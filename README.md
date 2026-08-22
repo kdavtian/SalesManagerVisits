@@ -57,9 +57,9 @@ for local development.
 
 ## Deployment
 
-Docker Compose (app + Postgres) behind nginx with Let's Encrypt on a
-DigitalOcean droplet. Deployment docs and scripts land in `deploy/` once the
-app is feature-complete locally (see build order below).
+Docker Compose (app + Postgres) behind nginx with Let's Encrypt, on a
+DigitalOcean droplet. Full walkthrough: [`deploy/digitalocean.md`](deploy/digitalocean.md).
+Once set up, redeploying is `./deploy/deploy.sh` on the droplet.
 
 ## Build order
 
@@ -68,5 +68,5 @@ app is feature-complete locally (see build order below).
 3. [x] Customers + check-ins CRUD, server-side GPS distance calc, photo upload
 4. [x] Frontend: login, map view, customer list, check-in flow, dashboard
 5. [x] PWA layer: manifest, icons, service worker, install prompt/walkthrough
-6. [ ] Dockerize: Dockerfile, docker-compose.yml, nginx + HTTPS config
-7. [ ] Deployment docs/script for the DigitalOcean droplet
+6. [x] Dockerize: Dockerfile, docker-compose.yml, nginx + HTTPS config
+7. [x] Deployment docs/script for the DigitalOcean droplet

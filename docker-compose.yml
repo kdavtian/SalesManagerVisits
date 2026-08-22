@@ -3,13 +3,34 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: fieldvisits
-      POSTGRES_PASSWORD: fieldvisits
-      POSTGRES_DB: fieldvisits
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-fieldvisits}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fieldvisits}
+      POSTGRES_DB: ${POSTGRES_DB:-fieldvisits}
     volumes:
       - db_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  # The Node app itself. Only used when running the full stack (e.g. in
+  # production); for local dev it's usually simpler to run `npm run dev`
+  # against `docker compose up -d db` instead.
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-fieldvisits}:${POSTGRES_PASSWORD:-fieldvisits}@db:5432/${POSTGRES_DB:-fieldvisits}
+      JWT_SECRET: ${JWT_SECRET}
+      PORT: 3000
+      UPLOAD_DIR: /app/server/uploads
+      CHECKIN_RADIUS_METERS: ${CHECKIN_RADIUS_METERS:-200}
+      NODE_ENV: production
+    volumes:
+      - uploads_data:/app/server/uploads
+    ports:
+      - "127.0.0.1:3000:3000"
 
 volumes:
   db_data:
+  uploads_data:

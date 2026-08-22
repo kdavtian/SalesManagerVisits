@@ -1,0 +1,8 @@
+**/node_modules
+server/uploads/*
+!server/uploads/.gitkeep
+.env
+.env.*
+!.env.example
+.git
+*.md
