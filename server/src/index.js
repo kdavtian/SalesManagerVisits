@@ -5,6 +5,9 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import { authRouter, meRouter } from "./routes/auth.js";
 import { usersRouter } from "./routes/users.js";
+import { customersRouter } from "./routes/customers.js";
+import { checkinsRouter } from "./routes/checkins.js";
+import { dashboardRouter } from "./routes/dashboard.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientDir = path.join(__dirname, "..", "..", "client", "public");
@@ -17,6 +20,9 @@ app.use(cookieParser());
 app.use("/api/auth", authRouter);
 app.use("/api/me", meRouter);
 app.use("/api/users", usersRouter);
+app.use("/api/customers", customersRouter);
+app.use("/api/checkins", checkinsRouter);
+app.use("/api/dashboard", dashboardRouter);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });
