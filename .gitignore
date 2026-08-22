@@ -1,0 +1,22 @@
+node_modules/
+dist/
+build/
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# uploaded photos (persisted via Docker volume in prod)
+server/uploads/*
+!server/uploads/.gitkeep
+
+# logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
