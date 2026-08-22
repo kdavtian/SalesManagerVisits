@@ -64,7 +64,7 @@ app is feature-complete locally (see build order below).
 ## Build order
 
 1. [x] Repo scaffold, `.gitignore`, README
-2. [ ] Backend: Express app, Postgres connection, migrations, auth, seed script
+2. [x] Backend: Express app, Postgres connection, migrations, auth, seed script
 3. [ ] Customers + check-ins CRUD, server-side GPS distance calc, photo upload
 4. [ ] Frontend: login, map view, customer list, check-in flow, dashboard
 5. [ ] PWA layer: manifest, icons, service worker, install prompt/walkthrough
