@@ -6,9 +6,9 @@ export function renderCustomers(root, navigate) {
     <div class="list-view">
       <div class="list-toolbar">
         <input type="search" id="customer-search" placeholder="Search customers…" />
-        <div class="chip-row">
+        <div class="segmented">
           <button class="chip chip-active" data-filter="">All</button>
-          <button class="chip" data-filter="visited">Visited this week</button>
+          <button class="chip" data-filter="visited">Visited</button>
           <button class="chip" data-filter="not_visited">Not visited</button>
         </div>
       </div>
@@ -43,8 +43,11 @@ export function renderCustomers(root, navigate) {
             <strong>${escapeHtml(c.name)}</strong>
             ${c.category ? `<span class="muted">${escapeHtml(c.category)}</span>` : ""}
           </div>
-          <span class="badge ${c.visited_this_week ? "badge-success" : "badge-neutral"}">
-            ${c.visited_this_week ? "Visited this week" : "Not visited"}
+          <span class="card-trailing">
+            <span class="badge ${c.visited_this_week ? "badge-success" : "badge-neutral"}">
+              ${c.visited_this_week ? "Visited" : "Not visited"}
+            </span>
+            <span class="chevron">&#8250;</span>
           </span>
         </button>
       `

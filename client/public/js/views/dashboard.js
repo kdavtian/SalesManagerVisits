@@ -61,8 +61,11 @@ export async function renderDashboard(root, navigate) {
             <strong>${escapeHtml(a.customer_name)}</strong>
             <span class="muted">${escapeHtml(a.user_name)} · ${formatRelative(a.timestamp)}</span>
           </div>
-          <span class="badge ${a.within_range ? "badge-success" : "badge-danger"}">
-            ${a.within_range ? "Verified" : `${formatDistance(a.distance_meters)} off`}
+          <span class="card-trailing">
+            <span class="badge ${a.within_range ? "badge-success" : "badge-danger"}">
+              ${a.within_range ? "Verified" : `${formatDistance(a.distance_meters)} off`}
+            </span>
+            <span class="chevron">&#8250;</span>
           </span>
         </button>
       `

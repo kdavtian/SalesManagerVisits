@@ -8,11 +8,13 @@ import { renderCheckin } from "./views/checkin.js";
 import { renderDashboard } from "./views/dashboard.js";
 import { renderAdminUsers } from "./views/admin.js";
 import { flushQueue, getQueue, onQueueChange } from "./offlineQueue.js";
+import { mountInstallPrompt } from "./install.js";
 
 const app = document.getElementById("app");
 const navBar = document.getElementById("nav-bar");
 const topBar = document.getElementById("top-bar");
 const syncBanner = document.getElementById("sync-banner");
+const installRoot = document.getElementById("install-root");
 
 let currentCleanup = null;
 
@@ -43,6 +45,7 @@ async function render() {
   topBar.hidden = false;
   navBar.hidden = false;
   renderNav();
+  mountInstallPrompt(installRoot);
 
   const hash = location.hash || "#/map";
   const customerMatch = hash.match(/^#\/customers\/(\d+)$/);
@@ -128,6 +131,14 @@ async function init() {
   renderSyncBanner();
   flushQueue();
   render();
+}
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch((err) => {
+      console.error("Service worker registration failed:", err);
+    });
+  });
 }
 
 init();

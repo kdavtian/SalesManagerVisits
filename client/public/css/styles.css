@@ -1,21 +1,25 @@
 :root {
-  --bg: #17181a;
-  --bg-elevated: #212327;
-  --bg-card: #26282d;
-  --border: #34363b;
-  --text: #f2f2f0;
-  --text-dim: #9a9ca3;
+  --bg: #000000;
+  --bg-elevated: rgba(28, 28, 30, 0.86);
+  --bg-card: #1c1c1e;
+  --bg-card-pressed: #232326;
+  --border: #38383a;
+  --text: #f5f5f7;
+  --text-dim: #98989d;
   --accent: #ff6a13;
   --accent-dark: #d9560a;
-  --success: #2ecc71;
-  --danger: #e74c3c;
-  --radius: 12px;
+  --success: #30d158;
+  --danger: #ff453a;
+  --radius: 14px;
+  --radius-lg: 20px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 * {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html,
@@ -27,7 +31,8 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -49,6 +54,27 @@ a {
   color: var(--text-dim);
 }
 
+/* Press feedback, iOS-style */
+
+.btn,
+.nav-item,
+.card,
+.chip,
+.fab {
+  transition: transform 0.12s ease, opacity 0.12s ease, background-color 0.12s ease;
+}
+
+.btn:active,
+.card:active,
+.fab:active {
+  transform: scale(0.97);
+  opacity: 0.85;
+}
+
+.nav-item:active {
+  opacity: 0.6;
+}
+
 /* Top bar */
 
 .top-bar {
@@ -57,19 +83,25 @@ a {
   gap: 12px;
   padding: calc(var(--safe-top) + 10px) 16px 10px;
   background: var(--bg-elevated);
-  border-bottom: 1px solid var(--border);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 0.5px solid var(--border);
   flex-shrink: 0;
+  position: relative;
+  z-index: 10;
 }
 
 .topbar-title {
   font-weight: 700;
-  color: var(--accent);
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+  color: var(--text);
 }
 
 .topbar-user {
   margin-left: auto;
   color: var(--text-dim);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
 }
 
 .btn-link {
@@ -78,6 +110,7 @@ a {
   color: var(--accent);
   cursor: pointer;
   padding: 4px;
+  font-size: 0.92rem;
 }
 
 /* Nav bar */
@@ -85,9 +118,13 @@ a {
 .nav-bar {
   display: flex;
   background: var(--bg-elevated);
-  border-top: 1px solid var(--border);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-top: 0.5px solid var(--border);
   padding-bottom: var(--safe-bottom);
   flex-shrink: 0;
+  position: relative;
+  z-index: 10;
 }
 
 .nav-item {
@@ -100,12 +137,14 @@ a {
   align-items: center;
   gap: 2px;
   padding: 8px 4px 6px;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
+  font-weight: 500;
   cursor: pointer;
 }
 
 .nav-icon {
-  font-size: 1.25rem;
+  font-size: 1.3rem;
+  line-height: 1;
 }
 
 .nav-item-active {
@@ -116,12 +155,128 @@ a {
 
 .sync-banner {
   background: var(--accent);
-  color: #1a1a1a;
+  color: #17181a;
   text-align: center;
   font-size: 0.85rem;
   font-weight: 600;
   padding: 6px 10px;
   padding-top: calc(6px + var(--safe-top));
+}
+
+/* Install banner */
+
+.install-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-elevated);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 10px 12px;
+  margin: 0 12px calc(10px + var(--safe-bottom));
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 62px;
+  z-index: 900;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  animation: slide-up 0.25s ease;
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.install-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.install-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.install-copy strong {
+  font-size: 0.88rem;
+}
+
+.install-copy span {
+  font-size: 0.76rem;
+  color: var(--text-dim);
+}
+
+.btn-sm {
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.install-dismiss {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.install-sheet .ios-steps {
+  list-style: none;
+  margin: 0 0 20px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.install-sheet .ios-steps li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 0.95rem;
+}
+
+.ios-step-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.ios-anim-share svg {
+  animation: bob 1.3s ease-in-out infinite;
+}
+
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
 }
 
 /* App main */
@@ -143,19 +298,20 @@ a {
   border: 1px solid var(--border);
   background: var(--bg-card);
   color: var(--text);
-  padding: 12px 16px;
+  padding: 13px 16px;
   font-weight: 600;
+  font-size: 0.95rem;
   cursor: pointer;
 }
 
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #1a1a1a;
+  color: #ffffff;
 }
 
 .btn-primary:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
 .btn-block {
@@ -171,7 +327,7 @@ a {
 
 form label {
   display: block;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   color: var(--text-dim);
   margin-bottom: 14px;
 }
@@ -182,11 +338,12 @@ form select {
   display: block;
   width: 100%;
   margin-top: 6px;
-  padding: 10px 12px;
+  padding: 11px 12px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
+  font-size: 0.95rem;
 }
 
 form input:focus,
@@ -232,19 +389,20 @@ form select:focus {
 
 .brand-mark {
   background: var(--accent);
-  color: #1a1a1a;
+  color: #ffffff;
   font-weight: 800;
-  border-radius: 10px;
-  width: 44px;
-  height: 44px;
+  border-radius: 12px;
+  width: 46px;
+  height: 46px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .login-brand h1 {
-  font-size: 1.4rem;
+  font-size: 1.5rem;
   margin: 0;
+  letter-spacing: -0.02em;
 }
 
 /* Cards / badges */
@@ -266,6 +424,10 @@ form select:focus {
   cursor: pointer;
 }
 
+.card:active {
+  background: var(--bg-card-pressed);
+}
+
 .customer-card,
 .activity-row {
   width: 100%;
@@ -280,11 +442,32 @@ form select:focus {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+}
+
+.customer-card-main strong,
+.activity-row-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-trailing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.chevron {
+  color: var(--text-dim);
+  opacity: 0.7;
+  font-size: 1rem;
 }
 
 .badge {
   display: inline-block;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 700;
   padding: 4px 8px;
   border-radius: 999px;
@@ -292,17 +475,17 @@ form select:focus {
 }
 
 .badge-success {
-  background: rgba(46, 204, 113, 0.15);
+  background: rgba(48, 209, 88, 0.15);
   color: var(--success);
 }
 
 .badge-danger {
-  background: rgba(231, 76, 60, 0.15);
+  background: rgba(255, 69, 58, 0.15);
   color: var(--danger);
 }
 
 .badge-neutral {
-  background: rgba(154, 156, 163, 0.15);
+  background: rgba(152, 152, 157, 0.15);
   color: var(--text-dim);
 }
 
@@ -328,30 +511,35 @@ form select:focus {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
-.chip-row {
+/* Segmented control, iOS style */
+
+.segmented {
   display: flex;
-  gap: 8px;
-  overflow-x: auto;
+  background: var(--bg-card);
+  border-radius: 9px;
+  padding: 2px;
+  gap: 2px;
 }
 
 .chip {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  flex: 1;
+  background: none;
+  border: none;
   color: var(--text-dim);
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 0.82rem;
+  border-radius: 7px;
+  padding: 7px 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
 }
 
 .chip-active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #1a1a1a;
+  background: #48484a;
+  color: var(--text);
 }
 
 /* Detail view */
@@ -370,8 +558,12 @@ form select:focus {
   gap: 10px;
 }
 
-.detail-header h1 {
-  font-size: 1.3rem;
+.detail-header h1,
+.dashboard-view h1,
+.admin-view h1 {
+  font-size: 1.9rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
   margin: 0;
 }
 
@@ -385,9 +577,12 @@ form select:focus {
 }
 
 .section-title {
-  font-size: 1rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   color: var(--text-dim);
-  margin: 22px 0 10px;
+  margin: 26px 0 10px;
 }
 
 .checkin-card-header {
@@ -403,14 +598,16 @@ form select:focus {
 .checkin-photo {
   margin-top: 10px;
   width: 100%;
-  border-radius: 8px;
+  border-radius: 10px;
   display: block;
 }
 
 /* Check-in flow */
 
 .checkin-view h1 {
-  font-size: 1.3rem;
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
 .gps-status {
@@ -435,7 +632,7 @@ form select:focus {
 .photo-field img {
   margin-top: 10px;
   max-width: 100%;
-  border-radius: 8px;
+  border-radius: 10px;
   display: block;
 }
 
@@ -457,7 +654,7 @@ form select:focus {
 }
 
 .result-success .result-icon {
-  background: rgba(46, 204, 113, 0.15);
+  background: rgba(48, 209, 88, 0.15);
   color: var(--success);
 }
 
@@ -486,14 +683,15 @@ form select:focus {
 }
 
 .stat-value {
-  font-size: 1.6rem;
+  font-size: 1.7rem;
   font-weight: 800;
   color: var(--accent);
+  letter-spacing: -0.02em;
 }
 
 .stat-label {
   color: var(--text-dim);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
 }
 
 .manager-row,
@@ -535,7 +733,7 @@ form select:focus {
   height: 54px;
   border-radius: 50%;
   background: var(--accent);
-  color: #1a1a1a;
+  color: #ffffff;
   border: none;
   font-size: 1.8rem;
   line-height: 1;
@@ -555,7 +753,9 @@ form select:focus {
   top: 12px;
   left: 12px;
   right: 12px;
-  background: var(--bg-card);
+  background: var(--bg-elevated);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
   border: 1px solid var(--accent);
   color: var(--text);
   padding: 10px 12px;
@@ -570,7 +770,7 @@ form select:focus {
   height: 18px;
   border-radius: 50% 50% 50% 0;
   transform: rotate(-45deg);
-  border: 2px solid #1a1a1a;
+  border: 2px solid #000000;
 }
 
 .pin-visited {
@@ -607,11 +807,11 @@ form select:focus {
 
 .popup-actions .btn-accent {
   background: var(--accent);
-  color: #1a1a1a;
+  color: #ffffff;
   border-color: var(--accent);
 }
 
-/* Add-customer sheet */
+/* Sheets (bottom modal) */
 
 .sheet-overlay {
   position: fixed;
@@ -623,16 +823,20 @@ form select:focus {
 }
 
 .sheet {
-  background: var(--bg-elevated);
-  border-radius: 16px 16px 0 0;
+  background: var(--bg-card);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   padding: 20px 16px calc(20px + var(--safe-bottom));
   width: 100%;
   max-height: 85vh;
   overflow-y: auto;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.5);
 }
 
 .sheet h2 {
   margin-top: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
 }
 
 .sheet-actions {

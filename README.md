@@ -67,6 +67,6 @@ app is feature-complete locally (see build order below).
 2. [x] Backend: Express app, Postgres connection, migrations, auth, seed script
 3. [x] Customers + check-ins CRUD, server-side GPS distance calc, photo upload
 4. [x] Frontend: login, map view, customer list, check-in flow, dashboard
-5. [ ] PWA layer: manifest, icons, service worker, install prompt/walkthrough
+5. [x] PWA layer: manifest, icons, service worker, install prompt/walkthrough
 6. [ ] Dockerize: Dockerfile, docker-compose.yml, nginx + HTTPS config
 7. [ ] Deployment docs/script for the DigitalOcean droplet
