@@ -2,9 +2,27 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
     <title>Field Visits</title>
+    <meta name="theme-color" content="#1a1a1a" />
+
+    <link rel="manifest" href="manifest.json" />
+    <link rel="icon" href="icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Field Visits" />
+
+    <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+    <link rel="stylesheet" href="css/styles.css" />
   </head>
   <body>
-    <p>Field Visits — frontend coming in step 4.</p>
+    <div id="sync-banner" class="sync-banner" hidden></div>
+    <header id="top-bar" class="top-bar" hidden></header>
+    <main id="app" class="app-main"></main>
+    <nav id="nav-bar" class="nav-bar" hidden></nav>
+
+    <script src="vendor/leaflet/leaflet.js"></script>
+    <script type="module" src="js/app.js"></script>
   </body>
 </html>
