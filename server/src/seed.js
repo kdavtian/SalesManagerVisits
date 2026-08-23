@@ -1,9 +1,13 @@
 import "dotenv/config";
+import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { pool } from "./db/pool.js";
 
 const email = (process.env.SEED_ADMIN_EMAIL ?? "admin@example.com").toLowerCase();
-const password = process.env.SEED_ADMIN_PASSWORD ?? "changeme123";
+// No hardcoded default password — a well-known "changeme123" left in place
+// on a rushed deploy is a real compromise path. Generate a random one and
+// print it once instead; the operator is expected to change it after login.
+const password = process.env.SEED_ADMIN_PASSWORD ?? crypto.randomBytes(9).toString("base64url");
 const name = process.env.SEED_ADMIN_NAME ?? "Admin";
 
 async function run() {

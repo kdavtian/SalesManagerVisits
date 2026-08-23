@@ -1,18 +1,27 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
+import rateLimit from "express-rate-limit";
 import { pool } from "../db/pool.js";
 import { issueSession, clearSession, requireAuth } from "../middleware/auth.js";
 
 export const authRouter = Router();
 
-authRouter.post("/login", async (req, res) => {
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many login attempts. Try again later." },
+});
+
+authRouter.post("/login", loginLimiter, async (req, res) => {
   const { email, password } = req.body ?? {};
   if (!email || !password) {
     return res.status(400).json({ error: "email and password are required" });
   }
 
   const { rows } = await pool.query(
-    "SELECT id, email, password_hash, name, role FROM users WHERE email = $1",
+    "SELECT id, email, password_hash, name, role, token_version FROM users WHERE email = $1",
     [String(email).toLowerCase()]
   );
   const user = rows[0];

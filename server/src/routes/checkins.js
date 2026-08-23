@@ -70,12 +70,18 @@ checkinsRouter.post("/", (req, res, next) => {
   const brands = parseBrandsFound(brands_found);
   const outcomeValue = VALID_OUTCOMES.has(outcome) ? outcome : null;
 
-  const { rows } = await pool.query(
-    `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, note, photo_path, brands_found, outcome)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-     RETURNING *`,
-    [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, photoPath, brands, outcomeValue]
-  );
+  let rows;
+  try {
+    ({ rows } = await pool.query(
+      `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, note, photo_path, brands_found, outcome)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING *`,
+      [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, photoPath, brands, outcomeValue]
+    ));
+  } catch (err) {
+    if (req.file) fs.unlink(req.file.path, () => {});
+    throw err;
+  }
 
   res.status(201).json(rows[0]);
 });

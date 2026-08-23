@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin, requireDirectEditAccess } from "../middleware/auth.js";
+import { seesAllActivity } from "../roles.js";
 
 export const customersRouter = Router();
 
@@ -131,13 +132,22 @@ customersRouter.delete("/:id", requireAdmin, async (req, res) => {
 });
 
 customersRouter.get("/:id/checkins", async (req, res) => {
+  // Plain managers only see their own visit history on a customer, same
+  // restriction as GET /api/checkins.
+  const params = [req.params.id];
+  let userFilter = "";
+  if (!seesAllActivity(req.user.role)) {
+    params.push(req.user.id);
+    userFilter = `AND ch.user_id = $${params.length}`;
+  }
+
   const { rows } = await pool.query(
     `SELECT ch.*, u.name AS user_name
      FROM checkins ch
      JOIN users u ON u.id = ch.user_id
-     WHERE ch.customer_id = $1
+     WHERE ch.customer_id = $1 ${userFilter}
      ORDER BY ch.timestamp DESC`,
-    [req.params.id]
+    params
   );
   res.json(rows);
 });

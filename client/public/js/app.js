@@ -13,6 +13,7 @@ import { renderSettings } from "./views/settings.js";
 import { flushQueue, getQueue, onQueueChange } from "./offlineQueue.js";
 import { mountInstallPrompt } from "./install.js";
 import { startLocationBroadcast, stopLocationBroadcast } from "./locationBroadcast.js";
+import { escapeHtml } from "./util.js";
 
 const app = document.getElementById("app");
 const navBar = document.getElementById("nav-bar");
@@ -123,7 +124,7 @@ function renderNav() {
 
   topBar.innerHTML = `
     <span class="topbar-title">${t("app_name")}</span>
-    <span class="topbar-user">${state.user.name}</span>
+    <span class="topbar-user">${escapeHtml(state.user.name)}</span>
   `;
 }
 
@@ -134,9 +135,10 @@ function renderSyncBanner() {
     return;
   }
   syncBanner.hidden = false;
-  syncBanner.textContent = navigator.onLine
-    ? `Syncing ${pending} pending check-in${pending > 1 ? "s" : ""}…`
-    : `Offline — ${pending} check-in${pending > 1 ? "s" : ""} waiting to sync`;
+  const template = t(navigator.onLine ? "syncing_checkins" : "offline_checkins_waiting");
+  syncBanner.textContent = template
+    .replace("{n}", pending)
+    .replace("{s}", pending > 1 ? "s" : "");
 }
 
 onQueueChange(renderSyncBanner);

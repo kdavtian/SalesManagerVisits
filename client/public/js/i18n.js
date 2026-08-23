@@ -111,6 +111,9 @@ const dict = {
     location_mismatch_away: "Mismatch",
     away: "away",
 
+    syncing_checkins: "Syncing {n} pending check-in{s}…",
+    offline_checkins_waiting: "Offline — {n} check-in{s} waiting to sync",
+
     getting_location: "Getting your location…",
     location_captured: "Location captured",
     accuracy: "accuracy",
@@ -307,6 +310,9 @@ const dict = {
     location_verified: "Տեղադրությունը հաստատված է",
     location_mismatch_away: "Անհամապատասխանություն",
     away: "հեռավորության վրա",
+
+    syncing_checkins: "Համաժամացվում է {n} սպասող այցելություն{s}…",
+    offline_checkins_waiting: "Օֆլայն — {n} այցելություն{s} սպասում է համաժամացման",
 
     getting_location: "Որոշվում է ձեր տեղադրությունը…",
     location_captured: "Տեղադրությունը որոշված է",

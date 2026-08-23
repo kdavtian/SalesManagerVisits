@@ -1,11 +1,12 @@
 import jwt from "jsonwebtoken";
+import { pool } from "../db/pool.js";
 import { canDeleteOrEditDirectly, canViewTeamLocations } from "../roles.js";
 
 const COOKIE_NAME = "session";
 
 export function issueSession(res, user) {
   const token = jwt.sign(
-    { sub: user.id, role: user.role },
+    { sub: user.id, tokenVersion: user.token_version },
     process.env.JWT_SECRET,
     { expiresIn: "30d" }
   );
@@ -22,19 +23,33 @@ export function clearSession(res) {
   res.clearCookie(COOKIE_NAME);
 }
 
-export function requireAuth(req, res, next) {
+// Re-checks the DB on every request (not just role/signature from the JWT)
+// so a deleted account or a password reset takes effect immediately instead
+// of the old cookie continuing to work for up to its 30-day expiry.
+export async function requireAuth(req, res, next) {
   const token = req.cookies?.[COOKIE_NAME];
   if (!token) {
     return res.status(401).json({ error: "Not authenticated" });
   }
 
+  let payload;
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = { id: payload.sub, role: payload.role };
-    next();
+    payload = jwt.verify(token, process.env.JWT_SECRET);
   } catch {
     return res.status(401).json({ error: "Invalid or expired session" });
   }
+
+  const { rows } = await pool.query(
+    "SELECT id, role, token_version FROM users WHERE id = $1",
+    [payload.sub]
+  );
+  const user = rows[0];
+  if (!user || user.token_version !== payload.tokenVersion) {
+    return res.status(401).json({ error: "Invalid or expired session" });
+  }
+
+  req.user = { id: user.id, role: user.role };
+  next();
 }
 
 export function requireAdmin(req, res, next) {

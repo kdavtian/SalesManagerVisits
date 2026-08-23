@@ -55,10 +55,13 @@ usersRouter.patch("/:id/password", async (req, res) => {
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
-  const { rowCount } = await pool.query("UPDATE users SET password_hash = $1 WHERE id = $2", [
-    passwordHash,
-    req.params.id,
-  ]);
+  // Bumping token_version invalidates any session cookie already issued to
+  // this user, so a reset password (e.g. after a suspected compromise)
+  // actually logs them out everywhere instead of just changing the hash.
+  const { rowCount } = await pool.query(
+    "UPDATE users SET password_hash = $1, token_version = token_version + 1 WHERE id = $2",
+    [passwordHash, req.params.id]
+  );
   if (!rowCount) return res.status(404).json({ error: "User not found" });
   res.status(204).end();
 });

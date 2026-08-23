@@ -6,7 +6,7 @@
   --bg-card-pressed: #eef0f3;
   --border: #e7e9ed;
   --text: #111318;
-  --text-dim: #747b86;
+  --text-dim: #5b6270;
   --text-tertiary: #9aa1ab;
   --accent: #1677ff;
   --accent-dark: #0b5ed6;
@@ -1199,8 +1199,8 @@ form select:focus {
 }
 
 .map-control-btn {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1643,8 +1643,8 @@ form select:focus {
 }
 
 .icon-btn {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: 10px;
   background: var(--bg-card);
   border: 1px solid var(--border);

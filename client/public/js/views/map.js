@@ -49,11 +49,13 @@ export function renderMap(root, navigate) {
 
       <button class="fab" id="add-customer-fab" title="${t("new_customer")}">+</button>
       <div class="map-hint" id="map-hint" hidden>${t("tap_map_hint")}</div>
+      <div class="map-hint" id="team-empty-hint" hidden>${t("team_locations_empty")}</div>
     </div>
   `;
 
   const mapEl = root.querySelector("#leaflet-map");
   const hint = root.querySelector("#map-hint");
+  const teamEmptyHint = root.querySelector("#team-empty-hint");
   const fab = root.querySelector("#add-customer-fab");
   const compassBtn = root.querySelector("#compass-btn");
   const locateBtn = root.querySelector("#locate-btn");
@@ -289,6 +291,7 @@ export function renderMap(root, navigate) {
         )
         .addTo(teamLayer);
     }
+    teamEmptyHint.hidden = !teamBtn.classList.contains("map-control-active") || locations.length > 0;
   }
 
   teamBtn?.addEventListener("click", () => {
@@ -301,6 +304,7 @@ export function renderMap(root, navigate) {
       map.removeLayer(teamLayer);
       clearInterval(teamPollId);
       teamPollId = null;
+      teamEmptyHint.hidden = true;
     }
   });
 

@@ -55,7 +55,7 @@ dashboardRouter.get("/summary", async (req, res) => {
          FROM users u
          LEFT JOIN checkins ch
            ON ch.user_id = u.id AND ch.timestamp >= now() - interval '7 days'
-         WHERE u.role = 'manager'
+         WHERE u.role != 'admin'
          GROUP BY u.id, u.name
          ORDER BY checkins_this_week DESC`
       )

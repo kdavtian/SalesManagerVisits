@@ -38,12 +38,18 @@ editRequestsRouter.post("/", async (req, res) => {
 });
 
 editRequestsRouter.get("/", async (req, res) => {
-  const { customer_id, status } = req.query;
+  const { customer_id } = req.query;
+  let { status } = req.query;
 
   // Non-admins can only look up requests for a specific customer (to show
-  // a "pending edit" banner) — the full review queue is admin-only.
-  if (req.user.role !== "admin" && !customer_id) {
-    return res.status(403).json({ error: "customer_id is required" });
+  // a "pending edit" banner), and only the pending one — past approved/
+  // rejected requests can reveal another user's proposed changes, so the
+  // full review queue and history are admin-only.
+  if (req.user.role !== "admin") {
+    if (!customer_id) {
+      return res.status(403).json({ error: "customer_id is required" });
+    }
+    status = "pending";
   }
 
   const conditions = [];
@@ -76,18 +82,26 @@ editRequestsRouter.patch("/:id", requireAdmin, async (req, res) => {
     return res.status(400).json({ error: "action must be 'approve' or 'reject'" });
   }
 
-  const { rows } = await pool.query("SELECT * FROM customer_edit_requests WHERE id = $1", [
-    req.params.id,
-  ]);
-  const request = rows[0];
-  if (!request) return res.status(404).json({ error: "Edit request not found" });
-  if (request.status !== "pending") {
-    return res.status(409).json({ error: "This request was already reviewed" });
-  }
-
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+
+    // Lock the row inside the transaction so two concurrent approvals (or
+    // a double-tapped button) can't both read status='pending' and both
+    // apply — the loser blocks on the lock, then sees the now-reviewed row.
+    const { rows } = await client.query(
+      "SELECT * FROM customer_edit_requests WHERE id = $1 FOR UPDATE",
+      [req.params.id]
+    );
+    const request = rows[0];
+    if (!request) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Edit request not found" });
+    }
+    if (request.status !== "pending") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "This request was already reviewed" });
+    }
 
     if (action === "approve") {
       const updates = [];

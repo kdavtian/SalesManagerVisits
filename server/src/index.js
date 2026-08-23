@@ -1,7 +1,9 @@
 import "dotenv/config";
+import "express-async-errors";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
+import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { authRouter, meRouter } from "./routes/auth.js";
 import { usersRouter } from "./routes/users.js";
@@ -12,11 +14,26 @@ import { settingsRouter } from "./routes/settings.js";
 import { editRequestsRouter } from "./routes/editRequests.js";
 import { locationsRouter } from "./routes/locations.js";
 
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
+  console.error(
+    "JWT_SECRET is missing or too short (must be at least 16 characters). Refusing to start."
+  );
+  process.exit(1);
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientDir = path.join(__dirname, "..", "..", "client", "public");
 
 const app = express();
 
+app.use(
+  helmet({
+    // The app serves its own HTML/CSS/JS same-origin and loads map tiles
+    // from basemaps.cartocdn.com, so a default strict CSP would break the
+    // map; disable CSP here rather than ship one that's wrong.
+    contentSecurityPolicy: false,
+  })
+);
 app.use(express.json());
 app.use(cookieParser());
 

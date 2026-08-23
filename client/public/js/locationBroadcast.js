@@ -15,6 +15,10 @@ function ping() {
   );
 }
 
+function onVisibilityChange() {
+  if (!document.hidden) ping();
+}
+
 // Foreground-only: a single getCurrentPosition() ping on an interval,
 // paused whenever the tab isn't visible. Never runs in a background
 // service worker and never uses watchPosition, so it stops the moment the
@@ -23,12 +27,11 @@ export function startLocationBroadcast() {
   if (timerId || !broadcastsLocation()) return;
   ping();
   timerId = setInterval(ping, INTERVAL_MS);
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) ping();
-  });
+  document.addEventListener("visibilitychange", onVisibilityChange);
 }
 
 export function stopLocationBroadcast() {
   if (timerId) clearInterval(timerId);
   timerId = null;
+  document.removeEventListener("visibilitychange", onVisibilityChange);
 }

@@ -10,6 +10,23 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
+set -a
+# shellcheck disable=SC1091
+source .env
+set +a
+
+if [ -z "${JWT_SECRET:-}" ] || [ "${#JWT_SECRET}" -lt 16 ]; then
+  echo "JWT_SECRET is missing or shorter than 16 characters in .env — refusing to deploy." >&2
+  echo "Generate one with: openssl rand -base64 32" >&2
+  exit 1
+fi
+
+if [ -z "${POSTGRES_PASSWORD:-}" ] || [ "${POSTGRES_PASSWORD}" = "fieldvisits" ]; then
+  echo "POSTGRES_PASSWORD is unset or still the default 'fieldvisits' in .env — refusing to deploy." >&2
+  echo "Set a strong POSTGRES_PASSWORD before deploying to production." >&2
+  exit 1
+fi
+
 echo "==> Pulling latest code"
 git pull --ff-only
 

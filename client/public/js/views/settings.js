@@ -3,6 +3,7 @@ import { t, getLang, setLang } from "../i18n.js";
 import { getTheme, setTheme } from "../theme.js";
 import { state, isAdmin } from "../state.js";
 import { renderTeamSection } from "./admin.js";
+import { escapeHtml } from "../util.js";
 
 export async function renderSettings(root, onLogout, onLanguageChange) {
   root.innerHTML = `
@@ -31,8 +32,8 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       <div class="card">
         <div class="settings-account-row">
           <span class="muted">${t("signed_in_as")}</span>
-          <strong>${state.user.name}</strong>
-          <span class="muted">${state.user.email}</span>
+          <strong>${escapeHtml(state.user.name)}</strong>
+          <span class="muted">${escapeHtml(state.user.email)}</span>
         </div>
       </div>
       <button class="btn btn-block" id="settings-logout">${t("log_out")}</button>
