@@ -3,6 +3,29 @@ import { escapeHtml, formatDateTime, formatDistance } from "../util.js";
 import { t } from "../i18n.js";
 import { canEditDirectly, isAdmin } from "../state.js";
 
+function formatAmd(value) {
+  if (value == null) return "";
+  return `${Number(value).toLocaleString()} ${t("amd")}`;
+}
+
+const AGING_BADGE = {
+  "0-7 days": "badge-success",
+  "8-14 days": "badge-info",
+  "15-30 days": "badge-warning",
+  "30+ days": "badge-danger",
+  "No payment found": "badge-neutral",
+  "Data error - review": "badge-neutral",
+};
+
+const AGING_LABEL_KEY = {
+  "0-7 days": "aging_0_7",
+  "8-14 days": "aging_8_14",
+  "15-30 days": "aging_15_30",
+  "30+ days": "aging_30_plus",
+  "No payment found": "aging_no_payment",
+  "Data error - review": "aging_data_error",
+};
+
 function navigationUrl(lat, lng, name) {
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   return isIOS
@@ -17,6 +40,9 @@ const EDIT_FIELDS = [
   { name: "address", labelKey: "address", type: "text" },
   { name: "visit_frequency_days", labelKey: "visit_frequency", type: "number" },
   { name: "notes", labelKey: "notes", type: "textarea" },
+  // Internal ERP linking field — admin-only, not something a manager/director
+  // should propose via the edit-request flow.
+  { name: "erp_customer_id", labelKey: "erp_customer_id", type: "text", adminOnly: true },
 ];
 
 export async function renderCustomerDetail(root, navigate, customerId) {
@@ -89,6 +115,8 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     </div>
 
     <div id="pending-request-slot"></div>
+
+    ${renderErpCard(customer)}
 
     <div class="card next-visit-card">
       <div class="next-visit-header"><span>${t("next_visit")}</span></div>
@@ -176,6 +204,47 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   }
 }
 
+function renderErpCard(customer) {
+  if (!customer.erp_synced_at) return "";
+
+  const debt = Number(customer.erp_debt_amd) || 0;
+  const agingClass = AGING_BADGE[customer.erp_aging_bucket] || "badge-neutral";
+  const orders = Array.isArray(customer.erp_recent_orders) ? customer.erp_recent_orders : [];
+
+  return `
+    <div class="card erp-card">
+      <div class="erp-card-header">
+        <span>${t("erp_data")}</span>
+        ${customer.erp_assigned_sales_rep ? `<span>${t("erp_assigned_rep")}: ${escapeHtml(customer.erp_assigned_sales_rep)}</span>` : ""}
+      </div>
+      ${
+        debt > 0
+          ? `<div class="erp-debt-row">
+               <span class="erp-debt-amount">${formatAmd(debt)}</span>
+               <span class="badge ${agingClass}">${escapeHtml(t(AGING_LABEL_KEY[customer.erp_aging_bucket] || "") || customer.erp_aging_bucket)}</span>
+             </div>
+             ${customer.erp_last_payment_date ? `<div class="muted">${t("erp_last_payment")}: ${escapeHtml(String(customer.erp_last_payment_date).slice(0, 10))}</div>` : ""}`
+          : `<div class="muted">${t("erp_no_debt")}</div>`
+      }
+      ${
+        orders.length
+          ? `<p class="proposed-changes-label">${t("erp_recent_orders")}</p>
+             ${orders
+               .map(
+                 (o) => `
+               <div class="erp-order-row">
+                 <span>${escapeHtml(o.date || "")}</span>
+                 <span>${escapeHtml(o.product || "")}</span>
+                 <span>${formatAmd(o.revenue_amd)}</span>
+               </div>`
+               )
+               .join("")}`
+          : ""
+      }
+    </div>
+  `;
+}
+
 function renderPendingRequest(slot, request, onDone) {
   if (!request) {
     slot.innerHTML = "";
@@ -218,13 +287,14 @@ function renderPendingRequest(slot, request, onDone) {
 }
 
 function openEditSheet(customer, onDone) {
+  const fields = EDIT_FIELDS.filter((f) => !f.adminOnly || isAdmin());
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
   overlay.innerHTML = `
     <div class="sheet">
       <h2>${canEditDirectly() ? t("edit_customer") : t("request_edit")}</h2>
       <form id="edit-customer-form">
-        ${EDIT_FIELDS.map((f) => {
+        ${fields.map((f) => {
           const value = escapeHtml(customer[f.name] ?? "");
           if (f.type === "textarea") {
             return `<label>${t(f.labelKey)}<textarea name="${f.name}" rows="2">${value}</textarea></label>`;
@@ -254,7 +324,7 @@ function openEditSheet(customer, onDone) {
     e.preventDefault();
     const data = new FormData(form);
     const changes = {};
-    for (const f of EDIT_FIELDS) {
+    for (const f of fields) {
       const raw = data.get(f.name);
       changes[f.name] = f.type === "number" ? Number(raw) : raw;
     }

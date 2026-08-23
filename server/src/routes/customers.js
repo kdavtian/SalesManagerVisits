@@ -90,15 +90,24 @@ customersRouter.post("/", async (req, res) => {
 
 customersRouter.get("/:id", async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT c.*, ${STATUS_COLUMNS}
-     FROM customers c WHERE c.id = $1`,
+    `SELECT c.*, ${STATUS_COLUMNS},
+       erp.assigned_sales_rep AS erp_assigned_sales_rep,
+       erp.debt_amd AS erp_debt_amd,
+       erp.last_payment_date AS erp_last_payment_date,
+       erp.days_since_payment AS erp_days_since_payment,
+       erp.aging_bucket AS erp_aging_bucket,
+       erp.recent_orders AS erp_recent_orders,
+       erp.synced_at AS erp_synced_at
+     FROM customers c
+     LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
+     WHERE c.id = $1`,
     [req.params.id]
   );
   if (!rows[0]) return res.status(404).json({ error: "Customer not found" });
   res.json(rows[0]);
 });
 
-export const EDITABLE_FIELDS = ["name", "category", "phone", "address", "notes", "lat", "lng", "visit_frequency_days"];
+export const EDITABLE_FIELDS = ["name", "category", "phone", "address", "notes", "lat", "lng", "visit_frequency_days", "erp_customer_id"];
 
 customersRouter.patch("/:id", requireDirectEditAccess, async (req, res) => {
   const updates = [];

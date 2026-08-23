@@ -13,12 +13,19 @@ import { dashboardRouter } from "./routes/dashboard.js";
 import { settingsRouter } from "./routes/settings.js";
 import { editRequestsRouter } from "./routes/editRequests.js";
 import { locationsRouter } from "./routes/locations.js";
+import { erpSyncRouter } from "./routes/erpSync.js";
 
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
   console.error(
     "JWT_SECRET is missing or too short (must be at least 16 characters). Refusing to start."
   );
   process.exit(1);
+}
+
+if (!process.env.ERP_SYNC_KEY) {
+  console.warn(
+    "ERP_SYNC_KEY is not set — the /api/erp-sync endpoint will reject all requests until it is."
+  );
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -46,6 +53,7 @@ app.use("/api/dashboard", dashboardRouter);
 app.use("/api/settings", settingsRouter);
 app.use("/api/edit-requests", editRequestsRouter);
 app.use("/api/locations", locationsRouter);
+app.use("/api/erp-sync", erpSyncRouter);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });

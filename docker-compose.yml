@@ -28,6 +28,7 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-fieldvisits}:${POSTGRES_PASSWORD:-fieldvisits}@db:5432/${POSTGRES_DB:-fieldvisits}
       JWT_SECRET: ${JWT_SECRET}
+      ERP_SYNC_KEY: ${ERP_SYNC_KEY:-}
       PORT: 3000
       UPLOAD_DIR: /app/server/uploads
       CHECKIN_RADIUS_METERS: ${CHECKIN_RADIUS_METERS:-200}

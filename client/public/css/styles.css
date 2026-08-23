@@ -590,6 +590,11 @@ form select:focus {
   color: #0a84ff;
 }
 
+.badge-warning {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warning);
+}
+
 /* List view */
 
 .list-toolbar {
@@ -1408,6 +1413,44 @@ form select:focus {
 .next-visit-card {
   margin-bottom: 18px;
   padding: 16px;
+}
+
+.erp-card {
+  margin-bottom: 18px;
+  padding: 16px;
+}
+
+.erp-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+}
+
+.erp-debt-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.erp-debt-amount {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.erp-order-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.85rem;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
 }
 
 .next-visit-header {
