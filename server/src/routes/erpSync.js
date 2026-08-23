@@ -47,9 +47,12 @@ function isPlainObject(value) {
 // merged row by row) so a customer that drops out of the extract -- debt
 // fully paid, no recent orders -- doesn't keep showing stale data forever.
 erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
-  const { customers } = req.body ?? {};
+  const { customers, order_lines } = req.body ?? {};
   if (!Array.isArray(customers)) {
     return res.status(400).json({ error: "customers must be an array" });
+  }
+  if (order_lines !== undefined && !Array.isArray(order_lines)) {
+    return res.status(400).json({ error: "order_lines must be an array" });
   }
 
   const erpIds = [];
