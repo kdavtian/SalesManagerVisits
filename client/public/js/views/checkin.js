@@ -1,7 +1,7 @@
 import { api } from "../api.js";
 import { escapeHtml, getCurrentPosition, compressImage, formatDistance, haversineMeters } from "../util.js";
 import { enqueueCheckin } from "../offlineQueue.js";
-import { t } from "../i18n.js";
+import { t, getLang } from "../i18n.js";
 
 const BRAND_OPTIONS = [
   { value: "castrol", labelKey: "brand_castrol" },
@@ -134,7 +134,8 @@ export async function renderCheckin(root, navigate, customerId) {
   try {
     position = await getCurrentPosition();
     const accuracy = Math.round(position.coords.accuracy);
-    gpsStatus.textContent = `${t("location_captured")} (±${accuracy}m ${t("accuracy")})`;
+    const unit = getLang() === "hy" ? "մ" : "m";
+    gpsStatus.textContent = `${t("location_captured")} (±${accuracy}${unit} ${t("accuracy")})`;
     gpsStatus.classList.add("gps-ok");
     submitBtn.disabled = false;
     submitBtn.textContent = t("submit_checkin");

@@ -1,3 +1,5 @@
+import { getLang, t } from "./i18n.js";
+
 export function escapeHtml(str) {
   return String(str ?? "").replace(
     /[&<>"']/g,
@@ -16,9 +18,19 @@ export function haversineMeters(lat1, lng1, lat2, lng2) {
   return EARTH_RADIUS_METERS * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+export const CATEGORY_OPTIONS = ["Յուղման կետ", "Խանութ", "Ավտոպարկ", "Ավտոսերվիս", "Այլ"];
+
+export function formatAmd(value) {
+  if (value == null) return "";
+  return `${Number(value).toLocaleString()} ${t("amd")}`;
+}
+
 export function formatDistance(meters) {
   if (meters == null) return "";
-  return meters < 1000 ? `${Math.round(meters)}m` : `${(meters / 1000).toFixed(1)}km`;
+  const isHy = getLang() === "hy";
+  const unitM = isHy ? "մ" : "m";
+  const unitKm = isHy ? "կմ" : "km";
+  return meters < 1000 ? `${Math.round(meters)}${unitM}` : `${(meters / 1000).toFixed(1)}${unitKm}`;
 }
 
 export function formatDateTime(iso) {

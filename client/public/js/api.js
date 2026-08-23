@@ -75,4 +75,6 @@ export const api = {
   getErpOrders: (customerId, scope = "recent") => request(`/customers/${customerId}/erp-orders?scope=${scope}`),
   getErpOrderDetail: (customerId, orderId) =>
     request(`/customers/${customerId}/erp-orders/${encodeURIComponent(orderId)}`),
+
+  reverseGeocode: (lat, lng) => request(`/geocode/reverse?lat=${lat}&lng=${lng}`),
 };

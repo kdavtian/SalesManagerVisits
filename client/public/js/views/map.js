@@ -1,8 +1,10 @@
 import { api } from "../api.js";
-import { escapeHtml, formatRelative } from "../util.js";
+import { escapeHtml, formatRelative, formatAmd, formatDistance, haversineMeters, getCurrentPosition, CATEGORY_OPTIONS } from "../util.js";
 import { t } from "../i18n.js";
 import { getTheme } from "../theme.js";
-import { canViewTeamLocations } from "../state.js";
+import { canViewTeamLocations, canEditDirectly } from "../state.js";
+
+const NEARBY_RADIUS_METERS = 5000;
 
 const TILE_URLS = {
   dark: "https://{s}.basemaps.cartocdn.com/rastertiles/dark_matter/{z}/{x}/{y}{r}.png",
@@ -11,15 +13,33 @@ const TILE_URLS = {
 const TILE_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
-export function renderMap(root, navigate) {
+export function renderMap(root, navigate, relocateCustomerId) {
   root.innerHTML = `
     <div class="map-view">
       <div id="leaflet-map"></div>
+      ${
+        relocateCustomerId
+          ? `<div class="relocate-banner" id="relocate-banner">
+              <span>${t("relocate_hint")}</span>
+              <button type="button" id="cancel-relocate">${t("cancel")}</button>
+            </div>`
+          : ""
+      }
 
       <div class="map-filter-row">
         <button class="map-filter-chip chip-active" data-filter="">${t("filter_all")}</button>
         <button class="map-filter-chip" data-filter="overdue">${t("filter_overdue")}</button>
         <button class="map-filter-chip" data-filter="visited">${t("filter_visited")}</button>
+        <button class="map-filter-chip" data-filter="nearby">${t("filter_nearby")}</button>
+      </div>
+
+      <div class="nearby-panel" id="nearby-panel" hidden>
+        <div class="nearby-panel-header">
+          <span id="nearby-panel-title">${t("nearby_loading")}</span>
+          <button type="button" class="icon-btn" id="nearby-panel-close" aria-label="${t("cancel")}">&times;</button>
+        </div>
+        <div class="nearby-list card-list" id="nearby-list"></div>
+        <button type="button" class="nearby-view-all" id="nearby-view-all">${t("view_all_customers")}</button>
       </div>
 
       <div class="map-controls">
@@ -73,7 +93,14 @@ export function renderMap(root, navigate) {
     touchRotate: true,
     rotateControl: false,
     bearing: 0,
+    // Attribution to OpenStreetMap/CARTO is a required condition of using
+    // their free tiles (ODbL/CARTO terms) -- it can't be removed outright,
+    // but the default control (with Leaflet's own "Leaflet |" branding
+    // prefix) is oversized for this app. Re-added below as a minimal,
+    // unobtrusive control instead.
+    attributionControl: false,
   }).setView([20, 0], 2);
+  L.control.attribution({ prefix: false, position: "bottomright" }).addTo(map);
 
   let tileLayer = L.tileLayer(TILE_URLS[getTheme()], {
     maxZoom: 19,
@@ -145,13 +172,20 @@ export function renderMap(root, navigate) {
 
   let activeFilter = "";
   let lastCustomers = [];
+  let myLocation = null;
 
   function applyFilter() {
     markerLayer.clearLayers();
     const bounds = [];
     for (const { c, marker } of lastCustomers) {
       const status = customerStatus(c);
-      if (activeFilter && !(activeFilter === "overdue" ? status === "overdue" : activeFilter === "visited" ? status === "today" || status === "week" : true)) {
+      if (activeFilter === "nearby") {
+        const distance = myLocation ? haversineMeters(myLocation.lat, myLocation.lng, c.lat, c.lng) : Infinity;
+        if (distance > NEARBY_RADIUS_METERS) continue;
+      } else if (
+        activeFilter &&
+        !(activeFilter === "overdue" ? status === "overdue" : activeFilter === "visited" ? status === "today" || status === "week" : true)
+      ) {
         continue;
       }
       marker.addTo(markerLayer);
@@ -166,12 +200,89 @@ export function renderMap(root, navigate) {
     }
   }
 
+  const nearbyPanel = root.querySelector("#nearby-panel");
+  const nearbyPanelTitle = root.querySelector("#nearby-panel-title");
+  const nearbyList = root.querySelector("#nearby-list");
+
+  async function openNearbyPanel() {
+    nearbyPanel.hidden = false;
+    nearbyPanelTitle.textContent = t("nearby_loading");
+    nearbyList.innerHTML = "";
+
+    if (!myLocation) {
+      try {
+        const pos = await getCurrentPosition();
+        myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      } catch {
+        nearbyPanelTitle.textContent = t("nearby_location_error");
+        applyFilter();
+        return;
+      }
+    }
+
+    applyFilter();
+    renderNearbyList();
+  }
+
+  function renderNearbyList() {
+    if (!myLocation) return;
+    const nearby = lastCustomers
+      .map(({ c }) => ({ c, distance: haversineMeters(myLocation.lat, myLocation.lng, c.lat, c.lng) }))
+      .filter((entry) => entry.distance <= NEARBY_RADIUS_METERS)
+      .sort((a, b) => a.distance - b.distance);
+
+    nearbyPanelTitle.textContent = `${t("nearby_customers")} · ${t("nearby_within")} · ${nearby.length}`;
+
+    if (!nearby.length) {
+      nearbyList.innerHTML = `<p class="muted">${t("nearby_empty")}</p>`;
+      return;
+    }
+
+    nearbyList.innerHTML = nearby
+      .map(({ c, distance }) => {
+        const status = customerStatus(c);
+        const badgeClass = status === "today" ? "badge-success" : status === "overdue" ? "badge-danger" : status === "week" ? "badge-info" : "badge-neutral";
+        const badgeText = status === "today" ? t("visited_today") : status === "overdue" ? t("filter_overdue") : status === "week" ? t("visited_this_week") : t("not_visited");
+        return `
+        <button class="card customer-card" data-id="${c.id}">
+          <div class="customer-card-main">
+            <strong>${escapeHtml(c.name)}</strong>
+            ${c.category ? `<span class="muted">${escapeHtml(c.category)}</span>` : ""}
+            <span class="muted">${formatDistance(distance)}</span>
+          </div>
+          <span class="card-trailing">
+            <span class="badge ${badgeClass}">${badgeText}</span>
+            <span class="chevron">&#8250;</span>
+          </span>
+        </button>`;
+      })
+      .join("");
+
+    nearbyList.querySelectorAll(".customer-card").forEach((el) => {
+      el.addEventListener("click", () => navigate(`#/customers/${el.dataset.id}`));
+    });
+  }
+
+  root.querySelector("#nearby-panel-close").addEventListener("click", () => {
+    nearbyPanel.hidden = true;
+    root.querySelectorAll(".map-filter-chip").forEach((c) => c.classList.remove("chip-active"));
+    root.querySelector('.map-filter-chip[data-filter=""]').classList.add("chip-active");
+    activeFilter = "";
+    applyFilter();
+  });
+  root.querySelector("#nearby-view-all").addEventListener("click", () => navigate("#/customers"));
+
   root.querySelectorAll(".map-filter-chip").forEach((chip) => {
     chip.addEventListener("click", () => {
       root.querySelectorAll(".map-filter-chip").forEach((c) => c.classList.remove("chip-active"));
       chip.classList.add("chip-active");
       activeFilter = chip.dataset.filter;
-      applyFilter();
+      if (activeFilter === "nearby") {
+        openNearbyPanel();
+      } else {
+        nearbyPanel.hidden = true;
+        applyFilter();
+      }
     });
   });
 
@@ -308,14 +419,31 @@ export function renderMap(root, navigate) {
     }
   });
 
-  fab.addEventListener("click", () => {
-    addMode = !addMode;
-    fab.classList.toggle("fab-active", addMode);
-    hint.hidden = !addMode;
-    mapEl.classList.toggle("map-picking", addMode);
-  });
+  if (relocateCustomerId) {
+    fab.hidden = true;
+    mapEl.classList.add("map-picking");
+    root.querySelector("#cancel-relocate")?.addEventListener("click", () => {
+      navigate(`#/customers/${relocateCustomerId}`);
+    });
+  } else {
+    fab.addEventListener("click", () => {
+      addMode = !addMode;
+      fab.classList.toggle("fab-active", addMode);
+      hint.hidden = !addMode;
+      mapEl.classList.toggle("map-picking", addMode);
+    });
+  }
 
   map.on("click", (e) => {
+    if (relocateCustomerId) {
+      if (placingMarker) map.removeLayer(placingMarker);
+      placingMarker = L.marker(e.latlng, {
+        icon: L.divIcon({ className: "", html: `<div class="pin pin-new"></div>`, iconSize: [26, 26], iconAnchor: [13, 26] }),
+      }).addTo(map);
+      openRelocateConfirm(e.latlng);
+      return;
+    }
+
     if (!addMode) return;
 
     if (placingMarker) map.removeLayer(placingMarker);
@@ -328,17 +456,54 @@ export function renderMap(root, navigate) {
     hint.hidden = true;
     mapEl.classList.remove("map-picking");
 
-    // Keep the dropped pin visible above the bottom sheet that's about to
-    // cover ~55% of the screen.
-    const point = map.latLngToContainerPoint(e.latlng);
-    // Leave clearance for the pin's own height above the sheet's top edge.
-    const sheetTop = mapEl.clientHeight * 0.45 - 40;
-    if (point.y > sheetTop) {
-      map.panBy([0, point.y - sheetTop], { animate: true });
-    }
-
     openNewCustomerForm(e.latlng);
   });
+
+  function openRelocateConfirm(latlng) {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay sheet-overlay-light";
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>${t("confirm_new_location")}</h2>
+        <p class="muted">${t("confirm_new_location_hint")}</p>
+        <p class="form-error" id="relocate-error" hidden></p>
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="cancel-relocate-confirm">${t("cancel")}</button>
+          <button type="button" class="btn btn-primary" id="save-relocate">${canEditDirectly() ? t("save") : t("submit_request")}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    function close() {
+      overlay.remove();
+      if (placingMarker) {
+        map.removeLayer(placingMarker);
+        placingMarker = null;
+      }
+    }
+    overlay.querySelector("#cancel-relocate-confirm").addEventListener("click", close);
+    overlay.addEventListener("click", (e) => e.target === overlay && close());
+
+    overlay.querySelector("#save-relocate").addEventListener("click", async (e) => {
+      const btn = e.target;
+      btn.disabled = true;
+      const errorEl = overlay.querySelector("#relocate-error");
+      const changes = { lat: latlng.lat, lng: latlng.lng };
+      try {
+        if (canEditDirectly()) {
+          await api.updateCustomer(relocateCustomerId, changes);
+        } else {
+          await api.createEditRequest(relocateCustomerId, changes);
+        }
+        navigate(`#/customers/${relocateCustomerId}`);
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+        btn.disabled = false;
+      }
+    });
+  }
 
   function openNewCustomerForm(latlng) {
     const overlay = document.createElement("div");
@@ -348,10 +513,20 @@ export function renderMap(root, navigate) {
         <h2>${t("new_customer")}</h2>
         <form id="new-customer-form">
           <label>${t("name")}<input name="name" required /></label>
-          <label>${t("category")}<input name="category" placeholder="${t("category_placeholder")}" /></label>
+          <label>${t("category")}
+            <select name="category">
+              <option value="">${t("category_placeholder")}</option>
+              ${CATEGORY_OPTIONS.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")}
+            </select>
+          </label>
           <label>${t("phone")}<input name="phone" type="tel" /></label>
-          <label>${t("address")}<input name="address" /></label>
+          <label>${t("address")}<input name="address" id="new-customer-address" /></label>
+          <label class="erp-suggest-wrap">${t("erp_customer_id")}
+            <input type="text" name="erp_customer_id" id="new-customer-erp-input" autocomplete="off" />
+            <div class="erp-suggest-list" id="new-customer-erp-suggest" hidden></div>
+          </label>
           <label>${t("notes")}<textarea name="notes" rows="2"></textarea></label>
+          <label>${t("tin")}<input name="tin" /></label>
           <p class="form-error" id="new-customer-error" hidden></p>
           <div class="sheet-actions">
             <button type="button" class="btn" id="cancel-new-customer">${t("cancel")}</button>
@@ -361,6 +536,17 @@ export function renderMap(root, navigate) {
       </div>
     `;
     document.body.appendChild(overlay);
+
+    // Keep the dropped pin visible above the sheet -- measured against the
+    // sheet's actual rendered height (it varies with content/keyboard),
+    // not a guessed fraction of the screen, so the pin reliably stays clear
+    // of the sheet's top edge instead of being hidden behind it.
+    const sheetEl = overlay.querySelector(".sheet");
+    const point = map.latLngToContainerPoint(latlng);
+    const sheetTop = mapEl.clientHeight - sheetEl.getBoundingClientRect().height - 40;
+    if (point.y > sheetTop) {
+      map.panBy([0, point.y - sheetTop], { animate: true });
+    }
 
     function close() {
       overlay.remove();
@@ -373,6 +559,65 @@ export function renderMap(root, navigate) {
     overlay.querySelector("#cancel-new-customer").addEventListener("click", close);
     overlay.addEventListener("click", (e) => {
       if (e.target === overlay) close();
+    });
+
+    // Auto-fill the address from the dropped pin's coordinates -- the rep
+    // can still edit it by hand, this just saves typing it from scratch.
+    const addressInput = overlay.querySelector("#new-customer-address");
+    api
+      .reverseGeocode(latlng.lat, latlng.lng)
+      .then((result) => {
+        if (result?.address && !addressInput.value) addressInput.value = result.address;
+      })
+      .catch(() => {});
+
+    const erpInput = overlay.querySelector("#new-customer-erp-input");
+    const erpSuggestList = overlay.querySelector("#new-customer-erp-suggest");
+    let erpOptions = [];
+    api
+      .getUnlinkedErpCustomers()
+      .then((results) => {
+        erpOptions = [...results].sort((a, b) =>
+          (a.customer_name || "").localeCompare(b.customer_name || "", undefined, { sensitivity: "base" })
+        );
+      })
+      .catch(() => {});
+
+    function renderErpSuggestions(query) {
+      const q = query.trim().toLowerCase();
+      const matches = q
+        ? erpOptions.filter(
+            (r) => (r.customer_name || "").toLowerCase().includes(q) || r.erp_customer_id.includes(q)
+          )
+        : erpOptions;
+      if (!matches.length) {
+        erpSuggestList.hidden = true;
+        erpSuggestList.innerHTML = "";
+        return;
+      }
+      erpSuggestList.innerHTML = matches
+        .slice(0, 30)
+        .map(
+          (r) => `
+        <div class="erp-suggest-item" data-id="${escapeHtml(r.erp_customer_id)}">
+          <span>${escapeHtml(r.customer_name || r.erp_customer_id)}</span>
+          ${r.debt_amd > 0 ? `<span class="muted">${formatAmd(r.debt_amd)}</span>` : ""}
+        </div>`
+        )
+        .join("");
+      erpSuggestList.hidden = false;
+    }
+
+    erpInput.addEventListener("focus", () => renderErpSuggestions(erpInput.value));
+    erpInput.addEventListener("input", () => renderErpSuggestions(erpInput.value));
+    erpInput.addEventListener("blur", () => {
+      setTimeout(() => (erpSuggestList.hidden = true), 150);
+    });
+    erpSuggestList.addEventListener("mousedown", (e) => {
+      const item = e.target.closest(".erp-suggest-item");
+      if (!item) return;
+      erpInput.value = item.dataset.id;
+      erpSuggestList.hidden = true;
     });
 
     const form = overlay.querySelector("#new-customer-form");
@@ -391,11 +636,16 @@ export function renderMap(root, navigate) {
           phone: data.get("phone") || null,
           address: data.get("address") || null,
           notes: data.get("notes") || null,
+          tin: data.get("tin") || null,
+          erp_customer_id: data.get("erp_customer_id") || null,
           lat: latlng.lat,
           lng: latlng.lng,
         });
         overlay.remove();
-        placingMarker = null;
+        if (placingMarker) {
+          map.removeLayer(placingMarker);
+          placingMarker = null;
+        }
         loadCustomers();
       } catch (err) {
         errorEl.textContent = err.message;

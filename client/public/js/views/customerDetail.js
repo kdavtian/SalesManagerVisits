@@ -1,12 +1,7 @@
 import { api } from "../api.js";
-import { escapeHtml, formatDateTime, formatDistance } from "../util.js";
+import { escapeHtml, formatDateTime, formatDistance, formatAmd, CATEGORY_OPTIONS } from "../util.js";
 import { t } from "../i18n.js";
 import { canEditDirectly, isAdmin } from "../state.js";
-
-function formatAmd(value) {
-  if (value == null) return "";
-  return `${Number(value).toLocaleString()} ${t("amd")}`;
-}
 
 const AGING_BADGE = {
   "0-7 days": "badge-success",
@@ -35,11 +30,12 @@ function navigationUrl(lat, lng, name) {
 
 const EDIT_FIELDS = [
   { name: "name", labelKey: "name", type: "text" },
-  { name: "category", labelKey: "category", type: "text" },
+  { name: "category", labelKey: "category", type: "select" },
   { name: "phone", labelKey: "phone", type: "tel" },
   { name: "address", labelKey: "address", type: "text" },
   { name: "visit_frequency_days", labelKey: "visit_frequency", type: "number" },
   { name: "notes", labelKey: "notes", type: "textarea" },
+  { name: "tin", labelKey: "tin", type: "text" },
   // Internal ERP linking field — admin-only, not something a manager/director
   // should propose via the edit-request flow.
   { name: "erp_customer_id", labelKey: "erp_customer_id", type: "text", adminOnly: true },
@@ -97,6 +93,9 @@ export async function renderCustomerDetail(root, navigate, customerId) {
         <button class="icon-btn" id="edit-customer-btn" aria-label="${t("edit")}">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
         </button>
+        <button class="icon-btn" id="relocate-customer-btn" aria-label="${t("change_location")}">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        </button>
         ${
           isAdmin()
             ? `<button class="icon-btn icon-btn-danger" id="delete-customer-btn" aria-label="${t("delete")}">
@@ -147,6 +146,9 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   });
   container.querySelector("#edit-customer-btn").addEventListener("click", () => {
     openEditSheet(customer, () => renderCustomerDetail(root, navigate, customerId));
+  });
+  container.querySelector("#relocate-customer-btn").addEventListener("click", () => {
+    navigate(`#/map?relocate=${customerId}`);
   });
   container.querySelector("#delete-customer-btn")?.addEventListener("click", async () => {
     if (!confirm(t("confirm_delete_customer"))) return;
@@ -297,7 +299,7 @@ export async function openOrderDetailSheet(customerId, orderId) {
         <div class="erp-line-row">
           <span>${escapeHtml(l.product_name || "")}${l.size_l ? ` ${escapeHtml(String(l.size_l))}L` : ""}</span>
           <span class="muted">${escapeHtml(String(l.qty ?? ""))}pcs</span>
-          <span>${formatAmd(l.revenue_amd)}</span>
+          <span>${formatAmd(l.unit_price_amd)}</span>
         </div>`
         )
         .join("")}`
@@ -373,6 +375,16 @@ function openEditSheet(customer, onDone) {
           const value = escapeHtml(customer[f.name] ?? "");
           if (f.type === "textarea") {
             return `<label>${t(f.labelKey)}<textarea name="${f.name}" rows="2">${value}</textarea></label>`;
+          }
+          if (f.type === "select") {
+            return `<label>${t(f.labelKey)}
+              <select name="${f.name}">
+                <option value="">${t("category_placeholder")}</option>
+                ${CATEGORY_OPTIONS.map(
+                  (c) => `<option value="${escapeHtml(c)}" ${customer[f.name] === c ? "selected" : ""}>${escapeHtml(c)}</option>`
+                ).join("")}
+              </select>
+            </label>`;
           }
           if (f.name === "erp_customer_id") {
             return `<label class="erp-suggest-wrap">${t(f.labelKey)}

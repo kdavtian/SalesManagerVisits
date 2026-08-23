@@ -60,7 +60,8 @@ customersRouter.get("/", async (req, res) => {
 });
 
 customersRouter.post("/", async (req, res) => {
-  const { name, category, phone, address, notes, lat, lng, visit_frequency_days } = req.body ?? {};
+  const { name, category, phone, address, notes, lat, lng, visit_frequency_days, erp_customer_id, tin } =
+    req.body ?? {};
 
   if (!name || lat === undefined || lng === undefined) {
     return res.status(400).json({ error: "name, lat and lng are required" });
@@ -70,8 +71,8 @@ customersRouter.post("/", async (req, res) => {
   }
 
   const { rows } = await pool.query(
-    `INSERT INTO customers (name, category, phone, address, notes, lat, lng, created_by, visit_frequency_days)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `INSERT INTO customers (name, category, phone, address, notes, lat, lng, created_by, visit_frequency_days, erp_customer_id, tin)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING *`,
     [
       name,
@@ -83,6 +84,8 @@ customersRouter.post("/", async (req, res) => {
       lng,
       req.user.id,
       Number(visit_frequency_days) || 14,
+      erp_customer_id || null,
+      tin || null,
     ]
   );
   res.status(201).json(rows[0]);
@@ -107,7 +110,7 @@ customersRouter.get("/:id", async (req, res) => {
   res.json(rows[0]);
 });
 
-export const EDITABLE_FIELDS = ["name", "category", "phone", "address", "notes", "lat", "lng", "visit_frequency_days", "erp_customer_id"];
+export const EDITABLE_FIELDS = ["name", "category", "phone", "address", "notes", "lat", "lng", "visit_frequency_days", "erp_customer_id", "tin"];
 
 customersRouter.patch("/:id", requireDirectEditAccess, async (req, res) => {
   const updates = [];

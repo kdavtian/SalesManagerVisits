@@ -1,6 +1,14 @@
 import { api } from "../api.js";
-import { escapeHtml, formatDateTime } from "../util.js";
+import { escapeHtml, formatDateTime, haversineMeters, getCurrentPosition } from "../util.js";
 import { t } from "../i18n.js";
+import { icons } from "../icons.js";
+
+const FILTERS = [
+  { key: "", labelKey: "filter_all" },
+  { key: "visited", labelKey: "filter_visited" },
+  { key: "overdue", labelKey: "filter_overdue" },
+  { key: "not_visited", labelKey: "filter_not_visited" },
+];
 
 export function renderCustomers(root, navigate, initialFilter) {
   root.innerHTML = `
@@ -17,11 +25,11 @@ export function renderCustomers(root, navigate, initialFilter) {
 
       <div class="list-toolbar">
         <input type="search" id="customer-search" placeholder="${t("search_customers")}" />
-        <div class="segmented" id="filter-segmented">
-          <button class="chip" data-filter="">${t("filter_all")}</button>
-          <button class="chip" data-filter="visited">${t("filter_visited")}</button>
-          <button class="chip" data-filter="overdue">${t("filter_overdue")}</button>
-          <button class="chip" data-filter="not_visited">${t("filter_not_visited")}</button>
+        <button class="icon-btn" id="sort-btn" type="button" aria-label="${t("sort")}">${icons.sort}</button>
+        <div id="sort-menu" class="dropdown-menu" hidden>
+          <button data-sort="name">${t("sort_name")}</button>
+          <button data-sort="last_visit">${t("sort_last_visit")}</button>
+          <button data-sort="distance">${t("sort_distance")}</button>
         </div>
       </div>
       <div id="customer-list" class="card-list"></div>
@@ -31,34 +39,89 @@ export function renderCustomers(root, navigate, initialFilter) {
   const searchInput = root.querySelector("#customer-search");
   const listEl = root.querySelector("#customer-list");
   const statsBar = root.querySelector("#customer-stats-bar");
-  const chips = root.querySelectorAll(".chip");
+  const sortBtn = root.querySelector("#sort-btn");
+  const sortMenu = root.querySelector("#sort-menu");
 
   let filter = initialFilter || "";
-  root.querySelectorAll(`.chip[data-filter="${filter}"]`).forEach((c) => c.classList.add("chip-active"));
-  if (!filter) chips[0].classList.add("chip-active");
-
+  let sortKey = "name";
+  let myLocation = null;
   let searchTimer;
 
   root.querySelector("#add-customer-btn").addEventListener("click", () => navigate("#/map"));
 
-  async function loadStats() {
-    const all = await api.listCustomers();
-    const visitedWeek = all.filter((c) => c.visited_this_week).length;
-    const overdue = all.filter((c) => c.overdue).length;
-    statsBar.innerHTML = `
-      <div class="stat-pill"><strong>${all.length}</strong><span>${t("filter_all")}</span></div>
-      <div class="stat-pill"><strong class="text-success">${visitedWeek}</strong><span>${t("filter_visited")}</span></div>
-      <div class="stat-pill"><strong class="text-danger">${overdue}</strong><span>${t("filter_overdue")}</span></div>
-    `;
+  sortBtn.addEventListener("click", () => {
+    sortMenu.hidden = !sortMenu.hidden;
+  });
+  sortMenu.querySelectorAll("[data-sort]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      sortKey = btn.dataset.sort;
+      sortMenu.hidden = true;
+      if (sortKey === "distance" && !myLocation) {
+        try {
+          const pos = await getCurrentPosition();
+          myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        } catch {
+          // Fall through and sort with whatever we have (no distance available).
+        }
+      }
+      render();
+    });
+  });
+  document.addEventListener("click", (e) => {
+    if (!sortMenu.hidden && !sortMenu.contains(e.target) && e.target !== sortBtn && !sortBtn.contains(e.target)) {
+      sortMenu.hidden = true;
+    }
+  });
+
+  let allCustomers = [];
+
+  function renderStatsBar() {
+    const counts = {
+      "": allCustomers.length,
+      visited: allCustomers.filter((c) => c.visited_this_week).length,
+      overdue: allCustomers.filter((c) => c.overdue).length,
+      not_visited: allCustomers.filter((c) => !c.visited_this_week).length,
+    };
+    statsBar.innerHTML = FILTERS.map(
+      (f) => `
+        <button class="stat-pill ${filter === f.key ? "stat-pill-active" : ""}" data-filter="${f.key}">
+          <strong>${counts[f.key]}</strong><span>${t(f.labelKey)}</span>
+        </button>
+      `
+    ).join("");
+    statsBar.querySelectorAll(".stat-pill").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        filter = btn.dataset.filter;
+        render();
+      });
+    });
   }
 
-  async function load() {
-    listEl.innerHTML = `<p class="muted">…</p>`;
-    const params = {};
-    if (searchInput.value.trim()) params.search = searchInput.value.trim();
-    if (filter) params.visited = filter;
+  function sortCustomers(customers) {
+    const sorted = [...customers];
+    if (sortKey === "name") {
+      sorted.sort((a, b) => a.name.localeCompare(b.name));
+    } else if (sortKey === "last_visit") {
+      sorted.sort((a, b) => new Date(b.last_visit_at || 0) - new Date(a.last_visit_at || 0));
+    } else if (sortKey === "distance" && myLocation) {
+      sorted.sort(
+        (a, b) =>
+          haversineMeters(myLocation.lat, myLocation.lng, a.lat, a.lng) -
+          haversineMeters(myLocation.lat, myLocation.lng, b.lat, b.lng)
+      );
+    }
+    return sorted;
+  }
 
-    const customers = await api.listCustomers(params);
+  function renderList() {
+    let customers = allCustomers;
+    const query = searchInput.value.trim().toLowerCase();
+    if (query) customers = customers.filter((c) => c.name.toLowerCase().includes(query));
+    if (filter === "visited") customers = customers.filter((c) => c.visited_this_week);
+    else if (filter === "overdue") customers = customers.filter((c) => c.overdue);
+    else if (filter === "not_visited") customers = customers.filter((c) => !c.visited_this_week);
+    customers = sortCustomers(customers);
+
     if (!customers.length) {
       listEl.innerHTML = `<p class="muted">${t("no_customers_found")}</p>`;
       return;
@@ -84,7 +147,6 @@ export function renderCustomers(root, navigate, initialFilter) {
 
         return `
         <button class="card customer-card" data-id="${c.id}">
-          <div class="customer-card-icon">🏪</div>
           <div class="customer-card-main">
             <strong>${escapeHtml(c.name)}</strong>
             ${c.category ? `<span class="muted">${escapeHtml(c.category)}</span>` : ""}
@@ -104,20 +166,21 @@ export function renderCustomers(root, navigate, initialFilter) {
     });
   }
 
+  function render() {
+    renderStatsBar();
+    renderList();
+  }
+
+  async function load() {
+    listEl.innerHTML = `<p class="muted">…</p>`;
+    allCustomers = await api.listCustomers();
+    render();
+  }
+
   searchInput.addEventListener("input", () => {
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(load, 300);
+    searchTimer = setTimeout(renderList, 300);
   });
 
-  chips.forEach((chip) => {
-    chip.addEventListener("click", () => {
-      chips.forEach((c) => c.classList.remove("chip-active"));
-      chip.classList.add("chip-active");
-      filter = chip.dataset.filter;
-      load();
-    });
-  });
-
-  loadStats();
   load();
 }

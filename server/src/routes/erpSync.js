@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { pool } from "../db/pool.js";
-import { requireAuth, requireAdmin } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
 
 export const erpSyncRouter = Router();
 
@@ -146,10 +146,11 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
   res.json({ synced: erpIds.length, order_lines_synced: order_lines !== undefined ? lineErpIds.length : undefined });
 });
 
-// Lets an admin browse the ERP extract by name instead of guessing at raw
-// Customer IDs when linking a Field Visits customer -- normal cookie/JWT
-// auth (not the sync key), since this is read by an admin in the browser.
-erpSyncRouter.get("/unlinked", requireAuth, requireAdmin, async (req, res) => {
+// Lets any logged-in rep browse the ERP extract by name instead of
+// guessing at raw Customer IDs when creating/linking a customer -- normal
+// cookie/JWT auth (not the sync key). Open to all roles (not admin-only)
+// because managers do the initial bulk customer onboarding themselves.
+erpSyncRouter.get("/unlinked", requireAuth, async (req, res) => {
   const { search } = req.query;
   const params = [];
   let searchFilter = "";

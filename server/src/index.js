@@ -14,6 +14,7 @@ import { settingsRouter } from "./routes/settings.js";
 import { editRequestsRouter } from "./routes/editRequests.js";
 import { locationsRouter } from "./routes/locations.js";
 import { erpSyncRouter } from "./routes/erpSync.js";
+import { geocodeRouter } from "./routes/geocode.js";
 
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
   console.error(
@@ -59,6 +60,7 @@ app.use("/api/locations", express.json(), locationsRouter);
 // not user-facing, so a larger limit here doesn't widen the attack surface
 // the way it would on a route any logged-in user can hit.
 app.use("/api/erp-sync", express.json({ limit: "25mb" }), erpSyncRouter);
+app.use("/api/geocode", geocodeRouter);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });
