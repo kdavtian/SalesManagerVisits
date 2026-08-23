@@ -9,6 +9,8 @@ import { customersRouter } from "./routes/customers.js";
 import { checkinsRouter } from "./routes/checkins.js";
 import { dashboardRouter } from "./routes/dashboard.js";
 import { settingsRouter } from "./routes/settings.js";
+import { editRequestsRouter } from "./routes/editRequests.js";
+import { locationsRouter } from "./routes/locations.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientDir = path.join(__dirname, "..", "..", "client", "public");
@@ -25,6 +27,8 @@ app.use("/api/customers", customersRouter);
 app.use("/api/checkins", checkinsRouter);
 app.use("/api/dashboard", dashboardRouter);
 app.use("/api/settings", settingsRouter);
+app.use("/api/edit-requests", editRequestsRouter);
+app.use("/api/locations", locationsRouter);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });

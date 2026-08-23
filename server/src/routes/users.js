@@ -2,6 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
+import { ROLES } from "../roles.js";
 
 export const usersRouter = Router();
 
@@ -22,8 +23,8 @@ usersRouter.post("/", async (req, res) => {
       .status(400)
       .json({ error: "email, password, name and role are required" });
   }
-  if (!["admin", "manager"].includes(role)) {
-    return res.status(400).json({ error: "role must be 'admin' or 'manager'" });
+  if (!ROLES.includes(role)) {
+    return res.status(400).json({ error: `role must be one of: ${ROLES.join(", ")}` });
   }
   if (password.length < 8) {
     return res.status(400).json({ error: "password must be at least 8 characters" });

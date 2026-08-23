@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v3";
+const CACHE_VERSION = "field-visits-v4";
 const TILE_CACHE = "field-visits-tiles-v2";
 
 const APP_SHELL = [
@@ -9,8 +9,10 @@ const APP_SHELL = [
   "/js/api.js",
   "/js/app.js",
   "/js/i18n.js",
+  "/js/icons.js",
   "/js/theme.js",
   "/js/install.js",
+  "/js/locationBroadcast.js",
   "/js/offlineQueue.js",
   "/js/state.js",
   "/js/util.js",

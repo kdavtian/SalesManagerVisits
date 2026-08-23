@@ -3,6 +3,14 @@ import { escapeHtml, formatDateTime } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 
+const ROLE_BADGE = {
+  admin: { key: "role_admin", cls: "badge-accent" },
+  manager: { key: "role_manager", cls: "badge-neutral" },
+  sales_director: { key: "role_sales_director", cls: "badge-info" },
+  warehouse_manager: { key: "role_warehouse_manager", cls: "badge-info" },
+  delivery_manager: { key: "role_delivery_manager", cls: "badge-info" },
+};
+
 export async function renderTeamSection(container) {
   container.innerHTML = `
     <div id="user-list" class="card-list"><p class="muted">…</p></div>
@@ -13,8 +21,11 @@ export async function renderTeamSection(container) {
       <label>${t("temp_password")}<input name="password" type="password" minlength="8" required /></label>
       <label>${t("role")}
         <select name="role">
-          <option value="manager">${t("manager")}</option>
-          <option value="admin">${t("admin")}</option>
+          <option value="manager">${t("role_manager")}</option>
+          <option value="sales_director">${t("role_sales_director")}</option>
+          <option value="warehouse_manager">${t("role_warehouse_manager")}</option>
+          <option value="delivery_manager">${t("role_delivery_manager")}</option>
+          <option value="admin">${t("role_admin")}</option>
         </select>
       </label>
       <p class="form-error" id="new-user-error" hidden></p>
@@ -28,15 +39,16 @@ export async function renderTeamSection(container) {
   async function loadUsers() {
     const users = await api.listUsers();
     listEl.innerHTML = users
-      .map(
-        (u) => `
+      .map((u) => {
+        const roleBadge = ROLE_BADGE[u.role] ?? { key: "role_manager", cls: "badge-neutral" };
+        return `
         <div class="card user-row">
           <div class="user-row-top">
             <div>
               <strong>${escapeHtml(u.name)}</strong>
               <span class="muted">${escapeHtml(u.email)}</span>
             </div>
-            <span class="badge ${u.role === "admin" ? "badge-accent" : "badge-neutral"}">${u.role}</span>
+            <span class="badge ${roleBadge.cls}">${t(roleBadge.key)}</span>
           </div>
           <div class="user-row-meta">
             <span class="muted">${formatDateTime(u.created_at)}</span>
@@ -46,8 +58,8 @@ export async function renderTeamSection(container) {
             </span>
           </div>
         </div>
-      `
-      )
+      `;
+      })
       .join("");
 
     listEl.querySelectorAll('[data-action="reset"]').forEach((btn) => {

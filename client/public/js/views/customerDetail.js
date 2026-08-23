@@ -1,6 +1,7 @@
 import { api } from "../api.js";
 import { escapeHtml, formatDateTime, formatDistance } from "../util.js";
 import { t } from "../i18n.js";
+import { canEditDirectly, isAdmin } from "../state.js";
 
 function navigationUrl(lat, lng, name) {
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -9,15 +10,25 @@ function navigationUrl(lat, lng, name) {
     : `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 }
 
+const EDIT_FIELDS = [
+  { name: "name", labelKey: "name", type: "text" },
+  { name: "category", labelKey: "category", type: "text" },
+  { name: "phone", labelKey: "phone", type: "tel" },
+  { name: "address", labelKey: "address", type: "text" },
+  { name: "visit_frequency_days", labelKey: "visit_frequency", type: "number" },
+  { name: "notes", labelKey: "notes", type: "textarea" },
+];
+
 export async function renderCustomerDetail(root, navigate, customerId) {
   root.innerHTML = `<div class="detail-view"><p class="muted">…</p></div>`;
   const container = root.querySelector(".detail-view");
 
-  let customer, checkins;
+  let customer, checkins, pendingRequests;
   try {
-    [customer, checkins] = await Promise.all([
+    [customer, checkins, pendingRequests] = await Promise.all([
       api.getCustomer(customerId),
       api.customerCheckins(customerId),
+      api.listEditRequests({ customer_id: customerId, status: "pending" }),
     ]);
   } catch (err) {
     container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
@@ -55,6 +66,18 @@ export async function renderCustomerDetail(root, navigate, customerId) {
         <h1>${escapeHtml(customer.name)}</h1>
         <span class="badge ${badgeClass}">${badgeText}</span>
       </div>
+      <div class="detail-header-actions">
+        <button class="icon-btn" id="edit-customer-btn" aria-label="${t("edit")}">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+        </button>
+        ${
+          isAdmin()
+            ? `<button class="icon-btn icon-btn-danger" id="delete-customer-btn" aria-label="${t("delete")}">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>
+        </button>`
+            : ""
+        }
+      </div>
     </div>
 
     <div class="card detail-facts-card">
@@ -64,6 +87,8 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       <div class="detail-fact">🔁 ${t("visit_frequency")}: ${t("every")} ${customer.visit_frequency_days} ${t("days")}</div>
       ${customer.notes ? `<div class="detail-fact muted">📝 ${escapeHtml(customer.notes)}</div>` : ""}
     </div>
+
+    <div id="pending-request-slot"></div>
 
     <div class="card next-visit-card">
       <div class="next-visit-header"><span>${t("next_visit")}</span></div>
@@ -91,6 +116,18 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   container.querySelector("#scroll-history-btn").addEventListener("click", () => {
     container.querySelector("#visit-history-anchor").scrollIntoView({ behavior: "smooth" });
   });
+  container.querySelector("#edit-customer-btn").addEventListener("click", () => {
+    openEditSheet(customer, () => renderCustomerDetail(root, navigate, customerId));
+  });
+  container.querySelector("#delete-customer-btn")?.addEventListener("click", async () => {
+    if (!confirm(t("confirm_delete_customer"))) return;
+    await api.deleteCustomer(customerId);
+    navigate("#/customers");
+  });
+
+  renderPendingRequest(container.querySelector("#pending-request-slot"), pendingRequests[0], () =>
+    renderCustomerDetail(root, navigate, customerId)
+  );
 
   const historyEl = container.querySelector("#checkin-history");
   if (!checkins.length) {
@@ -116,10 +153,126 @@ export async function renderCustomerDetail(root, navigate, customerId) {
               : ""
           }
           ${ch.note ? `<p class="checkin-note">${escapeHtml(ch.note)}</p>` : ""}
-          ${ch.photo_path ? `<img class="checkin-photo" src="${api.checkinPhotoUrl(ch.id)}" alt="Check-in photo" loading="lazy" />` : ""}
+          ${
+            ch.photo_path
+              ? `<div class="checkin-photo-wrap">
+                  <img class="checkin-photo" src="${api.checkinPhotoUrl(ch.id)}" alt="Check-in photo" loading="lazy" />
+                  ${isAdmin() ? `<button class="photo-delete-btn" data-checkin-id="${ch.id}" aria-label="${t("delete_photo")}">&times;</button>` : ""}
+                </div>`
+              : ""
+          }
         </div>
       `
       )
       .join("");
+
+    historyEl.querySelectorAll(".photo-delete-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if (!confirm(t("confirm_delete_photo"))) return;
+        await api.deleteCheckinPhoto(btn.dataset.checkinId);
+        renderCustomerDetail(root, navigate, customerId);
+      });
+    });
   }
+}
+
+function renderPendingRequest(slot, request, onDone) {
+  if (!request) {
+    slot.innerHTML = "";
+    return;
+  }
+
+  if (isAdmin()) {
+    const changesList = Object.entries(request.changes)
+      .map(([field, value]) => `<div class="proposed-change"><strong>${escapeHtml(t(field))}</strong>: ${escapeHtml(String(value))}</div>`)
+      .join("");
+    slot.innerHTML = `
+      <div class="card pending-request-card">
+        <div class="pending-request-header">
+          <span class="badge badge-accent">${t("review")}</span>
+          <span class="muted">${t("requested_by")} ${escapeHtml(request.requested_by_name)}</span>
+        </div>
+        <p class="proposed-changes-label">${t("proposed_changes")}</p>
+        ${changesList}
+        <div class="sheet-actions">
+          <button class="btn" id="reject-request-btn">${t("reject")}</button>
+          <button class="btn btn-primary" id="approve-request-btn">${t("approve")}</button>
+        </div>
+      </div>
+    `;
+    slot.querySelector("#approve-request-btn").addEventListener("click", async () => {
+      await api.reviewEditRequest(request.id, "approve");
+      onDone();
+    });
+    slot.querySelector("#reject-request-btn").addEventListener("click", async () => {
+      await api.reviewEditRequest(request.id, "reject");
+      onDone();
+    });
+  } else {
+    slot.innerHTML = `
+      <div class="card pending-request-card pending-request-card-quiet">
+        <span class="badge badge-neutral">${t("pending_edit_request")}</span>
+      </div>
+    `;
+  }
+}
+
+function openEditSheet(customer, onDone) {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.innerHTML = `
+    <div class="sheet">
+      <h2>${canEditDirectly() ? t("edit_customer") : t("request_edit")}</h2>
+      <form id="edit-customer-form">
+        ${EDIT_FIELDS.map((f) => {
+          const value = escapeHtml(customer[f.name] ?? "");
+          if (f.type === "textarea") {
+            return `<label>${t(f.labelKey)}<textarea name="${f.name}" rows="2">${value}</textarea></label>`;
+          }
+          return `<label>${t(f.labelKey)}<input type="${f.type}" name="${f.name}" value="${value}" /></label>`;
+        }).join("")}
+        <p class="form-error" id="edit-customer-error" hidden></p>
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="cancel-edit-customer">${t("cancel")}</button>
+          <button type="submit" class="btn btn-primary">${canEditDirectly() ? t("save") : t("submit_request")}</button>
+        </div>
+      </form>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  function close() {
+    overlay.remove();
+  }
+  overlay.querySelector("#cancel-edit-customer").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => e.target === overlay && close());
+
+  const form = overlay.querySelector("#edit-customer-form");
+  const errorEl = overlay.querySelector("#edit-customer-error");
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const data = new FormData(form);
+    const changes = {};
+    for (const f of EDIT_FIELDS) {
+      const raw = data.get(f.name);
+      changes[f.name] = f.type === "number" ? Number(raw) : raw;
+    }
+
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    try {
+      if (canEditDirectly()) {
+        await api.updateCustomer(customer.id, changes);
+      } else {
+        await api.createEditRequest(customer.id, changes);
+      }
+      close();
+      onDone();
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+      submitBtn.disabled = false;
+    }
+  });
 }

@@ -1,6 +1,7 @@
 import { api } from "./api.js";
 import { state, setUser, isAdmin } from "./state.js";
 import { t } from "./i18n.js";
+import { icons } from "./icons.js";
 import { renderLogin } from "./views/login.js";
 import { renderMap } from "./views/map.js";
 import { renderCustomers } from "./views/customers.js";
@@ -11,6 +12,7 @@ import { renderActivity } from "./views/activity.js";
 import { renderSettings } from "./views/settings.js";
 import { flushQueue, getQueue, onQueueChange } from "./offlineQueue.js";
 import { mountInstallPrompt } from "./install.js";
+import { startLocationBroadcast, stopLocationBroadcast } from "./locationBroadcast.js";
 
 const app = document.getElementById("app");
 const navBar = document.getElementById("nav-bar");
@@ -39,6 +41,7 @@ async function render() {
     navBar.hidden = true;
     renderLogin(app, async () => {
       location.hash = "#/dashboard";
+      startLocationBroadcast();
       render();
     });
     return;
@@ -73,6 +76,7 @@ async function render() {
       async () => {
         await api.logout();
         setUser(null);
+        stopLocationBroadcast();
         location.hash = "";
         render();
       },
@@ -86,11 +90,11 @@ async function render() {
 function renderNav() {
   const hash = (location.hash || "#/dashboard").split("?")[0];
   const items = [
-    { hash: "#/dashboard", label: t("nav_dashboard"), icon: "🏠" },
-    { hash: "#/activity", label: t("nav_activity"), icon: "📊" },
-    { hash: "#/map", label: t("nav_map"), icon: "➤", center: true },
-    { hash: "#/customers", label: t("nav_customers"), icon: "👥" },
-    { hash: "#/settings", label: t("nav_settings"), icon: "⚙️" },
+    { hash: "#/dashboard", label: t("nav_dashboard"), icon: icons.dashboard },
+    { hash: "#/activity", label: t("nav_activity"), icon: icons.activity },
+    { hash: "#/map", label: t("nav_map"), icon: icons.map, center: true },
+    { hash: "#/customers", label: t("nav_customers"), icon: icons.customers },
+    { hash: "#/settings", label: t("nav_settings"), icon: icons.settings },
   ];
 
   navBar.innerHTML = items
@@ -143,6 +147,7 @@ window.addEventListener("hashchange", render);
 async function init() {
   try {
     setUser(await api.me());
+    startLocationBroadcast();
   } catch {
     setUser(null);
   }

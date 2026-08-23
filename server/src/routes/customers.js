@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
-import { requireAuth, requireAdmin } from "../middleware/auth.js";
+import { requireAuth, requireAdmin, requireDirectEditAccess } from "../middleware/auth.js";
 
 export const customersRouter = Router();
 
@@ -97,9 +97,9 @@ customersRouter.get("/:id", async (req, res) => {
   res.json(rows[0]);
 });
 
-const EDITABLE_FIELDS = ["name", "category", "phone", "address", "notes", "lat", "lng", "visit_frequency_days"];
+export const EDITABLE_FIELDS = ["name", "category", "phone", "address", "notes", "lat", "lng", "visit_frequency_days"];
 
-customersRouter.patch("/:id", async (req, res) => {
+customersRouter.patch("/:id", requireDirectEditAccess, async (req, res) => {
   const updates = [];
   const params = [];
 

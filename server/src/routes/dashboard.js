@@ -1,15 +1,16 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
+import { seesAllActivity } from "../roles.js";
 
 export const dashboardRouter = Router();
 
 dashboardRouter.use(requireAuth);
 
 dashboardRouter.get("/summary", async (req, res) => {
-  const isAdmin = req.user.role === "admin";
-  const userFilter = isAdmin ? "" : "AND ch.user_id = $1";
-  const params = isAdmin ? [] : [req.user.id];
+  const seesAll = seesAllActivity(req.user.role);
+  const userFilter = seesAll ? "" : "AND ch.user_id = $1";
+  const params = seesAll ? [] : [req.user.id];
 
   const totalsQuery = pool.query(
     `SELECT
@@ -40,13 +41,13 @@ dashboardRouter.get("/summary", async (req, res) => {
      FROM checkins ch
      JOIN users u ON u.id = ch.user_id
      JOIN customers c ON c.id = ch.customer_id
-     ${isAdmin ? "" : "WHERE ch.user_id = $1"}
+     ${seesAll ? "" : "WHERE ch.user_id = $1"}
      ORDER BY ch.timestamp DESC
      LIMIT 20`,
     params
   );
 
-  const byManagerQuery = isAdmin
+  const byManagerQuery = seesAll
     ? pool.query(
         `SELECT u.id AS user_id, u.name AS user_name,
                 count(ch.id) AS checkins_this_week,

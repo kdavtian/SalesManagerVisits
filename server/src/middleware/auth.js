@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { canDeleteOrEditDirectly, canViewTeamLocations } from "../roles.js";
 
 const COOKIE_NAME = "session";
 
@@ -39,6 +40,22 @@ export function requireAuth(req, res, next) {
 export function requireAdmin(req, res, next) {
   if (req.user?.role !== "admin") {
     return res.status(403).json({ error: "Admin access required" });
+  }
+  next();
+}
+
+// Direct customer edits/deletes are admin-only; every other role can only
+// propose an edit request for admin to review.
+export function requireDirectEditAccess(req, res, next) {
+  if (!canDeleteOrEditDirectly(req.user?.role)) {
+    return res.status(403).json({ error: "Only admins can apply this directly" });
+  }
+  next();
+}
+
+export function requireLocationViewer(req, res, next) {
+  if (!canViewTeamLocations(req.user?.role)) {
+    return res.status(403).json({ error: "Not allowed" });
   }
   next();
 }

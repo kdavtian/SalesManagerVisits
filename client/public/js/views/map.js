@@ -1,7 +1,8 @@
 import { api } from "../api.js";
-import { escapeHtml } from "../util.js";
+import { escapeHtml, formatRelative } from "../util.js";
 import { t } from "../i18n.js";
 import { getTheme } from "../theme.js";
+import { canViewTeamLocations } from "../state.js";
 
 const TILE_URLS = {
   dark: "https://{s}.basemaps.cartocdn.com/rastertiles/dark_matter/{z}/{x}/{y}{r}.png",
@@ -37,6 +38,13 @@ export function renderMap(root, navigate) {
         <button class="map-control-btn map-control-standalone" id="locate-btn" aria-label="${t("locate_me")}">
           <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke-linecap="round"/></svg>
         </button>
+        ${
+          canViewTeamLocations()
+            ? `<button class="map-control-btn map-control-standalone" id="team-locations-btn" aria-label="${t("team_locations")}">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="3"/><path d="M2 20c0-3 2.7-5.5 6-5.5s6 2.5 6 5.5"/><circle cx="17" cy="8" r="2.3"/><path d="M14.8 14.8c2.4.3 4.2 2.3 4.2 4.8"/></svg>
+        </button>`
+            : ""
+        }
       </div>
 
       <button class="fab" id="add-customer-fab" title="${t("new_customer")}">+</button>
@@ -250,6 +258,52 @@ export function renderMap(root, navigate) {
     }
   });
 
+  // Team locations (admin/sales_director only) — foreground-only pings
+  // from teammates, polled while this toggle is on and this view is
+  // mounted; cleared on toggle-off and on view teardown.
+  const teamBtn = root.querySelector("#team-locations-btn");
+  const teamLayer = L.layerGroup();
+  let teamPollId = null;
+
+  function teamMemberIcon() {
+    return L.divIcon({
+      className: "",
+      html: `<div class="team-dot"></div>`,
+      iconSize: [16, 16],
+      iconAnchor: [8, 8],
+    });
+  }
+
+  async function refreshTeamLocations() {
+    let locations;
+    try {
+      locations = await api.getTeamLocations();
+    } catch {
+      return;
+    }
+    teamLayer.clearLayers();
+    for (const loc of locations) {
+      L.marker([loc.lat, loc.lng], { icon: teamMemberIcon() })
+        .bindPopup(
+          `<div class="map-popup"><strong>${escapeHtml(loc.name)}</strong><div class="popup-category">${escapeHtml(t(`role_${loc.role}`))} · ${formatRelative(loc.updated_at)}</div></div>`
+        )
+        .addTo(teamLayer);
+    }
+  }
+
+  teamBtn?.addEventListener("click", () => {
+    const active = teamBtn.classList.toggle("map-control-active");
+    if (active) {
+      teamLayer.addTo(map);
+      refreshTeamLocations();
+      teamPollId = setInterval(refreshTeamLocations, 15000);
+    } else {
+      map.removeLayer(teamLayer);
+      clearInterval(teamPollId);
+      teamPollId = null;
+    }
+  });
+
   fab.addEventListener("click", () => {
     addMode = !addMode;
     fab.classList.toggle("fab-active", addMode);
@@ -351,6 +405,7 @@ export function renderMap(root, navigate) {
 
   return () => {
     if (watchId != null) navigator.geolocation.clearWatch(watchId);
+    if (teamPollId) clearInterval(teamPollId);
     document.removeEventListener("visibilitychange", refreshTileStyle);
     appMain.classList.remove("app-main-locked");
     map.remove();

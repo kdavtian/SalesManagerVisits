@@ -45,6 +45,7 @@ export const api = {
     return request(`/checkins${qs ? `?${qs}` : ""}`);
   },
   checkinPhotoUrl: (id) => `/api/checkins/${id}/photo`,
+  deleteCheckinPhoto: (id) => request(`/checkins/${id}/photo`, { method: "DELETE" }),
 
   dashboardSummary: () => request("/dashboard/summary"),
 
@@ -55,4 +56,15 @@ export const api = {
 
   getSettings: () => request("/settings"),
   updateSettings: (data) => json("/settings", "PATCH", data),
+
+  createEditRequest: (customerId, changes, note) =>
+    json("/edit-requests", "POST", { customer_id: customerId, changes, note }),
+  listEditRequests: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/edit-requests${qs ? `?${qs}` : ""}`);
+  },
+  reviewEditRequest: (id, action, note) => json(`/edit-requests/${id}`, "PATCH", { action, note }),
+
+  postLocation: (lat, lng) => json("/locations", "POST", { lat, lng }),
+  getTeamLocations: () => request("/locations"),
 };

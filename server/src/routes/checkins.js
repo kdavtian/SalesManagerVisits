@@ -2,10 +2,11 @@ import { Router } from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { pool } from "../db/pool.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { photoUpload, uploadDirPath } from "../upload.js";
 import { haversineMeters } from "../utils/geo.js";
 import { getCheckinRadiusMeters } from "../settings.js";
+import { seesAllActivity } from "../roles.js";
 
 export const checkinsRouter = Router();
 
@@ -83,8 +84,9 @@ checkinsRouter.get("/", async (req, res) => {
   const { range, customer_id } = req.query;
   let { user_id } = req.query;
 
-  // Managers can only see their own check-ins; admins can filter by any user.
-  if (req.user.role !== "admin") {
+  // Plain managers only see their own check-ins; admins and every
+  // director-tier role (sales/warehouse/delivery) can filter by any user.
+  if (!seesAllActivity(req.user.role)) {
     user_id = req.user.id;
   }
 
@@ -126,11 +128,25 @@ checkinsRouter.get("/:id/photo", async (req, res) => {
   if (!checkin || !checkin.photo_path) {
     return res.status(404).json({ error: "Photo not found" });
   }
-  if (req.user.role !== "admin" && checkin.user_id !== req.user.id) {
+  if (!seesAllActivity(req.user.role) && checkin.user_id !== req.user.id) {
     return res.status(403).json({ error: "Not allowed" });
   }
 
   res.sendFile(path.join(uploadDirPath, checkin.photo_path), (err) => {
     if (err && !res.headersSent) res.status(404).json({ error: "Photo not found" });
   });
+});
+
+checkinsRouter.delete("/:id/photo", requireAdmin, async (req, res) => {
+  const { rows } = await pool.query("SELECT photo_path FROM checkins WHERE id = $1", [
+    req.params.id,
+  ]);
+  const checkin = rows[0];
+  if (!checkin || !checkin.photo_path) {
+    return res.status(404).json({ error: "Photo not found" });
+  }
+
+  fs.unlink(path.join(uploadDirPath, checkin.photo_path), () => {});
+  await pool.query("UPDATE checkins SET photo_path = NULL WHERE id = $1", [req.params.id]);
+  res.status(204).end();
 });
