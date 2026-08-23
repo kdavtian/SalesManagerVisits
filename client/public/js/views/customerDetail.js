@@ -299,8 +299,12 @@ function openEditSheet(customer, onDone) {
           if (f.type === "textarea") {
             return `<label>${t(f.labelKey)}<textarea name="${f.name}" rows="2">${value}</textarea></label>`;
           }
+          if (f.name === "erp_customer_id") {
+            return `<label>${t(f.labelKey)}<input type="text" name="${f.name}" value="${value}" list="erp-customer-options" autocomplete="off" /></label>`;
+          }
           return `<label>${t(f.labelKey)}<input type="${f.type}" name="${f.name}" value="${value}" /></label>`;
         }).join("")}
+        ${fields.some((f) => f.name === "erp_customer_id") ? `<datalist id="erp-customer-options"></datalist>` : ""}
         <p class="form-error" id="edit-customer-error" hidden></p>
         <div class="sheet-actions">
           <button type="button" class="btn" id="cancel-edit-customer">${t("cancel")}</button>
@@ -316,6 +320,21 @@ function openEditSheet(customer, onDone) {
   }
   overlay.querySelector("#cancel-edit-customer").addEventListener("click", close);
   overlay.addEventListener("click", (e) => e.target === overlay && close());
+
+  const erpOptionsList = overlay.querySelector("#erp-customer-options");
+  if (erpOptionsList) {
+    api
+      .getUnlinkedErpCustomers()
+      .then((results) => {
+        erpOptionsList.innerHTML = results
+          .map(
+            (r) =>
+              `<option value="${escapeHtml(r.erp_customer_id)}">${escapeHtml(r.customer_name || t("erp_customer_id"))}${r.debt_amd > 0 ? ` — ${formatAmd(r.debt_amd)}` : ""}</option>`
+          )
+          .join("");
+      })
+      .catch(() => {});
+  }
 
   const form = overlay.querySelector("#edit-customer-form");
   const errorEl = overlay.querySelector("#edit-customer-error");

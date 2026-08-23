@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { pool } from "../db/pool.js";
+import { requireAuth, requireAdmin } from "../middleware/auth.js";
 
 export const erpSyncRouter = Router();
 
@@ -52,6 +53,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
   }
 
   const erpIds = [];
+  const names = [];
   const reps = [];
   const debts = [];
   const lastPayments = [];
@@ -62,6 +64,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
   for (const entry of customers) {
     if (!isPlainObject(entry) || !entry.erp_customer_id) continue;
     erpIds.push(String(entry.erp_customer_id));
+    names.push(entry.customer_name != null ? String(entry.customer_name) : null);
     reps.push(entry.assigned_sales_rep != null ? String(entry.assigned_sales_rep) : null);
     debts.push(Number.isFinite(entry.debt_amd) ? entry.debt_amd : null);
     lastPayments.push(entry.last_payment_date || null);
@@ -82,11 +85,11 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     if (erpIds.length) {
       await client.query(
         `INSERT INTO erp_customer_data
-           (erp_customer_id, assigned_sales_rep, debt_amd, last_payment_date, days_since_payment, aging_bucket, recent_orders, synced_at)
-         SELECT erp_customer_id, assigned_sales_rep, debt_amd, last_payment_date, days_since_payment, aging_bucket, recent_orders, now()
-         FROM unnest($1::text[], $2::text[], $3::numeric[], $4::date[], $5::int[], $6::text[], $7::jsonb[])
-           AS t(erp_customer_id, assigned_sales_rep, debt_amd, last_payment_date, days_since_payment, aging_bucket, recent_orders)`,
-        [erpIds, reps, debts, lastPayments, daysSince, agingBuckets, recentOrders]
+           (erp_customer_id, customer_name, assigned_sales_rep, debt_amd, last_payment_date, days_since_payment, aging_bucket, recent_orders, synced_at)
+         SELECT erp_customer_id, customer_name, assigned_sales_rep, debt_amd, last_payment_date, days_since_payment, aging_bucket, recent_orders, now()
+         FROM unnest($1::text[], $2::text[], $3::text[], $4::numeric[], $5::date[], $6::int[], $7::text[], $8::jsonb[])
+           AS t(erp_customer_id, customer_name, assigned_sales_rep, debt_amd, last_payment_date, days_since_payment, aging_bucket, recent_orders)`,
+        [erpIds, names, reps, debts, lastPayments, daysSince, agingBuckets, recentOrders]
       );
     }
     await client.query("COMMIT");
@@ -99,4 +102,29 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
   }
 
   res.json({ synced: erpIds.length });
+});
+
+// Lets an admin browse the ERP extract by name instead of guessing at raw
+// Customer IDs when linking a Field Visits customer -- normal cookie/JWT
+// auth (not the sync key), since this is read by an admin in the browser.
+erpSyncRouter.get("/unlinked", requireAuth, requireAdmin, async (req, res) => {
+  const { search } = req.query;
+  const params = [];
+  let searchFilter = "";
+  if (search) {
+    params.push(`%${search}%`);
+    searchFilter = `AND erp.customer_name ILIKE $${params.length}`;
+  }
+
+  const { rows } = await pool.query(
+    `SELECT erp.erp_customer_id, erp.customer_name, erp.debt_amd, erp.assigned_sales_rep
+     FROM erp_customer_data erp
+     WHERE NOT EXISTS (
+       SELECT 1 FROM customers c WHERE c.erp_customer_id = erp.erp_customer_id
+     ) ${searchFilter}
+     ORDER BY erp.customer_name NULLS LAST, erp.erp_customer_id
+     LIMIT 200`,
+    params
+  );
+  res.json(rows);
 });

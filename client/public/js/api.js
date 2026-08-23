@@ -67,4 +67,9 @@ export const api = {
 
   postLocation: (lat, lng) => json("/locations", "POST", { lat, lng }),
   getTeamLocations: () => request("/locations"),
+
+  getUnlinkedErpCustomers: (search = "") => {
+    const qs = search ? `?search=${encodeURIComponent(search)}` : "";
+    return request(`/erp-sync/unlinked${qs}`);
+  },
 };
