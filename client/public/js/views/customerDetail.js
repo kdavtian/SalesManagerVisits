@@ -49,12 +49,13 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   root.innerHTML = `<div class="detail-view"><p class="muted">…</p></div>`;
   const container = root.querySelector(".detail-view");
 
-  let customer, checkins, pendingRequests;
+  let customer, checkins, pendingRequests, erpOrders;
   try {
-    [customer, checkins, pendingRequests] = await Promise.all([
+    [customer, checkins, pendingRequests, erpOrders] = await Promise.all([
       api.getCustomer(customerId),
       api.customerCheckins(customerId),
       api.listEditRequests({ customer_id: customerId, status: "pending" }),
+      api.getErpOrders(customerId, "recent"),
     ]);
   } catch (err) {
     container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
@@ -116,7 +117,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
 
     <div id="pending-request-slot"></div>
 
-    ${renderErpCard(customer)}
+    ${renderErpCard(customer, erpOrders)}
 
     <div class="card next-visit-card">
       <div class="next-visit-header"><span>${t("next_visit")}</span></div>
@@ -156,6 +157,13 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   renderPendingRequest(container.querySelector("#pending-request-slot"), pendingRequests[0], () =>
     renderCustomerDetail(root, navigate, customerId)
   );
+
+  container.querySelectorAll(".erp-order-row").forEach((row) => {
+    row.addEventListener("click", () => openOrderDetailSheet(customerId, row.dataset.orderId));
+  });
+  container.querySelector("#show-all-orders-btn")?.addEventListener("click", () => {
+    navigate(`#/customers/${customerId}/orders`);
+  });
 
   const historyEl = container.querySelector("#checkin-history");
   if (!checkins.length) {
@@ -204,12 +212,12 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   }
 }
 
-function renderErpCard(customer) {
+function renderErpCard(customer, erpOrders) {
   if (!customer.erp_synced_at) return "";
 
   const debt = Number(customer.erp_debt_amd) || 0;
   const agingClass = AGING_BADGE[customer.erp_aging_bucket] || "badge-neutral";
-  const orders = Array.isArray(customer.erp_recent_orders) ? customer.erp_recent_orders : [];
+  const orders = Array.isArray(erpOrders) ? erpOrders : [];
 
   return `
     <div class="card erp-card">
@@ -218,7 +226,13 @@ function renderErpCard(customer) {
         ${customer.erp_assigned_sales_rep ? `<span>${t("erp_assigned_rep")}: ${escapeHtml(customer.erp_assigned_sales_rep)}</span>` : ""}
       </div>
       ${
-        debt > 0
+        customer.erp_aging_bucket === "Data error - review"
+          ? `<div class="erp-debt-row">
+               <span class="erp-debt-amount">${t("erp_debt_unknown")}</span>
+               <span class="badge badge-danger">${t("aging_data_error")}</span>
+             </div>
+             <div class="muted">${t("erp_debt_data_error_note")}</div>`
+          : debt > 0
           ? `<div class="erp-debt-row">
                <span class="erp-debt-amount">${formatAmd(debt)}</span>
                <span class="badge ${agingClass}">${escapeHtml(t(AGING_LABEL_KEY[customer.erp_aging_bucket] || "") || customer.erp_aging_bucket)}</span>
@@ -230,19 +244,80 @@ function renderErpCard(customer) {
         orders.length
           ? `<p class="proposed-changes-label">${t("erp_recent_orders")}</p>
              ${orders
+               .slice(0, 5)
                .map(
                  (o) => `
-               <div class="erp-order-row">
-                 <span>${escapeHtml(o.date || "")}</span>
-                 <span>${escapeHtml(o.product || "")}</span>
-                 <span>${formatAmd(o.revenue_amd)}</span>
+               <div class="erp-order-row" data-order-id="${escapeHtml(o.order_id)}" role="button" tabindex="0">
+                 <span>${escapeHtml(String(o.order_date).slice(0, 10))}</span>
+                 <span class="erp-order-id">${escapeHtml(o.order_id)}</span>
+                 <span>${formatAmd(o.total_amd)}</span>
                </div>`
                )
-               .join("")}`
+               .join("")}
+             <button class="btn btn-block erp-show-all-btn" id="show-all-orders-btn">${t("show_all_orders")}</button>`
           : ""
       }
     </div>
   `;
+}
+
+function groupLinesByBrand(lines) {
+  const byBrand = new Map();
+  for (const line of lines) {
+    const brand = line.brand || t("erp_brand_unspecified");
+    if (!byBrand.has(brand)) byBrand.set(brand, []);
+    byBrand.get(brand).push(line);
+  }
+  return byBrand;
+}
+
+export async function openOrderDetailSheet(customerId, orderId) {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.innerHTML = `<div class="sheet"><p class="muted">…</p></div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+
+  let detail;
+  try {
+    detail = await api.getErpOrderDetail(customerId, orderId);
+  } catch (err) {
+    overlay.querySelector(".sheet").innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    return;
+  }
+
+  const byBrand = groupLinesByBrand(detail.lines);
+  const brandSections = [...byBrand.entries()]
+    .map(
+      ([brand, lines]) => `
+      <p class="proposed-changes-label">${escapeHtml(brand)}</p>
+      ${lines
+        .map(
+          (l) => `
+        <div class="erp-line-row">
+          <span>${escapeHtml(l.product_name || "")}${l.size_l ? ` ${escapeHtml(String(l.size_l))}L` : ""}</span>
+          <span class="muted">${escapeHtml(String(l.qty ?? ""))}pcs</span>
+          <span>${formatAmd(l.revenue_amd)}</span>
+        </div>`
+        )
+        .join("")}`
+    )
+    .join("");
+
+  overlay.querySelector(".sheet").innerHTML = `
+    <div class="order-detail-header">
+      <h2>${escapeHtml(detail.order_id)}</h2>
+      <button class="icon-btn" id="close-order-detail" aria-label="${t("cancel")}">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="order-detail-meta">
+      <span>${escapeHtml(String(detail.order_date).slice(0, 10))}</span>
+      <span class="erp-debt-amount">${formatAmd(detail.total_amd)}</span>
+    </div>
+    ${brandSections}
+  `;
+  overlay.querySelector("#close-order-detail").addEventListener("click", () => overlay.remove());
 }
 
 function renderPendingRequest(slot, request, onDone) {
@@ -300,11 +375,13 @@ function openEditSheet(customer, onDone) {
             return `<label>${t(f.labelKey)}<textarea name="${f.name}" rows="2">${value}</textarea></label>`;
           }
           if (f.name === "erp_customer_id") {
-            return `<label>${t(f.labelKey)}<input type="text" name="${f.name}" value="${value}" list="erp-customer-options" autocomplete="off" /></label>`;
+            return `<label class="erp-suggest-wrap">${t(f.labelKey)}
+              <input type="text" name="${f.name}" value="${value}" id="erp-customer-input" autocomplete="off" />
+              <div class="erp-suggest-list" id="erp-suggest-list" hidden></div>
+            </label>`;
           }
           return `<label>${t(f.labelKey)}<input type="${f.type}" name="${f.name}" value="${value}" /></label>`;
         }).join("")}
-        ${fields.some((f) => f.name === "erp_customer_id") ? `<datalist id="erp-customer-options"></datalist>` : ""}
         <p class="form-error" id="edit-customer-error" hidden></p>
         <div class="sheet-actions">
           <button type="button" class="btn" id="cancel-edit-customer">${t("cancel")}</button>
@@ -321,19 +398,62 @@ function openEditSheet(customer, onDone) {
   overlay.querySelector("#cancel-edit-customer").addEventListener("click", close);
   overlay.addEventListener("click", (e) => e.target === overlay && close());
 
-  const erpOptionsList = overlay.querySelector("#erp-customer-options");
-  if (erpOptionsList) {
+  const erpInput = overlay.querySelector("#erp-customer-input");
+  const erpSuggestList = overlay.querySelector("#erp-suggest-list");
+  if (erpInput) {
+    let erpOptions = [];
     api
       .getUnlinkedErpCustomers()
       .then((results) => {
-        erpOptionsList.innerHTML = results
-          .map(
-            (r) =>
-              `<option value="${escapeHtml(r.erp_customer_id)}">${escapeHtml(r.customer_name || t("erp_customer_id"))}${r.debt_amd > 0 ? ` — ${formatAmd(r.debt_amd)}` : ""}</option>`
-          )
-          .join("");
+        // Sort A-Z by name client-side too -- relying only on the server's
+        // ORDER BY isn't enough since the browser's own native datalist
+        // (what this replaces) silently ignored it; keep the sort explicit
+        // and visible here so it can't regress the same way again.
+        erpOptions = [...results].sort((a, b) =>
+          (a.customer_name || "").localeCompare(b.customer_name || "", undefined, { sensitivity: "base" })
+        );
       })
       .catch(() => {});
+
+    function renderSuggestions(query) {
+      const q = query.trim().toLowerCase();
+      const matches = q
+        ? erpOptions.filter(
+            (r) => (r.customer_name || "").toLowerCase().includes(q) || r.erp_customer_id.includes(q)
+          )
+        : erpOptions;
+      if (!matches.length) {
+        erpSuggestList.hidden = true;
+        erpSuggestList.innerHTML = "";
+        return;
+      }
+      erpSuggestList.innerHTML = matches
+        .slice(0, 30)
+        .map(
+          (r) => `
+        <div class="erp-suggest-item" data-id="${escapeHtml(r.erp_customer_id)}">
+          <span>${escapeHtml(r.customer_name || r.erp_customer_id)}</span>
+          ${r.debt_amd > 0 ? `<span class="muted">${formatAmd(r.debt_amd)}</span>` : ""}
+        </div>`
+        )
+        .join("");
+      erpSuggestList.hidden = false;
+    }
+
+    erpInput.addEventListener("focus", () => renderSuggestions(erpInput.value));
+    erpInput.addEventListener("input", () => renderSuggestions(erpInput.value));
+    erpInput.addEventListener("blur", () => {
+      // A delay, not immediate hide, so the suggestion's own click handler
+      // (mousedown fires first, but click needs the element still present)
+      // gets a chance to run before the list disappears.
+      setTimeout(() => (erpSuggestList.hidden = true), 150);
+    });
+    erpSuggestList.addEventListener("mousedown", (e) => {
+      const item = e.target.closest(".erp-suggest-item");
+      if (!item) return;
+      erpInput.value = item.dataset.id;
+      erpSuggestList.hidden = true;
+    });
   }
 
   const form = overlay.querySelector("#edit-customer-form");

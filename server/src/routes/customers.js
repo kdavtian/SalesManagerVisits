@@ -140,6 +140,57 @@ customersRouter.delete("/:id", requireAdmin, async (req, res) => {
   res.status(204).end();
 });
 
+// Order-level list for a customer's ERP order history: individual line
+// items grouped into real orders by order_id/order_date, with a summed
+// total per order. scope=recent (default) is the last 3 months for the
+// inline preview on the customer detail page; scope=all removes that
+// filter for the "show all orders" screen.
+customersRouter.get("/:id/erp-orders", async (req, res) => {
+  const scope = req.query.scope === "all" ? "all" : "recent";
+  const { rows: customerRows } = await pool.query("SELECT erp_customer_id FROM customers WHERE id = $1", [
+    req.params.id,
+  ]);
+  const erpCustomerId = customerRows[0]?.erp_customer_id;
+  if (!erpCustomerId) return res.json([]);
+
+  const dateFilter = scope === "recent" ? "AND order_date >= now() - interval '3 months'" : "";
+  const { rows } = await pool.query(
+    `SELECT order_id, order_date, sum(revenue_amd) AS total_amd
+     FROM erp_order_lines
+     WHERE erp_customer_id = $1 ${dateFilter}
+     GROUP BY order_id, order_date
+     ORDER BY order_date DESC, order_id DESC
+     LIMIT 200`,
+    [erpCustomerId]
+  );
+  res.json(rows);
+});
+
+// Line-item detail for one order (product/brand/qty/price), for the
+// click-into-an-order view. Grouped by brand client-side.
+customersRouter.get("/:id/erp-orders/:orderId", async (req, res) => {
+  const { rows: customerRows } = await pool.query("SELECT erp_customer_id FROM customers WHERE id = $1", [
+    req.params.id,
+  ]);
+  const erpCustomerId = customerRows[0]?.erp_customer_id;
+  if (!erpCustomerId) return res.status(404).json({ error: "Customer not linked to an ERP record" });
+
+  const { rows } = await pool.query(
+    `SELECT order_id, order_date, product_id, brand, product_name, size_l, qty, unit_price_amd, revenue_amd
+     FROM erp_order_lines
+     WHERE erp_customer_id = $1 AND order_id = $2
+     ORDER BY brand, product_name`,
+    [erpCustomerId, req.params.orderId]
+  );
+  if (!rows.length) return res.status(404).json({ error: "Order not found" });
+  res.json({
+    order_id: rows[0].order_id,
+    order_date: rows[0].order_date,
+    total_amd: rows.reduce((sum, r) => sum + Number(r.revenue_amd || 0), 0),
+    lines: rows,
+  });
+});
+
 customersRouter.get("/:id/checkins", async (req, res) => {
   // Plain managers only see their own visit history on a customer, same
   // restriction as GET /api/checkins.

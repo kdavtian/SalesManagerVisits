@@ -52,7 +52,7 @@ const dict = {
 
     dark_mode: "Dark mode",
 
-    app_name: "Field Visits",
+    app_name: "KAD Motors",
     log_in: "Log in",
     logging_in: "Logging in…",
     email: "Email",
@@ -113,7 +113,13 @@ const dict = {
     erp_assigned_rep: "Assigned rep",
     erp_last_payment: "Last payment",
     erp_no_debt: "No outstanding debt on record.",
+    erp_debt_unknown: "Debt: unknown",
+    erp_debt_data_error_note: "The source spreadsheet has a broken formula for this customer's debt — the real amount is unknown, not zero. Contact the office to check.",
     erp_recent_orders: "Recent orders",
+    show_all_orders: "Show all orders",
+    all_orders: "All orders",
+    no_orders_found: "No orders found.",
+    erp_brand_unspecified: "Other",
     amd: "AMD",
     aging_0_7: "0-7 days",
     aging_8_14: "8-14 days",
@@ -198,7 +204,7 @@ const dict = {
     delete_user: "Remove",
     confirm_delete_user: "Remove this user? This cannot be undone.",
 
-    install_title: "Install Field Visits",
+    install_title: "Install KAD Motors",
     install_body: "Add it to your home screen for one-tap access.",
     install_now: "Install",
     install_show_steps: "Show me how",
@@ -266,7 +272,7 @@ const dict = {
 
     dark_mode: "Մուգ ռեժիմ",
 
-    app_name: "Field Visits",
+    app_name: "KAD Motors",
     log_in: "Մուտք",
     logging_in: "Մուտք է գործում…",
     email: "Էլ. փոստ",
@@ -327,7 +333,13 @@ const dict = {
     erp_assigned_rep: "Պատասխանատու",
     erp_last_payment: "Վերջին վճարում",
     erp_no_debt: "Պարտք չկա գրանցված։",
+    erp_debt_unknown: "Պարտք՝ անհայտ",
+    erp_debt_data_error_note: "Աղբյուր աղյուսակում այս հաճախորդի պարտքի բանաձևը կոտրված է — իրական գումարն անհայտ է, ոչ թե զրո։ Կապվեք գրասենյակի հետ ստուգելու համար։",
     erp_recent_orders: "Վերջին պատվերները",
+    show_all_orders: "Ցուցադրել բոլոր պատվերները",
+    all_orders: "Բոլոր պատվերները",
+    no_orders_found: "Պատվերներ չեն գտնվել։",
+    erp_brand_unspecified: "Այլ",
     amd: "դր.",
     aging_0_7: "0-7 օր",
     aging_8_14: "8-14 օր",
@@ -413,7 +425,7 @@ const dict = {
     delete_user: "Հեռացնել",
     confirm_delete_user: "Հեռացնե՞լ այս օգտատիրոջը։ Այս գործողությունը հնարավոր չէ հետարկել։",
 
-    install_title: "Տեղադրել Field Visits-ը",
+    install_title: "Տեղադրել KAD Motors-ը",
     install_body: "Ավելացրեք հիմնական էկրանին՝ մեկ հպումով բացելու համար։",
     install_now: "Տեղադրել",
     install_show_steps: "Ցույց տալ քայլերը",

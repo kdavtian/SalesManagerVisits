@@ -131,6 +131,21 @@ a {
   z-index: 10;
 }
 
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topbar-logo {
+  width: 22px;
+  height: 22px;
+  background: #ffffff;
+  border-radius: 6px;
+  padding: 3px;
+  object-fit: contain;
+}
+
 .topbar-title {
   font-weight: 700;
   font-size: 1.05rem;
@@ -479,15 +494,13 @@ form select:focus {
 }
 
 .brand-mark {
-  background: var(--accent);
-  color: #ffffff;
-  font-weight: 800;
+  background: #ffffff;
   border-radius: 12px;
   width: 46px;
   height: 46px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  padding: 8px;
+  object-fit: contain;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
 }
 
 .login-brand h1 {
@@ -1449,8 +1462,88 @@ form select:focus {
   justify-content: space-between;
   gap: 10px;
   font-size: 0.85rem;
-  padding: 6px 0;
+  padding: 10px 4px;
   border-top: 1px solid var(--border);
+  cursor: pointer;
+  min-height: 44px;
+  align-items: center;
+}
+
+.erp-order-row:active {
+  background: var(--bg-card-pressed);
+}
+
+.erp-order-id {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.erp-show-all-btn {
+  margin-top: 12px;
+}
+
+.erp-suggest-wrap {
+  position: relative;
+}
+
+.erp-suggest-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin-top: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.erp-suggest-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  min-height: 44px;
+  align-items: center;
+  font-size: 0.9rem;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.erp-suggest-item:last-child {
+  border-bottom: none;
+}
+
+.erp-suggest-item:active {
+  background: var(--bg-card-pressed);
+}
+
+.erp-line-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.85rem;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+
+.order-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.order-detail-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
 }
 
 .next-visit-header {

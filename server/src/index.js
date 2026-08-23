@@ -52,12 +52,13 @@ app.use("/api/dashboard", dashboardRouter);
 app.use("/api/settings", express.json(), settingsRouter);
 app.use("/api/edit-requests", express.json(), editRequestsRouter);
 app.use("/api/locations", express.json(), locationsRouter);
-// A real ERP extract (hundreds of customers with debt + recent orders) can
-// comfortably exceed express's 100kb default JSON body limit, so this route
-// gets a higher one -- it's machine-authenticated (X-Sync-Key), not
-// user-facing, so a larger limit here doesn't widen the attack surface the
-// way it would on a route any logged-in user can hit.
-app.use("/api/erp-sync", express.json({ limit: "5mb" }), erpSyncRouter);
+// A real ERP extract (hundreds of customers with debt + recent orders, plus
+// full all-time order-line history for the "show all orders" drill-down)
+// can comfortably exceed express's 100kb default JSON body limit, so this
+// route gets a much higher one -- it's machine-authenticated (X-Sync-Key),
+// not user-facing, so a larger limit here doesn't widen the attack surface
+// the way it would on a route any logged-in user can hit.
+app.use("/api/erp-sync", express.json({ limit: "25mb" }), erpSyncRouter);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });

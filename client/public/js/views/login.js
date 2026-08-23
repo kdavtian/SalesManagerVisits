@@ -7,7 +7,7 @@ export function renderLogin(root, onSuccess) {
     <div class="login-screen">
       <div class="login-card">
         <div class="login-brand">
-          <span class="brand-mark">FV</span>
+          <img class="brand-mark" src="/brand/kad-k-mark.png" alt="" />
           <h1>${t("app_name")}</h1>
         </div>
         <form id="login-form">

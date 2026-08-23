@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v4";
+const CACHE_VERSION = "field-visits-v5";
 const TILE_CACHE = "field-visits-tiles-v2";
 
 const APP_SHELL = [
@@ -20,6 +20,7 @@ const APP_SHELL = [
   "/js/views/activity.js",
   "/js/views/checkin.js",
   "/js/views/customerDetail.js",
+  "/js/views/customerOrders.js",
   "/js/views/customers.js",
   "/js/views/dashboard.js",
   "/js/views/login.js",
@@ -31,6 +32,7 @@ const APP_SHELL = [
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/apple-touch-icon.png",
+  "/brand/kad-k-mark.png",
 ];
 
 self.addEventListener("install", (event) => {

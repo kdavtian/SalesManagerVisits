@@ -6,6 +6,7 @@ import { renderLogin } from "./views/login.js";
 import { renderMap } from "./views/map.js";
 import { renderCustomers } from "./views/customers.js";
 import { renderCustomerDetail } from "./views/customerDetail.js";
+import { renderCustomerOrders } from "./views/customerOrders.js";
 import { renderCheckin } from "./views/checkin.js";
 import { renderDashboard } from "./views/dashboard.js";
 import { renderActivity } from "./views/activity.js";
@@ -57,6 +58,7 @@ async function render() {
   const [path, queryString] = hash.split("?");
   const query = new URLSearchParams(queryString || "");
   const customerMatch = path.match(/^#\/customers\/(\d+)$/);
+  const customerOrdersMatch = path.match(/^#\/customers\/(\d+)\/orders$/);
   const checkinMatch = path.match(/^#\/checkin\/(\d+)$/);
 
   if (path === "#/dashboard") {
@@ -67,6 +69,8 @@ async function render() {
     currentCleanup = renderMap(app, navigate);
   } else if (path === "#/customers") {
     renderCustomers(app, navigate, query.get("visited"));
+  } else if (customerOrdersMatch) {
+    renderCustomerOrders(app, navigate, customerOrdersMatch[1]);
   } else if (customerMatch) {
     renderCustomerDetail(app, navigate, customerMatch[1]);
   } else if (checkinMatch) {
@@ -123,7 +127,10 @@ function renderNav() {
   });
 
   topBar.innerHTML = `
-    <span class="topbar-title">${t("app_name")}</span>
+    <span class="topbar-brand">
+      <img class="topbar-logo" src="/brand/kad-k-mark.png" alt="" />
+      <span class="topbar-title">${t("app_name")}</span>
+    </span>
     <span class="topbar-user">${escapeHtml(state.user.name)}</span>
   `;
 }

@@ -76,6 +76,31 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     recentOrders.push(JSON.stringify(Array.isArray(entry.recent_orders) ? entry.recent_orders.slice(0, 10) : []));
   }
 
+  const lineErpIds = [];
+  const lineOrderIds = [];
+  const lineDates = [];
+  const lineProductIds = [];
+  const lineBrands = [];
+  const lineProductNames = [];
+  const lineSizes = [];
+  const lineQtys = [];
+  const lineUnitPrices = [];
+  const lineRevenues = [];
+
+  for (const line of Array.isArray(order_lines) ? order_lines : []) {
+    if (!isPlainObject(line) || !line.erp_customer_id || !line.order_id || !line.date) continue;
+    lineErpIds.push(String(line.erp_customer_id));
+    lineOrderIds.push(String(line.order_id));
+    lineDates.push(line.date);
+    lineProductIds.push(line.product_id != null ? String(line.product_id) : null);
+    lineBrands.push(line.brand != null ? String(line.brand) : null);
+    lineProductNames.push(line.product != null ? String(line.product) : null);
+    lineSizes.push(line.size_l != null ? String(line.size_l) : null);
+    lineQtys.push(Number.isFinite(line.qty) ? line.qty : null);
+    lineUnitPrices.push(Number.isFinite(line.unit_price_amd) ? line.unit_price_amd : null);
+    lineRevenues.push(Number.isFinite(line.revenue_amd) ? line.revenue_amd : null);
+  }
+
   const client = await pool.connect();
   let releaseErr;
   try {
@@ -95,6 +120,20 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
         [erpIds, names, reps, debts, lastPayments, daysSince, agingBuckets, recentOrders]
       );
     }
+
+    if (order_lines !== undefined) {
+      await client.query("TRUNCATE erp_order_lines");
+      if (lineErpIds.length) {
+        await client.query(
+          `INSERT INTO erp_order_lines
+             (erp_customer_id, order_id, order_date, product_id, brand, product_name, size_l, qty, unit_price_amd, revenue_amd)
+           SELECT erp_customer_id, order_id, order_date, product_id, brand, product_name, size_l, qty, unit_price_amd, revenue_amd
+           FROM unnest($1::text[], $2::text[], $3::date[], $4::text[], $5::text[], $6::text[], $7::text[], $8::numeric[], $9::numeric[], $10::numeric[])
+             AS t(erp_customer_id, order_id, order_date, product_id, brand, product_name, size_l, qty, unit_price_amd, revenue_amd)`,
+          [lineErpIds, lineOrderIds, lineDates, lineProductIds, lineBrands, lineProductNames, lineSizes, lineQtys, lineUnitPrices, lineRevenues]
+        );
+      }
+    }
     await client.query("COMMIT");
   } catch (err) {
     releaseErr = err;
@@ -104,7 +143,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     client.release(releaseErr);
   }
 
-  res.json({ synced: erpIds.length });
+  res.json({ synced: erpIds.length, order_lines_synced: order_lines !== undefined ? lineErpIds.length : undefined });
 });
 
 // Lets an admin browse the ERP extract by name instead of guessing at raw
