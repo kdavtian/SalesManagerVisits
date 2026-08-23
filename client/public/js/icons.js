@@ -4,11 +4,11 @@
 const stroke = 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
 
 export const icons = {
-  dashboard: `<svg viewBox="0 0 24 24" width="22" height="22" ${stroke}><path d="M3 11l9-8 9 8"/><path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10"/></svg>`,
-  activity: `<svg viewBox="0 0 24 24" width="22" height="22" ${stroke}><path d="M4 20V10M10 20V4M16 20v-7M22 20v-4"/></svg>`,
-  map: `<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M2.5 21.5l19-9.5-19-9.5v7.5l13 2-13 2z"/></svg>`,
-  customers: `<svg viewBox="0 0 24 24" width="22" height="22" ${stroke}><circle cx="8.5" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 2.7-6.2 6-6.2s6 2.6 6 6.2"/><circle cx="17" cy="9" r="2.6"/><path d="M14.5 13.6c2.7.3 4.7 2.6 4.7 5.4"/></svg>`,
-  settings: `<svg viewBox="0 0 24 24" width="22" height="22" ${stroke}><circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.9 2.9l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V20a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.9-2.9l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H4a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.9-2.9l.1.1a1.7 1.7 0 0 0 1.9.3H10a1.7 1.7 0 0 0 1-1.6V4a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.9 2.9l-.1.1a1.7 1.7 0 0 0-.3 1.9V10c.1.7.6 1.3 1.6 1.4h.1a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1.1z"/></svg>`,
+  dashboard: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10.5 12 3l8.5 7.5"/><path d="M5 9.5V19a1.5 1.5 0 0 0 1.5 1.5H9V15a3 3 0 0 1 6 0v5.5h2.5A1.5 1.5 0 0 0 19 19V9.5"/></svg>`,
+  activity: `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><rect x="2" y="12" width="3.2" height="9" rx="1.6"/><rect x="7.6" y="5" width="3.2" height="16" rx="1.6"/><rect x="13.2" y="10" width="3.2" height="11" rx="1.6"/><rect x="18.8" y="15" width="3.2" height="6" rx="1.6"/></svg>`,
+  map: `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M3 11 22 2 13 21 11 13z"/></svg>`,
+  customers: `<svg viewBox="0 0 24 24" width="22" height="22" ${stroke}><circle cx="5.8" cy="8.2" r="2.3"/><circle cx="12" cy="7" r="2.8"/><circle cx="18.2" cy="8.2" r="2.3"/><path d="M2.2 19.5c0-2.7 1.6-4.7 3.6-4.7"/><path d="M18.2 14.8c2 0 3.6 2 3.6 4.7"/><path d="M6.4 19.8c0-3.4 2.5-6 5.6-6s5.6 2.6 5.6 6"/></svg>`,
+  settings: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6.4"/><circle cx="12" cy="12" r="2.4"/><path d="M12 3.4v1.4M12 19.2v1.4M20.6 12h-1.4M4.8 12H3.4M17.6 6.4l-1 1M7.4 16.6l-1 1M17.6 17.6l-1-1M7.4 7.4l-1-1"/></svg>`,
   locate: `<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke-linecap="round"/></svg>`,
   plus: `<svg viewBox="0 0 24 24" width="20" height="20" ${stroke}><path d="M12 5v14M5 12h14"/></svg>`,
   minus: `<svg viewBox="0 0 24 24" width="20" height="20" ${stroke}><path d="M5 12h14"/></svg>`,
