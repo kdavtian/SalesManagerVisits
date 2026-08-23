@@ -188,10 +188,19 @@ a {
   border-top: 0.5px solid var(--border);
   padding-bottom: var(--safe-bottom);
   flex-shrink: 0;
-  /* sticky (not just relative) keeps this pinned during iOS Safari's
-     momentum-scroll repaint on a long list (e.g. Customers, "Not visited"
-     filter) instead of drifting with the scrolled content. */
-  position: sticky;
+  /* Fixed (not sticky/relative) and pinned to the real viewport edge --
+     nav-bar is a sibling of #app, not one of its scrolling descendants, so
+     "sticky" here had nothing to stick against and just behaved like
+     "relative", leaving its exact position dependent on this flex column's
+     height math matching the device's true safe-area-inset-bottom. On some
+     iOS standalone-PWA installs that math comes up short, leaving a gap
+     between the nav bar and the home indicator with the map (or page
+     background) showing through, and the floating map-button circle
+     clipped by the map underneath it. Fixed positioning sidesteps that --
+     the bar is always flush with the actual screen edge. */
+  position: fixed;
+  left: 0;
+  right: 0;
   bottom: 0;
   z-index: 10;
   height: calc(48px + var(--safe-bottom));
@@ -399,6 +408,13 @@ a {
   overflow-y: auto;
   position: relative;
   -webkit-overflow-scrolling: touch;
+  /* nav-bar is now position: fixed (see .nav-bar) and no longer reserves
+     its own space in the flex layout, so scrollable views need this padding
+     to keep their last item from ending up underneath it. The map view
+     ignores this (its .map-view is absolutely inset:0 against #app's
+     padding box) and deliberately extends full-bleed under the translucent
+     nav bar instead. */
+  padding-bottom: calc(48px + var(--safe-bottom));
 }
 
 /* While the map view is mounted, the app shell must not scroll — an
