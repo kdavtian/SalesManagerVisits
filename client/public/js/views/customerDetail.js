@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatDateTime, formatDistance, formatAmd, CATEGORY_OPTIONS } from "../util.js";
+import { escapeHtml, formatDateTime, formatDistance, formatAmd, openNavigation, CATEGORY_OPTIONS } from "../util.js";
 import { t } from "../i18n.js";
 import { canEditDirectly, isAdmin } from "../state.js";
 
@@ -20,13 +20,6 @@ const AGING_LABEL_KEY = {
   "No payment found": "aging_no_payment",
   "Data error - review": "aging_data_error",
 };
-
-function navigationUrl(lat, lng, name) {
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  return isIOS
-    ? `https://maps.apple.com/?daddr=${lat},${lng}&q=${encodeURIComponent(name)}`
-    : `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-}
 
 const EDIT_FIELDS = [
   { name: "name", labelKey: "name", type: "text" },
@@ -127,9 +120,9 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       <button class="action-btn action-btn-primary" id="checkin-btn">
         <span>📍</span>${t("check_in")}
       </button>
-      <a class="action-btn" href="${navigationUrl(customer.lat, customer.lng, customer.name)}" target="_blank" rel="noopener">
+      <button type="button" class="action-btn" id="navigate-btn">
         <span>🧭</span>${t("navigate")}
-      </a>
+      </button>
       ${customer.phone ? `<a class="action-btn" href="tel:${escapeHtml(customer.phone)}"><span>📞</span>${t("call")}</a>` : ""}
       <button class="action-btn" id="scroll-history-btn"><span>🕘</span>${t("visit_history")}</button>
     </div>
@@ -140,6 +133,9 @@ export async function renderCustomerDetail(root, navigate, customerId) {
 
   container.querySelector("#checkin-btn").addEventListener("click", () => {
     navigate(`#/checkin/${customerId}`);
+  });
+  container.querySelector("#navigate-btn").addEventListener("click", () => {
+    openNavigation(customer.lat, customer.lng);
   });
   container.querySelector("#scroll-history-btn").addEventListener("click", () => {
     container.querySelector("#visit-history-anchor").scrollIntoView({ behavior: "smooth" });

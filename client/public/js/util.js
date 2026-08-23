@@ -54,6 +54,57 @@ export function formatRelative(iso) {
   return `${days}d ago`;
 }
 
+// Deep-link into a turn-by-turn navigation app, preferring Yandex Navi (the
+// app field reps actually use), then Google Maps, then falling back to
+// Yandex's own web-based route planner -- Yandex has by far the best map
+// data for Armenia, so it's a better universal fallback than Apple Maps. With
+// no API to ask "is this app installed?", we open the app's custom URL
+// scheme and watch whether the tab is backgrounded (the OS switching apps)
+// within a short window; if nothing happens we assume it's not installed and
+// fall through to the next option.
+export function openNavigation(lat, lng) {
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+  function tryScheme(url, onNotInstalled, timeoutMs = 1000) {
+    let settled = false;
+    function onVisibilityChange() {
+      if (document.hidden) settle();
+    }
+    function settle() {
+      if (settled) return;
+      settled = true;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      clearTimeout(timer);
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settle();
+        onNotInstalled();
+      }
+    }, timeoutMs);
+    window.location.href = url;
+  }
+
+  const yandexUrl = `yandexnavi://build_route_on_map?lat_to=${lat}&lon_to=${lng}`;
+  const yandexWebUrl = `https://yandex.com/maps/?rtext=~${lat}%2C${lng}&rtt=auto`;
+  const googleWebUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+  const googleIosSchemeUrl = `comgooglemaps://?daddr=${lat},${lng}&directionsmode=driving`;
+
+  tryScheme(yandexUrl, () => {
+    if (isIOS) {
+      tryScheme(googleIosSchemeUrl, () => {
+        window.location.href = yandexWebUrl;
+      });
+    } else {
+      // Google Maps' web URL resolves to the installed app via Android
+      // intent handling, or the web app otherwise -- no separate scheme
+      // attempt needed on Android.
+      window.location.href = googleWebUrl;
+    }
+  });
+}
+
 export function getCurrentPosition(options = {}) {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
