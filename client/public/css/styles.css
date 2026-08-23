@@ -1396,6 +1396,30 @@ form select:focus {
   flex: 1;
 }
 
+.plan-day-list {
+  max-height: 45vh;
+  overflow-y: auto;
+  margin: 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.plan-day-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.plan-day-row input {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
 /* ===== Dashboard / Activity redesign ===== */
 
 .text-success {

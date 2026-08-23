@@ -77,4 +77,9 @@ export const api = {
     request(`/customers/${customerId}/erp-orders/${encodeURIComponent(orderId)}`),
 
   reverseGeocode: (lat, lng) => request(`/geocode/reverse?lat=${lat}&lng=${lng}`),
+
+  getMyVisitPlan: (date) => request(`/visit-plans/mine${date ? `?date=${date}` : ""}`),
+  saveVisitPlan: (date, customerIds) => json("/visit-plans", "POST", { date, customer_ids: customerIds }),
+  getPendingVisitPlans: () => request("/visit-plans/pending"),
+  reviewVisitPlan: (id, action) => json(`/visit-plans/${id}`, "PATCH", { action }),
 };

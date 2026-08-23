@@ -146,3 +146,48 @@ export async function renderTeamSection(container) {
 
   loadUsers();
 }
+
+export async function renderPlanApprovalsSection(container) {
+  container.innerHTML = `<div id="plan-approvals-section"><p class="muted">…</p></div>`;
+  const section = container.querySelector("#plan-approvals-section");
+
+  async function load() {
+    const plans = await api.getPendingVisitPlans();
+    if (!plans.length) {
+      section.innerHTML = `<p class="muted">${t("plan_approvals_empty")}</p>`;
+      return;
+    }
+    section.innerHTML = plans
+      .map((p) => {
+        const dateLabel = new Date(p.plan_date).toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+        });
+        const names = p.customer_names.map(escapeHtml).join(", ") || t("no_customers_found");
+        return `
+        <div class="card plan-approval-row">
+          <div class="pending-request-header">
+            <span class="badge badge-accent">${t("review")}</span>
+            <span class="muted">${escapeHtml(p.user_name)} · ${t("plan_for_date")} ${dateLabel}</span>
+          </div>
+          <p class="proposed-changes-label">${names}</p>
+          <div class="sheet-actions">
+            <button class="btn" data-action="reject" data-id="${p.id}">${t("reject")}</button>
+            <button class="btn btn-primary" data-action="approve" data-id="${p.id}">${t("approve")}</button>
+          </div>
+        </div>
+      `;
+      })
+      .join("");
+
+    section.querySelectorAll("[data-action]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        btn.closest(".plan-approval-row").querySelectorAll("button").forEach((b) => (b.disabled = true));
+        await api.reviewVisitPlan(btn.dataset.id, btn.dataset.action);
+        load();
+      });
+    });
+  }
+
+  load();
+}

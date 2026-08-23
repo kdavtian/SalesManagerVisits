@@ -14,4 +14,5 @@ export const icons = {
   minus: `<svg viewBox="0 0 24 24" width="20" height="20" ${stroke}><path d="M5 12h14"/></svg>`,
   team: `<svg viewBox="0 0 24 24" width="20" height="20" ${stroke}><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>`,
   sort: `<svg viewBox="0 0 24 24" width="20" height="20" ${stroke}><path d="M6 4v16M6 4l-3 3M6 4l3 3M18 20V4M18 20l-3-3M18 20l3-3"/></svg>`,
+  planDay: `<svg viewBox="0 0 24 24" width="20" height="20" ${stroke}><rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17"/><path d="M8 3v3M16 3v3"/><path d="M7.5 14l2 2 4-4.5"/></svg>`,
 };

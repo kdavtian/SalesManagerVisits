@@ -2,7 +2,7 @@ import { api } from "../api.js";
 import { t, getLang, setLang } from "../i18n.js";
 import { getTheme, setTheme } from "../theme.js";
 import { state, isAdmin } from "../state.js";
-import { renderTeamSection } from "./admin.js";
+import { renderTeamSection, renderPlanApprovalsSection } from "./admin.js";
 import { escapeHtml } from "../util.js";
 
 export async function renderSettings(root, onLogout, onLanguageChange) {
@@ -54,6 +54,9 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
           </form>
         </div>
 
+        <h2 class="section-title">${t("plan_approvals")}</h2>
+        <div id="plan-approvals-slot"></div>
+
         <h2 class="section-title">${t("team")}</h2>
         <div id="team-section"></div>
       `
@@ -95,6 +98,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       }
     });
 
+    renderPlanApprovalsSection(root.querySelector("#plan-approvals-slot"));
     renderTeamSection(root.querySelector("#team-section"));
   }
 }

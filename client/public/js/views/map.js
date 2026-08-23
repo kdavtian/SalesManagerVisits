@@ -2,6 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml, formatRelative, formatAmd, formatDistance, haversineMeters, getCurrentPosition, CATEGORY_OPTIONS } from "../util.js";
 import { t } from "../i18n.js";
 import { getTheme } from "../theme.js";
+import { icons } from "../icons.js";
 import { canViewTeamLocations, canEditDirectly } from "../state.js";
 
 const NEARBY_RADIUS_METERS = 5000;
@@ -30,6 +31,7 @@ export function renderMap(root, navigate, relocateCustomerId) {
         <button class="map-filter-chip chip-active" data-filter="">${t("filter_all")}</button>
         <button class="map-filter-chip" data-filter="overdue">${t("filter_overdue")}</button>
         <button class="map-filter-chip" data-filter="visited">${t("filter_visited")}</button>
+        <button class="map-filter-chip" data-filter="planned">${t("filter_planned")}</button>
         <button class="map-filter-chip" data-filter="nearby">${t("filter_nearby")}</button>
       </div>
 
@@ -65,11 +67,13 @@ export function renderMap(root, navigate, relocateCustomerId) {
         </button>`
             : ""
         }
+        <button class="map-control-btn map-control-standalone" id="plan-day-btn" aria-label="${t("plan_day")}">${icons.planDay}</button>
       </div>
 
       <button class="fab" id="add-customer-fab" title="${t("new_customer")}">+</button>
       <div class="map-hint" id="map-hint" hidden>${t("tap_map_hint")}</div>
       <div class="map-hint" id="team-empty-hint" hidden>${t("team_locations_empty")}</div>
+      <div class="map-hint" id="planned-empty-hint" hidden>${t("planned_empty")}</div>
     </div>
   `;
 
@@ -173,6 +177,9 @@ export function renderMap(root, navigate, relocateCustomerId) {
   let activeFilter = "";
   let lastCustomers = [];
   let myLocation = null;
+  let plannedCustomerIds = null;
+
+  const plannedEmptyHint = root.querySelector("#planned-empty-hint");
 
   function applyFilter() {
     markerLayer.clearLayers();
@@ -182,6 +189,8 @@ export function renderMap(root, navigate, relocateCustomerId) {
       if (activeFilter === "nearby") {
         const distance = myLocation ? haversineMeters(myLocation.lat, myLocation.lng, c.lat, c.lng) : Infinity;
         if (distance > NEARBY_RADIUS_METERS) continue;
+      } else if (activeFilter === "planned") {
+        if (!plannedCustomerIds || !plannedCustomerIds.includes(c.id)) continue;
       } else if (
         activeFilter &&
         !(activeFilter === "overdue" ? status === "overdue" : activeFilter === "visited" ? status === "today" || status === "week" : true)
@@ -190,6 +199,11 @@ export function renderMap(root, navigate, relocateCustomerId) {
       }
       marker.addTo(markerLayer);
       bounds.push([c.lat, c.lng]);
+    }
+    if (activeFilter === "planned") {
+      plannedEmptyHint.hidden = bounds.length > 0 || plannedCustomerIds === null;
+    } else {
+      plannedEmptyHint.hidden = true;
     }
     if (bounds.length) {
       try {
@@ -272,6 +286,17 @@ export function renderMap(root, navigate, relocateCustomerId) {
   });
   root.querySelector("#nearby-view-all").addEventListener("click", () => navigate("#/customers"));
 
+  async function loadPlannedFilter() {
+    let plan;
+    try {
+      plan = await api.getMyVisitPlan();
+    } catch {
+      plan = null;
+    }
+    plannedCustomerIds = plan?.status === "approved" ? plan.customer_ids : [];
+    applyFilter();
+  }
+
   root.querySelectorAll(".map-filter-chip").forEach((chip) => {
     chip.addEventListener("click", () => {
       root.querySelectorAll(".map-filter-chip").forEach((c) => c.classList.remove("chip-active"));
@@ -279,6 +304,9 @@ export function renderMap(root, navigate, relocateCustomerId) {
       activeFilter = chip.dataset.filter;
       if (activeFilter === "nearby") {
         openNearbyPanel();
+      } else if (activeFilter === "planned") {
+        nearbyPanel.hidden = true;
+        loadPlannedFilter();
       } else {
         nearbyPanel.hidden = true;
         applyFilter();
@@ -418,6 +446,82 @@ export function renderMap(root, navigate, relocateCustomerId) {
       teamEmptyHint.hidden = true;
     }
   });
+
+  const PLAN_STATUS_KEY = {
+    pending: "plan_status_pending",
+    approved: "plan_status_approved",
+    rejected: "plan_status_rejected",
+  };
+
+  async function openPlanDaySheet() {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay sheet-overlay-light";
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>${t("plan_day")}</h2>
+        <p class="muted">${t("plan_day_hint")}</p>
+        <p class="badge badge-neutral" id="plan-status-badge"></p>
+        <div class="plan-day-list" id="plan-day-list"><p class="muted">…</p></div>
+        <p class="form-error" id="plan-day-error" hidden></p>
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="cancel-plan-day">${t("cancel")}</button>
+          <button type="button" class="btn btn-primary" id="save-plan-day">${t("save_plan")}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    function close() {
+      overlay.remove();
+    }
+    overlay.querySelector("#cancel-plan-day").addEventListener("click", close);
+    overlay.addEventListener("click", (e) => e.target === overlay && close());
+
+    const listEl = overlay.querySelector("#plan-day-list");
+    const badgeEl = overlay.querySelector("#plan-status-badge");
+    const errorEl = overlay.querySelector("#plan-day-error");
+
+    let existingPlan;
+    try {
+      existingPlan = await api.getMyVisitPlan();
+    } catch {
+      existingPlan = null;
+    }
+    const selectedIds = new Set(existingPlan?.customer_ids ?? []);
+
+    const statusClass =
+      existingPlan?.status === "approved" ? "badge-success" : existingPlan?.status === "rejected" ? "badge-danger" : "badge-neutral";
+    badgeEl.className = `badge ${statusClass}`;
+    badgeEl.textContent = t(existingPlan ? PLAN_STATUS_KEY[existingPlan.status] : "plan_status_none");
+
+    const sortedCustomers = [...lastCustomers].sort((a, b) => a.c.name.localeCompare(b.c.name));
+    listEl.innerHTML = sortedCustomers
+      .map(
+        ({ c }) => `
+      <label class="plan-day-row">
+        <input type="checkbox" value="${c.id}" ${selectedIds.has(c.id) ? "checked" : ""} />
+        <span>${escapeHtml(c.name)}</span>
+      </label>`
+      )
+      .join("");
+
+    overlay.querySelector("#save-plan-day").addEventListener("click", async (e) => {
+      const btn = e.target;
+      btn.disabled = true;
+      const ids = [...listEl.querySelectorAll("input:checked")].map((el) => Number(el.value));
+      try {
+        await api.saveVisitPlan(undefined, ids);
+        close();
+        if (activeFilter === "planned") loadPlannedFilter();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+        btn.disabled = false;
+      }
+    });
+  }
+
+  root.querySelector("#plan-day-btn").addEventListener("click", openPlanDaySheet);
 
   if (relocateCustomerId) {
     fab.hidden = true;

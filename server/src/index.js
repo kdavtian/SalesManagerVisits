@@ -15,6 +15,7 @@ import { editRequestsRouter } from "./routes/editRequests.js";
 import { locationsRouter } from "./routes/locations.js";
 import { erpSyncRouter } from "./routes/erpSync.js";
 import { geocodeRouter } from "./routes/geocode.js";
+import { visitPlansRouter } from "./routes/visitPlans.js";
 
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
   console.error(
@@ -61,6 +62,7 @@ app.use("/api/locations", express.json(), locationsRouter);
 // the way it would on a route any logged-in user can hit.
 app.use("/api/erp-sync", express.json({ limit: "25mb" }), erpSyncRouter);
 app.use("/api/geocode", geocodeRouter);
+app.use("/api/visit-plans", express.json(), visitPlansRouter);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });
