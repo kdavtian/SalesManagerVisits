@@ -46,3 +46,27 @@ usersRouter.post("/", async (req, res) => {
     throw err;
   }
 });
+
+usersRouter.patch("/:id/password", async (req, res) => {
+  const password = req.body?.password;
+  if (!password || password.length < 8) {
+    return res.status(400).json({ error: "password must be at least 8 characters" });
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  const { rowCount } = await pool.query("UPDATE users SET password_hash = $1 WHERE id = $2", [
+    passwordHash,
+    req.params.id,
+  ]);
+  if (!rowCount) return res.status(404).json({ error: "User not found" });
+  res.status(204).end();
+});
+
+usersRouter.delete("/:id", async (req, res) => {
+  if (Number(req.params.id) === req.user.id) {
+    return res.status(400).json({ error: "You can't delete your own account" });
+  }
+  const { rowCount } = await pool.query("DELETE FROM users WHERE id = $1", [req.params.id]);
+  if (!rowCount) return res.status(404).json({ error: "User not found" });
+  res.status(204).end();
+});

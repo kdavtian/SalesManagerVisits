@@ -1,5 +1,6 @@
 import { api } from "../api.js";
 import { setUser } from "../state.js";
+import { t } from "../i18n.js";
 
 export function renderLogin(root, onSuccess) {
   root.innerHTML = `
@@ -7,19 +8,19 @@ export function renderLogin(root, onSuccess) {
       <div class="login-card">
         <div class="login-brand">
           <span class="brand-mark">FV</span>
-          <h1>Field Visits</h1>
+          <h1>${t("app_name")}</h1>
         </div>
         <form id="login-form">
           <label>
-            Email
+            ${t("email")}
             <input type="email" name="email" autocomplete="username" required />
           </label>
           <label>
-            Password
+            ${t("password")}
             <input type="password" name="password" autocomplete="current-password" required />
           </label>
           <p class="form-error" id="login-error" hidden></p>
-          <button type="submit" class="btn btn-primary btn-block">Log in</button>
+          <button type="submit" class="btn btn-primary btn-block">${t("log_in")}</button>
         </form>
       </div>
     </div>
@@ -33,7 +34,7 @@ export function renderLogin(root, onSuccess) {
     errorEl.hidden = true;
     const submitBtn = form.querySelector("button");
     submitBtn.disabled = true;
-    submitBtn.textContent = "Logging in…";
+    submitBtn.textContent = t("logging_in");
 
     const data = new FormData(form);
     try {
@@ -44,7 +45,7 @@ export function renderLogin(root, onSuccess) {
       errorEl.textContent = err.message;
       errorEl.hidden = false;
       submitBtn.disabled = false;
-      submitBtn.textContent = "Log in";
+      submitBtn.textContent = t("log_in");
     }
   });
 }

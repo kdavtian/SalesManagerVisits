@@ -1,12 +1,14 @@
 import { api } from "./api.js";
 import { state, setUser, isAdmin } from "./state.js";
+import { t } from "./i18n.js";
 import { renderLogin } from "./views/login.js";
 import { renderMap } from "./views/map.js";
 import { renderCustomers } from "./views/customers.js";
 import { renderCustomerDetail } from "./views/customerDetail.js";
 import { renderCheckin } from "./views/checkin.js";
 import { renderDashboard } from "./views/dashboard.js";
-import { renderAdminUsers } from "./views/admin.js";
+import { renderSettings } from "./views/settings.js";
+import { renderPlan } from "./views/plan.js";
 import { flushQueue, getQueue, onQueueChange } from "./offlineQueue.js";
 import { mountInstallPrompt } from "./install.js";
 
@@ -61,8 +63,19 @@ async function render() {
     renderCheckin(app, navigate, checkinMatch[1]);
   } else if (hash === "#/dashboard") {
     renderDashboard(app, navigate);
-  } else if (hash === "#/admin/users" && isAdmin()) {
-    renderAdminUsers(app);
+  } else if (hash === "#/plan") {
+    renderPlan(app);
+  } else if (hash === "#/settings") {
+    renderSettings(
+      app,
+      async () => {
+        await api.logout();
+        setUser(null);
+        location.hash = "";
+        render();
+      },
+      render
+    );
   } else {
     navigate("#/map");
   }
@@ -71,15 +84,25 @@ async function render() {
 function renderNav() {
   const hash = location.hash || "#/map";
   const items = [
-    { hash: "#/map", label: "Map", icon: "🗺️" },
-    { hash: "#/customers", label: "Customers", icon: "📋" },
-    { hash: "#/dashboard", label: "Activity", icon: "📊" },
+    { hash: "#/dashboard", label: t("nav_activity"), icon: "📊" },
+    { hash: "#/plan", label: t("nav_plan"), icon: "🗓️" },
+    { hash: "#/map", label: t("nav_map"), icon: "🗺️", center: true },
+    { hash: "#/customers", label: t("nav_customers"), icon: "📋" },
+    { hash: "#/settings", label: t("nav_settings"), icon: "⚙️" },
   ];
-  if (isAdmin()) items.push({ hash: "#/admin/users", label: "Team", icon: "⚙️" });
 
   navBar.innerHTML = items
-    .map(
-      (item) => `
+    .map((item) =>
+      item.center
+        ? `
+      <div class="nav-item-center-wrap">
+        <button class="nav-item-center ${hash === item.hash ? "nav-item-center-active" : ""}" data-hash="${item.hash}">
+          <span class="nav-icon-center">${item.icon}</span>
+        </button>
+        <span class="nav-item-center-label">${item.label}</span>
+      </div>
+    `
+        : `
       <button class="nav-item ${hash === item.hash ? "nav-item-active" : ""}" data-hash="${item.hash}">
         <span class="nav-icon">${item.icon}</span>
         <span>${item.label}</span>
@@ -88,21 +111,14 @@ function renderNav() {
     )
     .join("");
 
-  navBar.querySelectorAll(".nav-item").forEach((el) => {
+  navBar.querySelectorAll("[data-hash]").forEach((el) => {
     el.addEventListener("click", () => navigate(el.dataset.hash));
   });
 
   topBar.innerHTML = `
-    <span class="topbar-title">Field Visits</span>
+    <span class="topbar-title">${t("app_name")}</span>
     <span class="topbar-user">${state.user.name}</span>
-    <button id="logout-btn" class="btn-link">Log out</button>
   `;
-  topBar.querySelector("#logout-btn").addEventListener("click", async () => {
-    await api.logout();
-    setUser(null);
-    location.hash = "";
-    render();
-  });
 }
 
 function renderSyncBanner() {

@@ -5,12 +5,26 @@ import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { photoUpload, uploadDirPath } from "../upload.js";
 import { haversineMeters } from "../utils/geo.js";
+import { getCheckinRadiusMeters } from "../settings.js";
 
 export const checkinsRouter = Router();
 
 checkinsRouter.use(requireAuth);
 
-const RADIUS_METERS = Number(process.env.CHECKIN_RADIUS_METERS) || 200;
+const VALID_BRANDS = new Set(["castrol", "lotos", "royal", "fake", "other_imports", "none"]);
+
+function parseBrandsFound(raw) {
+  if (!raw) return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed)) return null;
+  const filtered = parsed.filter((b) => VALID_BRANDS.has(b));
+  return filtered.length ? filtered : null;
+}
 
 checkinsRouter.post("/", (req, res, next) => {
   photoUpload.single("photo")(req, res, (err) => {
@@ -18,7 +32,7 @@ checkinsRouter.post("/", (req, res, next) => {
     next();
   });
 }, async (req, res) => {
-  const { customer_id, lat, lng, note } = req.body ?? {};
+  const { customer_id, lat, lng, note, brands_found } = req.body ?? {};
   const customerId = Number(customer_id);
   const latNum = Number(lat);
   const lngNum = Number(lng);
@@ -38,15 +52,17 @@ checkinsRouter.post("/", (req, res, next) => {
     return res.status(404).json({ error: "Customer not found" });
   }
 
+  const radiusMeters = await getCheckinRadiusMeters();
   const distance = haversineMeters(latNum, lngNum, customer.lat, customer.lng);
-  const withinRange = distance <= RADIUS_METERS;
+  const withinRange = distance <= radiusMeters;
   const photoPath = req.file ? req.file.filename : null;
+  const brands = parseBrandsFound(brands_found);
 
   const { rows } = await pool.query(
-    `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, note, photo_path)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, note, photo_path, brands_found)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
-    [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, photoPath]
+    [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, photoPath, brands]
   );
 
   res.status(201).json(rows[0]);

@@ -37,6 +37,7 @@ async function submitEntry(entry) {
   form.set("lat", entry.lat);
   form.set("lng", entry.lng);
   if (entry.note) form.set("note", entry.note);
+  if (entry.brands?.length) form.set("brands_found", JSON.stringify(entry.brands));
   if (entry.photoDataUrl) {
     const blob = await (await fetch(entry.photoDataUrl)).blob();
     form.set("photo", blob, "checkin.jpg");

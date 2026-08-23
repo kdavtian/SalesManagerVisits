@@ -1,8 +1,9 @@
 import { api } from "../api.js";
 import { escapeHtml, formatDateTime, formatDistance } from "../util.js";
+import { t } from "../i18n.js";
 
 export async function renderCustomerDetail(root, navigate, customerId) {
-  root.innerHTML = `<div class="detail-view"><p class="muted">Loading…</p></div>`;
+  root.innerHTML = `<div class="detail-view"><p class="muted">…</p></div>`;
   const container = root.querySelector(".detail-view");
 
   let customer, checkins;
@@ -16,12 +17,13 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     return;
   }
 
+  const badgeClass = customer.visited_today ? "badge-success" : customer.visited_this_week ? "badge-info" : "badge-neutral";
+  const badgeText = customer.visited_today ? t("visited_today") : customer.visited_this_week ? t("visited_this_week") : t("not_visited");
+
   container.innerHTML = `
     <div class="detail-header">
       <h1>${escapeHtml(customer.name)}</h1>
-      <span class="badge ${customer.visited_this_week ? "badge-success" : "badge-neutral"}">
-        ${customer.visited_this_week ? "Visited this week" : "Not visited"}
-      </span>
+      <span class="badge ${badgeClass}">${badgeText}</span>
     </div>
     <div class="detail-facts">
       ${customer.category ? `<div>${escapeHtml(customer.category)}</div>` : ""}
@@ -29,9 +31,9 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       ${customer.address ? `<div>${escapeHtml(customer.address)}</div>` : ""}
       ${customer.notes ? `<div class="muted">${escapeHtml(customer.notes)}</div>` : ""}
     </div>
-    <button class="btn btn-primary btn-block" id="checkin-btn">Check In Here</button>
+    <button class="btn btn-primary btn-block" id="checkin-btn">${t("check_in_here")}</button>
 
-    <h2 class="section-title">Visit history</h2>
+    <h2 class="section-title">${t("visit_history")}</h2>
     <div id="checkin-history" class="card-list"></div>
   `;
 
@@ -41,7 +43,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
 
   const historyEl = container.querySelector("#checkin-history");
   if (!checkins.length) {
-    historyEl.innerHTML = `<p class="muted">No visits recorded yet.</p>`;
+    historyEl.innerHTML = `<p class="muted">${t("no_visits_yet")}</p>`;
   } else {
     historyEl.innerHTML = checkins
       .map(
@@ -52,8 +54,13 @@ export async function renderCustomerDetail(root, navigate, customerId) {
             <span class="muted">${formatDateTime(ch.timestamp)}</span>
           </div>
           <span class="badge ${ch.within_range ? "badge-success" : "badge-danger"}">
-            ${ch.within_range ? "Location verified" : `Mismatch (${formatDistance(ch.distance_meters)} away)`}
+            ${ch.within_range ? t("location_verified") : `${t("location_mismatch_away")} (${formatDistance(ch.distance_meters)} ${t("away")})`}
           </span>
+          ${
+            ch.brands_found?.length
+              ? `<div class="brand-tags">${ch.brands_found.map((b) => `<span class="brand-tag">${escapeHtml(t(`brand_${b}`))}</span>`).join("")}</div>`
+              : ""
+          }
           ${ch.note ? `<p class="checkin-note">${escapeHtml(ch.note)}</p>` : ""}
           ${ch.photo_path ? `<img class="checkin-photo" src="${api.checkinPhotoUrl(ch.id)}" alt="Check-in photo" loading="lazy" />` : ""}
         </div>

@@ -11,6 +11,11 @@ const VISITED_THIS_WEEK_EXISTS = `EXISTS (
   WHERE ch.customer_id = c.id AND ch.timestamp >= now() - interval '7 days'
 )`;
 
+const VISITED_TODAY_EXISTS = `EXISTS (
+  SELECT 1 FROM checkins ch
+  WHERE ch.customer_id = c.id AND ch.timestamp >= date_trunc('day', now())
+)`;
+
 customersRouter.get("/", async (req, res) => {
   const { search, visited } = req.query;
   const conditions = [];
@@ -28,7 +33,7 @@ customersRouter.get("/", async (req, res) => {
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const { rows } = await pool.query(
-    `SELECT c.*, ${VISITED_THIS_WEEK_EXISTS} AS visited_this_week
+    `SELECT c.*, ${VISITED_THIS_WEEK_EXISTS} AS visited_this_week, ${VISITED_TODAY_EXISTS} AS visited_today
      FROM customers c
      ${where}
      ORDER BY c.name`,
@@ -58,7 +63,7 @@ customersRouter.post("/", async (req, res) => {
 
 customersRouter.get("/:id", async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT c.*, ${VISITED_THIS_WEEK_EXISTS} AS visited_this_week
+    `SELECT c.*, ${VISITED_THIS_WEEK_EXISTS} AS visited_this_week, ${VISITED_TODAY_EXISTS} AS visited_today
      FROM customers c WHERE c.id = $1`,
     [req.params.id]
   );

@@ -15,11 +15,35 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --pin-border: #000000;
+  --map-tile-filter: none;
+}
+
+:root[data-theme="light"] {
+  --bg: #f2f2f7;
+  --bg-elevated: rgba(255, 255, 255, 0.86);
+  --bg-card: #ffffff;
+  --bg-card-pressed: #e5e5ea;
+  --border: #d1d1d6;
+  --text: #1c1c1e;
+  --text-dim: #6e6e73;
+  --success: #248a3d;
+  --danger: #d70015;
+  --pin-border: #ffffff;
 }
 
 * {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Defends every element that toggles visibility via the `hidden` attribute
+   from being re-shown by a later class rule that sets `display` (e.g.
+   `.top-bar { display: flex }`) — those would otherwise win over the
+   browser's default `[hidden] { display: none }` since author CSS always
+   outranks user-agent CSS at equal specificity. */
+[hidden] {
+  display: none !important;
 }
 
 html,
@@ -117,6 +141,7 @@ a {
 
 .nav-bar {
   display: flex;
+  align-items: flex-start;
   background: var(--bg-elevated);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
@@ -125,6 +150,7 @@ a {
   flex-shrink: 0;
   position: relative;
   z-index: 10;
+  height: calc(52px + var(--safe-bottom));
 }
 
 .nav-item {
@@ -135,20 +161,60 @@ a {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 2px;
-  padding: 8px 4px 6px;
-  font-size: 0.68rem;
+  height: 52px;
+  padding: 0 2px;
+  font-size: 0.64rem;
   font-weight: 500;
   cursor: pointer;
 }
 
 .nav-icon {
-  font-size: 1.3rem;
+  font-size: 1.2rem;
   line-height: 1;
 }
 
 .nav-item-active {
   color: var(--accent);
+}
+
+.nav-item-center-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 52px;
+}
+
+.nav-item-center {
+  width: 54px;
+  height: 54px;
+  margin-top: -22px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 4px solid var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}
+
+.nav-item-center-active {
+  filter: brightness(1.1);
+}
+
+.nav-icon-center {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.nav-item-center-label {
+  font-size: 0.64rem;
+  font-weight: 600;
+  color: var(--accent);
+  margin-top: 1px;
 }
 
 /* Sync banner */
@@ -286,6 +352,13 @@ a {
   overflow-y: auto;
   position: relative;
   -webkit-overflow-scrolling: touch;
+}
+
+/* While the map view is mounted, the app shell must not scroll — an
+   ancestor with overflow:auto fights Leaflet's own pan/zoom touch
+   handling on iOS and can make the map feel like it's freezing. */
+.app-main-locked {
+  overflow: hidden;
 }
 
 /* Buttons */
@@ -494,6 +567,11 @@ form select:focus {
   color: var(--accent);
 }
 
+.badge-info {
+  background: rgba(10, 132, 255, 0.15);
+  color: #0a84ff;
+}
+
 /* List view */
 
 .list-toolbar {
@@ -595,6 +673,23 @@ form select:focus {
   margin: 8px 0 0;
 }
 
+.brand-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.brand-tag {
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+
 .checkin-photo {
   margin-top: 10px;
   width: 100%;
@@ -629,11 +724,108 @@ form select:focus {
   border-color: var(--danger);
 }
 
-.photo-field img {
-  margin-top: 10px;
-  max-width: 100%;
-  border-radius: 10px;
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.brands-label {
+  margin-bottom: 18px;
+}
+
+.brand-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.brand-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  color: var(--text);
+  margin: 0;
+  cursor: pointer;
+}
+
+.brand-chip input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.brand-chip:has(input:checked) {
+  border-color: var(--accent);
+  background: rgba(255, 106, 19, 0.1);
+}
+
+.camera-field {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.camera-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 2px dashed var(--border);
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.camera-btn:active {
+  background: var(--bg-card-pressed);
+}
+
+.photo-preview-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 280px;
+}
+
+.photo-preview-wrap img {
+  width: 100%;
+  border-radius: var(--radius-lg);
   display: block;
+  aspect-ratio: 1;
+  object-fit: cover;
+}
+
+.photo-retake-btn {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #ffffff;
+  border: none;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .checkin-result {
@@ -694,18 +886,153 @@ form select:focus {
   font-size: 0.8rem;
 }
 
-.manager-row,
-.user-row {
+.manager-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   cursor: default;
 }
 
+.user-row {
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.user-row-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.user-row-top > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .user-row-meta {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
+}
+
+.user-row-actions {
+  display: flex;
+  gap: 14px;
+}
+
+.btn-link-danger {
+  color: var(--danger);
+}
+
+/* Settings view */
+
+.settings-view {
+  padding: 16px;
+}
+
+.settings-view h1 {
+  font-size: 1.9rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 4px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: default;
+  margin-bottom: 16px;
+}
+
+.settings-account-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.radius-help {
+  font-size: 0.8rem;
+  margin: -8px 0 14px;
+}
+
+#radius-form .btn-primary {
+  width: 100%;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 30px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.switch-track {
+  position: absolute;
+  inset: 0;
+  background: var(--border);
+  border-radius: 999px;
+  transition: background-color 0.2s ease;
+}
+
+.switch-track::before {
+  content: "";
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  left: 2px;
+  top: 2px;
+  background: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s ease;
+}
+
+.switch input:checked + .switch-track {
+  background: var(--success);
+}
+
+.switch input:checked + .switch-track::before {
+  transform: translateX(20px);
+}
+
+/* Plan view */
+
+.plan-view {
+  padding: 16px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.plan-empty {
+  text-align: center;
+  max-width: 300px;
+}
+
+.plan-empty-icon {
+  font-size: 2.6rem;
+  margin-bottom: 12px;
+}
+
+.plan-empty h1 {
+  font-size: 1.3rem;
+  font-weight: 800;
+  margin: 0 0 8px;
 }
 
 /* Map view */
@@ -770,15 +1097,116 @@ form select:focus {
   height: 18px;
   border-radius: 50% 50% 50% 0;
   transform: rotate(-45deg);
-  border: 2px solid #000000;
+  border: 2px solid var(--pin-border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
 }
 
-.pin-visited {
+.pin-today {
   background: var(--success);
+}
+
+.pin-week {
+  background: #0a84ff;
 }
 
 .pin-pending {
   background: var(--accent);
+}
+
+.pin-new {
+  width: 26px;
+  height: 26px;
+  background: #0a84ff;
+  border-width: 3px;
+  animation: pin-drop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes pin-drop {
+  from {
+    transform: rotate(-45deg) translateY(-16px) scale(0.6);
+    opacity: 0;
+  }
+  to {
+    transform: rotate(-45deg) translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.pin-check {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: rotate(45deg) translate(-50%, -50%);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.me-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #0a84ff;
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.35), 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.map-controls {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  z-index: 1000;
+}
+
+.map-control-cluster {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+
+.map-control-divider {
+  height: 1px;
+  background: var(--border);
+}
+
+.map-control-btn {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.map-control-btn:active {
+  background: var(--bg-card-pressed);
+}
+
+.map-control-standalone {
+  background: var(--bg-elevated);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+
+.map-control-active {
+  color: #0a84ff;
 }
 
 .map-popup {
@@ -820,6 +1248,13 @@ form select:focus {
   display: flex;
   align-items: flex-end;
   z-index: 2000;
+}
+
+/* Used for the "new customer" sheet, opened right after dropping a pin —
+   a lighter wash keeps the just-placed pin clearly visible above the sheet
+   instead of being obscured by a near-opaque backdrop. */
+.sheet-overlay-light {
+  background: rgba(0, 0, 0, 0.15);
 }
 
 .sheet {

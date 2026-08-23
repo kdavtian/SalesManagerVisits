@@ -1,3 +1,5 @@
+import { t } from "./i18n.js";
+
 const DISMISS_KEY = "fieldvisits_install_dismissed_at";
 const DISMISS_DAYS = 14;
 
@@ -68,10 +70,10 @@ function renderAndroidBanner() {
     <div class="install-banner">
       <img src="icons/icon-192.png" alt="" class="install-icon" />
       <div class="install-copy">
-        <strong>Install Field Visits</strong>
-        <span>Add it to your home screen for one-tap access.</span>
+        <strong>${t("install_title")}</strong>
+        <span>${t("install_body")}</span>
       </div>
-      <button class="btn btn-primary btn-sm" id="install-now">Install</button>
+      <button class="btn btn-primary btn-sm" id="install-now">${t("install_now")}</button>
       <button class="install-dismiss" id="install-dismiss" aria-label="Dismiss">&times;</button>
     </div>
   `;
@@ -90,10 +92,10 @@ function renderIOSBanner() {
     <div class="install-banner">
       <img src="icons/icon-192.png" alt="" class="install-icon" />
       <div class="install-copy">
-        <strong>Install Field Visits</strong>
-        <span>Add it to your home screen for one-tap access.</span>
+        <strong>${t("install_title")}</strong>
+        <span>${t("install_body")}</span>
       </div>
-      <button class="btn btn-primary btn-sm" id="install-show-steps">Show me how</button>
+      <button class="btn btn-primary btn-sm" id="install-show-steps">${t("install_show_steps")}</button>
       <button class="install-dismiss" id="install-dismiss" aria-label="Dismiss">&times;</button>
     </div>
   `;
@@ -106,7 +108,7 @@ function showIOSWalkthrough() {
   overlay.className = "sheet-overlay";
   overlay.innerHTML = `
     <div class="sheet install-sheet">
-      <h2>Add to Home Screen</h2>
+      <h2>${t("add_to_home_screen")}</h2>
       <ol class="ios-steps">
         <li>
           <span class="ios-step-icon ios-anim-share">
@@ -116,7 +118,7 @@ function showIOSWalkthrough() {
               <rect x="4" y="12" width="16" height="8" rx="2"/>
             </svg>
           </span>
-          <span>Tap the <strong>Share</strong> icon in Safari's toolbar</span>
+          <span>${t("ios_step_1")} <strong>${t("ios_step_1b")}</strong> ${t("ios_step_1c")}</span>
         </li>
         <li>
           <span class="ios-step-icon">
@@ -125,7 +127,7 @@ function showIOSWalkthrough() {
               <path d="M12 8v8M8 12h8"/>
             </svg>
           </span>
-          <span>Scroll down and tap <strong>Add to Home Screen</strong></span>
+          <span>${t("ios_step_2")} <strong>${t("ios_step_2b")}</strong></span>
         </li>
         <li>
           <span class="ios-step-icon">
@@ -133,10 +135,10 @@ function showIOSWalkthrough() {
               <path d="M20 6L9 17l-5-5"/>
             </svg>
           </span>
-          <span>Tap <strong>Add</strong> in the top-right corner</span>
+          <span>${t("ios_step_3")} <strong>${t("ios_step_3b")}</strong> ${t("ios_step_3c")}</span>
         </li>
       </ol>
-      <button type="button" class="btn btn-primary btn-block" id="close-ios-steps">Got it</button>
+      <button type="button" class="btn btn-primary btn-block" id="close-ios-steps">${t("got_it")}</button>
     </div>
   `;
   document.body.appendChild(overlay);

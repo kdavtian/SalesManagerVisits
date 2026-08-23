@@ -14,6 +14,15 @@
     <meta name="apple-mobile-web-app-title" content="Field Visits" />
     <meta name="mobile-web-app-capable" content="yes" />
 
+    <script>
+      // Applied synchronously, before first paint, to avoid a flash of the
+      // wrong theme when the user has chosen light mode.
+      try {
+        var t = localStorage.getItem("fieldvisits_theme");
+        if (t === "light") document.documentElement.dataset.theme = "light";
+      } catch (e) {}
+    </script>
+
     <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
     <link rel="stylesheet" href="css/styles.css" />
   </head>
@@ -25,6 +34,7 @@
     <div id="install-root"></div>
 
     <script src="vendor/leaflet/leaflet.js"></script>
+    <script src="vendor/leaflet-rotate/leaflet-rotate.js"></script>
     <script type="module" src="js/app.js"></script>
   </body>
 </html>

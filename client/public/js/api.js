@@ -50,4 +50,9 @@ export const api = {
 
   listUsers: () => request("/users"),
   createUser: (data) => json("/users", "POST", data),
+  resetUserPassword: (id, password) => json(`/users/${id}/password`, "PATCH", { password }),
+  deleteUser: (id) => request(`/users/${id}`, { method: "DELETE" }),
+
+  getSettings: () => request("/settings"),
+  updateSettings: (data) => json("/settings", "PATCH", data),
 };

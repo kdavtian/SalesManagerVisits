@@ -1,5 +1,5 @@
-const CACHE_VERSION = "field-visits-v1";
-const TILE_CACHE = "field-visits-tiles-v1";
+const CACHE_VERSION = "field-visits-v2";
+const TILE_CACHE = "field-visits-tiles-v2";
 
 const APP_SHELL = [
   "/",
@@ -8,6 +8,8 @@ const APP_SHELL = [
   "/css/styles.css",
   "/js/api.js",
   "/js/app.js",
+  "/js/i18n.js",
+  "/js/theme.js",
   "/js/install.js",
   "/js/offlineQueue.js",
   "/js/state.js",
@@ -19,8 +21,11 @@ const APP_SHELL = [
   "/js/views/dashboard.js",
   "/js/views/login.js",
   "/js/views/map.js",
+  "/js/views/plan.js",
+  "/js/views/settings.js",
   "/vendor/leaflet/leaflet.js",
   "/vendor/leaflet/leaflet.css",
+  "/vendor/leaflet-rotate/leaflet-rotate.js",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/apple-touch-icon.png",
@@ -59,7 +64,7 @@ self.addEventListener("fetch", (event) => {
 
   // Map tiles: stale-while-revalidate, so previously-viewed areas stay
   // browsable offline.
-  if (url.hostname.endsWith("tile.openstreetmap.org")) {
+  if (url.hostname.endsWith("basemaps.cartocdn.com")) {
     event.respondWith(
       caches.open(TILE_CACHE).then(async (cache) => {
         const cached = await cache.match(request);

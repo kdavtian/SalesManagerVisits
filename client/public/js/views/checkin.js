@@ -1,9 +1,19 @@
 import { api } from "../api.js";
 import { escapeHtml, getCurrentPosition, compressImage, formatDistance } from "../util.js";
 import { enqueueCheckin } from "../offlineQueue.js";
+import { t } from "../i18n.js";
+
+const BRAND_OPTIONS = [
+  { value: "castrol", labelKey: "brand_castrol" },
+  { value: "lotos", labelKey: "brand_lotos" },
+  { value: "royal", labelKey: "brand_royal" },
+  { value: "fake", labelKey: "brand_fake" },
+  { value: "other_imports", labelKey: "brand_other_imports" },
+  { value: "none", labelKey: "brand_none" },
+];
 
 export async function renderCheckin(root, navigate, customerId) {
-  root.innerHTML = `<div class="checkin-view"><p class="muted">Loading customer…</p></div>`;
+  root.innerHTML = `<div class="checkin-view"><p class="muted">…</p></div>`;
   const container = root.querySelector(".checkin-view");
 
   let customer;
@@ -16,21 +26,46 @@ export async function renderCheckin(root, navigate, customerId) {
 
   container.innerHTML = `
     <h1>${escapeHtml(customer.name)}</h1>
-    <div class="gps-status" id="gps-status">Getting your location…</div>
+    <div class="gps-status" id="gps-status">${t("getting_location")}</div>
 
     <form id="checkin-form">
+      <label class="brands-label">
+        ${t("products_found")}
+        <div class="brand-grid">
+          ${BRAND_OPTIONS.map(
+            (b) => `
+            <label class="brand-chip">
+              <input type="checkbox" name="brands" value="${b.value}" />
+              <span>${t(b.labelKey)}</span>
+            </label>
+          `
+          ).join("")}
+        </div>
+      </label>
+
       <label>
-        Note (optional)
-        <textarea name="note" rows="3" placeholder="What did you cover during this visit?"></textarea>
+        ${t("note_optional")}
+        <textarea name="note" rows="3" placeholder="${t("note_placeholder")}"></textarea>
       </label>
-      <label class="photo-field">
-        Photo (optional)
-        <input type="file" name="photo" accept="image/*" capture="environment" />
-        <img id="photo-preview" hidden />
-      </label>
+
+      <div class="camera-field">
+        <input type="file" name="photo" accept="image/*" capture="environment" id="photo-input" class="visually-hidden" />
+        <button type="button" class="camera-btn" id="camera-btn" aria-label="${t("take_photo")}">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/>
+            <circle cx="12" cy="13" r="3.5"/>
+          </svg>
+          <span>${t("take_photo")}</span>
+        </button>
+        <div class="photo-preview-wrap" id="photo-preview-wrap" hidden>
+          <img id="photo-preview" />
+          <button type="button" class="photo-retake-btn" id="photo-retake-btn">${t("retake_photo")}</button>
+        </div>
+      </div>
+
       <p class="form-error" id="checkin-error" hidden></p>
       <button type="submit" class="btn btn-primary btn-block" id="checkin-submit" disabled>
-        Locating…
+        ${t("locating")}
       </button>
     </form>
     <div id="checkin-result" hidden></div>
@@ -41,23 +76,26 @@ export async function renderCheckin(root, navigate, customerId) {
   const form = container.querySelector("#checkin-form");
   const errorEl = container.querySelector("#checkin-error");
   const resultEl = container.querySelector("#checkin-result");
-  const photoInput = container.querySelector('input[name="photo"]');
+  const photoInput = container.querySelector("#photo-input");
+  const cameraBtn = container.querySelector("#camera-btn");
+  const previewWrap = container.querySelector("#photo-preview-wrap");
   const photoPreview = container.querySelector("#photo-preview");
+  const retakeBtn = container.querySelector("#photo-retake-btn");
 
   let position = null;
   let compressedPhoto = null;
 
+  cameraBtn.addEventListener("click", () => photoInput.click());
+  retakeBtn.addEventListener("click", () => photoInput.click());
+
   photoInput.addEventListener("change", async () => {
     const file = photoInput.files[0];
-    if (!file) {
-      photoPreview.hidden = true;
-      compressedPhoto = null;
-      return;
-    }
+    if (!file) return;
     try {
       compressedPhoto = await compressImage(file);
       photoPreview.src = URL.createObjectURL(compressedPhoto);
-      photoPreview.hidden = false;
+      previewWrap.hidden = false;
+      cameraBtn.hidden = true;
     } catch (err) {
       errorEl.textContent = err.message;
       errorEl.hidden = false;
@@ -66,12 +104,12 @@ export async function renderCheckin(root, navigate, customerId) {
 
   try {
     position = await getCurrentPosition();
-    gpsStatus.textContent = `Location captured (±${Math.round(position.coords.accuracy)}m accuracy)`;
+    gpsStatus.textContent = `${t("location_captured")} (±${Math.round(position.coords.accuracy)}m ${t("accuracy")})`;
     gpsStatus.classList.add("gps-ok");
     submitBtn.disabled = false;
-    submitBtn.textContent = "Submit check-in";
+    submitBtn.textContent = t("submit_checkin");
   } catch (err) {
-    gpsStatus.textContent = `Could not get your location: ${err.message}. Enable location access and reload.`;
+    gpsStatus.textContent = `${t("location_error")}: ${err.message}. ${t("enable_location_reload")}`;
     gpsStatus.classList.add("gps-error");
   }
 
@@ -80,9 +118,11 @@ export async function renderCheckin(root, navigate, customerId) {
     if (!position) return;
     errorEl.hidden = true;
     submitBtn.disabled = true;
-    submitBtn.textContent = "Submitting…";
+    submitBtn.textContent = t("submitting");
 
-    const note = new FormData(form).get("note");
+    const data = new FormData(form);
+    const note = data.get("note");
+    const brands = data.getAll("brands");
     const { latitude: lat, longitude: lng } = position.coords;
 
     const formData = new FormData();
@@ -90,6 +130,7 @@ export async function renderCheckin(root, navigate, customerId) {
     formData.set("lat", lat);
     formData.set("lng", lng);
     if (note) formData.set("note", note);
+    if (brands.length) formData.set("brands_found", JSON.stringify(brands));
     if (compressedPhoto) formData.set("photo", compressedPhoto, "checkin.jpg");
 
     try {
@@ -100,13 +141,13 @@ export async function renderCheckin(root, navigate, customerId) {
         // Offline / network failure — queue it instead of losing the visit.
         let photoDataUrl = null;
         if (compressedPhoto) photoDataUrl = await blobToDataUrl(compressedPhoto);
-        enqueueCheckin({ customerId, lat, lng, note, photoDataUrl });
+        enqueueCheckin({ customerId, lat, lng, note, brands, photoDataUrl });
         showQueued();
       } else {
         errorEl.textContent = err.message;
         errorEl.hidden = false;
         submitBtn.disabled = false;
-        submitBtn.textContent = "Submit check-in";
+        submitBtn.textContent = t("submit_checkin");
       }
     }
   });
@@ -117,13 +158,13 @@ export async function renderCheckin(root, navigate, customerId) {
     resultEl.innerHTML = `
       <div class="checkin-result ${checkin.within_range ? "result-success" : "result-warning"}">
         <div class="result-icon">${checkin.within_range ? "✓" : "!"}</div>
-        <h2>${checkin.within_range ? "Location verified" : "Location mismatch"}</h2>
+        <h2>${checkin.within_range ? t("location_verified") : t("location_mismatch_away")}</h2>
         <p>${
           checkin.within_range
-            ? "You checked in on-site."
-            : `You were ${formatDistance(checkin.distance_meters)} from ${escapeHtml(customer.name)}.`
+            ? t("checked_in_onsite")
+            : `${t("you_were")} ${formatDistance(checkin.distance_meters)} ${t("from")} ${escapeHtml(customer.name)}.`
         }</p>
-        <button class="btn btn-primary btn-block" id="back-to-customer">Done</button>
+        <button class="btn btn-primary btn-block" id="back-to-customer">${t("done")}</button>
       </div>
     `;
     resultEl.querySelector("#back-to-customer").addEventListener("click", () => {
@@ -137,9 +178,9 @@ export async function renderCheckin(root, navigate, customerId) {
     resultEl.innerHTML = `
       <div class="checkin-result result-warning">
         <div class="result-icon">⇪</div>
-        <h2>You're offline</h2>
-        <p>Your check-in was saved on this device and will upload automatically once you're back online.</p>
-        <button class="btn btn-primary btn-block" id="back-to-customer">Done</button>
+        <h2>${t("youre_offline")}</h2>
+        <p>${t("offline_queued_message")}</p>
+        <button class="btn btn-primary btn-block" id="back-to-customer">${t("done")}</button>
       </div>
     `;
     resultEl.querySelector("#back-to-customer").addEventListener("click", () => {
