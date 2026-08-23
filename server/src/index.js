@@ -41,19 +41,23 @@ app.use(
     contentSecurityPolicy: false,
   })
 );
-app.use(express.json());
 app.use(cookieParser());
 
-app.use("/api/auth", authRouter);
+app.use("/api/auth", express.json(), authRouter);
 app.use("/api/me", meRouter);
-app.use("/api/users", usersRouter);
-app.use("/api/customers", customersRouter);
+app.use("/api/users", express.json(), usersRouter);
+app.use("/api/customers", express.json(), customersRouter);
 app.use("/api/checkins", checkinsRouter);
 app.use("/api/dashboard", dashboardRouter);
-app.use("/api/settings", settingsRouter);
-app.use("/api/edit-requests", editRequestsRouter);
-app.use("/api/locations", locationsRouter);
-app.use("/api/erp-sync", erpSyncRouter);
+app.use("/api/settings", express.json(), settingsRouter);
+app.use("/api/edit-requests", express.json(), editRequestsRouter);
+app.use("/api/locations", express.json(), locationsRouter);
+// A real ERP extract (hundreds of customers with debt + recent orders) can
+// comfortably exceed express's 100kb default JSON body limit, so this route
+// gets a higher one -- it's machine-authenticated (X-Sync-Key), not
+// user-facing, so a larger limit here doesn't widen the attack surface the
+// way it would on a route any logged-in user can hit.
+app.use("/api/erp-sync", express.json({ limit: "5mb" }), erpSyncRouter);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });
@@ -72,7 +76,13 @@ app.get("*", (req, res) => {
 
 app.use((err, req, res, next) => {
   console.error(err);
-  res.status(500).json({ error: "Internal server error" });
+  // Known client-error cases (oversized body, malformed JSON) carry their
+  // own status via body-parser/http-errors conventions -- surface that
+  // instead of masking every error as a generic 500, which made a simple
+  // "payload too large" indistinguishable from a real server bug.
+  const status = typeof err.status === "number" && err.status >= 400 && err.status < 500 ? err.status : 500;
+  const message = status === 500 ? "Internal server error" : err.message || "Bad request";
+  res.status(status).json({ error: message });
 });
 
 const port = process.env.PORT || 3000;

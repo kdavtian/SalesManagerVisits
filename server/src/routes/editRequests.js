@@ -83,6 +83,7 @@ editRequestsRouter.patch("/:id", requireAdmin, async (req, res) => {
   }
 
   const client = await pool.connect();
+  let releaseErr;
   try {
     await client.query("BEGIN");
 
@@ -131,9 +132,10 @@ editRequestsRouter.patch("/:id", requireAdmin, async (req, res) => {
     await client.query("COMMIT");
     res.json(updated[0]);
   } catch (err) {
+    releaseErr = err;
     await client.query("ROLLBACK");
     throw err;
   } finally {
-    client.release();
+    client.release(releaseErr);
   }
 });
