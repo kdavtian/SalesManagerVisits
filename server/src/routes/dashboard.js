@@ -19,7 +19,18 @@ dashboardRouter.get("/summary", async (req, res) => {
        (SELECT count(DISTINCT ch.customer_id) FROM checkins ch
           WHERE ch.timestamp >= now() - interval '7 days' ${userFilter}) AS visited_this_week,
        (SELECT count(*) FROM checkins ch
-          WHERE ch.timestamp >= now() - interval '7 days' ${userFilter}) AS checkins_this_week`,
+          WHERE ch.timestamp >= now() - interval '7 days' ${userFilter}) AS checkins_this_week,
+       (SELECT count(*) FROM checkins ch
+          WHERE ch.timestamp >= date_trunc('day', now()) AND ch.within_range = false ${userFilter}) AS rejected_today,
+       (SELECT count(*) FROM customers c
+          WHERE NOT EXISTS (
+            SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= date_trunc('day', now())
+          )
+          AND (
+            (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id) IS NULL
+            OR (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id)
+               < now() - (c.visit_frequency_days || ' days')::interval
+          )) AS overdue`,
     params
   );
 

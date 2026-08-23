@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, getCurrentPosition, compressImage, formatDistance } from "../util.js";
+import { escapeHtml, getCurrentPosition, compressImage, formatDistance, haversineMeters } from "../util.js";
 import { enqueueCheckin } from "../offlineQueue.js";
 import { t } from "../i18n.js";
 
@@ -12,23 +12,51 @@ const BRAND_OPTIONS = [
   { value: "none", labelKey: "brand_none" },
 ];
 
+const OUTCOME_OPTIONS = [
+  { value: "order_placed", labelKey: "outcome_order_placed", icon: "🛒" },
+  { value: "no_order", labelKey: "outcome_no_order", icon: "⊘" },
+  { value: "payment_collected", labelKey: "outcome_payment_collected", icon: "💳" },
+  { value: "follow_up_required", labelKey: "outcome_follow_up_required", icon: "⏰" },
+  { value: "customer_unavailable", labelKey: "outcome_customer_unavailable", icon: "🚪" },
+  { value: "complaint", labelKey: "outcome_complaint", icon: "⚠️" },
+  { value: "stock_issue", labelKey: "outcome_stock_issue", icon: "📦" },
+  { value: "other", labelKey: "outcome_other", icon: "⋯" },
+];
+
 export async function renderCheckin(root, navigate, customerId) {
   root.innerHTML = `<div class="checkin-view"><p class="muted">…</p></div>`;
   const container = root.querySelector(".checkin-view");
 
-  let customer;
+  let customer, settings;
   try {
-    customer = await api.getCustomer(customerId);
+    [customer, settings] = await Promise.all([api.getCustomer(customerId), api.getSettings()]);
   } catch (err) {
     container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     return;
   }
+  const radiusMeters = settings.checkin_radius_meters;
 
   container.innerHTML = `
     <h1>${escapeHtml(customer.name)}</h1>
     <div class="gps-status" id="gps-status">${t("getting_location")}</div>
+    <div class="verify-banner" id="verify-banner" hidden></div>
 
     <form id="checkin-form">
+      <label class="outcome-label">
+        ${t("visit_outcome")}
+        <div class="outcome-grid">
+          ${OUTCOME_OPTIONS.map(
+            (o) => `
+            <label class="outcome-chip">
+              <input type="radio" name="outcome" value="${o.value}" />
+              <span class="outcome-icon">${o.icon}</span>
+              <span>${t(o.labelKey)}</span>
+            </label>
+          `
+          ).join("")}
+        </div>
+      </label>
+
       <label class="brands-label">
         ${t("products_found")}
         <div class="brand-grid">
@@ -72,6 +100,7 @@ export async function renderCheckin(root, navigate, customerId) {
   `;
 
   const gpsStatus = container.querySelector("#gps-status");
+  const verifyBanner = container.querySelector("#verify-banner");
   const submitBtn = container.querySelector("#checkin-submit");
   const form = container.querySelector("#checkin-form");
   const errorEl = container.querySelector("#checkin-error");
@@ -104,10 +133,23 @@ export async function renderCheckin(root, navigate, customerId) {
 
   try {
     position = await getCurrentPosition();
-    gpsStatus.textContent = `${t("location_captured")} (±${Math.round(position.coords.accuracy)}m ${t("accuracy")})`;
+    const accuracy = Math.round(position.coords.accuracy);
+    gpsStatus.textContent = `${t("location_captured")} (±${accuracy}m ${t("accuracy")})`;
     gpsStatus.classList.add("gps-ok");
     submitBtn.disabled = false;
     submitBtn.textContent = t("submit_checkin");
+
+    const distance = haversineMeters(position.coords.latitude, position.coords.longitude, customer.lat, customer.lng);
+    const withinRange = distance <= radiusMeters;
+    verifyBanner.hidden = false;
+    verifyBanner.className = `verify-banner ${withinRange ? "verify-banner-success" : "verify-banner-warning"}`;
+    verifyBanner.innerHTML = `
+      <span class="verify-banner-icon">${withinRange ? "✓" : "!"}</span>
+      <div>
+        <strong>${withinRange ? t("location_verified") : t("location_mismatch_away")}</strong>
+        <span class="muted">${t("you_are")} ${formatDistance(distance)} ${t("from_customer")}</span>
+      </div>
+    `;
   } catch (err) {
     gpsStatus.textContent = `${t("location_error")}: ${err.message}. ${t("enable_location_reload")}`;
     gpsStatus.classList.add("gps-error");
@@ -123,6 +165,7 @@ export async function renderCheckin(root, navigate, customerId) {
     const data = new FormData(form);
     const note = data.get("note");
     const brands = data.getAll("brands");
+    const outcome = data.get("outcome");
     const { latitude: lat, longitude: lng } = position.coords;
 
     const formData = new FormData();
@@ -130,6 +173,7 @@ export async function renderCheckin(root, navigate, customerId) {
     formData.set("lat", lat);
     formData.set("lng", lng);
     if (note) formData.set("note", note);
+    if (outcome) formData.set("outcome", outcome);
     if (brands.length) formData.set("brands_found", JSON.stringify(brands));
     if (compressedPhoto) formData.set("photo", compressedPhoto, "checkin.jpg");
 
@@ -141,7 +185,7 @@ export async function renderCheckin(root, navigate, customerId) {
         // Offline / network failure — queue it instead of losing the visit.
         let photoDataUrl = null;
         if (compressedPhoto) photoDataUrl = await blobToDataUrl(compressedPhoto);
-        enqueueCheckin({ customerId, lat, lng, note, brands, photoDataUrl });
+        enqueueCheckin({ customerId, lat, lng, note, brands, outcome, photoDataUrl });
         showQueued();
       } else {
         errorEl.textContent = err.message;

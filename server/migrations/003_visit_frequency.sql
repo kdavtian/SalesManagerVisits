@@ -1,0 +1,2 @@
+ALTER TABLE customers ADD COLUMN visit_frequency_days INTEGER NOT NULL DEFAULT 14;
+ALTER TABLE checkins ADD COLUMN outcome TEXT;

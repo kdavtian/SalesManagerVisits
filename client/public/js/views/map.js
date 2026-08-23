@@ -15,6 +15,12 @@ export function renderMap(root, navigate) {
     <div class="map-view">
       <div id="leaflet-map"></div>
 
+      <div class="map-filter-row">
+        <button class="map-filter-chip chip-active" data-filter="">${t("filter_all")}</button>
+        <button class="map-filter-chip" data-filter="overdue">${t("filter_overdue")}</button>
+        <button class="map-filter-chip" data-filter="visited">${t("filter_visited")}</button>
+      </div>
+
       <div class="map-controls">
         <div class="map-control-cluster">
           <button class="map-control-btn" id="zoom-in-btn" aria-label="Zoom in">
@@ -107,25 +113,66 @@ export function renderMap(root, navigate) {
   let placingMarker = null;
   const markerLayer = L.layerGroup().addTo(map);
 
+  function customerStatus(c) {
+    if (c.visited_today) return "today";
+    if (c.overdue) return "overdue";
+    if (c.visited_this_week) return "week";
+    return "pending";
+  }
+
+  const PIN_CLASS = { today: "pin-today", overdue: "pin-overdue", week: "pin-week", pending: "pin-pending" };
+
   function customerIcon(status) {
-    const cls = status === "today" ? "pin pin-today" : status === "week" ? "pin pin-week" : "pin pin-pending";
     const check = status === "today" ? '<span class="pin-check">&#10003;</span>' : "";
     return L.divIcon({
       className: "",
-      html: `<div class="${cls}">${check}</div>`,
+      html: `<div class="pin ${PIN_CLASS[status]}">${check}</div>`,
       iconSize: [22, 22],
       iconAnchor: [11, 22],
       popupAnchor: [0, -22],
     });
   }
 
+  let activeFilter = "";
+  let lastCustomers = [];
+
+  function applyFilter() {
+    markerLayer.clearLayers();
+    const bounds = [];
+    for (const { c, marker } of lastCustomers) {
+      const status = customerStatus(c);
+      if (activeFilter && !(activeFilter === "overdue" ? status === "overdue" : activeFilter === "visited" ? status === "today" || status === "week" : true)) {
+        continue;
+      }
+      marker.addTo(markerLayer);
+      bounds.push([c.lat, c.lng]);
+    }
+    if (bounds.length) {
+      try {
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+      } catch {
+        // See note below about the rotate-plugin pane-timing quirk.
+      }
+    }
+  }
+
+  root.querySelectorAll(".map-filter-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      root.querySelectorAll(".map-filter-chip").forEach((c) => c.classList.remove("chip-active"));
+      chip.classList.add("chip-active");
+      activeFilter = chip.dataset.filter;
+      applyFilter();
+    });
+  });
+
   async function loadCustomers() {
     const customers = await api.listCustomers();
     markerLayer.clearLayers();
+    lastCustomers = [];
 
     const bounds = [];
     for (const c of customers) {
-      const status = c.visited_today ? "today" : c.visited_this_week ? "week" : "pending";
+      const status = customerStatus(c);
       const marker = L.marker([c.lat, c.lng], { icon: customerIcon(status) });
       marker.bindPopup(`
         <div class="map-popup">
@@ -146,20 +193,13 @@ export function renderMap(root, navigate) {
           navigate(`#/checkin/${c.id}`);
         });
       });
-      marker.addTo(markerLayer);
+      lastCustomers.push({ c, marker });
       bounds.push([c.lat, c.lng]);
     }
 
-    if (bounds.length) {
-      try {
-        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
-      } catch {
-        // A pane-timing quirk between the rotate plugin and this Leaflet
-        // version can throw on the very first fitBounds call; the view is
-        // set correctly regardless; this only guards against a noisy
-        // console error.
-      }
-    } else if (navigator.geolocation) {
+    applyFilter();
+
+    if (!bounds.length && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => map.setView([pos.coords.latitude, pos.coords.longitude], 13),
         () => {}

@@ -6,15 +6,23 @@ export const customersRouter = Router();
 
 customersRouter.use(requireAuth);
 
-const VISITED_THIS_WEEK_EXISTS = `EXISTS (
-  SELECT 1 FROM checkins ch
-  WHERE ch.customer_id = c.id AND ch.timestamp >= now() - interval '7 days'
-)`;
+const LAST_VISIT_SUBQUERY = `(SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id)`;
 
-const VISITED_TODAY_EXISTS = `EXISTS (
-  SELECT 1 FROM checkins ch
-  WHERE ch.customer_id = c.id AND ch.timestamp >= date_trunc('day', now())
-)`;
+// Derived visit status — no assignment/planning data exists yet, so
+// "overdue" is approximated from each customer's own visit_frequency_days
+// against their actual last check-in, not a fabricated schedule.
+const STATUS_COLUMNS = `
+  ${LAST_VISIT_SUBQUERY} AS last_visit_at,
+  EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= date_trunc('day', now())) AS visited_today,
+  EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= now() - interval '7 days') AS visited_this_week,
+  (
+    NOT EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= date_trunc('day', now()))
+    AND (
+      ${LAST_VISIT_SUBQUERY} IS NULL
+      OR ${LAST_VISIT_SUBQUERY} < now() - (c.visit_frequency_days || ' days')::interval
+    )
+  ) AS overdue
+`;
 
 customersRouter.get("/", async (req, res) => {
   const { search, visited } = req.query;
@@ -26,14 +34,22 @@ customersRouter.get("/", async (req, res) => {
     conditions.push(`c.name ILIKE $${params.length}`);
   }
   if (visited === "visited") {
-    conditions.push(VISITED_THIS_WEEK_EXISTS);
+    conditions.push(`EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= now() - interval '7 days')`);
   } else if (visited === "not_visited") {
-    conditions.push(`NOT ${VISITED_THIS_WEEK_EXISTS}`);
+    conditions.push(`NOT EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= now() - interval '7 days')`);
+  } else if (visited === "overdue") {
+    conditions.push(`(
+      NOT EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= date_trunc('day', now()))
+      AND (
+        ${LAST_VISIT_SUBQUERY} IS NULL
+        OR ${LAST_VISIT_SUBQUERY} < now() - (c.visit_frequency_days || ' days')::interval
+      )
+    )`);
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const { rows } = await pool.query(
-    `SELECT c.*, ${VISITED_THIS_WEEK_EXISTS} AS visited_this_week, ${VISITED_TODAY_EXISTS} AS visited_today
+    `SELECT c.*, ${STATUS_COLUMNS}
      FROM customers c
      ${where}
      ORDER BY c.name`,
@@ -43,7 +59,7 @@ customersRouter.get("/", async (req, res) => {
 });
 
 customersRouter.post("/", async (req, res) => {
-  const { name, category, phone, address, notes, lat, lng } = req.body ?? {};
+  const { name, category, phone, address, notes, lat, lng, visit_frequency_days } = req.body ?? {};
 
   if (!name || lat === undefined || lng === undefined) {
     return res.status(400).json({ error: "name, lat and lng are required" });
@@ -53,17 +69,27 @@ customersRouter.post("/", async (req, res) => {
   }
 
   const { rows } = await pool.query(
-    `INSERT INTO customers (name, category, phone, address, notes, lat, lng, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO customers (name, category, phone, address, notes, lat, lng, created_by, visit_frequency_days)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
-    [name, category ?? null, phone ?? null, address ?? null, notes ?? null, lat, lng, req.user.id]
+    [
+      name,
+      category ?? null,
+      phone ?? null,
+      address ?? null,
+      notes ?? null,
+      lat,
+      lng,
+      req.user.id,
+      Number(visit_frequency_days) || 14,
+    ]
   );
   res.status(201).json(rows[0]);
 });
 
 customersRouter.get("/:id", async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT c.*, ${VISITED_THIS_WEEK_EXISTS} AS visited_this_week, ${VISITED_TODAY_EXISTS} AS visited_today
+    `SELECT c.*, ${STATUS_COLUMNS}
      FROM customers c WHERE c.id = $1`,
     [req.params.id]
   );
@@ -71,7 +97,7 @@ customersRouter.get("/:id", async (req, res) => {
   res.json(rows[0]);
 });
 
-const EDITABLE_FIELDS = ["name", "category", "phone", "address", "notes", "lat", "lng"];
+const EDITABLE_FIELDS = ["name", "category", "phone", "address", "notes", "lat", "lng", "visit_frequency_days"];
 
 customersRouter.patch("/:id", async (req, res) => {
   const updates = [];

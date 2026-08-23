@@ -1,15 +1,26 @@
 import { api } from "../api.js";
-import { escapeHtml } from "../util.js";
+import { escapeHtml, formatDateTime } from "../util.js";
 import { t } from "../i18n.js";
 
-export function renderCustomers(root, navigate) {
+export function renderCustomers(root, navigate, initialFilter) {
   root.innerHTML = `
     <div class="list-view">
+      <div class="list-header">
+        <div>
+          <h1>${t("nav_customers")}</h1>
+          <p class="muted">${t("customers_subtitle")}</p>
+        </div>
+        <button class="btn btn-primary btn-sm" id="add-customer-btn">+ ${t("add_customer")}</button>
+      </div>
+
+      <div class="customer-stats-bar" id="customer-stats-bar"></div>
+
       <div class="list-toolbar">
         <input type="search" id="customer-search" placeholder="${t("search_customers")}" />
-        <div class="segmented">
-          <button class="chip chip-active" data-filter="">${t("filter_all")}</button>
+        <div class="segmented" id="filter-segmented">
+          <button class="chip" data-filter="">${t("filter_all")}</button>
           <button class="chip" data-filter="visited">${t("filter_visited")}</button>
+          <button class="chip" data-filter="overdue">${t("filter_overdue")}</button>
           <button class="chip" data-filter="not_visited">${t("filter_not_visited")}</button>
         </div>
       </div>
@@ -19,10 +30,27 @@ export function renderCustomers(root, navigate) {
 
   const searchInput = root.querySelector("#customer-search");
   const listEl = root.querySelector("#customer-list");
+  const statsBar = root.querySelector("#customer-stats-bar");
   const chips = root.querySelectorAll(".chip");
 
-  let filter = "";
+  let filter = initialFilter || "";
+  root.querySelectorAll(`.chip[data-filter="${filter}"]`).forEach((c) => c.classList.add("chip-active"));
+  if (!filter) chips[0].classList.add("chip-active");
+
   let searchTimer;
+
+  root.querySelector("#add-customer-btn").addEventListener("click", () => navigate("#/map"));
+
+  async function loadStats() {
+    const all = await api.listCustomers();
+    const visitedWeek = all.filter((c) => c.visited_this_week).length;
+    const overdue = all.filter((c) => c.overdue).length;
+    statsBar.innerHTML = `
+      <div class="stat-pill"><strong>${all.length}</strong><span>${t("filter_all")}</span></div>
+      <div class="stat-pill"><strong class="text-success">${visitedWeek}</strong><span>${t("filter_visited")}</span></div>
+      <div class="stat-pill"><strong class="text-danger">${overdue}</strong><span>${t("filter_overdue")}</span></div>
+    `;
+  }
 
   async function load() {
     listEl.innerHTML = `<p class="muted">…</p>`;
@@ -38,13 +66,29 @@ export function renderCustomers(root, navigate) {
 
     listEl.innerHTML = customers
       .map((c) => {
-        const badgeClass = c.visited_today ? "badge-success" : c.visited_this_week ? "badge-info" : "badge-neutral";
-        const badgeText = c.visited_today ? t("visited_today") : c.visited_this_week ? t("visited_this_week") : t("not_visited");
+        let badgeClass = "badge-neutral";
+        let badgeText = t("not_visited");
+        if (c.visited_today) {
+          badgeClass = "badge-success";
+          badgeText = t("visited_today");
+        } else if (c.overdue) {
+          badgeClass = "badge-danger";
+          badgeText = t("filter_overdue");
+        } else if (c.visited_this_week) {
+          badgeClass = "badge-info";
+          badgeText = t("visited_this_week");
+        }
+        const lastVisit = c.last_visit_at
+          ? `${t("last_visit")}: ${formatDateTime(c.last_visit_at)}`
+          : t("never_visited");
+
         return `
         <button class="card customer-card" data-id="${c.id}">
+          <div class="customer-card-icon">🏪</div>
           <div class="customer-card-main">
             <strong>${escapeHtml(c.name)}</strong>
             ${c.category ? `<span class="muted">${escapeHtml(c.category)}</span>` : ""}
+            <span class="muted customer-card-last-visit">${lastVisit}</span>
           </div>
           <span class="card-trailing">
             <span class="badge ${badgeClass}">${badgeText}</span>
@@ -74,5 +118,6 @@ export function renderCustomers(root, navigate) {
     });
   });
 
+  loadStats();
   load();
 }

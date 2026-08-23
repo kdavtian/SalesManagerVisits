@@ -12,6 +12,16 @@ export const checkinsRouter = Router();
 checkinsRouter.use(requireAuth);
 
 const VALID_BRANDS = new Set(["castrol", "lotos", "royal", "fake", "other_imports", "none"]);
+const VALID_OUTCOMES = new Set([
+  "order_placed",
+  "no_order",
+  "payment_collected",
+  "follow_up_required",
+  "customer_unavailable",
+  "complaint",
+  "stock_issue",
+  "other",
+]);
 
 function parseBrandsFound(raw) {
   if (!raw) return null;
@@ -32,7 +42,7 @@ checkinsRouter.post("/", (req, res, next) => {
     next();
   });
 }, async (req, res) => {
-  const { customer_id, lat, lng, note, brands_found } = req.body ?? {};
+  const { customer_id, lat, lng, note, brands_found, outcome } = req.body ?? {};
   const customerId = Number(customer_id);
   const latNum = Number(lat);
   const lngNum = Number(lng);
@@ -57,12 +67,13 @@ checkinsRouter.post("/", (req, res, next) => {
   const withinRange = distance <= radiusMeters;
   const photoPath = req.file ? req.file.filename : null;
   const brands = parseBrandsFound(brands_found);
+  const outcomeValue = VALID_OUTCOMES.has(outcome) ? outcome : null;
 
   const { rows } = await pool.query(
-    `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, note, photo_path, brands_found)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, note, photo_path, brands_found, outcome)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING *`,
-    [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, photoPath, brands]
+    [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, photoPath, brands, outcomeValue]
   );
 
   res.status(201).json(rows[0]);

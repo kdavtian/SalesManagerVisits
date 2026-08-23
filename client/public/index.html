@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
     <title>Field Visits</title>
-    <meta name="theme-color" content="#17181a" />
+    <meta name="theme-color" content="#f6f7f9" />
 
     <link rel="manifest" href="manifest.json" />
     <link rel="icon" href="icons/icon-192.png" />
@@ -16,10 +16,10 @@
 
     <script>
       // Applied synchronously, before first paint, to avoid a flash of the
-      // wrong theme when the user has chosen light mode.
+      // wrong theme. Light is the default; dark only applies if chosen.
       try {
         var t = localStorage.getItem("fieldvisits_theme");
-        if (t === "light") document.documentElement.dataset.theme = "light";
+        if (t === "dark") document.documentElement.dataset.theme = "dark";
       } catch (e) {}
     </script>
 

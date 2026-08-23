@@ -1,4 +1,30 @@
 :root {
+  /* Light theme (default) — matches the KAD Field Visits design spec. */
+  --bg: #f6f7f9;
+  --bg-elevated: rgba(255, 255, 255, 0.9);
+  --bg-card: #ffffff;
+  --bg-card-pressed: #eef0f3;
+  --border: #e7e9ed;
+  --text: #111318;
+  --text-dim: #747b86;
+  --text-tertiary: #9aa1ab;
+  --accent: #1677ff;
+  --accent-dark: #0b5ed6;
+  --success: #16a765;
+  --warning: #f59e0b;
+  --danger: #e5484d;
+  --inactive: #adb3bc;
+  --radius: 14px;
+  --radius-lg: 20px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --pin-border: #ffffff;
+  --shadow-subtle: 0 1px 3px rgba(17, 19, 24, 0.06);
+  --shadow-elevated: 0 8px 24px rgba(17, 19, 24, 0.12);
+}
+
+:root[data-theme="dark"] {
   --bg: #000000;
   --bg-elevated: rgba(28, 28, 30, 0.86);
   --bg-card: #1c1c1e;
@@ -6,31 +32,21 @@
   --border: #38383a;
   --text: #f5f5f7;
   --text-dim: #98989d;
-  --accent: #ff6a13;
-  --accent-dark: #d9560a;
+  --text-tertiary: #6c6c70;
+  --accent: #3d8bff;
+  --accent-dark: #1677ff;
   --success: #30d158;
+  --warning: #ff9f0a;
   --danger: #ff453a;
-  --radius: 14px;
-  --radius-lg: 20px;
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-top: env(safe-area-inset-top, 0px);
-  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --inactive: #636366;
   --pin-border: #000000;
-  --map-tile-filter: none;
+  --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-elevated: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
-:root[data-theme="light"] {
-  --bg: #f2f2f7;
-  --bg-elevated: rgba(255, 255, 255, 0.86);
-  --bg-card: #ffffff;
-  --bg-card-pressed: #e5e5ea;
-  --border: #d1d1d6;
-  --text: #1c1c1e;
-  --text-dim: #6e6e73;
-  --success: #248a3d;
-  --danger: #d70015;
-  --pin-border: #ffffff;
-}
+/* Light is the deliberate default regardless of system preference (matches
+   the approved design), so dark mode only applies via an explicit user
+   toggle — see theme.js. */
 
 * {
   box-sizing: border-box;
@@ -629,16 +645,7 @@ form select:focus {
   padding: 16px;
 }
 
-.detail-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.detail-header h1,
-.dashboard-view h1,
-.admin-view h1 {
+.dashboard-view h1 {
   font-size: 1.9rem;
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -1281,4 +1288,535 @@ form select:focus {
 
 .sheet-actions .btn {
   flex: 1;
+}
+
+/* ===== Dashboard / Activity redesign ===== */
+
+.text-success {
+  color: var(--success);
+}
+
+.text-danger {
+  color: var(--danger);
+}
+
+.greeting-row {
+  margin-bottom: 14px;
+}
+
+.greeting-row h1 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 2px;
+}
+
+.card {
+  box-shadow: var(--shadow-subtle);
+}
+
+.progress-card {
+  margin: 4px 0 18px;
+  padding: 18px;
+}
+
+.progress-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+.progress-main {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin: 8px 0 14px;
+}
+
+.progress-fraction {
+  font-size: 2.4rem;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.progress-fraction-total {
+  font-size: 1.3rem;
+  color: var(--text-dim);
+  font-weight: 700;
+}
+
+.progress-side {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.progress-side-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot-success {
+  background: var(--success);
+}
+
+.dot-warning {
+  background: var(--warning);
+}
+
+.dot-danger {
+  background: var(--danger);
+}
+
+.progress-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.next-visit-card {
+  margin-bottom: 18px;
+  padding: 16px;
+}
+
+.next-visit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.next-visit-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0 14px;
+}
+
+.next-visit-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+
+.next-visit-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.next-visit-info strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.next-visit-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.next-visit-actions .btn {
+  flex: 1;
+}
+
+.next-visit-due {
+  margin-top: 8px;
+}
+
+/* .dashboard-view already carries 16px padding on all sides (shared with
+   .detail-view/.checkin-view), so nested .stat-grid/.card-list — which
+   normally add their own 16px side padding for unpadded containers like
+   .list-view — must not double it up here. */
+.dashboard-view .stat-grid,
+.dashboard-view .card-list {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.stat-grid-4 {
+  margin-bottom: 6px;
+}
+
+.section-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-title-inline {
+  margin: 26px 0 10px;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.quick-actions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding-bottom: 8px;
+}
+
+.quick-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.quick-action-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+}
+
+.quick-action-icon-accent {
+  background: var(--accent);
+  color: #ffffff;
+  font-weight: 800;
+}
+
+/* ===== Customers list redesign ===== */
+
+.list-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 16px 16px 0;
+  gap: 10px;
+}
+
+.list-header h1 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.customer-stats-bar {
+  display: flex;
+  gap: 8px;
+  padding: 14px 16px 0;
+  overflow-x: auto;
+}
+
+.stat-pill {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 84px;
+}
+
+.stat-pill strong {
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.stat-pill span {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.customer-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.customer-card-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+
+.customer-card-last-visit {
+  font-size: 0.76rem;
+}
+
+/* ===== Customer detail redesign ===== */
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.detail-header-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+
+.detail-header-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.detail-header-title h1 {
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-facts-card {
+  margin: 14px 0;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.detail-fact {
+  font-size: 0.9rem;
+  display: flex;
+  gap: 8px;
+}
+
+.detail-fact a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.detail-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 18px 0;
+}
+
+.action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.action-btn span:first-child {
+  font-size: 1.2rem;
+}
+
+.action-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.checkin-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ===== Check-in redesign ===== */
+
+.verify-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+}
+
+.verify-banner strong {
+  display: block;
+  font-size: 0.92rem;
+}
+
+.verify-banner .muted {
+  font-size: 0.8rem;
+}
+
+.verify-banner-success {
+  background: rgba(22, 167, 101, 0.12);
+}
+
+.verify-banner-warning {
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.verify-banner-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  flex-shrink: 0;
+  color: #ffffff;
+}
+
+.verify-banner-success .verify-banner-icon {
+  background: var(--success);
+}
+
+.verify-banner-warning .verify-banner-icon {
+  background: var(--warning);
+}
+
+.outcome-label {
+  margin-bottom: 18px;
+}
+
+.outcome-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.outcome-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 0.82rem;
+  color: var(--text);
+  margin: 0;
+  cursor: pointer;
+}
+
+.outcome-chip input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.outcome-chip:has(input:checked) {
+  border-color: var(--accent);
+  background: rgba(22, 119, 255, 0.1);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.outcome-icon {
+  font-size: 1rem;
+}
+
+/* ===== Map redesign ===== */
+
+.map-filter-row {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 70px;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  z-index: 1000;
+}
+
+.map-filter-chip {
+  background: var(--bg-elevated);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: var(--shadow-subtle);
+}
+
+.map-filter-chip.chip-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.pin-overdue {
+  background: var(--danger);
 }

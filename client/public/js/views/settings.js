@@ -11,9 +11,9 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
 
       <h2 class="section-title">${t("appearance")}</h2>
       <div class="card settings-row">
-        <span>${t("light_mode")}</span>
+        <span>${t("dark_mode")}</span>
         <label class="switch">
-          <input type="checkbox" id="theme-toggle" ${getTheme() === "light" ? "checked" : ""} />
+          <input type="checkbox" id="theme-toggle" ${getTheme() === "dark" ? "checked" : ""} />
           <span class="switch-track"></span>
         </label>
       </div>
@@ -62,7 +62,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
   `;
 
   root.querySelector("#theme-toggle").addEventListener("change", (e) => {
-    setTheme(e.target.checked ? "light" : "dark");
+    setTheme(e.target.checked ? "dark" : "light");
   });
 
   root.querySelector("#lang-toggle").addEventListener("change", (e) => {

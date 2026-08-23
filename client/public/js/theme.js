@@ -1,11 +1,11 @@
 const THEME_KEY = "fieldvisits_theme";
 
 export function getTheme() {
-  return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
+  return localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light";
 }
 
 export function setTheme(theme) {
-  const value = theme === "light" ? "light" : "dark";
+  const value = theme === "dark" ? "dark" : "light";
   localStorage.setItem(THEME_KEY, value);
   document.documentElement.dataset.theme = value;
 }

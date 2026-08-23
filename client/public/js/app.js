@@ -7,8 +7,8 @@ import { renderCustomers } from "./views/customers.js";
 import { renderCustomerDetail } from "./views/customerDetail.js";
 import { renderCheckin } from "./views/checkin.js";
 import { renderDashboard } from "./views/dashboard.js";
+import { renderActivity } from "./views/activity.js";
 import { renderSettings } from "./views/settings.js";
-import { renderPlan } from "./views/plan.js";
 import { flushQueue, getQueue, onQueueChange } from "./offlineQueue.js";
 import { mountInstallPrompt } from "./install.js";
 
@@ -38,7 +38,7 @@ async function render() {
     topBar.hidden = true;
     navBar.hidden = true;
     renderLogin(app, async () => {
-      location.hash = "#/map";
+      location.hash = "#/dashboard";
       render();
     });
     return;
@@ -49,23 +49,25 @@ async function render() {
   renderNav();
   mountInstallPrompt(installRoot);
 
-  const hash = location.hash || "#/map";
-  const customerMatch = hash.match(/^#\/customers\/(\d+)$/);
-  const checkinMatch = hash.match(/^#\/checkin\/(\d+)$/);
+  const hash = location.hash || "#/dashboard";
+  const [path, queryString] = hash.split("?");
+  const query = new URLSearchParams(queryString || "");
+  const customerMatch = path.match(/^#\/customers\/(\d+)$/);
+  const checkinMatch = path.match(/^#\/checkin\/(\d+)$/);
 
-  if (hash === "#/map") {
+  if (path === "#/dashboard") {
+    renderDashboard(app, navigate);
+  } else if (path === "#/activity") {
+    renderActivity(app, navigate);
+  } else if (path === "#/map") {
     currentCleanup = renderMap(app, navigate);
-  } else if (hash === "#/customers") {
-    renderCustomers(app, navigate);
+  } else if (path === "#/customers") {
+    renderCustomers(app, navigate, query.get("visited"));
   } else if (customerMatch) {
     renderCustomerDetail(app, navigate, customerMatch[1]);
   } else if (checkinMatch) {
     renderCheckin(app, navigate, checkinMatch[1]);
-  } else if (hash === "#/dashboard") {
-    renderDashboard(app, navigate);
-  } else if (hash === "#/plan") {
-    renderPlan(app);
-  } else if (hash === "#/settings") {
+  } else if (path === "#/settings") {
     renderSettings(
       app,
       async () => {
@@ -77,17 +79,17 @@ async function render() {
       render
     );
   } else {
-    navigate("#/map");
+    navigate("#/dashboard");
   }
 }
 
 function renderNav() {
-  const hash = location.hash || "#/map";
+  const hash = (location.hash || "#/dashboard").split("?")[0];
   const items = [
-    { hash: "#/dashboard", label: t("nav_activity"), icon: "📊" },
-    { hash: "#/plan", label: t("nav_plan"), icon: "🗓️" },
-    { hash: "#/map", label: t("nav_map"), icon: "🗺️", center: true },
-    { hash: "#/customers", label: t("nav_customers"), icon: "📋" },
+    { hash: "#/dashboard", label: t("nav_dashboard"), icon: "🏠" },
+    { hash: "#/activity", label: t("nav_activity"), icon: "📊" },
+    { hash: "#/map", label: t("nav_map"), icon: "➤", center: true },
+    { hash: "#/customers", label: t("nav_customers"), icon: "👥" },
     { hash: "#/settings", label: t("nav_settings"), icon: "⚙️" },
   ];
 
