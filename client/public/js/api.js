@@ -78,6 +78,13 @@ export const api = {
 
   reverseGeocode: (lat, lng) => request(`/geocode/reverse?lat=${lat}&lng=${lng}`),
 
+  changeMyPassword: (currentPassword, newPassword) =>
+    json("/me/password", "PATCH", { current_password: currentPassword, new_password: newPassword }),
+  logoutOtherSessions: () => request("/me/logout-other-sessions", { method: "POST" }),
+  uploadMyAvatar: (formData) => request("/me/avatar", { method: "POST", body: formData }),
+  deleteMyAvatar: () => request("/me/avatar", { method: "DELETE" }),
+  myAvatarUrl: () => `/api/me/avatar?t=${Date.now()}`,
+
   getMyVisitPlan: (date) => request(`/visit-plans/mine${date ? `?date=${date}` : ""}`),
   saveVisitPlan: (date, customerIds) => json("/visit-plans", "POST", { date, customer_ids: customerIds }),
   getPendingVisitPlans: () => request("/visit-plans/pending"),

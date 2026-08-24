@@ -48,6 +48,13 @@ async function submitEntry(entry) {
 
 let flushing = false;
 
+const LAST_SYNC_KEY = "fieldvisits_last_synced_at";
+
+export function getLastSyncedAt() {
+  const raw = localStorage.getItem(LAST_SYNC_KEY);
+  return raw ? Number(raw) : null;
+}
+
 export async function flushQueue() {
   if (flushing) return;
   flushing = true;
@@ -68,6 +75,7 @@ export async function flushQueue() {
         writeQueue(queue);
       }
     }
+    if (!queue.length) localStorage.setItem(LAST_SYNC_KEY, String(Date.now()));
   } finally {
     flushing = false;
   }

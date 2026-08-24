@@ -46,7 +46,7 @@ app.use(
 app.use(cookieParser());
 
 app.use("/api/auth", express.json(), authRouter);
-app.use("/api/me", meRouter);
+app.use("/api/me", express.json(), meRouter);
 app.use("/api/users", express.json(), usersRouter);
 app.use("/api/customers", express.json(), customersRouter);
 app.use("/api/checkins", checkinsRouter);

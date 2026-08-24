@@ -88,6 +88,7 @@ export async function renderCheckin(root, navigate, customerId) {
         </button>
         <div class="photo-preview-wrap" id="photo-preview-wrap" hidden>
           <img id="photo-preview" alt="${t("photo_optional")}" />
+          <button type="button" class="photo-remove-btn" id="photo-remove-btn" aria-label="${t("remove_photo")}">&times;</button>
           <button type="button" class="photo-retake-btn" id="photo-retake-btn">${t("retake_photo")}</button>
         </div>
       </div>
@@ -111,12 +112,20 @@ export async function renderCheckin(root, navigate, customerId) {
   const previewWrap = container.querySelector("#photo-preview-wrap");
   const photoPreview = container.querySelector("#photo-preview");
   const retakeBtn = container.querySelector("#photo-retake-btn");
+  const removePhotoBtn = container.querySelector("#photo-remove-btn");
 
   let position = null;
   let compressedPhoto = null;
 
   cameraBtn.addEventListener("click", () => photoInput.click());
   retakeBtn.addEventListener("click", () => photoInput.click());
+  removePhotoBtn.addEventListener("click", () => {
+    compressedPhoto = null;
+    photoInput.value = "";
+    photoPreview.src = "";
+    previewWrap.hidden = true;
+    cameraBtn.hidden = false;
+  });
 
   photoInput.addEventListener("change", async () => {
     const file = photoInput.files[0];

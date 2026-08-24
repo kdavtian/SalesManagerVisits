@@ -3,9 +3,16 @@ import { activateDialog, escapeHtml, formatDateTime } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 
+// Real territory/channel names from the Castrol sales data (see
+// work/build_sales_director_data.py's CHANNEL_ORDER in the castrol_ceo_report
+// repo) -- offered as suggestions, but the field stays free text since new
+// territories get added over time (e.g. "SM YVN3").
+const POSITION_SUGGESTIONS = ["SM YVN", "SM Davtashen", "SM CAS", "SM Shirak", "SM B2B"];
+
 const ROLE_BADGE = {
   admin: { key: "role_admin", cls: "badge-accent" },
-  manager: { key: "role_manager", cls: "badge-neutral" },
+  ceo: { key: "role_ceo", cls: "badge-accent" },
+  sales_manager: { key: "role_sales_manager", cls: "badge-neutral" },
   sales_director: { key: "role_sales_director", cls: "badge-info" },
   warehouse_manager: { key: "role_warehouse_manager", cls: "badge-info" },
   delivery_manager: { key: "role_delivery_manager", cls: "badge-info" },
@@ -20,13 +27,20 @@ export async function renderTeamSection(container) {
       <label>${t("email")}<input name="email" type="email" required /></label>
       <label>${t("temp_password")}<input name="password" type="password" minlength="8" required /></label>
       <label>${t("role")}
-        <select name="role">
-          <option value="manager">${t("role_manager")}</option>
+        <select name="role" id="new-user-role">
+          <option value="sales_manager">${t("role_sales_manager")}</option>
           <option value="sales_director">${t("role_sales_director")}</option>
           <option value="warehouse_manager">${t("role_warehouse_manager")}</option>
           <option value="delivery_manager">${t("role_delivery_manager")}</option>
+          <option value="ceo">${t("role_ceo")}</option>
           <option value="admin">${t("role_admin")}</option>
         </select>
+      </label>
+      <label id="new-user-position-field">${t("position")}
+        <input name="position" list="position-suggestions" placeholder="${t("position_placeholder")}" />
+        <datalist id="position-suggestions">
+          ${POSITION_SUGGESTIONS.map((p) => `<option value="${escapeHtml(p)}"></option>`).join("")}
+        </datalist>
       </label>
       <p class="form-error" id="new-user-error" hidden></p>
       <p class="form-success" id="new-user-success" hidden></p>
@@ -40,13 +54,13 @@ export async function renderTeamSection(container) {
     const users = await api.listUsers();
     listEl.innerHTML = users
       .map((u) => {
-        const roleBadge = ROLE_BADGE[u.role] ?? { key: "role_manager", cls: "badge-neutral" };
+        const roleBadge = ROLE_BADGE[u.role] ?? { key: "role_sales_manager", cls: "badge-neutral" };
         return `
         <div class="card user-row">
           <div class="user-row-top">
             <div>
               <strong>${escapeHtml(u.name)}</strong>
-              <span class="muted">${escapeHtml(u.email)}</span>
+              <span class="muted">${escapeHtml(u.email)}${u.position ? ` · ${escapeHtml(u.position)}` : ""}</span>
             </div>
             <span class="badge ${roleBadge.cls}">${t(roleBadge.key)}</span>
           </div>
@@ -117,6 +131,14 @@ export async function renderTeamSection(container) {
   const form = container.querySelector("#new-user-form");
   const errorEl = container.querySelector("#new-user-error");
   const successEl = container.querySelector("#new-user-success");
+  const roleSelect = container.querySelector("#new-user-role");
+  const positionField = container.querySelector("#new-user-position-field");
+
+  function togglePositionField() {
+    positionField.hidden = roleSelect.value !== "sales_manager";
+  }
+  roleSelect.addEventListener("change", togglePositionField);
+  togglePositionField();
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -132,8 +154,10 @@ export async function renderTeamSection(container) {
         email: data.get("email"),
         password: data.get("password"),
         role: data.get("role"),
+        position: data.get("role") === "sales_manager" ? data.get("position") || null : null,
       });
       form.reset();
+      togglePositionField();
       successEl.textContent = t("account_created");
       successEl.hidden = false;
       loadUsers();

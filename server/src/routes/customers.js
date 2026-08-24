@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin, requireDirectEditAccess } from "../middleware/auth.js";
 import { seesAllActivity } from "../roles.js";
+import { getDefaultVisitFrequencyDays } from "../settings.js";
 
 export const customersRouter = Router();
 
@@ -83,7 +84,7 @@ customersRouter.post("/", async (req, res) => {
       lat,
       lng,
       req.user.id,
-      Number(visit_frequency_days) || 14,
+      Number(visit_frequency_days) || (await getDefaultVisitFrequencyDays()),
       erp_customer_id || null,
       tin || null,
     ]

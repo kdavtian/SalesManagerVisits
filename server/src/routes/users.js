@@ -10,13 +10,13 @@ usersRouter.use(requireAuth, requireAdmin);
 
 usersRouter.get("/", async (req, res) => {
   const { rows } = await pool.query(
-    "SELECT id, email, name, role, created_at FROM users ORDER BY created_at DESC"
+    "SELECT id, email, name, role, position, created_at FROM users ORDER BY created_at DESC"
   );
   res.json(rows);
 });
 
 usersRouter.post("/", async (req, res) => {
-  const { email, password, name, role } = req.body ?? {};
+  const { email, password, name, role, position } = req.body ?? {};
 
   if (!email || !password || !name || !role) {
     return res
@@ -34,10 +34,10 @@ usersRouter.post("/", async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      `INSERT INTO users (email, password_hash, name, role)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, email, name, role, created_at`,
-      [String(email).toLowerCase(), passwordHash, name, role]
+      `INSERT INTO users (email, password_hash, name, role, position)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, email, name, role, position, created_at`,
+      [String(email).toLowerCase(), passwordHash, name, role, position || null]
     );
     res.status(201).json(rows[0]);
   } catch (err) {

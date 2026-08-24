@@ -10,10 +10,10 @@ export function isAdmin() {
   return state.user?.role === "admin";
 }
 
-// Managers only see their own data; every other role (admin + the three
-// director-tier roles) sees everyone's — mirrors server/src/roles.js.
+// Sales managers only see their own data; every other role sees
+// everyone's — mirrors server/src/roles.js.
 export function seesAllActivity() {
-  return state.user?.role !== "manager";
+  return state.user?.role !== "sales_manager";
 }
 
 export function canEditDirectly() {
@@ -21,9 +21,11 @@ export function canEditDirectly() {
 }
 
 export function canViewTeamLocations() {
-  return state.user?.role === "admin" || state.user?.role === "sales_director";
+  return (
+    state.user?.role === "admin" || state.user?.role === "sales_director" || state.user?.role === "ceo"
+  );
 }
 
 export function broadcastsLocation() {
-  return state.user?.role !== "admin";
+  return state.user?.role !== "admin" && state.user?.role !== "ceo";
 }
