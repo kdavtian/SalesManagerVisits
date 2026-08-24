@@ -42,13 +42,15 @@ export async function notifyUser(userId, payload) {
           { endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } },
           JSON.stringify(payload)
         );
+        console.log(`Push delivered to subscription ${row.id} (user ${userId}): "${payload.title}"`);
       } catch (err) {
         if (err.statusCode === 404 || err.statusCode === 410) {
+          console.log(`Subscription ${row.id} (user ${userId}) expired (${err.statusCode}) -- removing it.`);
           await pool.query("DELETE FROM push_subscriptions WHERE id = $1", [row.id]);
         } else {
           // Never let a notification failure break the request that
           // triggered it -- this is a best-effort side channel.
-          console.error(`Push notify error for subscription ${row.id}:`, err.message);
+          console.error(`Push notify error for subscription ${row.id} (status ${err.statusCode}):`, err.message);
         }
       }
     })

@@ -41,6 +41,15 @@ const clientDir = path.join(__dirname, "..", "..", "client", "public");
 
 const app = express();
 
+// Production runs behind a single reverse proxy (see deploy/docker-compose
+// setup -- the app container only binds 127.0.0.1:3000), which sets
+// X-Forwarded-For. Without this, express-rate-limit refuses to trust that
+// header (correctly, by default -- an untrusted client could otherwise
+// forge it to dodge rate limits) and throws on every rate-limited request.
+// Trusting exactly one hop matches the real topology without trusting the
+// whole chain.
+app.set("trust proxy", 1);
+
 app.use(
   helmet({
     // The app serves its own HTML/CSS/JS same-origin and loads map tiles
