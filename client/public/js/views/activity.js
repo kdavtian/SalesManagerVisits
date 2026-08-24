@@ -169,6 +169,7 @@ export async function renderActivity(root, navigate) {
       </div>
 
       <div class="activity-filters" id="activity-filters" ${filtersOpen ? "" : "hidden"}>
+        <label class="visually-hidden" for="activity-search">${t("search_customers")}</label>
         <input type="search" id="activity-search" placeholder="${t("search_customers")}" value="${escapeHtml(filters.search)}" />
         <div class="activity-filter-row">
           ${
@@ -204,6 +205,17 @@ export async function renderActivity(root, navigate) {
         visibleCount = PAGE_SIZE;
         renderShell();
         load();
+      });
+      btn.addEventListener("keydown", (e) => {
+        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+        e.preventDefault();
+        const tabs = [...container.querySelectorAll(".activity-tab")];
+        const delta = e.key === "ArrowRight" ? 1 : -1;
+        tabs[(tabs.indexOf(btn) + delta + tabs.length) % tabs.length]?.click();
+        requestAnimationFrame(() => {
+          const selected = container.querySelector(`.activity-tab[data-range="${range}"]`);
+          selected?.focus();
+        });
       });
     });
 

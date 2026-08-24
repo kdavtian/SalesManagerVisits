@@ -160,6 +160,66 @@ export function activateDialog(overlay) {
   observer.observe(document.body, { childList: true });
 }
 
+// Gives the project-local ERP suggestion lists full combobox semantics and
+// keyboard behavior without changing their filtering/data logic.
+export function activateCombobox(input, list, onSelect) {
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-controls", list.id);
+  input.setAttribute("aria-expanded", "false");
+  list.setAttribute("role", "listbox");
+  let activeIndex = -1;
+
+  function options() {
+    const items = [...list.querySelectorAll(".erp-suggest-item")];
+    items.forEach((item, index) => {
+      item.setAttribute("role", "option");
+      item.id ||= `${list.id}-option-${index}`;
+      item.setAttribute("aria-selected", String(index === activeIndex));
+    });
+    input.setAttribute("aria-expanded", String(!list.hidden && items.length > 0));
+    return items;
+  }
+
+  function choose(item) {
+    if (!item) return;
+    onSelect(item);
+    list.hidden = true;
+    activeIndex = -1;
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
+  }
+
+  input.addEventListener("keydown", (event) => {
+    const items = options();
+    if ((event.key === "ArrowDown" || event.key === "ArrowUp") && items.length) {
+      event.preventDefault();
+      const delta = event.key === "ArrowDown" ? 1 : -1;
+      activeIndex = (activeIndex + delta + items.length) % items.length;
+      items.forEach((item, index) => item.setAttribute("aria-selected", String(index === activeIndex)));
+      input.setAttribute("aria-activedescendant", items[activeIndex].id);
+      items[activeIndex].scrollIntoView({ block: "nearest" });
+    } else if (event.key === "Enter" && activeIndex >= 0) {
+      event.preventDefault();
+      choose(items[activeIndex]);
+    } else if (event.key === "Escape") {
+      list.hidden = true;
+      activeIndex = -1;
+      input.setAttribute("aria-expanded", "false");
+      input.removeAttribute("aria-activedescendant");
+    }
+  });
+
+  list.addEventListener("mousedown", (event) => {
+    const item = event.target.closest(".erp-suggest-item");
+    if (!item) return;
+    event.preventDefault();
+    choose(item);
+  });
+
+  new MutationObserver(options).observe(list, { childList: true, attributes: true, attributeFilter: ["hidden"] });
+}
+
 // Downscale + re-encode a photo client-side before upload, to keep uploads
 // small on patchy field connections.
 export function compressImage(file, { maxDimension = 1600, quality = 0.75 } = {}) {

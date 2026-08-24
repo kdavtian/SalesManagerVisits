@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateDialog, escapeHtml, formatRelative, formatAmd, formatDistance, haversineMeters, getCurrentPosition, CATEGORY_OPTIONS } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDistance, haversineMeters, getCurrentPosition, CATEGORY_OPTIONS } from "../util.js";
 import { t } from "../i18n.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
@@ -31,11 +31,11 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         relocateCustomerId
           ? ""
           : `<div class="map-filter-row">
-              <button class="map-filter-chip chip-active" data-filter="">${t("filter_all")}</button>
-              <button class="map-filter-chip" data-filter="overdue">${t("filter_overdue")}</button>
-              <button class="map-filter-chip" data-filter="visited">${t("filter_visited")}</button>
-              <button class="map-filter-chip" data-filter="planned">${t("filter_planned")}</button>
-              <button class="map-filter-chip" data-filter="nearby">${t("filter_nearby")}</button>
+              <button class="map-filter-chip chip-active" data-filter="" aria-pressed="true">${t("filter_all")}</button>
+              <button class="map-filter-chip" data-filter="overdue" aria-pressed="false">${t("filter_overdue")}</button>
+              <button class="map-filter-chip" data-filter="visited" aria-pressed="false">${t("filter_visited")}</button>
+              <button class="map-filter-chip" data-filter="planned" aria-pressed="false">${t("filter_planned")}</button>
+              <button class="map-filter-chip" data-filter="nearby" aria-pressed="false">${t("filter_nearby")}</button>
             </div>`
       }
 
@@ -50,15 +50,15 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
 
       <div class="map-controls">
         <div class="map-control-cluster">
-          <button class="map-control-btn" id="zoom-in-btn" aria-label="Zoom in">
+          <button class="map-control-btn" id="zoom-in-btn" aria-label="${t("zoom_in")}">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
           </button>
           <div class="map-control-divider"></div>
-          <button class="map-control-btn" id="zoom-out-btn" aria-label="Zoom out">
+          <button class="map-control-btn" id="zoom-out-btn" aria-label="${t("zoom_out")}">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"/></svg>
           </button>
         </div>
-        <button class="map-control-btn map-control-standalone" id="compass-btn" hidden aria-label="Reset north">
+        <button class="map-control-btn map-control-standalone" id="compass-btn" hidden aria-label="${t("reset_north")}">
           <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 2l4 10-4 4-4-4z" fill="var(--accent)"/><path d="M12 22l-4-10 4-4 4 4z" fill="var(--text-dim)"/></svg>
         </button>
         <button class="map-control-btn map-control-standalone" id="locate-btn" aria-label="${t("locate_me")}">
@@ -289,8 +289,13 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
 
   root.querySelector("#nearby-panel-close").addEventListener("click", () => {
     nearbyPanel.hidden = true;
-    root.querySelectorAll(".map-filter-chip").forEach((c) => c.classList.remove("chip-active"));
-    root.querySelector('.map-filter-chip[data-filter=""]').classList.add("chip-active");
+    root.querySelectorAll(".map-filter-chip").forEach((c) => {
+      c.classList.remove("chip-active");
+      c.setAttribute("aria-pressed", "false");
+    });
+    const allChip = root.querySelector('.map-filter-chip[data-filter=""]');
+    allChip.classList.add("chip-active");
+    allChip.setAttribute("aria-pressed", "true");
     activeFilter = "";
     applyFilter();
   });
@@ -309,8 +314,12 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
 
   root.querySelectorAll(".map-filter-chip").forEach((chip) => {
     chip.addEventListener("click", () => {
-      root.querySelectorAll(".map-filter-chip").forEach((c) => c.classList.remove("chip-active"));
+      root.querySelectorAll(".map-filter-chip").forEach((c) => {
+        c.classList.remove("chip-active");
+        c.setAttribute("aria-pressed", "false");
+      });
       chip.classList.add("chip-active");
+      chip.setAttribute("aria-pressed", "true");
       activeFilter = chip.dataset.filter;
       if (activeFilter === "nearby") {
         openNearbyPanel();
@@ -732,11 +741,8 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     erpInput.addEventListener("blur", () => {
       setTimeout(() => (erpSuggestList.hidden = true), 150);
     });
-    erpSuggestList.addEventListener("mousedown", (e) => {
-      const item = e.target.closest(".erp-suggest-item");
-      if (!item) return;
+    activateCombobox(erpInput, erpSuggestList, (item) => {
       erpInput.value = item.dataset.id;
-      erpSuggestList.hidden = true;
     });
 
     const form = overlay.querySelector("#new-customer-form");

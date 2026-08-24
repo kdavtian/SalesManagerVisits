@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, openNavigation, CATEGORY_OPTIONS } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, openNavigation, CATEGORY_OPTIONS } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { canEditDirectly, isAdmin } from "../state.js";
@@ -465,11 +465,8 @@ function openEditSheet(customer, onDone) {
       // gets a chance to run before the list disappears.
       setTimeout(() => (erpSuggestList.hidden = true), 150);
     });
-    erpSuggestList.addEventListener("mousedown", (e) => {
-      const item = e.target.closest(".erp-suggest-item");
-      if (!item) return;
+    activateCombobox(erpInput, erpSuggestList, (item) => {
       erpInput.value = item.dataset.id;
-      erpSuggestList.hidden = true;
     });
   }
 

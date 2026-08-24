@@ -10,6 +10,9 @@ const dict = {
     loading: "Loading…",
     retry: "Try again",
     saving: "Saving…",
+    zoom_in: "Zoom in",
+    zoom_out: "Zoom out",
+    reset_north: "Reset north",
 
     greeting_morning: "Good morning",
     greeting_afternoon: "Good afternoon",
@@ -283,6 +286,9 @@ const dict = {
     loading: "Բեռնվում է…",
     retry: "Կրկին փորձել",
     saving: "Պահպանվում է…",
+    zoom_in: "Մեծացնել",
+    zoom_out: "Փոքրացնել",
+    reset_north: "Վերականգնել հյուսիսը",
 
     greeting_morning: "Բարի լույս",
     greeting_afternoon: "Բարի օր",
