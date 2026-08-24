@@ -8,9 +8,9 @@ const OUTCOMES = [
   "no_order",
   "payment_collected",
   "follow_up_required",
+  "assortment_check",
   "customer_unavailable",
   "complaint",
-  "stock_issue",
   "other",
 ];
 
@@ -22,9 +22,16 @@ const STATUS_ICON = {
   rejected: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v5"/><circle cx="12" cy="16.5" r="0.6" fill="#fff" stroke="none"/><circle cx="12" cy="12" r="9"/></svg>`,
 };
 
+// New rows write `outcomes` (array); rows from before the multi-outcome
+// change only have the old singular `outcome` column.
+function checkinOutcomes(c) {
+  if (c.outcomes?.length) return c.outcomes;
+  return c.outcome ? [c.outcome] : [];
+}
+
 function checkinStatus(c) {
   if (!c.within_range) return "rejected";
-  if (c.outcome === "follow_up_required") return "pending";
+  if (checkinOutcomes(c).includes("follow_up_required")) return "pending";
   return "verified";
 }
 
@@ -123,7 +130,7 @@ export async function renderActivity(root, navigate) {
     let list = allCheckins;
     if (filters.manager) list = list.filter((c) => String(c.user_id) === filters.manager);
     if (filters.status) list = list.filter((c) => checkinStatus(c) === filters.status);
-    if (filters.outcome) list = list.filter((c) => c.outcome === filters.outcome);
+    if (filters.outcome) list = list.filter((c) => checkinOutcomes(c).includes(filters.outcome));
     if (filters.search.trim()) {
       const q = filters.search.trim().toLowerCase();
       list = list.filter((c) => c.customer_name.toLowerCase().includes(q));
@@ -318,7 +325,7 @@ export async function renderActivity(root, navigate) {
       .map((c) => {
         const status = checkinStatus(c);
         const meta = statusMeta(status);
-        const outcomeLabel = c.outcome ? t(`outcome_${c.outcome}`) : "";
+        const outcomeLabel = checkinOutcomes(c).map((o) => t(`outcome_${o}`)).join(", ");
         const distanceLabel = status === "rejected" ? `${formatDistance(c.distance_meters)} ${t("away")}` : formatDistance(c.distance_meters);
         return `
         <button class="card activity-row-rich" data-customer-id="${c.customer_id}">

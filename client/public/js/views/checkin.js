@@ -1,27 +1,55 @@
 import { api } from "../api.js";
-import { escapeHtml, getCurrentPosition, compressImage, formatDistance, haversineMeters } from "../util.js";
+import { escapeHtml, getCurrentPosition, compressImage, formatDistance, haversineMeters, activateDialog } from "../util.js";
 import { enqueueCheckin } from "../offlineQueue.js";
 import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
-
-const BRAND_OPTIONS = [
-  { value: "castrol", labelKey: "brand_castrol" },
-  { value: "lotos", labelKey: "brand_lotos" },
-  { value: "royal", labelKey: "brand_royal" },
-  { value: "fake", labelKey: "brand_fake" },
-  { value: "other_imports", labelKey: "brand_other_imports" },
-  { value: "none", labelKey: "brand_none" },
-];
 
 const OUTCOME_OPTIONS = [
   { value: "order_placed", labelKey: "outcome_order_placed", icon: icons.cart },
   { value: "no_order", labelKey: "outcome_no_order", icon: icons.noOrder },
   { value: "payment_collected", labelKey: "outcome_payment_collected", icon: icons.payment },
   { value: "follow_up_required", labelKey: "outcome_follow_up_required", icon: icons.clock },
+  { value: "assortment_check", labelKey: "outcome_assortment_check", icon: icons.clipboardCheck },
   { value: "customer_unavailable", labelKey: "outcome_customer_unavailable", icon: icons.door },
   { value: "complaint", labelKey: "outcome_complaint", icon: icons.warning },
-  { value: "stock_issue", labelKey: "outcome_stock_issue", icon: icons.box },
   { value: "other", labelKey: "outcome_other", icon: icons.more },
+];
+
+// Castrol/Lotos/Royal each get their own status tags; Competitors is a flat
+// list of brand names (presence is implied by ticking the name, no sub-status).
+const BRAND_GROUPS = [
+  {
+    key: "castrol",
+    labelKey: "brand_group_castrol",
+    options: [
+      "available",
+      "unavailable",
+      "full_range",
+      "fake",
+      "imported_us",
+      "imported_dubai",
+      "imported_ru",
+      "imported_other",
+    ].map((v) => ({ value: v, labelKey: `brand_status_${v}` })),
+  },
+  {
+    key: "lotos",
+    labelKey: "brand_group_lotos",
+    options: ["available", "unavailable", "full_range"].map((v) => ({ value: v, labelKey: `brand_status_${v}` })),
+  },
+  {
+    key: "royal",
+    labelKey: "brand_group_royal",
+    options: ["available", "unavailable", "full_range"].map((v) => ({ value: v, labelKey: `brand_status_${v}` })),
+  },
+  {
+    key: "competitors",
+    labelKey: "brand_group_competitors",
+    options: ["mobil", "motul", "shell", "liquimoly", "bardahl", "aral", "oscar", "zic", "russian_oil"].map((v) => ({
+      value: v,
+      labelKey: `competitor_${v}`,
+    })),
+  },
 ];
 
 export async function renderCheckin(root, navigate, customerId) {
@@ -49,24 +77,22 @@ export async function renderCheckin(root, navigate, customerId) {
           ${OUTCOME_OPTIONS.map(
             (o) => `
             <label class="outcome-chip">
-              <input type="radio" name="outcome" value="${o.value}" />
+              <input type="checkbox" name="outcomes" value="${o.value}" />
               <span class="outcome-icon">${o.icon}</span>
               <span>${t(o.labelKey)}</span>
             </label>
           `
           ).join("")}
         </div>
+        <p class="form-error" id="outcome-error" hidden>${t("select_outcome_required")}</p>
       </label>
 
       <label class="brands-label">
         ${t("products_found")}
-        <div class="brand-grid">
-          ${BRAND_OPTIONS.map(
-            (b) => `
-            <label class="brand-chip">
-              <input type="checkbox" name="brands" value="${b.value}" />
-              <span>${t(b.labelKey)}</span>
-            </label>
+        <div class="brand-group-grid" id="brand-group-grid">
+          ${BRAND_GROUPS.map(
+            (g) => `
+            <button type="button" class="brand-group-btn" data-brand-group="${g.key}">${t(g.labelKey)}</button>
           `
           ).join("")}
         </div>
@@ -113,9 +139,78 @@ export async function renderCheckin(root, navigate, customerId) {
   const photoPreview = container.querySelector("#photo-preview");
   const retakeBtn = container.querySelector("#photo-retake-btn");
   const removePhotoBtn = container.querySelector("#photo-remove-btn");
+  const outcomeError = container.querySelector("#outcome-error");
 
   let position = null;
   let compressedPhoto = null;
+  const brandStatus = Object.fromEntries(BRAND_GROUPS.map((g) => [g.key, []]));
+
+  function paintBrandGroupButtons() {
+    container.querySelectorAll("[data-brand-group]").forEach((btn) => {
+      btn.classList.toggle("brand-group-btn-active", brandStatus[btn.dataset.brandGroup].length > 0);
+    });
+  }
+
+  function openBrandSheet(group) {
+    const selected = new Set(brandStatus[group.key]);
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>${escapeHtml(t(group.labelKey))}</h2>
+        <div class="brand-grid">
+          ${group.options
+            .map(
+              (o) => `
+            <label class="brand-chip">
+              <input type="checkbox" value="${o.value}" ${selected.has(o.value) ? "checked" : ""} />
+              <span>${escapeHtml(t(o.labelKey))}</span>
+            </label>
+          `
+            )
+            .join("")}
+        </div>
+        <div class="sheet-actions">
+          <button type="button" class="btn btn-primary btn-block" id="brand-sheet-done">${t("done")}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    const close = () => overlay.remove();
+    overlay.addEventListener("click", (e) => e.target === overlay && close());
+
+    // "Available" and "Not available" are contradictory -- picking one
+    // clears the other, while every other tag stays freely combinable.
+    overlay.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+      input.addEventListener("change", () => {
+        if (input.checked && (input.value === "available" || input.value === "unavailable")) {
+          const other = input.value === "available" ? "unavailable" : "available";
+          const otherInput = overlay.querySelector(`input[value="${other}"]`);
+          if (otherInput) otherInput.checked = false;
+        }
+      });
+    });
+
+    overlay.querySelector("#brand-sheet-done").addEventListener("click", () => {
+      brandStatus[group.key] = [...overlay.querySelectorAll('input[type="checkbox"]:checked')].map((i) => i.value);
+      paintBrandGroupButtons();
+      close();
+    });
+  }
+
+  container.querySelectorAll("[data-brand-group]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const group = BRAND_GROUPS.find((g) => g.key === btn.dataset.brandGroup);
+      if (group) openBrandSheet(group);
+    });
+  });
+
+  container.querySelectorAll('input[name="outcomes"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      outcomeError.hidden = true;
+    });
+  });
 
   cameraBtn.addEventListener("click", () => photoInput.click());
   retakeBtn.addEventListener("click", () => photoInput.click());
@@ -188,15 +283,22 @@ export async function renderCheckin(root, navigate, customerId) {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!position) return;
+
+    const data = new FormData(form);
+    const outcomes = data.getAll("outcomes");
+    if (!outcomes.length) {
+      outcomeError.hidden = false;
+      outcomeError.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
     errorEl.hidden = true;
     submitBtn.disabled = true;
     submitBtn.textContent = t("submitting");
     form.setAttribute("aria-busy", "true");
 
-    const data = new FormData(form);
     const note = data.get("note");
-    const brands = data.getAll("brands");
-    const outcome = data.get("outcome");
+    const brandStatusPayload = Object.fromEntries(Object.entries(brandStatus).filter(([, v]) => v.length));
     const { latitude: lat, longitude: lng } = position.coords;
 
     const formData = new FormData();
@@ -204,8 +306,8 @@ export async function renderCheckin(root, navigate, customerId) {
     formData.set("lat", lat);
     formData.set("lng", lng);
     if (note) formData.set("note", note);
-    if (outcome) formData.set("outcome", outcome);
-    if (brands.length) formData.set("brands_found", JSON.stringify(brands));
+    formData.set("outcomes", JSON.stringify(outcomes));
+    if (Object.keys(brandStatusPayload).length) formData.set("brand_status", JSON.stringify(brandStatusPayload));
     if (compressedPhoto) formData.set("photo", compressedPhoto, "checkin.jpg");
 
     try {
@@ -216,7 +318,7 @@ export async function renderCheckin(root, navigate, customerId) {
         // Offline / network failure — queue it instead of losing the visit.
         let photoDataUrl = null;
         if (compressedPhoto) photoDataUrl = await blobToDataUrl(compressedPhoto);
-        enqueueCheckin({ customerId, lat, lng, note, brands, outcome, photoDataUrl });
+        enqueueCheckin({ customerId, lat, lng, note, brandStatus: brandStatusPayload, outcomes, photoDataUrl });
         showQueued();
       } else {
         errorEl.textContent = err.message;

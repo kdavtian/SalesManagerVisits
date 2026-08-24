@@ -22,6 +22,37 @@ const AGING_LABEL_KEY = {
   "Data error - review": "aging_data_error",
 };
 
+const BRAND_GROUP_LABEL_KEY = {
+  castrol: "brand_group_castrol",
+  lotos: "brand_group_lotos",
+  royal: "brand_group_royal",
+  competitors: "brand_group_competitors",
+};
+
+// New rows write `outcomes`/`brand_status`; rows from before the
+// multi-outcome change only have the old singular `outcome`/`brands_found`.
+function checkinOutcomeLabels(ch) {
+  const outcomes = ch.outcomes?.length ? ch.outcomes : ch.outcome ? [ch.outcome] : [];
+  return outcomes.map((o) => t(`outcome_${o}`));
+}
+
+function checkinBrandTags(ch) {
+  if (ch.brand_status && Object.keys(ch.brand_status).length) {
+    const tags = [];
+    for (const [brand, values] of Object.entries(ch.brand_status)) {
+      for (const v of values) {
+        if (brand === "competitors") {
+          tags.push(t(`competitor_${v}`));
+        } else {
+          tags.push(`${t(BRAND_GROUP_LABEL_KEY[brand])}: ${t(`brand_status_${v}`)}`);
+        }
+      }
+    }
+    return tags;
+  }
+  return (ch.brands_found ?? []).map((b) => t(`brand_${b}`));
+}
+
 const EDIT_FIELDS = [
   { name: "name", labelKey: "name", type: "text" },
   { name: "category", labelKey: "category", type: "select" },
@@ -170,11 +201,13 @@ export async function renderCustomerDetail(root, navigate, customerId) {
             <span class="badge ${ch.within_range ? "badge-success" : "badge-danger"}">
               ${ch.within_range ? t("location_verified") : `${t("location_mismatch_away")} (${formatDistance(ch.distance_meters)} ${t("away")})`}
             </span>
-            ${ch.outcome ? `<span class="badge badge-neutral">${escapeHtml(t(`outcome_${ch.outcome}`))}</span>` : ""}
+            ${checkinOutcomeLabels(ch)
+              .map((label) => `<span class="badge badge-neutral">${escapeHtml(label)}</span>`)
+              .join("")}
           </div>
           ${
-            ch.brands_found?.length
-              ? `<div class="brand-tags">${ch.brands_found.map((b) => `<span class="brand-tag">${escapeHtml(t(`brand_${b}`))}</span>`).join("")}</div>`
+            checkinBrandTags(ch).length
+              ? `<div class="brand-tags">${checkinBrandTags(ch).map((tag) => `<span class="brand-tag">${escapeHtml(tag)}</span>`).join("")}</div>`
               : ""
           }
           ${ch.note ? `<p class="checkin-note">${escapeHtml(ch.note)}</p>` : ""}

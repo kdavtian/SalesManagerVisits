@@ -976,6 +976,31 @@ form [aria-invalid="true"] {
   background: rgba(255, 106, 19, 0.1);
 }
 
+.brand-group-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.brand-group-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  text-align: center;
+}
+
+.brand-group-btn-active {
+  border-color: var(--accent);
+  background: rgba(255, 106, 19, 0.1);
+  color: var(--accent);
+}
+
 .camera-field {
   display: flex;
   justify-content: center;

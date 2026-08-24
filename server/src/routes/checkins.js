@@ -12,19 +12,46 @@ export const checkinsRouter = Router();
 
 checkinsRouter.use(requireAuth);
 
-const VALID_BRANDS = new Set(["castrol", "lotos", "royal", "fake", "other_imports", "none"]);
 const VALID_OUTCOMES = new Set([
   "order_placed",
   "no_order",
   "payment_collected",
   "follow_up_required",
+  "assortment_check",
   "customer_unavailable",
   "complaint",
-  "stock_issue",
   "other",
 ]);
 
-function parseBrandsFound(raw) {
+const BRAND_STATUS_OPTIONS = {
+  castrol: new Set([
+    "available",
+    "unavailable",
+    "full_range",
+    "fake",
+    "imported_us",
+    "imported_dubai",
+    "imported_ru",
+    "imported_other",
+  ]),
+  lotos: new Set(["available", "unavailable", "full_range"]),
+  royal: new Set(["available", "unavailable", "full_range"]),
+  competitors: new Set(["mobil", "motul", "shell", "liquimoly", "bardahl", "aral", "oscar", "zic", "russian_oil"]),
+};
+
+function parseOutcomes(raw) {
+  if (!raw) return [];
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((o) => VALID_OUTCOMES.has(o));
+}
+
+function parseBrandStatus(raw) {
   if (!raw) return null;
   let parsed;
   try {
@@ -32,9 +59,18 @@ function parseBrandsFound(raw) {
   } catch {
     return null;
   }
-  if (!Array.isArray(parsed)) return null;
-  const filtered = parsed.filter((b) => VALID_BRANDS.has(b));
-  return filtered.length ? filtered : null;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+
+  const result = {};
+  for (const [brand, allowed] of Object.entries(BRAND_STATUS_OPTIONS)) {
+    const values = Array.isArray(parsed[brand]) ? parsed[brand].filter((v) => allowed.has(v)) : [];
+    if (!values.length) continue;
+    // Defensive: "available" and "unavailable" are mutually exclusive; the
+    // client already enforces this, but never trust the client alone.
+    const deduped = values.includes("available") ? values.filter((v) => v !== "unavailable") : values;
+    result[brand] = deduped;
+  }
+  return Object.keys(result).length ? result : null;
 }
 
 checkinsRouter.post("/", (req, res, next) => {
@@ -43,14 +79,15 @@ checkinsRouter.post("/", (req, res, next) => {
     next();
   });
 }, async (req, res) => {
-  const { customer_id, lat, lng, note, brands_found, outcome } = req.body ?? {};
+  const { customer_id, lat, lng, note, brand_status, outcomes } = req.body ?? {};
   const customerId = Number(customer_id);
   const latNum = Number(lat);
   const lngNum = Number(lng);
+  const outcomeValues = parseOutcomes(outcomes);
 
-  if (!customerId || Number.isNaN(latNum) || Number.isNaN(lngNum)) {
+  if (!customerId || Number.isNaN(latNum) || Number.isNaN(lngNum) || !outcomeValues.length) {
     if (req.file) fs.unlink(req.file.path, () => {});
-    return res.status(400).json({ error: "customer_id, lat and lng are required" });
+    return res.status(400).json({ error: "customer_id, lat, lng and at least one outcome are required" });
   }
 
   const { rows: customerRows } = await pool.query(
@@ -67,16 +104,15 @@ checkinsRouter.post("/", (req, res, next) => {
   const distance = haversineMeters(latNum, lngNum, customer.lat, customer.lng);
   const withinRange = distance <= radiusMeters;
   const photoPath = req.file ? req.file.filename : null;
-  const brands = parseBrandsFound(brands_found);
-  const outcomeValue = VALID_OUTCOMES.has(outcome) ? outcome : null;
+  const brandStatusValue = parseBrandStatus(brand_status);
 
   let rows;
   try {
     ({ rows } = await pool.query(
-      `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, note, photo_path, brands_found, outcome)
+      `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, note, photo_path, brand_status, outcomes)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
-      [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, photoPath, brands, outcomeValue]
+      [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, photoPath, brandStatusValue, outcomeValues]
     ));
   } catch (err) {
     if (req.file) fs.unlink(req.file.path, () => {});
