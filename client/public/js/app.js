@@ -7,6 +7,7 @@ import { renderMap } from "./views/map.js";
 import { renderCustomers } from "./views/customers.js";
 import { renderCustomerDetail } from "./views/customerDetail.js";
 import { renderCustomerOrders } from "./views/customerOrders.js";
+import { renderOrderCreate } from "./views/orderCreate.js";
 import { renderCheckin } from "./views/checkin.js";
 import { renderDashboard } from "./views/dashboard.js";
 import { renderActivity } from "./views/activity.js";
@@ -79,6 +80,7 @@ async function render() {
   const customerMatch = path.match(/^#\/customers\/(\d+)$/);
   const customerOrdersMatch = path.match(/^#\/customers\/(\d+)\/orders$/);
   const checkinMatch = path.match(/^#\/checkin\/(\d+)$/);
+  const orderCreateMatch = path.match(/^#\/orders\/new\/(\d+)$/);
 
   if (path === "#/dashboard") {
     renderDashboard(app, navigate);
@@ -90,6 +92,8 @@ async function render() {
     renderCustomers(app, navigate, query.get("visited"));
   } else if (customerOrdersMatch) {
     renderCustomerOrders(app, navigate, customerOrdersMatch[1]);
+  } else if (orderCreateMatch) {
+    renderOrderCreate(app, navigate, orderCreateMatch[1], query.get("checkin"));
   } else if (customerMatch) {
     renderCustomerDetail(app, navigate, customerMatch[1]);
   } else if (checkinMatch) {

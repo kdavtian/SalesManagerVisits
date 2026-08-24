@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateDialog, escapeHtml, formatDateTime } from "../util.js";
+import { activateDialog, escapeHtml, formatDateTime, formatAmd } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 
@@ -231,4 +231,126 @@ export async function renderPlanApprovalsSection(container) {
   }
 
   load();
+}
+
+export async function renderProductsSection(container) {
+  container.innerHTML = `
+    <div id="product-list" class="card-list"><p class="loading-state" role="status">${t("loading")}</p></div>
+    <div class="team-add-btn-wrap">
+      <button type="button" class="btn btn-block" id="add-product-btn">+ ${t("add_product")}</button>
+    </div>
+  `;
+
+  const listEl = container.querySelector("#product-list");
+
+  async function loadProducts() {
+    const products = await api.listAllProducts();
+    listEl.innerHTML = products.length
+      ? products
+          .map(
+            (p) => `
+        <div class="card user-row">
+          <div class="user-row-top">
+            <div>
+              <strong>${escapeHtml(p.name)}</strong>
+              <span class="muted">${[p.brand, p.unit].filter(Boolean).map(escapeHtml).join(" · ")}</span>
+            </div>
+            <span class="badge ${p.active ? "badge-success" : "badge-neutral"}">${formatAmd(Number(p.unit_price_amd))}</span>
+          </div>
+          <div class="user-row-meta">
+            <span class="muted">${p.active ? t("active") : t("inactive")}</span>
+            <span class="user-row-actions">
+              <button class="btn-link" data-action="edit" data-id="${p.id}">${t("edit")}</button>
+              <button class="btn-link btn-link-danger" data-action="delete" data-id="${p.id}" data-name="${escapeHtml(p.name)}">${t("delete")}</button>
+            </span>
+          </div>
+        </div>
+      `
+          )
+          .join("")
+      : `<p class="empty-state">${t("no_products_found")}</p>`;
+
+    listEl.querySelectorAll('[data-action="edit"]').forEach((btn) => {
+      const product = products.find((p) => p.id === Number(btn.dataset.id));
+      btn.addEventListener("click", () => openProductSheet(product));
+    });
+    listEl.querySelectorAll('[data-action="delete"]').forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if (!confirm(`${t("confirm_delete_product")} ${btn.dataset.name}?`)) return;
+        await api.deleteProduct(btn.dataset.id);
+        loadProducts();
+      });
+    });
+  }
+
+  function openProductSheet(product) {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>${product ? t("edit_product") : t("add_product")}</h2>
+        <form id="product-form">
+          <label>${t("product_name")}<input name="name" value="${product ? escapeHtml(product.name) : ""}" required /></label>
+          <label>${t("brand")}<input name="brand" value="${product?.brand ? escapeHtml(product.brand) : ""}" /></label>
+          <label>${t("unit")}<input name="unit" value="${product?.unit ? escapeHtml(product.unit) : ""}" placeholder="e.g. box, L, pcs" /></label>
+          <label>${t("unit_price_amd")}<input name="unit_price_amd" type="number" min="0" step="1" value="${product ? Number(product.unit_price_amd) : ""}" required /></label>
+          ${
+            product
+              ? `<label class="settings-toggle-row"><span>${t("active")}</span>
+                  <button type="button" class="toggle-switch" id="product-active-toggle" role="switch" aria-checked="${product.active}"><span class="toggle-thumb"></span></button>
+                </label>`
+              : ""
+          }
+          <p class="form-error" id="product-form-error" hidden></p>
+          <div class="sheet-actions">
+            <button type="button" class="btn" id="cancel-product">${t("cancel")}</button>
+            <button type="submit" class="btn btn-primary">${t("save")}</button>
+          </div>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.querySelector("#cancel-product").addEventListener("click", () => overlay.remove());
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+
+    let active = product?.active ?? true;
+    const activeToggle = overlay.querySelector("#product-active-toggle");
+    activeToggle?.addEventListener("click", () => {
+      active = !active;
+      activeToggle.setAttribute("aria-checked", active);
+    });
+
+    const form = overlay.querySelector("#product-form");
+    const errorEl = overlay.querySelector("#product-form-error");
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const data = new FormData(form);
+      const submitBtn = form.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      const payload = {
+        name: data.get("name"),
+        brand: data.get("brand") || null,
+        unit: data.get("unit") || null,
+        unit_price_amd: Number(data.get("unit_price_amd")),
+      };
+      try {
+        if (product) {
+          await api.updateProduct(product.id, { ...payload, active });
+        } else {
+          await api.createProduct(payload);
+        }
+        overlay.remove();
+        loadProducts();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+        submitBtn.disabled = false;
+      }
+    });
+  }
+
+  container.querySelector("#add-product-btn").addEventListener("click", () => openProductSheet(null));
+
+  loadProducts();
 }

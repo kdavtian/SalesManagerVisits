@@ -158,6 +158,9 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       <button type="button" class="action-btn" id="navigate-btn">
         <span>${icons.compass}</span>${t("navigate")}
       </button>
+      <button type="button" class="action-btn" id="new-order-btn">
+        <span>${icons.cart}</span>${t("new_order")}
+      </button>
       ${customer.phone ? `<a class="action-btn" href="tel:${escapeHtml(customer.phone)}"><span>${icons.phone}</span>${t("call")}</a>` : ""}
       <button class="action-btn" id="scroll-history-btn"><span>${icons.history}</span>${t("visit_history_short")}</button>
       ${customer.erp_synced_at ? `<button class="action-btn" id="order-history-btn"><span>${icons.box}</span>${t("order_history_short")}</button>` : ""}
@@ -172,6 +175,9 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   });
   container.querySelector("#navigate-btn").addEventListener("click", () => {
     openNavigation(customer.lat, customer.lng);
+  });
+  container.querySelector("#new-order-btn").addEventListener("click", () => {
+    navigate(`#/orders/new/${customerId}`);
   });
   container.querySelector("#scroll-history-btn").addEventListener("click", () => {
     container.querySelector("#visit-history-anchor").scrollIntoView({ behavior: "smooth" });

@@ -105,4 +105,17 @@ export const api = {
   getVisitPlanRules: (userId) => request(`/visit-plans/rules${userId ? `?user_id=${userId}` : ""}`),
   saveVisitPlanRule: (dayOfWeek, areas, userId) =>
     json(`/visit-plans/rules/${dayOfWeek}`, "PUT", { areas, user_id: userId }),
+
+  listProducts: (q = "") => request(`/products${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  listAllProducts: () => request("/products/all"),
+  createProduct: (data) => json("/products", "POST", data),
+  updateProduct: (id, data) => json(`/products/${id}`, "PATCH", data),
+  deleteProduct: (id) => request(`/products/${id}`, { method: "DELETE" }),
+
+  createOrder: (data) => json("/orders", "POST", data),
+  listOrders: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/orders${qs ? `?${qs}` : ""}`);
+  },
+  getOrder: (id) => request(`/orders/${id}`),
 };

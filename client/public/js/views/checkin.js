@@ -373,6 +373,7 @@ export async function renderCheckin(root, navigate, customerId) {
     form.removeAttribute("aria-busy");
     form.hidden = true;
     resultEl.hidden = false;
+    const placedOrder = (checkin.outcomes ?? []).includes("order_placed");
     resultEl.innerHTML = `
       <div class="checkin-result ${checkin.within_range ? "result-success" : "result-warning"}">
         <div class="result-icon">${checkin.within_range ? "✓" : "!"}</div>
@@ -382,11 +383,15 @@ export async function renderCheckin(root, navigate, customerId) {
             ? t("checked_in_onsite")
             : `${t("you_were")} ${formatDistance(checkin.distance_meters)} ${t("from")} ${escapeHtml(customer.name)}.`
         }</p>
-        <button class="btn btn-primary btn-block" id="back-to-customer">${t("done")}</button>
+        ${placedOrder ? `<button class="btn btn-primary btn-block" id="create-order-btn">${t("create_order")}</button>` : ""}
+        <button class="btn ${placedOrder ? "" : "btn-primary"} btn-block" id="back-to-customer">${t("done")}</button>
       </div>
     `;
     resultEl.querySelector("#back-to-customer").addEventListener("click", () => {
       navigate(`#/customers/${customerId}`);
+    });
+    resultEl.querySelector("#create-order-btn")?.addEventListener("click", () => {
+      navigate(`#/orders/new/${customerId}?checkin=${checkin.id}`);
     });
   }
 

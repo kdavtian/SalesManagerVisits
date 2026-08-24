@@ -2,7 +2,7 @@ import { api } from "../api.js";
 import { t, getLang, setLang } from "../i18n.js";
 import { getTheme, setTheme } from "../theme.js";
 import { state, isAdmin, canPlanForOthers } from "../state.js";
-import { renderTeamSection, renderPlanApprovalsSection } from "./admin.js";
+import { renderTeamSection, renderPlanApprovalsSection, renderProductsSection } from "./admin.js";
 import { escapeHtml, compressImage, activateDialog } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 
@@ -123,6 +123,9 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
             <button type="submit" class="btn btn-primary">${t("save")}</button>
           </form>
         </div>
+
+        <h2 class="section-title">${t("product_catalog")}</h2>
+        <div id="products-section"></div>
 
         <h2 class="section-title">${t("team")}</h2>
         <div id="team-section"></div>
@@ -276,6 +279,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       }
     });
 
+    renderProductsSection(root.querySelector("#products-section"));
     renderTeamSection(root.querySelector("#team-section"));
   }
 
