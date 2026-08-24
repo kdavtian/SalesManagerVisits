@@ -132,30 +132,49 @@ export async function renderCheckin(root, navigate, customerId) {
     }
   });
 
-  try {
-    position = await getCurrentPosition();
-    const accuracy = Math.round(position.coords.accuracy);
-    const unit = getLang() === "hy" ? "մ" : "m";
-    gpsStatus.textContent = `${t("location_captured")} (±${accuracy}${unit} ${t("accuracy")})`;
-    gpsStatus.classList.add("gps-ok");
-    submitBtn.disabled = false;
-    submitBtn.textContent = t("submit_checkin");
+  async function acquirePosition() {
+    position = null;
+    submitBtn.disabled = true;
+    submitBtn.textContent = t("locating");
+    verifyBanner.hidden = true;
+    gpsStatus.className = "gps-status";
+    gpsStatus.textContent = t("getting_location");
+    gpsStatus.setAttribute("aria-busy", "true");
+    try {
+      position = await getCurrentPosition();
+      const accuracy = Math.round(position.coords.accuracy);
+      const unit = getLang() === "hy" ? "մ" : "m";
+      gpsStatus.textContent = `${t("location_captured")} (±${accuracy}${unit} ${t("accuracy")})`;
+      gpsStatus.classList.add("gps-ok");
+      submitBtn.disabled = false;
+      submitBtn.textContent = t("submit_checkin");
 
-    const distance = haversineMeters(position.coords.latitude, position.coords.longitude, customer.lat, customer.lng);
-    const withinRange = distance <= radiusMeters;
-    verifyBanner.hidden = false;
-    verifyBanner.className = `verify-banner ${withinRange ? "verify-banner-success" : "verify-banner-warning"}`;
-    verifyBanner.innerHTML = `
-      <span class="verify-banner-icon">${withinRange ? "✓" : "!"}</span>
-      <div>
-        <strong>${withinRange ? t("location_verified") : t("location_mismatch_away")}</strong>
-        <span class="muted">${t("you_are")} ${formatDistance(distance)} ${t("from_customer")}</span>
-      </div>
-    `;
-  } catch (err) {
-    gpsStatus.textContent = `${t("location_error")}: ${err.message}. ${t("enable_location_reload")}`;
-    gpsStatus.classList.add("gps-error");
+      const distance = haversineMeters(position.coords.latitude, position.coords.longitude, customer.lat, customer.lng);
+      const withinRange = distance <= radiusMeters;
+      verifyBanner.hidden = false;
+      verifyBanner.className = `verify-banner ${withinRange ? "verify-banner-success" : "verify-banner-warning"}`;
+      verifyBanner.innerHTML = `
+        <span class="verify-banner-icon">${withinRange ? "✓" : "!"}</span>
+        <div>
+          <strong>${withinRange ? t("location_verified") : t("location_mismatch_away")}</strong>
+          <span class="muted">${t("you_are")} ${formatDistance(distance)} ${t("from_customer")}</span>
+        </div>
+      `;
+    } catch (err) {
+      gpsStatus.textContent = `${t("location_error")}: ${err.message}. `;
+      gpsStatus.classList.add("gps-error");
+      const retryBtn = document.createElement("button");
+      retryBtn.type = "button";
+      retryBtn.className = "btn btn-sm gps-retry-btn";
+      retryBtn.textContent = t("retry");
+      retryBtn.addEventListener("click", acquirePosition);
+      gpsStatus.appendChild(retryBtn);
+    } finally {
+      gpsStatus.removeAttribute("aria-busy");
+    }
   }
+
+  await acquirePosition();
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -163,6 +182,7 @@ export async function renderCheckin(root, navigate, customerId) {
     errorEl.hidden = true;
     submitBtn.disabled = true;
     submitBtn.textContent = t("submitting");
+    form.setAttribute("aria-busy", "true");
 
     const data = new FormData(form);
     const note = data.get("note");
@@ -194,11 +214,13 @@ export async function renderCheckin(root, navigate, customerId) {
         errorEl.hidden = false;
         submitBtn.disabled = false;
         submitBtn.textContent = t("submit_checkin");
+        form.removeAttribute("aria-busy");
       }
     }
   });
 
   function showResult(checkin) {
+    form.removeAttribute("aria-busy");
     form.hidden = true;
     resultEl.hidden = false;
     resultEl.innerHTML = `
@@ -219,6 +241,7 @@ export async function renderCheckin(root, navigate, customerId) {
   }
 
   function showQueued() {
+    form.removeAttribute("aria-busy");
     form.hidden = true;
     resultEl.hidden = false;
     resultEl.innerHTML = `

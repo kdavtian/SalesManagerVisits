@@ -747,6 +747,8 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       const data = new FormData(form);
       const submitBtn = form.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
+      submitBtn.textContent = t("saving");
+      form.setAttribute("aria-busy", "true");
 
       try {
         await api.createCustomer({
@@ -770,6 +772,8 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         errorEl.textContent = err.message;
         errorEl.hidden = false;
         submitBtn.disabled = false;
+        submitBtn.textContent = t("save_customer");
+        form.removeAttribute("aria-busy");
       }
     });
   }

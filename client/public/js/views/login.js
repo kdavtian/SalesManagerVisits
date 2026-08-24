@@ -35,6 +35,7 @@ export function renderLogin(root, onSuccess) {
     const submitBtn = form.querySelector("button");
     submitBtn.disabled = true;
     submitBtn.textContent = t("logging_in");
+    form.setAttribute("aria-busy", "true");
 
     const data = new FormData(form);
     try {
@@ -46,6 +47,7 @@ export function renderLogin(root, onSuccess) {
       errorEl.hidden = false;
       submitBtn.disabled = false;
       submitBtn.textContent = t("log_in");
+      form.removeAttribute("aria-busy");
     }
   });
 }

@@ -581,6 +581,14 @@ form [aria-invalid="true"] {
   outline: 2px solid color-mix(in srgb, var(--danger) 35%, transparent);
 }
 
+.field-error {
+  display: block;
+  color: var(--danger);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  margin-top: 6px;
+}
+
 .form-error {
   color: var(--danger);
   font-size: 0.85rem;
@@ -894,6 +902,12 @@ form [aria-invalid="true"] {
   border: 1px solid var(--border);
   margin-bottom: 16px;
   font-size: 0.9rem;
+}
+
+.gps-retry-btn {
+  display: flex;
+  margin: 12px auto 0;
+  min-width: 120px;
 }
 
 .gps-status.gps-ok {

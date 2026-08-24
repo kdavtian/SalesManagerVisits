@@ -8,6 +8,8 @@ const dict = {
     nav_activity: "Activity",
     nav_settings: "Settings",
     loading: "Loading…",
+    retry: "Try again",
+    saving: "Saving…",
 
     greeting_morning: "Good morning",
     greeting_afternoon: "Good afternoon",
@@ -279,6 +281,8 @@ const dict = {
     nav_activity: "Ակտիվություն",
     nav_settings: "Կարգավորումներ",
     loading: "Բեռնվում է…",
+    retry: "Կրկին փորձել",
+    saving: "Պահպանվում է…",
 
     greeting_morning: "Բարի լույս",
     greeting_afternoon: "Բարի օր",

@@ -36,6 +36,7 @@ new MutationObserver((mutations) => {
 
 let currentCleanup = null;
 let currentPath = null;
+let fieldErrorId = 0;
 
 function navigate(hash) {
   if (location.hash === hash) {
@@ -172,11 +173,26 @@ window.addEventListener("offline", renderSyncBanner);
 window.addEventListener("hashchange", render);
 
 document.addEventListener("invalid", (event) => {
-  event.target.setAttribute("aria-invalid", "true");
+  const field = event.target;
+  field.setAttribute("aria-invalid", "true");
+  let error = field.parentElement?.querySelector(":scope > .field-error");
+  if (!error) {
+    error = document.createElement("span");
+    error.className = "field-error";
+    error.id = `field-error-${++fieldErrorId}`;
+    error.setAttribute("role", "alert");
+    field.insertAdjacentElement("afterend", error);
+  }
+  error.textContent = field.validationMessage;
+  field.setAttribute("aria-describedby", error.id);
 }, true);
 document.addEventListener("input", (event) => {
   if (event.target.matches("input, select, textarea") && event.target.validity?.valid) {
-    event.target.removeAttribute("aria-invalid");
+    const field = event.target;
+    field.removeAttribute("aria-invalid");
+    const error = field.parentElement?.querySelector(":scope > .field-error");
+    if (error) error.remove();
+    field.removeAttribute("aria-describedby");
   }
 });
 
