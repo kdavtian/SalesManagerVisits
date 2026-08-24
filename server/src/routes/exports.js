@@ -107,7 +107,7 @@ exportsRouter.get("/orders.csv", async (req, res) => {
 
   const { rows } = await pool.query(
     `SELECT o.id AS order_id, o.created_at, o.status, u.name AS rep_name, c.name AS customer_name,
-            oi.product_name, oi.quantity, oi.unit_price_amd, oi.line_total_amd
+            oi.product_name, oi.product_id, oi.quantity, oi.unit_price_amd, oi.line_total_amd
      FROM orders o
      JOIN users u ON u.id = o.user_id
      JOIN customers c ON c.id = o.customer_id
@@ -120,7 +120,7 @@ exportsRouter.get("/orders.csv", async (req, res) => {
   sendCsv(
     res,
     "orders.csv",
-    ["order_id", "date", "status", "rep", "customer", "product", "quantity", "unit_price_amd", "line_total_amd"],
+    ["order_id", "date", "status", "rep", "customer", "product", "price_source", "quantity", "unit_price_amd", "line_total_amd"],
     rows.map((r) => ({
       order_id: r.order_id,
       date: new Date(r.created_at).toISOString(),
@@ -128,6 +128,11 @@ exportsRouter.get("/orders.csv", async (req, res) => {
       rep: r.rep_name,
       customer: r.customer_name,
       product: r.product_name,
+      // A line with no product_id was priced by the rep at order time, not
+      // looked up from the catalog -- worth flagging separately for
+      // reconciliation, since that price hasn't been vetted the way a
+      // catalog price has.
+      price_source: r.product_id ? "catalog" : "custom",
       quantity: r.quantity,
       unit_price_amd: r.unit_price_amd,
       line_total_amd: r.line_total_amd,

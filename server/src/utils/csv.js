@@ -1,5 +1,13 @@
+// A cell starting with =, +, -, or @ is interpreted as a formula by Excel
+// and most spreadsheet apps -- a customer or product name containing one
+// (however it got there) would otherwise execute when the accountant opens
+// this file. Prefixing with a tab defuses the formula while leaving the
+// visible text unchanged.
+const FORMULA_PREFIX = /^[=+\-@]/;
+
 function csvCell(value) {
-  const str = value == null ? "" : String(value);
+  let str = value == null ? "" : String(value);
+  if (FORMULA_PREFIX.test(str)) str = `\t${str}`;
   return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
 }
 

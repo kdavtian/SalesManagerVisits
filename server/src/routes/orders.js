@@ -74,6 +74,20 @@ ordersRouter.post("/", async (req, res) => {
   const customer = customerRows[0];
   if (!customer) return res.status(404).json({ error: "Customer not found" });
 
+  // A client-supplied checkin_id is otherwise unverified -- without this,
+  // any rep could link their order to someone else's checkin (or one for a
+  // different customer entirely), which would misattribute the order in
+  // the customer's visit history.
+  if (checkin_id) {
+    const { rows: checkinRows } = await pool.query(
+      "SELECT id FROM checkins WHERE id = $1 AND user_id = $2 AND customer_id = $3",
+      [checkin_id, req.user.id, customerId]
+    );
+    if (!checkinRows[0]) {
+      return res.status(400).json({ error: "checkin_id does not match this customer and your own check-ins" });
+    }
+  }
+
   let lines;
   try {
     lines = await buildOrderLines(items);
