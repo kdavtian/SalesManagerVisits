@@ -14,6 +14,13 @@ export function seesAllActivity(role) {
   return role !== "sales_manager";
 }
 
+// Who can pull the financial CSV exports (payments, debt, orders) --
+// narrower than seesAllActivity, which also includes warehouse/delivery
+// staff who have no reconciliation reason to need this data.
+export function seesFinancialExports(role) {
+  return role === "admin" || role === "ceo" || role === "sales_director" || role === "accountant";
+}
+
 export function canDeleteOrEditDirectly(role) {
   return role === "admin";
 }

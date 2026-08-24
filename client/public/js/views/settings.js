@@ -1,7 +1,7 @@
 import { api } from "../api.js";
 import { t, getLang, setLang } from "../i18n.js";
 import { getTheme, setTheme } from "../theme.js";
-import { state, isAdmin, canPlanForOthers } from "../state.js";
+import { state, isAdmin, canPlanForOthers, seesFinancialExports } from "../state.js";
 import { renderTeamSection, renderPlanApprovalsSection, renderProductsSection, renderPointsCloseoutSection } from "./admin.js";
 import { escapeHtml, compressImage, activateDialog } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
@@ -59,6 +59,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
   // approve those reps' self-authored plans -- not just a superadmin
   // account. Kept separate from the strict admin-only section below.
   const canApprovePlans = canPlanForOthers(state.user.role);
+  const canExportFinancials = seesFinancialExports();
 
   root.innerHTML = `
     <div class="settings-view">
@@ -141,6 +142,25 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
           ? `
         <h2 class="section-title">${t("plan_approvals")}</h2>
         <div id="plan-approvals-slot"></div>
+      `
+          : ""
+      }
+
+      ${
+        canExportFinancials
+          ? `
+        <h2 class="section-title">${t("financial_exports")}</h2>
+        <div class="card settings-list">
+          <a class="settings-list-row" href="/api/exports/payments.csv">
+            <span class="settings-row-label">${t("export_payments")}</span>
+          </a>
+          <a class="settings-list-row" href="/api/exports/debt.csv">
+            <span class="settings-row-label">${t("export_debt")}</span>
+          </a>
+          <a class="settings-list-row" href="/api/exports/orders.csv">
+            <span class="settings-row-label">${t("export_orders")}</span>
+          </a>
+        </div>
       `
           : ""
       }

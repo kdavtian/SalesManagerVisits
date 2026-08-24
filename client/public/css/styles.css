@@ -3301,6 +3301,7 @@ form [aria-invalid="true"] {
   color: var(--text);
   cursor: pointer;
   text-align: left;
+  text-decoration: none;
 }
 
 .settings-list-row:last-child {

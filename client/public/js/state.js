@@ -30,6 +30,15 @@ export function broadcastsLocation() {
   return state.user?.role !== "admin" && state.user?.role !== "ceo";
 }
 
+export function seesFinancialExports() {
+  return (
+    state.user?.role === "admin" ||
+    state.user?.role === "ceo" ||
+    state.user?.role === "sales_director" ||
+    state.user?.role === "accountant"
+  );
+}
+
 export function canPlanForOthers() {
   return (
     state.user?.role === "admin" || state.user?.role === "sales_director" || state.user?.role === "ceo"
