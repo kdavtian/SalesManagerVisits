@@ -50,6 +50,9 @@ docker compose exec -T app npm run verify:ui
 echo "==> Running database migrations"
 docker compose exec -T app npm run migrate
 
+echo "==> Waiting for app health and checking served assets"
+docker compose exec -T app npm run verify:deployment
+
 echo "==> Current status"
 docker compose ps
 

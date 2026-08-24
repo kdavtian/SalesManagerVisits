@@ -12,6 +12,7 @@ docker compose exec -T app npm run verify:ui
 ```
 
 `deploy/deploy.sh` runs the container command automatically and stops if a critical UI invariant fails.
+After the container starts, it also runs `npm run verify:deployment` to wait for API health and confirm the HTML, CSS, and JavaScript entry assets are being served.
 
 ## Required device matrix
 
