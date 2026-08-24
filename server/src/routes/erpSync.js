@@ -63,6 +63,9 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
   const daysSince = [];
   const agingBuckets = [];
   const recentOrders = [];
+  const regionErpIds = [];
+  const regions = [];
+  const subregions = [];
 
   for (const entry of customers) {
     if (!isPlainObject(entry) || !entry.erp_customer_id) continue;
@@ -74,6 +77,11 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     daysSince.push(Number.isFinite(entry.days_since_payment) ? entry.days_since_payment : null);
     agingBuckets.push(entry.aging_bucket || null);
     recentOrders.push(JSON.stringify(Array.isArray(entry.recent_orders) ? entry.recent_orders.slice(0, 10) : []));
+    if (entry.region || entry.subregion) {
+      regionErpIds.push(String(entry.erp_customer_id));
+      regions.push(entry.region != null ? String(entry.region) : null);
+      subregions.push(entry.subregion != null ? String(entry.subregion) : null);
+    }
   }
 
   const lineErpIds = [];
@@ -118,6 +126,20 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
          FROM unnest($1::text[], $2::text[], $3::text[], $4::numeric[], $5::date[], $6::int[], $7::text[], $8::jsonb[])
            AS t(erp_customer_id, customer_name, assigned_sales_rep, debt_amd, last_payment_date, days_since_payment, aging_bucket, recent_orders)`,
         [erpIds, names, reps, debts, lastPayments, daysSince, agingBuckets, recentOrders]
+      );
+    }
+
+    // Auto-fill region/subregion for ERP-linked customers, but only where
+    // still unset -- a rep's manual correction on a customer should stick,
+    // not get silently overwritten by the next sync.
+    if (regionErpIds.length) {
+      await client.query(
+        `UPDATE customers c
+         SET region = COALESCE(c.region, t.region),
+             subregion = COALESCE(c.subregion, t.subregion)
+         FROM unnest($1::text[], $2::text[], $3::text[]) AS t(erp_customer_id, region, subregion)
+         WHERE c.erp_customer_id = t.erp_customer_id`,
+        [regionErpIds, regions, subregions]
       );
     }
 

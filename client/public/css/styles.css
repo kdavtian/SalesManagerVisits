@@ -1515,6 +1515,31 @@ form [aria-invalid="true"] {
   font-size: 0.82rem;
 }
 
+.popup-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 6px;
+  min-width: 180px;
+}
+
+.popup-fact {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.8rem;
+}
+
+.popup-fact strong {
+  text-align: right;
+}
+
+.popup-loading {
+  color: #777;
+  font-size: 0.8rem;
+  margin: 6px 0 0;
+}
+
 .popup-actions {
   display: flex;
   gap: 8px;
@@ -1522,6 +1547,7 @@ form [aria-invalid="true"] {
 }
 
 .popup-actions button {
+  flex: 1;
   border: 1px solid #ccc;
   background: #f4f4f4;
   border-radius: 6px;
@@ -2721,10 +2747,15 @@ form [aria-invalid="true"] {
   gap: 8px;
 }
 
-.activity-filter-row {
+.activity-filter-row,
+.region-filter-row {
   display: flex;
   gap: 8px;
   overflow-x: auto;
+}
+
+.region-filter-row:not(:empty) {
+  padding: 0 16px 10px;
 }
 
 .activity-filter-row .icon-btn {

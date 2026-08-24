@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDistance, haversineMeters, getCurrentPosition, CATEGORY_OPTIONS } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, haversineMeters, getCurrentPosition, CATEGORY_OPTIONS } from "../util.js";
 import { t } from "../i18n.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
@@ -14,7 +14,7 @@ const TILE_URLS = {
 const TILE_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
-export function renderMap(root, navigate, relocateCustomerId, startInAddMode = false) {
+export function renderMap(root, navigate, relocateCustomerId, startInAddMode = false, startInPlanMode = false) {
   root.innerHTML = `
     <div class="map-view">
       <div id="leaflet-map"></div>
@@ -346,13 +346,14 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         <div class="map-popup">
           <strong>${escapeHtml(c.name)}</strong>
           ${c.category ? `<div class="popup-category">${escapeHtml(c.category)}</div>` : ""}
+          <div class="popup-facts" id="popup-facts-${c.id}"><p class="popup-loading">${t("loading")}</p></div>
           <div class="popup-actions">
-            <button data-action="details" data-id="${c.id}">${t("details")}</button>
             <button data-action="checkin" data-id="${c.id}" class="btn-accent">${t("check_in")}</button>
+            <button data-action="details" data-id="${c.id}">${t("more")}</button>
           </div>
         </div>
       `);
-      marker.on("popupopen", (e) => {
+      marker.on("popupopen", async (e) => {
         const popupEl = e.popup.getElement();
         popupEl.querySelector('[data-action="details"]').addEventListener("click", () => {
           navigate(`#/customers/${c.id}`);
@@ -360,6 +361,26 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         popupEl.querySelector('[data-action="checkin"]').addEventListener("click", () => {
           navigate(`#/checkin/${c.id}`);
         });
+
+        const factsEl = popupEl.querySelector(`#popup-facts-${c.id}`);
+        try {
+          const [detail, plannedVisits] = await Promise.all([
+            api.getCustomer(c.id),
+            api.customerPlannedVisits(c.id),
+          ]);
+          const lastVisitLabel = detail.last_visit_at ? formatDateTime(detail.last_visit_at) : t("never_visited");
+          const debtLabel = detail.erp_debt_amd != null ? formatAmd(detail.erp_debt_amd) : "—";
+          const plannedLabel = plannedVisits.length
+            ? plannedVisits.map((p) => new Date(p.plan_date).toLocaleDateString(undefined, { month: "short", day: "numeric" })).join(", ")
+            : t("no_planned_visits");
+          factsEl.innerHTML = `
+            <div class="popup-fact"><span class="muted">${t("outstanding_debt")}</span><strong>${escapeHtml(debtLabel)}</strong></div>
+            <div class="popup-fact"><span class="muted">${t("last_visit")}</span><strong>${escapeHtml(lastVisitLabel)}</strong></div>
+            <div class="popup-fact"><span class="muted">${t("planned_visit_dates")}</span><strong>${escapeHtml(plannedLabel)}</strong></div>
+          `;
+        } catch {
+          factsEl.innerHTML = "";
+        }
       });
       lastCustomers.push({ c, marker });
       bounds.push([c.lat, c.lng]);
@@ -542,6 +563,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   }
 
   root.querySelector("#plan-day-btn").addEventListener("click", openPlanDaySheet);
+  if (startInPlanMode) openPlanDaySheet();
 
   if (relocateCustomerId) {
     fab.hidden = true;

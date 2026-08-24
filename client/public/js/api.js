@@ -37,6 +37,7 @@ export const api = {
   updateCustomer: (id, data) => json(`/customers/${id}`, "PATCH", data),
   deleteCustomer: (id) => request(`/customers/${id}`, { method: "DELETE" }),
   customerCheckins: (id) => request(`/customers/${id}/checkins`),
+  customerPlannedVisits: (id) => request(`/customers/${id}/planned-visits`),
 
   createCheckin: (formData) =>
     request("/checkins", { method: "POST", body: formData }),

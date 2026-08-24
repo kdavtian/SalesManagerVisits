@@ -58,6 +58,8 @@ const EDIT_FIELDS = [
   { name: "category", labelKey: "category", type: "select" },
   { name: "phone", labelKey: "phone", type: "tel" },
   { name: "address", labelKey: "address", type: "text" },
+  { name: "region", labelKey: "region", type: "text" },
+  { name: "subregion", labelKey: "subregion", type: "text" },
   { name: "visit_frequency_days", labelKey: "visit_frequency", type: "number" },
   { name: "notes", labelKey: "notes", type: "textarea" },
   { name: "tin", labelKey: "tin", type: "text" },

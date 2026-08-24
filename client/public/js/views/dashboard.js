@@ -63,30 +63,30 @@ export async function renderDashboard(root, navigate) {
 
     <h2 class="section-title">${t("quick_actions")}</h2>
     <div class="quick-actions-grid">
-      <button class="quick-action" id="qa-add-customer">
-        <span class="quick-action-icon quick-action-icon-accent">${icons.plus}</span>
-        <span>${t("qa_add_customer")}</span>
-      </button>
       <button class="quick-action" id="qa-check-in">
         <span class="quick-action-icon">${icons.pin}</span>
         <span>${t("qa_check_in")}</span>
       </button>
-      <button class="quick-action" id="qa-view-overdue">
-        <span class="quick-action-icon">${icons.clock}</span>
-        <span>${t("qa_view_overdue")}</span>
+      <button class="quick-action" id="qa-plan-route">
+        <span class="quick-action-icon">${icons.planDay}</span>
+        <span>${t("qa_plan_route")}</span>
       </button>
-      <button class="quick-action" id="qa-view-activity">
+      <button class="quick-action" id="qa-reports">
         <span class="quick-action-icon">${icons.chart}</span>
-        <span>${t("qa_view_activity")}</span>
+        <span>${t("qa_reports")}</span>
+      </button>
+      <button class="quick-action" id="qa-add-customer">
+        <span class="quick-action-icon quick-action-icon-accent">${icons.plus}</span>
+        <span>${t("qa_add_customer")}</span>
       </button>
     </div>
   `;
 
   container.querySelector("#view-all-activity").addEventListener("click", () => navigate("#/activity"));
-  container.querySelector("#qa-add-customer").addEventListener("click", () => navigate("#/map?add=1"));
   container.querySelector("#qa-check-in").addEventListener("click", () => navigate("#/map"));
-  container.querySelector("#qa-view-overdue").addEventListener("click", () => navigate("#/customers?visited=overdue"));
-  container.querySelector("#qa-view-activity").addEventListener("click", () => navigate("#/activity"));
+  container.querySelector("#qa-plan-route").addEventListener("click", () => navigate("#/map?plan=1"));
+  container.querySelector("#qa-reports").addEventListener("click", () => navigate("#/activity"));
+  container.querySelector("#qa-add-customer").addEventListener("click", () => navigate("#/map?add=1"));
 
   const activityEl = container.querySelector("#recent-activity");
   const recent = summary.recent_activity.slice(0, 3);

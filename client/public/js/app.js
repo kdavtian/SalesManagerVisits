@@ -85,7 +85,7 @@ async function render() {
   } else if (path === "#/activity") {
     renderActivity(app, navigate);
   } else if (path === "#/map") {
-    currentCleanup = renderMap(app, navigate, query.get("relocate"), query.get("add") === "1");
+    currentCleanup = renderMap(app, navigate, query.get("relocate"), query.get("add") === "1", query.get("plan") === "1");
   } else if (path === "#/customers") {
     renderCustomers(app, navigate, query.get("visited"));
   } else if (customerOrdersMatch) {

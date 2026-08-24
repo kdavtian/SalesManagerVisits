@@ -33,6 +33,7 @@ export function renderCustomers(root, navigate, initialFilter) {
           <button role="menuitemradio" aria-checked="false" data-sort="distance">${t("sort_distance")}</button>
         </div>
       </div>
+      <div class="region-filter-row" id="region-filter-row"></div>
       <div id="customer-list" class="card-list"></div>
     </div>
   `;
@@ -47,6 +48,10 @@ export function renderCustomers(root, navigate, initialFilter) {
   let sortKey = "name";
   let myLocation = null;
   let searchTimer;
+  let regionFilter = "";
+  let subregionFilter = "";
+  let openRegionMenu = null;
+  const regionFilterRow = root.querySelector("#region-filter-row");
 
   root.querySelector("#add-customer-btn").addEventListener("click", () => navigate("#/map?add=1"));
 
@@ -95,6 +100,83 @@ export function renderCustomers(root, navigate, initialFilter) {
 
   let allCustomers = [];
 
+  const CHEVRON_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+
+  // Reuses the in-page dropdown pattern from the Activity filters (native
+  // <select> popovers render as a full-width dark OS sheet on iOS that
+  // overlaps the list below).
+  function regionDropdownHtml(key, options, currentValue) {
+    const current = options.find((o) => o.value === currentValue) ?? options[0];
+    return `
+      <div class="filter-dropdown-wrap">
+        <button type="button" class="filter-dropdown-btn" data-region-dropdown="${key}" aria-haspopup="menu" aria-expanded="${openRegionMenu === key}" aria-controls="region-menu-${key}">
+          <span>${escapeHtml(current.label)}</span>
+          ${CHEVRON_ICON}
+        </button>
+        <div class="filter-dropdown-menu" id="region-menu-${key}" role="menu" data-region-dropdown-menu="${key}" ${openRegionMenu === key ? "" : "hidden"}>
+          ${options
+            .map(
+              (o) =>
+                `<button type="button" role="menuitemradio" aria-checked="${o.value === currentValue}" data-value="${escapeHtml(o.value)}" class="${o.value === currentValue ? "filter-dropdown-selected" : ""}">${escapeHtml(o.label)}</button>`
+            )
+            .join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderRegionFilterRow() {
+    const regions = [...new Set(allCustomers.map((c) => c.region).filter(Boolean))].sort();
+    if (!regions.length) {
+      regionFilterRow.innerHTML = "";
+      return;
+    }
+    const subregions = [
+      ...new Set(
+        allCustomers
+          .filter((c) => !regionFilter || c.region === regionFilter)
+          .map((c) => c.subregion)
+          .filter(Boolean)
+      ),
+    ].sort();
+
+    regionFilterRow.innerHTML = `
+      ${regionDropdownHtml("region", [{ value: "", label: t("all_regions") }, ...regions.map((r) => ({ value: r, label: r }))], regionFilter)}
+      ${subregions.length ? regionDropdownHtml("subregion", [{ value: "", label: t("all_subregions") }, ...subregions.map((s) => ({ value: s, label: s }))], subregionFilter) : ""}
+    `;
+
+    regionFilterRow.querySelectorAll("[data-region-dropdown]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const key = btn.dataset.regionDropdown;
+        openRegionMenu = openRegionMenu === key ? null : key;
+        renderRegionFilterRow();
+      });
+    });
+    regionFilterRow.querySelectorAll("[data-region-dropdown-menu] button").forEach((optBtn) => {
+      optBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const key = optBtn.closest("[data-region-dropdown-menu]").dataset.regionDropdownMenu;
+        if (key === "region") {
+          regionFilter = optBtn.dataset.value;
+          subregionFilter = "";
+        } else {
+          subregionFilter = optBtn.dataset.value;
+        }
+        openRegionMenu = null;
+        renderRegionFilterRow();
+        renderList();
+      });
+    });
+  }
+
+  root.addEventListener("click", () => {
+    if (openRegionMenu) {
+      openRegionMenu = null;
+      renderRegionFilterRow();
+    }
+  });
+
   function renderStatsBar() {
     const counts = {
       "": allCustomers.length,
@@ -140,6 +222,8 @@ export function renderCustomers(root, navigate, initialFilter) {
     if (filter === "visited") customers = customers.filter((c) => c.visited_this_week);
     else if (filter === "overdue") customers = customers.filter((c) => c.overdue);
     else if (filter === "not_visited") customers = customers.filter((c) => !c.visited_this_week);
+    if (regionFilter) customers = customers.filter((c) => c.region === regionFilter);
+    if (subregionFilter) customers = customers.filter((c) => c.subregion === subregionFilter);
     customers = sortCustomers(customers);
 
     if (!customers.length) {
@@ -188,6 +272,7 @@ export function renderCustomers(root, navigate, initialFilter) {
 
   function render() {
     renderStatsBar();
+    renderRegionFilterRow();
     renderList();
   }
 

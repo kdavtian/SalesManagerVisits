@@ -27,13 +27,21 @@ const STATUS_COLUMNS = `
 `;
 
 customersRouter.get("/", async (req, res) => {
-  const { search, visited } = req.query;
+  const { search, visited, region, subregion } = req.query;
   const conditions = [];
   const params = [];
 
   if (search) {
     params.push(`%${search}%`);
     conditions.push(`c.name ILIKE $${params.length}`);
+  }
+  if (region) {
+    params.push(region);
+    conditions.push(`c.region = $${params.length}`);
+  }
+  if (subregion) {
+    params.push(subregion);
+    conditions.push(`c.subregion = $${params.length}`);
   }
   if (visited === "visited") {
     conditions.push(`EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= now() - interval '7 days')`);
@@ -61,7 +69,7 @@ customersRouter.get("/", async (req, res) => {
 });
 
 customersRouter.post("/", async (req, res) => {
-  const { name, category, phone, address, notes, lat, lng, visit_frequency_days, erp_customer_id, tin } =
+  const { name, category, phone, address, notes, lat, lng, visit_frequency_days, erp_customer_id, tin, region, subregion } =
     req.body ?? {};
 
   if (!name || lat === undefined || lng === undefined) {
@@ -72,8 +80,8 @@ customersRouter.post("/", async (req, res) => {
   }
 
   const { rows } = await pool.query(
-    `INSERT INTO customers (name, category, phone, address, notes, lat, lng, created_by, visit_frequency_days, erp_customer_id, tin)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `INSERT INTO customers (name, category, phone, address, notes, lat, lng, created_by, visit_frequency_days, erp_customer_id, tin, region, subregion)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING *`,
     [
       name,
@@ -87,9 +95,21 @@ customersRouter.post("/", async (req, res) => {
       Number(visit_frequency_days) || (await getDefaultVisitFrequencyDays()),
       erp_customer_id || null,
       tin || null,
+      region || null,
+      subregion || null,
     ]
   );
   res.status(201).json(rows[0]);
+});
+
+// Distinct region/subregion values already in use, for the Customers page
+// filter dropdowns -- avoids hardcoding a region list that would drift from
+// what's actually been entered or synced from the ERP file.
+customersRouter.get("/regions", async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT region, subregion FROM customers WHERE region IS NOT NULL ORDER BY region, subregion`
+  );
+  res.json(rows);
 });
 
 customersRouter.get("/:id", async (req, res) => {
@@ -111,7 +131,7 @@ customersRouter.get("/:id", async (req, res) => {
   res.json(rows[0]);
 });
 
-export const EDITABLE_FIELDS = ["name", "category", "phone", "address", "notes", "lat", "lng", "visit_frequency_days", "erp_customer_id", "tin"];
+export const EDITABLE_FIELDS = ["name", "category", "phone", "address", "notes", "lat", "lng", "visit_frequency_days", "erp_customer_id", "tin", "region", "subregion"];
 
 customersRouter.patch("/:id", requireDirectEditAccess, async (req, res) => {
   const updates = [];
@@ -193,6 +213,21 @@ customersRouter.get("/:id/erp-orders/:orderId", async (req, res) => {
     total_amd: rows.reduce((sum, r) => sum + Number(r.revenue_amd || 0), 0),
     lines: rows,
   });
+});
+
+// Upcoming approved plan dates this customer is on -- for the map pin
+// popup ("planned visit dates"). Small, so no pagination.
+customersRouter.get("/:id/planned-visits", async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT vp.plan_date, vp.user_id, u.name AS user_name
+     FROM visit_plans vp
+     JOIN users u ON u.id = vp.user_id
+     WHERE $1 = ANY(vp.customer_ids) AND vp.status = 'approved' AND vp.plan_date >= CURRENT_DATE
+     ORDER BY vp.plan_date
+     LIMIT 5`,
+    [req.params.id]
+  );
+  res.json(rows);
 });
 
 customersRouter.get("/:id/checkins", async (req, res) => {
