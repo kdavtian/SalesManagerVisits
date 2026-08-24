@@ -76,27 +76,27 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     nextVisitHtml = `<span class="muted">${t("never_visited")}</span>`;
   }
 
+  const idCategoryLine = customer.erp_customer_id
+    ? `${t("customer_id_label")}: ${escapeHtml(customer.erp_customer_id)}${customer.category ? ` · ${escapeHtml(customer.category)}` : ""}`
+    : customer.category
+    ? escapeHtml(customer.category)
+    : "";
+
   container.innerHTML = `
     <div class="detail-header">
       <div class="detail-header-icon">${icons.store}</div>
       <div class="detail-header-title">
         <h1>${escapeHtml(customer.name)}</h1>
-        <span class="badge ${badgeClass}">${badgeText}</span>
+        ${idCategoryLine ? `<div class="muted detail-header-subtitle">${idCategoryLine}</div>` : ""}
+        <div class="detail-header-status-row">
+          <span class="badge ${badgeClass}">${badgeText}</span>
+          ${customer.last_visit_at ? `<span class="muted detail-header-last-visit">${formatDateTime(customer.last_visit_at)}</span>` : ""}
+        </div>
       </div>
       <div class="detail-header-actions">
         <button class="icon-btn" id="edit-customer-btn" aria-label="${t("edit")}">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
         </button>
-        <button class="icon-btn" id="relocate-customer-btn" aria-label="${t("change_location")}">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-        </button>
-        ${
-          isAdmin()
-            ? `<button class="icon-btn icon-btn-danger" id="delete-customer-btn" aria-label="${t("delete")}">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>
-        </button>`
-            : ""
-        }
       </div>
     </div>
 
@@ -104,7 +104,8 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       ${customer.address ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.pin}</span><span>${escapeHtml(customer.address)}</span></div>` : ""}
       ${customer.phone ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.phone}</span><a href="tel:${escapeHtml(customer.phone)}">${escapeHtml(customer.phone)}</a></div>` : ""}
       ${customer.category ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.tag}</span><span>${escapeHtml(customer.category)}</span></div>` : ""}
-      <div class="detail-fact"><span class="detail-fact-icon">${icons.repeat}</span><span>${t("visit_frequency")}: ${t("every")} ${customer.visit_frequency_days} ${t("days")}</span></div>
+      <div class="detail-fact"><span class="detail-fact-icon">${icons.repeat}</span><span>${t("visit_every_prefix")}${customer.visit_frequency_days}${t("visit_every_suffix")}</span></div>
+      ${customer.last_visit_at ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.clock}</span><span>${t("last_visit")}: ${formatDateTime(customer.last_visit_at)}</span></div>` : ""}
       ${customer.notes ? `<div class="detail-fact muted"><span class="detail-fact-icon">${icons.note}</span><span>${escapeHtml(customer.notes)}</span></div>` : ""}
     </div>
 
@@ -126,6 +127,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       </button>
       ${customer.phone ? `<a class="action-btn" href="tel:${escapeHtml(customer.phone)}"><span>${icons.phone}</span>${t("call")}</a>` : ""}
       <button class="action-btn" id="scroll-history-btn"><span>${icons.history}</span>${t("visit_history")}</button>
+      ${customer.erp_synced_at ? `<button class="action-btn" id="order-history-btn"><span>${icons.box}</span>${t("order_history")}</button>` : ""}
     </div>
 
     <h2 class="section-title" id="visit-history-anchor">${t("visit_history")}</h2>
@@ -142,33 +144,15 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     container.querySelector("#visit-history-anchor").scrollIntoView({ behavior: "smooth" });
   });
   container.querySelector("#edit-customer-btn").addEventListener("click", () => {
-    openEditSheet(customer, () => renderCustomerDetail(root, navigate, customerId));
+    openEditSheet(customer, navigate, () => renderCustomerDetail(root, navigate, customerId));
   });
-  container.querySelector("#relocate-customer-btn").addEventListener("click", () => {
-    navigate(`#/map?relocate=${customerId}`);
-  });
-  container.querySelector("#delete-customer-btn")?.addEventListener("click", async () => {
-    if (!confirm(t("confirm_delete_customer"))) return;
-    await api.deleteCustomer(customerId);
-    navigate("#/customers");
+  container.querySelector("#order-history-btn")?.addEventListener("click", () => {
+    navigate(`#/customers/${customerId}/orders`);
   });
 
   renderPendingRequest(container.querySelector("#pending-request-slot"), pendingRequests[0], () =>
     renderCustomerDetail(root, navigate, customerId)
   );
-
-  container.querySelectorAll(".erp-order-row").forEach((row) => {
-    row.addEventListener("click", () => openOrderDetailSheet(customerId, row.dataset.orderId));
-    row.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        row.click();
-      }
-    });
-  });
-  container.querySelector("#show-all-orders-btn")?.addEventListener("click", () => {
-    navigate(`#/customers/${customerId}/orders`);
-  });
 
   const historyEl = container.querySelector("#checkin-history");
   if (!checkins.length) {
@@ -222,46 +206,43 @@ function renderErpCard(customer, erpOrders) {
 
   const debt = Number(customer.erp_debt_amd) || 0;
   const agingClass = AGING_BADGE[customer.erp_aging_bucket] || "badge-neutral";
+  const isDataError = customer.erp_aging_bucket === "Data error - review";
   const orders = Array.isArray(erpOrders) ? erpOrders : [];
 
+  const now = new Date();
+  const salesThisMonth = orders
+    .filter((o) => {
+      const d = new Date(o.order_date);
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    })
+    .reduce((sum, o) => sum + Number(o.total_amd), 0);
+  // erpOrders is already sorted order_date DESC by the API, so [0] is the
+  // most recent order within the "recent" (last 3 months) scope this page
+  // fetches -- good enough for a summary tile without a separate request.
+  const lastOrderDate = orders[0] ? new Date(orders[0].order_date).toLocaleDateString() : null;
+
   return `
-    <div class="card erp-card">
-      <div class="erp-card-header">
-        <span>${t("erp_data")}</span>
-        ${customer.erp_assigned_sales_rep ? `<span>${t("erp_assigned_rep")}: ${escapeHtml(customer.erp_assigned_sales_rep)}</span>` : ""}
+    <div class="detail-stat-grid">
+      <div class="detail-stat-tile">
+        <span class="detail-stat-icon">${icons.cart}</span>
+        <span class="detail-stat-value">${formatAmd(salesThisMonth)}</span>
+        <span class="detail-stat-label">${t("sales_this_month")}</span>
       </div>
-      ${
-        customer.erp_aging_bucket === "Data error - review"
-          ? `<div class="erp-debt-row">
-               <span class="erp-debt-amount">${t("erp_debt_unknown")}</span>
-               <span class="badge badge-danger">${t("aging_data_error")}</span>
-             </div>
-             <div class="muted">${t("erp_debt_data_error_note")}</div>`
-          : debt > 0
-          ? `<div class="erp-debt-row">
-               <span class="erp-debt-amount">${formatAmd(debt)}</span>
-               <span class="badge ${agingClass}">${escapeHtml(t(AGING_LABEL_KEY[customer.erp_aging_bucket] || "") || customer.erp_aging_bucket)}</span>
-             </div>
-             ${customer.erp_last_payment_date ? `<div class="muted">${t("erp_last_payment")}: ${escapeHtml(String(customer.erp_last_payment_date).slice(0, 10))}</div>` : ""}`
-          : `<div class="muted">${t("erp_no_debt")}</div>`
-      }
-      ${
-        orders.length
-          ? `<p class="proposed-changes-label">${t("erp_recent_orders")}</p>
-             ${orders
-               .slice(0, 5)
-               .map(
-                 (o) => `
-               <div class="erp-order-row" data-order-id="${escapeHtml(o.order_id)}" role="button" tabindex="0">
-                 <span>${escapeHtml(String(o.order_date).slice(0, 10))}</span>
-                 <span class="erp-order-id">${escapeHtml(o.order_id)}</span>
-                 <span>${formatAmd(o.total_amd)}</span>
-               </div>`
-               )
-               .join("")}
-             <button class="btn btn-block erp-show-all-btn" id="show-all-orders-btn">${t("show_all_orders")}</button>`
-          : ""
-      }
+      <div class="detail-stat-tile ${isDataError ? "detail-stat-danger" : agingClass === "badge-danger" ? "detail-stat-danger" : ""}">
+        <span class="detail-stat-icon">${icons.payment}</span>
+        <span class="detail-stat-value">${isDataError ? t("erp_debt_unknown") : formatAmd(debt)}</span>
+        <span class="detail-stat-label">${t("outstanding_debt")}</span>
+      </div>
+      <div class="detail-stat-tile">
+        <span class="detail-stat-icon">${icons.box}</span>
+        <span class="detail-stat-value">${lastOrderDate ? escapeHtml(lastOrderDate) : "—"}</span>
+        <span class="detail-stat-label">${t("last_order")}</span>
+      </div>
+      <div class="detail-stat-tile">
+        <span class="detail-stat-icon">${icons.clock}</span>
+        <span class="detail-stat-value">${customer.last_visit_at ? new Date(customer.last_visit_at).toLocaleDateString() : "—"}</span>
+        <span class="detail-stat-label">${t("last_visit")}</span>
+      </div>
     </div>
   `;
 }
@@ -367,7 +348,7 @@ function renderPendingRequest(slot, request, onDone) {
   }
 }
 
-function openEditSheet(customer, onDone) {
+function openEditSheet(customer, navigate, onDone) {
   const fields = EDIT_FIELDS.filter((f) => !f.adminOnly || isAdmin());
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
@@ -404,6 +385,14 @@ function openEditSheet(customer, onDone) {
           <button type="submit" class="btn btn-primary">${canEditDirectly() ? t("save") : t("submit_request")}</button>
         </div>
       </form>
+      <div class="edit-sheet-danger-zone">
+        <button type="button" class="btn-link" id="change-location-btn">${icons.pin}${t("change_location")}</button>
+        ${
+          isAdmin()
+            ? `<button type="button" class="btn-link btn-link-danger" id="delete-customer-btn">${icons.warning}${t("delete_customer")}</button>`
+            : ""
+        }
+      </div>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -414,6 +403,16 @@ function openEditSheet(customer, onDone) {
   }
   overlay.querySelector("#cancel-edit-customer").addEventListener("click", close);
   overlay.addEventListener("click", (e) => e.target === overlay && close());
+  overlay.querySelector("#change-location-btn").addEventListener("click", () => {
+    close();
+    navigate(`#/map?relocate=${customer.id}`);
+  });
+  overlay.querySelector("#delete-customer-btn")?.addEventListener("click", async () => {
+    if (!confirm(t("confirm_delete_customer"))) return;
+    await api.deleteCustomer(customer.id);
+    close();
+    navigate("#/customers");
+  });
 
   const erpInput = overlay.querySelector("#erp-customer-input");
   const erpSuggestList = overlay.querySelector("#erp-suggest-list");
