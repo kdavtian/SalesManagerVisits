@@ -2439,14 +2439,23 @@ form [aria-invalid="true"] {
   position: absolute;
   top: 12px;
   left: 12px;
-  right: 70px;
+  right: 88px;
   display: flex;
   gap: 8px;
   overflow-x: auto;
   z-index: 1000;
+  padding-right: 4px;
+  /* Fade the trailing edge so a partially-scrolled last chip reads as
+     "more to scroll", not as clipped by / merged into the zoom controls. */
+  mask-image: linear-gradient(to right, black calc(100% - 20px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 20px), transparent 100%);
 }
 
 .map-filter-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
   background: var(--bg-elevated);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
@@ -2459,6 +2468,11 @@ form [aria-invalid="true"] {
   white-space: nowrap;
   cursor: pointer;
   box-shadow: var(--shadow-subtle);
+}
+
+.map-filter-chip-icon {
+  display: flex;
+  flex-shrink: 0;
 }
 
 .map-filter-chip.chip-active {
@@ -2924,6 +2938,14 @@ form [aria-invalid="true"] {
   margin: 14px 16px 0;
 }
 
+/* .card-list already gives its own cards a 16px horizontal inset -- without
+   this override, that padding stacks with the margin above and the user-row
+   cards render narrower than every other section on the page. */
+.settings-view .card-list .card {
+  margin-left: 0;
+  margin-right: 0;
+}
+
 .settings-view .section-title {
   margin: 20px 16px 6px;
 }
@@ -3034,6 +3056,69 @@ form [aria-invalid="true"] {
   flex-shrink: 0;
   color: var(--text-dim);
   display: flex;
+}
+
+.settings-toggle-row {
+  cursor: default;
+}
+
+.toggle-switch {
+  flex-shrink: 0;
+  position: relative;
+  width: 46px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--border);
+  cursor: pointer;
+}
+
+.toggle-switch[aria-checked="true"] {
+  background: var(--accent);
+}
+
+.toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s ease;
+}
+
+.toggle-switch[aria-checked="true"] .toggle-thumb {
+  transform: translateX(20px);
+}
+
+.team-add-btn-wrap {
+  margin: 4px 16px 0;
+}
+
+.nav-choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.nav-choice-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.nav-choice-btn:active {
+  background: var(--bg-card-pressed);
 }
 
 .settings-form-label {

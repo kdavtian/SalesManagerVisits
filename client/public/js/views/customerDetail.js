@@ -157,8 +157,8 @@ export async function renderCustomerDetail(root, navigate, customerId) {
         <span>${icons.compass}</span>${t("navigate")}
       </button>
       ${customer.phone ? `<a class="action-btn" href="tel:${escapeHtml(customer.phone)}"><span>${icons.phone}</span>${t("call")}</a>` : ""}
-      <button class="action-btn" id="scroll-history-btn"><span>${icons.history}</span>${t("visit_history")}</button>
-      ${customer.erp_synced_at ? `<button class="action-btn" id="order-history-btn"><span>${icons.box}</span>${t("order_history")}</button>` : ""}
+      <button class="action-btn" id="scroll-history-btn"><span>${icons.history}</span>${t("visit_history_short")}</button>
+      ${customer.erp_synced_at ? `<button class="action-btn" id="order-history-btn"><span>${icons.box}</span>${t("order_history_short")}</button>` : ""}
     </div>
 
     <h2 class="section-title" id="visit-history-anchor">${t("visit_history")}</h2>

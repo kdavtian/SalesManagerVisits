@@ -21,31 +21,9 @@ const ROLE_BADGE = {
 export async function renderTeamSection(container) {
   container.innerHTML = `
     <div id="user-list" class="card-list"><p class="loading-state" role="status">${t("loading")}</p></div>
-
-    <form id="new-user-form">
-      <label>${t("name")}<input name="name" required /></label>
-      <label>${t("email")}<input name="email" type="email" required /></label>
-      <label>${t("temp_password")}<input name="password" type="password" minlength="8" required /></label>
-      <label>${t("role")}
-        <select name="role" id="new-user-role">
-          <option value="sales_manager">${t("role_sales_manager")}</option>
-          <option value="sales_director">${t("role_sales_director")}</option>
-          <option value="warehouse_manager">${t("role_warehouse_manager")}</option>
-          <option value="delivery_manager">${t("role_delivery_manager")}</option>
-          <option value="ceo">${t("role_ceo")}</option>
-          <option value="admin">${t("role_admin")}</option>
-        </select>
-      </label>
-      <label id="new-user-position-field">${t("position")}
-        <input name="position" list="position-suggestions" placeholder="${t("position_placeholder")}" />
-        <datalist id="position-suggestions">
-          ${POSITION_SUGGESTIONS.map((p) => `<option value="${escapeHtml(p)}"></option>`).join("")}
-        </datalist>
-      </label>
-      <p class="form-error" id="new-user-error" hidden></p>
-      <p class="form-success" id="new-user-success" hidden></p>
-      <button type="submit" class="btn btn-primary btn-block">${t("create_account")}</button>
-    </form>
+    <div class="team-add-btn-wrap">
+      <button type="button" class="btn btn-block" id="add-team-member-btn">+ ${t("add_team_member")}</button>
+    </div>
   `;
 
   const listEl = container.querySelector("#user-list");
@@ -128,46 +106,82 @@ export async function renderTeamSection(container) {
     });
   }
 
-  const form = container.querySelector("#new-user-form");
-  const errorEl = container.querySelector("#new-user-error");
-  const successEl = container.querySelector("#new-user-success");
-  const roleSelect = container.querySelector("#new-user-role");
-  const positionField = container.querySelector("#new-user-position-field");
+  function openAddTeamMemberSheet() {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>${t("add_team_member")}</h2>
+        <form id="new-user-form">
+          <label>${t("name")}<input name="name" required /></label>
+          <label>${t("email")}<input name="email" type="email" required /></label>
+          <label>${t("temp_password")}<input name="password" type="password" minlength="8" required /></label>
+          <label>${t("role")}
+            <select name="role" id="new-user-role">
+              <option value="sales_manager">${t("role_sales_manager")}</option>
+              <option value="sales_director">${t("role_sales_director")}</option>
+              <option value="warehouse_manager">${t("role_warehouse_manager")}</option>
+              <option value="delivery_manager">${t("role_delivery_manager")}</option>
+              <option value="ceo">${t("role_ceo")}</option>
+              <option value="admin">${t("role_admin")}</option>
+            </select>
+          </label>
+          <label id="new-user-position-field">${t("position")}
+            <input name="position" list="position-suggestions" placeholder="${t("position_placeholder")}" />
+            <datalist id="position-suggestions">
+              ${POSITION_SUGGESTIONS.map((p) => `<option value="${escapeHtml(p)}"></option>`).join("")}
+            </datalist>
+          </label>
+          <p class="form-error" id="new-user-error" hidden></p>
+          <div class="sheet-actions">
+            <button type="button" class="btn" id="cancel-add-user">${t("cancel")}</button>
+            <button type="submit" class="btn btn-primary">${t("create_account")}</button>
+          </div>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.querySelector("#cancel-add-user").addEventListener("click", () => overlay.remove());
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
 
-  function togglePositionField() {
-    positionField.hidden = roleSelect.value !== "sales_manager";
-  }
-  roleSelect.addEventListener("change", togglePositionField);
-  togglePositionField();
+    const form = overlay.querySelector("#new-user-form");
+    const errorEl = overlay.querySelector("#new-user-error");
+    const roleSelect = overlay.querySelector("#new-user-role");
+    const positionField = overlay.querySelector("#new-user-position-field");
 
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    errorEl.hidden = true;
-    successEl.hidden = true;
-    const data = new FormData(form);
-    const submitBtn = form.querySelector("button");
-    submitBtn.disabled = true;
-
-    try {
-      await api.createUser({
-        name: data.get("name"),
-        email: data.get("email"),
-        password: data.get("password"),
-        role: data.get("role"),
-        position: data.get("role") === "sales_manager" ? data.get("position") || null : null,
-      });
-      form.reset();
-      togglePositionField();
-      successEl.textContent = t("account_created");
-      successEl.hidden = false;
-      loadUsers();
-    } catch (err) {
-      errorEl.textContent = err.message;
-      errorEl.hidden = false;
-    } finally {
-      submitBtn.disabled = false;
+    function togglePositionField() {
+      positionField.hidden = roleSelect.value !== "sales_manager";
     }
-  });
+    roleSelect.addEventListener("change", togglePositionField);
+    togglePositionField();
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorEl.hidden = true;
+      const data = new FormData(form);
+      const submitBtn = form.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+
+      try {
+        await api.createUser({
+          name: data.get("name"),
+          email: data.get("email"),
+          password: data.get("password"),
+          role: data.get("role"),
+          position: data.get("role") === "sales_manager" ? data.get("position") || null : null,
+        });
+        overlay.remove();
+        loadUsers();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+        submitBtn.disabled = false;
+      }
+    });
+  }
+
+  container.querySelector("#add-team-member-btn").addEventListener("click", openAddTeamMemberSheet);
 
   loadUsers();
 }

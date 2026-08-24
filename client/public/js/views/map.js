@@ -31,11 +31,11 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         relocateCustomerId
           ? ""
           : `<div class="map-filter-row">
-              <button class="map-filter-chip chip-active" data-filter="" aria-pressed="true">${t("filter_all")}</button>
-              <button class="map-filter-chip" data-filter="overdue" aria-pressed="false">${t("filter_overdue")}</button>
-              <button class="map-filter-chip" data-filter="visited" aria-pressed="false">${t("filter_visited")}</button>
-              <button class="map-filter-chip" data-filter="planned" aria-pressed="false">${t("filter_planned")}</button>
-              <button class="map-filter-chip" data-filter="nearby" aria-pressed="false">${t("filter_nearby")}</button>
+              <button class="map-filter-chip chip-active" data-filter="" aria-pressed="true"><span class="map-filter-chip-icon">${icons.filter}</span>${t("filter_all")}</button>
+              <button class="map-filter-chip" data-filter="overdue" aria-pressed="false"><span class="map-filter-chip-icon">${icons.warning}</span>${t("filter_overdue")}</button>
+              <button class="map-filter-chip" data-filter="visited" aria-pressed="false"><span class="map-filter-chip-icon">${icons.checkCircle}</span>${t("filter_visited")}</button>
+              <button class="map-filter-chip" data-filter="planned" aria-pressed="false"><span class="map-filter-chip-icon">${icons.send}</span>${t("filter_planned")}</button>
+              <button class="map-filter-chip" data-filter="nearby" aria-pressed="false"><span class="map-filter-chip-icon">${icons.locate}</span>${t("filter_nearby")}</button>
             </div>`
       }
 

@@ -54,48 +54,71 @@ export function formatRelative(iso) {
   return `${days}d ago`;
 }
 
-// Deep-link into a turn-by-turn navigation app, preferring Yandex Navi (the
-// app field reps actually use), then Google Maps, then falling back to
-// Yandex's own web-based route planner -- Yandex has by far the best map
-// data for Armenia, so it's a better universal fallback than Apple Maps. With
-// no API to ask "is this app installed?", we open the app's custom URL
-// scheme and watch whether the tab is backgrounded (the OS switching apps)
-// within a short window; if nothing happens we assume it's not installed and
-// fall through to the next option.
+// Deep-link into a turn-by-turn navigation app. Previously this auto-detected
+// which app was installed by racing a scheme launch against a timeout, then
+// cascading Yandex -> Google -> web on "not installed" -- but the detection
+// is inherently racy (e.g. iOS's "Open in App?" confirmation prompt delays
+// the visibility change past the timeout), so a slow-but-real Yandex launch
+// could still trigger the Google fallback on top of it, opening both apps.
+// Asking the rep which app to open removes the race entirely: exactly one
+// scheme fires, with only its own web version as a same-app fallback.
 export function openNavigation(lat, lng) {
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-
-  function tryScheme(url, onNotInstalled, timeoutMs = 1000) {
-    let settled = false;
-    function onVisibilityChange() {
-      if (document.hidden) settle();
-    }
-    function settle() {
-      if (settled) return;
-      settled = true;
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      clearTimeout(timer);
-    }
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    const timer = setTimeout(() => {
-      if (!settled) {
-        settle();
-        onNotInstalled();
-      }
-    }, timeoutMs);
-    window.location.href = url;
-  }
 
   const yandexUrl = `yandexnavi://build_route_on_map?lat_to=${lat}&lon_to=${lng}`;
   const yandexWebUrl = `https://yandex.com/maps/?rtext=~${lat}%2C${lng}&rtt=auto`;
   const googleWebUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
   const googleIosSchemeUrl = `comgooglemaps://?daddr=${lat},${lng}&directionsmode=driving`;
 
-  tryScheme(yandexUrl, () => {
+  function openWithFallback(schemeUrl, webFallbackUrl, timeoutMs = 1800) {
+    let settled = false;
+    function settle() {
+      if (settled) return;
+      settled = true;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      clearTimeout(timer);
+    }
+    function onVisibilityChange() {
+      if (document.hidden) settle();
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settle();
+        window.location.href = webFallbackUrl;
+      }
+    }, timeoutMs);
+    window.location.href = schemeUrl;
+  }
+
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.innerHTML = `
+    <div class="sheet">
+      <h2>${t("choose_navigation_app")}</h2>
+      <div class="nav-choice-list">
+        <button type="button" class="nav-choice-btn" data-app="yandex">${t("open_in_yandex")}</button>
+        <button type="button" class="nav-choice-btn" data-app="google">${t("open_in_google_maps")}</button>
+      </div>
+      <div class="sheet-actions">
+        <button type="button" class="btn btn-block" id="cancel-nav-choice">${t("cancel")}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  activateDialog(overlay);
+  const close = () => overlay.remove();
+  overlay.addEventListener("click", (e) => e.target === overlay && close());
+  overlay.querySelector("#cancel-nav-choice").addEventListener("click", close);
+
+  overlay.querySelector('[data-app="yandex"]').addEventListener("click", () => {
+    close();
+    openWithFallback(yandexUrl, yandexWebUrl);
+  });
+  overlay.querySelector('[data-app="google"]').addEventListener("click", () => {
+    close();
     if (isIOS) {
-      tryScheme(googleIosSchemeUrl, () => {
-        window.location.href = yandexWebUrl;
-      });
+      openWithFallback(googleIosSchemeUrl, googleWebUrl);
     } else {
       // Google Maps' web URL resolves to the installed app via Android
       // intent handling, or the web app otherwise -- no separate scheme

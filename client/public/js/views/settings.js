@@ -36,6 +36,19 @@ function settingsRow({ icon, label, value, id, interactive = true }) {
   `;
 }
 
+function settingsToggleRow({ icon, label, value, id, checked }) {
+  return `
+    <div class="settings-list-row settings-toggle-row">
+      <span class="settings-row-icon">${icon}</span>
+      <span class="settings-row-label">${label}</span>
+      <span class="settings-row-value muted">${value}</span>
+      <button type="button" class="toggle-switch" id="${id}" role="switch" aria-checked="${checked}" aria-label="${label}">
+        <span class="toggle-thumb"></span>
+      </button>
+    </div>
+  `;
+}
+
 function formatStorageMb(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
@@ -62,8 +75,8 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
 
       <h2 class="section-title">${t("preferences")}</h2>
       <div class="card settings-list">
-        ${settingsRow({ icon: ICON.appearance, label: t("appearance"), value: getTheme() === "dark" ? t("dark") : t("light"), id: "row-appearance" })}
-        ${settingsRow({ icon: ICON.language, label: t("language"), value: getLang() === "hy" ? t("armenian") : t("english"), id: "row-language" })}
+        ${settingsToggleRow({ icon: ICON.appearance, label: t("appearance"), value: getTheme() === "dark" ? t("dark") : t("light"), id: "toggle-appearance", checked: getTheme() === "dark" })}
+        ${settingsToggleRow({ icon: ICON.language, label: t("language"), value: getLang() === "hy" ? t("armenian") : t("english"), id: "toggle-language", checked: getLang() === "hy" })}
       </div>
 
       <h2 class="section-title">${t("data_sync")}</h2>
@@ -155,11 +168,11 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
   });
 
   // --- Preferences ---
-  root.querySelector("#row-appearance").addEventListener("click", () => {
+  root.querySelector("#toggle-appearance").addEventListener("click", () => {
     setTheme(getTheme() === "dark" ? "light" : "dark");
     renderSettings(root, onLogout, onLanguageChange);
   });
-  root.querySelector("#row-language").addEventListener("click", () => {
+  root.querySelector("#toggle-language").addEventListener("click", () => {
     setLang(getLang() === "hy" ? "en" : "hy");
     onLanguageChange();
   });

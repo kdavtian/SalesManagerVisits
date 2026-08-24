@@ -40,4 +40,7 @@ export const icons = {
   repeat: uiSvg(`<path d="m17 2 4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3"/>`),
   note: uiSvg(`<path d="M5 3h14v18H5zM8 8h8M8 12h8M8 16h5"/>`),
   clipboardCheck: uiSvg(`<rect x="5.5" y="4.5" width="13" height="16.5" rx="2"/><path d="M9 4.5V3.7a1.7 1.7 0 0 1 1.7-1.7h2.6A1.7 1.7 0 0 1 15 3.7v.8"/><path d="M8.8 12.2l2.1 2.1 4.3-4.8"/>`),
+  filter: `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18M6 12h12M10 19h4"/></svg>`,
+  checkCircle: `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.5 2.5L16 9.5"/></svg>`,
+  send: `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 11 13M21 3l-7 18-4-8-8-4z"/></svg>`,
 };
