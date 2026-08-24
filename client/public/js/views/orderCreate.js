@@ -2,13 +2,38 @@ import { api } from "../api.js";
 import { escapeHtml, formatAmd } from "../util.js";
 import { t } from "../i18n.js";
 
+// Reps often open "Create order" several times a visit (once per checkin);
+// the catalog rarely changes minute to minute, so cache it in module scope
+// (persists for the app session) instead of refetching on every open. Order
+// pricing is still snapshotted server-side from the live catalog at save
+// time (see buildOrderLines in orders.js), so a stale cached price here is
+// cosmetic only -- it never lets a rep submit an order at an outdated price.
+let catalogCache = null;
+let catalogCacheAt = 0;
+const CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function getCatalog() {
+  if (catalogCache && Date.now() - catalogCacheAt < CATALOG_CACHE_TTL_MS) {
+    return catalogCache;
+  }
+  catalogCache = await api.listProducts();
+  catalogCacheAt = Date.now();
+  return catalogCache;
+}
+
+function filterCatalog(list, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return list;
+  return list.filter((p) => [p.name, p.sku, p.brand].some((v) => v && v.toLowerCase().includes(q)));
+}
+
 export async function renderOrderCreate(root, navigate, customerId, checkinId) {
   root.innerHTML = `<div class="detail-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".detail-view");
 
   let customer, products;
   try {
-    [customer, products] = await Promise.all([api.getCustomer(customerId), api.listProducts()]);
+    [customer, products] = await Promise.all([api.getCustomer(customerId), getCatalog()]);
   } catch (err) {
     container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     return;
@@ -133,17 +158,8 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
 
   paintProductList(products);
 
-  let searchTimer;
   searchInput.addEventListener("input", () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(async () => {
-      try {
-        const results = await api.listProducts(searchInput.value.trim());
-        paintProductList(results);
-      } catch {
-        // Leave the previous results showing rather than clearing the list on a transient error.
-      }
-    }, 250);
+    paintProductList(filterCatalog(products, searchInput.value));
   });
 
   container.querySelector("#add-custom-line-btn").addEventListener("click", () => {
