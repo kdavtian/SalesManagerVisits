@@ -2369,14 +2369,79 @@ form select:focus {
   overflow-x: auto;
 }
 
-.activity-filter-row select {
-  flex: 1;
-  min-width: 110px;
-  font-size: 0.8rem;
-}
-
 .activity-filter-row .icon-btn {
   flex-shrink: 0;
+}
+
+.filter-dropdown-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 110px;
+}
+
+.filter-dropdown-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 9px 10px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.filter-dropdown-btn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filter-dropdown-btn svg {
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+
+.filter-dropdown-menu {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  z-index: 30;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-elevated);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.filter-dropdown-menu button {
+  background: none;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.filter-dropdown-menu button:active {
+  background: var(--bg-card-pressed);
+}
+
+.filter-dropdown-selected {
+  color: var(--accent) !important;
+  font-weight: 700;
 }
 
 .activity-count {

@@ -54,8 +54,47 @@ export async function renderActivity(root, navigate) {
   let visibleCount = PAGE_SIZE;
   let filtersOpen = true;
   let sortAsc = false;
+  let openDropdown = null;
 
   const filters = { search: "", manager: "", status: "", outcome: "" };
+
+  const STATUS_OPTIONS = [
+    { value: "", label: t("all_status") },
+    { value: "verified", label: t("verified") },
+    { value: "pending", label: t("status_pending") },
+    { value: "rejected", label: t("status_rejected") },
+  ];
+  const OUTCOME_OPTIONS = [
+    { value: "", label: t("all_outcomes") },
+    ...OUTCOMES.map((o) => ({ value: o, label: t(`outcome_${o}`) })),
+  ];
+
+  const CHEVRON_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+
+  // Native <select> popovers on iOS render as a full-width dark OS sheet
+  // that overlaps the stat cards/list below -- these dropdowns use the same
+  // in-page custom-menu pattern already used for Customers' sort menu
+  // instead, so the list stays fully visible and the app controls its own
+  // layout.
+  function dropdownHtml(key, options, currentValue) {
+    const current = options.find((o) => o.value === currentValue) ?? options[0];
+    return `
+      <div class="filter-dropdown-wrap">
+        <button type="button" class="filter-dropdown-btn" data-dropdown="${key}">
+          <span>${escapeHtml(current.label)}</span>
+          ${CHEVRON_ICON}
+        </button>
+        <div class="filter-dropdown-menu" data-dropdown-menu="${key}" ${openDropdown === key ? "" : "hidden"}>
+          ${options
+            .map(
+              (o) =>
+                `<button type="button" data-value="${escapeHtml(o.value)}" class="${o.value === currentValue ? "filter-dropdown-selected" : ""}">${escapeHtml(o.label)}</button>`
+            )
+            .join("")}
+        </div>
+      </div>
+    `;
+  }
 
   function statusMeta(status) {
     if (status === "verified") return { cls: "status-verified", badge: "badge-success", label: t("verified") };
@@ -134,24 +173,15 @@ export async function renderActivity(root, navigate) {
         <div class="activity-filter-row">
           ${
             canFilterByManager
-              ? `<select id="filter-manager">
-                  <option value="">${t("all_managers")}</option>
-                  ${managerOptions()
-                    .map(([id, name]) => `<option value="${id}" ${filters.manager === String(id) ? "selected" : ""}>${escapeHtml(name)}</option>`)
-                    .join("")}
-                </select>`
+              ? dropdownHtml(
+                  "manager",
+                  [{ value: "", label: t("all_managers") }, ...managerOptions().map(([id, name]) => ({ value: String(id), label: name }))],
+                  filters.manager
+                )
               : ""
           }
-          <select id="filter-status">
-            <option value="">${t("all_status")}</option>
-            <option value="verified" ${filters.status === "verified" ? "selected" : ""}>${t("verified")}</option>
-            <option value="pending" ${filters.status === "pending" ? "selected" : ""}>${t("status_pending")}</option>
-            <option value="rejected" ${filters.status === "rejected" ? "selected" : ""}>${t("status_rejected")}</option>
-          </select>
-          <select id="filter-outcome">
-            <option value="">${t("all_outcomes")}</option>
-            ${OUTCOMES.map((o) => `<option value="${o}" ${filters.outcome === o ? "selected" : ""}>${t(`outcome_${o}`)}</option>`).join("")}
-          </select>
+          ${dropdownHtml("status", STATUS_OPTIONS, filters.status)}
+          ${dropdownHtml("outcome", OUTCOME_OPTIONS, filters.outcome)}
           <button class="icon-btn" id="sort-toggle-btn" aria-label="${t("sort")}" style="transform: scaleY(${sortAsc ? -1 : 1})">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16M12 20l-5-5M12 20l5-5"/></svg>
           </button>
@@ -203,20 +233,25 @@ export async function renderActivity(root, navigate) {
       }, 250);
     });
 
-    container.querySelector("#filter-manager")?.addEventListener("change", (e) => {
-      filters.manager = e.target.value;
-      visibleCount = PAGE_SIZE;
-      renderList();
+    container.querySelectorAll("[data-dropdown]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const key = btn.dataset.dropdown;
+        openDropdown = openDropdown === key ? null : key;
+        renderShell();
+      });
     });
-    container.querySelector("#filter-status").addEventListener("change", (e) => {
-      filters.status = e.target.value;
-      visibleCount = PAGE_SIZE;
-      renderList();
-    });
-    container.querySelector("#filter-outcome").addEventListener("change", (e) => {
-      filters.outcome = e.target.value;
-      visibleCount = PAGE_SIZE;
-      renderList();
+    container.querySelectorAll("[data-dropdown-menu] button").forEach((optBtn) => {
+      optBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const key = optBtn.closest("[data-dropdown-menu]").dataset.dropdownMenu;
+        if (key === "manager") filters.manager = optBtn.dataset.value;
+        else if (key === "status") filters.status = optBtn.dataset.value;
+        else if (key === "outcome") filters.outcome = optBtn.dataset.value;
+        openDropdown = null;
+        visibleCount = PAGE_SIZE;
+        renderShell();
+      });
     });
     container.querySelector("#sort-toggle-btn").addEventListener("click", () => {
       sortAsc = !sortAsc;
@@ -226,6 +261,13 @@ export async function renderActivity(root, navigate) {
 
     renderList();
   }
+
+  document.addEventListener("click", () => {
+    if (openDropdown) {
+      openDropdown = null;
+      renderShell();
+    }
+  });
 
   function renderList() {
     const listEl = container.querySelector("#activity-list");
