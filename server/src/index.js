@@ -20,6 +20,8 @@ import { salesPerformanceRouter } from "./routes/salesPerformance.js";
 import { productsRouter } from "./routes/products.js";
 import { ordersRouter } from "./routes/orders.js";
 import { exportsRouter } from "./routes/exports.js";
+import { pushRouter } from "./routes/push.js";
+import { startOverdueReminders } from "./overdueReminders.js";
 
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
   console.error(
@@ -71,6 +73,7 @@ app.use("/api/sales-performance", salesPerformanceRouter);
 app.use("/api/products", express.json(), productsRouter);
 app.use("/api/orders", express.json(), ordersRouter);
 app.use("/api/exports", exportsRouter);
+app.use("/api/push", express.json(), pushRouter);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });
@@ -101,4 +104,5 @@ app.use((err, req, res, next) => {
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`Field Visits server listening on :${port}`);
+  startOverdueReminders();
 });

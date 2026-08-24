@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v14";
+const CACHE_VERSION = "field-visits-v15";
 const TILE_CACHE = "field-visits-tiles-v2";
 
 const APP_SHELL = [
@@ -14,6 +14,7 @@ const APP_SHELL = [
   "/js/install.js",
   "/js/locationBroadcast.js",
   "/js/offlineQueue.js",
+  "/js/pushNotifications.js",
   "/js/state.js",
   "/js/util.js",
   "/js/views/admin.js",
@@ -53,6 +54,41 @@ self.addEventListener("activate", (event) => {
         )
       )
       .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    // Malformed/empty push payload -- fall back to a generic notification
+    // rather than dropping it silently.
+  }
+  const title = payload.title || "KAD Motors";
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: payload.body || "",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      data: { url: payload.url || "/" },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || "/";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ("focus" in client) {
+          client.navigate(url);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(url);
+    })
   );
 });
 

@@ -3,6 +3,7 @@ import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { seesAllActivity } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
+import { notifyUser } from "../push.js";
 
 export const ordersRouter = Router();
 
@@ -276,4 +277,16 @@ ordersRouter.patch("/:id", async (req, res) => {
 
   const { rows: items2 } = await pool.query("SELECT * FROM order_items WHERE order_id = $1 ORDER BY id", [order.id]);
   res.json({ ...updated, items: items2 });
+
+  // Only the rep who placed the order cares about its fulfillment moving
+  // forward, and only when the status actually changed (not a pure
+  // items/note edit) -- and not when they made the change themselves.
+  if (status !== undefined && nextStatus !== order.status && req.user.id !== order.user_id) {
+    const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
+    notifyUser(order.user_id, {
+      title: "Order update",
+      body: `${customerRows[0]?.name || "Order"} is now "${nextStatus}".`,
+      url: "/#/orders",
+    });
+  }
 });

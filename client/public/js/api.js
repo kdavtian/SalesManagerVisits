@@ -123,4 +123,8 @@ export const api = {
   getOrder: (id) => request(`/orders/${id}`),
   updateOrderItems: (id, items) => json(`/orders/${id}`, "PATCH", { items }),
   updateOrderStatus: (id, status) => json(`/orders/${id}`, "PATCH", { status }),
+
+  getVapidPublicKey: () => request("/push/vapid-public-key"),
+  subscribePush: (subscription) => json("/push", "POST", subscription),
+  unsubscribePush: (endpoint) => json("/push", "DELETE", { endpoint }),
 };

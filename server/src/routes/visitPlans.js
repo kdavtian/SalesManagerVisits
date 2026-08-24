@@ -3,6 +3,7 @@ import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { canPlanForOthers } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
+import { notifyUser } from "../push.js";
 
 export const visitPlansRouter = Router();
 
@@ -257,6 +258,18 @@ visitPlansRouter.patch("/:id", requireCanPlanForOthers, async (req, res) => {
 
     await client.query("COMMIT");
     res.json(updated[0]);
+
+    if (action !== undefined) {
+      const dateLabel = new Date(updated[0].plan_date).toLocaleDateString();
+      notifyUser(updated[0].user_id, {
+        title: action === "approve" ? "Visit plan approved" : "Visit plan rejected",
+        body:
+          action === "approve"
+            ? `Your plan for ${dateLabel} was approved.`
+            : `Your plan for ${dateLabel} was rejected -- please revise it.`,
+        url: "/#/map",
+      });
+    }
   } catch (err) {
     releaseErr = err;
     await client.query("ROLLBACK");

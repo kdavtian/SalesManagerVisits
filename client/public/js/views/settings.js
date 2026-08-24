@@ -5,6 +5,7 @@ import { state, isAdmin, canPlanForOthers, seesFinancialExports } from "../state
 import { renderTeamSection, renderPlanApprovalsSection, renderProductsSection, renderPointsCloseoutSection } from "./admin.js";
 import { escapeHtml, compressImage, activateDialog } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
+import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
 
 const APP_VERSION = "1.0.0";
 
@@ -22,6 +23,7 @@ const ICON = {
   shield: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="m9 12 2 2 4-4"/></svg>`,
   info: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 8v.01"/></svg>`,
   chevron: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>`,
+  bell: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 4.5 1.5 6 1.5 6h-15S6 12.5 6 8Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>`,
 };
 
 function settingsRow({ icon, label, value, id, interactive = true }) {
@@ -88,6 +90,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       <div class="card settings-list">
         ${settingsToggleRow({ icon: ICON.appearance, label: t("appearance"), value: getTheme() === "dark" ? t("dark") : t("light"), id: "toggle-appearance", checked: getTheme() === "dark" })}
         ${settingsToggleRow({ icon: ICON.language, label: t("language"), value: getLang() === "hy" ? t("armenian") : t("english"), id: "toggle-language", checked: getLang() === "hy" })}
+        ${settingsToggleRow({ icon: ICON.bell, label: t("push_notifications"), value: "…", id: "toggle-push-notifications", checked: false })}
       </div>
 
       <h2 class="section-title">${t("data_sync")}</h2>
@@ -221,6 +224,42 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
   root.querySelector("#toggle-language").addEventListener("click", () => {
     setLang(getLang() === "hy" ? "en" : "hy");
     onLanguageChange();
+  });
+
+  // --- Push notifications ---
+  const pushToggle = root.querySelector("#toggle-push-notifications");
+  const pushToggleRow = pushToggle.closest(".settings-list-row");
+  const pushToggleValue = pushToggleRow.querySelector(".settings-row-value");
+
+  function paintPushToggle(subscribed) {
+    pushToggle.setAttribute("aria-checked", String(subscribed));
+    pushToggleValue.textContent = subscribed ? t("toggle_on") : t("toggle_off");
+  }
+
+  getPushSubscriptionState().then((s) => {
+    if (!s.supported) {
+      pushToggleRow.hidden = true;
+      return;
+    }
+    paintPushToggle(s.subscribed);
+  });
+
+  pushToggle.addEventListener("click", async () => {
+    const currentlyOn = pushToggle.getAttribute("aria-checked") === "true";
+    pushToggle.disabled = true;
+    try {
+      if (currentlyOn) {
+        await disablePushNotifications();
+        paintPushToggle(false);
+      } else {
+        await enablePushNotifications();
+        paintPushToggle(true);
+      }
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      pushToggle.disabled = false;
+    }
   });
 
   // --- Data & Sync ---
