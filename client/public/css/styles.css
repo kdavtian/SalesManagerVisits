@@ -1830,6 +1830,24 @@ form [aria-invalid="true"] {
   margin: 6px 0;
 }
 
+.perf-progress-label {
+  font-size: 0.78rem;
+  margin: 4px 0 2px;
+  text-align: right;
+}
+
+.perf-no-target {
+  font-size: 0.82rem;
+  margin: 2px 0;
+}
+
+.perf-pct-inline {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-align: right;
+}
+
 .progress-label {
   font-size: 0.82rem;
   font-weight: 700;

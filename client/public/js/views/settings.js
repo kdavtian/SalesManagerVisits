@@ -329,6 +329,20 @@ function formatAmdShort(value) {
   return `${Math.round(value).toLocaleString()} ${t("amd")}`;
 }
 
+function targetProgressHtml(salesAmd, budgetAmd) {
+  const budget = Number(budgetAmd);
+  if (!budget) return `<p class="muted perf-no-target">${t("no_target_set")}</p>`;
+  const sales = Number(salesAmd) || 0;
+  const pct = Math.max(0, sales / budget);
+  const clamped = Math.min(1, pct);
+  return `
+    <div class="progress-bar" role="progressbar" aria-valuenow="${Math.round(pct * 100)}" aria-valuemin="0" aria-valuemax="100">
+      <div class="progress-bar-fill" style="width:${clamped * 100}%"></div>
+    </div>
+    <p class="muted perf-progress-label">${Math.round(pct * 100)}% ${t("of_target")}</p>
+  `;
+}
+
 async function loadSalesPerformance(slot, role) {
   slot.innerHTML = `<h2 class="section-title">${t("sales_performance_title")}</h2><p class="loading-state" role="status">${t("loading")}</p>`;
 
@@ -359,9 +373,13 @@ async function loadSalesPerformance(slot, role) {
         <div class="card">
           <div class="perf-row"><span class="muted">${t("this_month_sales")}</span><strong>${formatAmdShort(cm?.sales_amd ?? 0)}</strong></div>
           <div class="perf-row"><span class="muted">${t("this_month_collected")}</span><strong>${formatAmdShort(cm?.collected_amd ?? 0)}</strong></div>
+          <div class="perf-row"><span class="muted">${t("this_month_target")}</span><strong>${formatAmdShort(cm?.budget_amd ?? 0)}</strong></div>
+          ${targetProgressHtml(cm?.sales_amd, cm?.budget_amd)}
           <div class="perf-divider"></div>
           <div class="perf-row"><span class="muted">${t("ytd_sales")}</span><strong>${formatAmdShort(mine.ytd.sales_amd)}</strong></div>
           <div class="perf-row"><span class="muted">${t("ytd_collected")}</span><strong>${formatAmdShort(mine.ytd.collected_amd)}</strong></div>
+          <div class="perf-row"><span class="muted">${t("ytd_target")}</span><strong>${formatAmdShort(mine.ytd.budget_amd)}</strong></div>
+          ${targetProgressHtml(mine.ytd.sales_amd, mine.ytd.budget_amd)}
         </div>
       `);
     }
@@ -371,15 +389,19 @@ async function loadSalesPerformance(slot, role) {
     sections.push(`<h2 class="section-title">${t("team_performance")}</h2>`);
     sections.push(
       `<div class="card-list">${team
-        .map(
-          (r, i) => `
+        .map((r, i) => {
+          const pct = Number(r.budget_amd) > 0 ? Number(r.sales_amd) / Number(r.budget_amd) : null;
+          return `
         <div class="card leaderboard-row">
           <span class="leaderboard-rank">${i === 0 ? "🏆" : `#${i + 1}`}</span>
           <span class="leaderboard-name">${escapeHtml(r.rep_name)}</span>
-          <span class="leaderboard-points">${formatAmdShort(r.sales_amd)}</span>
+          <span class="leaderboard-points">
+            ${formatAmdShort(r.sales_amd)}
+            ${pct != null ? `<span class="muted perf-pct-inline">${Math.round(pct * 100)}% ${t("of_target")}</span>` : ""}
+          </span>
         </div>
-      `
-        )
+      `;
+        })
         .join("")}</div>`
     );
   }
