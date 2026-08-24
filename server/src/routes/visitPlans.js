@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { canPlanForOthers } from "../roles.js";
+import { notifyTelegram, escapeHtml } from "../telegram.js";
 
 export const visitPlansRouter = Router();
 
@@ -126,6 +127,13 @@ visitPlansRouter.post("/", async (req, res) => {
     [targetId, date, customerIds, status, req.user.id, reviewedBy, reviewedAt]
   );
   res.status(201).json(rows[0]);
+
+  if (status === "pending") {
+    const { rows: userRows } = await pool.query("SELECT name FROM users WHERE id = $1", [targetId]);
+    notifyTelegram(
+      `📋 <b>Route plan needs review</b>\n${escapeHtml(userRows[0]?.name || "Someone")} — ${date}, ${customerIds.length} stop${customerIds.length === 1 ? "" : "s"}`
+    );
+  }
 });
 
 // --- Recurring rules ---

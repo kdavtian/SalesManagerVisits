@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { seesAllActivity } from "../roles.js";
+import { notifyTelegram, escapeHtml } from "../telegram.js";
 
 export const ordersRouter = Router();
 
@@ -69,8 +70,9 @@ ordersRouter.post("/", async (req, res) => {
     return res.status(400).json({ error: "customer_id and at least one item are required" });
   }
 
-  const { rows: customerRows } = await pool.query("SELECT id FROM customers WHERE id = $1", [customerId]);
-  if (!customerRows[0]) return res.status(404).json({ error: "Customer not found" });
+  const { rows: customerRows } = await pool.query("SELECT id, name FROM customers WHERE id = $1", [customerId]);
+  const customer = customerRows[0];
+  if (!customer) return res.status(404).json({ error: "Customer not found" });
 
   let lines;
   try {
@@ -108,6 +110,13 @@ ordersRouter.post("/", async (req, res) => {
   }
 
   res.status(201).json({ ...order, items: lines });
+
+  // Fire after responding -- the rep shouldn't wait on a Telegram round
+  // trip for their order confirmation.
+  const { rows: repRows } = await pool.query("SELECT name FROM users WHERE id = $1", [req.user.id]);
+  notifyTelegram(
+    `🛒 <b>New order</b>\n${escapeHtml(repRows[0]?.name || "Someone")} — ${escapeHtml(customer.name)}\n${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD`
+  );
 });
 
 ordersRouter.get("/", async (req, res) => {

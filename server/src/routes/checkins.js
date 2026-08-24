@@ -7,6 +7,10 @@ import { photoUpload, uploadDirPath } from "../upload.js";
 import { haversineMeters } from "../utils/geo.js";
 import { getCheckinRadiusMeters } from "../settings.js";
 import { seesAllActivity } from "../roles.js";
+import { notifyTelegram, escapeHtml } from "../telegram.js";
+
+// Below this, a payment isn't worth interrupting anyone's Telegram for.
+const LARGE_PAYMENT_THRESHOLD_AMD = 100000;
 
 export const checkinsRouter = Router();
 
@@ -106,7 +110,7 @@ checkinsRouter.post("/", (req, res, next) => {
   }
 
   const { rows: customerRows } = await pool.query(
-    "SELECT id, lat, lng FROM customers WHERE id = $1",
+    "SELECT id, name, lat, lng FROM customers WHERE id = $1",
     [customerId]
   );
   const customer = customerRows[0];
@@ -147,6 +151,13 @@ checkinsRouter.post("/", (req, res, next) => {
   }
 
   res.status(201).json({ ...checkin, photo_count: files.length });
+
+  if (amountCollected != null && amountCollected >= LARGE_PAYMENT_THRESHOLD_AMD) {
+    const { rows: repRows } = await pool.query("SELECT name FROM users WHERE id = $1", [req.user.id]);
+    notifyTelegram(
+      `💰 <b>Large payment collected</b>\n${escapeHtml(repRows[0]?.name || "Someone")} — ${escapeHtml(customer.name)}\n${Math.round(amountCollected).toLocaleString()} AMD`
+    );
+  }
 });
 
 function isValidDateString(value) {
