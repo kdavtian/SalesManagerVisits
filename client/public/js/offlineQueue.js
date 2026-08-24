@@ -27,11 +27,19 @@ export function onQueueChange(fn) {
 
 export function enqueueCheckin(entry) {
   const queue = readQueue();
-  queue.push({ id: crypto.randomUUID(), createdAt: Date.now(), ...entry });
+  queue.push({ id: crypto.randomUUID(), createdAt: Date.now(), type: "checkin", ...entry });
   writeQueue(queue);
 }
 
-async function submitEntry(entry) {
+// A rep often places an order right after a checkin, in the same weak-signal
+// spot -- queue it the same way instead of losing the order entirely.
+export function enqueueOrder(entry) {
+  const queue = readQueue();
+  queue.push({ id: crypto.randomUUID(), createdAt: Date.now(), type: "order", ...entry });
+  writeQueue(queue);
+}
+
+async function submitCheckin(entry) {
   const form = new FormData();
   form.set("customer_id", entry.customerId);
   form.set("lat", entry.lat);
@@ -45,6 +53,21 @@ async function submitEntry(entry) {
     form.append("photos", blob, `checkin-${i}.jpg`);
   }
   return api.createCheckin(form);
+}
+
+function submitOrder(entry) {
+  return api.createOrder({
+    customer_id: entry.customerId,
+    checkin_id: entry.checkinId,
+    items: entry.items,
+  });
+}
+
+// Entries queued before this file learned about "order" (type undefined)
+// are always checkins -- keeps an already-queued entry on an old client
+// submitting correctly after a deploy.
+function submitEntry(entry) {
+  return entry.type === "order" ? submitOrder(entry) : submitCheckin(entry);
 }
 
 let flushing = false;

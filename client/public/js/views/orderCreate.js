@@ -1,6 +1,7 @@
 import { api } from "../api.js";
 import { escapeHtml, formatAmd } from "../util.js";
 import { t } from "../i18n.js";
+import { enqueueOrder } from "../offlineQueue.js";
 
 // Reps often open "Create order" several times a visit (once per checkin);
 // the catalog rarely changes minute to minute, so cache it in module scope
@@ -182,23 +183,30 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
     errorEl.hidden = true;
     saveBtn.disabled = true;
     saveBtn.textContent = t("saving");
+    const items = [...cart.values()].map((l) => ({
+      product_id: l.product_id,
+      product_name: l.product_name,
+      unit_price_amd: l.unit_price_amd,
+      quantity: l.quantity,
+    }));
     try {
       const order = await api.createOrder({
         customer_id: Number(customerId),
         checkin_id: checkinId ? Number(checkinId) : undefined,
-        items: [...cart.values()].map((l) => ({
-          product_id: l.product_id,
-          product_name: l.product_name,
-          unit_price_amd: l.unit_price_amd,
-          quantity: l.quantity,
-        })),
+        items,
       });
       showOrderSaved(order);
     } catch (err) {
-      errorEl.textContent = err.message;
-      errorEl.hidden = false;
-      saveBtn.disabled = false;
-      saveBtn.textContent = t("save_order");
+      if (err instanceof TypeError) {
+        // Offline / network failure -- queue it instead of losing the order.
+        enqueueOrder({ customerId: Number(customerId), checkinId: checkinId ? Number(checkinId) : undefined, items });
+        showOrderQueued();
+      } else {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+        saveBtn.disabled = false;
+        saveBtn.textContent = t("save_order");
+      }
     }
   });
 
@@ -208,6 +216,20 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
         <div class="result-icon">✓</div>
         <h2>${t("order_saved")}</h2>
         <p>${escapeHtml(customer.name)} · ${formatAmd(Number(order.total_amd))}</p>
+        <button class="btn btn-primary btn-block" id="order-done-btn">${t("done")}</button>
+      </div>
+    `;
+    container.querySelector("#order-done-btn").addEventListener("click", () => {
+      navigate(`#/customers/${customerId}`);
+    });
+  }
+
+  function showOrderQueued() {
+    container.innerHTML = `
+      <div class="checkin-result result-warning">
+        <div class="result-icon">⇪</div>
+        <h2>${t("youre_offline")}</h2>
+        <p>${t("offline_queued_message")}</p>
         <button class="btn btn-primary btn-block" id="order-done-btn">${t("done")}</button>
       </div>
     `;
