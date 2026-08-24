@@ -44,6 +44,9 @@ done
 echo "==> Starting app"
 docker compose up -d app
 
+echo "==> Running UI regression checks"
+docker compose exec -T app npm run verify:ui
+
 echo "==> Running database migrations"
 docker compose exec -T app npm run migrate
 
