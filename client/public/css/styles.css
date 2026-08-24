@@ -17,6 +17,10 @@
   --radius: 14px;
   --radius-lg: 20px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* A full iPhone safe-area inset can be ~34px and makes the 48px tab bar
+     look detached from the bottom edge. Keep a compact protected inset for
+     the home indicator while avoiding a large empty band below the labels. */
+  --nav-safe-bottom: min(var(--safe-bottom), 14px);
   --safe-top: env(safe-area-inset-top, 0px);
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --pin-border: #ffffff;
@@ -186,7 +190,7 @@ a {
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   border-top: 0.5px solid var(--border);
-  padding-bottom: var(--safe-bottom);
+  padding-bottom: var(--nav-safe-bottom);
   flex-shrink: 0;
   /* Fixed (not sticky/relative) and pinned to the real viewport edge --
      nav-bar is a sibling of #app, not one of its scrolling descendants, so
@@ -203,7 +207,7 @@ a {
   right: 0;
   bottom: 0;
   z-index: 10;
-  height: calc(48px + var(--safe-bottom));
+  height: calc(48px + var(--nav-safe-bottom));
   /* iOS WebKit has a known compositing bug where a position:fixed element
      combined with backdrop-filter fails to repaint after a sibling's
      content changes underneath it (e.g. the map mounting) -- it stays in
@@ -432,7 +436,7 @@ a {
      ignores this (its .map-view is absolutely inset:0 against #app's
      padding box) and deliberately extends full-bleed under the translucent
      nav bar instead. */
-  padding-bottom: calc(48px + var(--safe-bottom));
+  padding-bottom: calc(48px + var(--nav-safe-bottom));
 }
 
 /* While the map view is mounted, the app shell must not scroll — an
