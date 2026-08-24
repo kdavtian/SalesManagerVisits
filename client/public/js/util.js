@@ -120,6 +120,46 @@ export function getCurrentPosition(options = {}) {
   });
 }
 
+// Applies consistent dialog semantics and keyboard behavior to dynamically
+// created bottom sheets, including focus restoration when a sheet closes.
+export function activateDialog(overlay) {
+  const dialog = overlay.querySelector(".sheet") || overlay;
+  const previousFocus = document.activeElement;
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("tabindex", "-1");
+  const selector =
+    'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+
+  overlay.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      overlay.remove();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const items = [...dialog.querySelectorAll(selector)].filter((el) => !el.hidden);
+    if (!items.length) {
+      event.preventDefault();
+      dialog.focus();
+    } else if (event.shiftKey && document.activeElement === items[0]) {
+      event.preventDefault();
+      items.at(-1).focus();
+    } else if (!event.shiftKey && document.activeElement === items.at(-1)) {
+      event.preventDefault();
+      items[0].focus();
+    }
+  });
+
+  requestAnimationFrame(() => (dialog.querySelector(selector) || dialog).focus());
+  const observer = new MutationObserver(() => {
+    if (overlay.isConnected) return;
+    observer.disconnect();
+    if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
+  });
+  observer.observe(document.body, { childList: true });
+}
+
 // Downscale + re-encode a photo client-side before upload, to keep uploads
 // small on patchy field connections.
 export function compressImage(file, { maxDimension = 1600, quality = 0.75 } = {}) {

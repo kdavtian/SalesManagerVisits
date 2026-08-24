@@ -22,6 +22,18 @@ const topBar = document.getElementById("top-bar");
 const syncBanner = document.getElementById("sync-banner");
 const installRoot = document.getElementById("install-root");
 
+// Dynamic views and sheets share the same feedback classes. Assign live
+// semantics as they appear so async errors/success messages are announced.
+new MutationObserver((mutations) => {
+  for (const mutation of mutations) {
+    for (const node of mutation.addedNodes) {
+      if (!(node instanceof HTMLElement)) continue;
+      const feedback = [node, ...node.querySelectorAll(".form-error, .form-success")];
+      feedback.forEach((el) => el.classList.contains("form-error") ? el.setAttribute("role", "alert") : el.setAttribute("role", "status"));
+    }
+  }
+}).observe(document.body, { childList: true, subtree: true });
+
 let currentCleanup = null;
 
 function navigate(hash) {
@@ -66,7 +78,7 @@ async function render() {
   } else if (path === "#/activity") {
     renderActivity(app, navigate);
   } else if (path === "#/map") {
-    currentCleanup = renderMap(app, navigate, query.get("relocate"));
+    currentCleanup = renderMap(app, navigate, query.get("relocate"), query.get("add") === "1");
   } else if (path === "#/customers") {
     renderCustomers(app, navigate, query.get("visited"));
   } else if (customerOrdersMatch) {
@@ -107,14 +119,14 @@ function renderNav() {
       item.center
         ? `
       <div class="nav-item-center-wrap">
-        <button class="nav-item-center ${hash === item.hash ? "nav-item-center-active" : ""}" data-hash="${item.hash}">
+        <button class="nav-item-center ${hash === item.hash ? "nav-item-center-active" : ""}" data-hash="${item.hash}" aria-label="${item.label}" ${hash === item.hash ? 'aria-current="page"' : ""}>
           <span class="nav-icon-center">${item.icon}</span>
         </button>
         <span class="nav-item-center-label">${item.label}</span>
       </div>
     `
         : `
-      <button class="nav-item ${hash === item.hash ? "nav-item-active" : ""}" data-hash="${item.hash}">
+      <button class="nav-item ${hash === item.hash ? "nav-item-active" : ""}" data-hash="${item.hash}" aria-label="${item.label}" ${hash === item.hash ? 'aria-current="page"' : ""}>
         <span class="nav-icon">${item.icon}</span>
         <span>${item.label}</span>
       </button>

@@ -2,6 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml, formatDistance, formatRelative, getCurrentPosition, haversineMeters } from "../util.js";
 import { state } from "../state.js";
 import { t } from "../i18n.js";
+import { icons } from "../icons.js";
 
 function greeting() {
   const hour = new Date().getHours();
@@ -49,9 +50,7 @@ export async function renderDashboard(root, navigate) {
     <div id="next-visit-slot"></div>
 
     <h2 class="section-title">${t("todays_summary")}</h2>
-    <div class="stat-grid stat-grid-4">
-      <div class="stat-card"><span class="stat-value">${totals.visited_today}</span><span class="stat-label">${t("stat_visited_today")}</span></div>
-      <div class="stat-card"><span class="stat-value">${remaining}</span><span class="stat-label">${t("stat_remaining")}</span></div>
+    <div class="stat-grid stat-grid-alerts">
       <div class="stat-card"><span class="stat-value">${totals.rejected_today}</span><span class="stat-label">${t("stat_rejected_today")}</span></div>
       <div class="stat-card"><span class="stat-value">${totals.overdue}</span><span class="stat-label">${t("stat_overdue")}</span></div>
     </div>
@@ -65,26 +64,26 @@ export async function renderDashboard(root, navigate) {
     <h2 class="section-title">${t("quick_actions")}</h2>
     <div class="quick-actions-grid">
       <button class="quick-action" id="qa-add-customer">
-        <span class="quick-action-icon quick-action-icon-accent">+</span>
+        <span class="quick-action-icon quick-action-icon-accent">${icons.plus}</span>
         <span>${t("qa_add_customer")}</span>
       </button>
       <button class="quick-action" id="qa-check-in">
-        <span class="quick-action-icon">📍</span>
+        <span class="quick-action-icon">${icons.pin}</span>
         <span>${t("qa_check_in")}</span>
       </button>
       <button class="quick-action" id="qa-view-overdue">
-        <span class="quick-action-icon">⏱️</span>
+        <span class="quick-action-icon">${icons.clock}</span>
         <span>${t("qa_view_overdue")}</span>
       </button>
       <button class="quick-action" id="qa-view-activity">
-        <span class="quick-action-icon">📊</span>
+        <span class="quick-action-icon">${icons.chart}</span>
         <span>${t("qa_view_activity")}</span>
       </button>
     </div>
   `;
 
   container.querySelector("#view-all-activity").addEventListener("click", () => navigate("#/activity"));
-  container.querySelector("#qa-add-customer").addEventListener("click", () => navigate("#/map"));
+  container.querySelector("#qa-add-customer").addEventListener("click", () => navigate("#/map?add=1"));
   container.querySelector("#qa-check-in").addEventListener("click", () => navigate("#/map"));
   container.querySelector("#qa-view-overdue").addEventListener("click", () => navigate("#/customers?visited=overdue"));
   container.querySelector("#qa-view-activity").addEventListener("click", () => navigate("#/activity"));
@@ -154,11 +153,11 @@ async function renderNextVisit(slot, customers, navigate) {
         <span class="chevron">&#8250;</span>
       </div>
       <div class="next-visit-body">
-        <div class="next-visit-icon">🏪</div>
+        <div class="next-visit-icon">${icons.store}</div>
         <div class="next-visit-info">
           <strong>${escapeHtml(next.name)}</strong>
           ${next.category ? `<span class="muted">${escapeHtml(next.category)}</span>` : ""}
-          ${distanceText ? `<span class="muted">📍 ${distanceText}</span>` : ""}
+          ${distanceText ? `<span class="muted inline-icon-text">${icons.pin} ${distanceText}</span>` : ""}
         </div>
       </div>
       <div class="next-visit-actions">

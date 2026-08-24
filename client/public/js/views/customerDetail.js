@@ -1,6 +1,7 @@
 import { api } from "../api.js";
-import { escapeHtml, formatDateTime, formatDistance, formatAmd, openNavigation, CATEGORY_OPTIONS } from "../util.js";
+import { activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, openNavigation, CATEGORY_OPTIONS } from "../util.js";
 import { t } from "../i18n.js";
+import { icons } from "../icons.js";
 import { canEditDirectly, isAdmin } from "../state.js";
 
 const AGING_BADGE = {
@@ -77,7 +78,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
 
   container.innerHTML = `
     <div class="detail-header">
-      <div class="detail-header-icon">🏪</div>
+      <div class="detail-header-icon">${icons.store}</div>
       <div class="detail-header-title">
         <h1>${escapeHtml(customer.name)}</h1>
         <span class="badge ${badgeClass}">${badgeText}</span>
@@ -118,13 +119,13 @@ export async function renderCustomerDetail(root, navigate, customerId) {
 
     <div class="detail-actions-grid">
       <button class="action-btn action-btn-primary" id="checkin-btn">
-        <span>📍</span>${t("check_in")}
+        <span>${icons.pin}</span>${t("check_in")}
       </button>
       <button type="button" class="action-btn" id="navigate-btn">
-        <span>🧭</span>${t("navigate")}
+        <span>${icons.compass}</span>${t("navigate")}
       </button>
-      ${customer.phone ? `<a class="action-btn" href="tel:${escapeHtml(customer.phone)}"><span>📞</span>${t("call")}</a>` : ""}
-      <button class="action-btn" id="scroll-history-btn"><span>🕘</span>${t("visit_history")}</button>
+      ${customer.phone ? `<a class="action-btn" href="tel:${escapeHtml(customer.phone)}"><span>${icons.phone}</span>${t("call")}</a>` : ""}
+      <button class="action-btn" id="scroll-history-btn"><span>${icons.history}</span>${t("visit_history")}</button>
     </div>
 
     <h2 class="section-title" id="visit-history-anchor">${t("visit_history")}</h2>
@@ -158,6 +159,12 @@ export async function renderCustomerDetail(root, navigate, customerId) {
 
   container.querySelectorAll(".erp-order-row").forEach((row) => {
     row.addEventListener("click", () => openOrderDetailSheet(customerId, row.dataset.orderId));
+    row.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        row.click();
+      }
+    });
   });
   container.querySelector("#show-all-orders-btn")?.addEventListener("click", () => {
     navigate(`#/customers/${customerId}/orders`);
@@ -274,6 +281,7 @@ export async function openOrderDetailSheet(customerId, orderId) {
   overlay.className = "sheet-overlay";
   overlay.innerHTML = `<div class="sheet"><p class="muted">…</p></div>`;
   document.body.appendChild(overlay);
+  activateDialog(overlay);
   overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
 
   let detail;
@@ -399,6 +407,7 @@ function openEditSheet(customer, onDone) {
     </div>
   `;
   document.body.appendChild(overlay);
+  activateDialog(overlay);
 
   function close() {
     overlay.remove();

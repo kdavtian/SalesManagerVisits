@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatDateTime } from "../util.js";
+import { activateDialog, escapeHtml, formatDateTime } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 
@@ -92,6 +92,7 @@ export async function renderTeamSection(container) {
       </div>
     `;
     document.body.appendChild(overlay);
+    activateDialog(overlay);
     overlay.querySelector("#cancel-reset").addEventListener("click", () => overlay.remove());
     overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
 

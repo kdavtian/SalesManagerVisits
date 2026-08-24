@@ -7,12 +7,12 @@
   --border: #e7e9ed;
   --text: #111318;
   --text-dim: #5b6270;
-  --text-tertiary: #9aa1ab;
-  --accent: #1677ff;
-  --accent-dark: #0b5ed6;
-  --success: #16a765;
-  --warning: #f59e0b;
-  --danger: #e5484d;
+  --text-tertiary: #6e7781;
+  --accent: #0969da;
+  --accent-dark: #0550ae;
+  --success: #087a48;
+  --warning: #9a6700;
+  --danger: #cf222e;
   --inactive: #adb3bc;
   --radius: 14px;
   --radius-lg: 20px;
@@ -55,6 +55,11 @@
 * {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* Defends every element that toggles visibility via the `hidden` attribute
@@ -177,7 +182,8 @@ a {
   border: none;
   color: var(--accent);
   cursor: pointer;
-  padding: 4px;
+  padding: 10px 4px;
+  min-height: 44px;
   font-size: 0.92rem;
 }
 
@@ -230,7 +236,7 @@ a {
   gap: 2px;
   height: 48px;
   padding: 0 2px;
-  font-size: 0.62rem;
+  font-size: 0.7rem;
   font-weight: 500;
   cursor: pointer;
 }
@@ -249,6 +255,12 @@ a {
   height: 24px;
   overflow: visible;
   shape-rendering: geometricPrecision;
+}
+
+.ui-svg {
+  display: block;
+  width: 22px;
+  height: 22px;
 }
 
 .nav-item-active {
@@ -289,7 +301,7 @@ a {
 }
 
 .nav-item-center-label {
-  font-size: 0.64rem;
+  font-size: 0.7rem;
   font-weight: 600;
   color: var(--accent);
   margin-top: 1px;
@@ -1379,7 +1391,8 @@ form select:focus {
   border: 1px solid #ccc;
   background: #f4f4f4;
   border-radius: 6px;
-  padding: 5px 10px;
+  padding: 10px 12px;
+  min-height: 44px;
   font-size: 0.82rem;
   cursor: pointer;
 }
@@ -1754,6 +1767,22 @@ form select:focus {
   margin-bottom: 6px;
 }
 
+.stat-grid-alerts {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 6px;
+}
+
+.inline-icon-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.inline-icon-text .ui-svg {
+  width: 15px;
+  height: 15px;
+}
+
 .section-heading-row {
   display: flex;
   align-items: center;
@@ -1771,7 +1800,8 @@ form select:focus {
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
-  padding: 4px;
+  padding: 10px 4px;
+  min-height: 44px;
 }
 
 .quick-actions-grid {
@@ -1960,8 +1990,8 @@ form select:focus {
   position: absolute;
   top: 8px;
   right: 8px;
-  width: 28px;
-  height: 28px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.6);
   color: #ffffff;
@@ -2262,34 +2292,95 @@ form select:focus {
   padding: 0 4px;
 }
 
-/* The manifest's "orientation": "portrait" is honored by Android in
-   standalone mode, but iOS Safari/WebKit ignores it even when installed to
-   the home screen -- there is no web API to force-lock orientation there.
-   This overlay is the practical fallback: it blocks interaction and asks
-   the user to rotate back, rather than letting the layout break. */
-.rotate-overlay {
-  display: none;
-}
-
-@media (orientation: landscape) and (max-device-width: 926px) {
-  .rotate-overlay {
-    display: flex;
-    position: fixed;
-    inset: 0;
-    z-index: 9999;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    background: var(--bg);
-    color: var(--text);
-    text-align: center;
-    padding: 24px;
+/* In a short landscape viewport the tab bar becomes a side rail, preserving
+   vertical space for the field workflow instead of blocking rotation. */
+@media (orientation: landscape) and (max-height: 540px) and (min-width: 568px) {
+  .top-bar,
+  .sync-banner {
+    margin-left: 88px;
   }
 
-  .rotate-overlay-icon {
-    font-size: 3rem;
-    transform: rotate(90deg);
+  .top-bar {
+    padding-top: calc(var(--safe-top) + 7px);
+    padding-bottom: 7px;
+  }
+
+  .app-main {
+    margin-left: 88px;
+    padding-bottom: 0;
+  }
+
+  .nav-bar {
+    top: 0;
+    right: auto;
+    width: 88px;
+    height: 100dvh;
+    padding: max(8px, var(--safe-top)) 6px max(8px, var(--safe-bottom));
+    flex-direction: column;
+    justify-content: center;
+    align-items: stretch;
+    gap: 2px;
+    border-top: 0;
+    border-right: 0.5px solid var(--border);
+  }
+
+  .nav-item,
+  .nav-item-center-wrap {
+    flex: 0 1 64px;
+    width: 100%;
+    height: 64px;
+  }
+
+  .nav-item {
+    border-radius: 12px;
+    font-size: 0.68rem;
+  }
+
+  .nav-item-active {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+
+  .nav-item-center-wrap {
+    justify-content: center;
+  }
+
+  .nav-item-center {
+    width: 40px;
+    height: 40px;
+    margin-top: 0;
+    border-width: 0;
+    box-shadow: none;
+  }
+
+  .nav-item-center-label {
+    margin-top: 2px;
+    font-size: 0.68rem;
+  }
+
+  .dashboard-view,
+  .detail-view,
+  .checkin-view,
+  .settings-view {
+    max-width: 960px;
+    margin-inline: auto;
+  }
+
+  .stat-grid,
+  .quick-actions-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .sheet {
+    width: min(620px, 72vw);
+    max-height: 94dvh;
+    margin-left: auto;
+    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+    padding-bottom: 20px;
+  }
+
+  .install-banner {
+    left: 88px;
+    bottom: 8px;
   }
 }
 

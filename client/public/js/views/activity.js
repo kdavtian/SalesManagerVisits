@@ -80,15 +80,15 @@ export async function renderActivity(root, navigate) {
     const current = options.find((o) => o.value === currentValue) ?? options[0];
     return `
       <div class="filter-dropdown-wrap">
-        <button type="button" class="filter-dropdown-btn" data-dropdown="${key}">
+        <button type="button" class="filter-dropdown-btn" data-dropdown="${key}" aria-haspopup="menu" aria-expanded="${openDropdown === key}" aria-controls="filter-menu-${key}">
           <span>${escapeHtml(current.label)}</span>
           ${CHEVRON_ICON}
         </button>
-        <div class="filter-dropdown-menu" data-dropdown-menu="${key}" ${openDropdown === key ? "" : "hidden"}>
+        <div class="filter-dropdown-menu" id="filter-menu-${key}" role="menu" data-dropdown-menu="${key}" ${openDropdown === key ? "" : "hidden"}>
           ${options
             .map(
               (o) =>
-                `<button type="button" data-value="${escapeHtml(o.value)}" class="${o.value === currentValue ? "filter-dropdown-selected" : ""}">${escapeHtml(o.label)}</button>`
+                `<button type="button" role="menuitemradio" aria-checked="${o.value === currentValue}" data-value="${escapeHtml(o.value)}" class="${o.value === currentValue ? "filter-dropdown-selected" : ""}">${escapeHtml(o.label)}</button>`
             )
             .join("")}
         </div>
@@ -145,11 +145,11 @@ export async function renderActivity(root, navigate) {
         <button class="btn btn-sm" id="toggle-filters-btn">${t("filters")}</button>
       </div>
 
-      <div class="activity-tabs">
-        <button class="activity-tab ${range === "today" ? "activity-tab-active" : ""}" data-range="today">${t("tab_today")}</button>
-        <button class="activity-tab ${range === "week" ? "activity-tab-active" : ""}" data-range="week">${t("tab_week")}</button>
-        <button class="activity-tab ${range === "month" ? "activity-tab-active" : ""}" data-range="month">${t("tab_month")}</button>
-        <button class="activity-tab ${range === "custom" ? "activity-tab-active" : ""}" data-range="custom">${t("tab_custom")}</button>
+      <div class="activity-tabs" role="tablist">
+        <button role="tab" aria-selected="${range === "today"}" class="activity-tab ${range === "today" ? "activity-tab-active" : ""}" data-range="today">${t("tab_today")}</button>
+        <button role="tab" aria-selected="${range === "week"}" class="activity-tab ${range === "week" ? "activity-tab-active" : ""}" data-range="week">${t("tab_week")}</button>
+        <button role="tab" aria-selected="${range === "month"}" class="activity-tab ${range === "month" ? "activity-tab-active" : ""}" data-range="month">${t("tab_month")}</button>
+        <button role="tab" aria-selected="${range === "custom"}" class="activity-tab ${range === "custom" ? "activity-tab-active" : ""}" data-range="custom">${t("tab_custom")}</button>
       </div>
 
       ${
@@ -239,6 +239,15 @@ export async function renderActivity(root, navigate) {
         const key = btn.dataset.dropdown;
         openDropdown = openDropdown === key ? null : key;
         renderShell();
+        if (openDropdown) requestAnimationFrame(() => container.querySelector(`[data-dropdown-menu="${key}"] button`)?.focus());
+      });
+      btn.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          openDropdown = btn.dataset.dropdown;
+          renderShell();
+          requestAnimationFrame(() => container.querySelector(`[data-dropdown-menu="${openDropdown}"] button`)?.focus());
+        }
       });
     });
     container.querySelectorAll("[data-dropdown-menu] button").forEach((optBtn) => {
@@ -262,10 +271,19 @@ export async function renderActivity(root, navigate) {
     renderList();
   }
 
-  document.addEventListener("click", () => {
+  container.addEventListener("click", () => {
     if (openDropdown) {
       openDropdown = null;
       renderShell();
+    }
+  });
+
+  container.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && openDropdown) {
+      const key = openDropdown;
+      openDropdown = null;
+      renderShell();
+      requestAnimationFrame(() => container.querySelector(`[data-dropdown="${key}"]`)?.focus());
     }
   });
 

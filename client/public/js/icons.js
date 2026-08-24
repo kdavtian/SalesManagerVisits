@@ -7,6 +7,8 @@ const stroke = 'fill="none" stroke="currentColor" stroke-width="1.9" stroke-line
 // Keeping them as vectors makes them perfectly sharp at every screen density.
 const navSvg = (content, attributes = stroke) =>
   `<svg class="nav-svg" viewBox="0 0 24 24" width="24" height="24" ${attributes} aria-hidden="true" focusable="false">${content}</svg>`;
+const uiSvg = (content, attributes = stroke) =>
+  `<svg class="ui-svg" viewBox="0 0 24 24" width="22" height="22" ${attributes} aria-hidden="true" focusable="false">${content}</svg>`;
 
 export const icons = {
   dashboard: navSvg(`<path d="M3.25 10.75 12 3l8.75 7.75"/><path d="M5.25 9.75v8.5c0 1.1.9 2 2 2h2.4v-5.1a2.35 2.35 0 0 1 4.7 0v5.1h2.4c1.1 0 2-.9 2-2v-8.5"/>`),
@@ -20,4 +22,11 @@ export const icons = {
   team: `<svg viewBox="0 0 24 24" width="20" height="20" ${stroke}><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>`,
   sort: `<svg viewBox="0 0 24 24" width="20" height="20" ${stroke}><path d="M6 4v16M6 4l-3 3M6 4l3 3M18 20V4M18 20l-3-3M18 20l3-3"/></svg>`,
   planDay: `<svg viewBox="0 0 24 24" width="20" height="20" ${stroke}><rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17"/><path d="M8 3v3M16 3v3"/><path d="M7.5 14l2 2 4-4.5"/></svg>`,
+  store: uiSvg(`<path d="M4 10v10h16V10M3 10l2-6h14l2 6"/><path d="M3 10a2.5 2.5 0 0 0 4.5 1.5A2.5 2.5 0 0 0 12 10a2.5 2.5 0 0 0 4.5 1.5A2.5 2.5 0 0 0 21 10"/><path d="M9 20v-5h6v5"/>`),
+  pin: uiSvg(`<path d="M20 10c0 5.5-8 11-8 11S4 15.5 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>`),
+  clock: uiSvg(`<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>`),
+  chart: uiSvg(`<path d="M4 20V11M10 20V4M16 20v-7M22 20V8"/>`),
+  compass: uiSvg(`<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2.1 4.9-4.9 2.1 2.1-4.9z"/>`),
+  phone: uiSvg(`<path d="M7.2 3.5 10 7.8 8.2 10a15.5 15.5 0 0 0 5.8 5.8l2.2-1.8 4.3 2.8-.8 3.2c-.2.8-1 1.3-1.8 1.2A18 18 0 0 1 2.8 6.1C2.7 5.3 3.2 4.5 4 4.3z"/>`),
+  history: uiSvg(`<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>`),
 };

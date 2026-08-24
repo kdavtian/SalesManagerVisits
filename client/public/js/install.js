@@ -1,4 +1,5 @@
 import { t } from "./i18n.js";
+import { activateDialog } from "./util.js";
 
 const DISMISS_KEY = "fieldvisits_install_dismissed_at";
 const DISMISS_DAYS = 14;
@@ -142,6 +143,7 @@ function showIOSWalkthrough() {
     </div>
   `;
   document.body.appendChild(overlay);
+  activateDialog(overlay);
   overlay.querySelector("#close-ios-steps").addEventListener("click", () => overlay.remove());
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) overlay.remove();

@@ -59,6 +59,12 @@ export async function renderCustomerOrders(root, navigate, customerId) {
         const { openOrderDetailSheet } = await import("./customerDetail.js");
         openOrderDetailSheet(customerId, row.dataset.orderId);
       });
+      row.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          row.click();
+        }
+      });
     });
   }
 }

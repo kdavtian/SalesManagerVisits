@@ -27,15 +27,11 @@
     <link rel="stylesheet" href="css/styles.css" />
   </head>
   <body>
-    <div id="sync-banner" class="sync-banner" hidden></div>
+    <div id="sync-banner" class="sync-banner" role="status" aria-live="polite" hidden></div>
     <header id="top-bar" class="top-bar" hidden></header>
     <main id="app" class="app-main"></main>
-    <nav id="nav-bar" class="nav-bar" hidden></nav>
+    <nav id="nav-bar" class="nav-bar" aria-label="Primary navigation" hidden></nav>
     <div id="install-root"></div>
-    <div id="rotate-overlay" class="rotate-overlay">
-      <div class="rotate-overlay-icon">📱</div>
-      <p>Please rotate your device back to portrait.</p>
-    </div>
 
     <script src="vendor/leaflet/leaflet.js"></script>
     <script src="vendor/leaflet-rotate/leaflet-rotate.js"></script>

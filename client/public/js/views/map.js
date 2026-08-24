@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatRelative, formatAmd, formatDistance, haversineMeters, getCurrentPosition, CATEGORY_OPTIONS } from "../util.js";
+import { activateDialog, escapeHtml, formatRelative, formatAmd, formatDistance, haversineMeters, getCurrentPosition, CATEGORY_OPTIONS } from "../util.js";
 import { t } from "../i18n.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
@@ -14,7 +14,7 @@ const TILE_URLS = {
 const TILE_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
-export function renderMap(root, navigate, relocateCustomerId) {
+export function renderMap(root, navigate, relocateCustomerId, startInAddMode = false) {
   root.innerHTML = `
     <div class="map-view">
       <div id="leaflet-map"></div>
@@ -74,8 +74,8 @@ export function renderMap(root, navigate, relocateCustomerId) {
         <button class="map-control-btn map-control-standalone" id="plan-day-btn" aria-label="${t("plan_day")}">${icons.planDay}</button>
       </div>
 
-      <button class="fab" id="add-customer-fab" title="${t("new_customer")}">+</button>
-      <div class="map-hint" id="map-hint" hidden>${t("tap_map_hint")}</div>
+      <button class="fab" id="add-customer-fab" title="${t("new_customer")}" aria-label="${t("new_customer")}" aria-pressed="false">+</button>
+      <div class="map-hint" id="map-hint" role="status" ${startInAddMode ? "" : "hidden"}>${t("tap_map_hint")}</div>
       <div class="map-hint" id="team-empty-hint" hidden>${t("team_locations_empty")}</div>
       <div class="map-hint" id="planned-empty-hint" hidden>${t("planned_empty")}</div>
     </div>
@@ -154,7 +154,12 @@ export function renderMap(root, navigate, relocateCustomerId) {
   root.querySelector("#zoom-out-btn").addEventListener("click", () => map.zoomOut());
   compassBtn.addEventListener("click", () => map.setBearing(0));
 
-  let addMode = false;
+  let addMode = startInAddMode && !relocateCustomerId;
+  if (addMode) {
+    fab.classList.add("fab-active");
+    fab.setAttribute("aria-pressed", "true");
+    mapEl.classList.add("map-picking");
+  }
   let placingMarker = null;
   const markerLayer = L.layerGroup().addTo(map);
 
@@ -474,6 +479,7 @@ export function renderMap(root, navigate, relocateCustomerId) {
       </div>
     `;
     document.body.appendChild(overlay);
+    activateDialog(overlay);
 
     function close() {
       overlay.remove();
@@ -537,6 +543,7 @@ export function renderMap(root, navigate, relocateCustomerId) {
     fab.addEventListener("click", () => {
       addMode = !addMode;
       fab.classList.toggle("fab-active", addMode);
+      fab.setAttribute("aria-pressed", String(addMode));
       hint.hidden = !addMode;
       mapEl.classList.toggle("map-picking", addMode);
     });
@@ -561,6 +568,7 @@ export function renderMap(root, navigate, relocateCustomerId) {
 
     addMode = false;
     fab.classList.remove("fab-active");
+    fab.setAttribute("aria-pressed", "false");
     hint.hidden = true;
     mapEl.classList.remove("map-picking");
 
@@ -582,6 +590,7 @@ export function renderMap(root, navigate, relocateCustomerId) {
       </div>
     `;
     document.body.appendChild(overlay);
+    activateDialog(overlay);
 
     function close() {
       overlay.remove();
@@ -644,6 +653,7 @@ export function renderMap(root, navigate, relocateCustomerId) {
       </div>
     `;
     document.body.appendChild(overlay);
+    activateDialog(overlay);
 
     // Keep the dropped pin visible above the sheet -- measured against the
     // sheet's actual rendered height (it varies with content/keyboard),

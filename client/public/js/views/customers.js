@@ -25,11 +25,11 @@ export function renderCustomers(root, navigate, initialFilter) {
 
       <div class="list-toolbar">
         <input type="search" id="customer-search" placeholder="${t("search_customers")}" />
-        <button class="icon-btn" id="sort-btn" type="button" aria-label="${t("sort")}">${icons.sort}</button>
-        <div id="sort-menu" class="dropdown-menu" hidden>
-          <button data-sort="name">${t("sort_name")}</button>
-          <button data-sort="last_visit">${t("sort_last_visit")}</button>
-          <button data-sort="distance">${t("sort_distance")}</button>
+        <button class="icon-btn" id="sort-btn" type="button" aria-label="${t("sort")}" aria-haspopup="menu" aria-expanded="false" aria-controls="sort-menu">${icons.sort}</button>
+        <div id="sort-menu" class="dropdown-menu" role="menu" hidden>
+          <button role="menuitemradio" aria-checked="true" data-sort="name">${t("sort_name")}</button>
+          <button role="menuitemradio" aria-checked="false" data-sort="last_visit">${t("sort_last_visit")}</button>
+          <button role="menuitemradio" aria-checked="false" data-sort="distance">${t("sort_distance")}</button>
         </div>
       </div>
       <div id="customer-list" class="card-list"></div>
@@ -47,15 +47,19 @@ export function renderCustomers(root, navigate, initialFilter) {
   let myLocation = null;
   let searchTimer;
 
-  root.querySelector("#add-customer-btn").addEventListener("click", () => navigate("#/map"));
+  root.querySelector("#add-customer-btn").addEventListener("click", () => navigate("#/map?add=1"));
 
   sortBtn.addEventListener("click", () => {
     sortMenu.hidden = !sortMenu.hidden;
+    sortBtn.setAttribute("aria-expanded", String(!sortMenu.hidden));
+    if (!sortMenu.hidden) sortMenu.querySelector("button")?.focus();
   });
   sortMenu.querySelectorAll("[data-sort]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       sortKey = btn.dataset.sort;
       sortMenu.hidden = true;
+      sortBtn.setAttribute("aria-expanded", "false");
+      sortMenu.querySelectorAll("button").forEach((item) => item.setAttribute("aria-checked", String(item === btn)));
       if (sortKey === "distance" && !myLocation) {
         try {
           const pos = await getCurrentPosition();
@@ -67,9 +71,24 @@ export function renderCustomers(root, navigate, initialFilter) {
       render();
     });
   });
-  document.addEventListener("click", (e) => {
+  root.addEventListener("click", (e) => {
     if (!sortMenu.hidden && !sortMenu.contains(e.target) && e.target !== sortBtn && !sortBtn.contains(e.target)) {
       sortMenu.hidden = true;
+      sortBtn.setAttribute("aria-expanded", "false");
+    }
+  });
+
+  sortMenu.addEventListener("keydown", (e) => {
+    const items = [...sortMenu.querySelectorAll("button")];
+    const index = items.indexOf(document.activeElement);
+    if (e.key === "Escape") {
+      sortMenu.hidden = true;
+      sortBtn.setAttribute("aria-expanded", "false");
+      sortBtn.focus();
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const delta = e.key === "ArrowDown" ? 1 : -1;
+      items[(index + delta + items.length) % items.length]?.focus();
     }
   });
 
@@ -84,7 +103,7 @@ export function renderCustomers(root, navigate, initialFilter) {
     };
     statsBar.innerHTML = FILTERS.map(
       (f) => `
-        <button class="stat-pill ${filter === f.key ? "stat-pill-active" : ""}" data-filter="${f.key}">
+        <button class="stat-pill ${filter === f.key ? "stat-pill-active" : ""}" data-filter="${f.key}" aria-pressed="${filter === f.key}">
           <strong>${counts[f.key]}</strong><span>${t(f.labelKey)}</span>
         </button>
       `

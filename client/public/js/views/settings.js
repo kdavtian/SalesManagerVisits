@@ -14,7 +14,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       <div class="card settings-row">
         <span>${t("dark_mode")}</span>
         <label class="switch">
-          <input type="checkbox" id="theme-toggle" ${getTheme() === "dark" ? "checked" : ""} />
+          <input type="checkbox" id="theme-toggle" aria-label="${t("dark_mode")}" ${getTheme() === "dark" ? "checked" : ""} />
           <span class="switch-track"></span>
         </label>
       </div>
@@ -23,7 +23,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       <div class="card settings-row">
         <span>${t("armenian")}</span>
         <label class="switch">
-          <input type="checkbox" id="lang-toggle" ${getLang() === "hy" ? "checked" : ""} />
+          <input type="checkbox" id="lang-toggle" aria-label="${t("armenian")}" ${getLang() === "hy" ? "checked" : ""} />
           <span class="switch-track"></span>
         </label>
       </div>
@@ -49,7 +49,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
               <input type="number" name="radius" min="10" max="5000" required />
             </label>
             <p class="muted radius-help">${t("checkin_radius_help")}</p>
-            <p class="form-success" id="radius-success" hidden>${t("saved")}</p>
+            <p class="form-success" id="radius-success" role="status" hidden>${t("saved")}</p>
             <button type="submit" class="btn btn-primary">${t("save")}</button>
           </form>
         </div>
