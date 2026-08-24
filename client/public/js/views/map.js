@@ -93,6 +93,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   // Suspend the app shell's own scrolling while the map view is mounted.
   const appMain = document.getElementById("app");
   appMain.classList.add("app-main-locked");
+  document.body.classList.add("map-active");
   mapEl.style.touchAction = "none";
 
   const map = L.map(mapEl, {
@@ -780,6 +781,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     if (teamPollId) clearInterval(teamPollId);
     document.removeEventListener("visibilitychange", refreshTileStyle);
     appMain.classList.remove("app-main-locked");
+    document.body.classList.remove("map-active");
     map.remove();
   };
 }

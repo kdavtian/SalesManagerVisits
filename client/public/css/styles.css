@@ -212,7 +212,10 @@ a {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 10;
+  /* Must sit above the isolated app/map stacking context. Leaflet uses
+     internal z-index values up to 1000, but those can no longer escape
+     .app-main and cover this navigation surface. */
+  z-index: 1200;
   height: calc(48px + var(--nav-safe-bottom));
   /* iOS WebKit has a known compositing bug where a position:fixed element
      combined with backdrop-filter fails to repaint after a sibling's
@@ -222,6 +225,16 @@ a {
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
   will-change: transform;
+  isolation: isolate;
+}
+
+/* iOS WebKit can drop a blurred fixed layer when Leaflet continuously
+   transforms tiles beneath it. Use an opaque navigation surface on the map
+   route so the compositor always has a stable layer to paint. */
+.map-active .nav-bar {
+  background: var(--bg-card);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .nav-item {
@@ -441,6 +454,8 @@ a {
   flex: 1;
   overflow-y: auto;
   position: relative;
+  z-index: 0;
+  isolation: isolate;
   -webkit-overflow-scrolling: touch;
   /* nav-bar is now position: fixed (see .nav-bar) and no longer reserves
      its own space in the flex layout, so scrollable views need this padding
