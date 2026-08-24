@@ -1,79 +1,301 @@
 import { api } from "../api.js";
-import { escapeHtml, formatRelative, formatDistance } from "../util.js";
+import { escapeHtml, formatDistance } from "../util.js";
 import { t } from "../i18n.js";
+import { seesAllActivity } from "../state.js";
+
+const OUTCOMES = [
+  "order_placed",
+  "no_order",
+  "payment_collected",
+  "follow_up_required",
+  "customer_unavailable",
+  "complaint",
+  "stock_issue",
+  "other",
+];
+
+const PAGE_SIZE = 15;
+
+const STATUS_ICON = {
+  verified: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>`,
+  pending: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>`,
+  rejected: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v5"/><circle cx="12" cy="16.5" r="0.6" fill="#fff" stroke="none"/><circle cx="12" cy="12" r="9"/></svg>`,
+};
+
+function checkinStatus(c) {
+  if (!c.within_range) return "rejected";
+  if (c.outcome === "follow_up_required") return "pending";
+  return "verified";
+}
+
+function formatActivityDate(iso) {
+  const d = new Date(iso);
+  const now = new Date();
+  const time = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  const isSameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+
+  if (isSameDay(d, now)) return `${t("tab_today")}, ${time}`;
+  if (isSameDay(d, yesterday)) return `${t("yesterday")}, ${time}`;
+  return `${d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}, ${time}`;
+}
 
 export async function renderActivity(root, navigate) {
-  root.innerHTML = `<div class="dashboard-view"><p class="muted">…</p></div>`;
-  const container = root.querySelector(".dashboard-view");
+  root.innerHTML = `<div class="activity-view"><p class="muted">…</p></div>`;
+  const container = root.querySelector(".activity-view");
 
-  let summary;
-  try {
-    summary = await api.dashboardSummary();
-  } catch (err) {
-    container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
-    return;
+  const canFilterByManager = seesAllActivity();
+
+  let range = "week";
+  let customFrom = "";
+  let customTo = "";
+  let allCheckins = [];
+  let visibleCount = PAGE_SIZE;
+  let filtersOpen = true;
+  let sortAsc = false;
+
+  const filters = { search: "", manager: "", status: "", outcome: "" };
+
+  function statusMeta(status) {
+    if (status === "verified") return { cls: "status-verified", badge: "badge-success", label: t("verified") };
+    if (status === "pending") return { cls: "status-pending", badge: "badge-warning", label: t("status_pending") };
+    return { cls: "status-rejected", badge: "badge-danger", label: t("status_rejected") };
   }
 
-  const totals = summary.totals;
+  function computeStats(list) {
+    const total = list.length;
+    const verified = list.filter((c) => checkinStatus(c) === "verified").length;
+    const rejected = list.filter((c) => checkinStatus(c) === "rejected").length;
+    const pending = list.filter((c) => checkinStatus(c) === "pending").length;
+    const pct = (n) => (total ? `${((n / total) * 100).toFixed(1)}%` : "—");
+    return { total, verified, rejected, pending, verifiedPct: pct(verified), rejectedPct: pct(rejected), pendingPct: pct(pending) };
+  }
 
-  container.innerHTML = `
-    <h1>${t("nav_activity")}</h1>
-    <div class="stat-grid">
-      <div class="stat-card"><span class="stat-value">${totals.checkins_this_week}</span><span class="stat-label">${t("stat_checkins_week")}</span></div>
-      <div class="stat-card"><span class="stat-value">${totals.rejected_today}</span><span class="stat-label">${t("stat_rejected_today")}</span></div>
-      <div class="stat-card"><span class="stat-value">${totals.visited_this_week}</span><span class="stat-label">${t("stat_visited_week")}</span></div>
-      <div class="stat-card"><span class="stat-value">${totals.overdue}</span><span class="stat-label">${t("stat_overdue")}</span></div>
-    </div>
+  function managerOptions() {
+    const seen = new Map();
+    for (const c of allCheckins) {
+      if (!seen.has(c.user_id)) seen.set(c.user_id, c.user_name);
+    }
+    return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }
 
-    ${
-      summary.by_manager
-        ? `
-      <h2 class="section-title">${t("by_manager_week")}</h2>
-      <div class="card-list">
-        ${summary.by_manager
-          .map(
-            (m) => `
-          <div class="card manager-row">
-            <strong>${escapeHtml(m.user_name)}</strong>
-            <span class="muted">${m.checkins_this_week} · ${m.customers_visited_this_week}</span>
-          </div>
-        `
-          )
-          .join("") || `<p class="muted">${t("no_managers_yet")}</p>`}
+  function applyFilters() {
+    let list = allCheckins;
+    if (filters.manager) list = list.filter((c) => String(c.user_id) === filters.manager);
+    if (filters.status) list = list.filter((c) => checkinStatus(c) === filters.status);
+    if (filters.outcome) list = list.filter((c) => c.outcome === filters.outcome);
+    if (filters.search.trim()) {
+      const q = filters.search.trim().toLowerCase();
+      list = list.filter((c) => c.customer_name.toLowerCase().includes(q));
+    }
+    list = [...list].sort((a, b) =>
+      sortAsc ? new Date(a.timestamp) - new Date(b.timestamp) : new Date(b.timestamp) - new Date(a.timestamp)
+    );
+    return list;
+  }
+
+  function renderShell() {
+    const stats = computeStats(allCheckins);
+    container.innerHTML = `
+      <div class="list-header">
+        <div>
+          <h1>${t("nav_activity")}</h1>
+          <p class="muted">${t("activity_subtitle")}</p>
+        </div>
+        <button class="btn btn-sm" id="toggle-filters-btn">${t("filters")}</button>
       </div>
-    `
-        : ""
+
+      <div class="activity-tabs">
+        <button class="activity-tab ${range === "today" ? "activity-tab-active" : ""}" data-range="today">${t("tab_today")}</button>
+        <button class="activity-tab ${range === "week" ? "activity-tab-active" : ""}" data-range="week">${t("tab_week")}</button>
+        <button class="activity-tab ${range === "month" ? "activity-tab-active" : ""}" data-range="month">${t("tab_month")}</button>
+        <button class="activity-tab ${range === "custom" ? "activity-tab-active" : ""}" data-range="custom">${t("tab_custom")}</button>
+      </div>
+
+      ${
+        range === "custom"
+          ? `<div class="activity-custom-range">
+              <label>${t("date_from")}<input type="date" id="custom-from" value="${customFrom}" /></label>
+              <label>${t("date_to")}<input type="date" id="custom-to" value="${customTo}" /></label>
+            </div>`
+          : ""
+      }
+
+      <div class="stat-grid activity-stat-grid">
+        <div class="stat-card"><span class="stat-value">${stats.total}</span><span class="stat-label">${t("stat_total_visits")}</span><span class="stat-sublabel">${t("stat_all_checkins")}</span></div>
+        <div class="stat-card"><span class="stat-value">${stats.verified}</span><span class="stat-label">${t("verified")}</span><span class="stat-sublabel">${stats.verifiedPct}</span></div>
+        <div class="stat-card"><span class="stat-value">${stats.rejected}</span><span class="stat-label">${t("status_rejected")}</span><span class="stat-sublabel">${stats.rejectedPct}</span></div>
+        <div class="stat-card"><span class="stat-value">${stats.pending}</span><span class="stat-label">${t("status_pending")}</span><span class="stat-sublabel">${stats.pendingPct}</span></div>
+      </div>
+
+      <div class="activity-filters" id="activity-filters" ${filtersOpen ? "" : "hidden"}>
+        <input type="search" id="activity-search" placeholder="${t("search_customers")}" value="${escapeHtml(filters.search)}" />
+        <div class="activity-filter-row">
+          ${
+            canFilterByManager
+              ? `<select id="filter-manager">
+                  <option value="">${t("all_managers")}</option>
+                  ${managerOptions()
+                    .map(([id, name]) => `<option value="${id}" ${filters.manager === String(id) ? "selected" : ""}>${escapeHtml(name)}</option>`)
+                    .join("")}
+                </select>`
+              : ""
+          }
+          <select id="filter-status">
+            <option value="">${t("all_status")}</option>
+            <option value="verified" ${filters.status === "verified" ? "selected" : ""}>${t("verified")}</option>
+            <option value="pending" ${filters.status === "pending" ? "selected" : ""}>${t("status_pending")}</option>
+            <option value="rejected" ${filters.status === "rejected" ? "selected" : ""}>${t("status_rejected")}</option>
+          </select>
+          <select id="filter-outcome">
+            <option value="">${t("all_outcomes")}</option>
+            ${OUTCOMES.map((o) => `<option value="${o}" ${filters.outcome === o ? "selected" : ""}>${t(`outcome_${o}`)}</option>`).join("")}
+          </select>
+          <button class="icon-btn" id="sort-toggle-btn" aria-label="${t("sort")}" style="transform: scaleY(${sortAsc ? -1 : 1})">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16M12 20l-5-5M12 20l5-5"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="activity-count" id="activity-count"></div>
+      <div class="card-list" id="activity-list"></div>
+      <button class="btn btn-block" id="activity-load-more" hidden>${t("load_more")}</button>
+    `;
+
+    root.querySelector("#toggle-filters-btn").addEventListener("click", () => {
+      filtersOpen = !filtersOpen;
+      renderShell();
+    });
+
+    container.querySelectorAll(".activity-tab").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        range = btn.dataset.range;
+        visibleCount = PAGE_SIZE;
+        renderShell();
+        load();
+      });
+    });
+
+    if (range === "custom") {
+      const fromInput = container.querySelector("#custom-from");
+      const toInput = container.querySelector("#custom-to");
+      const onCustomChange = () => {
+        customFrom = fromInput.value;
+        customTo = toInput.value;
+        if (customFrom && customTo) {
+          visibleCount = PAGE_SIZE;
+          load();
+        }
+      };
+      fromInput.addEventListener("change", onCustomChange);
+      toInput.addEventListener("change", onCustomChange);
     }
 
-    <h2 class="section-title">${t("recent_activity")}</h2>
-    <div class="card-list" id="recent-activity"></div>
-  `;
+    const searchInput = container.querySelector("#activity-search");
+    let searchTimer;
+    searchInput.addEventListener("input", () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        filters.search = searchInput.value;
+        visibleCount = PAGE_SIZE;
+        renderList();
+      }, 250);
+    });
 
-  const activityEl = container.querySelector("#recent-activity");
-  if (!summary.recent_activity.length) {
-    activityEl.innerHTML = `<p class="muted">${t("no_checkins_yet")}</p>`;
-  } else {
-    activityEl.innerHTML = summary.recent_activity
-      .map(
-        (a) => `
-        <button class="card activity-row" data-customer-id="${a.customer_id}">
-          <div class="activity-row-main">
-            <strong>${escapeHtml(a.customer_name)}</strong>
-            <span class="muted">${escapeHtml(a.user_name)} · ${formatRelative(a.timestamp)}</span>
+    container.querySelector("#filter-manager")?.addEventListener("change", (e) => {
+      filters.manager = e.target.value;
+      visibleCount = PAGE_SIZE;
+      renderList();
+    });
+    container.querySelector("#filter-status").addEventListener("change", (e) => {
+      filters.status = e.target.value;
+      visibleCount = PAGE_SIZE;
+      renderList();
+    });
+    container.querySelector("#filter-outcome").addEventListener("change", (e) => {
+      filters.outcome = e.target.value;
+      visibleCount = PAGE_SIZE;
+      renderList();
+    });
+    container.querySelector("#sort-toggle-btn").addEventListener("click", () => {
+      sortAsc = !sortAsc;
+      renderShell();
+      renderList();
+    });
+
+    renderList();
+  }
+
+  function renderList() {
+    const listEl = container.querySelector("#activity-list");
+    const countEl = container.querySelector("#activity-count");
+    const loadMoreBtn = container.querySelector("#activity-load-more");
+    const filtered = applyFilters();
+
+    countEl.textContent = `${filtered.length} ${t("visits_count")}`;
+
+    if (!filtered.length) {
+      listEl.innerHTML = `<p class="muted">${t("no_activity_found")}</p>`;
+      loadMoreBtn.hidden = true;
+      return;
+    }
+
+    const visible = filtered.slice(0, visibleCount);
+    listEl.innerHTML = visible
+      .map((c) => {
+        const status = checkinStatus(c);
+        const meta = statusMeta(status);
+        const outcomeLabel = c.outcome ? t(`outcome_${c.outcome}`) : "";
+        const distanceLabel = status === "rejected" ? `${formatDistance(c.distance_meters)} ${t("away")}` : formatDistance(c.distance_meters);
+        return `
+        <button class="card activity-row-rich" data-customer-id="${c.customer_id}">
+          <span class="activity-status-icon ${meta.cls}">${STATUS_ICON[status]}</span>
+          <div class="activity-row-body">
+            <div class="activity-row-top">
+              <strong>${escapeHtml(c.customer_name)}</strong>
+              <span class="activity-row-trailing ${status === "rejected" ? "activity-distance-danger" : "muted"}">${distanceLabel}</span>
+            </div>
+            <div class="muted activity-row-meta">${escapeHtml(c.user_name)} · ${formatActivityDate(c.timestamp)}</div>
+            <div class="activity-row-bottom">
+              <span class="badge ${meta.badge}">${meta.label}</span>
+              ${outcomeLabel ? `<span class="muted">${escapeHtml(outcomeLabel)}</span>` : ""}
+            </div>
           </div>
-          <span class="card-trailing">
-            <span class="badge ${a.within_range ? "badge-success" : "badge-danger"}">
-              ${a.within_range ? t("verified") : `${formatDistance(a.distance_meters)} ${t("off")}`}
-            </span>
-            <span class="chevron">&#8250;</span>
-          </span>
+          <span class="chevron">&#8250;</span>
         </button>
-      `
-      )
+      `;
+      })
       .join("");
 
-    activityEl.querySelectorAll(".activity-row").forEach((el) => {
+    listEl.querySelectorAll(".activity-row-rich").forEach((el) => {
       el.addEventListener("click", () => navigate(`#/customers/${el.dataset.customerId}`));
     });
+
+    loadMoreBtn.hidden = visibleCount >= filtered.length;
+    loadMoreBtn.onclick = () => {
+      visibleCount += PAGE_SIZE;
+      renderList();
+    };
   }
+
+  async function load() {
+    const params = {};
+    if (range === "custom") {
+      if (customFrom) params.from = customFrom;
+      if (customTo) params.to = customTo;
+    } else {
+      params.range = range;
+    }
+
+    try {
+      allCheckins = range === "custom" && (!customFrom || !customTo) ? [] : await api.listCheckins(params);
+    } catch (err) {
+      container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+      return;
+    }
+    renderShell();
+  }
+
+  load();
 }

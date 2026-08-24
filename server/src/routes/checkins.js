@@ -86,8 +86,12 @@ checkinsRouter.post("/", (req, res, next) => {
   res.status(201).json(rows[0]);
 });
 
+function isValidDateString(value) {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
 checkinsRouter.get("/", async (req, res) => {
-  const { range, customer_id } = req.query;
+  const { range, customer_id, from, to } = req.query;
   let { user_id } = req.query;
 
   // Plain managers only see their own check-ins; admins and every
@@ -99,10 +103,22 @@ checkinsRouter.get("/", async (req, res) => {
   const conditions = [];
   const params = [];
 
-  if (range === "today") {
+  // An explicit custom range (from/to) takes priority over the range
+  // keyword -- the two are alternative ways to express "since when", not
+  // meant to be combined.
+  if (isValidDateString(from)) {
+    params.push(from);
+    conditions.push(`ch.timestamp >= $${params.length}::date`);
+  } else if (range === "today") {
     conditions.push(`ch.timestamp >= date_trunc('day', now())`);
   } else if (range === "week") {
     conditions.push(`ch.timestamp >= now() - interval '7 days'`);
+  } else if (range === "month") {
+    conditions.push(`ch.timestamp >= now() - interval '30 days'`);
+  }
+  if (isValidDateString(to)) {
+    params.push(to);
+    conditions.push(`ch.timestamp < ($${params.length}::date + interval '1 day')`);
   }
   if (user_id) {
     params.push(user_id);
