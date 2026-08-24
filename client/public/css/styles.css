@@ -1422,6 +1422,24 @@ form [aria-invalid="true"] {
   }
 }
 
+.pin-stop {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  transform: none;
+  background: var(--accent);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.pin-stop-visited {
+  background: var(--success);
+}
+
 .pin-check {
   position: absolute;
   top: 50%;
@@ -1631,6 +1649,86 @@ form [aria-invalid="true"] {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
+}
+
+.plan-mode-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 10px 0;
+  background: var(--bg);
+  border-radius: var(--radius);
+  padding: 3px;
+}
+
+.plan-mode-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  border-radius: calc(var(--radius) - 3px);
+  padding: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.plan-mode-tab-active {
+  background: var(--bg-card);
+  color: var(--text);
+  box-shadow: var(--shadow-subtle);
+}
+
+.weekday-picker {
+  display: flex;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.weekday-btn {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.weekday-btn-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.plan-area-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.plan-area-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font-size: 0.85rem;
+}
+
+.plan-area-add-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.plan-area-add-row select {
+  flex: 1;
+  min-width: 0;
 }
 
 /* ===== Dashboard / Activity redesign ===== */
@@ -2617,6 +2715,64 @@ form [aria-invalid="true"] {
   font-size: 1.3rem;
   line-height: 1;
   color: var(--text-dim);
+}
+
+.stop-list {
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.stop-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.stop-number {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.stop-number-done {
+  background: var(--success);
+}
+
+.stop-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.stop-reorder {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.stop-reorder .icon-btn {
+  width: 30px;
+  height: 30px;
+}
+
+.stop-reorder .icon-btn[disabled] {
+  opacity: 0.3;
+  cursor: default;
 }
 
 .nearby-list {

@@ -28,6 +28,7 @@ export const api = {
   logout: () => request("/auth/logout", { method: "POST" }),
   me: () => request("/me"),
 
+  getCustomerRegions: () => request("/customers/regions"),
   listCustomers: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/customers${qs ? `?${qs}` : ""}`);
@@ -51,6 +52,7 @@ export const api = {
   dashboardSummary: () => request("/dashboard/summary"),
 
   listUsers: () => request("/users"),
+  listPlannableUsers: () => request("/users/plannable"),
   createUser: (data) => json("/users", "POST", data),
   resetUserPassword: (id, password) => json(`/users/${id}/password`, "PATCH", { password }),
   deleteUser: (id) => request(`/users/${id}`, { method: "DELETE" }),
@@ -89,8 +91,18 @@ export const api = {
   deleteMyAvatar: () => request("/me/avatar", { method: "DELETE" }),
   myAvatarUrl: () => `/api/me/avatar?t=${Date.now()}`,
 
-  getMyVisitPlan: (date) => request(`/visit-plans/mine${date ? `?date=${date}` : ""}`),
-  saveVisitPlan: (date, customerIds) => json("/visit-plans", "POST", { date, customer_ids: customerIds }),
+  getMyVisitPlan: (date, userId) => {
+    const params = new URLSearchParams();
+    if (date) params.set("date", date);
+    if (userId) params.set("user_id", userId);
+    const qs = params.toString();
+    return request(`/visit-plans/mine${qs ? `?${qs}` : ""}`);
+  },
+  saveVisitPlan: (date, customerIds, userId) =>
+    json("/visit-plans", "POST", { date, customer_ids: customerIds, user_id: userId }),
   getPendingVisitPlans: () => request("/visit-plans/pending"),
   reviewVisitPlan: (id, action) => json(`/visit-plans/${id}`, "PATCH", { action }),
+  getVisitPlanRules: (userId) => request(`/visit-plans/rules${userId ? `?user_id=${userId}` : ""}`),
+  saveVisitPlanRule: (dayOfWeek, areas, userId) =>
+    json(`/visit-plans/rules/${dayOfWeek}`, "PUT", { areas, user_id: userId }),
 };

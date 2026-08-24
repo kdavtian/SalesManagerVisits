@@ -2,11 +2,31 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { ROLES } from "../roles.js";
+import { ROLES, canPlanForOthers } from "../roles.js";
 
 export const usersRouter = Router();
 
-usersRouter.use(requireAuth, requireAdmin);
+usersRouter.use(requireAuth);
+
+// Just enough to populate the "plan for" rep picker -- no email/other PII,
+// open to any canPlanForOthers role (not admin-only like the rest of this
+// router), since a Sales Director planning their team's routes has no
+// other reason to need the full admin user-management list.
+usersRouter.get(
+  "/plannable",
+  (req, res, next) => {
+    if (!canPlanForOthers(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+    next();
+  },
+  async (req, res) => {
+    const { rows } = await pool.query(
+      "SELECT id, name, position FROM users WHERE role = 'sales_manager' ORDER BY name"
+    );
+    res.json(rows);
+  }
+);
+
+usersRouter.use(requireAdmin);
 
 usersRouter.get("/", async (req, res) => {
   const { rows } = await pool.query(

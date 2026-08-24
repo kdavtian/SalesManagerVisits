@@ -3,7 +3,7 @@ import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd
 import { t } from "../i18n.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
-import { canViewTeamLocations, canEditDirectly } from "../state.js";
+import { canViewTeamLocations, canEditDirectly, canPlanForOthers, state } from "../state.js";
 
 const NEARBY_RADIUS_METERS = 5000;
 
@@ -46,6 +46,14 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         </div>
         <div class="nearby-list card-list" id="nearby-list"></div>
         <button type="button" class="nearby-view-all" id="nearby-view-all">${t("view_all_customers")}</button>
+      </div>
+
+      <div class="nearby-panel" id="planned-stops-panel" hidden>
+        <div class="nearby-panel-header">
+          <span>${t("route_stops")}</span>
+          <button type="button" class="icon-btn" id="planned-stops-close" aria-label="${t("cancel")}">&times;</button>
+        </div>
+        <div class="stop-list" id="stop-list"></div>
       </div>
 
       <div class="map-controls">
@@ -188,8 +196,95 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   let lastCustomers = [];
   let myLocation = null;
   let plannedCustomerIds = null;
+  let routeLine = null;
+  const stopMarkers = [];
 
   const plannedEmptyHint = root.querySelector("#planned-empty-hint");
+  const plannedStopsPanel = root.querySelector("#planned-stops-panel");
+  const stopListEl = root.querySelector("#stop-list");
+
+  function numberedIcon(n, visited) {
+    return L.divIcon({
+      className: "",
+      html: `<div class="pin pin-stop ${visited ? "pin-stop-visited" : ""}">${visited ? "&#10003;" : n}</div>`,
+      iconSize: [26, 26],
+      iconAnchor: [13, 26],
+      popupAnchor: [0, -26],
+    });
+  }
+
+  function renderStopListPanel() {
+    stopMarkers.forEach((m) => markerLayer.removeLayer(m));
+    stopMarkers.length = 0;
+    if (routeLine) {
+      map.removeLayer(routeLine);
+      routeLine = null;
+    }
+
+    if (activeFilter !== "planned" || !plannedCustomerIds?.length) {
+      plannedStopsPanel.hidden = true;
+      stopListEl.innerHTML = "";
+      return;
+    }
+
+    const stops = plannedCustomerIds.map((id) => lastCustomers.find((entry) => entry.c.id === id)).filter(Boolean);
+    if (!stops.length) {
+      plannedStopsPanel.hidden = true;
+      return;
+    }
+
+    const latlngs = [];
+    stops.forEach(({ c }, i) => {
+      const visited = customerStatus(c) === "today";
+      const marker = L.marker([c.lat, c.lng], { icon: numberedIcon(i + 1, visited) }).addTo(markerLayer);
+      marker.on("click", () => navigate(`#/customers/${c.id}`));
+      stopMarkers.push(marker);
+      latlngs.push([c.lat, c.lng]);
+    });
+    // Leaflet's SVG renderer sets stroke via setAttribute, which doesn't
+    // resolve CSS custom properties -- read the theme's actual color value.
+    const accentColor = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#0969da";
+    routeLine = L.polyline(latlngs, { color: accentColor, weight: 3, opacity: 0.8, dashArray: "6 6" }).addTo(map);
+
+    plannedStopsPanel.hidden = false;
+    stopListEl.innerHTML = stops
+      .map(({ c }, i) => {
+        const visited = customerStatus(c) === "today";
+        return `
+        <div class="stop-row" data-index="${i}">
+          <span class="stop-number ${visited ? "stop-number-done" : ""}">${visited ? "&#10003;" : i + 1}</span>
+          <span class="stop-name">${escapeHtml(c.name)}</span>
+          <span class="stop-reorder">
+            <button type="button" class="icon-btn" data-move="up" data-index="${i}" ${i === 0 ? "disabled" : ""} aria-label="${t("move_up")}">&uarr;</button>
+            <button type="button" class="icon-btn" data-move="down" data-index="${i}" ${i === stops.length - 1 ? "disabled" : ""} aria-label="${t("move_down")}">&darr;</button>
+          </span>
+        </div>`;
+      })
+      .join("");
+
+    stopListEl.querySelectorAll("[data-move]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const i = Number(btn.dataset.index);
+        const j = btn.dataset.move === "up" ? i - 1 : i + 1;
+        [plannedCustomerIds[i], plannedCustomerIds[j]] = [plannedCustomerIds[j], plannedCustomerIds[i]];
+        renderStopListPanel();
+        try {
+          await api.saveVisitPlan(undefined, plannedCustomerIds);
+        } catch {
+          // Order is still reflected locally; the next plan load will
+          // reconcile if the save genuinely failed.
+        }
+      });
+    });
+
+    stopListEl.querySelectorAll(".stop-name").forEach((el, i) => {
+      el.addEventListener("click", () => navigate(`#/customers/${stops[i].c.id}`));
+    });
+  }
+
+  root.querySelector("#planned-stops-close").addEventListener("click", () => {
+    plannedStopsPanel.hidden = true;
+  });
 
   function applyFilter() {
     markerLayer.clearLayers();
@@ -200,7 +295,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         const distance = myLocation ? haversineMeters(myLocation.lat, myLocation.lng, c.lat, c.lng) : Infinity;
         if (distance > NEARBY_RADIUS_METERS) continue;
       } else if (activeFilter === "planned") {
-        if (!plannedCustomerIds || !plannedCustomerIds.includes(c.id)) continue;
+        continue;
       } else if (
         activeFilter &&
         !(activeFilter === "overdue" ? status === "overdue" : activeFilter === "visited" ? status === "today" || status === "week" : true)
@@ -211,8 +306,13 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       bounds.push([c.lat, c.lng]);
     }
     if (activeFilter === "planned") {
+      renderStopListPanel();
+      if (plannedCustomerIds?.length) {
+        bounds.push(...plannedCustomerIds.map((id) => lastCustomers.find((e) => e.c.id === id)).filter(Boolean).map(({ c }) => [c.lat, c.lng]));
+      }
       plannedEmptyHint.hidden = bounds.length > 0 || plannedCustomerIds === null;
     } else {
+      plannedStopsPanel.hidden = true;
       plannedEmptyHint.hidden = true;
     }
     if (bounds.length) {
@@ -493,15 +593,28 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     rejected: "plan_status_rejected",
   };
 
+  const WEEKDAY_KEYS = ["weekday_sun", "weekday_mon", "weekday_tue", "weekday_wed", "weekday_thu", "weekday_fri", "weekday_sat"];
+
   async function openPlanDaySheet() {
     const overlay = document.createElement("div");
     overlay.className = "sheet-overlay sheet-overlay-light";
     overlay.innerHTML = `
       <div class="sheet">
         <h2>${t("plan_day")}</h2>
-        <p class="muted">${t("plan_day_hint")}</p>
-        <p class="badge badge-neutral" id="plan-status-badge"></p>
-        <div class="plan-day-list" id="plan-day-list"><p class="loading-state" role="status">${t("loading")}</p></div>
+        ${
+          canPlanForOthers()
+            ? `<label>${t("planning_for")}
+                <select id="plan-target-select">
+                  <option value="">${t("myself")}</option>
+                </select>
+              </label>`
+            : ""
+        }
+        <div class="plan-mode-tabs" role="tablist">
+          <button type="button" class="plan-mode-tab plan-mode-tab-active" data-mode="today">${t("plan_mode_today")}</button>
+          <button type="button" class="plan-mode-tab" data-mode="recurring">${t("plan_mode_recurring")}</button>
+        </div>
+        <div id="plan-body"><p class="loading-state" role="status">${t("loading")}</p></div>
         <p class="form-error" id="plan-day-error" hidden></p>
         <div class="sheet-actions">
           <button type="button" class="btn" id="cancel-plan-day">${t("cancel")}</button>
@@ -518,48 +631,212 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     overlay.querySelector("#cancel-plan-day").addEventListener("click", close);
     overlay.addEventListener("click", (e) => e.target === overlay && close());
 
-    const listEl = overlay.querySelector("#plan-day-list");
-    const badgeEl = overlay.querySelector("#plan-status-badge");
+    const bodyEl = overlay.querySelector("#plan-body");
     const errorEl = overlay.querySelector("#plan-day-error");
+    const targetSelect = overlay.querySelector("#plan-target-select");
+    const saveBtn = overlay.querySelector("#save-plan-day");
 
-    let existingPlan;
-    try {
-      existingPlan = await api.getMyVisitPlan();
-    } catch {
-      existingPlan = null;
-    }
-    const selectedIds = new Set(existingPlan?.customer_ids ?? []);
+    let targetUserId = null;
+    let mode = "today";
+    let selectedWeekday = new Date().getDay();
 
-    const statusClass =
-      existingPlan?.status === "approved" ? "badge-success" : existingPlan?.status === "rejected" ? "badge-danger" : "badge-neutral";
-    badgeEl.className = `badge ${statusClass}`;
-    badgeEl.textContent = t(existingPlan ? PLAN_STATUS_KEY[existingPlan.status] : "plan_status_none");
-
-    const sortedCustomers = [...lastCustomers].sort((a, b) => a.c.name.localeCompare(b.c.name));
-    listEl.innerHTML = sortedCustomers
-      .map(
-        ({ c }) => `
-      <label class="plan-day-row">
-        <input type="checkbox" value="${c.id}" ${selectedIds.has(c.id) ? "checked" : ""} />
-        <span>${escapeHtml(c.name)}</span>
-      </label>`
-      )
-      .join("");
-
-    overlay.querySelector("#save-plan-day").addEventListener("click", async (e) => {
-      const btn = e.target;
-      btn.disabled = true;
-      const ids = [...listEl.querySelectorAll("input:checked")].map((el) => Number(el.value));
+    if (targetSelect) {
       try {
-        await api.saveVisitPlan(undefined, ids);
-        close();
-        if (activeFilter === "planned") loadPlannedFilter();
-      } catch (err) {
-        errorEl.textContent = err.message;
-        errorEl.hidden = false;
-        btn.disabled = false;
+        const plannable = await api.listPlannableUsers();
+        targetSelect.insertAdjacentHTML(
+          "beforeend",
+          plannable.map((u) => `<option value="${u.id}">${escapeHtml(u.name)}${u.position ? ` (${escapeHtml(u.position)})` : ""}</option>`).join("")
+        );
+      } catch {
+        // Leave just "Myself" if this fails -- not fatal.
       }
+      targetSelect.addEventListener("change", () => {
+        targetUserId = targetSelect.value || null;
+        renderBody();
+      });
+    }
+
+    overlay.querySelectorAll(".plan-mode-tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        overlay.querySelectorAll(".plan-mode-tab").forEach((t2) => t2.classList.remove("plan-mode-tab-active"));
+        tab.classList.add("plan-mode-tab-active");
+        mode = tab.dataset.mode;
+        renderBody();
+      });
     });
+
+    async function renderBody() {
+      errorEl.hidden = true;
+      bodyEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+      if (mode === "today") {
+        await renderTodayMode();
+      } else {
+        await renderRecurringMode();
+      }
+    }
+
+    async function renderTodayMode() {
+      let existingPlan;
+      try {
+        existingPlan = await api.getMyVisitPlan(undefined, targetUserId);
+      } catch {
+        existingPlan = null;
+      }
+      const selectedIds = new Set(existingPlan?.customer_ids ?? []);
+      const statusClass =
+        existingPlan?.status === "approved" ? "badge-success" : existingPlan?.status === "rejected" ? "badge-danger" : "badge-neutral";
+      const statusLabel = existingPlan
+        ? existingPlan.source === "rule"
+          ? t("plan_status_from_rule")
+          : t(PLAN_STATUS_KEY[existingPlan.status])
+        : t("plan_status_none");
+
+      const sortedCustomers = [...lastCustomers].sort((a, b) => a.c.name.localeCompare(b.c.name));
+      bodyEl.innerHTML = `
+        <p class="badge ${statusClass}" id="plan-status-badge">${statusLabel}</p>
+        <p class="muted">${t("plan_day_hint")}</p>
+        <div class="plan-day-list" id="plan-day-list">
+          ${sortedCustomers
+            .map(
+              ({ c }) => `
+            <label class="plan-day-row">
+              <input type="checkbox" value="${c.id}" ${selectedIds.has(c.id) ? "checked" : ""} />
+              <span>${escapeHtml(c.name)}</span>
+            </label>`
+            )
+            .join("")}
+        </div>
+      `;
+
+      saveBtn.onclick = async () => {
+        saveBtn.disabled = true;
+        const ids = [...bodyEl.querySelectorAll("#plan-day-list input:checked")].map((el) => Number(el.value));
+        try {
+          await api.saveVisitPlan(undefined, ids, targetUserId);
+          close();
+          if (activeFilter === "planned") loadPlannedFilter();
+        } catch (err) {
+          errorEl.textContent = err.message;
+          errorEl.hidden = false;
+          saveBtn.disabled = false;
+        }
+      };
+    }
+
+    async function renderRecurringMode() {
+      let regions = [];
+      let rules = [];
+      try {
+        [regions, rules] = await Promise.all([api.getCustomerRegions(), api.getVisitPlanRules(targetUserId)]);
+      } catch {
+        regions = [];
+        rules = [];
+      }
+      const regionNames = [...new Set(regions.map((r) => r.region))];
+      const currentRule = rules.find((r) => r.day_of_week === selectedWeekday);
+      const areas = currentRule?.areas ?? [];
+
+      bodyEl.innerHTML = `
+        <p class="muted">${t("plan_recurring_hint").replace("[weekday]", t(WEEKDAY_KEYS[selectedWeekday]))}</p>
+        <div class="weekday-picker" id="weekday-picker">
+          ${WEEKDAY_KEYS.map(
+            (key, i) => `<button type="button" class="weekday-btn ${i === selectedWeekday ? "weekday-btn-active" : ""}" data-day="${i}">${t(key)}</button>`
+          ).join("")}
+        </div>
+        <div class="plan-area-list" id="plan-area-list">
+          ${
+            areas.length
+              ? areas
+                  .map(
+                    (a, i) => `
+              <div class="plan-area-row" data-index="${i}">
+                <span>${escapeHtml(a.region)}${a.subregion ? ` · ${escapeHtml(a.subregion)}` : ""}</span>
+                <button type="button" class="icon-btn plan-area-remove" data-index="${i}" aria-label="${t("cancel")}">&times;</button>
+              </div>`
+                  )
+                  .join("")
+              : `<p class="muted">${t("no_areas_yet")}</p>`
+          }
+        </div>
+        <div class="plan-area-add-row">
+          <select id="plan-add-region">
+            <option value="">${t("region")}</option>
+            ${regionNames.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join("")}
+          </select>
+          <select id="plan-add-subregion">
+            <option value="">${t("all_subregions")}</option>
+          </select>
+          <button type="button" class="btn btn-sm" id="plan-add-area-btn">+</button>
+        </div>
+      `;
+
+      let workingAreas = areas.map((a) => ({ ...a }));
+      const regionSelect = bodyEl.querySelector("#plan-add-region");
+      const subregionSelect = bodyEl.querySelector("#plan-add-subregion");
+
+      regionSelect.addEventListener("change", () => {
+        const subregions = regions.filter((r) => r.region === regionSelect.value && r.subregion).map((r) => r.subregion);
+        subregionSelect.innerHTML = `<option value="">${t("all_subregions")}</option>${subregions
+          .map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`)
+          .join("")}`;
+      });
+
+      function paintAreaList() {
+        const listEl = bodyEl.querySelector("#plan-area-list");
+        listEl.innerHTML = workingAreas.length
+          ? workingAreas
+              .map(
+                (a, i) => `
+          <div class="plan-area-row" data-index="${i}">
+            <span>${escapeHtml(a.region)}${a.subregion ? ` · ${escapeHtml(a.subregion)}` : ""}</span>
+            <button type="button" class="icon-btn plan-area-remove" data-index="${i}" aria-label="${t("cancel")}">&times;</button>
+          </div>`
+              )
+              .join("")
+          : `<p class="muted">${t("no_areas_yet")}</p>`;
+        listEl.querySelectorAll(".plan-area-remove").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            workingAreas.splice(Number(btn.dataset.index), 1);
+            paintAreaList();
+          });
+        });
+      }
+      paintAreaList();
+
+      bodyEl.querySelector("#plan-add-area-btn").addEventListener("click", () => {
+        if (!regionSelect.value) return;
+        workingAreas.push({ region: regionSelect.value, subregion: subregionSelect.value || null });
+        paintAreaList();
+      });
+
+      bodyEl.querySelectorAll(".weekday-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          // Persist whatever was staged for the day being left before switching.
+          try {
+            await api.saveVisitPlanRule(selectedWeekday, workingAreas, targetUserId);
+          } catch {
+            // Non-fatal -- the explicit Save button below is the primary save path.
+          }
+          selectedWeekday = Number(btn.dataset.day);
+          renderRecurringMode();
+        });
+      });
+
+      saveBtn.onclick = async () => {
+        saveBtn.disabled = true;
+        try {
+          await api.saveVisitPlanRule(selectedWeekday, workingAreas, targetUserId);
+          close();
+          if (activeFilter === "planned") loadPlannedFilter();
+        } catch (err) {
+          errorEl.textContent = err.message;
+          errorEl.hidden = false;
+          saveBtn.disabled = false;
+        }
+      };
+    }
+
+    await renderBody();
   }
 
   root.querySelector("#plan-day-btn").addEventListener("click", openPlanDaySheet);

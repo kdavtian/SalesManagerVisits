@@ -22,6 +22,12 @@ export function canViewTeamLocations(role) {
   return role === "admin" || role === "sales_director" || role === "ceo";
 }
 
+// Who can plan a *different* rep's route (day-of or recurring), not just
+// their own. A plain sales_manager can only ever plan for themselves.
+export function canPlanForOthers(role) {
+  return role === "admin" || role === "sales_director" || role === "ceo";
+}
+
 // Every field-facing role broadcasts its own foreground location while the
 // app is open, so the office-based roles (admin, CEO) have something to
 // look at; those two don't visit customers themselves, so they don't

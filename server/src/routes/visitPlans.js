@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
+import { canPlanForOthers } from "../roles.js";
 
 export const visitPlansRouter = Router();
 
@@ -14,30 +15,103 @@ function isValidDate(value) {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
-// The authenticated rep's own plan for a date (defaults to today) -- used
-// to drive the map's "Planned" filter and to prefill the plan-day sheet.
+// Resolves which user_id a plan/rule request targets, enforcing that only
+// canPlanForOthers roles may target someone other than themselves.
+function resolveTargetUserId(req, res, rawUserId) {
+  const targetId = rawUserId ? Number(rawUserId) : req.user.id;
+  if (!Number.isInteger(targetId)) {
+    res.status(400).json({ error: "user_id must be an integer" });
+    return null;
+  }
+  if (targetId !== req.user.id && !canPlanForOthers(req.user.role)) {
+    res.status(403).json({ error: "Not allowed to plan for this user" });
+    return null;
+  }
+  return targetId;
+}
+
+async function expandAreas(areas) {
+  if (!Array.isArray(areas) || !areas.length) return [];
+  const ids = new Set();
+  for (const area of areas) {
+    if (!area?.region) continue;
+    const params = [area.region];
+    let subregionFilter = "";
+    if (area.subregion) {
+      params.push(area.subregion);
+      subregionFilter = `AND subregion = $${params.length}`;
+    }
+    const { rows } = await pool.query(`SELECT id FROM customers WHERE region = $1 ${subregionFilter}`, params);
+    rows.forEach((r) => ids.add(r.id));
+  }
+  return [...ids];
+}
+
+// The target user's plan for a date (defaults to today): an explicit
+// visit_plans row always wins; otherwise an active recurring rule for that
+// weekday is expanded live into a synthesized (non-persisted) plan.
 visitPlansRouter.get("/mine", async (req, res) => {
+  const targetId = resolveTargetUserId(req, res, req.query.user_id);
+  if (targetId === null) return;
   const date = isValidDate(req.query.date) ? req.query.date : todayDate();
-  const { rows } = await pool.query(
-    "SELECT * FROM visit_plans WHERE user_id = $1 AND plan_date = $2",
-    [req.user.id, date]
+
+  const { rows } = await pool.query("SELECT * FROM visit_plans WHERE user_id = $1 AND plan_date = $2", [
+    targetId,
+    date,
+  ]);
+  if (rows[0]) return res.json(rows[0]);
+
+  const dayOfWeek = new Date(`${date}T00:00:00Z`).getUTCDay();
+  const { rows: ruleRows } = await pool.query(
+    "SELECT * FROM visit_plan_rules WHERE user_id = $1 AND day_of_week = $2 AND active",
+    [targetId, dayOfWeek]
   );
-  res.json(rows[0] ?? null);
+  const rule = ruleRows[0];
+  if (!rule) return res.json(null);
+
+  const customerIds = await expandAreas(rule.areas);
+  res.json({
+    id: null,
+    user_id: targetId,
+    plan_date: date,
+    customer_ids: customerIds,
+    status: "approved",
+    source: "rule",
+    rule_id: rule.id,
+  });
 });
 
-// Create or replace the caller's plan for a date. Admin-authored plans are
-// auto-approved; anyone else's plan (re-)submission goes back to pending,
-// since the content changed and needs review again.
+// Create or replace a plan for a date, for self or (canPlanForOthers) for
+// someone else. Admin-authored plans, and any plan authored for someone
+// else by a canPlanForOthers role, are auto-approved -- the same trust
+// level as an admin editing a plan directly today.
 visitPlansRouter.post("/", async (req, res) => {
+  const targetId = resolveTargetUserId(req, res, req.body?.user_id);
+  if (targetId === null) return;
   const date = isValidDate(req.body?.date) ? req.body.date : todayDate();
   const customerIds = Array.isArray(req.body?.customer_ids)
     ? [...new Set(req.body.customer_ids.map(Number).filter(Number.isInteger))]
     : [];
 
-  const isAdmin = req.user.role === "admin";
-  const status = isAdmin ? "approved" : "pending";
-  const reviewedBy = isAdmin ? req.user.id : null;
-  const reviewedAt = isAdmin ? new Date() : null;
+  const { rows: existingRows } = await pool.query(
+    "SELECT * FROM visit_plans WHERE user_id = $1 AND plan_date = $2",
+    [targetId, date]
+  );
+  const existing = existingRows[0];
+  // A reorder (same customers, different sequence) isn't a content change --
+  // don't make an already-approved plan drop back to pending just because
+  // the rep dragged their stops into a different visiting order.
+  const isReorderOnly =
+    existing &&
+    existing.status === "approved" &&
+    existing.customer_ids.length === customerIds.length &&
+    new Set(existing.customer_ids).size === new Set(customerIds).size &&
+    customerIds.every((id) => existing.customer_ids.includes(id));
+
+  const autoApprove = isReorderOnly || req.user.role === "admin" || targetId !== req.user.id;
+  const status = autoApprove ? "approved" : "pending";
+  const reviewedBy = isReorderOnly ? existing.reviewed_by : autoApprove ? req.user.id : null;
+  const reviewedAt = isReorderOnly ? existing.reviewed_at : autoApprove ? new Date() : null;
 
   const { rows } = await pool.query(
     `INSERT INTO visit_plans (user_id, plan_date, customer_ids, status, created_by, reviewed_by, reviewed_at)
@@ -49,7 +123,48 @@ visitPlansRouter.post("/", async (req, res) => {
            reviewed_at = EXCLUDED.reviewed_at,
            updated_at = now()
      RETURNING *`,
-    [req.user.id, date, customerIds, status, req.user.id, reviewedBy, reviewedAt]
+    [targetId, date, customerIds, status, req.user.id, reviewedBy, reviewedAt]
+  );
+  res.status(201).json(rows[0]);
+});
+
+// --- Recurring rules ---
+
+// A rep's own rules, or (canPlanForOthers) someone else's.
+visitPlansRouter.get("/rules", async (req, res) => {
+  const targetId = resolveTargetUserId(req, res, req.query.user_id);
+  if (targetId === null) return;
+  const { rows } = await pool.query(
+    "SELECT * FROM visit_plan_rules WHERE user_id = $1 AND active ORDER BY day_of_week",
+    [targetId]
+  );
+  res.json(rows);
+});
+
+// Upsert the rule for one weekday. An empty areas array deactivates it
+// (kept as a row, not deleted, so the "who set this up" audit trail via
+// created_by survives a rep clearing their own cycle).
+visitPlansRouter.put("/rules/:dayOfWeek", async (req, res) => {
+  const dayOfWeek = Number(req.params.dayOfWeek);
+  if (!Number.isInteger(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6) {
+    return res.status(400).json({ error: "dayOfWeek must be 0-6" });
+  }
+  const targetId = resolveTargetUserId(req, res, req.body?.user_id);
+  if (targetId === null) return;
+
+  const areas = Array.isArray(req.body?.areas)
+    ? req.body.areas
+        .filter((a) => a && typeof a.region === "string" && a.region)
+        .map((a) => ({ region: a.region, subregion: typeof a.subregion === "string" && a.subregion ? a.subregion : null }))
+    : [];
+
+  const { rows } = await pool.query(
+    `INSERT INTO visit_plan_rules (user_id, day_of_week, areas, created_by, active)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (user_id, day_of_week) DO UPDATE
+       SET areas = EXCLUDED.areas, active = EXCLUDED.active, created_by = EXCLUDED.created_by, updated_at = now()
+     RETURNING *`,
+    [targetId, dayOfWeek, JSON.stringify(areas), req.user.id, areas.length > 0]
   );
   res.status(201).json(rows[0]);
 });

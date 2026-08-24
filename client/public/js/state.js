@@ -29,3 +29,9 @@ export function canViewTeamLocations() {
 export function broadcastsLocation() {
   return state.user?.role !== "admin" && state.user?.role !== "ceo";
 }
+
+export function canPlanForOthers() {
+  return (
+    state.user?.role === "admin" || state.user?.role === "sales_director" || state.user?.role === "ceo"
+  );
+}
