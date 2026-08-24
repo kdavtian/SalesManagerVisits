@@ -4,6 +4,37 @@ import { state } from "../state.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 
+// A dependency-free CSS bar chart -- this app has no charting library, and
+// 30 bars is simple enough not to need one. Each bar's height is relative
+// to the busiest day in the window, not an absolute scale, so a quiet
+// period still reads as a legible shape instead of 30 near-flat slivers.
+function trendChartHtml(daily) {
+  const max = Math.max(1, ...daily.map((d) => d.visits));
+  const bars = daily
+    .map((d) => {
+      const heightPct = Math.round((d.visits / max) * 100);
+      const label = new Date(`${d.day}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+      return `<div class="trend-bar" style="height:${Math.max(heightPct, d.visits > 0 ? 4 : 0)}%" title="${label}: ${d.visits}"></div>`;
+    })
+    .join("");
+  return `<div class="trend-chart" role="img" aria-label="${t("visit_trends")}">${bars}</div>`;
+}
+
+function comparisonCardHtml(label, current, previous, sublabel) {
+  current = Number(current);
+  previous = Number(previous);
+  const delta = previous > 0 ? Math.round(((current - previous) / previous) * 100) : current > 0 ? 100 : 0;
+  const trendCls = delta > 0 ? "trend-up" : delta < 0 ? "trend-down" : "trend-flat";
+  const arrow = delta > 0 ? "&#8593;" : delta < 0 ? "&#8595;" : "&#8226;";
+  return `
+    <div class="stat-card">
+      <span class="stat-value">${current}</span>
+      <span class="stat-label">${label}</span>
+      <span class="stat-sublabel ${trendCls}">${arrow} ${Math.abs(delta)}% ${sublabel}</span>
+    </div>
+  `;
+}
+
 function greeting() {
   const hour = new Date().getHours();
   if (hour < 12) return t("greeting_morning");
@@ -15,9 +46,9 @@ export async function renderDashboard(root, navigate) {
   root.innerHTML = `<div class="dashboard-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".dashboard-view");
 
-  let summary, customers;
+  let summary, customers, trends;
   try {
-    [summary, customers] = await Promise.all([api.dashboardSummary(), api.listCustomers()]);
+    [summary, customers, trends] = await Promise.all([api.dashboardSummary(), api.listCustomers(), api.dashboardTrends()]);
   } catch (err) {
     container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     return;
@@ -74,6 +105,15 @@ export async function renderDashboard(root, navigate) {
     <div class="stat-grid stat-grid-alerts">
       <div class="stat-card"><span class="stat-value">${totals.rejected_today}</span><span class="stat-label">${t("stat_rejected_today")}</span></div>
       <div class="stat-card"><span class="stat-value">${totals.overdue}</span><span class="stat-label">${t("stat_overdue")}</span></div>
+    </div>
+
+    <h2 class="section-title">${t("visit_trends")}</h2>
+    <div class="card trend-chart-card">
+      ${trendChartHtml(trends.daily)}
+    </div>
+    <div class="stat-grid">
+      ${comparisonCardHtml(t("this_week"), trends.comparison.this_week, trends.comparison.last_week, t("vs_last_week"))}
+      ${comparisonCardHtml(t("this_month"), trends.comparison.this_month, trends.comparison.last_month, t("vs_last_month"))}
     </div>
 
     <div class="section-heading-row">

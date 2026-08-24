@@ -1130,6 +1130,43 @@ form [aria-invalid="true"] {
   font-size: 0.8rem;
 }
 
+.stat-sublabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.trend-up {
+  color: var(--success);
+}
+
+.trend-down {
+  color: var(--danger);
+}
+
+.trend-flat {
+  color: var(--text-dim);
+}
+
+.trend-chart-card {
+  padding: 16px 12px 10px;
+  margin: 14px 0 0;
+}
+
+.trend-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 64px;
+}
+
+.trend-bar {
+  flex: 1;
+  min-width: 2px;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+  opacity: 0.85;
+}
+
 .manager-row {
   display: flex;
   justify-content: space-between;

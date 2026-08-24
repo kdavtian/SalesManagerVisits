@@ -112,6 +112,51 @@ dashboardRouter.get("/summary", async (req, res) => {
   });
 });
 
+// 30-day daily visit trend + week/month-over-week/month comparisons, for
+// the dashboard's trend chart. Same user-scoping as /summary: a rep sees
+// only their own activity, a director/admin/CEO sees the whole org.
+dashboardRouter.get("/trends", async (req, res) => {
+  const seesAll = seesAllActivity(req.user.role);
+  const userFilter = seesAll ? "" : "AND ch.user_id = $1";
+  const params = seesAll ? [] : [req.user.id];
+
+  const dailyQuery = pool.query(
+    `SELECT date_trunc('day', ch.timestamp)::date AS day, count(*)::int AS visits
+     FROM checkins ch
+     WHERE ch.timestamp >= now() - interval '29 days' ${userFilter}
+     GROUP BY day
+     ORDER BY day`,
+    params
+  );
+
+  const comparisonQuery = pool.query(
+    `SELECT
+       (SELECT count(*) FROM checkins ch WHERE ch.timestamp >= date_trunc('week', now()) ${userFilter}) AS this_week,
+       (SELECT count(*) FROM checkins ch WHERE ch.timestamp >= date_trunc('week', now() - interval '7 days')
+          AND ch.timestamp < date_trunc('week', now()) ${userFilter}) AS last_week,
+       (SELECT count(*) FROM checkins ch WHERE ch.timestamp >= date_trunc('month', now()) ${userFilter}) AS this_month,
+       (SELECT count(*) FROM checkins ch WHERE ch.timestamp >= date_trunc('month', now() - interval '1 month')
+          AND ch.timestamp < date_trunc('month', now()) ${userFilter}) AS last_month`,
+    params
+  );
+
+  const [daily, comparison] = await Promise.all([dailyQuery, comparisonQuery]);
+
+  // Fill in the days with zero visits -- the query above only returns rows
+  // that exist, so the chart would otherwise show gaps as "no data" instead
+  // of a flat zero.
+  const byDay = new Map(daily.rows.map((r) => [r.day.toISOString().slice(0, 10), r.visits]));
+  const series = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    series.push({ day: key, visits: byDay.get(key) ?? 0 });
+  }
+
+  res.json({ daily: series, comparison: comparison.rows[0] });
+});
+
 function isValidMonthString(value) {
   return typeof value === "string" && /^\d{4}-\d{2}-01$/.test(value);
 }
