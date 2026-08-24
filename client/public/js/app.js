@@ -1,6 +1,6 @@
 import { api } from "./api.js";
 import { state, setUser, isAdmin } from "./state.js";
-import { t } from "./i18n.js";
+import { getLang, t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { renderLogin } from "./views/login.js";
 import { renderMap } from "./views/map.js";
@@ -45,6 +45,7 @@ function navigate(hash) {
 }
 
 async function render() {
+  document.documentElement.lang = getLang();
   if (currentCleanup) {
     currentCleanup();
     currentCleanup = null;
@@ -164,6 +165,15 @@ onQueueChange(renderSyncBanner);
 window.addEventListener("online", renderSyncBanner);
 window.addEventListener("offline", renderSyncBanner);
 window.addEventListener("hashchange", render);
+
+document.addEventListener("invalid", (event) => {
+  event.target.setAttribute("aria-invalid", "true");
+}, true);
+document.addEventListener("input", (event) => {
+  if (event.target.matches("input, select, textarea") && event.target.validity?.valid) {
+    event.target.removeAttribute("aria-invalid");
+  }
+});
 
 async function init() {
   try {

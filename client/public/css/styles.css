@@ -254,6 +254,12 @@ a {
   cursor: pointer;
 }
 
+:lang(hy) .nav-item,
+:lang(hy) .nav-item-center-label {
+  font-size: 0.6rem;
+  letter-spacing: -0.025em;
+}
+
 .nav-icon {
   display: flex;
   align-items: center;
@@ -536,6 +542,11 @@ form textarea:focus,
 form select:focus {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
+}
+
+form [aria-invalid="true"] {
+  border-color: var(--danger);
+  outline: 2px solid color-mix(in srgb, var(--danger) 35%, transparent);
 }
 
 .form-error {
@@ -2074,6 +2085,21 @@ form select:focus {
   gap: 8px;
 }
 
+.detail-fact-icon {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.detail-fact-icon .ui-svg {
+  width: 18px;
+  height: 18px;
+}
+
 .detail-fact a {
   color: var(--text);
   text-decoration: none;
@@ -2634,4 +2660,15 @@ form select:focus {
   align-items: center;
   gap: 8px;
   margin-top: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

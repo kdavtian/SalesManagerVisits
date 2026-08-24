@@ -2,6 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml, getCurrentPosition, compressImage, formatDistance, haversineMeters } from "../util.js";
 import { enqueueCheckin } from "../offlineQueue.js";
 import { t, getLang } from "../i18n.js";
+import { icons } from "../icons.js";
 
 const BRAND_OPTIONS = [
   { value: "castrol", labelKey: "brand_castrol" },
@@ -13,14 +14,14 @@ const BRAND_OPTIONS = [
 ];
 
 const OUTCOME_OPTIONS = [
-  { value: "order_placed", labelKey: "outcome_order_placed", icon: "🛒" },
-  { value: "no_order", labelKey: "outcome_no_order", icon: "⊘" },
-  { value: "payment_collected", labelKey: "outcome_payment_collected", icon: "💳" },
-  { value: "follow_up_required", labelKey: "outcome_follow_up_required", icon: "⏰" },
-  { value: "customer_unavailable", labelKey: "outcome_customer_unavailable", icon: "🚪" },
-  { value: "complaint", labelKey: "outcome_complaint", icon: "⚠️" },
-  { value: "stock_issue", labelKey: "outcome_stock_issue", icon: "📦" },
-  { value: "other", labelKey: "outcome_other", icon: "⋯" },
+  { value: "order_placed", labelKey: "outcome_order_placed", icon: icons.cart },
+  { value: "no_order", labelKey: "outcome_no_order", icon: icons.noOrder },
+  { value: "payment_collected", labelKey: "outcome_payment_collected", icon: icons.payment },
+  { value: "follow_up_required", labelKey: "outcome_follow_up_required", icon: icons.clock },
+  { value: "customer_unavailable", labelKey: "outcome_customer_unavailable", icon: icons.door },
+  { value: "complaint", labelKey: "outcome_complaint", icon: icons.warning },
+  { value: "stock_issue", labelKey: "outcome_stock_issue", icon: icons.box },
+  { value: "other", labelKey: "outcome_other", icon: icons.more },
 ];
 
 export async function renderCheckin(root, navigate, customerId) {
@@ -86,7 +87,7 @@ export async function renderCheckin(root, navigate, customerId) {
           <span>${t("take_photo")}</span>
         </button>
         <div class="photo-preview-wrap" id="photo-preview-wrap" hidden>
-          <img id="photo-preview" />
+          <img id="photo-preview" alt="${t("photo_optional")}" />
           <button type="button" class="photo-retake-btn" id="photo-retake-btn">${t("retake_photo")}</button>
         </div>
       </div>

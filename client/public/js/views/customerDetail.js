@@ -101,11 +101,11 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     </div>
 
     <div class="card detail-facts-card">
-      ${customer.address ? `<div class="detail-fact">📍 ${escapeHtml(customer.address)}</div>` : ""}
-      ${customer.phone ? `<div class="detail-fact">📞 <a href="tel:${escapeHtml(customer.phone)}">${escapeHtml(customer.phone)}</a></div>` : ""}
-      ${customer.category ? `<div class="detail-fact">🏷️ ${escapeHtml(customer.category)}</div>` : ""}
-      <div class="detail-fact">🔁 ${t("visit_frequency")}: ${t("every")} ${customer.visit_frequency_days} ${t("days")}</div>
-      ${customer.notes ? `<div class="detail-fact muted">📝 ${escapeHtml(customer.notes)}</div>` : ""}
+      ${customer.address ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.pin}</span><span>${escapeHtml(customer.address)}</span></div>` : ""}
+      ${customer.phone ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.phone}</span><a href="tel:${escapeHtml(customer.phone)}">${escapeHtml(customer.phone)}</a></div>` : ""}
+      ${customer.category ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.tag}</span><span>${escapeHtml(customer.category)}</span></div>` : ""}
+      <div class="detail-fact"><span class="detail-fact-icon">${icons.repeat}</span><span>${t("visit_frequency")}: ${t("every")} ${customer.visit_frequency_days} ${t("days")}</span></div>
+      ${customer.notes ? `<div class="detail-fact muted"><span class="detail-fact-icon">${icons.note}</span><span>${escapeHtml(customer.notes)}</span></div>` : ""}
     </div>
 
     <div id="pending-request-slot"></div>
@@ -197,7 +197,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
           ${
             ch.photo_path
               ? `<div class="checkin-photo-wrap">
-                  <img class="checkin-photo" src="${api.checkinPhotoUrl(ch.id)}" alt="Check-in photo" loading="lazy" />
+                  <img class="checkin-photo" src="${api.checkinPhotoUrl(ch.id)}" alt="${t("photo_optional")}" loading="lazy" />
                   ${isAdmin() ? `<button class="photo-delete-btn" data-checkin-id="${ch.id}" aria-label="${t("delete_photo")}">&times;</button>` : ""}
                 </div>`
               : ""
