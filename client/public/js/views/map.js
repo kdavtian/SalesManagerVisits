@@ -51,7 +51,10 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       <div class="nearby-panel" id="planned-stops-panel" hidden>
         <div class="nearby-panel-header">
           <span>${t("route_stops")}</span>
-          <button type="button" class="icon-btn" id="planned-stops-close" aria-label="${t("cancel")}">&times;</button>
+          <span class="nearby-panel-header-actions">
+            <button type="button" class="btn btn-sm" id="optimize-route-btn">${t("optimize_route")}</button>
+            <button type="button" class="icon-btn" id="planned-stops-close" aria-label="${t("cancel")}">&times;</button>
+          </span>
         </div>
         <div class="stop-list" id="stop-list"></div>
       </div>
@@ -319,6 +322,45 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
 
   root.querySelector("#planned-stops-close").addEventListener("click", () => {
     plannedStopsPanel.hidden = true;
+  });
+
+  // Greedy nearest-neighbor ordering -- not a true shortest-route solver,
+  // but for the handful of stops a single rep plans in a day it gets close
+  // enough while staying instant and dependency-free. Starts from the
+  // rep's live location when available (locate button already tapped),
+  // otherwise from whichever stop is currently first.
+  function nearestNeighborOrder(ids) {
+    const remaining = ids.map((id) => lastCustomers.find((entry) => entry.c.id === id)).filter(Boolean);
+    if (!remaining.length) return ids;
+    const ordered = [];
+    let current = myLocation ?? { lat: remaining[0].c.lat, lng: remaining[0].c.lng };
+    while (remaining.length) {
+      let bestIndex = 0;
+      let bestDistance = Infinity;
+      remaining.forEach((entry, i) => {
+        const distance = haversineMeters(current.lat, current.lng, entry.c.lat, entry.c.lng);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestIndex = i;
+        }
+      });
+      const [chosen] = remaining.splice(bestIndex, 1);
+      ordered.push(chosen.c.id);
+      current = { lat: chosen.c.lat, lng: chosen.c.lng };
+    }
+    return ordered;
+  }
+
+  root.querySelector("#optimize-route-btn").addEventListener("click", async () => {
+    if (!plannedCustomerIds?.length) return;
+    plannedCustomerIds = nearestNeighborOrder(plannedCustomerIds);
+    renderStopListPanel();
+    try {
+      await api.saveVisitPlan(undefined, plannedCustomerIds);
+    } catch {
+      // Order is still reflected locally; the next plan load will
+      // reconcile if the save genuinely failed.
+    }
   });
 
   function applyFilter() {
