@@ -1710,6 +1710,20 @@ form [aria-invalid="true"] {
   font-size: 0.85rem;
 }
 
+.perf-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 0.9rem;
+}
+
+.perf-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 0;
+}
+
 .progress-label {
   font-size: 0.82rem;
   font-weight: 700;

@@ -47,12 +47,15 @@ function isPlainObject(value) {
 // merged row by row) so a customer that drops out of the extract -- debt
 // fully paid, no recent orders -- doesn't keep showing stale data forever.
 erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
-  const { customers, order_lines } = req.body ?? {};
+  const { customers, order_lines, sales_performance } = req.body ?? {};
   if (!Array.isArray(customers)) {
     return res.status(400).json({ error: "customers must be an array" });
   }
   if (order_lines !== undefined && !Array.isArray(order_lines)) {
     return res.status(400).json({ error: "order_lines must be an array" });
+  }
+  if (sales_performance !== undefined && !Array.isArray(sales_performance)) {
+    return res.status(400).json({ error: "sales_performance must be an array" });
   }
 
   const erpIds = [];
@@ -109,6 +112,24 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     lineRevenues.push(Number.isFinite(line.revenue_amd) ? line.revenue_amd : null);
   }
 
+  const perfRepNames = [];
+  const perfMonths = [];
+  const perfSales = [];
+  const perfCollected = [];
+  const perfBudget = [];
+
+  for (const rep of Array.isArray(sales_performance) ? sales_performance : []) {
+    if (!isPlainObject(rep) || !rep.rep_name || !Array.isArray(rep.monthly)) continue;
+    for (const m of rep.monthly) {
+      if (!isPlainObject(m) || !m.month) continue;
+      perfRepNames.push(String(rep.rep_name));
+      perfMonths.push(m.month);
+      perfSales.push(Number.isFinite(m.sales_amd) ? m.sales_amd : 0);
+      perfCollected.push(Number.isFinite(m.collected_amd) ? m.collected_amd : 0);
+      perfBudget.push(Number.isFinite(m.budget_amd) ? m.budget_amd : 0);
+    }
+  }
+
   const client = await pool.connect();
   let releaseErr;
   try {
@@ -143,6 +164,22 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
       );
     }
 
+    if (sales_performance !== undefined) {
+      await client.query("TRUNCATE sales_performance");
+      if (perfRepNames.length) {
+        await client.query(
+          `INSERT INTO sales_performance (rep_name, month, sales_amd, collected_amd, budget_amd)
+           SELECT rep_name, month, sales_amd, collected_amd, budget_amd
+           FROM unnest($1::text[], $2::date[], $3::numeric[], $4::numeric[], $5::numeric[])
+             AS t(rep_name, month, sales_amd, collected_amd, budget_amd)
+           ON CONFLICT (rep_name, month) DO UPDATE SET
+             sales_amd = EXCLUDED.sales_amd, collected_amd = EXCLUDED.collected_amd,
+             budget_amd = EXCLUDED.budget_amd, synced_at = now()`,
+          [perfRepNames, perfMonths, perfSales, perfCollected, perfBudget]
+        );
+      }
+    }
+
     if (order_lines !== undefined) {
       await client.query("TRUNCATE erp_order_lines");
       if (lineErpIds.length) {
@@ -165,7 +202,11 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     client.release(releaseErr);
   }
 
-  res.json({ synced: erpIds.length, order_lines_synced: order_lines !== undefined ? lineErpIds.length : undefined });
+  res.json({
+    synced: erpIds.length,
+    order_lines_synced: order_lines !== undefined ? lineErpIds.length : undefined,
+    sales_performance_synced: sales_performance !== undefined ? perfRepNames.length : undefined,
+  });
 });
 
 // Lets any logged-in rep browse the ERP extract by name instead of

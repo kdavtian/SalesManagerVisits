@@ -73,6 +73,12 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         </div>
       </div>
 
+      ${
+        ["sales_manager", "sales_director", "ceo", "admin"].includes(state.user.role)
+          ? `<div id="sales-performance-slot"></div>`
+          : ""
+      }
+
       <h2 class="section-title">${t("preferences")}</h2>
       <div class="card settings-list">
         ${settingsToggleRow({ icon: ICON.appearance, label: t("appearance"), value: getTheme() === "dark" ? t("dark") : t("light"), id: "toggle-appearance", checked: getTheme() === "dark" })}
@@ -150,6 +156,10 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     }
   }
   paintAvatar();
+
+  // --- Sales performance ---
+  const perfSlot = root.querySelector("#sales-performance-slot");
+  if (perfSlot) loadSalesPerformance(perfSlot, state.user.role);
 
   root.querySelector("#avatar-btn").addEventListener("click", () => avatarInput.click());
   avatarInput.addEventListener("change", async () => {
@@ -272,6 +282,68 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     unsubscribeQueue();
     onLogout();
   });
+}
+
+function formatAmdShort(value) {
+  return `${Math.round(value).toLocaleString()} ${t("amd")}`;
+}
+
+async function loadSalesPerformance(slot, role) {
+  slot.innerHTML = `<h2 class="section-title">${t("sales_performance_title")}</h2><p class="loading-state" role="status">${t("loading")}</p>`;
+
+  const wantsOwn = role === "sales_manager" || role === "sales_director";
+  const wantsTeam = role === "sales_director" || role === "ceo" || role === "admin";
+
+  let mine = null;
+  let team = null;
+  try {
+    [mine, team] = await Promise.all([
+      wantsOwn ? api.getMySalesPerformance() : Promise.resolve(null),
+      wantsTeam ? api.getSalesPerformanceTeam() : Promise.resolve(null),
+    ]);
+  } catch {
+    slot.innerHTML = "";
+    return;
+  }
+
+  const sections = [];
+
+  if (wantsOwn) {
+    sections.push(`<h2 class="section-title">${t("sales_performance_title")}</h2>`);
+    if (!mine?.synced) {
+      sections.push(`<div class="card"><p class="muted">${t("no_sales_data_yet")}</p></div>`);
+    } else {
+      const cm = mine.current_month;
+      sections.push(`
+        <div class="card">
+          <div class="perf-row"><span class="muted">${t("this_month_sales")}</span><strong>${formatAmdShort(cm?.sales_amd ?? 0)}</strong></div>
+          <div class="perf-row"><span class="muted">${t("this_month_collected")}</span><strong>${formatAmdShort(cm?.collected_amd ?? 0)}</strong></div>
+          <div class="perf-divider"></div>
+          <div class="perf-row"><span class="muted">${t("ytd_sales")}</span><strong>${formatAmdShort(mine.ytd.sales_amd)}</strong></div>
+          <div class="perf-row"><span class="muted">${t("ytd_collected")}</span><strong>${formatAmdShort(mine.ytd.collected_amd)}</strong></div>
+        </div>
+      `);
+    }
+  }
+
+  if (wantsTeam && team?.length) {
+    sections.push(`<h2 class="section-title">${t("team_performance")}</h2>`);
+    sections.push(
+      `<div class="card-list">${team
+        .map(
+          (r, i) => `
+        <div class="card leaderboard-row">
+          <span class="leaderboard-rank">${i === 0 ? "🏆" : `#${i + 1}`}</span>
+          <span class="leaderboard-name">${escapeHtml(r.rep_name)}</span>
+          <span class="leaderboard-points">${formatAmdShort(r.sales_amd)}</span>
+        </div>
+      `
+        )
+        .join("")}</div>`
+    );
+  }
+
+  slot.innerHTML = sections.join("");
 }
 
 function openChangePasswordSheet() {
