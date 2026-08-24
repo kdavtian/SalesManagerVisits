@@ -204,6 +204,14 @@ a {
   bottom: 0;
   z-index: 10;
   height: calc(48px + var(--safe-bottom));
+  /* iOS WebKit has a known compositing bug where a position:fixed element
+     combined with backdrop-filter fails to repaint after a sibling's
+     content changes underneath it (e.g. the map mounting) -- it stays in
+     the DOM and clickable, just visually blank until something else forces
+     a repaint. Promoting it to its own GPU layer avoids that. */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform;
 }
 
 .nav-item {

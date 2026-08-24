@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v5";
+const CACHE_VERSION = "field-visits-v6";
 const TILE_CACHE = "field-visits-tiles-v2";
 
 const APP_SHELL = [
@@ -92,16 +92,19 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Static assets: cache-first, refresh cache from network in the background.
+  // App shell (JS/CSS/etc): network-first. Cache-first previously meant a
+  // deploy was invisible to already-installed clients until CACHE_VERSION
+  // was manually bumped (this file's own bytes are what trigger a service
+  // worker reinstall, and that string was the only thing that ever changed
+  // it) -- in practice several real fixes silently never reached the
+  // installed app. Network-first always picks up a new deploy on the next
+  // load when online, and still falls back to the cache when offline.
   event.respondWith(
-    caches.match(request).then((cached) => {
-      const network = fetch(request)
-        .then((res) => {
-          if (res.ok) caches.open(CACHE_VERSION).then((cache) => cache.put(request, res.clone()));
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
+    fetch(request)
+      .then((res) => {
+        if (res.ok) caches.open(CACHE_VERSION).then((cache) => cache.put(request, res.clone()));
+        return res;
+      })
+      .catch(() => caches.match(request))
   );
 });

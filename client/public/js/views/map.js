@@ -27,13 +27,17 @@ export function renderMap(root, navigate, relocateCustomerId) {
           : ""
       }
 
-      <div class="map-filter-row">
-        <button class="map-filter-chip chip-active" data-filter="">${t("filter_all")}</button>
-        <button class="map-filter-chip" data-filter="overdue">${t("filter_overdue")}</button>
-        <button class="map-filter-chip" data-filter="visited">${t("filter_visited")}</button>
-        <button class="map-filter-chip" data-filter="planned">${t("filter_planned")}</button>
-        <button class="map-filter-chip" data-filter="nearby">${t("filter_nearby")}</button>
-      </div>
+      ${
+        relocateCustomerId
+          ? ""
+          : `<div class="map-filter-row">
+              <button class="map-filter-chip chip-active" data-filter="">${t("filter_all")}</button>
+              <button class="map-filter-chip" data-filter="overdue">${t("filter_overdue")}</button>
+              <button class="map-filter-chip" data-filter="visited">${t("filter_visited")}</button>
+              <button class="map-filter-chip" data-filter="planned">${t("filter_planned")}</button>
+              <button class="map-filter-chip" data-filter="nearby">${t("filter_nearby")}</button>
+            </div>`
+      }
 
       <div class="nearby-panel" id="nearby-panel" hidden>
         <div class="nearby-panel-header">
@@ -569,7 +573,7 @@ export function renderMap(root, navigate, relocateCustomerId) {
     overlay.innerHTML = `
       <div class="sheet">
         <h2>${t("confirm_new_location")}</h2>
-        <p class="muted">${t("confirm_new_location_hint")}</p>
+        <p class="muted">${canEditDirectly() ? t("confirm_new_location_hint") : t("confirm_new_location_hint_request")}</p>
         <p class="form-error" id="relocate-error" hidden></p>
         <div class="sheet-actions">
           <button type="button" class="btn" id="cancel-relocate-confirm">${t("cancel")}</button>
