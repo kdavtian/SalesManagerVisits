@@ -133,8 +133,10 @@ ordersRouter.post("/", async (req, res) => {
   );
 });
 
+const PAGE_SIZE = 100;
+
 ordersRouter.get("/", async (req, res) => {
-  let { customer_id, user_id, status } = req.query;
+  let { customer_id, user_id, status, offset } = req.query;
   if (!seesAllActivity(req.user.role)) {
     user_id = req.user.id;
   }
@@ -154,17 +156,22 @@ ordersRouter.get("/", async (req, res) => {
     conditions.push(`o.status = $${params.length}`);
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const offsetNum = Math.max(0, Number(offset) || 0);
 
+  // Fetch one extra row to know whether there's a next page, without a
+  // separate COUNT(*) query -- trimmed back to PAGE_SIZE before sending.
+  params.push(PAGE_SIZE + 1, offsetNum);
   const { rows } = await pool.query(
     `SELECT o.*, u.name AS user_name, c.name AS customer_name
      FROM orders o
      JOIN users u ON u.id = o.user_id
      JOIN customers c ON c.id = o.customer_id
      ${where}
-     ORDER BY o.created_at DESC`,
+     ORDER BY o.created_at DESC
+     LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params
   );
-  res.json(rows);
+  res.json({ rows: rows.slice(0, PAGE_SIZE), has_more: rows.length > PAGE_SIZE });
 });
 
 ordersRouter.get("/:id", async (req, res) => {

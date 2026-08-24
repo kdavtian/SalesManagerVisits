@@ -164,8 +164,10 @@ function isValidDateString(value) {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
+const CHECKINS_PAGE_SIZE = 200;
+
 checkinsRouter.get("/", async (req, res) => {
-  const { range, customer_id, from, to, payments_only } = req.query;
+  const { range, customer_id, from, to, payments_only, offset } = req.query;
   let { user_id } = req.query;
 
   // Plain managers only see their own check-ins; admins and every
@@ -207,6 +209,12 @@ checkinsRouter.get("/", async (req, res) => {
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const offsetNum = Math.max(0, Number(offset) || 0);
+
+  // Fetch one extra row to know whether there's a next page, without a
+  // separate COUNT(*) query -- trimmed back to CHECKINS_PAGE_SIZE before
+  // sending.
+  params.push(CHECKINS_PAGE_SIZE + 1, offsetNum);
   const { rows } = await pool.query(
     `SELECT ch.*, u.name AS user_name, c.name AS customer_name,
        COALESCE(
@@ -217,10 +225,11 @@ checkinsRouter.get("/", async (req, res) => {
      JOIN users u ON u.id = ch.user_id
      JOIN customers c ON c.id = ch.customer_id
      ${where}
-     ORDER BY ch.timestamp DESC`,
+     ORDER BY ch.timestamp DESC
+     LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params
   );
-  res.json(rows);
+  res.json({ rows: rows.slice(0, CHECKINS_PAGE_SIZE), has_more: rows.length > CHECKINS_PAGE_SIZE });
 });
 
 // Legacy single-photo endpoint -- still works for check-ins recorded before

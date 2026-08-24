@@ -46,14 +46,36 @@ export async function renderOrders(root, navigate) {
 
   let activeStatus = "";
   let orders = [];
+  let hasMore = false;
+  let loadingMore = false;
 
   async function load() {
     listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     try {
-      orders = await api.listOrders(activeStatus ? { status: activeStatus } : {});
+      const params = activeStatus ? { status: activeStatus } : {};
+      const result = await api.listOrders(params);
+      orders = result.rows;
+      hasMore = result.has_more;
     } catch (err) {
       listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
       return;
+    }
+    paint();
+  }
+
+  async function loadMore() {
+    if (loadingMore || !hasMore) return;
+    loadingMore = true;
+    const btn = listEl.querySelector("#orders-load-more");
+    if (btn) btn.disabled = true;
+    try {
+      const params = activeStatus ? { status: activeStatus } : {};
+      params.offset = orders.length;
+      const result = await api.listOrders(params);
+      orders = orders.concat(result.rows);
+      hasMore = result.has_more;
+    } finally {
+      loadingMore = false;
     }
     paint();
   }
@@ -87,6 +109,14 @@ export async function renderOrders(root, navigate) {
       `;
       })
       .join("");
+
+    // Loading more only makes sense against the unfiltered server order --
+    // once a client-side search narrows what's shown, there's no
+    // "next page" of that search to fetch, only of the whole list.
+    if (hasMore && !search) {
+      listEl.insertAdjacentHTML("beforeend", `<button type="button" class="btn btn-block" id="orders-load-more">${t("load_more")}</button>`);
+      listEl.querySelector("#orders-load-more").addEventListener("click", loadMore);
+    }
 
     listEl.querySelectorAll("[data-order-id]").forEach((row) => {
       row.addEventListener("click", () => openOrderDetail(Number(row.dataset.orderId)));

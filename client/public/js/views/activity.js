@@ -58,6 +58,7 @@ export async function renderActivity(root, navigate) {
   let customFrom = "";
   let customTo = "";
   let allCheckins = [];
+  let checkinsCapped = false;
   let visibleCount = PAGE_SIZE;
   let filtersOpen = true;
   let sortAsc = false;
@@ -167,6 +168,8 @@ export async function renderActivity(root, navigate) {
             </div>`
           : ""
       }
+
+      ${checkinsCapped ? `<p class="muted activity-capped-note">${t("activity_capped_note")}</p>` : ""}
 
       <div class="stat-grid activity-stat-grid">
         <div class="stat-card"><span class="stat-value">${stats.total}</span><span class="stat-label">${t("stat_total_visits")}</span><span class="stat-sublabel">${t("stat_all_checkins")}</span></div>
@@ -369,7 +372,18 @@ export async function renderActivity(root, navigate) {
     }
 
     try {
-      allCheckins = range === "custom" && (!customFrom || !customTo) ? [] : await api.listCheckins(params);
+      if (range === "custom" && (!customFrom || !customTo)) {
+        allCheckins = [];
+        checkinsCapped = false;
+      } else {
+        const result = await api.listCheckins(params);
+        allCheckins = result.rows;
+        // The server caps a single page at 200 rows -- for the default
+        // "week" range that's never hit in practice, but a wide custom
+        // range or a busy "month" view could exceed it. Surfaced rather
+        // than silently understating the stat tiles below.
+        checkinsCapped = result.has_more;
+      }
     } catch (err) {
       container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
       return;
