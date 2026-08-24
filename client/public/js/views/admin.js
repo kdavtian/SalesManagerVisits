@@ -364,3 +364,75 @@ export async function renderProductsSection(container) {
 
   loadProducts();
 }
+
+function previousMonthStart() {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function formatMonthLabel(monthStr) {
+  const [y, m] = monthStr.split("-");
+  return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString(undefined, { year: "numeric", month: "long" });
+}
+
+export async function renderPointsCloseoutSection(container) {
+  const lastMonth = previousMonthStart();
+  container.innerHTML = `
+    <div class="card">
+      <p class="muted">${t("closeout_hint")}</p>
+      <button type="button" class="btn btn-primary" id="close-out-btn">${t("close_out_month")} (${escapeHtml(formatMonthLabel(lastMonth))})</button>
+      <p class="form-error" id="closeout-error" hidden></p>
+    </div>
+    <div class="card-list" id="closeout-history"></div>
+  `;
+
+  const historyEl = container.querySelector("#closeout-history");
+  const errorEl = container.querySelector("#closeout-error");
+
+  async function loadHistory() {
+    const rows = await api.listMonthlyCloseouts();
+    if (!rows.length) {
+      historyEl.innerHTML = `<p class="empty-state">${t("no_closeouts_yet")}</p>`;
+      return;
+    }
+    const byMonth = new Map();
+    for (const r of rows) {
+      if (!byMonth.has(r.month)) byMonth.set(r.month, []);
+      byMonth.get(r.month).push(r);
+    }
+    historyEl.innerHTML = [...byMonth.entries()]
+      .map(([month, winners]) => {
+        const top = winners.find((w) => w.rank === 1);
+        return `
+        <div class="card user-row">
+          <div class="user-row-top">
+            <div>
+              <strong>${escapeHtml(formatMonthLabel(String(month).slice(0, 7)))}</strong>
+              <span class="muted">${top ? `🏆 ${escapeHtml(top.user_name)}` : ""}</span>
+            </div>
+            <span class="badge badge-accent">${top ? `${top.total_points} pts` : ""}</span>
+          </div>
+        </div>
+      `;
+      })
+      .join("");
+  }
+
+  container.querySelector("#close-out-btn").addEventListener("click", async (e) => {
+    errorEl.hidden = true;
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      await api.closeOutMonth(lastMonth);
+      loadHistory();
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  loadHistory();
+}

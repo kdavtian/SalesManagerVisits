@@ -2,7 +2,7 @@ import { api } from "../api.js";
 import { t, getLang, setLang } from "../i18n.js";
 import { getTheme, setTheme } from "../theme.js";
 import { state, isAdmin, canPlanForOthers } from "../state.js";
-import { renderTeamSection, renderPlanApprovalsSection, renderProductsSection } from "./admin.js";
+import { renderTeamSection, renderPlanApprovalsSection, renderProductsSection, renderPointsCloseoutSection } from "./admin.js";
 import { escapeHtml, compressImage, activateDialog } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 
@@ -126,6 +126,9 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
 
         <h2 class="section-title">${t("product_catalog")}</h2>
         <div id="products-section"></div>
+
+        <h2 class="section-title">${t("points_closeout_title")}</h2>
+        <div id="points-closeout-section"></div>
 
         <h2 class="section-title">${t("team")}</h2>
         <div id="team-section"></div>
@@ -280,6 +283,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     });
 
     renderProductsSection(root.querySelector("#products-section"));
+    renderPointsCloseoutSection(root.querySelector("#points-closeout-section"));
     renderTeamSection(root.querySelector("#team-section"));
   }
 

@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { seesAllActivity } from "../roles.js";
+import { notifyTelegram, escapeHtml } from "../telegram.js";
 
 export const dashboardRouter = Router();
 
@@ -109,4 +110,97 @@ dashboardRouter.get("/summary", async (req, res) => {
     },
     points_leaderboard: seesAll ? points.rows : null,
   });
+});
+
+function isValidMonthString(value) {
+  return typeof value === "string" && /^\d{4}-\d{2}-01$/.test(value);
+}
+
+// Same visit/photo point rule as the live dashboard query above, but scoped
+// to one specific calendar month instead of "since the start of this
+// month" -- needed to close out a month after it's already ended.
+async function computeMonthlyStandings(month) {
+  const { rows } = await pool.query(
+    `WITH daily_visits AS (
+       SELECT ch.user_id, ch.customer_id, date_trunc('day', ch.timestamp) AS visit_day,
+              bool_or(ch.photo_path IS NOT NULL OR EXISTS (SELECT 1 FROM checkin_photos cp WHERE cp.checkin_id = ch.id)) AS has_photo
+       FROM checkins ch
+       WHERE ch.timestamp >= $1::date AND ch.timestamp < ($1::date + interval '1 month')
+       GROUP BY ch.user_id, ch.customer_id, date_trunc('day', ch.timestamp)
+     )
+     SELECT u.id AS user_id, u.name AS user_name,
+       count(dv.*)::int AS visit_points,
+       count(dv.*) FILTER (WHERE dv.has_photo)::int AS photo_points,
+       (count(dv.*) + count(dv.*) FILTER (WHERE dv.has_photo))::int AS total_points
+     FROM users u
+     LEFT JOIN daily_visits dv ON dv.user_id = u.id
+     WHERE u.role != 'admin'
+     GROUP BY u.id, u.name
+     ORDER BY total_points DESC, u.name`,
+    [month]
+  );
+  return rows;
+}
+
+// Admin-triggered, not scheduled -- there's no job runner in this app, and
+// closing out a month is the kind of thing someone should actually decide
+// to do (right before paying out the bonus), not something that silently
+// fires itself.
+dashboardRouter.post("/points/close-out", requireAdmin, async (req, res) => {
+  const { month } = req.body ?? {};
+  if (!isValidMonthString(month)) {
+    return res.status(400).json({ error: "month must be YYYY-MM-01" });
+  }
+
+  const standings = await computeMonthlyStandings(month);
+  if (!standings.length) return res.json([]);
+
+  const client = await pool.connect();
+  let saved;
+  try {
+    await client.query("BEGIN");
+    saved = [];
+    for (let i = 0; i < standings.length; i++) {
+      const s = standings[i];
+      const { rows } = await client.query(
+        `INSERT INTO monthly_points_closeouts
+           (month, user_id, user_name, total_points, visit_points, photo_points, rank, closed_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (month, user_id) DO UPDATE
+           SET user_name = EXCLUDED.user_name, total_points = EXCLUDED.total_points,
+               visit_points = EXCLUDED.visit_points, photo_points = EXCLUDED.photo_points,
+               rank = EXCLUDED.rank, closed_by = EXCLUDED.closed_by, closed_at = now()
+         RETURNING *`,
+        [month, s.user_id, s.user_name, s.total_points, s.visit_points, s.photo_points, i + 1, req.user.id]
+      );
+      saved.push(rows[0]);
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  res.status(201).json(saved);
+
+  const winner = saved.find((s) => s.rank === 1);
+  if (winner) {
+    notifyTelegram(
+      `🏆 <b>${month.slice(0, 7)} points winner</b>\n${escapeHtml(winner.user_name)} — ${winner.total_points} pts`
+    );
+  }
+});
+
+// Anyone who already sees the live leaderboard can browse past close-outs.
+dashboardRouter.get("/points/closeouts", async (req, res) => {
+  if (!seesAllActivity(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const { month } = req.query;
+  const { rows } = await pool.query(
+    isValidMonthString(month)
+      ? { text: "SELECT * FROM monthly_points_closeouts WHERE month = $1 ORDER BY rank", values: [month] }
+      : { text: "SELECT * FROM monthly_points_closeouts ORDER BY month DESC, rank", values: [] }
+  );
+  res.json(rows);
 });

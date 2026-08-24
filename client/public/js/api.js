@@ -50,6 +50,8 @@ export const api = {
   deleteCheckinPhotoById: (photoId) => request(`/checkins/photos/${photoId}`, { method: "DELETE" }),
 
   dashboardSummary: () => request("/dashboard/summary"),
+  closeOutMonth: (month) => json("/dashboard/points/close-out", "POST", { month }),
+  listMonthlyCloseouts: (month) => request(`/dashboard/points/closeouts${month ? `?month=${month}` : ""}`),
 
   listUsers: () => request("/users"),
   listPlannableUsers: () => request("/users/plannable"),

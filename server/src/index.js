@@ -53,7 +53,7 @@ app.use("/api/me", express.json(), meRouter);
 app.use("/api/users", express.json(), usersRouter);
 app.use("/api/customers", express.json(), customersRouter);
 app.use("/api/checkins", checkinsRouter);
-app.use("/api/dashboard", dashboardRouter);
+app.use("/api/dashboard", express.json(), dashboardRouter);
 app.use("/api/settings", express.json(), settingsRouter);
 app.use("/api/edit-requests", express.json(), editRequestsRouter);
 app.use("/api/locations", express.json(), locationsRouter);
