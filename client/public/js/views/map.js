@@ -163,6 +163,34 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   root.querySelector("#zoom-out-btn").addEventListener("click", () => map.zoomOut());
   compassBtn.addEventListener("click", () => map.setBearing(0));
 
+  // Leaflet's built-in doubleClickZoom listens for a native "dblclick" DOM
+  // event, but mapEl's touch-action:none (needed to stop the app-shell
+  // scroll fight above) also stops iOS/Android from synthesizing dblclick
+  // from a double-tap -- so double-tap-to-zoom silently stopped working.
+  // Detect it ourselves from raw touchend timing/distance instead.
+  let lastTapTime = 0;
+  let lastTapPoint = null;
+  function onMapTouchEnd(e) {
+    if (e.touches.length > 0 || e.changedTouches.length !== 1) {
+      lastTapTime = 0;
+      lastTapPoint = null;
+      return;
+    }
+    if (e.target.closest(".leaflet-control, .leaflet-popup")) return;
+    const point = map.mouseEventToContainerPoint(e.changedTouches[0]);
+    const now = Date.now();
+    if (lastTapPoint && now - lastTapTime < 350 && point.distanceTo(lastTapPoint) < 30) {
+      e.preventDefault();
+      map.setZoomAround(map.containerPointToLatLng(point), map.getZoom() + 1);
+      lastTapTime = 0;
+      lastTapPoint = null;
+    } else {
+      lastTapTime = now;
+      lastTapPoint = point;
+    }
+  }
+  mapEl.addEventListener("touchend", onMapTouchEnd);
+
   let addMode = startInAddMode && !relocateCustomerId;
   if (addMode) {
     fab.classList.add("fab-active");
@@ -1102,6 +1130,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   return () => {
     if (watchId != null) navigator.geolocation.clearWatch(watchId);
     if (teamPollId) clearInterval(teamPollId);
+    mapEl.removeEventListener("touchend", onMapTouchEnd);
     document.removeEventListener("visibilitychange", refreshTileStyle);
     appMain.classList.remove("app-main-locked");
     document.body.classList.remove("map-active");

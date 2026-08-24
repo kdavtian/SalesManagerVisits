@@ -1315,7 +1315,12 @@ form [aria-invalid="true"] {
 .fab {
   position: absolute;
   right: 16px;
-  bottom: calc(16px + var(--safe-bottom));
+  /* .map-view is inset:0 against #app, but the nav bar is position:fixed
+     and (while the map route is active) opaque -- it isn't reserved space
+     in this container's box, so a plain "safe-bottom" offset here sits
+     the FAB underneath/behind the nav bar's 48px + safe-area height
+     instead of above it. Clear the actual nav bar height explicitly. */
+  bottom: calc(16px + 48px + var(--nav-safe-bottom));
   width: 54px;
   height: 54px;
   border-radius: 50%;
@@ -1472,7 +1477,10 @@ form [aria-invalid="true"] {
 .map-controls {
   position: absolute;
   right: 12px;
-  top: 12px;
+  /* Clears the full-width filter chip row above it instead of sharing its
+     horizontal band -- the zoom cluster used to sit right at top:12px,
+     squeezed against the chips and cramping how much room they had. */
+  top: 60px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -2648,7 +2656,7 @@ form [aria-invalid="true"] {
   position: absolute;
   top: 12px;
   left: 12px;
-  right: 88px;
+  right: 12px;
   display: flex;
   gap: 8px;
   overflow-x: auto;
@@ -3001,6 +3009,8 @@ form [aria-invalid="true"] {
 
 .activity-filter-row .icon-btn {
   flex-shrink: 0;
+  width: 38px;
+  height: 38px;
 }
 
 .filter-dropdown-wrap {
@@ -3010,7 +3020,9 @@ form [aria-invalid="true"] {
 }
 
 .filter-dropdown-btn {
+  box-sizing: border-box;
   width: 100%;
+  height: 38px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3019,7 +3031,7 @@ form [aria-invalid="true"] {
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: var(--radius);
-  padding: 9px 10px;
+  padding: 0 10px;
   font-size: 0.8rem;
   cursor: pointer;
   white-space: nowrap;
