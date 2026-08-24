@@ -47,6 +47,27 @@ export async function renderDashboard(root, navigate) {
       <div class="progress-bar"><div class="progress-bar-fill" style="width:${totals.total_customers ? Math.round((totals.visited_today / totals.total_customers) * 100) : 0}%"></div></div>
     </div>
 
+    ${
+      state.user.role !== "admin"
+        ? `<div class="card points-card">
+            <div class="points-card-main">
+              <span class="progress-label">${t("points_this_month")}</span>
+              <span class="points-value">${summary.my_points.total_points}</span>
+            </div>
+            <div class="points-breakdown muted">
+              ${summary.my_points.visit_points} ${t("points_from_visits")} · ${summary.my_points.photo_points} ${t("points_from_photos")}
+            </div>
+          </div>`
+        : ""
+    }
+
+    ${
+      summary.points_leaderboard?.length
+        ? `<h2 class="section-title">${t("points_leaderboard")}</h2>
+           <div class="card-list" id="points-leaderboard"></div>`
+        : ""
+    }
+
     <div id="next-visit-slot"></div>
 
     <h2 class="section-title">${t("todays_summary")}</h2>
@@ -87,6 +108,22 @@ export async function renderDashboard(root, navigate) {
   container.querySelector("#qa-plan-route").addEventListener("click", () => navigate("#/map?plan=1"));
   container.querySelector("#qa-reports").addEventListener("click", () => navigate("#/activity"));
   container.querySelector("#qa-add-customer").addEventListener("click", () => navigate("#/map?add=1"));
+
+  const leaderboardEl = container.querySelector("#points-leaderboard");
+  if (leaderboardEl && summary.points_leaderboard?.length) {
+    leaderboardEl.innerHTML = summary.points_leaderboard
+      .slice(0, 5)
+      .map(
+        (p, i) => `
+        <div class="card leaderboard-row">
+          <span class="leaderboard-rank">${i === 0 ? "🏆" : `#${i + 1}`}</span>
+          <span class="leaderboard-name">${escapeHtml(p.user_name)}</span>
+          <span class="leaderboard-points">${p.total_points} ${t("points_short")}</span>
+        </div>
+      `
+      )
+      .join("");
+  }
 
   const activityEl = container.querySelector("#recent-activity");
   const recent = summary.recent_activity.slice(0, 3);

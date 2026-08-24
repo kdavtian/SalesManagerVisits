@@ -39,9 +39,9 @@ async function submitEntry(entry) {
   if (entry.note) form.set("note", entry.note);
   if (entry.brandStatus && Object.keys(entry.brandStatus).length) form.set("brand_status", JSON.stringify(entry.brandStatus));
   if (entry.outcomes?.length) form.set("outcomes", JSON.stringify(entry.outcomes));
-  if (entry.photoDataUrl) {
-    const blob = await (await fetch(entry.photoDataUrl)).blob();
-    form.set("photo", blob, "checkin.jpg");
+  for (const [i, dataUrl] of (entry.photoDataUrls ?? []).entries()) {
+    const blob = await (await fetch(dataUrl)).blob();
+    form.append("photos", blob, `checkin-${i}.jpg`);
   }
   return api.createCheckin(form);
 }

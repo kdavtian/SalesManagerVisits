@@ -214,10 +214,18 @@ export async function renderCustomerDetail(root, navigate, customerId) {
           }
           ${ch.note ? `<p class="checkin-note">${escapeHtml(ch.note)}</p>` : ""}
           ${
-            ch.photo_path
-              ? `<div class="checkin-photo-wrap">
-                  <img class="checkin-photo" src="${api.checkinPhotoUrl(ch.id)}" alt="${t("photo_optional")}" loading="lazy" />
-                  ${isAdmin() ? `<button class="photo-delete-btn" data-checkin-id="${ch.id}" aria-label="${t("delete_photo")}">&times;</button>` : ""}
+            ch.photos?.length
+              ? `<div class="checkin-photo-grid">
+                  ${ch.photos
+                    .map(
+                      (photo) => `
+                    <div class="checkin-photo-wrap">
+                      <img class="checkin-photo" src="${api.checkinPhotoByIdUrl(photo.id)}" alt="${t("photo_optional")}" loading="lazy" />
+                      ${isAdmin() ? `<button class="photo-delete-btn" data-photo-id="${photo.id}" aria-label="${t("delete_photo")}">&times;</button>` : ""}
+                    </div>
+                  `
+                    )
+                    .join("")}
                 </div>`
               : ""
           }
@@ -229,7 +237,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     historyEl.querySelectorAll(".photo-delete-btn").forEach((btn) => {
       btn.addEventListener("click", async () => {
         if (!confirm(t("confirm_delete_photo"))) return;
-        await api.deleteCheckinPhoto(btn.dataset.checkinId);
+        await api.deleteCheckinPhotoById(btn.dataset.photoId);
         renderCustomerDetail(root, navigate, customerId);
       });
     });

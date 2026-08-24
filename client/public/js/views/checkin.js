@@ -105,18 +105,14 @@ export async function renderCheckin(root, navigate, customerId) {
 
       <div class="camera-field">
         <input type="file" name="photo" accept="image/*" capture="environment" id="photo-input" class="visually-hidden" />
+        <div class="photo-thumb-grid" id="photo-thumb-grid"></div>
         <button type="button" class="camera-btn" id="camera-btn" aria-label="${t("take_photo")}">
           <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/>
             <circle cx="12" cy="13" r="3.5"/>
           </svg>
-          <span>${t("take_photo")}</span>
+          <span id="camera-btn-label">${t("take_photo")}</span>
         </button>
-        <div class="photo-preview-wrap" id="photo-preview-wrap" hidden>
-          <img id="photo-preview" alt="${t("photo_optional")}" />
-          <button type="button" class="photo-remove-btn" id="photo-remove-btn" aria-label="${t("remove_photo")}">&times;</button>
-          <button type="button" class="photo-retake-btn" id="photo-retake-btn">${t("retake_photo")}</button>
-        </div>
       </div>
 
       <p class="form-error" id="checkin-error" hidden></p>
@@ -135,14 +131,13 @@ export async function renderCheckin(root, navigate, customerId) {
   const resultEl = container.querySelector("#checkin-result");
   const photoInput = container.querySelector("#photo-input");
   const cameraBtn = container.querySelector("#camera-btn");
-  const previewWrap = container.querySelector("#photo-preview-wrap");
-  const photoPreview = container.querySelector("#photo-preview");
-  const retakeBtn = container.querySelector("#photo-retake-btn");
-  const removePhotoBtn = container.querySelector("#photo-remove-btn");
+  const cameraBtnLabel = container.querySelector("#camera-btn-label");
+  const photoThumbGrid = container.querySelector("#photo-thumb-grid");
   const outcomeError = container.querySelector("#outcome-error");
 
   let position = null;
-  let compressedPhoto = null;
+  let photos = [];
+  const MAX_PHOTOS = 5;
   const brandStatus = Object.fromEntries(BRAND_GROUPS.map((g) => [g.key, []]));
 
   function paintBrandGroupButtons() {
@@ -212,24 +207,38 @@ export async function renderCheckin(root, navigate, customerId) {
     });
   });
 
+  function paintPhotoThumbs() {
+    photoThumbGrid.innerHTML = photos
+      .map(
+        (photo, i) => `
+        <div class="photo-thumb">
+          <img src="${photo.url}" alt="${t("photo_optional")}" />
+          <button type="button" class="photo-remove-btn" data-index="${i}" aria-label="${t("remove_photo")}">&times;</button>
+        </div>
+      `
+      )
+      .join("");
+    photoThumbGrid.querySelectorAll(".photo-remove-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        URL.revokeObjectURL(photos[Number(btn.dataset.index)].url);
+        photos.splice(Number(btn.dataset.index), 1);
+        paintPhotoThumbs();
+      });
+    });
+    cameraBtnLabel.textContent = photos.length ? t("add_another_photo") : t("take_photo");
+    cameraBtn.hidden = photos.length >= MAX_PHOTOS;
+  }
+
   cameraBtn.addEventListener("click", () => photoInput.click());
-  retakeBtn.addEventListener("click", () => photoInput.click());
-  removePhotoBtn.addEventListener("click", () => {
-    compressedPhoto = null;
-    photoInput.value = "";
-    photoPreview.src = "";
-    previewWrap.hidden = true;
-    cameraBtn.hidden = false;
-  });
 
   photoInput.addEventListener("change", async () => {
     const file = photoInput.files[0];
+    photoInput.value = "";
     if (!file) return;
     try {
-      compressedPhoto = await compressImage(file);
-      photoPreview.src = URL.createObjectURL(compressedPhoto);
-      previewWrap.hidden = false;
-      cameraBtn.hidden = true;
+      const compressed = await compressImage(file);
+      photos.push({ blob: compressed, url: URL.createObjectURL(compressed) });
+      paintPhotoThumbs();
     } catch (err) {
       errorEl.textContent = err.message;
       errorEl.hidden = false;
@@ -308,7 +317,7 @@ export async function renderCheckin(root, navigate, customerId) {
     if (note) formData.set("note", note);
     formData.set("outcomes", JSON.stringify(outcomes));
     if (Object.keys(brandStatusPayload).length) formData.set("brand_status", JSON.stringify(brandStatusPayload));
-    if (compressedPhoto) formData.set("photo", compressedPhoto, "checkin.jpg");
+    photos.forEach((photo, i) => formData.append("photos", photo.blob, `checkin-${i}.jpg`));
 
     try {
       const checkin = await api.createCheckin(formData);
@@ -316,9 +325,8 @@ export async function renderCheckin(root, navigate, customerId) {
     } catch (err) {
       if (err instanceof TypeError) {
         // Offline / network failure — queue it instead of losing the visit.
-        let photoDataUrl = null;
-        if (compressedPhoto) photoDataUrl = await blobToDataUrl(compressedPhoto);
-        enqueueCheckin({ customerId, lat, lng, note, brandStatus: brandStatusPayload, outcomes, photoDataUrl });
+        const photoDataUrls = await Promise.all(photos.map((photo) => blobToDataUrl(photo.blob)));
+        enqueueCheckin({ customerId, lat, lng, note, brandStatus: brandStatusPayload, outcomes, photoDataUrls });
         showQueued();
       } else {
         errorEl.textContent = err.message;

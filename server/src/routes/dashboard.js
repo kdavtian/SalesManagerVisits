@@ -61,15 +61,52 @@ dashboardRouter.get("/summary", async (req, res) => {
       )
     : Promise.resolve({ rows: null });
 
-  const [totals, recentActivity, byManager] = await Promise.all([
+  // Points: 1 per customer actually visited that day (repeat visits to the
+  // same customer on the same day don't stack), +1 more if that day's
+  // visit(s) to that customer included a photo. Derived straight from
+  // checkins/checkin_photos rather than a separate ledger, so it can never
+  // drift out of sync with the real visit history.
+  const pointsQuery = pool.query(
+    `WITH daily_visits AS (
+       SELECT ch.user_id, ch.customer_id, date_trunc('day', ch.timestamp) AS visit_day,
+              bool_or(ch.photo_path IS NOT NULL OR EXISTS (SELECT 1 FROM checkin_photos cp WHERE cp.checkin_id = ch.id)) AS has_photo
+       FROM checkins ch
+       WHERE ch.timestamp >= date_trunc('month', now())
+       GROUP BY ch.user_id, ch.customer_id, date_trunc('day', ch.timestamp)
+     )
+     SELECT u.id AS user_id, u.name AS user_name,
+       count(dv.*)::int AS visit_points,
+       count(dv.*) FILTER (WHERE dv.has_photo)::int AS photo_points,
+       (count(dv.*) + count(dv.*) FILTER (WHERE dv.has_photo))::int AS total_points
+     FROM users u
+     LEFT JOIN daily_visits dv ON dv.user_id = u.id
+     WHERE u.role != 'admin'
+     GROUP BY u.id, u.name
+     ORDER BY total_points DESC, u.name`
+  );
+
+  const [totals, recentActivity, byManager, points] = await Promise.all([
     totalsQuery,
     recentActivityQuery,
     byManagerQuery,
+    pointsQuery,
   ]);
+
+  const myPoints = points.rows.find((p) => p.user_id === req.user.id) ?? {
+    total_points: 0,
+    visit_points: 0,
+    photo_points: 0,
+  };
 
   res.json({
     totals: totals.rows[0],
     recent_activity: recentActivity.rows,
     by_manager: byManager.rows,
+    my_points: {
+      total_points: myPoints.total_points,
+      visit_points: myPoints.visit_points,
+      photo_points: myPoints.photo_points,
+    },
+    points_leaderboard: seesAll ? points.rows : null,
   });
 });

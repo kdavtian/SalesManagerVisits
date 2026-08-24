@@ -241,7 +241,11 @@ customersRouter.get("/:id/checkins", async (req, res) => {
   }
 
   const { rows } = await pool.query(
-    `SELECT ch.*, u.name AS user_name
+    `SELECT ch.*, u.name AS user_name,
+       COALESCE(
+         (SELECT json_agg(json_build_object('id', cp.id) ORDER BY cp.id) FROM checkin_photos cp WHERE cp.checkin_id = ch.id),
+         '[]'
+       ) AS photos
      FROM checkins ch
      JOIN users u ON u.id = ch.user_id
      WHERE ch.customer_id = $1 ${userFilter}

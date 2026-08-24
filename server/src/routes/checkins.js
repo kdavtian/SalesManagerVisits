@@ -73,8 +73,10 @@ function parseBrandStatus(raw) {
   return Object.keys(result).length ? result : null;
 }
 
+const MAX_PHOTOS_PER_CHECKIN = 5;
+
 checkinsRouter.post("/", (req, res, next) => {
-  photoUpload.single("photo")(req, res, (err) => {
+  photoUpload.array("photos", MAX_PHOTOS_PER_CHECKIN)(req, res, (err) => {
     if (err) return res.status(400).json({ error: err.message });
     next();
   });
@@ -84,9 +86,10 @@ checkinsRouter.post("/", (req, res, next) => {
   const latNum = Number(lat);
   const lngNum = Number(lng);
   const outcomeValues = parseOutcomes(outcomes);
+  const files = req.files ?? [];
 
   if (!customerId || Number.isNaN(latNum) || Number.isNaN(lngNum) || !outcomeValues.length) {
-    if (req.file) fs.unlink(req.file.path, () => {});
+    files.forEach((f) => fs.unlink(f.path, () => {}));
     return res.status(400).json({ error: "customer_id, lat, lng and at least one outcome are required" });
   }
 
@@ -96,30 +99,42 @@ checkinsRouter.post("/", (req, res, next) => {
   );
   const customer = customerRows[0];
   if (!customer) {
-    if (req.file) fs.unlink(req.file.path, () => {});
+    files.forEach((f) => fs.unlink(f.path, () => {}));
     return res.status(404).json({ error: "Customer not found" });
   }
 
   const radiusMeters = await getCheckinRadiusMeters();
   const distance = haversineMeters(latNum, lngNum, customer.lat, customer.lng);
   const withinRange = distance <= radiusMeters;
-  const photoPath = req.file ? req.file.filename : null;
   const brandStatusValue = parseBrandStatus(brand_status);
 
-  let rows;
+  const client = await pool.connect();
+  let checkin;
   try {
-    ({ rows } = await pool.query(
-      `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, note, photo_path, brand_status, outcomes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, note, brand_status, outcomes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
-      [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, photoPath, brandStatusValue, outcomeValues]
-    ));
+      [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, brandStatusValue, outcomeValues]
+    );
+    checkin = rows[0];
+    for (const file of files) {
+      await client.query("INSERT INTO checkin_photos (checkin_id, photo_path) VALUES ($1, $2)", [
+        checkin.id,
+        file.filename,
+      ]);
+    }
+    await client.query("COMMIT");
   } catch (err) {
-    if (req.file) fs.unlink(req.file.path, () => {});
+    await client.query("ROLLBACK");
+    files.forEach((f) => fs.unlink(f.path, () => {}));
     throw err;
+  } finally {
+    client.release();
   }
 
-  res.status(201).json(rows[0]);
+  res.status(201).json({ ...checkin, photo_count: files.length });
 });
 
 function isValidDateString(value) {
@@ -167,7 +182,11 @@ checkinsRouter.get("/", async (req, res) => {
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const { rows } = await pool.query(
-    `SELECT ch.*, u.name AS user_name, c.name AS customer_name
+    `SELECT ch.*, u.name AS user_name, c.name AS customer_name,
+       COALESCE(
+         (SELECT json_agg(json_build_object('id', cp.id) ORDER BY cp.id) FROM checkin_photos cp WHERE cp.checkin_id = ch.id),
+         '[]'
+       ) AS photos
      FROM checkins ch
      JOIN users u ON u.id = ch.user_id
      JOIN customers c ON c.id = ch.customer_id
@@ -178,6 +197,9 @@ checkinsRouter.get("/", async (req, res) => {
   res.json(rows);
 });
 
+// Legacy single-photo endpoint -- still works for check-ins recorded before
+// the multi-photo table existed (backfilled into checkin_photos, but this
+// keeps old client caches / bookmarked URLs working).
 checkinsRouter.get("/:id/photo", async (req, res) => {
   const { rows } = await pool.query("SELECT user_id, photo_path FROM checkins WHERE id = $1", [
     req.params.id,
@@ -206,5 +228,35 @@ checkinsRouter.delete("/:id/photo", requireAdmin, async (req, res) => {
 
   fs.unlink(path.join(uploadDirPath, checkin.photo_path), () => {});
   await pool.query("UPDATE checkins SET photo_path = NULL WHERE id = $1", [req.params.id]);
+  res.status(204).end();
+});
+
+checkinsRouter.get("/photos/:photoId", async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT cp.photo_path, ch.user_id
+     FROM checkin_photos cp
+     JOIN checkins ch ON ch.id = cp.checkin_id
+     WHERE cp.id = $1`,
+    [req.params.photoId]
+  );
+  const photo = rows[0];
+  if (!photo) return res.status(404).json({ error: "Photo not found" });
+  if (!seesAllActivity(req.user.role) && photo.user_id !== req.user.id) {
+    return res.status(403).json({ error: "Not allowed" });
+  }
+
+  res.sendFile(path.join(uploadDirPath, photo.photo_path), (err) => {
+    if (err && !res.headersSent) res.status(404).json({ error: "Photo not found" });
+  });
+});
+
+checkinsRouter.delete("/photos/:photoId", requireAdmin, async (req, res) => {
+  const { rows } = await pool.query("DELETE FROM checkin_photos WHERE id = $1 RETURNING photo_path", [
+    req.params.photoId,
+  ]);
+  const photo = rows[0];
+  if (!photo) return res.status(404).json({ error: "Photo not found" });
+
+  fs.unlink(path.join(uploadDirPath, photo.photo_path), () => {});
   res.status(204).end();
 });

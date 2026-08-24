@@ -45,8 +45,8 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/checkins${qs ? `?${qs}` : ""}`);
   },
-  checkinPhotoUrl: (id) => `/api/checkins/${id}/photo`,
-  deleteCheckinPhoto: (id) => request(`/checkins/${id}/photo`, { method: "DELETE" }),
+  checkinPhotoByIdUrl: (photoId) => `/api/checkins/photos/${photoId}`,
+  deleteCheckinPhotoById: (photoId) => request(`/checkins/photos/${photoId}`, { method: "DELETE" }),
 
   dashboardSummary: () => request("/dashboard/summary"),
 
