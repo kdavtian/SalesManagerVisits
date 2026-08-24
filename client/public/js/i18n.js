@@ -7,6 +7,7 @@ const dict = {
     nav_customers: "Customers",
     nav_activity: "Activity",
     nav_settings: "Settings",
+    loading: "Loading…",
 
     greeting_morning: "Good morning",
     greeting_afternoon: "Good afternoon",
@@ -277,6 +278,7 @@ const dict = {
     nav_customers: "Հաճախորդներ",
     nav_activity: "Ակտիվություն",
     nav_settings: "Կարգավորումներ",
+    loading: "Բեռնվում է…",
 
     greeting_morning: "Բարի լույս",
     greeting_afternoon: "Բարի օր",

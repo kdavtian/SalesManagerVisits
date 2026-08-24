@@ -35,6 +35,7 @@ new MutationObserver((mutations) => {
 }).observe(document.body, { childList: true, subtree: true });
 
 let currentCleanup = null;
+let currentPath = null;
 
 function navigate(hash) {
   if (location.hash === hash) {
@@ -69,6 +70,10 @@ async function render() {
 
   const hash = location.hash || "#/dashboard";
   const [path, queryString] = hash.split("?");
+  if (path !== currentPath) {
+    currentPath = path;
+    requestAnimationFrame(() => app.focus({ preventScroll: true }));
+  }
   const query = new URLSearchParams(queryString || "");
   const customerMatch = path.match(/^#\/customers\/(\d+)$/);
   const customerOrdersMatch = path.match(/^#\/customers\/(\d+)\/orders$/);

@@ -25,7 +25,7 @@ const OUTCOME_OPTIONS = [
 ];
 
 export async function renderCheckin(root, navigate, customerId) {
-  root.innerHTML = `<div class="checkin-view"><p class="muted">…</p></div>`;
+  root.innerHTML = `<div class="checkin-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".checkin-view");
 
   let customer, settings;

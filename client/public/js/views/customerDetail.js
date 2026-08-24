@@ -36,7 +36,7 @@ const EDIT_FIELDS = [
 ];
 
 export async function renderCustomerDetail(root, navigate, customerId) {
-  root.innerHTML = `<div class="detail-view"><p class="muted">…</p></div>`;
+  root.innerHTML = `<div class="detail-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".detail-view");
 
   let customer, checkins, pendingRequests, erpOrders;
@@ -172,7 +172,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
 
   const historyEl = container.querySelector("#checkin-history");
   if (!checkins.length) {
-    historyEl.innerHTML = `<p class="muted">${t("no_visits_yet")}</p>`;
+    historyEl.innerHTML = `<p class="empty-state">${t("no_visits_yet")}</p>`;
   } else {
     historyEl.innerHTML = checkins
       .map(
@@ -279,7 +279,7 @@ function groupLinesByBrand(lines) {
 export async function openOrderDetailSheet(customerId, orderId) {
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
-  overlay.innerHTML = `<div class="sheet"><p class="muted">…</p></div>`;
+  overlay.innerHTML = `<div class="sheet"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   document.body.appendChild(overlay);
   activateDialog(overlay);
   overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());

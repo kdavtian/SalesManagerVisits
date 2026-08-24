@@ -42,7 +42,7 @@ function formatActivityDate(iso) {
 }
 
 export async function renderActivity(root, navigate) {
-  root.innerHTML = `<div class="activity-view"><p class="muted">…</p></div>`;
+  root.innerHTML = `<div class="activity-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".activity-view");
 
   const canFilterByManager = seesAllActivity();
@@ -296,7 +296,7 @@ export async function renderActivity(root, navigate) {
     countEl.textContent = `${filtered.length} ${t("visits_count")}`;
 
     if (!filtered.length) {
-      listEl.innerHTML = `<p class="muted">${t("no_activity_found")}</p>`;
+      listEl.innerHTML = `<p class="empty-state">${t("no_activity_found")}</p>`;
       loadMoreBtn.hidden = true;
       return;
     }

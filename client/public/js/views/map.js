@@ -471,7 +471,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         <h2>${t("plan_day")}</h2>
         <p class="muted">${t("plan_day_hint")}</p>
         <p class="badge badge-neutral" id="plan-status-badge"></p>
-        <div class="plan-day-list" id="plan-day-list"><p class="muted">…</p></div>
+        <div class="plan-day-list" id="plan-day-list"><p class="loading-state" role="status">${t("loading")}</p></div>
         <p class="form-error" id="plan-day-error" hidden></p>
         <div class="sheet-actions">
           <button type="button" class="btn" id="cancel-plan-day">${t("cancel")}</button>

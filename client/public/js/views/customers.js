@@ -142,7 +142,7 @@ export function renderCustomers(root, navigate, initialFilter) {
     customers = sortCustomers(customers);
 
     if (!customers.length) {
-      listEl.innerHTML = `<p class="muted">${t("no_customers_found")}</p>`;
+      listEl.innerHTML = `<p class="empty-state">${t("no_customers_found")}</p>`;
       return;
     }
 
@@ -191,7 +191,7 @@ export function renderCustomers(root, navigate, initialFilter) {
   }
 
   async function load() {
-    listEl.innerHTML = `<p class="muted">…</p>`;
+    listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     allCustomers = await api.listCustomers();
     render();
   }

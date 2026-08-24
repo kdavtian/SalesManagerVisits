@@ -13,7 +13,7 @@ const ROLE_BADGE = {
 
 export async function renderTeamSection(container) {
   container.innerHTML = `
-    <div id="user-list" class="card-list"><p class="muted">…</p></div>
+    <div id="user-list" class="card-list"><p class="loading-state" role="status">${t("loading")}</p></div>
 
     <form id="new-user-form">
       <label>${t("name")}<input name="name" required /></label>
@@ -149,7 +149,7 @@ export async function renderTeamSection(container) {
 }
 
 export async function renderPlanApprovalsSection(container) {
-  container.innerHTML = `<div id="plan-approvals-section"><p class="muted">…</p></div>`;
+  container.innerHTML = `<div id="plan-approvals-section"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const section = container.querySelector("#plan-approvals-section");
 
   async function load() {

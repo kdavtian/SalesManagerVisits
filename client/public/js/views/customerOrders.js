@@ -8,7 +8,7 @@ function formatAmd(value) {
 }
 
 export async function renderCustomerOrders(root, navigate, customerId) {
-  root.innerHTML = `<div class="detail-view"><p class="muted">…</p></div>`;
+  root.innerHTML = `<div class="detail-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".detail-view");
 
   let customer, orders;
@@ -38,7 +38,7 @@ export async function renderCustomerOrders(root, navigate, customerId) {
 
   const listEl = container.querySelector("#orders-list");
   if (!orders.length) {
-    listEl.innerHTML = `<p class="muted">${t("no_orders_found")}</p>`;
+    listEl.innerHTML = `<p class="empty-state">${t("no_orders_found")}</p>`;
   } else {
     listEl.innerHTML = `
       <div class="card erp-card">

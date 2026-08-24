@@ -12,7 +12,7 @@ function greeting() {
 }
 
 export async function renderDashboard(root, navigate) {
-  root.innerHTML = `<div class="dashboard-view"><p class="muted">…</p></div>`;
+  root.innerHTML = `<div class="dashboard-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".dashboard-view");
 
   let summary, customers;
@@ -91,7 +91,7 @@ export async function renderDashboard(root, navigate) {
   const activityEl = container.querySelector("#recent-activity");
   const recent = summary.recent_activity.slice(0, 3);
   if (!recent.length) {
-    activityEl.innerHTML = `<p class="muted">${t("no_checkins_yet")}</p>`;
+    activityEl.innerHTML = `<p class="empty-state">${t("no_checkins_yet")}</p>`;
   } else {
     activityEl.innerHTML = recent
       .map(
