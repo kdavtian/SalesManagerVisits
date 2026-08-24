@@ -258,8 +258,12 @@ export async function renderProductsSection(container) {
             <span class="badge ${p.active ? "badge-success" : "badge-neutral"}">${formatAmd(Number(p.unit_price_amd))}</span>
           </div>
           <div class="user-row-meta">
-            <span class="muted">${p.active ? t("active") : t("inactive")}</span>
+            <span class="muted">
+              ${p.active ? t("active") : t("inactive")}
+              ${p.erp_product_id ? (p.manually_edited_at ? ` · ${t("catalog_manual")}` : ` · ${t("catalog_synced")}`) : ""}
+            </span>
             <span class="user-row-actions">
+              ${p.erp_product_id && p.manually_edited_at ? `<button class="btn-link" data-action="resync" data-id="${p.id}">${t("catalog_resync")}</button>` : ""}
               <button class="btn-link" data-action="edit" data-id="${p.id}">${t("edit")}</button>
               <button class="btn-link btn-link-danger" data-action="delete" data-id="${p.id}" data-name="${escapeHtml(p.name)}">${t("delete")}</button>
             </span>
@@ -278,6 +282,12 @@ export async function renderProductsSection(container) {
       btn.addEventListener("click", async () => {
         if (!confirm(`${t("confirm_delete_product")} ${btn.dataset.name}?`)) return;
         await api.deleteProduct(btn.dataset.id);
+        loadProducts();
+      });
+    });
+    listEl.querySelectorAll('[data-action="resync"]').forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        await api.resyncProduct(btn.dataset.id);
         loadProducts();
       });
     });

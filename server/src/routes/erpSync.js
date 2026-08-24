@@ -47,7 +47,7 @@ function isPlainObject(value) {
 // merged row by row) so a customer that drops out of the extract -- debt
 // fully paid, no recent orders -- doesn't keep showing stale data forever.
 erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
-  const { customers, order_lines, sales_performance } = req.body ?? {};
+  const { customers, order_lines, sales_performance, products } = req.body ?? {};
   if (!Array.isArray(customers)) {
     return res.status(400).json({ error: "customers must be an array" });
   }
@@ -56,6 +56,9 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
   }
   if (sales_performance !== undefined && !Array.isArray(sales_performance)) {
     return res.status(400).json({ error: "sales_performance must be an array" });
+  }
+  if (products !== undefined && !Array.isArray(products)) {
+    return res.status(400).json({ error: "products must be an array" });
   }
 
   const erpIds = [];
@@ -130,6 +133,21 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     }
   }
 
+  const prodErpIds = [];
+  const prodNames = [];
+  const prodBrands = [];
+  const prodUnits = [];
+  const prodPrices = [];
+
+  for (const p of Array.isArray(products) ? products : []) {
+    if (!isPlainObject(p) || !p.erp_product_id || !p.name || !Number.isFinite(p.unit_price_amd)) continue;
+    prodErpIds.push(String(p.erp_product_id));
+    prodNames.push(String(p.name));
+    prodBrands.push(p.brand != null ? String(p.brand) : null);
+    prodUnits.push(p.unit != null ? String(p.unit) : null);
+    prodPrices.push(p.unit_price_amd);
+  }
+
   const client = await pool.connect();
   let releaseErr;
   try {
@@ -193,6 +211,25 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
         );
       }
     }
+    // Upsert-only, never TRUNCATE: unlike the other tables above, products
+    // can also be created directly in the app (no erp_product_id), and a
+    // manual price/name correction here must survive later syncs -- so a
+    // row an admin has touched since its last sync is skipped, not
+    // overwritten out from under them.
+    if (prodErpIds.length) {
+      await client.query(
+        `INSERT INTO products (erp_product_id, name, brand, unit, unit_price_amd, synced_at)
+         SELECT erp_product_id, name, brand, unit, unit_price_amd, now()
+         FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::numeric[])
+           AS t(erp_product_id, name, brand, unit, unit_price_amd)
+         ON CONFLICT (erp_product_id) DO UPDATE SET
+           name = EXCLUDED.name, brand = EXCLUDED.brand, unit = EXCLUDED.unit,
+           unit_price_amd = EXCLUDED.unit_price_amd, synced_at = now(), updated_at = now()
+         WHERE products.manually_edited_at IS NULL`,
+        [prodErpIds, prodNames, prodBrands, prodUnits, prodPrices]
+      );
+    }
+
     await client.query("COMMIT");
   } catch (err) {
     releaseErr = err;
@@ -206,6 +243,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     synced: erpIds.length,
     order_lines_synced: order_lines !== undefined ? lineErpIds.length : undefined,
     sales_performance_synced: sales_performance !== undefined ? perfRepNames.length : undefined,
+    products_synced: products !== undefined ? prodErpIds.length : undefined,
   });
 });
 

@@ -111,6 +111,7 @@ export const api = {
   createProduct: (data) => json("/products", "POST", data),
   updateProduct: (id, data) => json(`/products/${id}`, "PATCH", data),
   deleteProduct: (id) => request(`/products/${id}`, { method: "DELETE" }),
+  resyncProduct: (id) => request(`/products/${id}/resync`, { method: "POST" }),
 
   createOrder: (data) => json("/orders", "POST", data),
   listOrders: (params = {}) => {
