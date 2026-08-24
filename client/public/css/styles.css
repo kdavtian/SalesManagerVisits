@@ -3504,3 +3504,10 @@ form [aria-invalid="true"] {
   font-size: 1.1rem;
   color: var(--text);
 }
+
+.order-status-filter-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0 8px;
+}

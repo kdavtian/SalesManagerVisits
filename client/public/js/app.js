@@ -8,6 +8,7 @@ import { renderCustomers } from "./views/customers.js";
 import { renderCustomerDetail } from "./views/customerDetail.js";
 import { renderCustomerOrders } from "./views/customerOrders.js";
 import { renderOrderCreate } from "./views/orderCreate.js";
+import { renderOrders } from "./views/orders.js";
 import { renderCheckin } from "./views/checkin.js";
 import { renderDashboard } from "./views/dashboard.js";
 import { renderActivity } from "./views/activity.js";
@@ -94,6 +95,8 @@ async function render() {
     renderCustomerOrders(app, navigate, customerOrdersMatch[1]);
   } else if (orderCreateMatch) {
     renderOrderCreate(app, navigate, orderCreateMatch[1], query.get("checkin"));
+  } else if (path === "#/orders") {
+    renderOrders(app, navigate);
   } else if (customerMatch) {
     renderCustomerDetail(app, navigate, customerMatch[1]);
   } else if (checkinMatch) {
@@ -122,6 +125,7 @@ function renderNav() {
     { hash: "#/activity", label: t("nav_activity"), icon: icons.activity },
     { hash: "#/map", label: t("nav_map"), icon: icons.map, center: true },
     { hash: "#/customers", label: t("nav_customers"), icon: icons.customers },
+    { hash: "#/orders", label: t("nav_orders"), icon: icons.cart },
     { hash: "#/settings", label: t("nav_settings"), icon: icons.settings },
   ];
 

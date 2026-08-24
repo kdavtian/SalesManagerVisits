@@ -119,4 +119,6 @@ export const api = {
     return request(`/orders${qs ? `?${qs}` : ""}`);
   },
   getOrder: (id) => request(`/orders/${id}`),
+  updateOrderItems: (id, items) => json(`/orders/${id}`, "PATCH", { items }),
+  updateOrderStatus: (id, status) => json(`/orders/${id}`, "PATCH", { status }),
 };
