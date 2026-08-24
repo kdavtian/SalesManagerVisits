@@ -87,6 +87,12 @@ export async function renderCheckin(root, navigate, customerId) {
         <p class="form-error" id="outcome-error" hidden>${t("select_outcome_required")}</p>
       </label>
 
+      <label id="amount-collected-field" hidden>
+        ${t("amount_collected_amd")}
+        <input type="number" name="amount_collected_amd" id="amount-collected-input" min="1" step="1" inputmode="numeric" placeholder="${t("amount_collected_placeholder")}" />
+        <p class="form-error" id="amount-collected-error" hidden>${t("amount_collected_required")}</p>
+      </label>
+
       <label class="brands-label">
         ${t("products_found")}
         <div class="brand-group-grid" id="brand-group-grid">
@@ -201,10 +207,27 @@ export async function renderCheckin(root, navigate, customerId) {
     });
   });
 
+  const amountField = container.querySelector("#amount-collected-field");
+  const amountInput = container.querySelector("#amount-collected-input");
+  const amountError = container.querySelector("#amount-collected-error");
+
+  function syncAmountFieldVisibility() {
+    const collected = container.querySelector('input[name="outcomes"][value="payment_collected"]').checked;
+    amountField.hidden = !collected;
+    if (!collected) {
+      amountInput.value = "";
+      amountError.hidden = true;
+    }
+  }
+
   container.querySelectorAll('input[name="outcomes"]').forEach((input) => {
     input.addEventListener("change", () => {
       outcomeError.hidden = true;
+      syncAmountFieldVisibility();
     });
+  });
+  amountInput.addEventListener("input", () => {
+    amountError.hidden = true;
   });
 
   function paintPhotoThumbs() {
@@ -301,6 +324,13 @@ export async function renderCheckin(root, navigate, customerId) {
       return;
     }
 
+    const amountCollected = outcomes.includes("payment_collected") ? Number(data.get("amount_collected_amd")) : null;
+    if (outcomes.includes("payment_collected") && (!Number.isFinite(amountCollected) || amountCollected <= 0)) {
+      amountError.hidden = false;
+      amountError.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
     errorEl.hidden = true;
     submitBtn.disabled = true;
     submitBtn.textContent = t("submitting");
@@ -316,6 +346,7 @@ export async function renderCheckin(root, navigate, customerId) {
     formData.set("lng", lng);
     if (note) formData.set("note", note);
     formData.set("outcomes", JSON.stringify(outcomes));
+    if (amountCollected != null) formData.set("amount_collected_amd", amountCollected);
     if (Object.keys(brandStatusPayload).length) formData.set("brand_status", JSON.stringify(brandStatusPayload));
     photos.forEach((photo, i) => formData.append("photos", photo.blob, `checkin-${i}.jpg`));
 
@@ -326,7 +357,7 @@ export async function renderCheckin(root, navigate, customerId) {
       if (err instanceof TypeError) {
         // Offline / network failure — queue it instead of losing the visit.
         const photoDataUrls = await Promise.all(photos.map((photo) => blobToDataUrl(photo.blob)));
-        enqueueCheckin({ customerId, lat, lng, note, brandStatus: brandStatusPayload, outcomes, photoDataUrls });
+        enqueueCheckin({ customerId, lat, lng, note, brandStatus: brandStatusPayload, outcomes, amountCollected, photoDataUrls });
         showQueued();
       } else {
         errorEl.textContent = err.message;

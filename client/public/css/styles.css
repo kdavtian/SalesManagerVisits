@@ -1978,6 +1978,12 @@ form [aria-invalid="true"] {
   color: var(--danger);
 }
 
+.detail-stat-sublabel {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  margin-top: -2px;
+}
+
 .erp-order-row {
   display: grid;
   grid-template-columns: 88px 1fr auto;

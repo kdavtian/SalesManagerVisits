@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatDistance } from "../util.js";
+import { escapeHtml, formatDistance, formatAmd } from "../util.js";
 import { t } from "../i18n.js";
 import { seesAllActivity } from "../state.js";
 
@@ -339,6 +339,7 @@ export async function renderActivity(root, navigate) {
             <div class="activity-row-bottom">
               <span class="badge ${meta.badge}">${meta.label}</span>
               ${outcomeLabel ? `<span class="muted">${escapeHtml(outcomeLabel)}</span>` : ""}
+              ${c.amount_collected_amd != null ? `<span class="badge badge-success">${formatAmd(Number(c.amount_collected_amd))}</span>` : ""}
             </div>
           </div>
           <span class="chevron">&#8250;</span>

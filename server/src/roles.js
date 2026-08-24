@@ -5,6 +5,7 @@ export const ROLES = [
   "sales_manager",
   "warehouse_manager",
   "delivery_manager",
+  "accountant",
 ];
 
 // Field reps (sales managers) only see their own data; every other role

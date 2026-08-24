@@ -121,14 +121,29 @@ customersRouter.get("/:id", async (req, res) => {
        erp.days_since_payment AS erp_days_since_payment,
        erp.aging_bucket AS erp_aging_bucket,
        erp.recent_orders AS erp_recent_orders,
-       erp.synced_at AS erp_synced_at
+       erp.synced_at AS erp_synced_at,
+       (SELECT COALESCE(SUM(ch.amount_collected_amd), 0)
+          FROM checkins ch
+          WHERE ch.customer_id = c.id
+            AND ch.amount_collected_amd IS NOT NULL
+            AND (erp.synced_at IS NULL OR ch.timestamp > erp.synced_at)
+       ) AS collected_since_sync_amd
      FROM customers c
      LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
      WHERE c.id = $1`,
     [req.params.id]
   );
-  if (!rows[0]) return res.status(404).json({ error: "Customer not found" });
-  res.json(rows[0]);
+  const customer = rows[0];
+  if (!customer) return res.status(404).json({ error: "Customer not found" });
+
+  // Estimated, not authoritative: the real debt figure only ever comes from
+  // the next ERP sync. This just reflects payments the app already knows
+  // about that the last sync predates, so the number on screen isn't stale
+  // between syncs.
+  if (customer.erp_debt_amd != null) {
+    customer.estimated_debt_amd = Math.max(0, Number(customer.erp_debt_amd) - Number(customer.collected_since_sync_amd));
+  }
+  res.json(customer);
 });
 
 export const EDITABLE_FIELDS = ["name", "category", "phone", "address", "notes", "lat", "lng", "visit_frequency_days", "erp_customer_id", "tin", "region", "subregion"];

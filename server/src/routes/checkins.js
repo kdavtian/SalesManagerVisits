@@ -81,7 +81,7 @@ checkinsRouter.post("/", (req, res, next) => {
     next();
   });
 }, async (req, res) => {
-  const { customer_id, lat, lng, note, brand_status, outcomes } = req.body ?? {};
+  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd } = req.body ?? {};
   const customerId = Number(customer_id);
   const latNum = Number(lat);
   const lngNum = Number(lng);
@@ -91,6 +91,18 @@ checkinsRouter.post("/", (req, res, next) => {
   if (!customerId || Number.isNaN(latNum) || Number.isNaN(lngNum) || !outcomeValues.length) {
     files.forEach((f) => fs.unlink(f.path, () => {}));
     return res.status(400).json({ error: "customer_id, lat, lng and at least one outcome are required" });
+  }
+
+  // Only meaningful (and required) when the rep actually flagged this visit
+  // as a collection -- an amount on a visit with no such outcome would be
+  // an orphaned, unexplainable number in the accountant's payment list.
+  let amountCollected = null;
+  if (outcomeValues.includes("payment_collected")) {
+    amountCollected = Number(amount_collected_amd);
+    if (!Number.isFinite(amountCollected) || amountCollected <= 0) {
+      files.forEach((f) => fs.unlink(f.path, () => {}));
+      return res.status(400).json({ error: "amount_collected_amd must be a positive number when payment_collected is selected" });
+    }
   }
 
   const { rows: customerRows } = await pool.query(
@@ -113,10 +125,10 @@ checkinsRouter.post("/", (req, res, next) => {
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
-      `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, note, brand_status, outcomes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, note, brand_status, outcomes, amount_collected_amd)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
-      [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, brandStatusValue, outcomeValues]
+      [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, brandStatusValue, outcomeValues, amountCollected]
     );
     checkin = rows[0];
     for (const file of files) {
@@ -142,7 +154,7 @@ function isValidDateString(value) {
 }
 
 checkinsRouter.get("/", async (req, res) => {
-  const { range, customer_id, from, to } = req.query;
+  const { range, customer_id, from, to, payments_only } = req.query;
   let { user_id } = req.query;
 
   // Plain managers only see their own check-ins; admins and every
@@ -178,6 +190,9 @@ checkinsRouter.get("/", async (req, res) => {
   if (customer_id) {
     params.push(customer_id);
     conditions.push(`ch.customer_id = $${params.length}`);
+  }
+  if (payments_only === "true") {
+    conditions.push(`ch.amount_collected_amd IS NOT NULL`);
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";

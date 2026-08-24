@@ -16,6 +16,7 @@ const ROLE_BADGE = {
   sales_director: { key: "role_sales_director", cls: "badge-info" },
   warehouse_manager: { key: "role_warehouse_manager", cls: "badge-info" },
   delivery_manager: { key: "role_delivery_manager", cls: "badge-info" },
+  accountant: { key: "role_accountant", cls: "badge-info" },
 };
 
 export async function renderTeamSection(container) {
@@ -122,6 +123,7 @@ export async function renderTeamSection(container) {
               <option value="sales_director">${t("role_sales_director")}</option>
               <option value="warehouse_manager">${t("role_warehouse_manager")}</option>
               <option value="delivery_manager">${t("role_delivery_manager")}</option>
+              <option value="accountant">${t("role_accountant")}</option>
               <option value="ceo">${t("role_ceo")}</option>
               <option value="admin">${t("role_admin")}</option>
             </select>

@@ -248,6 +248,8 @@ function renderErpCard(customer, erpOrders) {
   if (!customer.erp_synced_at) return "";
 
   const debt = Number(customer.erp_debt_amd) || 0;
+  const collectedSinceSync = Number(customer.collected_since_sync_amd) || 0;
+  const estimatedDebt = customer.estimated_debt_amd != null ? Number(customer.estimated_debt_amd) : null;
   const agingClass = AGING_BADGE[customer.erp_aging_bucket] || "badge-neutral";
   const isDataError = customer.erp_aging_bucket === "Data error - review";
   const orders = Array.isArray(erpOrders) ? erpOrders : [];
@@ -275,6 +277,11 @@ function renderErpCard(customer, erpOrders) {
         <span class="detail-stat-icon">${icons.payment}</span>
         <span class="detail-stat-value">${isDataError ? t("erp_debt_unknown") : formatAmd(debt)}</span>
         <span class="detail-stat-label">${t("outstanding_debt")}</span>
+        ${
+          !isDataError && collectedSinceSync > 0
+            ? `<span class="detail-stat-sublabel">${t("estimated_remaining")}: ${formatAmd(estimatedDebt)}</span>`
+            : ""
+        }
       </div>
       <div class="detail-stat-tile">
         <span class="detail-stat-icon">${icons.box}</span>
