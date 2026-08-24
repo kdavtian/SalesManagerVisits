@@ -194,6 +194,13 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
 
   let activeFilter = "";
   let lastCustomers = [];
+  let resolveCustomersReady;
+  // Lets anything that needs the full customer list (like the plan sheet)
+  // wait for the initial load instead of racing it -- lastCustomers is
+  // still [] for a beat after the map view mounts.
+  const customersReady = new Promise((resolve) => {
+    resolveCustomersReady = resolve;
+  });
   let myLocation = null;
   let plannedCustomerIds = null;
   let routeLine = null;
@@ -408,6 +415,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     } catch {
       plan = null;
     }
+    await customersReady;
     plannedCustomerIds = plan?.status === "approved" ? plan.customer_ids : [];
     applyFilter();
   }
@@ -486,6 +494,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       bounds.push([c.lat, c.lng]);
     }
 
+    resolveCustomersReady();
     applyFilter();
 
     if (!bounds.length && navigator.geolocation) {
@@ -630,6 +639,11 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     }
     overlay.querySelector("#cancel-plan-day").addEventListener("click", close);
     overlay.addEventListener("click", (e) => e.target === overlay && close());
+
+    // The customer checklist below reads lastCustomers, which is still
+    // empty for a beat after the map view mounts -- wait for it so the
+    // list isn't rendered permanently blank.
+    await customersReady;
 
     const bodyEl = overlay.querySelector("#plan-body");
     const errorEl = overlay.querySelector("#plan-day-error");

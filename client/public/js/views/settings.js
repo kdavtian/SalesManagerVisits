@@ -1,7 +1,7 @@
 import { api } from "../api.js";
 import { t, getLang, setLang } from "../i18n.js";
 import { getTheme, setTheme } from "../theme.js";
-import { state, isAdmin } from "../state.js";
+import { state, isAdmin, canPlanForOthers } from "../state.js";
 import { renderTeamSection, renderPlanApprovalsSection } from "./admin.js";
 import { escapeHtml, compressImage, activateDialog } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
@@ -55,6 +55,10 @@ function formatStorageMb(bytes) {
 
 export async function renderSettings(root, onLogout, onLanguageChange) {
   const admin = isAdmin();
+  // A director/CEO can plan for their reps, so they also need to be able to
+  // approve those reps' self-authored plans -- not just a superadmin
+  // account. Kept separate from the strict admin-only section below.
+  const canApprovePlans = canPlanForOthers(state.user.role);
 
   root.innerHTML = `
     <div class="settings-view">
@@ -120,11 +124,17 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
           </form>
         </div>
 
-        <h2 class="section-title">${t("plan_approvals")}</h2>
-        <div id="plan-approvals-slot"></div>
-
         <h2 class="section-title">${t("team")}</h2>
         <div id="team-section"></div>
+      `
+          : ""
+      }
+
+      ${
+        canApprovePlans
+          ? `
+        <h2 class="section-title">${t("plan_approvals")}</h2>
+        <div id="plan-approvals-slot"></div>
       `
           : ""
       }
@@ -266,8 +276,11 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       }
     });
 
-    renderPlanApprovalsSection(root.querySelector("#plan-approvals-slot"));
     renderTeamSection(root.querySelector("#team-section"));
+  }
+
+  if (canApprovePlans) {
+    renderPlanApprovalsSection(root.querySelector("#plan-approvals-slot"));
   }
 
   // --- Security ---

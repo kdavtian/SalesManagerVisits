@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
-import { requireAuth, requireAdmin } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
 import { canPlanForOthers } from "../roles.js";
 
 export const visitPlansRouter = Router();
@@ -169,8 +169,15 @@ visitPlansRouter.put("/rules/:dayOfWeek", async (req, res) => {
   res.status(201).json(rows[0]);
 });
 
-// Review queue -- admin only.
-visitPlansRouter.get("/pending", requireAdmin, async (req, res) => {
+// Review queue -- any role that can plan for others (admin, sales_director,
+// ceo), not just admin: a director needs to be able to approve their own
+// reps' self-authored plans without waiting on a superadmin account.
+function requireCanPlanForOthers(req, res, next) {
+  if (!canPlanForOthers(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  next();
+}
+
+visitPlansRouter.get("/pending", requireCanPlanForOthers, async (req, res) => {
   const { rows } = await pool.query(
     `SELECT vp.*, u.name AS user_name
      FROM visit_plans vp
@@ -194,9 +201,9 @@ visitPlansRouter.get("/pending", requireAdmin, async (req, res) => {
   );
 });
 
-// Approve/reject a pending plan, or (admin only) directly edit and
-// auto-approve an existing one -- "admin can change it later".
-visitPlansRouter.patch("/:id", requireAdmin, async (req, res) => {
+// Approve/reject a pending plan, or (admin/director/ceo only) directly edit
+// and auto-approve an existing one -- "the reviewer can change it later".
+visitPlansRouter.patch("/:id", requireCanPlanForOthers, async (req, res) => {
   const { action, customer_ids } = req.body ?? {};
   if (action === undefined && customer_ids === undefined) {
     return res.status(400).json({ error: "action or customer_ids is required" });
