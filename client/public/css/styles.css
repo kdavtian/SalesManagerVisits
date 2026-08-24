@@ -235,6 +235,16 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 26px;
+  height: 26px;
+}
+
+.nav-svg {
+  display: block;
+  width: 24px;
+  height: 24px;
+  overflow: visible;
+  shape-rendering: geometricPrecision;
 }
 
 .nav-item-active {
