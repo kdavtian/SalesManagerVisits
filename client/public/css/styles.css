@@ -308,12 +308,22 @@ a {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 3px;
   height: 48px;
   padding: 0 2px;
   font-size: 0.7rem;
   font-weight: 500;
   cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+/* Without this, the label's line-box carries its font's normal descender
+   space below the glyphs -- invisible but real height that pushes the
+   icon+label pair's optical center above the button's true geometric
+   center, reading as "sitting too high" even though justify-content is
+   already centering the flex box correctly. */
+.nav-item > span:last-child {
+  line-height: 1;
 }
 
 :lang(hy) .nav-item,
@@ -326,8 +336,8 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
 }
 
 .nav-svg {
@@ -384,6 +394,7 @@ a {
 .nav-item-center-label {
   font-size: 0.7rem;
   font-weight: 600;
+  line-height: 1;
   color: var(--accent);
   margin-top: 1px;
 }
