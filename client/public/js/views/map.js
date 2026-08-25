@@ -85,7 +85,15 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         </button>
       </div>
 
-      <button class="fab" id="add-customer-fab" title="${t("new_customer")}" aria-label="${t("new_customer")}" aria-pressed="false">${icons.plus}</button>
+      <button class="fab" id="add-customer-fab" title="${t("new_customer")}" aria-label="${t("new_customer")}" aria-pressed="false">${icons.mapPinPlus}</button>
+      ${
+        relocateCustomerId
+          ? ""
+          : `<div class="nearest-customer-bar" id="nearest-customer-bar" hidden>
+              <button type="button" class="nearest-checkin-btn" id="nearest-checkin-btn" aria-label="${t("check_in")}">${icons.mapPinCheck}</button>
+              <div class="nearest-customer-info" id="nearest-customer-info"></div>
+            </div>`
+      }
       <div class="map-hint" id="map-hint" role="status" ${startInAddMode ? "" : "hidden"}>${t("tap_map_hint")}</div>
       <div class="map-hint" id="team-empty-hint" hidden>${t("team_locations_empty")}</div>
       <div class="map-hint" id="planned-empty-hint" hidden>${t("planned_empty")}</div>
@@ -98,6 +106,10 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   const fab = root.querySelector("#add-customer-fab");
   const compassBtn = root.querySelector("#compass-btn");
   const locateBtn = root.querySelector("#locate-btn");
+  const nearestBar = root.querySelector("#nearest-customer-bar");
+  const nearestCheckinBtn = root.querySelector("#nearest-checkin-btn");
+  const nearestInfo = root.querySelector("#nearest-customer-info");
+  let nearestCustomer = null;
 
   // Leaflet's internal pan/zoom gesture handling can fight with an ancestor
   // scroll container on iOS, producing the "freezes while panning" bug.
@@ -235,6 +247,12 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     resolveCustomersReady = resolve;
   });
   let myLocation = null;
+  // The very first time the map settles on a view, prefer centering on the
+  // user's current position at a close zoom (so nearby customers are
+  // already visible) over the default "fit every customer" behavior, which
+  // zooms out to the whole territory and makes people zoom back in
+  // manually just to see what's around them.
+  let initialViewApplied = false;
   let plannedCustomerIds = null;
   let routeLine = null;
   const stopMarkers = [];
@@ -395,6 +413,29 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       plannedEmptyHint.hidden = true;
     }
     if (bounds.length) {
+      // The very first time the map settles (plain browsing, not while
+      // relocating/adding a customer or opening straight into Plan Day),
+      // prefer centering on the user's own position at a close zoom over
+      // fitBounds-to-everyone -- fitBounds naturally zooms out to fit the
+      // whole territory, which is the opposite of what someone opening the
+      // map wants to see first (what's near them right now).
+      if (!initialViewApplied && !relocateCustomerId && !startInAddMode && !startInPlanMode) {
+        initialViewApplied = true;
+        getCurrentPosition({ timeout: 4000 })
+          .then((pos) => {
+            myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            map.setView([myLocation.lat, myLocation.lng], 15);
+            refreshNearestCustomerBar();
+          })
+          .catch(() => {
+            try {
+              map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+            } catch {
+              // See note below about the rotate-plugin pane-timing quirk.
+            }
+          });
+        return;
+      }
       try {
         map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
       } catch {
@@ -402,6 +443,41 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       }
     }
   }
+
+  // Bottom-left "nearest customer" widget — an icon-only check-in shortcut
+  // plus a glance at who's closest, without opening a panel or a popup.
+  // Recomputed whenever the customer list or the user's own location
+  // changes (see the calls to this after each of those below); nothing to
+  // do here at all in relocate mode, where the widget isn't rendered.
+  function refreshNearestCustomerBar() {
+    if (!nearestBar) return;
+    if (!myLocation || !lastCustomers.length) {
+      nearestBar.hidden = true;
+      nearestCustomer = null;
+      return;
+    }
+    let nearest = null;
+    let nearestDist = Infinity;
+    for (const { c } of lastCustomers) {
+      const d = haversineMeters(myLocation.lat, myLocation.lng, c.lat, c.lng);
+      if (d < nearestDist) {
+        nearestDist = d;
+        nearest = c;
+      }
+    }
+    if (!nearest) {
+      nearestBar.hidden = true;
+      nearestCustomer = null;
+      return;
+    }
+    nearestCustomer = nearest;
+    nearestInfo.innerHTML = `<strong>${escapeHtml(nearest.name)}</strong><span class="muted">${formatDistance(nearestDist)}</span>`;
+    nearestBar.hidden = false;
+  }
+
+  nearestCheckinBtn?.addEventListener("click", () => {
+    if (nearestCustomer) navigate(`#/checkin/${nearestCustomer.id}`);
+  });
 
   const nearbyPanel = root.querySelector("#nearby-panel");
   const nearbyPanelTitle = root.querySelector("#nearby-panel-title");
@@ -416,6 +492,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       try {
         const pos = await getCurrentPosition();
         myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        refreshNearestCustomerBar();
       } catch {
         nearbyPanelTitle.textContent = t("nearby_location_error");
         applyFilter();
@@ -528,7 +605,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
           ${c.category ? `<div class="popup-category">${escapeHtml(c.category)}</div>` : ""}
           <div class="popup-facts" id="popup-facts-${c.id}"><p class="popup-loading">${t("loading")}</p></div>
           <div class="popup-actions">
-            <button data-action="checkin" data-id="${c.id}" class="btn-accent">${t("check_in")}</button>
+            <button data-action="checkin" data-id="${c.id}" class="btn-accent"><span>${icons.mapPinCheck}</span>${t("check_in")}</button>
             <button data-action="details" data-id="${c.id}">${t("more")}</button>
           </div>
         </div>
@@ -568,6 +645,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
 
     resolveCustomersReady();
     applyFilter();
+    refreshNearestCustomerBar();
 
     if (!bounds.length && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -595,6 +673,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         (pos) => {
           const { latitude, longitude, accuracy } = pos.coords;
           const latlng = [latitude, longitude];
+          myLocation = { lat: latitude, lng: longitude };
           if (!meMarker) {
             meMarker = L.marker(latlng, { icon: meIcon(), zIndexOffset: 1000 }).addTo(map);
             meAccuracyCircle = L.circle(latlng, {
@@ -609,6 +688,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
             meMarker.setLatLng(latlng);
             meAccuracyCircle.setLatLng(latlng).setRadius(accuracy);
           }
+          refreshNearestCustomerBar();
         },
         () => {
           locateBtn.classList.remove("map-control-active");

@@ -154,7 +154,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
 
     <div class="detail-actions-grid">
       <button class="action-btn action-btn-primary" id="checkin-btn">
-        <span>${icons.pin}</span>${t("check_in")}
+        <span>${icons.mapPinCheck}</span>${t("check_in")}
       </button>
       ${customer.phone ? `<a class="action-btn" href="tel:${escapeHtml(customer.phone)}"><span>${icons.phone}</span>${t("call")}</a>` : ""}
       <button type="button" class="action-btn" id="navigate-btn">

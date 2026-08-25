@@ -85,7 +85,7 @@ export async function renderDashboard(root, navigate) {
     <h2 class="section-title">${t("quick_actions")}</h2>
     <div class="quick-actions-grid">
       <button type="button" class="quick-action" id="qa-check-in">
-        <span class="quick-action-icon">${icons.pin}</span>
+        <span class="quick-action-icon">${icons.mapPinCheck}</span>
         <span>${t("qa_check_in")}</span>
       </button>
       <button type="button" class="quick-action" id="qa-plan-route">
@@ -97,7 +97,7 @@ export async function renderDashboard(root, navigate) {
         <span>${t("qa_reports")}</span>
       </button>
       <button type="button" class="quick-action" id="qa-add-customer">
-        <span class="quick-action-icon quick-action-icon-accent">${icons.plus}</span>
+        <span class="quick-action-icon quick-action-icon-accent">${icons.mapPinPlus}</span>
         <span>${t("qa_add_customer")}</span>
       </button>
     </div>
@@ -242,7 +242,7 @@ async function renderNextVisit(slot, customers, navigate) {
         </div>
       </div>
       <div class="next-visit-actions">
-        <button class="btn btn-primary" id="next-visit-checkin">${t("check_in")}</button>
+        <button class="btn btn-primary" id="next-visit-checkin"><span>${icons.mapPinCheck}</span>${t("check_in")}</button>
         <button class="btn" id="next-visit-details">${t("view_customer")}</button>
       </div>
     </div>
