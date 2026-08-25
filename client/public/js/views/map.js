@@ -1206,9 +1206,9 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   return () => {
     if (watchId != null) navigator.geolocation.clearWatch(watchId);
     if (teamPollId) clearInterval(teamPollId);
+    clearTimeout(teamEmptyHintTimer);
     mapEl.removeEventListener("touchend", onMapTouchEnd);
     document.removeEventListener("visibilitychange", refreshTileStyle);
-    document.removeEventListener("keydown", onMapToolsKeydown);
     appMain.classList.remove("app-main-locked");
     document.body.classList.remove("map-active");
     map.remove();
