@@ -60,16 +60,26 @@ async function buildOrderLines(items) {
 
 class OrderValidationError extends Error {}
 
+const DISCOUNT_APPROVER_ROLES = new Set(["admin", "sales_director"]);
+
+function applyDiscount(subtotal, discountPct) {
+  return subtotal * (1 - discountPct / 100);
+}
+
 // Create an order: an items array of {product_id, quantity} (or a free-text
 // {product_name, unit_price_amd, quantity} line for something not yet in
 // the catalog). Prices are snapshotted from the catalog at save time, not
 // looked up live later -- an order is what was actually agreed, and must
 // stay correct even if the catalog price changes afterward.
 ordersRouter.post("/", async (req, res) => {
-  const { customer_id, checkin_id, note, items } = req.body ?? {};
+  const { customer_id, checkin_id, note, items, discount_pct } = req.body ?? {};
   const customerId = Number(customer_id);
   if (!customerId || !Array.isArray(items) || !items.length) {
     return res.status(400).json({ error: "customer_id and at least one item are required" });
+  }
+  const discountPct = discount_pct !== undefined ? Number(discount_pct) : 0;
+  if (!Number.isFinite(discountPct) || discountPct < 0 || discountPct > 100) {
+    return res.status(400).json({ error: "discount_pct must be a number between 0 and 100" });
   }
 
   const { rows: customerRows } = await pool.query("SELECT id, name FROM customers WHERE id = $1", [customerId]);
@@ -98,16 +108,21 @@ ordersRouter.post("/", async (req, res) => {
     throw err;
   }
 
-  const totalAmd = lines.reduce((sum, l) => sum + l.line_total_amd, 0);
+  const subtotalAmd = lines.reduce((sum, l) => sum + l.line_total_amd, 0);
+  const totalAmd = applyDiscount(subtotalAmd, discountPct);
+  // A discount needs a director's sign-off before the order can move past
+  // "submitted" into fulfillment (see the approval_status gate in PATCH
+  // below) -- no discount means nothing to approve.
+  const approvalStatus = discountPct > 0 ? "pending" : "not_required";
 
   const client = await pool.connect();
   let order;
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
-      `INSERT INTO orders (customer_id, user_id, checkin_id, total_amd, note)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [customerId, req.user.id, checkin_id || null, totalAmd, note || null]
+      `INSERT INTO orders (customer_id, user_id, checkin_id, total_amd, note, discount_pct, approval_status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [customerId, req.user.id, checkin_id || null, totalAmd, note || null, discountPct, approvalStatus]
     );
     order = rows[0];
     for (const line of lines) {
@@ -131,8 +146,9 @@ ordersRouter.post("/", async (req, res) => {
   // trip for their order confirmation.
   const { rows: repRows } = await pool.query("SELECT name FROM users WHERE id = $1", [req.user.id]);
   const repName = repRows[0]?.name || "Someone";
+  const discountSuffix = discountPct > 0 ? ` (${discountPct}% discount, pending director approval)` : "";
   notifyTelegram(
-    `🛒 <b>New order</b>\n${escapeHtml(repName)} — ${escapeHtml(customer.name)}\n${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD`
+    `🛒 <b>New order</b>\n${escapeHtml(repName)} — ${escapeHtml(customer.name)}\n${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD${escapeHtml(discountSuffix)}`
   );
 
   const { rows: notifyRecipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [ORDER_NOTIFY_ROLES]);
@@ -140,7 +156,7 @@ ordersRouter.post("/", async (req, res) => {
     if (await isNotificationEnabled(recipient.id, "order_placed")) {
       notifyUser(recipient.id, {
         title: "New order placed",
-        body: `${repName} placed an order for ${customer.name} — ${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD.`,
+        body: `${repName} placed an order for ${customer.name} — ${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD.${discountSuffix}`,
         url: "/#/orders",
       });
     }
@@ -218,14 +234,32 @@ ordersRouter.patch("/:id", async (req, res) => {
   const order = rows[0];
   if (!order) return res.status(404).json({ error: "Order not found" });
 
-  const { status, items, note } = req.body ?? {};
-  if (status === undefined && items === undefined && note === undefined) {
-    return res.status(400).json({ error: "status, items, or note is required" });
+  const { status, items, note, discount_pct } = req.body ?? {};
+  if (status === undefined && items === undefined && note === undefined && discount_pct === undefined) {
+    return res.status(400).json({ error: "status, items, note, or discount_pct is required" });
   }
 
   const isOwnerOrAdmin = order.user_id === req.user.id || req.user.role === "admin";
   let nextLines = null;
   let nextTotal = order.total_amd;
+  let nextDiscountPct = Number(order.discount_pct);
+  let nextApprovalStatus = order.approval_status;
+
+  if (discount_pct !== undefined) {
+    if (!isOwnerOrAdmin) return res.status(403).json({ error: "Not allowed to edit this order" });
+    if (order.status !== "submitted") {
+      return res.status(409).json({ error: "Only a submitted order's discount can still be changed" });
+    }
+    const parsed = Number(discount_pct);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
+      return res.status(400).json({ error: "discount_pct must be a number between 0 and 100" });
+    }
+    nextDiscountPct = parsed;
+    // Changing the discount always resets any prior director decision --
+    // 0 needs no approval, anything else needs a fresh sign-off even if a
+    // previous (different) discount on this order was already approved.
+    nextApprovalStatus = parsed > 0 ? "pending" : "not_required";
+  }
 
   if (items !== undefined) {
     if (!isOwnerOrAdmin) return res.status(403).json({ error: "Not allowed to edit this order" });
@@ -241,7 +275,18 @@ ordersRouter.patch("/:id", async (req, res) => {
       if (err instanceof OrderValidationError) return res.status(400).json({ error: err.message });
       throw err;
     }
-    nextTotal = nextLines.reduce((sum, l) => sum + l.line_total_amd, 0);
+  }
+
+  if (nextLines || discount_pct !== undefined) {
+    // Editing items recomputes the subtotal, but a discount already
+    // approved (or awaiting approval) still applies to whatever the order
+    // now totals -- it shouldn't silently vanish just because the rep
+    // swapped a line.
+    const subtotal = nextLines
+      ? nextLines.reduce((sum, l) => sum + l.line_total_amd, 0)
+      : (await pool.query("SELECT COALESCE(SUM(line_total_amd), 0) AS subtotal FROM order_items WHERE order_id = $1", [order.id])).rows[0]
+          .subtotal;
+    nextTotal = applyDiscount(Number(subtotal), nextDiscountPct);
   }
 
   let nextStatus = order.status;
@@ -250,8 +295,18 @@ ordersRouter.patch("/:id", async (req, res) => {
       if (!isOwnerOrAdmin && !FULFILLMENT_ROLES.has(req.user.role)) {
         return res.status(403).json({ error: "Not allowed to cancel this order" });
       }
-    } else if (!FULFILLMENT_ROLES.has(req.user.role)) {
-      return res.status(403).json({ error: "Only warehouse/delivery staff can update fulfillment status" });
+    } else {
+      if (!FULFILLMENT_ROLES.has(req.user.role)) {
+        return res.status(403).json({ error: "Only warehouse/delivery staff can update fulfillment status" });
+      }
+      if (order.approval_status === "pending" || order.approval_status === "rejected") {
+        return res.status(409).json({
+          error:
+            order.approval_status === "pending"
+              ? "This order's discount is awaiting director approval"
+              : "This order's discount was rejected -- edit the order to remove or adjust the discount before it can proceed",
+        });
+      }
     }
     if (!NEXT_STATUS[order.status]?.includes(status)) {
       return res.status(409).json({ error: `Cannot move an order from "${order.status}" to "${status}"` });
@@ -264,9 +319,11 @@ ordersRouter.patch("/:id", async (req, res) => {
   try {
     await client.query("BEGIN");
     const { rows: updatedRows } = await client.query(
-      `UPDATE orders SET status = $1, total_amd = $2, note = COALESCE($3, note), updated_at = now()
-       WHERE id = $4 RETURNING *`,
-      [nextStatus, nextTotal, note ?? null, order.id]
+      `UPDATE orders
+       SET status = $1, total_amd = $2, note = COALESCE($3, note),
+           discount_pct = $4, approval_status = $5, updated_at = now()
+       WHERE id = $6 RETURNING *`,
+      [nextStatus, nextTotal, note ?? null, nextDiscountPct, nextApprovalStatus, order.id]
     );
     updated = updatedRows[0];
 
@@ -304,6 +361,79 @@ ordersRouter.patch("/:id", async (req, res) => {
     notifyUser(order.user_id, {
       title: "Order update",
       body: `${customerRows[0]?.name || "Order"} is now "${nextStatus}".`,
+      url: "/#/orders",
+    });
+  }
+});
+
+// A discounted order can't reach fulfillment until a sales director (or
+// admin) approves or rejects it here -- see the approval_status gate on
+// the fulfillment-status branch of PATCH /:id above.
+ordersRouter.post("/:id/approve-discount", async (req, res) => {
+  if (!DISCOUNT_APPROVER_ROLES.has(req.user.role)) {
+    return res.status(403).json({ error: "Only a sales director can approve a discount" });
+  }
+  const { rows } = await pool.query("SELECT * FROM orders WHERE id = $1", [req.params.id]);
+  const order = rows[0];
+  if (!order) return res.status(404).json({ error: "Order not found" });
+  if (order.approval_status !== "pending") {
+    return res.status(409).json({ error: "This order has no pending discount to approve" });
+  }
+
+  const { rows: updatedRows } = await pool.query(
+    `UPDATE orders SET approval_status = 'approved', approved_by = $1, approved_at = now(), updated_at = now()
+     WHERE id = $2 RETURNING *`,
+    [req.user.id, order.id]
+  );
+  res.json(updatedRows[0]);
+
+  const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
+  const customerName = customerRows[0]?.name || "Order";
+
+  // Now that the discount is cleared, the accountant is the next stop --
+  // same order_placed preference gate a rep's original order used.
+  const { rows: accountants } = await pool.query("SELECT id FROM users WHERE role = 'accountant'");
+  for (const accountant of accountants) {
+    if (await isNotificationEnabled(accountant.id, "order_placed")) {
+      notifyUser(accountant.id, {
+        title: "Order discount approved",
+        body: `${customerName}'s discounted order was approved and is ready for fulfillment.`,
+        url: "/#/orders",
+      });
+    }
+  }
+  if (req.user.id !== order.user_id && (await isNotificationEnabled(order.user_id, "order_status_changed"))) {
+    notifyUser(order.user_id, {
+      title: "Discount approved",
+      body: `${customerName}'s order discount was approved.`,
+      url: "/#/orders",
+    });
+  }
+});
+
+ordersRouter.post("/:id/reject-discount", async (req, res) => {
+  if (!DISCOUNT_APPROVER_ROLES.has(req.user.role)) {
+    return res.status(403).json({ error: "Only a sales director can reject a discount" });
+  }
+  const { rows } = await pool.query("SELECT * FROM orders WHERE id = $1", [req.params.id]);
+  const order = rows[0];
+  if (!order) return res.status(404).json({ error: "Order not found" });
+  if (order.approval_status !== "pending") {
+    return res.status(409).json({ error: "This order has no pending discount to reject" });
+  }
+
+  const { rows: updatedRows } = await pool.query(
+    `UPDATE orders SET approval_status = 'rejected', approved_by = $1, approved_at = now(), updated_at = now()
+     WHERE id = $2 RETURNING *`,
+    [req.user.id, order.id]
+  );
+  res.json(updatedRows[0]);
+
+  if (req.user.id !== order.user_id && (await isNotificationEnabled(order.user_id, "order_status_changed"))) {
+    const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
+    notifyUser(order.user_id, {
+      title: "Discount rejected",
+      body: `${customerRows[0]?.name || "Order"}'s discount was rejected -- edit the order or remove the discount to proceed.`,
       url: "/#/orders",
     });
   }

@@ -137,11 +137,18 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
     <p class="form-error" id="order-error" hidden></p>
 
     <div class="order-cart-bar" id="order-cart-bar" hidden>
-      <div class="order-cart-summary">
-        <span id="order-cart-count"></span>
-        <strong id="order-cart-total"></strong>
+      <div class="order-discount-row">
+        <label for="order-discount-input">${t("discount_pct_label")}</label>
+        <input type="number" id="order-discount-input" min="0" max="100" step="1" value="0" inputmode="numeric" />
+        <span>%</span>
       </div>
-      <button type="button" class="btn btn-primary" id="save-order-btn">${t("save_order")}</button>
+      <div class="order-cart-bar-row">
+        <div class="order-cart-summary">
+          <span id="order-cart-count"></span>
+          <strong id="order-cart-total"></strong>
+        </div>
+        <button type="button" class="btn btn-primary" id="save-order-btn">${t("save_order")}</button>
+      </div>
     </div>
   `;
 
@@ -172,13 +179,23 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
   const cartBar = container.querySelector("#order-cart-bar");
   const cartCount = container.querySelector("#order-cart-count");
   const cartTotal = container.querySelector("#order-cart-total");
+  const discountInput = container.querySelector("#order-discount-input");
   const errorEl = container.querySelector("#order-error");
   const saveBtn = container.querySelector("#save-order-btn");
 
-  function cartTotalAmd() {
+  function discountPct() {
+    const n = Number(discountInput.value);
+    return Number.isFinite(n) && n > 0 ? Math.min(100, n) : 0;
+  }
+
+  function cartSubtotalAmd() {
     let total = 0;
     for (const line of cart.values()) total += line.unit_price_amd * line.quantity;
     return total;
+  }
+
+  function cartTotalAmd() {
+    return cartSubtotalAmd() * (1 - discountPct() / 100);
   }
 
   function updateCartBar() {
@@ -191,6 +208,8 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
     cartCount.textContent = `${count} ${count === 1 ? t("item") : t("items")}`;
     cartTotal.textContent = formatAmd(cartTotalAmd());
   }
+
+  discountInput.addEventListener("input", updateCartBar);
 
   function renderCrumbs() {
     const parts = [];
@@ -341,17 +360,19 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
       unit_price_amd: l.unit_price_amd,
       quantity: l.quantity,
     }));
+    const discount = discountPct();
     try {
       const order = await api.createOrder({
         customer_id: Number(customerId),
         checkin_id: checkinId ? Number(checkinId) : undefined,
         items,
+        discount_pct: discount,
       });
       showOrderSaved(order);
     } catch (err) {
       if (err instanceof TypeError) {
         // Offline / network failure -- queue it instead of losing the order.
-        enqueueOrder({ customerId: Number(customerId), checkinId: checkinId ? Number(checkinId) : undefined, items });
+        enqueueOrder({ customerId: Number(customerId), checkinId: checkinId ? Number(checkinId) : undefined, items, discount_pct: discount });
         showOrderQueued();
       } else {
         errorEl.textContent = err.message;
@@ -368,6 +389,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
         <div class="result-icon">✓</div>
         <h2>${t("order_saved")}</h2>
         <p>${escapeHtml(customer.name)} · ${formatAmd(Number(order.total_amd))}</p>
+        ${order.approval_status === "pending" ? `<p class="muted">${t("discount_pending_approval")}</p>` : ""}
         <button class="btn btn-primary btn-block" id="order-done-btn">${t("done")}</button>
       </div>
     `;

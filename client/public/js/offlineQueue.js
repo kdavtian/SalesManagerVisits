@@ -60,6 +60,7 @@ function submitOrder(entry) {
     customer_id: entry.customerId,
     checkin_id: entry.checkinId,
     items: entry.items,
+    discount_pct: entry.discount_pct,
   });
 }
 

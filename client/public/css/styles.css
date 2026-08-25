@@ -3723,15 +3723,39 @@ form [aria-invalid="true"] {
   position: sticky;
   bottom: calc(var(--nav-height, 64px) + 12px);
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  flex-direction: column;
+  gap: 10px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 12px 16px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   margin-top: 16px;
+}
+
+.order-cart-bar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.order-discount-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.order-discount-row input[type="number"] {
+  width: 56px;
+  padding: 6px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  text-align: center;
 }
 
 .order-cart-summary {

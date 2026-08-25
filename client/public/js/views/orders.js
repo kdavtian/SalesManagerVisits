@@ -14,6 +14,12 @@ const STATUS_META = {
 const STATUS_FILTERS = ["", "submitted", "confirmed", "packed", "delivered", "cancelled"];
 
 const FULFILLMENT_ROLES = new Set(["warehouse_manager", "delivery_manager", "admin"]);
+const DISCOUNT_APPROVER_ROLES = new Set(["admin", "sales_director"]);
+const APPROVAL_META = {
+  pending: { key: "approval_status_pending", cls: "badge-warning" },
+  approved: { key: "approval_status_approved", cls: "badge-success" },
+  rejected: { key: "approval_status_rejected", cls: "badge-danger" },
+};
 const NEXT_STATUS = {
   submitted: ["confirmed", "cancelled"],
   confirmed: ["packed", "cancelled"],
@@ -156,11 +162,19 @@ export async function renderOrders(root, navigate) {
     const meta = STATUS_META[order.status] ?? STATUS_META.submitted;
     const isOwnerOrAdmin = order.user_id === state.user.id || state.user.role === "admin";
     const canFulfill = FULFILLMENT_ROLES.has(state.user.role);
+    const hasDiscount = Number(order.discount_pct) > 0;
+    const approvalMeta = APPROVAL_META[order.approval_status];
+    // A pending or rejected discount blocks fulfillment server-side too --
+    // don't offer a forward-status button that would just 409.
+    const blockedByApproval = order.approval_status === "pending" || order.approval_status === "rejected";
     const nextOptions = NEXT_STATUS[order.status] ?? [];
+    const canApproveDiscount = DISCOUNT_APPROVER_ROLES.has(state.user.role) && order.approval_status === "pending";
 
     overlay.querySelector(".sheet").innerHTML = `
       <h2>${escapeHtml(order.customer_name)}</h2>
-      <p class="badge ${meta.cls}">${t(meta.key)}</p>
+      <p><span class="badge ${meta.cls}">${t(meta.key)}</span>${
+      hasDiscount && approvalMeta ? ` <span class="badge ${approvalMeta.cls}">${t(approvalMeta.key)}</span>` : ""
+    }</p>
       <div class="card-list" style="margin:12px 0;">
         ${order.items
           .map(
@@ -173,6 +187,7 @@ export async function renderOrders(root, navigate) {
           )
           .join("")}
       </div>
+      ${hasDiscount ? `<p class="muted">${t("discount_label")}: ${Number(order.discount_pct)}%</p>` : ""}
       <p><strong>${t("total")}: ${formatAmd(Number(order.total_amd))}</strong></p>
       ${order.note ? `<p class="muted">${escapeHtml(order.note)}</p>` : ""}
       <p class="form-error" id="order-detail-error" hidden></p>
@@ -183,7 +198,11 @@ export async function renderOrders(root, navigate) {
     const errorEl = overlay.querySelector("#order-detail-error");
 
     const buttons = [];
-    if (canFulfill) {
+    if (canApproveDiscount) {
+      buttons.push({ label: t("approve_discount"), action: "approve-discount", cls: "btn btn-primary" });
+      buttons.push({ label: t("reject_discount"), action: "reject-discount", cls: "btn btn-danger" });
+    }
+    if (canFulfill && !blockedByApproval) {
       for (const next of nextOptions) {
         if (next === "cancelled") continue;
         buttons.push({ label: t(STATUS_META[next].key), status: next, cls: "btn btn-primary" });
@@ -194,7 +213,7 @@ export async function renderOrders(root, navigate) {
     }
 
     actionsEl.innerHTML = buttons
-      .map((b) => `<button type="button" class="${b.cls}" data-status="${b.status}">${b.label}</button>`)
+      .map((b) => `<button type="button" class="${b.cls}" ${b.action ? `data-action="${b.action}"` : `data-status="${b.status}"`}>${b.label}</button>`)
       .join("") || `<button type="button" class="btn" id="order-detail-close">${t("done")}</button>`;
 
     actionsEl.querySelector("#order-detail-close")?.addEventListener("click", () => overlay.remove());
@@ -204,6 +223,21 @@ export async function renderOrders(root, navigate) {
         actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
         try {
           await api.updateOrderStatus(orderId, btn.dataset.status);
+          overlay.remove();
+          load();
+        } catch (err) {
+          errorEl.textContent = err.message;
+          errorEl.hidden = false;
+          actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = false));
+        }
+      });
+    });
+    actionsEl.querySelectorAll("[data-action]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
+        try {
+          if (btn.dataset.action === "approve-discount") await api.approveOrderDiscount(orderId);
+          else await api.rejectOrderDiscount(orderId);
           overlay.remove();
           load();
         } catch (err) {
