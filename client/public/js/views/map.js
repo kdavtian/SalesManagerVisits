@@ -32,7 +32,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
           ? ""
           : `<div class="map-filter-row">
               <button class="map-filter-chip chip-active" data-filter="" aria-pressed="true"><span class="map-filter-chip-icon">${icons.filter}</span>${t("filter_all")}</button>
-              <button class="map-filter-chip" data-filter="overdue" aria-pressed="false"><span class="map-filter-chip-icon">${icons.warning}</span>${t("filter_overdue")}</button>
+              <button class="map-filter-chip" data-filter="overdue" aria-pressed="false"><span class="map-filter-chip-icon">${icons.mapWarning}</span>${t("filter_overdue")}</button>
               <button class="map-filter-chip" data-filter="visited" aria-pressed="false"><span class="map-filter-chip-icon">${icons.checkCircle}</span>${t("filter_visited")}</button>
               <button class="map-filter-chip" data-filter="planned" aria-pressed="false"><span class="map-filter-chip-icon">${icons.send}</span>${t("filter_planned")}</button>
               <button class="map-filter-chip" data-filter="nearby" aria-pressed="false"><span class="map-filter-chip-icon">${icons.locate}</span>${t("filter_nearby")}</button>
@@ -42,7 +42,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       <div class="nearby-panel" id="nearby-panel" hidden>
         <div class="nearby-panel-header">
           <span id="nearby-panel-title">${t("nearby_loading")}</span>
-          <button type="button" class="icon-btn" id="nearby-panel-close" aria-label="${t("cancel")}">&times;</button>
+          <button type="button" class="icon-btn" id="nearby-panel-close" aria-label="${t("cancel")}">${icons.close}</button>
         </div>
         <div class="nearby-list card-list" id="nearby-list"></div>
         <button type="button" class="nearby-view-all" id="nearby-view-all">${t("view_all_customers")}</button>
@@ -53,7 +53,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
           <span>${t("route_stops")}</span>
           <span class="nearby-panel-header-actions">
             <button type="button" class="btn btn-sm" id="optimize-route-btn">${t("optimize_route")}</button>
-            <button type="button" class="icon-btn" id="planned-stops-close" aria-label="${t("cancel")}">&times;</button>
+            <button type="button" class="icon-btn" id="planned-stops-close" aria-label="${t("cancel")}">${icons.close}</button>
           </span>
         </div>
         <div class="stop-list" id="stop-list"></div>
@@ -62,30 +62,30 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       <div class="map-controls">
         <div class="map-control-cluster">
           <button class="map-control-btn" id="zoom-in-btn" aria-label="${t("zoom_in")}">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            ${icons.plus}
           </button>
           <div class="map-control-divider"></div>
           <button class="map-control-btn" id="zoom-out-btn" aria-label="${t("zoom_out")}">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"/></svg>
+            ${icons.minus}
           </button>
         </div>
         <button class="map-control-btn map-control-standalone" id="compass-btn" hidden aria-label="${t("reset_north")}">
           <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 2l4 10-4 4-4-4z" fill="var(--accent)"/><path d="M12 22l-4-10 4-4 4 4z" fill="var(--text-dim)"/></svg>
         </button>
         <button class="map-control-btn map-control-standalone" id="locate-btn" aria-label="${t("locate_me")}">
-          <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke-linecap="round"/></svg>
+          ${icons.locate}
         </button>
         ${
           canViewTeamLocations()
             ? `<button class="map-control-btn map-control-standalone" id="team-locations-btn" aria-label="${t("team_locations")}">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="3"/><path d="M2 20c0-3 2.7-5.5 6-5.5s6 2.5 6 5.5"/><circle cx="17" cy="8" r="2.3"/><path d="M14.8 14.8c2.4.3 4.2 2.3 4.2 4.8"/></svg>
+          ${icons.team}
         </button>`
             : ""
         }
         <button class="map-control-btn map-control-standalone" id="plan-day-btn" aria-label="${t("plan_day")}">${icons.planDay}</button>
       </div>
 
-      <button class="fab" id="add-customer-fab" title="${t("new_customer")}" aria-label="${t("new_customer")}" aria-pressed="false">+</button>
+      <button class="fab" id="add-customer-fab" title="${t("new_customer")}" aria-label="${t("new_customer")}" aria-pressed="false">${icons.plus}</button>
       <div class="map-hint" id="map-hint" role="status" ${startInAddMode ? "" : "hidden"}>${t("tap_map_hint")}</div>
       <div class="map-hint" id="team-empty-hint" hidden>${t("team_locations_empty")}</div>
       <div class="map-hint" id="planned-empty-hint" hidden>${t("planned_empty")}</div>
@@ -835,7 +835,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
                     (a, i) => `
               <div class="plan-area-row" data-index="${i}">
                 <span>${escapeHtml(a.region)}${a.subregion ? ` · ${escapeHtml(a.subregion)}` : ""}</span>
-                <button type="button" class="icon-btn plan-area-remove" data-index="${i}" aria-label="${t("cancel")}">&times;</button>
+                <button type="button" class="icon-btn plan-area-remove" data-index="${i}" aria-label="${t("cancel")}">${icons.close}</button>
               </div>`
                   )
                   .join("")
@@ -850,7 +850,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
           <select id="plan-add-subregion">
             <option value="">${t("all_subregions")}</option>
           </select>
-          <button type="button" class="btn btn-sm" id="plan-add-area-btn">+</button>
+          <button type="button" class="btn btn-sm plan-add-area-btn" id="plan-add-area-btn" aria-label="${t("add_area")}">${icons.plus}</button>
         </div>
       `;
 
@@ -873,7 +873,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
                 (a, i) => `
           <div class="plan-area-row" data-index="${i}">
             <span>${escapeHtml(a.region)}${a.subregion ? ` · ${escapeHtml(a.subregion)}` : ""}</span>
-            <button type="button" class="icon-btn plan-area-remove" data-index="${i}" aria-label="${t("cancel")}">&times;</button>
+            <button type="button" class="icon-btn plan-area-remove" data-index="${i}" aria-label="${t("cancel")}">${icons.close}</button>
           </div>`
               )
               .join("")

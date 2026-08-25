@@ -1510,11 +1510,17 @@ form [aria-invalid="true"] {
   background: var(--accent);
   color: #ffffff;
   border: none;
-  font-size: 1.8rem;
-  line-height: 1;
+  display: grid;
+  place-items: center;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
   cursor: pointer;
   z-index: 1000;
+}
+
+.fab .map-action-svg {
+  width: 27px;
+  height: 27px;
+  stroke-width: 1.85;
 }
 
 .fab-active {
@@ -1698,6 +1704,12 @@ form [aria-invalid="true"] {
   border: none;
   color: var(--text);
   cursor: pointer;
+}
+
+.map-action-svg {
+  display: block;
+  width: 22px;
+  height: 22px;
 }
 
 .map-control-btn:active {
@@ -2891,6 +2903,27 @@ form [aria-invalid="true"] {
 .map-filter-chip-icon {
   display: flex;
   flex-shrink: 0;
+}
+
+.map-chip-svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.map-filter-chip-icon .map-action-svg {
+  width: 16px;
+  height: 16px;
+}
+
+.icon-btn .map-action-svg {
+  width: 20px;
+  height: 20px;
+}
+
+.plan-add-area-btn .map-action-svg {
+  width: 18px;
+  height: 18px;
 }
 
 .map-filter-chip.chip-active {
