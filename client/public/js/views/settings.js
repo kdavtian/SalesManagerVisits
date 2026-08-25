@@ -93,6 +93,11 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         ${settingsToggleRow({ icon: ICON.bell, label: t("push_notifications"), value: "…", id: "toggle-push-notifications", checked: false })}
       </div>
 
+      <h2 class="section-title">${t("notification_preferences_title")}</h2>
+      <div class="card settings-list" id="notification-prefs-list">
+        <p class="loading-state" role="status">${t("loading")}</p>
+      </div>
+
       <h2 class="section-title">${t("data_sync")}</h2>
       <div class="card settings-list">
         ${settingsRow({ icon: ICON.cloud, label: t("sync_status"), value: `<span id="sync-status-value"></span>`, interactive: false })}
@@ -136,6 +141,10 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
 
         <h2 class="section-title">${t("team")}</h2>
         <div id="team-section"></div>
+
+        <h2 class="section-title">${t("notification_defaults_title")}</h2>
+        <p class="muted radius-help">${t("notification_defaults_help")}</p>
+        <div id="notification-defaults-section"></div>
       `
           : ""
       }
@@ -199,6 +208,9 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
   // --- Sales performance ---
   const perfSlot = root.querySelector("#sales-performance-slot");
   if (perfSlot) loadSalesPerformance(perfSlot, state.user.role);
+
+  // --- Notification preferences ---
+  loadNotificationPreferences(root.querySelector("#notification-prefs-list"));
 
   root.querySelector("#avatar-btn").addEventListener("click", () => avatarInput.click());
   avatarInput.addEventListener("change", async () => {
@@ -344,6 +356,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     renderProductsSection(root.querySelector("#products-section"));
     renderPointsCloseoutSection(root.querySelector("#points-closeout-section"));
     renderTeamSection(root.querySelector("#team-section"));
+    renderNotificationDefaultsSection(root.querySelector("#notification-defaults-section"));
   }
 
   if (canApprovePlans) {
@@ -446,6 +459,128 @@ async function loadSalesPerformance(slot, role) {
   }
 
   slot.innerHTML = sections.join("");
+}
+
+const NOTIFICATION_TYPES = ["plan_submitted", "plan_reviewed", "order_status_changed", "visit_reminder"];
+
+async function loadNotificationPreferences(slot) {
+  let prefs;
+  try {
+    prefs = await api.getMyNotificationSettings();
+  } catch {
+    slot.innerHTML = "";
+    return;
+  }
+
+  const byType = new Map(prefs.map((p) => [p.notification_type, p]));
+  slot.innerHTML = NOTIFICATION_TYPES.map((type) => {
+    const p = byType.get(type) ?? { enabled: true };
+    return settingsToggleRow({
+      icon: ICON.bell,
+      label: t(`notification_type_${type}`),
+      value: p.enabled ? t("toggle_on") : t("toggle_off"),
+      id: `notif-pref-${type}`,
+      checked: p.enabled,
+    });
+  }).join("");
+
+  NOTIFICATION_TYPES.forEach((type) => {
+    const toggle = slot.querySelector(`#notif-pref-${type}`);
+    const valueEl = toggle.closest(".settings-list-row").querySelector(".settings-row-value");
+    toggle.addEventListener("click", async () => {
+      const nextEnabled = toggle.getAttribute("aria-checked") !== "true";
+      toggle.disabled = true;
+      try {
+        await api.setMyNotificationSetting(type, nextEnabled);
+        toggle.setAttribute("aria-checked", String(nextEnabled));
+        valueEl.textContent = nextEnabled ? t("toggle_on") : t("toggle_off");
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        toggle.disabled = false;
+      }
+    });
+  });
+}
+
+const NOTIFICATION_ROLES = [
+  "admin",
+  "ceo",
+  "sales_director",
+  "sales_manager",
+  "warehouse_manager",
+  "delivery_manager",
+  "accountant",
+];
+
+// A role-by-role dropdown instead of one flat 7-role x 4-type grid -- the
+// full matrix doesn't fit a phone screen without horizontal scrolling,
+// and most admins are only ever adjusting one role at a time anyway.
+async function renderNotificationDefaultsSection(slot) {
+  slot.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+  let matrix;
+  try {
+    matrix = await api.getNotificationDefaults();
+  } catch {
+    slot.innerHTML = "";
+    return;
+  }
+
+  let selectedRole = NOTIFICATION_ROLES[0];
+
+  slot.innerHTML = `
+    <div class="card" style="margin-bottom:10px;">
+      <label>${t("role")}
+        <select id="notif-default-role-select">
+          ${NOTIFICATION_ROLES.map((r) => `<option value="${r}">${t(`role_${r}`)}</option>`).join("")}
+        </select>
+      </label>
+    </div>
+    <div class="card settings-list" id="notif-default-toggles"></div>
+  `;
+
+  const toggleList = slot.querySelector("#notif-default-toggles");
+
+  function paintRole() {
+    toggleList.innerHTML = NOTIFICATION_TYPES.map((type) => {
+      const entry = matrix.find((m) => m.role === selectedRole && m.notification_type === type);
+      const enabled = entry?.enabled ?? true;
+      return settingsToggleRow({
+        icon: ICON.bell,
+        label: t(`notification_type_${type}`),
+        value: enabled ? t("toggle_on") : t("toggle_off"),
+        id: `notif-default-${type}`,
+        checked: enabled,
+      });
+    }).join("");
+
+    NOTIFICATION_TYPES.forEach((type) => {
+      const toggle = toggleList.querySelector(`#notif-default-${type}`);
+      const valueEl = toggle.closest(".settings-list-row").querySelector(".settings-row-value");
+      toggle.addEventListener("click", async () => {
+        const nextEnabled = toggle.getAttribute("aria-checked") !== "true";
+        toggle.disabled = true;
+        try {
+          await api.setNotificationDefault(selectedRole, type, nextEnabled);
+          const entry = matrix.find((m) => m.role === selectedRole && m.notification_type === type);
+          if (entry) entry.enabled = nextEnabled;
+          else matrix.push({ role: selectedRole, notification_type: type, enabled: nextEnabled });
+          toggle.setAttribute("aria-checked", String(nextEnabled));
+          valueEl.textContent = nextEnabled ? t("toggle_on") : t("toggle_off");
+        } catch (err) {
+          alert(err.message);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    });
+  }
+
+  paintRole();
+  slot.querySelector("#notif-default-role-select").addEventListener("change", (e) => {
+    selectedRole = e.target.value;
+    paintRole();
+  });
 }
 
 function openChangePasswordSheet() {

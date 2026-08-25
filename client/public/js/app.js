@@ -126,7 +126,6 @@ function renderNav() {
     { hash: "#/map", label: t("nav_map"), icon: icons.map, center: true },
     { hash: "#/customers", label: t("nav_customers"), icon: icons.customers },
     { hash: "#/orders", label: t("nav_orders"), icon: icons.cart },
-    { hash: "#/settings", label: t("nav_settings"), icon: icons.settings },
   ];
 
   navBar.innerHTML = items
@@ -158,8 +157,14 @@ function renderNav() {
       <img class="topbar-logo" src="/brand/kad-k-mark.png" alt="" />
       <span class="topbar-title">${t("app_name")}</span>
     </span>
-    <span class="topbar-user">${escapeHtml(state.user.name)}</span>
+    <div class="topbar-right">
+      <span class="topbar-user">${escapeHtml(state.user.name)}</span>
+      <button type="button" class="topbar-menu-btn" id="topbar-menu-btn" aria-label="${t("nav_settings")}" ${hash === "#/settings" ? 'aria-current="page"' : ""}>
+        ${icons.menu}
+      </button>
+    </div>
   `;
+  topBar.querySelector("#topbar-menu-btn").addEventListener("click", () => navigate("#/settings"));
 }
 
 function renderSyncBanner() {

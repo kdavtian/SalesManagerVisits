@@ -21,6 +21,7 @@ import { productsRouter } from "./routes/products.js";
 import { ordersRouter } from "./routes/orders.js";
 import { exportsRouter } from "./routes/exports.js";
 import { pushRouter } from "./routes/push.js";
+import { notificationSettingsRouter } from "./routes/notificationSettings.js";
 import { startOverdueReminders } from "./overdueReminders.js";
 
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
@@ -83,6 +84,7 @@ app.use("/api/products", express.json(), productsRouter);
 app.use("/api/orders", express.json(), ordersRouter);
 app.use("/api/exports", exportsRouter);
 app.use("/api/push", express.json(), pushRouter);
+app.use("/api/notification-settings", express.json(), notificationSettingsRouter);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });

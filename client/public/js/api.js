@@ -128,4 +128,12 @@ export const api = {
   getVapidPublicKey: () => request("/push/vapid-public-key"),
   subscribePush: (subscription) => json("/push", "POST", subscription),
   unsubscribePush: (endpoint) => json("/push", "DELETE", { endpoint }),
+
+  getMyNotificationSettings: () => request("/notification-settings/mine"),
+  setMyNotificationSetting: (notification_type, enabled) =>
+    json("/notification-settings/mine", "PUT", { notification_type, enabled }),
+  clearMyNotificationOverride: (type) => request(`/notification-settings/mine/${type}`, { method: "DELETE" }),
+  getNotificationDefaults: () => request("/notification-settings"),
+  setNotificationDefault: (role, notification_type, enabled) =>
+    json("/notification-settings", "PUT", { role, notification_type, enabled }),
 };

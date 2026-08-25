@@ -196,10 +196,39 @@ a {
   color: var(--text);
 }
 
-.topbar-user {
+.topbar-right {
   margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.topbar-user {
   color: var(--text-dim);
   font-size: 0.88rem;
+}
+
+.topbar-menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.topbar-menu-btn:active {
+  background: var(--bg-card-pressed);
+}
+
+.topbar-menu-btn[aria-current="page"] {
+  color: var(--accent);
 }
 
 .btn-link {

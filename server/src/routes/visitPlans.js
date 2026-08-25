@@ -4,6 +4,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { canPlanForOthers } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { notifyUser } from "../push.js";
+import { isNotificationEnabled, APPROVER_ROLES } from "../notificationPreferences.js";
 
 export const visitPlansRouter = Router();
 
@@ -131,9 +132,21 @@ visitPlansRouter.post("/", async (req, res) => {
 
   if (status === "pending") {
     const { rows: userRows } = await pool.query("SELECT name FROM users WHERE id = $1", [targetId]);
+    const repName = userRows[0]?.name || "Someone";
     notifyTelegram(
-      `📋 <b>Route plan needs review</b>\n${escapeHtml(userRows[0]?.name || "Someone")} — ${date}, ${customerIds.length} stop${customerIds.length === 1 ? "" : "s"}`
+      `📋 <b>Route plan needs review</b>\n${escapeHtml(repName)} — ${date}, ${customerIds.length} stop${customerIds.length === 1 ? "" : "s"}`
     );
+
+    const { rows: approvers } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [APPROVER_ROLES]);
+    for (const approver of approvers) {
+      if (await isNotificationEnabled(approver.id, "plan_submitted")) {
+        notifyUser(approver.id, {
+          title: "Plan needs review",
+          body: `${repName} submitted a plan for ${date} (${customerIds.length} stop${customerIds.length === 1 ? "" : "s"}).`,
+          url: "/#/settings",
+        });
+      }
+    }
   }
 });
 
@@ -259,7 +272,7 @@ visitPlansRouter.patch("/:id", requireCanPlanForOthers, async (req, res) => {
     await client.query("COMMIT");
     res.json(updated[0]);
 
-    if (action !== undefined) {
+    if (action !== undefined && (await isNotificationEnabled(updated[0].user_id, "plan_reviewed"))) {
       const dateLabel = new Date(updated[0].plan_date).toLocaleDateString();
       notifyUser(updated[0].user_id, {
         title: action === "approve" ? "Visit plan approved" : "Visit plan rejected",

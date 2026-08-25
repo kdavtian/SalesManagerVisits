@@ -4,6 +4,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { seesAllActivity } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { notifyUser } from "../push.js";
+import { isNotificationEnabled } from "../notificationPreferences.js";
 
 export const ordersRouter = Router();
 
@@ -281,7 +282,12 @@ ordersRouter.patch("/:id", async (req, res) => {
   // Only the rep who placed the order cares about its fulfillment moving
   // forward, and only when the status actually changed (not a pure
   // items/note edit) -- and not when they made the change themselves.
-  if (status !== undefined && nextStatus !== order.status && req.user.id !== order.user_id) {
+  if (
+    status !== undefined &&
+    nextStatus !== order.status &&
+    req.user.id !== order.user_id &&
+    (await isNotificationEnabled(order.user_id, "order_status_changed"))
+  ) {
     const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
     notifyUser(order.user_id, {
       title: "Order update",
