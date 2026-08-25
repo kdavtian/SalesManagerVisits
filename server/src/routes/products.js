@@ -45,14 +45,27 @@ productsRouter.post("/", async (req, res) => {
   res.status(201).json(rows[0]);
 });
 
-const EDITABLE_FIELDS = ["name", "sku", "brand", "unit", "unit_price_amd", "active"];
+const EDITABLE_FIELDS = [
+  "name",
+  "sku",
+  "brand",
+  "unit",
+  "unit_price_amd",
+  "active",
+  "family",
+  "bronze_price_amd",
+  "silver_price_amd",
+  "gold_price_amd",
+  "stock_qty",
+];
+const NUMERIC_FIELDS = new Set(["unit_price_amd", "bronze_price_amd", "silver_price_amd", "gold_price_amd", "stock_qty"]);
 
 productsRouter.patch("/:id", async (req, res) => {
   const updates = Object.entries(req.body ?? {}).filter(([key]) => EDITABLE_FIELDS.includes(key));
   if (!updates.length) return res.status(400).json({ error: "No editable fields provided" });
 
   const setClauses = updates.map(([key], i) => `${key} = $${i + 1}`);
-  const values = updates.map(([key, value]) => (key === "unit_price_amd" ? Number(value) : value));
+  const values = updates.map(([key, value]) => (NUMERIC_FIELDS.has(key) && value !== null ? Number(value) : value));
   values.push(req.params.id);
 
   const { rows } = await pool.query(

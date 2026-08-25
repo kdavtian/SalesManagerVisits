@@ -138,6 +138,11 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
   const prodBrands = [];
   const prodUnits = [];
   const prodPrices = [];
+  const prodFamilies = [];
+  const prodBronzePrices = [];
+  const prodSilverPrices = [];
+  const prodGoldPrices = [];
+  const prodStockQtys = [];
 
   for (const p of Array.isArray(products) ? products : []) {
     if (!isPlainObject(p) || !p.erp_product_id || !p.name || !Number.isFinite(p.unit_price_amd)) continue;
@@ -146,6 +151,13 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     prodBrands.push(p.brand != null ? String(p.brand) : null);
     prodUnits.push(p.unit != null ? String(p.unit) : null);
     prodPrices.push(p.unit_price_amd);
+    prodFamilies.push(p.family != null ? String(p.family) : null);
+    // bronze defaults to unit_price_amd (same source, "Price T1") when
+    // omitted, so the extract doesn't have to send it twice.
+    prodBronzePrices.push(Number.isFinite(p.bronze_price_amd) ? p.bronze_price_amd : p.unit_price_amd);
+    prodSilverPrices.push(Number.isFinite(p.silver_price_amd) ? p.silver_price_amd : null);
+    prodGoldPrices.push(Number.isFinite(p.gold_price_amd) ? p.gold_price_amd : null);
+    prodStockQtys.push(Number.isFinite(p.stock_qty) ? Math.trunc(p.stock_qty) : null);
   }
 
   const client = await pool.connect();
@@ -218,15 +230,18 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     // overwritten out from under them.
     if (prodErpIds.length) {
       await client.query(
-        `INSERT INTO products (erp_product_id, name, brand, unit, unit_price_amd, synced_at)
-         SELECT erp_product_id, name, brand, unit, unit_price_amd, now()
-         FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::numeric[])
-           AS t(erp_product_id, name, brand, unit, unit_price_amd)
+        `INSERT INTO products (erp_product_id, name, brand, unit, unit_price_amd, family, bronze_price_amd, silver_price_amd, gold_price_amd, stock_qty, synced_at)
+         SELECT erp_product_id, name, brand, unit, unit_price_amd, family, bronze_price_amd, silver_price_amd, gold_price_amd, stock_qty, now()
+         FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::numeric[], $6::text[], $7::numeric[], $8::numeric[], $9::numeric[], $10::int[])
+           AS t(erp_product_id, name, brand, unit, unit_price_amd, family, bronze_price_amd, silver_price_amd, gold_price_amd, stock_qty)
          ON CONFLICT (erp_product_id) DO UPDATE SET
            name = EXCLUDED.name, brand = EXCLUDED.brand, unit = EXCLUDED.unit,
-           unit_price_amd = EXCLUDED.unit_price_amd, synced_at = now(), updated_at = now()
+           unit_price_amd = EXCLUDED.unit_price_amd, family = EXCLUDED.family,
+           bronze_price_amd = EXCLUDED.bronze_price_amd, silver_price_amd = EXCLUDED.silver_price_amd,
+           gold_price_amd = EXCLUDED.gold_price_amd, stock_qty = EXCLUDED.stock_qty,
+           synced_at = now(), updated_at = now()
          WHERE products.manually_edited_at IS NULL`,
-        [prodErpIds, prodNames, prodBrands, prodUnits, prodPrices]
+        [prodErpIds, prodNames, prodBrands, prodUnits, prodPrices, prodFamilies, prodBronzePrices, prodSilverPrices, prodGoldPrices, prodStockQtys]
       );
     }
 
