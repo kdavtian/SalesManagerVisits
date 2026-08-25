@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>KAD Motors</title>
     <meta name="theme-color" content="#f6f7f9" />
 
@@ -40,8 +40,8 @@
       left-to-right on open and back left on close, the common drawer
       pattern regardless of which side the hamburger button sits on.
     -->
-    <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
-    <aside id="side-drawer" class="side-drawer" aria-label="Menu" hidden></aside>
+    <div id="drawer-backdrop" class="drawer-backdrop" aria-hidden="true" hidden></div>
+    <aside id="side-drawer" class="side-drawer" role="dialog" aria-modal="true" aria-label="Menu" hidden></aside>
 
     <script src="vendor/leaflet/leaflet.js"></script>
     <script src="vendor/leaflet-rotate/leaflet-rotate.js"></script>

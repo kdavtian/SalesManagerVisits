@@ -128,7 +128,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
     </div>
 
     <div class="order-search-row">
-      <input type="search" id="product-search" placeholder="${t("search_products_placeholder")}" />
+      <input type="search" id="product-search" placeholder="${t("search_products_placeholder")}" aria-label="${t("search_products_placeholder")}" />
     </div>
     <div class="order-crumb-row" id="order-crumb-row" hidden></div>
     <div class="order-product-list" id="order-product-list"></div>

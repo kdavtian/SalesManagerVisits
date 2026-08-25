@@ -64,9 +64,17 @@ async function doLogout() {
 // immediately on open so the slide-in is visible from frame one.
 const DRAWER_TRANSITION_MS = 220;
 let drawerHideTimer = null;
+let drawerPreviousFocus = null;
+
+function setDrawerBackgroundInert(inert) {
+  [app, navBar, topBar].forEach((element) => {
+    element.inert = inert;
+  });
+}
 
 function openDrawer() {
   clearTimeout(drawerHideTimer);
+  drawerPreviousFocus = document.activeElement;
   sideDrawer.innerHTML = `
     <div class="drawer-header">
       <strong>${t("app_name")}</strong>
@@ -95,6 +103,7 @@ function openDrawer() {
   drawerBackdrop.style.top = `${topBar.getBoundingClientRect().height}px`;
   drawerBackdrop.hidden = false;
   sideDrawer.hidden = false;
+  setDrawerBackgroundInert(true);
   // Two rAFs: the first lets the browser paint the [hidden]-removed,
   // pre-transition state; the second then flips the class so the
   // transition actually has a starting frame to animate from.
@@ -102,6 +111,7 @@ function openDrawer() {
     requestAnimationFrame(() => {
       drawerBackdrop.classList.add("drawer-visible");
       sideDrawer.classList.add("drawer-visible");
+      sideDrawer.querySelector("#drawer-close-btn")?.focus();
     });
   });
 }
@@ -111,6 +121,10 @@ function closeDrawer() {
   clearTimeout(drawerHideTimer);
   drawerBackdrop.classList.remove("drawer-visible");
   sideDrawer.classList.remove("drawer-visible");
+  setDrawerBackgroundInert(false);
+  topBar.querySelector("#topbar-menu-btn")?.setAttribute("aria-expanded", "false");
+  if (drawerPreviousFocus instanceof HTMLElement && drawerPreviousFocus.isConnected) drawerPreviousFocus.focus();
+  drawerPreviousFocus = null;
   drawerHideTimer = setTimeout(() => {
     drawerBackdrop.hidden = true;
     sideDrawer.hidden = true;
@@ -123,6 +137,18 @@ function toggleDrawer() {
 }
 
 drawerBackdrop.addEventListener("click", closeDrawer);
+sideDrawer.addEventListener("keydown", (event) => {
+  if (event.key !== "Tab") return;
+  const focusable = [...sideDrawer.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')];
+  if (!focusable.length) return;
+  if (event.shiftKey && document.activeElement === focusable[0]) {
+    event.preventDefault();
+    focusable.at(-1).focus();
+  } else if (!event.shiftKey && document.activeElement === focusable.at(-1)) {
+    event.preventDefault();
+    focusable[0].focus();
+  }
+});
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeDrawer();
 });

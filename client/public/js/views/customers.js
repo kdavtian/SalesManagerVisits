@@ -25,7 +25,7 @@ export function renderCustomers(root, navigate, initialFilter) {
 
       <div class="list-toolbar">
         <label class="visually-hidden" for="customer-search">${t("search_customers")}</label>
-        <input type="search" id="customer-search" placeholder="${t("search_customers")}" />
+        <input type="search" id="customer-search" placeholder="${t("search_customers")}" aria-label="${t("search_customers")}" />
         <button class="icon-btn" id="sort-btn" type="button" aria-label="${t("sort")}" aria-haspopup="menu" aria-expanded="false" aria-controls="sort-menu">${icons.sort}</button>
         <div id="sort-menu" class="dropdown-menu" role="menu" hidden>
           <button role="menuitemradio" aria-checked="true" data-sort="name">${t("sort_name")}</button>

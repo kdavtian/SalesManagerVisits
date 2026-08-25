@@ -180,7 +180,7 @@ export async function renderActivity(root, navigate) {
 
       <div class="activity-filters" id="activity-filters" ${filtersOpen ? "" : "hidden"}>
         <label class="visually-hidden" for="activity-search">${t("search_customers")}</label>
-        <input type="search" id="activity-search" placeholder="${t("search_customers")}" value="${escapeHtml(filters.search)}" />
+        <input type="search" id="activity-search" placeholder="${t("search_customers")}" aria-label="${t("search_customers")}" value="${escapeHtml(filters.search)}" />
         <div class="activity-filter-row">
           ${
             canFilterByManager

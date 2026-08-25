@@ -690,10 +690,10 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
             : ""
         }
         <div class="plan-mode-tabs" role="tablist">
-          <button type="button" class="plan-mode-tab plan-mode-tab-active" data-mode="today">${t("plan_mode_today")}</button>
-          <button type="button" class="plan-mode-tab" data-mode="recurring">${t("plan_mode_recurring")}</button>
+          <button type="button" class="plan-mode-tab plan-mode-tab-active" data-mode="today" role="tab" aria-selected="true" aria-controls="plan-body" tabindex="0">${t("plan_mode_today")}</button>
+          <button type="button" class="plan-mode-tab" data-mode="recurring" role="tab" aria-selected="false" aria-controls="plan-body" tabindex="-1">${t("plan_mode_recurring")}</button>
         </div>
-        <div id="plan-body"><p class="loading-state" role="status">${t("loading")}</p></div>
+        <div id="plan-body" role="tabpanel"><p class="loading-state" role="status">${t("loading")}</p></div>
         <p class="form-error" id="plan-day-error" hidden></p>
         <div class="sheet-actions">
           <button type="button" class="btn" id="cancel-plan-day">${t("cancel")}</button>
@@ -740,12 +740,27 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       });
     }
 
-    overlay.querySelectorAll(".plan-mode-tab").forEach((tab) => {
-      tab.addEventListener("click", () => {
-        overlay.querySelectorAll(".plan-mode-tab").forEach((t2) => t2.classList.remove("plan-mode-tab-active"));
+    const planModeTabs = [...overlay.querySelectorAll(".plan-mode-tab")];
+    function selectPlanMode(tab) {
+        planModeTabs.forEach((t2) => {
+          t2.classList.remove("plan-mode-tab-active");
+          t2.setAttribute("aria-selected", "false");
+          t2.tabIndex = -1;
+        });
         tab.classList.add("plan-mode-tab-active");
+        tab.setAttribute("aria-selected", "true");
+        tab.tabIndex = 0;
         mode = tab.dataset.mode;
         renderBody();
+    }
+    planModeTabs.forEach((tab, index) => {
+      tab.addEventListener("click", () => selectPlanMode(tab));
+      tab.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        event.preventDefault();
+        const nextIndex = (index + (event.key === "ArrowRight" ? 1 : -1) + planModeTabs.length) % planModeTabs.length;
+        planModeTabs[nextIndex].focus();
+        selectPlanMode(planModeTabs[nextIndex]);
       });
     });
 

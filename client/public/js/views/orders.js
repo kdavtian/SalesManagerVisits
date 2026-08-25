@@ -42,7 +42,7 @@ export async function renderOrders(root, navigate) {
         </button>
       </div>
       <div class="order-status-filter-row" id="order-status-filters"></div>
-      <div class="list-toolbar"><input type="search" id="order-search" placeholder="${t("search_customers")}" /></div>
+      <div class="list-toolbar"><input type="search" id="order-search" placeholder="${t("search_customers")}" aria-label="${t("search_customers")}" /></div>
       <div class="card-list" id="orders-list"><p class="loading-state" role="status">${t("loading")}</p></div>
     </div>
   `;
@@ -158,7 +158,7 @@ export async function renderOrders(root, navigate) {
     overlay.innerHTML = `
       <div class="sheet">
         <h2>${t("select_customer")}</h2>
-        <input type="search" id="order-customer-search" placeholder="${t("search_customers")}" autofocus />
+        <input type="search" id="order-customer-search" placeholder="${t("search_customers")}" aria-label="${t("search_customers")}" autofocus />
         <div class="card-list" id="order-customer-results" style="margin-top:12px; max-height:50vh; overflow-y:auto;"></div>
         <div class="sheet-actions">
           <button type="button" class="btn" id="order-customer-cancel">${t("cancel")}</button>
