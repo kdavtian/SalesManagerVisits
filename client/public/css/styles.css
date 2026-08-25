@@ -3690,6 +3690,35 @@ form [aria-invalid="true"] {
   background: var(--bg-card);
 }
 
+.order-crumb-row {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  padding: 0 0 8px;
+}
+
+.order-chip-grid {
+  flex-wrap: wrap;
+  height: auto;
+}
+
+.order-chip-grid .chip {
+  flex: 0 0 auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 16px;
+}
+
+.order-stock-warning {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--warning);
+}
+
+.order-stock-warning.order-stock-danger {
+  color: var(--danger);
+}
+
 .order-cart-bar {
   position: sticky;
   bottom: calc(var(--nav-height, 64px) + 12px);

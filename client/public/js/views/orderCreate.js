@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd } from "../util.js";
+import { escapeHtml, formatAmd, tierBadgeHtml } from "../util.js";
 import { t } from "../i18n.js";
 import { enqueueOrder } from "../offlineQueue.js";
 
@@ -25,7 +25,67 @@ async function getCatalog() {
 function filterCatalog(list, query) {
   const q = query.trim().toLowerCase();
   if (!q) return list;
-  return list.filter((p) => [p.name, p.sku, p.brand].some((v) => v && v.toLowerCase().includes(q)));
+  return list.filter((p) => [p.name, p.sku, p.brand, p.family].some((v) => v && v.toLowerCase().includes(q)));
+}
+
+// Brands the sales team actually leads with go first; anything else (a
+// brand only the ERP catalog knows about) still shows up, just after.
+const BRAND_PRIORITY = ["Castrol", "Lotos", "Royal"];
+
+function sortedBrands(products) {
+  const brands = [...new Set(products.map((p) => p.brand).filter(Boolean))];
+  return brands.sort((a, b) => {
+    const pa = BRAND_PRIORITY.indexOf(a);
+    const pb = BRAND_PRIORITY.indexOf(b);
+    if (pa !== -1 || pb !== -1) return (pa === -1 ? 99 : pa) - (pb === -1 ? 99 : pb);
+    return a.localeCompare(b);
+  });
+}
+
+const OTHER_FAMILY = "__other__";
+
+function familiesForBrand(products, brand) {
+  const families = [...new Set(products.filter((p) => p.brand === brand && p.family).map((p) => p.family))].sort();
+  const hasUnfamilied = products.some((p) => p.brand === brand && !p.family);
+  if (hasUnfamilied) families.push(OTHER_FAMILY);
+  return families;
+}
+
+// 1L bottles are sold by the case (4), 4L/5L jugs by the pair, anything
+// larger (drums, barrels) one at a time -- matches how a rep actually
+// batches a shop order instead of always starting the stepper at 1.
+function defaultQtyForUnit(unit) {
+  const m = /^([\d.]+)\s*L$/i.exec((unit || "").trim());
+  const liters = m ? parseFloat(m[1]) : null;
+  if (liters === 1) return 4;
+  if (liters === 4 || liters === 5) return 2;
+  return 1;
+}
+
+function numOrNull(value) {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Bronze/potential/competitor customers all pay the bronze (standard)
+// price -- a potential or competitor account isn't a Silver/Gold
+// relationship yet, so it never gets a discounted or special price.
+function tierPrice(product, tier) {
+  const bronze = numOrNull(product.bronze_price_amd) ?? Number(product.unit_price_amd);
+  if (tier === "silver") return numOrNull(product.silver_price_amd) ?? bronze;
+  if (tier === "gold") return numOrNull(product.gold_price_amd) ?? bronze;
+  return bronze;
+}
+
+// null/undefined stock_qty means the catalog doesn't track stock for this
+// product (e.g. a manually added line) -- no warning, not "unavailable".
+function stockWarning(product, requestedQty) {
+  const stock = product.stock_qty;
+  if (stock === null || stock === undefined) return null;
+  if (stock <= 0) return { level: "danger", text: t("out_of_stock") };
+  if (requestedQty > stock) return { level: "warning", text: `${t("only_n_available_prefix")}${stock}${t("only_n_available_suffix")}` };
+  return null;
 }
 
 export async function renderOrderCreate(root, navigate, customerId, checkinId) {
@@ -40,10 +100,20 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
     return;
   }
 
+  const tier = customer.customer_tier || "potential";
+
   // Keyed by product id (or a synthetic "custom-N" id for a free-text line
-  // not in the catalog) so both kinds of line share the same cart map.
+  // not in the catalog) so both kinds of line share the same cart map --
+  // and persists across brand/family navigation so a rep can pick items
+  // from several brands/families into one order.
   const cart = new Map();
   let customLineSeq = 0;
+
+  // Drill-down state: brands -> families (skipped if the brand has none) ->
+  // variants. A non-empty search query bypasses the hierarchy entirely and
+  // shows a flat filtered list, same as the old single-level UI.
+  const nav = { brand: null, family: null };
+  let searchQuery = "";
 
   container.innerHTML = `
     <div class="detail-header">
@@ -53,12 +123,14 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
       <div class="detail-header-title">
         <h1>${t("create_order")}</h1>
         <span class="badge badge-neutral">${escapeHtml(customer.name)}</span>
+        ${tierBadgeHtml(tier)}
       </div>
     </div>
 
     <div class="order-search-row">
       <input type="search" id="product-search" placeholder="${t("search_products_placeholder")}" />
     </div>
+    <div class="order-crumb-row" id="order-crumb-row" hidden></div>
     <div class="order-product-list" id="order-product-list"></div>
     <button type="button" class="btn btn-block" id="add-custom-line-btn">${t("add_custom_item")}</button>
 
@@ -73,10 +145,28 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
     </div>
   `;
 
-  container.querySelector("#back-btn").addEventListener("click", () => {
+  const backBtn = container.querySelector("#back-btn");
+  backBtn.addEventListener("click", () => {
+    if (searchQuery) {
+      searchQuery = "";
+      searchInput.value = "";
+      render();
+      return;
+    }
+    if (nav.family !== null) {
+      nav.family = null;
+      render();
+      return;
+    }
+    if (nav.brand !== null) {
+      nav.brand = null;
+      render();
+      return;
+    }
     navigate(`#/customers/${customerId}`);
   });
 
+  const crumbRow = container.querySelector("#order-crumb-row");
   const listEl = container.querySelector("#order-product-list");
   const searchInput = container.querySelector("#product-search");
   const cartBar = container.querySelector("#order-cart-bar");
@@ -102,14 +192,35 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
     cartTotal.textContent = formatAmd(cartTotalAmd());
   }
 
+  function renderCrumbs() {
+    const parts = [];
+    if (nav.brand) parts.push(escapeHtml(nav.brand));
+    if (nav.family) parts.push(nav.family === OTHER_FAMILY ? t("family_other") : escapeHtml(nav.family));
+    crumbRow.hidden = !parts.length;
+    crumbRow.textContent = parts.join(" › ");
+  }
+
+  function renderChipRow(items, onPick, labelFor = (x) => x) {
+    listEl.innerHTML = `<div class="segmented order-chip-grid">${items
+      .map((item) => `<button type="button" class="chip" data-value="${escapeHtml(String(item))}">${escapeHtml(labelFor(item))}</button>`)
+      .join("")}</div>`;
+    listEl.querySelectorAll("[data-value]").forEach((btn, i) => {
+      btn.addEventListener("click", () => onPick(items[i]));
+    });
+  }
+
   function renderProductRow(product) {
     const line = cart.get(product.id);
     const qty = line?.quantity ?? 0;
+    const price = tierPrice(product, tier);
+    const warning = stockWarning(product, qty || defaultQtyForUnit(product.unit));
+    const outOfStock = product.stock_qty !== null && product.stock_qty !== undefined && product.stock_qty <= 0;
     return `
       <div class="order-product-row" data-product-id="${product.id}">
         <div class="order-product-info">
           <strong>${escapeHtml(product.name)}</strong>
-          <span class="muted">${[product.brand, product.unit].filter(Boolean).map(escapeHtml).join(" · ")} ${formatAmd(Number(product.unit_price_amd))}</span>
+          <span class="muted">${[product.brand, product.unit].filter(Boolean).map(escapeHtml).join(" · ")} ${formatAmd(price)}</span>
+          ${warning ? `<span class="order-stock-warning${warning.level === "danger" ? " order-stock-danger" : ""}">${warning.text}</span>` : ""}
         </div>
         ${
           qty > 0
@@ -118,6 +229,8 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
                 <span>${qty}</span>
                 <button type="button" class="icon-btn" data-action="inc" aria-label="${t("increase")}">&plus;</button>
               </div>`
+            : outOfStock
+            ? `<span class="badge badge-danger">${t("out_of_stock")}</span>`
             : `<button type="button" class="btn btn-sm" data-action="add">${t("add")}</button>`
         }
       </div>
@@ -130,10 +243,11 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
         const line = cart.get(product.id) ?? {
           product_id: product.id,
           product_name: product.name,
-          unit_price_amd: Number(product.unit_price_amd),
+          unit_price_amd: tierPrice(product, tier),
           quantity: 0,
         };
-        if (btn.dataset.action === "add" || btn.dataset.action === "inc") line.quantity += 1;
+        if (btn.dataset.action === "add") line.quantity += defaultQtyForUnit(product.unit);
+        else if (btn.dataset.action === "inc") line.quantity += 1;
         else line.quantity -= 1;
 
         if (line.quantity <= 0) cart.delete(product.id);
@@ -157,10 +271,48 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
     });
   }
 
-  paintProductList(products);
+  function render() {
+    renderCrumbs();
+
+    if (searchQuery) {
+      paintProductList(filterCatalog(products, searchQuery));
+      return;
+    }
+
+    if (!nav.brand) {
+      renderChipRow(sortedBrands(products), (brand) => {
+        nav.brand = brand;
+        render();
+      });
+      return;
+    }
+
+    const families = familiesForBrand(products, nav.brand);
+    if (!nav.family) {
+      if (!families.length) {
+        // No recognized family for this brand at all -- skip straight to
+        // the variant list instead of showing a menu with nothing in it.
+        nav.family = OTHER_FAMILY;
+      } else {
+        renderChipRow(families, (family) => {
+          nav.family = family;
+          render();
+        }, (f) => (f === OTHER_FAMILY ? t("family_other") : f));
+        return;
+      }
+    }
+
+    const variants = products.filter(
+      (p) => p.brand === nav.brand && (nav.family === OTHER_FAMILY ? !p.family : p.family === nav.family)
+    );
+    paintProductList(variants);
+  }
+
+  render();
 
   searchInput.addEventListener("input", () => {
-    paintProductList(filterCatalog(products, searchInput.value));
+    searchQuery = searchInput.value;
+    render();
   });
 
   container.querySelector("#add-custom-line-btn").addEventListener("click", () => {
