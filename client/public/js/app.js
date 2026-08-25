@@ -157,7 +157,7 @@ function renderNav() {
     <div class="topbar-right">
       <span class="topbar-user">${escapeHtml(state.user.name)}</span>
       <button type="button" class="topbar-menu-btn" id="topbar-menu-btn" aria-label="${t("nav_settings")}">
-        ${icons.settings}
+        ${icons.menu}
       </button>
     </div>
   `;

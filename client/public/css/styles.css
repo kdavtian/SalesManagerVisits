@@ -78,11 +78,15 @@
 html,
 body {
   height: 100%;
-  /* Suppresses iOS Safari's double-tap-to-zoom gesture app-wide (the
-     viewport meta's maximum-scale alone doesn't reliably do this,
-     especially in standalone/installed mode) without blocking normal
-     single-finger scrolling, unlike touch-action: none. */
-  touch-action: manipulation;
+  /* Suppresses both double-tap-to-zoom and pinch-to-zoom app-wide (the
+     viewport meta's maximum-scale/user-scalable alone doesn't reliably do
+     this -- iOS Safari ignores user-scalable=no for accessibility reasons)
+     without blocking normal single/multi-finger panning and scrolling.
+     The Leaflet map re-enables its own pinch/zoom handling by setting
+     touch-action: none directly on #leaflet-map (see map.js), which wins
+     over this rule for that one element -- so zoom stays available there
+     and nowhere else in the app. */
+  touch-action: pan-x pan-y;
 }
 
 body {
@@ -1587,12 +1591,14 @@ input[type="search"]:focus {
 
 .map-hint {
   position: absolute;
-  top: 12px;
+  /* Clears the filter chip row (also top:12px, same z-index) instead of
+     overlapping it -- matches .map-controls' top offset for the same
+     reason. Solid fill (no blur/transparency) so it reads as a flat card
+     instead of picking up whatever colors are in the map tiles behind it. */
+  top: 60px;
   left: 12px;
   right: 12px;
-  background: var(--bg-elevated);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  background: var(--bg-card);
   border: 1px solid var(--accent);
   color: var(--text);
   padding: 10px 12px;
@@ -1706,9 +1712,7 @@ input[type="search"]:focus {
 .map-control-cluster {
   display: flex;
   flex-direction: column;
-  background: var(--bg-elevated);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
@@ -1743,9 +1747,7 @@ input[type="search"]:focus {
 }
 
 .map-control-standalone {
-  background: var(--bg-elevated);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
@@ -2957,9 +2959,7 @@ input[type="search"]:focus {
   align-items: center;
   gap: 5px;
   flex-shrink: 0;
-  background: var(--bg-elevated);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: 999px;

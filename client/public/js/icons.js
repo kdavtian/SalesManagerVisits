@@ -16,6 +16,7 @@ export const icons = {
   map: `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M20.75 3.25 3.55 10.1a.9.9 0 0 0 .12 1.71l6.72 1.8 1.8 6.72a.9.9 0 0 0 1.71.12l6.85-17.2Z"/></svg>`,
   customers: navSvg(`<circle cx="12" cy="6.75" r="2.75"/><circle cx="5.45" cy="8.05" r="2.15"/><circle cx="18.55" cy="8.05" r="2.15"/><path d="M6.25 20v-1.3a5.75 5.75 0 0 1 11.5 0V20"/><path d="M1.9 18.3v-.9a4.25 4.25 0 0 1 4.25-4.25c.72 0 1.4.18 2 .5M22.1 18.3v-.9a4.25 4.25 0 0 0-4.25-4.25c-.72 0-1.4.18-2 .5"/>`),
   settings: navSvg(`<path d="M9.35 3.15h5.3l.55 2.05c.48.2.94.46 1.36.78l2.06-.56 2.65 4.58-1.5 1.5a7.7 7.7 0 0 1 0 1.57l1.5 1.5-2.65 4.58-2.06-.56c-.42.32-.88.58-1.36.78l-.55 2.05h-5.3l-.55-2.05a7.5 7.5 0 0 1-1.36-.78l-2.06.56-2.65-4.58 1.5-1.5a7.7 7.7 0 0 1 0-1.57L2.73 10l2.65-4.58 2.06.56c.42-.32.88-.58 1.36-.78l.55-2.05Z"/><circle cx="12" cy="12.28" r="3.05"/>`),
+  menu: uiSvg(`<path d="M4 6h16M4 12h16M4 18h16"/>`),
   locate: `<svg class="map-action-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><circle cx="12" cy="12" r="2.15" fill="currentColor" stroke="none"/></svg>`,
   plus: `<svg class="map-action-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><path d="M12 4v16M4 12h16"/></svg>`,
   minus: `<svg class="map-action-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><path d="M4 12h16"/></svg>`,

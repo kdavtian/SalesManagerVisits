@@ -626,6 +626,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   const teamBtn = root.querySelector("#team-locations-btn");
   const teamLayer = L.layerGroup();
   let teamPollId = null;
+  let teamEmptyHintTimer = null;
 
   function teamMemberIcon() {
     return L.divIcon({
@@ -651,7 +652,17 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         )
         .addTo(teamLayer);
     }
-    teamEmptyHint.hidden = !teamBtn.classList.contains("map-control-active") || locations.length > 0;
+    clearTimeout(teamEmptyHintTimer);
+    if (teamBtn.classList.contains("map-control-active") && locations.length === 0) {
+      teamEmptyHint.hidden = false;
+      // Toast-style: shows briefly then dismisses itself, instead of
+      // sitting on the map indefinitely while the toggle stays on.
+      teamEmptyHintTimer = setTimeout(() => {
+        teamEmptyHint.hidden = true;
+      }, 2000);
+    } else {
+      teamEmptyHint.hidden = true;
+    }
   }
 
   teamBtn?.addEventListener("click", () => {
@@ -664,6 +675,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       map.removeLayer(teamLayer);
       clearInterval(teamPollId);
       teamPollId = null;
+      clearTimeout(teamEmptyHintTimer);
       teamEmptyHint.hidden = true;
     }
   });
