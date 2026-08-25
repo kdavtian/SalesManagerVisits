@@ -23,9 +23,6 @@ const navBar = document.getElementById("nav-bar");
 const topBar = document.getElementById("top-bar");
 const syncBanner = document.getElementById("sync-banner");
 const installRoot = document.getElementById("install-root");
-const drawerBackdrop = document.getElementById("drawer-backdrop");
-const sideDrawer = document.getElementById("side-drawer");
-
 // Dynamic views and sheets share the same feedback classes. Assign live
 // semantics as they appear so async errors/success messages are announced.
 new MutationObserver((mutations) => {
@@ -57,102 +54,6 @@ async function doLogout() {
   location.hash = "";
   render();
 }
-
-// The drawer transform transition (see .side-drawer in styles.css) is
-// 220ms -- [hidden] is applied that long after closing starts so taps
-// can't reach the off-screen content mid-animation, and removed
-// immediately on open so the slide-in is visible from frame one.
-const DRAWER_TRANSITION_MS = 220;
-let drawerHideTimer = null;
-let drawerPreviousFocus = null;
-
-function setDrawerBackgroundInert(inert) {
-  [app, navBar, topBar].forEach((element) => {
-    element.inert = inert;
-  });
-}
-
-function openDrawer() {
-  clearTimeout(drawerHideTimer);
-  drawerPreviousFocus = document.activeElement;
-  sideDrawer.innerHTML = `
-    <div class="drawer-header">
-      <strong>${t("app_name")}</strong>
-      <button type="button" class="icon-btn" id="drawer-close-btn" aria-label="${t("cancel")}">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
-    </div>
-    <div class="drawer-user">${escapeHtml(state.user.name)}</div>
-    <button type="button" class="drawer-item" id="drawer-settings-btn">${icons.settings} ${t("nav_settings")}</button>
-    <button type="button" class="drawer-item drawer-item-danger" id="drawer-logout-btn">${t("log_out")}</button>
-  `;
-  sideDrawer.querySelector("#drawer-close-btn").addEventListener("click", closeDrawer);
-  sideDrawer.querySelector("#drawer-settings-btn").addEventListener("click", () => {
-    closeDrawer();
-    navigate("#/settings");
-  });
-  sideDrawer.querySelector("#drawer-logout-btn").addEventListener("click", () => {
-    closeDrawer();
-    doLogout();
-  });
-
-  // Leaves the header strip (hamburger button included) outside the
-  // backdrop's hit area -- otherwise a second tap on the hamburger to
-  // close the drawer would be swallowed by the full-screen backdrop
-  // sitting above it in stacking order.
-  drawerBackdrop.style.top = `${topBar.getBoundingClientRect().height}px`;
-  drawerBackdrop.hidden = false;
-  sideDrawer.hidden = false;
-  setDrawerBackgroundInert(true);
-  // Two rAFs: the first lets the browser paint the [hidden]-removed,
-  // pre-transition state; the second then flips the class so the
-  // transition actually has a starting frame to animate from.
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      drawerBackdrop.classList.add("drawer-visible");
-      sideDrawer.classList.add("drawer-visible");
-      sideDrawer.querySelector("#drawer-close-btn")?.focus();
-    });
-  });
-}
-
-function closeDrawer() {
-  if (sideDrawer.hidden) return;
-  clearTimeout(drawerHideTimer);
-  drawerBackdrop.classList.remove("drawer-visible");
-  sideDrawer.classList.remove("drawer-visible");
-  setDrawerBackgroundInert(false);
-  topBar.querySelector("#topbar-menu-btn")?.setAttribute("aria-expanded", "false");
-  if (drawerPreviousFocus instanceof HTMLElement && drawerPreviousFocus.isConnected) drawerPreviousFocus.focus();
-  drawerPreviousFocus = null;
-  drawerHideTimer = setTimeout(() => {
-    drawerBackdrop.hidden = true;
-    sideDrawer.hidden = true;
-  }, DRAWER_TRANSITION_MS);
-}
-
-function toggleDrawer() {
-  if (sideDrawer.hidden) openDrawer();
-  else closeDrawer();
-}
-
-drawerBackdrop.addEventListener("click", closeDrawer);
-sideDrawer.addEventListener("keydown", (event) => {
-  if (event.key !== "Tab") return;
-  const focusable = [...sideDrawer.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')];
-  if (!focusable.length) return;
-  if (event.shiftKey && document.activeElement === focusable[0]) {
-    event.preventDefault();
-    focusable.at(-1).focus();
-  } else if (!event.shiftKey && document.activeElement === focusable.at(-1)) {
-    event.preventDefault();
-    focusable[0].focus();
-  }
-});
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeDrawer();
-});
-window.addEventListener("hashchange", closeDrawer);
 
 async function render() {
   document.documentElement.lang = getLang();
@@ -255,15 +156,12 @@ function renderNav() {
     </span>
     <div class="topbar-right">
       <span class="topbar-user">${escapeHtml(state.user.name)}</span>
-      <button type="button" class="topbar-menu-btn" id="topbar-menu-btn" aria-label="${t("menu")}" aria-expanded="false">
-        ${icons.menu}
+      <button type="button" class="topbar-menu-btn" id="topbar-menu-btn" aria-label="${t("nav_settings")}">
+        ${icons.settings}
       </button>
     </div>
   `;
-  topBar.querySelector("#topbar-menu-btn").addEventListener("click", (e) => {
-    toggleDrawer();
-    e.currentTarget.setAttribute("aria-expanded", String(!sideDrawer.hidden));
-  });
+  topBar.querySelector("#topbar-menu-btn").addEventListener("click", () => navigate("#/settings"));
 }
 
 function renderSyncBanner() {

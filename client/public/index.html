@@ -37,16 +37,6 @@
     <nav id="nav-bar" class="nav-bar" aria-label="Primary navigation" hidden></nav>
     <div id="install-root"></div>
 
-    <!--
-      Static, never re-created by the router -- only class toggles change
-      (transform/opacity, GPU-composited), so opening/closing this stays
-      cheap even on a slow Android phone. Left-anchored so it slides in
-      left-to-right on open and back left on close, the common drawer
-      pattern regardless of which side the hamburger button sits on.
-    -->
-    <div id="drawer-backdrop" class="drawer-backdrop" aria-hidden="true" hidden></div>
-    <aside id="side-drawer" class="side-drawer" role="dialog" aria-modal="true" aria-label="Menu" hidden></aside>
-
     <script src="vendor/leaflet/leaflet.js"></script>
     <script src="vendor/leaflet-rotate/leaflet-rotate.js"></script>
     <script type="module" src="js/app.js"></script>
