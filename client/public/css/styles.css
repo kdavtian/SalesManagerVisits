@@ -274,12 +274,21 @@ a {
 
 .nav-bar {
   display: flex;
-  align-items: flex-start;
+  /* Was flex-start with the safe-area inset carved out as separate bottom
+     padding -- on devices where --nav-safe-bottom computes larger than the
+     ~14px this was tuned for (seen on some Android browsers/WebViews),
+     that padding doesn't get redistributed, so the icon row stays pinned
+     to the top with a big unclaimed blank strip beneath it inside the bar.
+     Stretching items to the bar's full height (see .nav-item/.nav-item-
+     center-wrap below) and letting each item center its own content makes
+     the row self-center no matter how large that inset turns out to be on
+     a given device, instead of depending on the padding math working out
+     exactly. */
+  align-items: stretch;
   background: var(--bg-elevated);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   border-top: 0.5px solid var(--border);
-  padding-bottom: var(--nav-safe-bottom);
   flex-shrink: 0;
   /* Fixed (not sticky/relative) and pinned to the real viewport edge --
      nav-bar is a sibling of #app, not one of its scrolling descendants, so
@@ -330,7 +339,9 @@ a {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  height: 48px;
+  /* Fills the bar's full (content + safe-area) height and centers its own
+     icon+label within that -- see the .nav-bar comment on align-items. */
+  height: 100%;
   padding: 0 2px;
   font-size: 0.7rem;
   font-weight: 500;
@@ -384,7 +395,13 @@ a {
   display: flex;
   flex-direction: column;
   align-items: center;
-  height: 48px;
+  /* Packed at the top (not centered) on purpose -- .nav-item-center's
+     negative margin-top is what makes it float up above the bar's own top
+     edge, and that bump should stay pinned to the top regardless of how
+     tall this wrapper ends up (see height:100% below and the .nav-bar
+     comment on align-items). */
+  justify-content: flex-start;
+  height: 100%;
 }
 
 .nav-item-center {
