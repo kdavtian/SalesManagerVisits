@@ -478,6 +478,8 @@ const dict = {
     about: "About",
     about_app: "About KAD Motors",
     version: "Version",
+    user_guide: "User guide",
+    user_guide_hint: "Covers app version {v}. If something looks different now, the app has been updated since — ask your admin for a refreshed guide.",
 
     install_title: "Install KAD Motors",
     install_body: "Add it to your home screen for one-tap access.",
@@ -974,6 +976,8 @@ const dict = {
     about: "Մասին",
     about_app: "KAD Motors հավելվածի մասին",
     version: "Տարբերակ",
+    user_guide: "Օգտագործման ուղեցույց",
+    user_guide_hint: "Ուղեցույցը համապատասխանում է հավելվածի {v} տարբերակին։ Եթե այժմ ինչ-որ բան այլ կերպ է երևում, հավելվածը թարմացվել է դրանից հետո. խնդրեք Ձեր ադմինիստրատորին թարմացված ուղեցույց։",
 
     install_title: "Տեղադրել KAD Motors-ը",
     install_body: "Ավելացրեք հիմնական էկրանին՝ մեկ հպումով բացելու համար։",

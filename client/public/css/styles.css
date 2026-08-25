@@ -116,6 +116,12 @@ a {
   color: var(--text-dim);
 }
 
+.settings-hint {
+  font-size: 0.8rem;
+  margin: -6px 4px 20px;
+  line-height: 1.4;
+}
+
 .loading-state,
 .empty-state {
   color: var(--text-dim);

@@ -7,7 +7,7 @@ import { escapeHtml, compressImage, activateDialog } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
 
-const APP_VERSION = "1.4.2";
+const APP_VERSION = "1.5.0";
 
 const ICON = {
   camera: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg>`,
@@ -24,7 +24,15 @@ const ICON = {
   info: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 8v.01"/></svg>`,
   chevron: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>`,
   bell: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 4.5 1.5 6 1.5 6h-15S6 12.5 6 8Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>`,
+  book: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5v-15Z"/><path d="M4 18a2.5 2.5 0 0 1 2.5-2.5H20"/></svg>`,
 };
+
+// User guide PDF: update GUIDE_VERSION (and re-export docs/kad-motors-guide-hy.pdf
+// via the tutorial-generation flow used to build it) whenever a UI change is
+// significant enough that the screenshots/steps in the guide would mislead a
+// rep -- a new nav pattern, a changed order-creation flow, moved buttons,
+// etc. A copy-fix or color tweak doesn't need a re-export.
+const GUIDE_VERSION = "1.4.1";
 
 function settingsRow({ icon, label, value, id, interactive = true }) {
   const tag = interactive ? "button" : "div";
@@ -127,7 +135,9 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       <h2 class="section-title">${t("about")}</h2>
       <div class="card settings-list">
         ${settingsRow({ icon: ICON.info, label: t("about_app"), value: `${t("version")} ${APP_VERSION}`, interactive: false })}
+        ${settingsRow({ icon: ICON.book, label: t("user_guide"), value: "PDF", id: "row-user-guide" })}
       </div>
+      <p class="muted settings-hint">${t("user_guide_hint").replace("{v}", GUIDE_VERSION)}</p>
 
       <button class="btn btn-block btn-danger settings-logout" id="settings-logout">${t("log_out")}</button>
       </section>
@@ -401,6 +411,10 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
   if (canApprovePlans) {
     renderPlanApprovalsSection(root.querySelector("#plan-approvals-slot"));
   }
+
+  root.querySelector("#row-user-guide").addEventListener("click", () => {
+    window.open("/docs/kad-motors-guide-hy.pdf", "_blank");
+  });
 
   // --- Security ---
   root.querySelector("#row-change-password").addEventListener("click", openChangePasswordSheet);
