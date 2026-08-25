@@ -159,7 +159,7 @@ export async function renderOrders(root, navigate) {
       <div class="sheet">
         <h2>${t("select_customer")}</h2>
         <input type="search" id="order-customer-search" placeholder="${t("search_customers")}" aria-label="${t("search_customers")}" autofocus />
-        <div class="card-list" id="order-customer-results" style="margin-top:12px; max-height:50vh; overflow-y:auto;"></div>
+        <div class="card-list" id="order-customer-results" style="margin:12px 0; height:45vh; overflow-y:auto;"></div>
         <div class="sheet-actions">
           <button type="button" class="btn" id="order-customer-cancel">${t("cancel")}</button>
         </div>

@@ -910,14 +910,33 @@ form [aria-invalid="true"] {
   z-index: 5;
 }
 
-.list-toolbar input[type="search"] {
-  flex: 1;
-  min-width: 0;
+/* Base look for every search input app-wide (list pages, dialogs, the
+   order-creation catalog search, ...) -- one consistent style instead of
+   several near-duplicate rules scoped to each container, and a bare
+   <input type="search"> with no wrapper class no longer falls back to the
+   unstyled native control. -webkit-appearance strips iOS's own decoration
+   (which otherwise fights the custom border/background). */
+input[type="search"] {
+  width: 100%;
+  box-sizing: border-box;
   padding: 10px 12px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
+  font-size: 0.95rem;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input[type="search"]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.list-toolbar input[type="search"] {
+  flex: 1;
+  min-width: 0;
 }
 
 .dropdown-menu {
@@ -3793,16 +3812,6 @@ form [aria-invalid="true"] {
 
 .order-search-row {
   padding: 8px 0;
-}
-
-.order-search-row input[type="search"] {
-  width: 100%;
-  padding: 12px 14px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text);
-  font-size: 0.95rem;
 }
 
 .order-product-list {

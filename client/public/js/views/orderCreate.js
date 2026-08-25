@@ -42,15 +42,6 @@ function sortedBrands(products) {
   });
 }
 
-const OTHER_FAMILY = "__other__";
-
-function familiesForBrand(products, brand) {
-  const families = [...new Set(products.filter((p) => p.brand === brand && p.family).map((p) => p.family))].sort();
-  const hasUnfamilied = products.some((p) => p.brand === brand && !p.family);
-  if (hasUnfamilied) families.push(OTHER_FAMILY);
-  return families;
-}
-
 // 1L bottles are sold by the case (4), 4L/5L jugs by the pair, anything
 // larger (drums, barrels) one at a time -- matches how a rep actually
 // batches a shop order instead of always starting the stepper at 1.
@@ -109,10 +100,10 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
   const cart = new Map();
   let customLineSeq = 0;
 
-  // Drill-down state: brands -> families (skipped if the brand has none) ->
-  // variants. A non-empty search query bypasses the hierarchy entirely and
-  // shows a flat filtered list, same as the old single-level UI.
-  const nav = { brand: null, family: null };
+  // Brand -> flat product list -- no extra family step, just pick a brand
+  // and see everything under it. A non-empty search query bypasses even
+  // that, showing a flat filtered list across every brand.
+  const nav = { brand: null };
   let searchQuery = "";
 
   container.innerHTML = `
@@ -157,11 +148,6 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
     if (searchQuery) {
       searchQuery = "";
       searchInput.value = "";
-      render();
-      return;
-    }
-    if (nav.family !== null) {
-      nav.family = null;
       render();
       return;
     }
@@ -212,11 +198,8 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
   discountInput.addEventListener("input", updateCartBar);
 
   function renderCrumbs() {
-    const parts = [];
-    if (nav.brand) parts.push(escapeHtml(nav.brand));
-    if (nav.family) parts.push(nav.family === OTHER_FAMILY ? t("family_other") : escapeHtml(nav.family));
-    crumbRow.hidden = !parts.length;
-    crumbRow.textContent = parts.join(" › ");
+    crumbRow.hidden = !nav.brand;
+    crumbRow.textContent = nav.brand ? escapeHtml(nav.brand) : "";
   }
 
   function renderChipRow(items, onPick, labelFor = (x) => x) {
@@ -306,25 +289,10 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
       return;
     }
 
-    const families = familiesForBrand(products, nav.brand);
-    if (!nav.family) {
-      if (!families.length) {
-        // No recognized family for this brand at all -- skip straight to
-        // the variant list instead of showing a menu with nothing in it.
-        nav.family = OTHER_FAMILY;
-      } else {
-        renderChipRow(families, (family) => {
-          nav.family = family;
-          render();
-        }, (f) => (f === OTHER_FAMILY ? t("family_other") : f));
-        return;
-      }
-    }
-
-    const variants = products.filter(
-      (p) => p.brand === nav.brand && (nav.family === OTHER_FAMILY ? !p.family : p.family === nav.family)
-    );
-    paintProductList(variants);
+    const brandProducts = products
+      .filter((p) => p.brand === nav.brand)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    paintProductList(brandProducts);
   }
 
   render();
