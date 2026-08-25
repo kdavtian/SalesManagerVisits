@@ -36,6 +36,13 @@ export function canPlanForOthers(role) {
   return role === "admin" || role === "sales_director" || role === "ceo";
 }
 
+// Who reviews a freshly-submitted order -- confirms it, rejects it, or
+// edits its items/discount before it moves into fulfillment. Distinct from
+// FULFILLMENT_ROLES in routes/orders.js, which owns packed/delivered.
+export function canConfirmOrders(role) {
+  return role === "admin" || role === "sales_director";
+}
+
 // Every field-facing role broadcasts its own foreground location while the
 // app is open, so the office-based roles (admin, CEO) have something to
 // look at; those two don't visit customers themselves, so they don't

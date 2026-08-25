@@ -42,6 +42,69 @@ function sortedBrands(products) {
   });
 }
 
+// Matches the taxonomy sync_field_visits.py assigns on the Castrol side
+// (Edge/Magnatec/GTX/Vecton-CRB/Transmission oils/Other) plus Lotos/Royal's
+// simpler Engine oils/Transmission oils/Other -- ordered the way the
+// business actually leads with its lines, not alphabetically.
+const FAMILY_PRIORITY = ["Edge", "Magnatec", "GTX", "Vecton/CRB", "Engine oils", "Transmission oils", "Other"];
+
+// A broader grouping than family, for the category filter -- everything
+// is "Engine oil" except the recognized transmission family, per the
+// simple split requested until a real category taxonomy exists.
+function productCategory(product) {
+  return product.family === "Transmission oils" ? "Transmission" : "Engine oil";
+}
+
+// e.g. "Edge 5W-30" or "GTX 5w30" -> [5, 30]; null if the name doesn't
+// carry a viscosity grade (a non-oil line, or an unrecognized format).
+function viscosityGrade(name) {
+  const m = /\b(\d{1,2})w-?(\d{1,2})\b/i.exec(name || "");
+  return m ? [Number(m[1]), Number(m[2])] : null;
+}
+
+// "1L" -> 1, "208L" -> 208; null for a unit that isn't a plain liter size.
+function sizeLiters(unit) {
+  const m = /^([\d.]+)\s*L$/i.exec((unit || "").trim());
+  return m ? parseFloat(m[1]) : null;
+}
+
+// Groups by family (in the business's own order), then by viscosity grade
+// low-to-high within a family, then by size ascending within the same
+// variant (1L, 4L, 5L, 208L, ...) -- e.g. Edge 0w20, 0w20, 0w30, ...
+// 5w30, 5w40, 10w60, each with its sizes smallest-first, instead of a
+// flat alphabetical list that scatters "Edge 0w30 1L" and "Edge 0w30 4L"
+// away from each other by whatever else starts with the same letters.
+function sortProducts(products) {
+  return [...products].sort((a, b) => {
+    const fa = FAMILY_PRIORITY.indexOf(a.family ?? "Other");
+    const fb = FAMILY_PRIORITY.indexOf(b.family ?? "Other");
+    if (fa !== fb) return (fa === -1 ? 99 : fa) - (fb === -1 ? 99 : fb);
+
+    const va = viscosityGrade(a.name);
+    const vb = viscosityGrade(b.name);
+    if (va && vb) {
+      if (va[0] !== vb[0]) return va[0] - vb[0];
+      if (va[1] !== vb[1]) return va[1] - vb[1];
+    } else if (va || vb) {
+      return va ? -1 : 1;
+    }
+
+    const nameDiff = a.name.localeCompare(b.name);
+    if (nameDiff) return nameDiff;
+
+    const sa = sizeLiters(a.unit);
+    const sb = sizeLiters(b.unit);
+    if (sa !== null && sb !== null) return sa - sb;
+    return 0;
+  });
+}
+
+// null/undefined stock_qty means the catalog doesn't track stock for this
+// product -- treated as available, same as stockWarning below does.
+function isAvailable(product) {
+  return product.stock_qty === null || product.stock_qty === undefined || Number(product.stock_qty) > 0;
+}
+
 // 1L bottles are sold by the case (4), 4L/5L jugs by the pair, anything
 // larger (drums, barrels) one at a time -- matches how a rep actually
 // batches a shop order instead of always starting the stepper at 1.
@@ -102,9 +165,13 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
 
   // Brand -> flat product list -- no extra family step, just pick a brand
   // and see everything under it. A non-empty search query bypasses even
-  // that, showing a flat filtered list across every brand.
-  const nav = { brand: null };
+  // that, showing a flat filtered list across every brand. category narrows
+  // further within that (engine oil vs transmission); showAll turns off the
+  // default out-of-stock hiding so a manager can still see (and order) a
+  // product that's temporarily at 0 on hand.
+  const nav = { brand: null, category: null };
   let searchQuery = "";
+  let showAll = false;
 
   container.innerHTML = `
     <div class="detail-header">
@@ -122,6 +189,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
       <input type="search" id="product-search" placeholder="${t("search_products_placeholder")}" aria-label="${t("search_products_placeholder")}" />
     </div>
     <div class="order-crumb-row" id="order-crumb-row" hidden></div>
+    <div class="order-filter-row" id="order-filter-row" hidden></div>
     <div class="order-product-list" id="order-product-list"></div>
     <button type="button" class="btn btn-block" id="add-custom-line-btn">${t("add_custom_item")}</button>
 
@@ -130,8 +198,11 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
     <div class="order-cart-bar" id="order-cart-bar" hidden>
       <div class="order-discount-row">
         <label for="order-discount-input">${t("discount_pct_label")}</label>
-        <input type="number" id="order-discount-input" min="0" max="100" step="1" value="0" inputmode="numeric" />
-        <span>%</span>
+        <input type="number" id="order-discount-input" min="0" step="1" value="0" inputmode="numeric" />
+        <div class="segmented" id="order-discount-type">
+          <button type="button" class="chip chip-active" data-type="pct">${t("discount_type_pct")}</button>
+          <button type="button" class="chip" data-type="amd">${t("discount_type_amd")}</button>
+        </div>
       </div>
       <div class="order-cart-bar-row">
         <div class="order-cart-summary">
@@ -160,18 +231,26 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
   });
 
   const crumbRow = container.querySelector("#order-crumb-row");
+  const filterRow = container.querySelector("#order-filter-row");
   const listEl = container.querySelector("#order-product-list");
   const searchInput = container.querySelector("#product-search");
   const cartBar = container.querySelector("#order-cart-bar");
   const cartCount = container.querySelector("#order-cart-count");
   const cartTotal = container.querySelector("#order-cart-total");
   const discountInput = container.querySelector("#order-discount-input");
+  const discountTypeRow = container.querySelector("#order-discount-type");
   const errorEl = container.querySelector("#order-error");
   const saveBtn = container.querySelector("#save-order-btn");
 
-  function discountPct() {
+  // A rep negotiating "5,000 off" doesn't want to convert that to a percent
+  // by hand -- the two are mutually exclusive per order, same as the
+  // server enforces (see discount_amd in routes/orders.js).
+  let discountType = "pct";
+
+  function discountValue() {
     const n = Number(discountInput.value);
-    return Number.isFinite(n) && n > 0 ? Math.min(100, n) : 0;
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    return discountType === "pct" ? Math.min(100, n) : n;
   }
 
   function cartSubtotalAmd() {
@@ -181,7 +260,9 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
   }
 
   function cartTotalAmd() {
-    return cartSubtotalAmd() * (1 - discountPct() / 100);
+    const subtotal = cartSubtotalAmd();
+    const value = discountValue();
+    return discountType === "amd" ? Math.max(0, subtotal - value) : subtotal * (1 - value / 100);
   }
 
   function updateCartBar() {
@@ -196,10 +277,70 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
   }
 
   discountInput.addEventListener("input", updateCartBar);
+  discountTypeRow.querySelectorAll("[data-type]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      discountType = btn.dataset.type;
+      discountTypeRow.querySelectorAll("[data-type]").forEach((b) => b.classList.toggle("chip-active", b === btn));
+      discountInput.max = discountType === "pct" ? "100" : "";
+      updateCartBar();
+    });
+  });
 
   function renderCrumbs() {
     crumbRow.hidden = !nav.brand;
-    crumbRow.textContent = nav.brand ? escapeHtml(nav.brand) : "";
+    if (!nav.brand) return;
+    crumbRow.innerHTML = `
+      <span>${escapeHtml(nav.brand)}</span>
+      <button type="button" class="btn-link" id="order-switch-brand-btn">${t("switch_brand")}</button>
+    `;
+    crumbRow.querySelector("#order-switch-brand-btn").addEventListener("click", () => {
+      nav.brand = null;
+      render();
+    });
+  }
+
+  function renderFilters() {
+    // Only meaningful once there's an actual product list on screen (a
+    // specific brand, or a search) -- the brand-picker itself has nothing
+    // to filter yet.
+    filterRow.hidden = !nav.brand && !searchQuery;
+    if (filterRow.hidden) return;
+
+    const categories = [
+      { value: null, label: t("category_all") },
+      { value: "Engine oil", label: t("category_engine_oil") },
+      { value: "Transmission", label: t("category_transmission") },
+    ];
+    filterRow.innerHTML = `
+      <div class="segmented order-category-chips">
+        ${categories
+          .map(
+            (c) =>
+              `<button type="button" class="chip ${nav.category === c.value ? "chip-active" : ""}" data-category="${c.value ?? ""}">${escapeHtml(c.label)}</button>`
+          )
+          .join("")}
+      </div>
+      <button type="button" class="chip order-availability-toggle ${showAll ? "" : "chip-active"}" id="order-availability-toggle">
+        ${showAll ? t("show_all_products") : t("available_only")}
+      </button>
+    `;
+    filterRow.querySelectorAll("[data-category]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        nav.category = btn.dataset.category || null;
+        render();
+      });
+    });
+    filterRow.querySelector("#order-availability-toggle").addEventListener("click", () => {
+      showAll = !showAll;
+      render();
+    });
+  }
+
+  function applyFilters(list) {
+    let filtered = list;
+    if (nav.category) filtered = filtered.filter((p) => productCategory(p) === nav.category);
+    if (!showAll) filtered = filtered.filter((p) => isAvailable(p) || cart.has(p.id));
+    return filtered;
   }
 
   function renderChipRow(items, onPick, labelFor = (x) => x) {
@@ -275,9 +416,10 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
 
   function render() {
     renderCrumbs();
+    renderFilters();
 
     if (searchQuery) {
-      paintProductList(filterCatalog(products, searchQuery));
+      paintProductList(sortProducts(applyFilters(filterCatalog(products, searchQuery))));
       return;
     }
 
@@ -289,10 +431,8 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
       return;
     }
 
-    const brandProducts = products
-      .filter((p) => p.brand === nav.brand)
-      .sort((a, b) => a.name.localeCompare(b.name));
-    paintProductList(brandProducts);
+    const brandProducts = applyFilters(products.filter((p) => p.brand === nav.brand));
+    paintProductList(sortProducts(brandProducts));
   }
 
   render();
@@ -328,19 +468,28 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
       unit_price_amd: l.unit_price_amd,
       quantity: l.quantity,
     }));
-    const discount = discountPct();
+    const value = discountValue();
+    const discountPctToSend = discountType === "pct" ? value : 0;
+    const discountAmdToSend = discountType === "amd" ? value : 0;
     try {
       const order = await api.createOrder({
         customer_id: Number(customerId),
         checkin_id: checkinId ? Number(checkinId) : undefined,
         items,
-        discount_pct: discount,
+        discount_pct: discountPctToSend,
+        discount_amd: discountAmdToSend,
       });
       showOrderSaved(order);
     } catch (err) {
       if (err instanceof TypeError) {
         // Offline / network failure -- queue it instead of losing the order.
-        enqueueOrder({ customerId: Number(customerId), checkinId: checkinId ? Number(checkinId) : undefined, items, discount_pct: discount });
+        enqueueOrder({
+          customerId: Number(customerId),
+          checkinId: checkinId ? Number(checkinId) : undefined,
+          items,
+          discount_pct: discountPctToSend,
+          discount_amd: discountAmdToSend,
+        });
         showOrderQueued();
       } else {
         errorEl.textContent = err.message;

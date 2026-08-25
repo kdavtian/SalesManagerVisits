@@ -43,6 +43,41 @@ let fieldErrorId = 0;
 // return there, instead of just re-navigating to #/settings every time.
 let preSettingsHash = "#/dashboard";
 
+// How many orders are sitting in "submitted" waiting on a director's
+// confirm/reject/edit -- shown as a badge on the Orders nav icon. The
+// server returns 0 for anyone who isn't a director/admin, so this is safe
+// to poll unconditionally rather than gating it on the logged-in role here
+// too. orders.js fires "orders-changed" on the window after a confirm/
+// reject/edit so the badge updates immediately instead of waiting for the
+// next poll.
+let orderBadgeCount = 0;
+
+function applyOrderBadge() {
+  const el = document.getElementById("orders-nav-badge");
+  if (!el) return;
+  if (orderBadgeCount > 0) {
+    el.textContent = orderBadgeCount > 99 ? "99+" : String(orderBadgeCount);
+    el.hidden = false;
+  } else {
+    el.hidden = true;
+  }
+}
+
+async function refreshOrderBadge() {
+  if (!state.user) return;
+  try {
+    const { count } = await api.getOrdersPendingCount();
+    orderBadgeCount = count;
+  } catch {
+    // Transient network/auth failure -- leave the last known count showing
+    // rather than flashing the badge away.
+    return;
+  }
+  applyOrderBadge();
+}
+
+window.addEventListener("orders-changed", refreshOrderBadge);
+
 function navigate(hash) {
   if (location.hash === hash) {
     render();
@@ -73,6 +108,7 @@ async function render() {
       location.hash = "#/dashboard";
       startLocationBroadcast();
       render();
+      refreshOrderBadge();
     });
     return;
   }
@@ -142,7 +178,10 @@ function renderNav() {
     `
         : `
       <button class="nav-item ${hash === item.hash ? "nav-item-active" : ""}" data-hash="${item.hash}" aria-label="${item.label}" ${hash === item.hash ? 'aria-current="page"' : ""}>
-        <span class="nav-icon">${item.icon}</span>
+        <span class="nav-icon">
+          ${item.icon}
+          ${item.hash === "#/orders" ? `<span class="nav-badge" id="orders-nav-badge" hidden></span>` : ""}
+        </span>
         <span>${item.label}</span>
       </button>
     `
@@ -152,6 +191,7 @@ function renderNav() {
   navBar.querySelectorAll("[data-hash]").forEach((el) => {
     el.addEventListener("click", () => navigate(el.dataset.hash));
   });
+  applyOrderBadge();
 
   topBar.innerHTML = `
     <span class="topbar-brand">
@@ -227,6 +267,8 @@ async function init() {
   renderSyncBanner();
   flushQueue();
   render();
+  refreshOrderBadge();
+  setInterval(refreshOrderBadge, 60000);
 }
 
 if ("serviceWorker" in navigator) {

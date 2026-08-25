@@ -122,8 +122,10 @@ export const api = {
     return request(`/orders${qs ? `?${qs}` : ""}`);
   },
   getOrder: (id) => request(`/orders/${id}`),
+  getOrdersPendingCount: () => request("/orders/pending-count"),
   updateOrderItems: (id, items) => json(`/orders/${id}`, "PATCH", { items }),
   updateOrderStatus: (id, status) => json(`/orders/${id}`, "PATCH", { status }),
+  updateOrder: (id, data) => json(`/orders/${id}`, "PATCH", data),
   approveOrderDiscount: (id) => request(`/orders/${id}/approve-discount`, { method: "POST" }),
   deleteOrder: (id) => request(`/orders/${id}`, { method: "DELETE" }),
   rejectOrderDiscount: (id) => request(`/orders/${id}/reject-discount`, { method: "POST" }),

@@ -61,6 +61,7 @@ function submitOrder(entry) {
     checkin_id: entry.checkinId,
     items: entry.items,
     discount_pct: entry.discount_pct,
+    discount_amd: entry.discount_amd,
   });
 }
 

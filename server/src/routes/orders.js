@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { seesAllActivity } from "../roles.js";
+import { seesAllActivity, canConfirmOrders } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { notifyUser } from "../push.js";
 import { isNotificationEnabled, ORDER_NOTIFY_ROLES } from "../notificationPreferences.js";
@@ -62,7 +62,11 @@ class OrderValidationError extends Error {}
 
 const DISCOUNT_APPROVER_ROLES = new Set(["admin", "sales_director"]);
 
-function applyDiscount(subtotal, discountPct) {
+// A flat-AMD discount and a percent discount are mutually exclusive on one
+// order -- discount_amd wins if both are somehow nonzero (shouldn't happen,
+// since the two setters below reset the other), and never goes below 0.
+function applyDiscount(subtotal, discountPct, discountAmd) {
+  if (discountAmd > 0) return Math.max(0, subtotal - discountAmd);
   return subtotal * (1 - discountPct / 100);
 }
 
@@ -72,15 +76,22 @@ function applyDiscount(subtotal, discountPct) {
 // looked up live later -- an order is what was actually agreed, and must
 // stay correct even if the catalog price changes afterward.
 ordersRouter.post("/", async (req, res) => {
-  const { customer_id, checkin_id, note, items, discount_pct } = req.body ?? {};
+  const { customer_id, checkin_id, note, items, discount_pct, discount_amd } = req.body ?? {};
   const customerId = Number(customer_id);
   if (!customerId || !Array.isArray(items) || !items.length) {
     return res.status(400).json({ error: "customer_id and at least one item are required" });
   }
-  const discountPct = discount_pct !== undefined ? Number(discount_pct) : 0;
+  let discountPct = discount_pct !== undefined ? Number(discount_pct) : 0;
   if (!Number.isFinite(discountPct) || discountPct < 0 || discountPct > 100) {
     return res.status(400).json({ error: "discount_pct must be a number between 0 and 100" });
   }
+  let discountAmd = discount_amd !== undefined ? Number(discount_amd) : 0;
+  if (!Number.isFinite(discountAmd) || discountAmd < 0) {
+    return res.status(400).json({ error: "discount_amd must be a non-negative number" });
+  }
+  // The two discount kinds are mutually exclusive -- a flat amount takes
+  // priority if a caller somehow sent both.
+  if (discountAmd > 0) discountPct = 0;
 
   const { rows: customerRows } = await pool.query("SELECT id, name FROM customers WHERE id = $1", [customerId]);
   const customer = customerRows[0];
@@ -109,20 +120,20 @@ ordersRouter.post("/", async (req, res) => {
   }
 
   const subtotalAmd = lines.reduce((sum, l) => sum + l.line_total_amd, 0);
-  const totalAmd = applyDiscount(subtotalAmd, discountPct);
+  const totalAmd = applyDiscount(subtotalAmd, discountPct, discountAmd);
   // A discount needs a director's sign-off before the order can move past
   // "submitted" into fulfillment (see the approval_status gate in PATCH
   // below) -- no discount means nothing to approve.
-  const approvalStatus = discountPct > 0 ? "pending" : "not_required";
+  const approvalStatus = discountPct > 0 || discountAmd > 0 ? "pending" : "not_required";
 
   const client = await pool.connect();
   let order;
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
-      `INSERT INTO orders (customer_id, user_id, checkin_id, total_amd, note, discount_pct, approval_status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [customerId, req.user.id, checkin_id || null, totalAmd, note || null, discountPct, approvalStatus]
+      `INSERT INTO orders (customer_id, user_id, checkin_id, total_amd, note, discount_pct, discount_amd, approval_status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [customerId, req.user.id, checkin_id || null, totalAmd, note || null, discountPct, discountAmd, approvalStatus]
     );
     order = rows[0];
     for (const line of lines) {
@@ -146,7 +157,12 @@ ordersRouter.post("/", async (req, res) => {
   // trip for their order confirmation.
   const { rows: repRows } = await pool.query("SELECT name FROM users WHERE id = $1", [req.user.id]);
   const repName = repRows[0]?.name || "Someone";
-  const discountSuffix = discountPct > 0 ? ` (${discountPct}% discount, pending director approval)` : "";
+  const discountSuffix =
+    discountAmd > 0
+      ? ` (${discountAmd.toLocaleString()} AMD discount, pending director approval)`
+      : discountPct > 0
+      ? ` (${discountPct}% discount, pending director approval)`
+      : "";
   notifyTelegram(
     `🛒 <b>New order</b>\n${escapeHtml(repName)} — ${escapeHtml(customer.name)}\n${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD${escapeHtml(discountSuffix)}`
   );
@@ -204,6 +220,15 @@ ordersRouter.get("/", async (req, res) => {
   res.json({ rows: rows.slice(0, PAGE_SIZE), has_more: rows.length > PAGE_SIZE });
 });
 
+// Backs the badge on the Orders nav icon -- how many orders are sitting in
+// "submitted" waiting on a confirm/reject/edit decision. Declared ahead of
+// GET /:id so Express doesn't try to match "pending-count" as an :id.
+ordersRouter.get("/pending-count", async (req, res) => {
+  if (!canConfirmOrders(req.user.role)) return res.json({ count: 0 });
+  const { rows } = await pool.query("SELECT COUNT(*)::int AS count FROM orders WHERE status = 'submitted'");
+  res.json({ count: rows[0].count });
+});
+
 ordersRouter.get("/:id", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT o.*, u.name AS user_name, c.name AS customer_name
@@ -234,35 +259,54 @@ ordersRouter.patch("/:id", async (req, res) => {
   const order = rows[0];
   if (!order) return res.status(404).json({ error: "Order not found" });
 
-  const { status, items, note, discount_pct } = req.body ?? {};
-  if (status === undefined && items === undefined && note === undefined && discount_pct === undefined) {
-    return res.status(400).json({ error: "status, items, note, or discount_pct is required" });
+  const { status, items, note, discount_pct, discount_amd } = req.body ?? {};
+  if (status === undefined && items === undefined && note === undefined && discount_pct === undefined && discount_amd === undefined) {
+    return res.status(400).json({ error: "status, items, note, discount_pct, or discount_amd is required" });
   }
 
   const isOwnerOrAdmin = order.user_id === req.user.id || req.user.role === "admin";
+  // A sales director (or admin) reviewing a fresh order can confirm/reject
+  // it or fix a mistake in it, same editing rights as the rep who placed it
+  // -- but only while it's still "submitted"; once it's moved on, editing
+  // goes back to owner/admin only.
+  const canEditSubmitted = isOwnerOrAdmin || (order.status === "submitted" && canConfirmOrders(req.user.role));
   let nextLines = null;
   let nextTotal = order.total_amd;
   let nextDiscountPct = Number(order.discount_pct);
+  let nextDiscountAmd = Number(order.discount_amd);
   let nextApprovalStatus = order.approval_status;
 
-  if (discount_pct !== undefined) {
-    if (!isOwnerOrAdmin) return res.status(403).json({ error: "Not allowed to edit this order" });
+  if (discount_pct !== undefined || discount_amd !== undefined) {
+    if (!canEditSubmitted) return res.status(403).json({ error: "Not allowed to edit this order" });
     if (order.status !== "submitted") {
       return res.status(409).json({ error: "Only a submitted order's discount can still be changed" });
     }
-    const parsed = Number(discount_pct);
-    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
-      return res.status(400).json({ error: "discount_pct must be a number between 0 and 100" });
+    if (discount_pct !== undefined) {
+      const parsed = Number(discount_pct);
+      if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
+        return res.status(400).json({ error: "discount_pct must be a number between 0 and 100" });
+      }
+      nextDiscountPct = parsed;
+      // Setting one discount kind always clears the other -- an order
+      // carries at most one active discount.
+      if (parsed > 0) nextDiscountAmd = 0;
     }
-    nextDiscountPct = parsed;
+    if (discount_amd !== undefined) {
+      const parsed = Number(discount_amd);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        return res.status(400).json({ error: "discount_amd must be a non-negative number" });
+      }
+      nextDiscountAmd = parsed;
+      if (parsed > 0) nextDiscountPct = 0;
+    }
     // Changing the discount always resets any prior director decision --
-    // 0 needs no approval, anything else needs a fresh sign-off even if a
-    // previous (different) discount on this order was already approved.
-    nextApprovalStatus = parsed > 0 ? "pending" : "not_required";
+    // none needs no approval, anything else needs a fresh sign-off even if
+    // a previous (different) discount on this order was already approved.
+    nextApprovalStatus = nextDiscountPct > 0 || nextDiscountAmd > 0 ? "pending" : "not_required";
   }
 
   if (items !== undefined) {
-    if (!isOwnerOrAdmin) return res.status(403).json({ error: "Not allowed to edit this order" });
+    if (!canEditSubmitted) return res.status(403).json({ error: "Not allowed to edit this order" });
     if (order.status !== "submitted") {
       return res.status(409).json({ error: "Only a submitted order's items can still be edited" });
     }
@@ -277,7 +321,7 @@ ordersRouter.patch("/:id", async (req, res) => {
     }
   }
 
-  if (nextLines || discount_pct !== undefined) {
+  if (nextLines || discount_pct !== undefined || discount_amd !== undefined) {
     // Editing items recomputes the subtotal, but a discount already
     // approved (or awaiting approval) still applies to whatever the order
     // now totals -- it shouldn't silently vanish just because the rep
@@ -286,18 +330,22 @@ ordersRouter.patch("/:id", async (req, res) => {
       ? nextLines.reduce((sum, l) => sum + l.line_total_amd, 0)
       : (await pool.query("SELECT COALESCE(SUM(line_total_amd), 0) AS subtotal FROM order_items WHERE order_id = $1", [order.id])).rows[0]
           .subtotal;
-    nextTotal = applyDiscount(Number(subtotal), nextDiscountPct);
+    nextTotal = applyDiscount(Number(subtotal), nextDiscountPct, nextDiscountAmd);
   }
 
   let nextStatus = order.status;
   if (status !== undefined) {
+    // A director (or admin) reviewing a fresh order can confirm it or
+    // reject it (set status to "cancelled") -- same as the rep who placed
+    // it or fulfillment staff can, but only while it's still "submitted".
+    const canReviewSubmitted = order.status === "submitted" && canConfirmOrders(req.user.role);
     if (status === "cancelled") {
-      if (!isOwnerOrAdmin && !FULFILLMENT_ROLES.has(req.user.role)) {
+      if (!isOwnerOrAdmin && !FULFILLMENT_ROLES.has(req.user.role) && !canReviewSubmitted) {
         return res.status(403).json({ error: "Not allowed to cancel this order" });
       }
     } else {
-      if (!FULFILLMENT_ROLES.has(req.user.role)) {
-        return res.status(403).json({ error: "Only warehouse/delivery staff can update fulfillment status" });
+      if (!FULFILLMENT_ROLES.has(req.user.role) && !canReviewSubmitted) {
+        return res.status(403).json({ error: "Only warehouse/delivery staff -- or a director confirming a new order -- can update fulfillment status" });
       }
       if (order.approval_status === "pending" || order.approval_status === "rejected") {
         return res.status(409).json({
@@ -321,9 +369,9 @@ ordersRouter.patch("/:id", async (req, res) => {
     const { rows: updatedRows } = await client.query(
       `UPDATE orders
        SET status = $1, total_amd = $2, note = COALESCE($3, note),
-           discount_pct = $4, approval_status = $5, updated_at = now()
+           discount_pct = $4, discount_amd = $7, approval_status = $5, updated_at = now()
        WHERE id = $6 RETURNING *`,
-      [nextStatus, nextTotal, note ?? null, nextDiscountPct, nextApprovalStatus, order.id]
+      [nextStatus, nextTotal, note ?? null, nextDiscountPct, nextApprovalStatus, order.id, nextDiscountAmd]
     );
     updated = updatedRows[0];
 

@@ -15,6 +15,9 @@ const STATUS_FILTERS = ["", "submitted", "confirmed", "packed", "delivered", "ca
 
 const FULFILLMENT_ROLES = new Set(["warehouse_manager", "delivery_manager", "admin"]);
 const DISCOUNT_APPROVER_ROLES = new Set(["admin", "sales_director"]);
+// Who reviews a freshly-submitted order -- mirrors canConfirmOrders in the
+// server's roles.js.
+const CONFIRM_ROLES = new Set(["admin", "sales_director"]);
 const APPROVAL_META = {
   pending: { key: "approval_status_pending", cls: "badge-warning" },
   approved: { key: "approval_status_approved", cls: "badge-success" },
@@ -209,6 +212,13 @@ export async function renderOrders(root, navigate) {
     search("");
   }
 
+  // Any successful mutation here can change how many orders are waiting on
+  // a director's review -- let the nav badge (in app.js) know right away
+  // instead of waiting for its next poll.
+  function notifyOrdersChanged() {
+    window.dispatchEvent(new Event("orders-changed"));
+  }
+
   async function openOrderDetail(orderId) {
     const overlay = document.createElement("div");
     overlay.className = "sheet-overlay";
@@ -225,101 +235,254 @@ export async function renderOrders(root, navigate) {
       return;
     }
 
-    const meta = STATUS_META[order.status] ?? STATUS_META.submitted;
-    const isOwnerOrAdmin = order.user_id === state.user.id || state.user.role === "admin";
-    const canFulfill = FULFILLMENT_ROLES.has(state.user.role);
-    const hasDiscount = Number(order.discount_pct) > 0;
-    const approvalMeta = APPROVAL_META[order.approval_status];
-    // A pending or rejected discount blocks fulfillment server-side too --
-    // don't offer a forward-status button that would just 409.
-    const blockedByApproval = order.approval_status === "pending" || order.approval_status === "rejected";
-    const nextOptions = NEXT_STATUS[order.status] ?? [];
-    const canApproveDiscount = DISCOUNT_APPROVER_ROLES.has(state.user.role) && order.approval_status === "pending";
+    renderView(order);
 
-    overlay.querySelector(".sheet").innerHTML = `
-      <h2>${escapeHtml(order.customer_name)}</h2>
-      <p><span class="badge ${meta.cls}">${t(meta.key)}</span>${
-      hasDiscount && approvalMeta ? ` <span class="badge ${approvalMeta.cls}">${t(approvalMeta.key)}</span>` : ""
-    }</p>
-      <div class="card-list" style="margin:12px 0;">
-        ${order.items
+    function renderView(order) {
+      const meta = STATUS_META[order.status] ?? STATUS_META.submitted;
+      const isOwnerOrAdmin = order.user_id === state.user.id || state.user.role === "admin";
+      const canFulfill = FULFILLMENT_ROLES.has(state.user.role);
+      // A director/admin reviewing a fresh order gets confirm/reject/edit;
+      // the rep who placed it (or an admin) can still edit it too while
+      // it's waiting on that review.
+      const canReviewSubmitted = CONFIRM_ROLES.has(state.user.role) && order.status === "submitted";
+      const canEditThisOrder = order.status === "submitted" && (isOwnerOrAdmin || canReviewSubmitted);
+      const discountAmd = Number(order.discount_amd) || 0;
+      const discountPct = Number(order.discount_pct) || 0;
+      const hasDiscount = discountAmd > 0 || discountPct > 0;
+      const approvalMeta = APPROVAL_META[order.approval_status];
+      // A pending or rejected discount blocks fulfillment server-side too --
+      // don't offer a forward-status button that would just 409.
+      const blockedByApproval = order.approval_status === "pending" || order.approval_status === "rejected";
+      const nextOptions = NEXT_STATUS[order.status] ?? [];
+      const canApproveDiscount = DISCOUNT_APPROVER_ROLES.has(state.user.role) && order.approval_status === "pending";
+
+      overlay.querySelector(".sheet").innerHTML = `
+        <h2>${escapeHtml(order.customer_name)}</h2>
+        <p><span class="badge ${meta.cls}">${t(meta.key)}</span>${
+        hasDiscount && approvalMeta ? ` <span class="badge ${approvalMeta.cls}">${t(approvalMeta.key)}</span>` : ""
+      }</p>
+        <div class="card-list" style="margin:12px 0;">
+          ${order.items
+            .map(
+              (i) => `
+            <div class="erp-order-row" style="grid-template-columns:1fr auto auto;">
+              <span>${escapeHtml(i.product_name)}</span>
+              <span class="muted">&times;${Number(i.quantity)}</span>
+              <span>${formatAmd(Number(i.line_total_amd))}</span>
+            </div>`
+            )
+            .join("")}
+        </div>
+        ${
+          hasDiscount
+            ? `<p class="muted">${t("discount_label")}: ${discountAmd > 0 ? formatAmd(discountAmd) : `${discountPct}%`}</p>`
+            : ""
+        }
+        <p><strong>${t("total")}: ${formatAmd(Number(order.total_amd))}</strong></p>
+        ${order.note ? `<p class="muted">${escapeHtml(order.note)}</p>` : ""}
+        <p class="form-error" id="order-detail-error" hidden></p>
+        <div class="sheet-actions" id="order-detail-actions" style="flex-wrap:wrap;"></div>
+      `;
+
+      const actionsEl = overlay.querySelector("#order-detail-actions");
+      const errorEl = overlay.querySelector("#order-detail-error");
+
+      const buttons = [];
+      if (canApproveDiscount) {
+        buttons.push({ label: t("approve_discount"), action: "approve-discount", cls: "btn btn-primary" });
+        buttons.push({ label: t("reject_discount"), action: "reject-discount", cls: "btn btn-danger" });
+      }
+      if (canReviewSubmitted) {
+        buttons.push({ label: t("confirm_order"), status: "confirmed", cls: "btn btn-primary" });
+        buttons.push({ label: t("reject_order"), status: "cancelled", reject: true, cls: "btn btn-danger" });
+      } else {
+        if (canFulfill && !blockedByApproval) {
+          for (const next of nextOptions) {
+            if (next === "cancelled") continue;
+            buttons.push({ label: t(STATUS_META[next].key), status: next, cls: "btn btn-primary" });
+          }
+        }
+        if (nextOptions.includes("cancelled") && (isOwnerOrAdmin || canFulfill)) {
+          buttons.push({ label: t("cancel_order"), status: "cancelled", cls: "btn btn-danger" });
+        }
+      }
+      if (canEditThisOrder) {
+        buttons.push({ label: t("edit_order"), action: "edit-order", cls: "btn" });
+      }
+      // Permanent delete (distinct from cancel, which keeps it as a record)
+      // -- admin only, for a duplicate or mistaken order.
+      if (state.user.role === "admin") {
+        buttons.push({ label: t("delete_order"), action: "delete-order", cls: "btn btn-danger" });
+      }
+
+      actionsEl.innerHTML = buttons
+        .map((b) => `<button type="button" class="${b.cls}" ${b.action ? `data-action="${b.action}"` : `data-status="${b.status}"`}>${b.label}</button>`)
+        .join("") || `<button type="button" class="btn" id="order-detail-close">${t("done")}</button>`;
+
+      actionsEl.querySelector("#order-detail-close")?.addEventListener("click", () => overlay.remove());
+      actionsEl.querySelectorAll("[data-status]").forEach((btn, i) => {
+        const isReject = buttons.find((b) => b.status === btn.dataset.status && b.reject);
+        btn.addEventListener("click", async () => {
+          const confirmMsg = isReject ? t("confirm_reject_order") : t("confirm_cancel_order");
+          if (btn.dataset.status === "cancelled" && !confirm(confirmMsg)) return;
+          actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
+          try {
+            await api.updateOrderStatus(orderId, btn.dataset.status);
+            overlay.remove();
+            notifyOrdersChanged();
+            load();
+          } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+            actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = false));
+          }
+        });
+      });
+      actionsEl.querySelectorAll("[data-action]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          if (btn.dataset.action === "edit-order") {
+            renderEditMode(order);
+            return;
+          }
+          if (btn.dataset.action === "delete-order" && !confirm(t("confirm_delete_order"))) return;
+          actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
+          try {
+            if (btn.dataset.action === "approve-discount") await api.approveOrderDiscount(orderId);
+            else if (btn.dataset.action === "reject-discount") await api.rejectOrderDiscount(orderId);
+            else await api.deleteOrder(orderId);
+            overlay.remove();
+            notifyOrdersChanged();
+            load();
+          } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+            actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = false));
+          }
+        });
+      });
+    }
+
+    // A lightweight in-place editor for a still-"submitted" order: adjust
+    // each line's quantity, drop a line entirely, and switch the discount
+    // between percent and a flat AMD amount -- not a full re-browse of the
+    // catalog (that's what creating a fresh order is for), just fixing a
+    // mistake or a customer's last-minute change before it moves on.
+    function renderEditMode(order) {
+      const lines = order.items.map((i) => ({ ...i }));
+      let discountType = Number(order.discount_amd) > 0 ? "amd" : "pct";
+      let discountValue = discountType === "amd" ? Number(order.discount_amd) : Number(order.discount_pct);
+
+      function subtotal() {
+        return lines.reduce((sum, l) => sum + Number(l.unit_price_amd) * Number(l.quantity), 0);
+      }
+      function total() {
+        const sub = subtotal();
+        return discountType === "amd" ? Math.max(0, sub - discountValue) : sub * (1 - discountValue / 100);
+      }
+
+      function paint() {
+        overlay.querySelector(".sheet").innerHTML = `
+          <h2>${t("edit_order")}</h2>
+          <div class="card-list" id="edit-order-lines" style="margin:12px 0;"></div>
+          <div class="order-discount-row">
+            <label for="edit-discount-input">${t("discount_label")}</label>
+            <input type="number" id="edit-discount-input" min="0" step="1" value="${discountValue || 0}" inputmode="numeric" />
+            <div class="segmented" id="edit-discount-type">
+              <button type="button" class="chip ${discountType === "pct" ? "chip-active" : ""}" data-type="pct">${t("discount_type_pct")}</button>
+              <button type="button" class="chip ${discountType === "amd" ? "chip-active" : ""}" data-type="amd">${t("discount_type_amd")}</button>
+            </div>
+          </div>
+          <p><strong>${t("total")}: <span id="edit-order-total">${formatAmd(total())}</span></strong></p>
+          <p class="form-error" id="order-detail-error" hidden></p>
+          <div class="sheet-actions">
+            <button type="button" class="btn" id="edit-order-cancel">${t("cancel_edit")}</button>
+            <button type="button" class="btn btn-primary" id="edit-order-save">${t("save_changes")}</button>
+          </div>
+        `;
+
+        const linesEl = overlay.querySelector("#edit-order-lines");
+        linesEl.innerHTML = lines
           .map(
-            (i) => `
-          <div class="erp-order-row" style="grid-template-columns:1fr auto auto;">
-            <span>${escapeHtml(i.product_name)}</span>
-            <span class="muted">&times;${Number(i.quantity)}</span>
-            <span>${formatAmd(Number(i.line_total_amd))}</span>
+            (l, i) => `
+          <div class="order-product-row" data-line-index="${i}">
+            <div class="order-product-info">
+              <strong>${escapeHtml(l.product_name)}</strong>
+              <span class="muted">${formatAmd(Number(l.unit_price_amd))}</span>
+            </div>
+            <div class="order-qty-stepper">
+              <button type="button" class="icon-btn" data-action="dec" aria-label="${t("decrease")}">&minus;</button>
+              <span>${l.quantity}</span>
+              <button type="button" class="icon-btn" data-action="inc" aria-label="${t("increase")}">&plus;</button>
+            </div>
+            <button type="button" class="btn-link btn-link-danger" data-action="remove">${t("remove_item")}</button>
           </div>`
           )
-          .join("")}
-      </div>
-      ${hasDiscount ? `<p class="muted">${t("discount_label")}: ${Number(order.discount_pct)}%</p>` : ""}
-      <p><strong>${t("total")}: ${formatAmd(Number(order.total_amd))}</strong></p>
-      ${order.note ? `<p class="muted">${escapeHtml(order.note)}</p>` : ""}
-      <p class="form-error" id="order-detail-error" hidden></p>
-      <div class="sheet-actions" id="order-detail-actions" style="flex-wrap:wrap;"></div>
-    `;
+          .join("");
 
-    const actionsEl = overlay.querySelector("#order-detail-actions");
-    const errorEl = overlay.querySelector("#order-detail-error");
+        linesEl.querySelectorAll("[data-line-index]").forEach((row) => {
+          const i = Number(row.dataset.lineIndex);
+          row.querySelector('[data-action="inc"]').addEventListener("click", () => {
+            lines[i].quantity += 1;
+            paint();
+          });
+          row.querySelector('[data-action="dec"]').addEventListener("click", () => {
+            if (lines[i].quantity > 1) lines[i].quantity -= 1;
+            paint();
+          });
+          row.querySelector('[data-action="remove"]').addEventListener("click", () => {
+            lines.splice(i, 1);
+            paint();
+          });
+        });
 
-    const buttons = [];
-    if (canApproveDiscount) {
-      buttons.push({ label: t("approve_discount"), action: "approve-discount", cls: "btn btn-primary" });
-      buttons.push({ label: t("reject_discount"), action: "reject-discount", cls: "btn btn-danger" });
-    }
-    if (canFulfill && !blockedByApproval) {
-      for (const next of nextOptions) {
-        if (next === "cancelled") continue;
-        buttons.push({ label: t(STATUS_META[next].key), status: next, cls: "btn btn-primary" });
+        overlay.querySelector("#edit-discount-input").addEventListener("input", (e) => {
+          const n = Number(e.target.value);
+          discountValue = Number.isFinite(n) && n > 0 ? n : 0;
+          overlay.querySelector("#edit-order-total").textContent = formatAmd(total());
+        });
+        overlay.querySelectorAll("#edit-discount-type [data-type]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            discountType = btn.dataset.type;
+            paint();
+          });
+        });
+
+        overlay.querySelector("#edit-order-cancel").addEventListener("click", () => renderView(order));
+        overlay.querySelector("#edit-order-save").addEventListener("click", async () => {
+          const errorEl = overlay.querySelector("#order-detail-error");
+          if (!lines.length) {
+            errorEl.textContent = t("no_products_found");
+            errorEl.hidden = false;
+            return;
+          }
+          const saveBtn = overlay.querySelector("#edit-order-save");
+          saveBtn.disabled = true;
+          saveBtn.textContent = t("saving");
+          try {
+            const updated = await api.updateOrder(orderId, {
+              items: lines.map((l) => ({
+                product_id: l.product_id,
+                product_name: l.product_name,
+                unit_price_amd: l.unit_price_amd,
+                quantity: l.quantity,
+              })),
+              discount_pct: discountType === "pct" ? discountValue : 0,
+              discount_amd: discountType === "amd" ? discountValue : 0,
+            });
+            notifyOrdersChanged();
+            renderView(updated);
+            load();
+          } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+            saveBtn.disabled = false;
+            saveBtn.textContent = t("save_changes");
+          }
+        });
       }
-    }
-    if (nextOptions.includes("cancelled") && (isOwnerOrAdmin || canFulfill)) {
-      buttons.push({ label: t("cancel_order"), status: "cancelled", cls: "btn btn-danger" });
-    }
-    // Permanent delete (distinct from cancel, which keeps it as a record)
-    // -- admin only, for a duplicate or mistaken order.
-    if (state.user.role === "admin") {
-      buttons.push({ label: t("delete_order"), action: "delete-order", cls: "btn btn-danger" });
-    }
 
-    actionsEl.innerHTML = buttons
-      .map((b) => `<button type="button" class="${b.cls}" ${b.action ? `data-action="${b.action}"` : `data-status="${b.status}"`}>${b.label}</button>`)
-      .join("") || `<button type="button" class="btn" id="order-detail-close">${t("done")}</button>`;
-
-    actionsEl.querySelector("#order-detail-close")?.addEventListener("click", () => overlay.remove());
-    actionsEl.querySelectorAll("[data-status]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        if (btn.dataset.status === "cancelled" && !confirm(t("confirm_cancel_order"))) return;
-        actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
-        try {
-          await api.updateOrderStatus(orderId, btn.dataset.status);
-          overlay.remove();
-          load();
-        } catch (err) {
-          errorEl.textContent = err.message;
-          errorEl.hidden = false;
-          actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = false));
-        }
-      });
-    });
-    actionsEl.querySelectorAll("[data-action]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        if (btn.dataset.action === "delete-order" && !confirm(t("confirm_delete_order"))) return;
-        actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
-        try {
-          if (btn.dataset.action === "approve-discount") await api.approveOrderDiscount(orderId);
-          else if (btn.dataset.action === "reject-discount") await api.rejectOrderDiscount(orderId);
-          else await api.deleteOrder(orderId);
-          overlay.remove();
-          load();
-        } catch (err) {
-          errorEl.textContent = err.message;
-          errorEl.hidden = false;
-          actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = false));
-        }
-      });
-    });
+      paint();
+    }
   }
 
   load();
