@@ -7,9 +7,11 @@
   --border: #e7e9ed;
   --text: #111318;
   --text-dim: #5b6270;
-  --text-tertiary: #6e7781;
+  --text-tertiary: #5b6270;
   --accent: #0969da;
   --accent-dark: #0550ae;
+  --accent-fill: #0969da;
+  --control-border: #8c959f;
   --success: #087a48;
   --warning: #9a6700;
   --danger: #cf222e;
@@ -36,9 +38,11 @@
   --border: #38383a;
   --text: #f5f5f7;
   --text-dim: #98989d;
-  --text-tertiary: #6c6c70;
+  --text-tertiary: #a1a1a6;
   --accent: #3d8bff;
   --accent-dark: #1677ff;
+  --accent-fill: #1769c2;
+  --control-border: #6e6e73;
   --success: #30d158;
   --warning: #ff9f0a;
   --danger: #ff453a;
@@ -1732,6 +1736,55 @@ form [aria-invalid="true"] {
   color: #0a84ff;
 }
 
+.map-tools-wrap {
+  position: relative;
+}
+
+.map-tools-panel {
+  position: absolute;
+  right: calc(100% + 10px);
+  bottom: 0;
+  width: max-content;
+  min-width: 172px;
+  padding: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-elevated);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+.map-tool-option {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.map-tool-option:active,
+.map-tool-option.map-control-active {
+  background: var(--bg-card-pressed);
+  color: var(--accent);
+}
+
+.map-tool-option .ui-svg,
+.map-tool-option .map-action-svg {
+  width: 21px;
+  height: 21px;
+  flex-shrink: 0;
+}
+
 .map-popup {
   color: #1a1a1a;
 }
@@ -2467,6 +2520,48 @@ form [aria-invalid="true"] {
   background: var(--accent);
   color: #ffffff;
   font-weight: 800;
+}
+
+.dashboard-insights {
+  margin-top: 20px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.dashboard-insights > summary {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.dashboard-insights > summary::-webkit-details-marker {
+  display: none;
+}
+
+.dashboard-insights > summary::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-dim);
+  border-bottom: 2px solid var(--text-dim);
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 0.15s ease;
+}
+
+.dashboard-insights[open] > summary::after {
+  transform: rotate(225deg) translate(-2px, -2px);
+}
+
+.next-visit-loading {
+  min-height: 148px;
+  display: grid;
+  place-items: center;
 }
 
 /* ===== Customers list redesign ===== */
@@ -3465,6 +3560,39 @@ form [aria-invalid="true"] {
   letter-spacing: -0.02em;
 }
 
+.settings-workspace-tabs {
+  margin: 14px 16px 4px;
+  padding: 4px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  background: var(--bg-card-pressed);
+  border-radius: var(--radius);
+}
+
+.settings-workspace-tab {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.settings-workspace-tab-active {
+  background: var(--bg-card);
+  color: var(--text);
+  box-shadow: var(--shadow-subtle);
+}
+
+.settings-logout {
+  width: calc(100% - 32px);
+  margin: 20px 16px 16px;
+}
+
 .settings-view .card {
   margin: 14px 16px 0;
 }
@@ -3915,4 +4043,40 @@ form [aria-invalid="true"] {
 .drawer-item-danger {
   color: var(--danger);
   margin-top: auto;
+}
+
+/* Design-system migration: keep decorative dividers subtle while giving
+   interactive boundaries and filled actions WCAG-compliant contrast. */
+.btn,
+form input,
+form textarea,
+form select,
+.icon-btn,
+.map-control-cluster,
+.map-control-standalone,
+.map-filter-chip,
+.filter-dropdown-btn,
+.nav-choice-btn,
+.quick-action,
+.weekday-btn,
+.activity-tab {
+  border-color: var(--control-border);
+}
+
+.btn-primary,
+.chip-active,
+.fab,
+.quick-action-icon-accent,
+.map-filter-chip.chip-active,
+.weekday-btn-active,
+.toggle-switch[aria-checked="true"],
+.profile-avatar,
+.progress-bar-fill {
+  background: var(--accent-fill);
+}
+
+.btn-primary,
+.map-filter-chip.chip-active,
+.weekday-btn-active {
+  border-color: var(--accent-fill);
 }

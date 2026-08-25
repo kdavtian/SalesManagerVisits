@@ -25,6 +25,7 @@ export const icons = {
   chevronUp: `<svg class="map-action-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><path d="m5 15 7-7 7 7"/></svg>`,
   chevronDown: `<svg class="map-action-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><path d="m5 9 7 7 7-7"/></svg>`,
   navigation: `<svg class="map-action-svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M20.75 3.25 3.55 10.1a.9.9 0 0 0 .12 1.71l6.72 1.8 1.8 6.72a.9.9 0 0 0 1.71.12l6.85-17.2Z"/></svg>`,
+  tools: `<svg class="map-action-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h7M15 18h5"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="13" cy="18" r="2"/></svg>`,
   sort: `<svg viewBox="0 0 24 24" width="20" height="20" ${stroke}><path d="M6 4v16M6 4l-3 3M6 4l3 3M18 20V4M18 20l-3-3M18 20l3-3"/></svg>`,
   planDay: `<svg class="map-action-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="16" rx="2.75"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="m8 15 2.25 2.25L16 11.5"/></svg>`,
   store: uiSvg(`<path d="M4 10v10h16V10M3 10l2-6h14l2 6"/><path d="M3 10a2.5 2.5 0 0 0 4.5 1.5A2.5 2.5 0 0 0 12 10a2.5 2.5 0 0 0 4.5 1.5A2.5 2.5 0 0 0 21 10"/><path d="M9 20v-5h6v5"/>`),

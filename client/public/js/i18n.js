@@ -31,6 +31,7 @@ const dict = {
     zoom_in: "Zoom in",
     zoom_out: "Zoom out",
     reset_north: "Reset north",
+    map_tools: "Map tools",
 
     greeting_morning: "Good morning",
     greeting_afternoon: "Good afternoon",
@@ -416,6 +417,9 @@ const dict = {
       "Coming soon — your sales director will be able to assign customers to visit each day, week, or month, right here.",
 
     settings_title: "Settings",
+    personal_settings: "Personal",
+    admin_workspace: "Admin workspace",
+    performance_insights: "Performance and insights",
     preferences: "Preferences",
     appearance: "Appearance",
     light_mode: "Light mode",
@@ -522,6 +526,7 @@ const dict = {
     zoom_in: "Մեծացնել",
     zoom_out: "Փոքրացնել",
     reset_north: "Վերականգնել հյուսիսը",
+    map_tools: "Քարտեզի գործիքներ",
 
     greeting_morning: "Բարի լույս",
     greeting_afternoon: "Բարի օր",
@@ -908,6 +913,9 @@ const dict = {
       "Շուտով՝ Ձեր վաճառքի տնօրենը կկարողանա հատկացնել հաճախորդներ՝ ամեն օր, շաբաթ կամ ամիս այցելելու համար։",
 
     settings_title: "Կարգավորումներ",
+    personal_settings: "Անձնական",
+    admin_workspace: "Կառավարում",
+    performance_insights: "Արդյունքներ և վերլուծություն",
     preferences: "Նախապատվություններ",
     appearance: "Տեսք",
     light_mode: "Բաց ռեժիմ",

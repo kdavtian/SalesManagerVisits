@@ -86,6 +86,15 @@ No work in this section should begin without product confirmation.
 4. **Dashboard prioritization:** make Next Visit the single dominant task, collapse duplicate summary information, and move secondary analytics below a progressive-disclosure section.
 5. **Global contrast refresh:** strengthen tertiary text and component boundaries and introduce separate accent tokens for foreground links versus filled controls in dark mode.
 
+## Approved implementation status
+
+Approved on 2026-08-25 and implemented without changing the five-item primary navigation:
+
+- Map secondary controls consolidated into an accessible expandable tools group.
+- Settings split into Personal and Admin workspaces with tab semantics and keyboard navigation.
+- Dashboard reprioritized around Next Visit; duplicate summary tiles removed and analytics moved into progressive disclosure.
+- Global contrast system refreshed with separate filled-accent and interactive-boundary tokens for light and dark themes.
+
 ## Validation limitation
 
 Static implementation, semantics, CSS, localization, and automated regression checks are covered here. Final compliance still requires testing the deployed authenticated application on physical devices with VoiceOver/TalkBack and at 200% zoom; automated review cannot certify those behaviors alone.

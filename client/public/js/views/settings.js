@@ -62,10 +62,22 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
   // account. Kept separate from the strict admin-only section below.
   const canApprovePlans = canPlanForOthers(state.user.role);
   const canExportFinancials = seesFinancialExports();
+  const hasAdminWorkspace = admin || canApprovePlans || canExportFinancials;
 
   root.innerHTML = `
     <div class="settings-view">
       <h1>${t("settings_title")}</h1>
+
+      ${
+        hasAdminWorkspace
+          ? `<div class="settings-workspace-tabs" role="tablist" aria-label="${t("settings_title")}">
+              <button type="button" class="settings-workspace-tab settings-workspace-tab-active" id="settings-personal-tab" role="tab" aria-selected="true" aria-controls="settings-personal-panel">${t("personal_settings")}</button>
+              <button type="button" class="settings-workspace-tab" id="settings-admin-tab" role="tab" aria-selected="false" aria-controls="settings-admin-panel" tabindex="-1">${t("admin_workspace")}</button>
+            </div>`
+          : ""
+      }
+
+      <section id="settings-personal-panel" ${hasAdminWorkspace ? 'role="tabpanel" aria-labelledby="settings-personal-tab"' : ""}>
 
       <div class="card profile-card">
         <div class="profile-avatar-wrap">
@@ -105,6 +117,22 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         ${settingsRow({ icon: ICON.refresh, label: t("refresh_data"), id: "row-refresh" })}
         ${settingsRow({ icon: ICON.database, label: t("offline_storage"), value: `<span id="storage-value">…</span>`, interactive: false })}
       </div>
+
+      <h2 class="section-title">${t("security")}</h2>
+      <div class="card settings-list">
+        ${settingsRow({ icon: ICON.lock, label: t("change_password"), id: "row-change-password" })}
+        ${settingsRow({ icon: ICON.shield, label: t("session_management"), id: "row-sessions" })}
+      </div>
+
+      <h2 class="section-title">${t("about")}</h2>
+      <div class="card settings-list">
+        ${settingsRow({ icon: ICON.info, label: t("about_app"), value: `${t("version")} ${APP_VERSION}`, interactive: false })}
+      </div>
+
+      <button class="btn btn-block btn-danger settings-logout" id="settings-logout">${t("log_out")}</button>
+      </section>
+
+      <section id="settings-admin-panel" role="tabpanel" aria-labelledby="settings-admin-tab" hidden>
 
       ${
         admin
@@ -176,21 +204,32 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       `
           : ""
       }
-
-      <h2 class="section-title">${t("security")}</h2>
-      <div class="card settings-list">
-        ${settingsRow({ icon: ICON.lock, label: t("change_password"), id: "row-change-password" })}
-        ${settingsRow({ icon: ICON.shield, label: t("session_management"), id: "row-sessions" })}
-      </div>
-
-      <h2 class="section-title">${t("about")}</h2>
-      <div class="card settings-list">
-        ${settingsRow({ icon: ICON.info, label: t("about_app"), value: `${t("version")} ${APP_VERSION}`, interactive: false })}
-      </div>
-
-      <button class="btn btn-block btn-danger" id="settings-logout">${t("log_out")}</button>
+      </section>
     </div>
   `;
+
+  if (hasAdminWorkspace) {
+    const tabs = [root.querySelector("#settings-personal-tab"), root.querySelector("#settings-admin-tab")];
+    const panels = [root.querySelector("#settings-personal-panel"), root.querySelector("#settings-admin-panel")];
+    function selectWorkspace(index, moveFocus = false) {
+      tabs.forEach((tab, tabIndex) => {
+        const selected = tabIndex === index;
+        tab.classList.toggle("settings-workspace-tab-active", selected);
+        tab.setAttribute("aria-selected", String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+        panels[tabIndex].hidden = !selected;
+      });
+      if (moveFocus) tabs[index].focus();
+    }
+    tabs.forEach((tab, index) => {
+      tab.addEventListener("click", () => selectWorkspace(index));
+      tab.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        event.preventDefault();
+        selectWorkspace((index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length, true);
+      });
+    });
+  }
 
   // --- Avatar ---
   const avatarEl = root.querySelector("#profile-avatar");

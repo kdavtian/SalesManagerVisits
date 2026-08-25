@@ -69,20 +69,23 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
             ${icons.minus}
           </button>
         </div>
-        <button class="map-control-btn map-control-standalone" id="compass-btn" hidden aria-label="${t("reset_north")}">
-          <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 2l4 10-4 4-4-4z" fill="var(--accent)"/><path d="M12 22l-4-10 4-4 4 4z" fill="var(--text-dim)"/></svg>
-        </button>
         <button class="map-control-btn map-control-standalone" id="locate-btn" aria-label="${t("locate_me")}">
           ${icons.locate}
         </button>
-        ${
-          canViewTeamLocations()
-            ? `<button class="map-control-btn map-control-standalone" id="team-locations-btn" aria-label="${t("team_locations")}">
-          ${icons.team}
-        </button>`
-            : ""
-        }
-        <button class="map-control-btn map-control-standalone" id="plan-day-btn" aria-label="${t("plan_day")}">${icons.planDay}</button>
+        <div class="map-tools-wrap">
+          <button class="map-control-btn map-control-standalone" id="map-tools-btn" aria-label="${t("map_tools")}" aria-expanded="false" aria-controls="map-tools-panel">
+            ${icons.tools}
+          </button>
+          <div class="map-tools-panel" id="map-tools-panel" role="group" aria-label="${t("map_tools")}" hidden>
+            <button class="map-tool-option" id="compass-btn" hidden>${icons.compass}<span>${t("reset_north")}</span></button>
+            ${
+              canViewTeamLocations()
+                ? `<button class="map-tool-option" id="team-locations-btn">${icons.team}<span>${t("team_locations")}</span></button>`
+                : ""
+            }
+            <button class="map-tool-option" id="plan-day-btn">${icons.planDay}<span>${t("plan_day")}</span></button>
+          </div>
+        </div>
       </div>
 
       <button class="fab" id="add-customer-fab" title="${t("new_customer")}" aria-label="${t("new_customer")}" aria-pressed="false">${icons.plus}</button>
@@ -98,6 +101,28 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   const fab = root.querySelector("#add-customer-fab");
   const compassBtn = root.querySelector("#compass-btn");
   const locateBtn = root.querySelector("#locate-btn");
+  const mapToolsBtn = root.querySelector("#map-tools-btn");
+  const mapToolsPanel = root.querySelector("#map-tools-panel");
+
+  function closeMapTools() {
+    mapToolsPanel.hidden = true;
+    mapToolsBtn.setAttribute("aria-expanded", "false");
+  }
+
+  mapToolsBtn.addEventListener("click", () => {
+    const opening = mapToolsPanel.hidden;
+    mapToolsPanel.hidden = !opening;
+    mapToolsBtn.setAttribute("aria-expanded", String(opening));
+    if (opening) mapToolsPanel.querySelector("button:not([hidden])")?.focus();
+  });
+
+  function onMapToolsKeydown(event) {
+    if (event.key === "Escape" && !mapToolsPanel.hidden) {
+      closeMapTools();
+      mapToolsBtn.focus();
+    }
+  }
+  document.addEventListener("keydown", onMapToolsKeydown);
 
   // Leaflet's internal pan/zoom gesture handling can fight with an ancestor
   // scroll container on iOS, producing the "freezes while panning" bug.
@@ -120,6 +145,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     // unobtrusive control instead.
     attributionControl: false,
   }).setView([20, 0], 2);
+  map.on("click", closeMapTools);
   L.control.attribution({ prefix: false, position: "bottomright" }).addTo(map);
 
   let tileLayer = L.tileLayer(TILE_URLS[getTheme()], {
@@ -164,7 +190,10 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
 
   root.querySelector("#zoom-in-btn").addEventListener("click", () => map.zoomIn());
   root.querySelector("#zoom-out-btn").addEventListener("click", () => map.zoomOut());
-  compassBtn.addEventListener("click", () => map.setBearing(0));
+  compassBtn.addEventListener("click", () => {
+    map.setBearing(0);
+    closeMapTools();
+  });
 
   // Leaflet's built-in doubleClickZoom listens for a native "dblclick" DOM
   // event, but mapEl's touch-action:none (needed to stop the app-shell
@@ -664,6 +693,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       teamPollId = null;
       teamEmptyHint.hidden = true;
     }
+    closeMapTools();
   });
 
   const PLAN_STATUS_KEY = {
@@ -938,7 +968,10 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     await renderBody();
   }
 
-  root.querySelector("#plan-day-btn").addEventListener("click", openPlanDaySheet);
+  root.querySelector("#plan-day-btn").addEventListener("click", () => {
+    closeMapTools();
+    openPlanDaySheet();
+  });
   if (startInPlanMode) openPlanDaySheet();
 
   if (relocateCustomerId) {
@@ -1192,6 +1225,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     if (teamPollId) clearInterval(teamPollId);
     mapEl.removeEventListener("touchend", onMapTouchEnd);
     document.removeEventListener("visibilitychange", refreshTileStyle);
+    document.removeEventListener("keydown", onMapToolsKeydown);
     appMain.classList.remove("app-main-locked");
     document.body.classList.remove("map-active");
     map.remove();

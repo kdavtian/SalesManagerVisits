@@ -65,6 +65,10 @@ export async function renderDashboard(root, navigate) {
       </div>
     </div>
 
+    <div id="next-visit-slot" aria-live="polite">
+      <div class="card next-visit-card next-visit-loading"><p class="loading-state" role="status">${t("loading")}</p></div>
+    </div>
+
     <div class="card progress-card">
       <span class="progress-label">${t("today_progress")}</span>
       <div class="progress-main">
@@ -77,6 +81,29 @@ export async function renderDashboard(root, navigate) {
       </div>
       <div class="progress-bar"><div class="progress-bar-fill" style="width:${totals.total_customers ? Math.round((totals.visited_today / totals.total_customers) * 100) : 0}%"></div></div>
     </div>
+
+    <h2 class="section-title">${t("quick_actions")}</h2>
+    <div class="quick-actions-grid">
+      <button type="button" class="quick-action" id="qa-check-in">
+        <span class="quick-action-icon">${icons.pin}</span>
+        <span>${t("qa_check_in")}</span>
+      </button>
+      <button type="button" class="quick-action" id="qa-plan-route">
+        <span class="quick-action-icon">${icons.planDay}</span>
+        <span>${t("qa_plan_route")}</span>
+      </button>
+      <button type="button" class="quick-action" id="qa-reports">
+        <span class="quick-action-icon">${icons.chart}</span>
+        <span>${t("qa_reports")}</span>
+      </button>
+      <button type="button" class="quick-action" id="qa-add-customer">
+        <span class="quick-action-icon quick-action-icon-accent">${icons.plus}</span>
+        <span>${t("qa_add_customer")}</span>
+      </button>
+    </div>
+
+    <details class="dashboard-insights">
+      <summary>${t("performance_insights")}</summary>
 
     ${
       state.user.role !== "admin"
@@ -99,14 +126,6 @@ export async function renderDashboard(root, navigate) {
         : ""
     }
 
-    <div id="next-visit-slot"></div>
-
-    <h2 class="section-title">${t("todays_summary")}</h2>
-    <div class="stat-grid stat-grid-alerts">
-      <div class="stat-card"><span class="stat-value">${totals.rejected_today}</span><span class="stat-label">${t("stat_rejected_today")}</span></div>
-      <div class="stat-card"><span class="stat-value">${totals.overdue}</span><span class="stat-label">${t("stat_overdue")}</span></div>
-    </div>
-
     <h2 class="section-title">${t("visit_trends")}</h2>
     <div class="card trend-chart-card">
       ${trendChartHtml(trends.daily)}
@@ -115,6 +134,7 @@ export async function renderDashboard(root, navigate) {
       ${comparisonCardHtml(t("this_week"), trends.comparison.this_week, trends.comparison.last_week, t("vs_last_week"))}
       ${comparisonCardHtml(t("this_month"), trends.comparison.this_month, trends.comparison.last_month, t("vs_last_month"))}
     </div>
+    </details>
 
     <div class="section-heading-row">
       <h2 class="section-title section-title-inline">${t("recent_activity")}</h2>
@@ -122,25 +142,6 @@ export async function renderDashboard(root, navigate) {
     </div>
     <div class="card-list" id="recent-activity"></div>
 
-    <h2 class="section-title">${t("quick_actions")}</h2>
-    <div class="quick-actions-grid">
-      <button class="quick-action" id="qa-check-in">
-        <span class="quick-action-icon">${icons.pin}</span>
-        <span>${t("qa_check_in")}</span>
-      </button>
-      <button class="quick-action" id="qa-plan-route">
-        <span class="quick-action-icon">${icons.planDay}</span>
-        <span>${t("qa_plan_route")}</span>
-      </button>
-      <button class="quick-action" id="qa-reports">
-        <span class="quick-action-icon">${icons.chart}</span>
-        <span>${t("qa_reports")}</span>
-      </button>
-      <button class="quick-action" id="qa-add-customer">
-        <span class="quick-action-icon quick-action-icon-accent">${icons.plus}</span>
-        <span>${t("qa_add_customer")}</span>
-      </button>
-    </div>
   `;
 
   container.querySelector("#view-all-activity").addEventListener("click", () => navigate("#/activity"));
@@ -198,7 +199,10 @@ export async function renderDashboard(root, navigate) {
 
 async function renderNextVisit(slot, customers, navigate) {
   const candidates = customers.filter((c) => !c.visited_today);
-  if (!candidates.length) return;
+  if (!candidates.length) {
+    slot.innerHTML = "";
+    return;
+  }
 
   candidates.sort((a, b) => (b.overdue ? 1 : 0) - (a.overdue ? 1 : 0));
   let next = candidates[0];

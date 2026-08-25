@@ -13,7 +13,9 @@ const files = Object.fromEntries(
       "css/styles.css",
       "js/app.js",
       "js/util.js",
+      "js/views/dashboard.js",
       "js/views/map.js",
+      "js/views/settings.js",
       "sw.js",
     ].map(async (name) => [name, await readFile(path.join(publicDir, name), "utf8")]),
   ),
@@ -39,6 +41,11 @@ const checks = [
   ["map route enables its protected navigation state", "js/views/map.js", /document\.body\.classList\.add\("map-active"\)/],
   ["map cleanup restores the global navigation state", "js/views/map.js", /document\.body\.classList\.remove\("map-active"\)/],
   ["map filters expose their selected state", "js/views/map.js", /aria-pressed=/],
+  ["secondary map controls use an expandable tools group", "js/views/map.js", /id="map-tools-btn"[^>]+aria-expanded="false"[^>]+aria-controls="map-tools-panel"/],
+  ["dashboard analytics use progressive disclosure", "js/views/dashboard.js", /<details class="dashboard-insights">/],
+  ["settings separates personal and admin workspaces", "js/views/settings.js", /class="settings-workspace-tabs"[^>]+role="tablist"/],
+  ["filled accents use a dedicated contrast token", "css/styles.css", /--accent-fill:\s*#[0-9a-f]{6}/i],
+  ["interactive boundaries use a dedicated contrast token", "css/styles.css", /--control-border:\s*#[0-9a-f]{6}/i],
   ["service worker cache is explicitly versioned", "sw.js", /field-visits-v\d+/],
 ];
 
