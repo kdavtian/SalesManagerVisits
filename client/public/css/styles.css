@@ -61,9 +61,15 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* A color-based ring instead of a hard rectangular outline -- keeps a real,
+   visible keyboard-focus indicator (never remove that outright) while
+   avoiding the boxy blue rectangle that used to sit on top of rounded
+   buttons/dropdowns/checkboxes, ignoring their own border-radius. box-shadow
+   follows the element's rounded corners, so it reads as a colored glow
+   instead of a mismatched outline box. */
 :focus-visible {
-  outline: 3px solid var(--accent);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 /* Defends every element that toggles visibility via the `hidden` attribute
@@ -87,6 +93,15 @@ body {
      over this rule for that one element -- so zoom stays available there
      and nowhere else in the app. */
   touch-action: pan-x pan-y;
+  /* Without this, iOS/Android still let a rubber-band overscroll bubble up
+     from .app-main's inner scroll box to the document itself once you hit
+     the top/bottom of the content -- body's own overflow:hidden below stops
+     a *sustained* drag, but not that initial bounce, which is exactly what
+     read as "I can scroll the entire window" on the long customer-detail
+     page: the whole document nudges up under the fixed nav-bar for an
+     instant, so the action-button row briefly lands right where the nav
+     bar sits. */
+  overscroll-behavior: none;
 }
 
 body {
@@ -635,8 +650,9 @@ form select {
 form input:focus,
 form textarea:focus,
 form select:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: -1px;
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 form [aria-invalid="true"] {
@@ -1614,7 +1630,12 @@ input[type="search"]:focus {
      instead of picking up whatever colors are in the map tiles behind it. */
   top: 60px;
   left: 12px;
-  right: 12px;
+  /* .map-controls (the zoom +/- and locate cluster) sits at this same
+     top:60px, right:12px -- a plain right:12px here let this hint's full-
+     width card render directly underneath/behind those buttons. Reserve
+     the cluster's 44px width plus its own 12px gap from the edge so the
+     hint's text box stops short of it instead of overlapping. */
+  right: 68px;
   background: var(--bg-card);
   border: 1px solid var(--accent);
   color: var(--text);
@@ -1888,15 +1909,24 @@ input[type="search"]:focus {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 4px;
+  padding: 10px 8px;
+  border-radius: 10px;
   border-bottom: 1px solid var(--border);
   font-size: 0.9rem;
+}
+
+/* Highlight the row itself by color when its checkbox is checked, instead
+   of relying on the checkbox's own default outline/border to show
+   selection state. */
+.plan-day-row:has(input:checked) {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .plan-day-row input {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
+  accent-color: var(--accent);
 }
 
 .plan-mode-tabs {
@@ -2420,12 +2450,23 @@ input[type="search"]:focus {
   margin-top: 8px;
 }
 
-/* .dashboard-view already carries 16px padding on all sides (shared with
-   .detail-view/.checkin-view), so nested .stat-grid/.card-list — which
-   normally add their own 16px side padding for unpadded containers like
-   .list-view — must not double it up here. */
+/* .dashboard-view, .detail-view, .checkin-view and .admin-view all already
+   carry 16px padding on all sides (see the ".detail-view, .checkin-view,
+   .dashboard-view, .admin-view" rule above), so nested .stat-grid/.card-list
+   — which normally add their own 16px side padding for unpadded containers
+   like .list-view — must not double it up here, or their cards render
+   visibly narrower than sibling cards like .next-visit-card that sit
+   directly in the padded view (this bit customer detail's "Visit history"
+   list, which is exactly the double-padding this rule already fixed for
+   the dashboard's "Next visit" card). */
 .dashboard-view .stat-grid,
-.dashboard-view .card-list {
+.dashboard-view .card-list,
+.detail-view .stat-grid,
+.detail-view .card-list,
+.checkin-view .stat-grid,
+.checkin-view .card-list,
+.admin-view .stat-grid,
+.admin-view .card-list {
   padding-left: 0;
   padding-right: 0;
 }

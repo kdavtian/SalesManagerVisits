@@ -38,6 +38,10 @@ new MutationObserver((mutations) => {
 let currentCleanup = null;
 let currentPath = null;
 let fieldErrorId = 0;
+// Remembers the hash we were on right before navigating into Settings, so
+// tapping the top-bar menu button a second time can act as a "close" and
+// return there, instead of just re-navigating to #/settings every time.
+let preSettingsHash = "#/dashboard";
 
 function navigate(hash) {
   if (location.hash === hash) {
@@ -161,7 +165,14 @@ function renderNav() {
       </button>
     </div>
   `;
-  topBar.querySelector("#topbar-menu-btn").addEventListener("click", () => navigate("#/settings"));
+  topBar.querySelector("#topbar-menu-btn").addEventListener("click", () => {
+    if (hash === "#/settings") {
+      navigate(preSettingsHash);
+    } else {
+      preSettingsHash = hash;
+      navigate("#/settings");
+    }
+  });
 }
 
 function renderSyncBanner() {

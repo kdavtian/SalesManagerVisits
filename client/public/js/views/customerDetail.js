@@ -156,15 +156,14 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       <button class="action-btn action-btn-primary" id="checkin-btn">
         <span>${icons.pin}</span>${t("check_in")}
       </button>
+      ${customer.phone ? `<a class="action-btn" href="tel:${escapeHtml(customer.phone)}"><span>${icons.phone}</span>${t("call")}</a>` : ""}
       <button type="button" class="action-btn" id="navigate-btn">
         <span>${icons.compass}</span>${t("navigate")}
       </button>
+      ${customer.erp_synced_at ? `<button class="action-btn" id="order-history-btn"><span>${icons.box}</span>${t("order_history_short")}</button>` : ""}
       <button type="button" class="action-btn" id="new-order-btn">
         <span>${icons.cart}</span>${t("new_order")}
       </button>
-      ${customer.phone ? `<a class="action-btn" href="tel:${escapeHtml(customer.phone)}"><span>${icons.phone}</span>${t("call")}</a>` : ""}
-      <button class="action-btn" id="scroll-history-btn"><span>${icons.history}</span>${t("visit_history_short")}</button>
-      ${customer.erp_synced_at ? `<button class="action-btn" id="order-history-btn"><span>${icons.box}</span>${t("order_history_short")}</button>` : ""}
     </div>
 
     <h2 class="section-title" id="visit-history-anchor">${t("visit_history")}</h2>
@@ -179,9 +178,6 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   });
   container.querySelector("#new-order-btn").addEventListener("click", () => {
     navigate(`#/orders/new/${customerId}`);
-  });
-  container.querySelector("#scroll-history-btn").addEventListener("click", () => {
-    container.querySelector("#visit-history-anchor").scrollIntoView({ behavior: "smooth" });
   });
   container.querySelector("#edit-customer-btn").addEventListener("click", () => {
     openEditSheet(customer, navigate, () => renderCustomerDetail(root, navigate, customerId));
