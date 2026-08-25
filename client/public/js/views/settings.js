@@ -461,7 +461,7 @@ async function loadSalesPerformance(slot, role) {
   slot.innerHTML = sections.join("");
 }
 
-const NOTIFICATION_TYPES = ["plan_submitted", "plan_reviewed", "order_status_changed", "visit_reminder"];
+const NOTIFICATION_TYPES = ["plan_submitted", "plan_reviewed", "order_status_changed", "order_placed", "visit_reminder"];
 
 async function loadNotificationPreferences(slot) {
   let prefs;

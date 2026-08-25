@@ -4,7 +4,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { seesAllActivity } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { notifyUser } from "../push.js";
-import { isNotificationEnabled } from "../notificationPreferences.js";
+import { isNotificationEnabled, ORDER_NOTIFY_ROLES } from "../notificationPreferences.js";
 
 export const ordersRouter = Router();
 
@@ -130,9 +130,21 @@ ordersRouter.post("/", async (req, res) => {
   // Fire after responding -- the rep shouldn't wait on a Telegram round
   // trip for their order confirmation.
   const { rows: repRows } = await pool.query("SELECT name FROM users WHERE id = $1", [req.user.id]);
+  const repName = repRows[0]?.name || "Someone";
   notifyTelegram(
-    `🛒 <b>New order</b>\n${escapeHtml(repRows[0]?.name || "Someone")} — ${escapeHtml(customer.name)}\n${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD`
+    `🛒 <b>New order</b>\n${escapeHtml(repName)} — ${escapeHtml(customer.name)}\n${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD`
   );
+
+  const { rows: notifyRecipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [ORDER_NOTIFY_ROLES]);
+  for (const recipient of notifyRecipients) {
+    if (await isNotificationEnabled(recipient.id, "order_placed")) {
+      notifyUser(recipient.id, {
+        title: "New order placed",
+        body: `${repName} placed an order for ${customer.name} — ${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD.`,
+        url: "/#/orders",
+      });
+    }
+  }
 });
 
 const PAGE_SIZE = 100;
