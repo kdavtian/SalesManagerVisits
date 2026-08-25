@@ -25,8 +25,7 @@ const checks = [
   ["safe-area viewport is enabled", "index.html", /viewport-fit=cover/],
   ["main content can receive routed focus", "index.html", /<main[^>]+tabindex="-1"/],
   ["primary navigation has an accessible name", "index.html", /<nav[^>]+aria-label="Primary navigation"/],
-  ["page zoom remains available", "index.html", /<meta name="viewport"(?![^>]*maximum-scale)[^>]*>/],
-  ["navigation drawer has modal semantics", "index.html", /<aside[^>]+role="dialog"[^>]+aria-modal="true"/],
+  ["page-level pinch/double-tap zoom is disabled outside the map", "index.html", /<meta name="viewport"[^>]*maximum-scale=1[^>]*>/],
   ["landscape is allowed by the PWA", "manifest.json", /"orientation"\s*:\s*"any"/],
   ["application content creates an isolated stacking context", "css/styles.css", /\.app-main\s*\{[^}]*isolation:\s*isolate/s],
   ["navigation stays above map controls", "css/styles.css", /\.nav-bar\s*\{[^}]*z-index:\s*1200/s],
@@ -34,14 +33,12 @@ const checks = [
   ["compact landscape layout exists", "css/styles.css", /@media\s*\(orientation:\s*landscape\)[^{]*\{/],
   ["reduced-motion preference is respected", "css/styles.css", /@media\s*\(prefers-reduced-motion:\s*reduce\)/],
   ["active navigation exposes aria-current", "js/app.js", /aria-current="page"/],
-  ["navigation drawer isolates background content", "js/app.js", /setDrawerBackgroundInert\(true\)/],
-  ["navigation drawer restores background content", "js/app.js", /setDrawerBackgroundInert\(false\)/],
   ["dialogs use the shared accessible controller", "js/util.js", /export function activateDialog/],
   ["comboboxes use the shared keyboard controller", "js/util.js", /export function activateCombobox/],
   ["map route enables its protected navigation state", "js/views/map.js", /document\.body\.classList\.add\("map-active"\)/],
   ["map cleanup restores the global navigation state", "js/views/map.js", /document\.body\.classList\.remove\("map-active"\)/],
   ["map filters expose their selected state", "js/views/map.js", /aria-pressed=/],
-  ["secondary map controls use an expandable tools group", "js/views/map.js", /id="map-tools-btn"[^>]+aria-expanded="false"[^>]+aria-controls="map-tools-panel"/],
+  ["secondary map controls (team/plan day) are directly visible, not tucked behind a flyout", "js/views/map.js", /id="team-locations-btn"[\s\S]*id="plan-day-btn"/],
   ["dashboard analytics use progressive disclosure", "js/views/dashboard.js", /<details class="dashboard-insights">/],
   ["settings separates personal and admin workspaces", "js/views/settings.js", /class="settings-workspace-tabs"[^>]+role="tablist"/],
   ["filled accents use a dedicated contrast token", "css/styles.css", /--accent-fill:\s*#[0-9a-f]{6}/i],
@@ -62,6 +59,8 @@ for (const [label, file, pattern] of checks) {
 const forbidden = [
   ["legacy landscape blocker is absent", "index.html", /rotate-overlay|rotate-device/i],
   ["legacy landscape blocker styles are absent", "css/styles.css", /rotate-overlay|rotate-device/i],
+  ["retired hamburger drawer markup is absent", "index.html", /id="side-drawer"|id="drawer-backdrop"/],
+  ["retired map tools flyout markup is absent", "js/views/map.js", /id="map-tools-panel"/],
 ];
 
 for (const [label, file, pattern] of forbidden) {
