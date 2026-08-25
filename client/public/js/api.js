@@ -125,6 +125,7 @@ export const api = {
   updateOrderItems: (id, items) => json(`/orders/${id}`, "PATCH", { items }),
   updateOrderStatus: (id, status) => json(`/orders/${id}`, "PATCH", { status }),
   approveOrderDiscount: (id) => request(`/orders/${id}/approve-discount`, { method: "POST" }),
+  deleteOrder: (id) => request(`/orders/${id}`, { method: "DELETE" }),
   rejectOrderDiscount: (id) => request(`/orders/${id}/reject-discount`, { method: "POST" }),
 
   getVapidPublicKey: () => request("/push/vapid-public-key"),

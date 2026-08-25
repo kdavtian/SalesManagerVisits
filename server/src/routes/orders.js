@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { seesAllActivity } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { notifyUser } from "../push.js";
@@ -437,4 +437,13 @@ ordersRouter.post("/:id/reject-discount", async (req, res) => {
       url: "/#/orders",
     });
   }
+});
+
+// Permanent removal (not the same as cancelling, which keeps the order as
+// a record) -- admin-only, for a duplicate or mistaken order that
+// shouldn't appear in reports at all. order_items cascades with it.
+ordersRouter.delete("/:id", requireAdmin, async (req, res) => {
+  const { rowCount } = await pool.query("DELETE FROM orders WHERE id = $1", [req.params.id]);
+  if (!rowCount) return res.status(404).json({ error: "Order not found" });
+  res.status(204).end();
 });

@@ -885,6 +885,13 @@ form [aria-invalid="true"] {
 
 /* List view */
 
+.list-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .list-toolbar {
   display: flex;
   align-items: center;
@@ -3776,4 +3783,96 @@ form [aria-invalid="true"] {
   gap: 8px;
   overflow-x: auto;
   padding: 4px 0 8px;
+}
+
+/* --- Side drawer (hamburger menu) ---
+   Transform/opacity only, both GPU-composited -- no layout thrash, cheap
+   even on a slow Android phone. The drawer stays in the DOM at all times;
+   [hidden] is toggled by JS a beat after the close transition finishes
+   (see toggleDrawer in app.js) so it doesn't block interaction while
+   off-screen but also doesn't cut the closing animation short. */
+
+.drawer-backdrop {
+  position: fixed;
+  /* top is set inline in JS to the top bar's actual rendered height (see
+     openDrawer in app.js) -- this deliberately leaves the header strip,
+     hamburger button included, outside the backdrop's hit area so a
+     second tap on it reaches the button and closes the drawer, instead
+     of being swallowed by a full-screen backdrop sitting above it. */
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 1300;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.drawer-backdrop.drawer-visible {
+  opacity: 1;
+}
+
+.side-drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(78vw, 300px);
+  background: var(--bg-card);
+  z-index: 1301;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  padding-top: max(16px, env(safe-area-inset-top));
+  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.15);
+  transform: translateX(-100%);
+  transition: transform 0.22s ease-out;
+}
+
+.side-drawer.drawer-visible {
+  transform: translateX(0);
+}
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.drawer-header strong {
+  font-size: 1.05rem;
+}
+
+.drawer-user {
+  padding: 4px 4px 16px;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+
+.drawer-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 10px;
+  background: none;
+  border: none;
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.95rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.drawer-item:active {
+  background: var(--bg-card-pressed);
+}
+
+.drawer-item-danger {
+  color: var(--danger);
+  margin-top: auto;
 }

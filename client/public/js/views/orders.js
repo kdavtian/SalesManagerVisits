@@ -35,7 +35,12 @@ function formatDate(value) {
 export async function renderOrders(root, navigate) {
   root.innerHTML = `
     <div class="detail-view">
-      <h1>${t("orders_title")}</h1>
+      <div class="list-header-row">
+        <h1>${t("orders_title")}</h1>
+        <button type="button" class="icon-btn" id="orders-new-btn" aria-label="${t("create_order")}">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </div>
       <div class="order-status-filter-row" id="order-status-filters"></div>
       <div class="list-toolbar"><input type="search" id="order-search" placeholder="${t("search_customers")}" /></div>
       <div class="card-list" id="orders-list"><p class="loading-state" role="status">${t("loading")}</p></div>
@@ -142,6 +147,67 @@ export async function renderOrders(root, navigate) {
     });
   });
   searchInput.addEventListener("input", paint);
+  root.querySelector("#orders-new-btn").addEventListener("click", openCustomerPicker);
+
+  // Orders always belong to a customer -- picking one here just forwards
+  // into the same order-creation screen the customer detail page's "New
+  // order" button uses, so there's one order-creation flow, not two.
+  function openCustomerPicker() {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>${t("select_customer")}</h2>
+        <input type="search" id="order-customer-search" placeholder="${t("search_customers")}" autofocus />
+        <div class="card-list" id="order-customer-results" style="margin-top:12px; max-height:50vh; overflow-y:auto;"></div>
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="order-customer-cancel">${t("cancel")}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+    overlay.querySelector("#order-customer-cancel").addEventListener("click", () => overlay.remove());
+
+    const searchEl = overlay.querySelector("#order-customer-search");
+    const resultsEl = overlay.querySelector("#order-customer-results");
+    let searchSeq = 0;
+
+    async function search(query) {
+      const seq = ++searchSeq;
+      resultsEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+      let results;
+      try {
+        results = await api.listCustomers(query ? { search: query } : {});
+      } catch (err) {
+        if (seq === searchSeq) resultsEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+        return;
+      }
+      if (seq !== searchSeq) return;
+      if (!results.length) {
+        resultsEl.innerHTML = `<p class="empty-state">${t("no_customers_found")}</p>`;
+        return;
+      }
+      resultsEl.innerHTML = results
+        .slice(0, 30)
+        .map((c) => `<button type="button" class="card" style="text-align:left; width:100%;" data-customer-id="${c.id}">${escapeHtml(c.name)}</button>`)
+        .join("");
+      resultsEl.querySelectorAll("[data-customer-id]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          overlay.remove();
+          navigate(`#/orders/new/${btn.dataset.customerId}`);
+        });
+      });
+    }
+
+    let debounceTimer = null;
+    searchEl.addEventListener("input", () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => search(searchEl.value.trim()), 200);
+    });
+    search("");
+  }
 
   async function openOrderDetail(orderId) {
     const overlay = document.createElement("div");
@@ -211,6 +277,11 @@ export async function renderOrders(root, navigate) {
     if (nextOptions.includes("cancelled") && (isOwnerOrAdmin || canFulfill)) {
       buttons.push({ label: t("cancel_order"), status: "cancelled", cls: "btn btn-danger" });
     }
+    // Permanent delete (distinct from cancel, which keeps it as a record)
+    // -- admin only, for a duplicate or mistaken order.
+    if (state.user.role === "admin") {
+      buttons.push({ label: t("delete_order"), action: "delete-order", cls: "btn btn-danger" });
+    }
 
     actionsEl.innerHTML = buttons
       .map((b) => `<button type="button" class="${b.cls}" ${b.action ? `data-action="${b.action}"` : `data-status="${b.status}"`}>${b.label}</button>`)
@@ -234,10 +305,12 @@ export async function renderOrders(root, navigate) {
     });
     actionsEl.querySelectorAll("[data-action]").forEach((btn) => {
       btn.addEventListener("click", async () => {
+        if (btn.dataset.action === "delete-order" && !confirm(t("confirm_delete_order"))) return;
         actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
         try {
           if (btn.dataset.action === "approve-discount") await api.approveOrderDiscount(orderId);
-          else await api.rejectOrderDiscount(orderId);
+          else if (btn.dataset.action === "reject-discount") await api.rejectOrderDiscount(orderId);
+          else await api.deleteOrder(orderId);
           overlay.remove();
           load();
         } catch (err) {

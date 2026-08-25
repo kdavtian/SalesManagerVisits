@@ -23,6 +23,8 @@ const navBar = document.getElementById("nav-bar");
 const topBar = document.getElementById("top-bar");
 const syncBanner = document.getElementById("sync-banner");
 const installRoot = document.getElementById("install-root");
+const drawerBackdrop = document.getElementById("drawer-backdrop");
+const sideDrawer = document.getElementById("side-drawer");
 
 // Dynamic views and sheets share the same feedback classes. Assign live
 // semantics as they appear so async errors/success messages are announced.
@@ -47,6 +49,84 @@ function navigate(hash) {
     location.hash = hash;
   }
 }
+
+async function doLogout() {
+  await api.logout();
+  setUser(null);
+  stopLocationBroadcast();
+  location.hash = "";
+  render();
+}
+
+// The drawer transform transition (see .side-drawer in styles.css) is
+// 220ms -- [hidden] is applied that long after closing starts so taps
+// can't reach the off-screen content mid-animation, and removed
+// immediately on open so the slide-in is visible from frame one.
+const DRAWER_TRANSITION_MS = 220;
+let drawerHideTimer = null;
+
+function openDrawer() {
+  clearTimeout(drawerHideTimer);
+  sideDrawer.innerHTML = `
+    <div class="drawer-header">
+      <strong>${t("app_name")}</strong>
+      <button type="button" class="icon-btn" id="drawer-close-btn" aria-label="${t("cancel")}">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="drawer-user">${escapeHtml(state.user.name)}</div>
+    <button type="button" class="drawer-item" id="drawer-settings-btn">${icons.settings} ${t("nav_settings")}</button>
+    <button type="button" class="drawer-item drawer-item-danger" id="drawer-logout-btn">${t("log_out")}</button>
+  `;
+  sideDrawer.querySelector("#drawer-close-btn").addEventListener("click", closeDrawer);
+  sideDrawer.querySelector("#drawer-settings-btn").addEventListener("click", () => {
+    closeDrawer();
+    navigate("#/settings");
+  });
+  sideDrawer.querySelector("#drawer-logout-btn").addEventListener("click", () => {
+    closeDrawer();
+    doLogout();
+  });
+
+  // Leaves the header strip (hamburger button included) outside the
+  // backdrop's hit area -- otherwise a second tap on the hamburger to
+  // close the drawer would be swallowed by the full-screen backdrop
+  // sitting above it in stacking order.
+  drawerBackdrop.style.top = `${topBar.getBoundingClientRect().height}px`;
+  drawerBackdrop.hidden = false;
+  sideDrawer.hidden = false;
+  // Two rAFs: the first lets the browser paint the [hidden]-removed,
+  // pre-transition state; the second then flips the class so the
+  // transition actually has a starting frame to animate from.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      drawerBackdrop.classList.add("drawer-visible");
+      sideDrawer.classList.add("drawer-visible");
+    });
+  });
+}
+
+function closeDrawer() {
+  if (sideDrawer.hidden) return;
+  clearTimeout(drawerHideTimer);
+  drawerBackdrop.classList.remove("drawer-visible");
+  sideDrawer.classList.remove("drawer-visible");
+  drawerHideTimer = setTimeout(() => {
+    drawerBackdrop.hidden = true;
+    sideDrawer.hidden = true;
+  }, DRAWER_TRANSITION_MS);
+}
+
+function toggleDrawer() {
+  if (sideDrawer.hidden) openDrawer();
+  else closeDrawer();
+}
+
+drawerBackdrop.addEventListener("click", closeDrawer);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeDrawer();
+});
+window.addEventListener("hashchange", closeDrawer);
 
 async function render() {
   document.documentElement.lang = getLang();
@@ -102,17 +182,7 @@ async function render() {
   } else if (checkinMatch) {
     renderCheckin(app, navigate, checkinMatch[1]);
   } else if (path === "#/settings") {
-    renderSettings(
-      app,
-      async () => {
-        await api.logout();
-        setUser(null);
-        stopLocationBroadcast();
-        location.hash = "";
-        render();
-      },
-      render
-    );
+    renderSettings(app, doLogout, render);
   } else {
     navigate("#/dashboard");
   }
@@ -159,12 +229,15 @@ function renderNav() {
     </span>
     <div class="topbar-right">
       <span class="topbar-user">${escapeHtml(state.user.name)}</span>
-      <button type="button" class="topbar-menu-btn" id="topbar-menu-btn" aria-label="${t("nav_settings")}" ${hash === "#/settings" ? 'aria-current="page"' : ""}>
+      <button type="button" class="topbar-menu-btn" id="topbar-menu-btn" aria-label="${t("menu")}" aria-expanded="false">
         ${icons.menu}
       </button>
     </div>
   `;
-  topBar.querySelector("#topbar-menu-btn").addEventListener("click", () => navigate("#/settings"));
+  topBar.querySelector("#topbar-menu-btn").addEventListener("click", (e) => {
+    toggleDrawer();
+    e.currentTarget.setAttribute("aria-expanded", String(!sideDrawer.hidden));
+  });
 }
 
 function renderSyncBanner() {
