@@ -20,6 +20,64 @@ export function haversineMeters(lat1, lng1, lat2, lng2) {
 
 export const CATEGORY_OPTIONS = ["Յուղման կետ", "Խանութ", "Ավտոպարկ", "Ավտոսերվիս", "Այլ"];
 
+// Customer relationship tier -- distinct from category (what kind of
+// business). potential/competitor have no ERP Customer ID; bronze/silver/
+// gold are real accounts, each priced from a different Castrol PriceList
+// column (see server products.silver_price_amd / gold_price_amd).
+const TIER_ICON = {
+  potential: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10" cy="10" r="6"/><path d="M21 21l-5.2-5.2"/></svg>`,
+  medal: `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><circle cx="12" cy="15" r="6"/><path d="M9 10 6 3h3l3 6 3-6h3l-3 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`,
+  competitor: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`,
+};
+
+export const TIER_OPTIONS = [
+  { value: "potential", labelKey: "tier_potential", icon: TIER_ICON.potential, cls: "tier-potential" },
+  { value: "bronze", labelKey: "tier_bronze", icon: TIER_ICON.medal, cls: "tier-bronze" },
+  { value: "silver", labelKey: "tier_silver", icon: TIER_ICON.medal, cls: "tier-silver" },
+  { value: "gold", labelKey: "tier_gold", icon: TIER_ICON.medal, cls: "tier-gold" },
+  { value: "competitor", labelKey: "tier_competitor", icon: TIER_ICON.competitor, cls: "tier-competitor" },
+];
+
+export function tierSelectorHtml(selected = "potential", inputName = "customer_tier") {
+  return `
+    <div class="tier-selector" role="radiogroup" aria-label="${t("customer_tier")}">
+      ${TIER_OPTIONS.map(
+        (opt) => `
+        <button type="button" class="tier-btn ${opt.cls} ${opt.value === selected ? "tier-btn-active" : ""}" data-tier="${opt.value}" role="radio" aria-checked="${opt.value === selected}">
+          <span class="tier-icon">${opt.icon}</span>
+          <span class="tier-label">${t(opt.labelKey)}</span>
+        </button>`
+      ).join("")}
+      <input type="hidden" name="${inputName}" value="${selected}" />
+    </div>
+  `;
+}
+
+export function tierBadgeHtml(tier) {
+  const opt = TIER_OPTIONS.find((o) => o.value === tier) ?? TIER_OPTIONS[0];
+  return `<span class="badge tier-badge ${opt.cls}">${opt.icon}${t(opt.labelKey)}</span>`;
+}
+
+// Wires up click behavior for a tierSelectorHtml() block already in the
+// DOM -- pass the element containing it (not the .tier-selector itself).
+export function activateTierSelector(container, onChange) {
+  const wrap = container.querySelector(".tier-selector");
+  if (!wrap) return;
+  const hiddenInput = wrap.querySelector("input[type=hidden]");
+  wrap.querySelectorAll(".tier-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      wrap.querySelectorAll(".tier-btn").forEach((b) => {
+        b.classList.remove("tier-btn-active");
+        b.setAttribute("aria-checked", "false");
+      });
+      btn.classList.add("tier-btn-active");
+      btn.setAttribute("aria-checked", "true");
+      hiddenInput.value = btn.dataset.tier;
+      onChange?.(btn.dataset.tier);
+    });
+  });
+}
+
 export function formatAmd(value) {
   if (value == null) return "";
   return `${Number(value).toLocaleString()} ${t("amd")}`;

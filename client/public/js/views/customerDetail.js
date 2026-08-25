@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, openNavigation, CATEGORY_OPTIONS } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, openNavigation, CATEGORY_OPTIONS, tierSelectorHtml, activateTierSelector, tierBadgeHtml } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { canEditDirectly, isAdmin } from "../state.js";
@@ -122,6 +122,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
         <h1>${escapeHtml(customer.name)}</h1>
         ${idCategoryLine ? `<div class="muted detail-header-subtitle">${idCategoryLine}</div>` : ""}
         <div class="detail-header-status-row">
+          ${tierBadgeHtml(customer.customer_tier)}
           <span class="badge ${badgeClass}">${badgeText}</span>
           ${customer.last_visit_at ? `<span class="muted detail-header-last-visit">${formatDateTime(customer.last_visit_at)}</span>` : ""}
         </div>
@@ -412,6 +413,7 @@ function openEditSheet(customer, navigate, onDone) {
     <div class="sheet">
       <h2>${canEditDirectly() ? t("edit_customer") : t("request_edit")}</h2>
       <form id="edit-customer-form">
+        ${tierSelectorHtml(customer.customer_tier || "potential")}
         ${fields.map((f) => {
           const value = escapeHtml(customer[f.name] ?? "");
           if (f.type === "textarea") {
@@ -453,6 +455,7 @@ function openEditSheet(customer, navigate, onDone) {
   `;
   document.body.appendChild(overlay);
   activateDialog(overlay);
+  activateTierSelector(overlay);
 
   function close() {
     overlay.remove();
@@ -531,7 +534,7 @@ function openEditSheet(customer, navigate, onDone) {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const data = new FormData(form);
-    const changes = {};
+    const changes = { customer_tier: data.get("customer_tier") };
     for (const f of fields) {
       const raw = data.get(f.name);
       changes[f.name] = f.type === "number" ? Number(raw) : raw;

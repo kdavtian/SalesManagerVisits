@@ -773,6 +773,116 @@ form [aria-invalid="true"] {
   color: var(--warning);
 }
 
+/* Customer tier -- colors match the tier name (bronze/silver/gold/etc.) */
+
+.tier-potential {
+  background: rgba(152, 152, 157, 0.15);
+  color: var(--text-dim);
+}
+
+.tier-bronze {
+  background: rgba(205, 127, 50, 0.18);
+  color: #cd7f32;
+}
+
+.tier-silver {
+  background: rgba(192, 192, 200, 0.2);
+  color: #9a9aa5;
+}
+
+.tier-gold {
+  background: rgba(255, 200, 40, 0.18);
+  color: #d4a017;
+}
+
+.tier-competitor {
+  background: rgba(255, 69, 58, 0.15);
+  color: var(--danger);
+}
+
+.tier-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tier-badge svg {
+  width: 12px;
+  height: 12px;
+}
+
+.tier-selector {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 2px;
+  margin-bottom: 12px;
+}
+
+.tier-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 4px;
+  min-width: 0;
+  cursor: pointer;
+  color: var(--text-dim);
+}
+
+.tier-btn .tier-icon {
+  display: flex;
+}
+
+.tier-btn .tier-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.tier-btn .tier-label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.tier-btn.tier-potential.tier-btn-active {
+  background: rgba(152, 152, 157, 0.18);
+  border-color: var(--text-dim);
+  color: var(--text);
+}
+
+.tier-btn.tier-bronze.tier-btn-active {
+  background: rgba(205, 127, 50, 0.18);
+  border-color: #cd7f32;
+  color: #cd7f32;
+}
+
+.tier-btn.tier-silver.tier-btn-active {
+  background: rgba(192, 192, 200, 0.22);
+  border-color: #9a9aa5;
+  color: #9a9aa5;
+}
+
+.tier-btn.tier-gold.tier-btn-active {
+  background: rgba(255, 200, 40, 0.2);
+  border-color: #d4a017;
+  color: #d4a017;
+}
+
+.tier-btn.tier-competitor.tier-btn-active {
+  background: rgba(255, 69, 58, 0.18);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
 /* List view */
 
 .list-toolbar {

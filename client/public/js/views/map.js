@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, haversineMeters, getCurrentPosition, CATEGORY_OPTIONS } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, haversineMeters, getCurrentPosition, CATEGORY_OPTIONS, tierSelectorHtml, activateTierSelector } from "../util.js";
 import { t } from "../i18n.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
@@ -1022,6 +1022,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       <div class="sheet">
         <h2>${t("new_customer")}</h2>
         <form id="new-customer-form">
+          ${tierSelectorHtml("potential")}
           <label>${t("name")}<input name="name" required /></label>
           <label>${t("category")}
             <select name="category">
@@ -1047,6 +1048,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     `;
     document.body.appendChild(overlay);
     activateDialog(overlay);
+    activateTierSelector(overlay);
 
     // Keep the dropped pin visible above the sheet -- measured against the
     // sheet's actual rendered height (it varies with content/keyboard),
@@ -1148,6 +1150,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
           notes: data.get("notes") || null,
           tin: data.get("tin") || null,
           erp_customer_id: data.get("erp_customer_id") || null,
+          customer_tier: data.get("customer_tier") || null,
           lat: latlng.lat,
           lng: latlng.lng,
         });

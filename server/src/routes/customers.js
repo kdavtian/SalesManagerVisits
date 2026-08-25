@@ -68,8 +68,10 @@ customersRouter.get("/", async (req, res) => {
   res.json(rows);
 });
 
+const CUSTOMER_TIERS = new Set(["potential", "bronze", "silver", "gold", "competitor"]);
+
 customersRouter.post("/", async (req, res) => {
-  const { name, category, phone, address, notes, lat, lng, visit_frequency_days, erp_customer_id, tin, region, subregion } =
+  const { name, category, phone, address, notes, lat, lng, visit_frequency_days, erp_customer_id, tin, region, subregion, customer_tier } =
     req.body ?? {};
 
   if (!name || lat === undefined || lng === undefined) {
@@ -78,10 +80,13 @@ customersRouter.post("/", async (req, res) => {
   if (typeof lat !== "number" || typeof lng !== "number") {
     return res.status(400).json({ error: "lat and lng must be numbers" });
   }
+  if (customer_tier !== undefined && !CUSTOMER_TIERS.has(customer_tier)) {
+    return res.status(400).json({ error: "Invalid customer_tier" });
+  }
 
   const { rows } = await pool.query(
-    `INSERT INTO customers (name, category, phone, address, notes, lat, lng, created_by, visit_frequency_days, erp_customer_id, tin, region, subregion)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+    `INSERT INTO customers (name, category, phone, address, notes, lat, lng, created_by, visit_frequency_days, erp_customer_id, tin, region, subregion, customer_tier)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, COALESCE($14, 'potential'))
      RETURNING *`,
     [
       name,
@@ -97,6 +102,7 @@ customersRouter.post("/", async (req, res) => {
       tin || null,
       region || null,
       subregion || null,
+      customer_tier || null,
     ]
   );
   res.status(201).json(rows[0]);
@@ -146,9 +152,13 @@ customersRouter.get("/:id", async (req, res) => {
   res.json(customer);
 });
 
-export const EDITABLE_FIELDS = ["name", "category", "phone", "address", "notes", "lat", "lng", "visit_frequency_days", "erp_customer_id", "tin", "region", "subregion"];
+export const EDITABLE_FIELDS = ["name", "category", "phone", "address", "notes", "lat", "lng", "visit_frequency_days", "erp_customer_id", "tin", "region", "subregion", "customer_tier"];
 
 customersRouter.patch("/:id", requireDirectEditAccess, async (req, res) => {
+  if (req.body?.customer_tier !== undefined && !CUSTOMER_TIERS.has(req.body.customer_tier)) {
+    return res.status(400).json({ error: "Invalid customer_tier" });
+  }
+
   const updates = [];
   const params = [];
 
