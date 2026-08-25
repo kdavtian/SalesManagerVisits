@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, openNavigation, CATEGORY_OPTIONS, tierSelectorHtml, activateTierSelector, tierBadgeHtml } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryIcon } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { canEditDirectly, isAdmin } from "../state.js";
@@ -137,7 +137,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     <div class="card detail-facts-card">
       ${customer.address ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.pin}</span><span>${escapeHtml(customer.address)}</span></div>` : ""}
       ${customer.phone ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.phone}</span><a href="tel:${escapeHtml(customer.phone)}">${escapeHtml(customer.phone)}</a></div>` : ""}
-      ${customer.category ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.tag}</span><span>${escapeHtml(customer.category)}</span></div>` : ""}
+      ${customer.category ? `<div class="detail-fact"><span class="detail-fact-icon">${categoryIcon(customer.category)}</span><span>${escapeHtml(customer.category)}</span></div>` : ""}
       <div class="detail-fact"><span class="detail-fact-icon">${icons.repeat}</span><span>${t("visit_every_prefix")}${customer.visit_frequency_days}${t("visit_every_suffix")}</span></div>
       ${customer.last_visit_at ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.clock}</span><span>${t("last_visit")}: ${formatDateTime(customer.last_visit_at)}</span></div>` : ""}
       ${customer.notes ? `<div class="detail-fact muted"><span class="detail-fact-icon">${icons.note}</span><span>${escapeHtml(customer.notes)}</span></div>` : ""}
@@ -410,20 +410,11 @@ function openEditSheet(customer, navigate, onDone) {
       <h2>${canEditDirectly() ? t("edit_customer") : t("request_edit")}</h2>
       <form id="edit-customer-form">
         ${tierSelectorHtml(customer.customer_tier || "potential")}
-        ${fields.map((f) => {
+        ${categorySelectorHtml(customer.category || "")}
+        ${fields.filter((f) => f.type !== "select").map((f) => {
           const value = escapeHtml(customer[f.name] ?? "");
           if (f.type === "textarea") {
             return `<label>${t(f.labelKey)}<textarea name="${f.name}" rows="2">${value}</textarea></label>`;
-          }
-          if (f.type === "select") {
-            return `<label>${t(f.labelKey)}
-              <select name="${f.name}">
-                <option value="">${t("category_placeholder")}</option>
-                ${CATEGORY_OPTIONS.map(
-                  (c) => `<option value="${escapeHtml(c)}" ${customer[f.name] === c ? "selected" : ""}>${escapeHtml(c)}</option>`
-                ).join("")}
-              </select>
-            </label>`;
           }
           if (f.name === "erp_customer_id") {
             return `<label class="erp-suggest-wrap">${t(f.labelKey)}
@@ -452,6 +443,7 @@ function openEditSheet(customer, navigate, onDone) {
   document.body.appendChild(overlay);
   activateDialog(overlay);
   activateTierSelector(overlay);
+  activateCategorySelector(overlay);
 
   function close() {
     overlay.remove();

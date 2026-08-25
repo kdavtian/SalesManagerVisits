@@ -928,6 +928,75 @@ form [aria-invalid="true"] {
   color: var(--danger);
 }
 
+/* Customer category -- icon-button selector, same pattern as the tier
+   selector above, replacing what used to be a plain <select>. */
+
+.category-selector {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 2px;
+  margin-bottom: 12px;
+}
+
+.category-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 4px;
+  min-width: 0;
+  cursor: pointer;
+  color: var(--text-dim);
+}
+
+.category-btn .category-icon {
+  display: flex;
+}
+
+.category-btn .category-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.category-btn .category-label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.category-btn.category-oil-point.category-btn-active {
+  background: rgba(232, 130, 60, 0.18);
+  border-color: #e8823c;
+  color: #e8823c;
+}
+
+.category-btn.category-shop.category-btn-active {
+  background: rgba(9, 105, 218, 0.14);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.category-btn.category-workshop.category-btn-active {
+  background: rgba(96, 125, 139, 0.2);
+  border-color: #607d8b;
+  color: #607d8b;
+}
+
+.category-btn.category-other.category-btn-active {
+  background: rgba(152, 152, 157, 0.18);
+  border-color: var(--text-dim);
+  color: var(--text);
+}
+
 /* List view */
 
 .list-header-row {
@@ -1702,16 +1771,75 @@ input[type="search"]:focus {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
 }
 
-.pin-today {
-  background: var(--success);
+/* Pin color = customer tier (matches the tier selector's own colors), so
+   the same rank a rep sees on the customer's profile is what they see
+   scattered across the map. */
+.pin-tier-potential {
+  background: #8e8e93;
 }
 
-.pin-week {
-  background: #0a84ff;
+.pin-tier-bronze {
+  background: #cd7f32;
 }
 
-.pin-pending {
-  background: var(--accent);
+.pin-tier-silver {
+  background: #9a9aa5;
+}
+
+.pin-tier-gold {
+  background: #d4a017;
+}
+
+.pin-tier-competitor {
+  background: var(--danger);
+}
+
+/* bronze/silver/gold render as a plain coin (circle) instead of the
+   teardrop pin shape -- reads at a glance as "this one's a real ranked
+   account", distinct from the prospect/competitor markers. */
+.pin-coin {
+  border-radius: 50%;
+  transform: none;
+}
+
+/* The category glyph inside the pin -- centered and counter-rotated to
+   stay upright against the teardrop's own -45deg rotation. Uses the same
+   absolute-center-then-counter-rotate technique as .pin-check below. */
+.pin-glyph {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: rotate(45deg) translate(-50%, -50%);
+  color: #ffffff;
+  display: flex;
+}
+
+.pin-glyph svg {
+  width: 10px;
+  height: 10px;
+}
+
+/* Coin pins aren't rotated to begin with, so their glyph just centers --
+   no counter-rotation needed. Dark instead of white: bronze/silver/gold
+   are all light/mid-toned backgrounds where a white glyph loses contrast. */
+.pin-glyph-flat {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: rgba(0, 0, 0, 0.72);
+  display: flex;
+}
+
+.pin-glyph-flat svg {
+  width: 11px;
+  height: 11px;
+}
+
+/* Visit status now shows as a ring rather than owning the pin's whole
+   color, since color is spoken for by tier. */
+.pin-status-overdue {
+  box-shadow: 0 0 0 2px var(--danger), 0 1px 4px rgba(0, 0, 0, 0.35);
 }
 
 .pin-new {
@@ -3232,9 +3360,6 @@ input[type="search"]:focus {
   cursor: pointer;
 }
 
-.pin-overdue {
-  background: var(--danger);
-}
 
 /* Required OSM/CARTO attribution (see map.js), shrunk to an unobtrusive
    corner label instead of Leaflet's default full-contrast bar. */

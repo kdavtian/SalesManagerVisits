@@ -18,25 +18,104 @@ export function haversineMeters(lat1, lng1, lat2, lng2) {
   return EARTH_RADIUS_METERS * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-export const CATEGORY_OPTIONS = ["Յուղման կետ", "Խանութ", "Ավտոպարկ", "Ավտոսերվիս", "Այլ"];
-
 // Customer relationship tier -- distinct from category (what kind of
 // business). potential/competitor have no ERP Customer ID; bronze/silver/
 // gold are real accounts, each priced from a different Castrol PriceList
 // column (see server products.silver_price_amd / gold_price_amd).
+// A small embossed-coin glyph -- a ring with the tier's rank number in the
+// middle -- shared by bronze/silver/gold and colored per tier via CSS
+// currentColor (see .tier-bronze/.tier-silver/.tier-gold), same as the
+// other tier icons below.
+function coinIcon(n) {
+  return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><text x="12" y="16" text-anchor="middle" font-size="10" font-weight="700" fill="currentColor" stroke="none">${n}</text></svg>`;
+}
+
 const TIER_ICON = {
-  potential: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10" cy="10" r="6"/><path d="M21 21l-5.2-5.2"/></svg>`,
-  medal: `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><circle cx="12" cy="15" r="6"/><path d="M9 10 6 3h3l3 6 3-6h3l-3 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`,
-  competitor: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`,
+  // Bullseye/target -- an unconverted lead, still "in the sights".
+  potential: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.4"/><circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none"/></svg>`,
+  bronze: coinIcon(3),
+  silver: coinIcon(2),
+  gold: coinIcon(1),
+  // Binoculars -- watching a competitor's account, not our own.
+  competitor: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10 10h4"/><path d="M19 7V4a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v3"/><path d="M20 21a2 2 0 0 0 2-2v-3.85c0-1.39-2-2.96-2-4.83V8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v11a2 2 0 0 0 2 2z"/><path d="M22 16H2"/><path d="M4 21a2 2 0 0 1-2-2v-3.85c0-1.39 2-2.96 2-4.83V8a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2z"/><path d="M9 7V4a1 1 0 0 0-1-1H6a1 1 0 0 0-1 1v3"/></svg>`,
 };
 
 export const TIER_OPTIONS = [
   { value: "potential", labelKey: "tier_potential", icon: TIER_ICON.potential, cls: "tier-potential" },
-  { value: "bronze", labelKey: "tier_bronze", icon: TIER_ICON.medal, cls: "tier-bronze" },
-  { value: "silver", labelKey: "tier_silver", icon: TIER_ICON.medal, cls: "tier-silver" },
-  { value: "gold", labelKey: "tier_gold", icon: TIER_ICON.medal, cls: "tier-gold" },
+  { value: "bronze", labelKey: "tier_bronze", icon: TIER_ICON.bronze, cls: "tier-bronze" },
+  { value: "silver", labelKey: "tier_silver", icon: TIER_ICON.silver, cls: "tier-silver" },
+  { value: "gold", labelKey: "tier_gold", icon: TIER_ICON.gold, cls: "tier-gold" },
   { value: "competitor", labelKey: "tier_competitor", icon: TIER_ICON.competitor, cls: "tier-competitor" },
 ];
+
+// Customer category -- what kind of business this is, distinct from tier.
+// Selected via icon buttons (see categorySelectorHtml) rather than a
+// dropdown, same pattern as the tier selector above. Values are the raw
+// Armenian labels stored on the customer record -- used directly as both
+// the stored value and the display text, matching how this field always
+// worked (no separate translation layer for these fixed business terms).
+const CATEGORY_ICON = {
+  // A fuel pump -- stands in for "oil changing point" (garage forecourt).
+  oilPoint: `<svg class="ui-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 4 0V9.002a2 2 0 0 0-.59-1.42L18 5"/><path d="M14 21V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v16"/><path d="M2 21h13"/><path d="M3 9h11"/></svg>`,
+  shop: `<svg class="ui-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M3 4h2l2.2 10.2a2 2 0 0 0 2 1.6h8.6a2 2 0 0 0 2-1.6L21 8H6"/></svg>`,
+  // A wrench -- the auto workshop/service point.
+  workshop: `<svg class="ui-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.1-3.1c.32-.32.86-.22.98.22a6 6 0 0 1-8.26 7.06l-7.9 7.9a1 1 0 0 1-3-3l7.9-7.9a6 6 0 0 1 7.06-8.26c.44.12.54.66.22.98z"/></svg>`,
+  other: `<svg class="ui-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 5.5-8 11-8 11S4 15.5 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>`,
+};
+
+export const CATEGORY_LIST = [
+  { value: "Յուղման կետ", icon: CATEGORY_ICON.oilPoint, cls: "category-oil-point" },
+  { value: "Խանութ", icon: CATEGORY_ICON.shop, cls: "category-shop" },
+  { value: "Ավտոսերվիս", icon: CATEGORY_ICON.workshop, cls: "category-workshop" },
+  { value: "Այլ", icon: CATEGORY_ICON.other, cls: "category-other" },
+];
+
+// Kept for anything that still needs the raw list of values (e.g. filters
+// over existing data written before the category set changed).
+export const CATEGORY_OPTIONS = CATEGORY_LIST.map((c) => c.value);
+
+export function categorySelectorHtml(selected = "", inputName = "category") {
+  return `
+    <div class="category-selector" role="radiogroup" aria-label="${t("category")}">
+      ${CATEGORY_LIST.map(
+        (opt) => `
+        <button type="button" class="category-btn ${opt.cls} ${opt.value === selected ? "category-btn-active" : ""}" data-category="${escapeHtml(opt.value)}" role="radio" aria-checked="${opt.value === selected}">
+          <span class="category-icon">${opt.icon}</span>
+          <span class="category-label">${escapeHtml(opt.value)}</span>
+        </button>`
+      ).join("")}
+      <input type="hidden" name="${inputName}" value="${escapeHtml(selected)}" />
+    </div>
+  `;
+}
+
+// Wires up click behavior for a categorySelectorHtml() block already in the
+// DOM -- pass the element containing it (not the .category-selector itself).
+export function activateCategorySelector(container, onChange) {
+  const wrap = container.querySelector(".category-selector");
+  if (!wrap) return;
+  const hiddenInput = wrap.querySelector("input[type=hidden]");
+  wrap.querySelectorAll(".category-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      wrap.querySelectorAll(".category-btn").forEach((b) => {
+        b.classList.remove("category-btn-active");
+        b.setAttribute("aria-checked", "false");
+      });
+      btn.classList.add("category-btn-active");
+      btn.setAttribute("aria-checked", "true");
+      hiddenInput.value = btn.dataset.category;
+      onChange?.(btn.dataset.category);
+    });
+  });
+}
+
+// Maps a stored category value to its icon glyph -- for showing a small
+// category icon wherever a customer's category is displayed read-only
+// (detail page, map pins). Falls back to the generic "other" glyph for any
+// value that isn't one of the four current buttons (e.g. legacy data).
+export function categoryIcon(value) {
+  return CATEGORY_LIST.find((c) => c.value === value)?.icon ?? CATEGORY_ICON.other;
+}
 
 export function tierSelectorHtml(selected = "potential", inputName = "customer_tier") {
   return `

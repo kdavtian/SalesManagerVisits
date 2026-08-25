@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, haversineMeters, getCurrentPosition, CATEGORY_OPTIONS, tierSelectorHtml, activateTierSelector } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, haversineMeters, getCurrentPosition, tierSelectorHtml, activateTierSelector, categorySelectorHtml, activateCategorySelector, categoryIcon } from "../util.js";
 import { t } from "../i18n.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
@@ -224,13 +224,22 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     return "pending";
   }
 
-  const PIN_CLASS = { today: "pin-today", overdue: "pin-overdue", week: "pin-week", pending: "pin-pending" };
+  const TIERS_ON_PINS = new Set(["bronze", "silver", "gold", "competitor"]);
 
-  function customerIcon(status) {
+  // Pin shape+color now encode the customer's *tier*, and the small glyph
+  // inside encodes their *category* -- so glancing at the map answers "where
+  // are my gold oil-change customers" or "where are potential workshops" in
+  // one look, instead of needing to open each pin. Visit status (today's
+  // check, overdue) is still shown, just as a smaller badge/ring rather than
+  // owning the pin's whole color the way it used to.
+  function customerIcon(c, status) {
+    const tier = TIERS_ON_PINS.has(c.customer_tier) ? c.customer_tier : "potential";
+    const isCoin = tier === "bronze" || tier === "silver" || tier === "gold";
     const check = status === "today" ? '<span class="pin-check">&#10003;</span>' : "";
+    const overdueClass = status === "overdue" ? "pin-status-overdue" : "";
     return L.divIcon({
       className: "",
-      html: `<div class="pin ${PIN_CLASS[status]}">${check}</div>`,
+      html: `<div class="pin pin-tier-${tier} ${isCoin ? "pin-coin" : ""} ${overdueClass}"><span class="${isCoin ? "pin-glyph-flat" : "pin-glyph"}">${categoryIcon(c.category)}</span>${check}</div>`,
       iconSize: [22, 22],
       iconAnchor: [11, 22],
       popupAnchor: [0, -22],
@@ -598,7 +607,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     const bounds = [];
     for (const c of customers) {
       const status = customerStatus(c);
-      const marker = L.marker([c.lat, c.lng], { icon: customerIcon(status) });
+      const marker = L.marker([c.lat, c.lng], { icon: customerIcon(c, status) });
       marker.bindPopup(`
         <div class="map-popup">
           <strong>${escapeHtml(c.name)}</strong>
@@ -1134,13 +1143,8 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         <h2>${t("new_customer")}</h2>
         <form id="new-customer-form">
           ${tierSelectorHtml("potential")}
+          ${categorySelectorHtml("")}
           <label>${t("name")}<input name="name" required /></label>
-          <label>${t("category")}
-            <select name="category">
-              <option value="">${t("category_placeholder")}</option>
-              ${CATEGORY_OPTIONS.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")}
-            </select>
-          </label>
           <label>${t("phone")}<input name="phone" type="tel" /></label>
           <label>${t("address")}<input name="address" id="new-customer-address" /></label>
           <label class="erp-suggest-wrap">${t("erp_customer_id")}
@@ -1160,6 +1164,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     document.body.appendChild(overlay);
     activateDialog(overlay);
     activateTierSelector(overlay);
+    activateCategorySelector(overlay);
 
     // Keep the dropped pin visible above the sheet -- measured against the
     // sheet's actual rendered height (it varies with content/keyboard),
