@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
-import { requireAuth, requireAdmin, requireDirectEditAccess } from "../middleware/auth.js";
-import { seesAllActivity } from "../roles.js";
+import { requireAuth, requireAdmin } from "../middleware/auth.js";
+import { seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly } from "../roles.js";
 import { getDefaultVisitFrequencyDays } from "../settings.js";
 
 export const customersRouter = Router();
@@ -27,7 +27,7 @@ const STATUS_COLUMNS = `
 `;
 
 customersRouter.get("/", async (req, res) => {
-  const { search, visited, region, subregion } = req.query;
+  const { search, visited, region, subregion, assigned_manager_id } = req.query;
   const conditions = [];
   const params = [];
 
@@ -42,6 +42,10 @@ customersRouter.get("/", async (req, res) => {
   if (subregion) {
     params.push(subregion);
     conditions.push(`c.subregion = $${params.length}`);
+  }
+  if (assigned_manager_id) {
+    params.push(assigned_manager_id);
+    conditions.push(`c.assigned_manager_id = $${params.length}`);
   }
   if (visited === "visited") {
     conditions.push(`EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= now() - interval '7 days')`);
@@ -71,8 +75,22 @@ customersRouter.get("/", async (req, res) => {
 const CUSTOMER_TIERS = new Set(["potential", "bronze", "silver", "gold", "competitor"]);
 
 customersRouter.post("/", async (req, res) => {
-  const { name, category, phone, address, notes, lat, lng, visit_frequency_days, erp_customer_id, tin, region, subregion, customer_tier } =
-    req.body ?? {};
+  const {
+    name,
+    category,
+    phone,
+    address,
+    notes,
+    lat,
+    lng,
+    visit_frequency_days,
+    erp_customer_id,
+    tin,
+    region,
+    subregion,
+    customer_tier,
+    sales_channel,
+  } = req.body ?? {};
 
   if (!name || lat === undefined || lng === undefined) {
     return res.status(400).json({ error: "name, lat and lng are required" });
@@ -85,8 +103,8 @@ customersRouter.post("/", async (req, res) => {
   }
 
   const { rows } = await pool.query(
-    `INSERT INTO customers (name, category, phone, address, notes, lat, lng, created_by, visit_frequency_days, erp_customer_id, tin, region, subregion, customer_tier)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, COALESCE($14, 'potential'))
+    `INSERT INTO customers (name, category, phone, address, notes, lat, lng, created_by, assigned_manager_id, visit_frequency_days, erp_customer_id, tin, region, subregion, customer_tier, sales_channel)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, $11, $12, $13, COALESCE($14, 'potential'), $15)
      RETURNING *`,
     [
       name,
@@ -103,6 +121,7 @@ customersRouter.post("/", async (req, res) => {
       region || null,
       subregion || null,
       customer_tier || null,
+      sales_channel || null,
     ]
   );
   res.status(201).json(rows[0]);
@@ -121,6 +140,7 @@ customersRouter.get("/regions", async (req, res) => {
 customersRouter.get("/:id", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT c.*, ${STATUS_COLUMNS},
+       am.name AS assigned_manager_name,
        erp.assigned_sales_rep AS erp_assigned_sales_rep,
        erp.debt_amd AS erp_debt_amd,
        erp.last_payment_date AS erp_last_payment_date,
@@ -136,6 +156,7 @@ customersRouter.get("/:id", async (req, res) => {
        ) AS collected_since_sync_amd
      FROM customers c
      LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
+     LEFT JOIN users am ON am.id = c.assigned_manager_id
      WHERE c.id = $1`,
     [req.params.id]
   );
@@ -152,9 +173,37 @@ customersRouter.get("/:id", async (req, res) => {
   res.json(customer);
 });
 
-export const EDITABLE_FIELDS = ["name", "category", "phone", "address", "notes", "lat", "lng", "visit_frequency_days", "erp_customer_id", "tin", "region", "subregion", "customer_tier"];
+export const EDITABLE_FIELDS = [
+  "name",
+  "category",
+  "phone",
+  "address",
+  "notes",
+  "lat",
+  "lng",
+  "visit_frequency_days",
+  "erp_customer_id",
+  "tin",
+  "region",
+  "subregion",
+  "customer_tier",
+  "assigned_manager_id",
+  "sales_channel",
+];
 
-customersRouter.patch("/:id", requireDirectEditAccess, async (req, res) => {
+// A director/ceo (not just admin) can fix these four directly -- everything
+// else on EDITABLE_FIELDS still needs canDeleteOrEditDirectly (admin), same
+// as before, or goes through the edit-request approval flow.
+const REASSIGNMENT_FIELDS = new Set(["region", "subregion", "assigned_manager_id", "sales_channel"]);
+
+customersRouter.patch("/:id", async (req, res) => {
+  const fieldsPresent = EDITABLE_FIELDS.filter((f) => req.body?.[f] !== undefined);
+  const onlyReassignmentFields = fieldsPresent.length > 0 && fieldsPresent.every((f) => REASSIGNMENT_FIELDS.has(f));
+  const allowed = onlyReassignmentFields ? canReassignCustomers(req.user.role) : canDeleteOrEditDirectly(req.user.role);
+  if (!allowed) {
+    return res.status(403).json({ error: "Only admins can apply this directly" });
+  }
+
   if (req.body?.customer_tier !== undefined && !CUSTOMER_TIERS.has(req.body.customer_tier)) {
     return res.status(400).json({ error: "Invalid customer_tier" });
   }

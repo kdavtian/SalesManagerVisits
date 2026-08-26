@@ -25,6 +25,13 @@ export function canDeleteOrEditDirectly(role) {
   return role === "admin";
 }
 
+// Who can reassign a customer's region/subregion/sales channel/manager
+// without going through the edit-request approval flow -- a director is
+// senior enough to fix a mis-assigned customer on the spot.
+export function canReassignCustomers(role) {
+  return role === "admin" || role === "sales_director" || role === "ceo";
+}
+
 // Per spec: admin, sales director, and CEO see the live team-location map.
 export function canViewTeamLocations(role) {
   return role === "admin" || role === "sales_director" || role === "ceo";

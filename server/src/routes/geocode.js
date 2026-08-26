@@ -39,5 +39,15 @@ geocodeRouter.get("/reverse", geocodeLimiter, async (req, res) => {
   }
 
   const data = await response.json();
-  res.json({ address: data.display_name || null });
+  // Nominatim's address breakdown -- state is Armenia's marz (e.g.
+  // "Yerevan", "Shirak"), suburb/city_district is a Yerevan district
+  // (e.g. "Ajapnyak"), city/town is a marz's city for anywhere else. The
+  // client maps these onto the fixed region/subregion lists rather than
+  // trusting arbitrary OSM naming, since Nominatim's exact field per area
+  // varies.
+  res.json({
+    address: data.display_name || null,
+    region: data.address?.state || null,
+    subregion: data.address?.suburb || data.address?.city_district || data.address?.city || data.address?.town || null,
+  });
 });

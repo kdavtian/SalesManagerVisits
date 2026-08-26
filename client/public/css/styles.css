@@ -2934,6 +2934,13 @@ input[type="search"]:focus {
   gap: 12px;
 }
 
+/* A sales manager's own customers stay full-strength; everyone else's
+   recede so they stay findable (via the assignment filter) without
+   competing for attention with the rep's actual book. */
+.customer-card-unassigned {
+  opacity: 0.5;
+}
+
 .customer-card-icon {
   width: 44px;
   height: 44px;

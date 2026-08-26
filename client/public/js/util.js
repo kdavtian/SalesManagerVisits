@@ -63,6 +63,74 @@ const CATEGORY_ICON = {
   other: `<svg class="ui-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 5.5-8 11-8 11S4 15.5 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>`,
 };
 
+// Armenia's 11 administrative regions (10 marzes + Yerevan, which is a
+// separate city with marz-equivalent status). Subregion is a fixed list of
+// Yerevan's 12 districts when region is Yerevan; for every other region,
+// there's no exhaustive city list maintained here, so subregion stays free
+// text (whatever city the customer is in).
+export const REGION_LIST = [
+  "Yerevan",
+  "Aragatsotn",
+  "Ararat",
+  "Armavir",
+  "Gegharkunik",
+  "Kotayk",
+  "Lori",
+  "Shirak",
+  "Syunik",
+  "Tavush",
+  "Vayots Dzor",
+];
+
+export const YEREVAN_DISTRICTS = [
+  "Ajapnyak",
+  "Arabkir",
+  "Avan",
+  "Davtashen",
+  "Erebuni",
+  "Kanaker-Zeytun",
+  "Kentron",
+  "Malatia-Sebastia",
+  "Nor Nork",
+  "Nork-Marash",
+  "Nubarashen",
+  "Shengavit",
+];
+
+// Best-effort match of a geocoder's free-text region/subregion guess
+// against the fixed lists above -- accent/case-insensitive substring match
+// in either direction, since OSM data can spell things a little differently
+// ("Kanaker-Zeytun" vs "Kanaker Zeytun"). Returns "" (unmatched, left for
+// the rep to pick) rather than guessing wrong.
+function fuzzyMatch(guess, list) {
+  if (!guess) return "";
+  const norm = (s) =>
+    s
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9]/g, "");
+  const g = norm(guess);
+  if (!g) return "";
+  return list.find((v) => {
+    const n = norm(v);
+    return n === g || n.includes(g) || g.includes(n);
+  }) ?? "";
+}
+
+export function matchRegion(guess) {
+  return fuzzyMatch(guess, REGION_LIST);
+}
+
+export function matchSubregion(guess, region) {
+  if (region === "Yerevan") return fuzzyMatch(guess, YEREVAN_DISTRICTS);
+  // Outside Yerevan there's no fixed list -- just pass the geocoder's own
+  // guess through as the starting text (e.g. the city name), still editable.
+  return guess || "";
+}
+
+export const SALES_CHANNELS = ["PVO", "CVO", "OEM"];
+
 export const CATEGORY_LIST = [
   { value: "Յուղման կետ", icon: CATEGORY_ICON.oilPoint, cls: "category-oil-point" },
   { value: "Խանութ", icon: CATEGORY_ICON.shop, cls: "category-shop" },

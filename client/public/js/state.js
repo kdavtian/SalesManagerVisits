@@ -44,3 +44,10 @@ export function canPlanForOthers() {
     state.user?.role === "admin" || state.user?.role === "sales_director" || state.user?.role === "ceo"
   );
 }
+
+// Mirrors canReassignCustomers in the server's roles.js.
+export function canReassignCustomers() {
+  return (
+    state.user?.role === "admin" || state.user?.role === "sales_director" || state.user?.role === "ceo"
+  );
+}

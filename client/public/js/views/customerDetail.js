@@ -1,8 +1,8 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryIcon } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryIcon, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { canEditDirectly, isAdmin } from "../state.js";
+import { canEditDirectly, canReassignCustomers, isAdmin } from "../state.js";
 
 const AGING_BADGE = {
   "0-7 days": "badge-success",
@@ -58,8 +58,6 @@ const EDIT_FIELDS = [
   { name: "category", labelKey: "category", type: "select" },
   { name: "phone", labelKey: "phone", type: "tel" },
   { name: "address", labelKey: "address", type: "text" },
-  { name: "region", labelKey: "region", type: "text" },
-  { name: "subregion", labelKey: "subregion", type: "text" },
   { name: "visit_frequency_days", labelKey: "visit_frequency", type: "number" },
   { name: "notes", labelKey: "notes", type: "textarea" },
   { name: "tin", labelKey: "tin", type: "text" },
@@ -128,6 +126,13 @@ export async function renderCustomerDetail(root, navigate, customerId) {
         </div>
       </div>
       <div class="detail-header-actions">
+        ${
+          canReassignCustomers()
+            ? `<button class="icon-btn" id="reassign-customer-btn" aria-label="${t("assigned_manager")}">
+                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20v-1.25A5.75 5.75 0 0 1 8.75 13h.5A5.75 5.75 0 0 1 15 18.75V20"/><circle cx="17.5" cy="8.5" r="2.5"/><path d="M15.5 13.6c.6-.25 1.25-.38 1.9-.38A4.6 4.6 0 0 1 22 17.82V20"/></svg>
+               </button>`
+            : ""
+        }
         <button class="icon-btn" id="edit-customer-btn" aria-label="${t("edit")}">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
         </button>
@@ -138,6 +143,17 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       ${customer.address ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.pin}</span><span>${escapeHtml(customer.address)}</span></div>` : ""}
       ${customer.phone ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.phone}</span><a href="tel:${escapeHtml(customer.phone)}">${escapeHtml(customer.phone)}</a></div>` : ""}
       ${customer.category ? `<div class="detail-fact"><span class="detail-fact-icon">${categoryIcon(customer.category)}</span><span>${escapeHtml(customer.category)}</span></div>` : ""}
+      ${
+        customer.region
+          ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.pin}</span><span>${escapeHtml(customer.region)}${customer.subregion ? ` &middot; ${escapeHtml(customer.subregion)}` : ""}</span></div>`
+          : ""
+      }
+      ${customer.sales_channel ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.box}</span><span>${escapeHtml(customer.sales_channel)}</span></div>` : ""}
+      ${
+        customer.assigned_manager_name
+          ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.store}</span><span>${t("assigned_manager")}: ${escapeHtml(customer.assigned_manager_name)}</span></div>`
+          : ""
+      }
       <div class="detail-fact"><span class="detail-fact-icon">${icons.repeat}</span><span>${t("visit_every_prefix")}${customer.visit_frequency_days}${t("visit_every_suffix")}</span></div>
       ${customer.last_visit_at ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.clock}</span><span>${t("last_visit")}: ${formatDateTime(customer.last_visit_at)}</span></div>` : ""}
       ${customer.notes ? `<div class="detail-fact muted"><span class="detail-fact-icon">${icons.note}</span><span>${escapeHtml(customer.notes)}</span></div>` : ""}
@@ -181,6 +197,9 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   });
   container.querySelector("#edit-customer-btn").addEventListener("click", () => {
     openEditSheet(customer, navigate, () => renderCustomerDetail(root, navigate, customerId));
+  });
+  container.querySelector("#reassign-customer-btn")?.addEventListener("click", () => {
+    openReassignSheet(customer, () => renderCustomerDetail(root, navigate, customerId));
   });
   container.querySelector("#order-history-btn")?.addEventListener("click", () => {
     navigate(`#/customers/${customerId}/orders`);
@@ -399,6 +418,112 @@ function renderPendingRequest(slot, request, onDone) {
       </div>
     `;
   }
+}
+
+// Region/subregion/sales channel/assigned manager -- a director/ceo/admin
+// can change these directly (server allows it per canReassignCustomers),
+// separate from the regular edit sheet below which still goes through the
+// edit-request approval flow for everyone but admin.
+async function openReassignSheet(customer, onDone) {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.innerHTML = `
+    <div class="sheet">
+      <h2>${t("assigned_manager")}</h2>
+      <form id="reassign-form">
+        <label>${t("region")}
+          <select name="region" id="reassign-region">
+            <option value="">${t("select_placeholder")}</option>
+            ${REGION_LIST.map(
+              (r) => `<option value="${escapeHtml(r)}" ${r === customer.region ? "selected" : ""}>${escapeHtml(r)}</option>`
+            ).join("")}
+          </select>
+        </label>
+        <label id="reassign-subregion-wrap">${t("subregion")}<input name="subregion" id="reassign-subregion" value="${escapeHtml(customer.subregion ?? "")}" /></label>
+        <label>${t("sales_channel")}
+          <select name="sales_channel">
+            <option value="">${t("select_placeholder")}</option>
+            ${SALES_CHANNELS.map(
+              (c) => `<option value="${escapeHtml(c)}" ${c === customer.sales_channel ? "selected" : ""}>${escapeHtml(c)}</option>`
+            ).join("")}
+          </select>
+        </label>
+        <label>${t("assigned_manager")}
+          <select name="assigned_manager_id" id="reassign-manager">
+            <option value="">${t("unassigned")}</option>
+          </select>
+        </label>
+        <p class="form-error" id="reassign-error" hidden></p>
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="cancel-reassign">${t("cancel")}</button>
+          <button type="submit" class="btn btn-primary">${t("save")}</button>
+        </div>
+      </form>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  activateDialog(overlay);
+
+  function close() {
+    overlay.remove();
+  }
+  overlay.querySelector("#cancel-reassign").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => e.target === overlay && close());
+
+  const regionSelect = overlay.querySelector("#reassign-region");
+  const subregionWrap = overlay.querySelector("#reassign-subregion-wrap");
+  function renderSubregionField(region, value) {
+    if (region === "Yerevan") {
+      subregionWrap.innerHTML = `${t("subregion")}
+        <select name="subregion" id="reassign-subregion">
+          <option value="">${t("select_placeholder")}</option>
+          ${YEREVAN_DISTRICTS.map(
+            (d) => `<option value="${escapeHtml(d)}" ${d === value ? "selected" : ""}>${escapeHtml(d)}</option>`
+          ).join("")}
+        </select>`;
+    } else {
+      subregionWrap.innerHTML = `${t("subregion")}<input name="subregion" id="reassign-subregion" value="${escapeHtml(value ?? "")}" />`;
+    }
+  }
+  if (customer.region === "Yerevan") renderSubregionField("Yerevan", customer.subregion);
+  regionSelect.addEventListener("change", () => renderSubregionField(regionSelect.value, ""));
+
+  const managerSelect = overlay.querySelector("#reassign-manager");
+  api
+    .listPlannableUsers()
+    .then((users) => {
+      managerSelect.innerHTML =
+        `<option value="">${t("unassigned")}</option>` +
+        users
+          .map((u) => `<option value="${u.id}" ${u.id === customer.assigned_manager_id ? "selected" : ""}>${escapeHtml(u.name)}</option>`)
+          .join("");
+    })
+    .catch(() => {});
+
+  const form = overlay.querySelector("#reassign-form");
+  const errorEl = overlay.querySelector("#reassign-error");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const data = new FormData(form);
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = t("saving");
+    try {
+      await api.updateCustomer(customer.id, {
+        region: data.get("region") || null,
+        subregion: data.get("subregion") || null,
+        sales_channel: data.get("sales_channel") || null,
+        assigned_manager_id: data.get("assigned_manager_id") ? Number(data.get("assigned_manager_id")) : null,
+      });
+      close();
+      onDone();
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+      submitBtn.disabled = false;
+      submitBtn.textContent = t("save");
+    }
+  });
 }
 
 function openEditSheet(customer, navigate, onDone) {

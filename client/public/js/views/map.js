@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, haversineMeters, getCurrentPosition, tierSelectorHtml, activateTierSelector, categorySelectorHtml, activateCategorySelector, categoryIcon } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, haversineMeters, getCurrentPosition, tierSelectorHtml, activateTierSelector, categorySelectorHtml, activateCategorySelector, categoryIcon, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion } from "../util.js";
 import { t } from "../i18n.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
@@ -1155,6 +1155,19 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
           <label>${t("name")}<input name="name" required /></label>
           <label>${t("phone")}<input name="phone" type="tel" /></label>
           <label>${t("address")}<input name="address" id="new-customer-address" /></label>
+          <label>${t("region")}
+            <select name="region" id="new-customer-region">
+              <option value="">${t("select_placeholder")}</option>
+              ${REGION_LIST.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join("")}
+            </select>
+          </label>
+          <label id="new-customer-subregion-wrap">${t("subregion")}<input name="subregion" id="new-customer-subregion" /></label>
+          <label>${t("sales_channel")}
+            <select name="sales_channel">
+              <option value="">${t("select_placeholder")}</option>
+              ${SALES_CHANNELS.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")}
+            </select>
+          </label>
           <label class="erp-suggest-wrap">${t("erp_customer_id")}
             <input type="text" name="erp_customer_id" id="new-customer-erp-input" autocomplete="off" />
             <div class="erp-suggest-list" id="new-customer-erp-suggest" hidden></div>
@@ -1202,13 +1215,39 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     // Cancel button.
     placingMarker?.on("click", close);
 
-    // Auto-fill the address from the dropped pin's coordinates -- the rep
-    // can still edit it by hand, this just saves typing it from scratch.
+    // Auto-fill address/region/subregion from the dropped pin's coordinates
+    // -- the rep can still correct any of these by hand, this just saves
+    // typing/picking from scratch. Region/subregion are best-effort matches
+    // against the fixed lists (see matchRegion/matchSubregion in util.js),
+    // never silently trusted as exact.
     const addressInput = overlay.querySelector("#new-customer-address");
+    const regionSelect = overlay.querySelector("#new-customer-region");
+    const subregionWrap = overlay.querySelector("#new-customer-subregion-wrap");
+
+    function renderSubregionField(region, guess) {
+      if (region === "Yerevan") {
+        subregionWrap.innerHTML = `${t("subregion")}
+          <select name="subregion" id="new-customer-subregion">
+            <option value="">${t("select_placeholder")}</option>
+            ${YEREVAN_DISTRICTS.map(
+              (d) => `<option value="${escapeHtml(d)}" ${d === guess ? "selected" : ""}>${escapeHtml(d)}</option>`
+            ).join("")}
+          </select>`;
+      } else {
+        subregionWrap.innerHTML = `${t("subregion")}<input name="subregion" id="new-customer-subregion" value="${escapeHtml(guess || "")}" />`;
+      }
+    }
+    regionSelect.addEventListener("change", () => renderSubregionField(regionSelect.value, ""));
+
     api
       .reverseGeocode(latlng.lat, latlng.lng)
       .then((result) => {
         if (result?.address && !addressInput.value) addressInput.value = result.address;
+        const guessedRegion = matchRegion(result?.region);
+        if (guessedRegion) {
+          regionSelect.value = guessedRegion;
+          renderSubregionField(guessedRegion, matchSubregion(result?.subregion, guessedRegion));
+        }
       })
       .catch(() => {});
 
@@ -1279,6 +1318,9 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
           tin: data.get("tin") || null,
           erp_customer_id: data.get("erp_customer_id") || null,
           customer_tier: data.get("customer_tier") || null,
+          region: data.get("region") || null,
+          subregion: data.get("subregion") || null,
+          sales_channel: data.get("sales_channel") || null,
           lat: latlng.lat,
           lng: latlng.lng,
         });

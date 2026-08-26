@@ -2,6 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml, formatDateTime, haversineMeters, getCurrentPosition } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
+import { state } from "../state.js";
 
 const FILTERS = [
   { key: "", labelKey: "filter_all" },
@@ -50,6 +51,7 @@ export function renderCustomers(root, navigate, initialFilter) {
   let searchTimer;
   let regionFilter = "";
   let subregionFilter = "";
+  let assignmentFilter = ""; // "", "mine", "others"
   let openRegionMenu = null;
   const regionFilterRow = root.querySelector("#region-filter-row");
 
@@ -127,10 +129,6 @@ export function renderCustomers(root, navigate, initialFilter) {
 
   function renderRegionFilterRow() {
     const regions = [...new Set(allCustomers.map((c) => c.region).filter(Boolean))].sort();
-    if (!regions.length) {
-      regionFilterRow.innerHTML = "";
-      return;
-    }
     const subregions = [
       ...new Set(
         allCustomers
@@ -140,8 +138,18 @@ export function renderCustomers(root, navigate, initialFilter) {
       ),
     ].sort();
 
+    // "assigned to me/others" -- lets every role narrow to their own book,
+    // not just sales managers (who additionally get a visual dim on the
+    // "others" cards in the list itself, see renderList).
+    const assignmentOptions = [
+      { value: "", label: t("all_customers") },
+      { value: "mine", label: t("assigned_to_me") },
+      { value: "others", label: t("assigned_to_others") },
+    ];
+
     regionFilterRow.innerHTML = `
-      ${regionDropdownHtml("region", [{ value: "", label: t("all_regions") }, ...regions.map((r) => ({ value: r, label: r }))], regionFilter)}
+      ${regionDropdownHtml("assignment", assignmentOptions, assignmentFilter)}
+      ${regions.length ? regionDropdownHtml("region", [{ value: "", label: t("all_regions") }, ...regions.map((r) => ({ value: r, label: r }))], regionFilter) : ""}
       ${subregions.length ? regionDropdownHtml("subregion", [{ value: "", label: t("all_subregions") }, ...subregions.map((s) => ({ value: s, label: s }))], subregionFilter) : ""}
     `;
 
@@ -160,8 +168,10 @@ export function renderCustomers(root, navigate, initialFilter) {
         if (key === "region") {
           regionFilter = optBtn.dataset.value;
           subregionFilter = "";
-        } else {
+        } else if (key === "subregion") {
           subregionFilter = optBtn.dataset.value;
+        } else {
+          assignmentFilter = optBtn.dataset.value;
         }
         openRegionMenu = null;
         renderRegionFilterRow();
@@ -224,6 +234,8 @@ export function renderCustomers(root, navigate, initialFilter) {
     else if (filter === "not_visited") customers = customers.filter((c) => !c.visited_this_week);
     if (regionFilter) customers = customers.filter((c) => c.region === regionFilter);
     if (subregionFilter) customers = customers.filter((c) => c.subregion === subregionFilter);
+    if (assignmentFilter === "mine") customers = customers.filter((c) => c.assigned_manager_id === state.user.id);
+    else if (assignmentFilter === "others") customers = customers.filter((c) => c.assigned_manager_id !== state.user.id);
     customers = sortCustomers(customers);
 
     if (!customers.length) {
@@ -249,8 +261,16 @@ export function renderCustomers(root, navigate, initialFilter) {
           ? `${t("last_visit")}: ${formatDateTime(c.last_visit_at)}`
           : t("never_visited");
 
+        // A plain sales manager sees their own book at full strength and
+        // everyone else's customers dimmed -- they stay visible/searchable
+        // (per the assignment filter above) but visually recede so the rep
+        // stays focused on what's theirs. Every other role sees all
+        // customers the same way.
+        const isOthers =
+          state.user.role === "sales_manager" && c.assigned_manager_id != null && c.assigned_manager_id !== state.user.id;
+
         return `
-        <button class="card customer-card" data-id="${c.id}">
+        <button class="card customer-card ${isOthers ? "customer-card-unassigned" : ""}" data-id="${c.id}">
           <div class="customer-card-main">
             <strong>${escapeHtml(c.name)}</strong>
             ${c.category ? `<span class="muted">${escapeHtml(c.category)}</span>` : ""}
