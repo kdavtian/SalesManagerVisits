@@ -7,7 +7,7 @@ import { escapeHtml, compressImage, activateDialog } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
 
-const APP_VERSION = "1.10.0";
+const APP_VERSION = "1.10.1";
 
 const ICON = {
   camera: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg>`,
@@ -412,9 +412,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     renderPlanApprovalsSection(root.querySelector("#plan-approvals-slot"));
   }
 
-  root.querySelector("#row-user-guide").addEventListener("click", () => {
-    window.open("/docs/kad-motors-guide-hy.pdf", "_blank");
-  });
+  root.querySelector("#row-user-guide").addEventListener("click", openGuideOverlay);
 
   // --- Security ---
   root.querySelector("#row-change-password").addEventListener("click", openChangePasswordSheet);
@@ -634,6 +632,31 @@ async function renderNotificationDefaultsSection(slot) {
     selectedRole = e.target.value;
     paintRole();
   });
+}
+
+// Shown in-app instead of window.open(..., "_blank") -- a new browser tab
+// leaves a rep stuck (no visible way back into the app on some mobile
+// browser chrome, especially once installed as a home-screen PWA), so this
+// embeds the PDF full-screen with its own X to get back to Settings.
+function openGuideOverlay() {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay guide-overlay";
+  overlay.innerHTML = `
+    <div class="guide-overlay-frame">
+      <button type="button" class="icon-btn guide-overlay-close" id="guide-overlay-close" aria-label="${t("close")}">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <iframe src="/docs/kad-motors-guide-hy.pdf" title="${t("user_guide")}"></iframe>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  activateDialog(overlay);
+
+  function close() {
+    overlay.remove();
+  }
+  overlay.querySelector("#guide-overlay-close").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => e.target === overlay && close());
 }
 
 function openChangePasswordSheet() {
