@@ -104,6 +104,10 @@ export async function renderDashboard(root, navigate) {
         <span class="quick-action-icon quick-action-icon-accent">${icons.mapPinPlus}</span>
         <span>${t("qa_add_customer")}</span>
       </button>
+      <button type="button" class="quick-action" id="qa-cash-expense">
+        <span class="quick-action-icon">${icons.wallet}</span>
+        <span>${t("qa_cash_expense")}</span>
+      </button>
     </div>
 
     <details class="dashboard-insights">
@@ -153,6 +157,7 @@ export async function renderDashboard(root, navigate) {
   container.querySelector("#qa-plan-route").addEventListener("click", () => navigate("#/map?plan=1"));
   container.querySelector("#qa-reports").addEventListener("click", () => navigate("#/activity"));
   container.querySelector("#qa-add-customer").addEventListener("click", () => navigate("#/map?add=1"));
+  container.querySelector("#qa-cash-expense").addEventListener("click", () => navigate("#/expenses"));
 
   const leaderboardEl = container.querySelector("#points-leaderboard");
   if (leaderboardEl && summary.points_leaderboard?.length) {

@@ -97,6 +97,16 @@ const dict = {
     qa_view_activity: "View activity",
     qa_plan_route: "Plan route",
     qa_reports: "Reports",
+    qa_cash_expense: "Cash expense",
+
+    cash_expenses: "Cash expenses",
+    add_expense: "Add expense",
+    edit_expense: "Edit expense",
+    delete_expense: "Delete expense",
+    confirm_delete_expense: "Delete this expense? This cannot be undone.",
+    amount_amd: "Amount (AMD)",
+    purpose: "Purpose",
+    no_expenses_yet: "No expenses yet.",
 
     customers_subtitle: "Manage and visit your customers",
     add_customer: "Add Customer",
@@ -622,6 +632,16 @@ const dict = {
     qa_view_activity: "Ակտիվությունը",
     qa_plan_route: "Պլանավորել երթուղին",
     qa_reports: "Հաշվետվություններ",
+    qa_cash_expense: "Կանխիկ ծախս",
+
+    cash_expenses: "Կանխիկ ծախսեր",
+    add_expense: "Ավելացնել ծախս",
+    edit_expense: "Խմբագրել ծախսը",
+    delete_expense: "Ջնջել ծախսը",
+    confirm_delete_expense: "Ջնջե՞լ այս ծախսը։ Այս գործողությունը հնարավոր չէ հետարկել։",
+    amount_amd: "Գումար (ԱՄԴ)",
+    purpose: "Նպատակ",
+    no_expenses_yet: "Ծախսեր դեռ չկան։",
 
     customers_subtitle: "Կառավարեք և այցելեք Ձեր հաճախորդներին",
     add_customer: "Ավելացնել հաճախորդ",

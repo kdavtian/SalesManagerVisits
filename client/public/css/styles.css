@@ -2941,6 +2941,32 @@ input[type="search"]:focus {
   opacity: 0.5;
 }
 
+.expense-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+}
+
+.expense-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.expense-card-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.expense-card-amount {
+  flex-shrink: 0;
+  font-weight: 700;
+}
+
 .customer-card-icon {
   width: 44px;
   height: 44px;

@@ -37,6 +37,7 @@ export const icons = {
   cart: uiSvg(`<circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M3 4h2l2.2 10.2a2 2 0 0 0 2 1.6h8.6a2 2 0 0 0 2-1.6L21 8H6"/>`),
   noOrder: uiSvg(`<circle cx="12" cy="12" r="9"/><path d="m6 6 12 12"/>`),
   payment: uiSvg(`<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h3"/>`),
+  wallet: uiSvg(`<path d="M3 7a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v2"/><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H5a2 2 0 0 1-2-2Z"/><circle cx="16" cy="13" r="1.3" fill="currentColor" stroke="none"/>`),
   door: uiSvg(`<path d="M5 21h14M7 21V4l10-1v18"/><circle cx="14" cy="12" r=".7" fill="currentColor" stroke="none"/>`),
   warning: uiSvg(`<path d="M10.3 4.2 2.5 18a2 2 0 0 0 1.7 3h15.6a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/>`),
   mapWarning: `<svg class="map-chip-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><path d="M10.25 4.35 2.7 17.5a2.2 2.2 0 0 0 1.9 3.3h14.8a2.2 2.2 0 0 0 1.9-3.3L13.75 4.35a2 2 0 0 0-3.5 0Z"/><path d="M12 9v4.25M12 17h.01"/></svg>`,

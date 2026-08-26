@@ -141,4 +141,9 @@ export const api = {
   getNotificationDefaults: () => request("/notification-settings"),
   setNotificationDefault: (role, notification_type, enabled) =>
     json("/notification-settings", "PUT", { role, notification_type, enabled }),
+
+  listCashExpenses: () => request("/cash-expenses"),
+  createCashExpense: (data) => json("/cash-expenses", "POST", data),
+  updateCashExpense: (id, data) => json(`/cash-expenses/${id}`, "PATCH", data),
+  deleteCashExpense: (id) => request(`/cash-expenses/${id}`, { method: "DELETE" }),
 };
