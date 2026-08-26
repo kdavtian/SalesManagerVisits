@@ -289,6 +289,39 @@ customersRouter.get("/:id/erp-orders/:orderId", async (req, res) => {
   });
 });
 
+// Distinct products this customer has ever ordered -- from this app's own
+// orders (order_items) and, if linked, the full ERP order history
+// (erp_order_lines) -- for the "product availability check" picker at
+// check-in, so a rep only has to tick which of what this shop actually
+// carries is currently in stock, not browse the whole catalog.
+customersRouter.get("/:id/ordered-products", async (req, res) => {
+  const { rows: customerRows } = await pool.query("SELECT erp_customer_id FROM customers WHERE id = $1", [
+    req.params.id,
+  ]);
+  const customer = customerRows[0];
+  if (!customer) return res.status(404).json({ error: "Customer not found" });
+
+  const { rows } = await pool.query(
+    `SELECT DISTINCT brand, product_name FROM (
+       SELECT p.brand AS brand, oi.product_name AS product_name
+       FROM order_items oi
+       JOIN orders o ON o.id = oi.order_id
+       LEFT JOIN products p ON p.id = oi.product_id
+       WHERE o.customer_id = $1
+
+       UNION ALL
+
+       SELECT brand, product_name
+       FROM erp_order_lines
+       WHERE erp_customer_id = $2
+     ) combined
+     WHERE product_name IS NOT NULL
+     ORDER BY brand, product_name`,
+    [req.params.id, customer.erp_customer_id]
+  );
+  res.json(rows);
+});
+
 // Upcoming approved plan dates this customer is on -- for the map pin
 // popup ("planned visit dates"). Small, so no pagination.
 customersRouter.get("/:id/planned-visits", async (req, res) => {

@@ -39,6 +39,7 @@ export const api = {
   deleteCustomer: (id) => request(`/customers/${id}`, { method: "DELETE" }),
   customerCheckins: (id) => request(`/customers/${id}/checkins`),
   customerPlannedVisits: (id) => request(`/customers/${id}/planned-visits`),
+  customerOrderedProducts: (id) => request(`/customers/${id}/ordered-products`),
 
   createCheckin: (formData) =>
     request("/checkins", { method: "POST", body: formData }),

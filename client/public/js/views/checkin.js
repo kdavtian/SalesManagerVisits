@@ -93,6 +93,11 @@ export async function renderCheckin(root, navigate, customerId) {
         <p class="form-error" id="amount-collected-error" hidden>${t("amount_collected_required")}</p>
       </label>
 
+      <label id="available-products-field" hidden>
+        ${t("available_products_label")}
+        <button type="button" class="btn btn-block" id="available-products-btn">${t("select_available_products")}</button>
+      </label>
+
       <label class="brands-label">
         ${t("products_found")}
         <div class="brand-group-grid" id="brand-group-grid">
@@ -145,6 +150,85 @@ export async function renderCheckin(root, navigate, customerId) {
   let photos = [];
   const MAX_PHOTOS = 5;
   const brandStatus = Object.fromEntries(BRAND_GROUPS.map((g) => [g.key, []]));
+
+  // Which of this customer's own previously-ordered products the rep found
+  // in stock right now -- distinct from brandStatus above (that's the
+  // general market landscape; this is specific to what this shop has
+  // actually bought from us before). Fetched lazily the first time the
+  // picker opens, since most check-ins never touch this outcome.
+  let orderedProducts = null;
+  let selectedAvailableProducts = new Set();
+
+  const availableProductsField = container.querySelector("#available-products-field");
+  const availableProductsBtn = container.querySelector("#available-products-btn");
+
+  function syncAvailableProductsVisibility() {
+    const checked = container.querySelector('input[name="outcomes"][value="assortment_check"]').checked;
+    availableProductsField.hidden = !checked;
+  }
+
+  function paintAvailableProductsBtn() {
+    availableProductsBtn.textContent = selectedAvailableProducts.size
+      ? `${t("select_available_products")} (${selectedAvailableProducts.size})`
+      : t("select_available_products");
+  }
+
+  async function openAvailableProductsSheet() {
+    if (!orderedProducts) {
+      availableProductsBtn.disabled = true;
+      availableProductsBtn.textContent = t("loading");
+      try {
+        orderedProducts = await api.customerOrderedProducts(customerId);
+      } catch {
+        orderedProducts = [];
+      }
+      availableProductsBtn.disabled = false;
+      paintAvailableProductsBtn();
+    }
+
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>${t("select_available_products")}</h2>
+        ${
+          orderedProducts.length
+            ? `<div class="brand-grid">
+                ${orderedProducts
+                  .map((p, i) => {
+                    const label = p.brand ? `${p.brand} — ${p.product_name}` : p.product_name;
+                    return `
+                <label class="brand-chip">
+                  <input type="checkbox" data-index="${i}" ${selectedAvailableProducts.has(label) ? "checked" : ""} />
+                  <span>${escapeHtml(label)}</span>
+                </label>`;
+                  })
+                  .join("")}
+              </div>`
+            : `<p class="empty-state">${t("no_ordered_products_found")}</p>`
+        }
+        <div class="sheet-actions">
+          <button type="button" class="btn btn-primary btn-block" id="available-products-done">${t("done")}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+
+    overlay.querySelector("#available-products-done").addEventListener("click", () => {
+      selectedAvailableProducts = new Set(
+        [...overlay.querySelectorAll("input[type=\"checkbox\"]:checked")].map((input) => {
+          const p = orderedProducts[Number(input.dataset.index)];
+          return p.brand ? `${p.brand} — ${p.product_name}` : p.product_name;
+        })
+      );
+      paintAvailableProductsBtn();
+      overlay.remove();
+    });
+  }
+
+  availableProductsBtn.addEventListener("click", openAvailableProductsSheet);
 
   function paintBrandGroupButtons() {
     container.querySelectorAll("[data-brand-group]").forEach((btn) => {
@@ -224,6 +308,7 @@ export async function renderCheckin(root, navigate, customerId) {
     input.addEventListener("change", () => {
       outcomeError.hidden = true;
       syncAmountFieldVisibility();
+      syncAvailableProductsVisibility();
     });
   });
   amountInput.addEventListener("input", () => {
@@ -348,6 +433,8 @@ export async function renderCheckin(root, navigate, customerId) {
     formData.set("outcomes", JSON.stringify(outcomes));
     if (amountCollected != null) formData.set("amount_collected_amd", amountCollected);
     if (Object.keys(brandStatusPayload).length) formData.set("brand_status", JSON.stringify(brandStatusPayload));
+    const availableProductsPayload = [...selectedAvailableProducts];
+    if (availableProductsPayload.length) formData.set("available_products", JSON.stringify(availableProductsPayload));
     photos.forEach((photo, i) => formData.append("photos", photo.blob, `checkin-${i}.jpg`));
 
     try {
@@ -357,7 +444,17 @@ export async function renderCheckin(root, navigate, customerId) {
       if (err instanceof TypeError) {
         // Offline / network failure — queue it instead of losing the visit.
         const photoDataUrls = await Promise.all(photos.map((photo) => blobToDataUrl(photo.blob)));
-        enqueueCheckin({ customerId, lat, lng, note, brandStatus: brandStatusPayload, outcomes, amountCollected, photoDataUrls });
+        enqueueCheckin({
+          customerId,
+          lat,
+          lng,
+          note,
+          brandStatus: brandStatusPayload,
+          outcomes,
+          amountCollected,
+          availableProducts: availableProductsPayload,
+          photoDataUrls,
+        });
         showQueued();
       } else {
         errorEl.textContent = err.message;

@@ -55,6 +55,27 @@ function parseOutcomes(raw) {
   return parsed.filter((o) => VALID_OUTCOMES.has(o));
 }
 
+// A free-text list (product names/brands from this customer's own order
+// history, not a fixed catalog whitelist) -- just sanitized and capped,
+// same trust level as `note`.
+const MAX_AVAILABLE_PRODUCTS = 200;
+function parseAvailableProducts(raw) {
+  if (!raw) return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed)) return null;
+  const values = parsed
+    .filter((v) => typeof v === "string")
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .slice(0, MAX_AVAILABLE_PRODUCTS);
+  return values.length ? values : null;
+}
+
 function parseBrandStatus(raw) {
   if (!raw) return null;
   let parsed;
@@ -85,7 +106,7 @@ checkinsRouter.post("/", (req, res, next) => {
     next();
   });
 }, async (req, res) => {
-  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd } = req.body ?? {};
+  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd, available_products } = req.body ?? {};
   const customerId = Number(customer_id);
   const latNum = Number(lat);
   const lngNum = Number(lng);
@@ -123,16 +144,17 @@ checkinsRouter.post("/", (req, res, next) => {
   const distance = haversineMeters(latNum, lngNum, customer.lat, customer.lng);
   const withinRange = distance <= radiusMeters;
   const brandStatusValue = parseBrandStatus(brand_status);
+  const availableProductsValue = parseAvailableProducts(available_products);
 
   const client = await pool.connect();
   let checkin;
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
-      `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, note, brand_status, outcomes, amount_collected_amd)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, note, brand_status, outcomes, amount_collected_amd, available_products)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
-      [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, brandStatusValue, outcomeValues, amountCollected]
+      [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, brandStatusValue, outcomeValues, amountCollected, availableProductsValue]
     );
     checkin = rows[0];
     for (const file of files) {
