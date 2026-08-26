@@ -4505,3 +4505,55 @@ form select,
 .weekday-btn-active {
   border-color: var(--accent-fill);
 }
+
+.report-list-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+}
+
+.report-list-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-fill);
+}
+
+.report-list-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.report-filter-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.report-filter-form select {
+  flex: 1 1 auto;
+  min-width: 120px;
+}
+
+.report-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.report-row-multiline {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  text-align: left;
+}

@@ -148,4 +148,21 @@ export const api = {
   createCashExpense: (data) => json("/cash-expenses", "POST", data),
   updateCashExpense: (id, data) => json(`/cash-expenses/${id}`, "PATCH", data),
   deleteCashExpense: (id) => request(`/cash-expenses/${id}`, { method: "DELETE" }),
+
+  listReports: () => request("/reports"),
+  getReportAccessMatrix: () => request("/reports/access"),
+  setReportAccess: (report_key, role, enabled) =>
+    json("/reports/access", "PUT", { report_key, role, enabled }),
+  getNewCustomersReport: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/reports/new-customers${qs ? `?${qs}` : ""}`);
+  },
+  getCheckinsReport: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/reports/checkins${qs ? `?${qs}` : ""}`);
+  },
+  getBrandAvailabilityReport: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/reports/brand-availability${qs ? `?${qs}` : ""}`);
+  },
 };

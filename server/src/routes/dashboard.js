@@ -74,15 +74,23 @@ dashboardRouter.get("/summary", async (req, res) => {
        FROM checkins ch
        WHERE ch.timestamp >= date_trunc('month', now())
        GROUP BY ch.user_id, ch.customer_id, date_trunc('day', ch.timestamp)
+     ),
+     new_customers AS (
+       SELECT c.created_by AS user_id, count(*)::int AS customer_points
+       FROM customers c
+       WHERE c.created_at >= date_trunc('month', now())
+       GROUP BY c.created_by
      )
      SELECT u.id AS user_id, u.name AS user_name,
        count(dv.*)::int AS visit_points,
        count(dv.*) FILTER (WHERE dv.has_photo)::int AS photo_points,
-       (count(dv.*) + count(dv.*) FILTER (WHERE dv.has_photo))::int AS total_points
+       coalesce(nc.customer_points, 0) AS customer_points,
+       (count(dv.*) + count(dv.*) FILTER (WHERE dv.has_photo) + coalesce(nc.customer_points, 0))::int AS total_points
      FROM users u
      LEFT JOIN daily_visits dv ON dv.user_id = u.id
+     LEFT JOIN new_customers nc ON nc.user_id = u.id
      WHERE u.role != 'admin'
-     GROUP BY u.id, u.name
+     GROUP BY u.id, u.name, nc.customer_points
      ORDER BY total_points DESC, u.name`
   );
 
@@ -97,6 +105,7 @@ dashboardRouter.get("/summary", async (req, res) => {
     total_points: 0,
     visit_points: 0,
     photo_points: 0,
+    customer_points: 0,
   };
 
   res.json({
@@ -107,6 +116,7 @@ dashboardRouter.get("/summary", async (req, res) => {
       total_points: myPoints.total_points,
       visit_points: myPoints.visit_points,
       photo_points: myPoints.photo_points,
+      customer_points: myPoints.customer_points,
     },
     points_leaderboard: seesAll ? points.rows : null,
   });
@@ -172,15 +182,23 @@ async function computeMonthlyStandings(month) {
        FROM checkins ch
        WHERE ch.timestamp >= $1::date AND ch.timestamp < ($1::date + interval '1 month')
        GROUP BY ch.user_id, ch.customer_id, date_trunc('day', ch.timestamp)
+     ),
+     new_customers AS (
+       SELECT c.created_by AS user_id, count(*)::int AS customer_points
+       FROM customers c
+       WHERE c.created_at >= $1::date AND c.created_at < ($1::date + interval '1 month')
+       GROUP BY c.created_by
      )
      SELECT u.id AS user_id, u.name AS user_name,
        count(dv.*)::int AS visit_points,
        count(dv.*) FILTER (WHERE dv.has_photo)::int AS photo_points,
-       (count(dv.*) + count(dv.*) FILTER (WHERE dv.has_photo))::int AS total_points
+       coalesce(nc.customer_points, 0) AS customer_points,
+       (count(dv.*) + count(dv.*) FILTER (WHERE dv.has_photo) + coalesce(nc.customer_points, 0))::int AS total_points
      FROM users u
      LEFT JOIN daily_visits dv ON dv.user_id = u.id
+     LEFT JOIN new_customers nc ON nc.user_id = u.id
      WHERE u.role != 'admin'
-     GROUP BY u.id, u.name
+     GROUP BY u.id, u.name, nc.customer_points
      ORDER BY total_points DESC, u.name`,
     [month]
   );
@@ -209,14 +227,25 @@ dashboardRouter.post("/points/close-out", requireAdmin, async (req, res) => {
       const s = standings[i];
       const { rows } = await client.query(
         `INSERT INTO monthly_points_closeouts
-           (month, user_id, user_name, total_points, visit_points, photo_points, rank, closed_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           (month, user_id, user_name, total_points, visit_points, photo_points, customer_points, rank, closed_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (month, user_id) DO UPDATE
            SET user_name = EXCLUDED.user_name, total_points = EXCLUDED.total_points,
                visit_points = EXCLUDED.visit_points, photo_points = EXCLUDED.photo_points,
+               customer_points = EXCLUDED.customer_points,
                rank = EXCLUDED.rank, closed_by = EXCLUDED.closed_by, closed_at = now()
          RETURNING *`,
-        [month, s.user_id, s.user_name, s.total_points, s.visit_points, s.photo_points, i + 1, req.user.id]
+        [
+          month,
+          s.user_id,
+          s.user_name,
+          s.total_points,
+          s.visit_points,
+          s.photo_points,
+          s.customer_points,
+          i + 1,
+          req.user.id,
+        ]
       );
       saved.push(rows[0]);
     }

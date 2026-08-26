@@ -7,7 +7,7 @@ import { escapeHtml, compressImage, activateDialog } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
 
-const APP_VERSION = "1.16.0";
+const APP_VERSION = "1.17.0";
 
 const ICON = {
   camera: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg>`,
@@ -26,6 +26,7 @@ const ICON = {
   bell: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 4.5 1.5 6 1.5 6h-15S6 12.5 6 8Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>`,
   book: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5v-15Z"/><path d="M4 18a2.5 2.5 0 0 1 2.5-2.5H20"/></svg>`,
   team: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20v-1.25A5.75 5.75 0 0 1 8.75 13h.5A5.75 5.75 0 0 1 15 18.75V20"/><circle cx="17.5" cy="8.5" r="2.5"/><path d="M15.5 13.6c.6-.25 1.25-.38 1.9-.38A4.6 4.6 0 0 1 22 17.82V20"/></svg>`,
+  chart: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>`,
 };
 
 // User guide PDF: update GUIDE_VERSION (and re-export docs/kad-motors-guide-hy.pdf
@@ -175,6 +176,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         <div class="card settings-list">
           ${settingsRow({ icon: ICON.database, label: t("product_catalog"), id: "row-product-catalog" })}
           ${settingsRow({ icon: ICON.team, label: t("team_management"), id: "row-team-management" })}
+          ${settingsRow({ icon: ICON.chart, label: t("reports_management"), id: "row-reports-management" })}
         </div>
 
         <h2 class="section-title">${t("points_closeout_title")}</h2>
@@ -411,6 +413,9 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     root.querySelector("#row-team-management").addEventListener("click", () => {
       openAdminSectionOverlay(t("team_management"), renderTeamSection);
     });
+    root.querySelector("#row-reports-management").addEventListener("click", () => {
+      openAdminSectionOverlay(t("reports_management"), renderReportsManagementSection);
+    });
   }
 
   if (canApprovePlans) {
@@ -636,6 +641,76 @@ async function renderNotificationDefaultsSection(slot) {
   slot.querySelector("#notif-default-role-select").addEventListener("change", (e) => {
     selectedRole = e.target.value;
     paintRole();
+  });
+}
+
+// Which role sees which named report -- a report-by-report dropdown, same
+// shape as the notification defaults above. Toggle state comes straight
+// from the access matrix endpoint, which already resolves each role's
+// current effective state (an explicit override, or the report's own
+// code-default when no override exists).
+async function renderReportsManagementSection(slot) {
+  slot.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+  let matrix;
+  try {
+    matrix = await api.getReportAccessMatrix();
+  } catch {
+    slot.innerHTML = "";
+    return;
+  }
+
+  let selectedReport = matrix[0];
+
+  slot.innerHTML = `
+    <div class="card" style="margin-bottom:10px;">
+      <label>${t("reports")}
+        <select id="report-access-select">
+          ${matrix.map((r) => `<option value="${r.key}">${t(r.nameKey)}</option>`).join("")}
+        </select>
+      </label>
+    </div>
+    <div class="card settings-list" id="report-access-toggles"></div>
+  `;
+
+  const toggleList = slot.querySelector("#report-access-toggles");
+
+  function paintReport() {
+    toggleList.innerHTML = selectedReport.roles
+      .map((r) =>
+        settingsToggleRow({
+          icon: ICON.chart,
+          label: t(`role_${r.role}`),
+          value: r.enabled ? t("toggle_on") : t("toggle_off"),
+          id: `report-access-${r.role}`,
+          checked: r.enabled,
+        })
+      )
+      .join("");
+
+    selectedReport.roles.forEach((r) => {
+      const toggle = toggleList.querySelector(`#report-access-${r.role}`);
+      const valueEl = toggle.closest(".settings-list-row").querySelector(".settings-row-value");
+      toggle.addEventListener("click", async () => {
+        const nextEnabled = toggle.getAttribute("aria-checked") !== "true";
+        toggle.disabled = true;
+        try {
+          await api.setReportAccess(selectedReport.key, r.role, nextEnabled);
+          r.enabled = nextEnabled;
+          toggle.setAttribute("aria-checked", String(nextEnabled));
+          valueEl.textContent = nextEnabled ? t("toggle_on") : t("toggle_off");
+        } catch (err) {
+          alert(err.message);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    });
+  }
+
+  paintReport();
+  slot.querySelector("#report-access-select").addEventListener("change", (e) => {
+    selectedReport = matrix.find((r) => r.key === e.target.value);
+    paintReport();
   });
 }
 

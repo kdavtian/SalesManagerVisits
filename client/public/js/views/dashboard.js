@@ -121,7 +121,7 @@ export async function renderDashboard(root, navigate) {
               <span class="points-value">${summary.my_points.total_points}</span>
             </div>
             <div class="points-breakdown muted">
-              ${summary.my_points.visit_points} ${t("points_from_visits")} · ${summary.my_points.photo_points} ${t("points_from_photos")}
+              ${summary.my_points.visit_points} ${t("points_from_visits")} · ${summary.my_points.photo_points} ${t("points_from_photos")} · ${summary.my_points.customer_points} ${t("points_from_customers")}
             </div>
           </div>`
         : ""
@@ -155,7 +155,7 @@ export async function renderDashboard(root, navigate) {
   container.querySelector("#view-all-activity").addEventListener("click", () => navigate("#/activity"));
   container.querySelector("#qa-check-in").addEventListener("click", () => navigate("#/map"));
   container.querySelector("#qa-plan-route").addEventListener("click", () => navigate("#/map?plan=1"));
-  container.querySelector("#qa-reports").addEventListener("click", () => navigate("#/activity"));
+  container.querySelector("#qa-reports").addEventListener("click", () => navigate("#/reports"));
   container.querySelector("#qa-add-customer").addEventListener("click", () => navigate("#/map?add=1"));
   container.querySelector("#qa-cash-expense").addEventListener("click", () => navigate("#/expenses"));
 

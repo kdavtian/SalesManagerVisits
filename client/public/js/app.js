@@ -14,6 +14,7 @@ import { renderDashboard } from "./views/dashboard.js";
 import { renderActivity } from "./views/activity.js";
 import { renderSettings } from "./views/settings.js";
 import { renderCashExpenses } from "./views/cashExpenses.js";
+import { renderReports } from "./views/reports.js";
 import { flushQueue, getQueue, onQueueChange } from "./offlineQueue.js";
 import { mountInstallPrompt } from "./install.js";
 import { startLocationBroadcast, stopLocationBroadcast } from "./locationBroadcast.js";
@@ -147,6 +148,8 @@ async function render() {
     renderOrders(app, navigate);
   } else if (path === "#/expenses") {
     renderCashExpenses(app, navigate);
+  } else if (path === "#/reports") {
+    renderReports(app, navigate, query.get("r"));
   } else if (customerMatch) {
     renderCustomerDetail(app, navigate, customerMatch[1]);
   } else if (checkinMatch) {

@@ -23,6 +23,7 @@ import { exportsRouter } from "./routes/exports.js";
 import { pushRouter } from "./routes/push.js";
 import { notificationSettingsRouter } from "./routes/notificationSettings.js";
 import { cashExpensesRouter } from "./routes/cashExpenses.js";
+import { reportsRouter } from "./routes/reports.js";
 import { startOverdueReminders } from "./overdueReminders.js";
 
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
@@ -87,6 +88,7 @@ app.use("/api/exports", exportsRouter);
 app.use("/api/push", express.json(), pushRouter);
 app.use("/api/notification-settings", express.json(), notificationSettingsRouter);
 app.use("/api/cash-expenses", express.json(), cashExpensesRouter);
+app.use("/api/reports", express.json(), reportsRouter);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });
