@@ -3354,6 +3354,66 @@ input[type="search"]:focus {
   -webkit-mask-image: linear-gradient(to right, black calc(100% - 20px), transparent 100%);
 }
 
+/* Brand-availability mode: a small colored dot replaces the tier pin
+   entirely while active, so distribution reads at a glance across a whole
+   district instead of competing with tier shape/color. */
+.brand-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--pin-border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.brand-dot-available {
+  background: var(--success);
+}
+
+.brand-dot-unavailable {
+  background: var(--danger);
+}
+
+.brand-dot-unknown {
+  background: var(--inactive);
+}
+
+.map-brand-legend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  box-shadow: var(--shadow-elevated);
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.map-brand-legend span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.brand-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.brand-legend-available {
+  background: var(--success);
+}
+
+.brand-legend-unavailable {
+  background: var(--danger);
+}
+
+.brand-legend-unknown {
+  background: var(--inactive);
+}
+
 .map-filter-chip {
   display: flex;
   align-items: center;

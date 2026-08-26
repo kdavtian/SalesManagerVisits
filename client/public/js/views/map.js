@@ -7,6 +7,19 @@ import { canViewTeamLocations, canEditDirectly, canPlanForOthers, state } from "
 
 const NEARBY_RADIUS_METERS = 5000;
 
+// Mirrors the brand_status shape recorded at check-in (see BRAND_GROUPS in
+// checkin.js) -- castrol/lotos/royal get their own status tags, each
+// competitor is a flat presence flag inside brand_status.competitors.
+const BRAND_FILTER_OPTIONS = [
+  { value: "castrol", labelKey: "brand_group_castrol" },
+  { value: "lotos", labelKey: "brand_group_lotos" },
+  { value: "royal", labelKey: "brand_group_royal" },
+  ...["mobil", "motul", "shell", "liquimoly", "bardahl", "aral", "oscar", "zic", "russian_oil"].map((v) => ({
+    value: `competitor:${v}`,
+    labelKey: `competitor_${v}`,
+  })),
+];
+
 const TILE_URLS = {
   dark: "https://{s}.basemaps.cartocdn.com/rastertiles/dark_matter/{z}/{x}/{y}{r}.png",
   light: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
@@ -51,6 +64,13 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
                 <button class="map-filter-chip" data-filter="visited" aria-pressed="false"><span class="map-filter-chip-icon">${icons.checkCircle}</span>${t("filter_visited")}</button>
                 <button class="map-filter-chip" data-filter="planned" aria-pressed="false"><span class="map-filter-chip-icon">${icons.send}</span>${t("filter_planned")}</button>
                 <button class="map-filter-chip" data-filter="nearby" aria-pressed="false"><span class="map-filter-chip-icon">${icons.locate}</span>${t("filter_nearby")}</button>
+                <button class="map-filter-chip" data-filter="brands" aria-pressed="false"><span class="map-filter-chip-icon">${icons.tag}</span>${t("filter_brands")}</button>
+              </div>
+              <div class="map-filter-row" id="brand-picker-row" hidden></div>
+              <div class="map-brand-legend" id="brand-legend" hidden>
+                <span><span class="brand-legend-dot brand-legend-available"></span>${t("brand_legend_available")}</span>
+                <span><span class="brand-legend-dot brand-legend-unavailable"></span>${t("brand_legend_unavailable")}</span>
+                <span><span class="brand-legend-dot brand-legend-unknown"></span>${t("brand_legend_unknown")}</span>
               </div>
             </div>`
       }
@@ -272,6 +292,35 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   let activeFilter = "";
   let managerFilter = "";
   let searchQuery = "";
+  let selectedBrand = "";
+  let brandStatusByCustomer = null;
+
+  // available/full_range -> green, unavailable -> red (or absent from the
+  // competitors list -> unknown grey, since that list is presence-only --
+  // a competitor not ticked was never confirmed absent, just not recorded).
+  function brandAvailabilityStatus(c) {
+    const status = brandStatusByCustomer?.get(c.id);
+    if (!status) return "unknown";
+    if (selectedBrand.startsWith("competitor:")) {
+      const key = selectedBrand.slice("competitor:".length);
+      return (status.competitors ?? []).includes(key) ? "available" : "unknown";
+    }
+    const tags = status[selectedBrand] ?? [];
+    if (tags.includes("available") || tags.includes("full_range")) return "available";
+    if (tags.includes("unavailable")) return "unavailable";
+    return "unknown";
+  }
+
+  function brandAvailabilityIcon(c) {
+    const level = brandAvailabilityStatus(c);
+    return L.divIcon({
+      className: "",
+      html: `<div class="brand-dot brand-dot-${level}"></div>`,
+      iconSize: [18, 18],
+      iconAnchor: [9, 9],
+      popupAnchor: [0, -9],
+    });
+  }
   let lastCustomers = [];
   let resolveCustomersReady;
   // Lets anything that needs the full customer list (like the plan sheet)
@@ -427,16 +476,22 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         const haystack = `${c.name} ${c.address ?? ""} ${c.category ?? ""}`.toLowerCase();
         if (!haystack.includes(searchQuery)) continue;
       }
-      if (activeFilter === "nearby") {
+      if (activeFilter === "brands") {
+        marker.setIcon(selectedBrand ? brandAvailabilityIcon(c) : customerIcon(c, status));
+      } else if (activeFilter === "nearby") {
         const distance = myLocation ? haversineMeters(myLocation.lat, myLocation.lng, c.lat, c.lng) : Infinity;
         if (distance > NEARBY_RADIUS_METERS) continue;
+        marker.setIcon(customerIcon(c, status));
       } else if (activeFilter === "planned") {
         continue;
-      } else if (
-        activeFilter &&
-        !(activeFilter === "overdue" ? status === "overdue" : activeFilter === "visited" ? status === "today" || status === "week" : true)
-      ) {
-        continue;
+      } else {
+        if (
+          activeFilter &&
+          !(activeFilter === "overdue" ? status === "overdue" : activeFilter === "visited" ? status === "today" || status === "week" : true)
+        ) {
+          continue;
+        }
+        marker.setIcon(customerIcon(c, status));
       }
       marker.addTo(markerLayer);
       bounds.push([c.lat, c.lng]);
@@ -617,17 +672,56 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       chip.classList.add("chip-active");
       chip.setAttribute("aria-pressed", "true");
       activeFilter = chip.dataset.filter;
+      if (activeFilter !== "brands") selectedBrand = "";
+      brandPickerRow.hidden = activeFilter !== "brands";
+      brandLegend.hidden = activeFilter !== "brands" || !selectedBrand;
       if (activeFilter === "nearby") {
         openNearbyPanel();
       } else if (activeFilter === "planned") {
         nearbyPanel.hidden = true;
         loadPlannedFilter();
+      } else if (activeFilter === "brands") {
+        nearbyPanel.hidden = true;
+        loadBrandStatus();
       } else {
         nearbyPanel.hidden = true;
         applyFilter();
       }
     });
   });
+
+  const brandPickerRow = root.querySelector("#brand-picker-row");
+  const brandLegend = root.querySelector("#brand-legend");
+  if (brandPickerRow) {
+    brandPickerRow.innerHTML = BRAND_FILTER_OPTIONS.map(
+      (o) => `<button type="button" class="map-filter-chip brand-picker-chip" data-brand="${o.value}" aria-pressed="false">${t(o.labelKey)}</button>`
+    ).join("");
+    brandPickerRow.querySelectorAll(".brand-picker-chip").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        brandPickerRow.querySelectorAll(".brand-picker-chip").forEach((c) => {
+          c.classList.toggle("chip-active", c === chip);
+          c.setAttribute("aria-pressed", String(c === chip));
+        });
+        selectedBrand = chip.dataset.brand;
+        brandLegend.hidden = false;
+        applyFilter();
+      });
+    });
+  }
+
+  let brandStatusLoaded = false;
+  async function loadBrandStatus() {
+    if (!brandStatusLoaded) {
+      try {
+        const rows = await api.getBrandStatusByCustomer();
+        brandStatusByCustomer = new Map(rows.map((r) => [r.customer_id, r.brand_status]));
+      } catch {
+        brandStatusByCustomer = new Map();
+      }
+      brandStatusLoaded = true;
+    }
+    applyFilter();
+  }
 
   const mapSearchInput = root.querySelector("#map-customer-search");
   mapSearchInput?.addEventListener("input", () => {

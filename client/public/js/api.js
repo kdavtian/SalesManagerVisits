@@ -29,6 +29,7 @@ export const api = {
   me: () => request("/me"),
 
   getCustomerRegions: () => request("/customers/regions"),
+  getBrandStatusByCustomer: () => request("/customers/brand-status"),
   listCustomers: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/customers${qs ? `?${qs}` : ""}`);

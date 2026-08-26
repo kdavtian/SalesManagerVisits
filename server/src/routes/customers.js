@@ -137,6 +137,22 @@ customersRouter.get("/regions", async (req, res) => {
   res.json(rows);
 });
 
+// Latest recorded brand-availability tags per customer (from checkins'
+// assortment-check brand grid), for the map's "Brands" filter -- e.g. so a
+// director can see how Mobil is actually distributed across Yerevan, not
+// just our own brands. DISTINCT ON picks each customer's single most
+// recent checkin that actually recorded brand data; a customer never
+// checked this way just doesn't appear.
+customersRouter.get("/brand-status", async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT ON (customer_id) customer_id, brand_status, timestamp
+     FROM checkins
+     WHERE brand_status IS NOT NULL
+     ORDER BY customer_id, timestamp DESC`
+  );
+  res.json(rows);
+});
+
 customersRouter.get("/:id", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT c.*, ${STATUS_COLUMNS},
