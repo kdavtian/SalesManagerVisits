@@ -50,6 +50,7 @@ async function buildOrderLines(items) {
     lines.push({
       product_id: product?.id ?? null,
       product_name: productName,
+      brand: product?.brand ?? item.brand ?? null,
       unit_price_amd: unitPrice,
       quantity,
       line_total_amd: unitPrice * quantity,
@@ -60,7 +61,28 @@ async function buildOrderLines(items) {
 
 class OrderValidationError extends Error {}
 
-const DISCOUNT_APPROVER_ROLES = new Set(["admin", "sales_director"]);
+// YYMMDD + a 2-digit daily sequence, e.g. the 1st order on 2026-05-30 is
+// "26053001" and the 27th on 2026-07-18 is "26071827".
+function formatOrderCode(date, seq) {
+  const yy = String(date.getFullYear()).slice(-2);
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yy}${mm}${dd}${String(seq).padStart(2, "0")}`;
+}
+
+// Atomically claims the next sequence number for today within the given
+// transaction -- the upsert prevents two orders placed in the same instant
+// from racing to the same seq.
+async function nextOrderCode(client) {
+  const { rows } = await client.query(
+    `INSERT INTO daily_order_seq (day, seq) VALUES (CURRENT_DATE, 1)
+     ON CONFLICT (day) DO UPDATE SET seq = daily_order_seq.seq + 1
+     RETURNING seq`
+  );
+  return formatOrderCode(new Date(), rows[0].seq);
+}
+
+const DISCOUNT_APPROVER_ROLES = new Set(["admin", "sales_director", "ceo"]);
 
 // A flat-AMD discount and a percent discount are mutually exclusive on one
 // order -- discount_amd wins if both are somehow nonzero (shouldn't happen,
@@ -130,17 +152,18 @@ ordersRouter.post("/", async (req, res) => {
   let order;
   try {
     await client.query("BEGIN");
+    const orderCode = await nextOrderCode(client);
     const { rows } = await client.query(
-      `INSERT INTO orders (customer_id, user_id, checkin_id, total_amd, note, discount_pct, discount_amd, approval_status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [customerId, req.user.id, checkin_id || null, totalAmd, note || null, discountPct, discountAmd, approvalStatus]
+      `INSERT INTO orders (customer_id, user_id, checkin_id, total_amd, note, discount_pct, discount_amd, approval_status, order_code)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [customerId, req.user.id, checkin_id || null, totalAmd, note || null, discountPct, discountAmd, approvalStatus, orderCode]
     );
     order = rows[0];
     for (const line of lines) {
       await client.query(
-        `INSERT INTO order_items (order_id, product_id, product_name, unit_price_amd, quantity, line_total_amd)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [order.id, line.product_id, line.product_name, line.unit_price_amd, line.quantity, line.line_total_amd]
+        `INSERT INTO order_items (order_id, product_id, product_name, brand, unit_price_amd, quantity, line_total_amd)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [order.id, line.product_id, line.product_name, line.brand, line.unit_price_amd, line.quantity, line.line_total_amd]
       );
     }
     await client.query("COMMIT");
@@ -231,7 +254,7 @@ ordersRouter.get("/pending-count", async (req, res) => {
 
 ordersRouter.get("/:id", async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT o.*, u.name AS user_name, c.name AS customer_name
+    `SELECT o.*, u.name AS user_name, c.name AS customer_name, c.erp_customer_id
      FROM orders o
      JOIN users u ON u.id = o.user_id
      JOIN customers c ON c.id = o.customer_id
@@ -379,9 +402,9 @@ ordersRouter.patch("/:id", async (req, res) => {
       await client.query("DELETE FROM order_items WHERE order_id = $1", [order.id]);
       for (const line of nextLines) {
         await client.query(
-          `INSERT INTO order_items (order_id, product_id, product_name, unit_price_amd, quantity, line_total_amd)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [order.id, line.product_id, line.product_name, line.unit_price_amd, line.quantity, line.line_total_amd]
+          `INSERT INTO order_items (order_id, product_id, product_name, brand, unit_price_amd, quantity, line_total_amd)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [order.id, line.product_id, line.product_name, line.brand, line.unit_price_amd, line.quantity, line.line_total_amd]
         );
       }
     }

@@ -14,10 +14,10 @@ const STATUS_META = {
 const STATUS_FILTERS = ["", "submitted", "confirmed", "packed", "delivered", "cancelled"];
 
 const FULFILLMENT_ROLES = new Set(["warehouse_manager", "delivery_manager", "admin"]);
-const DISCOUNT_APPROVER_ROLES = new Set(["admin", "sales_director"]);
+const DISCOUNT_APPROVER_ROLES = new Set(["admin", "sales_director", "ceo"]);
 // Who reviews a freshly-submitted order -- mirrors canConfirmOrders in the
 // server's roles.js.
-const CONFIRM_ROLES = new Set(["admin", "sales_director"]);
+const CONFIRM_ROLES = new Set(["admin", "sales_director", "ceo"]);
 const APPROVAL_META = {
   pending: { key: "approval_status_pending", cls: "badge-warning" },
   approved: { key: "approval_status_approved", cls: "badge-success" },
@@ -219,6 +219,22 @@ export async function renderOrders(root, navigate) {
     window.dispatchEvent(new Event("orders-changed"));
   }
 
+  // A manager's order can mix e.g. Lotos 5W-30 1L and Royal 5W-30 1L -- the
+  // brand line (small, muted) keeps those from reading as duplicate rows.
+  // Unit price sits in the same small font next to the quantity, sum stays
+  // bold, so a multi-line order still fits on one screen.
+  function orderLineHtml(i) {
+    return `
+      <div class="order-line-row">
+        ${i.brand ? `<span class="order-line-brand">${escapeHtml(i.brand)}</span>` : ""}
+        <div class="order-line-top">
+          <span class="order-line-name">${escapeHtml(i.product_name)}</span>
+          <strong>${formatAmd(Number(i.line_total_amd))}</strong>
+        </div>
+        <span class="order-line-meta">${formatAmd(Number(i.unit_price_amd))} &times; ${Number(i.quantity)}</span>
+      </div>`;
+  }
+
   async function openOrderDetail(orderId) {
     const overlay = document.createElement("div");
     overlay.className = "sheet-overlay";
@@ -257,21 +273,16 @@ export async function renderOrders(root, navigate) {
       const canApproveDiscount = DISCOUNT_APPROVER_ROLES.has(state.user.role) && order.approval_status === "pending";
 
       overlay.querySelector(".sheet").innerHTML = `
+        <div class="order-detail-ids">
+          <span>${t("customer_id_label")}: ${escapeHtml(order.erp_customer_id || String(order.customer_id))}</span>
+          ${order.order_code ? `<span>${t("order_id_label")}: ${escapeHtml(order.order_code)}</span>` : ""}
+        </div>
         <h2>${escapeHtml(order.customer_name)}</h2>
         <p><span class="badge ${meta.cls}">${t(meta.key)}</span>${
         hasDiscount && approvalMeta ? ` <span class="badge ${approvalMeta.cls}">${t(approvalMeta.key)}</span>` : ""
       }</p>
         <div class="card-list" style="margin:12px 0;">
-          ${order.items
-            .map(
-              (i) => `
-            <div class="erp-order-row" style="grid-template-columns:1fr auto auto;">
-              <span>${escapeHtml(i.product_name)}</span>
-              <span class="muted">&times;${Number(i.quantity)}</span>
-              <span>${formatAmd(Number(i.line_total_amd))}</span>
-            </div>`
-            )
-            .join("")}
+          ${order.items.map((i) => orderLineHtml(i)).join("")}
         </div>
         ${
           hasDiscount
@@ -371,6 +382,12 @@ export async function renderOrders(root, navigate) {
       const lines = order.items.map((i) => ({ ...i }));
       let discountType = Number(order.discount_amd) > 0 ? "amd" : "pct";
       let discountValue = discountType === "amd" ? Number(order.discount_amd) : Number(order.discount_pct);
+      // Lets whoever is allowed into edit mode (the rep, or a director/ceo/
+      // admin reviewing it) drop in a product that wasn't originally
+      // ordered -- fetched lazily since most edits never touch it.
+      let showAddProduct = false;
+      let productCatalog = null;
+      let addProductQuery = "";
 
       function subtotal() {
         return lines.reduce((sum, l) => sum + Number(l.unit_price_amd) * Number(l.quantity), 0);
@@ -384,6 +401,8 @@ export async function renderOrders(root, navigate) {
         overlay.querySelector(".sheet").innerHTML = `
           <h2>${t("edit_order")}</h2>
           <div class="card-list" id="edit-order-lines" style="margin:12px 0;"></div>
+          <button type="button" class="btn btn-block" id="edit-add-product-btn">${t("add_product_to_order")}</button>
+          <div id="edit-add-product-panel" ${showAddProduct ? "" : "hidden"}></div>
           <div class="order-discount-row">
             <label for="edit-discount-input">${t("discount_label")}</label>
             <input type="number" id="edit-discount-input" min="0" step="1" value="${discountValue || 0}" inputmode="numeric" />
@@ -407,7 +426,7 @@ export async function renderOrders(root, navigate) {
           <div class="order-product-row" data-line-index="${i}">
             <div class="order-product-info">
               <strong>${escapeHtml(l.product_name)}</strong>
-              <span class="muted">${formatAmd(Number(l.unit_price_amd))}</span>
+              <span class="muted">${[l.brand, formatAmd(Number(l.unit_price_amd))].filter(Boolean).map(escapeHtml).join(" · ")}</span>
             </div>
             <div class="order-qty-stepper">
               <button type="button" class="icon-btn" data-action="dec" aria-label="${t("decrease")}">&minus;</button>
@@ -434,6 +453,67 @@ export async function renderOrders(root, navigate) {
             paint();
           });
         });
+
+        overlay.querySelector("#edit-add-product-btn").addEventListener("click", async () => {
+          showAddProduct = !showAddProduct;
+          if (showAddProduct && !productCatalog) {
+            try {
+              productCatalog = await api.listProducts();
+            } catch {
+              productCatalog = [];
+            }
+          }
+          paint();
+        });
+
+        const addPanel = overlay.querySelector("#edit-add-product-panel");
+        if (showAddProduct) {
+          const matches = (productCatalog || []).filter((p) => {
+            const q = addProductQuery.trim().toLowerCase();
+            if (!q) return true;
+            return [p.name, p.brand, p.family].some((v) => v && v.toLowerCase().includes(q));
+          });
+          addPanel.innerHTML = `
+            <input type="search" id="edit-add-product-search" placeholder="${t("add_product_search_placeholder")}" value="${escapeHtml(addProductQuery)}" style="margin-bottom:8px;" />
+            <div class="card-list">
+              ${matches
+                .slice(0, 30)
+                .map(
+                  (p) => `
+                <div class="order-product-row" data-add-product-id="${p.id}">
+                  <div class="order-product-info">
+                    <strong>${escapeHtml(p.name)}</strong>
+                    <span class="muted">${[p.brand, p.unit].filter(Boolean).map(escapeHtml).join(" · ")} ${formatAmd(Number(p.unit_price_amd))}</span>
+                  </div>
+                  <button type="button" class="btn btn-sm" data-action="add-product">${t("add")}</button>
+                </div>`
+                )
+                .join("") || `<p class="empty-state">${t("no_products_found")}</p>`}
+            </div>
+          `;
+          const searchInput = addPanel.querySelector("#edit-add-product-search");
+          searchInput.addEventListener("input", () => {
+            addProductQuery = searchInput.value;
+            paint();
+            overlay.querySelector("#edit-add-product-search")?.focus();
+          });
+          addPanel.querySelectorAll("[data-add-product-id]").forEach((row) => {
+            const product = matches.find((p) => p.id === Number(row.dataset.addProductId));
+            row.querySelector('[data-action="add-product"]').addEventListener("click", () => {
+              const existing = lines.find((l) => l.product_id === product.id);
+              if (existing) existing.quantity += 1;
+              else
+                lines.push({
+                  product_id: product.id,
+                  product_name: product.name,
+                  brand: product.brand || null,
+                  unit_price_amd: Number(product.unit_price_amd),
+                  quantity: 1,
+                });
+              paint();
+            });
+          });
+        }
 
         overlay.querySelector("#edit-discount-input").addEventListener("input", (e) => {
           const n = Number(e.target.value);
@@ -463,6 +543,7 @@ export async function renderOrders(root, navigate) {
               items: lines.map((l) => ({
                 product_id: l.product_id,
                 product_name: l.product_name,
+                brand: l.brand,
                 unit_price_amd: l.unit_price_amd,
                 quantity: l.quantity,
               })),

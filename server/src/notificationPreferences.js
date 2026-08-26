@@ -9,9 +9,12 @@ export const NOTIFICATION_TYPES = ["plan_submitted", "plan_reviewed", "order_sta
 // ever relevant to (see canPlanForOthers in roles.js).
 export const APPROVER_ROLES = ["admin", "sales_director", "ceo"];
 
-// Roles that need to know a new order landed -- the director who may need
-// to approve a discount, and the accountant who consolidates orders.
-export const ORDER_NOTIFY_ROLES = ["sales_director", "accountant"];
+// Roles that need to know a new order landed -- the director (or CEO) who
+// may need to review or approve a discount, and the accountant who
+// consolidates orders. Each recipient can still turn this off for
+// themselves in Settings (see isNotificationEnabled) -- being on this list
+// only sets the default to "on", not "forced".
+export const ORDER_NOTIFY_ROLES = ["sales_director", "accountant", "ceo"];
 
 // A user-scoped row always wins over a role-scoped row for the same type;
 // with neither, the notification is enabled by default (opt-out, not

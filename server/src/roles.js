@@ -40,7 +40,7 @@ export function canPlanForOthers(role) {
 // edits its items/discount before it moves into fulfillment. Distinct from
 // FULFILLMENT_ROLES in routes/orders.js, which owns packed/delivered.
 export function canConfirmOrders(role) {
-  return role === "admin" || role === "sales_director";
+  return role === "admin" || role === "sales_director" || role === "ceo";
 }
 
 // Every field-facing role broadcasts its own foreground location while the

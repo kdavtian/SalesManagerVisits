@@ -4196,8 +4196,22 @@ input[type="search"]:focus {
   color: var(--text-dim);
 }
 
+.order-discount-row label {
+  flex-shrink: 0;
+}
+
+.order-discount-row #order-discount-type,
+.order-discount-row #edit-discount-type {
+  flex-shrink: 0;
+}
+
+/* A flat-AMD amount can run to 6+ digits (e.g. 150,000), so this needs
+   real room to grow -- the old fixed 56px only fit 3 digits before the
+   value scrolled out of view inside its own box. */
 .order-discount-row input[type="number"] {
-  width: 56px;
+  flex: 1;
+  min-width: 0;
+  width: auto;
   padding: 6px 8px;
   background: var(--bg);
   border: 1px solid var(--border);
@@ -4211,6 +4225,55 @@ input[type="search"]:focus {
   flex-direction: column;
   gap: 2px;
   font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+/* Customer ID / order ID strip above the order-detail sheet's customer
+   name -- small and muted since the name itself is the primary heading. */
+.order-detail-ids {
+  display: flex;
+  gap: 14px;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+
+/* One order line: brand (tiny, uppercase) above the product name + line
+   total, with unit price x quantity in small type underneath -- keeps a
+   multi-brand order (e.g. Lotos 5W-30 1L and Royal 5W-30 1L) from reading
+   as duplicate rows, while still fitting on one screen. */
+.order-line-row {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.order-line-row:last-child {
+  border-bottom: none;
+}
+
+.order-line-brand {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-dim);
+}
+
+.order-line-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.order-line-name {
+  font-weight: 600;
+}
+
+.order-line-meta {
+  display: block;
+  font-size: 0.75rem;
   color: var(--text-dim);
 }
 
