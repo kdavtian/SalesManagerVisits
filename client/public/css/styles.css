@@ -2116,6 +2116,18 @@ input[type="search"]:focus {
   border: none;
 }
 
+.admin-section-overlay-body {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: calc(20px + var(--safe-top)) 16px calc(20px + var(--safe-bottom));
+}
+
+.admin-section-overlay-body h2 {
+  margin-top: 0;
+}
+
 .guide-overlay-close {
   position: absolute;
   top: calc(10px + var(--safe-top));
@@ -3630,7 +3642,6 @@ input[type="search"]:focus {
 .region-filter-row {
   display: flex;
   gap: 8px;
-  overflow-x: auto;
 }
 
 .region-filter-row:not(:empty) {

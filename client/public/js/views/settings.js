@@ -7,7 +7,7 @@ import { escapeHtml, compressImage, activateDialog } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
 
-const APP_VERSION = "1.10.2";
+const APP_VERSION = "1.11.0";
 
 const ICON = {
   camera: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg>`,
@@ -25,6 +25,7 @@ const ICON = {
   chevron: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>`,
   bell: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 4.5 1.5 6 1.5 6h-15S6 12.5 6 8Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>`,
   book: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5v-15Z"/><path d="M4 18a2.5 2.5 0 0 1 2.5-2.5H20"/></svg>`,
+  team: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20v-1.25A5.75 5.75 0 0 1 8.75 13h.5A5.75 5.75 0 0 1 15 18.75V20"/><circle cx="17.5" cy="8.5" r="2.5"/><path d="M15.5 13.6c.6-.25 1.25-.38 1.9-.38A4.6 4.6 0 0 1 22 17.82V20"/></svg>`,
 };
 
 // User guide PDF: update GUIDE_VERSION (and re-export docs/kad-motors-guide-hy.pdf
@@ -171,14 +172,13 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
           </form>
         </div>
 
-        <h2 class="section-title">${t("product_catalog")}</h2>
-        <div id="products-section"></div>
+        <div class="card settings-list">
+          ${settingsRow({ icon: ICON.database, label: t("product_catalog"), id: "row-product-catalog" })}
+          ${settingsRow({ icon: ICON.team, label: t("team_management"), id: "row-team-management" })}
+        </div>
 
         <h2 class="section-title">${t("points_closeout_title")}</h2>
         <div id="points-closeout-section"></div>
-
-        <h2 class="section-title">${t("team")}</h2>
-        <div id="team-section"></div>
 
         <h2 class="section-title">${t("notification_defaults_title")}</h2>
         <p class="muted radius-help">${t("notification_defaults_help")}</p>
@@ -402,10 +402,15 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       }
     });
 
-    renderProductsSection(root.querySelector("#products-section"));
     renderPointsCloseoutSection(root.querySelector("#points-closeout-section"));
-    renderTeamSection(root.querySelector("#team-section"));
     renderNotificationDefaultsSection(root.querySelector("#notification-defaults-section"));
+
+    root.querySelector("#row-product-catalog").addEventListener("click", () => {
+      openAdminSectionOverlay(t("product_catalog"), renderProductsSection);
+    });
+    root.querySelector("#row-team-management").addEventListener("click", () => {
+      openAdminSectionOverlay(t("team_management"), renderTeamSection);
+    });
   }
 
   if (canApprovePlans) {
@@ -657,6 +662,35 @@ function openGuideOverlay() {
   }
   overlay.querySelector("#guide-overlay-close").addEventListener("click", close);
   overlay.addEventListener("click", (e) => e.target === overlay && close());
+}
+
+// Product catalog and team management used to render as full inline
+// sections directly on the Settings page -- with plan approvals, financial
+// exports, notification defaults etc. also stacked there, the page got very
+// long for an admin/director. Each now collapses to a single row that opens
+// its content in a full-screen overlay instead, same shell as the guide
+// viewer.
+function openAdminSectionOverlay(title, renderFn) {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay guide-overlay";
+  overlay.innerHTML = `
+    <div class="guide-overlay-frame">
+      <button type="button" class="icon-btn guide-overlay-close" id="admin-section-close" aria-label="${t("close")}">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <div class="admin-section-overlay-body">
+        <h2>${escapeHtml(title)}</h2>
+        <div id="admin-section-overlay-content"></div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  activateDialog(overlay);
+
+  overlay.querySelector("#admin-section-close").addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+
+  renderFn(overlay.querySelector("#admin-section-overlay-content"));
 }
 
 function openChangePasswordSheet() {

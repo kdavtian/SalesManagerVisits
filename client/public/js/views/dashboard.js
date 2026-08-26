@@ -65,9 +65,13 @@ export async function renderDashboard(root, navigate) {
       </div>
     </div>
 
-    <div id="next-visit-slot" aria-live="polite">
+    ${
+      state.user.role === "admin" || state.user.role === "ceo"
+        ? ""
+        : `<div id="next-visit-slot" aria-live="polite">
       <div class="card next-visit-card next-visit-loading"><p class="loading-state" role="status">${t("loading")}</p></div>
-    </div>
+    </div>`
+    }
 
     <div class="card progress-card">
       <span class="progress-label">${t("today_progress")}</span>
@@ -194,7 +198,8 @@ export async function renderDashboard(root, navigate) {
     });
   }
 
-  renderNextVisit(container.querySelector("#next-visit-slot"), customers, navigate);
+  const nextVisitSlot = container.querySelector("#next-visit-slot");
+  if (nextVisitSlot) renderNextVisit(nextVisitSlot, customers, navigate);
 }
 
 async function renderNextVisit(slot, customers, navigate) {

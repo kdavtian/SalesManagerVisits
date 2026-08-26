@@ -217,6 +217,13 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   let placingMarker = null;
   const markerLayer = L.layerGroup().addTo(map);
 
+  // A plain solid teardrop with nothing inside read as "blank"/broken once
+  // dropped -- an X glyph makes it obvious this pin is just a pending
+  // placement, and it's also the tap target that cancels it (see the click
+  // handler wired onto placingMarker below, in addition to the sheet's own
+  // Cancel button).
+  const NEW_PIN_HTML = `<div class="pin pin-new"><span class="pin-glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span></div>`;
+
   function customerStatus(c) {
     if (c.visited_today) return "today";
     if (c.overdue) return "overdue";
@@ -1066,7 +1073,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     if (relocateCustomerId) {
       if (placingMarker) map.removeLayer(placingMarker);
       placingMarker = L.marker(e.latlng, {
-        icon: L.divIcon({ className: "", html: `<div class="pin pin-new"></div>`, iconSize: [26, 26], iconAnchor: [13, 26] }),
+        icon: L.divIcon({ className: "", html: NEW_PIN_HTML, iconSize: [26, 26], iconAnchor: [13, 26] }),
       }).addTo(map);
       openRelocateConfirm(e.latlng);
       return;
@@ -1076,7 +1083,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
 
     if (placingMarker) map.removeLayer(placingMarker);
     placingMarker = L.marker(e.latlng, {
-      icon: L.divIcon({ className: "", html: `<div class="pin pin-new"></div>`, iconSize: [26, 26], iconAnchor: [13, 26] }),
+      icon: L.divIcon({ className: "", html: NEW_PIN_HTML, iconSize: [26, 26], iconAnchor: [13, 26] }),
     }).addTo(map);
 
     addMode = false;
@@ -1114,6 +1121,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     }
     overlay.querySelector("#cancel-relocate-confirm").addEventListener("click", close);
     overlay.addEventListener("click", (e) => e.target === overlay && close());
+    placingMarker?.on("click", close);
 
     overlay.querySelector("#save-relocate").addEventListener("click", async (e) => {
       const btn = e.target;
@@ -1189,6 +1197,10 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     overlay.addEventListener("click", (e) => {
       if (e.target === overlay) close();
     });
+    // The dropped pin itself doubles as a cancel target -- tapping it (its
+    // X glyph makes that discoverable) closes the sheet the same as the
+    // Cancel button.
+    placingMarker?.on("click", close);
 
     // Auto-fill the address from the dropped pin's coordinates -- the rep
     // can still edit it by hand, this just saves typing it from scratch.
