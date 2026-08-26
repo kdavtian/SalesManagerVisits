@@ -30,12 +30,28 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       ${
         relocateCustomerId
           ? ""
-          : `<div class="map-filter-row">
-              <button class="map-filter-chip chip-active" data-filter="" aria-pressed="true"><span class="map-filter-chip-icon">${icons.filter}</span>${t("filter_all")}</button>
-              <button class="map-filter-chip" data-filter="overdue" aria-pressed="false"><span class="map-filter-chip-icon">${icons.mapWarning}</span>${t("filter_overdue")}</button>
-              <button class="map-filter-chip" data-filter="visited" aria-pressed="false"><span class="map-filter-chip-icon">${icons.checkCircle}</span>${t("filter_visited")}</button>
-              <button class="map-filter-chip" data-filter="planned" aria-pressed="false"><span class="map-filter-chip-icon">${icons.send}</span>${t("filter_planned")}</button>
-              <button class="map-filter-chip" data-filter="nearby" aria-pressed="false"><span class="map-filter-chip-icon">${icons.locate}</span>${t("filter_nearby")}</button>
+          : `<div class="map-top-controls">
+              <div class="map-search-row">
+                <input type="search" id="map-customer-search" placeholder="${t("map_search_placeholder")}" aria-label="${t("map_search_placeholder")}" />
+                ${
+                  canViewTeamLocations()
+                    ? `<div class="filter-dropdown-wrap" id="map-manager-filter-wrap">
+                         <button type="button" class="filter-dropdown-btn" id="map-manager-filter-btn" aria-haspopup="menu" aria-expanded="false">
+                           <span id="map-manager-filter-label">${t("all_managers")}</span>
+                           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+                         </button>
+                         <div class="filter-dropdown-menu" id="map-manager-filter-menu" role="menu" hidden></div>
+                       </div>`
+                    : ""
+                }
+              </div>
+              <div class="map-filter-row">
+                <button class="map-filter-chip chip-active" data-filter="" aria-pressed="true"><span class="map-filter-chip-icon">${icons.filter}</span>${t("filter_all")}</button>
+                <button class="map-filter-chip" data-filter="overdue" aria-pressed="false"><span class="map-filter-chip-icon">${icons.mapWarning}</span>${t("filter_overdue")}</button>
+                <button class="map-filter-chip" data-filter="visited" aria-pressed="false"><span class="map-filter-chip-icon">${icons.checkCircle}</span>${t("filter_visited")}</button>
+                <button class="map-filter-chip" data-filter="planned" aria-pressed="false"><span class="map-filter-chip-icon">${icons.send}</span>${t("filter_planned")}</button>
+                <button class="map-filter-chip" data-filter="nearby" aria-pressed="false"><span class="map-filter-chip-icon">${icons.locate}</span>${t("filter_nearby")}</button>
+              </div>
             </div>`
       }
 
@@ -254,6 +270,8 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   }
 
   let activeFilter = "";
+  let managerFilter = "";
+  let searchQuery = "";
   let lastCustomers = [];
   let resolveCustomersReady;
   // Lets anything that needs the full customer list (like the plan sheet)
@@ -404,6 +422,11 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     const bounds = [];
     for (const { c, marker } of lastCustomers) {
       const status = customerStatus(c);
+      if (managerFilter && String(c.assigned_manager_id) !== managerFilter) continue;
+      if (searchQuery) {
+        const haystack = `${c.name} ${c.address ?? ""} ${c.category ?? ""}`.toLowerCase();
+        if (!haystack.includes(searchQuery)) continue;
+      }
       if (activeFilter === "nearby") {
         const distance = myLocation ? haversineMeters(myLocation.lat, myLocation.lng, c.lat, c.lng) : Infinity;
         if (distance > NEARBY_RADIUS_METERS) continue;
@@ -605,6 +628,57 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       }
     });
   });
+
+  const mapSearchInput = root.querySelector("#map-customer-search");
+  mapSearchInput?.addEventListener("input", () => {
+    searchQuery = mapSearchInput.value.trim().toLowerCase();
+    applyFilter();
+  });
+
+  // Manager filter -- director/ceo/admin only (canViewTeamLocations gate
+  // above decides whether the control even renders). Populated from the
+  // same "plannable" roster the route-planning picker uses, since that's
+  // already the right list (sales managers only) with no extra endpoint.
+  const managerFilterBtn = root.querySelector("#map-manager-filter-btn");
+  const managerFilterMenu = root.querySelector("#map-manager-filter-menu");
+  const managerFilterLabel = root.querySelector("#map-manager-filter-label");
+  if (managerFilterBtn) {
+    api
+      .listPlannableUsers()
+      .then((users) => {
+        managerFilterMenu.innerHTML = `
+          <button type="button" role="menuitemradio" aria-checked="true" class="filter-dropdown-selected" data-value="">${t("all_managers")}</button>
+          ${users.map((u) => `<button type="button" role="menuitemradio" aria-checked="false" data-value="${u.id}">${escapeHtml(u.name)}</button>`).join("")}
+        `;
+        managerFilterMenu.querySelectorAll("button").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            managerFilter = btn.dataset.value;
+            managerFilterLabel.textContent = btn.textContent;
+            managerFilterMenu.querySelectorAll("button").forEach((b) => {
+              b.classList.toggle("filter-dropdown-selected", b === btn);
+              b.setAttribute("aria-checked", String(b === btn));
+            });
+            managerFilterMenu.hidden = true;
+            managerFilterBtn.setAttribute("aria-expanded", "false");
+            applyFilter();
+          });
+        });
+      })
+      .catch(() => {});
+
+    managerFilterBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      managerFilterMenu.hidden = !managerFilterMenu.hidden;
+      managerFilterBtn.setAttribute("aria-expanded", String(!managerFilterMenu.hidden));
+    });
+    root.addEventListener("click", () => {
+      if (!managerFilterMenu.hidden) {
+        managerFilterMenu.hidden = true;
+        managerFilterBtn.setAttribute("aria-expanded", "false");
+      }
+    });
+  }
 
   async function loadCustomers() {
     const customers = await api.listCustomers();

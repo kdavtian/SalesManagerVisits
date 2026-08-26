@@ -1779,14 +1779,14 @@ input[type="search"]:focus {
 
 .map-hint {
   position: absolute;
-  /* Clears the filter chip row (also top:12px, same z-index) instead of
+  /* Clears .map-top-controls (search row + filter chip row) instead of
      overlapping it -- matches .map-controls' top offset for the same
      reason. Solid fill (no blur/transparency) so it reads as a flat card
      instead of picking up whatever colors are in the map tiles behind it. */
-  top: 60px;
+  top: 112px;
   left: 12px;
   /* .map-controls (the zoom +/- and locate cluster) sits at this same
-     top:60px, right:12px -- a plain right:12px here let this hint's full-
+     top offset, right:12px -- a plain right:12px here let this hint's full-
      width card render directly underneath/behind those buttons. Reserve
      the cluster's 44px width plus its own 12px gap from the edge so the
      hint's text box stops short of it instead of overlapping. */
@@ -1950,10 +1950,9 @@ input[type="search"]:focus {
 .map-controls {
   position: absolute;
   right: 12px;
-  /* Clears the full-width filter chip row above it instead of sharing its
-     horizontal band -- the zoom cluster used to sit right at top:12px,
-     squeezed against the chips and cramping how much room they had. */
-  top: 60px;
+  /* Clears .map-top-controls (search row + filter chip row stacked above
+     it) instead of sharing its horizontal band. */
+  top: 112px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -3304,15 +3303,50 @@ input[type="search"]:focus {
 
 /* ===== Map redesign ===== */
 
-.map-filter-row {
+/* Search row + filter-chip row now stack inside one positioned wrapper,
+   instead of each guessing its own top offset. */
+.map-top-controls {
   position: absolute;
   top: 12px;
   left: 12px;
   right: 12px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.map-search-row {
+  display: flex;
+  gap: 8px;
+}
+
+.map-search-row input[type="search"] {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  box-sizing: border-box;
+  padding: 0 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.9rem;
+  box-shadow: var(--shadow-elevated);
+}
+
+/* The manager filter reuses the plain filter-dropdown-btn/menu look from
+   the Customers page, but needs a fixed (not flex:1) width here since it
+   sits beside the search input rather than alone in its own row. */
+.map-search-row #map-manager-filter-wrap {
+  flex: 0 0 auto;
+  width: 130px;
+}
+
+.map-filter-row {
   display: flex;
   gap: 8px;
   overflow-x: auto;
-  z-index: 1000;
   padding-right: 4px;
   /* Fade the trailing edge so a partially-scrolled last chip reads as
      "more to scroll", not as clipped by / merged into the zoom controls. */
