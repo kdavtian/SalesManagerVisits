@@ -11,6 +11,10 @@
   --accent: #0969da;
   --accent-dark: #0550ae;
   --accent-fill: #0969da;
+  /* Castrol brand green, sampled from the logo -- used only for the
+     dedicated "Check In" buttons (not the app-wide accent color). */
+  --checkin-green: #41904f;
+  --checkin-green-dark: #337140;
   --control-border: #8c959f;
   --success: #087a48;
   --warning: #9a6700;
@@ -1714,7 +1718,7 @@ input[type="search"]:focus {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--checkin-green);
   color: #ffffff;
   border: none;
   display: grid;
@@ -2067,9 +2071,9 @@ input[type="search"]:focus {
 }
 
 .popup-actions .btn-accent {
-  background: var(--accent);
+  background: var(--checkin-green);
   color: #ffffff;
-  border-color: var(--accent);
+  border-color: var(--checkin-green);
 }
 
 /* Sheets (bottom modal) */
@@ -2701,6 +2705,14 @@ input[type="search"]:focus {
   margin-top: 8px;
 }
 
+/* Scoped to this one button (not .btn-primary generally, which is the
+   app-wide submit/save color) -- the dashboard's own Check In entry point
+   gets the same Castrol green as the other check-in buttons. */
+#next-visit-checkin {
+  background: var(--checkin-green);
+  border-color: var(--checkin-green);
+}
+
 /* .dashboard-view, .detail-view, .checkin-view and .admin-view all already
    carry 16px padding on all sides (see the ".detail-view, .checkin-view,
    .dashboard-view, .admin-view" rule above), so nested .stat-grid/.card-list
@@ -3143,8 +3155,8 @@ input[type="search"]:focus {
 }
 
 .action-btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--checkin-green);
+  border-color: var(--checkin-green);
   color: #ffffff;
 }
 
