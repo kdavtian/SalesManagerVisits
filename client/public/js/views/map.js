@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, haversineMeters, getCurrentPosition, tierSelectorHtml, activateTierSelector, categorySelectorHtml, activateCategorySelector, categoryIcon, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, haversineMeters, getCurrentPosition, tierSelectorHtml, activateTierSelector, categorySelectorHtml, activateCategorySelector, categoryIcon, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion } from "../util.js";
 import { t } from "../i18n.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
@@ -621,7 +621,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         <button class="card customer-card" data-id="${c.id}">
           <div class="customer-card-main">
             <strong>${escapeHtml(c.name)}</strong>
-            ${c.category ? `<span class="muted">${escapeHtml(c.category)}</span>` : ""}
+            ${c.category ? `<span class="muted">${escapeHtml(categoryLabel(c.category))}</span>` : ""}
             <span class="muted">${formatDistance(distance)}</span>
           </div>
           <span class="card-trailing">
@@ -786,7 +786,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       marker.bindPopup(`
         <div class="map-popup">
           <strong>${escapeHtml(c.name)}</strong>
-          ${c.category ? `<div class="popup-category">${escapeHtml(c.category)}</div>` : ""}
+          ${c.category ? `<div class="popup-category">${escapeHtml(categoryLabel(c.category))}</div>` : ""}
           <div class="popup-facts" id="popup-facts-${c.id}"><p class="popup-loading">${t("loading")}</p></div>
           <div class="popup-actions">
             <button data-action="checkin" data-id="${c.id}" class="btn-accent"><span>${icons.mapPinCheck}</span>${t("check_in")}</button>
@@ -951,6 +951,10 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   };
 
   const WEEKDAY_KEYS = ["weekday_sun", "weekday_mon", "weekday_tue", "weekday_wed", "weekday_thu", "weekday_fri", "weekday_sat"];
+  // Display order only -- the underlying day_of_week values stay 0=Sun..6=Sat
+  // (matching JS Date#getDay(), which the visit_plan_rules schema is built
+  // on), but the week is shown Monday-first everywhere in the UI.
+  const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
   async function openPlanDaySheet() {
     const overlay = document.createElement("div");
@@ -1068,20 +1072,31 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
           : t(PLAN_STATUS_KEY[existingPlan.status])
         : t("plan_status_none");
 
-      const sortedCustomers = [...lastCustomers].sort((a, b) => a.c.name.localeCompare(b.c.name));
+      // Scope the checklist to whoever the plan is actually for -- the
+      // customers assigned to that rep, not the entire map. Without this a
+      // director planning for one SM would be picking from every other
+      // rep's customers too.
+      const effectiveTargetId = targetUserId ? Number(targetUserId) : state.user.id;
+      const sortedCustomers = lastCustomers
+        .filter(({ c }) => Number(c.assigned_manager_id) === effectiveTargetId)
+        .sort((a, b) => a.c.name.localeCompare(b.c.name));
       bodyEl.innerHTML = `
         <p class="badge ${statusClass}" id="plan-status-badge">${statusLabel}</p>
         <p class="muted">${t("plan_day_hint")}</p>
         <div class="plan-day-list" id="plan-day-list">
-          ${sortedCustomers
-            .map(
-              ({ c }) => `
+          ${
+            sortedCustomers.length
+              ? sortedCustomers
+                  .map(
+                    ({ c }) => `
             <label class="plan-day-row">
               <input type="checkbox" value="${c.id}" ${selectedIds.has(c.id) ? "checked" : ""} />
               <span>${escapeHtml(c.name)}</span>
             </label>`
-            )
-            .join("")}
+                  )
+                  .join("")
+              : `<p class="empty-state">${t("no_assigned_customers")}</p>`
+          }
         </div>
       `;
 
@@ -1116,8 +1131,8 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       bodyEl.innerHTML = `
         <p class="muted">${t("plan_recurring_hint").replace("[weekday]", t(WEEKDAY_KEYS[selectedWeekday]))}</p>
         <div class="weekday-picker" id="weekday-picker">
-          ${WEEKDAY_KEYS.map(
-            (key, i) => `<button type="button" class="weekday-btn ${i === selectedWeekday ? "weekday-btn-active" : ""}" data-day="${i}">${t(key)}</button>`
+          ${WEEKDAY_ORDER.map(
+            (i) => `<button type="button" class="weekday-btn ${i === selectedWeekday ? "weekday-btn-active" : ""}" data-day="${i}">${t(WEEKDAY_KEYS[i])}</button>`
           ).join("")}
         </div>
         <div class="plan-area-list" id="plan-area-list">
@@ -1319,29 +1334,33 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         <h2>${t("new_customer")}</h2>
         <form id="new-customer-form">
           ${tierSelectorHtml("potential")}
-          ${categorySelectorHtml("")}
+          ${categorySelectorHtml(CATEGORY_LIST[0].value)}
           <label>${t("name")}<input name="name" required /></label>
           <label>${t("phone")}<input name="phone" type="tel" /></label>
           <label>${t("address")}<input name="address" id="new-customer-address" /></label>
-          <label>${t("region")}
-            <select name="region" id="new-customer-region">
-              <option value="">${t("select_placeholder")}</option>
-              ${REGION_LIST.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join("")}
-            </select>
-          </label>
-          <label id="new-customer-subregion-wrap">${t("subregion")}<input name="subregion" id="new-customer-subregion" /></label>
+          <div class="form-row-2">
+            <label>${t("region")}
+              <select name="region" id="new-customer-region">
+                <option value="">${t("select_placeholder")}</option>
+                ${REGION_LIST.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join("")}
+              </select>
+            </label>
+            <label id="new-customer-subregion-wrap">${t("subregion")}<input name="subregion" id="new-customer-subregion" /></label>
+          </div>
           <label>${t("sales_channel")}
             <select name="sales_channel">
               <option value="">${t("select_placeholder")}</option>
               ${SALES_CHANNELS.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")}
             </select>
           </label>
-          <label class="erp-suggest-wrap">${t("erp_customer_id")}
-            <input type="text" name="erp_customer_id" id="new-customer-erp-input" autocomplete="off" />
-            <div class="erp-suggest-list" id="new-customer-erp-suggest" hidden></div>
-          </label>
+          <div class="form-row-2">
+            <label class="erp-suggest-wrap">${t("erp_customer_id")}
+              <input type="text" name="erp_customer_id" id="new-customer-erp-input" autocomplete="off" />
+              <div class="erp-suggest-list" id="new-customer-erp-suggest" hidden></div>
+            </label>
+            <label>${t("tin")}<input name="tin" /></label>
+          </div>
           <label>${t("notes")}<textarea name="notes" rows="2"></textarea></label>
-          <label>${t("tin")}<input name="tin" /></label>
           <p class="form-error" id="new-customer-error" hidden></p>
           <div class="sheet-actions">
             <button type="button" class="btn" id="cancel-new-customer">${t("cancel")}</button>

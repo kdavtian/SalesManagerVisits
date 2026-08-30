@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatDistance, formatRelative, getCurrentPosition, haversineMeters } from "../util.js";
+import { escapeHtml, formatDistance, formatRelative, getCurrentPosition, haversineMeters, categoryLabel } from "../util.js";
 import { state } from "../state.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
@@ -247,7 +247,7 @@ async function renderNextVisit(slot, customers, navigate) {
         <div class="next-visit-icon">${icons.store}</div>
         <div class="next-visit-info">
           <strong>${escapeHtml(next.name)}</strong>
-          ${next.category ? `<span class="muted">${escapeHtml(next.category)}</span>` : ""}
+          ${next.category ? `<span class="muted">${escapeHtml(categoryLabel(next.category))}</span>` : ""}
           ${distanceText ? `<span class="muted inline-icon-text">${icons.pin} ${distanceText}</span>` : ""}
         </div>
       </div>

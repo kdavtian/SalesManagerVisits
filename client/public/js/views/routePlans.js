@@ -5,6 +5,9 @@ import { icons } from "../icons.js";
 import { state, canPlanForOthers } from "../state.js";
 
 const WEEKDAY_KEYS = ["weekday_sun", "weekday_mon", "weekday_tue", "weekday_wed", "weekday_thu", "weekday_fri", "weekday_sat"];
+// Display order only -- day_of_week values stay 0=Sun..6=Sat (JS Date#getDay()),
+// but the week is shown Monday-first everywhere in the UI.
+const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 // Route Plans is the recurring weekday cycle -- "every Monday, Rita visits
 // these 6 customers". It's the same visit_plan_rules data the Map page's
@@ -63,11 +66,11 @@ export async function renderRoutePlans(root, navigate) {
           ${rep.position ? `<span class="muted">${escapeHtml(rep.position)}</span>` : ""}
         </div>
         <div class="route-plan-week-row">
-          ${WEEKDAY_KEYS.map((key, i) => {
+          ${WEEKDAY_ORDER.map((i) => {
             const day = byDay.get(i);
             const count = day?.customer_count ?? 0;
             return `<button type="button" class="route-plan-day-chip ${count ? "route-plan-day-chip-active" : ""}" data-user-id="${rep.user_id}" data-user-name="${escapeHtml(rep.user_name)}" data-day="${i}">
-              <span class="route-plan-day-label">${t(key)}</span>
+              <span class="route-plan-day-label">${t(WEEKDAY_KEYS[i])}</span>
               <span class="route-plan-day-count">${count || "–"}</span>
             </button>`;
           }).join("")}
@@ -89,11 +92,11 @@ export async function renderRoutePlans(root, navigate) {
     bodyEl.innerHTML = `
       <p class="muted" style="margin: 0 4px 10px;">${t("route_plan_own_hint")}</p>
       <div class="route-plan-week-row route-plan-week-row-standalone">
-        ${WEEKDAY_KEYS.map((key, i) => {
+        ${WEEKDAY_ORDER.map((i) => {
           const rule = byDay.get(i);
           const count = rule ? new Set([...(rule.customer_ids || [])]).size : 0;
           return `<button type="button" class="route-plan-day-chip ${count ? "route-plan-day-chip-active" : ""}" data-day="${i}">
-            <span class="route-plan-day-label">${t(key)}</span>
+            <span class="route-plan-day-label">${t(WEEKDAY_KEYS[i])}</span>
             <span class="route-plan-day-count">${count || "–"}</span>
           </button>`;
         }).join("")}
@@ -124,7 +127,7 @@ async function openCustomerPickSheet({ userId, userName, days, existingCustomerI
   overlay.innerHTML = `
     <div class="sheet">
       <h2>${escapeHtml(userName)}</h2>
-      <p class="muted">${days.map((d) => t(WEEKDAY_KEYS[d])).join(", ")}</p>
+      <p class="muted">${[...days].sort((a, b) => WEEKDAY_ORDER.indexOf(a) - WEEKDAY_ORDER.indexOf(b)).map((d) => t(WEEKDAY_KEYS[d])).join(", ")}</p>
       <div id="route-plan-customer-list" class="plan-day-list"><p class="loading-state" role="status">${t("loading")}</p></div>
       <p class="form-error" id="route-plan-picker-error" hidden></p>
       <div class="sheet-actions">
@@ -270,8 +273,8 @@ async function openNewRoutePlanFlow(onSaved) {
     stepBody.innerHTML = `
       <p class="muted">${t("choose_days_hint").replace("[name]", escapeHtml(selectedUserName))}</p>
       <div class="weekday-picker" id="new-plan-weekday-picker">
-        ${WEEKDAY_KEYS.map(
-          (key, i) => `<button type="button" class="weekday-btn ${selectedDays.includes(i) ? "weekday-btn-active" : ""}" data-day="${i}">${t(key)}</button>`
+        ${WEEKDAY_ORDER.map(
+          (i) => `<button type="button" class="weekday-btn ${selectedDays.includes(i) ? "weekday-btn-active" : ""}" data-day="${i}">${t(WEEKDAY_KEYS[i])}</button>`
         ).join("")}
       </div>
     `;

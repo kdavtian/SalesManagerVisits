@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatDateTime, haversineMeters, getCurrentPosition } from "../util.js";
+import { escapeHtml, formatDateTime, haversineMeters, getCurrentPosition, customerListIconHtml, categoryLabel } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state } from "../state.js";
@@ -271,11 +271,14 @@ export function renderCustomers(root, navigate, initialFilter) {
 
         return `
         <button class="card customer-card ${isOthers ? "customer-card-unassigned" : ""}" data-id="${c.id}">
-          <div class="customer-card-main">
-            <strong>${escapeHtml(c.name)}</strong>
-            ${c.category ? `<span class="muted">${escapeHtml(c.category)}</span>` : ""}
-            <span class="muted customer-card-last-visit">${lastVisit}</span>
-          </div>
+          <span class="customer-card-left">
+            ${customerListIconHtml(c)}
+            <div class="customer-card-main">
+              <strong>${escapeHtml(c.name)}</strong>
+              ${c.category ? `<span class="muted">${escapeHtml(categoryLabel(c.category))}</span>` : ""}
+              <span class="muted customer-card-last-visit">${lastVisit}</span>
+            </div>
+          </span>
           <span class="card-trailing">
             <span class="badge ${badgeClass}">${badgeText}</span>
             <span class="chevron">&#8250;</span>

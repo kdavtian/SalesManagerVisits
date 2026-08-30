@@ -700,6 +700,21 @@ form [aria-invalid="true"] {
   outline: 2px solid color-mix(in srgb, var(--danger) 35%, transparent);
 }
 
+/* Pairs two fields on one line (region+subregion, ERP ID+TIN) instead of
+   each taking a full row -- the form gets long enough already on the new
+   customer sheet. */
+.form-row-2 {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.form-row-2 > label {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
 .field-error {
   display: block;
   color: var(--danger);
@@ -2966,9 +2981,18 @@ input[type="search"]:focus {
   font-weight: 700;
 }
 
+.customer-card-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
 .customer-card-icon {
-  width: 44px;
-  height: 44px;
+  position: relative;
+  width: 40px;
+  height: 40px;
   border-radius: 12px;
   background: var(--bg);
   display: flex;
@@ -2976,6 +3000,28 @@ input[type="search"]:focus {
   justify-content: center;
   font-size: 1.3rem;
   flex-shrink: 0;
+  color: var(--text-dim);
+}
+
+/* The tier coin/glyph badge sits in the icon's bottom-right corner, colored
+   via the same .tier-* classes used elsewhere (tier selector, detail badge)
+   so bronze/silver/gold/potential/competitor read identically everywhere. */
+.customer-card-icon-tier {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--bg-card);
+}
+
+.customer-card-icon-tier svg {
+  width: 12px;
+  height: 12px;
 }
 
 .customer-card-last-visit {

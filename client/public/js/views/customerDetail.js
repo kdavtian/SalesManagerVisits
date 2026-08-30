@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryIcon, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryIcon, categoryLabel, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { canEditDirectly, canReassignCustomers, isAdmin } from "../state.js";
@@ -108,9 +108,9 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   }
 
   const idCategoryLine = customer.erp_customer_id
-    ? `${t("customer_id_label")}: ${escapeHtml(customer.erp_customer_id)}${customer.category ? ` · ${escapeHtml(customer.category)}` : ""}`
+    ? `${t("customer_id_label")}: ${escapeHtml(customer.erp_customer_id)}${customer.category ? ` · ${escapeHtml(categoryLabel(customer.category))}` : ""}`
     : customer.category
-    ? escapeHtml(customer.category)
+    ? escapeHtml(categoryLabel(customer.category))
     : "";
 
   container.innerHTML = `
@@ -142,7 +142,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     <div class="card detail-facts-card">
       ${customer.address ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.pin}</span><span>${escapeHtml(customer.address)}</span></div>` : ""}
       ${customer.phone ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.phone}</span><a href="tel:${escapeHtml(customer.phone)}">${escapeHtml(customer.phone)}</a></div>` : ""}
-      ${customer.category ? `<div class="detail-fact"><span class="detail-fact-icon">${categoryIcon(customer.category)}</span><span>${escapeHtml(customer.category)}</span></div>` : ""}
+      ${customer.category ? `<div class="detail-fact"><span class="detail-fact-icon">${categoryIcon(customer.category)}</span><span>${escapeHtml(categoryLabel(customer.category))}</span></div>` : ""}
       ${
         customer.region
           ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.pin}</span><span>${escapeHtml(customer.region)}${customer.subregion ? ` &middot; ${escapeHtml(customer.subregion)}` : ""}</span></div>`

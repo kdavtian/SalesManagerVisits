@@ -129,18 +129,32 @@ export function matchSubregion(guess, region) {
   return guess || "";
 }
 
-export const SALES_CHANNELS = ["PVO", "CVO", "OEM"];
+// The fixed set of assigned sales channels, matching the Customers sheet in
+// the Castrol file: the named-account channels (KF, CAS) plus the region-
+// scoped OEM/CVO/PCO trade channels and each sales manager's own territory
+// channel (SM B2B/YVN/Davtashen/Shirak).
+export const SALES_CHANNELS = ["KF", "CAS", "OEM", "CVO", "PCO", "SM B2B", "SM YVN", "SM Davtashen", "SM Shirak"];
 
 export const CATEGORY_LIST = [
-  { value: "Յուղման կետ", icon: CATEGORY_ICON.oilPoint, cls: "category-oil-point" },
-  { value: "Խանութ", icon: CATEGORY_ICON.shop, cls: "category-shop" },
-  { value: "Ավտոսերվիս", icon: CATEGORY_ICON.workshop, cls: "category-workshop" },
-  { value: "Այլ", icon: CATEGORY_ICON.other, cls: "category-other" },
+  { value: "Յուղման կետ", labelKey: "category_oil_point", icon: CATEGORY_ICON.oilPoint, cls: "category-oil-point" },
+  { value: "Խանութ", labelKey: "category_shop", icon: CATEGORY_ICON.shop, cls: "category-shop" },
+  { value: "Ավտոսերվիս", labelKey: "category_workshop", icon: CATEGORY_ICON.workshop, cls: "category-workshop" },
+  { value: "Այլ", labelKey: "category_other", icon: CATEGORY_ICON.other, cls: "category-other" },
 ];
 
 // Kept for anything that still needs the raw list of values (e.g. filters
 // over existing data written before the category set changed).
 export const CATEGORY_OPTIONS = CATEGORY_LIST.map((c) => c.value);
+
+// The stored value is always the raw Armenian text (matches the ERP/Castrol
+// data and every customer record written before this translation layer
+// existed) -- this only controls what's *displayed*, so a customer marked
+// "Յուղման կետ" reads as "Oil change point" when English is selected and
+// "Յուղման կետ" when Armenian is, without touching the underlying data.
+export function categoryLabel(value) {
+  const opt = CATEGORY_LIST.find((c) => c.value === value);
+  return opt ? t(opt.labelKey) : value;
+}
 
 export function categorySelectorHtml(selected = "", inputName = "category") {
   return `
@@ -149,7 +163,7 @@ export function categorySelectorHtml(selected = "", inputName = "category") {
         (opt) => `
         <button type="button" class="category-btn ${opt.cls} ${opt.value === selected ? "category-btn-active" : ""}" data-category="${escapeHtml(opt.value)}" role="radio" aria-checked="${opt.value === selected}">
           <span class="category-icon">${opt.icon}</span>
-          <span class="category-label">${escapeHtml(opt.value)}</span>
+          <span class="category-label">${escapeHtml(t(opt.labelKey))}</span>
         </button>`
       ).join("")}
       <input type="hidden" name="${inputName}" value="${escapeHtml(selected)}" />
@@ -203,6 +217,23 @@ export function tierSelectorHtml(selected = "potential", inputName = "customer_t
 export function tierBadgeHtml(tier) {
   const opt = TIER_OPTIONS.find((o) => o.value === tier) ?? TIER_OPTIONS[0];
   return `<span class="badge tier-badge ${opt.cls}">${opt.icon}${t(opt.labelKey)}</span>`;
+}
+
+// The customer-list-row icon: the category glyph (garage/shop/workshop/
+// other) as the main shape, with a small tier-colored badge in the corner
+// (a numbered coin for bronze/silver/gold, the target/binoculars glyph for
+// potential/competitor) -- so glancing at the row alone answers "what kind
+// of place, and how big an account" without opening it. Complements the
+// map pins, which encode the same two facts the other way around (tier
+// owns the pin's shape/color, category is the small glyph inside it).
+export function customerListIconHtml(c) {
+  const tier = TIER_OPTIONS.find((o) => o.value === c.customer_tier) ?? TIER_OPTIONS[0];
+  return `
+    <span class="customer-card-icon">
+      ${categoryIcon(c.category)}
+      <span class="customer-card-icon-tier ${tier.cls}">${tier.icon}</span>
+    </span>
+  `;
 }
 
 // Wires up click behavior for a tierSelectorHtml() block already in the
