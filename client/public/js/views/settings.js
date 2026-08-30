@@ -7,7 +7,7 @@ import { escapeHtml, compressImage, activateDialog } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
 
-const APP_VERSION = "1.19.0";
+const APP_VERSION = "1.19.1";
 
 const ICON = {
   camera: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg>`,
@@ -714,19 +714,33 @@ async function renderReportsManagementSection(slot) {
   });
 }
 
-// Shown in-app instead of window.open(..., "_blank") -- a new browser tab
-// leaves a rep stuck (no visible way back into the app on some mobile
-// browser chrome, especially once installed as a home-screen PWA), so this
-// embeds the PDF full-screen with its own X to get back to Settings.
+// Shown in-app full-screen with its own X to get back to Settings. The
+// iframe preview is only best-effort: an installed iOS PWA's WKWebView
+// can't render a PDF inside an iframe at all (it just renders blank),
+// which is why the guide looked "not working" for reps using the
+// home-screen app. Share/Open are the actual guaranteed-working path on
+// every platform -- Share hands the real PDF file to the OS share sheet
+// (save to Files, send in a chat, print, etc.), Open falls back to letting
+// the browser/OS handle the PDF URL directly.
 function openGuideOverlay() {
+  const pdfUrl = "/docs/kad-motors-guide-hy.pdf";
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay guide-overlay";
   overlay.innerHTML = `
     <div class="guide-overlay-frame">
-      <button type="button" class="icon-btn guide-overlay-close" id="guide-overlay-close" aria-label="${t("close")}">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-      </button>
-      <iframe src="/docs/kad-motors-guide-hy.pdf" title="${t("user_guide")}"></iframe>
+      <div class="guide-overlay-toolbar">
+        <button type="button" class="icon-btn guide-overlay-close" id="guide-overlay-close" aria-label="${t("close")}">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+        <div class="guide-overlay-toolbar-actions">
+          <button type="button" class="btn btn-sm" id="guide-share-btn">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:4px;"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>${t("share_pdf")}
+          </button>
+          <a class="btn btn-sm" id="guide-open-btn" href="${pdfUrl}" target="_blank" rel="noopener">${t("open_pdf")}</a>
+        </div>
+      </div>
+      <iframe src="${pdfUrl}" title="${t("user_guide")}"></iframe>
+      <p class="muted guide-overlay-fallback-hint">${t("guide_preview_fallback_hint")}</p>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -737,6 +751,29 @@ function openGuideOverlay() {
   }
   overlay.querySelector("#guide-overlay-close").addEventListener("click", close);
   overlay.addEventListener("click", (e) => e.target === overlay && close());
+
+  const shareBtn = overlay.querySelector("#guide-share-btn");
+  shareBtn.addEventListener("click", async () => {
+    shareBtn.disabled = true;
+    try {
+      const res = await fetch(pdfUrl);
+      const blob = await res.blob();
+      const file = new File([blob], "KAD-Motors-Guide.pdf", { type: "application/pdf" });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: t("user_guide") });
+      } else if (navigator.share) {
+        // Some browsers support share() but not file sharing -- share the
+        // absolute URL instead of nothing.
+        await navigator.share({ url: new URL(pdfUrl, location.href).href, title: t("user_guide") });
+      } else {
+        window.open(pdfUrl, "_blank");
+      }
+    } catch (err) {
+      if (err?.name !== "AbortError") window.open(pdfUrl, "_blank");
+    } finally {
+      shareBtn.disabled = false;
+    }
+  });
 }
 
 // Product catalog and team management used to render as full inline

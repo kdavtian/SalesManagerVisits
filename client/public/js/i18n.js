@@ -561,6 +561,9 @@ const dict = {
     version: "Version",
     user_guide: "User guide",
     user_guide_hint: "Covers app version {v}. If something looks different now, the app has been updated since — ask your admin for a refreshed guide.",
+    share_pdf: "Share PDF",
+    open_pdf: "Open",
+    guide_preview_fallback_hint: "Preview not showing? Use Share or Open above.",
     close: "Close",
 
     install_title: "Install KAD Motors",
@@ -1141,6 +1144,9 @@ const dict = {
     version: "Տարբերակ",
     user_guide: "Օգտագործման ուղեցույց",
     user_guide_hint: "Ուղեցույցը համապատասխանում է հավելվածի {v} տարբերակին։ Եթե այժմ ինչ-որ բան այլ կերպ է երևում, հավելվածը թարմացվել է դրանից հետո. խնդրեք Ձեր ադմինիստրատորին թարմացված ուղեցույց։",
+    share_pdf: "Կիսվել PDF-ով",
+    open_pdf: "Բացել",
+    guide_preview_fallback_hint: "Նախադիտումը չի՞ երևում։ Օգտագործեք վերևի Կիսվել կամ Բացել կոճակները։",
     close: "Փակել",
 
     install_title: "Տեղադրել KAD Motors-ը",
