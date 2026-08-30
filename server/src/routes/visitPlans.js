@@ -72,7 +72,8 @@ visitPlansRouter.get("/mine", async (req, res) => {
   const rule = ruleRows[0];
   if (!rule) return res.json(null);
 
-  const customerIds = await expandAreas(rule.areas);
+  const areaIds = await expandAreas(rule.areas);
+  const customerIds = [...new Set([...areaIds, ...(rule.customer_ids ?? [])])];
   res.json({
     id: null,
     user_id: targetId,
@@ -163,9 +164,13 @@ visitPlansRouter.get("/rules", async (req, res) => {
   res.json(rows);
 });
 
-// Upsert the rule for one weekday. An empty areas array deactivates it
-// (kept as a row, not deleted, so the "who set this up" audit trail via
-// created_by survives a rep clearing their own cycle).
+// Upsert the rule for one weekday. Empty areas AND customer_ids deactivates
+// it (kept as a row, not deleted, so the "who set this up" audit trail via
+// created_by survives a rep clearing their own cycle). customer_ids is the
+// direct-pick path used by the Route Plans page (straight from a rep's
+// assigned customers); areas is the older region/subregion-based path,
+// still used by the Map page's quick planner. A rule can carry either or
+// both -- they're unioned together when the rule is expanded for a date.
 visitPlansRouter.put("/rules/:dayOfWeek", async (req, res) => {
   const dayOfWeek = Number(req.params.dayOfWeek);
   if (!Number.isInteger(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6) {
@@ -179,16 +184,56 @@ visitPlansRouter.put("/rules/:dayOfWeek", async (req, res) => {
         .filter((a) => a && typeof a.region === "string" && a.region)
         .map((a) => ({ region: a.region, subregion: typeof a.subregion === "string" && a.subregion ? a.subregion : null }))
     : [];
+  const customerIds = Array.isArray(req.body?.customer_ids)
+    ? [...new Set(req.body.customer_ids.map(Number).filter(Number.isInteger))]
+    : [];
 
   const { rows } = await pool.query(
-    `INSERT INTO visit_plan_rules (user_id, day_of_week, areas, created_by, active)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO visit_plan_rules (user_id, day_of_week, areas, customer_ids, created_by, active)
+     VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT (user_id, day_of_week) DO UPDATE
-       SET areas = EXCLUDED.areas, active = EXCLUDED.active, created_by = EXCLUDED.created_by, updated_at = now()
+       SET areas = EXCLUDED.areas, customer_ids = EXCLUDED.customer_ids,
+           active = EXCLUDED.active, created_by = EXCLUDED.created_by, updated_at = now()
      RETURNING *`,
-    [targetId, dayOfWeek, JSON.stringify(areas), req.user.id, areas.length > 0]
+    [targetId, dayOfWeek, JSON.stringify(areas), customerIds, req.user.id, areas.length > 0 || customerIds.length > 0]
   );
   res.status(201).json(rows[0]);
+});
+
+// Full weekday x rep grid for the Route Plans overview page -- one request
+// instead of N+1 per sales manager. Only sales_manager-role users are
+// route-planned targets (matches /users/plannable); customer_count is
+// precomputed here so the overview grid doesn't need to expand areas for
+// every cell just to show a number.
+visitPlansRouter.get("/rules/overview", requireCanPlanForOthers, async (req, res) => {
+  const { rows: reps } = await pool.query(
+    "SELECT id, name, position FROM users WHERE role = 'sales_manager' ORDER BY name"
+  );
+  const { rows: rules } = await pool.query(
+    "SELECT * FROM visit_plan_rules WHERE active ORDER BY day_of_week"
+  );
+
+  const rulesByUser = new Map();
+  for (const rule of rules) {
+    if (!rulesByUser.has(rule.user_id)) rulesByUser.set(rule.user_id, []);
+    const areaIds = await expandAreas(rule.areas);
+    const customerIds = [...new Set([...areaIds, ...(rule.customer_ids ?? [])])];
+    rulesByUser.get(rule.user_id).push({
+      day_of_week: rule.day_of_week,
+      customer_ids: rule.customer_ids ?? [],
+      areas: rule.areas ?? [],
+      customer_count: customerIds.length,
+    });
+  }
+
+  res.json(
+    reps.map((rep) => ({
+      user_id: rep.id,
+      user_name: rep.name,
+      position: rep.position,
+      days: rulesByUser.get(rep.id) ?? [],
+    }))
+  );
 });
 
 // Review queue -- any role that can plan for others (admin, sales_director,

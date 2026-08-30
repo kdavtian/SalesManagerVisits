@@ -4557,3 +4557,59 @@ form select,
   align-items: flex-start;
   text-align: left;
 }
+
+.route-plan-rep-card {
+  margin-bottom: 10px;
+}
+
+.route-plan-rep-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.route-plan-week-row {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.route-plan-week-row-standalone {
+  margin: 10px 0;
+}
+
+.route-plan-day-chip {
+  flex: 1 0 auto;
+  min-width: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 4px;
+  cursor: pointer;
+  min-height: 48px;
+}
+
+.route-plan-day-chip-active {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-card));
+  border-color: var(--accent);
+}
+
+.route-plan-day-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.route-plan-day-count {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.plan-day-row-radio input {
+  border-radius: 50%;
+}

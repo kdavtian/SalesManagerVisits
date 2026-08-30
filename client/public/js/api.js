@@ -108,8 +108,9 @@ export const api = {
   getPendingVisitPlans: () => request("/visit-plans/pending"),
   reviewVisitPlan: (id, action) => json(`/visit-plans/${id}`, "PATCH", { action }),
   getVisitPlanRules: (userId) => request(`/visit-plans/rules${userId ? `?user_id=${userId}` : ""}`),
-  saveVisitPlanRule: (dayOfWeek, areas, userId) =>
-    json(`/visit-plans/rules/${dayOfWeek}`, "PUT", { areas, user_id: userId }),
+  saveVisitPlanRule: (dayOfWeek, areas, userId, customerIds) =>
+    json(`/visit-plans/rules/${dayOfWeek}`, "PUT", { areas, user_id: userId, customer_ids: customerIds }),
+  getRoutePlansOverview: () => request("/visit-plans/rules/overview"),
 
   listProducts: (q = "") => request(`/products${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   listAllProducts: () => request("/products/all"),

@@ -154,7 +154,7 @@ export async function renderDashboard(root, navigate) {
 
   container.querySelector("#view-all-activity").addEventListener("click", () => navigate("#/activity"));
   container.querySelector("#qa-check-in").addEventListener("click", () => navigate("#/map"));
-  container.querySelector("#qa-plan-route").addEventListener("click", () => navigate("#/map?plan=1"));
+  container.querySelector("#qa-plan-route").addEventListener("click", () => navigate("#/route-plans"));
   container.querySelector("#qa-reports").addEventListener("click", () => navigate("#/reports"));
   container.querySelector("#qa-add-customer").addEventListener("click", () => navigate("#/map?add=1"));
   container.querySelector("#qa-cash-expense").addEventListener("click", () => navigate("#/expenses"));
