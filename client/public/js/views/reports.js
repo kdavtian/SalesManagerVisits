@@ -247,6 +247,8 @@ async function renderCheckinsReport(root, navigate) {
   await load();
 }
 
+// Deliberately not run through t() -- these are trademarked brand names,
+// not translatable UI copy, and read the same in Armenian as in English.
 const BRAND_LABELS = {
   castrol: "Castrol",
   lotos: "Lotos",

@@ -55,10 +55,25 @@ app.set("trust proxy", 1);
 
 app.use(
   helmet({
-    // The app serves its own HTML/CSS/JS same-origin and loads map tiles
-    // from basemaps.cartocdn.com, so a default strict CSP would break the
-    // map; disable CSP here rather than ship one that's wrong.
-    contentSecurityPolicy: false,
+    // Everything the app loads is same-origin except the Leaflet map
+    // tiles (basemaps.cartocdn.com) and OpenStreetMap/CARTO attribution
+    // links, plus inline style attributes the vanilla-JS views set
+    // directly (style-src stays permissive for that reason -- the
+    // inline <script> that used to need 'unsafe-inline' was moved to
+    // js/theme-init.js so script-src can stay locked to 'self').
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "blob:", "https://*.basemaps.cartocdn.com"],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+      },
+    },
   })
 );
 app.use(cookieParser());

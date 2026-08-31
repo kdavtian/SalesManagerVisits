@@ -3033,6 +3033,27 @@ input[type="search"]:focus {
   font-weight: 700;
 }
 
+.expense-card-readonly {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.expenses-filters {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.expenses-filters input[type="search"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.expenses-filters input[type="date"] {
+  flex-shrink: 0;
+  width: 42%;
+}
+
 .customer-card-left {
   display: flex;
   align-items: center;
@@ -4240,6 +4261,24 @@ input[type="search"]:focus {
   flex-shrink: 0;
   color: var(--text-dim);
   display: flex;
+}
+
+.settings-reset-link {
+  display: block;
+  border: none;
+  background: none;
+  padding: 4px 0 0;
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+  min-height: 24px;
+}
+
+.settings-reset-link:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .settings-toggle-row {

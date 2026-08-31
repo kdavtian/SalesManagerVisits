@@ -19,6 +19,10 @@ export async function renderCashExpenses(root, navigate) {
         </div>
       </div>
       <button type="button" class="btn btn-primary btn-block" id="add-expense-btn">+ ${t("add_expense")}</button>
+      <div class="expenses-filters">
+        <input type="search" id="expenses-search" placeholder="${t("search_expenses")}" />
+        <input type="date" id="expenses-date" />
+      </div>
       <p class="form-error" id="expenses-error" hidden></p>
       <div id="expenses-list" class="card-list" style="margin-top:12px;"></div>
     </div>
@@ -28,17 +32,35 @@ export async function renderCashExpenses(root, navigate) {
 
   const listEl = container.querySelector("#expenses-list");
   const errorEl = container.querySelector("#expenses-error");
+  const searchInput = container.querySelector("#expenses-search");
+  const dateInput = container.querySelector("#expenses-date");
+
+  let allExpenses = [];
 
   async function load() {
     listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     try {
-      const expenses = await api.listCashExpenses();
-      paint(expenses);
+      allExpenses = await api.listCashExpenses();
+      paintFiltered();
     } catch (err) {
       errorEl.textContent = err.message;
       errorEl.hidden = false;
     }
   }
+
+  function paintFiltered() {
+    const query = searchInput.value.trim().toLowerCase();
+    const date = dateInput.value;
+    const filtered = allExpenses.filter((e) => {
+      if (query && !e.purpose.toLowerCase().includes(query)) return false;
+      if (date && e.created_at.slice(0, 10) !== date) return false;
+      return true;
+    });
+    paint(filtered);
+  }
+
+  searchInput.addEventListener("input", paintFiltered);
+  dateInput.addEventListener("change", paintFiltered);
 
   function paint(expenses) {
     if (!expenses.length) {
@@ -47,16 +69,17 @@ export async function renderCashExpenses(root, navigate) {
     }
     const showOwner = seesFinancialExports();
     listEl.innerHTML = expenses
-      .map(
-        (e) => `
-      <button type="button" class="card expense-card" data-id="${e.id}">
+      .map((e) => {
+        const canModify = e.user_id === state.user.id || state.user.role === "admin";
+        return `
+      <button type="button" class="card expense-card${canModify ? "" : " expense-card-readonly"}" data-id="${e.id}">
         <div class="expense-card-main">
           <strong>${escapeHtml(e.purpose)}</strong>
           <span class="muted">${formatDateTime(e.created_at)}${showOwner ? ` &middot; ${escapeHtml(e.user_name)}` : ""}</span>
         </div>
         <span class="expense-card-amount">${formatAmd(Number(e.amount_amd))}</span>
-      </button>`
-      )
+      </button>`;
+      })
       .join("");
 
     listEl.querySelectorAll(".expense-card").forEach((el) => {

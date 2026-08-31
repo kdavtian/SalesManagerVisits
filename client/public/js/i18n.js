@@ -108,6 +108,7 @@ const dict = {
     amount_amd: "Amount (AMD)",
     purpose: "Purpose",
     no_expenses_yet: "No expenses yet.",
+    search_expenses: "Search expenses…",
 
     reports: "Reports",
     reports_management: "Reports management",
@@ -533,6 +534,7 @@ const dict = {
     profile: "Profile",
     change_photo: "Change photo",
     remove_avatar: "Remove photo",
+    reset_to_default: "Reset to default",
     data_sync: "Data & Sync",
     sync_status: "Sync status",
     sync_status_synced: "Synced",
@@ -690,6 +692,7 @@ const dict = {
     amount_amd: "Գումար (ԱՄԴ)",
     purpose: "Նպատակ",
     no_expenses_yet: "Ծախսեր դեռ չկան։",
+    search_expenses: "Փնտրել ծախսեր…",
 
     reports: "Հաշվետվություններ",
     reports_management: "Հաշվետվությունների կառավարում",
@@ -1116,6 +1119,7 @@ const dict = {
     profile: "Պրոֆիլ",
     change_photo: "Փոխել լուսանկարը",
     remove_avatar: "Հեռացնել լուսանկարը",
+    reset_to_default: "Վերականգնել կանխադրվածը",
     data_sync: "Տվյալներ և համաժամացում",
     sync_status: "Համաժամացման կարգավիճակ",
     sync_status_synced: "Համաժամացված է",

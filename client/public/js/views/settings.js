@@ -7,7 +7,7 @@ import { escapeHtml, compressImage, activateDialog } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
 
-const APP_VERSION = "1.19.2";
+const APP_VERSION = "1.20.0";
 
 const ICON = {
   camera: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg>`,
@@ -48,11 +48,14 @@ function settingsRow({ icon, label, value, id, interactive = true }) {
   `;
 }
 
-function settingsToggleRow({ icon, label, value, id, checked }) {
+function settingsToggleRow({ icon, label, value, id, checked, resetId }) {
   return `
     <div class="settings-list-row settings-toggle-row">
       <span class="settings-row-icon">${icon}</span>
-      <span class="settings-row-label">${label}</span>
+      <span class="settings-row-label">
+        ${label}
+        ${resetId ? `<button type="button" class="settings-reset-link" id="${resetId}">${t("reset_to_default")}</button>` : ""}
+      </span>
       <span class="settings-row-value muted">${value}</span>
       <button type="button" class="toggle-switch" id="${id}" role="switch" aria-checked="${checked}" aria-label="${label}">
         <span class="toggle-thumb"></span>
@@ -99,6 +102,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
           <strong>${escapeHtml(state.user.name)}</strong>
           <span class="muted">${t(`role_${state.user.role}`)}${state.user.position ? ` · ${escapeHtml(state.user.position)}` : ""}</span>
           <span class="muted">${escapeHtml(state.user.email)}</span>
+          ${state.user.has_avatar ? `<button type="button" class="settings-reset-link" id="avatar-remove-btn">${t("remove_avatar")}</button>` : ""}
         </div>
       </div>
 
@@ -273,7 +277,17 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       form.set("avatar", compressed, "avatar.jpg");
       await api.uploadMyAvatar(form);
       state.user.has_avatar = true;
-      paintAvatar();
+      renderSettings(root, onLogout, onLanguageChange);
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  root.querySelector("#avatar-remove-btn")?.addEventListener("click", async () => {
+    try {
+      await api.deleteMyAvatar();
+      state.user.has_avatar = false;
+      renderSettings(root, onLogout, onLanguageChange);
     } catch (err) {
       alert(err.message);
     }
@@ -535,13 +549,14 @@ async function loadNotificationPreferences(slot) {
 
   const byType = new Map(prefs.map((p) => [p.notification_type, p]));
   slot.innerHTML = NOTIFICATION_TYPES.map((type) => {
-    const p = byType.get(type) ?? { enabled: true };
+    const p = byType.get(type) ?? { enabled: true, is_override: false };
     return settingsToggleRow({
       icon: ICON.bell,
       label: t(`notification_type_${type}`),
       value: p.enabled ? t("toggle_on") : t("toggle_off"),
       id: `notif-pref-${type}`,
       checked: p.enabled,
+      resetId: p.is_override ? `notif-pref-reset-${type}` : null,
     });
   }).join("");
 
@@ -555,10 +570,23 @@ async function loadNotificationPreferences(slot) {
         await api.setMyNotificationSetting(type, nextEnabled);
         toggle.setAttribute("aria-checked", String(nextEnabled));
         valueEl.textContent = nextEnabled ? t("toggle_on") : t("toggle_off");
+        loadNotificationPreferences(slot);
       } catch (err) {
         alert(err.message);
-      } finally {
         toggle.disabled = false;
+      }
+    });
+
+    const resetBtn = slot.querySelector(`#notif-pref-reset-${type}`);
+    resetBtn?.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      resetBtn.disabled = true;
+      try {
+        await api.clearMyNotificationOverride(type);
+        loadNotificationPreferences(slot);
+      } catch (err) {
+        alert(err.message);
+        resetBtn.disabled = false;
       }
     });
   });

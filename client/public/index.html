@@ -18,14 +18,7 @@
     <meta name="apple-mobile-web-app-title" content="KAD Motors" />
     <meta name="mobile-web-app-capable" content="yes" />
 
-    <script>
-      // Applied synchronously, before first paint, to avoid a flash of the
-      // wrong theme. Light is the default; dark only applies if chosen.
-      try {
-        var t = localStorage.getItem("fieldvisits_theme");
-        if (t === "dark") document.documentElement.dataset.theme = "dark";
-      } catch (e) {}
-    </script>
+    <script src="js/theme-init.js"></script>
 
     <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
     <link rel="stylesheet" href="css/styles.css" />
