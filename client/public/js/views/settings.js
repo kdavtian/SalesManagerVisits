@@ -70,7 +70,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
   // A director/CEO can plan for their reps, so they also need to be able to
   // approve those reps' self-authored plans -- not just a superadmin
   // account. Kept separate from the strict admin-only section below.
-  const canApprovePlans = canPlanForOthers(state.user.role);
+  const canApprovePlans = canPlanForOthers();
   const canExportFinancials = seesFinancialExports();
   const hasAdminWorkspace = admin || canApprovePlans || canExportFinancials;
 

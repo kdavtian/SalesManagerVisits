@@ -174,12 +174,18 @@ checkinsRouter.post("/", (req, res, next) => {
 
   res.status(201).json({ ...checkin, photo_count: files.length });
 
-  if (amountCollected != null && amountCollected >= LARGE_PAYMENT_THRESHOLD_AMD) {
-    const { rows: repRows } = await pool.query("SELECT name FROM users WHERE id = $1", [req.user.id]);
-    notifyTelegram(
-      `💰 <b>Large payment collected</b>\n${escapeHtml(repRows[0]?.name || "Someone")} — ${escapeHtml(customer.name)}\n${Math.round(amountCollected).toLocaleString()} AMD`
-    );
-  }
+  (async () => {
+    try {
+      if (amountCollected != null && amountCollected >= LARGE_PAYMENT_THRESHOLD_AMD) {
+        const { rows: repRows } = await pool.query("SELECT name FROM users WHERE id = $1", [req.user.id]);
+        notifyTelegram(
+          `💰 <b>Large payment collected</b>\n${escapeHtml(repRows[0]?.name || "Someone")} — ${escapeHtml(customer.name)}\n${Math.round(amountCollected).toLocaleString()} AMD`
+        );
+      }
+    } catch (err) {
+      console.error("Post-checkin notification failed:", err);
+    }
+  })();
 });
 
 function isValidDateString(value) {

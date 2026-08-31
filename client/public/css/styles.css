@@ -32,6 +32,13 @@
   --pin-border: #ffffff;
   --shadow-subtle: 0 1px 3px rgba(17, 19, 24, 0.06);
   --shadow-elevated: 0 8px 24px rgba(17, 19, 24, 0.12);
+  /* Customer tier metal colors -- deliberately the same in light and dark
+     (bronze/silver/gold read as those metals regardless of theme), shared
+     by the tier badge, tier selector, and map pins so a rebrand only
+     touches one place instead of three. */
+  --tier-bronze: #cd7f32;
+  --tier-silver: #9a9aa5;
+  --tier-gold: #d4a017;
 }
 
 :root[data-theme="dark"] {
@@ -533,6 +540,7 @@ a {
   padding: 8px 12px;
   font-size: 0.82rem;
   white-space: nowrap;
+  min-height: 44px;
 }
 
 .install-dismiss {
@@ -882,17 +890,17 @@ form [aria-invalid="true"] {
 
 .tier-bronze {
   background: rgba(205, 127, 50, 0.18);
-  color: #cd7f32;
+  color: var(--tier-bronze);
 }
 
 .tier-silver {
   background: rgba(192, 192, 200, 0.2);
-  color: #9a9aa5;
+  color: var(--tier-silver);
 }
 
 .tier-gold {
   background: rgba(255, 200, 40, 0.18);
-  color: #d4a017;
+  color: var(--tier-gold);
 }
 
 .tier-competitor {
@@ -961,20 +969,20 @@ form [aria-invalid="true"] {
 
 .tier-btn.tier-bronze.tier-btn-active {
   background: rgba(205, 127, 50, 0.18);
-  border-color: #cd7f32;
-  color: #cd7f32;
+  border-color: var(--tier-bronze);
+  color: var(--tier-bronze);
 }
 
 .tier-btn.tier-silver.tier-btn-active {
   background: rgba(192, 192, 200, 0.22);
-  border-color: #9a9aa5;
-  color: #9a9aa5;
+  border-color: var(--tier-silver);
+  color: var(--tier-silver);
 }
 
 .tier-btn.tier-gold.tier-btn-active {
   background: rgba(255, 200, 40, 0.2);
-  border-color: #d4a017;
-  color: #d4a017;
+  border-color: var(--tier-gold);
+  color: var(--tier-gold);
 }
 
 .tier-btn.tier-competitor.tier-btn-active {
@@ -1592,7 +1600,8 @@ input[type="search"]:focus {
   margin: -8px 0 14px;
 }
 
-#radius-form .btn-primary {
+#radius-form .btn-primary,
+#visit-frequency-form .btn-primary {
   width: 100%;
 }
 
@@ -1834,15 +1843,15 @@ input[type="search"]:focus {
 }
 
 .pin-tier-bronze {
-  background: #cd7f32;
+  background: var(--tier-bronze);
 }
 
 .pin-tier-silver {
-  background: #9a9aa5;
+  background: var(--tier-silver);
 }
 
 .pin-tier-gold {
-  background: #d4a017;
+  background: var(--tier-gold);
 }
 
 .pin-tier-competitor {
@@ -2024,12 +2033,24 @@ input[type="search"]:focus {
   color: #0a84ff;
 }
 
+/* Leaflet's popup chrome ships its own hardcoded white background/tip via
+   leaflet.css, so this is the one surface that stays light-only unless we
+   override it here too -- not just the text colors inside it. */
+.leaflet-popup-content-wrapper {
+  background: var(--bg-card);
+  color: var(--text);
+}
+
+.leaflet-popup-tip {
+  background: var(--bg-card);
+}
+
 .map-popup {
-  color: #1a1a1a;
+  color: var(--text);
 }
 
 .popup-category {
-  color: #555;
+  color: var(--text-dim);
   font-size: 0.82rem;
 }
 
@@ -2053,7 +2074,7 @@ input[type="search"]:focus {
 }
 
 .popup-loading {
-  color: #777;
+  color: var(--text-dim);
   font-size: 0.8rem;
   margin: 6px 0 0;
 }
@@ -2070,8 +2091,9 @@ input[type="search"]:focus {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  border: 1px solid #ccc;
-  background: #f4f4f4;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
   border-radius: 6px;
   padding: 10px 8px;
   min-height: 44px;
@@ -2284,8 +2306,11 @@ input[type="search"]:focus {
 }
 
 .weekday-btn-active {
-  background: var(--accent);
-  border-color: var(--accent);
+  /* background/border-color come from the shared design-system migration
+     block further down (--accent-fill) -- declared here too previously,
+     but that always lost the cascade to the later rule and, in dark mode,
+     silently disagreed with it (--accent is a different color from
+     --accent-fill there). */
   color: #ffffff;
 }
 
@@ -2496,7 +2521,8 @@ input[type="search"]:focus {
 
 .progress-bar-fill {
   height: 100%;
-  background: var(--accent);
+  /* background comes from the design-system migration block further down
+     (--accent-fill) -- see the note on .weekday-btn-active above. */
   border-radius: 999px;
   transition: width 0.3s ease;
 }
@@ -4653,7 +4679,7 @@ form select,
 
 .route-plan-day-chip {
   flex: 1 0 auto;
-  min-width: 40px;
+  min-width: 44px;
   display: flex;
   flex-direction: column;
   align-items: center;

@@ -74,12 +74,17 @@ function formatOrderCode(date, seq) {
 // transaction -- the upsert prevents two orders placed in the same instant
 // from racing to the same seq.
 async function nextOrderCode(client) {
+  // Stamp the code from the same row (and thus the same clock) that claimed
+  // the sequence number, rather than the app server's own `new Date()` --
+  // if the app container and the DB ever disagree on timezone, those two
+  // clocks can land on different calendar days near midnight, producing a
+  // code whose date doesn't match the counter it was actually assigned from.
   const { rows } = await client.query(
     `INSERT INTO daily_order_seq (day, seq) VALUES (CURRENT_DATE, 1)
      ON CONFLICT (day) DO UPDATE SET seq = daily_order_seq.seq + 1
-     RETURNING seq`
+     RETURNING seq, day`
   );
-  return formatOrderCode(new Date(), rows[0].seq);
+  return formatOrderCode(rows[0].day, rows[0].seq);
 }
 
 const DISCOUNT_APPROVER_ROLES = new Set(["admin", "sales_director", "ceo"]);
@@ -177,29 +182,37 @@ ordersRouter.post("/", async (req, res) => {
   res.status(201).json({ ...order, items: lines });
 
   // Fire after responding -- the rep shouldn't wait on a Telegram round
-  // trip for their order confirmation.
-  const { rows: repRows } = await pool.query("SELECT name FROM users WHERE id = $1", [req.user.id]);
-  const repName = repRows[0]?.name || "Someone";
-  const discountSuffix =
-    discountAmd > 0
-      ? ` (${discountAmd.toLocaleString()} AMD discount, pending director approval)`
-      : discountPct > 0
-      ? ` (${discountPct}% discount, pending director approval)`
-      : "";
-  notifyTelegram(
-    `🛒 <b>New order</b>\n${escapeHtml(repName)} — ${escapeHtml(customer.name)}\n${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD${escapeHtml(discountSuffix)}`
-  );
+  // trip for their order confirmation. Wrapped so a late DB hiccup here
+  // can't throw after headers are already sent (which would otherwise
+  // crash the handler with ERR_HTTP_HEADERS_SENT).
+  (async () => {
+    try {
+      const { rows: repRows } = await pool.query("SELECT name FROM users WHERE id = $1", [req.user.id]);
+      const repName = repRows[0]?.name || "Someone";
+      const discountSuffix =
+        discountAmd > 0
+          ? ` (${discountAmd.toLocaleString()} AMD discount, pending director approval)`
+          : discountPct > 0
+          ? ` (${discountPct}% discount, pending director approval)`
+          : "";
+      notifyTelegram(
+        `🛒 <b>New order</b>\n${escapeHtml(repName)} — ${escapeHtml(customer.name)}\n${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD${escapeHtml(discountSuffix)}`
+      );
 
-  const { rows: notifyRecipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [ORDER_NOTIFY_ROLES]);
-  for (const recipient of notifyRecipients) {
-    if (await isNotificationEnabled(recipient.id, "order_placed")) {
-      notifyUser(recipient.id, {
-        title: "New order placed",
-        body: `${repName} placed an order for ${customer.name} — ${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD.${discountSuffix}`,
-        url: "/#/orders",
-      });
+      const { rows: notifyRecipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [ORDER_NOTIFY_ROLES]);
+      for (const recipient of notifyRecipients) {
+        if (await isNotificationEnabled(recipient.id, "order_placed")) {
+          notifyUser(recipient.id, {
+            title: "New order placed",
+            body: `${repName} placed an order for ${customer.name} — ${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD.${discountSuffix}`,
+            url: "/#/orders",
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Post-order notification failed:", err);
     }
-  }
+  })();
 });
 
 const PAGE_SIZE = 100;
@@ -422,19 +435,25 @@ ordersRouter.patch("/:id", async (req, res) => {
   // Only the rep who placed the order cares about its fulfillment moving
   // forward, and only when the status actually changed (not a pure
   // items/note edit) -- and not when they made the change themselves.
-  if (
-    status !== undefined &&
-    nextStatus !== order.status &&
-    req.user.id !== order.user_id &&
-    (await isNotificationEnabled(order.user_id, "order_status_changed"))
-  ) {
-    const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
-    notifyUser(order.user_id, {
-      title: "Order update",
-      body: `${customerRows[0]?.name || "Order"} is now "${nextStatus}".`,
-      url: "/#/orders",
-    });
-  }
+  (async () => {
+    try {
+      if (
+        status !== undefined &&
+        nextStatus !== order.status &&
+        req.user.id !== order.user_id &&
+        (await isNotificationEnabled(order.user_id, "order_status_changed"))
+      ) {
+        const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
+        notifyUser(order.user_id, {
+          title: "Order update",
+          body: `${customerRows[0]?.name || "Order"} is now "${nextStatus}".`,
+          url: "/#/orders",
+        });
+      }
+    } catch (err) {
+      console.error("Post-order-update notification failed:", err);
+    }
+  })();
 });
 
 // A discounted order can't reach fulfillment until a sales director (or
@@ -458,28 +477,34 @@ ordersRouter.post("/:id/approve-discount", async (req, res) => {
   );
   res.json(updatedRows[0]);
 
-  const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
-  const customerName = customerRows[0]?.name || "Order";
+  (async () => {
+    try {
+      const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
+      const customerName = customerRows[0]?.name || "Order";
 
-  // Now that the discount is cleared, the accountant is the next stop --
-  // same order_placed preference gate a rep's original order used.
-  const { rows: accountants } = await pool.query("SELECT id FROM users WHERE role = 'accountant'");
-  for (const accountant of accountants) {
-    if (await isNotificationEnabled(accountant.id, "order_placed")) {
-      notifyUser(accountant.id, {
-        title: "Order discount approved",
-        body: `${customerName}'s discounted order was approved and is ready for fulfillment.`,
-        url: "/#/orders",
-      });
+      // Now that the discount is cleared, the accountant is the next stop --
+      // same order_placed preference gate a rep's original order used.
+      const { rows: accountants } = await pool.query("SELECT id FROM users WHERE role = 'accountant'");
+      for (const accountant of accountants) {
+        if (await isNotificationEnabled(accountant.id, "order_placed")) {
+          notifyUser(accountant.id, {
+            title: "Order discount approved",
+            body: `${customerName}'s discounted order was approved and is ready for fulfillment.`,
+            url: "/#/orders",
+          });
+        }
+      }
+      if (req.user.id !== order.user_id && (await isNotificationEnabled(order.user_id, "order_status_changed"))) {
+        notifyUser(order.user_id, {
+          title: "Discount approved",
+          body: `${customerName}'s order discount was approved.`,
+          url: "/#/orders",
+        });
+      }
+    } catch (err) {
+      console.error("Post-discount-approval notification failed:", err);
     }
-  }
-  if (req.user.id !== order.user_id && (await isNotificationEnabled(order.user_id, "order_status_changed"))) {
-    notifyUser(order.user_id, {
-      title: "Discount approved",
-      body: `${customerName}'s order discount was approved.`,
-      url: "/#/orders",
-    });
-  }
+  })();
 });
 
 ordersRouter.post("/:id/reject-discount", async (req, res) => {
@@ -500,14 +525,20 @@ ordersRouter.post("/:id/reject-discount", async (req, res) => {
   );
   res.json(updatedRows[0]);
 
-  if (req.user.id !== order.user_id && (await isNotificationEnabled(order.user_id, "order_status_changed"))) {
-    const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
-    notifyUser(order.user_id, {
-      title: "Discount rejected",
-      body: `${customerRows[0]?.name || "Order"}'s discount was rejected -- edit the order or remove the discount to proceed.`,
-      url: "/#/orders",
-    });
-  }
+  (async () => {
+    try {
+      if (req.user.id !== order.user_id && (await isNotificationEnabled(order.user_id, "order_status_changed"))) {
+        const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
+        notifyUser(order.user_id, {
+          title: "Discount rejected",
+          body: `${customerRows[0]?.name || "Order"}'s discount was rejected -- edit the order or remove the discount to proceed.`,
+          url: "/#/orders",
+        });
+      }
+    } catch (err) {
+      console.error("Post-discount-rejection notification failed:", err);
+    }
+  })();
 });
 
 // Permanent removal (not the same as cancelling, which keeps the order as

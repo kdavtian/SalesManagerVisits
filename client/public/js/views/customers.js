@@ -301,8 +301,12 @@ export function renderCustomers(root, navigate, initialFilter) {
 
   async function load() {
     listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
-    allCustomers = await api.listCustomers();
-    render();
+    try {
+      allCustomers = await api.listCustomers();
+      render();
+    } catch (err) {
+      listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    }
   }
 
   searchInput.addEventListener("input", () => {

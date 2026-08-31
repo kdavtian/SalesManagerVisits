@@ -247,11 +247,35 @@ customersRouter.patch("/:id", async (req, res) => {
 });
 
 customersRouter.delete("/:id", requireAdmin, async (req, res) => {
-  const { rowCount } = await pool.query("DELETE FROM customers WHERE id = $1", [
-    req.params.id,
-  ]);
-  if (!rowCount) return res.status(404).json({ error: "Customer not found" });
-  res.status(204).end();
+  const customerId = Number(req.params.id);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // visit_plans/visit_plan_rules reference customers via a plain integer
+    // array (customer_ids), which Postgres can't foreign-key -- without this,
+    // a deleted customer's id lingers forever as an unnamed ghost stop on
+    // whichever rep's plan/rule it was on.
+    await client.query(
+      "UPDATE visit_plans SET customer_ids = array_remove(customer_ids, $1) WHERE $1 = ANY(customer_ids)",
+      [customerId]
+    );
+    await client.query(
+      "UPDATE visit_plan_rules SET customer_ids = array_remove(customer_ids, $1) WHERE $1 = ANY(customer_ids)",
+      [customerId]
+    );
+    const { rowCount } = await client.query("DELETE FROM customers WHERE id = $1", [customerId]);
+    if (!rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Customer not found" });
+    }
+    await client.query("COMMIT");
+    res.status(204).end();
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 });
 
 // Order-level list for a customer's ERP order history: individual line

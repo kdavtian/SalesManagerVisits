@@ -50,6 +50,29 @@ async function expandAreas(areas) {
   return [...ids];
 }
 
+// Same expansion as expandAreas(), but for many rules at once -- one query
+// for every customer's region/subregion instead of one query per area per
+// rule per rep, which is what the overview endpoint used to do (a real N+1
+// once a team has more than a couple of recurring rules).
+async function batchExpandAreas(rules) {
+  const result = new Map(rules.map((rule) => [rule.id, new Set()]));
+  if (!rules.some((rule) => Array.isArray(rule.areas) && rule.areas.length)) return result;
+  const { rows: customers } = await pool.query("SELECT id, region, subregion FROM customers");
+  for (const rule of rules) {
+    if (!Array.isArray(rule.areas) || !rule.areas.length) continue;
+    const ids = result.get(rule.id);
+    for (const area of rule.areas) {
+      if (!area?.region) continue;
+      for (const c of customers) {
+        if (c.region !== area.region) continue;
+        if (area.subregion && c.subregion !== area.subregion) continue;
+        ids.add(c.id);
+      }
+    }
+  }
+  return result;
+}
+
 // The target user's plan for a date (defaults to today): an explicit
 // visit_plans row always wins; otherwise an active recurring rule for that
 // weekday is expanded live into a synthesized (non-persisted) plan.
@@ -131,24 +154,30 @@ visitPlansRouter.post("/", async (req, res) => {
   );
   res.status(201).json(rows[0]);
 
-  if (status === "pending") {
-    const { rows: userRows } = await pool.query("SELECT name FROM users WHERE id = $1", [targetId]);
-    const repName = userRows[0]?.name || "Someone";
-    notifyTelegram(
-      `📋 <b>Route plan needs review</b>\n${escapeHtml(repName)} — ${date}, ${customerIds.length} stop${customerIds.length === 1 ? "" : "s"}`
-    );
+  (async () => {
+    try {
+      if (status === "pending") {
+        const { rows: userRows } = await pool.query("SELECT name FROM users WHERE id = $1", [targetId]);
+        const repName = userRows[0]?.name || "Someone";
+        notifyTelegram(
+          `📋 <b>Route plan needs review</b>\n${escapeHtml(repName)} — ${date}, ${customerIds.length} stop${customerIds.length === 1 ? "" : "s"}`
+        );
 
-    const { rows: approvers } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [APPROVER_ROLES]);
-    for (const approver of approvers) {
-      if (await isNotificationEnabled(approver.id, "plan_submitted")) {
-        notifyUser(approver.id, {
-          title: "Plan needs review",
-          body: `${repName} submitted a plan for ${date} (${customerIds.length} stop${customerIds.length === 1 ? "" : "s"}).`,
-          url: "/#/settings",
-        });
+        const { rows: approvers } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [APPROVER_ROLES]);
+        for (const approver of approvers) {
+          if (await isNotificationEnabled(approver.id, "plan_submitted")) {
+            notifyUser(approver.id, {
+              title: "Plan needs review",
+              body: `${repName} submitted a plan for ${date} (${customerIds.length} stop${customerIds.length === 1 ? "" : "s"}).`,
+              url: "/#/settings",
+            });
+          }
+        }
       }
+    } catch (err) {
+      console.error("Post-plan-submit notification failed:", err);
     }
-  }
+  })();
 });
 
 // --- Recurring rules ---
@@ -213,16 +242,18 @@ visitPlansRouter.get("/rules/overview", requireCanPlanForOthers, async (req, res
     "SELECT * FROM visit_plan_rules WHERE active ORDER BY day_of_week"
   );
 
+  const areaIdsByRule = await batchExpandAreas(rules);
+
   const rulesByUser = new Map();
   for (const rule of rules) {
     if (!rulesByUser.has(rule.user_id)) rulesByUser.set(rule.user_id, []);
-    const areaIds = await expandAreas(rule.areas);
-    const customerIds = [...new Set([...areaIds, ...(rule.customer_ids ?? [])])];
+    const areaIds = areaIdsByRule.get(rule.id);
+    const customerIds = new Set([...areaIds, ...(rule.customer_ids ?? [])]);
     rulesByUser.get(rule.user_id).push({
       day_of_week: rule.day_of_week,
       customer_ids: rule.customer_ids ?? [],
       areas: rule.areas ?? [],
-      customer_count: customerIds.length,
+      customer_count: customerIds.size,
     });
   }
 
@@ -317,17 +348,26 @@ visitPlansRouter.patch("/:id", requireCanPlanForOthers, async (req, res) => {
     await client.query("COMMIT");
     res.json(updated[0]);
 
-    if (action !== undefined && (await isNotificationEnabled(updated[0].user_id, "plan_reviewed"))) {
-      const dateLabel = new Date(updated[0].plan_date).toLocaleDateString();
-      notifyUser(updated[0].user_id, {
-        title: action === "approve" ? "Visit plan approved" : "Visit plan rejected",
-        body:
-          action === "approve"
-            ? `Your plan for ${dateLabel} was approved.`
-            : `Your plan for ${dateLabel} was rejected -- please revise it.`,
-        url: "/#/map",
-      });
-    }
+    // Outside the transaction's own try/catch on purpose -- a failure here
+    // must not trigger that catch's ROLLBACK (a no-op after COMMIT, but
+    // still rethrows) and crash the handler after the response is sent.
+    (async () => {
+      try {
+        if (action !== undefined && (await isNotificationEnabled(updated[0].user_id, "plan_reviewed"))) {
+          const dateLabel = new Date(updated[0].plan_date).toLocaleDateString();
+          notifyUser(updated[0].user_id, {
+            title: action === "approve" ? "Visit plan approved" : "Visit plan rejected",
+            body:
+              action === "approve"
+                ? `Your plan for ${dateLabel} was approved.`
+                : `Your plan for ${dateLabel} was rejected -- please revise it.`,
+            url: "/#/map",
+          });
+        }
+      } catch (err) {
+        console.error("Post-plan-review notification failed:", err);
+      }
+    })();
   } catch (err) {
     releaseErr = err;
     await client.query("ROLLBACK");

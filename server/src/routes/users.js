@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { ROLES, canPlanForOthers } from "../roles.js";
+import { passwordChangeLimiter } from "./auth.js";
 
 export const usersRouter = Router();
 
@@ -68,7 +69,7 @@ usersRouter.post("/", async (req, res) => {
   }
 });
 
-usersRouter.patch("/:id/password", async (req, res) => {
+usersRouter.patch("/:id/password", passwordChangeLimiter, async (req, res) => {
   const password = req.body?.password;
   if (!password || password.length < 8) {
     return res.status(400).json({ error: "password must be at least 8 characters" });

@@ -55,7 +55,7 @@ meRouter.get("/", requireAuth, async (req, res) => {
   res.json(rows[0]);
 });
 
-const passwordChangeLimiter = rateLimit({
+export const passwordChangeLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,
   standardHeaders: true,

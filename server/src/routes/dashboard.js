@@ -19,9 +19,9 @@ dashboardRouter.get("/summary", async (req, res) => {
        (SELECT count(DISTINCT ch.customer_id) FROM checkins ch
           WHERE ch.timestamp >= date_trunc('day', now()) ${userFilter}) AS visited_today,
        (SELECT count(DISTINCT ch.customer_id) FROM checkins ch
-          WHERE ch.timestamp >= now() - interval '7 days' ${userFilter}) AS visited_this_week,
+          WHERE ch.timestamp >= date_trunc('week', now()) ${userFilter}) AS visited_this_week,
        (SELECT count(*) FROM checkins ch
-          WHERE ch.timestamp >= now() - interval '7 days' ${userFilter}) AS checkins_this_week,
+          WHERE ch.timestamp >= date_trunc('week', now()) ${userFilter}) AS checkins_this_week,
        (SELECT count(*) FROM checkins ch
           WHERE ch.timestamp >= date_trunc('day', now()) AND ch.within_range = false ${userFilter}) AS rejected_today,
        (SELECT count(*) FROM customers c
@@ -55,7 +55,7 @@ dashboardRouter.get("/summary", async (req, res) => {
                 count(DISTINCT ch.customer_id) AS customers_visited_this_week
          FROM users u
          LEFT JOIN checkins ch
-           ON ch.user_id = u.id AND ch.timestamp >= now() - interval '7 days'
+           ON ch.user_id = u.id AND ch.timestamp >= date_trunc('week', now())
          WHERE u.role != 'admin'
          GROUP BY u.id, u.name
          ORDER BY checkins_this_week DESC`
@@ -259,11 +259,15 @@ dashboardRouter.post("/points/close-out", requireAdmin, async (req, res) => {
 
   res.status(201).json(saved);
 
-  const winner = saved.find((s) => s.rank === 1);
-  if (winner) {
-    notifyTelegram(
-      `🏆 <b>${month.slice(0, 7)} points winner</b>\n${escapeHtml(winner.user_name)} — ${winner.total_points} pts`
-    );
+  try {
+    const winner = saved.find((s) => s.rank === 1);
+    if (winner) {
+      notifyTelegram(
+        `🏆 <b>${month.slice(0, 7)} points winner</b>\n${escapeHtml(winner.user_name)} — ${winner.total_points} pts`
+      );
+    }
+  } catch (err) {
+    console.error("Post-closeout notification failed:", err);
   }
 });
 
