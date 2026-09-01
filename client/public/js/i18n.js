@@ -579,6 +579,10 @@ const dict = {
     install_now: "Install",
     install_show_steps: "Show me how",
     add_to_home_screen: "Add to Home Screen",
+
+    update_available_title: "Update available",
+    update_available_body: "A newer version of the app is ready.",
+    refresh_now: "Refresh",
     ios_step_1: "Tap the",
     ios_step_1b: "Share",
     ios_step_1c: "icon in Safari's toolbar",
@@ -1170,6 +1174,10 @@ const dict = {
     install_now: "Տեղադրել",
     install_show_steps: "Ցույց տալ քայլերը",
     add_to_home_screen: "Ավելացնել հիմնական էկրանին",
+
+    update_available_title: "Թարմացում կա",
+    update_available_body: "Հավելվածի նոր տարբերակը պատրաստ է։",
+    refresh_now: "Թարմացնել",
     ios_step_1: "Հպեք",
     ios_step_1b: "Share",
     ios_step_1c: "նշանին Safari-ի գործիքագոտում",
