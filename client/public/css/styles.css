@@ -563,6 +563,51 @@ a {
   flex-shrink: 0;
 }
 
+/* Update-available prompt -- a blurred backdrop (unlike the plain dim wash
+   on .sheet-overlay) so it reads as more attention-worthy than a routine
+   sheet, since ignoring it means the app keeps running stale code. */
+.update-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2100;
+  padding: 20px;
+}
+
+.update-banner {
+  background: var(--bg-elevated);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 22px 20px;
+  max-width: 320px;
+  width: 100%;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: center;
+  animation: slide-up 0.25s ease;
+}
+
+.update-banner strong {
+  font-size: 1.05rem;
+}
+
+.update-banner span {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+}
+
+.update-banner .btn-link {
+  align-self: center;
+}
+
 .install-sheet .ios-steps {
   list-style: none;
   margin: 0 0 20px;

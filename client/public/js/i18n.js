@@ -583,6 +583,12 @@ const dict = {
     update_available_title: "Update available",
     update_available_body: "A newer version of the app is ready.",
     refresh_now: "Refresh",
+    later: "Later",
+    updating: "Updating",
+    check_for_updates: "Check for updates",
+    checking_for_updates: "Checking…",
+    up_to_date: "You're on the latest version",
+    update_found: "Update found — restarting…",
     ios_step_1: "Tap the",
     ios_step_1b: "Share",
     ios_step_1c: "icon in Safari's toolbar",
@@ -1178,6 +1184,12 @@ const dict = {
     update_available_title: "Թարմացում կա",
     update_available_body: "Հավելվածի նոր տարբերակը պատրաստ է։",
     refresh_now: "Թարմացնել",
+    later: "Ավելի ուշ",
+    updating: "Թարմացվում է",
+    check_for_updates: "Ստուգել թարմացումները",
+    checking_for_updates: "Ստուգվում է…",
+    up_to_date: "Դուք օգտագործում եք վերջին տարբերակը",
+    update_found: "Թարմացում է գտնվել — վերագործարկվում է…",
     ios_step_1: "Հպեք",
     ios_step_1b: "Share",
     ios_step_1c: "նշանին Safari-ի գործիքագոտում",
@@ -1192,8 +1204,11 @@ const dict = {
   },
 };
 
+// Armenian by default -- the sales team's working language -- until a user
+// explicitly picks English via the Settings toggle, which stores "en" here
+// and wins from then on.
 export function getLang() {
-  return localStorage.getItem(LANG_KEY) === "hy" ? "hy" : "en";
+  return localStorage.getItem(LANG_KEY) === "en" ? "en" : "hy";
 }
 
 export function setLang(lang) {

@@ -19,7 +19,7 @@ import { renderReports } from "./views/reports.js";
 import { renderRoutePlans } from "./views/routePlans.js";
 import { flushQueue, getQueue, onQueueChange } from "./offlineQueue.js";
 import { mountInstallPrompt } from "./install.js";
-import { mountUpdateBanner, showUpdateBanner } from "./updateBanner.js";
+import { mountUpdateBanner, initServiceWorkerUpdates } from "./updateBanner.js";
 import { startLocationBroadcast, stopLocationBroadcast } from "./locationBroadcast.js";
 import { escapeHtml } from "./util.js";
 
@@ -322,36 +322,6 @@ async function init() {
   setInterval(refreshNotificationBadge, 60000);
 }
 
-if ("serviceWorker" in navigator) {
-  // A truthy .controller here means this page load was already being
-  // served by a previously-installed service worker -- so a later
-  // controllerchange means a real update just took over, not just this
-  // page's first-ever activation (which also fires controllerchange, but
-  // there's nothing stale to refresh away from in that case).
-  const hadController = Boolean(navigator.serviceWorker.controller);
-  navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (!hadController) return;
-    showUpdateBanner(() => window.location.reload());
-  });
-
-  window.addEventListener("load", () => {
-    navigator.serviceWorker
-      .register("/sw.js")
-      .then((registration) => {
-        // The browser only checks for a changed sw.js on its own schedule
-        // (throttled to roughly once a day), which is much too slow for an
-        // app under active daily development -- and an installed PWA
-        // reopened from the home screen doesn't reliably trigger even that
-        // check, especially on iOS. Force a check every time the app comes
-        // back to the foreground instead.
-        document.addEventListener("visibilitychange", () => {
-          if (document.visibilityState === "visible") registration.update().catch(() => {});
-        });
-      })
-      .catch((err) => {
-        console.error("Service worker registration failed:", err);
-      });
-  });
-}
+initServiceWorkerUpdates();
 
 init();

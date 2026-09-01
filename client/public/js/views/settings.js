@@ -6,8 +6,9 @@ import { renderTeamSection, renderPlanApprovalsSection, renderProductsSection, r
 import { escapeHtml, compressImage, activateDialog } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
+import { checkForUpdateManually } from "../updateBanner.js";
 
-const APP_VERSION = "1.21.1";
+const APP_VERSION = "1.22.0";
 
 const ICON = {
   camera: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg>`,
@@ -142,6 +143,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       <div class="card settings-list">
         ${settingsRow({ icon: ICON.info, label: t("about_app"), value: `${t("version")} ${APP_VERSION}`, interactive: false })}
         ${settingsRow({ icon: ICON.book, label: t("user_guide"), value: "PDF", id: "row-user-guide" })}
+        ${settingsRow({ icon: ICON.refresh, label: t("check_for_updates"), value: `<span id="check-updates-value"></span>`, id: "row-check-updates" })}
       </div>
       <p class="muted settings-hint">${t("user_guide_hint").replace("{v}", GUIDE_VERSION)}</p>
 
@@ -437,6 +439,25 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
   }
 
   root.querySelector("#row-user-guide").addEventListener("click", openGuideOverlay);
+
+  const checkUpdatesRow = root.querySelector("#row-check-updates");
+  const checkUpdatesValue = root.querySelector("#check-updates-value");
+  checkUpdatesRow.addEventListener("click", async () => {
+    checkUpdatesRow.disabled = true;
+    checkUpdatesValue.textContent = t("checking_for_updates");
+    const { updateFound } = await checkForUpdateManually();
+    checkUpdatesValue.textContent = updateFound ? t("update_found") : t("up_to_date");
+    if (!updateFound) {
+      checkUpdatesRow.disabled = false;
+      setTimeout(() => {
+        checkUpdatesValue.textContent = "";
+      }, 4000);
+    }
+    // Left disabled with its "found" message showing when an update is
+    // found -- the update-overlay (see updateBanner.js) takes over from
+    // here and reloads the page, so there's no useful "re-enabled" state
+    // to return this row to.
+  });
 
   // --- Security ---
   root.querySelector("#row-change-password").addEventListener("click", openChangePasswordSheet);
