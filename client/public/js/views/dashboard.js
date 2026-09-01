@@ -108,6 +108,14 @@ export async function renderDashboard(root, navigate) {
         <span class="quick-action-icon">${icons.wallet}</span>
         <span>${t("qa_cash_expense")}</span>
       </button>
+      ${
+        ["admin", "ceo", "sales_director", "accountant", "sales_manager"].includes(state.user.role)
+          ? `<button type="button" class="quick-action" id="qa-team-performance">
+        <span class="quick-action-icon">${icons.target}</span>
+        <span>${t("qa_team_performance")}</span>
+      </button>`
+          : ""
+      }
     </div>
 
     <details class="dashboard-insights">
@@ -158,6 +166,7 @@ export async function renderDashboard(root, navigate) {
   container.querySelector("#qa-reports").addEventListener("click", () => navigate("#/reports"));
   container.querySelector("#qa-add-customer").addEventListener("click", () => navigate("#/map?add=1"));
   container.querySelector("#qa-cash-expense").addEventListener("click", () => navigate("#/expenses"));
+  container.querySelector("#qa-team-performance")?.addEventListener("click", () => navigate("#/team-performance"));
 
   const leaderboardEl = container.querySelector("#points-leaderboard");
   if (leaderboardEl && summary.points_leaderboard?.length) {

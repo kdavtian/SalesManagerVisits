@@ -17,6 +17,7 @@ import { renderNotifications } from "./views/notifications.js";
 import { renderCashExpenses } from "./views/cashExpenses.js";
 import { renderReports } from "./views/reports.js";
 import { renderRoutePlans } from "./views/routePlans.js";
+import { renderTeamPerformance } from "./views/teamPerformance.js";
 import { flushQueue, getQueue, onQueueChange } from "./offlineQueue.js";
 import { mountInstallPrompt } from "./install.js";
 import { mountUpdateBanner, initServiceWorkerUpdates } from "./updateBanner.js";
@@ -185,6 +186,8 @@ async function render() {
     renderReports(app, navigate, query.get("r"));
   } else if (path === "#/route-plans") {
     renderRoutePlans(app, navigate);
+  } else if (path === "#/team-performance") {
+    renderTeamPerformance(app, navigate);
   } else if (customerMatch) {
     renderCustomerDetail(app, navigate, customerMatch[1]);
   } else if (checkinMatch) {

@@ -51,3 +51,33 @@ export function canReassignCustomers() {
     state.user?.role === "admin" || state.user?.role === "sales_director" || state.user?.role === "ceo"
   );
 }
+
+// --- Team Performance -- mirrors server/src/roles.js exactly. The server
+// enforces all of this independently; these are UI-only gates so the right
+// screen renders in the first place, not a security boundary.
+
+export function isPerfCeo() {
+  return state.user?.role === "admin" || state.user?.role === "ceo";
+}
+
+export function seesAllPerformance() {
+  return (
+    state.user?.role === "admin" ||
+    state.user?.role === "ceo" ||
+    state.user?.role === "sales_director" ||
+    state.user?.role === "accountant"
+  );
+}
+
+export function canEditChannelPlan(ownerRole) {
+  if (isPerfCeo()) return true;
+  if (state.user?.role === "sales_director") return ownerRole === "sales_director";
+  if (state.user?.role === "accountant") return ownerRole === "accountant";
+  return false;
+}
+
+export function canReviewPerfPlan(submittedByRole) {
+  if (isPerfCeo()) return true;
+  if (state.user?.role === "accountant") return submittedByRole === "sales_director";
+  return false;
+}

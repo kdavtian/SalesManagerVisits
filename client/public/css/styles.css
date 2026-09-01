@@ -2579,6 +2579,102 @@ input[type="search"]:focus {
   transition: width 0.3s ease;
 }
 
+/* Team Performance */
+
+.perf-month-picker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 12px;
+  font-size: 0.95rem;
+}
+
+.perf-status-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.perf-status-success {
+  background: color-mix(in srgb, var(--success) 18%, transparent);
+  color: var(--success);
+}
+
+.perf-status-accent {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+
+.perf-status-warning {
+  background: color-mix(in srgb, var(--warning) 18%, transparent);
+  color: var(--warning);
+}
+
+.perf-status-danger {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger);
+}
+
+.perf-channel-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.perf-channel-head strong {
+  font-size: 1.02rem;
+}
+
+.perf-kpi-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.perf-kpi-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.perf-kpi-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.perf-kpi-main {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.perf-kpi-actual {
+  font-weight: 700;
+  font-size: 1.02rem;
+}
+
+.perf-kpi-target {
+  font-size: 0.85rem;
+}
+
+.perf-kpi-bar {
+  margin-top: 2px;
+}
+
+.perf-kpi-foot {
+  font-size: 0.76rem;
+  min-height: 1em;
+}
+
+.perf-pending-hint {
+  font-size: 0.8rem;
+  margin: -6px 0 0;
+}
+
 .next-visit-card {
   margin-bottom: 18px;
   padding: 16px;
