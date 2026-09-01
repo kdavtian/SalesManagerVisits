@@ -190,4 +190,6 @@ export const api = {
   getPerfApprovals: () => request("/team-performance/approvals"),
   getPerfDashboard: (planId) => request(`/team-performance/plans/${planId}/dashboard`),
   getMyPerformance: (month) => request(`/team-performance/my-performance?month=${month}`),
+  getPerfDrilldown: (planId, channelId, kpi) =>
+    request(`/team-performance/plans/${planId}/channels/${channelId}/drilldown?kpi=${kpi}`),
 };

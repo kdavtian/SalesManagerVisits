@@ -6,6 +6,7 @@ import { notifyUser } from "../notifications.js";
 import { PERF_APPROVER_ROLES } from "../notificationPreferences.js";
 import { workingDaysForMonth } from "../workingDays.js";
 import { kpiProgress } from "../perfCalc.js";
+import { buildRecommendations, buildNeedsAttention } from "../perfRecommendations.js";
 
 export const teamPerformanceRouter = Router();
 
@@ -118,8 +119,9 @@ function buildChannelDashboardRow(target, brandTargets, actuals, wd) {
     ...kpiProgress({ actual: brandActualsByBrand.get(brand) ?? 0, target: brandTargetsByBrand.get(brand) ?? 0, ...kpiArgs }),
   }));
 
-  return {
+  const row = {
     channel_id: target.channel_id,
+    plan_id: target.plan_id,
     channel_code: target.channel_code,
     channel_name: target.channel_name,
     working_days: wd,
@@ -132,6 +134,8 @@ function buildChannelDashboardRow(target, brandTargets, actuals, wd) {
     new_customers: kpiProgress({ actual: actuals.new_customers_actual, target: target.new_customers_target, ...kpiArgs }),
     brands: brand_kpis,
   };
+  row.recommendations = buildRecommendations(row);
+  return row;
 }
 
 async function writeAudit(client, planId, actorId, action, before, after, reason) {
@@ -171,7 +175,7 @@ teamPerformanceRouter.get("/my-performance", async (req, res) => {
   }
 
   const { rows } = await pool.query(
-    `SELECT t.channel_id, c.code AS channel_code, c.name AS channel_name,
+    `SELECT t.channel_id, p.id AS plan_id, c.code AS channel_code, c.name AS channel_name,
        t.sales_target_amd, t.collection_target_amd, t.new_customers_target
      FROM perf_plan_targets t
      JOIN perf_plans p ON p.id = t.plan_id
@@ -223,7 +227,75 @@ teamPerformanceRouter.get("/plans/:id/dashboard", async (req, res) => {
     })
   );
 
-  res.json({ plan_id: detail.id, month: detail.month, status: detail.status, working_days: wd, channels: rows });
+  res.json({
+    plan_id: detail.id,
+    month: detail.month,
+    status: detail.status,
+    working_days: wd,
+    channels: rows,
+    needs_attention: buildNeedsAttention(rows),
+  });
+});
+
+// Drill-down behind the two KPIs Field Visits actually has transaction-
+// level data for. Sales Amount and confirmed Collections come only from
+// the Excel-authoritative sales_performance aggregate -- there is no
+// per-transaction record of those in this database to drill into (Excel is
+// the system of record; see the erpSync business rule this module is built
+// against). New customers and pending (not-yet-confirmed) collections,
+// though, are things Field Visits itself tracks, so those get a real list.
+teamPerformanceRouter.get("/plans/:id/channels/:channelId/drilldown", async (req, res) => {
+  if (!seesAllPerformance(req.user.role) && req.user.role !== "sales_manager") {
+    return res.status(403).json({ error: "Not allowed" });
+  }
+  const { kpi } = req.query;
+  if (!["new_customers", "collections_pending"].includes(kpi)) {
+    return res.status(400).json({ error: "kpi must be new_customers or collections_pending (the only drill-downs Field Visits has transaction-level data for)" });
+  }
+
+  const { rows: planRows } = await pool.query("SELECT month FROM perf_plans WHERE id = $1", [req.params.id]);
+  if (!planRows[0]) return res.status(404).json({ error: "Plan not found" });
+  const monthStr = planRows[0].month.toISOString().slice(0, 10);
+
+  const { rows: channelRows } = await pool.query("SELECT code FROM sales_channels WHERE id = $1", [req.params.channelId]);
+  const channel = channelRows[0];
+  if (!channel) return res.status(404).json({ error: "Channel not found" });
+
+  if (req.user.role === "sales_manager" && req.user.position !== channel.code) {
+    return res.status(403).json({ error: "Not allowed to view another channel's data" });
+  }
+
+  if (kpi === "new_customers") {
+    const { rows } = await pool.query(
+      `SELECT d.erp_customer_id, d.customer_name, fs.first_seen_month
+       FROM erp_customer_first_seen fs
+       JOIN erp_customer_data d ON d.erp_customer_id = fs.erp_customer_id
+       WHERE d.assigned_sales_rep = $1 AND fs.first_seen_month = $2
+       ORDER BY d.customer_name`,
+      [channel.code, monthStr]
+    );
+    return res.json(rows);
+  }
+
+  const { rows: perfRows } = await pool.query("SELECT synced_at FROM sales_performance WHERE rep_name = $1 AND month = $2", [
+    channel.code,
+    monthStr,
+  ]);
+  const sinceTimestamp = perfRows[0]?.synced_at ?? `${monthStr}T00:00:00Z`;
+  const { rows } = await pool.query(
+    `SELECT c.id AS checkin_id, c.timestamp, c.amount_collected_amd, cu.name AS customer_name, u.name AS logged_by
+     FROM checkins c
+     JOIN users u ON u.id = c.user_id
+     LEFT JOIN customers cu ON cu.id = c.customer_id
+     WHERE u.position = $1
+       AND c.timestamp >= date_trunc('month', $2::date)
+       AND c.timestamp < (date_trunc('month', $2::date) + interval '1 month')
+       AND c.timestamp > $3
+       AND c.amount_collected_amd IS NOT NULL
+     ORDER BY c.timestamp DESC`,
+    [channel.code, monthStr, sinceTimestamp]
+  );
+  res.json(rows);
 });
 
 // The single "live" plan for a month -- draft/pending/approved/rejected,

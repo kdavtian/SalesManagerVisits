@@ -146,6 +146,10 @@ const dict = {
     perf_channel_count: "channels",
     perf_add_comment: "Add a comment",
     perf_comment_placeholder: "Write a comment…",
+    perf_comments: "Comments",
+    perf_no_comments: "No comments yet.",
+    perf_needs_attention: "Needs attention",
+    perf_drill_empty: "Nothing here yet.",
 
     cash_expenses: "Cash expenses",
     add_expense: "Add expense",
@@ -793,6 +797,10 @@ const dict = {
     perf_channel_count: "ալիք",
     perf_add_comment: "Ավելացնել մեկնաբանություն",
     perf_comment_placeholder: "Գրեք մեկնաբանություն…",
+    perf_comments: "Մեկնաբանություններ",
+    perf_no_comments: "Դեռ մեկնաբանություններ չկան։",
+    perf_needs_attention: "Պահանջում է ուշադրություն",
+    perf_drill_empty: "Դեռ ոչինչ չկա։",
 
     cash_expenses: "Կանխիկ ծախսեր",
     add_expense: "Ավելացնել ծախս",

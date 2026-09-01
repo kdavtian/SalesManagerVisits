@@ -74,8 +74,39 @@ function kpiBlockHtml(label, kpi, { isAmd = true, unit = "" } = {}) {
   `;
 }
 
+const REC_ICON = { high: "⛔", medium: "⚠️", info: "ℹ️" };
+
+function recommendationsHtml(row) {
+  if (!row.recommendations?.length) return "";
+  return `
+    <div class="perf-recommendations">
+      ${row.recommendations
+        .map((r) => `<p class="perf-recommendation perf-recommendation-${r.severity}">${REC_ICON[r.severity] ?? ""} ${escapeHtml(r.message)}</p>`)
+        .join("")}
+    </div>
+  `;
+}
+
+function needsAttentionHtml(items) {
+  if (!items?.length) return "";
+  return `
+    <div class="card perf-needs-attention">
+      <strong>${t("perf_needs_attention")}</strong>
+      <div class="perf-recommendations">
+        ${items
+          .map(
+            (i) =>
+              `<p class="perf-recommendation perf-recommendation-${i.severity}">${REC_ICON[i.severity] ?? ""} <strong>${escapeHtml(i.channel_name)}</strong> — ${escapeHtml(i.message)}</p>`
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
 function channelCardHtml(row) {
   const collections = row.collections;
+  const canDrill = row.plan_id != null;
   return `
     <div class="card perf-channel-card">
       <div class="perf-channel-head">
@@ -83,11 +114,60 @@ function channelCardHtml(row) {
       </div>
       ${kpiBlockHtml(t("perf_sales"), row.sales)}
       ${kpiBlockHtml(t("perf_collections"), collections)}
-      ${collections?.pending_amd ? `<p class="perf-pending-hint muted">+${formatAmd(Math.round(collections.pending_amd))} ${t("perf_pending_not_recorded")}</p>` : ""}
-      ${kpiBlockHtml(t("perf_new_customers"), row.new_customers, { isAmd: false })}
+      ${
+        collections?.pending_amd
+          ? `<p class="perf-pending-hint muted${canDrill ? " perf-drill-link" : ""}" ${canDrill ? `data-drill-plan="${row.plan_id}" data-drill-channel="${row.channel_id}" data-drill-kpi="collections_pending"` : ""}>+${formatAmd(Math.round(collections.pending_amd))} ${t("perf_pending_not_recorded")}</p>`
+          : ""
+      }
+      <div class="${canDrill ? "perf-drill-link" : ""}" ${canDrill ? `data-drill-plan="${row.plan_id}" data-drill-channel="${row.channel_id}" data-drill-kpi="new_customers"` : ""}>
+        ${kpiBlockHtml(t("perf_new_customers"), row.new_customers, { isAmd: false })}
+      </div>
       ${row.brands.map((b) => kpiBlockHtml(`${b.brand[0].toUpperCase()}${b.brand.slice(1)}`, b, { isAmd: false, unit: "L" })).join("")}
+      ${recommendationsHtml(row)}
     </div>
   `;
+}
+
+function wireDrilldowns(container) {
+  container.querySelectorAll("[data-drill-kpi]").forEach((el) => {
+    el.addEventListener("click", () => {
+      openDrilldownSheet(Number(el.dataset.drillPlan), Number(el.dataset.drillChannel), el.dataset.drillKpi);
+    });
+  });
+}
+
+async function openDrilldownSheet(planId, channelId, kpi) {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.innerHTML = `
+    <div class="sheet">
+      <h2>${kpi === "new_customers" ? t("perf_new_customers") : t("perf_pending_not_recorded")}</h2>
+      <div id="perf-drill-body"><p class="loading-state" role="status">${t("loading")}</p></div>
+      <div class="sheet-actions"><button type="button" class="btn" id="close-perf-drill">${t("cancel")}</button></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  activateDialog(overlay);
+  overlay.querySelector("#close-perf-drill").addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+
+  const bodyEl = overlay.querySelector("#perf-drill-body");
+  try {
+    const rows = await api.getPerfDrilldown(planId, channelId, kpi);
+    if (!rows.length) {
+      bodyEl.innerHTML = `<p class="empty-state">${t("perf_drill_empty")}</p>`;
+      return;
+    }
+    bodyEl.innerHTML = `<div class="card-list">${rows
+      .map((r) =>
+        kpi === "new_customers"
+          ? `<div class="card"><strong>${escapeHtml(r.customer_name || r.erp_customer_id)}</strong><div class="muted">${escapeHtml(String(r.erp_customer_id))}</div></div>`
+          : `<div class="card"><strong>${formatAmd(Number(r.amount_collected_amd))}</strong><div class="muted">${escapeHtml(r.customer_name ?? "")} · ${escapeHtml(r.logged_by)} · ${new Date(r.timestamp).toLocaleDateString()}</div></div>`
+      )
+      .join("")}</div>`;
+  } catch (err) {
+    bodyEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+  }
 }
 
 export async function renderTeamPerformance(root, navigate) {
@@ -132,6 +212,7 @@ async function renderMyPerformanceView(root, navigate) {
       bodyEl.innerHTML = row
         ? `<p class="muted" style="margin:0 4px 10px;">${t("perf_working_day_progress").replace("{elapsed}", row.working_days.elapsed).replace("{total}", row.working_days.total)}</p>${channelCardHtml(row)}`
         : `<p class="empty-state">${t("perf_no_plan_yet")}</p>`;
+      wireDrilldowns(bodyEl);
     } catch (err) {
       bodyEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     }
@@ -205,8 +286,10 @@ async function renderManagementView(root, navigate) {
     const dashboard = await api.getPerfDashboard(plan.id);
     bodyEl.innerHTML = `
       <p class="muted" style="margin:0 4px 10px;">${t("perf_working_day_progress").replace("{elapsed}", dashboard.working_days.elapsed).replace("{total}", dashboard.working_days.total)}</p>
+      ${needsAttentionHtml(dashboard.needs_attention)}
       ${dashboard.channels.map(channelCardHtml).join("")}
     `;
+    wireDrilldowns(bodyEl);
   }
 
   async function loadPlanning(bodyEl) {
@@ -415,6 +498,21 @@ async function openReviewSheet(planId, submittedByRole, onDone) {
           )
           .join("")}
       </div>
+      <div class="perf-comments">
+        <strong>${t("perf_comments") ?? "Comments"}</strong>
+        <div class="card-list" id="perf-comment-list">
+          ${plan.comments
+            .map(
+              (c) =>
+                `<div class="card"><span class="muted">${escapeHtml(c.author_name)} · ${new Date(c.created_at).toLocaleDateString()}</span><p style="margin:4px 0 0;">${escapeHtml(c.body)}</p></div>`
+            )
+            .join("") || `<p class="muted" id="perf-no-comments">${t("perf_no_comments") ?? ""}</p>`}
+        </div>
+        <form id="perf-comment-form" style="display:flex;gap:8px;margin-top:8px;">
+          <input type="text" name="body" placeholder="${t("perf_comment_placeholder")}" style="flex:1;" />
+          <button type="submit" class="btn">${t("perf_add_comment")}</button>
+        </form>
+      </div>
       <p class="form-error" id="perf-review-error" hidden></p>
       <div class="sheet-actions">
         <button type="button" class="btn" id="cancel-perf-review">${t("cancel")}</button>
@@ -430,6 +528,29 @@ async function openReviewSheet(planId, submittedByRole, onDone) {
   }
   overlay.querySelector("#cancel-perf-review").addEventListener("click", close);
   overlay.addEventListener("click", (e) => e.target === overlay && close());
+
+  overlay.querySelector("#perf-comment-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const input = form.querySelector('input[name="body"]');
+    if (!input.value.trim()) return;
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    try {
+      const comment = await api.addPerfComment(planId, input.value.trim());
+      const listEl = overlay.querySelector("#perf-comment-list");
+      listEl.querySelector("#perf-no-comments")?.remove();
+      listEl.insertAdjacentHTML(
+        "beforeend",
+        `<div class="card"><span class="muted">${escapeHtml(comment.author_name ?? state.user.name)} · ${new Date(comment.created_at).toLocaleDateString()}</span><p style="margin:4px 0 0;">${escapeHtml(comment.body)}</p></div>`
+      );
+      input.value = "";
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
 
   const errorEl = overlay.querySelector("#perf-review-error");
   overlay.querySelector("#perf-review-approve")?.addEventListener("click", async (e) => {

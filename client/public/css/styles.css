@@ -2675,6 +2675,52 @@ input[type="search"]:focus {
   margin: -6px 0 0;
 }
 
+.perf-drill-link {
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background-color 0.15s ease;
+}
+
+.perf-drill-link:hover,
+.perf-drill-link:active {
+  background-color: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.perf-recommendations {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.perf-recommendation {
+  font-size: 0.8rem;
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  line-height: 1.35;
+}
+
+.perf-recommendation-high {
+  background-color: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.perf-recommendation-medium {
+  background-color: color-mix(in srgb, var(--warning) 14%, transparent);
+}
+
+.perf-recommendation-info {
+  background-color: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.perf-needs-attention {
+  margin-bottom: 14px;
+}
+
+.perf-comments {
+  margin-top: 14px;
+}
+
 .next-visit-card {
   margin-bottom: 18px;
   padding: 16px;
