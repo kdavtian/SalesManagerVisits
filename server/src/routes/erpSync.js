@@ -47,7 +47,7 @@ function isPlainObject(value) {
 // merged row by row) so a customer that drops out of the extract -- debt
 // fully paid, no recent orders -- doesn't keep showing stale data forever.
 erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
-  const { customers, order_lines, sales_performance, products } = req.body ?? {};
+  const { customers, order_lines, sales_performance, products, brand_volume } = req.body ?? {};
   if (!Array.isArray(customers)) {
     return res.status(400).json({ error: "customers must be an array" });
   }
@@ -59,6 +59,9 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
   }
   if (products !== undefined && !Array.isArray(products)) {
     return res.status(400).json({ error: "products must be an array" });
+  }
+  if (brand_volume !== undefined && !Array.isArray(brand_volume)) {
+    return res.status(400).json({ error: "brand_volume must be an array" });
   }
 
   const erpIds = [];
@@ -160,11 +163,40 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     prodStockQtys.push(Number.isFinite(p.stock_qty) ? Math.trunc(p.stock_qty) : null);
   }
 
+  const volChannelCodes = [];
+  const volMonths = [];
+  const volBrands = [];
+  const volLiters = [];
+
+  for (const v of Array.isArray(brand_volume) ? brand_volume : []) {
+    if (!isPlainObject(v) || !v.channel_code || !v.month || !v.brand) continue;
+    volChannelCodes.push(String(v.channel_code));
+    volMonths.push(v.month);
+    volBrands.push(String(v.brand));
+    volLiters.push(Number.isFinite(v.liters) ? v.liters : 0);
+  }
+
   const client = await pool.connect();
   let releaseErr;
   try {
     await client.query("BEGIN");
     await client.query("TRUNCATE erp_customer_data");
+
+    // Immutable "first time we've ever seen this ERP customer" marker --
+    // written once per erp_customer_id, ever, regardless of how many times
+    // this sync runs. This is what "new customer" is actually counted
+    // from (see erp_customer_first_seen, migration 037), since a single
+    // Excel snapshot alone can't tell a brand-new customer from one that's
+    // simply never been in an extract before today for an unrelated reason.
+    if (erpIds.length) {
+      await client.query(
+        `INSERT INTO erp_customer_first_seen (erp_customer_id, first_seen_month)
+         SELECT DISTINCT erp_customer_id, date_trunc('month', now())::date
+         FROM unnest($1::text[]) AS t(erp_customer_id)
+         ON CONFLICT (erp_customer_id) DO NOTHING`,
+        [erpIds]
+      );
+    }
     // Single bulk insert via unnest() instead of one round trip per row --
     // keeps the TRUNCATE's ACCESS EXCLUSIVE lock (which blocks concurrent
     // reads of this table, e.g. a customer detail page) held for as short
@@ -245,6 +277,21 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
       );
     }
 
+    if (brand_volume !== undefined) {
+      await client.query("TRUNCATE perf_actuals_brand_monthly");
+      if (volChannelCodes.length) {
+        await client.query(
+          `INSERT INTO perf_actuals_brand_monthly (channel_code, month, brand, liters)
+           SELECT channel_code, month, brand, liters
+           FROM unnest($1::text[], $2::date[], $3::text[], $4::numeric[])
+             AS t(channel_code, month, brand, liters)
+           ON CONFLICT (channel_code, month, brand) DO UPDATE SET
+             liters = EXCLUDED.liters, synced_at = now()`,
+          [volChannelCodes, volMonths, volBrands, volLiters]
+        );
+      }
+    }
+
     await client.query("COMMIT");
   } catch (err) {
     releaseErr = err;
@@ -259,6 +306,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     order_lines_synced: order_lines !== undefined ? lineErpIds.length : undefined,
     sales_performance_synced: sales_performance !== undefined ? perfRepNames.length : undefined,
     products_synced: products !== undefined ? prodErpIds.length : undefined,
+    brand_volume_synced: brand_volume !== undefined ? volChannelCodes.length : undefined,
   });
 });
 

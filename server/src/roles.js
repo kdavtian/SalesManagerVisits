@@ -57,3 +57,45 @@ export function canConfirmOrders(role) {
 export function broadcastsLocation(role) {
   return role !== "admin" && role !== "ceo";
 }
+
+// --- Team Performance -------------------------------------------------
+// admin is treated as a CEO-equivalent superset throughout: full authority,
+// same as the spec's "CEO" role, so a technical admin account can always
+// unblock a stuck workflow.
+
+export function isPerfCeo(role) {
+  return role === "admin" || role === "ceo";
+}
+
+// Who may create/edit a DRAFT plan for a channel owned by the given
+// owner_role (see sales_channels.owner_role -- 'sales_director' for most
+// channels, 'accountant' for KF/CAS). CEO can touch any channel directly.
+export function canEditChannelPlan(role, ownerRole) {
+  if (isPerfCeo(role)) return true;
+  if (role === "sales_director") return ownerRole === "sales_director";
+  if (role === "accountant") return ownerRole === "accountant";
+  return false;
+}
+
+// Who may approve/reject a PENDING_APPROVAL plan. A Sales Director can
+// never approve their own submission -- only CEO or Accountant review it;
+// Accountant plans (KF/CAS) go to CEO only, since Accountant can't approve
+// their own submission either.
+export function canReviewPlan(role, submittedByRole) {
+  if (isPerfCeo(role)) return true;
+  if (role === "accountant") return submittedByRole === "sales_director";
+  return false;
+}
+
+// Only CEO (or admin) may create a new revision of an already-approved
+// plan -- this is the one mandatory-immutability rule in the whole
+// workflow (see perf_plans.supersedes_plan_id).
+export function canReviseApprovedPlan(role) {
+  return isPerfCeo(role);
+}
+
+// Who sees company-wide Team Performance data (management dashboard, all
+// channels) vs only their own channel's numbers.
+export function seesAllPerformance(role) {
+  return role === "admin" || role === "ceo" || role === "sales_director" || role === "accountant";
+}

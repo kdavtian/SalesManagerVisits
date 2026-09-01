@@ -3,11 +3,25 @@ import { pool } from "./db/pool.js";
 // The fixed set of push notification events this app can send. Kept as a
 // plain list (not derived from anywhere else) so the admin matrix and the
 // self-service preferences UI both have one place to enumerate them from.
-export const NOTIFICATION_TYPES = ["plan_submitted", "plan_reviewed", "order_status_changed", "order_placed", "visit_reminder"];
+export const NOTIFICATION_TYPES = [
+  "plan_submitted",
+  "plan_reviewed",
+  "order_status_changed",
+  "order_placed",
+  "visit_reminder",
+  "perf_plan_submitted",
+  "perf_plan_reviewed",
+];
 
 // Roles that can review a route plan -- the only roles plan_submitted is
 // ever relevant to (see canPlanForOthers in roles.js).
 export const APPROVER_ROLES = ["admin", "sales_director", "ceo"];
+
+// Roles that can review a Team Performance plan -- CEO/admin review
+// everything, Accountant reviews Sales Director submissions only (see
+// canReviewPlan in roles.js). Kept separate from APPROVER_ROLES since these
+// are two unrelated approval workflows (route plans vs performance plans).
+export const PERF_APPROVER_ROLES = ["admin", "ceo", "accountant"];
 
 // Roles that need to know a new order landed -- the director (or CEO) who
 // may need to review or approve a discount, and the accountant who
