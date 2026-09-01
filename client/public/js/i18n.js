@@ -567,6 +567,12 @@ const dict = {
     open_pdf: "Open",
     guide_preview_fallback_hint: "Preview not showing? Use Share or Open above.",
     close: "Close",
+    open: "Open",
+
+    notifications_title: "Notifications",
+    no_notifications_yet: "No notifications yet.",
+    mark_all_read: "Mark all read",
+    load_more: "Load more",
 
     install_title: "Install KAD Motors",
     install_body: "Add it to your home screen for one-tap access.",
@@ -1152,6 +1158,12 @@ const dict = {
     open_pdf: "Բացել",
     guide_preview_fallback_hint: "Նախադիտումը չի՞ երևում։ Օգտագործեք վերևի Կիսվել կամ Բացել կոճակները։",
     close: "Փակել",
+    open: "Բացել",
+
+    notifications_title: "Ծանուցումներ",
+    no_notifications_yet: "Ծանուցումներ դեռ չկան։",
+    mark_all_read: "Նշել բոլորը որպես կարդացված",
+    load_more: "Ցույց տալ ավելին",
 
     install_title: "Տեղադրել KAD Motors-ը",
     install_body: "Ավելացրեք հիմնական էկրանին՝ մեկ հպումով բացելու համար։",

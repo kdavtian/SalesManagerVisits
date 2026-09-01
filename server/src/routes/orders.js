@@ -3,8 +3,8 @@ import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { seesAllActivity, canConfirmOrders } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
-import { notifyUser } from "../push.js";
-import { isNotificationEnabled, ORDER_NOTIFY_ROLES } from "../notificationPreferences.js";
+import { notifyUser } from "../notifications.js";
+import { ORDER_NOTIFY_ROLES } from "../notificationPreferences.js";
 
 export const ordersRouter = Router();
 
@@ -201,13 +201,11 @@ ordersRouter.post("/", async (req, res) => {
 
       const { rows: notifyRecipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [ORDER_NOTIFY_ROLES]);
       for (const recipient of notifyRecipients) {
-        if (await isNotificationEnabled(recipient.id, "order_placed")) {
-          notifyUser(recipient.id, {
-            title: "New order placed",
-            body: `${repName} placed an order for ${customer.name} — ${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD.${discountSuffix}`,
-            url: "/#/orders",
-          });
-        }
+        notifyUser(recipient.id, "order_placed", {
+          title: "New order placed",
+          body: `${repName} placed an order for ${customer.name} — ${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD.${discountSuffix}`,
+          url: "/#/orders",
+        });
       }
     } catch (err) {
       console.error("Post-order notification failed:", err);
@@ -437,14 +435,9 @@ ordersRouter.patch("/:id", async (req, res) => {
   // items/note edit) -- and not when they made the change themselves.
   (async () => {
     try {
-      if (
-        status !== undefined &&
-        nextStatus !== order.status &&
-        req.user.id !== order.user_id &&
-        (await isNotificationEnabled(order.user_id, "order_status_changed"))
-      ) {
+      if (status !== undefined && nextStatus !== order.status && req.user.id !== order.user_id) {
         const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
-        notifyUser(order.user_id, {
+        notifyUser(order.user_id, "order_status_changed", {
           title: "Order update",
           body: `${customerRows[0]?.name || "Order"} is now "${nextStatus}".`,
           url: "/#/orders",
@@ -486,16 +479,14 @@ ordersRouter.post("/:id/approve-discount", async (req, res) => {
       // same order_placed preference gate a rep's original order used.
       const { rows: accountants } = await pool.query("SELECT id FROM users WHERE role = 'accountant'");
       for (const accountant of accountants) {
-        if (await isNotificationEnabled(accountant.id, "order_placed")) {
-          notifyUser(accountant.id, {
-            title: "Order discount approved",
-            body: `${customerName}'s discounted order was approved and is ready for fulfillment.`,
-            url: "/#/orders",
-          });
-        }
+        notifyUser(accountant.id, "order_placed", {
+          title: "Order discount approved",
+          body: `${customerName}'s discounted order was approved and is ready for fulfillment.`,
+          url: "/#/orders",
+        });
       }
-      if (req.user.id !== order.user_id && (await isNotificationEnabled(order.user_id, "order_status_changed"))) {
-        notifyUser(order.user_id, {
+      if (req.user.id !== order.user_id) {
+        notifyUser(order.user_id, "order_status_changed", {
           title: "Discount approved",
           body: `${customerName}'s order discount was approved.`,
           url: "/#/orders",
@@ -527,9 +518,9 @@ ordersRouter.post("/:id/reject-discount", async (req, res) => {
 
   (async () => {
     try {
-      if (req.user.id !== order.user_id && (await isNotificationEnabled(order.user_id, "order_status_changed"))) {
+      if (req.user.id !== order.user_id) {
         const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
-        notifyUser(order.user_id, {
+        notifyUser(order.user_id, "order_status_changed", {
           title: "Discount rejected",
           body: `${customerRows[0]?.name || "Order"}'s discount was rejected -- edit the order or remove the discount to proceed.`,
           url: "/#/orders",

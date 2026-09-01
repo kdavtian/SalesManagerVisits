@@ -6,8 +6,8 @@
 // already nudged today so a rep gets at most one reminder per day.
 
 import { pool } from "./db/pool.js";
-import { notifyUser, enabled as pushEnabled } from "./push.js";
-import { isNotificationEnabled } from "./notificationPreferences.js";
+import { enabled as pushEnabled } from "./push.js";
+import { notifyUser } from "./notifications.js";
 
 const CHECK_INTERVAL_MS = 2 * 60 * 60 * 1000; // every 2 hours
 const lastNotifiedDate = new Map(); // user_id -> "YYYY-MM-DD" already notified
@@ -36,10 +36,9 @@ export async function checkOverdueReminders() {
     const visited = new Set(visitedRows.map((r) => r.customer_id));
     const remaining = plan.customer_ids.filter((id) => !visited.has(id));
     if (!remaining.length) continue;
-    if (!(await isNotificationEnabled(plan.user_id, "visit_reminder"))) continue;
 
     lastNotifiedDate.set(plan.user_id, today);
-    await notifyUser(plan.user_id, {
+    await notifyUser(plan.user_id, "visit_reminder", {
       title: "Planned visits waiting",
       body: `You still have ${remaining.length} planned stop${remaining.length === 1 ? "" : "s"} to visit today.`,
       url: "/#/map",

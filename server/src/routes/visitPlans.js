@@ -3,8 +3,8 @@ import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { canPlanForOthers } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
-import { notifyUser } from "../push.js";
-import { isNotificationEnabled, APPROVER_ROLES } from "../notificationPreferences.js";
+import { notifyUser } from "../notifications.js";
+import { APPROVER_ROLES } from "../notificationPreferences.js";
 
 export const visitPlansRouter = Router();
 
@@ -165,13 +165,11 @@ visitPlansRouter.post("/", async (req, res) => {
 
         const { rows: approvers } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [APPROVER_ROLES]);
         for (const approver of approvers) {
-          if (await isNotificationEnabled(approver.id, "plan_submitted")) {
-            notifyUser(approver.id, {
-              title: "Plan needs review",
-              body: `${repName} submitted a plan for ${date} (${customerIds.length} stop${customerIds.length === 1 ? "" : "s"}).`,
-              url: "/#/settings",
-            });
-          }
+          notifyUser(approver.id, "plan_submitted", {
+            title: "Plan needs review",
+            body: `${repName} submitted a plan for ${date} (${customerIds.length} stop${customerIds.length === 1 ? "" : "s"}).`,
+            url: "/#/settings",
+          });
         }
       }
     } catch (err) {
@@ -353,9 +351,9 @@ visitPlansRouter.patch("/:id", requireCanPlanForOthers, async (req, res) => {
     // still rethrows) and crash the handler after the response is sent.
     (async () => {
       try {
-        if (action !== undefined && (await isNotificationEnabled(updated[0].user_id, "plan_reviewed"))) {
+        if (action !== undefined) {
           const dateLabel = new Date(updated[0].plan_date).toLocaleDateString();
-          notifyUser(updated[0].user_id, {
+          notifyUser(updated[0].user_id, "plan_reviewed", {
             title: action === "approve" ? "Visit plan approved" : "Visit plan rejected",
             body:
               action === "approve"

@@ -145,6 +145,14 @@ export const api = {
   setNotificationDefault: (role, notification_type, enabled) =>
     json("/notification-settings", "PUT", { role, notification_type, enabled }),
 
+  listNotifications: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/notifications${qs ? `?${qs}` : ""}`);
+  },
+  getUnreadNotificationCount: () => request("/notifications/unread-count"),
+  markNotificationRead: (id) => request(`/notifications/${id}/read`, { method: "PATCH" }),
+  markAllNotificationsRead: () => request("/notifications/read-all", { method: "PATCH" }),
+
   listCashExpenses: () => request("/cash-expenses"),
   createCashExpense: (data) => json("/cash-expenses", "POST", data),
   updateCashExpense: (id, data) => json(`/cash-expenses/${id}`, "PATCH", data),

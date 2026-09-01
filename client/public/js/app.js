@@ -13,6 +13,7 @@ import { renderCheckin } from "./views/checkin.js";
 import { renderDashboard } from "./views/dashboard.js";
 import { renderActivity } from "./views/activity.js";
 import { renderSettings } from "./views/settings.js";
+import { renderNotifications } from "./views/notifications.js";
 import { renderCashExpenses } from "./views/cashExpenses.js";
 import { renderReports } from "./views/reports.js";
 import { renderRoutePlans } from "./views/routePlans.js";
@@ -81,6 +82,33 @@ async function refreshOrderBadge() {
 
 window.addEventListener("orders-changed", refreshOrderBadge);
 
+// Same pattern as the Orders badge above -- polled and also refreshed
+// on-demand (here, whenever the Notifications page marks something read)
+// so the bell badge doesn't lag behind what the user just saw.
+let unreadNotificationCount = 0;
+
+function applyNotificationBadge() {
+  const el = document.getElementById("topbar-bell-badge");
+  if (!el) return;
+  if (unreadNotificationCount > 0) {
+    el.textContent = unreadNotificationCount > 99 ? "99+" : String(unreadNotificationCount);
+    el.hidden = false;
+  } else {
+    el.hidden = true;
+  }
+}
+
+async function refreshNotificationBadge() {
+  if (!state.user) return;
+  try {
+    const { count } = await api.getUnreadNotificationCount();
+    unreadNotificationCount = count;
+  } catch {
+    return;
+  }
+  applyNotificationBadge();
+}
+
 function navigate(hash) {
   if (location.hash === hash) {
     render();
@@ -112,6 +140,7 @@ async function render() {
       startLocationBroadcast();
       render();
       refreshOrderBadge();
+      refreshNotificationBadge();
     });
     return;
   }
@@ -159,6 +188,8 @@ async function render() {
     renderCheckin(app, navigate, checkinMatch[1]);
   } else if (path === "#/settings") {
     renderSettings(app, doLogout, render);
+  } else if (path === "#/notifications") {
+    renderNotifications(app, navigate, refreshNotificationBadge);
   } else {
     navigate("#/dashboard");
   }
@@ -209,11 +240,16 @@ function renderNav() {
     </span>
     <div class="topbar-right">
       <span class="topbar-user">${escapeHtml(state.user.name)}</span>
-      <button type="button" class="topbar-menu-btn" id="topbar-menu-btn" aria-label="${t("nav_settings")}">
+      <button type="button" class="topbar-menu-btn" id="topbar-bell-btn" aria-label="${t("notifications_title")}" ${hash === "#/notifications" ? 'aria-current="page"' : ""}>
+        ${icons.bell}
+        <span class="nav-badge" id="topbar-bell-badge" hidden></span>
+      </button>
+      <button type="button" class="topbar-menu-btn" id="topbar-menu-btn" aria-label="${t("nav_settings")}" ${hash === "#/settings" ? 'aria-current="page"' : ""}>
         ${icons.menu}
       </button>
     </div>
   `;
+  topBar.querySelector("#topbar-bell-btn").addEventListener("click", () => navigate("#/notifications"));
   topBar.querySelector("#topbar-menu-btn").addEventListener("click", () => {
     if (hash === "#/settings") {
       navigate(preSettingsHash);
@@ -222,6 +258,7 @@ function renderNav() {
       navigate("#/settings");
     }
   });
+  applyNotificationBadge();
 }
 
 function renderSyncBanner() {
@@ -277,7 +314,9 @@ async function init() {
   flushQueue();
   render();
   refreshOrderBadge();
+  refreshNotificationBadge();
   setInterval(refreshOrderBadge, 60000);
+  setInterval(refreshNotificationBadge, 60000);
 }
 
 if ("serviceWorker" in navigator) {

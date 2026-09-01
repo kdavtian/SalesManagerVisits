@@ -22,6 +22,7 @@ import { ordersRouter } from "./routes/orders.js";
 import { exportsRouter } from "./routes/exports.js";
 import { pushRouter } from "./routes/push.js";
 import { notificationSettingsRouter } from "./routes/notificationSettings.js";
+import { notificationsRouter } from "./routes/notifications.js";
 import { cashExpensesRouter } from "./routes/cashExpenses.js";
 import { reportsRouter } from "./routes/reports.js";
 import { startOverdueReminders } from "./overdueReminders.js";
@@ -102,6 +103,7 @@ app.use("/api/orders", express.json(), ordersRouter);
 app.use("/api/exports", exportsRouter);
 app.use("/api/push", express.json(), pushRouter);
 app.use("/api/notification-settings", express.json(), notificationSettingsRouter);
+app.use("/api/notifications", express.json(), notificationsRouter);
 app.use("/api/cash-expenses", express.json(), cashExpensesRouter);
 app.use("/api/reports", express.json(), reportsRouter);
 

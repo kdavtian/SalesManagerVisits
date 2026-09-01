@@ -250,6 +250,7 @@ a {
 }
 
 .topbar-menu-btn {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -261,6 +262,12 @@ a {
   border-radius: 8px;
   color: var(--text);
   cursor: pointer;
+}
+
+#topbar-bell-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
 }
 
 .topbar-menu-btn:active {
@@ -3052,6 +3059,58 @@ input[type="search"]:focus {
 .expenses-filters input[type="date"] {
   flex-shrink: 0;
   width: 42%;
+}
+
+.notification-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  text-align: left;
+}
+
+.notification-card-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  margin-top: 6px;
+  background: var(--accent);
+  visibility: hidden;
+}
+
+.notification-card-unread .notification-card-dot {
+  visibility: visible;
+}
+
+.notification-card-unread strong {
+  font-weight: 700;
+}
+
+.notification-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.notification-card-body {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.88rem;
+}
+
+.notification-card-time {
+  font-size: 0.78rem;
+}
+
+.notification-sheet-time {
+  margin: -6px 0 10px;
+  font-size: 0.85rem;
+}
+
+.notification-sheet-body {
+  white-space: pre-wrap;
 }
 
 .customer-card-left {
