@@ -33,6 +33,9 @@ git pull --ff-only
 echo "==> Building app image"
 docker compose build app
 
+echo "==> Running unit tests"
+docker compose run --rm app npm test
+
 echo "==> Starting database"
 docker compose up -d db
 
