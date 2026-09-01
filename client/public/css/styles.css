@@ -2721,6 +2721,16 @@ input[type="search"]:focus {
   margin-top: 14px;
 }
 
+.perf-dq-row {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.perf-dq-row:last-child {
+  border-bottom: none;
+}
+
 .next-visit-card {
   margin-bottom: 18px;
   padding: 16px;

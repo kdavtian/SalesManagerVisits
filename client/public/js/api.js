@@ -194,4 +194,5 @@ export const api = {
     request(`/team-performance/plans/${planId}/channels/${channelId}/drilldown?kpi=${kpi}`),
   getPerfHistoryList: () => request("/team-performance/history"),
   closePerfMonth: (planId) => json(`/team-performance/plans/${planId}/close`, "POST", {}),
+  getPerfDataQuality: () => request("/team-performance/data-quality"),
 };

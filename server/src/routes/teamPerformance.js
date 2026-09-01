@@ -844,3 +844,62 @@ teamPerformanceRouter.post("/plans/:id/close", async (req, res) => {
     client.release();
   }
 });
+
+// Data Quality: surfaces the configuration gaps that make a channel's
+// numbers wrong or invisible on this module's dashboards -- not a general
+// data-integrity audit of the whole app, just the handful of things that
+// break Team Performance specifically. Every check here is a cheap,
+// read-only query against small tables; nothing here recomputes actuals.
+teamPerformanceRouter.get("/data-quality", async (req, res) => {
+  if (!seesAllPerformance(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+
+  const [
+    { rows: unmappedSalesReps },
+    { rows: unmappedErpReps },
+    { rows: staleChannels },
+    { rows: unassignedChannels },
+  ] = await Promise.all([
+    // A rep_name in the Excel-sourced sales_performance table that doesn't
+    // match any configured sales_channels.code -- that channel's Sales/
+    // Collections numbers are being synced but have nowhere to land, so
+    // they're silently absent from every Team Performance dashboard.
+    pool.query(
+      `SELECT DISTINCT sp.rep_name, max(sp.month) AS latest_month, max(sp.synced_at) AS latest_sync
+       FROM sales_performance sp
+       WHERE NOT EXISTS (SELECT 1 FROM sales_channels c WHERE c.code = sp.rep_name)
+       GROUP BY sp.rep_name ORDER BY sp.rep_name`
+    ),
+    // Same idea for the customer/debt feed -- an assigned_sales_rep with no
+    // matching channel means that rep's customers can never be counted as
+    // "new customers" for any channel.
+    pool.query(
+      `SELECT DISTINCT assigned_sales_rep, count(*)::int AS customer_count
+       FROM erp_customer_data
+       WHERE assigned_sales_rep IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM sales_channels c WHERE c.code = erp_customer_data.assigned_sales_rep)
+       GROUP BY assigned_sales_rep ORDER BY assigned_sales_rep`
+    ),
+    // An active channel with no sales_performance sync at all in the last
+    // 45 days -- the Excel pipeline may have stopped sending this channel's
+    // numbers, which would otherwise look identical to "genuinely zero"
+    // sales on the dashboard.
+    pool.query(
+      `SELECT c.id, c.code, c.name, max(sp.synced_at) AS latest_sync
+       FROM sales_channels c
+       LEFT JOIN sales_performance sp ON sp.rep_name = c.code
+       WHERE c.active
+       GROUP BY c.id, c.code, c.name
+       HAVING max(sp.synced_at) IS NULL OR max(sp.synced_at) < now() - interval '45 days'
+       ORDER BY c.display_order`
+    ),
+    // A sales_director-owned channel with no manager_user_id -- plannable
+    // and approvable, but nobody in the app is actually accountable for it.
+    pool.query(
+      `SELECT id, code, name FROM sales_channels
+       WHERE active AND owner_role = 'sales_director' AND manager_user_id IS NULL
+       ORDER BY display_order`
+    ),
+  ]);
+
+  res.json({ unmappedSalesReps, unmappedErpReps, staleChannels, unassignedChannels });
+});

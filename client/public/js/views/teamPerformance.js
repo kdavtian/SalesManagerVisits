@@ -241,6 +241,7 @@ async function renderManagementView(root, navigate) {
           <button type="button" class="settings-workspace-tab ${tab === "planning" ? "settings-workspace-tab-active" : ""}" data-tab="planning">${t("perf_planning")}</button>
           <button type="button" class="settings-workspace-tab ${tab === "approvals" ? "settings-workspace-tab-active" : ""}" data-tab="approvals">${t("perf_approvals")}</button>
           <button type="button" class="settings-workspace-tab ${tab === "history" ? "settings-workspace-tab-active" : ""}" data-tab="history">${t("perf_history")}</button>
+          ${isPerfCeo() ? `<button type="button" class="settings-workspace-tab ${tab === "data_quality" ? "settings-workspace-tab-active" : ""}" data-tab="data_quality">${t("perf_data_quality")}</button>` : ""}
         </div>
         ${tab === "overview" || tab === "planning" ? monthPickerHtml(month) : ""}
         <div id="perf-body" style="margin-top:12px;"><p class="loading-state" role="status">${t("loading")}</p></div>
@@ -269,7 +270,8 @@ async function renderManagementView(root, navigate) {
       if (tab === "overview") await loadOverview(bodyEl);
       else if (tab === "planning") await loadPlanning(bodyEl);
       else if (tab === "approvals") await loadApprovals(bodyEl);
-      else await loadHistory(bodyEl);
+      else if (tab === "history") await loadHistory(bodyEl);
+      else await loadDataQuality(bodyEl);
     } catch (err) {
       bodyEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     }
@@ -424,6 +426,58 @@ async function renderManagementView(root, navigate) {
     bodyEl.querySelectorAll("[data-history-plan-id]").forEach((btn) => {
       btn.addEventListener("click", () => openHistorySheet(Number(btn.dataset.historyPlanId)));
     });
+  }
+
+  // Configuration gaps that make a channel's numbers wrong or invisible on
+  // this module's own dashboards -- Excel sync reaching a rep_name with no
+  // matching channel, a channel that's gone quiet, an owner with nobody
+  // assigned. Not a general app health check, just what breaks Team
+  // Performance specifically (see the /data-quality route's own comment).
+  async function loadDataQuality(bodyEl) {
+    const dq = await api.getPerfDataQuality();
+    const sections = [
+      {
+        key: "unmappedSalesReps",
+        rows: dq.unmappedSalesReps,
+        title: t("perf_dq_unmapped_sales"),
+        render: (r) => `${escapeHtml(r.rep_name)} <span class="muted">· ${t("perf_dq_latest")}: ${new Date(r.latest_sync).toLocaleDateString()}</span>`,
+      },
+      {
+        key: "unmappedErpReps",
+        rows: dq.unmappedErpReps,
+        title: t("perf_dq_unmapped_customers"),
+        render: (r) => `${escapeHtml(r.assigned_sales_rep)} <span class="muted">· ${r.customer_count} ${t("perf_dq_customers_unit")}</span>`,
+      },
+      {
+        key: "staleChannels",
+        rows: dq.staleChannels,
+        title: t("perf_dq_stale"),
+        render: (r) => `${escapeHtml(r.name)} <span class="muted">· ${t("perf_dq_latest")}: ${r.latest_sync ? new Date(r.latest_sync).toLocaleDateString() : t("perf_dq_never")}</span>`,
+      },
+      {
+        key: "unassignedChannels",
+        rows: dq.unassignedChannels,
+        title: t("perf_dq_unassigned"),
+        render: (r) => escapeHtml(r.name),
+      },
+    ];
+    const totalIssues = sections.reduce((sum, s) => sum + s.rows.length, 0);
+    if (!totalIssues) {
+      bodyEl.innerHTML = `<p class="empty-state">${t("perf_dq_clean")}</p>`;
+      return;
+    }
+    bodyEl.innerHTML = sections
+      .filter((s) => s.rows.length)
+      .map(
+        (s) => `
+      <div class="card" style="margin-bottom:10px;">
+        <strong>${s.title}</strong> <span class="muted">(${s.rows.length})</span>
+        <div class="card-list" style="margin-top:8px;">
+          ${s.rows.map((r) => `<div class="perf-dq-row">${s.render(r)}</div>`).join("")}
+        </div>
+      </div>`
+      )
+      .join("");
   }
 
   paintShell();
