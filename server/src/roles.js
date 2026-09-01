@@ -99,3 +99,10 @@ export function canReviseApprovedPlan(role) {
 export function seesAllPerformance(role) {
   return role === "admin" || role === "ceo" || role === "sales_director" || role === "accountant";
 }
+
+// Closing a month freezes its final numbers into an immutable snapshot --
+// a finance-close action, so CEO or Accountant (the two roles that also
+// reconcile against the Excel books), not a Sales Director.
+export function canCloseMonth(role) {
+  return isPerfCeo(role) || role === "accountant";
+}

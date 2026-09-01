@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
-import { isPerfCeo, canEditChannelPlan, canReviewPlan, canReviseApprovedPlan, seesAllPerformance } from "../roles.js";
+import { isPerfCeo, canEditChannelPlan, canReviewPlan, canReviseApprovedPlan, seesAllPerformance, canCloseMonth } from "../roles.js";
 import { notifyUser } from "../notifications.js";
 import { PERF_APPROVER_ROLES } from "../notificationPreferences.js";
 import { workingDaysForMonth } from "../workingDays.js";
@@ -138,6 +138,37 @@ function buildChannelDashboardRow(target, brandTargets, actuals, wd) {
   return row;
 }
 
+// Same shape as buildChannelDashboardRow, but from a frozen closed-month
+// snapshot row instead of live targets+actuals -- a closed month is always
+// fully elapsed (wd.elapsed === wd.total), so forecast is moot and
+// required_daily_rate/status just report the final outcome.
+function buildClosedChannelRow(snapshot, wd) {
+  const kpiArgs = { elapsedWorkingDays: wd.elapsed, totalWorkingDays: wd.total, remainingWorkingDays: wd.remaining };
+  const brand_kpis = (snapshot.brand_actuals ?? []).map((ba) => ({
+    brand: ba.brand,
+    ...kpiProgress({ actual: Number(ba.liters), target: Number(ba.target_liters ?? 0), ...kpiArgs }),
+  }));
+
+  const row = {
+    channel_id: snapshot.channel_id,
+    plan_id: snapshot.plan_id,
+    channel_code: snapshot.channel_code,
+    channel_name: snapshot.channel_name,
+    working_days: wd,
+    closed: true,
+    sales: kpiProgress({ actual: Number(snapshot.sales_actual_amd), target: Number(snapshot.sales_target_amd), ...kpiArgs }),
+    collections: {
+      ...kpiProgress({ actual: Number(snapshot.collection_actual_amd), target: Number(snapshot.collection_target_amd), ...kpiArgs }),
+      pending_amd: 0,
+      confirmed_synced_at: null,
+    },
+    new_customers: kpiProgress({ actual: snapshot.new_customers_actual, target: snapshot.new_customers_target, ...kpiArgs }),
+    brands: brand_kpis,
+  };
+  row.recommendations = [];
+  return row;
+}
+
 async function writeAudit(client, planId, actorId, action, before, after, reason) {
   await client.query(
     `INSERT INTO perf_plan_audit (plan_id, actor_id, action, before, after, reason)
@@ -214,18 +245,30 @@ teamPerformanceRouter.get("/plans/:id/dashboard", async (req, res) => {
   const monthDate = new Date(`${monthStr}T00:00:00Z`);
   const wd = await workingDaysForMonth(monthDate);
 
-  const brandTargetsByChannel = new Map();
-  for (const bt of detail.brand_targets) {
-    if (!brandTargetsByChannel.has(bt.channel_id)) brandTargetsByChannel.set(bt.channel_id, []);
-    brandTargetsByChannel.get(bt.channel_id).push(bt);
-  }
+  let rows;
+  if (detail.status === "closed") {
+    // A closed month reads from its frozen snapshot, never from live
+    // actuals -- see migration 040. This is what makes "closed" mean
+    // something: the numbers on this screen can't drift after the fact.
+    const { rows: snapshot } = await pool.query(
+      "SELECT * FROM perf_plan_closed_snapshot WHERE plan_id = $1 ORDER BY channel_name",
+      [detail.id]
+    );
+    rows = snapshot.map((s) => buildClosedChannelRow(s, wd));
+  } else {
+    const brandTargetsByChannel = new Map();
+    for (const bt of detail.brand_targets) {
+      if (!brandTargetsByChannel.has(bt.channel_id)) brandTargetsByChannel.set(bt.channel_id, []);
+      brandTargetsByChannel.get(bt.channel_id).push(bt);
+    }
 
-  const rows = await Promise.all(
-    detail.targets.map(async (target) => {
-      const actuals = await loadChannelActuals(target.channel_code, monthStr);
-      return buildChannelDashboardRow(target, brandTargetsByChannel.get(target.channel_id) ?? [], actuals, wd);
-    })
-  );
+    rows = await Promise.all(
+      detail.targets.map(async (target) => {
+        const actuals = await loadChannelActuals(target.channel_code, monthStr);
+        return buildChannelDashboardRow(target, brandTargetsByChannel.get(target.channel_id) ?? [], actuals, wd);
+      })
+    );
+  }
 
   res.json({
     plan_id: detail.id,
@@ -702,4 +745,102 @@ teamPerformanceRouter.get("/approvals", async (req, res) => {
   // that's a single small list, not worth pushing into the SQL above.
   const visible = req.user.role === "accountant" ? rows.filter((r) => r.submitted_by_role === "sales_director") : rows;
   res.json(visible);
+});
+
+// One row per month with any plan history -- superseded rows are excluded
+// so this always shows each month's current/latest state (draft, pending,
+// approved, rejected, or closed). The History screen's month list.
+teamPerformanceRouter.get("/history", async (req, res) => {
+  if (!seesAllPerformance(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const { rows } = await pool.query(
+    `SELECT p.id, p.month, p.version, p.status, p.closed_at,
+       (SELECT count(*)::int FROM perf_plan_targets t WHERE t.plan_id = p.id) AS channel_count
+     FROM perf_plans p
+     WHERE p.status != 'superseded'
+     ORDER BY p.month DESC`
+  );
+  res.json(rows);
+});
+
+// Freezes an approved plan's final numbers into perf_plan_closed_snapshot
+// and marks it closed. Irreversible by design -- a closed month is the
+// permanent historical record; if a real correction is needed later it
+// happens in Excel and gets flagged there, per the no-duplicate-source-of-
+// truth business rule this whole module is built against, not by reopening
+// a closed month here.
+teamPerformanceRouter.post("/plans/:id/close", async (req, res) => {
+  if (!canCloseMonth(req.user.role)) {
+    return res.status(403).json({ error: "Only the CEO or Accountant can close a month" });
+  }
+
+  const detail = await loadPlanDetail(req.params.id);
+  if (!detail) return res.status(404).json({ error: "Plan not found" });
+  if (detail.status !== "approved") return res.status(409).json({ error: "Only an approved plan can be closed" });
+
+  const monthStr = detail.month.toISOString().slice(0, 10);
+
+  const brandTargetsByChannel = new Map();
+  for (const bt of detail.brand_targets) {
+    if (!brandTargetsByChannel.has(bt.channel_id)) brandTargetsByChannel.set(bt.channel_id, []);
+    brandTargetsByChannel.get(bt.channel_id).push(bt);
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    for (const target of detail.targets) {
+      const actuals = await loadChannelActuals(target.channel_code, monthStr);
+      const brandTargets = brandTargetsByChannel.get(target.channel_id) ?? [];
+      const brandTargetsByBrand = new Map(brandTargets.map((bt) => [bt.brand, Number(bt.target_liters)]));
+      const brandActuals = actuals.brand_actuals.map((ba) => ({
+        brand: ba.brand,
+        liters: Number(ba.liters),
+        target_liters: brandTargetsByBrand.get(ba.brand) ?? 0,
+      }));
+      // Brand targets with no recorded actual liters still belong in the
+      // frozen snapshot (0 actual is a real outcome, not a missing one).
+      for (const [brand, targetLiters] of brandTargetsByBrand) {
+        if (!brandActuals.some((ba) => ba.brand === brand)) {
+          brandActuals.push({ brand, liters: 0, target_liters: targetLiters });
+        }
+      }
+
+      await client.query(
+        `INSERT INTO perf_plan_closed_snapshot
+           (plan_id, channel_id, channel_code, channel_name, sales_target_amd, sales_actual_amd,
+            collection_target_amd, collection_actual_amd, new_customers_target, new_customers_actual, brand_actuals)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         ON CONFLICT (plan_id, channel_id) DO NOTHING`,
+        [
+          detail.id,
+          target.channel_id,
+          target.channel_code,
+          target.channel_name,
+          target.sales_target_amd,
+          actuals.sales_actual,
+          target.collection_target_amd,
+          actuals.collected_confirmed,
+          target.new_customers_target,
+          actuals.new_customers_actual,
+          JSON.stringify(brandActuals),
+        ]
+      );
+    }
+
+    const { rows: updated } = await client.query(
+      `UPDATE perf_plans SET status = 'closed', closed_by = $1, closed_at = now(), lock_version = lock_version + 1, updated_at = now()
+       WHERE id = $2 RETURNING *`,
+      [req.user.id, detail.id]
+    );
+    await writeAudit(client, detail.id, req.user.id, "close", { status: "approved" }, { status: "closed" });
+
+    await client.query("COMMIT");
+    res.json(updated[0]);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 });

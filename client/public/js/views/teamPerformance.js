@@ -1,7 +1,7 @@
 import { api } from "../api.js";
 import { escapeHtml, formatAmd, activateDialog } from "../util.js";
 import { t } from "../i18n.js";
-import { state, seesAllPerformance, isPerfCeo, canEditChannelPlan, canReviewPerfPlan } from "../state.js";
+import { state, seesAllPerformance, isPerfCeo, canEditChannelPlan, canReviewPerfPlan, canCloseMonth } from "../state.js";
 
 const BRANDS = ["castrol", "lotos", "royal"];
 const PACE_COLOR = {
@@ -240,8 +240,9 @@ async function renderManagementView(root, navigate) {
           <button type="button" class="settings-workspace-tab ${tab === "overview" ? "settings-workspace-tab-active" : ""}" data-tab="overview">${t("perf_overview")}</button>
           <button type="button" class="settings-workspace-tab ${tab === "planning" ? "settings-workspace-tab-active" : ""}" data-tab="planning">${t("perf_planning")}</button>
           <button type="button" class="settings-workspace-tab ${tab === "approvals" ? "settings-workspace-tab-active" : ""}" data-tab="approvals">${t("perf_approvals")}</button>
+          <button type="button" class="settings-workspace-tab ${tab === "history" ? "settings-workspace-tab-active" : ""}" data-tab="history">${t("perf_history")}</button>
         </div>
-        ${tab !== "approvals" ? monthPickerHtml(month) : ""}
+        ${tab === "overview" || tab === "planning" ? monthPickerHtml(month) : ""}
         <div id="perf-body" style="margin-top:12px;"><p class="loading-state" role="status">${t("loading")}</p></div>
       </div>
     `;
@@ -253,7 +254,7 @@ async function renderManagementView(root, navigate) {
         paintShell();
       });
     });
-    if (tab !== "approvals") {
+    if (tab === "overview" || tab === "planning") {
       wireMonthPicker(container, month, (newMonth) => {
         month = newMonth;
         paintShell();
@@ -267,7 +268,8 @@ async function renderManagementView(root, navigate) {
     try {
       if (tab === "overview") await loadOverview(bodyEl);
       else if (tab === "planning") await loadPlanning(bodyEl);
-      else await loadApprovals(bodyEl);
+      else if (tab === "approvals") await loadApprovals(bodyEl);
+      else await loadHistory(bodyEl);
     } catch (err) {
       bodyEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     }
@@ -316,6 +318,7 @@ async function renderManagementView(root, navigate) {
     api.getPerfChannels().then((channels) => {
       const canSubmit = plan.status === "draft" && plan.targets.length > 0;
       const isRevise = plan.status === "approved" && isPerfCeo();
+      const canClose = plan.status === "approved" && canCloseMonth();
       bodyEl.innerHTML = `
         <div class="card" style="margin-bottom:10px;">
           <strong>${t(`perf_status_${plan.status}`)}</strong>
@@ -323,6 +326,7 @@ async function renderManagementView(root, navigate) {
         </div>
         <div class="card-list" id="perf-channel-list"></div>
         ${plan.status === "draft" ? `<button type="button" class="btn btn-primary btn-block" id="perf-submit-btn" ${canSubmit ? "" : "disabled"} style="margin-top:12px;">${t("perf_submit_for_approval")}</button>` : ""}
+        ${canClose ? `<button type="button" class="btn btn-block" id="perf-close-btn" style="margin-top:12px;">${t("perf_close_month")}</button>` : ""}
       `;
       const listEl = bodyEl.querySelector("#perf-channel-list");
       listEl.innerHTML = channels
@@ -363,6 +367,18 @@ async function renderManagementView(root, navigate) {
           e.currentTarget.disabled = false;
         }
       });
+
+      bodyEl.querySelector("#perf-close-btn")?.addEventListener("click", async (e) => {
+        if (!confirm(t("perf_close_month_confirm"))) return;
+        e.currentTarget.disabled = true;
+        try {
+          await api.closePerfMonth(plan.id);
+          loadTab();
+        } catch (err) {
+          alert(err.message);
+          e.currentTarget.disabled = false;
+        }
+      });
     });
   }
 
@@ -390,7 +406,87 @@ async function renderManagementView(root, navigate) {
     });
   }
 
+  async function loadHistory(bodyEl) {
+    const months = await api.getPerfHistoryList();
+    if (!months.length) {
+      bodyEl.innerHTML = `<p class="empty-state">${t("perf_no_plan_yet")}</p>`;
+      return;
+    }
+    bodyEl.innerHTML = months
+      .map(
+        (m) => `
+      <button type="button" class="card settings-list-row" data-history-plan-id="${m.id}">
+        <span class="settings-row-label">${escapeHtml(formatMonthLabel(m.month))}<br/><span class="muted">${t(`perf_status_${m.status}`)} · v${m.version} · ${m.channel_count} ${t("perf_channel_count")}</span></span>
+        <span class="settings-row-chevron">›</span>
+      </button>`
+      )
+      .join("");
+    bodyEl.querySelectorAll("[data-history-plan-id]").forEach((btn) => {
+      btn.addEventListener("click", () => openHistorySheet(Number(btn.dataset.historyPlanId)));
+    });
+  }
+
   paintShell();
+}
+
+// Read-only: version chain + audit trail for one month, plus its final
+// numbers if the plan reached 'closed' -- the record of what actually
+// happened, not an editing surface (edits only ever happen through
+// Planning/Approvals on the current live plan for a month).
+async function openHistorySheet(planId) {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.innerHTML = `
+    <div class="sheet">
+      <h2>${t("perf_history")}</h2>
+      <div id="perf-history-body"><p class="loading-state" role="status">${t("loading")}</p></div>
+      <div class="sheet-actions"><button type="button" class="btn" id="close-perf-history">${t("cancel")}</button></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  activateDialog(overlay);
+  overlay.querySelector("#close-perf-history").addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+
+  const bodyEl = overlay.querySelector("#perf-history-body");
+  try {
+    const [plan, versions, audit] = await Promise.all([
+      api.getPerfPlan(planId),
+      api.getPerfPlanHistory(planId),
+      api.getPerfPlanAudit(planId),
+    ]);
+
+    let dashboardHtml = "";
+    if (plan.status === "closed") {
+      const dashboard = await api.getPerfDashboard(planId);
+      dashboardHtml = dashboard.channels.map(channelCardHtml).join("");
+    }
+
+    bodyEl.innerHTML = `
+      <h3>${escapeHtml(formatMonthLabel(plan.month))}</h3>
+      <div class="card-list" style="margin-bottom:14px;">
+        ${versions
+          .map(
+            (v) => `
+          <div class="card"><strong>v${v.version}</strong> <span class="muted">${t(`perf_status_${v.status}`)}${v.revision_reason ? ` — ${escapeHtml(v.revision_reason)}` : ""}</span></div>`
+          )
+          .join("")}
+      </div>
+      ${dashboardHtml}
+      <h3 style="margin-top:14px;">${t("perf_audit_trail")}</h3>
+      <div class="card-list">
+        ${audit
+          .map(
+            (a) => `
+          <div class="card"><span class="muted">${new Date(a.created_at).toLocaleString()} · ${escapeHtml(a.actor_name)}</span><div>${escapeHtml(a.action)}${a.reason ? ` — ${escapeHtml(a.reason)}` : ""}</div></div>`
+          )
+          .join("")}
+      </div>
+    `;
+    wireDrilldowns(bodyEl);
+  } catch (err) {
+    bodyEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+  }
 }
 
 // A single channel's sales/collection/new-customer/brand targets, edited

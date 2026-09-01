@@ -81,3 +81,7 @@ export function canReviewPerfPlan(submittedByRole) {
   if (state.user?.role === "accountant") return submittedByRole === "sales_director";
   return false;
 }
+
+export function canCloseMonth() {
+  return isPerfCeo() || state.user?.role === "accountant";
+}
