@@ -4,6 +4,8 @@ import { requireAuth } from "../middleware/auth.js";
 import { isPerfCeo, canEditChannelPlan, canReviewPlan, canReviseApprovedPlan, seesAllPerformance } from "../roles.js";
 import { notifyUser } from "../notifications.js";
 import { PERF_APPROVER_ROLES } from "../notificationPreferences.js";
+import { workingDaysForMonth } from "../workingDays.js";
+import { kpiProgress } from "../perfCalc.js";
 
 export const teamPerformanceRouter = Router();
 
@@ -52,6 +54,86 @@ async function loadPlanDetail(planId) {
   return { ...plan, targets, brand_targets: brandTargets, comments };
 }
 
+// Sales + Collections actuals reuse the existing sales_performance table
+// (matched by channel code, same as before Team Performance existed) --
+// Collections gets two numbers, not one: `confirmed` is what accounting
+// has actually recorded in Excel (authoritative), `pending` is what's been
+// logged in the app since that last Excel sync and hasn't reached
+// accounting yet. Never blended into one total -- see the confirmed
+// business rule this is built against.
+async function loadChannelActuals(channelCode, monthStr) {
+  const [{ rows: perfRows }, { rows: brandRows }, { rows: newCustRows }] = await Promise.all([
+    pool.query("SELECT sales_amd, collected_amd, synced_at FROM sales_performance WHERE rep_name = $1 AND month = $2", [
+      channelCode,
+      monthStr,
+    ]),
+    pool.query("SELECT brand, liters FROM perf_actuals_brand_monthly WHERE channel_code = $1 AND month = $2", [
+      channelCode,
+      monthStr,
+    ]),
+    pool.query(
+      `SELECT count(*)::int AS n FROM erp_customer_first_seen fs
+       JOIN erp_customer_data d ON d.erp_customer_id = fs.erp_customer_id
+       WHERE d.assigned_sales_rep = $1 AND fs.first_seen_month = $2`,
+      [channelCode, monthStr]
+    ),
+  ]);
+
+  const perf = perfRows[0] ?? { sales_amd: 0, collected_amd: 0, synced_at: null };
+  const sinceTimestamp = perf.synced_at ?? `${monthStr}T00:00:00Z`;
+
+  const { rows: pendingRows } = await pool.query(
+    `SELECT COALESCE(sum(c.amount_collected_amd), 0) AS pending
+     FROM checkins c JOIN users u ON u.id = c.user_id
+     WHERE u.position = $1
+       AND c.timestamp >= date_trunc('month', $2::date)
+       AND c.timestamp < (date_trunc('month', $2::date) + interval '1 month')
+       AND c.timestamp > $3
+       AND c.amount_collected_amd IS NOT NULL`,
+    [channelCode, monthStr, sinceTimestamp]
+  );
+
+  return {
+    sales_actual: Number(perf.sales_amd),
+    collected_confirmed: Number(perf.collected_amd),
+    collected_pending: Number(pendingRows[0].pending),
+    collected_synced_at: perf.synced_at,
+    new_customers_actual: newCustRows[0].n,
+    brand_actuals: brandRows,
+  };
+}
+
+// Combines one channel's plan targets with its actuals into the shape
+// every dashboard (management, Sales Director, personal) renders --
+// achievement %, pace status, forecast, and required-daily-rate for every
+// KPI, all from the single perfCalc.js engine.
+function buildChannelDashboardRow(target, brandTargets, actuals, wd) {
+  const kpiArgs = { elapsedWorkingDays: wd.elapsed, totalWorkingDays: wd.total, remainingWorkingDays: wd.remaining };
+
+  const brandTargetsByBrand = new Map(brandTargets.map((bt) => [bt.brand, Number(bt.target_liters)]));
+  const brandActualsByBrand = new Map(actuals.brand_actuals.map((ba) => [ba.brand, Number(ba.liters)]));
+  const brands = new Set([...brandTargetsByBrand.keys(), ...brandActualsByBrand.keys()]);
+  const brand_kpis = [...brands].map((brand) => ({
+    brand,
+    ...kpiProgress({ actual: brandActualsByBrand.get(brand) ?? 0, target: brandTargetsByBrand.get(brand) ?? 0, ...kpiArgs }),
+  }));
+
+  return {
+    channel_id: target.channel_id,
+    channel_code: target.channel_code,
+    channel_name: target.channel_name,
+    working_days: wd,
+    sales: kpiProgress({ actual: actuals.sales_actual, target: Number(target.sales_target_amd), ...kpiArgs }),
+    collections: {
+      ...kpiProgress({ actual: actuals.collected_confirmed, target: Number(target.collection_target_amd), ...kpiArgs }),
+      pending_amd: actuals.collected_pending,
+      confirmed_synced_at: actuals.collected_synced_at,
+    },
+    new_customers: kpiProgress({ actual: actuals.new_customers_actual, target: target.new_customers_target, ...kpiArgs }),
+    brands: brand_kpis,
+  };
+}
+
 async function writeAudit(client, planId, actorId, action, before, after, reason) {
   await client.query(
     `INSERT INTO perf_plan_audit (plan_id, actor_id, action, before, after, reason)
@@ -72,15 +154,16 @@ function channelCodeForUser(user) {
   return user.role === "sales_manager" && user.position ? user.position : null;
 }
 
-// The one channel's approved target for a month, for a Sales Manager's own
-// "My Performance" view -- never exposes any other channel's numbers (see
-// seesAllPerformance for who gets the full cross-channel picture instead).
-teamPerformanceRouter.get("/my-plan", async (req, res) => {
+// The one channel's approved plan for a month, combined with its actuals
+// and pacing -- a Sales Manager's own "My Performance" view. Never exposes
+// any other channel's numbers (see seesAllPerformance for who gets the
+// full cross-channel picture instead).
+teamPerformanceRouter.get("/my-performance", async (req, res) => {
   const { month } = req.query;
   if (!isValidMonth(month)) return res.status(400).json({ error: "month must be YYYY-MM-01" });
 
   if (seesAllPerformance(req.user.role)) {
-    return res.status(400).json({ error: "Use /plans for a full cross-channel plan" });
+    return res.status(400).json({ error: "Use /plans/:id/dashboard for a full cross-channel view" });
   }
   const channelCode = channelCodeForUser(req.user);
   if (!channelCode) {
@@ -88,14 +171,59 @@ teamPerformanceRouter.get("/my-plan", async (req, res) => {
   }
 
   const { rows } = await pool.query(
-    `SELECT t.sales_target_amd, t.collection_target_amd, t.new_customers_target, p.month, p.status
+    `SELECT t.channel_id, c.code AS channel_code, c.name AS channel_name,
+       t.sales_target_amd, t.collection_target_amd, t.new_customers_target
      FROM perf_plan_targets t
      JOIN perf_plans p ON p.id = t.plan_id
      JOIN sales_channels c ON c.id = t.channel_id
      WHERE c.code = $1 AND p.month = $2 AND p.status = 'approved'`,
     [channelCode, month]
   );
-  res.json(rows[0] ?? null);
+  const target = rows[0];
+  if (!target) return res.json(null);
+
+  const { rows: brandTargets } = await pool.query(
+    `SELECT bt.brand, bt.target_liters FROM perf_plan_brand_targets bt
+     JOIN perf_plans p ON p.id = bt.plan_id
+     WHERE bt.channel_id = $1 AND p.month = $2 AND p.status = 'approved'`,
+    [target.channel_id, month]
+  );
+
+  const monthDate = new Date(`${month}T00:00:00Z`);
+  const [actuals, wd] = await Promise.all([loadChannelActuals(channelCode, month), workingDaysForMonth(monthDate)]);
+  res.json(buildChannelDashboardRow(target, brandTargets, actuals, wd));
+});
+
+// The full cross-channel dashboard for one plan -- Management/Sales
+// Director view. Restricted to roles that see company-wide data at all
+// (seesAllPerformance); a Sales Director still only sees this for
+// channels/plans they have some standing in via the same role check used
+// everywhere else in this file, not a per-channel filter, since the whole
+// point of this screen is comparing channels side by side.
+teamPerformanceRouter.get("/plans/:id/dashboard", async (req, res) => {
+  if (!seesAllPerformance(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+
+  const detail = await loadPlanDetail(req.params.id);
+  if (!detail) return res.status(404).json({ error: "Plan not found" });
+
+  const monthStr = detail.month.toISOString().slice(0, 10);
+  const monthDate = new Date(`${monthStr}T00:00:00Z`);
+  const wd = await workingDaysForMonth(monthDate);
+
+  const brandTargetsByChannel = new Map();
+  for (const bt of detail.brand_targets) {
+    if (!brandTargetsByChannel.has(bt.channel_id)) brandTargetsByChannel.set(bt.channel_id, []);
+    brandTargetsByChannel.get(bt.channel_id).push(bt);
+  }
+
+  const rows = await Promise.all(
+    detail.targets.map(async (target) => {
+      const actuals = await loadChannelActuals(target.channel_code, monthStr);
+      return buildChannelDashboardRow(target, brandTargetsByChannel.get(target.channel_id) ?? [], actuals, wd);
+    })
+  );
+
+  res.json({ plan_id: detail.id, month: detail.month, status: detail.status, working_days: wd, channels: rows });
 });
 
 // The single "live" plan for a month -- draft/pending/approved/rejected,
