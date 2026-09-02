@@ -130,6 +130,8 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return `/api/products/export/xlsx${qs ? `?${qs}` : ""}`;
   },
+  previewProductImport: (formData) => request("/products/import/preview", { method: "POST", body: formData }),
+  applyProductImport: (formData) => request("/products/import/apply", { method: "POST", body: formData }),
 
   getCompanyProfile: () => request("/company-profile"),
   updateCompanyProfile: (data) => json("/company-profile", "PATCH", data),

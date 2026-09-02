@@ -2,10 +2,19 @@ import fs from "node:fs";
 import path from "node:path";
 import { Router } from "express";
 import ExcelJS from "exceljs";
+import multer from "multer";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireProductManager } from "../middleware/auth.js";
 import { getEffectiveProductPricing } from "../pricingService.js";
 import { photoUpload, uploadDirPath } from "../upload.js";
+import { parseImportFile, classifyImportRows, applyImportRows } from "../productImport.js";
+
+// In-memory (not disk) -- an import workbook is parsed and discarded, never
+// served back, so there's no reason to write it to disk first.
+const xlsxUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 export const productsRouter = Router();
 
@@ -463,5 +472,50 @@ productsRouter.post("/bulk-price-update", async (req, res) => {
 
   res.json({ count: changes.length, changes: changes.slice(0, 500) });
 });
+
+// Excel import (item 28): upload -> preview (no writes) -> a second
+// confirmed call actually applies it. Both parse+classify the same file
+// through the exact same functions so what the preview shows is exactly
+// what apply does -- see productImport.js.
+productsRouter.post(
+  "/import/preview",
+  (req, res, next) => {
+    xlsxUpload.single("file")(req, res, (err) => {
+      if (err) return res.status(400).json({ error: err.message });
+      next();
+    });
+  },
+  async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "file is required" });
+    try {
+      const rows = await parseImportFile(req.file.buffer);
+      const classified = await classifyImportRows(rows);
+      res.json(classified);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  }
+);
+
+productsRouter.post(
+  "/import/apply",
+  (req, res, next) => {
+    xlsxUpload.single("file")(req, res, (err) => {
+      if (err) return res.status(400).json({ error: err.message });
+      next();
+    });
+  },
+  async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "file is required" });
+    try {
+      const rows = await parseImportFile(req.file.buffer);
+      const classified = await classifyImportRows(rows);
+      const result = await applyImportRows(classified, req.user.id);
+      res.json(result);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  }
+);
 
 export { logPriceChanges };

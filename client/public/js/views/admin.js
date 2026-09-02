@@ -238,12 +238,14 @@ export async function renderProductsSection(container) {
     <div id="product-list" class="card-list"><p class="loading-state" role="status">${t("loading")}</p></div>
     <div class="team-add-btn-wrap product-section-actions">
       <button type="button" class="btn" id="bulk-price-edit-btn">${t("bulk_price_edit")}</button>
+      <button type="button" class="btn" id="import-excel-btn">${t("import_excel")}</button>
       <button type="button" class="btn btn-block" id="add-product-btn">+ ${t("add_product")}</button>
     </div>
   `;
 
   const listEl = container.querySelector("#product-list");
   container.querySelector("#bulk-price-edit-btn").addEventListener("click", () => openBulkPriceEditSheet(loadProducts));
+  container.querySelector("#import-excel-btn").addEventListener("click", () => openImportSheet(loadProducts));
 
   async function loadProducts() {
     const products = await api.listAllProducts();
@@ -696,6 +698,122 @@ function openBulkPriceEditSheet(onDone) {
       alert(err.message);
     }
   });
+}
+
+// Excel import (item 28): pick a file -> preview (server parses +
+// classifies, writes nothing) -> a second confirmed step re-uploads the
+// same file to actually apply it. Never overwrites blindly -- the preview
+// always renders before Apply is even shown.
+function openImportSheet(onDone) {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.innerHTML = `
+    <div class="sheet">
+      <h2>${t("import_excel")}</h2>
+      <p class="muted">${t("import_excel_hint")}</p>
+      <input type="file" id="import-file-input" accept=".xlsx" />
+      <p class="form-error" id="import-error" hidden></p>
+      <div id="import-preview" hidden></div>
+      <div class="sheet-actions">
+        <button type="button" class="btn btn-block" id="close-import">${t("cancel")}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  activateDialog(overlay);
+  overlay.querySelector("#close-import").addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+
+  const fileInput = overlay.querySelector("#import-file-input");
+  const errorEl = overlay.querySelector("#import-error");
+  const previewEl = overlay.querySelector("#import-preview");
+  let selectedFile = null;
+
+  fileInput.addEventListener("change", async () => {
+    selectedFile = fileInput.files[0];
+    if (!selectedFile) return;
+    errorEl.hidden = true;
+    previewEl.hidden = true;
+    previewEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+    previewEl.hidden = false;
+    try {
+      const form = new FormData();
+      form.set("file", selectedFile);
+      const result = await api.previewProductImport(form);
+      renderPreview(result);
+    } catch (err) {
+      previewEl.hidden = true;
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+    }
+  });
+
+  function summaryRow(label, count) {
+    return `<div class="user-row-meta"><span>${escapeHtml(label)}</span><strong>${count}</strong></div>`;
+  }
+
+  function renderPreview(result) {
+    const { newProducts, changedPrices, unchanged, duplicates, invalidRows, missingProducts } = result;
+    previewEl.innerHTML = `
+      <div class="card">
+        ${summaryRow(t("import_new_products"), newProducts.length)}
+        ${summaryRow(t("import_changed_prices"), changedPrices.length)}
+        ${summaryRow(t("import_unchanged"), unchanged.length)}
+        ${duplicates.length ? summaryRow(t("import_duplicates"), duplicates.length) : ""}
+        ${invalidRows.length ? summaryRow(t("import_invalid_rows"), invalidRows.length) : ""}
+        ${summaryRow(t("import_missing_products"), missingProducts.length)}
+      </div>
+      ${
+        changedPrices.length
+          ? `<div class="card-list">
+              ${changedPrices
+                .slice(0, 30)
+                .map(
+                  (c) => `
+                <div class="card user-row">
+                  <div class="user-row-top"><strong>${escapeHtml(c.name)}</strong></div>
+                  <div class="user-row-meta">
+                    <span>${t("price_standard")}: ${formatAmd(c.oldStandard ?? 0)} &rarr; ${formatAmd(c.newStandard ?? 0)}</span>
+                  </div>
+                </div>
+              `
+                )
+                .join("")}
+            </div>`
+          : ""
+      }
+      ${
+        invalidRows.length
+          ? `<div class="card-list">
+              ${invalidRows
+                .slice(0, 30)
+                .map((r) => `<div class="card user-row"><div class="user-row-meta"><span>${t("row")} ${r.rowNumber}: ${escapeHtml(r.reason)}</span></div></div>`)
+                .join("")}
+            </div>`
+          : ""
+      }
+      <div class="sheet-actions">
+        <button type="button" class="btn btn-primary btn-block" id="apply-import-btn">${t("apply_import")}</button>
+      </div>
+    `;
+    overlay.querySelector("#apply-import-btn").addEventListener("click", async () => {
+      const applyBtn = overlay.querySelector("#apply-import-btn");
+      applyBtn.disabled = true;
+      try {
+        const form = new FormData();
+        form.set("file", selectedFile);
+        const applied = await api.applyProductImport(form);
+        previewEl.innerHTML = `<div class="card checkin-result result-success">
+          <div class="result-icon">&#10003;</div>
+          <p>${applied.created} ${t("import_new_products").toLowerCase()}, ${applied.updated} ${t("import_changed_prices").toLowerCase()}, ${applied.specialsCreated} ${t("promo_price_label").toLowerCase()}</p>
+        </div>`;
+        onDone();
+      } catch (err) {
+        applyBtn.disabled = false;
+        alert(err.message);
+      }
+    });
+  }
 }
 
 // Editable company header for the pricelist export (item 14) -- name,
