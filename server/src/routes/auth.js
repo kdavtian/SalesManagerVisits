@@ -46,13 +46,25 @@ export const meRouter = Router();
 
 meRouter.get("/", requireAuth, async (req, res) => {
   const { rows } = await pool.query(
-    "SELECT id, email, name, role, position, avatar_path IS NOT NULL AS has_avatar, created_at FROM users WHERE id = $1",
+    "SELECT id, email, name, role, position, phone, avatar_path IS NOT NULL AS has_avatar, created_at FROM users WHERE id = $1",
     [req.user.id]
   );
   if (!rows[0]) {
     return res.status(401).json({ error: "User no longer exists" });
   }
   res.json(rows[0]);
+});
+
+// Self-service profile fields -- just phone for now, shown on the
+// personalized pricelist's "Prepared by" footer (see routes/products.js /
+// the pricelist export). Name/role/position stay admin-managed.
+meRouter.patch("/profile", requireAuth, async (req, res) => {
+  const { phone } = req.body ?? {};
+  if (phone !== undefined && phone !== null && String(phone).length > 40) {
+    return res.status(400).json({ error: "phone is too long" });
+  }
+  await pool.query("UPDATE users SET phone = $1 WHERE id = $2", [phone ? String(phone).trim() : null, req.user.id]);
+  res.status(204).end();
 });
 
 export const passwordChangeLimiter = rateLimit({

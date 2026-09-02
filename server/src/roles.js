@@ -44,6 +44,16 @@ export function canAssignErpCustomerId(role, customerCreatedBy, userId) {
   return false;
 }
 
+// Full product/pricing management (create/edit products, set standard and
+// retail prices, create/cancel special prices, bulk-edit, manage the
+// company profile) -- accountant is included because they own pricing
+// day to day, same as the ERP-linking authority above. Sales director and
+// sales manager can browse the catalog and generate a pricelist, but not
+// touch master pricing.
+export function canManageProducts(role) {
+  return role === "admin" || role === "ceo" || role === "accountant";
+}
+
 // Per spec: admin, sales director, and CEO see the live team-location map.
 export function canViewTeamLocations(role) {
   return role === "admin" || role === "sales_director" || role === "ceo";

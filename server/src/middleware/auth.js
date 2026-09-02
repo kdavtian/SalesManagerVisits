@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import { pool } from "../db/pool.js";
-import { canDeleteOrEditDirectly, canViewTeamLocations } from "../roles.js";
+import { canDeleteOrEditDirectly, canViewTeamLocations, canManageProducts } from "../roles.js";
 
 const COOKIE_NAME = "session";
 
@@ -70,6 +70,16 @@ export function requireDirectEditAccess(req, res, next) {
 
 export function requireLocationViewer(req, res, next) {
   if (!canViewTeamLocations(req.user?.role)) {
+    return res.status(403).json({ error: "Not allowed" });
+  }
+  next();
+}
+
+// Product/pricing management -- admin/ceo/accountant (see canManageProducts).
+// Broader than requireAdmin: the CEO's own spec puts full pricing control
+// in the accountant's hands day to day, not just admin's.
+export function requireProductManager(req, res, next) {
+  if (!canManageProducts(req.user?.role)) {
     return res.status(403).json({ error: "Not allowed" });
   }
   next();
