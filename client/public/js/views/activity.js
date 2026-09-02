@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { escapeHtml, formatDistance, formatAmd } from "../util.js";
-import { t } from "../i18n.js";
+import { t, getLang } from "../i18n.js";
 import { seesAllActivity } from "../state.js";
 
 const OUTCOMES = [
@@ -22,9 +22,6 @@ const STATUS_ICON = {
   rejected: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v5"/><circle cx="12" cy="16.5" r="0.6" fill="#fff" stroke="none"/><circle cx="12" cy="12" r="9"/></svg>`,
 };
 
-// Activity filter icons: intentionally simple, instantly recognizable and
-// drawn on the same 24px / 1.9px-stroke system as the app navigation icons.
-// No decorative micro-glyphs: these remain clear at the compact 20–21px size.
 const ACTIVITY_FILTER_ICONS = {
   manager: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17.5" cy="8.6" r="2.35"/><path d="M3.5 20v-1.2A5.5 5.5 0 0 1 9 13.3h.1a5.5 5.5 0 0 1 5.5 5.5V20"/><path d="M15.1 13.8c.7-.35 1.5-.55 2.35-.55A4.55 4.55 0 0 1 22 17.8V20"/></svg>`,
   status: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.75"/><path d="m7.9 12.1 2.6 2.7 5.8-6"/></svg>`,
@@ -61,17 +58,15 @@ export async function renderActivity(root, navigate) {
   const container = root.querySelector(".activity-view");
 
   const canFilterByManager = seesAllActivity();
+  const isHy = getLang() === "hy";
 
-  // Activity opens on Today: it is the field team's operational screen and
-  // should answer "what happened today?" immediately. Wider periods remain
-  // one tap away and use the same server-side range handling.
   let range = "today";
   let customFrom = "";
   let customTo = "";
   let allCheckins = [];
   let checkinsCapped = false;
   let visibleCount = PAGE_SIZE;
-  let sortAsc = false;
+  let sortMode = "newest";
   let openDropdown = null;
 
   const filters = { search: "", manager: "", status: "", outcome: "" };
@@ -86,23 +81,29 @@ export async function renderActivity(root, navigate) {
     { value: "", label: t("all_outcomes") },
     ...OUTCOMES.map((o) => ({ value: o, label: t(`outcome_${o}`) })),
   ];
+  const SORT_OPTIONS = [
+    { value: "newest", label: isHy ? "Նորերը սկզբում" : "Newest first" },
+    { value: "oldest", label: isHy ? "Հները սկզբում" : "Oldest first" },
+    ...(canFilterByManager ? [{ value: "manager", label: isHy ? "Ըստ վաճառքի մենեջերի" : "By sales manager" }] : []),
+  ];
 
-  function iconDropdownHtml(key, options, currentValue, icon, label) {
+  function iconDropdownHtml(key, options, currentValue, icon, label, isApplied = Boolean(currentValue)) {
+    const isOpen = openDropdown === key;
     return `
       <div class="activity-icon-dropdown">
         <button type="button"
-          class="activity-search-filter-btn ${currentValue ? "activity-search-filter-btn-active" : ""}"
+          class="activity-search-filter-btn ${isApplied ? "activity-search-filter-btn-active" : ""} ${isOpen ? "activity-search-filter-btn-open" : ""}"
           data-dropdown="${key}"
           aria-label="${escapeHtml(label)}"
           title="${escapeHtml(label)}"
           aria-haspopup="menu"
-          aria-expanded="${openDropdown === key}"
+          aria-expanded="${isOpen}"
           aria-controls="activity-filter-menu-${key}">
           ${icon}
-          ${currentValue ? `<span class="activity-search-filter-dot" aria-hidden="true"></span>` : ""}
+          ${isApplied ? `<span class="activity-search-filter-dot" aria-hidden="true"></span>` : ""}
         </button>
-        <div class="activity-search-menu" id="activity-filter-menu-${key}" role="menu" data-dropdown-menu="${key}" ${openDropdown === key ? "" : "hidden"}>
-          ${options.map((o) => `<button type="button" role="menuitemradio" aria-checked="${o.value === currentValue}" data-value="${escapeHtml(o.value)}" class="${o.value === currentValue ? "filter-dropdown-selected" : ""}">${escapeHtml(o.label)}</button>`).join("")}
+        <div class="activity-search-menu" id="activity-filter-menu-${key}" role="menu" data-dropdown-menu="${key}" ${isOpen ? "" : "hidden"}>
+          ${options.map((o) => `<button type="button" role="menuitemradio" aria-checked="${o.value === currentValue}" data-value="${escapeHtml(o.value)}" class="${o.value === currentValue ? "filter-dropdown-selected" : ""}"><span>${escapeHtml(o.label)}</span>${o.value === currentValue ? `<span class="activity-menu-check" aria-hidden="true">✓</span>` : ""}</button>`).join("")}
         </div>
       </div>
     `;
@@ -140,9 +141,16 @@ export async function renderActivity(root, navigate) {
       const q = filters.search.trim().toLowerCase();
       list = list.filter((c) => c.customer_name.toLowerCase().includes(q));
     }
-    list = [...list].sort((a, b) =>
-      sortAsc ? new Date(a.timestamp) - new Date(b.timestamp) : new Date(b.timestamp) - new Date(a.timestamp)
-    );
+
+    list = [...list].sort((a, b) => {
+      if (sortMode === "oldest") return new Date(a.timestamp) - new Date(b.timestamp);
+      if (sortMode === "manager") {
+        const byManager = String(a.user_name || "").localeCompare(String(b.user_name || ""), undefined, { sensitivity: "base" });
+        if (byManager !== 0) return byManager;
+        return new Date(b.timestamp) - new Date(a.timestamp);
+      }
+      return new Date(b.timestamp) - new Date(a.timestamp);
+    });
     return list;
   }
 
@@ -151,12 +159,11 @@ export async function renderActivity(root, navigate) {
     const managerLabel = t("all_managers");
     const statusLabel = t("all_status");
     const outcomeLabel = t("all_outcomes");
+    const sortLabel = isHy ? "Դասավորել" : t("sort");
 
     container.innerHTML = `
       <div class="list-header">
-        <div>
-          <h1>${t("nav_activity")}</h1>
-        </div>
+        <div><h1>${t("nav_activity")}</h1></div>
       </div>
 
       <div class="activity-tabs" role="tablist">
@@ -167,9 +174,9 @@ export async function renderActivity(root, navigate) {
       </div>
 
       ${range === "custom" ? `<div class="activity-custom-range">
-              <label>${t("date_from")}<input type="date" id="custom-from" value="${customFrom}" /></label>
-              <label>${t("date_to")}<input type="date" id="custom-to" value="${customTo}" /></label>
-            </div>` : ""}
+        <label>${t("date_from")}<input type="date" id="custom-from" value="${customFrom}" /></label>
+        <label>${t("date_to")}<input type="date" id="custom-to" value="${customTo}" /></label>
+      </div>` : ""}
 
       ${checkinsCapped ? `<p class="muted activity-capped-note">${t("activity_capped_note")}</p>` : ""}
 
@@ -187,9 +194,7 @@ export async function renderActivity(root, navigate) {
           ${canFilterByManager ? iconDropdownHtml("manager", [{ value: "", label: managerLabel }, ...managerOptions().map(([id, name]) => ({ value: String(id), label: name }))], filters.manager, ACTIVITY_FILTER_ICONS.manager, managerLabel) : ""}
           ${iconDropdownHtml("status", STATUS_OPTIONS, filters.status, ACTIVITY_FILTER_ICONS.status, statusLabel)}
           ${iconDropdownHtml("outcome", OUTCOME_OPTIONS, filters.outcome, ACTIVITY_FILTER_ICONS.outcome, outcomeLabel)}
-          <button type="button" class="activity-search-filter-btn ${sortAsc ? "activity-search-filter-btn-active" : ""}" id="sort-toggle-btn" aria-label="${t("sort")}" title="${t("sort")}">
-            ${ACTIVITY_FILTER_ICONS.sort}
-          </button>
+          ${iconDropdownHtml("sort", SORT_OPTIONS, sortMode, ACTIVITY_FILTER_ICONS.sort, sortLabel, sortMode !== "newest")}
         </div>
       </div>
 
@@ -211,10 +216,7 @@ export async function renderActivity(root, navigate) {
         const tabs = [...container.querySelectorAll(".activity-tab")];
         const delta = e.key === "ArrowRight" ? 1 : -1;
         tabs[(tabs.indexOf(btn) + delta + tabs.length) % tabs.length]?.click();
-        requestAnimationFrame(() => {
-          const selected = container.querySelector(`.activity-tab[data-range="${range}"]`);
-          selected?.focus();
-        });
+        requestAnimationFrame(() => container.querySelector(`.activity-tab[data-range="${range}"]`)?.focus());
       });
     });
 
@@ -253,8 +255,9 @@ export async function renderActivity(root, navigate) {
         if (openDropdown) requestAnimationFrame(() => container.querySelector(`[data-dropdown-menu="${key}"] button`)?.focus());
       });
       btn.addEventListener("keydown", (e) => {
+        if (e.key !== "ArrowDown" && e.key !== "Enter" && e.key !== " ") return;
+        if (e.key === "ArrowDown") e.preventDefault();
         if (e.key === "ArrowDown") {
-          e.preventDefault();
           openDropdown = btn.dataset.dropdown;
           renderShell();
           requestAnimationFrame(() => container.querySelector(`[data-dropdown-menu="${openDropdown}"] button`)?.focus());
@@ -269,16 +272,11 @@ export async function renderActivity(root, navigate) {
         if (key === "manager") filters.manager = optBtn.dataset.value;
         else if (key === "status") filters.status = optBtn.dataset.value;
         else if (key === "outcome") filters.outcome = optBtn.dataset.value;
+        else if (key === "sort") sortMode = optBtn.dataset.value;
         openDropdown = null;
         visibleCount = PAGE_SIZE;
         renderShell();
       });
-    });
-
-    container.querySelector("#sort-toggle-btn").addEventListener("click", (e) => {
-      e.stopPropagation();
-      sortAsc = !sortAsc;
-      renderShell();
     });
 
     renderList();
@@ -315,13 +313,19 @@ export async function renderActivity(root, navigate) {
     }
 
     const visible = filtered.slice(0, visibleCount);
+    let lastManager = null;
     listEl.innerHTML = visible
       .map((c) => {
         const status = checkinStatus(c);
         const meta = statusMeta(status);
         const outcomeLabel = checkinOutcomes(c).map((o) => t(`outcome_${o}`)).join(", ");
         const distanceLabel = status === "rejected" ? `${formatDistance(c.distance_meters)} ${t("away")}` : formatDistance(c.distance_meters);
-        return `
+        let managerHeading = "";
+        if (sortMode === "manager" && c.user_name !== lastManager) {
+          lastManager = c.user_name;
+          managerHeading = `<div class="activity-manager-group-heading">${escapeHtml(c.user_name)}</div>`;
+        }
+        return `${managerHeading}
         <button class="card activity-row-rich" data-customer-id="${c.customer_id}">
           <span class="activity-status-icon ${meta.cls}">${STATUS_ICON[status]}</span>
           <div class="activity-row-body">
@@ -337,8 +341,7 @@ export async function renderActivity(root, navigate) {
             </div>
           </div>
           <span class="chevron">&#8250;</span>
-        </button>
-      `;
+        </button>`;
       })
       .join("");
 

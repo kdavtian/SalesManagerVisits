@@ -1,6 +1,6 @@
 /* Activity search + filter controls.
-   The filters intentionally live inside the search field so the header stays
-   compact on iPhone and Armenian labels never force horizontal overflow. */
+   Filters live inside the search field so the header stays compact on iPhone
+   and Armenian labels never force horizontal overflow. */
 
 .activity-search-combined {
   position: relative;
@@ -32,7 +32,7 @@
   outline: 0;
   background: transparent;
   color: var(--text);
-  font-size: 16px; /* prevents iOS focus zoom */
+  font-size: 16px;
   box-shadow: none;
 }
 
@@ -69,13 +69,14 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, transform 90ms ease, box-shadow 120ms ease;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 
 .activity-search-filter-btn:active {
   background: var(--bg-card-pressed);
-  transform: scale(0.96);
+  transform: scale(0.93);
 }
 
 .activity-search-filter-btn:focus-visible {
@@ -89,9 +90,18 @@
   height: 21px;
 }
 
+/* Applied filter: remains visibly active after the menu is closed. */
 .activity-search-filter-btn-active {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, var(--bg-card));
+}
+
+/* Open menu: stronger state than merely applied, so a tap gives immediate
+   unmistakable feedback even when the selected filter value is still "All". */
+.activity-search-filter-btn-open {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-card));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 38%, transparent);
 }
 
 .activity-search-filter-dot {
@@ -110,33 +120,43 @@
   right: 0;
   top: calc(100% + 7px);
   z-index: 80;
-  min-width: 190px;
-  max-width: min(280px, calc(100vw - 32px));
-  max-height: 280px;
+  min-width: 205px;
+  max-width: min(300px, calc(100vw - 32px));
+  max-height: 300px;
   overflow-y: auto;
   padding: 6px;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 14px;
   box-shadow: var(--shadow-elevated);
   overscroll-behavior: contain;
+  transform-origin: top right;
+  animation: activity-menu-in 120ms ease-out;
+}
+
+@keyframes activity-menu-in {
+  from { opacity: 0; transform: translateY(-3px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .activity-search-menu button {
   width: 100%;
-  min-height: 44px;
+  min-height: 46px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 9px 11px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 9px;
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 0.86rem;
+  font-size: 0.88rem;
   text-align: left;
   white-space: normal;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .activity-search-menu button:active {
@@ -146,11 +166,28 @@
 .activity-search-menu .filter-dropdown-selected {
   color: var(--accent) !important;
   font-weight: 700;
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
 }
 
-/* The old second filter row is intentionally suppressed on Activity only.
-   Customer filters use their own .customer-filter-row and are untouched. */
+.activity-menu-check {
+  flex: 0 0 auto;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.activity-manager-group-heading {
+  margin: 14px 4px 7px;
+  color: var(--text-dim);
+  font-size: 0.77rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.activity-manager-group-heading:first-child {
+  margin-top: 2px;
+}
+
 .activity-view .activity-filter-row {
   display: none;
 }
@@ -174,5 +211,17 @@
   .activity-search-filter-btn svg {
     width: 20px;
     height: 20px;
+  }
+
+  .activity-search-menu {
+    min-width: 196px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-search-filter-btn,
+  .activity-search-menu {
+    transition: none;
+    animation: none;
   }
 }
