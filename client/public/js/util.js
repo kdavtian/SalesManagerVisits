@@ -419,6 +419,98 @@ export function activateDialog(overlay) {
   observer.observe(document.body, { childList: true });
 }
 
+// iOS-style edge-swipe-to-dismiss: a touch starting within a thin strip
+// along the screen's left edge (mirroring the OS's own interactive-pop
+// gesture, so it never fights normal horizontal scrolling/carousels
+// elsewhere in the sheet) that drags mostly rightward closes the sheet;
+// dragging mostly vertically is left alone so the sheet's own content can
+// still scroll normally. `frameEl` is the element that visually slides
+// (translateX); `onDismiss` is called once the close animation finishes.
+const SWIPE_EDGE_ZONE = 24;
+const SWIPE_DISMISS_DISTANCE = 90;
+const SWIPE_DISMISS_VELOCITY = 0.5; // px/ms
+
+export function attachSwipeToDismiss(overlay, frameEl, onDismiss) {
+  let tracking = false;
+  let direction = null; // null | "horizontal" | "vertical"
+  let startX = 0;
+  let startY = 0;
+  let startTime = 0;
+  let lastX = 0;
+  let lastTime = 0;
+
+  function resetTransform() {
+    frameEl.style.transition = "";
+    frameEl.style.transform = "";
+  }
+
+  overlay.addEventListener(
+    "touchstart",
+    (e) => {
+      if (e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      if (touch.clientX > SWIPE_EDGE_ZONE) return;
+      tracking = true;
+      direction = null;
+      startX = lastX = touch.clientX;
+      startY = touch.clientY;
+      startTime = lastTime = e.timeStamp;
+      frameEl.style.transition = "none";
+    },
+    { passive: true }
+  );
+
+  overlay.addEventListener(
+    "touchmove",
+    (e) => {
+      if (!tracking) return;
+      const touch = e.touches[0];
+      const dx = touch.clientX - startX;
+      const dy = touch.clientY - startY;
+      if (direction === null) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        direction = Math.abs(dx) > Math.abs(dy) && dx > 0 ? "horizontal" : "vertical";
+        if (direction === "vertical") {
+          tracking = false;
+          resetTransform();
+          return;
+        }
+      }
+      if (direction !== "horizontal") return;
+      // Now committed to the swipe -- stop the page/content from also
+      // scrolling underneath the dragging finger.
+      e.preventDefault();
+      lastX = touch.clientX;
+      lastTime = e.timeStamp;
+      frameEl.style.transform = `translateX(${Math.max(0, dx)}px)`;
+    },
+    { passive: false }
+  );
+
+  function finish() {
+    if (!tracking) return;
+    tracking = false;
+    if (direction !== "horizontal") return;
+    const dx = lastX - startX;
+    const elapsed = Math.max(1, lastTime - startTime);
+    const velocity = dx / elapsed;
+    frameEl.style.transition = "transform 0.25s ease";
+    if (dx > SWIPE_DISMISS_DISTANCE || velocity > SWIPE_DISMISS_VELOCITY) {
+      frameEl.style.transform = "translateX(100%)";
+      frameEl.addEventListener("transitionend", () => onDismiss(), { once: true });
+    } else {
+      frameEl.style.transform = "";
+    }
+  }
+
+  overlay.addEventListener("touchend", finish);
+  overlay.addEventListener("touchcancel", () => {
+    tracking = false;
+    if (direction === "horizontal") resetTransform();
+    direction = null;
+  });
+}
+
 // Gives the project-local ERP suggestion lists full combobox semantics and
 // keyboard behavior without changing their filtering/data logic.
 export function activateCombobox(input, list, onSelect) {

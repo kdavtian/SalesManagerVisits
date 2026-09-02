@@ -28,6 +28,19 @@ import { escapeHtml } from "./util.js";
 const app = document.getElementById("app");
 const navBar = document.getElementById("nav-bar");
 const topBar = document.getElementById("top-bar");
+
+// #app (not the document) is the app's real scroll container -- body stays
+// overflow:hidden so the fixed top/nav bars never drift with content (see
+// styles.css). That means iOS's native "tap the status bar to scroll to
+// top" gesture has nothing to reach: it only ever targets the document's
+// own scroll view, and there's no way to intercept a tap on the real status
+// bar from a web page at all. Tapping the top bar itself -- the strip
+// immediately below the real status bar -- is the standard PWA stand-in for
+// that gesture, so wire it here once for every page rather than per view.
+topBar.addEventListener("click", (e) => {
+  if (e.target.closest("button, a")) return;
+  app.scrollTo({ top: 0, behavior: "smooth" });
+});
 const syncBanner = document.getElementById("sync-banner");
 const installRoot = document.getElementById("install-root");
 const updateRoot = document.getElementById("update-root");

@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatDateTime, haversineMeters, getCurrentPosition, customerListIconHtml, categoryLabel } from "../util.js";
+import { escapeHtml, formatDateTime, haversineMeters, getCurrentPosition, customerListIconHtml, categoryLabel, activateDialog } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state, seesAllActivity } from "../state.js";
@@ -15,11 +15,8 @@ export function renderCustomers(root, navigate, initialFilter) {
   root.innerHTML = `
     <div class="list-view">
       <div class="list-header">
-        <div>
-          <h1>${t("nav_customers")}</h1>
-          <p class="muted">${t("customers_subtitle")}</p>
-        </div>
-        <button class="btn btn-primary btn-sm" id="add-customer-btn">+ ${t("add_customer")}</button>
+        <h1>${t("nav_customers")}</h1>
+        <button class="list-header-add-btn" id="add-customer-btn" aria-label="${t("add_customer")}" title="${t("add_customer")}">${icons.plus}</button>
       </div>
 
       <div class="customer-stats-bar" id="customer-stats-bar"></div>
@@ -34,7 +31,7 @@ export function renderCustomers(root, navigate, initialFilter) {
           <button role="menuitemradio" aria-checked="false" data-sort="distance">${t("sort_distance")}</button>
         </div>
       </div>
-      <div class="region-filter-row" id="region-filter-row"></div>
+      <div class="customer-filter-row" id="customer-filter-row"></div>
       <div id="customer-list" class="card-list"></div>
     </div>
   `;
@@ -53,8 +50,7 @@ export function renderCustomers(root, navigate, initialFilter) {
   let subregionFilter = "";
   let assignmentFilter = ""; // "", "mine", "others"
   let channelFilter = "";
-  let openRegionMenu = null;
-  const regionFilterRow = root.querySelector("#region-filter-row");
+  const filterRow = root.querySelector("#customer-filter-row");
 
   root.querySelector("#add-customer-btn").addEventListener("click", () => navigate("#/map?add=1"));
 
@@ -103,32 +99,50 @@ export function renderCustomers(root, navigate, initialFilter) {
 
   let allCustomers = [];
 
-  const CHEVRON_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
-
-  // Reuses the in-page dropdown pattern from the Activity filters (native
-  // <select> popovers render as a full-width dark OS sheet on iOS that
-  // overlaps the list below).
-  function regionDropdownHtml(key, options, currentValue) {
-    const current = options.find((o) => o.value === currentValue) ?? options[0];
-    return `
-      <div class="filter-dropdown-wrap">
-        <button type="button" class="filter-dropdown-btn" data-region-dropdown="${key}" aria-haspopup="menu" aria-expanded="${openRegionMenu === key}" aria-controls="region-menu-${key}">
-          <span>${escapeHtml(current.label)}</span>
-          ${CHEVRON_ICON}
-        </button>
-        <div class="filter-dropdown-menu" id="region-menu-${key}" role="menu" data-region-dropdown-menu="${key}" ${openRegionMenu === key ? "" : "hidden"}>
+  // A compact 44px icon button that opens a full-height-label bottom sheet
+  // -- keeps the toolbar to a fixed, screen-width-independent size no
+  // matter how long the Armenian option text is (the old text-label
+  // dropdown row didn't fit 4 of them on an iPhone-width screen and forced
+  // the whole page to scroll sideways).
+  function openFilterSheet(titleText, options, currentValue, onSelect) {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet filter-sheet">
+        <h2>${escapeHtml(titleText)}</h2>
+        <div class="filter-sheet-options">
           ${options
             .map(
-              (o) =>
-                `<button type="button" role="menuitemradio" aria-checked="${o.value === currentValue}" data-value="${escapeHtml(o.value)}" class="${o.value === currentValue ? "filter-dropdown-selected" : ""}">${escapeHtml(o.label)}</button>`
+              (o) => `
+            <button type="button" class="filter-sheet-option ${o.value === currentValue ? "filter-sheet-option-selected" : ""}" data-value="${escapeHtml(o.value)}">
+              <span>${escapeHtml(o.label)}</span>
+              ${o.value === currentValue ? `<span class="filter-sheet-check">${icons.checkCircle}</span>` : ""}
+            </button>
+          `
             )
             .join("")}
         </div>
       </div>
     `;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+    overlay.querySelectorAll(".filter-sheet-option").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        onSelect(btn.dataset.value);
+        overlay.remove();
+      });
+    });
   }
 
-  function renderRegionFilterRow() {
+  function filterIconButton({ key, icon, label, active, onClick }) {
+    return `<button type="button" class="filter-icon-btn ${active ? "filter-icon-btn-active" : ""}" data-filter-btn="${key}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">
+      ${icon}
+      ${active ? `<span class="filter-icon-dot" aria-hidden="true"></span>` : ""}
+    </button>`;
+  }
+
+  function renderFilterRow() {
     const regions = [...new Set(allCustomers.map((c) => c.region).filter(Boolean))].sort();
     const subregions = [
       ...new Set(
@@ -138,66 +152,89 @@ export function renderCustomers(root, navigate, initialFilter) {
           .filter(Boolean)
       ),
     ].sort();
-
-    // "assigned to me/others" -- lets every role narrow to their own book,
-    // not just sales managers (who additionally get a visual dim on the
-    // "others" cards in the list itself, see renderList).
-    const assignmentOptions = [
-      { value: "", label: t("all_customers") },
-      { value: "mine", label: t("assigned_to_me") },
-      { value: "others", label: t("assigned_to_others") },
-    ];
-
-    // Sales channel (SM YVN, SM Davtashen, ...) only makes sense to filter
-    // by for roles that see more than one channel's worth of customers at
-    // once -- a sales_manager already sees only their own book, so the
-    // filter would have nothing to narrow.
     const channels = seesAllActivity()
       ? [...new Set(allCustomers.map((c) => c.sales_channel).filter(Boolean))].sort()
       : [];
 
-    regionFilterRow.innerHTML = `
-      ${regionDropdownHtml("assignment", assignmentOptions, assignmentFilter)}
-      ${regions.length ? regionDropdownHtml("region", [{ value: "", label: t("all_regions") }, ...regions.map((r) => ({ value: r, label: r }))], regionFilter) : ""}
-      ${subregions.length ? regionDropdownHtml("subregion", [{ value: "", label: t("all_subregions") }, ...subregions.map((s) => ({ value: s, label: s }))], subregionFilter) : ""}
-      ${channels.length ? regionDropdownHtml("channel", [{ value: "", label: t("all_channels") }, ...channels.map((c) => ({ value: c, label: c }))], channelFilter) : ""}
-    `;
+    const buttons = [
+      filterIconButton({
+        key: "assignment",
+        icon: icons.person,
+        label: t("filter_assignment_title"),
+        active: assignmentFilter !== "",
+      }),
+      regions.length
+        ? filterIconButton({ key: "region", icon: icons.pin, label: t("region"), active: regionFilter !== "" })
+        : "",
+      subregions.length
+        ? filterIconButton({ key: "subregion", icon: icons.compass, label: t("subregion"), active: subregionFilter !== "" })
+        : "",
+      channels.length
+        ? filterIconButton({ key: "channel", icon: icons.route, label: t("filter_direction_title"), active: channelFilter !== "" })
+        : "",
+    ]
+      .filter(Boolean)
+      .join("");
 
-    regionFilterRow.querySelectorAll("[data-region-dropdown]").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const key = btn.dataset.regionDropdown;
-        openRegionMenu = openRegionMenu === key ? null : key;
-        renderRegionFilterRow();
-      });
-    });
-    regionFilterRow.querySelectorAll("[data-region-dropdown-menu] button").forEach((optBtn) => {
-      optBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const key = optBtn.closest("[data-region-dropdown-menu]").dataset.regionDropdownMenu;
-        if (key === "region") {
-          regionFilter = optBtn.dataset.value;
-          subregionFilter = "";
-        } else if (key === "subregion") {
-          subregionFilter = optBtn.dataset.value;
-        } else if (key === "channel") {
-          channelFilter = optBtn.dataset.value;
-        } else {
-          assignmentFilter = optBtn.dataset.value;
+    filterRow.innerHTML = buttons;
+
+    filterRow.querySelector('[data-filter-btn="assignment"]')?.addEventListener("click", () => {
+      openFilterSheet(
+        t("filter_assignment_title"),
+        [
+          { value: "", label: t("all_customers") },
+          { value: "mine", label: t("assigned_to_me") },
+          { value: "others", label: t("assigned_to_others") },
+        ],
+        assignmentFilter,
+        (value) => {
+          assignmentFilter = value;
+          renderFilterRow();
+          renderList();
         }
-        openRegionMenu = null;
-        renderRegionFilterRow();
-        renderList();
-      });
+      );
+    });
+
+    filterRow.querySelector('[data-filter-btn="region"]')?.addEventListener("click", () => {
+      openFilterSheet(
+        t("region"),
+        [{ value: "", label: t("all_regions") }, ...regions.map((r) => ({ value: r, label: r }))],
+        regionFilter,
+        (value) => {
+          regionFilter = value;
+          subregionFilter = "";
+          renderFilterRow();
+          renderList();
+        }
+      );
+    });
+
+    filterRow.querySelector('[data-filter-btn="subregion"]')?.addEventListener("click", () => {
+      openFilterSheet(
+        t("subregion"),
+        [{ value: "", label: t("all_subregions") }, ...subregions.map((s) => ({ value: s, label: s }))],
+        subregionFilter,
+        (value) => {
+          subregionFilter = value;
+          renderFilterRow();
+          renderList();
+        }
+      );
+    });
+
+    filterRow.querySelector('[data-filter-btn="channel"]')?.addEventListener("click", () => {
+      openFilterSheet(
+        t("filter_direction_title"),
+        [{ value: "", label: t("all_channels") }, ...channels.map((c) => ({ value: c, label: c }))],
+        channelFilter,
+        (value) => {
+          channelFilter = value;
+          renderFilterRow();
+          renderList();
+        }
+      );
     });
   }
-
-  root.addEventListener("click", () => {
-    if (openRegionMenu) {
-      openRegionMenu = null;
-      renderRegionFilterRow();
-    }
-  });
 
   function renderStatsBar() {
     const counts = {
@@ -273,6 +310,9 @@ export function renderCustomers(root, navigate, initialFilter) {
         const lastVisit = c.last_visit_at
           ? `${t("last_visit")}: ${formatDateTime(c.last_visit_at)}`
           : t("never_visited");
+        const idAndType = [c.erp_customer_id ? `ID: ${escapeHtml(String(c.erp_customer_id))}` : "", c.category ? escapeHtml(categoryLabel(c.category)) : ""]
+          .filter(Boolean)
+          .join(" &bull; ");
 
         // A plain sales manager sees their own book at full strength and
         // everyone else's customers dimmed -- they stay visible/searchable
@@ -288,7 +328,7 @@ export function renderCustomers(root, navigate, initialFilter) {
             ${customerListIconHtml(c)}
             <div class="customer-card-main">
               <strong>${escapeHtml(c.name)}</strong>
-              ${c.category ? `<span class="muted">${escapeHtml(categoryLabel(c.category))}</span>` : ""}
+              ${idAndType ? `<span class="muted customer-card-id-type">${idAndType}</span>` : ""}
               <span class="muted customer-card-last-visit">${lastVisit}</span>
             </div>
           </span>
@@ -308,7 +348,7 @@ export function renderCustomers(root, navigate, initialFilter) {
 
   function render() {
     renderStatsBar();
-    renderRegionFilterRow();
+    renderFilterRow();
     renderList();
   }
 

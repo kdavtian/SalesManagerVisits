@@ -3,12 +3,12 @@ import { t, getLang, setLang } from "../i18n.js";
 import { getTheme, setTheme } from "../theme.js";
 import { state, isAdmin, canPlanForOthers, seesFinancialExports, canManageProducts } from "../state.js";
 import { renderTeamSection, renderPlanApprovalsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection } from "./admin.js";
-import { escapeHtml, compressImage, activateDialog } from "../util.js";
+import { escapeHtml, compressImage, activateDialog, attachSwipeToDismiss } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
 import { checkForUpdateManually } from "../updateBanner.js";
 
-const APP_VERSION = "1.36.0";
+const APP_VERSION = "1.37.0";
 
 const ICON = {
   camera: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg>`,
@@ -805,6 +805,7 @@ function openGuideOverlay() {
   }
   overlay.querySelector("#guide-overlay-close").addEventListener("click", close);
   overlay.addEventListener("click", (e) => e.target === overlay && close());
+  attachSwipeToDismiss(overlay, overlay.querySelector(".guide-overlay-frame"), close);
 
   const shareBtn = overlay.querySelector("#guide-share-btn");
   shareBtn.addEventListener("click", async () => {
@@ -841,10 +842,12 @@ function openAdminSectionOverlay(title, renderFn) {
   overlay.className = "sheet-overlay guide-overlay";
   overlay.innerHTML = `
     <div class="guide-overlay-frame">
-      <button type="button" class="icon-btn guide-overlay-close" id="admin-section-close" aria-label="${t("close")}">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-      </button>
-      <div class="admin-section-overlay-body">
+      <div class="admin-section-overlay-toolbar">
+        <button type="button" class="icon-btn guide-overlay-close" id="admin-section-close" aria-label="${t("close")}">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="admin-section-overlay-body" id="admin-section-overlay-body">
         <h2>${escapeHtml(title)}</h2>
         <div id="admin-section-overlay-content"></div>
       </div>
@@ -853,8 +856,22 @@ function openAdminSectionOverlay(title, renderFn) {
   document.body.appendChild(overlay);
   activateDialog(overlay);
 
-  overlay.querySelector("#admin-section-close").addEventListener("click", () => overlay.remove());
-  overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+  const frame = overlay.querySelector(".guide-overlay-frame");
+  const body = overlay.querySelector("#admin-section-overlay-body");
+  function close() {
+    overlay.remove();
+  }
+  overlay.querySelector("#admin-section-close").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => e.target === overlay && close());
+  attachSwipeToDismiss(overlay, frame, close);
+  // Tapping the toolbar (the strip right below the real status bar) scrolls
+  // this overlay's own content to top -- emulates iOS's native
+  // tap-status-bar-to-scroll-top, which can't otherwise reach this overlay
+  // (it's a plain DOM sheet, not the document itself).
+  overlay.querySelector(".admin-section-overlay-toolbar").addEventListener("click", (e) => {
+    if (e.target.closest("button")) return;
+    body.scrollTo({ top: 0, behavior: "smooth" });
+  });
 
   renderFn(overlay.querySelector("#admin-section-overlay-content"));
 }

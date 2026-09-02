@@ -2292,12 +2292,27 @@ input[type="search"]:focus {
   flex-shrink: 0;
 }
 
+/* Close button sits in its own row above the scrolling body (a flex
+   sibling, not a descendant of .admin-section-overlay-body), so it never
+   scrolls away with the content and needs its own safe-area-top padding
+   instead of inheriting the body's. Right-aligned per the app's modal
+   convention (a full-screen sheet with a single dismiss action, no
+   competing primary action, gets its close X on the trailing/right side --
+   left is reserved for back navigation on routed, page-style views). */
+.admin-section-overlay-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: calc(10px + var(--safe-top)) 10px 6px;
+  flex-shrink: 0;
+}
+
 .admin-section-overlay-body {
   width: 100%;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   box-sizing: border-box;
-  padding: calc(20px + var(--safe-top)) 16px calc(20px + var(--safe-bottom));
+  padding: 4px 16px calc(20px + var(--safe-bottom));
 }
 
 .admin-section-overlay-body h2 {
@@ -3225,7 +3240,7 @@ input[type="search"]:focus {
 
 .list-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   padding: 16px 16px 0;
   gap: 10px;
@@ -3236,12 +3251,35 @@ input[type="search"]:focus {
   font-weight: 800;
   letter-spacing: -0.02em;
   margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Icon-only, not "+ Add Customer" -- the full Armenian label ("Ավելացնել
+   հաճախորդ") next to the page title was wider than the button had room
+   for, which is exactly the kind of oversized header control that pushed
+   this whole page into horizontal scroll. A round accent-filled icon
+   button says "primary add action" without needing the words. */
+.list-header-add-btn {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #ffffff;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
 }
 
 .customer-stats-bar {
   display: flex;
   gap: 8px;
-  padding: 14px 16px 0;
+  padding: 10px 16px 0;
   overflow-x: auto;
 }
 
@@ -3437,6 +3475,14 @@ input[type="search"]:focus {
 
 .customer-card-last-visit {
   font-size: 0.76rem;
+}
+
+/* "ID: 10001 • Խանութ" -- secondary to the name, ahead of last-visit. Not a
+   badge (task explicitly calls for readable-but-secondary, not a pill), so
+   it's just a smaller/dimmer text line consistent with the rest of the
+   card's metadata hierarchy. */
+.customer-card-id-type {
+  font-size: 0.78rem;
 }
 
 /* ===== Customer detail redesign ===== */
@@ -4236,6 +4282,104 @@ input[type="search"]:focus {
   flex-shrink: 0;
   width: 44px;
   height: 44px;
+}
+
+/* Compact icon-first filter row (Customers) -- each button is a fixed
+   44px square regardless of how long its Armenian label is, so the row
+   never grows past the buttons it actually has and can't force the page
+   to scroll sideways the way the old full-width text-label dropdowns did. */
+.customer-filter-row {
+  display: flex;
+  gap: 8px;
+}
+
+.customer-filter-row:not(:empty) {
+  padding: 0 16px 10px;
+}
+
+.filter-icon-btn {
+  position: relative;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.filter-icon-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Active state must read at a glance -- tinted icon + pale background, plus
+   a small dot so it's still obvious to someone who can't distinguish the
+   color shift alone. */
+.filter-icon-btn-active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+.filter-icon-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 1.5px solid var(--bg-card);
+}
+
+/* Bottom sheet opened by a filter-icon-btn -- full Armenian option labels,
+   one per row, same shell as every other sheet in the app. */
+.filter-sheet-options {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.filter-sheet-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 4px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.95rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.filter-sheet-option:last-child {
+  border-bottom: none;
+}
+
+.filter-sheet-option-selected {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.filter-sheet-check {
+  flex-shrink: 0;
+  color: var(--accent);
+  display: flex;
+}
+
+.filter-sheet-check svg {
+  width: 18px;
+  height: 18px;
 }
 
 .filter-dropdown-wrap {
