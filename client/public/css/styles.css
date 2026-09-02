@@ -2522,6 +2522,23 @@ input[type="search"]:focus {
   font-size: 0.85rem;
 }
 
+.leaderboard-row-mine {
+  border: 1.5px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
+}
+
+.leaderboard-divider {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 8px 4px 2px;
+}
+
+.leaderboard-prize-hint {
+  font-size: 0.78rem;
+}
+
 .perf-row {
   display: flex;
   align-items: center;

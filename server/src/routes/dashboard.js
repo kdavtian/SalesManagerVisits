@@ -118,7 +118,12 @@ dashboardRouter.get("/summary", async (req, res) => {
       photo_points: myPoints.photo_points,
       customer_points: myPoints.customer_points,
     },
-    points_leaderboard: seesAll ? points.rows : null,
+    // Everyone sees the full leaderboard, sales managers included -- they're
+    // the ones actually competing for the monthly premium, so hiding
+    // standings from exactly that audience defeated the whole point of a
+    // motivating leaderboard (seesAll only ever gated broader activity
+    // data, not this).
+    points_leaderboard: points.rows,
   });
 });
 

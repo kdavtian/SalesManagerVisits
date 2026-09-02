@@ -118,14 +118,11 @@ export async function renderDashboard(root, navigate) {
       }
     </div>
 
-    <details class="dashboard-insights">
-      <summary>${t("performance_insights")}</summary>
-
     ${
       state.user.role !== "admin"
         ? `<div class="card points-card">
             <div class="points-card-main">
-              <span class="progress-label">${t("points_this_month")}</span>
+              <span class="progress-label">🏆 ${t("points_this_month")}</span>
               <span class="points-value">${summary.my_points.total_points}</span>
             </div>
             <div class="points-breakdown muted">
@@ -137,10 +134,16 @@ export async function renderDashboard(root, navigate) {
 
     ${
       summary.points_leaderboard?.length
-        ? `<h2 class="section-title">${t("points_leaderboard")}</h2>
+        ? `<div class="section-heading-row">
+             <h2 class="section-title section-title-inline">${t("points_leaderboard")}</h2>
+             <span class="muted leaderboard-prize-hint">${t("points_leaderboard_prize_hint")}</span>
+           </div>
            <div class="card-list" id="points-leaderboard"></div>`
         : ""
     }
+
+    <details class="dashboard-insights">
+      <summary>${t("performance_insights")}</summary>
 
     <h2 class="section-title">${t("visit_trends")}</h2>
     <div class="card trend-chart-card">
@@ -170,18 +173,24 @@ export async function renderDashboard(root, navigate) {
 
   const leaderboardEl = container.querySelector("#points-leaderboard");
   if (leaderboardEl && summary.points_leaderboard?.length) {
-    leaderboardEl.innerHTML = summary.points_leaderboard
-      .slice(0, 5)
-      .map(
-        (p, i) => `
-        <div class="card leaderboard-row">
-          <span class="leaderboard-rank">${i === 0 ? "🏆" : `#${i + 1}`}</span>
+    const board = summary.points_leaderboard;
+    const myIndex = board.findIndex((p) => p.user_id === state.user.id);
+    // Top 5 always show; if the current user isn't in it, their own row is
+    // appended below a divider so nobody has to wonder where they stand --
+    // "seeing the leaderboard but not knowing your own rank" is not
+    // motivating, it's just noise.
+    const top = board.slice(0, 5);
+    const mine = myIndex >= 5 ? board[myIndex] : null;
+    const rowHtml = (p, rank) => `
+        <div class="card leaderboard-row ${p.user_id === state.user.id ? "leaderboard-row-mine" : ""}">
+          <span class="leaderboard-rank">${rank === 0 ? "🏆" : `#${rank + 1}`}</span>
           <span class="leaderboard-name">${escapeHtml(p.user_name)}</span>
           <span class="leaderboard-points">${p.total_points} ${t("points_short")}</span>
         </div>
-      `
-      )
-      .join("");
+      `;
+    leaderboardEl.innerHTML =
+      top.map((p, i) => rowHtml(p, i)).join("") +
+      (mine ? `<div class="leaderboard-divider muted">${t("points_your_rank")}</div>${rowHtml(mine, myIndex)}` : "");
   }
 
   const activityEl = container.querySelector("#recent-activity");
