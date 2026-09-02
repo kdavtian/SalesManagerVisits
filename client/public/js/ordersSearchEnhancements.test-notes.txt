@@ -1,0 +1,10 @@
+Orders search/filter QA checklist
+- Search input and channel filter render as one compact control.
+- Channel icon remains visible and uses the same stroke system as Activity.
+- Tapping filter gives immediate open-state feedback.
+- Selecting a non-default channel keeps the icon highlighted and shows an indicator dot.
+- Reopening the menu marks the selected channel with a check.
+- Selecting All clears the active state.
+- Existing order status chips, search behavior, channel filtering, loading-more logic, order detail navigation and new-order flow remain unchanged.
+- Status chips remain horizontally scrollable on narrow iPhones without page-level horizontal drift.
+- PWA cache updated so installed iPhones receive the new assets.
