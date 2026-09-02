@@ -1,7 +1,8 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, tierBadgeHtml } from "../util.js";
+import { escapeHtml, formatAmd, tierBadgeHtml, activateDialog, activateCombobox } from "../util.js";
 import { t } from "../i18n.js";
 import { enqueueOrder } from "../offlineQueue.js";
+import { canAssignErpCustomerId } from "../state.js";
 
 // Reps often open "Create order" several times a visit (once per checkin);
 // the catalog rarely changes minute to minute, so cache it in module scope
@@ -501,6 +502,10 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
   });
 
   function showOrderSaved(order) {
+    if (order.status === "draft") {
+      openErpRequiredSheet(order);
+      return;
+    }
     container.innerHTML = `
       <div class="checkin-result result-success">
         <div class="result-icon">✓</div>
@@ -512,6 +517,122 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
     `;
     container.querySelector("#order-done-btn").addEventListener("click", () => {
       navigate(`#/customers/${customerId}`);
+    });
+  }
+
+  // An order for a customer with no ERP customer ID lands as a draft (see
+  // POST /orders) -- ask for the ID right away so it can go straight to
+  // "submitted" without the rep needing to remember to come back to it
+  // later. Closing without an ID is a valid choice too: the order is
+  // already safely saved as a draft either way.
+  function openErpRequiredSheet(order) {
+    container.innerHTML = `
+      <div class="checkin-result result-warning">
+        <div class="result-icon">📝</div>
+        <h2>${t("order_saved_as_draft")}</h2>
+        <p>${escapeHtml(customer.name)} · ${formatAmd(Number(order.total_amd))}</p>
+        <p class="muted">${t("draft_needs_erp_id")}</p>
+        <button class="btn btn-primary btn-block" id="draft-done-btn">${t("done")}</button>
+      </div>
+    `;
+    container.querySelector("#draft-done-btn").addEventListener("click", () => {
+      navigate(`#/customers/${customerId}`);
+    });
+
+    if (!canAssignErpCustomerId(customer)) return;
+
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>${t("erp_customer_id")}</h2>
+        <p class="muted">${t("draft_needs_erp_id")}</p>
+        <form id="submit-order-form">
+          <label class="erp-suggest-wrap">${t("erp_customer_id")}
+            <input type="text" name="erp_customer_id" id="draft-erp-input" autocomplete="off" />
+            <div class="erp-suggest-list" id="draft-erp-suggest-list" hidden></div>
+          </label>
+          <p class="form-error" id="draft-erp-error" hidden></p>
+          <div class="sheet-actions">
+            <button type="button" class="btn" id="draft-close-btn">${t("save_as_draft")}</button>
+            <button type="submit" class="btn btn-primary">${t("submit_order")}</button>
+          </div>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+
+    function close() {
+      overlay.remove();
+    }
+    overlay.querySelector("#draft-close-btn").addEventListener("click", close);
+    overlay.addEventListener("click", (e) => e.target === overlay && close());
+
+    const erpInput = overlay.querySelector("#draft-erp-input");
+    const suggestList = overlay.querySelector("#draft-erp-suggest-list");
+    let erpOptions = [];
+    api
+      .getUnlinkedErpCustomers()
+      .then((results) => {
+        erpOptions = [...results].sort((a, b) =>
+          (a.customer_name || "").localeCompare(b.customer_name || "", undefined, { sensitivity: "base" })
+        );
+      })
+      .catch(() => {});
+
+    function renderSuggestions(query) {
+      const q = query.trim().toLowerCase();
+      const matches = q
+        ? erpOptions.filter((r) => (r.customer_name || "").toLowerCase().includes(q) || r.erp_customer_id.includes(q))
+        : erpOptions;
+      if (!matches.length) {
+        suggestList.hidden = true;
+        suggestList.innerHTML = "";
+        return;
+      }
+      suggestList.innerHTML = matches
+        .slice(0, 30)
+        .map(
+          (r) => `
+        <div class="erp-suggest-item" data-id="${escapeHtml(r.erp_customer_id)}">
+          <span>${escapeHtml(r.customer_name || r.erp_customer_id)}</span>
+          ${r.debt_amd > 0 ? `<span class="muted">${formatAmd(r.debt_amd)}</span>` : ""}
+        </div>`
+        )
+        .join("");
+      suggestList.hidden = false;
+    }
+
+    erpInput.addEventListener("focus", () => renderSuggestions(erpInput.value));
+    erpInput.addEventListener("input", () => renderSuggestions(erpInput.value));
+    erpInput.addEventListener("blur", () => {
+      setTimeout(() => (suggestList.hidden = true), 150);
+    });
+    activateCombobox(erpInput, suggestList, (item) => {
+      erpInput.value = item.dataset.id;
+    });
+
+    const form = overlay.querySelector("#submit-order-form");
+    const errorEl = overlay.querySelector("#draft-erp-error");
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const submitBtn = form.querySelector('button[type="submit"]');
+      const erpId = erpInput.value.trim();
+      if (!erpId) {
+        errorEl.textContent = t("erp_customer_id_required");
+        errorEl.hidden = false;
+        return;
+      }
+      submitBtn.disabled = true;
+      try {
+        await api.submitOrder(order.id, erpId);
+        close();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+        submitBtn.disabled = false;
+      }
     });
   }
 

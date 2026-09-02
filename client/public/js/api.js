@@ -119,6 +119,7 @@ export const api = {
   resyncProduct: (id) => request(`/products/${id}/resync`, { method: "POST" }),
 
   createOrder: (data) => json("/orders", "POST", data),
+  submitOrder: (id, erpCustomerId) => json(`/orders/${id}/submit`, "POST", erpCustomerId ? { erp_customer_id: erpCustomerId } : {}),
   listOrders: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/orders${qs ? `?${qs}` : ""}`);

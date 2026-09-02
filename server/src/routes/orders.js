@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { seesAllActivity, canConfirmOrders } from "../roles.js";
+import { seesAllActivity, canConfirmOrders, canAssignErpCustomerId } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { notifyUser } from "../notifications.js";
 import { ORDER_NOTIFY_ROLES } from "../notificationPreferences.js";
@@ -18,6 +18,7 @@ const FULFILLMENT_ROLES = new Set(["warehouse_manager", "delivery_manager", "adm
 // What each status may legally become next. "cancelled" is reachable from
 // anywhere in-flight; once delivered or cancelled, an order is final.
 const NEXT_STATUS = {
+  draft: ["cancelled"],
   submitted: ["confirmed", "cancelled"],
   confirmed: ["packed", "cancelled"],
   packed: ["delivered", "cancelled"],
@@ -120,9 +121,17 @@ ordersRouter.post("/", async (req, res) => {
   // priority if a caller somehow sent both.
   if (discountAmd > 0) discountPct = 0;
 
-  const { rows: customerRows } = await pool.query("SELECT id, name FROM customers WHERE id = $1", [customerId]);
+  const { rows: customerRows } = await pool.query("SELECT id, name, erp_customer_id FROM customers WHERE id = $1", [customerId]);
   const customer = customerRows[0];
   if (!customer) return res.status(404).json({ error: "Customer not found" });
+
+  // An order can never be approved without its customer being linked to an
+  // ERP record (see the confirm-transition guard below), so there is no
+  // point letting one exist as "submitted" and waiting on a reviewer who
+  // can never approve it. It lands as a draft instead -- not visible to
+  // reviewers/fulfillment -- until POST /orders/:id/submit links the
+  // customer (or confirms it's already linked) and moves it forward.
+  const initialStatus = customer.erp_customer_id ? "submitted" : "draft";
 
   // A client-supplied checkin_id is otherwise unverified -- without this,
   // any rep could link their order to someone else's checkin (or one for a
@@ -159,9 +168,9 @@ ordersRouter.post("/", async (req, res) => {
     await client.query("BEGIN");
     const orderCode = await nextOrderCode(client);
     const { rows } = await client.query(
-      `INSERT INTO orders (customer_id, user_id, checkin_id, total_amd, note, discount_pct, discount_amd, approval_status, order_code)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-      [customerId, req.user.id, checkin_id || null, totalAmd, note || null, discountPct, discountAmd, approvalStatus, orderCode]
+      `INSERT INTO orders (customer_id, user_id, checkin_id, status, total_amd, note, discount_pct, discount_amd, approval_status, order_code)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+      [customerId, req.user.id, checkin_id || null, initialStatus, totalAmd, note || null, discountPct, discountAmd, approvalStatus, orderCode]
     );
     order = rows[0];
     for (const line of lines) {
@@ -184,7 +193,10 @@ ordersRouter.post("/", async (req, res) => {
   // Fire after responding -- the rep shouldn't wait on a Telegram round
   // trip for their order confirmation. Wrapped so a late DB hiccup here
   // can't throw after headers are already sent (which would otherwise
-  // crash the handler with ERR_HTTP_HEADERS_SENT).
+  // crash the handler with ERR_HTTP_HEADERS_SENT). Skipped entirely for a
+  // draft -- reviewers/fulfillment have nothing to act on until it's
+  // actually submitted.
+  if (initialStatus !== "submitted") return;
   (async () => {
     try {
       const { rows: repRows } = await pool.query("SELECT name FROM users WHERE id = $1", [req.user.id]);
@@ -242,7 +254,7 @@ ordersRouter.get("/", async (req, res) => {
   // separate COUNT(*) query -- trimmed back to PAGE_SIZE before sending.
   params.push(PAGE_SIZE + 1, offsetNum);
   const { rows } = await pool.query(
-    `SELECT o.*, u.name AS user_name, c.name AS customer_name
+    `SELECT o.*, u.name AS user_name, c.name AS customer_name, c.sales_channel
      FROM orders o
      JOIN users u ON u.id = o.user_id
      JOIN customers c ON c.id = o.customer_id
@@ -283,6 +295,68 @@ ordersRouter.get("/:id", async (req, res) => {
     [order.id]
   );
   res.json({ ...order, items });
+});
+
+// Moves a draft order to "submitted" -- the only path that transition can
+// take (see NEXT_STATUS, where "submitted" isn't reachable from "draft" via
+// the generic PATCH below). If the customer still has no ERP customer ID,
+// one must be supplied here and passes through the same ownership check as
+// the dedicated "assign ERP ID" sheet on the customer page.
+ordersRouter.post("/:id/submit", async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT o.*, c.erp_customer_id, c.created_by AS customer_created_by, c.name AS customer_name
+     FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = $1`,
+    [req.params.id]
+  );
+  const order = rows[0];
+  if (!order) return res.status(404).json({ error: "Order not found" });
+  if (order.user_id !== req.user.id && req.user.role !== "admin") {
+    return res.status(403).json({ error: "Not allowed to submit this order" });
+  }
+  if (order.status !== "draft") {
+    return res.status(409).json({ error: `Cannot submit an order that is already "${order.status}"` });
+  }
+
+  let erpCustomerId = order.erp_customer_id;
+  if (!erpCustomerId) {
+    const { erp_customer_id } = req.body ?? {};
+    if (!erp_customer_id || !String(erp_customer_id).trim()) {
+      return res.status(400).json({ error: "This customer has no ERP customer ID -- provide one to submit the order" });
+    }
+    if (!canAssignErpCustomerId(req.user.role, order.customer_created_by, req.user.id)) {
+      return res.status(403).json({ error: "Not allowed to assign an ERP customer ID to this customer" });
+    }
+    erpCustomerId = String(erp_customer_id).trim();
+    await pool.query("UPDATE customers SET erp_customer_id = $1 WHERE id = $2", [erpCustomerId, order.customer_id]);
+  }
+
+  const { rows: updatedRows } = await pool.query(
+    "UPDATE orders SET status = 'submitted', updated_at = now() WHERE id = $1 RETURNING *",
+    [order.id]
+  );
+  const updated = updatedRows[0];
+  const { rows: items } = await pool.query("SELECT * FROM order_items WHERE order_id = $1 ORDER BY id", [order.id]);
+  res.json({ ...updated, items });
+
+  (async () => {
+    try {
+      const { rows: repRows } = await pool.query("SELECT name FROM users WHERE id = $1", [req.user.id]);
+      const repName = repRows[0]?.name || "Someone";
+      notifyTelegram(
+        `🛒 <b>New order</b>\n${escapeHtml(repName)} — ${escapeHtml(order.customer_name)}\n${Number(order.total_amd).toLocaleString()} AMD`
+      );
+      const { rows: notifyRecipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [ORDER_NOTIFY_ROLES]);
+      for (const recipient of notifyRecipients) {
+        notifyUser(recipient.id, "order_placed", {
+          title: "New order placed",
+          body: `${repName} submitted an order for ${order.customer_name} — ${Number(order.total_amd).toLocaleString()} AMD.`,
+          url: "/#/orders",
+        });
+      }
+    } catch (err) {
+      console.error("Post-order-submit notification failed:", err);
+    }
+  })();
 });
 
 // Edit line items (only while still "submitted", by the rep who placed it
@@ -392,6 +466,17 @@ ordersRouter.patch("/:id", async (req, res) => {
     }
     if (!NEXT_STATUS[order.status]?.includes(status)) {
       return res.status(409).json({ error: `Cannot move an order from "${order.status}" to "${status}"` });
+    }
+    // Defense in depth: draft orders can only reach "submitted" through
+    // POST /:id/submit (see NEXT_STATUS, which doesn't even list it as
+    // reachable from here), but a submitted order could in principle have
+    // had its customer's ERP link removed after the fact -- re-check right
+    // before confirming rather than trusting the state at submit time.
+    if (status === "confirmed") {
+      const { rows: cRows } = await pool.query("SELECT erp_customer_id FROM customers WHERE id = $1", [order.customer_id]);
+      if (!cRows[0]?.erp_customer_id) {
+        return res.status(409).json({ error: "This order's customer has no ERP customer ID -- link one before confirming" });
+      }
     }
     nextStatus = status;
   }

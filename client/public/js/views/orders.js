@@ -2,8 +2,10 @@ import { api } from "../api.js";
 import { escapeHtml, formatAmd, activateDialog } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
+import { icons } from "../icons.js";
 
 const STATUS_META = {
+  draft: { key: "order_status_draft", cls: "badge-warning" },
   submitted: { key: "order_status_submitted", cls: "badge-neutral" },
   confirmed: { key: "order_status_confirmed", cls: "badge-info" },
   packed: { key: "order_status_packed", cls: "badge-info" },
@@ -11,7 +13,7 @@ const STATUS_META = {
   cancelled: { key: "order_status_cancelled", cls: "badge-danger" },
 };
 
-const STATUS_FILTERS = ["", "submitted", "confirmed", "packed", "delivered", "cancelled"];
+const STATUS_FILTERS = ["", "draft", "submitted", "confirmed", "packed", "delivered", "cancelled"];
 
 const FULFILLMENT_ROLES = new Set(["warehouse_manager", "delivery_manager", "admin"]);
 const DISCOUNT_APPROVER_ROLES = new Set(["admin", "sales_director", "ceo"]);
@@ -24,6 +26,7 @@ const APPROVAL_META = {
   rejected: { key: "approval_status_rejected", cls: "badge-danger" },
 };
 const NEXT_STATUS = {
+  draft: ["cancelled"],
   submitted: ["confirmed", "cancelled"],
   confirmed: ["packed", "cancelled"],
   packed: ["delivered", "cancelled"],
@@ -45,7 +48,11 @@ export async function renderOrders(root, navigate) {
         </button>
       </div>
       <div class="order-status-filter-row" id="order-status-filters"></div>
-      <div class="list-toolbar"><input type="search" id="order-search" placeholder="${t("search_customers")}" aria-label="${t("search_customers")}" /></div>
+      <div class="list-toolbar">
+        <input type="search" id="order-search" placeholder="${t("search")}" aria-label="${t("search")}" />
+        <button type="button" class="icon-btn" id="order-filter-btn" aria-label="${t("filter")}" aria-haspopup="menu" aria-expanded="false" aria-controls="order-filter-menu">${icons.filter}</button>
+        <div id="order-filter-menu" class="dropdown-menu" role="menu" hidden></div>
+      </div>
       <div class="card-list" id="orders-list"><p class="loading-state" role="status">${t("loading")}</p></div>
     </div>
   `;
@@ -57,11 +64,44 @@ export async function renderOrders(root, navigate) {
 
   const listEl = root.querySelector("#orders-list");
   const searchInput = root.querySelector("#order-search");
+  const filterBtn = root.querySelector("#order-filter-btn");
+  const filterMenu = root.querySelector("#order-filter-menu");
 
   let activeStatus = "";
+  let channelFilter = "";
   let orders = [];
   let hasMore = false;
   let loadingMore = false;
+
+  function renderFilterMenu() {
+    const channels = [...new Set(orders.map((o) => o.sales_channel).filter(Boolean))].sort();
+    filterMenu.innerHTML = `
+      <button role="menuitemradio" aria-checked="${channelFilter === ""}" data-channel="">${t("all_channels")}</button>
+      ${channels
+        .map((c) => `<button role="menuitemradio" aria-checked="${c === channelFilter}" data-channel="${escapeHtml(c)}">${escapeHtml(c)}</button>`)
+        .join("")}
+    `;
+    filterMenu.querySelectorAll("[data-channel]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        channelFilter = btn.dataset.channel;
+        filterMenu.hidden = true;
+        filterBtn.setAttribute("aria-expanded", "false");
+        paint();
+      });
+    });
+  }
+
+  filterBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const willShow = filterMenu.hidden;
+    if (willShow) renderFilterMenu();
+    filterMenu.hidden = !willShow;
+    filterBtn.setAttribute("aria-expanded", String(willShow));
+  });
+  root.addEventListener("click", () => {
+    filterMenu.hidden = true;
+    filterBtn.setAttribute("aria-expanded", "false");
+  });
 
   async function load() {
     listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
@@ -96,7 +136,17 @@ export async function renderOrders(root, navigate) {
 
   function paint() {
     const search = searchInput.value.trim().toLowerCase();
-    const filtered = search ? orders.filter((o) => o.customer_name.toLowerCase().includes(search)) : orders;
+    let filtered = orders;
+    if (channelFilter) filtered = filtered.filter((o) => o.sales_channel === channelFilter);
+    if (search) {
+      filtered = filtered.filter((o) => {
+        const haystack = [o.customer_name, o.order_code, o.user_name, o.sales_channel, formatDate(o.created_at)]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(search);
+      });
+    }
 
     if (!filtered.length) {
       listEl.innerHTML = `<p class="empty-state">${t("no_orders_found")}</p>`;
@@ -113,7 +163,7 @@ export async function renderOrders(root, navigate) {
               <strong>${escapeHtml(o.customer_name)}</strong>
               <span class="activity-row-trailing">${formatAmd(Number(o.total_amd))}</span>
             </div>
-            <div class="muted activity-row-meta">${escapeHtml(o.user_name)} · ${formatDate(o.created_at)}</div>
+            <div class="muted activity-row-meta">${o.order_code ? `${escapeHtml(o.order_code)} · ` : ""}${escapeHtml(o.user_name)} · ${formatDate(o.created_at)}</div>
             <div class="activity-row-bottom">
               <span class="badge ${meta.cls}">${t(meta.key)}</span>
             </div>
@@ -125,9 +175,10 @@ export async function renderOrders(root, navigate) {
       .join("");
 
     // Loading more only makes sense against the unfiltered server order --
-    // once a client-side search narrows what's shown, there's no
-    // "next page" of that search to fetch, only of the whole list.
-    if (hasMore && !search) {
+    // once a client-side search or channel filter narrows what's shown,
+    // there's no "next page" of that search to fetch, only of the whole
+    // list.
+    if (hasMore && !search && !channelFilter) {
       listEl.insertAdjacentHTML("beforeend", `<button type="button" class="btn btn-block" id="orders-load-more">${t("load_more")}</button>`);
       listEl.querySelector("#orders-load-more").addEventListener("click", loadMore);
     }
@@ -299,6 +350,9 @@ export async function renderOrders(root, navigate) {
       const errorEl = overlay.querySelector("#order-detail-error");
 
       const buttons = [];
+      if (order.status === "draft" && isOwnerOrAdmin) {
+        buttons.push({ label: t("submit_order"), action: "submit-order", cls: "btn btn-primary" });
+      }
       if (canApproveDiscount) {
         buttons.push({ label: t("approve_discount"), action: "approve-discount", cls: "btn btn-primary" });
         buttons.push({ label: t("reject_discount"), action: "reject-discount", cls: "btn btn-danger" });
@@ -356,10 +410,27 @@ export async function renderOrders(root, navigate) {
             return;
           }
           if (btn.dataset.action === "delete-order" && !confirm(t("confirm_delete_order"))) return;
+          if (btn.dataset.action === "submit-order" && !order.erp_customer_id) {
+            const erpId = prompt(t("erp_customer_id_required"));
+            if (!erpId || !erpId.trim()) return;
+            actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
+            try {
+              await api.submitOrder(orderId, erpId.trim());
+              overlay.remove();
+              notifyOrdersChanged();
+              load();
+            } catch (err) {
+              errorEl.textContent = err.message;
+              errorEl.hidden = false;
+              actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = false));
+            }
+            return;
+          }
           actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
           try {
             if (btn.dataset.action === "approve-discount") await api.approveOrderDiscount(orderId);
             else if (btn.dataset.action === "reject-discount") await api.rejectOrderDiscount(orderId);
+            else if (btn.dataset.action === "submit-order") await api.submitOrder(orderId);
             else await api.deleteOrder(orderId);
             overlay.remove();
             notifyOrdersChanged();
