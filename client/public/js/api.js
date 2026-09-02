@@ -121,6 +121,9 @@ export const api = {
   createProductPromo: (id, data) => json(`/products/${id}/promos`, "POST", data),
   deleteProductPromo: (id, promoId) => request(`/products/${id}/promos/${promoId}`, { method: "DELETE" }),
   getProductPriceHistory: (id) => request(`/products/${id}/price-history`),
+  productImageUrl: (id) => `/api/products/${id}/image`,
+  uploadProductImage: (id, formData) => request(`/products/${id}/image`, { method: "POST", body: formData }),
+  deleteProductImage: (id) => request(`/products/${id}/image`, { method: "DELETE" }),
   previewBulkPriceUpdate: (data) => json("/products/bulk-price-update", "POST", { ...data, apply: false }),
   applyBulkPriceUpdate: (data) => json("/products/bulk-price-update", "POST", { ...data, apply: true }),
   productsExportXlsxUrl: (params = {}) => {

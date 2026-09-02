@@ -302,6 +302,11 @@ export async function renderPricelist(root, navigate) {
     return `
       <div class="card pricelist-row ${selectMode ? "pricelist-row-selectable" : ""}" ${selectMode ? `data-select-id="${p.id}"` : ""}>
         ${selectMode ? `<span class="pricelist-select-check ${selected ? "pricelist-select-check-on" : ""}">${selected ? icons.checkCircle : ""}</span>` : ""}
+        ${
+          p.image_path
+            ? `<img class="pricelist-row-thumb" src="${api.productImageUrl(p.id)}" alt="" loading="lazy" />`
+            : `<span class="pricelist-row-thumb pricelist-row-thumb-placeholder">${icons.box}</span>`
+        }
         <div class="pricelist-row-main">
           <strong>${escapeHtml(p.name)}</strong>
           <span class="muted">${[p.brand, p.family, p.unit].filter(Boolean).map(escapeHtml).join(" · ")}${p.sku ? ` · ${escapeHtml(p.sku)}` : ""}</span>

@@ -1,8 +1,11 @@
+import fs from "node:fs";
+import path from "node:path";
 import { Router } from "express";
 import ExcelJS from "exceljs";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireProductManager } from "../middleware/auth.js";
 import { getEffectiveProductPricing } from "../pricingService.js";
+import { photoUpload, uploadDirPath } from "../upload.js";
 
 export const productsRouter = Router();
 
@@ -138,6 +141,18 @@ productsRouter.get("/export/xlsx", async (req, res) => {
   res.setHeader("Content-Disposition", `attachment; filename="kad-pricelist-${new Date().toISOString().slice(0, 10)}.xlsx"`);
   await workbook.xlsx.write(res);
   res.end();
+});
+
+// Any authenticated role can view a product photo (it's shown on the
+// catalog/pricelist to everyone) -- only uploading/removing one is
+// restricted, same split as the rest of this router.
+productsRouter.get("/:id/image", async (req, res) => {
+  const { rows } = await pool.query("SELECT image_path FROM products WHERE id = $1", [req.params.id]);
+  const imagePath = rows[0]?.image_path;
+  if (!imagePath) return res.status(404).json({ error: "No image set" });
+  res.sendFile(path.join(uploadDirPath, imagePath), (err) => {
+    if (err && !res.headersSent) res.status(404).json({ error: "Image not found" });
+  });
 });
 
 productsRouter.use(requireProductManager);
@@ -276,6 +291,40 @@ productsRouter.delete("/:id", async (req, res) => {
     [req.params.id]
   );
   if (!rowCount) return res.status(404).json({ error: "Product not found" });
+  res.status(204).end();
+});
+
+productsRouter.post(
+  "/:id/image",
+  (req, res, next) => {
+    photoUpload.single("image")(req, res, (err) => {
+      if (err) return res.status(400).json({ error: err.message });
+      next();
+    });
+  },
+  async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "image file is required" });
+
+    const { rows } = await pool.query("SELECT image_path FROM products WHERE id = $1", [req.params.id]);
+    if (!rows[0]) {
+      fs.unlink(path.join(uploadDirPath, req.file.filename), () => {});
+      return res.status(404).json({ error: "Product not found" });
+    }
+    const previousPath = rows[0].image_path;
+
+    await pool.query("UPDATE products SET image_path = $1 WHERE id = $2", [req.file.filename, req.params.id]);
+    if (previousPath) fs.unlink(path.join(uploadDirPath, previousPath), () => {});
+    res.status(201).json({ ok: true });
+  }
+);
+
+productsRouter.delete("/:id/image", async (req, res) => {
+  const { rows } = await pool.query("SELECT image_path FROM products WHERE id = $1", [req.params.id]);
+  const imagePath = rows[0]?.image_path;
+  if (!imagePath) return res.status(404).json({ error: "No image set" });
+
+  fs.unlink(path.join(uploadDirPath, imagePath), () => {});
+  await pool.query("UPDATE products SET image_path = NULL WHERE id = $1", [req.params.id]);
   res.status(204).end();
 });
 

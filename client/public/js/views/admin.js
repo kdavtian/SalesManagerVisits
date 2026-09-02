@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateDialog, escapeHtml, formatDateTime, formatAmd } from "../util.js";
+import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 
@@ -406,6 +406,20 @@ export async function renderProductsSection(container) {
     overlay.innerHTML = `
       <div class="sheet">
         <h2>${product ? t("edit_product") : t("add_product")}</h2>
+        ${
+          product
+            ? `<div class="product-image-editor">
+                <div class="product-image-preview" id="product-image-preview">
+                  ${product.image_path ? `<img src="${api.productImageUrl(product.id)}" alt="" />` : `<span class="product-image-placeholder">${t("no_image")}</span>`}
+                </div>
+                <div class="product-image-actions">
+                  <input type="file" id="product-image-input" accept="image/*" class="visually-hidden" />
+                  <button type="button" class="btn-link" id="product-image-upload-btn">${t("upload_image")}</button>
+                  ${product.image_path ? `<button type="button" class="btn-link btn-link-danger" id="product-image-remove-btn">${t("remove")}</button>` : ""}
+                </div>
+              </div>`
+            : ""
+        }
         <form id="product-form">
           <label>${t("product_name")}<input name="name" value="${product ? escapeHtml(product.name) : ""}" required /></label>
           <label>${t("brand")}<input name="brand" value="${product?.brand ? escapeHtml(product.brand) : ""}" /></label>
@@ -431,6 +445,33 @@ export async function renderProductsSection(container) {
     activateDialog(overlay);
     overlay.querySelector("#cancel-product").addEventListener("click", () => overlay.remove());
     overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+
+    if (product) {
+      const imageInput = overlay.querySelector("#product-image-input");
+      overlay.querySelector("#product-image-upload-btn").addEventListener("click", () => imageInput.click());
+      imageInput.addEventListener("change", async () => {
+        const file = imageInput.files[0];
+        if (!file) return;
+        try {
+          // Consistent aspect ratio, small footprint (item 38) -- a
+          // catalog photo just needs to help identify the product, not
+          // be print-quality.
+          const compressed = await compressImage(file, { maxDimension: 500, quality: 0.8 });
+          const form = new FormData();
+          form.set("image", compressed, "image.jpg");
+          await api.uploadProductImage(product.id, form);
+          overlay.remove();
+          loadProducts();
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+      overlay.querySelector("#product-image-remove-btn")?.addEventListener("click", async () => {
+        await api.deleteProductImage(product.id);
+        overlay.remove();
+        loadProducts();
+      });
+    }
 
     let active = product?.active ?? true;
     const activeToggle = overlay.querySelector("#product-active-toggle");
