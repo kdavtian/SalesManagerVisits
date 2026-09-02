@@ -1,0 +1,385 @@
+/* Custom Activity date-range controls.
+   Native iOS date inputs are hidden because Safari localizes its own Reset/
+   Done toolbar from the device language and gives the web app no supported
+   way to add a third Today action. This sheet provides a fully controlled,
+   accessible, touch-first picker that matches the KAD light design system. */
+
+.activity-custom-range {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  padding: 0 16px;
+  margin-top: 10px;
+}
+
+.activity-custom-range .activity-date-label {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.activity-native-date-input {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
+
+.activity-date-field {
+  width: 100%;
+  min-width: 0;
+  min-height: 50px;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-card);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 12px 0 14px;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 650;
+  text-align: left;
+  box-shadow: var(--shadow-subtle);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.activity-date-field:active {
+  transform: scale(0.985);
+  background: var(--bg-card-pressed);
+}
+
+.activity-date-field:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.activity-date-field-filled {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+.activity-date-field-value {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.activity-date-field-placeholder {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.activity-date-field-icon {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-card));
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+}
+
+.activity-date-field-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.activity-date-picker-open,
+.activity-date-picker-open body {
+  overflow: hidden;
+}
+
+.activity-date-picker-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1600;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 12px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+
+.activity-date-picker-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(12 18 28 / 38%);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  animation: activity-date-backdrop-in 140ms ease-out both;
+}
+
+.activity-date-picker {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 430px);
+  box-sizing: border-box;
+  padding: 8px 16px 10px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  border-radius: 24px;
+  background: var(--bg-card);
+  color: var(--text);
+  box-shadow: 0 24px 70px rgb(10 15 25 / 24%);
+  animation: activity-date-sheet-in 180ms cubic-bezier(.2,.85,.25,1) both;
+}
+
+.activity-date-picker-grabber {
+  width: 38px;
+  height: 4px;
+  margin: 1px auto 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 40%, transparent);
+}
+
+.activity-date-picker-topline {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.activity-date-picker-target {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.activity-date-picker-selected {
+  margin-top: 2px;
+  color: var(--text);
+  font-size: 1.08rem;
+  font-weight: 750;
+}
+
+.activity-date-picker-close,
+.activity-date-nav {
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.activity-date-picker-close {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.activity-date-picker-close:active,
+.activity-date-nav:active {
+  background: var(--bg-card-pressed);
+}
+
+.activity-date-picker-monthbar {
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  text-align: center;
+  border-top: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+}
+
+.activity-date-picker-monthbar strong {
+  font-size: 1rem;
+  font-weight: 750;
+  text-transform: capitalize;
+}
+
+.activity-date-nav {
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  color: var(--accent);
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.activity-date-weekdays,
+.activity-date-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.activity-date-weekdays {
+  padding: 5px 0 4px;
+  color: var(--text-muted);
+  font-size: 0.67rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.activity-date-weekdays span {
+  display: grid;
+  place-items: center;
+  min-height: 24px;
+}
+
+.activity-date-grid {
+  row-gap: 3px;
+}
+
+.activity-date-day {
+  position: relative;
+  aspect-ratio: 1;
+  width: min(100%, 44px);
+  min-width: 36px;
+  justify-self: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.activity-date-day:active {
+  background: var(--bg-card-pressed);
+}
+
+.activity-date-day-outside {
+  color: color-mix(in srgb, var(--text-muted) 55%, transparent);
+}
+
+.activity-date-day-today::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+}
+
+.activity-date-day-selected {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 5px 13px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.activity-date-day-selected::after {
+  background: #fff;
+}
+
+.activity-date-picker-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+}
+
+.activity-date-action {
+  min-height: 46px;
+  border: 0;
+  border-radius: 13px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 750;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.activity-date-action:active {
+  background: var(--bg-card-pressed);
+}
+
+.activity-date-today {
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg-card));
+}
+
+.activity-date-done {
+  background: var(--accent);
+  color: #fff;
+}
+
+.activity-date-done:active {
+  background: color-mix(in srgb, var(--accent) 88%, #000);
+}
+
+@media (min-width: 600px) {
+  .activity-date-picker-overlay {
+    align-items: center;
+  }
+
+  .activity-date-picker {
+    border-radius: 22px;
+  }
+
+  .activity-date-picker-grabber {
+    display: none;
+  }
+}
+
+@media (max-width: 380px) {
+  .activity-custom-range {
+    padding-left: 12px;
+    padding-right: 12px;
+    gap: 8px;
+  }
+
+  .activity-date-field {
+    padding-left: 10px;
+    padding-right: 9px;
+    font-size: 0.82rem;
+  }
+
+  .activity-date-field-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .activity-date-picker {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .activity-date-day {
+    min-width: 34px;
+  }
+}
+
+@keyframes activity-date-sheet-in {
+  from { opacity: 0; transform: translateY(16px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes activity-date-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-date-picker,
+  .activity-date-picker-backdrop {
+    animation: none;
+  }
+}
