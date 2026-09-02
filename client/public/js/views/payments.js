@@ -56,6 +56,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
       </div>
       <p class="muted" id="payments-pending-summary" hidden></p>
       <div class="order-status-filter-row" id="payment-quick-filters"></div>
+      <div class="order-status-filter-row" id="payment-active-filters" hidden></div>
       <div class="list-toolbar">
         <input type="search" id="payment-search" placeholder="${t("search_payments")}" aria-label="${t("search_payments")}" />
         <button type="button" class="icon-btn" id="payment-filter-btn" aria-label="${t("filter")}" aria-haspopup="menu" aria-expanded="false" aria-controls="payment-filter-menu">${icons.filter}</button>
@@ -67,6 +68,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
 
   const summaryEl = root.querySelector("#payments-pending-summary");
   const filterRow = root.querySelector("#payment-quick-filters");
+  const activeFiltersRow = root.querySelector("#payment-active-filters");
   const listEl = root.querySelector("#payments-list");
   const searchInput = root.querySelector("#payment-search");
   const filterBtn = root.querySelector("#payment-filter-btn");
@@ -118,6 +120,37 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
     return params;
   }
 
+  // channelFilter/managerFilter can arrive from a Reports drill-down link
+  // with no UI element that set them (see app.js's #/payments route
+  // passing along the query string) -- without this, a manager landing
+  // here from a report would be stuck silently filtered with no way back
+  // except re-navigating. Channel needs no lookup (it's already the
+  // display string); manager only has an id, so its name is read off
+  // whatever's already loaded rather than firing an extra request for it.
+  function paintActiveFilters() {
+    const chips = [];
+    if (channelFilter) chips.push({ label: channelFilter, clear: () => (channelFilter = "") });
+    if (managerFilter) {
+      const managerName = payments.find((p) => String(p.sales_manager_id) === String(managerFilter))?.sales_manager_name_snapshot;
+      chips.push({ label: managerName || t("payment_manager_label"), clear: () => (managerFilter = "") });
+    }
+    if (!chips.length) {
+      activeFiltersRow.hidden = true;
+      activeFiltersRow.innerHTML = "";
+      return;
+    }
+    activeFiltersRow.hidden = false;
+    activeFiltersRow.innerHTML = chips
+      .map((c, i) => `<button type="button" class="map-filter-chip chip-active" data-clear-filter="${i}">${escapeHtml(c.label)} &times;</button>`)
+      .join("");
+    activeFiltersRow.querySelectorAll("[data-clear-filter]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        chips[Number(btn.dataset.clearFilter)].clear();
+        load();
+      });
+    });
+  }
+
   async function load() {
     listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     try {
@@ -128,6 +161,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
       listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
       return;
     }
+    paintActiveFilters();
     paint();
   }
 
@@ -427,7 +461,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
     async function ensureManagers() {
       if (managers || !SUBMIT_FOR_OTHERS_ROLES.has(state.user.role)) return;
       try {
-        managers = (await api.listUsers()).filter((u) => u.role === "sales_manager");
+        managers = await api.getEligiblePaymentManagers();
       } catch {
         managers = [];
       }
@@ -477,7 +511,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
       if (managerSelect) {
         ensureManagers().then(() => {
           managerSelect.innerHTML =
-            `<option value="">${t("select_customer")}</option>` +
+            `<option value="">—</option>` +
             (managers || [])
               .map((m) => `<option value="${m.id}" ${selectedManager?.id === m.id ? "selected" : ""}>${escapeHtml(m.name)}${m.position ? ` · ${escapeHtml(m.position)}` : ""}</option>`)
               .join("");

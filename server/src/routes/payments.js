@@ -17,6 +17,20 @@ paymentsRouter.use(requireAuth);
 const PAGE_SIZE = 30;
 const MAX_AMOUNT = 100000000000; // matches the DB CHECK constraint
 
+// The Add Payment form's manager picker (for roles that can submit on
+// someone else's behalf) needs the list of sales managers, but GET
+// /api/users is admin-only -- a Director/Accountant/CEO submitting for
+// another manager still isn't an admin, so this is scoped narrowly to
+// exactly the fields the picker needs, gated by the same permission as
+// submitting itself.
+paymentsRouter.get("/eligible-managers", async (req, res) => {
+  if (!canSubmitPaymentsForOthers(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const { rows } = await pool.query(
+    "SELECT id, name, position FROM users WHERE role = 'sales_manager' ORDER BY name"
+  );
+  res.json(rows);
+});
+
 async function loadPaymentRow(id) {
   const { rows } = await pool.query(
     `SELECT p.*, sm.name AS current_sales_manager_name, cb.name AS created_by_name,

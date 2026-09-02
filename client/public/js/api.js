@@ -163,6 +163,7 @@ export const api = {
   },
   getPayment: (id) => request(`/payments/${id}`),
   getPaymentsPendingCount: () => request("/payments/pending-count"),
+  getEligiblePaymentManagers: () => request("/payments/eligible-managers"),
   approvePayment: (id) => request(`/payments/${id}/approve`, { method: "POST" }),
   rejectPayment: (id, reason) => json(`/payments/${id}/reject`, "POST", { reason }),
   returnPaymentToPending: (id, reason) => json(`/payments/${id}/return-to-pending`, "POST", { reason }),
