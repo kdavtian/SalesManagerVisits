@@ -1,0 +1,60 @@
+/* Orders search + channel filter.
+   Mirrors the compact Activity search treatment while keeping Orders-specific
+   status chips and business logic unchanged. */
+
+.orders-search-combined.activity-search-combined {
+  margin: 12px 0 14px;
+  width: 100%;
+}
+
+.orders-search-combined .orders-search-actions {
+  margin-left: 0;
+}
+
+.orders-search-combined .orders-channel-filter-btn {
+  flex: 0 0 auto;
+}
+
+.orders-search-combined .orders-search-menu {
+  right: 0;
+  min-width: 220px;
+}
+
+/* The filter menu is reused from Orders' existing logic, but visually adopts
+   the same selected/check treatment as Activity. */
+.orders-search-menu[hidden] {
+  display: none !important;
+}
+
+.orders-search-menu button > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Keep the status row usable on narrow iPhones without allowing the page
+   itself to drift horizontally. */
+.order-status-filter-row {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.order-status-filter-row::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 380px) {
+  .orders-search-combined.activity-search-combined {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .orders-search-combined .orders-search-menu {
+    min-width: 205px;
+  }
+}

@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v42";
+const CACHE_VERSION = "field-visits-v43";
 const TILE_CACHE = "field-visits-tiles-v2";
 
 const APP_SHELL = [
@@ -8,9 +8,11 @@ const APP_SHELL = [
   "/css/styles.css",
   "/css/activity-search-filters.css",
   "/css/activity-date-picker.css",
+  "/css/orders-search-filters.css",
   "/js/api.js",
   "/js/app.js",
   "/js/activityDatePicker.js",
+  "/js/ordersSearchEnhancements.js",
   "/js/i18n.js",
   "/js/icons.js",
   "/js/theme.js",
