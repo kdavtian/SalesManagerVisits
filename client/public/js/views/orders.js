@@ -337,7 +337,7 @@ export async function renderOrders(root, navigate) {
         </div>
         ${
           hasDiscount
-            ? `<p class="muted">${t("discount_label")}: ${discountAmd > 0 ? formatAmd(discountAmd) : `${discountPct}%`}</p>`
+            ? `<p class="muted">${t("price_change_label")}: ${discountAmd > 0 ? formatAmd(discountAmd) : `${discountPct}%`}</p>`
             : ""
         }
         <p><strong>${t("total")}: ${formatAmd(Number(order.total_amd))}</strong></p>
@@ -354,8 +354,8 @@ export async function renderOrders(root, navigate) {
         buttons.push({ label: t("submit_order"), action: "submit-order", cls: "btn btn-primary" });
       }
       if (canApproveDiscount) {
-        buttons.push({ label: t("approve_discount"), action: "approve-discount", cls: "btn btn-primary" });
-        buttons.push({ label: t("reject_discount"), action: "reject-discount", cls: "btn btn-danger" });
+        buttons.push({ label: t("approve_price_change"), action: "approve-discount", cls: "btn btn-primary" });
+        buttons.push({ label: t("reject_price_change"), action: "reject-discount", cls: "btn btn-danger" });
       }
       if (canReviewSubmitted) {
         buttons.push({ label: t("confirm_order"), status: "confirmed", cls: "btn btn-primary" });
@@ -475,13 +475,14 @@ export async function renderOrders(root, navigate) {
           <button type="button" class="btn btn-block" id="edit-add-product-btn">${t("add_product_to_order")}</button>
           <div id="edit-add-product-panel" ${showAddProduct ? "" : "hidden"}></div>
           <div class="order-discount-row">
-            <label for="edit-discount-input">${t("discount_label")}</label>
+            <label for="edit-discount-input">${t("request_price_change")}</label>
             <input type="number" id="edit-discount-input" min="0" step="1" value="${discountValue || 0}" inputmode="numeric" />
             <div class="segmented" id="edit-discount-type">
               <button type="button" class="chip ${discountType === "pct" ? "chip-active" : ""}" data-type="pct">${t("discount_type_pct")}</button>
               <button type="button" class="chip ${discountType === "amd" ? "chip-active" : ""}" data-type="amd">${t("discount_type_amd")}</button>
             </div>
           </div>
+          <p class="muted price-change-hint">${t("price_change_hint")}</p>
           <p><strong>${t("total")}: <span id="edit-order-total">${formatAmd(total())}</span></strong></p>
           <p class="form-error" id="order-detail-error" hidden></p>
           <div class="sheet-actions">

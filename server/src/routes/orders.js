@@ -459,8 +459,8 @@ ordersRouter.patch("/:id", async (req, res) => {
         return res.status(409).json({
           error:
             order.approval_status === "pending"
-              ? "This order's discount is awaiting director approval"
-              : "This order's discount was rejected -- edit the order to remove or adjust the discount before it can proceed",
+              ? "This order's price change is awaiting director approval"
+              : "This order's price change was rejected -- edit the order to remove or adjust it before it can proceed",
         });
       }
     }
