@@ -24,6 +24,13 @@ const TILE_URLS = {
   dark: "https://{s}.basemaps.cartocdn.com/rastertiles/dark_matter/{z}/{x}/{y}{r}.png",
   light: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
 };
+// Some networks (certain mobile carriers in particular) block or can't
+// resolve the CARTO CDN outright, not just intermittently -- reported live
+// from a real device, not a hypothetical. OSM's own tile server is a
+// different host/CDN entirely, so it's a genuinely independent fallback,
+// not just a retry of the same failure. It has no dark styling of its own,
+// so it's used for both themes -- a working light map beats no map.
+const FALLBACK_TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 const TILE_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
@@ -193,6 +200,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   const mapErrorOverlay = root.querySelector("#map-error-overlay");
   let tileEverLoaded = false;
   let tileHealthTimer = null;
+  let usingFallbackTiles = false;
 
   function hideMapError() {
     mapErrorOverlay.hidden = true;
@@ -203,10 +211,12 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   }
 
   function makeTileLayer(url) {
+    // OSM's tile server only has a/b/c subdomains (CARTO has a/b/c/d) --
+    // requesting a "d" tile from OSM 404s, so this can't share one constant.
     const layer = L.tileLayer(url, {
       maxZoom: 19,
       attribution: TILE_ATTRIBUTION,
-      subdomains: "abcd",
+      subdomains: url === FALLBACK_TILE_URL ? "abc" : "abcd",
     });
     layer.on("tileload", () => {
       tileEverLoaded = true;
@@ -216,32 +226,51 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     return layer;
   }
 
+  function primaryTileUrl() {
+    return TILE_URLS[getTheme()];
+  }
+
   // A slow-but-working connection still succeeds well within this window;
   // only a provider that's genuinely unreachable fails to deliver a single
-  // tile in 9 seconds.
+  // tile in 9 seconds. On the primary (CARTO) provider, that failure falls
+  // back to OSM's tile server once before showing an error -- a real error
+  // is still shown if that independent host fails too, since at that point
+  // it's very likely the device/network has no map access at all, not just
+  // a problem with one CDN.
   function startTileHealthCheck() {
     tileEverLoaded = false;
     clearTimeout(tileHealthTimer);
     tileHealthTimer = setTimeout(() => {
-      if (!tileEverLoaded) showMapError();
+      if (tileEverLoaded) return;
+      if (!usingFallbackTiles) {
+        usingFallbackTiles = true;
+        map.removeLayer(tileLayer);
+        tileLayer = makeTileLayer(FALLBACK_TILE_URL).addTo(map);
+        startTileHealthCheck();
+      } else {
+        showMapError();
+      }
     }, 9000);
   }
 
-  let tileLayer = makeTileLayer(TILE_URLS[getTheme()]).addTo(map);
+  let tileLayer = makeTileLayer(primaryTileUrl()).addTo(map);
   startTileHealthCheck();
 
   root.querySelector("#map-error-retry").addEventListener("click", () => {
     hideMapError();
+    usingFallbackTiles = false;
     map.removeLayer(tileLayer);
-    tileLayer = makeTileLayer(TILE_URLS[getTheme()]).addTo(map);
+    tileLayer = makeTileLayer(primaryTileUrl()).addTo(map);
     startTileHealthCheck();
   });
 
   // Re-apply the matching tile style if the user flips light/dark while the
   // map is mounted (Settings lives on a different tab, so this covers the
-  // case of returning to the map after toggling).
+  // case of returning to the map after toggling). Only matters while still
+  // on the primary provider -- the fallback has no theme variants.
   function refreshTileStyle() {
-    const url = TILE_URLS[getTheme()];
+    if (usingFallbackTiles) return;
+    const url = primaryTileUrl();
     if (tileLayer._url !== url) {
       map.removeLayer(tileLayer);
       tileLayer = makeTileLayer(url).addTo(map);

@@ -60,9 +60,11 @@ app.set("trust proxy", 1);
 app.use(
   helmet({
     // Everything the app loads is same-origin except the Leaflet map
-    // tiles (basemaps.cartocdn.com) and OpenStreetMap/CARTO attribution
-    // links, plus inline style attributes the vanilla-JS views set
-    // directly (style-src stays permissive for that reason -- the
+    // tiles (basemaps.cartocdn.com, plus tile.openstreetmap.org as a
+    // fallback provider when CARTO is unreachable from the client's
+    // network -- see map.js's FALLBACK_TILE_URL) and OpenStreetMap/CARTO
+    // attribution links, plus inline style attributes the vanilla-JS views
+    // set directly (style-src stays permissive for that reason -- the
     // inline <script> that used to need 'unsafe-inline' was moved to
     // js/theme-init.js so script-src can stay locked to 'self').
     contentSecurityPolicy: {
@@ -70,7 +72,7 @@ app.use(
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:", "blob:", "https://*.basemaps.cartocdn.com"],
+        imgSrc: ["'self'", "data:", "blob:", "https://*.basemaps.cartocdn.com", "https://*.tile.openstreetmap.org"],
         connectSrc: ["'self'"],
         fontSrc: ["'self'"],
         objectSrc: ["'none'"],
