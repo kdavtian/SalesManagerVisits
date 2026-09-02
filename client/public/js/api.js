@@ -10,7 +10,10 @@ async function request(path, options = {}) {
   const body = isJson ? await res.json() : null;
 
   if (!res.ok) {
-    throw new Error(body?.error || `Request failed (${res.status})`);
+    const err = new Error(body?.message || body?.error || `Request failed (${res.status})`);
+    err.status = res.status;
+    err.body = body;
+    throw err;
   }
   return body;
 }
@@ -153,6 +156,17 @@ export const api = {
   deleteOrder: (id) => request(`/orders/${id}`, { method: "DELETE" }),
   rejectOrderDiscount: (id) => request(`/orders/${id}/reject-discount`, { method: "POST" }),
 
+  createPayment: (data) => json("/payments", "POST", data),
+  listPayments: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/payments${qs ? `?${qs}` : ""}`);
+  },
+  getPayment: (id) => request(`/payments/${id}`),
+  getPaymentsPendingCount: () => request("/payments/pending-count"),
+  approvePayment: (id) => request(`/payments/${id}/approve`, { method: "POST" }),
+  rejectPayment: (id, reason) => json(`/payments/${id}/reject`, "POST", { reason }),
+  returnPaymentToPending: (id, reason) => json(`/payments/${id}/return-to-pending`, "POST", { reason }),
+
   getVapidPublicKey: () => request("/push/vapid-public-key"),
   subscribePush: (subscription) => json("/push", "POST", subscription),
   unsubscribePush: (endpoint) => json("/push", "DELETE", { endpoint }),
@@ -193,6 +207,10 @@ export const api = {
   getBrandAvailabilityReport: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/reports/brand-availability${qs ? `?${qs}` : ""}`);
+  },
+  getPaymentsReport: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/reports/payments${qs ? `?${qs}` : ""}`);
   },
 
   getPerfChannels: () => request("/team-performance/channels"),

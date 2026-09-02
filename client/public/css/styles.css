@@ -1572,6 +1572,14 @@ input[type="search"]:focus {
   gap: 4px;
 }
 
+.report-drill-card {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
 .stat-value {
   font-size: 1.7rem;
   font-weight: 800;
@@ -1945,6 +1953,29 @@ input[type="search"]:focus {
   text-align: center;
   font-size: 0.85rem;
   z-index: 1000;
+}
+
+/* Shown when no map tile has loaded within a reasonable window (see
+   startTileHealthCheck in map.js) -- covers just the map area, not the
+   whole screen, so the search/filter chrome above it stays usable. */
+.map-error-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  padding: 24px;
+}
+
+.map-error-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+  max-width: 280px;
 }
 
 .pin {
@@ -3182,6 +3213,7 @@ input[type="search"]:focus {
 }
 
 .quick-action-icon {
+  position: relative;
   width: 32px;
   height: 32px;
   border-radius: 9px;
@@ -4587,6 +4619,34 @@ input[type="search"]:focus {
   align-items: flex-start;
   gap: 12px;
   text-align: left;
+}
+
+.payment-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.list-group-heading {
+  margin: 18px 0 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.list-group-heading:first-child {
+  margin-top: 4px;
 }
 
 .activity-status-icon {

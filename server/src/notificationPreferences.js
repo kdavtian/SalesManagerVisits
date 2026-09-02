@@ -11,6 +11,7 @@ export const NOTIFICATION_TYPES = [
   "visit_reminder",
   "perf_plan_submitted",
   "perf_plan_reviewed",
+  "payment_submitted",
 ];
 
 // Roles that can review a route plan -- the only roles plan_submitted is

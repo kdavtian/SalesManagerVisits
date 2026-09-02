@@ -19,6 +19,7 @@ import { renderReports } from "./views/reports.js";
 import { renderRoutePlans } from "./views/routePlans.js";
 import { renderTeamPerformance } from "./views/teamPerformance.js";
 import { renderPricelist } from "./views/pricelist.js";
+import { renderPayments } from "./views/payments.js";
 import { flushQueue, getQueue, onQueueChange } from "./offlineQueue.js";
 import { mountInstallPrompt } from "./install.js";
 import { mountUpdateBanner, initServiceWorkerUpdates } from "./updateBanner.js";
@@ -100,6 +101,38 @@ async function refreshOrderBadge() {
 
 window.addEventListener("orders-changed", refreshOrderBadge);
 
+// Same pattern as the Orders badge above, on the Payments quick action --
+// pending count is role-aware server-side (Accountant/CEO/admin get every
+// payment awaiting review, a Sales Manager only their own), so this is
+// safe to poll unconditionally too. payments.js fires "payments-changed"
+// after a submit/approve/reject/return-to-pending so the badge updates
+// immediately instead of waiting for the next poll.
+let paymentBadgeCount = 0;
+
+export function applyPaymentBadge() {
+  const el = document.getElementById("qa-payments-badge");
+  if (!el) return;
+  if (paymentBadgeCount > 0) {
+    el.textContent = paymentBadgeCount > 99 ? "99+" : String(paymentBadgeCount);
+    el.hidden = false;
+  } else {
+    el.hidden = true;
+  }
+}
+
+async function refreshPaymentBadge() {
+  if (!state.user) return;
+  try {
+    const { count } = await api.getPaymentsPendingCount();
+    paymentBadgeCount = count;
+  } catch {
+    return;
+  }
+  applyPaymentBadge();
+}
+
+window.addEventListener("payments-changed", refreshPaymentBadge);
+
 // Same pattern as the Orders badge above -- polled and also refreshed
 // on-demand (here, whenever the Notifications page marks something read)
 // so the bell badge doesn't lag behind what the user just saw.
@@ -158,6 +191,7 @@ async function render() {
       startLocationBroadcast();
       render();
       refreshOrderBadge();
+      refreshPaymentBadge();
       refreshNotificationBadge();
     });
     return;
@@ -179,6 +213,7 @@ async function render() {
   const customerOrdersMatch = path.match(/^#\/customers\/(\d+)\/orders$/);
   const checkinMatch = path.match(/^#\/checkin\/(\d+)$/);
   const orderCreateMatch = path.match(/^#\/orders\/new\/(\d+)$/);
+  const paymentDetailMatch = path.match(/^#\/payments\/(\d+)$/);
 
   if (path === "#/dashboard") {
     renderDashboard(app, navigate);
@@ -194,6 +229,10 @@ async function render() {
     renderOrderCreate(app, navigate, orderCreateMatch[1], query.get("checkin"));
   } else if (path === "#/orders") {
     renderOrders(app, navigate);
+  } else if (paymentDetailMatch) {
+    renderPayments(app, navigate, paymentDetailMatch[1]);
+  } else if (path === "#/payments") {
+    renderPayments(app, navigate, null, query);
   } else if (path === "#/expenses") {
     renderCashExpenses(app, navigate);
   } else if (path === "#/reports") {
@@ -336,8 +375,10 @@ async function init() {
   flushQueue();
   render();
   refreshOrderBadge();
+  refreshPaymentBadge();
   refreshNotificationBadge();
   setInterval(refreshOrderBadge, 60000);
+  setInterval(refreshPaymentBadge, 60000);
   setInterval(refreshNotificationBadge, 60000);
 }
 

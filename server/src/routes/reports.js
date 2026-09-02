@@ -206,3 +206,96 @@ reportsRouter.get("/brand-availability", requireReportAccess("brand_availability
 
   res.json(rows);
 });
+
+// Payments report -- reuses the canonical `payments` table directly (no
+// separate reporting engine, per task spec), scoped to a period plus
+// optional channel/manager/status. APPROVED is the only status that
+// represents confirmed, reconciled collection; "submitted" (all statuses
+// combined) is reported separately so the two are never conflated.
+reportsRouter.get("/payments", requireReportAccess("payments"), async (req, res) => {
+  const { period, sales_channel, sales_manager_id, status } = req.query;
+  const conditions = [`p.payment_date >= ${periodBounds(period)}`];
+  const params = [];
+  if (sales_channel) {
+    params.push(sales_channel);
+    conditions.push(`p.sales_channel = $${params.length}`);
+  }
+  if (sales_manager_id) {
+    params.push(sales_manager_id);
+    conditions.push(`p.sales_manager_id = $${params.length}`);
+  }
+  if (status) {
+    params.push(status);
+    conditions.push(`p.status = $${params.length}`);
+  }
+  const where = `WHERE ${conditions.join(" AND ")}`;
+
+  const { rows: kpiRows } = await pool.query(
+    `SELECT
+       count(*)::int AS submitted_count,
+       COALESCE(sum(amount_amd), 0) AS submitted_amd,
+       count(*) FILTER (WHERE status = 'approved')::int AS approved_count,
+       COALESCE(sum(amount_amd) FILTER (WHERE status = 'approved'), 0) AS approved_amd,
+       count(*) FILTER (WHERE status = 'pending')::int AS pending_count,
+       COALESCE(sum(amount_amd) FILTER (WHERE status = 'pending'), 0) AS pending_amd,
+       count(*) FILTER (WHERE status = 'rejected')::int AS rejected_count,
+       COALESCE(sum(amount_amd) FILTER (WHERE status = 'rejected'), 0) AS rejected_amd
+     FROM payments p
+     ${where}`,
+    params
+  );
+
+  const { rows: byChannel } = await pool.query(
+    `SELECT COALESCE(p.sales_channel, '—') AS sales_channel,
+            count(*)::int AS submitted_count,
+            COALESCE(sum(amount_amd) FILTER (WHERE status = 'approved'), 0) AS approved_amd
+     FROM payments p
+     ${where}
+     GROUP BY p.sales_channel
+     ORDER BY approved_amd DESC`,
+    params
+  );
+
+  const { rows: byManager } = await pool.query(
+    `SELECT p.sales_manager_id, p.sales_manager_name_snapshot AS sales_manager_name,
+            count(*)::int AS submitted_count,
+            COALESCE(sum(amount_amd) FILTER (WHERE status = 'approved'), 0) AS approved_amd
+     FROM payments p
+     ${where}
+     GROUP BY p.sales_manager_id, p.sales_manager_name_snapshot
+     ORDER BY approved_amd DESC`,
+    params
+  );
+
+  // Daily approved-collections trend within the period -- keyed by the
+  // day it was approved (not submitted), since that's the day the money
+  // is actually confirmed as collected.
+  const { rows: dailyTrend } = await pool.query(
+    `SELECT date_trunc('day', approved_at)::date AS day, COALESCE(sum(amount_amd), 0) AS approved_amd
+     FROM payments p
+     ${where.replace("p.payment_date", "p.approved_at")} AND p.status = 'approved'
+     GROUP BY day
+     ORDER BY day`,
+    params
+  );
+
+  const { rows: opsRows } = await pool.query(
+    `SELECT
+       count(*) FILTER (WHERE status = 'pending')::int AS pending_count,
+       min(created_at) FILTER (WHERE status = 'pending') AS oldest_pending_at,
+       count(*) FILTER (WHERE status = 'pending' AND created_at < now() - interval '24 hours')::int AS pending_over_24h,
+       count(*) FILTER (WHERE status = 'rejected')::int AS rejected_count,
+       AVG(approved_at - created_at) FILTER (WHERE status = 'approved') AS avg_approval_interval
+     FROM payments p
+     ${where}`,
+    params
+  );
+
+  res.json({
+    kpis: kpiRows[0],
+    by_channel: byChannel,
+    by_manager: byManager,
+    daily_trend: dailyTrend,
+    operations: opsRows[0],
+  });
+});

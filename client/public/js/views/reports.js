@@ -2,7 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { REGION_LIST, YEREVAN_DISTRICTS, CATEGORY_LIST } from "../util.js";
+import { REGION_LIST, YEREVAN_DISTRICTS, CATEGORY_LIST, formatAmd } from "../util.js";
 
 const PERIOD_OPTIONS = [
   { value: "", labelKey: "period_all_time" },
@@ -43,6 +43,7 @@ export async function renderReports(root, navigate, reportKey) {
   if (reportKey === "new_customers") return renderNewCustomersReport(root, navigate);
   if (reportKey === "checkins") return renderCheckinsReport(root, navigate);
   if (reportKey === "brand_availability") return renderBrandAvailabilityReport(root, navigate);
+  if (reportKey === "payments") return renderPaymentsReport(root, navigate);
   return renderReportsList(root, navigate);
 }
 
@@ -241,6 +242,154 @@ async function renderCheckinsReport(root, navigate) {
     } catch (err) {
       body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     }
+  }
+
+  form.addEventListener("change", load);
+  await load();
+}
+
+const PAYMENT_STATUS_OPTIONS = ["pending", "approved", "rejected"];
+
+function formatAvgInterval(pgInterval) {
+  if (!pgInterval) return "—";
+  // node-postgres returns an INTERVAL as {hours, minutes, days, ...} -- keep
+  // this to the coarsest unit that's actually informative for an approval
+  // turnaround (hours is the practical unit here, not days/weeks).
+  const totalHours = (pgInterval.days || 0) * 24 + (pgInterval.hours || 0) + (pgInterval.minutes || 0) / 60;
+  return `${totalHours.toFixed(1)}h`;
+}
+
+async function renderPaymentsReport(root, navigate) {
+  root.innerHTML = `
+    <div class="detail-view">
+      ${reportHeaderHtml("report_payments_name")}
+      <form id="report-filters" class="report-filter-form">
+        ${selectHtml(
+          "period",
+          PERIOD_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) })),
+          "month"
+        )}
+        ${selectHtml(
+          "status",
+          [{ value: "", label: t("all_payment_statuses") }, ...PAYMENT_STATUS_OPTIONS.map((v) => ({ value: v, label: t(`payment_status_${v}`) }))],
+          ""
+        )}
+      </form>
+      <div id="report-body"><p class="loading-state" role="status">${t("loading")}</p></div>
+    </div>
+  `;
+  const container = root.querySelector(".detail-view");
+  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  const form = container.querySelector("#report-filters");
+  const body = container.querySelector("#report-body");
+
+  async function load() {
+    body.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+    const data = new FormData(form);
+    const params = Object.fromEntries([...data.entries()].filter(([, v]) => v));
+    let result;
+    try {
+      result = await api.getPaymentsReport(params);
+    } catch (err) {
+      body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+      return;
+    }
+    const { kpis, by_channel, by_manager, daily_trend, operations } = result;
+
+    function drillLink(extraParams) {
+      const qs = new URLSearchParams({ ...params, ...extraParams }).toString();
+      return `#/payments${qs ? `?${qs}` : ""}`;
+    }
+
+    const maxDaily = Math.max(1, ...daily_trend.map((d) => Number(d.approved_amd)));
+
+    body.innerHTML = `
+      <div class="stat-grid">
+        <button type="button" class="stat-card report-drill-card" data-href="${drillLink({})}">
+          <span class="stat-value">${kpis.submitted_count}</span>
+          <span class="stat-label">${t("report_payments_submitted")}</span>
+          <span class="stat-sublabel">${formatAmd(Number(kpis.submitted_amd))}</span>
+        </button>
+        <button type="button" class="stat-card report-drill-card" data-href="${drillLink({ status: "approved" })}">
+          <span class="stat-value">${kpis.approved_count}</span>
+          <span class="stat-label">${t("report_payments_approved")}</span>
+          <span class="stat-sublabel">${formatAmd(Number(kpis.approved_amd))}</span>
+        </button>
+        <button type="button" class="stat-card report-drill-card" data-href="${drillLink({ status: "pending" })}">
+          <span class="stat-value">${kpis.pending_count}</span>
+          <span class="stat-label">${t("payment_status_pending")}</span>
+          <span class="stat-sublabel">${formatAmd(Number(kpis.pending_amd))}</span>
+        </button>
+        <button type="button" class="stat-card report-drill-card" data-href="${drillLink({ status: "rejected" })}">
+          <span class="stat-value">${kpis.rejected_count}</span>
+          <span class="stat-label">${t("payment_status_rejected")}</span>
+          <span class="stat-sublabel">${formatAmd(Number(kpis.rejected_amd))}</span>
+        </button>
+      </div>
+
+      <h2 class="section-title">${t("report_payments_operations")}</h2>
+      <div class="card-list">
+        <div class="card report-row"><span>${t("report_payments_pending_now")}</span><strong>${operations.pending_count}</strong></div>
+        <div class="card report-row"><span>${t("report_payments_pending_over_24h")}</span><strong>${operations.pending_over_24h}</strong></div>
+        <div class="card report-row"><span>${t("report_payments_oldest_pending")}</span><strong>${operations.oldest_pending_at ? formatDate(operations.oldest_pending_at) : "—"}</strong></div>
+        <div class="card report-row"><span>${t("report_payments_avg_approval_time")}</span><strong>${formatAvgInterval(operations.avg_approval_interval)}</strong></div>
+        <div class="card report-row"><span>${t("payment_status_rejected")}</span><strong>${operations.rejected_count}</strong></div>
+      </div>
+
+      ${
+        daily_trend.length
+          ? `<h2 class="section-title">${t("report_payments_daily_trend")}</h2>
+        <div class="card trend-chart-card">
+          <div class="trend-chart" role="img" aria-label="${t("report_payments_daily_trend")}">
+            ${daily_trend
+              .map((d) => {
+                const heightPct = Math.round((Number(d.approved_amd) / maxDaily) * 100);
+                return `<div class="trend-bar" style="height:${Math.max(heightPct, Number(d.approved_amd) > 0 ? 4 : 0)}%" title="${formatDate(d.day)}: ${formatAmd(Number(d.approved_amd))}"></div>`;
+              })
+              .join("")}
+          </div>
+        </div>`
+          : ""
+      }
+
+      <h2 class="section-title">${t("by_channel")}</h2>
+      <div class="card-list">
+        ${
+          by_channel.length
+            ? by_channel
+                .map(
+                  (c) => `
+              <button type="button" class="card report-row report-drill-card" data-href="${drillLink({ sales_channel: c.sales_channel === "—" ? "" : c.sales_channel })}">
+                <span>${escapeHtml(c.sales_channel)}</span>
+                <strong>${formatAmd(Number(c.approved_amd))}</strong>
+              </button>`
+                )
+                .join("")
+            : `<p class="empty-state">${t("no_data")}</p>`
+        }
+      </div>
+
+      <h2 class="section-title">${t("by_manager")}</h2>
+      <div class="card-list">
+        ${
+          by_manager.length
+            ? by_manager
+                .map(
+                  (m) => `
+              <button type="button" class="card report-row report-drill-card" data-href="${drillLink({ sales_manager_id: m.sales_manager_id })}">
+                <span>${escapeHtml(m.sales_manager_name)}</span>
+                <strong>${formatAmd(Number(m.approved_amd))}</strong>
+              </button>`
+                )
+                .join("")
+            : `<p class="empty-state">${t("no_data")}</p>`
+        }
+      </div>
+    `;
+
+    body.querySelectorAll(".report-drill-card").forEach((el) => {
+      el.addEventListener("click", () => navigate(el.dataset.href));
+    });
   }
 
   form.addEventListener("change", load);

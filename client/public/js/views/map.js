@@ -137,6 +137,12 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
             </div>`
       }
       <div class="map-hint" id="map-hint" role="status" ${startInAddMode ? "" : "hidden"}>${t("tap_map_hint")}</div>
+      <div class="map-error-overlay" id="map-error-overlay" role="alert" hidden>
+        <div class="map-error-card">
+          <p>${t("map_load_failed")}</p>
+          <button type="button" class="btn btn-primary" id="map-error-retry">${t("try_again")}</button>
+        </div>
+      </div>
       <div class="map-hint" id="team-empty-hint" hidden>${t("team_locations_empty")}</div>
       <div class="map-hint" id="planned-empty-hint" hidden>${t("planned_empty")}</div>
     </div>
@@ -176,11 +182,60 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   }).setView([20, 0], 2);
   L.control.attribution({ prefix: false, position: "bottomright" }).addTo(map);
 
-  let tileLayer = L.tileLayer(TILE_URLS[getTheme()], {
-    maxZoom: 19,
-    attribution: TILE_ATTRIBUTION,
-    subdomains: "abcd",
-  }).addTo(map);
+  // Root cause of "the map doesn't show anything": the tile provider
+  // (CARTO, a third-party CDN) can be unreachable -- blocked by a
+  // network/firewall, an ad/tracker blocker, or just down -- and until now
+  // nothing detected that. Leaflet just sits there with an empty gray
+  // .map-view forever, which reads exactly as "the map isn't showing" with
+  // no way for the user to tell what's wrong or do anything about it. Track
+  // whether any tile has actually loaded, and surface a real error with a
+  // retry instead of failing silently.
+  const mapErrorOverlay = root.querySelector("#map-error-overlay");
+  let tileEverLoaded = false;
+  let tileHealthTimer = null;
+
+  function hideMapError() {
+    mapErrorOverlay.hidden = true;
+  }
+
+  function showMapError() {
+    mapErrorOverlay.hidden = false;
+  }
+
+  function makeTileLayer(url) {
+    const layer = L.tileLayer(url, {
+      maxZoom: 19,
+      attribution: TILE_ATTRIBUTION,
+      subdomains: "abcd",
+    });
+    layer.on("tileload", () => {
+      tileEverLoaded = true;
+      clearTimeout(tileHealthTimer);
+      hideMapError();
+    });
+    return layer;
+  }
+
+  // A slow-but-working connection still succeeds well within this window;
+  // only a provider that's genuinely unreachable fails to deliver a single
+  // tile in 9 seconds.
+  function startTileHealthCheck() {
+    tileEverLoaded = false;
+    clearTimeout(tileHealthTimer);
+    tileHealthTimer = setTimeout(() => {
+      if (!tileEverLoaded) showMapError();
+    }, 9000);
+  }
+
+  let tileLayer = makeTileLayer(TILE_URLS[getTheme()]).addTo(map);
+  startTileHealthCheck();
+
+  root.querySelector("#map-error-retry").addEventListener("click", () => {
+    hideMapError();
+    map.removeLayer(tileLayer);
+    tileLayer = makeTileLayer(TILE_URLS[getTheme()]).addTo(map);
+    startTileHealthCheck();
+  });
 
   // Re-apply the matching tile style if the user flips light/dark while the
   // map is mounted (Settings lives on a different tab, so this covers the
@@ -189,11 +244,8 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     const url = TILE_URLS[getTheme()];
     if (tileLayer._url !== url) {
       map.removeLayer(tileLayer);
-      tileLayer = L.tileLayer(url, {
-        maxZoom: 19,
-        attribution: TILE_ATTRIBUTION,
-        subdomains: "abcd",
-      }).addTo(map);
+      tileLayer = makeTileLayer(url).addTo(map);
+      startTileHealthCheck();
     }
   }
   document.addEventListener("visibilitychange", refreshTileStyle);
@@ -1804,6 +1856,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     if (watchId != null) navigator.geolocation.clearWatch(watchId);
     if (teamPollId) clearInterval(teamPollId);
     clearTimeout(teamEmptyHintTimer);
+    clearTimeout(tileHealthTimer);
     mapEl.removeEventListener("touchend", onMapTouchEnd);
     document.removeEventListener("visibilitychange", refreshTileStyle);
     appMain.classList.remove("app-main-locked");

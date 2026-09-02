@@ -25,6 +25,15 @@ export const REPORTS = [
     descriptionKey: "report_brand_availability_description",
     defaultRoles: ["admin", "ceo", "sales_director"],
   },
+  {
+    key: "payments",
+    nameKey: "report_payments_name",
+    descriptionKey: "report_payments_description",
+    // Accountant is the one who actually reconciles these day to day --
+    // included here even though they're outside the usual office-roles set
+    // for other reports, same reasoning as canReviewPayments in roles.js.
+    defaultRoles: ["admin", "ceo", "sales_director", "accountant"],
+  },
 ];
 
 export function findReport(key) {

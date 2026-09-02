@@ -128,3 +128,35 @@ export function seesAllPerformance(role) {
 export function canCloseMonth(role) {
   return isPerfCeo(role) || role === "accountant";
 }
+
+// --- Payments -----------------------------------------------------------
+// Who reviews (approves/rejects/reverses) a submitted payment -- the
+// Accountant who reconciles it against the accounting books, or CEO/admin
+// as a backstop. A Sales Director does not review payments (they submit
+// like a manager if they log one themselves, same as canSubmitPayments).
+export function canReviewPayments(role) {
+  return role === "admin" || role === "ceo" || role === "accountant";
+}
+
+// Who can submit a payment on someone else's behalf (picking a sales
+// manager + their channel explicitly) vs a plain Sales Manager, who always
+// self-submits under their own name/channel and can never impersonate
+// another manager.
+export function canSubmitPaymentsForOthers(role) {
+  return role === "admin" || role === "ceo" || role === "accountant" || role === "sales_director";
+}
+
+// Payment visibility mirrors seesAllActivity -- a Sales Manager sees only
+// their own submissions, every other role sees all payments (Sales
+// Director included, consistent with how they already see all customers/
+// activity company-wide, not scoped to a single channel).
+export function seesAllPayments(role) {
+  return seesAllActivity(role);
+}
+
+// Payments push notifications go only to whoever actually reconciles them
+// day to day (Accountant) -- explicitly NOT CEO or admin, who can both
+// still review payments in-app but shouldn't be paged for every single one
+// (see task spec: "CEO should NOT receive automatic payment push
+// notifications").
+export const PAYMENT_NOTIFY_ROLES = ["accountant"];

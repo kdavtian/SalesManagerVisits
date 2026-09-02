@@ -27,6 +27,7 @@ import { notificationsRouter } from "./routes/notifications.js";
 import { teamPerformanceRouter } from "./routes/teamPerformance.js";
 import { cashExpensesRouter } from "./routes/cashExpenses.js";
 import { reportsRouter } from "./routes/reports.js";
+import { paymentsRouter } from "./routes/payments.js";
 import { startOverdueReminders } from "./overdueReminders.js";
 
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
@@ -110,6 +111,7 @@ app.use("/api/notifications", express.json(), notificationsRouter);
 app.use("/api/team-performance", express.json(), teamPerformanceRouter);
 app.use("/api/cash-expenses", express.json(), cashExpensesRouter);
 app.use("/api/reports", express.json(), reportsRouter);
+app.use("/api/payments", express.json(), paymentsRouter);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });

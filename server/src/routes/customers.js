@@ -120,9 +120,16 @@ customersRouter.post("/", async (req, res) => {
     return res.status(400).json({ error: "Invalid customer_tier" });
   }
 
+  // Same ERP-ID-implies-at-least-Bronze rule as the PATCH handler below,
+  // applied at creation time: a brand-new customer entered with an ERP ID
+  // already in hand starts at Bronze instead of Potential, unless whoever
+  // is creating it explicitly picked a tier themselves (manual selection
+  // always wins -- see canAssignErpCustomerId's PATCH counterpart).
+  const initialTier = customer_tier || (erp_customer_id ? "bronze" : "potential");
+
   const { rows } = await pool.query(
     `INSERT INTO customers (name, category, phone, address, notes, lat, lng, created_by, assigned_manager_id, visit_frequency_days, erp_customer_id, tin, region, subregion, customer_tier, sales_channel)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, $11, $12, $13, COALESCE($14, 'potential'), $15)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, $11, $12, $13, $14, $15)
      RETURNING *`,
     [
       name,
@@ -138,7 +145,7 @@ customersRouter.post("/", async (req, res) => {
       tin || null,
       region || null,
       subregion || null,
-      customer_tier || null,
+      initialTier,
       sales_channel || null,
     ]
   );
@@ -234,13 +241,18 @@ customersRouter.patch("/:id", async (req, res) => {
   const fieldsPresent = EDITABLE_FIELDS.filter((f) => req.body?.[f] !== undefined);
   const onlyErpField = fieldsPresent.length === 1 && fieldsPresent[0] === "erp_customer_id";
 
+  const { rows: currentRows } = await pool.query(
+    "SELECT created_by, erp_customer_id, customer_tier FROM customers WHERE id = $1",
+    [req.params.id]
+  );
+  const current = currentRows[0];
+  if (!current) return res.status(404).json({ error: "Customer not found" });
+
   if (onlyErpField) {
     // Linking to ERP has its own ownership-based rule (see
     // canAssignErpCustomerId) instead of the blanket admin-or-request-review
     // rule below -- it's a lookup/link action, not a factual change.
-    const { rows: ownerRows } = await pool.query("SELECT created_by FROM customers WHERE id = $1", [req.params.id]);
-    if (!ownerRows[0]) return res.status(404).json({ error: "Customer not found" });
-    if (!canAssignErpCustomerId(req.user.role, ownerRows[0].created_by, req.user.id)) {
+    if (!canAssignErpCustomerId(req.user.role, current.created_by, req.user.id)) {
       return res.status(403).json({ error: "Not allowed to link this customer to an ERP record" });
     }
   } else {
@@ -262,12 +274,26 @@ customersRouter.patch("/:id", async (req, res) => {
     }
   }
 
+  // ERP-ID-implies-at-least-Bronze: a customer only ever gets *pulled up*
+  // to Bronze the moment they're first linked to a real ERP record, and
+  // only from Potential -- Silver/Gold (assigned by a human) are never
+  // touched, and re-linking/changing an already-set ERP ID later doesn't
+  // re-trigger this (see task spec: "do not repeatedly modify level when
+  // ERP ID changes later"). A caller setting customer_tier explicitly in
+  // the same request always wins over this automatic bump.
+  const newErpId = req.body?.erp_customer_id;
+  const isNewErpLink = newErpId && !current.erp_customer_id;
+  const autoUpgradeToBronze = isNewErpLink && req.body?.customer_tier === undefined && current.customer_tier === "potential";
+
+  const fieldsToApply = { ...req.body };
+  if (autoUpgradeToBronze) fieldsToApply.customer_tier = "bronze";
+
   const updates = [];
   const params = [];
 
   for (const field of EDITABLE_FIELDS) {
-    if (req.body?.[field] !== undefined) {
-      params.push(req.body[field]);
+    if (fieldsToApply[field] !== undefined) {
+      params.push(fieldsToApply[field]);
       updates.push(`${field} = $${params.length}`);
     }
   }
@@ -281,6 +307,15 @@ customersRouter.patch("/:id", async (req, res) => {
     params
   );
   if (!rows[0]) return res.status(404).json({ error: "Customer not found" });
+
+  if (autoUpgradeToBronze) {
+    await pool.query(
+      `INSERT INTO customer_level_audit (customer_id, old_tier, new_tier, reason, changed_by)
+       VALUES ($1, 'potential', 'bronze', 'ERP ID assigned', $2)`,
+      [req.params.id, req.user.id]
+    );
+  }
+
   res.json(rows[0]);
 });
 
