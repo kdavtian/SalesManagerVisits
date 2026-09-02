@@ -1878,7 +1878,16 @@ input[type="search"]:focus {
   white-space: nowrap;
 }
 
-.fab-active {
+/* Two classes, not one -- a later unconditional ".fab { background:
+   var(--accent-fill) }" rule (same 0-1-0 specificity as a bare
+   ".fab-active" and declared further down the file) was winning the
+   cascade and repainting the button's background back to accent-fill.
+   In light mode --accent and --accent-fill are the literal same color, so
+   the icon (stroke: currentColor = --accent) vanished against a
+   background of that exact color -- this is the "Add Customer icon goes
+   empty" bug. ".fab.fab-active" has higher specificity than either bare
+   ".fab" rule, so it always wins regardless of source order. */
+.fab.fab-active {
   background: var(--bg-card);
   color: var(--accent);
   border: 2px solid var(--accent);
@@ -4080,6 +4089,117 @@ input[type="search"]:focus {
   cursor: pointer;
 }
 
+/* The Add Customer / relocate location picker -- deliberately NOT a
+   .sheet-overlay modal. A full-screen overlay sits above the whole map and
+   would swallow every tap and drag underneath it, but this panel needs the
+   pin above it to stay draggable and the rest of the map still pannable
+   while it's showing (see the task requirement that dragging the pin must
+   work with the confirmation panel visible). Docked to the bottom like
+   .nearby-panel instead, so it only claims its own footprint. */
+.location-picker-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* The global bottom nav-bar is position:fixed at z-index 1200 and stays
+     on top of everything in .map-view (which deliberately renders full-
+     bleed underneath it -- see .app-main's own padding-bottom note). A
+     panel docked to this view's bottom edge needs to clear both that
+     stacking order and its footprint, or its lowest buttons render
+     visible but unclickable, stolen by the nav bar sitting above them. */
+  z-index: 1250;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg-elevated);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-top: 1px solid var(--border);
+  border-radius: 16px 16px 0 0;
+  box-shadow: var(--shadow-elevated, 0 -4px 20px rgba(0, 0, 0, 0.2));
+  padding: 14px 16px calc(14px + 48px + var(--nav-safe-bottom));
+}
+
+.location-picker-panel h2 {
+  margin: 0;
+  padding-right: 40px;
+  font-size: 1.05rem;
+}
+
+.location-picker-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+}
+
+.location-picker-address {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.location-picker-accuracy {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+.location-picker-accuracy svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.location-picker-accuracy-low {
+  color: var(--danger);
+}
+
+.location-picker-hint {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.location-picker-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.location-picker-actions .btn {
+  flex: 1;
+}
+
+.address-search-results {
+  display: flex;
+  flex-direction: column;
+  margin-top: 10px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.address-search-result {
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 12px 4px;
+  min-height: 44px;
+  font-size: 0.9rem;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.address-search-result:last-child {
+  border-bottom: none;
+}
+
+.address-search-result:active {
+  background: var(--bg-card-pressed);
+}
+
 
 /* Required OSM/CARTO attribution (see map.js), shrunk to an unobtrusive
    corner label instead of Leaflet's default full-contrast bar. */
@@ -5286,8 +5406,8 @@ form select,
   position: absolute;
   top: calc(12px + var(--safe-top));
   right: 16px;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   border: none;
   background: rgba(255, 255, 255, 0.15);

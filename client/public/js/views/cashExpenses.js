@@ -11,7 +11,7 @@ export async function renderCashExpenses(root, navigate) {
   root.innerHTML = `
     <div class="detail-view">
       <div class="detail-header">
-        <button class="icon-btn" id="back-btn" aria-label="${t("cancel")}">
+        <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
         <div class="detail-header-title">

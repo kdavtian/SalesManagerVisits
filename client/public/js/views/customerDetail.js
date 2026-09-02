@@ -259,6 +259,9 @@ export async function renderCustomerDetail(root, navigate, customerId) {
 
   container.innerHTML = `
     <div class="detail-header">
+      <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
       <div class="detail-header-icon">${icons.store}</div>
       <div class="detail-header-title">
         <h1>${escapeHtml(customer.name)}</h1>
@@ -339,6 +342,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   container.querySelector("#navigate-btn").addEventListener("click", () => {
     openNavigation(customer.lat, customer.lng);
   });
+  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/customers"));
   container.querySelector("#new-order-btn").addEventListener("click", () => {
     navigate(`#/orders/new/${customerId}`);
   });

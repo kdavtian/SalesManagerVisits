@@ -87,6 +87,7 @@ export const api = {
     request(`/customers/${customerId}/erp-orders/${encodeURIComponent(orderId)}`),
 
   reverseGeocode: (lat, lng) => request(`/geocode/reverse?lat=${lat}&lng=${lng}`),
+  searchAddress: (q) => request(`/geocode/search?q=${encodeURIComponent(q)}`),
 
   changeMyPassword: (currentPassword, newPassword) =>
     json("/me/password", "PATCH", { current_password: currentPassword, new_password: newPassword }),

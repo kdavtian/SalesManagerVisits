@@ -51,3 +51,40 @@ geocodeRouter.get("/reverse", geocodeLimiter, async (req, res) => {
     subregion: data.address?.suburb || data.address?.city_district || data.address?.city || data.address?.town || null,
   });
 });
+
+// Forward geocoding for the address-search fallback in the location picker
+// (map.js) -- lets a rep type a customer's address and drop the pin there
+// instead of relying on GPS. Same provider/rate-limit shape as /reverse.
+// Biased to Armenia (countrycodes=am) since every customer is local; still
+// returns whatever Nominatim finds if nothing local matches.
+geocodeRouter.get("/search", geocodeLimiter, async (req, res) => {
+  const q = String(req.query.q || "").trim();
+  if (!q || q.length < 3) {
+    return res.status(400).json({ error: "q must be at least 3 characters" });
+  }
+
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}&countrycodes=am&addressdetails=1&limit=5`;
+  let response;
+  try {
+    response = await fetch(url, {
+      headers: { "User-Agent": "KAD-Motors-FieldVisits/1.0 (internal field sales app)" },
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch {
+    return res.status(502).json({ error: "Address search failed" });
+  }
+  if (!response.ok) {
+    return res.status(502).json({ error: "Address search failed" });
+  }
+
+  const data = await response.json();
+  res.json(
+    data.map((item) => ({
+      address: item.display_name,
+      lat: Number(item.lat),
+      lng: Number(item.lon),
+      region: item.address?.state || null,
+      subregion: item.address?.suburb || item.address?.city_district || item.address?.city || item.address?.town || null,
+    }))
+  );
+});

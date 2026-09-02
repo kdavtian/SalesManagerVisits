@@ -84,6 +84,12 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         <button type="button" class="nearby-view-all" id="nearby-view-all">${t("view_all_customers")}</button>
       </div>
 
+      <!-- Bottom-docked (not a full-screen modal) so the map and its
+           draggable pin stay interactive while this is showing -- a modal
+           .sheet-overlay sits above everything and would swallow every tap
+           and drag on the map underneath it. -->
+      <div class="location-picker-panel" id="location-picker-panel" hidden></div>
+
       <div class="nearby-panel" id="planned-stops-panel" hidden>
         <div class="nearby-panel-header">
           <span>${t("route_stops")}</span>
@@ -1236,49 +1242,311 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   });
   if (startInPlanMode) openPlanDaySheet();
 
+  // ---- Shared customer-location picker (Add Customer + Relocate) ----
+  // One flow services both: propose a location (a fresh GPS fix, the
+  // customer's existing saved coordinates, or a plain tap), let the rep
+  // drag the pin or search an address instead, and only ever write lat/lng
+  // once they explicitly tap Confirm. The panel is a bottom-docked HUD
+  // (.location-picker-panel), not a modal .sheet-overlay -- a full-screen
+  // overlay would sit above the whole map and block exactly the dragging
+  // and panning this flow depends on.
+  const locationPanel = root.querySelector("#location-picker-panel");
+  let geocodeToken = 0; // discards a stale reverse-geocode reply if the pin moved again before it returned
+
+  function removePlacingMarker() {
+    if (placingMarker) {
+      map.removeLayer(placingMarker);
+      placingMarker = null;
+    }
+  }
+
+  function closeLocationPanel() {
+    locationPanel.hidden = true;
+    locationPanel.innerHTML = "";
+    if (!relocateCustomerId) fab.hidden = false;
+  }
+
+  // Full abandon: closes the panel and removes the pin entirely. Used when
+  // the rep backs out of picking a location altogether (tapping the FAB a
+  // second time to cancel). Not used when handing off to the customer-
+  // details form below -- that keeps the pin on the map and takes over its
+  // lifecycle itself.
+  function cancelLocationPicker() {
+    closeLocationPanel();
+    removePlacingMarker();
+    if (!relocateCustomerId) {
+      addMode = false;
+      fab.classList.remove("fab-active");
+      fab.setAttribute("aria-pressed", "false");
+      mapEl.classList.remove("map-picking");
+    }
+  }
+
+  // Location confirmed -- resets the picker's own UI state but leaves the
+  // pin on the map for openNewCustomerForm to keep showing (and to remove
+  // itself, on that form's own cancel/save).
+  function handoffToCustomerForm(latlng) {
+    closeLocationPanel();
+    addMode = false;
+    fab.classList.remove("fab-active");
+    fab.setAttribute("aria-pressed", "false");
+    mapEl.classList.remove("map-picking");
+    // Freeze the pin in place -- the details form below doesn't listen for
+    // further drags (it reverse-geocodes once, at open), so leaving it
+    // draggable would let a drag here reopen the location panel on top of
+    // that form instead of updating it.
+    placingMarker?.dragging?.disable();
+    openNewCustomerForm(latlng);
+  }
+
+  // Places (or moves) the one draggable "proposed location" pin, distinct
+  // from the blue "me" dot (.me-dot, only shown via the Locate button) so
+  // there's never any doubt which marker is about to be saved. Dragging it
+  // re-runs the same confirm step against the new spot -- nothing is
+  // written until Confirm is tapped.
+  function placeLocationPin(latlng, opts) {
+    if (placingMarker) {
+      placingMarker.setLatLng(latlng);
+    } else {
+      placingMarker = L.marker(latlng, {
+        icon: L.divIcon({ className: "", html: NEW_PIN_HTML, iconSize: [26, 26], iconAnchor: [13, 26] }),
+        draggable: true,
+        autoPan: true,
+      }).addTo(map);
+      placingMarker.on("dragend", () => {
+        showLocationPanel(placingMarker.getLatLng(), { ...opts, source: "dragged_pin", accuracy: undefined, onConfirm: opts.onConfirm });
+      });
+    }
+    showLocationPanel(latlng, opts);
+  }
+
+  // The panel is bottom-docked at the same spot the FAB sits in, so the two
+  // would visually stack -- hide the FAB for as long as the panel is open
+  // and give the panel its own close (X) instead, consistent with the
+  // rest of the app's dismiss-vs-back convention (this is a temporary
+  // overlay panel, not a pushed page, so X rather than a back arrow).
+  function renderLocationPanelShell(bodyHtml) {
+    fab.hidden = true;
+    locationPanel.hidden = false;
+    locationPanel.innerHTML = `
+      <button type="button" class="icon-btn location-picker-close" id="location-panel-close" aria-label="${t("cancel")}">${icons.close}</button>
+      ${bodyHtml}
+    `;
+    locationPanel.querySelector("#location-panel-close").addEventListener("click", cancelLocationPicker);
+  }
+
+  // The one confirm panel for "here's the proposed location" -- title and
+  // accuracy line vary with how the pin got there, everything else
+  // (address line, Confirm/Change-address actions, drag-to-adjust hint) is
+  // identical whether it came from a fresh GPS fix, a dragged pin, a
+  // searched address, or an existing customer's saved location.
+  function showLocationPanel(latlng, { source, accuracy, onConfirm }) {
+    const title =
+      source === "dragged_pin"
+        ? t("new_selected_address")
+        : source === "geocoded_address"
+          ? t("location_updated_title")
+          : t("selected_location");
+    const lowAccuracy = accuracy != null && accuracy > 50;
+    renderLocationPanelShell(`
+      <h2>${title}</h2>
+      <p class="location-picker-address" id="location-panel-address">${escapeHtml(t("loading"))}</p>
+      ${
+        accuracy != null
+          ? `<p class="location-picker-accuracy ${lowAccuracy ? "location-picker-accuracy-low" : ""}">${icons.locate}${
+              lowAccuracy
+                ? t("low_accuracy_warning").replace("{m}", String(Math.round(accuracy)))
+                : t("gps_accuracy_label").replace("{m}", String(Math.round(accuracy)))
+            }</p>`
+          : ""
+      }
+      <p class="muted location-picker-hint">${t("drag_pin_hint")}</p>
+      <div class="location-picker-actions">
+        <button type="button" class="btn" id="location-panel-address-btn">${t("change_address")}</button>
+        <button type="button" class="btn btn-primary" id="location-panel-confirm-btn">${t("confirm_location")}</button>
+      </div>
+    `);
+
+    const myToken = ++geocodeToken;
+    api
+      .reverseGeocode(latlng.lat, latlng.lng)
+      .then((result) => {
+        if (myToken !== geocodeToken) return; // pin moved again since this request went out
+        const addressEl = document.getElementById("location-panel-address");
+        if (addressEl) addressEl.textContent = result?.address || t("address_unknown");
+      })
+      .catch(() => {
+        if (myToken !== geocodeToken) return;
+        const addressEl = document.getElementById("location-panel-address");
+        if (addressEl) addressEl.textContent = t("address_unknown");
+      });
+
+    locationPanel.querySelector("#location-panel-address-btn").addEventListener("click", () => {
+      openAddressSearchSheet((result) => {
+        const newLatLng = L.latLng(result.lat, result.lng);
+        map.panTo(newLatLng);
+        placeLocationPin(newLatLng, { source: "geocoded_address", onConfirm });
+      });
+    });
+    locationPanel.querySelector("#location-panel-confirm-btn").addEventListener("click", () => {
+      const finalLatLng = placingMarker ? placingMarker.getLatLng() : latlng;
+      closeLocationPanel();
+      onConfirm(finalLatLng);
+    });
+  }
+
+  function showLocationErrorPanel(onRetry, onEnterAddress) {
+    renderLocationPanelShell(`
+      <h2>${t("location_failed_title")}</h2>
+      <div class="location-picker-actions">
+        <button type="button" class="btn" id="location-panel-error-address">${t("enter_address")}</button>
+        <button type="button" class="btn btn-primary" id="location-panel-error-retry">${t("try_again")}</button>
+      </div>
+    `);
+    locationPanel.querySelector("#location-panel-error-retry").addEventListener("click", onRetry);
+    locationPanel.querySelector("#location-panel-error-address").addEventListener("click", onEnterAddress);
+  }
+
+  // Debounced address search -- only geocodes on an explicit result tap,
+  // never per keystroke, so typing never jumps the map or burns API calls
+  // on every character.
+  function openAddressSearchSheet(onSelect) {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>${t("search_address_title")}</h2>
+        <label class="visually-hidden" for="address-search-input">${t("search_address_placeholder")}</label>
+        <input type="search" id="address-search-input" placeholder="${t("search_address_placeholder")}" />
+        <div class="address-search-results" id="address-search-results"></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+
+    const input = overlay.querySelector("#address-search-input");
+    const resultsEl = overlay.querySelector("#address-search-results");
+    let searchTimer;
+    let searchToken = 0;
+
+    input.addEventListener("input", () => {
+      clearTimeout(searchTimer);
+      const q = input.value.trim();
+      if (q.length < 3) {
+        resultsEl.innerHTML = "";
+        return;
+      }
+      searchTimer = setTimeout(async () => {
+        const myToken = ++searchToken;
+        resultsEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+        let results;
+        try {
+          results = await api.searchAddress(q);
+        } catch (err) {
+          if (myToken !== searchToken) return;
+          resultsEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+          return;
+        }
+        if (myToken !== searchToken) return; // a newer query already superseded this one
+        if (!results.length) {
+          resultsEl.innerHTML = `<p class="empty-state">${t("no_address_results")}</p>`;
+          return;
+        }
+        resultsEl.innerHTML = results
+          .map((r, i) => `<button type="button" class="address-search-result" data-index="${i}">${escapeHtml(r.address)}</button>`)
+          .join("");
+        resultsEl.querySelectorAll("[data-index]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            overlay.remove();
+            onSelect(results[Number(btn.dataset.index)]);
+          });
+        });
+      }, 400);
+    });
+
+    requestAnimationFrame(() => input.focus());
+  }
+
+  function startAddCustomerFlow() {
+    renderLocationPanelShell(`<p class="location-picker-address">${escapeHtml(t("locating_you"))}</p>`);
+    getCurrentPosition({ timeout: 8000 })
+      .then((pos) => {
+        const latlng = L.latLng(pos.coords.latitude, pos.coords.longitude);
+        map.setView(latlng, Math.max(map.getZoom(), 16));
+        placeLocationPin(latlng, {
+          source: "gps",
+          accuracy: pos.coords.accuracy,
+          onConfirm: handoffToCustomerForm,
+        });
+      })
+      .catch(() => {
+        showLocationErrorPanel(
+          () => startAddCustomerFlow(),
+          () => {
+            openAddressSearchSheet((result) => {
+              const latlng = L.latLng(result.lat, result.lng);
+              map.setView(latlng, 16);
+              placeLocationPin(latlng, {
+                source: "geocoded_address",
+                onConfirm: handoffToCustomerForm,
+              });
+            });
+          }
+        );
+      });
+  }
+
   if (relocateCustomerId) {
     fab.hidden = true;
     mapEl.classList.add("map-picking");
     root.querySelector("#cancel-relocate")?.addEventListener("click", () => {
       navigate(`#/customers/${relocateCustomerId}`);
     });
+    customersReady.then(() => {
+      const existing = lastCustomers.find((entry) => String(entry.c.id) === String(relocateCustomerId));
+      const startLatLng = existing ? L.latLng(existing.c.lat, existing.c.lng) : map.getCenter();
+      if (existing) map.setView(startLatLng, Math.max(map.getZoom(), 16));
+      placeLocationPin(startLatLng, { source: "existing_customer", onConfirm: openRelocateConfirmDetails });
+    });
   } else {
+    // Tapping the FAB a second time while already picking cancels --
+    // mirrors the button's own pressed/active state, so there's always one
+    // obvious way to back out beyond navigating away entirely.
     fab.addEventListener("click", () => {
-      addMode = !addMode;
-      fab.classList.toggle("fab-active", addMode);
-      fab.setAttribute("aria-pressed", String(addMode));
-      hint.hidden = !addMode;
-      mapEl.classList.toggle("map-picking", addMode);
+      if (addMode) {
+        cancelLocationPicker();
+        return;
+      }
+      addMode = true;
+      fab.classList.add("fab-active");
+      fab.setAttribute("aria-pressed", "true");
+      mapEl.classList.add("map-picking");
+      startAddCustomerFlow();
     });
   }
 
+  // Manual fallback: while addMode/relocate is active, a plain tap anywhere
+  // on the map also drops (or moves) the pin -- the GPS-first flow above is
+  // the default, not the only way in, per the task's "let the user accept
+  // it, drag it, or place it themselves" requirement.
   map.on("click", (e) => {
     if (relocateCustomerId) {
-      if (placingMarker) map.removeLayer(placingMarker);
-      placingMarker = L.marker(e.latlng, {
-        icon: L.divIcon({ className: "", html: NEW_PIN_HTML, iconSize: [26, 26], iconAnchor: [13, 26] }),
-      }).addTo(map);
-      openRelocateConfirm(e.latlng);
+      placeLocationPin(e.latlng, { source: "dragged_pin", onConfirm: openRelocateConfirmDetails });
       return;
     }
-
     if (!addMode) return;
-
-    if (placingMarker) map.removeLayer(placingMarker);
-    placingMarker = L.marker(e.latlng, {
-      icon: L.divIcon({ className: "", html: NEW_PIN_HTML, iconSize: [26, 26], iconAnchor: [13, 26] }),
-    }).addTo(map);
-
-    addMode = false;
-    fab.classList.remove("fab-active");
-    fab.setAttribute("aria-pressed", "false");
-    hint.hidden = true;
-    mapEl.classList.remove("map-picking");
-
-    openNewCustomerForm(e.latlng);
+    placeLocationPin(e.latlng, { source: "dragged_pin", onConfirm: handoffToCustomerForm });
   });
 
-  function openRelocateConfirm(latlng) {
+  // Final "save this?" step for an existing customer once a location has
+  // already been confirmed via the shared picker above -- kept separate
+  // from openNewCustomerForm because relocating writes immediately (or
+  // files an edit request) instead of opening the full customer-details
+  // form again.
+  function openRelocateConfirmDetails(latlng) {
+    closeLocationPanel();
+    placingMarker?.dragging?.disable();
     const overlay = document.createElement("div");
     overlay.className = "sheet-overlay sheet-overlay-light";
     overlay.innerHTML = `
@@ -1295,16 +1563,17 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     document.body.appendChild(overlay);
     activateDialog(overlay);
 
-    function close() {
+    // Cancelling this step doesn't abandon the whole picker -- it goes back
+    // to the draggable-pin confirm panel so the rep can still adjust or
+    // re-search before deciding again, rather than dead-ending with a
+    // frozen pin and no visible way to continue.
+    function backToPicker() {
       overlay.remove();
-      if (placingMarker) {
-        map.removeLayer(placingMarker);
-        placingMarker = null;
-      }
+      placingMarker?.dragging?.enable();
+      showLocationPanel(latlng, { source: "existing_customer", onConfirm: openRelocateConfirmDetails });
     }
-    overlay.querySelector("#cancel-relocate-confirm").addEventListener("click", close);
-    overlay.addEventListener("click", (e) => e.target === overlay && close());
-    placingMarker?.on("click", close);
+    overlay.querySelector("#cancel-relocate-confirm").addEventListener("click", backToPicker);
+    overlay.addEventListener("click", (e) => e.target === overlay && backToPicker());
 
     overlay.querySelector("#save-relocate").addEventListener("click", async (e) => {
       const btn = e.target;
@@ -1325,6 +1594,8 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       }
     });
   }
+
+  if (addMode) startAddCustomerFlow();
 
   function openNewCustomerForm(latlng) {
     const overlay = document.createElement("div");
