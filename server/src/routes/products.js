@@ -265,8 +265,16 @@ productsRouter.post("/:id/resync", async (req, res) => {
   res.json(rows[0]);
 });
 
+// Deactivates rather than deletes (item 41: no silent deletion). A hard
+// delete would CASCADE away product_promos and product_price_history --
+// wiping exactly the audit trail this module exists to keep -- and every
+// past order_items row referencing this product would lose its link
+// (though not its snapshotted name/price). "Delete" in the UI means this.
 productsRouter.delete("/:id", async (req, res) => {
-  const { rowCount } = await pool.query("DELETE FROM products WHERE id = $1", [req.params.id]);
+  const { rowCount } = await pool.query(
+    "UPDATE products SET active = false, updated_at = now() WHERE id = $1",
+    [req.params.id]
+  );
   if (!rowCount) return res.status(404).json({ error: "Product not found" });
   res.status(204).end();
 });

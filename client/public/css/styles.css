@@ -5405,6 +5405,64 @@ form select,
   font-weight: 400;
   margin-bottom: 0 !important;
 }
+
+.pricelist-price-range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+.pricelist-price-range input {
+  width: 80px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+.pricelist-select-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  background: var(--bg-elevated);
+}
+.pricelist-row-selectable {
+  cursor: pointer;
+  padding-left: 40px;
+  position: relative;
+}
+.pricelist-select-check {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+.pricelist-select-check-on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Desktop dense table (item 35) -- kicks in only at the >=900px
+   breakpoint (see isDesktop in pricelist.js); the mobile card list is
+   used below that regardless of window resize mid-session. */
+.pricelist-desktop-table {
+  min-width: 100%;
+}
+.pricelist-desktop-table th,
+.pricelist-desktop-table td {
+  padding: 8px 12px;
+}
 .radio-row input[type="radio"],
 .radio-row input[type="checkbox"] {
   display: inline-block;

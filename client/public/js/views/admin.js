@@ -269,7 +269,7 @@ export async function renderProductsSection(container) {
               <button class="btn-link" data-action="promo" data-id="${p.id}">${t("promo_price_label")}</button>
               <button class="btn-link" data-action="history" data-id="${p.id}">${t("price_history")}</button>
               <button class="btn-link" data-action="edit" data-id="${p.id}">${t("edit")}</button>
-              <button class="btn-link btn-link-danger" data-action="delete" data-id="${p.id}" data-name="${escapeHtml(p.name)}">${t("delete")}</button>
+              ${p.active ? `<button class="btn-link btn-link-danger" data-action="delete" data-id="${p.id}" data-name="${escapeHtml(p.name)}">${t("deactivate")}</button>` : ""}
             </span>
           </div>
         </div>

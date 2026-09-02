@@ -65,12 +65,19 @@ export async function renderPricelist(root, navigate) {
 
   const brands = sortedBrands(products);
   const categories = [...new Set(products.map((p) => p.family).filter(Boolean))];
+  const packages = [...new Set(products.map((p) => p.unit).filter(Boolean))].sort();
+  const isDesktop = window.matchMedia("(min-width: 900px)").matches;
 
   let searchQuery = "";
   let brandFilter = "";
   let categoryFilter = "";
+  let packageFilter = "";
+  let priceMin = null;
+  let priceMax = null;
   let specialOnly = false;
   let sortBy = "default";
+  let selectMode = false;
+  const selectedIds = new Set();
   const collapsedBrands = new Set();
 
   container.innerHTML = `
@@ -82,6 +89,7 @@ export async function renderPricelist(root, navigate) {
         <h1>${t("pricelist_title")}</h1>
         <span class="muted">${t("pricelist_subtitle")}</span>
       </div>
+      <button type="button" class="icon-btn" id="select-mode-btn" aria-label="${t("select_products")}">${icons.checkCircle}</button>
       ${canManageProducts() ? `<button type="button" class="icon-btn" id="manage-btn" aria-label="${t("manage_prices")}">${icons.tag}</button>` : ""}
       <button type="button" class="icon-btn" id="export-btn" aria-label="${t("export")}">${icons.send}</button>
     </div>
@@ -92,6 +100,7 @@ export async function renderPricelist(root, navigate) {
       <input type="search" id="pricelist-search" placeholder="${t("search_products_placeholder")}" aria-label="${t("search_products_placeholder")}" />
     </div>
     <div class="pricelist-filter-row pricelist-no-print" id="pricelist-filter-row"></div>
+    <div id="pricelist-select-bar" class="pricelist-select-bar pricelist-no-print" hidden></div>
 
     <div id="pricelist-catalog"></div>
   `;
@@ -126,6 +135,10 @@ export async function renderPricelist(root, navigate) {
         <button type="button" class="chip ${!categoryFilter ? "chip-active" : ""}" data-category="">${t("category_all")}</button>
         ${categories.map((c) => `<button type="button" class="chip ${categoryFilter === c ? "chip-active" : ""}" data-category="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join("")}
       </div>
+      <div class="segmented pricelist-brand-chips">
+        <button type="button" class="chip ${!packageFilter ? "chip-active" : ""}" data-package="">${t("all_packages")}</button>
+        ${packages.map((p) => `<button type="button" class="chip ${packageFilter === p ? "chip-active" : ""}" data-package="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join("")}
+      </div>
       <div class="pricelist-filter-controls">
         <button type="button" class="chip ${specialOnly ? "chip-active" : ""}" id="special-only-toggle">${t("has_special_price")}</button>
         <select id="pricelist-sort" aria-label="${t("sort")}">
@@ -134,6 +147,12 @@ export async function renderPricelist(root, navigate) {
           <option value="standard_price" ${sortBy === "standard_price" ? "selected" : ""}>${t("price_standard")}</option>
           <option value="retail_price" ${sortBy === "retail_price" ? "selected" : ""}>${t("price_retail")}</option>
         </select>
+      </div>
+      <div class="pricelist-price-range">
+        <span class="muted">${t("price_range")}:</span>
+        <input type="number" min="0" id="price-min" placeholder="${t("min")}" value="${priceMin ?? ""}" aria-label="${t("min")}" />
+        <span class="muted">&ndash;</span>
+        <input type="number" min="0" id="price-max" placeholder="${t("max")}" value="${priceMax ?? ""}" aria-label="${t("max")}" />
       </div>
     `;
     filterRow.querySelectorAll("[data-brand]").forEach((btn) => {
@@ -150,6 +169,22 @@ export async function renderPricelist(root, navigate) {
         paint();
       });
     });
+    filterRow.querySelectorAll("[data-package]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        packageFilter = btn.dataset.package;
+        renderFilters();
+        paint();
+      });
+    });
+    const priceMinInput = filterRow.querySelector("#price-min");
+    const priceMaxInput = filterRow.querySelector("#price-max");
+    const applyPriceRange = debounce(() => {
+      priceMin = priceMinInput.value ? Number(priceMinInput.value) : null;
+      priceMax = priceMaxInput.value ? Number(priceMaxInput.value) : null;
+      paint();
+    }, 300);
+    priceMinInput.addEventListener("input", applyPriceRange);
+    priceMaxInput.addEventListener("input", applyPriceRange);
     filterRow.querySelector("#special-only-toggle").addEventListener("click", () => {
       specialOnly = !specialOnly;
       renderFilters();
@@ -176,15 +211,46 @@ export async function renderPricelist(root, navigate) {
     return products.filter((p) => {
       if (brandFilter && p.brand !== brandFilter) return false;
       if (categoryFilter && p.family !== categoryFilter) return false;
+      if (packageFilter && p.unit !== packageFilter) return false;
       if (specialOnly && p.effective_special_amd === null) return false;
+      if (priceMin !== null && p.effective_standard_amd < priceMin) return false;
+      if (priceMax !== null && p.effective_standard_amd > priceMax) return false;
       if (q && !`${p.name} ${p.sku ?? ""} ${p.brand ?? ""}`.toLowerCase().includes(q)) return false;
       return true;
     });
   }
 
   const catalogEl = container.querySelector("#pricelist-catalog");
+  const selectBar = container.querySelector("#pricelist-select-bar");
+
+  function renderSelectBar() {
+    selectBar.hidden = !selectMode;
+    if (!selectMode) return;
+    selectBar.innerHTML = `
+      <span>${selectedIds.size} ${t("selected")}</span>
+      <button type="button" class="btn-link" id="select-clear-btn">${t("clear")}</button>
+    `;
+    selectBar.querySelector("#select-clear-btn").addEventListener("click", () => {
+      selectedIds.clear();
+      paint();
+    });
+  }
+
+  container.querySelector("#select-mode-btn").addEventListener("click", () => {
+    selectMode = !selectMode;
+    if (!selectMode) selectedIds.clear();
+    paint();
+  });
+
   function paint() {
+    renderSelectBar();
     const filtered = currentlyFiltered();
+    // Desktop gets a dense table (item 35); mobile keeps the card list
+    // (item 34) -- same data, laid out for the space actually available.
+    if (isDesktop && !selectMode) {
+      catalogEl.innerHTML = renderDesktopTable(sortProducts(filtered, sortBy));
+      return;
+    }
     const visibleBrands = sortedBrands(filtered);
     catalogEl.innerHTML = visibleBrands.length
       ? visibleBrands
@@ -216,6 +282,15 @@ export async function renderPricelist(root, navigate) {
         paint();
       });
     });
+    catalogEl.querySelectorAll("[data-select-id]").forEach((el) => {
+      el.addEventListener("click", (e) => {
+        e.preventDefault();
+        const id = Number(el.dataset.selectId);
+        if (selectedIds.has(id)) selectedIds.delete(id);
+        else selectedIds.add(id);
+        paint();
+      });
+    });
   }
 
   function productRowHtml(p) {
@@ -223,8 +298,10 @@ export async function renderPricelist(root, navigate) {
     // on the row; standard becomes secondary/muted; retail always shows,
     // clearly labeled, since it's the number a customer would recognize.
     const hasSpecial = p.effective_special_amd !== null;
+    const selected = selectedIds.has(p.id);
     return `
-      <div class="card pricelist-row">
+      <div class="card pricelist-row ${selectMode ? "pricelist-row-selectable" : ""}" ${selectMode ? `data-select-id="${p.id}"` : ""}>
+        ${selectMode ? `<span class="pricelist-select-check ${selected ? "pricelist-select-check-on" : ""}">${selected ? icons.checkCircle : ""}</span>` : ""}
         <div class="pricelist-row-main">
           <strong>${escapeHtml(p.name)}</strong>
           <span class="muted">${[p.brand, p.family, p.unit].filter(Boolean).map(escapeHtml).join(" · ")}${p.sku ? ` · ${escapeHtml(p.sku)}` : ""}</span>
@@ -243,6 +320,45 @@ export async function renderPricelist(root, navigate) {
     `;
   }
 
+  // Dense table for wide viewports (item 35) -- same canonical fields as
+  // the mobile card, just laid out as real table rows/columns instead of
+  // squeezing a desktop table into phone width.
+  function renderDesktopTable(list) {
+    if (!list.length) return `<p class="empty-state">${t("no_products_found")}</p>`;
+    return `
+      <div class="pricelist-table-wrap">
+        <table class="pricelist-table pricelist-desktop-table">
+          <thead>
+            <tr>
+              <th>${t("brand")}</th>
+              <th>${t("product_name")}</th>
+              <th>${t("unit")}</th>
+              <th>${t("price_standard")}</th>
+              <th>${t("price_special_period")}</th>
+              <th>${t("price_retail")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list
+              .map(
+                (p) => `
+              <tr>
+                <td>${escapeHtml(p.brand ?? "")}</td>
+                <td>${escapeHtml(p.name)}</td>
+                <td>${escapeHtml(p.unit ?? "")}</td>
+                <td>${formatAmd(p.effective_standard_amd)}</td>
+                <td>${p.effective_special_amd !== null ? `<strong class="pricelist-promo">${formatAmd(p.effective_special_amd)}</strong>` : "&mdash;"}</td>
+                <td>${formatAmd(p.effective_retail_amd)}</td>
+              </tr>
+            `
+              )
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
   paint();
 
   // --- Export sheet (items 15-21) ---
@@ -257,6 +373,11 @@ export async function renderPricelist(root, navigate) {
             <legend>${t("export_content")}</legend>
             <label class="radio-row"><input type="radio" name="content" value="all" checked /> ${t("export_content_all")}</label>
             <label class="radio-row"><input type="radio" name="content" value="filtered" /> ${t("export_content_filtered")}</label>
+            ${
+              selectedIds.size
+                ? `<label class="radio-row"><input type="radio" name="content" value="selected" /> ${t("export_content_selected")} (${selectedIds.size})</label>`
+                : ""
+            }
           </fieldset>
           <fieldset>
             <legend>${t("export_columns")}</legend>
@@ -285,25 +406,42 @@ export async function renderPricelist(root, navigate) {
 
     function readOptions() {
       const data = new FormData(overlay.querySelector("#export-form"));
-      const useFiltered = data.get("content") === "filtered";
+      const content = data.get("content");
       const cols = ["standard", "special", "retail"].filter((c) => data.get(`col_${c}`));
-      return { useFiltered, cols };
+      return { content, cols };
+    }
+
+    function docProductsFor(content) {
+      if (content === "selected") return products.filter((p) => selectedIds.has(p.id));
+      if (content === "filtered") return currentlyFiltered();
+      return products;
     }
 
     overlay.querySelector("#export-print-btn").addEventListener("click", () => {
-      const { useFiltered, cols } = readOptions();
-      const docProducts = useFiltered ? currentlyFiltered() : products;
+      const { content, cols } = readOptions();
+      const docProducts = docProductsFor(content);
       overlay.remove();
       openPrintView(docProducts, cols);
     });
 
     overlay.querySelector("#export-excel-btn").addEventListener("click", () => {
-      const { useFiltered, cols } = readOptions();
+      const { content, cols } = readOptions();
       const params = { cols: cols.join(",") };
-      if (useFiltered) {
-        if (brandFilter) params.brand = brandFilter;
-        if (categoryFilter) params.family = categoryFilter;
-        if (!brandFilter && !categoryFilter) params.ids = currentlyFiltered().map((p) => p.id).join(",");
+      if (content === "selected") {
+        params.ids = [...selectedIds].join(",");
+      } else if (content === "filtered") {
+        // The server's brand/family shorthand only covers those two
+        // filters -- if anything else on screen is narrowing the list
+        // (package, price range, search, special-only), fall back to an
+        // explicit id list so the export can't include more than what's
+        // actually visible.
+        const onlyBrandOrFamily = !packageFilter && priceMin === null && priceMax === null && !specialOnly && !searchQuery.trim();
+        if (onlyBrandOrFamily && (brandFilter || categoryFilter)) {
+          if (brandFilter) params.brand = brandFilter;
+          if (categoryFilter) params.family = categoryFilter;
+        } else {
+          params.ids = currentlyFiltered().map((p) => p.id).join(",");
+        }
       }
       window.location.href = api.productsExportXlsxUrl(params);
       overlay.remove();
