@@ -8,7 +8,7 @@ import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offline
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
 import { checkForUpdateManually } from "../updateBanner.js";
 
-const APP_VERSION = "1.26.0";
+const APP_VERSION = "1.27.0";
 
 const ICON = {
   camera: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg>`,
@@ -108,7 +108,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       </div>
 
       ${
-        ["sales_manager", "sales_director", "ceo", "admin"].includes(state.user.role)
+        ["sales_manager", "sales_director"].includes(state.user.role)
           ? `<div id="sales-performance-slot"></div>`
           : ""
       }
@@ -495,15 +495,10 @@ async function loadSalesPerformance(slot, role) {
   slot.innerHTML = `<h2 class="section-title">${t("sales_performance_title")}</h2><p class="loading-state" role="status">${t("loading")}</p>`;
 
   const wantsOwn = role === "sales_manager" || role === "sales_director";
-  const wantsTeam = role === "sales_director" || role === "ceo" || role === "admin";
 
   let mine = null;
-  let team = null;
   try {
-    [mine, team] = await Promise.all([
-      wantsOwn ? api.getMySalesPerformance() : Promise.resolve(null),
-      wantsTeam ? api.getSalesPerformanceTeam() : Promise.resolve(null),
-    ]);
+    mine = wantsOwn ? await api.getMySalesPerformance() : null;
   } catch {
     slot.innerHTML = "";
     return;
@@ -533,26 +528,10 @@ async function loadSalesPerformance(slot, role) {
     }
   }
 
-  if (wantsTeam && team?.length) {
-    sections.push(`<h2 class="section-title">${t("team_performance")}</h2>`);
-    sections.push(
-      `<div class="card-list">${team
-        .map((r, i) => {
-          const pct = Number(r.budget_amd) > 0 ? Number(r.sales_amd) / Number(r.budget_amd) : null;
-          return `
-        <div class="card leaderboard-row">
-          <span class="leaderboard-rank">${i === 0 ? "🏆" : `#${i + 1}`}</span>
-          <span class="leaderboard-name">${escapeHtml(r.rep_name)}</span>
-          <span class="leaderboard-points">
-            ${formatAmdShort(r.sales_amd)}
-            ${pct != null ? `<span class="muted perf-pct-inline">${Math.round(pct * 100)}% ${t("of_target")}</span>` : ""}
-          </span>
-        </div>
-      `;
-        })
-        .join("")}</div>`
-    );
-  }
+  // The cross-rep leaderboard used to live here, but it's now fully
+  // superseded by the dedicated Team Performance module (reachable from the
+  // dashboard's Quick Actions) -- keeping both would just be two different
+  // numbers for the same thing in two different places.
 
   slot.innerHTML = sections.join("");
 }

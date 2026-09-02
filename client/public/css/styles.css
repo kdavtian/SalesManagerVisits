@@ -134,6 +134,20 @@ select {
   color: inherit;
 }
 
+/* Buttons/tabs/nav items are UI chrome, not text content -- without this a
+   long-press or fast double-tap on one (nav icons, quick actions, tab
+   bars, list-row buttons) triggers the OS's native text-selection/callout
+   menu instead of the tap action, which is exactly what reads as "this is
+   a website, not an app." Genuine text content (customer names, comments,
+   order numbers) is untouched -- only <button> itself is affected, and any
+   text a user should be able to copy lives in a plain span/div/input
+   instead, not a button. */
+button {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 a {
   color: var(--accent);
 }
@@ -227,6 +241,16 @@ a {
   border-radius: 6px;
   padding: 3px;
   object-fit: contain;
+}
+
+.topbar-logo-wordmark {
+  /* The wordmark PNG is near-black ink on a transparent background, so it
+     needs the same white backing plate as the old mark for dark-mode
+     legibility -- just wider, to fit the full "KAD" wordmark instead of a
+     single letter. */
+  width: auto;
+  height: 22px;
+  padding: 4px 6px;
 }
 
 .topbar-title {
@@ -446,9 +470,18 @@ a {
   flex-shrink: 0;
   margin-top: -4px;
   border-radius: 50%;
-  background: var(--accent);
-  color: #ffffff;
+  /* Dim/inactive by default, same as every other nav item -- this raised
+     circle used to be accent-colored unconditionally, which is the actual
+     bug: at the bar's real height the label below it has essentially no
+     room to render (the circle alone is taller than the bar), so the
+     button's own color was the only visible signal, and it never changed.
+     See .nav-item-center-active below for the "this is the current route"
+     state, matching how every other tab already distinguishes active from
+     inactive by color, not by a label nobody can see. */
+  background: var(--bg-card);
+  color: var(--text-dim);
   border: 4px solid var(--bg);
+  transition: background-color 0.15s ease, color 0.15s ease;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -457,7 +490,9 @@ a {
 }
 
 .nav-item-center-active {
-  filter: brightness(1.1);
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--bg);
 }
 
 .nav-icon-center {
@@ -470,8 +505,15 @@ a {
   font-size: 0.7rem;
   font-weight: 600;
   line-height: 1;
-  color: var(--accent);
+  color: var(--text-dim);
   margin-top: 1px;
+}
+
+/* Matches the other nav items: dim label normally, accent only when this
+   is the active route -- previously always accent, so the Map tab looked
+   "pressed" all the time and gave no way to tell whether it actually was. */
+.nav-item-center-active + .nav-item-center-label {
+  color: var(--accent);
 }
 
 /* Sync banner */
@@ -660,6 +702,14 @@ a {
   z-index: 0;
   isolation: isolate;
   -webkit-overflow-scrolling: touch;
+  /* html/body's overscroll-behavior:none stops the outer document from
+     moving, but on some engines (notably newer iOS Safari) a scroll
+     container still needs its own overscroll-behavior to stop scroll
+     *chaining* -- reaching the top/bottom of .app-main's content and
+     continuing to drag was still handing the gesture up to the page,
+     which is what read as "the whole customers tab scrolls" even though
+     .app-main itself was already the one truly scrolling. */
+  overscroll-behavior: contain;
   /* nav-bar is now position: fixed (see .nav-bar) and no longer reserves
      its own space in the flex layout, so scrollable views need this padding
      to keep their last item from ending up underneath it. The map view
@@ -3095,6 +3145,11 @@ input[type="search"]:focus {
   background: var(--accent);
   color: #ffffff;
   font-weight: 800;
+}
+
+.quick-action-icon-checkin {
+  background: var(--checkin-green);
+  color: #ffffff;
 }
 
 .dashboard-insights {

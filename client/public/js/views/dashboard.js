@@ -89,7 +89,7 @@ export async function renderDashboard(root, navigate) {
     <h2 class="section-title">${t("quick_actions")}</h2>
     <div class="quick-actions-grid">
       <button type="button" class="quick-action" id="qa-check-in">
-        <span class="quick-action-icon">${icons.mapPinCheck}</span>
+        <span class="quick-action-icon quick-action-icon-checkin">${icons.mapPinCheck}</span>
         <span>${t("qa_check_in")}</span>
       </button>
       <button type="button" class="quick-action" id="qa-plan-route">

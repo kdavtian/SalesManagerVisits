@@ -333,6 +333,7 @@ const dict = {
     dark_mode: "Dark mode",
 
     app_name: "KAD Motors",
+    app_name_suffix: "Motors",
     log_in: "Log in",
     logging_in: "Logging in…",
     email: "Email",
@@ -997,6 +998,7 @@ const dict = {
     dark_mode: "Մուգ ռեժիմ",
 
     app_name: "KAD Motors",
+    app_name_suffix: "Motors",
     log_in: "Մուտք",
     logging_in: "Մուտք է գործում…",
     email: "Էլ. փոստ",

@@ -241,8 +241,8 @@ function renderNav() {
 
   topBar.innerHTML = `
     <span class="topbar-brand">
-      <img class="topbar-logo" src="/brand/kad-k-mark.png" alt="" />
-      <span class="topbar-title">${t("app_name")}</span>
+      <img class="topbar-logo topbar-logo-wordmark" src="/brand/kad-wordmark.png" alt="KAD" />
+      <span class="topbar-title">${t("app_name_suffix")}</span>
     </span>
     <div class="topbar-right">
       <span class="topbar-user">${escapeHtml(state.user.name)}</span>
