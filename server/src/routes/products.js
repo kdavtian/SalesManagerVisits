@@ -1,4 +1,5 @@
 import { Router } from "express";
+import ExcelJS from "exceljs";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireProductManager } from "../middleware/auth.js";
 import { getEffectiveProductPricing } from "../pricingService.js";
@@ -6,6 +7,44 @@ import { getEffectiveProductPricing } from "../pricingService.js";
 export const productsRouter = Router();
 
 productsRouter.use(requireAuth);
+
+// Shared by GET / (the catalog/order-entry list) and the Excel export --
+// one query, one pricing computation, so both surfaces show identical
+// numbers. `where`/`params` let each caller filter differently (active
+// only vs. explicit ids, a name search, etc).
+async function fetchPricedProducts(where, params) {
+  // The one promo (if any) covering today, per product -- ORDER BY +
+  // LIMIT 1 picks the most recently created if two promo windows somehow
+  // overlap, rather than erroring or picking arbitrarily.
+  const { rows } = await pool.query(
+    `SELECT p.*, promo.id AS promo_id, promo.promo_price_amd, promo.starts_on AS promo_starts_on, promo.ends_on AS promo_ends_on
+     FROM products p
+     LEFT JOIN LATERAL (
+       SELECT id, promo_price_amd, starts_on, ends_on FROM product_promos
+       WHERE product_id = p.id AND CURRENT_DATE BETWEEN starts_on AND ends_on
+       ORDER BY created_at DESC LIMIT 1
+     ) promo ON true
+     ${where}
+     ORDER BY p.brand NULLS LAST, p.family NULLS LAST, p.name`,
+    params
+  );
+  // Every surface (this list, the pricelist page, PDF/print, Excel) reads
+  // its prices through the same canonical function -- see pricingService.js.
+  return rows.map((row) => {
+    const pricing = getEffectiveProductPricing(
+      row,
+      row.promo_id ? { promo_price_amd: row.promo_price_amd, starts_on: row.promo_starts_on, ends_on: row.promo_ends_on } : null
+    );
+    return {
+      ...row,
+      effective_standard_amd: pricing.standard,
+      effective_special_amd: pricing.special,
+      effective_retail_amd: pricing.retail,
+      special_valid_from: pricing.specialValidFrom,
+      special_valid_to: pricing.specialValidTo,
+    };
+  });
+}
 
 // Everyone (any logged-in role) can browse the catalog to build an order --
 // only editing it is restricted to product managers (see requireProductManager).
@@ -17,39 +56,88 @@ productsRouter.get("/", async (req, res) => {
     params.push(`%${q}%`);
     where += ` AND (p.name ILIKE $${params.length} OR p.sku ILIKE $${params.length} OR p.brand ILIKE $${params.length})`;
   }
-  // The one promo (if any) covering today, per product -- DISTINCT ON picks
-  // the most recently created if two promo windows somehow overlap, rather
-  // than erroring or picking arbitrarily.
-  const { rows } = await pool.query(
-    `SELECT p.*, promo.id AS promo_id, promo.promo_price_amd, promo.starts_on AS promo_starts_on, promo.ends_on AS promo_ends_on
-     FROM products p
-     LEFT JOIN LATERAL (
-       SELECT id, promo_price_amd, starts_on, ends_on FROM product_promos
-       WHERE product_id = p.id AND CURRENT_DATE BETWEEN starts_on AND ends_on
-       ORDER BY created_at DESC LIMIT 1
-     ) promo ON true
-     ${where}
-     ORDER BY p.brand NULLS LAST, p.name`,
-    params
-  );
-  // Every surface (this list, the pricelist page, PDF/print, Excel) reads
-  // its prices through the same canonical function -- see pricingService.js.
-  res.json(
-    rows.map((row) => {
-      const pricing = getEffectiveProductPricing(
-        row,
-        row.promo_id ? { promo_price_amd: row.promo_price_amd, starts_on: row.promo_starts_on, ends_on: row.promo_ends_on } : null
-      );
-      return {
-        ...row,
-        effective_standard_amd: pricing.standard,
-        effective_special_amd: pricing.special,
-        effective_retail_amd: pricing.retail,
-        special_valid_from: pricing.specialValidFrom,
-        special_valid_to: pricing.specialValidTo,
-      };
-    })
-  );
+  res.json(await fetchPricedProducts(where, params));
+});
+
+// Real .xlsx (not HTML dressed up as one) for the Products & Pricelist
+// export -- open to any authenticated role, same as GET / above, since a
+// sales manager generating their own pricelist needs this as much as the
+// CEO does. Optional filters: brand, family, ids (comma-separated) --
+// mirrors whatever the pricelist page currently has selected. Column
+// visibility (standard/special/retail) is controlled by the caller via
+// cols=standard,special,retail (defaults to all three).
+productsRouter.get("/export/xlsx", async (req, res) => {
+  const { brand, family, ids, cols } = req.query;
+  const params = [];
+  let where = "WHERE p.active";
+  if (ids) {
+    const idList = String(ids).split(",").map(Number).filter(Number.isInteger);
+    if (idList.length) {
+      params.push(idList);
+      where += ` AND p.id = ANY($${params.length})`;
+    }
+  } else {
+    if (brand) {
+      params.push(brand);
+      where += ` AND p.brand = $${params.length}`;
+    }
+    if (family) {
+      params.push(family);
+      where += ` AND p.family = $${params.length}`;
+    }
+  }
+
+  const products = await fetchPricedProducts(where, params);
+  const columns = new Set(cols ? String(cols).split(",") : ["standard", "special", "retail"]);
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "KAD Motors";
+  workbook.created = new Date();
+  const sheet = workbook.addWorksheet("Pricelist", { views: [{ state: "frozen", ySplit: 1 }] });
+
+  const cols_def = [
+    { header: "Brand", key: "brand", width: 14 },
+    { header: "Category", key: "category", width: 16 },
+    { header: "Product Code", key: "sku", width: 16 },
+    { header: "Product Name", key: "name", width: 34 },
+    { header: "Package", key: "unit", width: 10 },
+  ];
+  if (columns.has("standard")) cols_def.push({ header: "Standard Price (AMD)", key: "standard", width: 18 });
+  if (columns.has("special")) {
+    cols_def.push({ header: "Special Price (AMD)", key: "special", width: 18 });
+    cols_def.push({ header: "Special From", key: "specialFrom", width: 14 });
+    cols_def.push({ header: "Special To", key: "specialTo", width: 14 });
+  }
+  if (columns.has("retail")) cols_def.push({ header: "Retail Price (AMD)", key: "retail", width: 18 });
+  sheet.columns = cols_def;
+
+  sheet.getRow(1).font = { bold: true };
+  sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFF1F5" } };
+  sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: cols_def.length } };
+
+  const priceFmt = "#,##0";
+  for (const p of products) {
+    const row = sheet.addRow({
+      brand: p.brand || "",
+      category: p.family || "",
+      sku: p.sku || "",
+      name: p.name,
+      unit: p.unit || "",
+      standard: p.effective_standard_amd,
+      special: p.effective_special_amd ?? null,
+      specialFrom: p.special_valid_from || "",
+      specialTo: p.special_valid_to || "",
+      retail: p.effective_retail_amd,
+    });
+    if (columns.has("standard")) row.getCell("standard").numFmt = priceFmt;
+    if (columns.has("special")) row.getCell("special").numFmt = priceFmt;
+    if (columns.has("retail")) row.getCell("retail").numFmt = priceFmt;
+  }
+
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="kad-pricelist-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+  await workbook.xlsx.write(res);
+  res.end();
 });
 
 productsRouter.use(requireProductManager);
