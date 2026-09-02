@@ -43,6 +43,14 @@ function notifyPaymentsChanged() {
 }
 
 export async function renderPayments(root, navigate, focusPaymentId, initialQuery) {
+  // A payment-detail sheet is appended to document.body, not to `root`, so
+  // it survives a normal view re-render -- and this view can be re-entered
+  // via a hash change alone (e.g. tapping a payment push notification while
+  // a *different* payment's detail sheet is already open, since both are
+  // just `#/payments/:id`). Without this, that leaves two stacked overlays
+  // instead of replacing one.
+  document.querySelectorAll(".sheet-overlay").forEach((el) => el.remove());
+
   const canSeeAll = seesAllPayments(state.user.role);
   const canReview = REVIEW_ROLES.has(state.user.role);
 
@@ -471,6 +479,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
       overlay.innerHTML = `
         <div class="sheet">
           <h2>${t("add_payment")}</h2>
+          <form id="payment-add-form">
           <label>${t("select_customer")}
             <button type="button" class="btn btn-block" id="payment-pick-customer" style="text-align:left;">
               ${selectedCustomer ? escapeHtml(selectedCustomer.name) : t("select_customer")}
@@ -499,8 +508,9 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
           <p class="form-error" id="payment-add-error" hidden></p>
           <div class="sheet-actions">
             <button type="button" class="btn" id="payment-add-cancel">${t("cancel")}</button>
-            <button type="button" class="btn btn-primary" id="payment-add-submit">${t("submit_payment")}</button>
+            <button type="submit" class="btn btn-primary" id="payment-add-submit">${t("submit_payment")}</button>
           </div>
+          </form>
         </div>
       `;
 
@@ -521,7 +531,10 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
         });
       }
 
-      overlay.querySelector("#payment-add-submit").addEventListener("click", () => submit(false));
+      overlay.querySelector("#payment-add-form").addEventListener("submit", (e) => {
+        e.preventDefault();
+        submit(false);
+      });
     }
 
     function openCustomerPicker() {

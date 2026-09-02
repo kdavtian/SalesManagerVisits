@@ -1250,6 +1250,15 @@ input[type="search"]:focus {
   background: var(--bg-card-pressed);
 }
 
+.dropdown-menu hr {
+  align-self: stretch;
+  width: auto;
+  height: 0;
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 4px 6px;
+}
+
 /* Segmented control, iOS style */
 
 .segmented {
