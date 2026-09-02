@@ -52,6 +52,15 @@ export function canReassignCustomers() {
   );
 }
 
+// Mirrors canAssignErpCustomerId in the server's roles.js -- UI gate only,
+// the server independently re-checks ownership on every PATCH.
+export function canAssignErpCustomerId(customer) {
+  const role = state.user?.role;
+  if (role === "admin" || role === "ceo" || role === "accountant") return true;
+  if (role === "sales_manager" || role === "sales_director") return customer.created_by === state.user.id;
+  return false;
+}
+
 // --- Team Performance -- mirrors server/src/roles.js exactly. The server
 // enforces all of this independently; these are UI-only gates so the right
 // screen renders in the first place, not a security boundary.

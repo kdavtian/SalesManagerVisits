@@ -2,7 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml, formatDateTime, haversineMeters, getCurrentPosition, customerListIconHtml, categoryLabel } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { state } from "../state.js";
+import { state, seesAllActivity } from "../state.js";
 
 const FILTERS = [
   { key: "", labelKey: "filter_all" },
@@ -52,6 +52,7 @@ export function renderCustomers(root, navigate, initialFilter) {
   let regionFilter = "";
   let subregionFilter = "";
   let assignmentFilter = ""; // "", "mine", "others"
+  let channelFilter = "";
   let openRegionMenu = null;
   const regionFilterRow = root.querySelector("#region-filter-row");
 
@@ -147,10 +148,19 @@ export function renderCustomers(root, navigate, initialFilter) {
       { value: "others", label: t("assigned_to_others") },
     ];
 
+    // Sales channel (SM YVN, SM Davtashen, ...) only makes sense to filter
+    // by for roles that see more than one channel's worth of customers at
+    // once -- a sales_manager already sees only their own book, so the
+    // filter would have nothing to narrow.
+    const channels = seesAllActivity()
+      ? [...new Set(allCustomers.map((c) => c.sales_channel).filter(Boolean))].sort()
+      : [];
+
     regionFilterRow.innerHTML = `
       ${regionDropdownHtml("assignment", assignmentOptions, assignmentFilter)}
       ${regions.length ? regionDropdownHtml("region", [{ value: "", label: t("all_regions") }, ...regions.map((r) => ({ value: r, label: r }))], regionFilter) : ""}
       ${subregions.length ? regionDropdownHtml("subregion", [{ value: "", label: t("all_subregions") }, ...subregions.map((s) => ({ value: s, label: s }))], subregionFilter) : ""}
+      ${channels.length ? regionDropdownHtml("channel", [{ value: "", label: t("all_channels") }, ...channels.map((c) => ({ value: c, label: c }))], channelFilter) : ""}
     `;
 
     regionFilterRow.querySelectorAll("[data-region-dropdown]").forEach((btn) => {
@@ -170,6 +180,8 @@ export function renderCustomers(root, navigate, initialFilter) {
           subregionFilter = "";
         } else if (key === "subregion") {
           subregionFilter = optBtn.dataset.value;
+        } else if (key === "channel") {
+          channelFilter = optBtn.dataset.value;
         } else {
           assignmentFilter = optBtn.dataset.value;
         }
@@ -234,6 +246,7 @@ export function renderCustomers(root, navigate, initialFilter) {
     else if (filter === "not_visited") customers = customers.filter((c) => !c.visited_this_week);
     if (regionFilter) customers = customers.filter((c) => c.region === regionFilter);
     if (subregionFilter) customers = customers.filter((c) => c.subregion === subregionFilter);
+    if (channelFilter) customers = customers.filter((c) => c.sales_channel === channelFilter);
     if (assignmentFilter === "mine") customers = customers.filter((c) => c.assigned_manager_id === state.user.id);
     else if (assignmentFilter === "others") customers = customers.filter((c) => c.assigned_manager_id !== state.user.id);
     customers = sortCustomers(customers);

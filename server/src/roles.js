@@ -32,6 +32,18 @@ export function canReassignCustomers(role) {
   return role === "admin" || role === "sales_director" || role === "ceo";
 }
 
+// Linking a customer to its ERP record is treated separately from the rest
+// of the edit-request flow -- it's a lookup/link action, not a factual
+// change someone should have to review. Accountant/CEO/admin can link any
+// customer (accountant is the one who actually reconciles against ERP data
+// day to day); a sales manager or director can only link customers they
+// personally created, so they can't relabel someone else's book.
+export function canAssignErpCustomerId(role, customerCreatedBy, userId) {
+  if (role === "admin" || role === "ceo" || role === "accountant") return true;
+  if (role === "sales_manager" || role === "sales_director") return customerCreatedBy === userId;
+  return false;
+}
+
 // Per spec: admin, sales director, and CEO see the live team-location map.
 export function canViewTeamLocations(role) {
   return role === "admin" || role === "sales_director" || role === "ceo";

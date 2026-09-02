@@ -250,6 +250,8 @@ const dict = {
     select_sales_rep_required: "Choose a sales representative to continue.",
     select_day_required: "Choose at least one day to continue.",
     next: "Next",
+    previous: "Previous",
+    back: "Back",
 
     plan_for_date: "Plan for",
     last_visit: "Last visit",
@@ -373,6 +375,7 @@ const dict = {
     unassigned: "Unassigned",
     all_regions: "All regions",
     all_subregions: "All subregions",
+    all_channels: "All channels",
     all_customers: "All customers",
     assigned_to_me: "Assigned to me",
     assigned_to_others: "Assigned to others",
@@ -917,6 +920,8 @@ const dict = {
     select_sales_rep_required: "Շարունակելու համար ընտրեք վաճառքի ներկայացուցիչ։",
     select_day_required: "Շարունակելու համար ընտրեք առնվազն մեկ օր։",
     next: "Հաջորդը",
+    previous: "Նախորդը",
+    back: "Հետ",
 
     plan_for_date: "Պլան",
     last_visit: "Վերջին այցելություն",
@@ -1040,6 +1045,7 @@ const dict = {
     unassigned: "Չնշանակված",
     all_regions: "Բոլոր մարզերը",
     all_subregions: "Բոլոր ենթաշրջանները",
+    all_channels: "Բոլոր ալիքները",
     all_customers: "Բոլոր հաճախորդները",
     assigned_to_me: "Նշանակված ինձ",
     assigned_to_others: "Նշանակված այլոց",

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly } from "../roles.js";
+import { seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId } from "../roles.js";
 import { getDefaultVisitFrequencyDays } from "../settings.js";
 
 export const customersRouter = Router();
@@ -74,6 +74,21 @@ customersRouter.get("/", async (req, res) => {
 
 const CUSTOMER_TIERS = new Set(["potential", "bronze", "silver", "gold", "competitor"]);
 
+// A generous bounding box around Armenia (not a precise border polygon --
+// this only needs to catch "the pin landed in the wrong country," e.g. a
+// slipped tap on the map or a stale GPS fix from a phone that was abroad
+// last, not to be a strict customs-grade boundary).
+const ARMENIA_BOUNDS = { minLat: 38.8, maxLat: 41.35, minLng: 43.4, maxLng: 46.65 };
+
+function isWithinArmenia(lat, lng) {
+  return (
+    lat >= ARMENIA_BOUNDS.minLat &&
+    lat <= ARMENIA_BOUNDS.maxLat &&
+    lng >= ARMENIA_BOUNDS.minLng &&
+    lng <= ARMENIA_BOUNDS.maxLng
+  );
+}
+
 customersRouter.post("/", async (req, res) => {
   const {
     name,
@@ -97,6 +112,9 @@ customersRouter.post("/", async (req, res) => {
   }
   if (typeof lat !== "number" || typeof lng !== "number") {
     return res.status(400).json({ error: "lat and lng must be numbers" });
+  }
+  if (!isWithinArmenia(lat, lng)) {
+    return res.status(400).json({ error: "This location is outside Armenia. Double-check the pin placement." });
   }
   if (customer_tier !== undefined && !CUSTOMER_TIERS.has(customer_tier)) {
     return res.status(400).json({ error: "Invalid customer_tier" });
@@ -214,14 +232,34 @@ const REASSIGNMENT_FIELDS = new Set(["region", "subregion", "assigned_manager_id
 
 customersRouter.patch("/:id", async (req, res) => {
   const fieldsPresent = EDITABLE_FIELDS.filter((f) => req.body?.[f] !== undefined);
-  const onlyReassignmentFields = fieldsPresent.length > 0 && fieldsPresent.every((f) => REASSIGNMENT_FIELDS.has(f));
-  const allowed = onlyReassignmentFields ? canReassignCustomers(req.user.role) : canDeleteOrEditDirectly(req.user.role);
-  if (!allowed) {
-    return res.status(403).json({ error: "Only admins can apply this directly" });
+  const onlyErpField = fieldsPresent.length === 1 && fieldsPresent[0] === "erp_customer_id";
+
+  if (onlyErpField) {
+    // Linking to ERP has its own ownership-based rule (see
+    // canAssignErpCustomerId) instead of the blanket admin-or-request-review
+    // rule below -- it's a lookup/link action, not a factual change.
+    const { rows: ownerRows } = await pool.query("SELECT created_by FROM customers WHERE id = $1", [req.params.id]);
+    if (!ownerRows[0]) return res.status(404).json({ error: "Customer not found" });
+    if (!canAssignErpCustomerId(req.user.role, ownerRows[0].created_by, req.user.id)) {
+      return res.status(403).json({ error: "Not allowed to link this customer to an ERP record" });
+    }
+  } else {
+    const onlyReassignmentFields = fieldsPresent.length > 0 && fieldsPresent.every((f) => REASSIGNMENT_FIELDS.has(f));
+    const allowed = onlyReassignmentFields ? canReassignCustomers(req.user.role) : canDeleteOrEditDirectly(req.user.role);
+    if (!allowed) {
+      return res.status(403).json({ error: "Only admins can apply this directly" });
+    }
   }
 
   if (req.body?.customer_tier !== undefined && !CUSTOMER_TIERS.has(req.body.customer_tier)) {
     return res.status(400).json({ error: "Invalid customer_tier" });
+  }
+  if (req.body?.lat !== undefined || req.body?.lng !== undefined) {
+    const nextLat = req.body.lat;
+    const nextLng = req.body.lng;
+    if (typeof nextLat !== "number" || typeof nextLng !== "number" || !isWithinArmenia(nextLat, nextLng)) {
+      return res.status(400).json({ error: "This location is outside Armenia. Double-check the pin placement." });
+    }
   }
 
   const updates = [];

@@ -1,8 +1,8 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryIcon, categoryLabel, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { canEditDirectly, canReassignCustomers, isAdmin } from "../state.js";
+import { canEditDirectly, canReassignCustomers, canAssignErpCustomerId, isAdmin } from "../state.js";
 
 const AGING_BADGE = {
   "0-7 days": "badge-success",
@@ -53,6 +53,153 @@ function checkinBrandTags(ch) {
   return (ch.brands_found ?? []).map((b) => t(`brand_${b}`));
 }
 
+// Full detail for one visit -- badges, brand tags, note, photos -- opened
+// from a tap on its compact row in the visit history list. All the data is
+// already in the checkins array this page fetched, so this needs no
+// separate request; it just changes how much of it is on screen at once.
+function openVisitDetailSheet(ch, onPhotoDeleted) {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.innerHTML = `
+    <div class="sheet visit-detail-sheet">
+      <div class="visit-detail-header">
+        <button type="button" class="icon-btn" id="visit-detail-back" aria-label="${t("back")}">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div>
+          <h2>${escapeHtml(ch.user_name)}</h2>
+          <p class="muted">${formatDateTime(ch.timestamp)}</p>
+        </div>
+      </div>
+      <div class="checkin-card-badges">
+        <span class="badge ${ch.within_range ? "badge-success" : "badge-danger"}">
+          ${ch.within_range ? t("location_verified") : `${t("location_mismatch_away")} (${formatDistance(ch.distance_meters)} ${t("away")})`}
+        </span>
+        ${checkinOutcomeLabels(ch)
+          .map((label) => `<span class="badge badge-neutral">${escapeHtml(label)}</span>`)
+          .join("")}
+      </div>
+      ${
+        checkinBrandTags(ch).length
+          ? `<div class="brand-tags">${checkinBrandTags(ch).map((tag) => `<span class="brand-tag">${escapeHtml(tag)}</span>`).join("")}</div>`
+          : ""
+      }
+      ${ch.note ? `<p class="checkin-note">${escapeHtml(ch.note)}</p>` : ""}
+      ${
+        ch.photos?.length
+          ? `<div class="checkin-photo-grid">
+              ${ch.photos
+                .map(
+                  (photo, i) => `
+                <div class="checkin-photo-wrap">
+                  <img class="checkin-photo" data-photo-index="${i}" src="${api.checkinPhotoByIdUrl(photo.id)}" alt="${t("photo_optional")}" loading="lazy" />
+                  ${isAdmin() ? `<button class="photo-delete-btn" data-photo-id="${photo.id}" aria-label="${t("delete_photo")}">&times;</button>` : ""}
+                </div>
+              `
+                )
+                .join("")}
+            </div>`
+          : ""
+      }
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  activateDialog(overlay);
+
+  function close() {
+    overlay.remove();
+  }
+  overlay.querySelector("#visit-detail-back").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => e.target === overlay && close());
+
+  overlay.querySelectorAll(".checkin-photo").forEach((img) => {
+    img.addEventListener("click", () => {
+      openPhotoLightbox(
+        ch.photos.map((p) => api.checkinPhotoByIdUrl(p.id)),
+        Number(img.dataset.photoIndex)
+      );
+    });
+  });
+
+  overlay.querySelectorAll(".photo-delete-btn").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!confirm(t("confirm_delete_photo"))) return;
+      await api.deleteCheckinPhotoById(btn.dataset.photoId);
+      close();
+      onPhotoDeleted();
+    });
+  });
+}
+
+// Full-screen photo viewer -- tap a photo to open it, swipe or use the
+// arrow buttons/keys to move between the rest of that visit's photos,
+// tap outside/the close button/Escape to dismiss. This is the fix for
+// "I cannot open already uploaded photos" -- the thumbnails were
+// previously not clickable at all.
+function openPhotoLightbox(urls, startIndex) {
+  let index = startIndex;
+  const overlay = document.createElement("div");
+  overlay.className = "photo-lightbox-overlay";
+  overlay.innerHTML = `
+    <button type="button" class="photo-lightbox-close" aria-label="${t("cancel")}">&times;</button>
+    <img class="photo-lightbox-img" src="${urls[index]}" alt="${t("photo_optional")}" />
+    ${
+      urls.length > 1
+        ? `<button type="button" class="photo-lightbox-nav photo-lightbox-prev" aria-label="${t("previous")}">&#8249;</button>
+           <button type="button" class="photo-lightbox-nav photo-lightbox-next" aria-label="${t("next")}">&#8250;</button>
+           <div class="photo-lightbox-counter">${index + 1} / ${urls.length}</div>`
+        : ""
+    }
+  `;
+  document.body.appendChild(overlay);
+  document.body.style.overflow = "hidden";
+
+  const imgEl = overlay.querySelector(".photo-lightbox-img");
+  const counterEl = overlay.querySelector(".photo-lightbox-counter");
+
+  function show(i) {
+    index = (i + urls.length) % urls.length;
+    imgEl.src = urls[index];
+    if (counterEl) counterEl.textContent = `${index + 1} / ${urls.length}`;
+  }
+
+  function close() {
+    document.body.style.overflow = "";
+    document.removeEventListener("keydown", onKey);
+    overlay.remove();
+  }
+
+  function onKey(e) {
+    if (e.key === "Escape") close();
+    else if (e.key === "ArrowLeft") show(index - 1);
+    else if (e.key === "ArrowRight") show(index + 1);
+  }
+
+  overlay.querySelector(".photo-lightbox-close").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) close();
+  });
+  overlay.querySelector(".photo-lightbox-prev")?.addEventListener("click", () => show(index - 1));
+  overlay.querySelector(".photo-lightbox-next")?.addEventListener("click", () => show(index + 1));
+  document.addEventListener("keydown", onKey);
+
+  let touchStartX = null;
+  overlay.addEventListener(
+    "touchstart",
+    (e) => {
+      touchStartX = e.touches[0].clientX;
+    },
+    { passive: true }
+  );
+  overlay.addEventListener("touchend", (e) => {
+    if (touchStartX == null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 40) show(index + (dx < 0 ? 1 : -1));
+    touchStartX = null;
+  });
+}
+
 const EDIT_FIELDS = [
   { name: "name", labelKey: "name", type: "text" },
   { name: "category", labelKey: "category", type: "select" },
@@ -61,9 +208,6 @@ const EDIT_FIELDS = [
   { name: "visit_frequency_days", labelKey: "visit_frequency", type: "number" },
   { name: "notes", labelKey: "notes", type: "textarea" },
   { name: "tin", labelKey: "tin", type: "text" },
-  // Internal ERP linking field — admin-only, not something a manager/director
-  // should propose via the edit-request flow.
-  { name: "erp_customer_id", labelKey: "erp_customer_id", type: "text", adminOnly: true },
 ];
 
 export async function renderCustomerDetail(root, navigate, customerId) {
@@ -122,7 +266,6 @@ export async function renderCustomerDetail(root, navigate, customerId) {
         <div class="detail-header-status-row">
           ${tierBadgeHtml(customer.customer_tier)}
           <span class="badge ${badgeClass}">${badgeText}</span>
-          ${customer.last_visit_at ? `<span class="muted detail-header-last-visit">${formatDateTime(customer.last_visit_at)}</span>` : ""}
         </div>
       </div>
       <div class="detail-header-actions">
@@ -133,6 +276,13 @@ export async function renderCustomerDetail(root, navigate, customerId) {
                </button>`
             : ""
         }
+        ${
+          canAssignErpCustomerId(customer)
+            ? `<button class="icon-btn" id="assign-erp-btn" aria-label="${t("erp_customer_id")}">
+                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 9.5h17"/><path d="M7 13.5h4"/></svg>
+               </button>`
+            : ""
+        }
         <button class="icon-btn" id="edit-customer-btn" aria-label="${t("edit")}">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
         </button>
@@ -140,18 +290,15 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     </div>
 
     <div class="card detail-facts-card">
-      ${customer.address ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.pin}</span><span>${escapeHtml(customer.address)}</span></div>` : ""}
-      ${customer.phone ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.phone}</span><a href="tel:${escapeHtml(customer.phone)}">${escapeHtml(customer.phone)}</a></div>` : ""}
-      ${customer.category ? `<div class="detail-fact"><span class="detail-fact-icon">${categoryIcon(customer.category)}</span><span>${escapeHtml(categoryLabel(customer.category))}</span></div>` : ""}
       ${
-        customer.region
-          ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.pin}</span><span>${escapeHtml(customer.region)}${customer.subregion ? ` &middot; ${escapeHtml(customer.subregion)}` : ""}</span></div>`
+        customer.region || customer.address
+          ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.pin}</span><span>${[customer.region, customer.subregion, customer.address].filter(Boolean).map(escapeHtml).join(" &middot; ")}</span></div>`
           : ""
       }
-      ${customer.sales_channel ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.box}</span><span>${escapeHtml(customer.sales_channel)}</span></div>` : ""}
+      ${customer.phone ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.phone}</span><a href="tel:${escapeHtml(customer.phone)}">${escapeHtml(customer.phone)}</a></div>` : ""}
       ${
-        customer.assigned_manager_name
-          ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.store}</span><span>${t("assigned_manager")}: ${escapeHtml(customer.assigned_manager_name)}</span></div>`
+        customer.sales_channel || customer.assigned_manager_name
+          ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.box}</span><span>${[customer.sales_channel, customer.assigned_manager_name].filter(Boolean).map(escapeHtml).join(" &middot; ")}</span></div>`
           : ""
       }
       <div class="detail-fact"><span class="detail-fact-icon">${icons.repeat}</span><span>${t("visit_every_prefix")}${customer.visit_frequency_days}${t("visit_every_suffix")}</span></div>
@@ -201,6 +348,9 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   container.querySelector("#reassign-customer-btn")?.addEventListener("click", () => {
     openReassignSheet(customer, () => renderCustomerDetail(root, navigate, customerId));
   });
+  container.querySelector("#assign-erp-btn")?.addEventListener("click", () => {
+    openAssignErpIdSheet(customer, () => renderCustomerDetail(root, navigate, customerId));
+  });
   container.querySelector("#order-history-btn")?.addEventListener("click", () => {
     navigate(`#/customers/${customerId}/orders`);
   });
@@ -213,54 +363,35 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   if (!checkins.length) {
     historyEl.innerHTML = `<p class="empty-state">${t("no_visits_yet")}</p>`;
   } else {
+    // A compact, tappable row per visit -- the full detail (badges, brand
+    // tags, note, photos) used to be rendered inline for every single visit
+    // at once, which made a customer with a long history nearly unusable to
+    // scroll through. Tapping a row opens everything in its own sheet.
     historyEl.innerHTML = checkins
       .map(
-        (ch) => `
-        <div class="card checkin-card">
-          <div class="checkin-card-header">
+        (ch, i) => `
+        <button type="button" class="card checkin-row" data-checkin-index="${i}">
+          <div class="checkin-row-main">
             <strong>${escapeHtml(ch.user_name)}</strong>
             <span class="muted">${formatDateTime(ch.timestamp)}</span>
           </div>
-          <div class="checkin-card-badges">
+          <span class="card-trailing">
             <span class="badge ${ch.within_range ? "badge-success" : "badge-danger"}">
-              ${ch.within_range ? t("location_verified") : `${t("location_mismatch_away")} (${formatDistance(ch.distance_meters)} ${t("away")})`}
+              ${ch.within_range ? t("location_verified") : t("location_mismatch_away")}
             </span>
-            ${checkinOutcomeLabels(ch)
-              .map((label) => `<span class="badge badge-neutral">${escapeHtml(label)}</span>`)
-              .join("")}
-          </div>
-          ${
-            checkinBrandTags(ch).length
-              ? `<div class="brand-tags">${checkinBrandTags(ch).map((tag) => `<span class="brand-tag">${escapeHtml(tag)}</span>`).join("")}</div>`
-              : ""
-          }
-          ${ch.note ? `<p class="checkin-note">${escapeHtml(ch.note)}</p>` : ""}
-          ${
-            ch.photos?.length
-              ? `<div class="checkin-photo-grid">
-                  ${ch.photos
-                    .map(
-                      (photo) => `
-                    <div class="checkin-photo-wrap">
-                      <img class="checkin-photo" src="${api.checkinPhotoByIdUrl(photo.id)}" alt="${t("photo_optional")}" loading="lazy" />
-                      ${isAdmin() ? `<button class="photo-delete-btn" data-photo-id="${photo.id}" aria-label="${t("delete_photo")}">&times;</button>` : ""}
-                    </div>
-                  `
-                    )
-                    .join("")}
-                </div>`
-              : ""
-          }
-        </div>
+            ${ch.photos?.length ? `<span class="checkin-row-photo-count">📷 ${ch.photos.length}</span>` : ""}
+            <span class="chevron">&#8250;</span>
+          </span>
+        </button>
       `
       )
       .join("");
 
-    historyEl.querySelectorAll(".photo-delete-btn").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        if (!confirm(t("confirm_delete_photo"))) return;
-        await api.deleteCheckinPhotoById(btn.dataset.photoId);
-        renderCustomerDetail(root, navigate, customerId);
+    historyEl.querySelectorAll("[data-checkin-index]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        openVisitDetailSheet(checkins[Number(btn.dataset.checkinIndex)], () =>
+          renderCustomerDetail(root, navigate, customerId)
+        );
       });
     });
   }
@@ -420,6 +551,107 @@ function renderPendingRequest(slot, request, onDone) {
   }
 }
 
+// Linking a customer to its ERP record -- its own small sheet, separate
+// from the general edit-request flow (server allows it per
+// canAssignErpCustomerId: accountant/CEO/admin for any customer, a manager
+// or director only for one they created themselves).
+async function openAssignErpIdSheet(customer, onDone) {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.innerHTML = `
+    <div class="sheet">
+      <h2>${t("erp_customer_id")}</h2>
+      <form id="assign-erp-form">
+        <label class="erp-suggest-wrap">${t("erp_customer_id")}
+          <input type="text" name="erp_customer_id" value="${escapeHtml(customer.erp_customer_id ?? "")}" id="erp-customer-input" autocomplete="off" />
+          <div class="erp-suggest-list" id="erp-suggest-list" hidden></div>
+        </label>
+        <p class="form-error" id="assign-erp-error" hidden></p>
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="cancel-assign-erp">${t("cancel")}</button>
+          <button type="submit" class="btn btn-primary">${t("save")}</button>
+        </div>
+      </form>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  activateDialog(overlay);
+
+  function close() {
+    overlay.remove();
+  }
+  overlay.querySelector("#cancel-assign-erp").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => e.target === overlay && close());
+
+  const erpInput = overlay.querySelector("#erp-customer-input");
+  const erpSuggestList = overlay.querySelector("#erp-suggest-list");
+  let erpOptions = [];
+  api
+    .getUnlinkedErpCustomers()
+    .then((results) => {
+      // Sort A-Z by name client-side too -- relying only on the server's
+      // ORDER BY isn't enough since the browser's own native datalist
+      // (what this replaces) silently ignored it; keep the sort explicit
+      // and visible here so it can't regress the same way again.
+      erpOptions = [...results].sort((a, b) =>
+        (a.customer_name || "").localeCompare(b.customer_name || "", undefined, { sensitivity: "base" })
+      );
+    })
+    .catch(() => {});
+
+  function renderSuggestions(query) {
+    const q = query.trim().toLowerCase();
+    const matches = q
+      ? erpOptions.filter((r) => (r.customer_name || "").toLowerCase().includes(q) || r.erp_customer_id.includes(q))
+      : erpOptions;
+    if (!matches.length) {
+      erpSuggestList.hidden = true;
+      erpSuggestList.innerHTML = "";
+      return;
+    }
+    erpSuggestList.innerHTML = matches
+      .slice(0, 30)
+      .map(
+        (r) => `
+      <div class="erp-suggest-item" data-id="${escapeHtml(r.erp_customer_id)}">
+        <span>${escapeHtml(r.customer_name || r.erp_customer_id)}</span>
+        ${r.debt_amd > 0 ? `<span class="muted">${formatAmd(r.debt_amd)}</span>` : ""}
+      </div>`
+      )
+      .join("");
+    erpSuggestList.hidden = false;
+  }
+
+  erpInput.addEventListener("focus", () => renderSuggestions(erpInput.value));
+  erpInput.addEventListener("input", () => renderSuggestions(erpInput.value));
+  erpInput.addEventListener("blur", () => {
+    // A delay, not immediate hide, so the suggestion's own click handler
+    // (mousedown fires first, but click needs the element still present)
+    // gets a chance to run before the list disappears.
+    setTimeout(() => (erpSuggestList.hidden = true), 150);
+  });
+  activateCombobox(erpInput, erpSuggestList, (item) => {
+    erpInput.value = item.dataset.id;
+  });
+
+  const form = overlay.querySelector("#assign-erp-form");
+  const errorEl = overlay.querySelector("#assign-erp-error");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    try {
+      await api.updateCustomer(customer.id, { erp_customer_id: erpInput.value.trim() || null });
+      close();
+      onDone();
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+      submitBtn.disabled = false;
+    }
+  });
+}
+
 // Region/subregion/sales channel/assigned manager -- a director/ceo/admin
 // can change these directly (server allows it per canReassignCustomers),
 // separate from the regular edit sheet below which still goes through the
@@ -527,7 +759,7 @@ async function openReassignSheet(customer, onDone) {
 }
 
 function openEditSheet(customer, navigate, onDone) {
-  const fields = EDIT_FIELDS.filter((f) => !f.adminOnly || isAdmin());
+  const fields = EDIT_FIELDS;
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
   overlay.innerHTML = `
@@ -540,12 +772,6 @@ function openEditSheet(customer, navigate, onDone) {
           const value = escapeHtml(customer[f.name] ?? "");
           if (f.type === "textarea") {
             return `<label>${t(f.labelKey)}<textarea name="${f.name}" rows="2">${value}</textarea></label>`;
-          }
-          if (f.name === "erp_customer_id") {
-            return `<label class="erp-suggest-wrap">${t(f.labelKey)}
-              <input type="text" name="${f.name}" value="${value}" id="erp-customer-input" autocomplete="off" />
-              <div class="erp-suggest-list" id="erp-suggest-list" hidden></div>
-            </label>`;
           }
           return `<label>${t(f.labelKey)}<input type="${f.type}" name="${f.name}" value="${value}" /></label>`;
         }).join("")}
@@ -585,61 +811,6 @@ function openEditSheet(customer, navigate, onDone) {
     close();
     navigate("#/customers");
   });
-
-  const erpInput = overlay.querySelector("#erp-customer-input");
-  const erpSuggestList = overlay.querySelector("#erp-suggest-list");
-  if (erpInput) {
-    let erpOptions = [];
-    api
-      .getUnlinkedErpCustomers()
-      .then((results) => {
-        // Sort A-Z by name client-side too -- relying only on the server's
-        // ORDER BY isn't enough since the browser's own native datalist
-        // (what this replaces) silently ignored it; keep the sort explicit
-        // and visible here so it can't regress the same way again.
-        erpOptions = [...results].sort((a, b) =>
-          (a.customer_name || "").localeCompare(b.customer_name || "", undefined, { sensitivity: "base" })
-        );
-      })
-      .catch(() => {});
-
-    function renderSuggestions(query) {
-      const q = query.trim().toLowerCase();
-      const matches = q
-        ? erpOptions.filter(
-            (r) => (r.customer_name || "").toLowerCase().includes(q) || r.erp_customer_id.includes(q)
-          )
-        : erpOptions;
-      if (!matches.length) {
-        erpSuggestList.hidden = true;
-        erpSuggestList.innerHTML = "";
-        return;
-      }
-      erpSuggestList.innerHTML = matches
-        .slice(0, 30)
-        .map(
-          (r) => `
-        <div class="erp-suggest-item" data-id="${escapeHtml(r.erp_customer_id)}">
-          <span>${escapeHtml(r.customer_name || r.erp_customer_id)}</span>
-          ${r.debt_amd > 0 ? `<span class="muted">${formatAmd(r.debt_amd)}</span>` : ""}
-        </div>`
-        )
-        .join("");
-      erpSuggestList.hidden = false;
-    }
-
-    erpInput.addEventListener("focus", () => renderSuggestions(erpInput.value));
-    erpInput.addEventListener("input", () => renderSuggestions(erpInput.value));
-    erpInput.addEventListener("blur", () => {
-      // A delay, not immediate hide, so the suggestion's own click handler
-      // (mousedown fires first, but click needs the element still present)
-      // gets a chance to run before the list disappears.
-      setTimeout(() => (erpSuggestList.hidden = true), 150);
-    });
-    activateCombobox(erpInput, erpSuggestList, (item) => {
-      erpInput.value = item.dataset.id;
-    });
-  }
 
   const form = overlay.querySelector("#edit-customer-form");
   const errorEl = overlay.querySelector("#edit-customer-error");
