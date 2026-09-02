@@ -117,6 +117,9 @@ export const api = {
   updateProduct: (id, data) => json(`/products/${id}`, "PATCH", data),
   deleteProduct: (id) => request(`/products/${id}`, { method: "DELETE" }),
   resyncProduct: (id) => request(`/products/${id}/resync`, { method: "POST" }),
+  listProductPromos: (id) => request(`/products/${id}/promos`),
+  createProductPromo: (id, data) => json(`/products/${id}/promos`, "POST", data),
+  deleteProductPromo: (id, promoId) => request(`/products/${id}/promos/${promoId}`, { method: "DELETE" }),
 
   createOrder: (data) => json("/orders", "POST", data),
   submitOrder: (id, erpCustomerId) => json(`/orders/${id}/submit`, "POST", erpCustomerId ? { erp_customer_id: erpCustomerId } : {}),

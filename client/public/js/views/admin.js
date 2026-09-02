@@ -264,6 +264,7 @@ export async function renderProductsSection(container) {
             </span>
             <span class="user-row-actions">
               ${p.erp_product_id && p.manually_edited_at ? `<button class="btn-link" data-action="resync" data-id="${p.id}">${t("catalog_resync")}</button>` : ""}
+              <button class="btn-link" data-action="promo" data-id="${p.id}">${t("promo_price_label")}</button>
               <button class="btn-link" data-action="edit" data-id="${p.id}">${t("edit")}</button>
               <button class="btn-link btn-link-danger" data-action="delete" data-id="${p.id}" data-name="${escapeHtml(p.name)}">${t("delete")}</button>
             </span>
@@ -290,6 +291,103 @@ export async function renderProductsSection(container) {
         await api.resyncProduct(btn.dataset.id);
         loadProducts();
       });
+    });
+    listEl.querySelectorAll('[data-action="promo"]').forEach((btn) => {
+      const product = products.find((p) => p.id === Number(btn.dataset.id));
+      btn.addEventListener("click", () => openPromoSheet(product));
+    });
+  }
+
+  // Date-ranged "special period" promo pricing (item 6) -- shows any
+  // existing promos for this product (past and upcoming, most recent
+  // first) and a small form to add a new one.
+  async function openPromoSheet(product) {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>${t("promo_price_label")}</h2>
+        <p class="muted">${escapeHtml(product.name)}</p>
+        <div id="promo-list" class="card-list"><p class="loading-state" role="status">${t("loading")}</p></div>
+        <form id="promo-form">
+          <label>${t("promo_price_amd")}<input name="promo_price_amd" type="number" min="0" step="1" required /></label>
+          <label>${t("promo_starts_on")}<input name="starts_on" type="date" required /></label>
+          <label>${t("promo_ends_on")}<input name="ends_on" type="date" required /></label>
+          <p class="form-error" id="promo-form-error" hidden></p>
+          <div class="sheet-actions">
+            <button type="button" class="btn" id="close-promo">${t("done")}</button>
+            <button type="submit" class="btn btn-primary">${t("add_promo")}</button>
+          </div>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.querySelector("#close-promo").addEventListener("click", () => overlay.remove());
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+
+    const promoListEl = overlay.querySelector("#promo-list");
+    async function loadPromos() {
+      const promos = await api.listProductPromos(product.id);
+      const today = new Date().toISOString().slice(0, 10);
+      // DATE columns come back over JSON as a full ISO timestamp
+      // ("2026-09-01T00:00:00.000Z") -- trim to just the date for both the
+      // active-range comparison and the display.
+      const dateOnly = (v) => String(v).slice(0, 10);
+      promoListEl.innerHTML = promos.length
+        ? promos
+            .map((promo) => {
+              const starts = dateOnly(promo.starts_on);
+              const ends = dateOnly(promo.ends_on);
+              const active = starts <= today && today <= ends;
+              return `
+          <div class="card user-row">
+            <div class="user-row-top">
+              <strong>${formatAmd(Number(promo.promo_price_amd))}</strong>
+              <span class="badge ${active ? "badge-success" : "badge-neutral"}">
+                ${active ? t("promo_active") : ends < today ? t("promo_ended") : t("promo_upcoming")}
+              </span>
+            </div>
+            <div class="user-row-meta">
+              <span class="muted">${escapeHtml(starts)} &ndash; ${escapeHtml(ends)}</span>
+              <button class="btn-link btn-link-danger" data-promo-id="${promo.id}">${t("delete")}</button>
+            </div>
+          </div>
+        `;
+            })
+            .join("")
+        : `<p class="empty-state">${t("no_promos_yet")}</p>`;
+
+      promoListEl.querySelectorAll("[data-promo-id]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          await api.deleteProductPromo(product.id, btn.dataset.promoId);
+          loadPromos();
+        });
+      });
+    }
+    loadPromos();
+
+    const form = overlay.querySelector("#promo-form");
+    const errorEl = overlay.querySelector("#promo-form-error");
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const data = new FormData(form);
+      const submitBtn = form.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      try {
+        await api.createProductPromo(product.id, {
+          promo_price_amd: Number(data.get("promo_price_amd")),
+          starts_on: data.get("starts_on"),
+          ends_on: data.get("ends_on"),
+        });
+        form.reset();
+        loadPromos();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+      } finally {
+        submitBtn.disabled = false;
+      }
     });
   }
 

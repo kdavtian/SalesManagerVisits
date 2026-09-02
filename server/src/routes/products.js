@@ -11,13 +11,24 @@ productsRouter.use(requireAuth);
 productsRouter.get("/", async (req, res) => {
   const { q } = req.query;
   const params = [];
-  let where = "WHERE active";
+  let where = "WHERE p.active";
   if (q) {
     params.push(`%${q}%`);
-    where += ` AND (name ILIKE $${params.length} OR sku ILIKE $${params.length} OR brand ILIKE $${params.length})`;
+    where += ` AND (p.name ILIKE $${params.length} OR p.sku ILIKE $${params.length} OR p.brand ILIKE $${params.length})`;
   }
+  // The one promo (if any) covering today, per product -- DISTINCT ON picks
+  // the most recently created if two promo windows somehow overlap, rather
+  // than erroring or picking arbitrarily.
   const { rows } = await pool.query(
-    `SELECT * FROM products ${where} ORDER BY brand NULLS LAST, name`,
+    `SELECT p.*, promo.promo_price_amd, promo.ends_on AS promo_ends_on
+     FROM products p
+     LEFT JOIN LATERAL (
+       SELECT promo_price_amd, ends_on FROM product_promos
+       WHERE product_id = p.id AND CURRENT_DATE BETWEEN starts_on AND ends_on
+       ORDER BY created_at DESC LIMIT 1
+     ) promo ON true
+     ${where}
+     ORDER BY p.brand NULLS LAST, p.name`,
     params
   );
   res.json(rows);
@@ -91,5 +102,43 @@ productsRouter.post("/:id/resync", async (req, res) => {
 productsRouter.delete("/:id", async (req, res) => {
   const { rowCount } = await pool.query("DELETE FROM products WHERE id = $1", [req.params.id]);
   if (!rowCount) return res.status(404).json({ error: "Product not found" });
+  res.status(204).end();
+});
+
+// Admin-managed date-ranged promo ("special period") pricing -- item 6 of
+// the pricelist feature. Past promos are kept (not deleted) as a record of
+// what ran when; only the currently-active one (if any) is surfaced on the
+// public GET / above.
+productsRouter.get("/:id/promos", async (req, res) => {
+  const { rows } = await pool.query(
+    "SELECT * FROM product_promos WHERE product_id = $1 ORDER BY starts_on DESC",
+    [req.params.id]
+  );
+  res.json(rows);
+});
+
+productsRouter.post("/:id/promos", async (req, res) => {
+  const { promo_price_amd, starts_on, ends_on } = req.body ?? {};
+  const price = Number(promo_price_amd);
+  if (!Number.isFinite(price) || price < 0) {
+    return res.status(400).json({ error: "promo_price_amd must be a non-negative number" });
+  }
+  if (!starts_on || !ends_on || new Date(ends_on) < new Date(starts_on)) {
+    return res.status(400).json({ error: "starts_on and ends_on are required, and ends_on must not be before starts_on" });
+  }
+  const { rows } = await pool.query(
+    `INSERT INTO product_promos (product_id, promo_price_amd, starts_on, ends_on, created_by)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [req.params.id, price, starts_on, ends_on, req.user.id]
+  );
+  res.status(201).json(rows[0]);
+});
+
+productsRouter.delete("/:id/promos/:promoId", async (req, res) => {
+  const { rowCount } = await pool.query(
+    "DELETE FROM product_promos WHERE id = $1 AND product_id = $2",
+    [req.params.promoId, req.params.id]
+  );
+  if (!rowCount) return res.status(404).json({ error: "Promo not found" });
   res.status(204).end();
 });

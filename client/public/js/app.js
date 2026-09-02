@@ -18,6 +18,7 @@ import { renderCashExpenses } from "./views/cashExpenses.js";
 import { renderReports } from "./views/reports.js";
 import { renderRoutePlans } from "./views/routePlans.js";
 import { renderTeamPerformance } from "./views/teamPerformance.js";
+import { renderPricelist } from "./views/pricelist.js";
 import { flushQueue, getQueue, onQueueChange } from "./offlineQueue.js";
 import { mountInstallPrompt } from "./install.js";
 import { mountUpdateBanner, initServiceWorkerUpdates } from "./updateBanner.js";
@@ -188,6 +189,8 @@ async function render() {
     renderRoutePlans(app, navigate);
   } else if (path === "#/team-performance") {
     renderTeamPerformance(app, navigate);
+  } else if (path === "#/pricelist") {
+    renderPricelist(app, navigate);
   } else if (customerMatch) {
     renderCustomerDetail(app, navigate, customerMatch[1]);
   } else if (checkinMatch) {

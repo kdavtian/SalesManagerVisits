@@ -5182,3 +5182,91 @@ form select,
   padding: 4px 12px;
   border-radius: 999px;
 }
+
+/* Pricelist (item 6) -- a printable catalog page, styled like a real
+   document rather than an app screen since it's meant to be handed to or
+   printed for a customer. */
+.pricelist-doc {
+  background: var(--bg-card);
+  border-radius: 12px;
+  padding: 20px;
+  margin: 0 16px 16px;
+}
+.pricelist-doc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+}
+.pricelist-doc-header h1 {
+  margin: 0 0 4px;
+  font-size: 1.3rem;
+}
+.pricelist-rep-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+.pricelist-rep-card strong {
+  color: var(--text);
+  font-size: 0.95rem;
+}
+.pricelist-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin: 0 0 16px;
+}
+.pricelist-brand-heading {
+  margin: 20px 0 8px;
+  font-size: 1.05rem;
+  color: var(--accent);
+}
+.pricelist-table-wrap {
+  overflow-x: auto;
+}
+.pricelist-table {
+  width: 100%;
+  min-width: 480px;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+}
+.pricelist-table th {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.pricelist-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-subtle, var(--border));
+}
+.pricelist-promo {
+  color: var(--danger);
+}
+
+@media print {
+  .pricelist-no-print,
+  .app-nav,
+  .topbar {
+    display: none !important;
+  }
+  .pricelist-doc {
+    margin: 0;
+    padding: 0;
+  }
+  body,
+  .app-main {
+    background: #fff !important;
+  }
+}
