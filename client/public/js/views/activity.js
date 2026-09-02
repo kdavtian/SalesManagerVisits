@@ -22,11 +22,14 @@ const STATUS_ICON = {
   rejected: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v5"/><circle cx="12" cy="16.5" r="0.6" fill="#fff" stroke="none"/><circle cx="12" cy="12" r="9"/></svg>`,
 };
 
+// Activity filter icons: intentionally simple, instantly recognizable and
+// drawn on the same 24px / 1.9px-stroke system as the app navigation icons.
+// No decorative micro-glyphs: these remain clear at the compact 20–21px size.
 const ACTIVITY_FILTER_ICONS = {
-  manager: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="7" r="3.1"/><path d="M5.5 20v-1.2a6.5 6.5 0 0 1 13 0V20"/><path d="m10.3 12.8 1.7 2 1.7-2M12 14.8v3.4"/></svg>`,
-  status: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16l-6.2 7.1v5.3l-3.6 1.8v-7.1L4 5Z"/><circle cx="17.2" cy="16.7" r="3.1"/><path d="m15.9 16.7.9.9 1.8-2"/></svg>`,
-  outcome: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="2"/><path d="M7 12h3.4c2.6 0 3.3-1.7 4.4-3.4C15.8 7 17 6 19 6h1"/><path d="m18 4 2 2-2 2"/><path d="M7 12h3.4c2.6 0 3.3 1.7 4.4 3.4C15.8 17 17 18 19 18h1"/><path d="m18 16 2 2-2 2"/><path d="M7 12h13"/><path d="m18 10 2 2-2 2"/></svg>`,
-  sort: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M4 7l3-3 3 3M17 20V4M14 17l3 3 3-3"/><path d="M12 7h3M12 12h2M12 17h1"/></svg>`,
+  manager: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17.5" cy="8.6" r="2.35"/><path d="M3.5 20v-1.2A5.5 5.5 0 0 1 9 13.3h.1a5.5 5.5 0 0 1 5.5 5.5V20"/><path d="M15.1 13.8c.7-.35 1.5-.55 2.35-.55A4.55 4.55 0 0 1 22 17.8V20"/></svg>`,
+  status: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.75"/><path d="m7.9 12.1 2.6 2.7 5.8-6"/></svg>`,
+  outcome: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3.75" width="14" height="16.5" rx="2.5"/><path d="M9 3.75v-.5A1.25 1.25 0 0 1 10.25 2h3.5A1.25 1.25 0 0 1 15 3.25v.5"/><path d="m8.5 11.7 1.8 1.8 4.7-5"/><path d="M8.5 17h7"/></svg>`,
+  sort: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M4 7l3-3 3 3M17 20V4M14 17l3 3 3-3"/></svg>`,
 };
 
 function checkinOutcomes(c) {
@@ -59,7 +62,10 @@ export async function renderActivity(root, navigate) {
 
   const canFilterByManager = seesAllActivity();
 
-  let range = "week";
+  // Activity opens on Today: it is the field team's operational screen and
+  // should answer "what happened today?" immediately. Wider periods remain
+  // one tap away and use the same server-side range handling.
+  let range = "today";
   let customFrom = "";
   let customTo = "";
   let allCheckins = [];
@@ -150,7 +156,6 @@ export async function renderActivity(root, navigate) {
       <div class="list-header">
         <div>
           <h1>${t("nav_activity")}</h1>
-          <p class="muted">${t("activity_subtitle")}</p>
         </div>
       </div>
 
@@ -169,7 +174,7 @@ export async function renderActivity(root, navigate) {
       ${checkinsCapped ? `<p class="muted activity-capped-note">${t("activity_capped_note")}</p>` : ""}
 
       <div class="stat-grid activity-stat-grid">
-        <div class="stat-card"><span class="stat-value">${stats.total}</span><span class="stat-label">${t("stat_total_visits")}</span><span class="stat-sublabel">${t("stat_all_checkins")}</span></div>
+        <div class="stat-card"><span class="stat-value">${stats.total}</span><span class="stat-label">${t("stat_total_visits")}</span></div>
         <div class="stat-card"><span class="stat-value">${stats.verified}</span><span class="stat-label">${t("verified")}</span><span class="stat-sublabel">${stats.verifiedPct}</span></div>
         <div class="stat-card"><span class="stat-value">${stats.rejected}</span><span class="stat-label">${t("status_rejected")}</span><span class="stat-sublabel">${stats.rejectedPct}</span></div>
         <div class="stat-card"><span class="stat-value">${stats.pending}</span><span class="stat-label">${t("status_pending")}</span><span class="stat-sublabel">${stats.pendingPct}</span></div>
