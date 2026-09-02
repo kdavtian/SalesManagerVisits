@@ -1,8 +1,8 @@
 import { api } from "../api.js";
 import { t, getLang, setLang } from "../i18n.js";
 import { getTheme, setTheme } from "../theme.js";
-import { state, isAdmin, canPlanForOthers, seesFinancialExports } from "../state.js";
-import { renderTeamSection, renderPlanApprovalsSection, renderProductsSection, renderPointsCloseoutSection } from "./admin.js";
+import { state, isAdmin, canPlanForOthers, seesFinancialExports, canManageProducts } from "../state.js";
+import { renderTeamSection, renderPlanApprovalsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection } from "./admin.js";
 import { escapeHtml, compressImage, activateDialog } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
@@ -28,6 +28,7 @@ const ICON = {
   book: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5v-15Z"/><path d="M4 18a2.5 2.5 0 0 1 2.5-2.5H20"/></svg>`,
   team: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20v-1.25A5.75 5.75 0 0 1 8.75 13h.5A5.75 5.75 0 0 1 15 18.75V20"/><circle cx="17.5" cy="8.5" r="2.5"/><path d="M15.5 13.6c.6-.25 1.25-.38 1.9-.38A4.6 4.6 0 0 1 22 17.82V20"/></svg>`,
   chart: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>`,
+  phone: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7.2 3.5 10 7.8 8.2 10a15.5 15.5 0 0 0 5.8 5.8l2.2-1.8 4.3 2.8-.8 3.2c-.2.8-1 1.3-1.8 1.2A18 18 0 0 1 2.8 6.1C2.7 5.3 3.2 4.5 4 4.3z"/></svg>`,
 };
 
 // User guide PDF: update GUIDE_VERSION (and re-export docs/kad-motors-guide-hy.pdf
@@ -113,6 +114,11 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
           : ""
       }
 
+      <h2 class="section-title">${t("contact_info")}</h2>
+      <div class="card settings-list">
+        ${settingsRow({ icon: ICON.phone, label: t("phone"), value: state.user.phone ? escapeHtml(state.user.phone) : t("not_set"), id: "row-phone" })}
+      </div>
+
       <h2 class="section-title">${t("preferences")}</h2>
       <div class="card settings-list">
         ${settingsToggleRow({ icon: ICON.appearance, label: t("appearance"), value: getTheme() === "dark" ? t("dark") : t("light"), id: "toggle-appearance", checked: getTheme() === "dark" })}
@@ -180,7 +186,6 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         </div>
 
         <div class="card settings-list">
-          ${settingsRow({ icon: ICON.database, label: t("product_catalog"), id: "row-product-catalog" })}
           ${settingsRow({ icon: ICON.team, label: t("team_management"), id: "row-team-management" })}
           ${settingsRow({ icon: ICON.chart, label: t("reports_management"), id: "row-reports-management" })}
         </div>
@@ -191,6 +196,18 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         <h2 class="section-title">${t("notification_defaults_title")}</h2>
         <p class="muted radius-help">${t("notification_defaults_help")}</p>
         <div id="notification-defaults-section"></div>
+      `
+          : ""
+      }
+
+      ${
+        canManageProducts()
+          ? `
+        <h2 class="section-title">${t("products_pricelist_admin_section")}</h2>
+        <div class="card settings-list">
+          ${settingsRow({ icon: ICON.database, label: t("product_catalog"), id: "row-product-catalog" })}
+          ${settingsRow({ icon: ICON.chart, label: t("company_profile"), id: "row-company-profile" })}
+        </div>
       `
           : ""
       }
@@ -423,14 +440,20 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     renderPointsCloseoutSection(root.querySelector("#points-closeout-section"));
     renderNotificationDefaultsSection(root.querySelector("#notification-defaults-section"));
 
-    root.querySelector("#row-product-catalog").addEventListener("click", () => {
-      openAdminSectionOverlay(t("product_catalog"), renderProductsSection);
-    });
     root.querySelector("#row-team-management").addEventListener("click", () => {
       openAdminSectionOverlay(t("team_management"), renderTeamSection);
     });
     root.querySelector("#row-reports-management").addEventListener("click", () => {
       openAdminSectionOverlay(t("reports_management"), renderReportsManagementSection);
+    });
+  }
+
+  if (canManageProducts()) {
+    root.querySelector("#row-product-catalog").addEventListener("click", () => {
+      openAdminSectionOverlay(t("product_catalog"), renderProductsSection);
+    });
+    root.querySelector("#row-company-profile").addEventListener("click", () => {
+      openAdminSectionOverlay(t("company_profile"), renderCompanyProfileSection);
     });
   }
 
@@ -458,6 +481,9 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     // here and reloads the page, so there's no useful "re-enabled" state
     // to return this row to.
   });
+
+  // --- Contact ---
+  root.querySelector("#row-phone").addEventListener("click", () => openPhoneSheet(root, onLogout, onLanguageChange));
 
   // --- Security ---
   root.querySelector("#row-change-password").addEventListener("click", openChangePasswordSheet);
@@ -831,6 +857,53 @@ function openAdminSectionOverlay(title, renderFn) {
   overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
 
   renderFn(overlay.querySelector("#admin-section-overlay-content"));
+}
+
+// Self-service phone number -- populates the "Prepared by" footer on a
+// generated pricelist (see views/pricelist.js). Nothing else reads it yet.
+function openPhoneSheet(root, onLogout, onLanguageChange) {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.innerHTML = `
+    <div class="sheet">
+      <h2>${t("phone")}</h2>
+      <form id="phone-form">
+        <label>${t("phone")}<input name="phone" type="tel" value="${state.user.phone ? escapeHtml(state.user.phone) : ""}" placeholder="+374 ..." /></label>
+        <p class="form-error" id="phone-form-error" hidden></p>
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="cancel-phone">${t("cancel")}</button>
+          <button type="submit" class="btn btn-primary">${t("save")}</button>
+        </div>
+      </form>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  activateDialog(overlay);
+
+  function close() {
+    overlay.remove();
+  }
+  overlay.querySelector("#cancel-phone").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => e.target === overlay && close());
+
+  const form = overlay.querySelector("#phone-form");
+  const errorEl = overlay.querySelector("#phone-form-error");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    const phone = new FormData(form).get("phone");
+    try {
+      await api.updateMyProfile({ phone: phone || null });
+      state.user.phone = phone || null;
+      close();
+      renderSettings(root, onLogout, onLanguageChange);
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+      submitBtn.disabled = false;
+    }
+  });
 }
 
 function openChangePasswordSheet() {

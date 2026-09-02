@@ -236,12 +236,14 @@ export async function renderPlanApprovalsSection(container) {
 export async function renderProductsSection(container) {
   container.innerHTML = `
     <div id="product-list" class="card-list"><p class="loading-state" role="status">${t("loading")}</p></div>
-    <div class="team-add-btn-wrap">
+    <div class="team-add-btn-wrap product-section-actions">
+      <button type="button" class="btn" id="bulk-price-edit-btn">${t("bulk_price_edit")}</button>
       <button type="button" class="btn btn-block" id="add-product-btn">+ ${t("add_product")}</button>
     </div>
   `;
 
   const listEl = container.querySelector("#product-list");
+  container.querySelector("#bulk-price-edit-btn").addEventListener("click", () => openBulkPriceEditSheet(loadProducts));
 
   async function loadProducts() {
     const products = await api.listAllProducts();
@@ -265,6 +267,7 @@ export async function renderProductsSection(container) {
             <span class="user-row-actions">
               ${p.erp_product_id && p.manually_edited_at ? `<button class="btn-link" data-action="resync" data-id="${p.id}">${t("catalog_resync")}</button>` : ""}
               <button class="btn-link" data-action="promo" data-id="${p.id}">${t("promo_price_label")}</button>
+              <button class="btn-link" data-action="history" data-id="${p.id}">${t("price_history")}</button>
               <button class="btn-link" data-action="edit" data-id="${p.id}">${t("edit")}</button>
               <button class="btn-link btn-link-danger" data-action="delete" data-id="${p.id}" data-name="${escapeHtml(p.name)}">${t("delete")}</button>
             </span>
@@ -296,6 +299,10 @@ export async function renderProductsSection(container) {
       const product = products.find((p) => p.id === Number(btn.dataset.id));
       btn.addEventListener("click", () => openPromoSheet(product));
     });
+    listEl.querySelectorAll('[data-action="history"]').forEach((btn) => {
+      const product = products.find((p) => p.id === Number(btn.dataset.id));
+      btn.addEventListener("click", () => openPriceHistorySheet(product));
+    });
   }
 
   // Date-ranged "special period" promo pricing (item 6) -- shows any
@@ -313,6 +320,7 @@ export async function renderProductsSection(container) {
           <label>${t("promo_price_amd")}<input name="promo_price_amd" type="number" min="0" step="1" required /></label>
           <label>${t("promo_starts_on")}<input name="starts_on" type="date" required /></label>
           <label>${t("promo_ends_on")}<input name="ends_on" type="date" required /></label>
+          <label>${t("promo_note")}<input name="note" type="text" maxlength="200" /></label>
           <p class="form-error" id="promo-form-error" hidden></p>
           <div class="sheet-actions">
             <button type="button" class="btn" id="close-promo">${t("done")}</button>
@@ -379,6 +387,7 @@ export async function renderProductsSection(container) {
           promo_price_amd: Number(data.get("promo_price_amd")),
           starts_on: data.get("starts_on"),
           ends_on: data.get("ends_on"),
+          note: data.get("note") || null,
         });
         form.reset();
         loadPromos();
@@ -401,7 +410,8 @@ export async function renderProductsSection(container) {
           <label>${t("product_name")}<input name="name" value="${product ? escapeHtml(product.name) : ""}" required /></label>
           <label>${t("brand")}<input name="brand" value="${product?.brand ? escapeHtml(product.brand) : ""}" /></label>
           <label>${t("unit")}<input name="unit" value="${product?.unit ? escapeHtml(product.unit) : ""}" placeholder="e.g. box, L, pcs" /></label>
-          <label>${t("unit_price_amd")}<input name="unit_price_amd" type="number" min="0" step="1" value="${product ? Number(product.unit_price_amd) : ""}" required /></label>
+          <label>${t("price_standard")}<input name="unit_price_amd" type="number" min="0" step="1" value="${product ? Number(product.unit_price_amd) : ""}" required /></label>
+          <label>${t("price_retail")}<input name="retail_price_amd" type="number" min="0" step="1" value="${product && product.retail_price_amd !== null ? Number(product.retail_price_amd) : ""}" placeholder="${t("price_retail_hint")}" /></label>
           ${
             product
               ? `<label class="settings-toggle-row"><span>${t("active")}</span>
@@ -436,11 +446,19 @@ export async function renderProductsSection(container) {
       const data = new FormData(form);
       const submitBtn = form.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
+      const standardPrice = Number(data.get("unit_price_amd"));
+      const retailInput = data.get("retail_price_amd");
       const payload = {
         name: data.get("name"),
         brand: data.get("brand") || null,
         unit: data.get("unit") || null,
-        unit_price_amd: Number(data.get("unit_price_amd")),
+        // bronze_price_amd is what pricingService.getEffectiveProductPricing
+        // actually reads as the "standard" price -- kept equal to
+        // unit_price_amd here (same value the ERP sync writes to both) so a
+        // manual edit doesn't silently desync the two.
+        unit_price_amd: standardPrice,
+        bronze_price_amd: standardPrice,
+        retail_price_amd: retailInput ? Number(retailInput) : standardPrice,
       };
       try {
         if (product) {
@@ -458,9 +476,233 @@ export async function renderProductsSection(container) {
     });
   }
 
+  // Full price-change trail for one product -- standard/retail edits and
+  // special create/cancel events, newest first. Read-only (item 9/40).
+  async function openPriceHistorySheet(product) {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>${t("price_history")}</h2>
+        <p class="muted">${escapeHtml(product.name)}</p>
+        <div id="price-history-list" class="card-list"><p class="loading-state" role="status">${t("loading")}</p></div>
+        <div class="sheet-actions">
+          <button type="button" class="btn btn-block" id="close-price-history">${t("done")}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.querySelector("#close-price-history").addEventListener("click", () => overlay.remove());
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+
+    const listEl = overlay.querySelector("#price-history-list");
+    const PRICE_TYPE_LABEL = { standard: t("price_standard"), retail: t("price_retail"), special: t("price_special_period") };
+    const entries = await api.getProductPriceHistory(product.id);
+    listEl.innerHTML = entries.length
+      ? entries
+          .map(
+            (h) => `
+        <div class="card user-row">
+          <div class="user-row-top">
+            <strong>${escapeHtml(PRICE_TYPE_LABEL[h.price_type] || h.price_type)}</strong>
+            <span class="muted">${formatDateTime(h.changed_at)}</span>
+          </div>
+          <div class="user-row-meta">
+            <span>${h.old_value !== null ? formatAmd(Number(h.old_value)) : "—"} &rarr; ${h.new_value !== null ? formatAmd(Number(h.new_value)) : "—"}</span>
+            <span class="muted">${escapeHtml(h.changed_by_name || "")}${h.note ? ` · ${escapeHtml(h.note)}` : ""}</span>
+          </div>
+        </div>
+      `
+          )
+          .join("")
+      : `<p class="empty-state">${t("no_price_history")}</p>`;
+  }
+
   container.querySelector("#add-product-btn").addEventListener("click", () => openProductSheet(null));
 
   loadProducts();
+}
+
+// Percent/fixed/exact price changes across a brand, family, or the current
+// product filter, with a preview (old -> new, diff, count) the user must
+// confirm before anything is written -- see POST /products/bulk-price-update.
+function openBulkPriceEditSheet(onDone) {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.innerHTML = `
+    <div class="sheet">
+      <h2>${t("bulk_price_edit")}</h2>
+      <form id="bulk-price-form">
+        <label>${t("brand")}<input name="brand" placeholder="${t("bulk_edit_brand_placeholder")}" /></label>
+        <label>${t("price_field")}
+          <select name="price_field">
+            <option value="bronze_price_amd">${t("price_standard")}</option>
+            <option value="retail_price_amd">${t("price_retail")}</option>
+          </select>
+        </label>
+        <label>${t("operation")}
+          <select name="operation" id="bulk-operation">
+            <option value="percent">${t("operation_percent")}</option>
+            <option value="fixed">${t("operation_fixed")}</option>
+            <option value="exact">${t("operation_exact")}</option>
+          </select>
+        </label>
+        <label id="bulk-value-label">${t("value_percent_hint")}<input name="value" type="number" step="0.1" required /></label>
+        <p class="form-error" id="bulk-form-error" hidden></p>
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="cancel-bulk">${t("cancel")}</button>
+          <button type="submit" class="btn btn-primary">${t("preview_changes")}</button>
+        </div>
+      </form>
+      <div id="bulk-preview" hidden>
+        <p id="bulk-preview-count" class="muted"></p>
+        <div id="bulk-preview-list" class="card-list"></div>
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="bulk-preview-back">${t("back")}</button>
+          <button type="button" class="btn btn-primary" id="bulk-apply-btn">${t("apply_changes")}</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  activateDialog(overlay);
+  function close() {
+    overlay.remove();
+  }
+  overlay.querySelector("#cancel-bulk").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => e.target === overlay && close());
+
+  const form = overlay.querySelector("#bulk-price-form");
+  const operationSelect = overlay.querySelector("#bulk-operation");
+  const valueLabel = overlay.querySelector("#bulk-value-label");
+  const errorEl = overlay.querySelector("#bulk-form-error");
+  const previewSection = overlay.querySelector("#bulk-preview");
+  const previewCountEl = overlay.querySelector("#bulk-preview-count");
+  const previewListEl = overlay.querySelector("#bulk-preview-list");
+
+  operationSelect.addEventListener("change", () => {
+    valueLabel.firstChild.textContent =
+      operationSelect.value === "percent" ? t("value_percent_hint") : operationSelect.value === "fixed" ? t("value_fixed_hint") : t("value_exact_hint");
+  });
+
+  let lastRequest = null;
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errorEl.hidden = true;
+    const data = new FormData(form);
+    const brand = data.get("brand")?.trim();
+    if (!brand) {
+      errorEl.textContent = t("bulk_edit_brand_required");
+      errorEl.hidden = false;
+      return;
+    }
+    lastRequest = {
+      brand,
+      price_field: data.get("price_field"),
+      operation: data.get("operation"),
+      value: Number(data.get("value")),
+    };
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    try {
+      const result = await api.previewBulkPriceUpdate(lastRequest);
+      previewCountEl.textContent = `${result.count} ${t("products_affected")}`;
+      previewListEl.innerHTML = result.changes.length
+        ? result.changes
+            .slice(0, 100)
+            .map(
+              (c) => `
+        <div class="card user-row">
+          <div class="user-row-top">
+            <strong>${escapeHtml(c.name)}</strong>
+            <span class="muted">${escapeHtml(c.brand || "")}</span>
+          </div>
+          <div class="user-row-meta">
+            <span>${formatAmd(c.old_value)} &rarr; ${formatAmd(c.new_value)}</span>
+            <span class="${c.diff >= 0 ? "muted" : "muted"}">${c.diff >= 0 ? "+" : ""}${formatAmd(c.diff)}</span>
+          </div>
+        </div>
+      `
+            )
+            .join("")
+        : `<p class="empty-state">${t("no_products_found")}</p>`;
+      form.hidden = true;
+      previewSection.hidden = false;
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+
+  overlay.querySelector("#bulk-preview-back").addEventListener("click", () => {
+    previewSection.hidden = true;
+    form.hidden = false;
+  });
+
+  overlay.querySelector("#bulk-apply-btn").addEventListener("click", async () => {
+    const applyBtn = overlay.querySelector("#bulk-apply-btn");
+    applyBtn.disabled = true;
+    try {
+      await api.applyBulkPriceUpdate(lastRequest);
+      close();
+      onDone();
+    } catch (err) {
+      applyBtn.disabled = false;
+      alert(err.message);
+    }
+  });
+}
+
+// Editable company header for the pricelist export (item 14) -- name,
+// logo, phone/email/website/address. A singleton row (see the
+// company_profile table), not per-user.
+export async function renderCompanyProfileSection(container) {
+  container.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+  const profile = await api.getCompanyProfile();
+  container.innerHTML = `
+    <div class="card">
+      <form id="company-profile-form">
+        <label>${t("company_name")}<input name="name" value="${escapeHtml(profile.name || "")}" required /></label>
+        <label>${t("phone")}<input name="phone" value="${escapeHtml(profile.phone || "")}" /></label>
+        <label>${t("email")}<input name="email" type="email" value="${escapeHtml(profile.email || "")}" /></label>
+        <label>${t("website")}<input name="website" value="${escapeHtml(profile.website || "")}" /></label>
+        <label>${t("address")}<textarea name="address" rows="2">${escapeHtml(profile.address || "")}</textarea></label>
+        <p class="form-success" id="company-profile-success" role="status" hidden>${t("saved")}</p>
+        <p class="form-error" id="company-profile-error" hidden></p>
+        <button type="submit" class="btn btn-primary">${t("save")}</button>
+      </form>
+    </div>
+  `;
+  const form = container.querySelector("#company-profile-form");
+  const successEl = container.querySelector("#company-profile-success");
+  const errorEl = container.querySelector("#company-profile-error");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    successEl.hidden = true;
+    errorEl.hidden = true;
+    const data = new FormData(form);
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    try {
+      await api.updateCompanyProfile({
+        name: data.get("name"),
+        phone: data.get("phone") || null,
+        email: data.get("email") || null,
+        website: data.get("website") || null,
+        address: data.get("address") || null,
+      });
+      successEl.hidden = false;
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
 }
 
 function previousMonthStart() {

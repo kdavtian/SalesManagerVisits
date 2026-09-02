@@ -10,6 +10,13 @@ export function isAdmin() {
   return state.user?.role === "admin";
 }
 
+// Mirrors canManageProducts in the server's roles.js -- UI gate only, the
+// server independently re-checks on every product/pricing mutation.
+export function canManageProducts() {
+  const role = state.user?.role;
+  return role === "admin" || role === "ceo" || role === "accountant";
+}
+
 // Sales managers only see their own data; every other role sees
 // everyone's — mirrors server/src/roles.js.
 export function seesAllActivity() {

@@ -120,6 +120,17 @@ export const api = {
   listProductPromos: (id) => request(`/products/${id}/promos`),
   createProductPromo: (id, data) => json(`/products/${id}/promos`, "POST", data),
   deleteProductPromo: (id, promoId) => request(`/products/${id}/promos/${promoId}`, { method: "DELETE" }),
+  getProductPriceHistory: (id) => request(`/products/${id}/price-history`),
+  previewBulkPriceUpdate: (data) => json("/products/bulk-price-update", "POST", { ...data, apply: false }),
+  applyBulkPriceUpdate: (data) => json("/products/bulk-price-update", "POST", { ...data, apply: true }),
+  productsExportXlsxUrl: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return `/api/products/export/xlsx${qs ? `?${qs}` : ""}`;
+  },
+
+  getCompanyProfile: () => request("/company-profile"),
+  updateCompanyProfile: (data) => json("/company-profile", "PATCH", data),
+  updateMyProfile: (data) => json("/me/profile", "PATCH", data),
 
   createOrder: (data) => json("/orders", "POST", data),
   submitOrder: (id, erpCustomerId) => json(`/orders/${id}/submit`, "POST", erpCustomerId ? { erp_customer_id: erpCustomerId } : {}),
