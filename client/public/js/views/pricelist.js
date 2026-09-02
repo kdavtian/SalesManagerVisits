@@ -1,7 +1,7 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd } from "../util.js";
+import { escapeHtml, formatAmd, activateDialog } from "../util.js";
 import { t } from "../i18n.js";
-import { state } from "../state.js";
+import { state, canManageProducts } from "../state.js";
 import { icons } from "../icons.js";
 
 // Same brand ordering the order-creation flow uses, so the pricelist reads
@@ -20,8 +20,14 @@ function sortedBrands(products) {
 
 const FAMILY_PRIORITY = ["Edge", "Magnatec", "GTX", "Vecton/CRB", "Engine oils", "Transmission oils", "Other"];
 
-function sortProducts(products) {
-  return [...products].sort((a, b) => {
+function sortProducts(products, sortBy) {
+  const sorted = [...products];
+  if (sortBy === "standard_price") return sorted.sort((a, b) => a.effective_standard_amd - b.effective_standard_amd);
+  if (sortBy === "retail_price") return sorted.sort((a, b) => a.effective_retail_amd - b.effective_retail_amd);
+  if (sortBy === "name") return sorted.sort((a, b) => a.name.localeCompare(b.name));
+  // Default: brand's own family order, then name -- the order a rep
+  // actually presents a pricelist to a customer, not alphabetical.
+  return sorted.sort((a, b) => {
     const fa = FAMILY_PRIORITY.indexOf(a.family ?? "Other");
     const fb = FAMILY_PRIORITY.indexOf(b.family ?? "Other");
     if (fa !== fb) return (fa === -1 ? 99 : fa) - (fb === -1 ? 99 : fb);
@@ -29,26 +35,43 @@ function sortProducts(products) {
   });
 }
 
-function numOrNull(value) {
-  if (value === null || value === undefined) return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
+function debounce(fn, ms) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), ms);
+  };
+}
+
+function daysUntil(dateStr) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr);
+  target.setHours(0, 0, 0, 0);
+  return Math.round((target - today) / 86400000);
 }
 
 export async function renderPricelist(root, navigate) {
   root.innerHTML = `<div class="detail-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".detail-view");
 
-  let products;
+  let products, companyProfile;
   try {
-    products = await api.listProducts();
+    [products, companyProfile] = await Promise.all([api.listProducts(), api.getCompanyProfile()]);
   } catch (err) {
     container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     return;
   }
 
-  const today = new Date().toLocaleDateString();
   const brands = sortedBrands(products);
+  const categories = [...new Set(products.map((p) => p.family).filter(Boolean))];
+
+  let searchQuery = "";
+  let brandFilter = "";
+  let categoryFilter = "";
+  let specialOnly = false;
+  let sortBy = "default";
+  const collapsedBrands = new Set();
 
   container.innerHTML = `
     <div class="detail-header pricelist-no-print">
@@ -57,68 +80,321 @@ export async function renderPricelist(root, navigate) {
       </button>
       <div class="detail-header-title">
         <h1>${t("pricelist_title")}</h1>
+        <span class="muted">${t("pricelist_subtitle")}</span>
       </div>
-      <button type="button" class="icon-btn" id="print-btn" aria-label="${t("print")}">${icons.print ?? "🖨️"}</button>
+      ${canManageProducts() ? `<button type="button" class="icon-btn" id="manage-btn" aria-label="${t("manage_prices")}">${icons.tag}</button>` : ""}
+      <button type="button" class="icon-btn" id="export-btn" aria-label="${t("export")}">${icons.send}</button>
     </div>
 
-    <div class="pricelist-doc">
-      <div class="pricelist-doc-header">
-        <div>
-          <h1>${t("pricelist_title")}</h1>
-          <p class="muted">${escapeHtml(today)}</p>
-        </div>
-        <div class="pricelist-rep-card">
-          <strong>${escapeHtml(state.user.name)}</strong>
-          ${state.user.position ? `<span>${escapeHtml(state.user.position)}</span>` : ""}
-          <span>${escapeHtml(state.user.email)}</span>
-        </div>
-      </div>
-      <p class="pricelist-legend">
-        <span><strong>${t("price_standard")}</strong> &mdash; ${t("price_standard_hint")}</span>
-        <span><strong>${t("price_special_period")}</strong> &mdash; ${t("price_special_period_hint")}</span>
-        <span><strong>${t("price_retail")}</strong> &mdash; ${t("price_retail_hint")}</span>
-      </p>
-      ${brands
-        .map((brand) => {
-          const brandProducts = sortProducts(products.filter((p) => p.brand === brand));
-          return `
-          <h2 class="pricelist-brand-heading">${escapeHtml(brand)}</h2>
-          <div class="pricelist-table-wrap">
-          <table class="pricelist-table">
-            <thead>
-              <tr>
-                <th>${t("product_name")}</th>
-                <th>${t("unit")}</th>
-                <th>${t("price_standard")}</th>
-                <th>${t("price_special_period")}</th>
-                <th>${t("price_retail")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${brandProducts
-                .map((p) => {
-                  const standard = numOrNull(p.bronze_price_amd) ?? Number(p.unit_price_amd);
-                  const promo = numOrNull(p.promo_price_amd);
-                  return `
-                  <tr>
-                    <td>${escapeHtml(p.name)}</td>
-                    <td>${escapeHtml(p.unit ?? "")}</td>
-                    <td>${formatAmd(standard)}</td>
-                    <td>${promo !== null ? `<strong class="pricelist-promo">${formatAmd(promo)}</strong>` : "&mdash;"}</td>
-                    <td>${formatAmd(Number(p.unit_price_amd))}</td>
-                  </tr>
-                `;
-                })
-                .join("")}
-            </tbody>
-          </table>
-          </div>
-        `;
-        })
-        .join("")}
+    <div id="expiring-soon-banner" class="pricelist-no-print"></div>
+
+    <div class="order-search-row pricelist-no-print">
+      <input type="search" id="pricelist-search" placeholder="${t("search_products_placeholder")}" aria-label="${t("search_products_placeholder")}" />
     </div>
+    <div class="pricelist-filter-row pricelist-no-print" id="pricelist-filter-row"></div>
+
+    <div id="pricelist-catalog"></div>
   `;
 
   container.querySelector("#back-btn").addEventListener("click", () => navigate("#/dashboard"));
-  container.querySelector("#print-btn").addEventListener("click", () => window.print());
+  container.querySelector("#manage-btn")?.addEventListener("click", () => navigate("#/settings"));
+  container.querySelector("#export-btn").addEventListener("click", () => openExportSheet());
+
+  // --- Expiring-soon banner (item 39) -- surfaces specials ending within
+  // 3 days so a manager can decide whether to renew before they lapse.
+  if (canManageProducts()) {
+    const expiring = products.filter((p) => p.special_valid_to && daysUntil(p.special_valid_to) >= 0 && daysUntil(p.special_valid_to) <= 3);
+    if (expiring.length) {
+      container.querySelector("#expiring-soon-banner").innerHTML = `
+        <div class="card pricelist-expiring-banner">
+          ${icons.warning}
+          <span>${expiring.length} ${t("products_expiring_soon")}</span>
+        </div>
+      `;
+    }
+  }
+
+  // --- Filters ---
+  const filterRow = container.querySelector("#pricelist-filter-row");
+  function renderFilters() {
+    filterRow.innerHTML = `
+      <div class="segmented pricelist-brand-chips">
+        <button type="button" class="chip ${!brandFilter ? "chip-active" : ""}" data-brand="">${t("all_brands")}</button>
+        ${brands.map((b) => `<button type="button" class="chip ${brandFilter === b ? "chip-active" : ""}" data-brand="${escapeHtml(b)}">${escapeHtml(b)}</button>`).join("")}
+      </div>
+      <div class="segmented pricelist-brand-chips">
+        <button type="button" class="chip ${!categoryFilter ? "chip-active" : ""}" data-category="">${t("category_all")}</button>
+        ${categories.map((c) => `<button type="button" class="chip ${categoryFilter === c ? "chip-active" : ""}" data-category="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join("")}
+      </div>
+      <div class="pricelist-filter-controls">
+        <button type="button" class="chip ${specialOnly ? "chip-active" : ""}" id="special-only-toggle">${t("has_special_price")}</button>
+        <select id="pricelist-sort" aria-label="${t("sort")}">
+          <option value="default" ${sortBy === "default" ? "selected" : ""}>${t("sort_default")}</option>
+          <option value="name" ${sortBy === "name" ? "selected" : ""}>${t("product_name")}</option>
+          <option value="standard_price" ${sortBy === "standard_price" ? "selected" : ""}>${t("price_standard")}</option>
+          <option value="retail_price" ${sortBy === "retail_price" ? "selected" : ""}>${t("price_retail")}</option>
+        </select>
+      </div>
+    `;
+    filterRow.querySelectorAll("[data-brand]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        brandFilter = btn.dataset.brand;
+        renderFilters();
+        paint();
+      });
+    });
+    filterRow.querySelectorAll("[data-category]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        categoryFilter = btn.dataset.category;
+        renderFilters();
+        paint();
+      });
+    });
+    filterRow.querySelector("#special-only-toggle").addEventListener("click", () => {
+      specialOnly = !specialOnly;
+      renderFilters();
+      paint();
+    });
+    filterRow.querySelector("#pricelist-sort").addEventListener("change", (e) => {
+      sortBy = e.target.value;
+      paint();
+    });
+  }
+  renderFilters();
+
+  const searchInput = container.querySelector("#pricelist-search");
+  searchInput.addEventListener(
+    "input",
+    debounce(() => {
+      searchQuery = searchInput.value;
+      paint();
+    }, 250)
+  );
+
+  function currentlyFiltered() {
+    const q = searchQuery.trim().toLowerCase();
+    return products.filter((p) => {
+      if (brandFilter && p.brand !== brandFilter) return false;
+      if (categoryFilter && p.family !== categoryFilter) return false;
+      if (specialOnly && p.effective_special_amd === null) return false;
+      if (q && !`${p.name} ${p.sku ?? ""} ${p.brand ?? ""}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }
+
+  const catalogEl = container.querySelector("#pricelist-catalog");
+  function paint() {
+    const filtered = currentlyFiltered();
+    const visibleBrands = sortedBrands(filtered);
+    catalogEl.innerHTML = visibleBrands.length
+      ? visibleBrands
+          .map((brand) => {
+            const brandProducts = sortProducts(
+              filtered.filter((p) => p.brand === brand),
+              sortBy
+            );
+            const collapsed = collapsedBrands.has(brand);
+            return `
+            <button type="button" class="pricelist-brand-toggle" data-toggle-brand="${escapeHtml(brand)}">
+              <span>${escapeHtml(brand)}</span>
+              <span class="muted">${brandProducts.length}</span>
+              <span class="pricelist-collapse-icon">${collapsed ? icons.chevronDown : icons.chevronUp}</span>
+            </button>
+            <div class="card-list" ${collapsed ? "hidden" : ""}>
+              ${brandProducts.map((p) => productRowHtml(p)).join("")}
+            </div>
+          `;
+          })
+          .join("")
+      : `<p class="empty-state">${t("no_products_found")}</p>`;
+
+    catalogEl.querySelectorAll("[data-toggle-brand]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const brand = btn.dataset.toggleBrand;
+        if (collapsedBrands.has(brand)) collapsedBrands.delete(brand);
+        else collapsedBrands.add(brand);
+        paint();
+      });
+    });
+  }
+
+  function productRowHtml(p) {
+    // Price hierarchy (item 37): an active special is the loudest number
+    // on the row; standard becomes secondary/muted; retail always shows,
+    // clearly labeled, since it's the number a customer would recognize.
+    const hasSpecial = p.effective_special_amd !== null;
+    return `
+      <div class="card pricelist-row">
+        <div class="pricelist-row-main">
+          <strong>${escapeHtml(p.name)}</strong>
+          <span class="muted">${[p.brand, p.family, p.unit].filter(Boolean).map(escapeHtml).join(" · ")}${p.sku ? ` · ${escapeHtml(p.sku)}` : ""}</span>
+        </div>
+        <div class="pricelist-row-prices">
+          ${
+            hasSpecial
+              ? `<span class="pricelist-price-special">${formatAmd(p.effective_special_amd)}</span>
+                 <span class="pricelist-price-standard-struck">${formatAmd(p.effective_standard_amd)}</span>`
+              : `<span class="pricelist-price-standard">${formatAmd(p.effective_standard_amd)}</span>`
+          }
+          <span class="pricelist-price-retail">${t("price_retail")}: ${formatAmd(p.effective_retail_amd)}</span>
+          ${hasSpecial ? `<span class="muted pricelist-special-valid">${t("valid_through")} ${escapeHtml(p.special_valid_to)}</span>` : ""}
+        </div>
+      </div>
+    `;
+  }
+
+  paint();
+
+  // --- Export sheet (items 15-21) ---
+  function openExportSheet() {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>${t("export")}</h2>
+        <form id="export-form">
+          <fieldset>
+            <legend>${t("export_content")}</legend>
+            <label class="radio-row"><input type="radio" name="content" value="all" checked /> ${t("export_content_all")}</label>
+            <label class="radio-row"><input type="radio" name="content" value="filtered" /> ${t("export_content_filtered")}</label>
+          </fieldset>
+          <fieldset>
+            <legend>${t("export_columns")}</legend>
+            <label class="radio-row"><input type="checkbox" name="col_standard" checked /> ${t("price_standard")}</label>
+            <label class="radio-row"><input type="checkbox" name="col_special" checked /> ${t("price_special_period")}</label>
+            <label class="radio-row"><input type="checkbox" name="col_retail" checked /> ${t("price_retail")}</label>
+          </fieldset>
+          <fieldset>
+            <legend>${t("prepared_by")}</legend>
+            <p class="muted">${escapeHtml(state.user.name)}${state.user.position ? ` · ${escapeHtml(state.user.position)}` : ""}</p>
+          </fieldset>
+          <div class="sheet-actions" style="flex-wrap:wrap;">
+            <button type="button" class="btn" id="export-print-btn">${t("print_pdf")}</button>
+            <button type="button" class="btn btn-primary" id="export-excel-btn">${t("download_excel")}</button>
+          </div>
+          <div class="sheet-actions">
+            <button type="button" class="btn btn-block" id="cancel-export">${t("cancel")}</button>
+          </div>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.querySelector("#cancel-export").addEventListener("click", () => overlay.remove());
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+
+    function readOptions() {
+      const data = new FormData(overlay.querySelector("#export-form"));
+      const useFiltered = data.get("content") === "filtered";
+      const cols = ["standard", "special", "retail"].filter((c) => data.get(`col_${c}`));
+      return { useFiltered, cols };
+    }
+
+    overlay.querySelector("#export-print-btn").addEventListener("click", () => {
+      const { useFiltered, cols } = readOptions();
+      const docProducts = useFiltered ? currentlyFiltered() : products;
+      overlay.remove();
+      openPrintView(docProducts, cols);
+    });
+
+    overlay.querySelector("#export-excel-btn").addEventListener("click", () => {
+      const { useFiltered, cols } = readOptions();
+      const params = { cols: cols.join(",") };
+      if (useFiltered) {
+        if (brandFilter) params.brand = brandFilter;
+        if (categoryFilter) params.family = categoryFilter;
+        if (!brandFilter && !categoryFilter) params.ids = currentlyFiltered().map((p) => p.id).join(",");
+      }
+      window.location.href = api.productsExportXlsxUrl(params);
+      overlay.remove();
+    });
+  }
+
+  // Full-page printable document -- reuses the browser's native print-to-
+  // PDF flow (see @media print in styles.css) instead of a server-side PDF
+  // renderer. Swaps the whole view rather than opening a new window so it
+  // still has the app's cookies/session for nothing extra to fetch.
+  function openPrintView(docProducts, cols) {
+    const today = new Date().toLocaleDateString();
+    const docBrands = sortedBrands(docProducts);
+    root.innerHTML = `
+      <div class="detail-header pricelist-no-print">
+        <button class="icon-btn" id="exit-print-btn" aria-label="${t("cancel")}">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div class="detail-header-title"><h1>${t("pricelist_title")}</h1></div>
+        <button type="button" class="icon-btn" id="do-print-btn" aria-label="${t("print")}">${icons.print ?? "🖨️"}</button>
+      </div>
+      <div class="pricelist-doc">
+        <div class="pricelist-doc-header">
+          <div>
+            ${companyProfile.logo_path ? `<img src="${escapeHtml(companyProfile.logo_path)}" class="pricelist-doc-logo" alt="" />` : ""}
+            <h1>${escapeHtml(companyProfile.name || "KAD Motors")}</h1>
+            <p class="muted">
+              ${[companyProfile.phone, companyProfile.email, companyProfile.website].filter(Boolean).map(escapeHtml).join(" · ")}
+            </p>
+            ${companyProfile.address ? `<p class="muted">${escapeHtml(companyProfile.address)}</p>` : ""}
+            <p class="muted">${t("generated_on")} ${escapeHtml(today)}</p>
+          </div>
+          <div class="pricelist-rep-card">
+            <span class="muted">${t("prepared_by")}</span>
+            <strong>${escapeHtml(state.user.name)}</strong>
+            ${state.user.position ? `<span>${escapeHtml(state.user.position)}</span>` : ""}
+            ${state.user.phone ? `<span>${escapeHtml(state.user.phone)}</span>` : ""}
+            <span>${escapeHtml(state.user.email)}</span>
+          </div>
+        </div>
+        ${
+          cols.includes("special")
+            ? `<p class="pricelist-legend"><span>${t("special_price_validity_note")}</span></p>`
+            : ""
+        }
+        ${docBrands
+          .map((brand) => {
+            const brandProducts = sortProducts(
+              docProducts.filter((p) => p.brand === brand),
+              "default"
+            );
+            return `
+            <h2 class="pricelist-brand-heading">${escapeHtml(brand)}</h2>
+            <div class="pricelist-table-wrap">
+            <table class="pricelist-table">
+              <thead>
+                <tr>
+                  <th>${t("product_name")}</th>
+                  <th>${t("unit")}</th>
+                  ${cols.includes("standard") ? `<th>${t("price_standard")}</th>` : ""}
+                  ${cols.includes("special") ? `<th>${t("price_special_period")}</th>` : ""}
+                  ${cols.includes("retail") ? `<th>${t("price_retail")}</th>` : ""}
+                </tr>
+              </thead>
+              <tbody>
+                ${brandProducts
+                  .map(
+                    (p) => `
+                  <tr>
+                    <td>${escapeHtml(p.name)}</td>
+                    <td>${escapeHtml(p.unit ?? "")}</td>
+                    ${cols.includes("standard") ? `<td>${formatAmd(p.effective_standard_amd)}</td>` : ""}
+                    ${
+                      cols.includes("special")
+                        ? `<td>${p.effective_special_amd !== null ? `<strong class="pricelist-promo">${formatAmd(p.effective_special_amd)}</strong> <span class="muted">(${escapeHtml(p.special_valid_from)} – ${escapeHtml(p.special_valid_to)})</span>` : "&mdash;"}</td>`
+                        : ""
+                    }
+                    ${cols.includes("retail") ? `<td>${formatAmd(p.effective_retail_amd)}</td>` : ""}
+                  </tr>
+                `
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+            </div>
+          `;
+          })
+          .join("")}
+      </div>
+    `;
+    root.querySelector("#exit-print-btn").addEventListener("click", () => renderPricelist(root, navigate));
+    root.querySelector("#do-print-btn").addEventListener("click", () => window.print());
+  }
 }
