@@ -1,0 +1,178 @@
+/* Activity search + filter controls.
+   The filters intentionally live inside the search field so the header stays
+   compact on iPhone and Armenian labels never force horizontal overflow. */
+
+.activity-search-combined {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 52px;
+  margin: 4px 16px 0;
+  padding: 4px 5px 4px 14px;
+  box-sizing: border-box;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-subtle);
+}
+
+.activity-search-combined:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.activity-search-combined input[type="search"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  height: 42px;
+  padding: 0 6px 0 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 16px; /* prevents iOS focus zoom */
+  box-shadow: none;
+}
+
+.activity-search-combined input[type="search"]:focus {
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+}
+
+.activity-search-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 5px;
+  border-left: 1px solid var(--border);
+}
+
+.activity-icon-dropdown {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.activity-search-filter-btn {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.activity-search-filter-btn:active {
+  background: var(--bg-card-pressed);
+  transform: scale(0.96);
+}
+
+.activity-search-filter-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.activity-search-filter-btn svg {
+  display: block;
+  width: 21px;
+  height: 21px;
+}
+
+.activity-search-filter-btn-active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-card));
+}
+
+.activity-search-filter-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 1.5px solid var(--bg-card);
+}
+
+.activity-search-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 7px);
+  z-index: 80;
+  min-width: 190px;
+  max-width: min(280px, calc(100vw - 32px));
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-elevated);
+  overscroll-behavior: contain;
+}
+
+.activity-search-menu button {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.86rem;
+  text-align: left;
+  white-space: normal;
+  cursor: pointer;
+}
+
+.activity-search-menu button:active {
+  background: var(--bg-card-pressed);
+}
+
+.activity-search-menu .filter-dropdown-selected {
+  color: var(--accent) !important;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+/* The old second filter row is intentionally suppressed on Activity only.
+   Customer filters use their own .customer-filter-row and are untouched. */
+.activity-view .activity-filter-row {
+  display: none;
+}
+
+@media (max-width: 380px) {
+  .activity-search-combined {
+    margin-left: 12px;
+    margin-right: 12px;
+    padding-left: 11px;
+  }
+
+  .activity-search-actions {
+    gap: 0;
+  }
+
+  .activity-search-filter-btn {
+    width: 37px;
+    height: 40px;
+  }
+
+  .activity-search-filter-btn svg {
+    width: 20px;
+    height: 20px;
+  }
+}

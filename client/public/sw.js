@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v38";
+const CACHE_VERSION = "field-visits-v39";
 const TILE_CACHE = "field-visits-tiles-v2";
 
 const APP_SHELL = [
@@ -6,6 +6,7 @@ const APP_SHELL = [
   "/index.html",
   "/manifest.json",
   "/css/styles.css",
+  "/css/activity-search-filters.css",
   "/js/api.js",
   "/js/app.js",
   "/js/i18n.js",
@@ -98,12 +99,8 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
 
-  // API calls always go to the network; never served from cache, so data
-  // stays fresh. Offline check-ins are queued client-side instead.
   if (url.pathname.startsWith("/api/")) return;
 
-  // Map tiles: stale-while-revalidate, so previously-viewed areas stay
-  // browsable offline.
   if (url.hostname.endsWith("basemaps.cartocdn.com")) {
     event.respondWith(
       caches.open(TILE_CACHE).then(async (cache) => {
@@ -120,7 +117,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // App shell navigation: try the network, fall back to the cached shell.
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request).catch(() => caches.match("/index.html"))
@@ -128,13 +124,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // App shell (JS/CSS/etc): network-first. Cache-first previously meant a
-  // deploy was invisible to already-installed clients until CACHE_VERSION
-  // was manually bumped (this file's own bytes are what trigger a service
-  // worker reinstall, and that string was the only thing that ever changed
-  // it) -- in practice several real fixes silently never reached the
-  // installed app. Network-first always picks up a new deploy on the next
-  // load when online, and still falls back to the cache when offline.
   event.respondWith(
     fetch(request)
       .then((res) => {

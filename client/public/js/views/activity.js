@@ -22,8 +22,13 @@ const STATUS_ICON = {
   rejected: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v5"/><circle cx="12" cy="16.5" r="0.6" fill="#fff" stroke="none"/><circle cx="12" cy="12" r="9"/></svg>`,
 };
 
-// New rows write `outcomes` (array); rows from before the multi-outcome
-// change only have the old singular `outcome` column.
+const ACTIVITY_FILTER_ICONS = {
+  manager: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="7" r="3.1"/><path d="M5.5 20v-1.2a6.5 6.5 0 0 1 13 0V20"/><path d="m10.3 12.8 1.7 2 1.7-2M12 14.8v3.4"/></svg>`,
+  status: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16l-6.2 7.1v5.3l-3.6 1.8v-7.1L4 5Z"/><circle cx="17.2" cy="16.7" r="3.1"/><path d="m15.9 16.7.9.9 1.8-2"/></svg>`,
+  outcome: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="2"/><path d="M7 12h3.4c2.6 0 3.3-1.7 4.4-3.4C15.8 7 17 6 19 6h1"/><path d="m18 4 2 2-2 2"/><path d="M7 12h3.4c2.6 0 3.3 1.7 4.4 3.4C15.8 17 17 18 19 18h1"/><path d="m18 16 2 2-2 2"/><path d="M7 12h13"/><path d="m18 10 2 2-2 2"/></svg>`,
+  sort: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M4 7l3-3 3 3M17 20V4M14 17l3 3 3-3"/><path d="M12 7h3M12 12h2M12 17h1"/></svg>`,
+};
+
 function checkinOutcomes(c) {
   if (c.outcomes?.length) return c.outcomes;
   return c.outcome ? [c.outcome] : [];
@@ -60,7 +65,6 @@ export async function renderActivity(root, navigate) {
   let allCheckins = [];
   let checkinsCapped = false;
   let visibleCount = PAGE_SIZE;
-  let filtersOpen = true;
   let sortAsc = false;
   let openDropdown = null;
 
@@ -77,28 +81,22 @@ export async function renderActivity(root, navigate) {
     ...OUTCOMES.map((o) => ({ value: o, label: t(`outcome_${o}`) })),
   ];
 
-  const CHEVRON_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
-
-  // Native <select> popovers on iOS render as a full-width dark OS sheet
-  // that overlaps the stat cards/list below -- these dropdowns use the same
-  // in-page custom-menu pattern already used for Customers' sort menu
-  // instead, so the list stays fully visible and the app controls its own
-  // layout.
-  function dropdownHtml(key, options, currentValue) {
-    const current = options.find((o) => o.value === currentValue) ?? options[0];
+  function iconDropdownHtml(key, options, currentValue, icon, label) {
     return `
-      <div class="filter-dropdown-wrap">
-        <button type="button" class="filter-dropdown-btn" data-dropdown="${key}" aria-haspopup="menu" aria-expanded="${openDropdown === key}" aria-controls="filter-menu-${key}">
-          <span>${escapeHtml(current.label)}</span>
-          ${CHEVRON_ICON}
+      <div class="activity-icon-dropdown">
+        <button type="button"
+          class="activity-search-filter-btn ${currentValue ? "activity-search-filter-btn-active" : ""}"
+          data-dropdown="${key}"
+          aria-label="${escapeHtml(label)}"
+          title="${escapeHtml(label)}"
+          aria-haspopup="menu"
+          aria-expanded="${openDropdown === key}"
+          aria-controls="activity-filter-menu-${key}">
+          ${icon}
+          ${currentValue ? `<span class="activity-search-filter-dot" aria-hidden="true"></span>` : ""}
         </button>
-        <div class="filter-dropdown-menu" id="filter-menu-${key}" role="menu" data-dropdown-menu="${key}" ${openDropdown === key ? "" : "hidden"}>
-          ${options
-            .map(
-              (o) =>
-                `<button type="button" role="menuitemradio" aria-checked="${o.value === currentValue}" data-value="${escapeHtml(o.value)}" class="${o.value === currentValue ? "filter-dropdown-selected" : ""}">${escapeHtml(o.label)}</button>`
-            )
-            .join("")}
+        <div class="activity-search-menu" id="activity-filter-menu-${key}" role="menu" data-dropdown-menu="${key}" ${openDropdown === key ? "" : "hidden"}>
+          ${options.map((o) => `<button type="button" role="menuitemradio" aria-checked="${o.value === currentValue}" data-value="${escapeHtml(o.value)}" class="${o.value === currentValue ? "filter-dropdown-selected" : ""}">${escapeHtml(o.label)}</button>`).join("")}
         </div>
       </div>
     `;
@@ -144,13 +142,16 @@ export async function renderActivity(root, navigate) {
 
   function renderShell() {
     const stats = computeStats(allCheckins);
+    const managerLabel = t("all_managers");
+    const statusLabel = t("all_status");
+    const outcomeLabel = t("all_outcomes");
+
     container.innerHTML = `
       <div class="list-header">
         <div>
           <h1>${t("nav_activity")}</h1>
           <p class="muted">${t("activity_subtitle")}</p>
         </div>
-        <button class="btn btn-sm" id="toggle-filters-btn">${t("filters")}</button>
       </div>
 
       <div class="activity-tabs" role="tablist">
@@ -160,14 +161,10 @@ export async function renderActivity(root, navigate) {
         <button role="tab" aria-selected="${range === "custom"}" class="activity-tab ${range === "custom" ? "activity-tab-active" : ""}" data-range="custom">${t("tab_custom")}</button>
       </div>
 
-      ${
-        range === "custom"
-          ? `<div class="activity-custom-range">
+      ${range === "custom" ? `<div class="activity-custom-range">
               <label>${t("date_from")}<input type="date" id="custom-from" value="${customFrom}" /></label>
               <label>${t("date_to")}<input type="date" id="custom-to" value="${customTo}" /></label>
-            </div>`
-          : ""
-      }
+            </div>` : ""}
 
       ${checkinsCapped ? `<p class="muted activity-capped-note">${t("activity_capped_note")}</p>` : ""}
 
@@ -178,23 +175,15 @@ export async function renderActivity(root, navigate) {
         <div class="stat-card"><span class="stat-value">${stats.pending}</span><span class="stat-label">${t("status_pending")}</span><span class="stat-sublabel">${stats.pendingPct}</span></div>
       </div>
 
-      <div class="activity-filters" id="activity-filters" ${filtersOpen ? "" : "hidden"}>
+      <div class="activity-search-combined" id="activity-search-combined">
         <label class="visually-hidden" for="activity-search">${t("search_customers")}</label>
         <input type="search" id="activity-search" placeholder="${t("search_customers")}" aria-label="${t("search_customers")}" value="${escapeHtml(filters.search)}" />
-        <div class="activity-filter-row">
-          ${
-            canFilterByManager
-              ? dropdownHtml(
-                  "manager",
-                  [{ value: "", label: t("all_managers") }, ...managerOptions().map(([id, name]) => ({ value: String(id), label: name }))],
-                  filters.manager
-                )
-              : ""
-          }
-          ${dropdownHtml("status", STATUS_OPTIONS, filters.status)}
-          ${dropdownHtml("outcome", OUTCOME_OPTIONS, filters.outcome)}
-          <button class="icon-btn" id="sort-toggle-btn" aria-label="${t("sort")}" style="transform: scaleY(${sortAsc ? -1 : 1})">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16M12 20l-5-5M12 20l5-5"/></svg>
+        <div class="activity-search-actions" aria-label="${t("filters")}">
+          ${canFilterByManager ? iconDropdownHtml("manager", [{ value: "", label: managerLabel }, ...managerOptions().map(([id, name]) => ({ value: String(id), label: name }))], filters.manager, ACTIVITY_FILTER_ICONS.manager, managerLabel) : ""}
+          ${iconDropdownHtml("status", STATUS_OPTIONS, filters.status, ACTIVITY_FILTER_ICONS.status, statusLabel)}
+          ${iconDropdownHtml("outcome", OUTCOME_OPTIONS, filters.outcome, ACTIVITY_FILTER_ICONS.outcome, outcomeLabel)}
+          <button type="button" class="activity-search-filter-btn ${sortAsc ? "activity-search-filter-btn-active" : ""}" id="sort-toggle-btn" aria-label="${t("sort")}" title="${t("sort")}">
+            ${ACTIVITY_FILTER_ICONS.sort}
           </button>
         </div>
       </div>
@@ -203,11 +192,6 @@ export async function renderActivity(root, navigate) {
       <div class="card-list" id="activity-list"></div>
       <button class="btn btn-block" id="activity-load-more" hidden>${t("load_more")}</button>
     `;
-
-    root.querySelector("#toggle-filters-btn").addEventListener("click", () => {
-      filtersOpen = !filtersOpen;
-      renderShell();
-    });
 
     container.querySelectorAll(".activity-tab").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -272,6 +256,7 @@ export async function renderActivity(root, navigate) {
         }
       });
     });
+
     container.querySelectorAll("[data-dropdown-menu] button").forEach((optBtn) => {
       optBtn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -284,17 +269,18 @@ export async function renderActivity(root, navigate) {
         renderShell();
       });
     });
-    container.querySelector("#sort-toggle-btn").addEventListener("click", () => {
+
+    container.querySelector("#sort-toggle-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
       sortAsc = !sortAsc;
       renderShell();
-      renderList();
     });
 
     renderList();
   }
 
-  container.addEventListener("click", () => {
-    if (openDropdown) {
+  container.addEventListener("click", (e) => {
+    if (openDropdown && !e.target.closest("[data-dropdown]") && !e.target.closest("[data-dropdown-menu]")) {
       openDropdown = null;
       renderShell();
     }
@@ -378,10 +364,6 @@ export async function renderActivity(root, navigate) {
       } else {
         const result = await api.listCheckins(params);
         allCheckins = result.rows;
-        // The server caps a single page at 200 rows -- for the default
-        // "week" range that's never hit in practice, but a wide custom
-        // range or a busy "month" view could exceed it. Surfaced rather
-        // than silently understating the stat tiles below.
         checkinsCapped = result.has_more;
       }
     } catch (err) {
