@@ -39,6 +39,11 @@
 
     <script src="vendor/leaflet/leaflet.js"></script>
     <script src="vendor/leaflet-rotate/leaflet-rotate.js"></script>
+    <!-- These must execute before app.js: one patches Leaflet's initial
+         viewport/tile runtime, the other enforces competitor no-visit data
+         semantics before API modules begin issuing requests. -->
+    <script src="js/mapRuntimeEnhancements.js"></script>
+    <script src="js/competitorVisitPolicy.js"></script>
     <script type="module" src="js/activityDatePicker.js"></script>
     <script type="module" src="js/ordersSearchEnhancements.js"></script>
     <script type="module" src="js/unifiedSearchEnhancements.js"></script>
