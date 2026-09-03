@@ -62,9 +62,19 @@
       let bootstrapSetViewHandled = false;
       let protectViewportUntil = Date.now() + 6000;
       let userMoved = false;
+      let internalMove = false;
 
       const originalSetView = map.setView.bind(map);
       const originalFitBounds = map.fitBounds.bind(map);
+
+      function internalSetView(center, zoom, options) {
+        internalMove = true;
+        try {
+          return originalSetView(center, zoom, options);
+        } finally {
+          requestAnimationFrame(() => { internalMove = false; });
+        }
+      }
 
       map.setView = function kadSetView(center, zoom, options) {
         const looksLikeWorldBootstrap =
@@ -78,7 +88,7 @@
         bootstrapSetViewHandled = true;
 
         if (stored) {
-          originalSetView([stored.lat, stored.lng], stored.zoom, { animate: false });
+          internalSetView([stored.lat, stored.lng], stored.zoom, { animate: false });
           if (stored.bearing && typeof map.setBearing === "function") {
             try { map.setBearing(stored.bearing); } catch {}
           }
@@ -88,14 +98,14 @@
 
         // Never expose the world/whole-territory view on first entry. Give an
         // immediately useful local view, then refine it to GPS when available.
-        originalSetView([YEREVAN_FALLBACK.lat, YEREVAN_FALLBACK.lng], YEREVAN_FALLBACK.zoom, { animate: false });
+        internalSetView([YEREVAN_FALLBACK.lat, YEREVAN_FALLBACK.lng], YEREVAN_FALLBACK.zoom, { animate: false });
 
         if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(
             (position) => {
               if (userMoved) return;
               const { latitude, longitude } = position.coords;
-              originalSetView([latitude, longitude], 15, { animate: false });
+              internalSetView([latitude, longitude], 15, { animate: false });
               protectViewportUntil = Date.now() + 1200;
               writeStoredView(map);
             },
@@ -118,6 +128,7 @@
       };
 
       const noteUserInteraction = () => {
+        if (internalMove) return;
         userMoved = true;
         protectViewportUntil = 0;
       };
