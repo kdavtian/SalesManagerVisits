@@ -40,7 +40,7 @@ export async function requireAuth(req, res, next) {
   }
 
   const { rows } = await pool.query(
-    "SELECT id, role, position, token_version FROM users WHERE id = $1",
+    "SELECT id, role, position, token_version, last_seen_at FROM users WHERE id = $1",
     [payload.sub]
   );
   const user = rows[0];
@@ -50,6 +50,21 @@ export async function requireAuth(req, res, next) {
 
   req.user = { id: user.id, role: user.role, position: user.position };
   next();
+
+  // Fire-and-forget, after next() so it never delays the actual response.
+  // Throttled to once every 5 minutes per user -- every authenticated
+  // request passes through here, so writing on literally every one of them
+  // would mean a DB write per API call app-wide for no real benefit (the
+  // "last seen" admins care about is "roughly when", not to the second).
+  const staleForMs = 5 * 60 * 1000;
+  if (!user.last_seen_at || Date.now() - new Date(user.last_seen_at).getTime() > staleForMs) {
+    pool
+      .query(
+        `UPDATE users SET last_seen_at = now(), last_seen_app_version = $1, last_seen_user_agent = $2 WHERE id = $3`,
+        [req.get("X-App-Version") || null, req.get("User-Agent") || null, user.id]
+      )
+      .catch((err) => console.error("last_seen update failed:", err));
+  }
 }
 
 export function requireAdmin(req, res, next) {

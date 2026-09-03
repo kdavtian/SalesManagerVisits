@@ -31,9 +31,55 @@ usersRouter.use(requireAdmin);
 
 usersRouter.get("/", async (req, res) => {
   const { rows } = await pool.query(
-    "SELECT id, email, name, role, position, created_at FROM users ORDER BY created_at DESC"
+    `SELECT id, email, name, role, position, phone, created_at,
+            last_seen_at, last_seen_app_version, last_seen_user_agent
+     FROM users ORDER BY created_at DESC`
   );
   res.json(rows);
+});
+
+// Editable profile fields for an existing staff member -- deliberately not
+// role (a role change has broader implications, e.g. re-checking whatever
+// that user was assigned/plans/approves elsewhere, so it's out of scope
+// for a quick "fix a typo in their phone number" edit) and not password
+// (its own endpoint below, with its own rate limit and session-invalidation
+// behavior).
+const EDITABLE_PROFILE_FIELDS = ["name", "email", "position", "phone"];
+
+usersRouter.patch("/:id", async (req, res) => {
+  if (req.body?.email !== undefined && !req.body.email) {
+    return res.status(400).json({ error: "Email cannot be empty" });
+  }
+  if (req.body?.name !== undefined && !req.body.name) {
+    return res.status(400).json({ error: "Name cannot be empty" });
+  }
+
+  const updates = [];
+  const params = [];
+  for (const field of EDITABLE_PROFILE_FIELDS) {
+    if (req.body?.[field] === undefined) continue;
+    const value = field === "email" ? String(req.body.email).toLowerCase() : req.body[field] || null;
+    params.push(value);
+    updates.push(`${field} = $${params.length}`);
+  }
+  if (!updates.length) return res.status(400).json({ error: "No editable fields provided" });
+
+  params.push(req.params.id);
+  try {
+    const { rows } = await pool.query(
+      `UPDATE users SET ${updates.join(", ")} WHERE id = $${params.length}
+       RETURNING id, email, name, role, position, phone, created_at,
+                 last_seen_at, last_seen_app_version, last_seen_user_agent`,
+      params
+    );
+    if (!rows[0]) return res.status(404).json({ error: "User not found" });
+    res.json(rows[0]);
+  } catch (err) {
+    if (err.code === "23505") {
+      return res.status(409).json({ error: "A user with that email already exists" });
+    }
+    throw err;
+  }
 });
 
 usersRouter.post("/", async (req, res) => {

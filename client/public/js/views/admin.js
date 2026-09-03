@@ -1,13 +1,7 @@
 import { api } from "../api.js";
-import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage } from "../util.js";
+import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, parseUserAgent, SALES_CHANNELS } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
-
-// Real territory/channel names from the Castrol sales data (see
-// work/build_sales_director_data.py's CHANNEL_ORDER in the castrol_ceo_report
-// repo) -- offered as suggestions, but the field stays free text since new
-// territories get added over time (e.g. "SM YVN3").
-const POSITION_SUGGESTIONS = ["SM YVN", "SM Davtashen", "SM CAS", "SM Shirak", "SM B2B"];
 
 const ROLE_BADGE = {
   admin: { key: "role_admin", cls: "badge-accent" },
@@ -19,6 +13,20 @@ const ROLE_BADGE = {
   accountant: { key: "role_accountant", cls: "badge-info" },
 };
 
+function salesChannelOptionsHtml(selected) {
+  return (
+    `<option value="">${t("select_sales_channel")}</option>` +
+    SALES_CHANNELS.map((c) => `<option value="${escapeHtml(c)}" ${c === selected ? "selected" : ""}>${escapeHtml(c)}</option>`).join("")
+  );
+}
+
+function lastSeenSummary(u) {
+  if (!u.last_seen_at) return t("never");
+  const device = parseUserAgent(u.last_seen_user_agent) || t("unknown");
+  const version = u.last_seen_app_version ? `v${u.last_seen_app_version}` : t("unknown");
+  return `${formatDateTime(u.last_seen_at)} · ${version} · ${device}`;
+}
+
 export async function renderTeamSection(container) {
   container.innerHTML = `
     <div id="user-list" class="card-list"><p class="loading-state" role="status">${t("loading")}</p></div>
@@ -28,14 +36,15 @@ export async function renderTeamSection(container) {
   `;
 
   const listEl = container.querySelector("#user-list");
+  let users = [];
 
   async function loadUsers() {
-    const users = await api.listUsers();
+    users = await api.listUsers();
     listEl.innerHTML = users
       .map((u) => {
         const roleBadge = ROLE_BADGE[u.role] ?? { key: "role_sales_manager", cls: "badge-neutral" };
         return `
-        <div class="card user-row">
+        <button type="button" class="card user-row" data-id="${u.id}">
           <div class="user-row-top">
             <div>
               <strong>${escapeHtml(u.name)}</strong>
@@ -44,25 +53,17 @@ export async function renderTeamSection(container) {
             <span class="badge ${roleBadge.cls}">${t(roleBadge.key)}</span>
           </div>
           <div class="user-row-meta">
-            <span class="muted">${formatDateTime(u.created_at)}</span>
-            <span class="user-row-actions">
-              <button class="btn-link" data-action="reset" data-id="${u.id}" data-name="${escapeHtml(u.name)}">${t("reset_password")}</button>
-              ${u.id !== state.user.id ? `<button class="btn-link btn-link-danger" data-action="delete" data-id="${u.id}" data-name="${escapeHtml(u.name)}">${t("delete_user")}</button>` : ""}
-            </span>
+            <span class="muted">${t("last_seen")}: ${escapeHtml(lastSeenSummary(u))}</span>
           </div>
-        </div>
+        </button>
       `;
       })
       .join("");
 
-    listEl.querySelectorAll('[data-action="reset"]').forEach((btn) => {
-      btn.addEventListener("click", () => openResetPasswordSheet(btn.dataset.id, btn.dataset.name));
-    });
-    listEl.querySelectorAll('[data-action="delete"]').forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        if (!confirm(t("confirm_delete_user"))) return;
-        await api.deleteUser(btn.dataset.id);
-        loadUsers();
+    listEl.querySelectorAll("[data-id]").forEach((row) => {
+      row.addEventListener("click", () => {
+        const u = users.find((x) => String(x.id) === row.dataset.id);
+        if (u) openEditTeamMemberSheet(u);
       });
     });
   }
@@ -107,6 +108,90 @@ export async function renderTeamSection(container) {
     });
   }
 
+  // Full profile edit for an existing staff member -- opened by tapping
+  // their card. Role isn't editable here (see EDITABLE_PROFILE_FIELDS in
+  // routes/users.js for why); Reset password and Remove stay one tap away
+  // as secondary actions instead of cluttering the row itself.
+  function openEditTeamMemberSheet(u) {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    const isSalesManager = u.role === "sales_manager";
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>${t("edit_team_member")}</h2>
+        <p class="muted">
+          ${t("last_seen")}: ${escapeHtml(lastSeenSummary(u))}<br />
+          ${t("device")}: ${escapeHtml(parseUserAgent(u.last_seen_user_agent) || t("unknown"))}
+        </p>
+        <form id="edit-user-form">
+          <label>${t("name")}<input name="name" value="${escapeHtml(u.name)}" required /></label>
+          <label>${t("email")}<input name="email" type="email" value="${escapeHtml(u.email)}" required /></label>
+          <label>${t("phone")}<input name="phone" type="tel" value="${escapeHtml(u.phone || "")}" /></label>
+          ${
+            isSalesManager
+              ? `<label>${t("sales_channel")}
+            <select name="position">${salesChannelOptionsHtml(u.position)}</select>
+          </label>`
+              : ""
+          }
+          <p class="form-error" id="edit-user-error" hidden></p>
+          <div class="sheet-actions">
+            <button type="button" class="btn" id="cancel-edit-user">${t("cancel")}</button>
+            <button type="submit" class="btn btn-primary">${t("save")}</button>
+          </div>
+        </form>
+        <div class="team-edit-secondary-actions">
+          <button type="button" class="btn-link" id="edit-user-reset">${t("reset_password")}</button>
+          ${u.id !== state.user.id ? `<button type="button" class="btn-link btn-link-danger" id="edit-user-delete">${t("delete_user")}</button>` : ""}
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+
+    function close() {
+      overlay.remove();
+    }
+    overlay.querySelector("#cancel-edit-user").addEventListener("click", close);
+    overlay.addEventListener("click", (e) => e.target === overlay && close());
+
+    overlay.querySelector("#edit-user-reset").addEventListener("click", () => {
+      close();
+      openResetPasswordSheet(u.id, u.name);
+    });
+    overlay.querySelector("#edit-user-delete")?.addEventListener("click", async () => {
+      if (!confirm(t("confirm_delete_user"))) return;
+      await api.deleteUser(u.id);
+      close();
+      loadUsers();
+    });
+
+    const form = overlay.querySelector("#edit-user-form");
+    const errorEl = overlay.querySelector("#edit-user-error");
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorEl.hidden = true;
+      const data = new FormData(form);
+      const submitBtn = form.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+
+      try {
+        await api.updateUser(u.id, {
+          name: data.get("name"),
+          email: data.get("email"),
+          phone: data.get("phone") || null,
+          position: isSalesManager ? data.get("position") || null : u.position,
+        });
+        close();
+        loadUsers();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+        submitBtn.disabled = false;
+      }
+    });
+  }
+
   function openAddTeamMemberSheet() {
     const overlay = document.createElement("div");
     overlay.className = "sheet-overlay";
@@ -128,11 +213,8 @@ export async function renderTeamSection(container) {
               <option value="admin">${t("role_admin")}</option>
             </select>
           </label>
-          <label id="new-user-position-field">${t("position")}
-            <input name="position" list="position-suggestions" placeholder="${t("position_placeholder")}" />
-            <datalist id="position-suggestions">
-              ${POSITION_SUGGESTIONS.map((p) => `<option value="${escapeHtml(p)}"></option>`).join("")}
-            </datalist>
+          <label id="new-user-position-field">${t("sales_channel")}
+            <select name="position">${salesChannelOptionsHtml("")}</select>
           </label>
           <p class="form-error" id="new-user-error" hidden></p>
           <div class="sheet-actions">

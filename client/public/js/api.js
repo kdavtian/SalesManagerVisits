@@ -1,7 +1,10 @@
+import { APP_VERSION } from "./version.js";
+
 async function request(path, options = {}) {
   const res = await fetch(`/api${path}`, {
     credentials: "include",
     ...options,
+    headers: { "X-App-Version": APP_VERSION, ...options.headers },
   });
 
   if (res.status === 204) return null;
@@ -62,6 +65,7 @@ export const api = {
   listUsers: () => request("/users"),
   listPlannableUsers: () => request("/users/plannable"),
   createUser: (data) => json("/users", "POST", data),
+  updateUser: (id, data) => json(`/users/${id}`, "PATCH", data),
   resetUserPassword: (id, password) => json(`/users/${id}/password`, "PATCH", { password }),
   deleteUser: (id) => request(`/users/${id}`, { method: "DELETE" }),
 

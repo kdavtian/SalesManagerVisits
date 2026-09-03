@@ -279,6 +279,30 @@ export function formatDateTime(iso) {
   });
 }
 
+// Lightweight, dependency-free read of a raw User-Agent string for the
+// admin team list -- just enough to show "iPhone · Safari" / "Windows ·
+// Chrome" at a glance, not a full device-detection library (this app has
+// no need to branch behavior on it, only to display it).
+export function parseUserAgent(ua) {
+  if (!ua) return "";
+  let os = "";
+  if (/iPhone/.test(ua)) os = "iPhone";
+  else if (/iPad/.test(ua)) os = "iPad";
+  else if (/Android/.test(ua)) os = "Android";
+  else if (/Mac OS X/.test(ua)) os = "Mac";
+  else if (/Windows/.test(ua)) os = "Windows";
+  else if (/Linux/.test(ua)) os = "Linux";
+
+  let browser = "";
+  if (/EdgA?\//.test(ua)) browser = "Edge";
+  else if (/OPR\//.test(ua)) browser = "Opera";
+  else if (/CriOS|Chrome\//.test(ua)) browser = "Chrome";
+  else if (/FxiOS|Firefox\//.test(ua)) browser = "Firefox";
+  else if (/Version\/.*Safari/.test(ua)) browser = "Safari";
+
+  return [os, browser].filter(Boolean).join(" · ");
+}
+
 export function formatRelative(iso) {
   const diffMs = Date.now() - new Date(iso).getTime();
   const mins = Math.round(diffMs / 60000);
