@@ -35,6 +35,16 @@ function text() {
   return labels[getLang() === "hy" ? "hy" : "en"];
 }
 
+function escapeAttr(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[c]));
+}
+
 function customerIdFromHash() {
   const match = location.hash.match(/^#\/customers\/(\d+)(?:$|[/?])/);
   return match ? Number(match[1]) : null;
@@ -79,9 +89,6 @@ function openPlatformProfile(kind, value) {
     if (document.visibilityState === "visible") window.open(webUrl, "_blank", "noopener,noreferrer");
   }, 700);
 
-  // A direct user gesture is required for iOS/Android to hand off a custom
-  // scheme to the installed app. If the app is unavailable, the timed
-  // universal-web fallback above takes over.
   window.location.href = appUrl;
 }
 
@@ -89,7 +96,7 @@ function socialButton(kind, value) {
   const isInstagram = kind === "instagram";
   const icon = isInstagram ? INSTAGRAM_ICON : FACEBOOK_ICON;
   const label = isInstagram ? "Instagram" : "Facebook";
-  return `<button type="button" class="customer-social-link customer-social-${kind}" data-social-kind="${kind}" data-social-value="${String(value).replace(/"/g, "&quot;")}" aria-label="${label}" title="${label}">${icon}</button>`;
+  return `<button type="button" class="customer-social-link customer-social-${kind}" data-social-kind="${kind}" data-social-value="${escapeAttr(value)}" aria-label="${label}" title="${label}">${icon}</button>`;
 }
 
 function openEditor(customerId, data, onSaved) {
@@ -98,14 +105,14 @@ function openEditor(customerId, data, onSaved) {
   overlay.className = "sheet-overlay customer-social-overlay";
   overlay.innerHTML = `
     <div class="sheet customer-social-sheet" role="dialog" aria-modal="true" aria-labelledby="customer-social-title">
-      <h2 id="customer-social-title">${l.title}</h2>
+      <h2 id="customer-social-title">${escapeAttr(l.title)}</h2>
       <form id="customer-social-form">
-        <label>${l.instagram}<input name="instagram" inputmode="url" autocapitalize="none" autocomplete="off" placeholder="${l.instagramPlaceholder}" value="${data.instagram_username ? `@${data.instagram_username}` : ""}" /></label>
-        <label>${l.facebook}<input name="facebook" inputmode="url" autocapitalize="none" autocomplete="off" placeholder="${l.facebookPlaceholder}" value="${data.facebook_url || ""}" /></label>
+        <label>${escapeAttr(l.instagram)}<input name="instagram" inputmode="url" autocapitalize="none" autocomplete="off" placeholder="${escapeAttr(l.instagramPlaceholder)}" value="${data.instagram_username ? escapeAttr(`@${data.instagram_username}`) : ""}" /></label>
+        <label>${escapeAttr(l.facebook)}<input name="facebook" inputmode="url" autocapitalize="none" autocomplete="off" placeholder="${escapeAttr(l.facebookPlaceholder)}" value="${escapeAttr(data.facebook_url || "")}" /></label>
         <p class="form-error" id="customer-social-error" hidden></p>
         <div class="sheet-actions">
-          <button type="button" class="btn" id="customer-social-cancel">${l.cancel}</button>
-          <button type="submit" class="btn btn-primary" id="customer-social-save">${l.save}</button>
+          <button type="button" class="btn" id="customer-social-cancel">${escapeAttr(l.cancel)}</button>
+          <button type="submit" class="btn btn-primary" id="customer-social-save">${escapeAttr(l.save)}</button>
         </div>
       </form>
     </div>`;
@@ -155,6 +162,7 @@ async function decorateCustomerDetail() {
   try {
     data = await apiRequest(`/api/customer-social/${customerId}`);
   } catch {
+    delete facts.dataset.socialProfilesReady;
     return;
   }
   if (token !== renderToken || customerIdFromHash() !== customerId || !facts.isConnected) return;
@@ -175,10 +183,10 @@ async function decorateCustomerDetail() {
     ].filter(Boolean).join("");
 
     section.innerHTML = `
-      <span class="customer-social-label">${l.title}</span>
+      <span class="customer-social-label">${escapeAttr(l.title)}</span>
       <span class="customer-social-actions">
         ${links}
-        ${data.can_edit ? `<button type="button" class="customer-social-edit" aria-label="${links ? l.edit : l.add}" title="${links ? l.edit : l.add}">${EDIT_ICON}</button>` : ""}
+        ${data.can_edit ? `<button type="button" class="customer-social-edit" aria-label="${escapeAttr(links ? l.edit : l.add)}" title="${escapeAttr(links ? l.edit : l.add)}">${EDIT_ICON}</button>` : ""}
       </span>`;
 
     section.querySelectorAll("[data-social-kind]").forEach((button) => {
