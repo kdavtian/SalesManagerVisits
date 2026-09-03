@@ -55,8 +55,8 @@ export const TIER_OPTIONS = [
 // the stored value and the display text, matching how this field always
 // worked (no separate translation layer for these fixed business terms).
 const CATEGORY_ICON = {
-  // A fuel pump -- stands in for "oil changing point" (garage forecourt).
-  oilPoint: `<svg class="ui-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 4 0V9.002a2 2 0 0 0-.59-1.42L18 5"/><path d="M14 21V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v16"/><path d="M2 21h13"/><path d="M3 9h11"/></svg>`,
+  // An oil can with a drop -- stands in for "oil changing point".
+  oilPoint: `<svg class="ui-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="11.5" width="9.5" height="6.7" rx="1.2"/><path d="M9.6 11.5V8.3a.9.9 0 0 1 .9-.9h2a.9.9 0 0 1 .9.9v.6"/><rect x="9.2" y="6" width="4.2" height="1.9" rx="0.5"/><path d="M6 11.6c-3-1.3-4.3.3-3.5 2 .5 1.1 1.7 1.6 2.6 1.7"/><path d="M12.5 12.7 18.8 7"/><path d="M18.8 7v1.4"/><path d="M19.1 10v1.8"/><path d="M19.1 11.8c1.15 1.15 1.15 2.7 0 3.75-1.15-1.05-1.15-2.6 0-3.75Z"/></svg>`,
   shop: `<svg class="ui-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M3 4h2l2.2 10.2a2 2 0 0 0 2 1.6h8.6a2 2 0 0 0 2-1.6L21 8H6"/></svg>`,
   // A wrench -- the auto workshop/service point.
   workshop: `<svg class="ui-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.1-3.1c.32-.32.86-.22.98.22a6 6 0 0 1-8.26 7.06l-7.9 7.9a1 1 0 0 1-3-3l7.9-7.9a6 6 0 0 1 7.06-8.26c.44.12.54.66.22.98z"/></svg>`,

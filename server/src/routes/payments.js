@@ -71,6 +71,71 @@ async function findLikelyDuplicate({ customerId, amount, salesManagerId, payment
   return rows[0] ?? null;
 }
 
+// Shared by the manual "Add Payment" submission below and by the checkin
+// flow's "payment collected" outcome (see routes/checkins.js) -- both end
+// up as an ordinary pending payment an accountant reviews the same way,
+// so there's exactly one insert+history+notify path regardless of source.
+// client_ref is what makes this idempotent: checkins.js passes a
+// deterministic `checkin-<id>` ref, so a retried/duplicate checkin submit
+// can never create a second payment for the same collection.
+export async function insertPayment({ customer, amount, paymentDate, salesManagerId, manager, note, createdBy, clientRef }) {
+  const salesChannel = manager.role === "sales_manager" ? manager.position || null : null;
+
+  const { rows } = await pool.query(
+    `INSERT INTO payments
+       (customer_id, customer_name_snapshot, erp_customer_id_snapshot, amount_amd, payment_date,
+        sales_manager_id, sales_manager_name_snapshot, sales_channel, note, status, created_by, client_ref)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, $11)
+     ON CONFLICT (created_by, client_ref) WHERE client_ref IS NOT NULL DO NOTHING
+     RETURNING id`,
+    [
+      customer.id,
+      customer.name,
+      customer.erp_customer_id || null,
+      amount,
+      paymentDate,
+      salesManagerId,
+      manager.name,
+      salesChannel,
+      note || null,
+      createdBy,
+      clientRef || null,
+    ]
+  );
+
+  let paymentId = rows[0]?.id;
+  if (!paymentId) {
+    // ON CONFLICT DO NOTHING means this exact client_ref already exists
+    // (an idempotent retry) -- return the existing payment's id, no new
+    // history row or notification.
+    const existing = await pool.query("SELECT id FROM payments WHERE created_by = $1 AND client_ref = $2", [createdBy, clientRef]);
+    return existing.rows[0]?.id ?? null;
+  }
+
+  await pool.query(
+    `INSERT INTO payment_status_history (payment_id, old_status, new_status, reason, changed_by)
+     VALUES ($1, NULL, 'pending', 'Submitted', $2)`,
+    [paymentId, createdBy]
+  );
+
+  (async () => {
+    try {
+      const { rows: recipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [PAYMENT_NOTIFY_ROLES]);
+      for (const recipient of recipients) {
+        notifyUser(recipient.id, "payment_submitted", {
+          title: "Նոր վճարում",
+          body: `${customer.name}${customer.erp_customer_id ? ` · ID ${customer.erp_customer_id}` : ""}\n${Number(amount).toLocaleString()} AMD\n${manager.name}${salesChannel ? ` · ${salesChannel}` : ""}`,
+          url: `/#/payments/${paymentId}`,
+        });
+      }
+    } catch (err) {
+      console.error("Payment notification failed:", err);
+    }
+  })();
+
+  return paymentId;
+}
+
 paymentsRouter.post("/", async (req, res) => {
   const { customer_id, amount_amd, payment_date, note, sales_manager_id, client_ref, confirm_duplicate } = req.body ?? {};
 
@@ -135,53 +200,19 @@ paymentsRouter.post("/", async (req, res) => {
     }
   }
 
-  const salesChannel = manager.role === "sales_manager" ? manager.position || null : null;
-
-  const { rows } = await pool.query(
-    `INSERT INTO payments
-       (customer_id, customer_name_snapshot, erp_customer_id_snapshot, amount_amd, payment_date,
-        sales_manager_id, sales_manager_name_snapshot, sales_channel, note, status, created_by, client_ref)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, $11)
-     RETURNING id`,
-    [
-      customer.id,
-      customer.name,
-      customer.erp_customer_id || null,
-      amount,
-      paymentDateObj.toISOString(),
-      salesManagerId,
-      manager.name,
-      salesChannel,
-      note || null,
-      req.user.id,
-      client_ref || null,
-    ]
-  );
-  const paymentId = rows[0].id;
-
-  await pool.query(
-    `INSERT INTO payment_status_history (payment_id, old_status, new_status, reason, changed_by)
-     VALUES ($1, NULL, 'pending', 'Submitted', $2)`,
-    [paymentId, req.user.id]
-  );
+  const paymentId = await insertPayment({
+    customer,
+    amount,
+    paymentDate: paymentDateObj.toISOString(),
+    salesManagerId,
+    manager,
+    note,
+    createdBy: req.user.id,
+    clientRef: client_ref,
+  });
 
   const payment = await loadPaymentRow(paymentId);
   res.status(201).json(payment);
-
-  (async () => {
-    try {
-      const { rows: recipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [PAYMENT_NOTIFY_ROLES]);
-      for (const recipient of recipients) {
-        notifyUser(recipient.id, "payment_submitted", {
-          title: "Նոր վճարում",
-          body: `${customer.name}${customer.erp_customer_id ? ` · ID ${customer.erp_customer_id}` : ""}\n${Number(amount).toLocaleString()} AMD\n${manager.name}${salesChannel ? ` · ${salesChannel}` : ""}`,
-          url: `/#/payments/${paymentId}`,
-        });
-      }
-    } catch (err) {
-      console.error("Payment notification failed:", err);
-    }
-  })();
 });
 
 paymentsRouter.get("/pending-count", async (req, res) => {

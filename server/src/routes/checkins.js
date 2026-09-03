@@ -8,6 +8,7 @@ import { haversineMeters } from "../utils/geo.js";
 import { getCheckinRadiusMeters } from "../settings.js";
 import { seesAllActivity } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
+import { insertPayment } from "./payments.js";
 
 // Below this, a payment isn't worth interrupting anyone's Telegram for.
 const LARGE_PAYMENT_THRESHOLD_AMD = 100000;
@@ -131,7 +132,7 @@ checkinsRouter.post("/", (req, res, next) => {
   }
 
   const { rows: customerRows } = await pool.query(
-    "SELECT id, name, lat, lng FROM customers WHERE id = $1",
+    "SELECT id, name, lat, lng, erp_customer_id FROM customers WHERE id = $1",
     [customerId]
   );
   const customer = customerRows[0];
@@ -176,11 +177,34 @@ checkinsRouter.post("/", (req, res, next) => {
 
   (async () => {
     try {
-      if (amountCollected != null && amountCollected >= LARGE_PAYMENT_THRESHOLD_AMD) {
-        const { rows: repRows } = await pool.query("SELECT name FROM users WHERE id = $1", [req.user.id]);
-        notifyTelegram(
-          `💰 <b>Large payment collected</b>\n${escapeHtml(repRows[0]?.name || "Someone")} — ${escapeHtml(customer.name)}\n${Math.round(amountCollected).toLocaleString()} AMD`
-        );
+      if (amountCollected != null) {
+        const { rows: repRows } = await pool.query("SELECT name, position, role FROM users WHERE id = $1", [req.user.id]);
+        const rep = repRows[0];
+
+        if (rep) {
+          // The check-in itself is the field-visit record of the money
+          // changing hands; this mirrors it into the reviewed Payments
+          // workflow so an accountant sees and reconciles it the same way
+          // as a manually-submitted payment, instead of it sitting invisibly
+          // on amount_collected_amd where only checkin/activity views show it.
+          // client_ref ties it 1:1 to this checkin, so it can never double-sync.
+          await insertPayment({
+            customer,
+            amount: amountCollected,
+            paymentDate: checkin.timestamp,
+            salesManagerId: req.user.id,
+            manager: rep,
+            note: null,
+            createdBy: req.user.id,
+            clientRef: `checkin-${checkin.id}`,
+          });
+        }
+
+        if (amountCollected >= LARGE_PAYMENT_THRESHOLD_AMD) {
+          notifyTelegram(
+            `💰 <b>Large payment collected</b>\n${escapeHtml(rep?.name || "Someone")} — ${escapeHtml(customer.name)}\n${Math.round(amountCollected).toLocaleString()} AMD`
+          );
+        }
       }
     } catch (err) {
       console.error("Post-checkin notification failed:", err);
