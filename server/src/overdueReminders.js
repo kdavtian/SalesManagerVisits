@@ -28,23 +28,13 @@ export async function checkOverdueReminders() {
     if (lastNotifiedDate.get(plan.user_id) === today) continue;
     if (!plan.customer_ids?.length) continue;
 
-    // Competitor records are market intelligence only; they do not carry a
-    // recurring visit obligation and therefore must never create a missed-
-    // visit reminder even if an older plan still contains one.
-    const { rows: eligibleRows } = await pool.query(
-      `SELECT id FROM customers WHERE id = ANY($1) AND COALESCE(customer_tier, 'potential') <> 'competitor'`,
-      [plan.customer_ids]
-    );
-    const eligibleIds = eligibleRows.map((row) => row.id);
-    if (!eligibleIds.length) continue;
-
     const { rows: visitedRows } = await pool.query(
       `SELECT DISTINCT customer_id FROM checkins
        WHERE user_id = $1 AND customer_id = ANY($2) AND timestamp >= date_trunc('day', now())`,
-      [plan.user_id, eligibleIds]
+      [plan.user_id, plan.customer_ids]
     );
     const visited = new Set(visitedRows.map((r) => r.customer_id));
-    const remaining = eligibleIds.filter((id) => !visited.has(id));
+    const remaining = plan.customer_ids.filter((id) => !visited.has(id));
     if (!remaining.length) continue;
 
     lastNotifiedDate.set(plan.user_id, today);
