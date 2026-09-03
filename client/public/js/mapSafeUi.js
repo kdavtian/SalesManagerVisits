@@ -1,7 +1,6 @@
 // Map-only UI enhancements. No MutationObserver and no recurring polling.
 // A short bounded mount retry is used because the SPA renders the Map view
 // after the route changes; once attached, normal event handlers do the rest.
-import { t } from "./i18n.js";
 
 function competitorIcon() {
   return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10h16v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19z"/><path d="m5 10 1.2-5h11.6L19 10M8 20.5v-6h4v6M4.5 10c.8 1.4 2.6 1.4 3.5 0 .8 1.4 2.7 1.4 3.5 0 .8 1.4 2.7 1.4 3.5 0 .8 1.4 2.7 1.4 3.5 0"/></svg>`;
@@ -32,12 +31,26 @@ function attachCompetitorToggle() {
   button.title = copy.show;
   button.innerHTML = `<span class="map-filter-chip-icon">${competitorIcon()}</span>${copy.label}`;
 
-  button.addEventListener("click", () => {
-    const visible = mapView.classList.toggle("kad-show-competitors");
+  const syncButton = () => {
+    const visible = mapView.classList.contains("kad-show-competitors");
     button.classList.toggle("chip-active", visible);
     button.setAttribute("aria-pressed", String(visible));
     button.setAttribute("aria-label", visible ? copy.hide : copy.show);
     button.title = visible ? copy.hide : copy.show;
+  };
+
+  button.addEventListener("click", () => {
+    mapView.classList.toggle("kad-show-competitors");
+    syncButton();
+  });
+
+  // Existing Map filters reset .chip-active on every filter chip. Re-sync
+  // this independent intelligence toggle immediately after those handlers
+  // run, without observing or scanning the DOM.
+  mapView.addEventListener("click", (event) => {
+    if (event.target.closest(".map-filter-chip") || event.target.closest("#nearby-panel-close")) {
+      requestAnimationFrame(syncButton);
+    }
   });
 
   filterRow.appendChild(button);
