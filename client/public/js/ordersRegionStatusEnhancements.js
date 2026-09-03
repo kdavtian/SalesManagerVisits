@@ -22,9 +22,6 @@ async function requestJson(path) {
   return body;
 }
 
-// Keep the existing Orders module untouched. When a region is actually
-// selected, transparently route only its list calls through the equivalent
-// region-aware endpoint; with no region selected, use the original API path.
 api.listOrders = (params = {}) => {
   if (!activeRegion) return originalListOrders(params);
   const qs = new URLSearchParams({ ...params, region: activeRegion }).toString();
@@ -66,12 +63,20 @@ function selectedStatusReload() {
   selected?.click();
 }
 
+function escapeAttr(value) {
+  return String(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
+function escapeText(value) {
+  return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+}
+
 function renderRegionMenu(menu, button, regions) {
   menu.innerHTML = ["", ...regions]
     .map((region) => {
       const selected = region === activeRegion;
       const label = region || allRegionsLabel();
-      return `<button type="button" role="menuitemradio" aria-checked="${selected}" data-order-region="${String(region).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;")}"><span>${String(label).replace(/&/g, "&amp;").replace(/</g, "&lt;")}</span>${selected ? '<span class="activity-menu-check" aria-hidden="true">✓</span>' : ""}</button>`;
+      return `<button type="button" role="menuitemradio" aria-checked="${selected}" data-order-region="${escapeAttr(region)}"><span>${escapeText(label)}</span>${selected ? '<span class="activity-menu-check" aria-hidden="true">✓</span>' : ""}</button>`;
     })
     .join("");
 
@@ -120,7 +125,7 @@ function paintCounts(counts = {}) {
     if (!badge) {
       badge = document.createElement("span");
       badge.className = "order-status-count-badge";
-      badge.setAttribute("aria-label", `${t(`order_status_${status}`)} count`);
+      badge.setAttribute("aria-hidden", "true");
       chip.appendChild(badge);
     }
     badge.textContent = String(Number(counts[status]) || 0);
@@ -176,11 +181,6 @@ async function enhanceOrdersRegionAndCounts() {
         regionButton.focus();
       }
     });
-
-    document.addEventListener("click", (event) => {
-      if (!regionWrap.isConnected || regionMenu.hidden || regionWrap.contains(event.target)) return;
-      closeRegionMenu(regionButton, regionMenu);
-    });
   }
 
   setButtonState(regionButton);
@@ -188,8 +188,7 @@ async function enhanceOrdersRegionAndCounts() {
     const summary = await getSummary();
     paintCounts(summary.counts);
   } catch {
-    // Counts are informative only; never block the Orders list if this small
-    // summary request fails temporarily.
+    // Informative UI only; never block the Orders list.
   }
 }
 
@@ -209,6 +208,17 @@ function boot() {
     const observer = new MutationObserver(scheduleEnhance);
     observer.observe(app, { childList: true, subtree: true });
   }
+
+  // One delegated outside-click handler for the lifetime of the app. This
+  // avoids accumulating document listeners when the Orders tab is mounted
+  // repeatedly during navigation.
+  document.addEventListener("click", (event) => {
+    const wrap = document.querySelector(".orders-region-filter-wrap");
+    const button = wrap?.querySelector(".orders-region-filter-btn");
+    const menu = wrap?.querySelector(".orders-region-filter-menu");
+    if (!wrap || !button || !menu || menu.hidden || wrap.contains(event.target)) return;
+    closeRegionMenu(button, menu);
+  });
 
   window.addEventListener("orders-changed", async () => {
     cachedSummary = null;
