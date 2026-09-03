@@ -6,7 +6,7 @@
   window.__kadSafeMapRuntimeInstalled = true;
 
   const STORAGE_KEY = "kad.fieldVisits.mapView.v2";
-  const FALLBACK_VIEW = { lat: 40.1872, lng: 44.5152, zoom: 14, bearing: 0 };
+  const FALLBACK_VIEW = { lat: 40.1872, lng: 44.5152, zoom: 15, bearing: 0 };
   const OSM_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
   const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
@@ -17,7 +17,7 @@
       return {
         lat: parsed.lat,
         lng: parsed.lng,
-        zoom: Math.max(11, Math.min(19, parsed.zoom)),
+        zoom: Math.max(11, Math.min(20, parsed.zoom)),
         bearing: Number.isFinite(parsed.bearing) ? parsed.bearing : 0,
       };
     } catch {
@@ -37,9 +37,10 @@
     }
   }
 
-  // Use standard OSM raster tiles instead of the CARTO endpoint that was
-  // producing repeated provider/API-key watermarks on some mobile sessions.
-  // Required OpenStreetMap attribution remains intact.
+  // Use standard OpenStreetMap raster tiles directly. On Retina/high-DPI
+  // iPhones Leaflet otherwise stretches 256px tiles across twice as many
+  // physical pixels, which makes roads and labels look soft. detectRetina
+  // requests one zoom level sharper and scales it correctly on-device.
   const nativeTileLayer = window.L.tileLayer.bind(window.L);
   window.L.tileLayer = function safeTileLayer(url, options = {}) {
     const isCarto = typeof url === "string" && url.includes("basemaps.cartocdn.com");
@@ -48,7 +49,13 @@
       ...options,
       subdomains: "",
       attribution: OSM_ATTRIBUTION,
-      maxZoom: Math.min(Number(options.maxZoom) || 19, 19),
+      detectRetina: true,
+      maxNativeZoom: 19,
+      maxZoom: 20,
+      updateWhenIdle: true,
+      updateWhenZooming: false,
+      keepBuffer: 3,
+      crossOrigin: true,
     });
   };
 
