@@ -87,31 +87,38 @@
 }
 
 /* ----- Orders ---------------------------------------------------------- */
+/* Orders is already a padded .detail-view (16px), while Activity/Customers
+   are unpadded views whose .list-header supplies the same 16px inset. Keep
+   this header at zero horizontal padding/margin so all three titles land on
+   the same screen x-position and share the exact same typography. */
 .orders-view-unified .list-header-row.list-header.unified-list-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  margin: 0 16px 18px;
+  gap: 10px;
+  margin: 0 0 14px;
   padding: 0;
-  min-height: 54px;
+  min-height: 44px;
 }
 
 .orders-view-unified .list-header-row.list-header.unified-list-header h1 {
   margin: 0;
   padding: 0;
-  font: inherit;
-  font-size: 2rem;
-  line-height: 1.08;
+  font-size: 1.5rem;
+  line-height: normal;
   font-weight: 800;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.02em;
   color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .orders-new-action {
-  width: 50px !important;
-  height: 50px !important;
-  min-width: 50px;
+  width: 48px !important;
+  height: 48px !important;
+  min-width: 48px;
   padding: 0 !important;
   border-radius: 50% !important;
   display: inline-flex !important;
@@ -239,10 +246,6 @@
   }
   .customers-search-combined input[type="search"] {
     min-width: 64px;
-  }
-  .orders-view-unified .list-header-row.list-header.unified-list-header {
-    margin-left: 12px;
-    margin-right: 12px;
   }
 }
 
