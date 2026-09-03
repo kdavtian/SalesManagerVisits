@@ -38,6 +38,28 @@ function compactNativeFilterSheet(button) {
     sheet.classList.add("map-dimension-popover");
     sheet.style.setProperty("--map-popover-left", `${left}px`);
     sheet.style.setProperty("--map-popover-top", `${Math.max(12, top)}px`);
+
+    // Competitors are intentionally hidden on ordinary Map entry. Choosing
+    // COMPETITORS from the channel menu is an explicit request to see them,
+    // so reveal them for that selection. When leaving that channel, only
+    // undo visibility if this helper was the thing that enabled it.
+    if (button.dataset.mapFilterBtn === "channel") {
+      sheet.addEventListener("click", (event) => {
+        const option = event.target.closest("[data-value]");
+        if (!option) return;
+        const mapView = document.querySelector(".map-view");
+        if (!mapView) return;
+        if (option.dataset.value === "COMPETITORS") {
+          if (!mapView.classList.contains("kad-show-competitors")) {
+            mapView.dataset.competitorsForcedByChannel = "true";
+            mapView.classList.add("kad-show-competitors");
+          }
+        } else if (mapView.dataset.competitorsForcedByChannel === "true") {
+          delete mapView.dataset.competitorsForcedByChannel;
+          mapView.classList.remove("kad-show-competitors");
+        }
+      });
+    }
   });
 }
 
@@ -48,8 +70,6 @@ function enhanceMapDimensionFilters() {
   const filterRow = document.querySelector("#map-icon-filter-row");
   if (!input || !searchRow || !actions || !filterRow) return;
 
-  // Manager is the first search-bar dimension. Keep its semantics/listener,
-  // only standardise the glyph and compact button treatment.
   const managerBtn = actions.querySelector("#map-manager-filter-btn");
   if (managerBtn && !managerBtn.dataset.kadManagerIcon) {
     const label = managerBtn.textContent?.trim();
