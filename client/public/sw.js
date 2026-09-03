@@ -1,5 +1,5 @@
-const CACHE_VERSION = "field-visits-v50";
-const TILE_CACHE = "field-visits-tiles-v2";
+const CACHE_VERSION = "field-visits-v57";
+const TILE_CACHE = "field-visits-tiles-v4";
 
 const APP_SHELL = [
   "/",
@@ -11,12 +11,18 @@ const APP_SHELL = [
   "/css/orders-search-filters.css",
   "/css/unified-search.css",
   "/css/field-visit-enhancements.css",
+  "/css/map-marker-system.css",
+  "/css/map-safe-enhancements.css",
   "/js/api.js",
   "/js/app.js",
   "/js/activityDatePicker.js",
   "/js/ordersSearchEnhancements.js",
   "/js/unifiedSearchEnhancements.js",
   "/js/fieldVisitEnhancements.js",
+  "/js/mapMarkerEnhancements.js",
+  "/js/mapSafeRuntime.js",
+  "/js/mapSafeUi.js",
+  "/js/competitorPolicySafe.js",
   "/js/version.js",
   "/js/i18n.js",
   "/js/icons.js",
@@ -129,17 +135,9 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Any other cross-origin request (the OSM/Wikimedia map-tile fallbacks,
-  // in practice) -- deliberately NOT intercepted. A fetch() issued from
-  // inside a service worker is governed by the page's connect-src CSP
-  // directive, not img-src, even though the request started life as a
-  // plain <img> load; connect-src is locked to 'self' here, so re-issuing
-  // it through fetch() silently failed the CSP check and broke every tile
-  // from a provider not explicitly cached above (root cause of tiles
-  // failing to load only inside the installed app, never in a plain
-  // Safari tab with no active service worker). Returning here lets the
-  // browser handle the request itself, uncontrolled, where it's correctly
-  // governed by img-src instead.
+  // Cross-origin OSM/Wikimedia map tiles are intentionally left to the
+  // browser. Re-fetching them from the service worker would apply connect-src
+  // CSP instead of img-src and can break tiles in the installed iOS PWA.
   if (url.origin !== self.location.origin) return;
 
   if (request.mode === "navigate") {

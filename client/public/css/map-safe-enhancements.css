@@ -1,0 +1,58 @@
+/* Safe map usability additions — CSS-only marker visibility, no DOM observer. */
+
+/* Competitors are intelligence-only, so they are hidden from the default map.
+   :has() is supported by the iOS/Android browser versions targeted by this PWA. */
+#leaflet-map .leaflet-marker-icon:has(.pin-tier-competitor) {
+  display: none !important;
+}
+.map-view.kad-show-competitors #leaflet-map .leaflet-marker-icon:has(.pin-tier-competitor) {
+  display: block !important;
+}
+
+/* Competitors never visually claim that a visit is due/completed. */
+#leaflet-map .pin-tier-competitor.pin-status-overdue::after,
+#leaflet-map .pin-tier-competitor .pin-check {
+  display: none !important;
+}
+#leaflet-map .pin-tier-competitor {
+  box-shadow: 0 2px 7px rgba(17,19,24,.18), 0 0 0 1px rgba(255,255,255,.9) !important;
+}
+
+.map-competitor-toggle {
+  border-style: dashed !important;
+}
+.map-competitor-toggle.chip-active {
+  border-style: solid !important;
+}
+
+/* Mobile raster quality/performance.
+   - Keep browser interpolation at its normal high-quality path.
+   - Promote the tile pane to its own compositor layer so pan/zoom remains
+     fluid on modern iOS Safari and Chromium without forcing blurry scaling.
+   - Avoid non-standard pixelated/crisp-edges modes. */
+#leaflet-map .leaflet-tile-pane {
+  will-change: transform;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+#leaflet-map .leaflet-tile {
+  image-rendering: auto;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+/* Keep the single legal OSM attribution readable but visually quiet. */
+#leaflet-map .leaflet-control-attribution {
+  margin: 0 6px 6px 0;
+  padding: 2px 6px;
+  border-radius: 7px;
+  background: rgba(255,255,255,.86);
+  color: #5b6270;
+  font-size: 9px;
+  line-height: 1.25;
+  box-shadow: 0 1px 3px rgba(17,19,24,.08);
+}
+#leaflet-map .leaflet-control-attribution a {
+  color: inherit;
+  text-decoration: none;
+}
