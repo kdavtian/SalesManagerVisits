@@ -26,11 +26,15 @@ const TILE_URLS = {
 };
 // Some networks (certain mobile carriers in particular) block or can't
 // resolve the CARTO CDN outright, not just intermittently -- reported live
-// from a real device, not a hypothetical. OSM's own tile server is a
-// different host/CDN entirely, so it's a genuinely independent fallback,
-// not just a retry of the same failure. It has no dark styling of its own,
-// so it's used for both themes -- a working light map beats no map.
-const FALLBACK_TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+// from a real device, not a hypothetical. Two independent OSM-tile mirrors
+// on different infrastructure (OSMF's own servers, then Wikimedia's) back
+// it up -- diversifying against one CDN having a bad day, not just one
+// provider. Neither has dark styling of its own, so both are used for
+// either theme -- a working light map beats no map.
+const FALLBACK_TILE_URLS = [
+  { url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", subdomains: "abc" },
+  { url: "https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png", subdomains: "" },
+];
 const TILE_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
@@ -200,7 +204,8 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   const mapErrorOverlay = root.querySelector("#map-error-overlay");
   let tileEverLoaded = false;
   let tileHealthTimer = null;
-  let usingFallbackTiles = false;
+  // 0 = primary (CARTO); 1..FALLBACK_TILE_URLS.length = that fallback's index+1.
+  let providerIndex = 0;
 
   function hideMapError() {
     mapErrorOverlay.hidden = true;
@@ -210,14 +215,13 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     mapErrorOverlay.hidden = false;
   }
 
-  function makeTileLayer(url) {
-    // OSM's tile server only has a/b/c subdomains (CARTO has a/b/c/d) --
-    // requesting a "d" tile from OSM 404s, so this can't share one constant.
-    const layer = L.tileLayer(url, {
-      maxZoom: 19,
-      attribution: TILE_ATTRIBUTION,
-      subdomains: url === FALLBACK_TILE_URL ? "abc" : "abcd",
-    });
+  function currentProvider() {
+    if (providerIndex === 0) return { url: primaryTileUrl(), subdomains: "abcd" };
+    return FALLBACK_TILE_URLS[providerIndex - 1];
+  }
+
+  function makeTileLayer({ url, subdomains }) {
+    const layer = L.tileLayer(url, { maxZoom: 19, attribution: TILE_ATTRIBUTION, subdomains });
     layer.on("tileload", () => {
       tileEverLoaded = true;
       clearTimeout(tileHealthTimer);
@@ -230,50 +234,53 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     return TILE_URLS[getTheme()];
   }
 
-  // A slow-but-working connection still succeeds well within this window;
-  // only a provider that's genuinely unreachable fails to deliver a single
-  // tile in 9 seconds. On the primary (CARTO) provider, that failure falls
-  // back to OSM's tile server once before showing an error -- a real error
-  // is still shown if that independent host fails too, since at that point
-  // it's very likely the device/network has no map access at all, not just
-  // a problem with one CDN.
+  // Real-world mobile latency to a foreign tile CDN (DNS + TLS + first byte,
+  // over 4G/5G, possibly roaming) can genuinely run past what looks like a
+  // generous timeout on a fast connection -- reported live from a device in
+  // Yerevan where even OSM's own tile server didn't clear a 9s window. 15s
+  // gives a slow-but-working connection real room, while still failing fast
+  // enough that a truly unreachable provider doesn't leave the map looking
+  // frozen for too long. Each provider gets its own attempt in sequence
+  // (CARTO -> OSM -> Wikimedia) before showing a real error -- three
+  // independent hosts/CDNs failing in a row is a strong signal the device
+  // has no route to any map tiles at all, not a problem with one of them.
   function startTileHealthCheck() {
     tileEverLoaded = false;
     clearTimeout(tileHealthTimer);
     tileHealthTimer = setTimeout(() => {
       if (tileEverLoaded) return;
-      if (!usingFallbackTiles) {
-        usingFallbackTiles = true;
+      if (providerIndex <= FALLBACK_TILE_URLS.length - 1) {
+        providerIndex += 1;
         map.removeLayer(tileLayer);
-        tileLayer = makeTileLayer(FALLBACK_TILE_URL).addTo(map);
+        tileLayer = makeTileLayer(currentProvider()).addTo(map);
         startTileHealthCheck();
       } else {
         showMapError();
       }
-    }, 9000);
+    }, 15000);
   }
 
-  let tileLayer = makeTileLayer(primaryTileUrl()).addTo(map);
+  let tileLayer = makeTileLayer(currentProvider()).addTo(map);
   startTileHealthCheck();
 
   root.querySelector("#map-error-retry").addEventListener("click", () => {
     hideMapError();
-    usingFallbackTiles = false;
+    providerIndex = 0;
     map.removeLayer(tileLayer);
-    tileLayer = makeTileLayer(primaryTileUrl()).addTo(map);
+    tileLayer = makeTileLayer(currentProvider()).addTo(map);
     startTileHealthCheck();
   });
 
   // Re-apply the matching tile style if the user flips light/dark while the
   // map is mounted (Settings lives on a different tab, so this covers the
   // case of returning to the map after toggling). Only matters while still
-  // on the primary provider -- the fallback has no theme variants.
+  // on the primary provider -- the fallbacks have no theme variants.
   function refreshTileStyle() {
-    if (usingFallbackTiles) return;
+    if (providerIndex !== 0) return;
     const url = primaryTileUrl();
     if (tileLayer._url !== url) {
       map.removeLayer(tileLayer);
-      tileLayer = makeTileLayer(url).addTo(map);
+      tileLayer = makeTileLayer(currentProvider()).addTo(map);
       startTileHealthCheck();
     }
   }
