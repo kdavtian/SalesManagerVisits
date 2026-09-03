@@ -25,7 +25,8 @@ dashboardRouter.get("/summary", async (req, res) => {
        (SELECT count(*) FROM checkins ch
           WHERE ch.timestamp >= date_trunc('day', now()) AND ch.within_range = false ${userFilter}) AS rejected_today,
        (SELECT count(*) FROM customers c
-          WHERE NOT EXISTS (
+          WHERE COALESCE(c.sales_channel, '') <> ALL(ARRAY['KF','CAS','CVO','PCO'])
+          AND NOT EXISTS (
             SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= date_trunc('day', now())
           )
           AND (

@@ -10,6 +10,13 @@ customersRouter.use(requireAuth);
 
 const LAST_VISIT_SUBQUERY = `(SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id)`;
 
+// KF/CAS/CVO/PCO are channels Castrol serves through a route that doesn't
+// involve field visits (key accounts / distributor-managed), so these
+// customers never need to show up as "overdue" or "not visited" no matter
+// how long since their last check-in.
+const NO_VISIT_CHANNELS = ["KF", "CAS", "CVO", "PCO"];
+const NOT_NO_VISIT_CHANNEL_SQL = `COALESCE(c.sales_channel, '') <> ALL(ARRAY[${NO_VISIT_CHANNELS.map((v) => `'${v}'`).join(",")}])`;
+
 // Derived visit status — no assignment/planning data exists yet, so
 // "overdue" is approximated from each customer's own visit_frequency_days
 // against their actual last check-in, not a fabricated schedule.
@@ -18,7 +25,8 @@ const STATUS_COLUMNS = `
   EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= date_trunc('day', now())) AS visited_today,
   EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= now() - interval '7 days') AS visited_this_week,
   (
-    NOT EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= date_trunc('day', now()))
+    ${NOT_NO_VISIT_CHANNEL_SQL}
+    AND NOT EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= date_trunc('day', now()))
     AND (
       ${LAST_VISIT_SUBQUERY} IS NULL
       OR ${LAST_VISIT_SUBQUERY} < now() - (c.visit_frequency_days || ' days')::interval
@@ -50,10 +58,11 @@ customersRouter.get("/", async (req, res) => {
   if (visited === "visited") {
     conditions.push(`EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= now() - interval '7 days')`);
   } else if (visited === "not_visited") {
-    conditions.push(`NOT EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= now() - interval '7 days')`);
+    conditions.push(`${NOT_NO_VISIT_CHANNEL_SQL} AND NOT EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= now() - interval '7 days')`);
   } else if (visited === "overdue") {
     conditions.push(`(
-      NOT EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= date_trunc('day', now()))
+      ${NOT_NO_VISIT_CHANNEL_SQL}
+      AND NOT EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= date_trunc('day', now()))
       AND (
         ${LAST_VISIT_SUBQUERY} IS NULL
         OR ${LAST_VISIT_SUBQUERY} < now() - (c.visit_frequency_days || ' days')::interval

@@ -28,12 +28,15 @@ export async function checkOverdueReminders() {
     if (lastNotifiedDate.get(plan.user_id) === today) continue;
     if (!plan.customer_ids?.length) continue;
 
-    // Competitors are market-intelligence records, not required field visits.
-    // Filter them server-side too, so legacy plans cannot create false reminders.
+    // Competitors are market-intelligence records, not required field visits;
+    // KF/CAS/CVO/PCO customers are served through a channel that doesn't
+    // involve field visits at all. Filter both server-side too, so legacy
+    // plans cannot create false reminders.
     const { rows: eligibleRows } = await pool.query(
       `SELECT id FROM customers
        WHERE id = ANY($1)
-         AND COALESCE(customer_tier, 'potential') <> 'competitor'`,
+         AND COALESCE(customer_tier, 'potential') <> 'competitor'
+         AND COALESCE(sales_channel, '') <> ALL(ARRAY['KF','CAS','CVO','PCO'])`,
       [plan.customer_ids]
     );
     const eligibleIds = eligibleRows.map((row) => row.id);

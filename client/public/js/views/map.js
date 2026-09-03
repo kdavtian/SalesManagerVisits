@@ -70,6 +70,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
                 }
               </div>
               <p class="map-search-no-results" id="map-search-no-results" hidden>${t("map_search_no_results")}</p>
+              <div class="customer-filter-row" id="map-icon-filter-row"></div>
               <div class="map-filter-row">
                 <button class="map-filter-chip chip-active" data-filter="" aria-pressed="true"><span class="map-filter-chip-icon">${icons.filter}</span>${t("filter_all")}</button>
                 <button class="map-filter-chip" data-filter="overdue" aria-pressed="false"><span class="map-filter-chip-icon">${icons.mapWarning}</span>${t("filter_overdue")}</button>
@@ -410,7 +411,96 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   let managerFilter = "";
   let searchQuery = "";
   let selectedBrand = "";
+  let channelFilter = "";
+  let categoryFilter = "";
   let brandStatusByCustomer = null;
+
+  // Same 44px icon-button + bottom-sheet pattern as the Customers tab's own
+  // filter row (openFilterSheet there is identical) -- duplicated here
+  // rather than imported since it's a private closure over that view's own
+  // state, not an exported helper.
+  function openMapFilterSheet(titleText, options, currentValue, onSelect) {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet filter-sheet">
+        <h2>${escapeHtml(titleText)}</h2>
+        <div class="filter-sheet-options">
+          ${options
+            .map(
+              (o) => `
+            <button type="button" class="filter-sheet-option ${o.value === currentValue ? "filter-sheet-option-selected" : ""}" data-value="${escapeHtml(o.value)}">
+              <span>${escapeHtml(o.label)}</span>
+              ${o.value === currentValue ? `<span class="filter-sheet-check">${icons.checkCircle}</span>` : ""}
+            </button>
+          `
+            )
+            .join("")}
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+    overlay.querySelectorAll(".filter-sheet-option").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        onSelect(btn.dataset.value);
+        overlay.remove();
+      });
+    });
+  }
+
+  function mapFilterIconButton({ key, icon, label, active }) {
+    return `<button type="button" class="filter-icon-btn ${active ? "filter-icon-btn-active" : ""}" data-map-filter-btn="${key}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">
+      ${icon}
+      ${active ? `<span class="filter-icon-dot" aria-hidden="true"></span>` : ""}
+    </button>`;
+  }
+
+  const iconFilterRow = root.querySelector("#map-icon-filter-row");
+
+  function renderIconFilterRow() {
+    if (!iconFilterRow) return;
+    const channels = [...new Set(lastCustomers.map(({ c }) => c.sales_channel).filter(Boolean))].sort();
+    const categories = [...new Set(lastCustomers.map(({ c }) => c.category).filter(Boolean))];
+
+    iconFilterRow.innerHTML = [
+      channels.length
+        ? mapFilterIconButton({ key: "channel", icon: icons.route, label: t("filter_direction_title"), active: channelFilter !== "" })
+        : "",
+      categories.length
+        ? mapFilterIconButton({ key: "category", icon: icons.store, label: t("category"), active: categoryFilter !== "" })
+        : "",
+    ]
+      .filter(Boolean)
+      .join("");
+
+    iconFilterRow.querySelector('[data-map-filter-btn="channel"]')?.addEventListener("click", () => {
+      openMapFilterSheet(
+        t("filter_direction_title"),
+        [{ value: "", label: t("all_channels") }, ...channels.map((c) => ({ value: c, label: c }))],
+        channelFilter,
+        (value) => {
+          channelFilter = value;
+          renderIconFilterRow();
+          applyFilter();
+        }
+      );
+    });
+
+    iconFilterRow.querySelector('[data-map-filter-btn="category"]')?.addEventListener("click", () => {
+      openMapFilterSheet(
+        t("category"),
+        [{ value: "", label: t("all_categories") }, ...categories.map((v) => ({ value: v, label: categoryLabel(v) }))],
+        categoryFilter,
+        (value) => {
+          categoryFilter = value;
+          renderIconFilterRow();
+          applyFilter();
+        }
+      );
+    });
+  }
 
   // available/full_range -> green, unavailable -> red (or absent from the
   // competitors list -> unknown grey, since that list is presence-only --
@@ -600,6 +690,8 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       const status = customerStatus(c);
       if (c.customer_tier === "competitor" && !showCompetitors) continue;
       if (managerFilter && String(c.assigned_manager_id) !== managerFilter) continue;
+      if (channelFilter && c.sales_channel !== channelFilter) continue;
+      if (categoryFilter && c.category !== categoryFilter) continue;
       if (searchQuery) {
         const haystack = `${c.name} ${c.address ?? ""} ${c.category ?? ""} ${c.erp_customer_id ?? ""}`.toLowerCase();
         if (!haystack.includes(searchQuery)) continue;
@@ -969,6 +1061,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     }
 
     resolveCustomersReady();
+    renderIconFilterRow();
     applyFilter();
     refreshNearestCustomerBar();
 
@@ -1042,7 +1135,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     });
   }
 
-  async function refreshTeamLocations() {
+  async function refreshTeamLocations({ fitBounds = false } = {}) {
     let locations;
     try {
       locations = await api.getTeamLocations();
@@ -1056,6 +1149,19 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
           `<div class="map-popup"><strong>${escapeHtml(loc.name)}</strong><div class="popup-category">${escapeHtml(t(`role_${loc.role}`))} · ${formatRelative(loc.updated_at)}</div></div>`
         )
         .addTo(teamLayer);
+    }
+    // Only zoom to fit on the toggle-on load, not on every 15s poll refresh
+    // -- otherwise the map would yank the viewport out from under someone
+    // who's since panned/zoomed to look at a specific area.
+    if (fitBounds && locations.length) {
+      try {
+        map.fitBounds(
+          locations.map((loc) => [loc.lat, loc.lng]),
+          { padding: [50, 50], maxZoom: 15 }
+        );
+      } catch {
+        // See the rotate-plugin pane-timing note elsewhere in this file.
+      }
     }
     clearTimeout(teamEmptyHintTimer);
     if (teamBtn.classList.contains("map-control-active") && locations.length === 0) {
@@ -1074,7 +1180,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     const active = teamBtn.classList.toggle("map-control-active");
     if (active) {
       teamLayer.addTo(map);
-      refreshTeamLocations();
+      refreshTeamLocations({ fitBounds: true });
       teamPollId = setInterval(refreshTeamLocations, 15000);
     } else {
       map.removeLayer(teamLayer);

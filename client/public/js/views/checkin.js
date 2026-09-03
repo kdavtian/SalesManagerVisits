@@ -10,7 +10,7 @@ const OUTCOME_OPTIONS = [
   { value: "payment_collected", labelKey: "outcome_payment_collected", icon: icons.payment },
   { value: "follow_up_required", labelKey: "outcome_follow_up_required", icon: icons.clock },
   { value: "assortment_check", labelKey: "outcome_assortment_check", icon: icons.clipboardCheck },
-  { value: "customer_unavailable", labelKey: "outcome_customer_unavailable", icon: icons.door },
+  { value: "customer_unavailable", labelKey: "outcome_customer_unavailable", icon: icons.truck },
   { value: "complaint", labelKey: "outcome_complaint", icon: icons.warning },
   { value: "other", labelKey: "outcome_other", icon: icons.more },
 ];
