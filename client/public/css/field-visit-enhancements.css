@@ -1,0 +1,64 @@
+/* KAD Field Visits — focused polish for photo viewing and customer creation. */
+
+.photo-lightbox-img {
+  transition: transform 120ms ease;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.photo-lightbox-img-zoomed {
+  cursor: zoom-out;
+}
+
+.photo-zoom-controls {
+  position: absolute;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 4;
+  display: grid;
+  grid-template-columns: 48px 58px 48px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 16px;
+  background: rgba(20,20,22,.78);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  box-shadow: 0 8px 28px rgba(0,0,0,.28);
+}
+
+.photo-zoom-controls button {
+  min-width: 44px;
+  min-height: 46px;
+  padding: 0;
+  border: 0;
+  border-right: 1px solid rgba(255,255,255,.14);
+  background: transparent;
+  color: #fff;
+  font-size: 1.35rem;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.photo-zoom-controls button:nth-child(2) {
+  font-size: .8rem;
+  font-weight: 700;
+}
+
+.photo-zoom-controls button:last-child {
+  border-right: 0;
+}
+
+.photo-zoom-controls button:active {
+  background: rgba(255,255,255,.14);
+}
+
+#new-customer-form label[hidden] {
+  display: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .photo-lightbox-img { transition: none; }
+}
