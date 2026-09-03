@@ -1,7 +1,7 @@
 /* Safe map usability additions — CSS-only marker visibility, no DOM observer. */
 
 /* Competitors are intelligence-only, so they are hidden from the default map.
-   :has() is supported by the iOS versions targeted by this PWA. */
+   :has() is supported by the iOS/Android browser versions targeted by this PWA. */
 #leaflet-map .leaflet-marker-icon:has(.pin-tier-competitor) {
   display: none !important;
 }
@@ -23,6 +23,22 @@
 }
 .map-competitor-toggle.chip-active {
   border-style: solid !important;
+}
+
+/* Mobile raster quality/performance.
+   - Keep browser interpolation at its normal high-quality path.
+   - Promote the tile pane to its own compositor layer so pan/zoom remains
+     fluid on modern iOS Safari and Chromium without forcing blurry scaling.
+   - Avoid non-standard pixelated/crisp-edges modes. */
+#leaflet-map .leaflet-tile-pane {
+  will-change: transform;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+#leaflet-map .leaflet-tile {
+  image-rendering: auto;
+  -webkit-user-drag: none;
+  user-select: none;
 }
 
 /* Keep the single legal OSM attribution readable but visually quiet. */
