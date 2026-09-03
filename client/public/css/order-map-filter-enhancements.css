@@ -29,7 +29,7 @@
 .map-dimension-filter-inline {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 0;
   flex: 0 0 auto;
   width: auto;
   margin: 0;
@@ -37,19 +37,91 @@
   overflow: visible;
 }
 
-.map-dimension-filter-inline .map-dimension-filter-btn {
-  flex: 0 0 auto;
+.map-dimension-filter-inline .map-dimension-filter-btn,
+.map-search-combined #map-manager-filter-btn,
+.map-search-combined .map-primary-filter-wrap > .activity-search-filter-btn {
+  flex: 0 0 38px;
+  width: 38px;
+  min-width: 38px;
+  height: 44px;
+  border-radius: 10px;
+}
+
+.map-dimension-filter-inline .map-dimension-filter-btn svg,
+.map-search-combined #map-manager-filter-btn svg,
+.map-search-combined .map-primary-filter-wrap > .activity-search-filter-btn svg {
+  width: 22px;
+  height: 22px;
 }
 
 .map-search-combined .map-search-actions {
+  gap: 0;
+  align-items: center;
+}
+
+.map-search-combined .map-search-actions > * + * {
+  margin-left: 1px;
+}
+
+/* Channel/category reuse the Map's native filter sheet logic, but on Map it
+   is presented as the same compact anchored menu language as the status
+   filter rather than a bottom sheet. Business/filter state stays untouched. */
+.map-dimension-popover-overlay.sheet-overlay {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.map-dimension-popover-overlay .map-dimension-popover.filter-sheet {
+  position: fixed;
+  left: var(--map-popover-left);
+  top: var(--map-popover-top);
+  width: min(260px, calc(100vw - 24px));
+  max-height: min(380px, 55vh);
+  overflow-y: auto;
+  margin: 0;
+  padding: 7px;
+  border-radius: 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, .18);
+  transform: none;
+}
+
+.map-dimension-popover .filter-sheet-options {
   gap: 2px;
+}
+
+.map-dimension-popover > h2 {
+  display: none;
+}
+
+.map-dimension-popover .filter-sheet-option {
+  min-height: 44px;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  font-size: .88rem;
+  font-weight: 600;
+}
+
+.map-dimension-popover .filter-sheet-option:active {
+  background: var(--bg-card-pressed);
+}
+
+.map-dimension-popover .filter-sheet-option-selected {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
 }
 
 @media (max-width: 390px) {
   .map-search-combined .activity-search-filter-btn,
   .orders-search-combined .activity-search-filter-btn {
-    width: 40px;
-    min-width: 40px;
+    width: 36px;
+    min-width: 36px;
   }
 
   .map-dimension-filter-inline,
@@ -67,7 +139,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .order-status-count-badge,
-  .map-dimension-filter-inline .activity-search-filter-btn {
+  .map-dimension-filter-inline .activity-search-filter-btn,
+  .map-dimension-popover {
     transition: none;
   }
 }
