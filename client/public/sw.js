@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v49";
+const CACHE_VERSION = "field-visits-v50";
 const TILE_CACHE = "field-visits-tiles-v2";
 
 const APP_SHELL = [
@@ -40,6 +40,9 @@ const APP_SHELL = [
   "/vendor/leaflet/leaflet.js",
   "/vendor/leaflet/leaflet.css",
   "/vendor/leaflet-rotate/leaflet-rotate.js",
+  "/vendor/leaflet-markercluster/leaflet.markercluster.js",
+  "/vendor/leaflet-markercluster/MarkerCluster.css",
+  "/vendor/leaflet-markercluster/MarkerCluster.Default.css",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/apple-touch-icon.png",

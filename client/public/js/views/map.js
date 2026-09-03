@@ -69,6 +69,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
                     : ""
                 }
               </div>
+              <p class="map-search-no-results" id="map-search-no-results" hidden>${t("map_search_no_results")}</p>
               <div class="map-filter-row">
                 <button class="map-filter-chip chip-active" data-filter="" aria-pressed="true"><span class="map-filter-chip-icon">${icons.filter}</span>${t("filter_all")}</button>
                 <button class="map-filter-chip" data-filter="overdue" aria-pressed="false"><span class="map-filter-chip-icon">${icons.mapWarning}</span>${t("filter_overdue")}</button>
@@ -346,6 +347,28 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   }
   let placingMarker = null;
   const markerLayer = L.layerGroup().addTo(map);
+  // Customer pins specifically (not plan-day stop numbers, not team member
+  // dots) get clustered -- a real customer base packed into a district
+  // renders as dozens of overlapping 22px pins otherwise, which is
+  // unreadable and near-impossible to tap accurately. Clustering collapses
+  // that into a count badge that splits apart as you zoom in; pins already
+  // spread out (a rural territory, or once you're zoomed to street level)
+  // render exactly as before since there's nothing to cluster.
+  const customerClusterGroup = L.markerClusterGroup({
+    maxClusterRadius: 60,
+    disableClusteringAtZoom: 17,
+    spiderfyOnMaxZoom: true,
+    showCoverageOnHover: false,
+    iconCreateFunction(cluster) {
+      const count = cluster.getChildCount();
+      const size = count < 10 ? 32 : count < 50 ? 38 : 44;
+      return L.divIcon({
+        html: `<div class="pin-cluster" style="width:${size}px;height:${size}px;line-height:${size}px;">${count}</div>`,
+        className: "",
+        iconSize: [size, size],
+      });
+    },
+  }).addTo(map);
 
   // A plain solid teardrop with nothing inside read as "blank"/broken once
   // dropped -- an X glyph makes it obvious this pin is just a pending
@@ -562,14 +585,17 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
 
   function applyFilter() {
     markerLayer.clearLayers();
+    customerClusterGroup.clearLayers();
     const bounds = [];
+    let searchMatchCount = 0;
     for (const { c, marker } of lastCustomers) {
       const status = customerStatus(c);
       if (managerFilter && String(c.assigned_manager_id) !== managerFilter) continue;
       if (searchQuery) {
-        const haystack = `${c.name} ${c.address ?? ""} ${c.category ?? ""}`.toLowerCase();
+        const haystack = `${c.name} ${c.address ?? ""} ${c.category ?? ""} ${c.erp_customer_id ?? ""}`.toLowerCase();
         if (!haystack.includes(searchQuery)) continue;
       }
+      searchMatchCount += 1;
       if (activeFilter === "brands") {
         marker.setIcon(selectedBrand ? brandAvailabilityIcon(c) : customerIcon(c, status));
       } else if (activeFilter === "nearby") {
@@ -587,9 +613,10 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         }
         marker.setIcon(customerIcon(c, status));
       }
-      marker.addTo(markerLayer);
+      marker.addTo(customerClusterGroup);
       bounds.push([c.lat, c.lng]);
     }
+    if (searchNoResults) searchNoResults.hidden = !(searchQuery && searchMatchCount === 0);
     if (activeFilter === "planned") {
       renderStopListPanel();
       if (plannedCustomerIds?.length) {
@@ -818,6 +845,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   }
 
   const mapSearchInput = root.querySelector("#map-customer-search");
+  const searchNoResults = root.querySelector("#map-search-no-results");
   mapSearchInput?.addEventListener("input", () => {
     searchQuery = mapSearchInput.value.trim().toLowerCase();
     applyFilter();
@@ -871,6 +899,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   async function loadCustomers() {
     const customers = await api.listCustomers();
     markerLayer.clearLayers();
+    customerClusterGroup.clearLayers();
     lastCustomers = [];
 
     const bounds = [];

@@ -3916,6 +3916,35 @@ input[type="search"]:focus {
   -webkit-mask-image: linear-gradient(to right, black calc(100% - 20px), transparent 100%);
 }
 
+.map-search-no-results {
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-elevated);
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+/* Cluster badge for grouped customer pins -- circular, accent-colored to
+   match the app's own palette instead of the plugin's default green/
+   yellow/orange scale, since a cluster of 40 potential customers isn't
+   more "alarming" than a cluster of 5. */
+.pin-cluster {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.8rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  border: 2px solid var(--bg-card);
+}
+
 /* Brand-availability mode: a small colored dot replaces the tier pin
    entirely while active, so distribution reads at a glance across a whole
    district instead of competing with tier shape/color. */
