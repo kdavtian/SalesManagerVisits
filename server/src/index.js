@@ -78,7 +78,6 @@ app.use("/api/auth", express.json(), authRouter);
 app.use("/api/me", express.json(), meRouter);
 app.use("/api/users", express.json(), usersRouter);
 app.post("/api/customers", express.json(), requireAuth, autoAssignSalesChannel, normalizeCustomerPortfolio);
-app.patch("/api/customers/:id", express.json(), requireAuth, normalizeCustomerPortfolio);
 app.use("/api/customers", express.json(), customersRouter);
 app.use("/api/customer-social", express.json(), customerSocialRouter);
 app.use("/api/checkins", checkinsRouter);
