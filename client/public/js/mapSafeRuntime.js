@@ -1,14 +1,14 @@
 // Safe, bounded Leaflet runtime improvements for Field Visits.
 // Important: no MutationObserver, no global fetch interception, and no DOM scans.
-// This only adjusts the map instance at creation time and the tile provider.
+// This module only handles safe viewport persistence/restoration. Tile-provider
+// selection stays inside views/map.js, where CARTO Voyager/Dark Matter are the
+// primary styles and OSM/Wikimedia remain independent fallbacks.
 (function () {
   if (!window.L || window.__kadSafeMapRuntimeInstalled) return;
   window.__kadSafeMapRuntimeInstalled = true;
 
   const STORAGE_KEY = "kad.fieldVisits.mapView.v2";
   const FALLBACK_VIEW = { lat: 40.1872, lng: 44.5152, zoom: 15, bearing: 0 };
-  const OSM_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-  const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
   function readView() {
     try {
@@ -17,7 +17,7 @@
       return {
         lat: parsed.lat,
         lng: parsed.lng,
-        zoom: Math.max(11, Math.min(20, parsed.zoom)),
+        zoom: Math.max(11, Math.min(19, parsed.zoom)),
         bearing: Number.isFinite(parsed.bearing) ? parsed.bearing : 0,
       };
     } catch {
@@ -36,28 +36,6 @@
       // View memory is a convenience only; storage failure must never affect Map.
     }
   }
-
-  // Use standard OpenStreetMap raster tiles directly. On Retina/high-DPI
-  // iPhones Leaflet otherwise stretches 256px tiles across twice as many
-  // physical pixels, which makes roads and labels look soft. detectRetina
-  // requests one zoom level sharper and scales it correctly on-device.
-  const nativeTileLayer = window.L.tileLayer.bind(window.L);
-  window.L.tileLayer = function safeTileLayer(url, options = {}) {
-    const isCarto = typeof url === "string" && url.includes("basemaps.cartocdn.com");
-    if (!isCarto) return nativeTileLayer(url, options);
-    return nativeTileLayer(OSM_URL, {
-      ...options,
-      subdomains: "",
-      attribution: OSM_ATTRIBUTION,
-      detectRetina: true,
-      maxNativeZoom: 19,
-      maxZoom: 20,
-      updateWhenIdle: true,
-      updateWhenZooming: false,
-      keepBuffer: 3,
-      crossOrigin: true,
-    });
-  };
 
   const nativeMapFactory = window.L.map.bind(window.L);
   window.L.map = function safeMapFactory(...args) {
@@ -99,8 +77,6 @@
         Number(zoom) === 15
       ) {
         suppressOneAutomaticGpsSetView = false;
-        // GPS succeeded, so map.js will not fall back to fitBounds. Do not
-        // accidentally suppress the user's first real filter-driven fit.
         suppressOneAutomaticFit = false;
         return map;
       }
