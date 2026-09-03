@@ -1,0 +1,255 @@
+/* Shared mobile search/filter language across Activity, Orders, Customers and Map. */
+
+.activity-search-combined input[type="search"]::-webkit-search-cancel-button,
+.customers-search-combined input[type="search"]::-webkit-search-cancel-button,
+.map-search-combined input[type="search"]::-webkit-search-cancel-button,
+.orders-search-combined input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  display: none;
+}
+
+.unified-search-clear {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: background 120ms ease, color 120ms ease, transform 90ms ease;
+}
+
+.unified-search-clear[hidden] { display: none; }
+.unified-search-clear:active {
+  transform: scale(.91);
+  background: var(--bg-card-pressed);
+  color: var(--text);
+}
+.unified-search-clear:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.unified-search-clear svg { width: 18px; height: 18px; display: block; }
+
+/* ----- Customers ------------------------------------------------------- */
+.customers-search-combined {
+  position: relative;
+  overflow: visible;
+}
+
+.customers-search-actions {
+  gap: 1px;
+}
+
+.customer-filter-inline {
+  display: contents;
+}
+
+.unified-customer-filter-btn {
+  flex: 0 0 auto;
+}
+
+.customers-search-menu {
+  right: 0;
+}
+
+.customer-map-add-action {
+  width: 50px !important;
+  height: 50px !important;
+  min-width: 50px;
+  padding: 0 !important;
+  border-radius: 16px !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent) !important;
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-card)) !important;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border)) !important;
+  box-shadow: var(--shadow-subtle);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.customer-map-add-action:active {
+  transform: scale(.95);
+  background: color-mix(in srgb, var(--accent) 13%, var(--bg-card)) !important;
+}
+
+.customer-map-add-action svg {
+  width: 27px !important;
+  height: 27px !important;
+}
+
+/* ----- Orders ---------------------------------------------------------- */
+.orders-view-unified .list-header-row.list-header.unified-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 16px 18px;
+  padding: 0;
+  min-height: 54px;
+}
+
+.orders-view-unified .list-header-row.list-header.unified-list-header h1 {
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 2rem;
+  line-height: 1.08;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  color: var(--text);
+}
+
+.orders-new-action {
+  width: 50px !important;
+  height: 50px !important;
+  min-width: 50px;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card) !important;
+  color: var(--text) !important;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border)) !important;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .08);
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 90ms ease, background 120ms ease, box-shadow 120ms ease;
+}
+
+.orders-new-action:active {
+  transform: scale(.94);
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-card)) !important;
+  box-shadow: 0 2px 7px rgba(15, 23, 42, .08);
+}
+.orders-new-action svg { width: 28px; height: 28px; }
+
+/* ----- Map ------------------------------------------------------------- */
+.map-search-combined {
+  margin: 0 !important;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-shadow: 0 5px 18px rgba(15, 23, 42, .11);
+  background: color-mix(in srgb, var(--bg-card) 96%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.map-search-actions {
+  gap: 1px;
+}
+
+.map-manager-icon-wrap {
+  position: relative;
+}
+
+.map-manager-icon-wrap .activity-search-menu,
+.map-primary-filter-wrap .activity-search-menu {
+  right: 0;
+}
+
+.map-search-filter-menu {
+  min-width: 232px !important;
+  max-height: min(390px, 58vh) !important;
+}
+
+.map-search-filter-menu:not([hidden]) {
+  display: block !important;
+}
+
+.map-search-filter-menu.unified-map-menu-option,
+.map-search-filter-menu .unified-map-menu-option {
+  width: 100%;
+}
+
+.map-search-filter-menu .map-filter-chip.unified-map-menu-option {
+  min-height: 46px;
+  height: auto;
+  margin: 0;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  font-size: .88rem;
+  font-weight: 600;
+  white-space: normal;
+  text-align: left;
+}
+
+.map-search-filter-menu .map-filter-chip.unified-map-menu-option:active {
+  background: var(--bg-card-pressed);
+}
+
+.map-search-filter-menu .map-filter-chip.unified-map-menu-option.chip-active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.map-search-filter-menu .map-filter-chip-icon {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.map-search-filter-menu .map-filter-chip-icon svg { width: 21px; height: 21px; }
+.map-search-filter-menu .activity-menu-check { margin-left: auto; }
+
+/* The primary chip row lives in the popup now; brand-specific choices are
+   intentionally still rendered below the search field only after Brands is
+   selected, because those are the second level of that filter. */
+.map-top-controls > .map-filter-row:not(#brand-picker-row) {
+  margin: 0;
+}
+
+/* Keep all search action bars visually balanced even when the clear X appears. */
+@media (max-width: 430px) {
+  .customers-search-actions .activity-search-filter-btn,
+  .map-search-actions .activity-search-filter-btn {
+    width: 38px;
+  }
+
+  .customers-search-combined .unified-search-clear,
+  .map-search-combined .unified-search-clear,
+  .orders-search-combined .unified-search-clear,
+  .activity-search-combined .unified-search-clear {
+    width: 32px;
+  }
+}
+
+@media (max-width: 380px) {
+  .customers-search-actions .activity-search-filter-btn {
+    width: 35px;
+  }
+  .customers-search-combined input[type="search"] {
+    min-width: 64px;
+  }
+  .orders-view-unified .list-header-row.list-header.unified-list-header {
+    margin-left: 12px;
+    margin-right: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .unified-search-clear,
+  .orders-new-action,
+  .customer-map-add-action {
+    transition: none;
+  }
+}
