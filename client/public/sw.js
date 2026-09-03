@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v61";
+const CACHE_VERSION = "field-visits-v62";
 const TILE_CACHE = "field-visits-tiles-v4";
 
 const APP_SHELL = [
@@ -11,6 +11,7 @@ const APP_SHELL = [
   "/css/orders-search-filters.css",
   "/css/unified-search.css",
   "/css/field-visit-enhancements.css",
+  "/css/customer-social.css",
   "/css/map-marker-system.css",
   "/css/map-safe-enhancements.css",
   "/js/api.js",
@@ -19,6 +20,7 @@ const APP_SHELL = [
   "/js/ordersSearchEnhancements.js",
   "/js/unifiedSearchEnhancements.js",
   "/js/fieldVisitEnhancements.js",
+  "/js/customerSocialProfiles.js",
   "/js/mapMarkerEnhancements.js",
   "/js/oilPointIconEnhancements.js",
   "/js/mapSafeRuntime.js",
@@ -137,15 +139,10 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Cross-origin OSM/Wikimedia map tiles are intentionally left to the
-  // browser. Re-fetching them from the service worker would apply connect-src
-  // CSP instead of img-src and can break tiles in the installed iOS PWA.
   if (url.origin !== self.location.origin) return;
 
   if (request.mode === "navigate") {
-    event.respondWith(
-      fetch(request).catch(() => caches.match("/index.html"))
-    );
+    event.respondWith(fetch(request).catch(() => caches.match("/index.html")));
     return;
   }
 
