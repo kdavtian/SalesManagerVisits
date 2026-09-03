@@ -92,6 +92,9 @@
         Number(zoom) === 15
       ) {
         suppressOneAutomaticGpsSetView = false;
+        // GPS succeeded, so map.js will not fall back to fitBounds. Do not
+        // accidentally suppress the user's first real filter-driven fit.
+        suppressOneAutomaticFit = false;
         return map;
       }
       suppressOneAutomaticGpsSetView = false;
