@@ -60,7 +60,17 @@ app.use(
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "blob:", "https://*.basemaps.cartocdn.com", "https://*.tile.openstreetmap.org", "https://maps.wikimedia.org"],
-        connectSrc: ["'self'"],
+        // The service worker's stale-while-revalidate tile cache calls
+        // fetch() on cartocdn.com tile requests it intercepts -- a fetch()
+        // from inside a service worker is governed by connect-src, not
+        // img-src, even though the request originated as a plain <img>
+        // load. Without this, every cartocdn tile the SW's cache didn't
+        // already have silently failed CSP inside the SW (never visible as
+        // a normal img-src violation) and the map never rendered a single
+        // tile the first time a device loaded it -- see sw.js's fetch
+        // handler for the matching fix on the OSM/Wikimedia fallbacks
+        // (bypassed entirely instead, since they don't need SW caching).
+        connectSrc: ["'self'", "https://*.basemaps.cartocdn.com"],
         fontSrc: ["'self'"],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],

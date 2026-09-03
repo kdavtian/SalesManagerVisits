@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v46";
+const CACHE_VERSION = "field-visits-v47";
 const TILE_CACHE = "field-visits-tiles-v2";
 
 const APP_SHELL = [
@@ -125,6 +125,19 @@ self.addEventListener("fetch", (event) => {
     );
     return;
   }
+
+  // Any other cross-origin request (the OSM/Wikimedia map-tile fallbacks,
+  // in practice) -- deliberately NOT intercepted. A fetch() issued from
+  // inside a service worker is governed by the page's connect-src CSP
+  // directive, not img-src, even though the request started life as a
+  // plain <img> load; connect-src is locked to 'self' here, so re-issuing
+  // it through fetch() silently failed the CSP check and broke every tile
+  // from a provider not explicitly cached above (root cause of tiles
+  // failing to load only inside the installed app, never in a plain
+  // Safari tab with no active service worker). Returning here lets the
+  // browser handle the request itself, uncontrolled, where it's correctly
+  // governed by img-src instead.
+  if (url.origin !== self.location.origin) return;
 
   if (request.mode === "navigate") {
     event.respondWith(
