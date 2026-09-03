@@ -1,0 +1,73 @@
+/* Orders: keep both dimension filters inside the same compact search action rail. */
+.orders-region-filter-wrap {
+  flex: 0 0 auto;
+}
+
+.orders-region-filter-menu {
+  right: 0;
+  min-width: 220px;
+}
+
+.order-status-count-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 750;
+  margin-left: 2px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  color: currentColor;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Map: manager -> channel -> category -> status, all in one search bar. */
+.map-dimension-filter-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+}
+
+.map-dimension-filter-inline .map-dimension-filter-btn {
+  flex: 0 0 auto;
+}
+
+.map-search-combined .map-search-actions {
+  gap: 2px;
+}
+
+@media (max-width: 390px) {
+  .map-search-combined .activity-search-filter-btn,
+  .orders-search-combined .activity-search-filter-btn {
+    width: 40px;
+    min-width: 40px;
+  }
+
+  .map-dimension-filter-inline,
+  .map-search-combined .map-search-actions {
+    gap: 0;
+  }
+
+  .order-status-count-badge {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    font-size: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .order-status-count-badge,
+  .map-dimension-filter-inline .activity-search-filter-btn {
+    transition: none;
+  }
+}
