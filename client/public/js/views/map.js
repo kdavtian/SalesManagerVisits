@@ -1674,6 +1674,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         } else {
           await api.createEditRequest(relocateCustomerId, changes);
         }
+        overlay.remove();
         navigate(`#/customers/${relocateCustomerId}`);
       } catch (err) {
         errorEl.textContent = err.message;
