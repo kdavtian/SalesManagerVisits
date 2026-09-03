@@ -4733,6 +4733,43 @@ input[type="search"]:focus {
   gap: 8px;
 }
 
+.activity-row-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.activity-row-title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A real <button> so it's its own tap target within the row (which is
+   itself not a <button>, since a <button> can't contain another
+   interactive control) -- tapping it jumps to the customer's own card
+   instead of opening this visit's details like the rest of the row does. */
+.activity-customer-icon-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--bg-inset, var(--bg-card));
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.activity-customer-icon-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
 .activity-row-trailing {
   font-size: 0.78rem;
   flex-shrink: 0;

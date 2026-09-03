@@ -160,13 +160,37 @@ async function refreshNotificationBadge() {
   applyNotificationBadge();
 }
 
+// Tracks whether this SPA session has done at least one in-app navigation
+// (as opposed to just rendering whatever hash the app happened to boot
+// into, e.g. a deep link or a notification tap straight into a detail
+// page). Lets a "back" button distinguish "there's a real previous screen
+// in this tab's history I can return to" from "there isn't, so jump to a
+// sensible default instead" -- see navigate.goBack below.
+let hasNavigatedInApp = false;
+
 function navigate(hash) {
   if (location.hash === hash) {
     render();
   } else {
+    hasNavigatedInApp = true;
     location.hash = hash;
   }
 }
+
+// A detail-style page's back button should return wherever the user
+// actually came from (Activity, Map, Dashboard, a filtered Customers list,
+// ...), not always the same hardcoded parent route -- that only happens to
+// be right if the user always arrives the same way, which they don't.
+// Falls back to fallbackHash only when there's genuinely nothing in this
+// session's history to go back to (e.g. the detail page was the very first
+// thing this tab loaded, from a deep link or a push notification).
+navigate.goBack = (fallbackHash) => {
+  if (hasNavigatedInApp) {
+    history.back();
+  } else {
+    navigate(fallbackHash);
+  }
+};
 
 async function doLogout() {
   await api.logout();

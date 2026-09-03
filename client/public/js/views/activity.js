@@ -1,7 +1,8 @@
 import { api } from "../api.js";
-import { escapeHtml, formatDistance, formatAmd } from "../util.js";
+import { escapeHtml, formatDistance, formatAmd, categoryIcon } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { seesAllActivity } from "../state.js";
+import { openVisitDetailSheet } from "../visitDetail.js";
 
 const OUTCOMES = [
   "order_placed",
@@ -326,11 +327,16 @@ export async function renderActivity(root, navigate) {
           managerHeading = `<div class="activity-manager-group-heading">${escapeHtml(c.user_name)}</div>`;
         }
         return `${managerHeading}
-        <button class="card activity-row-rich" data-customer-id="${c.customer_id}">
+        <div class="card activity-row-rich" tabindex="0" role="button" data-checkin-id="${c.id}">
           <span class="activity-status-icon ${meta.cls}">${STATUS_ICON[status]}</span>
           <div class="activity-row-body">
             <div class="activity-row-top">
-              <strong>${escapeHtml(c.customer_name)}</strong>
+              <span class="activity-row-title">
+                <button type="button" class="activity-customer-icon-btn" data-customer-id="${c.customer_id}" aria-label="${escapeHtml(c.customer_name)}" title="${escapeHtml(c.customer_name)}">
+                  ${categoryIcon(c.customer_category)}
+                </button>
+                <strong>${escapeHtml(c.customer_name)}</strong>
+              </span>
               <span class="activity-row-trailing ${status === "rejected" ? "activity-distance-danger" : "muted"}">${distanceLabel}</span>
             </div>
             <div class="muted activity-row-meta">${escapeHtml(c.user_name)} · ${formatActivityDate(c.timestamp)}</div>
@@ -341,12 +347,35 @@ export async function renderActivity(root, navigate) {
             </div>
           </div>
           <span class="chevron">&#8250;</span>
-        </button>`;
+        </div>`;
       })
       .join("");
 
+    // Tapping the row opens this visit's own details (what actually
+    // happened at that stop); tapping the customer icon specifically -- not
+    // the name/rest of the row -- jumps to that customer's card instead.
+    // The icon is a real <button> nested in a non-button row (a <button>
+    // can't contain another interactive control), so its own click is
+    // stopped from bubbling up to the row's handler.
     listEl.querySelectorAll(".activity-row-rich").forEach((el) => {
-      el.addEventListener("click", () => navigate(`#/customers/${el.dataset.customerId}`));
+      const openDetails = () => {
+        const checkin = visible.find((c) => String(c.id) === el.dataset.checkinId);
+        if (checkin) openVisitDetailSheet(checkin, load);
+      };
+      el.addEventListener("click", openDetails);
+      el.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openDetails();
+        }
+      });
+    });
+
+    listEl.querySelectorAll(".activity-customer-icon-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        navigate(`#/customers/${btn.dataset.customerId}`);
+      });
     });
 
     loadMoreBtn.hidden = visibleCount >= filtered.length;
