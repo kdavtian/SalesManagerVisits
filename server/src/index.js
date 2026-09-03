@@ -74,10 +74,10 @@ app.use(cookieParser());
 app.use("/api/auth", express.json(), authRouter);
 app.use("/api/me", express.json(), meRouter);
 app.use("/api/users", express.json(), usersRouter);
-// Authenticate once before the customer router so the sales-channel autofill
-// can safely resolve the logged-in manager. customersRouter still keeps its
-// own requireAuth guard as a defense-in-depth route-level boundary.
-app.use("/api/customers", express.json(), requireAuth, autoAssignSalesChannel, customersRouter);
+// Only customer creation needs the extra pre-router authorization/context
+// for channel autofill. Customer reads keep their original single auth pass.
+app.post("/api/customers", express.json(), requireAuth, autoAssignSalesChannel);
+app.use("/api/customers", express.json(), customersRouter);
 app.use("/api/checkins", checkinsRouter);
 app.use("/api/dashboard", express.json(), dashboardRouter);
 app.use("/api/settings", express.json(), settingsRouter);
