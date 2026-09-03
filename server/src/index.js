@@ -8,6 +8,7 @@ import cookieParser from "cookie-parser";
 import { authRouter, meRouter } from "./routes/auth.js";
 import { usersRouter } from "./routes/users.js";
 import { customersRouter } from "./routes/customers.js";
+import { customerSocialRouter } from "./routes/customerSocial.js";
 import { checkinsRouter } from "./routes/checkins.js";
 import { dashboardRouter } from "./routes/dashboard.js";
 import { settingsRouter } from "./routes/settings.js";
@@ -60,16 +61,6 @@ app.use(
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "blob:", "https://*.basemaps.cartocdn.com", "https://*.tile.openstreetmap.org", "https://maps.wikimedia.org"],
-        // The service worker's stale-while-revalidate tile cache calls
-        // fetch() on cartocdn.com tile requests it intercepts -- a fetch()
-        // from inside a service worker is governed by connect-src, not
-        // img-src, even though the request originated as a plain <img>
-        // load. Without this, every cartocdn tile the SW's cache didn't
-        // already have silently failed CSP inside the SW (never visible as
-        // a normal img-src violation) and the map never rendered a single
-        // tile the first time a device loaded it -- see sw.js's fetch
-        // handler for the matching fix on the OSM/Wikimedia fallbacks
-        // (bypassed entirely instead, since they don't need SW caching).
         connectSrc: ["'self'", "https://*.basemaps.cartocdn.com"],
         fontSrc: ["'self'"],
         objectSrc: ["'none'"],
@@ -84,10 +75,9 @@ app.use(cookieParser());
 app.use("/api/auth", express.json(), authRouter);
 app.use("/api/me", express.json(), meRouter);
 app.use("/api/users", express.json(), usersRouter);
-// Only customer creation needs the extra pre-router authorization/context
-// for channel autofill. Customer reads keep their original single auth pass.
 app.post("/api/customers", express.json(), requireAuth, autoAssignSalesChannel);
 app.use("/api/customers", express.json(), customersRouter);
+app.use("/api/customer-social", express.json(), customerSocialRouter);
 app.use("/api/checkins", checkinsRouter);
 app.use("/api/dashboard", express.json(), dashboardRouter);
 app.use("/api/settings", express.json(), settingsRouter);
