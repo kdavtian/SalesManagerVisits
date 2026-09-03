@@ -33,6 +33,7 @@ import { paymentsRouter } from "./routes/payments.js";
 import { startOverdueReminders } from "./overdueReminders.js";
 import { requireAuth } from "./middleware/auth.js";
 import { autoAssignSalesChannel } from "./salesChannelAutofill.js";
+import { normalizeCustomerPortfolio } from "./customerChannelPolicy.js";
 
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
   console.error(
@@ -76,7 +77,8 @@ app.use(cookieParser());
 app.use("/api/auth", express.json(), authRouter);
 app.use("/api/me", express.json(), meRouter);
 app.use("/api/users", express.json(), usersRouter);
-app.post("/api/customers", express.json(), requireAuth, autoAssignSalesChannel);
+app.post("/api/customers", express.json(), requireAuth, autoAssignSalesChannel, normalizeCustomerPortfolio);
+app.patch("/api/customers/:id", express.json(), requireAuth, normalizeCustomerPortfolio);
 app.use("/api/customers", express.json(), customersRouter);
 app.use("/api/customer-social", express.json(), customerSocialRouter);
 app.use("/api/checkins", checkinsRouter);
