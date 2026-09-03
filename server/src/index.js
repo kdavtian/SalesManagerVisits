@@ -29,6 +29,8 @@ import { cashExpensesRouter } from "./routes/cashExpenses.js";
 import { reportsRouter } from "./routes/reports.js";
 import { paymentsRouter } from "./routes/payments.js";
 import { startOverdueReminders } from "./overdueReminders.js";
+import { requireAuth } from "./middleware/auth.js";
+import { autoAssignSalesChannel } from "./salesChannelAutofill.js";
 
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
   console.error(
@@ -48,25 +50,10 @@ const clientDir = path.join(__dirname, "..", "..", "client", "public");
 
 const app = express();
 
-// Production runs behind a single reverse proxy (see deploy/docker-compose
-// setup -- the app container only binds 127.0.0.1:3000), which sets
-// X-Forwarded-For. Without this, express-rate-limit refuses to trust that
-// header (correctly, by default -- an untrusted client could otherwise
-// forge it to dodge rate limits) and throws on every rate-limited request.
-// Trusting exactly one hop matches the real topology without trusting the
-// whole chain.
 app.set("trust proxy", 1);
 
 app.use(
   helmet({
-    // Everything the app loads is same-origin except the Leaflet map
-    // tiles (basemaps.cartocdn.com, plus tile.openstreetmap.org as a
-    // fallback provider when CARTO is unreachable from the client's
-    // network -- see map.js's FALLBACK_TILE_URL) and OpenStreetMap/CARTO
-    // attribution links, plus inline style attributes the vanilla-JS views
-    // set directly (style-src stays permissive for that reason -- the
-    // inline <script> that used to need 'unsafe-inline' was moved to
-    // js/theme-init.js so script-src can stay locked to 'self').
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
@@ -87,18 +74,15 @@ app.use(cookieParser());
 app.use("/api/auth", express.json(), authRouter);
 app.use("/api/me", express.json(), meRouter);
 app.use("/api/users", express.json(), usersRouter);
+// Only customer creation needs the extra pre-router authorization/context
+// for channel autofill. Customer reads keep their original single auth pass.
+app.post("/api/customers", express.json(), requireAuth, autoAssignSalesChannel);
 app.use("/api/customers", express.json(), customersRouter);
 app.use("/api/checkins", checkinsRouter);
 app.use("/api/dashboard", express.json(), dashboardRouter);
 app.use("/api/settings", express.json(), settingsRouter);
 app.use("/api/edit-requests", express.json(), editRequestsRouter);
 app.use("/api/locations", express.json(), locationsRouter);
-// A real ERP extract (hundreds of customers with debt + recent orders, plus
-// full all-time order-line history for the "show all orders" drill-down)
-// can comfortably exceed express's 100kb default JSON body limit, so this
-// route gets a much higher one -- it's machine-authenticated (X-Sync-Key),
-// not user-facing, so a larger limit here doesn't widen the attack surface
-// the way it would on a route any logged-in user can hit.
 app.use("/api/erp-sync", express.json({ limit: "25mb" }), erpSyncRouter);
 app.use("/api/geocode", geocodeRouter);
 app.use("/api/visit-plans", express.json(), visitPlansRouter);
@@ -121,7 +105,6 @@ app.get("/api/health", (req, res) => {
 
 app.use(express.static(clientDir));
 
-// Non-error 404 for unmatched API routes, before falling back to the SPA shell.
 app.use("/api", (req, res) => {
   res.status(404).json({ error: "Not found" });
 });
@@ -132,10 +115,6 @@ app.get("*", (req, res) => {
 
 app.use((err, req, res, next) => {
   console.error(err);
-  // Known client-error cases (oversized body, malformed JSON) carry their
-  // own status via body-parser/http-errors conventions -- surface that
-  // instead of masking every error as a generic 500, which made a simple
-  // "payload too large" indistinguishable from a real server bug.
   const status = typeof err.status === "number" && err.status >= 400 && err.status < 500 ? err.status : 500;
   const message = status === 500 ? "Internal server error" : err.message || "Bad request";
   res.status(status).json({ error: message });
