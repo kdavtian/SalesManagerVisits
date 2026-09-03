@@ -28,16 +28,13 @@ const HY_REGION = {
   Shengavit: "Շենգավիթ",
 };
 
-function translatedRegion(value) {
-  return getLang() === "hy" ? HY_REGION[String(value).trim()] || value : value;
-}
-
 function localizeRegionControls(root = document) {
   if (getLang() !== "hy") return;
 
   root.querySelectorAll("select option").forEach((option) => {
     const key = option.value || option.textContent.trim();
-    if (HY_REGION[key]) option.textContent = HY_REGION[key];
+    const next = HY_REGION[key];
+    if (next && option.textContent !== next) option.textContent = next;
   });
 
   root.querySelectorAll(".filter-sheet-option span:first-child, .plan-area-row > span, .detail-fact > span:last-child").forEach((el) => {
@@ -48,7 +45,10 @@ function localizeRegionControls(root = document) {
       if (next) changed = true;
       return next || part;
     });
-    if (changed) el.textContent = localized.join(" · ");
+    if (changed) {
+      const nextText = localized.join(" · ");
+      if (el.textContent !== nextText) el.textContent = nextText;
+    }
   });
 }
 
@@ -118,7 +118,9 @@ function enhancePhotoLightbox(root = document) {
     scale = Math.min(5, Math.max(1, next));
     img.style.transform = `scale(${scale})`;
     img.classList.toggle("photo-lightbox-img-zoomed", scale > 1.01);
-    controls.querySelector('[data-photo-zoom="reset"]').textContent = scale === 1 ? "1×" : `${scale.toFixed(1)}×`;
+    const reset = controls.querySelector('[data-photo-zoom="reset"]');
+    const label = scale === 1 ? "1×" : `${scale.toFixed(1)}×`;
+    if (reset.textContent !== label) reset.textContent = label;
   }
 
   controls.addEventListener("click", (event) => {
@@ -168,8 +170,6 @@ function enhancePhotoLightbox(root = document) {
     { capture: true, passive: false }
   );
 
-  // When zoomed, a drag should not be interpreted by the existing gallery
-  // handler as a next/previous-photo swipe.
   overlay.addEventListener(
     "touchend",
     (event) => {
@@ -180,21 +180,21 @@ function enhancePhotoLightbox(root = document) {
   );
 
   overlay.addEventListener("wheel", (event) => {
-    if (!event.ctrlKey && Math.abs(event.deltaY) < 1) return;
     event.preventDefault();
     applyScale(scale + (event.deltaY < 0 ? 0.25 : -0.25));
   }, { passive: false });
 
-  const observer = new MutationObserver(() => applyScale(1));
-  observer.observe(img, { attributes: true, attributeFilter: ["src"] });
+  const imageObserver = new MutationObserver(() => applyScale(1));
+  imageObserver.observe(img, { attributes: true, attributeFilter: ["src"] });
   applyScale(1);
 }
 
 function updateDisplayedVersion(root = document) {
   root.querySelectorAll(".settings-row-value").forEach((el) => {
-    if (/\b1\.\d+\.\d+\b/.test(el.textContent)) {
-      el.textContent = el.textContent.replace(/\b1\.\d+\.\d+\b/, APP_VERSION);
-    }
+    const current = el.textContent;
+    if (!/\b1\.\d+\.\d+\b/.test(current)) return;
+    const next = current.replace(/\b1\.\d+\.\d+\b/, APP_VERSION);
+    if (next !== current) el.textContent = next;
   });
 }
 
@@ -213,7 +213,6 @@ function boot() {
         if (node.nodeType === Node.ELEMENT_NODE) enhanceAll(node);
       });
     }
-    enhanceAll();
   });
   observer.observe(document.body, { childList: true, subtree: true });
 }
