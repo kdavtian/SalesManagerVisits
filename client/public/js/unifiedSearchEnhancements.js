@@ -99,8 +99,6 @@ function enhanceOrders() {
   const header = view?.querySelector(".list-header-row");
   if (view && header) {
     view.classList.add("orders-view-unified");
-    // Reuse the exact header token used by Activity/Customers instead of a
-    // separate Orders-only title scale and vertical rhythm.
     header.classList.add("list-header", "unified-list-header");
   }
 
@@ -131,8 +129,9 @@ function syncCustomerFilterButtons(filterRow) {
     const active = button.classList.contains("filter-icon-btn-active") || button.classList.contains("activity-search-filter-btn-active");
     button.classList.remove("filter-icon-btn", "filter-icon-btn-active");
     button.classList.add("activity-search-filter-btn", "unified-customer-filter-btn");
-    if (active) button.classList.add("activity-search-filter-btn-active");
-    button.innerHTML = `${customerIconFor(button.dataset.filterBtn)}${active ? '<span class="activity-search-filter-dot" aria-hidden="true"></span>' : ""}`;
+    button.classList.toggle("activity-search-filter-btn-active", active);
+    const wanted = `${customerIconFor(button.dataset.filterBtn)}${active ? '<span class="activity-search-filter-dot" aria-hidden="true"></span>' : ""}`;
+    if (button.innerHTML !== wanted) button.innerHTML = wanted;
   });
 }
 
@@ -146,8 +145,6 @@ function enhanceCustomers() {
   if (add && !add.dataset.mapAddIcon) {
     add.dataset.mapAddIcon = "true";
     add.classList.add("customer-map-add-action");
-    // Exact same map-pin-plus glyph as the Map FAB: one visual meaning for
-    // "new customer" everywhere.
     add.innerHTML = icons.mapPinPlus;
   }
 
@@ -187,8 +184,11 @@ function enhanceCustomers() {
     if (filterRow) {
       filterRow.classList.add("customer-filter-inline");
       actions.insertBefore(filterRow, actions.querySelector(".customers-sort-wrap"));
+      // renderFilterRow replaces the row's direct children whenever a
+      // filter changes. Observe only that replacement; observing subtree
+      // mutations would also see our icon markup and create a feedback loop.
       const observer = new MutationObserver(() => syncCustomerFilterButtons(filterRow));
-      observer.observe(filterRow, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+      observer.observe(filterRow, { childList: true });
       syncCustomerFilterButtons(filterRow);
     }
   }
@@ -245,10 +245,6 @@ function enhanceMap() {
     syncManager();
   }
 
-  // Fold the long horizontal Map chip strip into one Activity-style filter
-  // button. Existing chip nodes/listeners are moved, not recreated, so all
-  // current Map business logic (nearby, plan, brands, status) remains the
-  // single source of truth.
   const filterRow = [...view.querySelectorAll(".map-filter-row")].find((el) => el.id !== "brand-picker-row");
   if (filterRow) {
     const wrap = document.createElement("div");
@@ -301,7 +297,10 @@ function enhanceMap() {
         syncMapFilter();
       }
     });
-    new MutationObserver(syncMapFilter).observe(filterRow, { subtree: true, attributes: true, attributeFilter: ["class", "aria-pressed"] });
+    // Existing Map logic writes aria-pressed when the active filter changes.
+    // Watch only that source-of-truth attribute so our own styling/classes do
+    // not recursively retrigger this observer.
+    new MutationObserver(syncMapFilter).observe(filterRow, { subtree: true, attributes: true, attributeFilter: ["aria-pressed"] });
     syncMapFilter();
   }
 
