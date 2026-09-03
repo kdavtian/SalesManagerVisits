@@ -1,0 +1,162 @@
+/* KAD Field Visits — semantic map marker system */
+:root {
+  --map-marker-blue: #1677f2;
+  --map-marker-dark: #27364a;
+  --map-tier-potential: #c7cdd4;
+  --map-tier-bronze: #a96d3b;
+  --map-tier-silver: #aab2bd;
+  --map-tier-gold: #d4a017;
+  --map-tier-competitor: #b42332;
+  --map-visited: #22a45d;
+  --map-overdue: #e33b43;
+}
+
+#leaflet-map .pin:not(.pin-stop):not(.pin-new) {
+  width: 30px;
+  height: 34px;
+  border-radius: 15px 15px 16px 16px;
+  transform: none;
+  background: #fff;
+  border: 3px solid var(--map-tier-potential);
+  box-shadow: 0 2px 7px rgba(17,19,24,.22), 0 0 0 1px rgba(255,255,255,.92);
+  color: var(--map-marker-dark);
+  position: relative;
+  isolation: isolate;
+  transition: transform .14s ease, box-shadow .14s ease;
+}
+
+#leaflet-map .pin:not(.pin-stop):not(.pin-new)::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: 9px;
+  height: 9px;
+  background: #fff;
+  border-right: 3px solid var(--map-tier-potential);
+  border-bottom: 3px solid var(--map-tier-potential);
+  transform: translateX(-50%) rotate(45deg);
+  border-radius: 0 0 2px 0;
+  z-index: -1;
+}
+
+#leaflet-map .pin-tier-potential,
+#leaflet-map .pin-tier-potential::before { border-color: var(--map-tier-potential) !important; }
+#leaflet-map .pin-tier-bronze,
+#leaflet-map .pin-tier-bronze::before { border-color: var(--map-tier-bronze) !important; }
+#leaflet-map .pin-tier-silver,
+#leaflet-map .pin-tier-silver::before { border-color: var(--map-tier-silver) !important; }
+#leaflet-map .pin-tier-gold,
+#leaflet-map .pin-tier-gold::before { border-color: var(--map-tier-gold) !important; }
+
+#leaflet-map .pin-tier-competitor {
+  border-color: var(--map-tier-competitor) !important;
+  border-style: dashed !important;
+  background: #fff;
+}
+#leaflet-map .pin-tier-competitor::before { border-color: var(--map-tier-competitor) !important; }
+
+#leaflet-map .pin-coin {
+  border-radius: 15px 15px 16px 16px;
+  transform: none;
+}
+
+#leaflet-map .pin-glyph,
+#leaflet-map .pin-glyph-flat {
+  position: absolute;
+  inset: 0;
+  transform: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--map-marker-dark);
+  z-index: 2;
+}
+
+#leaflet-map .pin-glyph svg,
+#leaflet-map .pin-glyph-flat svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2 !important;
+}
+
+#leaflet-map .pin-check {
+  position: absolute;
+  top: -7px;
+  right: -8px;
+  left: auto;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  transform: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--map-visited);
+  color: #fff;
+  border: 2px solid #fff;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 1px 3px rgba(17,19,24,.22);
+  z-index: 5;
+}
+
+#leaflet-map .pin-status-overdue {
+  box-shadow: 0 2px 7px rgba(17,19,24,.22), 0 0 0 1px rgba(255,255,255,.92) !important;
+}
+#leaflet-map .pin-status-overdue::after {
+  content: "!";
+  position: absolute;
+  top: -7px;
+  right: -8px;
+  width: 15px;
+  height: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--map-overdue);
+  color: #fff;
+  border: 2px solid #fff;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 1px 3px rgba(17,19,24,.22);
+  z-index: 5;
+}
+
+#leaflet-map .leaflet-marker-icon.kad-marker-selected .pin:not(.pin-stop):not(.pin-new) {
+  transform: scale(1.18);
+  box-shadow: 0 3px 10px rgba(17,19,24,.26), 0 0 0 4px rgba(22,119,242,.22);
+}
+
+/* Managers use a completely different round avatar language. */
+#leaflet-map .team-dot {
+  width: 30px;
+  height: 30px;
+  margin: -7px;
+  border-radius: 50%;
+  border: 3px solid var(--map-marker-blue);
+  background:
+    radial-gradient(circle at 77% 78%, var(--map-visited) 0 3px, #fff 3.5px 5px, transparent 5.5px),
+    radial-gradient(circle at 50% 36%, var(--map-marker-dark) 0 4px, transparent 4.5px),
+    radial-gradient(ellipse at 50% 70%, var(--map-marker-dark) 0 7px, transparent 7.5px),
+    #fff;
+  box-shadow: 0 2px 8px rgba(17,19,24,.26), 0 0 0 2px rgba(255,255,255,.92);
+}
+
+#leaflet-map .me-dot {
+  width: 16px;
+  height: 16px;
+  border: 3px solid #fff;
+  background: var(--map-marker-blue);
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(22,119,242,.22), 0 2px 5px rgba(17,19,24,.2);
+}
+
+#leaflet-map .pin-stop { box-shadow: 0 2px 6px rgba(17,19,24,.2); }
+
+@media (prefers-reduced-motion: reduce) {
+  #leaflet-map .pin:not(.pin-stop):not(.pin-new) { transition: none; }
+}
