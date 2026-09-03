@@ -588,8 +588,17 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     customerClusterGroup.clearLayers();
     const bounds = [];
     let searchMatchCount = 0;
+    // Competitors are hidden by default (see .map-competitor-toggle /
+    // map-safe-enhancements.css, which hides their individual pins via
+    // CSS). Clustering happens in JS before that CSS rule ever applies, so
+    // without this check a cluster badge would count competitors that are
+    // never actually visible once it splits apart -- leaving the number on
+    // the badge wrong. Reading the toggle's own class keeps this in sync
+    // without depending on anything from that module directly.
+    const showCompetitors = root.querySelector(".map-view")?.classList.contains("kad-show-competitors");
     for (const { c, marker } of lastCustomers) {
       const status = customerStatus(c);
+      if (c.customer_tier === "competitor" && !showCompetitors) continue;
       if (managerFilter && String(c.assigned_manager_id) !== managerFilter) continue;
       if (searchQuery) {
         const haystack = `${c.name} ${c.address ?? ""} ${c.category ?? ""} ${c.erp_customer_id ?? ""}`.toLowerCase();
@@ -849,6 +858,15 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   mapSearchInput?.addEventListener("input", () => {
     searchQuery = mapSearchInput.value.trim().toLowerCase();
     applyFilter();
+  });
+
+  // The competitor visibility toggle is mounted separately (see
+  // mapSafeUi.js) and is deliberately CSS-only/DOM-only with no direct call
+  // into this module. Re-clustering on its click (delegated, since the
+  // button doesn't exist yet at render time) keeps cluster badge counts
+  // honest -- see the showCompetitors check in applyFilter above.
+  root.addEventListener("click", (e) => {
+    if (e.target.closest(".map-competitor-toggle")) applyFilter();
   });
 
   // Manager filter -- director/ceo/admin only (canViewTeamLocations gate
