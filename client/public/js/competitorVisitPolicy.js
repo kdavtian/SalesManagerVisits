@@ -36,8 +36,6 @@
       .filter((customer) => {
         if (customer?.customer_tier !== "competitor") return true;
         const visitedFilter = url.searchParams.get("visited");
-        // Competitors do not belong in operational queues such as Overdue or
-        // Not visited because no recurring visit is required for them.
         return visitedFilter !== "overdue" && visitedFilter !== "not_visited";
       })
       .map((customer) =>
@@ -49,14 +47,24 @@
     return Array.isArray(payload) ? filtered : filtered[0] ?? null;
   }
 
-  function sanitizePlan(plan) {
-    if (!plan || !Array.isArray(plan.customer_ids) || !competitorIds.size) return plan;
-    return { ...plan, customer_ids: plan.customer_ids.filter((id) => !competitorIds.has(Number(id))) };
+  function sanitizePlanPayload(value) {
+    if (!value || !competitorIds.size) return value;
+    if (Array.isArray(value)) return value.map(sanitizePlanPayload);
+    if (typeof value !== "object") return value;
+
+    const next = { ...value };
+    if (Array.isArray(next.customer_ids)) {
+      next.customer_ids = next.customer_ids.filter((id) => !competitorIds.has(Number(id)));
+    }
+    if (Array.isArray(next.days)) next.days = next.days.map(sanitizePlanPayload);
+    return next;
   }
 
-  async function jsonResponse(response, payload) {
+  function jsonResponse(response, payload) {
     const headers = new Headers(response.headers);
     headers.set("content-type", "application/json; charset=utf-8");
+    headers.delete("content-length");
+    headers.delete("content-encoding");
     return new Response(JSON.stringify(payload), {
       status: response.status,
       statusText: response.statusText,
@@ -68,13 +76,11 @@
     const url = asUrl(input);
     let nextInit = init;
 
-    if (url && /\/api\/visit-plans(?:\/|$)/.test(url.pathname) && init?.body && competitorIds.size) {
+    if (url && url.pathname.startsWith("/api/visit-plans") && init?.body && competitorIds.size) {
       try {
         const body = JSON.parse(init.body);
-        if (Array.isArray(body.customer_ids)) {
-          body.customer_ids = body.customer_ids.filter((id) => !competitorIds.has(Number(id)));
-          nextInit = { ...init, body: JSON.stringify(body) };
-        }
+        const sanitized = sanitizePlanPayload(body);
+        nextInit = { ...init, body: JSON.stringify(sanitized) };
       } catch {
         // Non-JSON request body: leave untouched.
       }
@@ -83,14 +89,15 @@
     const response = await originalFetch(input, nextInit);
     if (!url || !response.ok) return response;
 
+    const method = (nextInit?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
     const isCustomers = /\/api\/customers(?:\/\d+)?$/.test(url.pathname);
-    const isVisitPlan = /\/api\/visit-plans(?:\/mine)?$/.test(url.pathname) && (nextInit?.method ?? "GET").toUpperCase() === "GET";
+    const isVisitPlan = url.pathname.startsWith("/api/visit-plans") && method === "GET";
     if (!isCustomers && !isVisitPlan) return response;
 
     try {
       const payload = await response.clone().json();
       if (isCustomers) return jsonResponse(response, normalizeCustomerVisitState(payload, url));
-      if (isVisitPlan) return jsonResponse(response, sanitizePlan(payload));
+      if (isVisitPlan) return jsonResponse(response, sanitizePlanPayload(payload));
     } catch {
       return response;
     }
