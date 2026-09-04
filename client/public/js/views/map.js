@@ -9,10 +9,12 @@ const NEARBY_RADIUS_METERS = 5000;
 
 // Fixed display order for the Map tab's channel filter (per explicit
 // request), independent of SALES_CHANNELS' own order used elsewhere --
-// field reps' own channels first, then the non-field channels. Anything
-// not listed here (shouldn't happen, but a new channel could exist before
-// this list is updated) sorts alphabetically after these.
-const MAP_CHANNEL_ORDER = ["SM YVN", "SM Davtashen", "SM Shirak", "SM B2B", "PCO", "CVO", "OEM", "KF", "CAS"];
+// Potential right after "All channels" (customers with no ERP link yet
+// are the ones a rep is most likely to be filtering for), then field
+// reps' own channels, then the non-field channels. Anything not listed
+// here (shouldn't happen, but a new channel could exist before this list
+// is updated) sorts alphabetically after these.
+const MAP_CHANNEL_ORDER = ["POTENTIAL", "SM YVN", "SM Davtashen", "SM Shirak", "SM B2B", "PCO", "CVO", "OEM", "KF", "CAS"];
 function sortMapChannels(channels) {
   return [...channels].sort((a, b) => {
     const ia = MAP_CHANNEL_ORDER.indexOf(a);
@@ -22,6 +24,16 @@ function sortMapChannels(channels) {
     if (ib !== -1) return 1;
     return a.localeCompare(b);
   });
+}
+
+// customerPortfolioUi.js writes POTENTIAL/COMPETITORS in all caps into
+// sales_channel so they sort and filter like any other channel value --
+// but as filter-sheet labels they should read as normal words, not
+// shouting, same as every other channel label.
+function channelDisplayLabel(channel) {
+  if (channel === "POTENTIAL") return t("tier_potential");
+  if (channel === "COMPETITORS") return t("brand_group_competitors");
+  return channel;
 }
 
 // Mirrors the brand_status shape recorded at check-in (see BRAND_GROUPS in
@@ -495,7 +507,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     iconFilterRow.querySelector('[data-map-filter-btn="channel"]')?.addEventListener("click", () => {
       openMapFilterSheet(
         t("filter_direction_title"),
-        [{ value: "", label: t("all_channels") }, ...channels.map((c) => ({ value: c, label: c }))],
+        [{ value: "", label: t("all_channels") }, ...channels.map((c) => ({ value: c, label: channelDisplayLabel(c) }))],
         channelFilter,
         (value) => {
           channelFilter = value;

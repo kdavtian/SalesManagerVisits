@@ -25,8 +25,17 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Map: manager -> channel -> category -> status, all in one search bar. */
-.map-dimension-filter-inline {
+/* Map: manager -> channel -> category -> status, all in one search bar.
+   #map-icon-filter-row is also styled as .customer-filter-row (shared
+   markup with the Customers page's standalone filter row), whose own
+   ":not(:empty)" padding rule outranks a plain ".map-dimension-filter-inline"
+   selector on specificity -- so this override has to match that same
+   specificity shape to actually win, or the row silently keeps the
+   16px/10px padding meant for a full-width row and both the search input
+   and the whole bar get pushed wider/taller than every other search bar
+   in the app. */
+.map-dimension-filter-inline,
+.customer-filter-row.map-dimension-filter-inline:not(:empty) {
   display: inline-flex;
   align-items: center;
   gap: 0;
@@ -37,30 +46,47 @@
   overflow: visible;
 }
 
+/* Same 40px / 21px icon sizing every other search bar's filter buttons
+   use (Activity/Orders/Customers) -- Map's buttons were sized up to
+   44px/22px independently, which is what made this bar visibly taller
+   than the others despite sharing the same .activity-search-combined
+   container. */
 .map-dimension-filter-inline .map-dimension-filter-btn,
 .map-search-combined #map-manager-filter-btn,
 .map-search-combined .map-primary-filter-wrap > .activity-search-filter-btn {
-  flex: 0 0 38px;
-  width: 38px;
-  min-width: 38px;
-  height: 44px;
-  border-radius: 10px;
+  flex: 0 0 40px;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  border-radius: 11px;
 }
 
 .map-dimension-filter-inline .map-dimension-filter-btn svg,
 .map-search-combined #map-manager-filter-btn svg,
 .map-search-combined .map-primary-filter-wrap > .activity-search-filter-btn svg {
-  width: 22px;
-  height: 22px;
+  width: 21px;
+  height: 21px;
 }
 
 .map-search-combined .map-search-actions {
-  gap: 0;
+  gap: 2px;
   align-items: center;
 }
 
 .map-search-combined .map-search-actions > * + * {
-  margin-left: 1px;
+  margin-left: 0;
+}
+
+/* Icon-only now (see unifiedSearchEnhancements.js, which visually-hides
+   the text label) -- the fixed 130px width was sized for the old
+   label+chevron dropdown button, and .filter-dropdown-wrap's own
+   flex:1/min-width:110px (that class stays on the element; the enhancer
+   only adds classes, never removes this one) both left a large dead gap
+   before the next icon once that label was hidden. */
+.map-search-combined #map-manager-filter-wrap {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 0;
 }
 
 /* Channel/category reuse the Map's native filter sheet logic, but on Map it

@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v70";
+const CACHE_VERSION = "field-visits-v71";
 const TILE_CACHE = "field-visits-tiles-v4";
 
 const APP_SHELL = [
