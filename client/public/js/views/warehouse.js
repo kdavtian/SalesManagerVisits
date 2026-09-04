@@ -1,6 +1,7 @@
 import { api } from "../api.js";
 import { escapeHtml, formatAmd } from "../util.js";
 import { t } from "../i18n.js";
+import { icons } from "../icons.js";
 
 export async function renderWarehouse(root, navigate) {
   let activeTab = "pick-list";
@@ -129,21 +130,37 @@ export async function renderWarehouse(root, navigate) {
 
   async function loadInventory() {
     contentEl.innerHTML = `
-      <input type="search" id="inventory-search" placeholder="${t("search")}" style="margin-bottom:8px;" />
+      <div class="inventory-search-row">
+        <input type="search" id="inventory-search" placeholder="${t("search")}" />
+        <button type="button" class="filter-icon-btn" id="inventory-brand-btn" aria-label="${t("filter_brand")}" title="${t("filter_brand")}">
+          ${icons.tag}
+        </button>
+      </div>
       <div id="inventory-list" class="card-list"></div>
     `;
     const listEl = contentEl.querySelector("#inventory-list");
     const searchInput = contentEl.querySelector("#inventory-search");
+    const brandBtn = contentEl.querySelector("#inventory-brand-btn");
+    let brandFilter = "";
+    let brandOptions = null;
+
+    function groupHeadingHtml(p, prevP) {
+      if (prevP && prevP.brand === p.brand && prevP.family === p.family) return "";
+      const label = [p.brand, p.family].filter(Boolean).join(" · ") || t("warehouse_stock_unknown");
+      return `<div class="list-group-heading">${escapeHtml(label)}</div>`;
+    }
+
     async function paint(q) {
-      const rows = await api.getInventory(q);
+      const rows = await api.getInventory(q, brandFilter);
       listEl.innerHTML = rows.length
         ? rows
             .map(
-              (p) => `
+              (p, i) => `
+        ${groupHeadingHtml(p, rows[i - 1])}
         <div class="card">
           <div class="order-product-info">
             <strong>${escapeHtml(p.name)}</strong>
-            <span class="muted">${[p.brand, p.unit].filter(Boolean).map(escapeHtml).join(" · ")}</span>
+            <span class="muted">${escapeHtml(p.unit || "")}</span>
           </div>
           <span class="badge ${p.stock_qty > 0 ? "badge-success" : "badge-warning"}">${p.stock_qty != null ? p.stock_qty : t("warehouse_stock_unknown")}</span>
         </div>`
@@ -156,6 +173,47 @@ export async function renderWarehouse(root, navigate) {
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => paint(searchInput.value.trim()), 250);
     });
+
+    brandBtn.addEventListener("click", async () => {
+      if (!brandOptions) {
+        try {
+          brandOptions = await api.getInventoryBrands();
+        } catch {
+          brandOptions = [];
+        }
+      }
+      const overlay = document.createElement("div");
+      overlay.className = "sheet-overlay";
+      overlay.innerHTML = `
+        <div class="sheet filter-sheet">
+          <h2>${t("filter_brand")}</h2>
+          <div class="filter-sheet-options">
+            <button type="button" class="filter-sheet-option ${brandFilter === "" ? "filter-sheet-option-selected" : ""}" data-value="">
+              <span>${t("all_brands")}</span>
+            </button>
+            ${brandOptions
+              .map(
+                (b) => `
+              <button type="button" class="filter-sheet-option ${b === brandFilter ? "filter-sheet-option-selected" : ""}" data-value="${escapeHtml(b)}">
+                <span>${escapeHtml(b)}</span>
+              </button>`
+              )
+              .join("")}
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+      overlay.querySelectorAll(".filter-sheet-option").forEach((optBtn) => {
+        optBtn.addEventListener("click", () => {
+          brandFilter = optBtn.dataset.value;
+          brandBtn.classList.toggle("filter-icon-btn-active", Boolean(brandFilter));
+          overlay.remove();
+          paint(searchInput.value.trim());
+        });
+      });
+    });
+
     await paint("");
   }
 

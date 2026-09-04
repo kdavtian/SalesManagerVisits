@@ -328,16 +328,16 @@ export async function renderActivity(root, navigate) {
         }
         return `${managerHeading}
         <div class="card activity-row-rich" tabindex="0" role="button" data-checkin-id="${c.id}">
-          <span class="activity-status-icon ${meta.cls}">${STATUS_ICON[status]}</span>
+          <button type="button" class="activity-customer-icon-btn activity-customer-icon-square" data-customer-id="${c.customer_id}" aria-label="${escapeHtml(c.customer_name)}" title="${escapeHtml(c.customer_name)}">
+            ${categoryIcon(c.customer_category)}
+          </button>
           <div class="activity-row-body">
             <div class="activity-row-top">
-              <span class="activity-row-title">
-                <button type="button" class="activity-customer-icon-btn" data-customer-id="${c.customer_id}" aria-label="${escapeHtml(c.customer_name)}" title="${escapeHtml(c.customer_name)}">
-                  ${categoryIcon(c.customer_category)}
-                </button>
-                <strong>${escapeHtml(c.customer_name)}</strong>
+              <strong class="activity-customer-name-btn" role="button" tabindex="0" data-customer-id="${c.customer_id}">${escapeHtml(c.customer_name)}</strong>
+              <span class="activity-row-trailing-group">
+                <span class="activity-status-icon activity-status-icon-sm ${meta.cls}" aria-label="${escapeHtml(meta.label)}" title="${escapeHtml(meta.label)}">${STATUS_ICON[status]}</span>
+                <span class="activity-row-trailing ${status === "rejected" ? "activity-distance-danger" : "muted"}">${distanceLabel}</span>
               </span>
-              <span class="activity-row-trailing ${status === "rejected" ? "activity-distance-danger" : "muted"}">${distanceLabel}</span>
             </div>
             <div class="muted activity-row-meta">${escapeHtml(c.user_name)} · ${formatActivityDate(c.timestamp)}</div>
             <div class="activity-row-bottom">
@@ -371,8 +371,14 @@ export async function renderActivity(root, navigate) {
       });
     });
 
-    listEl.querySelectorAll(".activity-customer-icon-btn").forEach((btn) => {
+    listEl.querySelectorAll(".activity-customer-icon-btn, .activity-customer-name-btn").forEach((btn) => {
       btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        navigate(`#/customers/${btn.dataset.customerId}`);
+      });
+      btn.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
         e.stopPropagation();
         navigate(`#/customers/${btn.dataset.customerId}`);
       });

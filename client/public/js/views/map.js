@@ -1,11 +1,28 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, haversineMeters, getCurrentPosition, tierSelectorHtml, activateTierSelector, categorySelectorHtml, activateCategorySelector, categoryIcon, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, tierSelectorHtml, activateTierSelector, categorySelectorHtml, activateCategorySelector, categoryIcon, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion } from "../util.js";
 import { t } from "../i18n.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
 import { canViewTeamLocations, canEditDirectly, canPlanForOthers, state } from "../state.js";
 
 const NEARBY_RADIUS_METERS = 5000;
+
+// Fixed display order for the Map tab's channel filter (per explicit
+// request), independent of SALES_CHANNELS' own order used elsewhere --
+// field reps' own channels first, then the non-field channels. Anything
+// not listed here (shouldn't happen, but a new channel could exist before
+// this list is updated) sorts alphabetically after these.
+const MAP_CHANNEL_ORDER = ["SM YVN", "SM Davtashen", "SM Shirak", "SM B2B", "PCO", "CVO", "OEM", "KF", "CAS"];
+function sortMapChannels(channels) {
+  return [...channels].sort((a, b) => {
+    const ia = MAP_CHANNEL_ORDER.indexOf(a);
+    const ib = MAP_CHANNEL_ORDER.indexOf(b);
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+    return a.localeCompare(b);
+  });
+}
 
 // Mirrors the brand_status shape recorded at check-in (see BRAND_GROUPS in
 // checkin.js) -- castrol/lotos/royal get their own status tags, each
@@ -461,7 +478,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
 
   function renderIconFilterRow() {
     if (!iconFilterRow) return;
-    const channels = [...new Set(lastCustomers.map(({ c }) => c.sales_channel).filter(Boolean))].sort();
+    const channels = sortMapChannels([...new Set(lastCustomers.map(({ c }) => c.sales_channel).filter(Boolean))]);
     const categories = [...new Set(lastCustomers.map(({ c }) => c.category).filter(Boolean))];
 
     iconFilterRow.innerHTML = [
@@ -1849,7 +1866,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
           ${tierSelectorHtml("potential")}
           ${categorySelectorHtml(CATEGORY_LIST[0].value)}
           <label>${t("name")}<input name="name" required /></label>
-          <label>${t("phone")}<input name="phone" type="tel" /></label>
+          <label>${t("phone")}<input name="phone" type="tel" value="+374 " /></label>
           <label>${t("address")}<input name="address" id="new-customer-address" /></label>
           <div class="form-row-2">
             <label>${t("region")}
@@ -2009,10 +2026,11 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       form.setAttribute("aria-busy", "true");
 
       try {
+        const phoneDigits = normalizePhone(data.get("phone"));
         await api.createCustomer({
           name: data.get("name"),
           category: data.get("category") || null,
-          phone: data.get("phone") || null,
+          phone: phoneDigits.length > 3 ? `+${phoneDigits}` : null,
           address: data.get("address") || null,
           notes: data.get("notes") || null,
           tin: data.get("tin") || null,

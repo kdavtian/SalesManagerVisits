@@ -35,7 +35,7 @@ const STATUS_COLUMNS = `
 `;
 
 customersRouter.get("/", async (req, res) => {
-  const { search, visited, region, subregion, assigned_manager_id } = req.query;
+  const { search, visited, region, subregion, assigned_manager_id, include_debt } = req.query;
   const conditions = [];
   const params = [];
 
@@ -71,9 +71,15 @@ customersRouter.get("/", async (req, res) => {
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  // Outstanding debt is opt-in (see task spec: "off by default, to make
+  // app run faster") -- the LEFT JOIN and its per-row lookup only happen
+  // when the Customers list toggle actually asks for it.
+  const debtJoin = include_debt ? "LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id" : "";
+  const debtColumn = include_debt ? "erp.debt_amd AS debt_amd," : "";
   const { rows } = await pool.query(
-    `SELECT c.*, ${STATUS_COLUMNS}
+    `SELECT c.*, ${debtColumn} ${STATUS_COLUMNS}
      FROM customers c
+     ${debtJoin}
      ${where}
      ORDER BY c.name`,
     params

@@ -68,18 +68,42 @@ warehouseRouter.get("/staging-list", async (req, res) => {
 // real time (per spec), this is just "what does the catalog currently say
 // we have" so a WM can sanity-check before flagging a stock issue.
 warehouseRouter.get("/inventory", async (req, res) => {
-  const { q } = req.query;
+  const { q, brand } = req.query;
+  const conditions = [];
   const params = [];
-  let where = "";
   if (q) {
     params.push(`%${q}%`);
-    where = `WHERE name ILIKE $1 OR brand ILIKE $1`;
+    conditions.push(`(name ILIKE $${params.length} OR brand ILIKE $${params.length})`);
   }
+  if (brand) {
+    params.push(brand);
+    conditions.push(`brand = $${params.length}`);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const { rows } = await pool.query(
-    `SELECT id, name, brand, family, unit, stock_qty FROM products ${where} ORDER BY brand NULLS LAST, name LIMIT 300`,
+    `SELECT id, name, brand, family, unit, stock_qty,
+       NULLIF(regexp_replace(unit, 'L$', ''), '')::numeric AS liters
+     FROM products
+     ${where}
+     -- Brand, then family/category, then size ascending (small to big) --
+     -- a non-liter unit (no numeric size) sorts after sized ones within
+     -- its own brand/family group, then alphabetically by name as a
+     -- final tiebreaker.
+     ORDER BY brand NULLS LAST, family NULLS LAST, liters NULLS LAST, name
+     LIMIT 300`,
     params
   );
   res.json(rows);
+});
+
+// Distinct brand list for the inventory screen's brand filter -- kept
+// separate from the paginated/searched inventory rows themselves so the
+// filter's own option list doesn't shrink as a search narrows the results.
+warehouseRouter.get("/inventory/brands", async (req, res) => {
+  const { rows } = await pool.query(
+    "SELECT DISTINCT brand FROM products WHERE brand IS NOT NULL ORDER BY brand"
+  );
+  res.json(rows.map((r) => r.brand));
 });
 
 warehouseRouter.post("/orders/:id/packed", async (req, res) => {

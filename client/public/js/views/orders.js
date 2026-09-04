@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { escapeHtml, formatAmd, activateDialog } from "../util.js";
-import { t } from "../i18n.js";
+import { t, getLang } from "../i18n.js";
 import { state } from "../state.js";
 import { icons } from "../icons.js";
 
@@ -66,6 +66,27 @@ const NEXT_STATUS = {
 
 function formatDate(value) {
   return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+// Local calendar-day key an order's created_at falls into -- grouping is by
+// the viewer's own day boundary, not UTC, so an order placed at 11pm
+// doesn't jump to "tomorrow" in the list.
+function orderDateKey(value) {
+  const d = new Date(value);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function formatOrderDateHeading(value) {
+  const d = new Date(value);
+  const month = d.toLocaleDateString(getLang() === "hy" ? "hy" : "en", { month: "short" });
+  return `${d.getDate()} ${month}`;
+}
+
+function formatLiters(value) {
+  const n = Number(value) || 0;
+  // Whole liters show as-is; fractional totals (e.g. half-liter items) keep
+  // one decimal so 4.5L doesn't silently round away.
+  return Number.isInteger(n) ? `${n}L` : `${n.toFixed(1)}L`;
 }
 
 export async function renderOrders(root, navigate) {
@@ -183,10 +204,28 @@ export async function renderOrders(root, navigate) {
       return;
     }
 
+    // Grouped by the order's own calendar day (not the whole filtered
+    // list's range) -- each day's header row totals just that day's
+    // orders: amount, liters (see server's total_liters, computed from
+    // catalog-linked lines only), and order count.
+    let lastDateKey = null;
     listEl.innerHTML = filtered
       .map((o) => {
         const meta = STATUS_META[o.status] ?? STATUS_META.submitted;
-        return `
+        const dateKey = orderDateKey(o.created_at);
+        let dateHeading = "";
+        if (dateKey !== lastDateKey) {
+          lastDateKey = dateKey;
+          const dayOrders = filtered.filter((x) => orderDateKey(x.created_at) === dateKey);
+          const dayTotal = dayOrders.reduce((sum, x) => sum + Number(x.total_amd), 0);
+          const dayLiters = dayOrders.reduce((sum, x) => sum + Number(x.total_liters || 0), 0);
+          dateHeading = `
+            <div class="order-date-heading">
+              <span class="order-date-heading-label">${formatOrderDateHeading(o.created_at)}</span>
+              <span class="order-date-heading-stats">${formatAmd(dayTotal)} | ${formatLiters(dayLiters)} | ${dayOrders.length} ${t("orders_count_label")}</span>
+            </div>`;
+        }
+        return `${dateHeading}
         <button class="card activity-row-rich" data-order-id="${o.id}">
           <div class="activity-row-body">
             <div class="activity-row-top">

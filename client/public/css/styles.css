@@ -3335,6 +3335,26 @@ input[type="search"]:focus {
   cursor: pointer;
 }
 
+/* Debt-visibility toggle sits next to Add Customer, same shape but a
+   neutral (not accent-filled) resting state -- it's off by default, so it
+   shouldn't read as "the" primary action the way Add Customer does. */
+.list-header-add-btn#toggle-debt-btn {
+  background: var(--bg-inset, var(--bg-card));
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+}
+
+.list-header-add-btn-active {
+  background: var(--accent) !important;
+  color: #ffffff !important;
+  border-color: var(--accent) !important;
+}
+
+.customer-card-debt {
+  color: var(--danger);
+  font-weight: 600;
+}
+
 .customer-stats-bar {
   display: flex;
   gap: 8px;
@@ -4706,6 +4726,18 @@ input[type="search"]:focus {
   justify-content: center;
 }
 
+/* Small variant used in the row's top-right corner, next to the distance
+   label, now that the customer icon owns the row's left side. */
+.activity-status-icon-sm {
+  width: 20px;
+  height: 20px;
+}
+
+.activity-status-icon-sm svg {
+  width: 13px;
+  height: 13px;
+}
+
 .status-verified {
   background: var(--success, #34c759);
 }
@@ -4768,6 +4800,39 @@ input[type="search"]:focus {
 .activity-customer-icon-btn svg {
   width: 15px;
   height: 15px;
+}
+
+/* Big rounded-square variant anchoring the left side of an activity row --
+   the row's primary visual identifier, replacing the old small circular
+   icon that used to sit inline with the customer name. */
+.activity-customer-icon-square {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  align-self: flex-start;
+}
+
+.activity-customer-icon-square svg {
+  width: 28px;
+  height: 28px;
+}
+
+/* Not a <button> (a <strong> with role="button") so it can sit inline with
+   the trailing status/distance group in the same flex row without nesting
+   interactive elements -- same tap-stops-propagation pattern as the icon. */
+.activity-customer-name-btn {
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.activity-row-trailing-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .activity-row-trailing {
@@ -5522,6 +5587,109 @@ form select,
   margin: 0;
 }
 
+.visit-detail-avatar {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-inset, var(--bg-card));
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.visit-detail-avatar svg {
+  width: 24px;
+  height: 24px;
+}
+
+.visit-detail-info-card {
+  background: var(--bg-inset, var(--bg-card));
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.visit-detail-info-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.visit-detail-info-icon {
+  flex-shrink: 0;
+  display: flex;
+  color: var(--text-dim);
+}
+
+.visit-detail-info-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.visit-detail-danger-text {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.visit-detail-section-title {
+  margin: 14px 0 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.visit-detail-outcome-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.visit-detail-outcome-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.92rem;
+}
+
+.visit-detail-outcome-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--bg-inset, var(--bg-card));
+  border: 1px solid var(--border);
+  color: var(--accent, var(--primary));
+}
+
+.visit-detail-outcome-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.visit-detail-note-icon {
+  display: inline-flex;
+  vertical-align: -3px;
+  margin-right: 6px;
+  color: var(--text-dim);
+}
+
+.visit-detail-note-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
 /* Photo lightbox -- full-screen viewer opened from any check-in photo
    thumbnail; swipe or use the on-screen/keyboard arrows to move through
    the rest of that visit's photos. */
@@ -5983,4 +6151,58 @@ form select,
 }
 .route-stop-done {
   opacity: 0.7;
+}
+
+/* Map search-bar filter icon buttons (channel/category/manager/status) --
+   explicit touch-action avoids the ambiguous-gesture window mobile
+   browsers can apply to small adjacent tap targets with no touch-action of
+   their own, which reads as "some icon buttons don't respond to the first
+   tap". Covers every button shape these buttons can be styled into across
+   the search bar (see unifiedSearchEnhancements.js / views/map.js). */
+.map-search-row button,
+.map-icon-filter-row button,
+.filter-icon-btn,
+.activity-search-filter-btn,
+.filter-dropdown-btn,
+.map-filter-chip {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Orders list: per-day group heading with amount/liters/count totals. */
+.order-date-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 18px 0 8px;
+}
+.order-date-heading:first-child {
+  margin-top: 4px;
+}
+.order-date-heading-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.order-date-heading-stats {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Warehouse inventory tab: search + brand-filter icon button row, same
+   shape as other search bars in the app. */
+.inventory-search-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.inventory-search-row input[type="search"] {
+  flex: 1;
+  min-width: 0;
 }

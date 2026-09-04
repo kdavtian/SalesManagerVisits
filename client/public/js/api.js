@@ -163,7 +163,14 @@ export const api = {
   // Warehouse (see server/src/routes/warehouse.js)
   getPickList: () => request("/warehouse/pick-list"),
   getStagingList: () => request("/warehouse/staging-list"),
-  getInventory: (q = "") => request(`/warehouse/inventory${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  getInventory: (q = "", brand = "") => {
+    const qs = new URLSearchParams();
+    if (q) qs.set("q", q);
+    if (brand) qs.set("brand", brand);
+    const s = qs.toString();
+    return request(`/warehouse/inventory${s ? `?${s}` : ""}`);
+  },
+  getInventoryBrands: () => request("/warehouse/inventory/brands"),
   markOrderPacked: (id) => request(`/warehouse/orders/${id}/packed`, { method: "POST" }),
   flagOrderStockIssue: (id, note) => json(`/warehouse/orders/${id}/stock-issue`, "POST", { note }),
 

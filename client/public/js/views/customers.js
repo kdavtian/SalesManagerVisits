@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatDateTime, haversineMeters, getCurrentPosition, customerListIconHtml, categoryLabel, activateDialog } from "../util.js";
+import { escapeHtml, formatDateTime, formatAmd, haversineMeters, getCurrentPosition, customerListIconHtml, categoryLabel, activateDialog } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state, seesAllActivity } from "../state.js";
@@ -16,6 +16,7 @@ export function renderCustomers(root, navigate, initialFilter) {
     <div class="list-view">
       <div class="list-header">
         <h1>${t("nav_customers")}</h1>
+        <button class="list-header-add-btn" id="toggle-debt-btn" aria-label="${t("show_outstanding_debt")}" title="${t("show_outstanding_debt")}" aria-pressed="false">${icons.payment}</button>
         <button class="list-header-add-btn" id="add-customer-btn" aria-label="${t("add_customer")}" title="${t("add_customer")}">${icons.plus}</button>
       </div>
 
@@ -50,9 +51,20 @@ export function renderCustomers(root, navigate, initialFilter) {
   let subregionFilter = "";
   let assignmentFilter = ""; // "", "mine", "others"
   let channelFilter = "";
+  // Off by default (per task spec: "to make app run faster") -- the debt
+  // lookup is a real join server-side, not free, so it's opt-in per
+  // session rather than always fetched with the rest of the list.
+  let showDebt = false;
   const filterRow = root.querySelector("#customer-filter-row");
+  const debtToggleBtn = root.querySelector("#toggle-debt-btn");
 
   root.querySelector("#add-customer-btn").addEventListener("click", () => navigate("#/map?add=1"));
+  debtToggleBtn.addEventListener("click", () => {
+    showDebt = !showDebt;
+    debtToggleBtn.classList.toggle("list-header-add-btn-active", showDebt);
+    debtToggleBtn.setAttribute("aria-pressed", String(showDebt));
+    load();
+  });
 
   sortBtn.addEventListener("click", () => {
     sortMenu.hidden = !sortMenu.hidden;
@@ -330,6 +342,11 @@ export function renderCustomers(root, navigate, initialFilter) {
               <strong>${escapeHtml(c.name)}</strong>
               ${idAndType ? `<span class="muted customer-card-id-type">${idAndType}</span>` : ""}
               <span class="muted customer-card-last-visit">${lastVisit}</span>
+              ${
+                showDebt && c.debt_amd != null && Number(c.debt_amd) > 0
+                  ? `<span class="customer-card-debt">${t("outstanding_debt_label")}: ${formatAmd(Number(c.debt_amd))}</span>`
+                  : ""
+              }
             </div>
           </span>
           <span class="card-trailing">
@@ -355,7 +372,7 @@ export function renderCustomers(root, navigate, initialFilter) {
   async function load() {
     listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     try {
-      allCustomers = await api.listCustomers();
+      allCustomers = await api.listCustomers(showDebt ? { include_debt: 1 } : {});
       render();
     } catch (err) {
       listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;

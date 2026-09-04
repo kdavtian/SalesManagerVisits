@@ -4,9 +4,10 @@
 // check-in. Kept as its own module (not exported from customerDetail.js)
 // so neither view has to import the other's file to reuse it.
 import { api } from "./api.js";
-import { activateDialog, escapeHtml, formatDateTime, formatDistance } from "./util.js";
+import { activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, categoryIcon } from "./util.js";
 import { t } from "./i18n.js";
 import { isAdmin } from "./state.js";
+import { icons } from "./icons.js";
 
 const BRAND_GROUP_LABEL_KEY = {
   castrol: "brand_group_castrol",
@@ -15,11 +16,27 @@ const BRAND_GROUP_LABEL_KEY = {
   competitors: "brand_group_competitors",
 };
 
+// Mirrors views/checkin.js's OUTCOME_META icon choices, so an outcome reads
+// the same visual way here as it did while the rep was picking it.
+const OUTCOME_ICON = {
+  order_placed: icons.cart,
+  no_order: icons.noOrder,
+  payment_collected: icons.payment,
+  follow_up_required: icons.clock,
+  assortment_check: icons.clipboardCheck,
+  customer_unavailable: icons.truck,
+  complaint: icons.warning,
+  other: icons.more,
+};
+
 // New rows write `outcomes`/`brand_status`; rows from before the
 // multi-outcome change only have the old singular `outcome`/`brands_found`.
+export function checkinOutcomeValues(ch) {
+  return ch.outcomes?.length ? ch.outcomes : ch.outcome ? [ch.outcome] : [];
+}
+
 export function checkinOutcomeLabels(ch) {
-  const outcomes = ch.outcomes?.length ? ch.outcomes : ch.outcome ? [ch.outcome] : [];
-  return outcomes.map((o) => t(`outcome_${o}`));
+  return checkinOutcomeValues(ch).map((o) => t(`outcome_${o}`));
 }
 
 export function checkinBrandTags(ch) {
@@ -112,34 +129,76 @@ function openPhotoLightbox(urls, startIndex) {
 export function openVisitDetailSheet(ch, onPhotoDeleted) {
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
+  const outcomeValues = checkinOutcomeValues(ch);
+  const outcomeLabels = checkinOutcomeLabels(ch);
+  const brandTags = checkinBrandTags(ch);
+  const hasCustomer = Boolean(ch.customer_name);
+
   overlay.innerHTML = `
     <div class="sheet visit-detail-sheet">
       <div class="visit-detail-header">
         <button type="button" class="icon-btn" id="visit-detail-back" aria-label="${t("back")}">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
+        ${hasCustomer ? `<span class="visit-detail-avatar">${categoryIcon(ch.customer_category)}</span>` : ""}
         <div>
-          <h2>${escapeHtml(ch.user_name)}</h2>
-          <p class="muted">${formatDateTime(ch.timestamp)}</p>
+          <h2>${escapeHtml(hasCustomer ? ch.customer_name : ch.user_name)}</h2>
+          <p class="muted">${hasCustomer ? `${escapeHtml(ch.user_name)} · ` : ""}${formatDateTime(ch.timestamp)}</p>
         </div>
       </div>
-      <div class="checkin-card-badges">
-        <span class="badge ${ch.within_range ? "badge-success" : "badge-danger"}">
-          ${ch.within_range ? t("location_verified") : `${t("location_mismatch_away")} (${formatDistance(ch.distance_meters)} ${t("away")})`}
-        </span>
-        ${checkinOutcomeLabels(ch)
-          .map((label) => `<span class="badge badge-neutral">${escapeHtml(label)}</span>`)
-          .join("")}
+
+      <div class="visit-detail-info-card">
+        <div class="visit-detail-info-row">
+          <span class="visit-detail-info-icon">${ch.within_range ? icons.checkCircle : icons.mapWarning}</span>
+          <span class="${ch.within_range ? "" : "visit-detail-danger-text"}">
+            ${ch.within_range ? t("location_verified") : `${t("location_mismatch_away")} (${formatDistance(ch.distance_meters)} ${t("away")})`}
+          </span>
+        </div>
+        ${
+          ch.amount_collected_amd != null
+            ? `<div class="visit-detail-info-row">
+                <span class="visit-detail-info-icon">${icons.payment}</span>
+                <span><strong>${formatAmd(Number(ch.amount_collected_amd))}</strong> ${t("outcome_payment_collected")}</span>
+              </div>`
+            : ""
+        }
       </div>
+
       ${
-        checkinBrandTags(ch).length
-          ? `<div class="brand-tags">${checkinBrandTags(ch).map((tag) => `<span class="brand-tag">${escapeHtml(tag)}</span>`).join("")}</div>`
+        outcomeValues.length
+          ? `<h3 class="visit-detail-section-title">${t("visit_outcome_label")}</h3>
+             <div class="visit-detail-outcome-list">
+               ${outcomeValues
+                 .map(
+                   (o, i) => `
+                 <div class="visit-detail-outcome-row">
+                   <span class="visit-detail-outcome-icon">${OUTCOME_ICON[o] || icons.more}</span>
+                   <span>${escapeHtml(outcomeLabels[i])}</span>
+                 </div>`
+                 )
+                 .join("")}
+             </div>`
           : ""
       }
-      ${ch.note ? `<p class="checkin-note">${escapeHtml(ch.note)}</p>` : ""}
+
+      ${
+        brandTags.length
+          ? `<h3 class="visit-detail-section-title">${t("brands_found_label")}</h3>
+             <div class="brand-tags">${brandTags.map((tag) => `<span class="brand-tag">${escapeHtml(tag)}</span>`).join("")}</div>`
+          : ""
+      }
+
+      ${
+        ch.note
+          ? `<h3 class="visit-detail-section-title">${t("note_optional")}</h3>
+             <p class="checkin-note"><span class="visit-detail-note-icon">${icons.note}</span>${escapeHtml(ch.note)}</p>`
+          : ""
+      }
+
       ${
         ch.photos?.length
-          ? `<div class="checkin-photo-grid">
+          ? `<h3 class="visit-detail-section-title">${t("photo_optional")}</h3>
+             <div class="checkin-photo-grid">
               ${ch.photos
                 .map(
                   (photo, i) => `

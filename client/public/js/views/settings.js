@@ -3,7 +3,7 @@ import { t, getLang, setLang } from "../i18n.js";
 import { getTheme, setTheme } from "../theme.js";
 import { state, isAdmin, canPlanForOthers, seesFinancialExports, canManageProducts } from "../state.js";
 import { renderTeamSection, renderPlanApprovalsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection } from "./admin.js";
-import { escapeHtml, compressImage, activateDialog, attachSwipeToDismiss } from "../util.js";
+import { escapeHtml, compressImage, activateDialog, attachSwipeToDismiss, formatPhoneDisplay, normalizePhone } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
 import { checkForUpdateManually } from "../updateBanner.js";
@@ -115,7 +115,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
 
       <h2 class="section-title">${t("contact_info")}</h2>
       <div class="card settings-list">
-        ${settingsRow({ icon: ICON.phone, label: t("phone"), value: state.user.phone ? escapeHtml(state.user.phone) : t("not_set"), id: "row-phone" })}
+        ${settingsRow({ icon: ICON.phone, label: t("phone"), value: state.user.phone ? escapeHtml(formatPhoneDisplay(state.user.phone)) : t("not_set"), id: "row-phone" })}
       </div>
 
       <h2 class="section-title">${t("preferences")}</h2>
@@ -884,7 +884,7 @@ function openPhoneSheet(root, onLogout, onLanguageChange) {
     <div class="sheet">
       <h2>${t("phone")}</h2>
       <form id="phone-form">
-        <label>${t("phone")}<input name="phone" type="tel" value="${state.user.phone ? escapeHtml(state.user.phone) : ""}" placeholder="+374 ..." /></label>
+        <label>${t("phone")}<input name="phone" type="tel" value="${state.user.phone ? escapeHtml(formatPhoneDisplay(state.user.phone)) : "+374 "}" placeholder="+374 ..." /></label>
         <p class="form-error" id="phone-form-error" hidden></p>
         <div class="sheet-actions">
           <button type="button" class="btn" id="cancel-phone">${t("cancel")}</button>
@@ -908,10 +908,11 @@ function openPhoneSheet(root, onLogout, onLanguageChange) {
     e.preventDefault();
     const submitBtn = form.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
-    const phone = new FormData(form).get("phone");
+    const digits = normalizePhone(new FormData(form).get("phone"));
+    const phone = digits.length > 3 ? `+${digits}` : null;
     try {
-      await api.updateMyProfile({ phone: phone || null });
-      state.user.phone = phone || null;
+      await api.updateMyProfile({ phone });
+      state.user.phone = phone;
       close();
       renderSettings(root, onLogout, onLanguageChange);
     } catch (err) {

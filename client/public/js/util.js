@@ -7,6 +7,33 @@ export function escapeHtml(str) {
   );
 }
 
+// Normalizes any Armenian phone number a user might type/paste (with or
+// without +374, spaces, dashes, a leading 0, or a leading 8) into a plain
+// digit string prefixed with the country code, e.g. "374910070 19" or
+// "091007019" both become "37491007019". Used both to format for display
+// and to normalize before saving, so the two always agree on one shape.
+export function normalizePhone(raw) {
+  let digits = String(raw ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("00374")) digits = digits.slice(2);
+  if (digits.startsWith("374")) return digits;
+  // A local Armenian number is dialed with a leading 0 (or sometimes 8);
+  // strip it before prefixing the country code.
+  if (digits.startsWith("0") || digits.startsWith("8")) digits = digits.slice(1);
+  return `374${digits}`;
+}
+
+// Renders a normalized "374XXXXXXXXX" digit string as "+374 XX XXXXXX" --
+// the one display shape every phone number in the app should share. Falls
+// back to the raw input unchanged if it doesn't look like an Armenian
+// number (e.g. already something else entirely), rather than mangling it.
+export function formatPhoneDisplay(raw) {
+  if (!raw) return "";
+  const digits = normalizePhone(raw);
+  if (!digits.startsWith("374") || digits.length !== 11) return String(raw);
+  return `+374 ${digits.slice(3, 5)} ${digits.slice(5)}`;
+}
+
 const EARTH_RADIUS_METERS = 6371000;
 
 export function haversineMeters(lat1, lng1, lat2, lng2) {

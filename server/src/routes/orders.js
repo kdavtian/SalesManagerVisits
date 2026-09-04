@@ -282,7 +282,16 @@ ordersRouter.get("/", async (req, res) => {
   // separate COUNT(*) query -- trimmed back to PAGE_SIZE before sending.
   params.push(PAGE_SIZE + 1, offsetNum);
   const { rows } = await pool.query(
-    `SELECT o.*, u.name AS user_name, c.name AS customer_name, c.sales_channel
+    `SELECT o.*, u.name AS user_name, c.name AS customer_name, c.sales_channel,
+       -- Total liters across this order's lines -- only lines linked to a
+       -- real catalog product count (product_id set), since a free-text
+       -- line has no unit to go by. Every current product's unit is a
+       -- plain "<number>L" string (e.g. "4L", "0.5L", "205L"), so stripping
+       -- the trailing L and casting is enough; a future non-liter unit
+       -- (e.g. "PCS") would need excluding here explicitly.
+       (SELECT COALESCE(SUM(oi.quantity * NULLIF(regexp_replace(p.unit, 'L$', ''), '')::numeric), 0)
+        FROM order_items oi JOIN products p ON p.id = oi.product_id
+        WHERE oi.order_id = o.id AND p.unit ~ '^[0-9.]+L$') AS total_liters
      FROM orders o
      JOIN users u ON u.id = o.user_id
      JOIN customers c ON c.id = o.customer_id

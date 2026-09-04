@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { canEditDirectly, canReassignCustomers, canAssignErpCustomerId, isAdmin, seesFinancialExports } from "../state.js";
@@ -128,7 +128,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
           ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.pin}</span><span>${[customer.region, customer.subregion, customer.address].filter(Boolean).map(escapeHtml).join(" &middot; ")}</span></div>`
           : ""
       }
-      ${customer.phone ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.phone}</span><a href="tel:${escapeHtml(customer.phone)}">${escapeHtml(customer.phone)}</a></div>` : ""}
+      ${customer.phone ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.phone}</span><a href="tel:${escapeHtml(customer.phone)}">${escapeHtml(formatPhoneDisplay(customer.phone))}</a></div>` : ""}
       ${
         customer.sales_channel || customer.assigned_manager_name
           ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.box}</span><span>${[customer.sales_channel, customer.assigned_manager_name].filter(Boolean).map(escapeHtml).join(" &middot; ")}</span></div>`
@@ -666,7 +666,12 @@ function openEditSheet(customer, navigate, onDone) {
         ${tierSelectorHtml(customer.customer_tier || "potential")}
         ${categorySelectorHtml(customer.category || "")}
         ${fields.filter((f) => f.type !== "select").map((f) => {
-          const value = escapeHtml(customer[f.name] ?? "");
+          // A phone field with nothing saved yet starts pre-filled with the
+          // country code -- one less thing for a manager to type on every
+          // new customer -- but an already-saved number is shown formatted
+          // as-is, not silently rewritten under them.
+          const rawValue = f.name === "phone" && !customer[f.name] ? "+374 " : customer[f.name] ?? "";
+          const value = escapeHtml(f.name === "phone" && customer[f.name] ? formatPhoneDisplay(customer[f.name]) : rawValue);
           if (f.type === "textarea") {
             return `<label>${t(f.labelKey)}<textarea name="${f.name}" rows="2">${value}</textarea></label>`;
           }
@@ -718,7 +723,15 @@ function openEditSheet(customer, navigate, onDone) {
     const changes = { customer_tier: data.get("customer_tier") };
     for (const f of fields) {
       const raw = data.get(f.name);
-      changes[f.name] = f.type === "number" ? Number(raw) : raw;
+      if (f.name === "phone") {
+        // Bare "+374" (just the pre-filled prefix, nothing typed after it)
+        // means the manager left it empty -- save null, not a phone number
+        // that's only a country code.
+        const digits = normalizePhone(raw);
+        changes.phone = digits.length > 3 ? `+${digits}` : null;
+      } else {
+        changes[f.name] = f.type === "number" ? Number(raw) : raw;
+      }
     }
 
     const submitBtn = form.querySelector('button[type="submit"]');
