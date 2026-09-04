@@ -3,7 +3,7 @@ import { escapeHtml, formatDistance, formatRelative, getCurrentPosition, haversi
 import { state } from "../state.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { applyPaymentBadge } from "../app.js";
+import { applyPaymentBadge, applyUnrecordedBadge } from "../app.js";
 
 // A dependency-free CSS bar chart -- this app has no charting library, and
 // 30 bars is simple enough not to need one. Each bar's height is relative
@@ -146,10 +146,11 @@ export async function renderDashboard(root, navigate) {
           : ""
       }
       ${
-        ["admin", "ceo", "sales_director", "accountant"].includes(state.user.role)
-          ? `<button type="button" class="quick-action" id="qa-payment-aging">
+        ["admin", "ceo", "accountant"].includes(state.user.role)
+          ? `<button type="button" class="quick-action" id="qa-recorded">
         <span class="quick-action-icon">${icons.clock}</span>
-        <span>${t("qa_payment_aging")}</span>
+        <span>${t("qa_recorded")}</span>
+        <span class="badge badge-danger" id="unrecorded-badge" hidden></span>
       </button>`
           : ""
       }
@@ -211,8 +212,9 @@ export async function renderDashboard(root, navigate) {
   container.querySelector("#qa-payments")?.addEventListener("click", () => navigate("#/payments"));
   container.querySelector("#qa-warehouse")?.addEventListener("click", () => navigate("#/warehouse"));
   container.querySelector("#qa-delivery")?.addEventListener("click", () => navigate("#/delivery"));
-  container.querySelector("#qa-payment-aging")?.addEventListener("click", () => navigate("#/payment-aging"));
+  container.querySelector("#qa-recorded")?.addEventListener("click", () => navigate("#/recorded"));
   applyPaymentBadge();
+  applyUnrecordedBadge();
 
   const leaderboardEl = container.querySelector("#points-leaderboard");
   if (leaderboardEl && summary.points_leaderboard?.length) {

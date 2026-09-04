@@ -22,7 +22,7 @@ import { renderPricelist } from "./views/pricelist.js";
 import { renderPayments } from "./views/payments.js";
 import { renderWarehouse } from "./views/warehouse.js";
 import { renderDelivery } from "./views/deliveryRoute.js";
-import { renderPaymentAging } from "./views/paymentAging.js";
+import { renderRecorded } from "./views/recorded.js";
 import { flushQueue, getQueue, onQueueChange } from "./offlineQueue.js";
 import { mountInstallPrompt } from "./install.js";
 import { mountUpdateBanner, initServiceWorkerUpdates } from "./updateBanner.js";
@@ -136,6 +136,36 @@ async function refreshPaymentBadge() {
 
 window.addEventListener("payments-changed", refreshPaymentBadge);
 
+// Same pattern again, on the accountant "Recorded" quick action -- the
+// unrecorded-delivered-order backlog (accountant/CEO/admin only server-side,
+// see roles.js's seesUnrecordedBadge). recorded.js fires
+// "recorded-changed" after a checkbox toggle so this updates immediately.
+let unrecordedBadgeCount = 0;
+
+export function applyUnrecordedBadge() {
+  const el = document.getElementById("unrecorded-badge");
+  if (!el) return;
+  if (unrecordedBadgeCount > 0) {
+    el.textContent = unrecordedBadgeCount > 99 ? "99+" : String(unrecordedBadgeCount);
+    el.hidden = false;
+  } else {
+    el.hidden = true;
+  }
+}
+
+async function refreshUnrecordedBadge() {
+  if (!state.user || !["accountant", "ceo", "admin"].includes(state.user.role)) return;
+  try {
+    const { count } = await api.getUnrecordedCount();
+    unrecordedBadgeCount = count;
+  } catch {
+    return;
+  }
+  applyUnrecordedBadge();
+}
+
+window.addEventListener("recorded-changed", refreshUnrecordedBadge);
+
 // Same pattern as the Orders badge above -- polled and also refreshed
 // on-demand (here, whenever the Notifications page marks something read)
 // so the bell badge doesn't lag behind what the user just saw.
@@ -219,6 +249,7 @@ async function render() {
       render();
       refreshOrderBadge();
       refreshPaymentBadge();
+      refreshUnrecordedBadge();
       refreshNotificationBadge();
     });
     return;
@@ -274,8 +305,8 @@ async function render() {
     renderWarehouse(app, navigate);
   } else if (path === "#/delivery") {
     renderDelivery(app, navigate);
-  } else if (path === "#/payment-aging") {
-    renderPaymentAging(app, navigate);
+  } else if (path === "#/recorded") {
+    renderRecorded(app, navigate);
   } else if (customerMatch) {
     renderCustomerDetail(app, navigate, customerMatch[1]);
   } else if (checkinMatch) {
@@ -409,9 +440,11 @@ async function init() {
   render();
   refreshOrderBadge();
   refreshPaymentBadge();
+  refreshUnrecordedBadge();
   refreshNotificationBadge();
   setInterval(refreshOrderBadge, 60000);
   setInterval(refreshPaymentBadge, 60000);
+  setInterval(refreshUnrecordedBadge, 60000);
   setInterval(refreshNotificationBadge, 60000);
 }
 

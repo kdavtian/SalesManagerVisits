@@ -12,13 +12,11 @@ const ORDER_STATUS_ICONS = {
   draft: statusSvg(`<path d="M7 3.5h11l6 6V27a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 27V5A1.5 1.5 0 0 1 7 3.5Z"/><path d="M18 3.5v6h6M10 13h8M10 17h7M10 21h4"/><path d="m15.5 25.5 8.1-8.1 2.9 2.9-8.1 8.1-4 .9z"/>`),
   submitted: statusSvg(`<path d="M7 3.5h11l6 6V27a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 27V5A1.5 1.5 0 0 1 7 3.5Z"/><path d="M18 3.5v6h6M10 13h8M10 17h7M10 21h4"/><path d="m15 23 13-6-6 13-2.1-5z"/><path d="m19.9 25 4.2-4.1"/>`),
   confirmed: statusSvg(`<path d="M6.5 3.5h13l6 6V26A2.5 2.5 0 0 1 23 28.5H6.5A2.5 2.5 0 0 1 4 26V6A2.5 2.5 0 0 1 6.5 3.5Z"/><path d="M19.5 3.5v6h6"/><path d="m8 11 5-2.7 5 2.7-5 2.7zM8 11v5.5l5 2.7 5-2.7V11M13 13.7v5.5"/><path d="M9 22h8"/><circle cx="23" cy="23" r="6"/><path d="m20.2 23 1.9 2 3.8-4.2"/>`),
-  packed: statusSvg(`<path d="m6 9 10-5 10 5-10 5zM6 9v13l10 5 10-5V9M16 14v13"/><path d="m10 7 10 5"/><circle cx="24.5" cy="23.5" r="5.5"/><path d="m22 23.4 1.6 1.7 3.4-3.6"/>`),
-  stock_out: statusSvg(`<path d="m5 9 9-4.5L23 9l-9 4.5zM5 9v12l9 4.5 5-2.5M14 13.5v12"/><path d="M19 18h10M25 14l4 4-4 4"/>`),
+  packed_stock_out: statusSvg(`<path d="m6 9 10-5 10 5-10 5zM6 9v13l10 5 10-5V9M16 14v13"/><path d="m10 7 10 5"/><path d="M19 18h10M25 14l4 4-4 4"/>`),
   delivered: statusSvg(`<path d="m5 9 9-4.5L23 9l-9 4.5zM5 9v12l9 4.5 9-4.5V9M14 13.5v12"/><circle cx="24" cy="23" r="6"/><path d="m21.2 23 1.9 2 3.8-4.2"/>`),
-  cancelled: statusSvg(`<path d="m5 9 9-4.5L23 9l-9 4.5zM5 9v12l9 4.5 9-4.5V9M14 13.5v12"/><circle cx="24" cy="23" r="6"/><path d="m21.5 20.5 5 5M26.5 20.5l-5 5"/>`),
 };
 
-const STATUS_KEYS = ["draft", "submitted", "confirmed", "packed", "stock_out", "delivered", "cancelled"];
+const STATUS_KEYS = ["draft", "submitted", "confirmed", "packed_stock_out", "delivered"];
 
 function resolveStatusFromBadge(badge) {
   const text = badge?.textContent?.trim();

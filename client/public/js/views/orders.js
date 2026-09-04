@@ -4,40 +4,24 @@ import { t, getLang } from "../i18n.js";
 import { state } from "../state.js";
 import { icons } from "../icons.js";
 
+// v3 5-state machine (see migrations/051_warehouse_delivery_v3.sql):
+// draft -> submitted -> confirmed -> packed_stock_out -> delivered, every
+// exception looping back to draft.
 const STATUS_META = {
   draft: { key: "order_status_draft", cls: "badge-warning" },
   submitted: { key: "order_status_submitted", cls: "badge-neutral" },
   confirmed: { key: "order_status_confirmed", cls: "badge-info" },
-  warehouse_review: { key: "order_status_warehouse_review", cls: "badge-info" },
-  stock_issue: { key: "order_status_stock_issue", cls: "badge-warning" },
-  packed: { key: "order_status_packed", cls: "badge-info" },
-  out_for_delivery: { key: "order_status_out_for_delivery", cls: "badge-info" },
+  packed_stock_out: { key: "order_status_packed_stock_out", cls: "badge-info" },
   delivered: { key: "order_status_delivered", cls: "badge-success" },
-  returned: { key: "order_status_returned", cls: "badge-warning" },
-  cancelled: { key: "order_status_cancelled", cls: "badge-danger" },
 };
 
-const STATUS_FILTERS = [
-  "",
-  "draft",
-  "submitted",
-  "confirmed",
-  "warehouse_review",
-  "stock_issue",
-  "packed",
-  "out_for_delivery",
-  "delivered",
-  "returned",
-  "cancelled",
-];
+const STATUS_FILTERS = ["", "draft", "submitted", "confirmed", "packed_stock_out", "delivered"];
 
-// Fulfillment status changes (packed/out_for_delivery/delivered) now go
-// through the dedicated Warehouse and Delivery screens (see
-// views/warehouse.js and views/deliveryRoute.js), which collect the
-// required extra data (pick confirmation, route stop, signature). This
-// list only still drives the generic "cancel"/"re-confirm" actions here.
-const FULFILLMENT_ROLES = new Set(["warehouse_manager", "delivery_manager", "admin"]);
-const WAREHOUSE_ROLES = new Set(["warehouse_manager", "admin"]);
+// Fulfillment status changes (packed_stock_out/delivered) go through the
+// dedicated Warehouse and Delivery screens (see views/warehouse.js and
+// views/deliveryRoute.js), which collect the required extra data (pick
+// confirmation, route stop, signature). This view only drives confirm and
+// director-reject.
 const DISCOUNT_APPROVER_ROLES = new Set(["admin", "sales_director", "ceo"]);
 // Who reviews a freshly-submitted order -- mirrors canConfirmOrders in the
 // server's roles.js.
@@ -46,22 +30,6 @@ const APPROVAL_META = {
   pending: { key: "approval_status_pending", cls: "badge-warning" },
   approved: { key: "approval_status_approved", cls: "badge-success" },
   rejected: { key: "approval_status_rejected", cls: "badge-danger" },
-};
-// Mirrors the server's exported NEXT_STATUS (routes/orders.js) -- kept for
-// the "cancel" button and to know which statuses can still move at all;
-// packed/out_for_delivery/delivered are reached through the dedicated
-// warehouse/delivery screens, not the generic PATCH this view uses.
-const NEXT_STATUS = {
-  draft: ["cancelled"],
-  submitted: ["confirmed", "cancelled"],
-  confirmed: ["warehouse_review", "cancelled"],
-  warehouse_review: ["packed", "stock_issue", "cancelled"],
-  stock_issue: ["confirmed", "cancelled"],
-  packed: ["out_for_delivery", "cancelled"],
-  out_for_delivery: ["delivered", "returned"],
-  delivered: [],
-  returned: ["confirmed", "cancelled"],
-  cancelled: [],
 };
 
 function formatDate(value) {
@@ -376,7 +344,6 @@ export async function renderOrders(root, navigate) {
     function renderView(order) {
       const meta = STATUS_META[order.status] ?? STATUS_META.submitted;
       const isOwnerOrAdmin = order.user_id === state.user.id || state.user.role === "admin";
-      const canFulfill = FULFILLMENT_ROLES.has(state.user.role);
       // A director/admin reviewing a fresh order gets confirm/reject/edit;
       // the rep who placed it (or an admin) can still edit it too while
       // it's waiting on that review.
@@ -388,8 +355,6 @@ export async function renderOrders(root, navigate) {
       const approvalMeta = APPROVAL_META[order.approval_status];
       // A pending or rejected discount blocks fulfillment server-side too --
       // don't offer a forward-status button that would just 409.
-      const blockedByApproval = order.approval_status === "pending" || order.approval_status === "rejected";
-      const nextOptions = NEXT_STATUS[order.status] ?? [];
       const canApproveDiscount = DISCOUNT_APPROVER_ROLES.has(state.user.role) && order.approval_status === "pending";
 
       overlay.querySelector(".sheet").innerHTML = `
@@ -420,6 +385,9 @@ export async function renderOrders(root, navigate) {
 
       const buttons = [];
       if (order.status === "draft" && isOwnerOrAdmin) {
+        if (order.draft_reason) {
+          buttons.push({ label: `${t("draft_reason_label")}: ${order.draft_reason}`, action: "noop", cls: "btn", disabledDisplay: true });
+        }
         buttons.push({ label: t("submit_order"), action: "submit-order", cls: "btn btn-primary" });
       }
       if (canApproveDiscount) {
@@ -428,37 +396,20 @@ export async function renderOrders(root, navigate) {
       }
       if (canReviewSubmitted) {
         buttons.push({ label: t("confirm_order"), status: "confirmed", cls: "btn btn-primary" });
-        buttons.push({ label: t("reject_order"), status: "cancelled", reject: true, cls: "btn btn-danger" });
-      } else if (order.status === "warehouse_review" && WAREHOUSE_ROLES.has(state.user.role)) {
-        buttons.push({ label: t("mark_packed"), action: "mark-packed", cls: "btn btn-primary" });
-        buttons.push({ label: t("flag_stock_issue"), action: "flag-stock-issue", cls: "btn btn-danger" });
-      } else if ((order.status === "stock_issue" || order.status === "returned") && CONFIRM_ROLES.has(state.user.role)) {
-        if (order.status === "stock_issue" && order.stock_issue_note) {
-          buttons.push({ label: `${t("stock_issue_note_label")}: ${order.stock_issue_note}`, action: "noop", cls: "btn", disabledDisplay: true });
-        }
-        buttons.push({ label: t("reconfirm_order"), status: "confirmed", cls: "btn btn-primary" });
-      } else {
-        if (canFulfill && !blockedByApproval) {
-          for (const next of nextOptions) {
-            if (next === "cancelled" || next === "warehouse_review" || next === "stock_issue" || next === "out_for_delivery" || next === "returned") continue;
-            buttons.push({ label: t(STATUS_META[next].key), status: next, cls: "btn btn-primary" });
-          }
-        }
-        if (nextOptions.includes("cancelled") && (isOwnerOrAdmin || canFulfill)) {
-          buttons.push({ label: t("cancel_order"), status: "cancelled", cls: "btn btn-danger" });
-        }
+        buttons.push({ label: t("reject_order"), action: "reject-order", cls: "btn btn-danger" });
       }
-      if (order.status === "packed") {
+      if (order.status === "confirmed") {
+        buttons.push({ label: t("confirmed_awaiting_warehouse"), action: "noop", cls: "btn", disabledDisplay: true });
+      }
+      if (order.status === "packed_stock_out") {
         buttons.push({ label: t("packed_awaiting_route"), action: "noop", cls: "btn", disabledDisplay: true });
-      }
-      if (order.status === "out_for_delivery") {
-        buttons.push({ label: t("out_for_delivery_hint"), action: "noop", cls: "btn", disabledDisplay: true });
       }
       if (canEditThisOrder) {
         buttons.push({ label: t("edit_order"), action: "edit-order", cls: "btn" });
       }
-      // Permanent delete (distinct from cancel, which keeps it as a record)
-      // -- admin only, for a duplicate or mistaken order.
+      // Permanent delete (distinct from a director's reject, which keeps
+      // the order as a record back at draft) -- admin only, for a
+      // duplicate or mistaken order.
       if (state.user.role === "admin") {
         buttons.push({ label: t("delete_order"), action: "delete-order", cls: "btn btn-danger" });
       }
@@ -473,11 +424,8 @@ export async function renderOrders(root, navigate) {
         .join("") || `<button type="button" class="btn" id="order-detail-close">${t("done")}</button>`;
 
       actionsEl.querySelector("#order-detail-close")?.addEventListener("click", () => overlay.remove());
-      actionsEl.querySelectorAll("[data-status]").forEach((btn, i) => {
-        const isReject = buttons.find((b) => b.status === btn.dataset.status && b.reject);
+      actionsEl.querySelectorAll("[data-status]").forEach((btn) => {
         btn.addEventListener("click", async () => {
-          const confirmMsg = isReject ? t("confirm_reject_order") : t("confirm_cancel_order");
-          if (btn.dataset.status === "cancelled" && !confirm(confirmMsg)) return;
           actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
           try {
             await api.updateOrderStatus(orderId, btn.dataset.status);
@@ -498,26 +446,12 @@ export async function renderOrders(root, navigate) {
             return;
           }
           if (btn.dataset.action === "delete-order" && !confirm(t("confirm_delete_order"))) return;
-          if (btn.dataset.action === "mark-packed") {
+          if (btn.dataset.action === "reject-order") {
+            if (!confirm(t("confirm_reject_order"))) return;
+            const note = prompt(t("reject_order_note_prompt")) || "";
             actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
             try {
-              await api.markOrderPacked(orderId);
-              overlay.remove();
-              notifyOrdersChanged();
-              load();
-            } catch (err) {
-              errorEl.textContent = err.message;
-              errorEl.hidden = false;
-              actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = false));
-            }
-            return;
-          }
-          if (btn.dataset.action === "flag-stock-issue") {
-            const note = prompt(t("stock_issue_note_prompt"));
-            if (!note || !note.trim()) return;
-            actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
-            try {
-              await api.flagOrderStockIssue(orderId, note.trim());
+              await api.rejectOrder(orderId, note.trim());
               overlay.remove();
               notifyOrdersChanged();
               load();

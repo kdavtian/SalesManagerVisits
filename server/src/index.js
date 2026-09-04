@@ -33,6 +33,7 @@ import { paymentsRouter } from "./routes/payments.js";
 import { warehouseRouter } from "./routes/warehouse.js";
 import { deliveryRouter } from "./routes/delivery.js";
 import { startOverdueReminders } from "./overdueReminders.js";
+import { startStalePackedReminder } from "./stalePackedReminder.js";
 import { requireAuth } from "./middleware/auth.js";
 import { autoAssignSalesChannel } from "./salesChannelAutofill.js";
 import { normalizeCustomerPortfolio } from "./customerChannelPolicy.js";
@@ -131,4 +132,5 @@ const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`Field Visits server listening on :${port}`);
   startOverdueReminders();
+  startStalePackedReminder();
 });

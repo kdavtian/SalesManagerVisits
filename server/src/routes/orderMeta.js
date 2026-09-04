@@ -25,7 +25,7 @@ orderMetaRouter.get("/summary", async (req, res) => {
     `SELECT
        COUNT(*) FILTER (WHERE o.status = 'submitted')::int AS submitted,
        COUNT(*) FILTER (WHERE o.status = 'confirmed')::int AS confirmed,
-       COUNT(*) FILTER (WHERE o.status = 'packed')::int AS packed,
+       COUNT(*) FILTER (WHERE o.status = 'packed_stock_out')::int AS packed,
        COALESCE(
          json_agg(DISTINCT c.region ORDER BY c.region) FILTER (WHERE c.region IS NOT NULL AND btrim(c.region) <> ''),
          '[]'::json

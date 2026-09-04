@@ -7,25 +7,25 @@ import path from "node:path";
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
-import { canPlanRoutes, canDeliverOrders } from "../roles.js";
+import { canPlanRoutes, canDeliverOrders, seesUnrecordedBadge } from "../roles.js";
 import { notifyUser } from "../notifications.js";
 import { DRIVER_NOTIFY_ROLES, DELIVERY_OUTCOME_NOTIFY_ROLES } from "../notificationPreferences.js";
 import { buildMatrix, optimizeOrder } from "../osrm.js";
 import { signatureUpload, uploadDirPath } from "../upload.js";
-import { insertPayment } from "./payments.js";
 
 export const deliveryRouter = Router();
 deliveryRouter.use(requireAuth);
 
-// Every packed order not already on an active route -- what the planner
-// picks stops from.
+// Every packed_stock_out order not already on an active route -- what the
+// planner auto-pools stops from (spec: the planner gathers these itself,
+// no manual checkbox selection).
 deliveryRouter.get("/packed-orders", async (req, res) => {
   if (!canPlanRoutes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const { rows } = await pool.query(
     `SELECT o.id, o.order_code, o.total_amd, c.name AS customer_name, c.address, c.lat, c.lng
      FROM orders o
      JOIN customers c ON c.id = o.customer_id
-     WHERE o.status = 'packed'
+     WHERE o.status = 'packed_stock_out'
        AND NOT EXISTS (SELECT 1 FROM route_stops rs WHERE rs.order_id = o.id)
      ORDER BY o.created_at ASC`
   );
@@ -57,18 +57,19 @@ async function loadRoute(routeId) {
   return { ...route, stops };
 }
 
-// Builds (or replaces) a driver's route for a day from a chosen set of
-// packed orders: runs nearest-neighbor + 2-opt against OSRM (or the
-// haversine fallback) starting from the driver's given location, then
-// auto-flips every included order to out_for_delivery.
+// Builds (or refreshes) a driver's route for a day from every
+// packed_stock_out order not already on a route -- the planner auto-pools
+// stops itself (spec: no manual checkbox selection). Runs
+// nearest-neighbor + 2-opt against OSRM (or the haversine fallback)
+// starting from the driver's given location. Order status is left at
+// "packed_stock_out" -- v3 has no separate "out for delivery" state, so
+// routing doesn't move the order forward, only delivery confirmation does.
 deliveryRouter.post("/routes/plan", async (req, res) => {
   if (!canPlanRoutes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
-  const { driver_id, route_date, order_ids, start_lat, start_lng } = req.body ?? {};
+  const { driver_id, route_date, start_lat, start_lng } = req.body ?? {};
   const driverId = Number(driver_id);
   const routeDate = route_date || new Date().toISOString().slice(0, 10);
-  if (!driverId || !Array.isArray(order_ids) || !order_ids.length) {
-    return res.status(400).json({ error: "driver_id and at least one order_id are required" });
-  }
+  if (!driverId) return res.status(400).json({ error: "driver_id is required" });
   const { rows: driverRows } = await pool.query("SELECT id, role FROM users WHERE id = $1", [driverId]);
   if (!driverRows[0] || !canDeliverOrders(driverRows[0].role)) {
     return res.status(400).json({ error: "driver_id must be a delivery_manager" });
@@ -77,14 +78,12 @@ deliveryRouter.post("/routes/plan", async (req, res) => {
   const { rows: orders } = await pool.query(
     `SELECT o.id, o.status, c.name AS customer_name, c.lat, c.lng
      FROM orders o JOIN customers c ON c.id = o.customer_id
-     WHERE o.id = ANY($1)`,
-    [order_ids.map(Number)]
+     WHERE o.status = 'packed_stock_out'
+       AND NOT EXISTS (SELECT 1 FROM route_stops rs WHERE rs.order_id = o.id)
+       AND c.lat IS NOT NULL AND c.lng IS NOT NULL
+     ORDER BY o.created_at ASC`
   );
-  if (orders.length !== order_ids.length) return res.status(400).json({ error: "One or more orders not found" });
-  const notPacked = orders.find((o) => o.status !== "packed");
-  if (notPacked) return res.status(409).json({ error: `${notPacked.customer_name}'s order is not packed` });
-  const noLocation = orders.find((o) => o.lat == null || o.lng == null);
-  if (noLocation) return res.status(400).json({ error: `${noLocation.customer_name} has no map location set` });
+  if (!orders.length) return res.status(409).json({ error: "No packed orders with a map location are waiting to be routed" });
 
   // Point 0 is the driver's starting location (defaults to the first
   // stop's location if not given, so the optimizer still has something to
@@ -117,7 +116,6 @@ deliveryRouter.post("/routes/plan", async (req, res) => {
          VALUES ($1, $2, $3, $4, $5)`,
         [routeId, order.id, sequence, distances[prevPointIndex][pointIndex], durations[prevPointIndex][pointIndex]]
       );
-      await client.query("UPDATE orders SET status = 'out_for_delivery', updated_at = now() WHERE id = $1", [order.id]);
       prevPointIndex = pointIndex;
       sequence++;
     }
@@ -235,9 +233,9 @@ deliveryRouter.get("/orders/:id/debt-snapshot", async (req, res) => {
 });
 
 // Confirms a delivery: saves the signature as Proof of Delivery, records
-// any payment collected (as a pending payment for the Accountant to
-// review, same as every other payment source -- see insertPayment), and
-// moves the order to delivered.
+// the amount/method collected as informational fields on the POD record
+// (no payment-approval workflow here -- Excel remains the source of truth
+// for collections, per spec section 9), and moves the order to delivered.
 deliveryRouter.post("/orders/:id/confirm", (req, res, next) => {
   signatureUpload.single("signature")(req, res, (err) => {
     if (err) return res.status(400).json({ error: err.message });
@@ -257,11 +255,12 @@ deliveryRouter.post("/orders/:id/confirm", (req, res, next) => {
   );
   const order = rows[0];
   if (!order) return res.status(404).json({ error: "Order not found" });
-  if (order.status !== "out_for_delivery") {
+  if (order.status !== "packed_stock_out") {
     return res.status(409).json({ error: `Cannot confirm delivery for an order that is "${order.status}"` });
   }
 
   const amountCollected = Number(req.body.amount_collected_amd) || 0;
+  const paymentMethod = amountCollected > 0 && ["cash", "other"].includes(req.body.payment_method) ? req.body.payment_method : null;
   const { rows: erpRows } = await pool.query("SELECT debt_amd FROM erp_customer_data WHERE erp_customer_id = $1", [
     order.erp_customer_id,
   ]);
@@ -274,9 +273,9 @@ deliveryRouter.post("/orders/:id/confirm", (req, res, next) => {
     await client.query("BEGIN");
     await client.query(
       `INSERT INTO pod_records
-         (order_id, driver_id, driver_name_snapshot, signature_path, debt_balance_before_amd, order_amount_amd, amount_collected_amd, new_balance_after_amd)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [order.id, req.user.id, driverName, signaturePath, debtBefore, order.total_amd, amountCollected, newBalance]
+         (order_id, driver_id, driver_name_snapshot, signature_path, debt_balance_before_amd, order_amount_amd, amount_collected_amd, new_balance_after_amd, payment_method)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [order.id, req.user.id, driverName, signaturePath, debtBefore, order.total_amd, amountCollected, newBalance, paymentMethod]
     );
     await client.query("UPDATE route_stops SET completed_at = now() WHERE order_id = $1", [order.id]);
     await client.query("UPDATE orders SET status = 'delivered', updated_at = now() WHERE id = $1", [order.id]);
@@ -293,22 +292,6 @@ deliveryRouter.post("/orders/:id/confirm", (req, res, next) => {
 
   (async () => {
     try {
-      if (amountCollected > 0) {
-        const { rows: customerRows } = await pool.query("SELECT id, name, erp_customer_id FROM customers WHERE id = $1", [
-          order.customer_id,
-        ]);
-        await insertPayment({
-          customer: customerRows[0],
-          amount: amountCollected,
-          paymentDate: new Date().toISOString(),
-          salesManagerId: order.user_id,
-          manager: { name: driverName, role: req.user.role, position: null },
-          note: `Collected on delivery of order ${order.order_code || order.id}`,
-          createdBy: req.user.id,
-          clientRef: `delivery-${order.id}`,
-          orderId: order.id,
-        });
-      }
       const { rows: recipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [DELIVERY_OUTCOME_NOTIFY_ROLES]);
       for (const recipient of recipients) {
         notifyUser(recipient.id, "order_delivered", {
@@ -324,8 +307,9 @@ deliveryRouter.post("/orders/:id/confirm", (req, res, next) => {
 });
 
 // Delivery failed -- no reason required, no stock adjustment (per spec).
-// Drops the order back to "confirmed" so it re-enters warehouse_review for
-// a fresh pack/route attempt.
+// Drops the order back to "draft" (the shared exception loop -- see
+// migrations/051_warehouse_delivery_v3.sql) for the rep/director to fix up
+// and resubmit.
 deliveryRouter.post("/orders/:id/fail", async (req, res) => {
   if (!canDeliverOrders(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const { rows } = await pool.query(
@@ -334,13 +318,13 @@ deliveryRouter.post("/orders/:id/fail", async (req, res) => {
   );
   const order = rows[0];
   if (!order) return res.status(404).json({ error: "Order not found" });
-  if (order.status !== "out_for_delivery") {
+  if (order.status !== "packed_stock_out") {
     return res.status(409).json({ error: `Cannot fail delivery for an order that is "${order.status}"` });
   }
 
   await pool.query("UPDATE route_stops SET completed_at = now() WHERE order_id = $1", [order.id]);
   const { rows: updatedRows } = await pool.query(
-    "UPDATE orders SET status = 'returned', updated_at = now() WHERE id = $1 RETURNING *",
+    "UPDATE orders SET status = 'draft', draft_reason = 'Delivery attempt failed', updated_at = now() WHERE id = $1 RETURNING *",
     [order.id]
   );
   res.json(updatedRows[0]);
@@ -351,7 +335,7 @@ deliveryRouter.post("/orders/:id/fail", async (req, res) => {
       for (const recipient of recipients) {
         notifyUser(recipient.id, "order_returned", {
           title: "Delivery failed",
-          body: `${order.customer_name}'s delivery attempt failed and was returned.`,
+          body: `${order.customer_name}'s delivery attempt failed and was returned to draft.`,
           url: "/#/orders",
         });
       }
@@ -369,7 +353,7 @@ deliveryRouter.get("/pod/:orderId/signature", async (req, res) => {
   ]);
   const pod = rows[0];
   if (!pod) return res.status(404).json({ error: "Signature not found" });
-  if (!canPlanRoutes(req.user.role) && !canDeliverOrders(req.user.role) && pod.driver_id !== req.user.id) {
+  if (!canPlanRoutes(req.user.role) && !canDeliverOrders(req.user.role) && !seesUnrecordedBadge(req.user.role) && pod.driver_id !== req.user.id) {
     return res.status(403).json({ error: "Not allowed" });
   }
   res.sendFile(path.join(uploadDirPath, pod.signature_path), (err) => {

@@ -157,12 +157,11 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
 
   const tier = customer.customer_tier || "potential";
 
-  // Keyed by product id (or a synthetic "custom-N" id for a free-text line
-  // not in the catalog) so both kinds of line share the same cart map --
-  // and persists across brand/family navigation so a rep can pick items
-  // from several brands/families into one order.
+  // Keyed by product id. No product can be sold out of catalog (decision
+  // C6), so every line is a real catalog product -- persists across
+  // brand/family navigation so a rep can pick items from several
+  // brands/families into one order.
   const cart = new Map();
-  let customLineSeq = 0;
 
   // Brand -> flat product list -- no extra family step, just pick a brand
   // and see everything under it. A non-empty search query bypasses even
@@ -192,7 +191,6 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
     <div class="order-crumb-row" id="order-crumb-row" hidden></div>
     <div class="order-filter-row" id="order-filter-row" hidden></div>
     <div class="order-product-list" id="order-product-list"></div>
-    <button type="button" class="btn btn-block" id="add-custom-line-btn">${t("add_custom_item")}</button>
 
     <p class="form-error" id="order-error" hidden></p>
 
@@ -441,21 +439,6 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
   searchInput.addEventListener("input", () => {
     searchQuery = searchInput.value;
     render();
-  });
-
-  container.querySelector("#add-custom-line-btn").addEventListener("click", () => {
-    const name = prompt(t("custom_item_name_prompt"));
-    if (!name) return;
-    const priceStr = prompt(t("custom_item_price_prompt"));
-    const price = Number(priceStr);
-    if (!Number.isFinite(price) || price <= 0) {
-      alert(t("custom_item_invalid_price"));
-      return;
-    }
-    const id = `custom-${customLineSeq++}`;
-    cart.set(id, { product_id: null, product_name: name, unit_price_amd: price, quantity: 1 });
-    updateCartBar();
-    alert(`${t("added")}: ${name} (${formatAmd(price)})`);
   });
 
   saveBtn.addEventListener("click", async () => {

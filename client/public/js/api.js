@@ -172,6 +172,7 @@ export const api = {
   },
   getInventoryBrands: () => request("/warehouse/inventory/brands"),
   markOrderPacked: (id) => request(`/warehouse/orders/${id}/packed`, { method: "POST" }),
+  bulkMarkOrdersPacked: (orderIds) => json("/warehouse/orders/bulk-packed", "POST", { order_ids: orderIds }),
   flagOrderStockIssue: (id, note) => json(`/warehouse/orders/${id}/stock-issue`, "POST", { note }),
 
   // Delivery routes (see server/src/routes/delivery.js)
@@ -184,9 +185,13 @@ export const api = {
   confirmDelivery: (orderId, formData) => request(`/delivery/orders/${orderId}/confirm`, { method: "POST", body: formData }),
   failDelivery: (orderId) => request(`/delivery/orders/${orderId}/fail`, { method: "POST" }),
   getOrderDebtSnapshot: (orderId) => request(`/delivery/orders/${orderId}/debt-snapshot`),
+  podSignatureUrl: (orderId) => `/api/delivery/pod/${orderId}/signature`,
 
-  // Orders Due for Payment aging (see server/src/routes/payments.js)
-  getPaymentAging: () => request("/payments/aging"),
+  // Order rejection + accountant "Recorded" screen (see server/src/routes/orders.js)
+  rejectOrder: (id, note) => json(`/orders/${id}/reject`, "POST", { note }),
+  getRecordedList: (recorded) => request(`/orders/recorded-list?recorded=${recorded ? "true" : "false"}`),
+  getUnrecordedCount: () => request("/orders/unrecorded-count"),
+  setOrderRecorded: (id, recorded) => json(`/orders/${id}/recorded`, "PATCH", { recorded }),
 
   createPayment: (data) => json("/payments", "POST", data),
   listPayments: (params = {}) => {

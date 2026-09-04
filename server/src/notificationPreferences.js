@@ -17,6 +17,7 @@ export const NOTIFICATION_TYPES = [
   "order_packed",
   "order_delivered",
   "order_returned",
+  "order_stale_packed",
   "payment_due_soon",
 ];
 

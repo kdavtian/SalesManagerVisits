@@ -75,8 +75,31 @@ export async function renderWarehouse(root, navigate) {
   async function loadStaging() {
     const rows = await api.getStagingList();
     contentEl.innerHTML = rows.length
-      ? `<div class="card-list">${rows.map((o) => stagingRowHtml(o)).join("")}</div>`
+      ? `<button type="button" class="btn btn-primary btn-block" id="bulk-mark-packed-btn" disabled>${t("warehouse_bulk_mark_packed")}</button>
+         <div class="card-list" style="margin-top:8px;">${rows.map((o) => stagingRowHtml(o)).join("")}</div>`
       : `<p class="empty-state">${t("warehouse_staging_empty")}</p>`;
+
+    const bulkBtn = contentEl.querySelector("#bulk-mark-packed-btn");
+    function updateBulkBtn() {
+      const checked = contentEl.querySelectorAll('[data-select-order]:checked').length;
+      if (!bulkBtn) return;
+      bulkBtn.disabled = checked === 0;
+      bulkBtn.textContent = checked ? `${t("warehouse_bulk_mark_packed")} (${checked})` : t("warehouse_bulk_mark_packed");
+    }
+    contentEl.querySelectorAll("[data-select-order]").forEach((cb) => cb.addEventListener("change", updateBulkBtn));
+    bulkBtn?.addEventListener("click", async () => {
+      const ids = Array.from(contentEl.querySelectorAll('[data-select-order]:checked')).map((cb) => Number(cb.dataset.selectOrder));
+      if (!ids.length) return;
+      bulkBtn.disabled = true;
+      try {
+        await api.bulkMarkOrdersPacked(ids);
+        load();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+        bulkBtn.disabled = false;
+      }
+    });
 
     contentEl.querySelectorAll("[data-mark-packed]").forEach((btn) => {
       btn.addEventListener("click", async () => {
@@ -111,6 +134,10 @@ export async function renderWarehouse(root, navigate) {
   function stagingRowHtml(o) {
     return `
       <div class="card">
+        <label class="plan-order-row" style="padding:0 0 8px;">
+          <input type="checkbox" data-select-order="${o.id}" />
+          <span>${t("warehouse_select_for_bulk")}</span>
+        </label>
         <div class="order-detail-ids">
           <span>${t("customer_id_label")}: ${escapeHtml(o.erp_customer_id || "")}</span>
           ${o.order_code ? `<span>${t("order_id_label")}: ${escapeHtml(o.order_code)}</span>` : ""}

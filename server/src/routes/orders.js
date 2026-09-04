@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { seesAllActivity, canConfirmOrders, canAssignErpCustomerId, isFulfillmentRole, canManageWarehouse } from "../roles.js";
+import { seesAllActivity, canConfirmOrders, canAssignErpCustomerId, canRecordOrders, seesUnrecordedBadge } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { notifyUser } from "../notifications.js";
 import { ORDER_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES } from "../notificationPreferences.js";
@@ -10,49 +10,28 @@ export const ordersRouter = Router();
 
 ordersRouter.use(requireAuth);
 
-// Warehouse/delivery staff (plus admin) are the ones who actually move an
-// order through fulfillment; a plain rep or director can request a
-// cancellation but can't claim to have packed or delivered something.
-// Kept as a re-export of roles.js's isFulfillmentRole so nothing else in
-// this file (or its call sites) needs to change shape.
-const FULFILLMENT_ROLES = { has: (role) => isFulfillmentRole(role) };
-
-// What each status may legally become next. "cancelled" is reachable from
-// anywhere in-flight; once delivered or cancelled, an order is final. This
-// is the master map -- see routes/warehouse.js and routes/delivery.js for
-// the dedicated endpoints that actually perform the note-required
-// (stock_issue) and route-driven (out_for_delivery) transitions; the
-// generic PATCH below only exposes a subset of this map (see
-// GENERIC_PATCH_TARGETS) so those can't be bypassed without their required
-// extra data.
+// v3 status machine (5 states): draft -> submitted -> confirmed ->
+// packed_stock_out -> delivered. Every exception (director reject, WM
+// stock issue, failed delivery) loops back to "draft" instead of a
+// dedicated status -- see migrations/051_warehouse_delivery_v3.sql. This is
+// the master map -- routes/warehouse.js and routes/delivery.js own the
+// dedicated endpoints that actually perform the note-required (stock
+// issue/reject) and POD-required (delivered) transitions; the generic
+// PATCH below only exposes "confirmed" (see GENERIC_PATCH_TARGETS) so
+// those can't be bypassed without their required extra data.
 export const NEXT_STATUS = {
-  draft: ["cancelled"],
-  submitted: ["confirmed", "cancelled"],
-  // "confirmed" auto-chains straight into "warehouse_review" the moment a
-  // director confirms it (see the PATCH handler below) -- it's never
-  // actually left sitting at "confirmed" in the DB, just validated as a
-  // reachable step so the review permission check has something to gate on.
-  confirmed: ["warehouse_review", "cancelled"],
-  warehouse_review: ["packed", "stock_issue", "cancelled"],
-  // A flagged stock issue drops back to "confirmed" (the closest existing
-  // equivalent of the spec's "pending") -- resolving it and re-confirming
-  // re-enters warehouse_review automatically via the same auto-chain.
-  stock_issue: ["confirmed", "cancelled"],
-  packed: ["out_for_delivery", "cancelled"],
-  out_for_delivery: ["delivered", "returned"],
+  draft: ["submitted"],
+  submitted: ["confirmed", "draft"],
+  confirmed: ["packed_stock_out", "draft"],
+  packed_stock_out: ["delivered", "draft"],
   delivered: [],
-  // A failed delivery attempt (no reason, no stock adjustment -- per spec)
-  // also drops back to "confirmed" for a re-attempt.
-  returned: ["confirmed", "cancelled"],
-  cancelled: [],
 };
 
-// The generic PATCH /:id below only ever writes one of these statuses
-// directly -- warehouse_review/stock_issue/out_for_delivery/returned all
-// carry required extra data (a stock-issue note, a route assignment, a
-// delivery signature) that only routes/warehouse.js and routes/delivery.js
-// collect, so this endpoint refuses to set them directly.
-const GENERIC_PATCH_TARGETS = new Set(["confirmed", "packed", "delivered", "cancelled"]);
+// The generic PATCH /:id below only ever writes "confirmed" directly --
+// draft (reject/stock-issue/delivery-failure), packed_stock_out and
+// delivered all carry required extra data (a note, a mark-packed action, a
+// delivery signature) that only their dedicated endpoints collect.
+const GENERIC_PATCH_TARGETS = new Set(["confirmed"]);
 
 // Snapshots each line's product name/price at build time -- shared by
 // create and edit so an edited order prices its new lines exactly the same
@@ -70,19 +49,21 @@ async function buildOrderLines(items) {
     if (!Number.isFinite(quantity) || quantity <= 0) {
       throw new OrderValidationError("Every item needs a positive quantity");
     }
+    // Every line must resolve to a real catalog product -- no product can
+    // be sold out of catalog (per decision C6). A free-text line was
+    // previously allowed here for something not yet in the catalog; that
+    // path is removed.
     const product = Number.isInteger(Number(item.product_id)) ? productById.get(Number(item.product_id)) : null;
-    const productName = product ? product.name : item.product_name;
-    const unitPrice = product ? Number(product.unit_price_amd) : Number(item.unit_price_amd);
-    if (!productName || !Number.isFinite(unitPrice) || unitPrice < 0) {
-      throw new OrderValidationError("Each item needs a valid product and a non-negative price");
+    if (!product) {
+      throw new OrderValidationError("Every item must be a product from the catalog");
     }
     lines.push({
-      product_id: product?.id ?? null,
-      product_name: productName,
-      brand: product?.brand ?? item.brand ?? null,
-      unit_price_amd: unitPrice,
+      product_id: product.id,
+      product_name: product.name,
+      brand: product.brand ?? null,
+      unit_price_amd: Number(product.unit_price_amd),
       quantity,
-      line_total_amd: unitPrice * quantity,
+      line_total_amd: Number(product.unit_price_amd) * quantity,
     });
   }
   return lines;
@@ -116,7 +97,9 @@ async function nextOrderCode(client) {
   return formatOrderCode(rows[0].day, rows[0].seq);
 }
 
-const DISCOUNT_APPROVER_ROLES = new Set(["admin", "sales_director", "ceo"]);
+// Same reviewer set as who confirms a submitted order (roles.js's
+// canConfirmOrders) -- kept as one function instead of a second duplicate
+// role list (B1).
 
 // A flat-AMD discount and a percent discount are mutually exclusive on one
 // order -- discount_amd wins if both are somehow nonzero (shouldn't happen,
@@ -126,11 +109,11 @@ function applyDiscount(subtotal, discountPct, discountAmd) {
   return subtotal * (1 - discountPct / 100);
 }
 
-// Create an order: an items array of {product_id, quantity} (or a free-text
-// {product_name, unit_price_amd, quantity} line for something not yet in
-// the catalog). Prices are snapshotted from the catalog at save time, not
-// looked up live later -- an order is what was actually agreed, and must
-// stay correct even if the catalog price changes afterward.
+// Create an order: an items array of {product_id, quantity}, every line
+// resolving to a real catalog product (no free-text lines -- decision C6).
+// Prices are snapshotted from the catalog at save time, not looked up live
+// later -- an order is what was actually agreed, and must stay correct
+// even if the catalog price changes afterward.
 ordersRouter.post("/", async (req, res) => {
   const { customer_id, checkin_id, note, items, discount_pct, discount_amd } = req.body ?? {};
   const customerId = Number(customer_id);
@@ -312,6 +295,42 @@ ordersRouter.get("/pending-count", async (req, res) => {
   res.json({ count: rows[0].count });
 });
 
+// Accountant "Recorded" screen (spec section 6): every delivered order is
+// listed here with its POD signature/debt/payment info until an
+// accountant (or CEO/admin, who can also see the unrecorded backlog to
+// catch it before it piles up) checks it off against the Excel books.
+// This module never decides whether an order is "paid" -- it only tracks
+// whether someone has looked at it. Declared ahead of GET /:id, same
+// reason as pending-count above -- Express would otherwise try to match
+// "recorded-list"/"unrecorded-count" as an :id.
+ordersRouter.get("/recorded-list", async (req, res) => {
+  if (!seesUnrecordedBadge(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const recorded = req.query.recorded === "true";
+  const { rows } = await pool.query(
+    `SELECT o.id, o.order_code, o.total_amd, o.updated_at AS delivered_at, o.recorded, o.recorded_at,
+            c.name AS customer_name, c.erp_customer_id,
+            rb.name AS recorded_by_name,
+            pod.debt_balance_before_amd, pod.amount_collected_amd, pod.new_balance_after_amd,
+            pod.payment_method, pod.delivered_at AS pod_delivered_at
+     FROM orders o
+     JOIN customers c ON c.id = o.customer_id
+     LEFT JOIN users rb ON rb.id = o.recorded_by
+     LEFT JOIN LATERAL (
+       SELECT * FROM pod_records WHERE order_id = o.id ORDER BY id DESC LIMIT 1
+     ) pod ON true
+     WHERE o.status = 'delivered' AND o.recorded = $1
+     ORDER BY o.updated_at DESC`,
+    [recorded]
+  );
+  res.json(rows);
+});
+
+ordersRouter.get("/unrecorded-count", async (req, res) => {
+  if (!seesUnrecordedBadge(req.user.role)) return res.json({ count: 0 });
+  const { rows } = await pool.query("SELECT COUNT(*)::int AS count FROM orders WHERE status = 'delivered' AND recorded = false");
+  res.json({ count: rows[0].count });
+});
+
 ordersRouter.get("/:id", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT o.*, u.name AS user_name, c.name AS customer_name, c.erp_customer_id
@@ -397,8 +416,11 @@ ordersRouter.post("/:id/submit", async (req, res) => {
 });
 
 // Edit line items (only while still "submitted", by the rep who placed it
-// or an admin) and/or move the order's fulfillment status forward or to
-// "cancelled". Both can be sent in the same request.
+// or an admin) and/or confirm a submitted order. Both can be sent in the
+// same request. There is no "cancel" path here -- a rep who wants to
+// withdraw their own submitted order asks a director to reject it (see
+// POST /:id/reject); the only true dead-end is an admin's permanent
+// DELETE below.
 ordersRouter.patch("/:id", async (req, res) => {
   const { rows } = await pool.query("SELECT * FROM orders WHERE id = $1", [req.params.id]);
   const order = rows[0];
@@ -480,33 +502,26 @@ ordersRouter.patch("/:id", async (req, res) => {
 
   let nextStatus = order.status;
   if (status !== undefined) {
-    // A director (or admin) reviewing a fresh order can confirm it or
-    // reject it (set status to "cancelled") -- same as the rep who placed
-    // it or fulfillment staff can, but only while it's still "submitted".
+    // Only a director (or admin) reviewing a fresh "submitted" order can
+    // confirm it via this generic endpoint -- see GENERIC_PATCH_TARGETS.
     const canReviewSubmitted = order.status === "submitted" && canConfirmOrders(req.user.role);
-    if (status === "cancelled") {
-      if (!isOwnerOrAdmin && !FULFILLMENT_ROLES.has(req.user.role) && !canReviewSubmitted) {
-        return res.status(403).json({ error: "Not allowed to cancel this order" });
-      }
-    } else {
-      if (!FULFILLMENT_ROLES.has(req.user.role) && !canReviewSubmitted) {
-        return res.status(403).json({ error: "Only warehouse/delivery staff -- or a director confirming a new order -- can update fulfillment status" });
-      }
-      if (order.approval_status === "pending" || order.approval_status === "rejected") {
-        return res.status(409).json({
-          error:
-            order.approval_status === "pending"
-              ? "This order's price change is awaiting director approval"
-              : "This order's price change was rejected -- edit the order to remove or adjust it before it can proceed",
-        });
-      }
+    if (!canReviewSubmitted) {
+      return res.status(403).json({ error: "Only a director confirming a submitted order can update its status here" });
+    }
+    if (order.approval_status === "pending" || order.approval_status === "rejected") {
+      return res.status(409).json({
+        error:
+          order.approval_status === "pending"
+            ? "This order's price change is awaiting director approval"
+            : "This order's price change was rejected -- edit the order to remove or adjust it before it can proceed",
+      });
     }
     if (!NEXT_STATUS[order.status]?.includes(status)) {
       return res.status(409).json({ error: `Cannot move an order from "${order.status}" to "${status}"` });
     }
     if (!GENERIC_PATCH_TARGETS.has(status)) {
       return res.status(400).json({
-        error: `"${status}" requires the dedicated warehouse/delivery endpoint, not a plain status edit`,
+        error: `"${status}" requires the dedicated endpoint, not a plain status edit`,
       });
     }
     // Defense in depth: draft orders can only reach "submitted" through
@@ -514,21 +529,16 @@ ordersRouter.patch("/:id", async (req, res) => {
     // reachable from here), but a submitted order could in principle have
     // had its customer's ERP link removed after the fact -- re-check right
     // before confirming rather than trusting the state at submit time.
-    if (status === "confirmed") {
-      const { rows: cRows } = await pool.query("SELECT erp_customer_id FROM customers WHERE id = $1", [order.customer_id]);
-      if (!cRows[0]?.erp_customer_id) {
-        return res.status(409).json({ error: "This order's customer has no ERP customer ID -- link one before confirming" });
-      }
+    const { rows: cRows } = await pool.query("SELECT erp_customer_id FROM customers WHERE id = $1", [order.customer_id]);
+    if (!cRows[0]?.erp_customer_id) {
+      return res.status(409).json({ error: "This order's customer has no ERP customer ID -- link one before confirming" });
     }
     nextStatus = status;
   }
 
   // Confirming an order isn't a resting state -- it immediately enters the
-  // Warehouse Manager's queue (see task spec: "order confirmed -> enters
-  // warehouse_review, notifies WM"). Chaining it here keeps that a single
-  // atomic write instead of a second round trip.
-  const enteringWarehouseReview = nextStatus === "confirmed";
-  if (enteringWarehouseReview) nextStatus = "warehouse_review";
+  // Warehouse Manager's queue (spec: "order confirmed -> WM notified").
+  const enteringWarehouseQueue = status !== undefined && nextStatus === "confirmed" && order.status !== "confirmed";
 
   const client = await pool.connect();
   let updated;
@@ -573,11 +583,11 @@ ordersRouter.patch("/:id", async (req, res) => {
         const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
         notifyUser(order.user_id, "order_status_changed", {
           title: "Order update",
-          body: `${customerRows[0]?.name || "Order"} is now "${nextStatus === "warehouse_review" ? "confirmed" : nextStatus}".`,
+          body: `${customerRows[0]?.name || "Order"} is now "${nextStatus}".`,
           url: "/#/orders",
         });
       }
-      if (enteringWarehouseReview) {
+      if (enteringWarehouseQueue) {
         const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
         const customerName = customerRows[0]?.name || "Order";
         const { rows: wmRows } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [WAREHOUSE_NOTIFY_ROLES]);
@@ -599,7 +609,7 @@ ordersRouter.patch("/:id", async (req, res) => {
 // admin) approves or rejects it here -- see the approval_status gate on
 // the fulfillment-status branch of PATCH /:id above.
 ordersRouter.post("/:id/approve-discount", async (req, res) => {
-  if (!DISCOUNT_APPROVER_ROLES.has(req.user.role)) {
+  if (!canConfirmOrders(req.user.role)) {
     return res.status(403).json({ error: "Only a sales director can approve a discount" });
   }
   const { rows } = await pool.query("SELECT * FROM orders WHERE id = $1", [req.params.id]);
@@ -645,7 +655,7 @@ ordersRouter.post("/:id/approve-discount", async (req, res) => {
 });
 
 ordersRouter.post("/:id/reject-discount", async (req, res) => {
-  if (!DISCOUNT_APPROVER_ROLES.has(req.user.role)) {
+  if (!canConfirmOrders(req.user.role)) {
     return res.status(403).json({ error: "Only a sales director can reject a discount" });
   }
   const { rows } = await pool.query("SELECT * FROM orders WHERE id = $1", [req.params.id]);
@@ -678,7 +688,68 @@ ordersRouter.post("/:id/reject-discount", async (req, res) => {
   })();
 });
 
-// Permanent removal (not the same as cancelling, which keeps the order as
+// A director (or admin) rejects a freshly-submitted order -- the only way
+// (besides an admin's permanent delete below) a submitted order leaves the
+// review queue without being confirmed. Drops it back to "draft" with an
+// optional note, same exception-loop shape as the warehouse/delivery
+// reject paths (see routes/warehouse.js and routes/delivery.js).
+ordersRouter.post("/:id/reject", async (req, res) => {
+  if (!canConfirmOrders(req.user.role)) {
+    return res.status(403).json({ error: "Only a director can reject a submitted order" });
+  }
+  const { note } = req.body ?? {};
+  const { rows } = await pool.query(
+    `SELECT o.*, c.name AS customer_name FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = $1`,
+    [req.params.id]
+  );
+  const order = rows[0];
+  if (!order) return res.status(404).json({ error: "Order not found" });
+  if (order.status !== "submitted") {
+    return res.status(409).json({ error: `Cannot reject an order that is "${order.status}" -- only a submitted order can be rejected` });
+  }
+
+  const { rows: updatedRows } = await pool.query(
+    "UPDATE orders SET status = 'draft', draft_reason = $1, updated_at = now() WHERE id = $2 RETURNING *",
+    [note?.trim() || null, order.id]
+  );
+  res.json(updatedRows[0]);
+
+  (async () => {
+    try {
+      if (req.user.id !== order.user_id) {
+        notifyUser(order.user_id, "order_status_changed", {
+          title: "Order rejected",
+          body: `${order.customer_name}'s order was rejected${note?.trim() ? `: ${note.trim()}` : ""} -- edit and resubmit it.`,
+          url: "/#/orders",
+        });
+      }
+    } catch (err) {
+      console.error("Post-order-reject notification failed:", err);
+    }
+  })();
+});
+
+ordersRouter.patch("/:id/recorded", async (req, res) => {
+  if (!canRecordOrders(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const { recorded } = req.body ?? {};
+  if (typeof recorded !== "boolean") return res.status(400).json({ error: "recorded (boolean) is required" });
+
+  const { rows } = await pool.query("SELECT status FROM orders WHERE id = $1", [req.params.id]);
+  if (!rows[0]) return res.status(404).json({ error: "Order not found" });
+  if (rows[0].status !== "delivered") {
+    return res.status(409).json({ error: "Only a delivered order can be marked recorded" });
+  }
+
+  const { rows: updatedRows } = await pool.query(
+    recorded
+      ? "UPDATE orders SET recorded = true, recorded_by = $1, recorded_at = now() WHERE id = $2 RETURNING *"
+      : "UPDATE orders SET recorded = false, recorded_by = NULL, recorded_at = NULL WHERE id = $1 RETURNING *",
+    recorded ? [req.user.id, req.params.id] : [req.params.id]
+  );
+  res.json(updatedRows[0]);
+});
+
+// Permanent removal (not the same as rejecting, which keeps the order as
 // a record) -- admin-only, for a duplicate or mistaken order that
 // shouldn't appear in reports at all. order_items cascades with it.
 ordersRouter.delete("/:id", requireAdmin, async (req, res) => {

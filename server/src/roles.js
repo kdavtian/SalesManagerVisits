@@ -181,12 +181,20 @@ export function isFulfillmentRole(role) {
   return canManageWarehouse(role) || canDeliverOrders(role);
 }
 
-// The "Orders Due for Payment" aging view and per-customer credit-term
-// editing are financial/collections concerns -- same audience as
-// seesFinancialExports (warehouse/delivery are excluded -- no
-// reconciliation reason to see debt aging).
-export function seesPaymentAging(role) {
-  return seesFinancialExports(role);
+// Who can check/uncheck the accountant's "Recorded" flag on a delivered
+// order (v3 spec section 6) -- the accountant who actually reconciles it
+// against the Excel books, or admin as a backstop.
+export function canRecordOrders(role) {
+  return role === "accountant" || role === "admin";
+}
+
+// Who sees the unrecorded-order backlog (count badge, recorded-list
+// screen) -- the accountant doing the recording, plus CEO/admin so a
+// growing backlog gets caught before it becomes a problem (explicit
+// decision, not just seesFinancialExports -- sales_director does not see
+// this one).
+export function seesUnrecordedBadge(role) {
+  return role === "accountant" || role === "ceo" || role === "admin";
 }
 
 // Payments push notifications go only to whoever actually reconciles them

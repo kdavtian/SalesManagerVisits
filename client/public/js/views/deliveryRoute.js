@@ -122,41 +122,24 @@ export async function renderDelivery(root, navigate) {
   }
 
   // --- Planner (delivery_manager/admin) ---------------------------------
+  // The planner auto-pools every packed_stock_out order not already on a
+  // route -- no manual checkbox selection (spec section 4). The driver
+  // picker plus a single "Plan/Refresh Route" action is all that's left.
   async function loadPlanner() {
     const [packedOrders, drivers] = await Promise.all([api.listPackedOrders(), api.listDrivers()]);
     contentEl.innerHTML = `
       <label class="form-label" for="plan-driver">${t("delivery_choose_driver")}</label>
       <select id="plan-driver">${drivers.map((d) => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join("")}</select>
-      <p class="muted" style="margin:10px 0 4px;">${t("delivery_choose_orders")}</p>
-      <div class="card-list" id="plan-orders-list">
-        ${
-          packedOrders.length
-            ? packedOrders
-                .map(
-                  (o) => `
-          <label class="card plan-order-row">
-            <input type="checkbox" value="${o.id}" ${o.lat == null ? "disabled" : ""} />
-            <span>
-              <strong>${escapeHtml(o.customer_name)}</strong>
-              <span class="muted">${escapeHtml(o.address || "")} ${o.lat == null ? `· ${t("delivery_no_location")}` : ""}</span>
-            </span>
-            <span class="muted">${formatAmd(Number(o.total_amd))}</span>
-          </label>`
-                )
-                .join("")
-            : `<p class="empty-state">${t("delivery_no_packed_orders")}</p>`
-        }
-      </div>
-      <button type="button" class="btn btn-primary btn-block" id="plan-route-btn" style="margin-top:12px;" ${packedOrders.length ? "" : "disabled"}>${t("delivery_plan_route_btn")}</button>
+      <p class="muted" style="margin:10px 0 4px;">${t("delivery_waiting_orders_count")}: ${packedOrders.filter((o) => o.lat != null).length}</p>
+      ${
+        packedOrders.some((o) => o.lat == null)
+          ? `<p class="muted">${packedOrders.filter((o) => o.lat == null).length} ${t("delivery_no_location")}</p>`
+          : ""
+      }
+      <button type="button" class="btn btn-primary btn-block" id="plan-route-btn" style="margin-top:12px;" ${packedOrders.some((o) => o.lat != null) ? "" : "disabled"}>${t("delivery_plan_route_btn")}</button>
       <div id="planned-route-result" style="margin-top:16px;"></div>
     `;
     contentEl.querySelector("#plan-route-btn").addEventListener("click", async () => {
-      const orderIds = Array.from(contentEl.querySelectorAll('#plan-orders-list input[type="checkbox"]:checked')).map((i) => Number(i.value));
-      if (!orderIds.length) {
-        errorEl.textContent = t("delivery_select_at_least_one");
-        errorEl.hidden = false;
-        return;
-      }
       const btn = contentEl.querySelector("#plan-route-btn");
       btn.disabled = true;
       btn.textContent = t("saving");
@@ -169,14 +152,14 @@ export async function renderDelivery(root, navigate) {
         }
         const route = await api.planRoute({
           driver_id: Number(contentEl.querySelector("#plan-driver").value),
-          order_ids: orderIds,
           start_lat: start?.lat,
           start_lng: start?.lng,
         });
         const resultEl = contentEl.querySelector("#planned-route-result");
         resultEl.innerHTML = `
           <h2 class="section-title">${t("delivery_route_planned")}</h2>
-          <div id="planned-route-map" style="height:220px;border-radius:12px;overflow:hidden;margin-bottom:12px;"></div>
+          ${route.used_osrm === false ? `<span class="badge badge-warning">${t("delivery_osrm_fallback_badge")}</span>` : ""}
+          <div id="planned-route-map" style="height:220px;border-radius:12px;overflow:hidden;margin:8px 0 12px;"></div>
           <div class="card-list" id="planned-route-list"></div>
         `;
         paintRouteMap(resultEl.querySelector("#planned-route-map"), route.stops);
@@ -264,6 +247,10 @@ export async function renderDelivery(root, navigate) {
         <p>${t("delivery_order_amount")}: <strong>${formatAmd(snapshot.order_amount_amd)}</strong></p>
         <label class="form-label" for="amount-collected-input">${t("delivery_amount_collected")}</label>
         <input type="number" id="amount-collected-input" min="0" step="1" value="0" inputmode="numeric" />
+        <div class="segmented" id="payment-method-row">
+          <button type="button" class="chip chip-active" data-method="cash">${t("payment_method_cash")}</button>
+          <button type="button" class="chip" data-method="other">${t("payment_method_other")}</button>
+        </div>
         <div id="new-balance-display">${newBalanceHtml()}</div>
       </div>
       <label class="form-label">${t("delivery_signature_label")}</label>
@@ -280,6 +267,14 @@ export async function renderDelivery(root, navigate) {
     amountInput.addEventListener("input", () => {
       amountCollected = Number(amountInput.value) || 0;
       overlay.querySelector("#new-balance-display").innerHTML = newBalanceHtml();
+    });
+
+    let paymentMethod = "cash";
+    overlay.querySelectorAll("#payment-method-row [data-method]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        paymentMethod = btn.dataset.method;
+        overlay.querySelectorAll("#payment-method-row [data-method]").forEach((b) => b.classList.toggle("chip-active", b === btn));
+      });
     });
 
     // Minimal canvas signature pad -- pointer events cover mouse, touch and
@@ -346,6 +341,7 @@ export async function renderDelivery(root, navigate) {
         const formData = new FormData();
         formData.append("signature", blob, "signature.png");
         formData.append("amount_collected_amd", String(amountCollected));
+        formData.append("payment_method", paymentMethod);
         await api.confirmDelivery(orderId, formData);
         overlay.remove();
         load();

@@ -1,9 +1,10 @@
 // Warehouse Manager screens: an Aggregated Pick List (grouped by product,
-// across every order currently sitting in warehouse_review -- not scoped
-// to one day, since orders arrive continuously), a Per-Order Staging List
-// (one order per row, "Mark Packed" / "Flag stock issue"), and a read-only
-// live-inventory reference panel. See migrations/050_warehouse_delivery.sql
-// for the status machine this operates on.
+// across every order currently sitting "confirmed" -- not scoped to one
+// day, since orders arrive continuously), a Per-Order Staging List (one
+// order per row, "Mark Packed" / "Flag stock issue"), and a read-only
+// live-inventory reference panel. See
+// migrations/051_warehouse_delivery_v3.sql for the 5-state status machine
+// this operates on.
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -32,7 +33,7 @@ warehouseRouter.get("/pick-list", async (req, res) => {
      FROM order_items oi
      JOIN orders o ON o.id = oi.order_id
      LEFT JOIN products p ON p.id = oi.product_id
-     WHERE o.status = 'warehouse_review'
+     WHERE o.status = 'confirmed'
      GROUP BY oi.product_id, oi.product_name, oi.brand, p.stock_qty
      ORDER BY oi.brand NULLS LAST, oi.product_name`
   );
@@ -49,7 +50,7 @@ warehouseRouter.get("/staging-list", async (req, res) => {
      FROM orders o
      JOIN customers c ON c.id = o.customer_id
      JOIN users u ON u.id = o.user_id
-     WHERE o.status = 'warehouse_review'
+     WHERE o.status = 'confirmed'
      ORDER BY o.created_at ASC`
   );
   const orderIds = rows.map((r) => r.id);
@@ -106,30 +107,28 @@ warehouseRouter.get("/inventory/brands", async (req, res) => {
   res.json(rows.map((r) => r.brand));
 });
 
-warehouseRouter.post("/orders/:id/packed", async (req, res) => {
+async function markPacked(orderId) {
   const { rows } = await pool.query(
     `SELECT o.*, c.name AS customer_name FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = $1`,
-    [req.params.id]
+    [orderId]
   );
   const order = rows[0];
-  if (!order) return res.status(404).json({ error: "Order not found" });
-  if (order.status !== "warehouse_review") {
-    return res.status(409).json({ error: `Cannot mark "${order.status}" as packed -- only a warehouse_review order can be packed` });
+  if (!order) return { error: "Order not found", status: 404 };
+  if (order.status !== "confirmed") {
+    return { error: `Cannot mark "${order.status}" as packed -- only a confirmed order can be packed`, status: 409 };
   }
 
   const { rows: updatedRows } = await pool.query(
-    "UPDATE orders SET status = 'packed', updated_at = now() WHERE id = $1 RETURNING *",
+    "UPDATE orders SET status = 'packed_stock_out', updated_at = now() WHERE id = $1 RETURNING *",
     [order.id]
   );
-  res.json(updatedRows[0]);
 
   (async () => {
     try {
-      const { rows: driverRows } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [WAREHOUSE_NOTIFY_ROLES]);
       // Packed orders are picked up by the route planner, not pushed to one
       // driver directly -- notify delivery_manager/admin generally so
       // whoever plans routes knows there's fresh stock ready to route.
-      const { rows: deliveryRows } = await pool.query("SELECT id FROM users WHERE role IN ('delivery_manager', 'admin')");
+      const { rows: deliveryRows } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [WAREHOUSE_NOTIFY_ROLES]);
       for (const d of deliveryRows) {
         notifyUser(d.id, "order_packed", {
           title: "Order packed",
@@ -137,11 +136,36 @@ warehouseRouter.post("/orders/:id/packed", async (req, res) => {
           url: "/#/delivery",
         });
       }
-      void driverRows;
     } catch (err) {
       console.error("Post-packed notification failed:", err);
     }
   })();
+
+  return { order: updatedRows[0] };
+}
+
+warehouseRouter.post("/orders/:id/packed", async (req, res) => {
+  const result = await markPacked(req.params.id);
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  res.json(result.order);
+});
+
+// C7: bulk mark-packed -- a WM staging a full batch shouldn't have to tap
+// "Mark Packed" once per order. Best-effort per order (one bad id doesn't
+// block the rest); the response lists which succeeded and which didn't.
+warehouseRouter.post("/orders/bulk-packed", async (req, res) => {
+  const { order_ids } = req.body ?? {};
+  if (!Array.isArray(order_ids) || !order_ids.length) {
+    return res.status(400).json({ error: "order_ids is required" });
+  }
+  const packed = [];
+  const failed = [];
+  for (const id of order_ids) {
+    const result = await markPacked(id);
+    if (result.error) failed.push({ id, error: result.error });
+    else packed.push(result.order);
+  }
+  res.json({ packed, failed });
 });
 
 warehouseRouter.post("/orders/:id/stock-issue", async (req, res) => {
@@ -154,12 +178,12 @@ warehouseRouter.post("/orders/:id/stock-issue", async (req, res) => {
   );
   const order = rows[0];
   if (!order) return res.status(404).json({ error: "Order not found" });
-  if (order.status !== "warehouse_review") {
-    return res.status(409).json({ error: `Cannot flag a stock issue on "${order.status}" -- only a warehouse_review order qualifies` });
+  if (order.status !== "confirmed") {
+    return res.status(409).json({ error: `Cannot flag a stock issue on "${order.status}" -- only a confirmed order qualifies` });
   }
 
   const { rows: updatedRows } = await pool.query(
-    "UPDATE orders SET status = 'stock_issue', stock_issue_note = $1, updated_at = now() WHERE id = $2 RETURNING *",
+    "UPDATE orders SET status = 'draft', draft_reason = $1, updated_at = now() WHERE id = $2 RETURNING *",
     [note.trim(), order.id]
   );
   res.json(updatedRows[0]);
