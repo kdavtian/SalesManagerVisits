@@ -160,6 +160,27 @@ export const api = {
   deleteOrder: (id) => request(`/orders/${id}`, { method: "DELETE" }),
   rejectOrderDiscount: (id) => request(`/orders/${id}/reject-discount`, { method: "POST" }),
 
+  // Warehouse (see server/src/routes/warehouse.js)
+  getPickList: () => request("/warehouse/pick-list"),
+  getStagingList: () => request("/warehouse/staging-list"),
+  getInventory: (q = "") => request(`/warehouse/inventory${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  markOrderPacked: (id) => request(`/warehouse/orders/${id}/packed`, { method: "POST" }),
+  flagOrderStockIssue: (id, note) => json(`/warehouse/orders/${id}/stock-issue`, "POST", { note }),
+
+  // Delivery routes (see server/src/routes/delivery.js)
+  listPackedOrders: () => request("/delivery/packed-orders"),
+  planRoute: (data) => json("/delivery/routes/plan", "POST", data),
+  listDrivers: () => request("/delivery/drivers"),
+  getRoute: (id) => request(`/delivery/routes/${id}`),
+  getMyRoute: (date) => request(`/delivery/my-route${date ? `?date=${encodeURIComponent(date)}` : ""}`),
+  reorderRouteStops: (id, orderIds) => json(`/delivery/routes/${id}/reorder`, "POST", { order_ids: orderIds }),
+  confirmDelivery: (orderId, formData) => request(`/delivery/orders/${orderId}/confirm`, { method: "POST", body: formData }),
+  failDelivery: (orderId) => request(`/delivery/orders/${orderId}/fail`, { method: "POST" }),
+  getOrderDebtSnapshot: (orderId) => request(`/delivery/orders/${orderId}/debt-snapshot`),
+
+  // Orders Due for Payment aging (see server/src/routes/payments.js)
+  getPaymentAging: () => request("/payments/aging"),
+
   createPayment: (data) => json("/payments", "POST", data),
   listPayments: (params = {}) => {
     const qs = new URLSearchParams(params).toString();

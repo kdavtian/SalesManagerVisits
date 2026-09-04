@@ -12,7 +12,27 @@ export const NOTIFICATION_TYPES = [
   "perf_plan_submitted",
   "perf_plan_reviewed",
   "payment_submitted",
+  "order_warehouse_review",
+  "order_stock_issue",
+  "order_packed",
+  "order_delivered",
+  "order_returned",
+  "payment_due_soon",
 ];
+
+// Warehouse Manager: an order just entered their queue.
+export const WAREHOUSE_NOTIFY_ROLES = ["warehouse_manager", "admin"];
+
+// A stock issue needs the Sales Director (and CEO/admin) to sort out --
+// same reviewers who confirmed the order in the first place.
+export const STOCK_ISSUE_NOTIFY_ROLES = ["sales_director", "ceo", "admin"];
+
+// A driver only needs to know once an order is packed and ready to route.
+export const DRIVER_NOTIFY_ROLES = ["delivery_manager", "admin"];
+
+// Delivered/returned events are visible to management and the warehouse,
+// per the spec's notification-events table.
+export const DELIVERY_OUTCOME_NOTIFY_ROLES = ["sales_director", "admin", "warehouse_manager"];
 
 // Roles that can review a route plan -- the only roles plan_submitted is
 // ever relevant to (see canPlanForOthers in roles.js).

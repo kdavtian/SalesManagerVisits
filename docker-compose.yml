@@ -37,11 +37,43 @@ services:
       PORT: 3000
       UPLOAD_DIR: /app/server/uploads
       CHECKIN_RADIUS_METERS: ${CHECKIN_RADIUS_METERS:-200}
+      OSRM_URL: ${OSRM_URL:-http://osrm:5000}
       NODE_ENV: production
     volumes:
       - uploads_data:/app/server/uploads
     ports:
       - "127.0.0.1:3000:3000"
+
+  # Self-hosted routing engine for the delivery Route Planner (see
+  # server/src/osrm.js). If this container isn't reachable, the app falls
+  # back to straight-line (haversine) distance automatically -- OSRM isn't
+  # a hard dependency, just a nicer route.
+  #
+  # OSRM needs a pre-processed road network before it can serve requests,
+  # which is a one-time step this compose file can't do for you (it needs
+  # an .osm.pbf extract, e.g. Armenia from Geofabrik, and running
+  # osrm-extract/osrm-partition/osrm-customize against it). On the droplet:
+  #
+  #   mkdir -p osrm-data && cd osrm-data
+  #   curl -L -o armenia-latest.osm.pbf \
+  #     https://download.geofabrik.de/asia/armenia-latest.osm.pbf
+  #   docker run --rm -v "$PWD:/data" osrm/osrm-backend \
+  #     osrm-extract -p /opt/car.lua /data/armenia-latest.osm.pbf
+  #   docker run --rm -v "$PWD:/data" osrm/osrm-backend \
+  #     osrm-partition /data/armenia-latest.osrm
+  #   docker run --rm -v "$PWD:/data" osrm/osrm-backend \
+  #     osrm-customize /data/armenia-latest.osrm
+  #
+  # Then point OSRM_DATA_DIR below at that osrm-data directory (defaults to
+  # ./osrm-data next to this file) and `docker compose up -d osrm`.
+  osrm:
+    image: osrm/osrm-backend:v5.27.1
+    restart: unless-stopped
+    command: osrm-routed --algorithm mld /data/armenia-latest.osrm
+    volumes:
+      - ${OSRM_DATA_DIR:-./osrm-data}:/data
+    ports:
+      - "127.0.0.1:5001:5000"
 
 volumes:
   db_data:

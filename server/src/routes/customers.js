@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId } from "../roles.js";
+import { seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, seesPaymentAging } from "../roles.js";
 import { getDefaultVisitFrequencyDays } from "../settings.js";
 
 export const customersRouter = Router();
@@ -239,12 +239,18 @@ export const EDITABLE_FIELDS = [
   "customer_tier",
   "assigned_manager_id",
   "sales_channel",
+  "credit_term_days",
 ];
 
 // A director/ceo (not just admin) can fix these four directly -- everything
 // else on EDITABLE_FIELDS still needs canDeleteOrEditDirectly (admin), same
 // as before, or goes through the edit-request approval flow.
 const REASSIGNMENT_FIELDS = new Set(["region", "subregion", "assigned_manager_id", "sales_channel"]);
+
+// credit_term_days is a collections/finance setting -- whoever can pull the
+// financial exports (accountant included, unlike REASSIGNMENT_FIELDS) can
+// edit it directly, same on-the-spot treatment as a reassignment.
+const FINANCE_FIELDS = new Set(["credit_term_days"]);
 
 customersRouter.patch("/:id", async (req, res) => {
   const fieldsPresent = EDITABLE_FIELDS.filter((f) => req.body?.[f] !== undefined);
@@ -266,7 +272,12 @@ customersRouter.patch("/:id", async (req, res) => {
     }
   } else {
     const onlyReassignmentFields = fieldsPresent.length > 0 && fieldsPresent.every((f) => REASSIGNMENT_FIELDS.has(f));
-    const allowed = onlyReassignmentFields ? canReassignCustomers(req.user.role) : canDeleteOrEditDirectly(req.user.role);
+    const onlyFinanceFields = fieldsPresent.length > 0 && fieldsPresent.every((f) => FINANCE_FIELDS.has(f));
+    const allowed = onlyReassignmentFields
+      ? canReassignCustomers(req.user.role)
+      : onlyFinanceFields
+      ? seesPaymentAging(req.user.role)
+      : canDeleteOrEditDirectly(req.user.role);
     if (!allowed) {
       return res.status(403).json({ error: "Only admins can apply this directly" });
     }
@@ -274,6 +285,12 @@ customersRouter.patch("/:id", async (req, res) => {
 
   if (req.body?.customer_tier !== undefined && !CUSTOMER_TIERS.has(req.body.customer_tier)) {
     return res.status(400).json({ error: "Invalid customer_tier" });
+  }
+  if (req.body?.credit_term_days !== undefined) {
+    const days = Number(req.body.credit_term_days);
+    if (!Number.isInteger(days) || days <= 0) {
+      return res.status(400).json({ error: "credit_term_days must be a positive whole number" });
+    }
   }
   if (req.body?.lat !== undefined || req.body?.lng !== undefined) {
     const nextLat = req.body.lat;

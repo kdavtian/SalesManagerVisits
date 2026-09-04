@@ -129,6 +129,30 @@ export async function renderDashboard(root, navigate) {
       </button>`
           : ""
       }
+      ${
+        state.user.role === "warehouse_manager" || state.user.role === "admin"
+          ? `<button type="button" class="quick-action" id="qa-warehouse">
+        <span class="quick-action-icon">${icons.box}</span>
+        <span>${t("qa_warehouse")}</span>
+      </button>`
+          : ""
+      }
+      ${
+        state.user.role === "delivery_manager" || state.user.role === "admin"
+          ? `<button type="button" class="quick-action" id="qa-delivery">
+        <span class="quick-action-icon">${icons.truck}</span>
+        <span>${t("qa_delivery")}</span>
+      </button>`
+          : ""
+      }
+      ${
+        ["admin", "ceo", "sales_director", "accountant"].includes(state.user.role)
+          ? `<button type="button" class="quick-action" id="qa-payment-aging">
+        <span class="quick-action-icon">${icons.clock}</span>
+        <span>${t("qa_payment_aging")}</span>
+      </button>`
+          : ""
+      }
     </div>
 
     ${
@@ -185,6 +209,9 @@ export async function renderDashboard(root, navigate) {
   container.querySelector("#qa-pricelist").addEventListener("click", () => navigate("#/pricelist"));
   container.querySelector("#qa-team-performance")?.addEventListener("click", () => navigate("#/team-performance"));
   container.querySelector("#qa-payments")?.addEventListener("click", () => navigate("#/payments"));
+  container.querySelector("#qa-warehouse")?.addEventListener("click", () => navigate("#/warehouse"));
+  container.querySelector("#qa-delivery")?.addEventListener("click", () => navigate("#/delivery"));
+  container.querySelector("#qa-payment-aging")?.addEventListener("click", () => navigate("#/payment-aging"));
   applyPaymentBadge();
 
   const leaderboardEl = container.querySelector("#points-leaderboard");

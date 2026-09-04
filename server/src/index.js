@@ -30,6 +30,8 @@ import { teamPerformanceRouter } from "./routes/teamPerformance.js";
 import { cashExpensesRouter } from "./routes/cashExpenses.js";
 import { reportsRouter } from "./routes/reports.js";
 import { paymentsRouter } from "./routes/payments.js";
+import { warehouseRouter } from "./routes/warehouse.js";
+import { deliveryRouter } from "./routes/delivery.js";
 import { startOverdueReminders } from "./overdueReminders.js";
 import { requireAuth } from "./middleware/auth.js";
 import { autoAssignSalesChannel } from "./salesChannelAutofill.js";
@@ -101,6 +103,8 @@ app.use("/api/team-performance", express.json(), teamPerformanceRouter);
 app.use("/api/cash-expenses", express.json(), cashExpensesRouter);
 app.use("/api/reports", express.json(), reportsRouter);
 app.use("/api/payments", express.json(), paymentsRouter);
+app.use("/api/warehouse", express.json(), warehouseRouter);
+app.use("/api/delivery", express.json(), deliveryRouter);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });

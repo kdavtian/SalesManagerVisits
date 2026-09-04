@@ -154,6 +154,41 @@ export function seesAllPayments(role) {
   return seesAllActivity(role);
 }
 
+// --- Warehouse & Delivery -----------------------------------------------
+// Who sees the Warehouse Manager's pick list / staging list and can mark an
+// order packed or flag a stock issue.
+export function canManageWarehouse(role) {
+  return role === "warehouse_manager" || role === "admin";
+}
+
+// Who plans/edits a delivery route (distinct from canPlanForOthers, which
+// is about the SM "Plan day" visit-plan tool, not deliveries).
+export function canPlanRoutes(role) {
+  return role === "delivery_manager" || role === "admin";
+}
+
+// Who can act as a driver on a delivery stop (confirm/fail a delivery).
+// A route's own driver_id is checked separately per-route -- this is just
+// "is this role allowed to drive at all".
+export function canDeliverOrders(role) {
+  return role === "delivery_manager" || role === "admin";
+}
+
+// Fulfillment staff who move an order between confirmed and delivered --
+// the single shared set orders.js's own FULFILLMENT_ROLES draws from, so
+// there is exactly one place that defines "who does fulfillment".
+export function isFulfillmentRole(role) {
+  return canManageWarehouse(role) || canDeliverOrders(role);
+}
+
+// The "Orders Due for Payment" aging view and per-customer credit-term
+// editing are financial/collections concerns -- same audience as
+// seesFinancialExports (warehouse/delivery are excluded -- no
+// reconciliation reason to see debt aging).
+export function seesPaymentAging(role) {
+  return seesFinancialExports(role);
+}
+
 // Payments push notifications go only to whoever actually reconciles them
 // day to day (Accountant) -- explicitly NOT CEO or admin, who can both
 // still review payments in-app but shouldn't be paged for every single one

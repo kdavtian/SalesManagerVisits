@@ -2,7 +2,7 @@ import { api } from "../api.js";
 import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { canEditDirectly, canReassignCustomers, canAssignErpCustomerId, isAdmin } from "../state.js";
+import { canEditDirectly, canReassignCustomers, canAssignErpCustomerId, isAdmin, seesFinancialExports } from "../state.js";
 import { openVisitDetailSheet } from "../visitDetail.js";
 
 const AGING_BADGE = {
@@ -109,6 +109,13 @@ export async function renderCustomerDetail(root, navigate, customerId) {
                </button>`
             : ""
         }
+        ${
+          seesFinancialExports()
+            ? `<button class="icon-btn" id="credit-term-btn" aria-label="${t("credit_term_days")}">
+                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+               </button>`
+            : ""
+        }
         <button class="icon-btn" id="edit-customer-btn" aria-label="${t("edit")}">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
         </button>
@@ -128,6 +135,11 @@ export async function renderCustomerDetail(root, navigate, customerId) {
           : ""
       }
       <div class="detail-fact"><span class="detail-fact-icon">${icons.repeat}</span><span>${t("visit_every_prefix")}${customer.visit_frequency_days}${t("visit_every_suffix")}</span></div>
+      ${
+        seesFinancialExports()
+          ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.clock}</span><span>${t("credit_term_days")}: ${customer.credit_term_days}</span></div>`
+          : ""
+      }
       ${customer.last_visit_at ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.clock}</span><span>${t("last_visit")}: ${formatDateTime(customer.last_visit_at)}</span></div>` : ""}
       ${customer.notes ? `<div class="detail-fact muted"><span class="detail-fact-icon">${icons.note}</span><span>${escapeHtml(customer.notes)}</span></div>` : ""}
     </div>
@@ -174,6 +186,9 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   });
   container.querySelector("#reassign-customer-btn")?.addEventListener("click", () => {
     openReassignSheet(customer, () => renderCustomerDetail(root, navigate, customerId));
+  });
+  container.querySelector("#credit-term-btn")?.addEventListener("click", () => {
+    openCreditTermSheet(customer, () => renderCustomerDetail(root, navigate, customerId));
   });
   container.querySelector("#assign-erp-btn")?.addEventListener("click", () => {
     openAssignErpIdSheet(customer, () => renderCustomerDetail(root, navigate, customerId));
@@ -376,6 +391,61 @@ function renderPendingRequest(slot, request, onDone) {
       </div>
     `;
   }
+}
+
+// Per-customer credit term in days, used by the "Orders Due for Payment"
+// aging view (defaults to 45 -- see migrations/050_warehouse_delivery.sql).
+// Its own small sheet, same pattern as ERP linking below -- a
+// finance/collections setting, edited directly by whoever can see
+// financial exports (server-gated by seesPaymentAging).
+async function openCreditTermSheet(customer, onDone) {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.innerHTML = `
+    <div class="sheet">
+      <h2>${t("credit_term_days")}</h2>
+      <form id="credit-term-form">
+        <label>${t("credit_term_days")}
+          <input type="number" name="credit_term_days" min="1" step="1" value="${customer.credit_term_days}" inputmode="numeric" />
+        </label>
+        <p class="form-error" id="credit-term-error" hidden></p>
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="cancel-credit-term">${t("cancel")}</button>
+          <button type="submit" class="btn btn-primary">${t("save")}</button>
+        </div>
+      </form>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  activateDialog(overlay);
+
+  function close() {
+    overlay.remove();
+  }
+  overlay.querySelector("#cancel-credit-term").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => e.target === overlay && close());
+
+  overlay.querySelector("#credit-term-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const errorEl = overlay.querySelector("#credit-term-error");
+    const days = Number(new FormData(e.target).get("credit_term_days"));
+    if (!Number.isInteger(days) || days <= 0) {
+      errorEl.textContent = t("credit_term_invalid");
+      errorEl.hidden = false;
+      return;
+    }
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    try {
+      await api.updateCustomer(customer.id, { credit_term_days: days });
+      close();
+      onDone();
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+      submitBtn.disabled = false;
+    }
+  });
 }
 
 // Linking a customer to its ERP record -- its own small sheet, separate

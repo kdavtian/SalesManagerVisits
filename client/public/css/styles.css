@@ -5929,3 +5929,58 @@ form select,
   margin: 0;
   flex: none;
 }
+
+/* Warehouse & Delivery module (see views/warehouse.js, views/deliveryRoute.js) */
+.pick-list-qty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.plan-order-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.plan-order-row input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+.plan-order-row > span:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.route-stop-marker span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+.route-stop-draggable {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: grab;
+}
+.route-stop-draggable.dragging {
+  opacity: 0.5;
+}
+.route-stop-handle {
+  color: var(--muted-color, #888);
+  font-size: 14px;
+  flex: none;
+}
+.route-stop-done {
+  opacity: 0.7;
+}

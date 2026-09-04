@@ -8,14 +8,36 @@ const STATUS_META = {
   draft: { key: "order_status_draft", cls: "badge-warning" },
   submitted: { key: "order_status_submitted", cls: "badge-neutral" },
   confirmed: { key: "order_status_confirmed", cls: "badge-info" },
+  warehouse_review: { key: "order_status_warehouse_review", cls: "badge-info" },
+  stock_issue: { key: "order_status_stock_issue", cls: "badge-warning" },
   packed: { key: "order_status_packed", cls: "badge-info" },
+  out_for_delivery: { key: "order_status_out_for_delivery", cls: "badge-info" },
   delivered: { key: "order_status_delivered", cls: "badge-success" },
+  returned: { key: "order_status_returned", cls: "badge-warning" },
   cancelled: { key: "order_status_cancelled", cls: "badge-danger" },
 };
 
-const STATUS_FILTERS = ["", "draft", "submitted", "confirmed", "packed", "delivered", "cancelled"];
+const STATUS_FILTERS = [
+  "",
+  "draft",
+  "submitted",
+  "confirmed",
+  "warehouse_review",
+  "stock_issue",
+  "packed",
+  "out_for_delivery",
+  "delivered",
+  "returned",
+  "cancelled",
+];
 
+// Fulfillment status changes (packed/out_for_delivery/delivered) now go
+// through the dedicated Warehouse and Delivery screens (see
+// views/warehouse.js and views/deliveryRoute.js), which collect the
+// required extra data (pick confirmation, route stop, signature). This
+// list only still drives the generic "cancel"/"re-confirm" actions here.
 const FULFILLMENT_ROLES = new Set(["warehouse_manager", "delivery_manager", "admin"]);
+const WAREHOUSE_ROLES = new Set(["warehouse_manager", "admin"]);
 const DISCOUNT_APPROVER_ROLES = new Set(["admin", "sales_director", "ceo"]);
 // Who reviews a freshly-submitted order -- mirrors canConfirmOrders in the
 // server's roles.js.
@@ -25,12 +47,20 @@ const APPROVAL_META = {
   approved: { key: "approval_status_approved", cls: "badge-success" },
   rejected: { key: "approval_status_rejected", cls: "badge-danger" },
 };
+// Mirrors the server's exported NEXT_STATUS (routes/orders.js) -- kept for
+// the "cancel" button and to know which statuses can still move at all;
+// packed/out_for_delivery/delivered are reached through the dedicated
+// warehouse/delivery screens, not the generic PATCH this view uses.
 const NEXT_STATUS = {
   draft: ["cancelled"],
   submitted: ["confirmed", "cancelled"],
-  confirmed: ["packed", "cancelled"],
-  packed: ["delivered", "cancelled"],
+  confirmed: ["warehouse_review", "cancelled"],
+  warehouse_review: ["packed", "stock_issue", "cancelled"],
+  stock_issue: ["confirmed", "cancelled"],
+  packed: ["out_for_delivery", "cancelled"],
+  out_for_delivery: ["delivered", "returned"],
   delivered: [],
+  returned: ["confirmed", "cancelled"],
   cancelled: [],
 };
 
@@ -360,16 +390,30 @@ export async function renderOrders(root, navigate) {
       if (canReviewSubmitted) {
         buttons.push({ label: t("confirm_order"), status: "confirmed", cls: "btn btn-primary" });
         buttons.push({ label: t("reject_order"), status: "cancelled", reject: true, cls: "btn btn-danger" });
+      } else if (order.status === "warehouse_review" && WAREHOUSE_ROLES.has(state.user.role)) {
+        buttons.push({ label: t("mark_packed"), action: "mark-packed", cls: "btn btn-primary" });
+        buttons.push({ label: t("flag_stock_issue"), action: "flag-stock-issue", cls: "btn btn-danger" });
+      } else if ((order.status === "stock_issue" || order.status === "returned") && CONFIRM_ROLES.has(state.user.role)) {
+        if (order.status === "stock_issue" && order.stock_issue_note) {
+          buttons.push({ label: `${t("stock_issue_note_label")}: ${order.stock_issue_note}`, action: "noop", cls: "btn", disabledDisplay: true });
+        }
+        buttons.push({ label: t("reconfirm_order"), status: "confirmed", cls: "btn btn-primary" });
       } else {
         if (canFulfill && !blockedByApproval) {
           for (const next of nextOptions) {
-            if (next === "cancelled") continue;
+            if (next === "cancelled" || next === "warehouse_review" || next === "stock_issue" || next === "out_for_delivery" || next === "returned") continue;
             buttons.push({ label: t(STATUS_META[next].key), status: next, cls: "btn btn-primary" });
           }
         }
         if (nextOptions.includes("cancelled") && (isOwnerOrAdmin || canFulfill)) {
           buttons.push({ label: t("cancel_order"), status: "cancelled", cls: "btn btn-danger" });
         }
+      }
+      if (order.status === "packed") {
+        buttons.push({ label: t("packed_awaiting_route"), action: "noop", cls: "btn", disabledDisplay: true });
+      }
+      if (order.status === "out_for_delivery") {
+        buttons.push({ label: t("out_for_delivery_hint"), action: "noop", cls: "btn", disabledDisplay: true });
       }
       if (canEditThisOrder) {
         buttons.push({ label: t("edit_order"), action: "edit-order", cls: "btn" });
@@ -381,7 +425,12 @@ export async function renderOrders(root, navigate) {
       }
 
       actionsEl.innerHTML = buttons
-        .map((b) => `<button type="button" class="${b.cls}" ${b.action ? `data-action="${b.action}"` : `data-status="${b.status}"`}>${b.label}</button>`)
+        .map(
+          (b) =>
+            `<button type="button" class="${b.cls}" ${b.disabledDisplay ? "disabled" : ""} ${
+              b.action ? `data-action="${b.action}"` : `data-status="${b.status}"`
+            }>${b.label}</button>`
+        )
         .join("") || `<button type="button" class="btn" id="order-detail-close">${t("done")}</button>`;
 
       actionsEl.querySelector("#order-detail-close")?.addEventListener("click", () => overlay.remove());
@@ -410,6 +459,36 @@ export async function renderOrders(root, navigate) {
             return;
           }
           if (btn.dataset.action === "delete-order" && !confirm(t("confirm_delete_order"))) return;
+          if (btn.dataset.action === "mark-packed") {
+            actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
+            try {
+              await api.markOrderPacked(orderId);
+              overlay.remove();
+              notifyOrdersChanged();
+              load();
+            } catch (err) {
+              errorEl.textContent = err.message;
+              errorEl.hidden = false;
+              actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = false));
+            }
+            return;
+          }
+          if (btn.dataset.action === "flag-stock-issue") {
+            const note = prompt(t("stock_issue_note_prompt"));
+            if (!note || !note.trim()) return;
+            actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
+            try {
+              await api.flagOrderStockIssue(orderId, note.trim());
+              overlay.remove();
+              notifyOrdersChanged();
+              load();
+            } catch (err) {
+              errorEl.textContent = err.message;
+              errorEl.hidden = false;
+              actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = false));
+            }
+            return;
+          }
           if (btn.dataset.action === "submit-order" && !order.erp_customer_id) {
             const erpId = prompt(t("erp_customer_id_required"));
             if (!erpId || !erpId.trim()) return;

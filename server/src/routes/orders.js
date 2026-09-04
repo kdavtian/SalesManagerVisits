@@ -1,10 +1,10 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { seesAllActivity, canConfirmOrders, canAssignErpCustomerId } from "../roles.js";
+import { seesAllActivity, canConfirmOrders, canAssignErpCustomerId, isFulfillmentRole, canManageWarehouse } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { notifyUser } from "../notifications.js";
-import { ORDER_NOTIFY_ROLES } from "../notificationPreferences.js";
+import { ORDER_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES } from "../notificationPreferences.js";
 
 export const ordersRouter = Router();
 
@@ -13,18 +13,46 @@ ordersRouter.use(requireAuth);
 // Warehouse/delivery staff (plus admin) are the ones who actually move an
 // order through fulfillment; a plain rep or director can request a
 // cancellation but can't claim to have packed or delivered something.
-const FULFILLMENT_ROLES = new Set(["warehouse_manager", "delivery_manager", "admin"]);
+// Kept as a re-export of roles.js's isFulfillmentRole so nothing else in
+// this file (or its call sites) needs to change shape.
+const FULFILLMENT_ROLES = { has: (role) => isFulfillmentRole(role) };
 
 // What each status may legally become next. "cancelled" is reachable from
-// anywhere in-flight; once delivered or cancelled, an order is final.
-const NEXT_STATUS = {
+// anywhere in-flight; once delivered or cancelled, an order is final. This
+// is the master map -- see routes/warehouse.js and routes/delivery.js for
+// the dedicated endpoints that actually perform the note-required
+// (stock_issue) and route-driven (out_for_delivery) transitions; the
+// generic PATCH below only exposes a subset of this map (see
+// GENERIC_PATCH_TARGETS) so those can't be bypassed without their required
+// extra data.
+export const NEXT_STATUS = {
   draft: ["cancelled"],
   submitted: ["confirmed", "cancelled"],
-  confirmed: ["packed", "cancelled"],
-  packed: ["delivered", "cancelled"],
+  // "confirmed" auto-chains straight into "warehouse_review" the moment a
+  // director confirms it (see the PATCH handler below) -- it's never
+  // actually left sitting at "confirmed" in the DB, just validated as a
+  // reachable step so the review permission check has something to gate on.
+  confirmed: ["warehouse_review", "cancelled"],
+  warehouse_review: ["packed", "stock_issue", "cancelled"],
+  // A flagged stock issue drops back to "confirmed" (the closest existing
+  // equivalent of the spec's "pending") -- resolving it and re-confirming
+  // re-enters warehouse_review automatically via the same auto-chain.
+  stock_issue: ["confirmed", "cancelled"],
+  packed: ["out_for_delivery", "cancelled"],
+  out_for_delivery: ["delivered", "returned"],
   delivered: [],
+  // A failed delivery attempt (no reason, no stock adjustment -- per spec)
+  // also drops back to "confirmed" for a re-attempt.
+  returned: ["confirmed", "cancelled"],
   cancelled: [],
 };
+
+// The generic PATCH /:id below only ever writes one of these statuses
+// directly -- warehouse_review/stock_issue/out_for_delivery/returned all
+// carry required extra data (a stock-issue note, a route assignment, a
+// delivery signature) that only routes/warehouse.js and routes/delivery.js
+// collect, so this endpoint refuses to set them directly.
+const GENERIC_PATCH_TARGETS = new Set(["confirmed", "packed", "delivered", "cancelled"]);
 
 // Snapshots each line's product name/price at build time -- shared by
 // create and edit so an edited order prices its new lines exactly the same
@@ -467,6 +495,11 @@ ordersRouter.patch("/:id", async (req, res) => {
     if (!NEXT_STATUS[order.status]?.includes(status)) {
       return res.status(409).json({ error: `Cannot move an order from "${order.status}" to "${status}"` });
     }
+    if (!GENERIC_PATCH_TARGETS.has(status)) {
+      return res.status(400).json({
+        error: `"${status}" requires the dedicated warehouse/delivery endpoint, not a plain status edit`,
+      });
+    }
     // Defense in depth: draft orders can only reach "submitted" through
     // POST /:id/submit (see NEXT_STATUS, which doesn't even list it as
     // reachable from here), but a submitted order could in principle have
@@ -480,6 +513,13 @@ ordersRouter.patch("/:id", async (req, res) => {
     }
     nextStatus = status;
   }
+
+  // Confirming an order isn't a resting state -- it immediately enters the
+  // Warehouse Manager's queue (see task spec: "order confirmed -> enters
+  // warehouse_review, notifies WM"). Chaining it here keeps that a single
+  // atomic write instead of a second round trip.
+  const enteringWarehouseReview = nextStatus === "confirmed";
+  if (enteringWarehouseReview) nextStatus = "warehouse_review";
 
   const client = await pool.connect();
   let updated;
@@ -524,9 +564,21 @@ ordersRouter.patch("/:id", async (req, res) => {
         const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
         notifyUser(order.user_id, "order_status_changed", {
           title: "Order update",
-          body: `${customerRows[0]?.name || "Order"} is now "${nextStatus}".`,
+          body: `${customerRows[0]?.name || "Order"} is now "${nextStatus === "warehouse_review" ? "confirmed" : nextStatus}".`,
           url: "/#/orders",
         });
+      }
+      if (enteringWarehouseReview) {
+        const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
+        const customerName = customerRows[0]?.name || "Order";
+        const { rows: wmRows } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [WAREHOUSE_NOTIFY_ROLES]);
+        for (const wm of wmRows) {
+          notifyUser(wm.id, "order_warehouse_review", {
+            title: "Order ready for warehouse",
+            body: `${customerName}'s order was confirmed and is ready to pick and pack.`,
+            url: "/#/warehouse",
+          });
+        }
       }
     } catch (err) {
       console.error("Post-order-update notification failed:", err);

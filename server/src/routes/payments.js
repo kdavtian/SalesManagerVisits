@@ -8,7 +8,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
-import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments, PAYMENT_NOTIFY_ROLES } from "../roles.js";
+import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments, seesPaymentAging, PAYMENT_NOTIFY_ROLES } from "../roles.js";
 import { notifyUser } from "../notifications.js";
 
 export const paymentsRouter = Router();
@@ -23,6 +23,31 @@ const MAX_AMOUNT = 100000000000; // matches the DB CHECK constraint
 // another manager still isn't an admin, so this is scoped narrowly to
 // exactly the fields the picker needs, gated by the same permission as
 // submitting itself.
+// "Orders Due for Payment" aging view: every delivered order whose full
+// amount hasn't yet been matched by an approved payment against it, aged
+// against the customer's own credit_term_days (defaults to 45 -- see
+// migrations/050_warehouse_delivery.sql). collected_amd only counts
+// APPROVED payments (pending/rejected aren't confirmed collection, same
+// rule as everywhere else payments are reported).
+paymentsRouter.get("/aging", async (req, res) => {
+  if (!seesPaymentAging(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const { rows } = await pool.query(
+    `SELECT o.id AS order_id, o.order_code, o.total_amd, o.updated_at AS delivered_at,
+            c.id AS customer_id, c.name AS customer_name, c.erp_customer_id, c.credit_term_days,
+            COALESCE(paid.amount, 0) AS collected_amd,
+            (o.updated_at + (c.credit_term_days || ' days')::interval) AS due_date,
+            GREATEST(0, EXTRACT(DAY FROM now() - (o.updated_at + (c.credit_term_days || ' days')::interval)))::int AS days_past_due
+     FROM orders o
+     JOIN customers c ON c.id = o.customer_id
+     LEFT JOIN (
+       SELECT order_id, SUM(amount_amd) AS amount FROM payments WHERE status = 'approved' AND order_id IS NOT NULL GROUP BY order_id
+     ) paid ON paid.order_id = o.id
+     WHERE o.status = 'delivered' AND COALESCE(paid.amount, 0) < o.total_amd
+     ORDER BY due_date ASC`
+  );
+  res.json(rows);
+});
+
 paymentsRouter.get("/eligible-managers", async (req, res) => {
   if (!canSubmitPaymentsForOthers(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const { rows } = await pool.query(
@@ -78,18 +103,19 @@ async function findLikelyDuplicate({ customerId, amount, salesManagerId, payment
 // client_ref is what makes this idempotent: checkins.js passes a
 // deterministic `checkin-<id>` ref, so a retried/duplicate checkin submit
 // can never create a second payment for the same collection.
-export async function insertPayment({ customer, amount, paymentDate, salesManagerId, manager, note, createdBy, clientRef }) {
+export async function insertPayment({ customer, amount, paymentDate, salesManagerId, manager, note, createdBy, clientRef, orderId }) {
   const salesChannel = manager.role === "sales_manager" ? manager.position || null : null;
 
   const { rows } = await pool.query(
     `INSERT INTO payments
-       (customer_id, customer_name_snapshot, erp_customer_id_snapshot, amount_amd, payment_date,
+       (customer_id, order_id, customer_name_snapshot, erp_customer_id_snapshot, amount_amd, payment_date,
         sales_manager_id, sales_manager_name_snapshot, sales_channel, note, status, created_by, client_ref)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, $11)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', $11, $12)
      ON CONFLICT (created_by, client_ref) WHERE client_ref IS NOT NULL DO NOTHING
      RETURNING id`,
     [
       customer.id,
+      orderId || null,
       customer.name,
       customer.erp_customer_id || null,
       amount,
