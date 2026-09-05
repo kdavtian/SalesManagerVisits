@@ -153,26 +153,30 @@ let renderToken = 0;
 async function decorateCustomerDetail() {
   const customerId = customerIdFromHash();
   if (!customerId) return;
-  const facts = document.querySelector(".detail-view .detail-facts-card");
-  if (!facts || facts.dataset.socialProfilesReady === String(customerId)) return;
-  facts.dataset.socialProfilesReady = String(customerId);
+  // Lives inline in the header's icon-action row now, next to
+  // reassign/assign-ERP/edit -- a full-width "Social profiles" row in the
+  // facts card was consuming a whole row for what is, most of the time,
+  // zero or one icon.
+  const actions = document.querySelector(".detail-view .detail-header-actions");
+  if (!actions || actions.dataset.socialProfilesReady === String(customerId)) return;
+  actions.dataset.socialProfilesReady = String(customerId);
   const token = ++renderToken;
 
   let data;
   try {
     data = await apiRequest(`/api/customer-social/${customerId}`);
   } catch {
-    delete facts.dataset.socialProfilesReady;
+    delete actions.dataset.socialProfilesReady;
     return;
   }
-  if (token !== renderToken || customerIdFromHash() !== customerId || !facts.isConnected) return;
+  if (token !== renderToken || customerIdFromHash() !== customerId || !actions.isConnected) return;
 
   const l = text();
-  let section = facts.querySelector(".customer-social-section");
+  let section = actions.querySelector(".customer-social-section");
   if (!section) {
-    section = document.createElement("div");
-    section.className = "detail-fact customer-social-section";
-    facts.appendChild(section);
+    section = document.createElement("span");
+    section.className = "customer-social-section";
+    actions.prepend(section);
   }
 
   function paint(nextData) {
@@ -182,12 +186,11 @@ async function decorateCustomerDetail() {
       data.facebook_url ? socialButton("facebook", data.facebook_url) : "",
     ].filter(Boolean).join("");
 
+    // Icon-only, matching the other header-action buttons -- aria-label/title
+    // carry the meaning the old full-row text label used to spell out.
     section.innerHTML = `
-      <span class="customer-social-label">${escapeAttr(l.title)}</span>
-      <span class="customer-social-actions">
-        ${links}
-        ${data.can_edit ? `<button type="button" class="customer-social-edit" aria-label="${escapeAttr(links ? l.edit : l.add)}" title="${escapeAttr(links ? l.edit : l.add)}">${EDIT_ICON}</button>` : ""}
-      </span>`;
+      ${links}
+      ${data.can_edit ? `<button type="button" class="customer-social-edit" aria-label="${escapeAttr(links ? l.edit : l.add)}" title="${escapeAttr(links ? l.edit : l.add)}">${EDIT_ICON}</button>` : ""}`;
 
     section.querySelectorAll("[data-social-kind]").forEach((button) => {
       button.addEventListener("click", () => openPlatformProfile(button.dataset.socialKind, button.dataset.socialValue));

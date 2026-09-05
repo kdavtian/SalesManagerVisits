@@ -1120,47 +1120,143 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   }
 
   // "My location" — blue dot + accuracy circle, kept live with watchPosition.
+  // Three states cycled by tapping the same button: off -> on (shows the dot,
+  // no auto-recenter) -> track (map follows + rotates to heading) -> off.
   let meMarker = null;
   let meAccuracyCircle = null;
   let watchId = null;
+  let locationMode = "off"; // "off" | "on" | "track"
+  let headingEventName = null;
 
-  function meIcon() {
-    return L.divIcon({ className: "", html: `<div class="me-dot"></div>`, iconSize: [18, 18], iconAnchor: [9, 9] });
+  // The heading arrow is drawn "north-up" (0deg = pointing up) inside the
+  // marker's own icon. Leaflet.Rotate rotates the whole map pane -- markers
+  // included -- by -bearing (see the #compass-btn needle above, which has
+  // to counter-rotate by the same -bearing to keep pointing at true north).
+  // Track mode sets the map bearing to the live heading, so pre-rotating the
+  // arrow by +heading cancels that pane rotation and keeps it pointing
+  // straight up on screen, i.e. "forward" -- exactly like a Google Maps-style
+  // compass-mode blue dot.
+  function meIcon(heading) {
+    const arrow =
+      heading != null
+        ? `<div class="me-heading-arrow" style="transform: rotate(${heading}deg)"></div>`
+        : "";
+    return L.divIcon({ className: "", html: `<div class="me-dot">${arrow}</div>`, iconSize: [18, 18], iconAnchor: [9, 9] });
   }
 
-  locateBtn.addEventListener("click", () => {
-    if (!navigator.geolocation) return;
-    locateBtn.classList.add("map-control-active");
+  function updateLocateButtonState() {
+    locateBtn.classList.toggle("map-control-active", locationMode === "on");
+    locateBtn.classList.toggle("map-control-tracking", locationMode === "track");
+    locateBtn.setAttribute(
+      "aria-label",
+      t(locationMode === "track" ? "location_mode_track" : locationMode === "on" ? "location_mode_on" : "locate_me")
+    );
+  }
 
-    if (watchId == null) {
-      watchId = navigator.geolocation.watchPosition(
-        (pos) => {
-          const { latitude, longitude, accuracy } = pos.coords;
-          const latlng = [latitude, longitude];
-          myLocation = { lat: latitude, lng: longitude };
-          if (!meMarker) {
-            meMarker = L.marker(latlng, { icon: meIcon(), zIndexOffset: 1000 }).addTo(map);
-            meAccuracyCircle = L.circle(latlng, {
-              radius: accuracy,
-              color: "#0a84ff",
-              weight: 1,
-              fillColor: "#0a84ff",
-              fillOpacity: 0.12,
-            }).addTo(map);
-            map.setView(latlng, Math.max(map.getZoom(), 15));
-          } else {
-            meMarker.setLatLng(latlng);
-            meAccuracyCircle.setLatLng(latlng).setRadius(accuracy);
-          }
-          refreshNearestCustomerBar();
-        },
-        () => {
-          locateBtn.classList.remove("map-control-active");
-        },
-        { enableHighAccuracy: true }
-      );
-    } else if (meMarker) {
-      map.setView(meMarker.getLatLng(), Math.max(map.getZoom(), 15));
+  function stopWatch() {
+    if (watchId != null) {
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+    }
+  }
+
+  function onHeading(e) {
+    // iOS Safari exposes a ready-to-use compass heading; everything else
+    // gives raw device-orientation alpha, which runs counter-clockwise from
+    // the device's start orientation and needs flipping to a clockwise
+    // compass bearing.
+    let heading = typeof e.webkitCompassHeading === "number" ? e.webkitCompassHeading : null;
+    if (heading == null && typeof e.alpha === "number") heading = (360 - e.alpha) % 360;
+    if (heading == null || Number.isNaN(heading)) return;
+    map.setBearing(heading);
+    if (meMarker) meMarker.setIcon(meIcon(heading));
+  }
+
+  function stopHeading() {
+    if (headingEventName) {
+      window.removeEventListener(headingEventName, onHeading);
+      headingEventName = null;
+    }
+    map.setBearing(0);
+    if (meMarker) meMarker.setIcon(meIcon(null));
+  }
+
+  async function startHeading() {
+    if (headingEventName) return;
+    // iOS 13+ only grants device-orientation data after an explicit
+    // user-gesture-triggered prompt -- this function only ever runs from
+    // inside the button's click handler, never on load, so the gesture
+    // requirement is satisfied.
+    if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+      try {
+        const result = await DeviceOrientationEvent.requestPermission();
+        if (result !== "granted") return;
+      } catch {
+        return;
+      }
+    }
+    headingEventName = "ondeviceorientationabsolute" in window ? "deviceorientationabsolute" : "deviceorientation";
+    window.addEventListener(headingEventName, onHeading);
+  }
+
+  function startWatch() {
+    if (watchId != null) return;
+    watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        const latlng = [latitude, longitude];
+        myLocation = { lat: latitude, lng: longitude };
+        if (!meMarker) {
+          meMarker = L.marker(latlng, { icon: meIcon(null), zIndexOffset: 1000 }).addTo(map);
+          meAccuracyCircle = L.circle(latlng, {
+            radius: accuracy,
+            color: "#0a84ff",
+            weight: 1,
+            fillColor: "#0a84ff",
+            fillOpacity: 0.12,
+          }).addTo(map);
+          map.setView(latlng, Math.max(map.getZoom(), 15));
+        } else {
+          meMarker.setLatLng(latlng);
+          meAccuracyCircle.setLatLng(latlng).setRadius(accuracy);
+          if (locationMode === "track") map.panTo(latlng, { animate: true });
+        }
+        refreshNearestCustomerBar();
+      },
+      () => {
+        locationMode = "off";
+        updateLocateButtonState();
+        stopWatch();
+        stopHeading();
+      },
+      { enableHighAccuracy: true }
+    );
+  }
+
+  locateBtn.addEventListener("click", async () => {
+    if (!navigator.geolocation) return;
+
+    if (locationMode === "off") {
+      locationMode = "on";
+      updateLocateButtonState();
+      startWatch();
+      if (meMarker) map.setView(meMarker.getLatLng(), Math.max(map.getZoom(), 15));
+    } else if (locationMode === "on") {
+      locationMode = "track";
+      updateLocateButtonState();
+      if (meMarker) map.setView(meMarker.getLatLng(), Math.max(map.getZoom(), 16));
+      await startHeading();
+    } else {
+      locationMode = "off";
+      updateLocateButtonState();
+      stopHeading();
+      stopWatch();
+      if (meMarker) {
+        map.removeLayer(meMarker);
+        map.removeLayer(meAccuracyCircle);
+        meMarker = null;
+        meAccuracyCircle = null;
+      }
     }
   });
 
@@ -1924,12 +2020,19 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
             </label>
             <label id="new-customer-subregion-wrap">${t("subregion")}<input name="subregion" id="new-customer-subregion" /></label>
           </div>
-          <label>${t("sales_channel")}
-            <select name="sales_channel">
-              <option value="">${t("select_placeholder")}</option>
-              ${SALES_CHANNELS.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")}
-            </select>
-          </label>
+          <div class="form-row-2">
+            <label>${t("sales_channel")}
+              <select name="sales_channel" id="new-customer-channel">
+                <option value="">${t("select_placeholder")}</option>
+                ${SALES_CHANNELS.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")}
+              </select>
+            </label>
+            <label>${t("assigned_manager")}
+              <select name="assigned_manager_id" id="new-customer-manager">
+                <option value="">${t("unassigned")}</option>
+              </select>
+            </label>
+          </div>
           <div class="form-row-2">
             <label class="erp-suggest-wrap">${t("erp_customer_id")}
               <input type="text" name="erp_customer_id" id="new-customer-erp-input" autocomplete="off" />
@@ -2001,7 +2104,47 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         subregionWrap.innerHTML = `${t("subregion")}<input name="subregion" id="new-customer-subregion" value="${escapeHtml(guess || "")}" />`;
       }
     }
-    regionSelect.addEventListener("change", () => renderSubregionField(regionSelect.value, ""));
+    const channelSelect = overlay.querySelector("#new-customer-channel");
+    const managerSelect = overlay.querySelector("#new-customer-manager");
+    let managerOptionsHtml = `<option value="">${t("unassigned")}</option>`;
+    api
+      .listPlannableUsers()
+      .then((users) => {
+        managerOptionsHtml =
+          `<option value="">${t("unassigned")}</option>` +
+          users.map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join("");
+        managerSelect.innerHTML = managerOptionsHtml;
+      })
+      .catch(() => {});
+
+    // Routes Distribution suggestion -- a convenience default, never a lock:
+    // it only fills in values, the rep can still change either dropdown
+    // before saving. Re-runs whenever region/subregion changes so picking a
+    // different area updates the suggestion instead of leaving a stale one.
+    function refreshRouteSuggestion() {
+      const region = regionSelect.value;
+      if (!region) return;
+      const subregionField = overlay.querySelector("#new-customer-subregion");
+      const subregion = subregionField?.value || "";
+      api
+        .lookupRouteDistribution(region, subregion)
+        .then((match) => {
+          if (!match) return;
+          if (match.sales_channel && !channelSelect.value) channelSelect.value = match.sales_channel;
+          if (match.assigned_manager_id && !managerSelect.value) {
+            managerSelect.innerHTML = managerOptionsHtml;
+            managerSelect.value = String(match.assigned_manager_id);
+          }
+        })
+        .catch(() => {});
+    }
+    regionSelect.addEventListener("change", () => {
+      renderSubregionField(regionSelect.value, "");
+      refreshRouteSuggestion();
+    });
+    overlay.addEventListener("change", (e) => {
+      if (e.target.id === "new-customer-subregion") refreshRouteSuggestion();
+    });
 
     api
       .reverseGeocode(latlng.lat, latlng.lng)
@@ -2011,6 +2154,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         if (guessedRegion) {
           regionSelect.value = guessedRegion;
           renderSubregionField(guessedRegion, matchSubregion(result?.subregion, guessedRegion));
+          refreshRouteSuggestion();
         }
       })
       .catch(() => {});
@@ -2086,6 +2230,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
           region: data.get("region") || null,
           subregion: data.get("subregion") || null,
           sales_channel: data.get("sales_channel") || null,
+          assigned_manager_id: data.get("assigned_manager_id") ? Number(data.get("assigned_manager_id")) : null,
           lat: latlng.lat,
           lng: latlng.lng,
         });
@@ -2109,6 +2254,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
 
   return () => {
     if (watchId != null) navigator.geolocation.clearWatch(watchId);
+    if (headingEventName) window.removeEventListener(headingEventName, onHeading);
     if (teamPollId) clearInterval(teamPollId);
     clearTimeout(teamEmptyHintTimer);
     clearTimeout(tileHealthTimer);

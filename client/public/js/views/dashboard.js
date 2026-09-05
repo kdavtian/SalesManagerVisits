@@ -47,9 +47,14 @@ export async function renderDashboard(root, navigate) {
   root.innerHTML = `<div class="dashboard-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".dashboard-view");
 
-  let summary, customers, trends;
+  let summary, customers, trends, settings;
   try {
-    [summary, customers, trends] = await Promise.all([api.dashboardSummary(), api.listCustomers(), api.dashboardTrends()]);
+    [summary, customers, trends, settings] = await Promise.all([
+      api.dashboardSummary(),
+      api.listCustomers(),
+      api.dashboardTrends(),
+      api.getSettings(),
+    ]);
   } catch (err) {
     container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     return;
@@ -97,21 +102,9 @@ export async function renderDashboard(root, navigate) {
         <span class="quick-action-icon">${icons.planDay}</span>
         <span>${t("qa_plan_route")}</span>
       </button>
-      <button type="button" class="quick-action" id="qa-reports">
-        <span class="quick-action-icon">${icons.chart}</span>
-        <span>${t("qa_reports")}</span>
-      </button>
       <button type="button" class="quick-action" id="qa-add-customer">
         <span class="quick-action-icon quick-action-icon-accent">${icons.mapPinPlus}</span>
         <span>${t("qa_add_customer")}</span>
-      </button>
-      <button type="button" class="quick-action" id="qa-cash-expense">
-        <span class="quick-action-icon">${icons.wallet}</span>
-        <span>${t("qa_cash_expense")}</span>
-      </button>
-      <button type="button" class="quick-action" id="qa-pricelist">
-        <span class="quick-action-icon">${icons.tag}</span>
-        <span>${t("qa_pricelist")}</span>
       </button>
       ${
         state.user.role !== "warehouse_manager" && state.user.role !== "delivery_manager"
@@ -121,14 +114,14 @@ export async function renderDashboard(root, navigate) {
       </button>`
           : ""
       }
-      ${
-        ["admin", "ceo", "sales_director", "accountant", "sales_manager"].includes(state.user.role)
-          ? `<button type="button" class="quick-action" id="qa-team-performance">
-        <span class="quick-action-icon">${icons.target}</span>
-        <span>${t("qa_team_performance")}</span>
-      </button>`
-          : ""
-      }
+      <button type="button" class="quick-action" id="qa-cash-expense">
+        <span class="quick-action-icon">${icons.wallet}</span>
+        <span>${t("qa_cash_expense")}</span>
+      </button>
+      <button type="button" class="quick-action" id="qa-pricelist">
+        <span class="quick-action-icon">${icons.tag}</span>
+        <span>${t("qa_pricelist")}</span>
+      </button>
       ${
         state.user.role === "warehouse_manager" || state.user.role === "admin"
           ? `<button type="button" class="quick-action" id="qa-warehouse">
@@ -153,6 +146,18 @@ export async function renderDashboard(root, navigate) {
       </button>`
           : ""
       }
+      ${
+        ["admin", "ceo", "sales_director", "accountant", "sales_manager"].includes(state.user.role)
+          ? `<button type="button" class="quick-action" id="qa-team-performance">
+        <span class="quick-action-icon">${icons.target}</span>
+        <span>${t("qa_team_performance")}</span>
+      </button>`
+          : ""
+      }
+      <button type="button" class="quick-action" id="qa-reports">
+        <span class="quick-action-icon">${icons.chart}</span>
+        <span>${t("qa_reports")}</span>
+      </button>
     </div>
 
     ${
@@ -173,7 +178,7 @@ export async function renderDashboard(root, navigate) {
       summary.points_leaderboard?.length
         ? `<div class="section-heading-row">
              <h2 class="section-title section-title-inline">${t("points_leaderboard")}</h2>
-             <span class="muted leaderboard-prize-hint">${t("points_leaderboard_prize_hint")}</span>
+             <span class="muted leaderboard-prize-hint">${escapeHtml(settings.incentive_message || t("points_leaderboard_prize_hint"))}</span>
            </div>
            <div class="card-list" id="points-leaderboard"></div>`
         : ""

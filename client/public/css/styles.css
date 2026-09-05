@@ -2210,12 +2210,40 @@ input[type="search"]:focus {
 }
 
 .me-dot {
+  position: relative;
   width: 16px;
   height: 16px;
   border-radius: 50%;
   background: #0a84ff;
   border: 3px solid #ffffff;
   box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.35), 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* Heading cone shown only in Track mode -- see meIcon()'s comment in map.js
+   for why rotating it by +heading keeps it pointing "forward" (up) once the
+   map itself has rotated -heading to put the current heading at the top of
+   the screen. The negative margins pull the (zero-size, border-only)
+   triangle box up so its flat base sits exactly on the dot's center, with
+   transform-origin at that same point so rotation pivots there rather than
+   swinging the whole cone around the dot. */
+.me-heading-arrow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  margin-left: -6px;
+  margin-top: -14px;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 14px solid rgba(10, 132, 255, 0.9);
+  transform-origin: 50% 100%;
+}
+
+.map-control-tracking {
+  color: #ffffff !important;
+  background: var(--accent-fill, var(--accent)) !important;
+  border-color: var(--accent-fill, var(--accent)) !important;
 }
 
 .map-controls {
@@ -3392,8 +3420,8 @@ input[type="search"]:focus {
    was 2 columns, forcing the same tile count into 4-6 rows. */
 .quick-actions-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
   padding-bottom: 8px;
 }
 
@@ -3401,12 +3429,12 @@ input[type="search"]:focus {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 10px 6px;
-  font-size: 0.68rem;
+  padding: 14px 6px;
+  font-size: var(--fs-stat-label);
   font-weight: 600;
   color: var(--text);
   cursor: pointer;
@@ -3416,19 +3444,19 @@ input[type="search"]:focus {
 
 .quick-action-icon {
   position: relative;
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   background: var(--bg);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.85rem;
+  font-size: 1.05rem;
 }
 
 .quick-action-icon svg {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
 }
 
 .quick-action-icon-accent {
@@ -3737,9 +3765,27 @@ input[type="search"]:focus {
 
 .detail-header-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   margin-left: auto;
   flex-shrink: 0;
+}
+
+/* This row can carry up to 4-5 icon buttons (reassign/assign-ERP/social/
+   edit) on top of the back button and header icon -- at the standard 44px
+   .icon-btn size that leaves the customer name almost no room to render
+   before its ellipsis kicks in. Shrinking just these action icons buys back
+   meaningful width for the name without touching .icon-btn's size anywhere
+   else in the app. */
+.detail-header-actions .icon-btn,
+.detail-header-actions .customer-social-link,
+.detail-header-actions .customer-social-edit {
+  width: 36px;
+  height: 36px;
+}
+
+.detail-header-actions .icon-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .icon-btn {
@@ -3842,6 +3888,14 @@ input[type="search"]:focus {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
+}
+
+/* Tapped once: let a long name wrap onto extra lines instead of staying
+   clipped behind the ellipsis. */
+.detail-header-title h1.customer-detail-name-expanded {
+  overflow: visible;
+  white-space: normal;
 }
 
 .detail-header-subtitle {
@@ -4526,8 +4580,7 @@ input[type="search"]:focus {
     margin-inline: auto;
   }
 
-  .stat-grid,
-  .quick-actions-grid {
+  .stat-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
@@ -5219,6 +5272,33 @@ button.list-row-icon {
   padding: 4px 0;
   display: flex;
   flex-direction: column;
+}
+
+/* A single grouped card holding several related forms (iOS-Settings-style
+   "section" containing multiple rows), separated by hairlines instead of
+   each form getting its own floating card. */
+.settings-list-group {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.settings-list-group-item {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-list-group-item:last-child {
+  border-bottom: 0;
+}
+
+.settings-subsection-title {
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-eyebrow);
+  letter-spacing: var(--ls-eyebrow);
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 18px 0 8px;
 }
 
 .settings-list-row {

@@ -1,17 +1,23 @@
 import { api } from "../api.js";
-import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, parseUserAgent, SALES_CHANNELS } from "../util.js";
+import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, parseUserAgent, SALES_CHANNELS, REGION_LIST, YEREVAN_DISTRICTS } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 
 const ROLE_BADGE = {
-  admin: { key: "role_admin", cls: "badge-accent" },
-  ceo: { key: "role_ceo", cls: "badge-accent" },
-  sales_manager: { key: "role_sales_manager", cls: "badge-neutral" },
-  sales_director: { key: "role_sales_director", cls: "badge-info" },
-  warehouse_manager: { key: "role_warehouse_manager", cls: "badge-info" },
-  delivery_manager: { key: "role_delivery_manager", cls: "badge-info" },
-  accountant: { key: "role_accountant", cls: "badge-info" },
+  admin: { key: "role_admin", cls: "badge-accent", tint: "warning" },
+  ceo: { key: "role_ceo", cls: "badge-accent", tint: "warning" },
+  sales_manager: { key: "role_sales_manager", cls: "badge-neutral", tint: "neutral" },
+  sales_director: { key: "role_sales_director", cls: "badge-info", tint: "info" },
+  warehouse_manager: { key: "role_warehouse_manager", cls: "badge-info", tint: "info" },
+  delivery_manager: { key: "role_delivery_manager", cls: "badge-info", tint: "info" },
+  accountant: { key: "role_accountant", cls: "badge-info", tint: "info" },
 };
+
+function userInitials(name) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const initials = parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : parts[0]?.slice(0, 2) || "?";
+  return initials.toUpperCase();
+}
 
 function salesChannelOptionsHtml(selected) {
   return (
@@ -42,19 +48,23 @@ export async function renderTeamSection(container) {
     users = await api.listUsers();
     listEl.innerHTML = users
       .map((u) => {
-        const roleBadge = ROLE_BADGE[u.role] ?? { key: "role_sales_manager", cls: "badge-neutral" };
+        const roleBadge = ROLE_BADGE[u.role] ?? { key: "role_sales_manager", cls: "badge-neutral", tint: "neutral" };
+        // Identity (avatar/name/role) leads; email only shows once the card
+        // is opened (see openEditTeamMemberSheet) so the list stays scannable
+        // instead of doubling every row's height with contact details nobody
+        // is scanning for at a glance.
         return `
-        <button type="button" class="card user-row" data-id="${u.id}">
-          <div class="user-row-top">
-            <div>
+        <button type="button" class="card list-row" data-id="${u.id}">
+          <span class="list-row-icon list-row-icon-${roleBadge.tint}" aria-hidden="true">${userInitials(u.name)}</span>
+          <div class="list-row-body">
+            <div class="list-row-top">
               <strong>${escapeHtml(u.name)}</strong>
-              <span class="muted">${escapeHtml(u.email)}${u.position ? ` · ${escapeHtml(u.position)}` : ""}</span>
+              <span class="badge ${roleBadge.cls}">${t(roleBadge.key)}</span>
             </div>
-            <span class="badge ${roleBadge.cls}">${t(roleBadge.key)}</span>
+            ${u.position ? `<div class="muted list-row-meta">${escapeHtml(u.position)}</div>` : ""}
+            <div class="muted list-row-meta">${t("last_seen")}: ${escapeHtml(lastSeenSummary(u))}</div>
           </div>
-          <div class="user-row-meta">
-            <span class="muted">${t("last_seen")}: ${escapeHtml(lastSeenSummary(u))}</span>
-          </div>
+          <span class="chevron">&#8250;</span>
         </button>
       `;
       })
@@ -937,6 +947,119 @@ export async function renderCompanyProfileSection(container) {
         address: data.get("address") || null,
       });
       successEl.hidden = false;
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+}
+
+// Region/Subregion -> Sales Channel + Sales Manager mapping table. The
+// new-customer form (map.js) reads this via the /route-distribution/lookup
+// endpoint to suggest a channel and manager once a location's region has
+// been detected -- always just a suggestion the rep can override, never a
+// lock, so this admin screen only needs to manage the mapping itself.
+export async function renderRouteDistributionSection(container) {
+  container.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+  const [mappings, managers] = await Promise.all([api.listRouteDistribution(), api.listPlannableUsers()]);
+
+  function subregionFieldHtml(region) {
+    if (region === "Yerevan") {
+      return `<select name="subregion" id="rd-subregion">
+        <option value="">${t("route_distribution_whole_region")}</option>
+        ${YEREVAN_DISTRICTS.map((d) => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join("")}
+      </select>`;
+    }
+    return `<input name="subregion" id="rd-subregion" placeholder="${t("route_distribution_whole_region")}" />`;
+  }
+
+  container.innerHTML = `
+    <div class="card">
+      <form id="rd-add-form">
+        <label>${t("region")}
+          <select name="region" id="rd-region" required>
+            <option value="">${t("select_placeholder")}</option>
+            ${REGION_LIST.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join("")}
+          </select>
+        </label>
+        <label id="rd-subregion-wrap">${t("subregion")}${subregionFieldHtml("")}</label>
+        <label>${t("sales_channel")}
+          <select name="sales_channel" id="rd-channel" required>
+            <option value="">${t("select_placeholder")}</option>
+            ${SALES_CHANNELS.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")}
+          </select>
+        </label>
+        <label>${t("assigned_manager")}
+          <select name="assigned_manager_id" id="rd-manager">
+            <option value="">${t("unassigned")}</option>
+            ${managers.map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join("")}
+          </select>
+        </label>
+        <p class="form-error" id="rd-error" hidden></p>
+        <button type="submit" class="btn btn-primary">${t("route_distribution_add")}</button>
+      </form>
+    </div>
+    <div id="rd-list" class="card-list"></div>
+  `;
+
+  const regionSelect = container.querySelector("#rd-region");
+  const subregionWrap = container.querySelector("#rd-subregion-wrap");
+  regionSelect.addEventListener("change", () => {
+    subregionWrap.innerHTML = `${t("subregion")}${subregionFieldHtml(regionSelect.value)}`;
+  });
+
+  const listEl = container.querySelector("#rd-list");
+  function renderList() {
+    if (!mappings.length) {
+      listEl.innerHTML = `<p class="empty-state">${t("route_distribution_empty")}</p>`;
+      return;
+    }
+    listEl.innerHTML = mappings
+      .map(
+        (m) => `
+      <div class="card user-row">
+        <div class="user-row-top">
+          <div>
+            <strong>${escapeHtml(m.region)}${m.subregion ? ` · ${escapeHtml(m.subregion)}` : ""}</strong>
+            <span class="muted">${escapeHtml(m.sales_channel)}${m.assigned_manager_name ? ` · ${escapeHtml(m.assigned_manager_name)}` : ""}</span>
+          </div>
+          <button type="button" class="btn-link btn-link-danger" data-delete-id="${m.id}">${t("delete")}</button>
+        </div>
+      </div>`
+      )
+      .join("");
+    listEl.querySelectorAll("[data-delete-id]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        await api.deleteRouteDistribution(btn.dataset.deleteId);
+        mappings.splice(mappings.findIndex((m) => String(m.id) === btn.dataset.deleteId), 1);
+        renderList();
+      });
+    });
+  }
+  renderList();
+
+  const form = container.querySelector("#rd-add-form");
+  const errorEl = container.querySelector("#rd-error");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errorEl.hidden = true;
+    const data = new FormData(form);
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    try {
+      const created = await api.createRouteDistribution({
+        region: data.get("region"),
+        subregion: data.get("subregion") || null,
+        sales_channel: data.get("sales_channel"),
+        assigned_manager_id: data.get("assigned_manager_id") ? Number(data.get("assigned_manager_id")) : null,
+      });
+      created.assigned_manager_name = managers.find((u) => u.id === created.assigned_manager_id)?.name || null;
+      mappings.push(created);
+      renderList();
+      form.reset();
+      subregionWrap.innerHTML = `${t("subregion")}${subregionFieldHtml("")}`;
     } catch (err) {
       errorEl.textContent = err.message;
       errorEl.hidden = false;

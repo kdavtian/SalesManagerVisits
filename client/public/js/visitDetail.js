@@ -59,7 +59,7 @@ export function checkinBrandTags(ch) {
 // Full-screen photo viewer -- tap a photo to open it, swipe or use the
 // arrow buttons/keys to move between the rest of that visit's photos,
 // tap outside/the close button/Escape to dismiss.
-function openPhotoLightbox(urls, startIndex) {
+export function openPhotoLightbox(urls, startIndex) {
   let index = startIndex;
   const overlay = document.createElement("div");
   overlay.className = "photo-lightbox-overlay";

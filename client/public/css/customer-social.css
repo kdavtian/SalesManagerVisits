@@ -1,20 +1,9 @@
+/* Sits inline among the customer detail header's other icon-action buttons
+   (reassign/assign-ERP/edit) instead of taking a full-width row of its own. */
 .customer-social-section {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.customer-social-label {
-  font-weight: 600;
-  color: var(--text-color, #111318);
-}
-
-.customer-social-actions {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
 }
 
 .customer-social-link,
@@ -72,9 +61,6 @@
 }
 
 @media (max-width: 380px) {
-  .customer-social-label {
-    font-size: .93rem;
-  }
   .customer-social-link,
   .customer-social-edit {
     width: 34px;

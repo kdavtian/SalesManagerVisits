@@ -120,6 +120,7 @@ customersRouter.post("/", async (req, res) => {
     subregion,
     customer_tier,
     sales_channel,
+    assigned_manager_id,
   } = req.body ?? {};
 
   if (!name || lat === undefined || lng === undefined) {
@@ -142,9 +143,17 @@ customersRouter.post("/", async (req, res) => {
   // always wins -- see canAssignErpCustomerId's PATCH counterpart).
   const initialTier = customer_tier || (erp_customer_id ? "bronze" : "potential");
 
+  // Defaults to whoever is creating the customer, same as before this field
+  // existed. A caller allowed to reassign customers (e.g. the Routes
+  // Distribution auto-suggested manager on the new-customer form) can point
+  // it at someone else instead; anyone without that permission has the
+  // field silently ignored rather than erroring, since submitting the
+  // default suggestion back is the common case.
+  const resolvedManagerId = assigned_manager_id && canReassignCustomers(req.user.role) ? assigned_manager_id : req.user.id;
+
   const { rows } = await pool.query(
     `INSERT INTO customers (name, category, phone, address, notes, lat, lng, created_by, assigned_manager_id, visit_frequency_days, erp_customer_id, tin, region, subregion, customer_tier, sales_channel)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, $11, $12, $13, $14, $15)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $16, $9, $10, $11, $12, $13, $14, $15)
      RETURNING *`,
     [
       name,
@@ -162,6 +171,7 @@ customersRouter.post("/", async (req, res) => {
       subregion || null,
       initialTier,
       sales_channel || null,
+      resolvedManagerId,
     ]
   );
   res.status(201).json(rows[0]);

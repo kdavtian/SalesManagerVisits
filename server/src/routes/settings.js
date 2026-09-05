@@ -5,6 +5,8 @@ import {
   setCheckinRadiusMeters,
   getDefaultVisitFrequencyDays,
   setDefaultVisitFrequencyDays,
+  getIncentiveMessage,
+  setIncentiveMessage,
 } from "../settings.js";
 
 export const settingsRouter = Router();
@@ -12,13 +14,15 @@ export const settingsRouter = Router();
 settingsRouter.use(requireAuth);
 
 settingsRouter.get("/", async (req, res) => {
-  const [checkinRadiusMeters, defaultVisitFrequencyDays] = await Promise.all([
+  const [checkinRadiusMeters, defaultVisitFrequencyDays, incentiveMessage] = await Promise.all([
     getCheckinRadiusMeters(),
     getDefaultVisitFrequencyDays(),
+    getIncentiveMessage(),
   ]);
   res.json({
     checkin_radius_meters: checkinRadiusMeters,
     default_visit_frequency_days: defaultVisitFrequencyDays,
+    incentive_message: incentiveMessage,
   });
 });
 
@@ -39,6 +43,15 @@ settingsRouter.patch("/", requireAdmin, async (req, res) => {
       return res.status(400).json({ error: "default_visit_frequency_days must be between 1 and 365" });
     }
     result.default_visit_frequency_days = await setDefaultVisitFrequencyDays(Math.round(days));
+  }
+
+  if (req.body?.incentive_message !== undefined) {
+    const message = String(req.body.incentive_message).trim();
+    if (message.length > 200) {
+      return res.status(400).json({ error: "incentive_message must be 200 characters or fewer" });
+    }
+    // Empty string resets to the built-in default (stored as NULL).
+    result.incentive_message = await setIncentiveMessage(message || null);
   }
 
   res.json(result);

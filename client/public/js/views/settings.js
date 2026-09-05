@@ -2,7 +2,7 @@ import { api } from "../api.js";
 import { t, getLang, setLang } from "../i18n.js";
 import { getTheme, setTheme } from "../theme.js";
 import { state, isAdmin, canPlanForOthers, seesFinancialExports, canManageProducts } from "../state.js";
-import { renderTeamSection, renderPlanApprovalsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection } from "./admin.js";
+import { renderTeamSection, renderPlanApprovalsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection, renderRouteDistributionSection } from "./admin.js";
 import { escapeHtml, compressImage, activateDialog, attachSwipeToDismiss, formatPhoneDisplay, normalizePhone } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
@@ -160,9 +160,25 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       ${
         admin
           ? `
-        <h2 class="section-title">${t("admin_section")}</h2>
-        <div class="card">
-          <form id="radius-form">
+        <h2 class="section-title">${t("admin_group_team_roles")}</h2>
+        <div class="card settings-list">
+          ${settingsRow({ icon: ICON.team, label: t("team_management"), id: "row-team-management" })}
+        </div>
+        <h3 class="settings-subsection-title">${t("notification_defaults_title")}</h3>
+        <p class="muted radius-help">${t("notification_defaults_help")}</p>
+        <div id="notification-defaults-section"></div>
+        <h3 class="settings-subsection-title">${t("points_closeout_title")}</h3>
+        <div id="points-closeout-section"></div>
+      `
+          : ""
+      }
+
+      ${
+        admin
+          ? `
+        <h2 class="section-title">${t("admin_group_app_config")}</h2>
+        <div class="card settings-list-group">
+          <form id="radius-form" class="settings-list-group-item">
             <label>
               <span class="settings-form-label">${ICON.gps}${t("gps_verification_settings")}</span>
               <input type="number" name="radius" min="10" max="5000" required />
@@ -171,9 +187,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
             <p class="form-success" id="radius-success" role="status" hidden>${t("saved")}</p>
             <button type="submit" class="btn btn-primary">${t("save")}</button>
           </form>
-        </div>
-        <div class="card">
-          <form id="visit-frequency-form">
+          <form id="visit-frequency-form" class="settings-list-group-item">
             <label>
               <span class="settings-form-label">${ICON.calendar}${t("default_visit_frequency")}</span>
               <input type="number" name="days" min="1" max="365" required />
@@ -182,49 +196,50 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
             <p class="form-success" id="visit-frequency-success" role="status" hidden>${t("saved")}</p>
             <button type="submit" class="btn btn-primary">${t("save")}</button>
           </form>
+          <form id="incentive-message-form" class="settings-list-group-item">
+            <label>
+              <span class="settings-form-label">${ICON.gps}${t("incentive_message_label")}</span>
+              <input type="text" name="message" maxlength="200" placeholder="${t("points_leaderboard_prize_hint")}" />
+            </label>
+            <p class="muted radius-help">${t("incentive_message_help")}</p>
+            <p class="form-success" id="incentive-message-success" role="status" hidden>${t("saved")}</p>
+            <button type="submit" class="btn btn-primary">${t("save")}</button>
+          </form>
         </div>
-
-        <div class="card settings-list">
-          ${settingsRow({ icon: ICON.team, label: t("team_management"), id: "row-team-management" })}
-          ${settingsRow({ icon: ICON.chart, label: t("reports_management"), id: "row-reports-management" })}
-        </div>
-
-        <h2 class="section-title">${t("points_closeout_title")}</h2>
-        <div id="points-closeout-section"></div>
-
-        <h2 class="section-title">${t("notification_defaults_title")}</h2>
-        <p class="muted radius-help">${t("notification_defaults_help")}</p>
-        <div id="notification-defaults-section"></div>
       `
           : ""
       }
 
       ${
-        canManageProducts()
+        admin || canManageProducts() || canApprovePlans || canExportFinancials
           ? `
-        <h2 class="section-title">${t("products_pricelist_admin_section")}</h2>
-        <div class="card settings-list">
+        <h2 class="section-title">${t("admin_group_data_integrations")}</h2>
+        ${
+          admin
+            ? `<div class="card settings-list">
+          ${settingsRow({ icon: ICON.chart, label: t("reports_management"), id: "row-reports-management" })}
+          ${settingsRow({ icon: ICON.database, label: t("route_distribution_title"), id: "row-route-distribution" })}
+        </div>`
+            : ""
+        }
+        ${
+          canManageProducts()
+            ? `<div class="card settings-list">
           ${settingsRow({ icon: ICON.database, label: t("product_catalog"), id: "row-product-catalog" })}
           ${settingsRow({ icon: ICON.chart, label: t("company_profile"), id: "row-company-profile" })}
-        </div>
-      `
-          : ""
-      }
-
-      ${
-        canApprovePlans
-          ? `
-        <h2 class="section-title">${t("plan_approvals")}</h2>
-        <div id="plan-approvals-slot"></div>
-      `
-          : ""
-      }
-
-      ${
-        canExportFinancials
-          ? `
-        <h2 class="section-title">${t("financial_exports")}</h2>
-        <div class="card settings-list">
+        </div>`
+            : ""
+        }
+        ${
+          canApprovePlans
+            ? `<h3 class="settings-subsection-title">${t("plan_approvals")}</h3>
+          <div id="plan-approvals-slot"></div>`
+            : ""
+        }
+        ${
+          canExportFinancials
+            ? `<h3 class="settings-subsection-title">${t("financial_exports")}</h3>
+          <div class="card settings-list">
           <a class="settings-list-row" href="/api/exports/payments.csv">
             <span class="settings-row-label">${t("export_payments")}</span>
           </a>
@@ -234,7 +249,9 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
           <a class="settings-list-row" href="/api/exports/orders.csv">
             <span class="settings-row-label">${t("export_orders")}</span>
           </a>
-        </div>
+        </div>`
+            : ""
+        }
       `
           : ""
       }
@@ -404,10 +421,14 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     const frequencyForm = root.querySelector("#visit-frequency-form");
     const frequencyInput = frequencyForm.querySelector('input[name="days"]');
     const frequencySuccess = root.querySelector("#visit-frequency-success");
+    const incentiveForm = root.querySelector("#incentive-message-form");
+    const incentiveInput = incentiveForm.querySelector('input[name="message"]');
+    const incentiveSuccess = root.querySelector("#incentive-message-success");
 
     api.getSettings().then((s) => {
       radiusInput.value = s.checkin_radius_meters;
       frequencyInput.value = s.default_visit_frequency_days;
+      incentiveInput.value = s.incentive_message || "";
     });
 
     radiusForm.addEventListener("submit", async (e) => {
@@ -436,6 +457,19 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       }
     });
 
+    incentiveForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      incentiveSuccess.hidden = true;
+      const submitBtn = incentiveForm.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      try {
+        await api.updateSettings({ incentive_message: incentiveInput.value });
+        incentiveSuccess.hidden = false;
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
     renderPointsCloseoutSection(root.querySelector("#points-closeout-section"));
     renderNotificationDefaultsSection(root.querySelector("#notification-defaults-section"));
 
@@ -444,6 +478,9 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     });
     root.querySelector("#row-reports-management").addEventListener("click", () => {
       openAdminSectionOverlay(t("reports_management"), renderReportsManagementSection);
+    });
+    root.querySelector("#row-route-distribution").addEventListener("click", () => {
+      openAdminSectionOverlay(t("route_distribution_title"), renderRouteDistributionSection);
     });
   }
 

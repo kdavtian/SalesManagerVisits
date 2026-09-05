@@ -17,6 +17,21 @@ export async function setCheckinRadiusMeters(meters) {
   return rows[0].checkin_radius_meters;
 }
 
+export async function getIncentiveMessage() {
+  const { rows } = await pool.query("SELECT incentive_message FROM app_settings WHERE id = 1");
+  return rows[0]?.incentive_message ?? null;
+}
+
+export async function setIncentiveMessage(message) {
+  const { rows } = await pool.query(
+    `INSERT INTO app_settings (id, incentive_message) VALUES (1, $1)
+     ON CONFLICT (id) DO UPDATE SET incentive_message = EXCLUDED.incentive_message
+     RETURNING incentive_message`,
+    [message]
+  );
+  return rows[0].incentive_message;
+}
+
 export async function getDefaultVisitFrequencyDays() {
   const { rows } = await pool.query("SELECT default_visit_frequency_days FROM app_settings WHERE id = 1");
   return rows[0]?.default_visit_frequency_days ?? 14;

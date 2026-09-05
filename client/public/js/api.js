@@ -145,6 +145,15 @@ export const api = {
   updateCompanyProfile: (data) => json("/company-profile", "PATCH", data),
   updateMyProfile: (data) => json("/me/profile", "PATCH", data),
 
+  listRouteDistribution: () => request("/route-distribution"),
+  lookupRouteDistribution: (region, subregion) => {
+    const qs = new URLSearchParams({ region, ...(subregion ? { subregion } : {}) }).toString();
+    return request(`/route-distribution/lookup?${qs}`);
+  },
+  createRouteDistribution: (data) => json("/route-distribution", "POST", data),
+  updateRouteDistribution: (id, data) => json(`/route-distribution/${id}`, "PATCH", data),
+  deleteRouteDistribution: (id) => request(`/route-distribution/${id}`, { method: "DELETE" }),
+
   createOrder: (data) => json("/orders", "POST", data),
   submitOrder: (id, erpCustomerId) => json(`/orders/${id}/submit`, "POST", erpCustomerId ? { erp_customer_id: erpCustomerId } : {}),
   listOrders: (params = {}) => {

@@ -3,7 +3,7 @@ import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDis
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { canEditDirectly, canReassignCustomers, canAssignErpCustomerId, isAdmin } from "../state.js";
-import { openVisitDetailSheet } from "../visitDetail.js";
+import { openVisitDetailSheet, openPhotoLightbox } from "../visitDetail.js";
 
 const AGING_BADGE = {
   "0-7 days": "badge-success",
@@ -87,7 +87,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       </button>
       <div class="detail-header-icon">${icons.store}</div>
       <div class="detail-header-title">
-        <h1>${escapeHtml(customer.name)}</h1>
+        <h1 id="customer-detail-name" tabindex="0" role="button" aria-label="${t("tap_to_show_full_name")}">${escapeHtml(customer.name)}</h1>
         ${idCategoryLine ? `<div class="muted detail-header-subtitle">${idCategoryLine}</div>` : ""}
         <div class="detail-header-status-row">
           ${tierBadgeHtml(customer.customer_tier)}
@@ -153,6 +153,9 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       <button type="button" class="action-btn" id="new-order-btn">
         <span>${icons.cart}</span>${t("new_order")}
       </button>
+      <button type="button" class="action-btn" id="customer-photos-btn">
+        <span><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5.5-5.5a1.5 1.5 0 0 0-2.1 0L5 19"/></svg></span>${t("customer_photos")}
+      </button>
     </div>
 
     <h2 class="section-title" id="visit-history-anchor">${t("visit_history")}</h2>
@@ -166,12 +169,19 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     openNavigation(customer.lat, customer.lng);
   });
   container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/customers"));
+  // Long names truncate with an ellipsis by default (see .detail-header-title
+  // h1); tapping reveals the full name by letting it wrap instead of adding
+  // a tooltip/sheet nobody would think to open.
+  container.querySelector("#customer-detail-name").addEventListener("click", (e) => {
+    e.currentTarget.classList.toggle("customer-detail-name-expanded");
+  });
   container.querySelector("#new-order-btn").addEventListener("click", () => {
     navigate(`#/orders/new/${customerId}`);
   });
   container.querySelector("#edit-customer-btn").addEventListener("click", () => {
     openEditSheet(customer, navigate, () => renderCustomerDetail(root, navigate, customerId));
   });
+  container.querySelector("#customer-photos-btn").addEventListener("click", () => openCustomerPhotoGallery(customerId));
   container.querySelector("#reassign-customer-btn")?.addEventListener("click", () => {
     openReassignSheet(customer, () => renderCustomerDetail(root, navigate, customerId));
   });
@@ -583,6 +593,61 @@ async function openReassignSheet(customer, onDone) {
       submitBtn.disabled = false;
       submitBtn.textContent = t("save");
     }
+  });
+}
+
+// Every photo captured at check-ins for this customer, most recent visit
+// first -- a simple grid that opens into the same full-screen lightbox the
+// per-visit detail sheet uses, rather than building a second viewer.
+async function openCustomerPhotoGallery(customerId) {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.innerHTML = `
+    <div class="sheet">
+      <h2>${t("customer_photos")}</h2>
+      <div id="customer-photo-gallery-body"><p class="loading-state" role="status">${t("loading")}</p></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  activateDialog(overlay);
+  overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+
+  const body = overlay.querySelector("#customer-photo-gallery-body");
+  let checkins;
+  try {
+    ({ rows: checkins } = await api.listCheckins({ customer_id: customerId }));
+  } catch (err) {
+    body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    return;
+  }
+
+  // listCheckins already returns rows newest-first, so flattening in order
+  // keeps the gallery most-recent-first without a separate sort pass.
+  const photos = [];
+  for (const ch of checkins) {
+    for (const photo of ch.photos ?? []) photos.push({ id: photo.id, timestamp: ch.timestamp });
+  }
+
+  if (!photos.length) {
+    body.innerHTML = `<p class="empty-state">${t("no_photos_yet")}</p>`;
+    return;
+  }
+
+  const urls = photos.map((p) => api.checkinPhotoByIdUrl(p.id));
+  body.innerHTML = `
+    <div class="checkin-photo-grid">
+      ${photos
+        .map(
+          (p, i) => `
+        <div class="checkin-photo-wrap">
+          <img class="checkin-photo" data-photo-index="${i}" src="${urls[i]}" alt="${t("photo_optional")}" loading="lazy" />
+        </div>`
+        )
+        .join("")}
+    </div>
+  `;
+  body.querySelectorAll(".checkin-photo").forEach((img) => {
+    img.addEventListener("click", () => openPhotoLightbox(urls, Number(img.dataset.photoIndex)));
   });
 }
 
