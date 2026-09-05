@@ -8,7 +8,7 @@ const statusSvg = (content) =>
 // Production vector versions of the exact concepts approved in the generated
 // icon set: document+pencil, document+send, verified order document,
 // packed box, outbound box, delivered box+check, cancelled box+x.
-const ORDER_STATUS_ICONS = {
+export const ORDER_STATUS_ICONS = {
   draft: statusSvg(`<path d="M7 3.5h11l6 6V27a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 27V5A1.5 1.5 0 0 1 7 3.5Z"/><path d="M18 3.5v6h6M10 13h8M10 17h7M10 21h4"/><path d="m15.5 25.5 8.1-8.1 2.9 2.9-8.1 8.1-4 .9z"/>`),
   submitted: statusSvg(`<path d="M7 3.5h11l6 6V27a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 27V5A1.5 1.5 0 0 1 7 3.5Z"/><path d="M18 3.5v6h6M10 13h8M10 17h7M10 21h4"/><path d="m15 23 13-6-6 13-2.1-5z"/><path d="m19.9 25 4.2-4.1"/>`),
   confirmed: statusSvg(`<path d="M6.5 3.5h13l6 6V26A2.5 2.5 0 0 1 23 28.5H6.5A2.5 2.5 0 0 1 4 26V6A2.5 2.5 0 0 1 6.5 3.5Z"/><path d="M19.5 3.5v6h6"/><path d="m8 11 5-2.7 5 2.7-5 2.7zM8 11v5.5l5 2.7 5-2.7V11M13 13.7v5.5"/><path d="M9 22h8"/><circle cx="23" cy="23" r="6"/><path d="m20.2 23 1.9 2 3.8-4.2"/>`),
@@ -16,18 +16,10 @@ const ORDER_STATUS_ICONS = {
   delivered: statusSvg(`<path d="m5 9 9-4.5L23 9l-9 4.5zM5 9v12l9 4.5 9-4.5V9M14 13.5v12"/><circle cx="24" cy="23" r="6"/><path d="m21.2 23 1.9 2 3.8-4.2"/>`),
 };
 
-const STATUS_KEYS = ["draft", "submitted", "confirmed", "packed_stock_out", "delivered"];
-
-function resolveStatusFromBadge(badge) {
-  const text = badge?.textContent?.trim();
-  if (!text) return "";
-  for (const status of STATUS_KEYS) {
-    const translated = t(`order_status_${status}`);
-    if (translated && translated !== `order_status_${status}` && translated.trim() === text) return status;
-  }
-  return "";
-}
-
+// Row icons are now rendered inline by orders.js itself (importing
+// ORDER_STATUS_ICONS above) rather than injected here after the fact --
+// this only still decorates the status *filter tab bar*, which has no
+// per-status data attribute of its own to key off of at render time.
 function decorateOrdersStatusUi() {
   const filterRow = document.querySelector("#order-status-filters");
   filterRow?.querySelectorAll("[data-status]").forEach((btn) => {
@@ -40,24 +32,6 @@ function decorateOrdersStatusUi() {
       btn.prepend(icon);
     }
     icon.innerHTML = ORDER_STATUS_ICONS[status];
-  });
-
-  const list = document.querySelector("#orders-list");
-  if (!list) return;
-  list.querySelectorAll("[data-order-id].activity-row-rich").forEach((row) => {
-    const badge = row.querySelector(".activity-row-bottom .badge");
-    const status = resolveStatusFromBadge(badge);
-    if (!status || !ORDER_STATUS_ICONS[status]) return;
-    let icon = row.querySelector(":scope > .order-row-status-icon");
-    if (!icon) {
-      icon = document.createElement("span");
-      icon.className = `order-row-status-icon order-status-${status}`;
-      icon.setAttribute("aria-hidden", "true");
-      row.prepend(icon);
-    }
-    icon.className = `order-row-status-icon order-status-${status}`;
-    icon.innerHTML = ORDER_STATUS_ICONS[status];
-    row.dataset.orderStatus = status;
   });
 }
 

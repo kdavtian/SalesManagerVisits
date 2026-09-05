@@ -345,7 +345,7 @@ function renderNav() {
       <button class="nav-item ${hash === item.hash ? "nav-item-active" : ""}" data-hash="${item.hash}" aria-label="${item.label}" ${hash === item.hash ? 'aria-current="page"' : ""}>
         <span class="nav-icon">
           ${item.icon}
-          ${item.hash === "#/orders" ? `<span class="nav-badge" id="orders-nav-badge" hidden></span>` : ""}
+          ${item.hash === "#/orders" ? `<span class="nav-badge count-badge" id="orders-nav-badge" hidden></span>` : ""}
         </span>
         <span>${item.label}</span>
       </button>
@@ -367,7 +367,7 @@ function renderNav() {
       <span class="topbar-user">${escapeHtml(state.user.name)}</span>
       <button type="button" class="topbar-menu-btn" id="topbar-bell-btn" aria-label="${t("notifications_title")}" ${hash === "#/notifications" ? 'aria-current="page"' : ""}>
         ${icons.bell}
-        <span class="nav-badge" id="topbar-bell-badge" hidden></span>
+        <span class="nav-badge count-badge" id="topbar-bell-badge" hidden></span>
       </button>
       <button type="button" class="topbar-menu-btn" id="topbar-menu-btn" aria-label="${t("nav_settings")}" ${hash === "#/settings" ? 'aria-current="page"' : ""}>
         ${icons.menu}

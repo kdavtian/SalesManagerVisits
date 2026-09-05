@@ -167,6 +167,23 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         <button class="map-control-btn map-control-standalone" id="plan-day-btn" aria-label="${t("plan_day")}">
           ${icons.planDay}
         </button>
+        <button class="map-control-btn map-control-standalone map-control-legend-btn" id="map-legend-btn" aria-label="${t("map_legend")}" aria-expanded="false" aria-haspopup="dialog">
+          ${icons.info}
+        </button>
+      </div>
+
+      <div class="map-legend-panel" id="map-legend-panel" role="dialog" aria-label="${t("map_legend_title")}" hidden>
+        <div class="map-legend-header">
+          <span>${t("map_legend_title")}</span>
+          <button type="button" class="icon-btn" id="map-legend-close" aria-label="${t("close")}">${icons.close}</button>
+        </div>
+        <ul class="map-legend-list">
+          <li><span class="map-legend-swatch map-legend-swatch-pin"></span>${t("map_legend_tier")}</li>
+          <li><span class="map-legend-swatch map-legend-swatch-badge map-legend-swatch-visited">&#10003;</span>${t("map_legend_visited")}</li>
+          <li><span class="map-legend-swatch map-legend-swatch-badge map-legend-swatch-overdue">!</span>${t("map_legend_overdue")}</li>
+          <li><span class="map-legend-swatch map-legend-swatch-selected"></span>${t("map_legend_selected")}</li>
+          <li><span class="map-legend-swatch map-legend-swatch-cluster">9</span>${t("map_legend_cluster")}</li>
+        </ul>
       </div>
 
       <button class="fab" id="add-customer-fab" title="${t("new_customer")}" aria-label="${t("new_customer")}" aria-pressed="false">${icons.mapPinPlus}</button>
@@ -1511,6 +1528,24 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     openPlanDaySheet();
   });
   if (startInPlanMode) openPlanDaySheet();
+
+  const legendBtn = root.querySelector("#map-legend-btn");
+  const legendPanel = root.querySelector("#map-legend-panel");
+  const closeLegend = () => {
+    legendPanel.hidden = true;
+    legendBtn.setAttribute("aria-expanded", "false");
+  };
+  legendBtn.addEventListener("click", () => {
+    const open = legendPanel.hidden;
+    legendPanel.hidden = !open;
+    legendBtn.setAttribute("aria-expanded", String(open));
+  });
+  root.querySelector("#map-legend-close").addEventListener("click", closeLegend);
+  root.addEventListener("click", (event) => {
+    if (!legendPanel.hidden && !legendPanel.contains(event.target) && event.target !== legendBtn && !legendBtn.contains(event.target)) {
+      closeLegend();
+    }
+  });
 
   // ---- Shared customer-location picker (Add Customer + Relocate) ----
   // One flow services both: propose a location (a fresh GPS fix, the

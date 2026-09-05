@@ -116,7 +116,7 @@ export async function renderDashboard(root, navigate) {
       ${
         state.user.role !== "warehouse_manager" && state.user.role !== "delivery_manager"
           ? `<button type="button" class="quick-action" id="qa-payments">
-        <span class="quick-action-icon quick-action-icon-accent">${icons.payment}<span class="nav-badge" id="qa-payments-badge" hidden></span></span>
+        <span class="quick-action-icon quick-action-icon-accent">${icons.payment}<span class="nav-badge count-badge" id="qa-payments-badge" hidden></span></span>
         <span>${t("qa_payments")}</span>
       </button>`
           : ""
@@ -148,9 +148,8 @@ export async function renderDashboard(root, navigate) {
       ${
         ["admin", "ceo", "accountant"].includes(state.user.role)
           ? `<button type="button" class="quick-action" id="qa-recorded">
-        <span class="quick-action-icon">${icons.clock}</span>
+        <span class="quick-action-icon">${icons.clock}<span class="nav-badge count-badge" id="unrecorded-badge" hidden></span></span>
         <span>${t("qa_recorded")}</span>
-        <span class="badge badge-danger" id="unrecorded-badge" hidden></span>
       </button>`
           : ""
       }

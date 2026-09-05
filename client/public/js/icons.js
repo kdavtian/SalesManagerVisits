@@ -22,6 +22,7 @@ export const icons = {
   minus: `<svg class="map-action-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><path d="M4 12h16"/></svg>`,
   team: `<svg class="map-action-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><circle cx="9" cy="8" r="3"/><path d="M3 20v-1.25A5.75 5.75 0 0 1 8.75 13h.5A5.75 5.75 0 0 1 15 18.75V20"/><circle cx="17.5" cy="8.5" r="2.5"/><path d="M15.5 13.6c.6-.25 1.25-.38 1.9-.38A4.6 4.6 0 0 1 22 17.82V20"/></svg>`,
   close: `<svg class="map-action-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><path d="M5 5l14 14M19 5 5 19"/></svg>`,
+  info: `<svg class="map-action-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><circle cx="12" cy="7.75" r="0.15" fill="currentColor" stroke="currentColor" stroke-width="2.4"/></svg>`,
   chevronUp: `<svg class="map-action-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><path d="m5 15 7-7 7 7"/></svg>`,
   chevronDown: `<svg class="map-action-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><path d="m5 9 7 7 7-7"/></svg>`,
   navigation: `<svg class="map-action-svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M20.75 3.25 3.55 10.1a.9.9 0 0 0 .12 1.71l6.72 1.8 1.8 6.72a.9.9 0 0 0 1.71.12l6.85-17.2Z"/></svg>`,

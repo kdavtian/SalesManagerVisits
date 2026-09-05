@@ -335,30 +335,30 @@ export function renderCustomers(root, navigate, initialFilter) {
           state.user.role === "sales_manager" && c.assigned_manager_id != null && c.assigned_manager_id !== state.user.id;
 
         return `
-        <button class="card customer-card ${isOthers ? "customer-card-unassigned" : ""}" data-id="${c.id}">
-          <span class="customer-card-left">
-            ${customerListIconHtml(c)}
-            <div class="customer-card-main">
+        <button class="card list-row ${isOthers ? "customer-card-unassigned" : ""}" data-id="${c.id}">
+          ${customerListIconHtml(c)}
+          <div class="list-row-body">
+            <div class="list-row-top">
               <strong>${escapeHtml(c.name)}</strong>
-              ${idAndType ? `<span class="muted customer-card-id-type">${idAndType}</span>` : ""}
-              <span class="muted customer-card-last-visit">${lastVisit}</span>
+            </div>
+            ${idAndType ? `<div class="muted list-row-meta">${idAndType}</div>` : ""}
+            <div class="muted list-row-meta">${lastVisit}</div>
+            <div class="list-row-bottom">
+              <span class="badge ${badgeClass}">${badgeText}</span>
               ${
                 showDebt && c.debt_amd != null && Number(c.debt_amd) > 0
                   ? `<span class="customer-card-debt">${t("outstanding_debt_label")}: ${formatAmd(Number(c.debt_amd))}</span>`
                   : ""
               }
             </div>
-          </span>
-          <span class="card-trailing">
-            <span class="badge ${badgeClass}">${badgeText}</span>
-            <span class="chevron">&#8250;</span>
-          </span>
+          </div>
+          <span class="chevron">&#8250;</span>
         </button>
       `;
       })
       .join("");
 
-    listEl.querySelectorAll(".customer-card").forEach((el) => {
+    listEl.querySelectorAll(".list-row").forEach((el) => {
       el.addEventListener("click", () => navigate(`#/customers/${el.dataset.id}`));
     });
   }

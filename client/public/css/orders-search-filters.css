@@ -23,6 +23,12 @@
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   padding-bottom: 3px;
+  /* Same trailing-edge fade as .map-filter-row in styles.css, so a
+     partially-scrolled last tab reads as "more to scroll" instead of
+     looking clipped -- previously this row scrolled but gave no visual
+     hint that the last tab (Delivered) wasn't the full list. */
+  mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
 }
 .order-status-filter-row::-webkit-scrollbar { display: none; }
 .order-status-filter-row .map-filter-chip {
@@ -48,38 +54,14 @@
 .order-status-filter-row .chip-active .order-filter-status-icon { color: currentColor; }
 .order-status-svg { display: block; width: 100%; height: 100%; }
 
-#orders-list .activity-row-rich { align-items: center; }
-.order-row-status-icon {
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #536174;
-  margin-right: 12px;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-}
-.order-row-status-icon .order-status-svg { width: 31px; height: 31px; }
-
 @media (max-width: 380px) {
   .orders-search-combined.activity-search-combined { margin-left: 0; margin-right: 0; }
   .orders-search-combined .orders-search-menu { min-width: 205px; }
   .order-status-filter-row .map-filter-chip { gap: 6px; }
-  .order-row-status-icon {
-    width: 32px;
-    height: 32px;
-    flex-basis: 32px;
-    margin-right: 10px;
-  }
-  .order-row-status-icon .order-status-svg { width: 29px; height: 29px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .order-status-filter-row,
-  .order-row-status-icon {
+  .order-status-filter-row {
     scroll-behavior: auto;
     transition: none;
   }

@@ -3,16 +3,19 @@ import { escapeHtml, formatAmd, activateDialog } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { state } from "../state.js";
 import { icons } from "../icons.js";
+import { ORDER_STATUS_ICONS } from "../ordersSearchEnhancements.js";
 
 // v3 5-state machine (see migrations/051_warehouse_delivery_v3.sql):
 // draft -> submitted -> confirmed -> packed_stock_out -> delivered, every
-// exception looping back to draft.
+// exception looping back to draft. `iconTint` picks the shared
+// .list-row-icon-* tint variant (see styles.css) so the row's leading
+// icon color always matches its trailing status badge's color family.
 const STATUS_META = {
-  draft: { key: "order_status_draft", cls: "badge-warning" },
-  submitted: { key: "order_status_submitted", cls: "badge-neutral" },
-  confirmed: { key: "order_status_confirmed", cls: "badge-info" },
-  packed_stock_out: { key: "order_status_packed_stock_out", cls: "badge-info" },
-  delivered: { key: "order_status_delivered", cls: "badge-success" },
+  draft: { key: "order_status_draft", cls: "badge-warning", iconTint: "warning" },
+  submitted: { key: "order_status_submitted", cls: "badge-neutral", iconTint: "neutral" },
+  confirmed: { key: "order_status_confirmed", cls: "badge-info", iconTint: "info" },
+  packed_stock_out: { key: "order_status_packed_stock_out", cls: "badge-info", iconTint: "info" },
+  delivered: { key: "order_status_delivered", cls: "badge-success", iconTint: "success" },
 };
 
 const STATUS_FILTERS = ["", "draft", "submitted", "confirmed", "packed_stock_out", "delivered"];
@@ -194,14 +197,15 @@ export async function renderOrders(root, navigate) {
             </div>`;
         }
         return `${dateHeading}
-        <button class="card activity-row-rich" data-order-id="${o.id}">
-          <div class="activity-row-body">
-            <div class="activity-row-top">
+        <button class="card list-row" data-order-id="${o.id}">
+          <span class="list-row-icon list-row-icon-${meta.iconTint}" aria-hidden="true">${ORDER_STATUS_ICONS[o.status] ?? ""}</span>
+          <div class="list-row-body">
+            <div class="list-row-top">
               <strong>${escapeHtml(o.customer_name)}</strong>
-              <span class="activity-row-trailing">${formatAmd(Number(o.total_amd))}</span>
+              <span class="list-row-trailing-text">${formatAmd(Number(o.total_amd))}</span>
             </div>
-            <div class="muted activity-row-meta">${o.order_code ? `${escapeHtml(o.order_code)} · ` : ""}${escapeHtml(o.user_name)} · ${formatDate(o.created_at)}</div>
-            <div class="activity-row-bottom">
+            <div class="muted list-row-meta">${o.order_code ? `${escapeHtml(o.order_code)} · ` : ""}${escapeHtml(o.user_name)} · ${formatDate(o.created_at)}</div>
+            <div class="list-row-bottom">
               <span class="badge ${meta.cls}">${t(meta.key)}</span>
             </div>
           </div>

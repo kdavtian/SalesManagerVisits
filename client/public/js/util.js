@@ -247,20 +247,23 @@ export function tierBadgeHtml(tier) {
 }
 
 // The customer-list-row icon: the category glyph (garage/shop/workshop/
-// other) as the main shape, with a small tier-colored badge in the corner
-// (a numbered coin for bronze/silver/gold, the target/binoculars glyph for
-// potential/competitor) -- so glancing at the row alone answers "what kind
-// of place, and how big an account" without opening it. Complements the
-// map pins, which encode the same two facts the other way around (tier
-// owns the pin's shape/color, category is the small glyph inside it).
+// other) as the shared .list-row-icon avatar's glyph, tinted by tier --
+// so glancing at the row alone answers "what kind of place, and how big
+// an account" without opening it (the tier itself is still spelled out
+// via tierBadgeHtml wherever a row shows its status badges). Complements
+// the map pins, which encode the same two facts the other way around
+// (tier owns the pin's shape/color, category is the small glyph inside).
+const TIER_ICON_TINT = {
+  potential: "neutral",
+  bronze: "warning",
+  silver: "info",
+  gold: "success",
+  competitor: "danger",
+};
+
 export function customerListIconHtml(c) {
-  const tier = TIER_OPTIONS.find((o) => o.value === c.customer_tier) ?? TIER_OPTIONS[0];
-  return `
-    <span class="customer-card-icon">
-      ${categoryIcon(c.category)}
-      <span class="customer-card-icon-tier ${tier.cls}">${tier.icon}</span>
-    </span>
-  `;
+  const tint = TIER_ICON_TINT[c.customer_tier] ?? "neutral";
+  return `<span class="list-row-icon list-row-icon-${tint}">${categoryIcon(c.category)}</span>`;
 }
 
 // Wires up click behavior for a tierSelectorHtml() block already in the

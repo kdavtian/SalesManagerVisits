@@ -327,20 +327,20 @@ export async function renderActivity(root, navigate) {
           managerHeading = `<div class="activity-manager-group-heading">${escapeHtml(c.user_name)}</div>`;
         }
         return `${managerHeading}
-        <div class="card activity-row-rich" tabindex="0" role="button" data-checkin-id="${c.id}">
-          <button type="button" class="activity-customer-icon-btn activity-customer-icon-square" data-customer-id="${c.customer_id}" aria-label="${escapeHtml(c.customer_name)}" title="${escapeHtml(c.customer_name)}">
+        <div class="card list-row" tabindex="0" role="button" data-checkin-id="${c.id}">
+          <button type="button" class="list-row-icon list-row-icon-neutral" data-customer-id="${c.customer_id}" aria-label="${escapeHtml(c.customer_name)}" title="${escapeHtml(c.customer_name)}">
             ${categoryIcon(c.customer_category)}
           </button>
-          <div class="activity-row-body">
-            <div class="activity-row-top">
+          <div class="list-row-body">
+            <div class="list-row-top">
               <strong class="activity-customer-name-btn" role="button" tabindex="0" data-customer-id="${c.customer_id}">${escapeHtml(c.customer_name)}</strong>
-              <span class="activity-row-trailing-group">
+              <span class="list-row-trailing">
                 <span class="activity-status-icon activity-status-icon-sm ${meta.cls}" aria-label="${escapeHtml(meta.label)}" title="${escapeHtml(meta.label)}">${STATUS_ICON[status]}</span>
-                <span class="activity-row-trailing ${status === "rejected" ? "activity-distance-danger" : "muted"}">${distanceLabel}</span>
+                <span class="list-row-trailing-text ${status === "rejected" ? "activity-distance-danger" : "muted"}">${distanceLabel}</span>
               </span>
             </div>
-            <div class="muted activity-row-meta">${escapeHtml(c.user_name)} · ${formatActivityDate(c.timestamp)}</div>
-            <div class="activity-row-bottom">
+            <div class="muted list-row-meta">${escapeHtml(c.user_name)} · ${formatActivityDate(c.timestamp)}</div>
+            <div class="list-row-bottom">
               <span class="badge ${meta.badge}">${meta.label}</span>
               ${outcomeLabel ? `<span class="muted">${escapeHtml(outcomeLabel)}</span>` : ""}
               ${c.amount_collected_amd != null ? `<span class="badge badge-success">${formatAmd(Number(c.amount_collected_amd))}</span>` : ""}
@@ -357,7 +357,7 @@ export async function renderActivity(root, navigate) {
     // The icon is a real <button> nested in a non-button row (a <button>
     // can't contain another interactive control), so its own click is
     // stopped from bubbling up to the row's handler.
-    listEl.querySelectorAll(".activity-row-rich").forEach((el) => {
+    listEl.querySelectorAll(".list-row").forEach((el) => {
       const openDetails = () => {
         const checkin = visible.find((c) => String(c.id) === el.dataset.checkinId);
         if (checkin) openVisitDetailSheet(checkin, load);
@@ -371,7 +371,7 @@ export async function renderActivity(root, navigate) {
       });
     });
 
-    listEl.querySelectorAll(".activity-customer-icon-btn, .activity-customer-name-btn").forEach((btn) => {
+    listEl.querySelectorAll(".list-row-icon, .activity-customer-name-btn").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         navigate(`#/customers/${btn.dataset.customerId}`);

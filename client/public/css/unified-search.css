@@ -164,8 +164,14 @@
   right: 0;
 }
 
+/* Match the channel/category popover's width exactly so all four Map
+   filter dropdowns (channel, category, status, manager) present the same
+   size regardless of which trigger opened them. */
+.map-search-menu,
 .map-search-filter-menu {
-  min-width: 232px !important;
+  width: min(260px, calc(100vw - 24px)) !important;
+  min-width: 0 !important;
+  max-width: min(260px, calc(100vw - 24px)) !important;
   max-height: min(390px, 58vh) !important;
 }
 

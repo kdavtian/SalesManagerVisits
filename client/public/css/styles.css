@@ -415,20 +415,14 @@ a {
   height: 24px;
 }
 
+/* Corner-badge positioning only -- shape/color/typography come from the
+   shared .count-badge component (see styles.css's list-row section) so
+   every small numbered circle in the app (nav icons, quick-action tiles)
+   is visually the same badge, just anchored differently per context. */
 .nav-badge {
   position: absolute;
   top: -6px;
   right: -10px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 999px;
-  background: var(--danger);
-  color: #ffffff;
-  font-size: 0.62rem;
-  font-weight: 700;
-  line-height: 16px;
-  text-align: center;
   box-shadow: 0 0 0 2px var(--bg-elevated);
 }
 
@@ -2203,6 +2197,110 @@ input[type="search"]:focus {
   color: #0a84ff;
 }
 
+/* Discoverable pin-state key -- toggled by the "?" control, anchored to the
+   same control cluster it opens from. */
+.map-legend-panel {
+  position: absolute;
+  right: 12px;
+  top: 112px;
+  z-index: 1001;
+  width: min(240px, calc(100vw - 24px));
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-elevated, 0 14px 36px rgba(15, 23, 42, .18));
+}
+
+.map-legend-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.map-legend-header .icon-btn {
+  width: 26px;
+  height: 26px;
+}
+
+.map-legend-header .icon-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.map-legend-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.map-legend-list li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 0.76rem;
+  color: var(--text-dim);
+  line-height: 1.25;
+}
+
+.map-legend-swatch {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.map-legend-swatch-pin {
+  width: 14px;
+  height: 16px;
+  border-radius: 7px 7px 8px 8px;
+  background: #fff;
+  border: 2.5px solid var(--map-tier-gold, #d4a017);
+}
+
+.map-legend-swatch-badge {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.map-legend-swatch-visited {
+  background: var(--map-visited, #22a45d);
+}
+
+.map-legend-swatch-overdue {
+  background: var(--map-overdue, #e33b43);
+}
+
+.map-legend-swatch-selected {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--map-marker-blue, #1677f2);
+  box-shadow: 0 0 0 3px rgba(22, 119, 242, .28);
+}
+
+.map-legend-swatch-cluster {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+}
+
 /* Leaflet's popup chrome ships its own hardcoded white background/tip via
    leaflet.css, so this is the one surface that stays light-only unless we
    override it here too -- not just the text colors inside it. */
@@ -3207,39 +3305,47 @@ input[type="search"]:focus {
   min-height: 44px;
 }
 
+/* 4 columns per row so 8+ actions fit within 2-3 rows without scrolling --
+   was 2 columns, forcing the same tile count into 4-6 rows. */
 .quick-actions-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
   padding-bottom: 8px;
 }
 
 .quick-action {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  gap: 6px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 14px;
-  font-size: 0.85rem;
+  padding: 10px 6px;
+  font-size: 0.68rem;
   font-weight: 600;
   color: var(--text);
   cursor: pointer;
-  text-align: left;
+  text-align: center;
+  line-height: 1.2;
 }
 
 .quick-action-icon {
   position: relative;
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
   background: var(--bg);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1rem;
+  font-size: 0.85rem;
+}
+
+.quick-action-icon svg {
+  width: 16px;
+  height: 16px;
 }
 
 .quick-action-icon-accent {
@@ -3507,61 +3613,6 @@ input[type="search"]:focus {
 
 .notification-sheet-body {
   white-space: pre-wrap;
-}
-
-.customer-card-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  flex: 1;
-}
-
-.customer-card-icon {
-  position: relative;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: var(--bg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.3rem;
-  flex-shrink: 0;
-  color: var(--text-dim);
-}
-
-/* The tier coin/glyph badge sits in the icon's bottom-right corner, colored
-   via the same .tier-* classes used elsewhere (tier selector, detail badge)
-   so bronze/silver/gold/potential/competitor read identically everywhere. */
-.customer-card-icon-tier {
-  position: absolute;
-  bottom: -4px;
-  right: -4px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid var(--bg-card);
-}
-
-.customer-card-icon-tier svg {
-  width: 12px;
-  height: 12px;
-}
-
-.customer-card-last-visit {
-  font-size: 0.76rem;
-}
-
-/* "ID: 10001 • Խանութ" -- secondary to the name, ahead of last-visit. Not a
-   badge (task explicitly calls for readable-but-secondary, not a pill), so
-   it's just a smaller/dimmer text line consistent with the rest of the
-   card's metadata hierarchy. */
-.customer-card-id-type {
-  font-size: 0.78rem;
 }
 
 /* ===== Customer detail redesign ===== */
@@ -4681,11 +4732,131 @@ input[type="search"]:focus {
   font-weight: 600;
 }
 
-.activity-row-rich {
+/* Shared list-row component: one row shape (icon avatar + title/subtitle +
+   trailing status) used identically by Activity, Customers, Orders and
+   Payments. Each screen used to build its own near-duplicate of this same
+   pattern with different padding/icon sizes/tints -- this is the single
+   source now; a screen customizes only its icon's tint variant (see
+   .list-row-icon-* below) and its own content inside .list-row-body. */
+.list-row {
   display: flex;
   align-items: flex-start;
   gap: 12px;
   text-align: left;
+}
+
+.list-row-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.list-row-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.list-row-meta {
+  font-size: 0.78rem;
+}
+
+.list-row-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+
+/* Groups the trailing status icon/pill(s) at the row's top-right. */
+.list-row-trailing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.list-row-trailing-text {
+  font-size: 0.78rem;
+  flex-shrink: 0;
+}
+
+/* The one icon-avatar shape every list row uses: a fixed 44x44 size and
+   12px corner radius, tinted per semantic category (see the
+   .list-row-icon-* variants) instead of each screen picking its own
+   size/radius/background token. */
+.list-row-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 12px;
+  border: 0;
+  cursor: default;
+  background: var(--bg-inset, var(--bg-card));
+  color: var(--text-dim);
+}
+
+.list-row-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+button.list-row-icon {
+  cursor: pointer;
+}
+
+.list-row-icon-neutral {
+  background: var(--bg-inset, var(--bg-card));
+  color: var(--text-dim);
+}
+
+.list-row-icon-info {
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-card));
+  color: var(--accent);
+}
+
+.list-row-icon-success {
+  background: color-mix(in srgb, var(--success, #34c759) 16%, var(--bg-card));
+  color: var(--success, #34c759);
+}
+
+.list-row-icon-warning {
+  background: color-mix(in srgb, var(--warning, #ff9500) 16%, var(--bg-card));
+  color: var(--warning, #ff9500);
+}
+
+.list-row-icon-danger {
+  background: color-mix(in srgb, var(--danger) 16%, var(--bg-card));
+  color: var(--danger);
+}
+
+/* Small numbered circle: the one "count badge" shape used both inline
+   (e.g. a corner badge on a nav icon) and as a map marker-cluster glyph.
+   Cluster markers still scale up by count tier (see .pin-cluster) since
+   they double as map tap targets, but share this same color/weight/shape
+   language rather than each inventing its own. */
+.count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #ffffff;
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .payment-row-main {
@@ -4750,76 +4921,11 @@ input[type="search"]:focus {
   background: var(--danger);
 }
 
-.activity-row-body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.activity-row-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.activity-row-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.activity-row-title strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* A real <button> so it's its own tap target within the row (which is
-   itself not a <button>, since a <button> can't contain another
-   interactive control) -- tapping it jumps to the customer's own card
-   instead of opening this visit's details like the rest of the row does. */
-.activity-customer-icon-btn {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border-radius: 50%;
-  background: var(--bg-inset, var(--bg-card));
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  cursor: pointer;
-}
-
-.activity-customer-icon-btn svg {
-  width: 15px;
-  height: 15px;
-}
-
-/* Big rounded-square variant anchoring the left side of an activity row --
-   the row's primary visual identifier, replacing the old small circular
-   icon that used to sit inline with the customer name. */
-.activity-customer-icon-square {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
-  align-self: flex-start;
-}
-
-.activity-customer-icon-square svg {
-  width: 28px;
-  height: 28px;
-}
-
 /* Not a <button> (a <strong> with role="button") so it can sit inline with
    the trailing status/distance group in the same flex row without nesting
-   interactive elements -- same tap-stops-propagation pattern as the icon. */
+   interactive elements -- tapping it jumps to the customer's own card
+   instead of opening this visit's details like the rest of the row does;
+   same tap-stops-propagation pattern as .list-row-icon when it's a button. */
 .activity-customer-name-btn {
   cursor: pointer;
   overflow: hidden;
@@ -4828,32 +4934,9 @@ input[type="search"]:focus {
   min-width: 0;
 }
 
-.activity-row-trailing-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.activity-row-trailing {
-  font-size: 0.78rem;
-  flex-shrink: 0;
-}
-
 .activity-distance-danger {
   color: var(--danger);
   font-weight: 700;
-}
-
-.activity-row-meta {
-  font-size: 0.78rem;
-}
-
-.activity-row-bottom {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {

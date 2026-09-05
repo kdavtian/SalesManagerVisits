@@ -252,16 +252,16 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
   function paymentRowHtml(p) {
     const meta = STATUS_META[p.status] ?? STATUS_META.pending;
     return `
-      <div class="card activity-row-rich" data-payment-id="${p.id}">
+      <div class="card list-row" data-payment-id="${p.id}">
         <button class="payment-row-main" data-payment-id="${p.id}">
-          <div class="activity-row-top">
+          <div class="list-row-top">
             <strong>${escapeHtml(p.customer_name_snapshot)}</strong>
-            <span class="activity-row-trailing">${formatAmd(Number(p.amount_amd))}</span>
+            <span class="list-row-trailing-text">${formatAmd(Number(p.amount_amd))}</span>
           </div>
-          <div class="muted activity-row-meta">
+          <div class="muted list-row-meta">
             ${p.erp_customer_id_snapshot ? `${t("customer_id_label")}: ${escapeHtml(p.erp_customer_id_snapshot)} · ` : ""}${escapeHtml(p.sales_manager_name_snapshot)}${p.sales_channel ? ` · ${escapeHtml(p.sales_channel)}` : ""} · ${formatDateTime(p.payment_date)}
           </div>
-          <div class="activity-row-bottom">
+          <div class="list-row-bottom">
             <span class="badge ${meta.cls}">${t(meta.key)}</span>
           </div>
         </button>
