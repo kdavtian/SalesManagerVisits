@@ -256,7 +256,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
         <button class="payment-row-main" data-payment-id="${p.id}">
           <div class="list-row-top">
             <strong>${escapeHtml(p.customer_name_snapshot)}</strong>
-            <span class="list-row-trailing-text">${formatAmd(Number(p.amount_amd))}</span>
+            <span class="list-row-trailing-text text-amount">${formatAmd(Number(p.amount_amd))}</span>
           </div>
           <div class="muted list-row-meta">
             ${p.erp_customer_id_snapshot ? `${t("customer_id_label")}: ${escapeHtml(p.erp_customer_id_snapshot)} · ` : ""}${escapeHtml(p.sales_manager_name_snapshot)}${p.sales_channel ? ` · ${escapeHtml(p.sales_channel)}` : ""} · ${formatDateTime(p.payment_date)}
@@ -370,7 +370,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
         <p><span class="badge ${meta.cls}">${t(meta.key)}</span></p>
         <div class="card-list" style="margin:12px 0;">
           <div class="order-line-row">
-            <div class="order-line-top"><span class="order-line-name">${escapeHtml(p.customer_name_snapshot)}</span><strong>${formatAmd(Number(p.amount_amd))}</strong></div>
+            <div class="order-line-top"><span class="order-line-name">${escapeHtml(p.customer_name_snapshot)}</span><strong class="text-amount">${formatAmd(Number(p.amount_amd))}</strong></div>
             <span class="order-line-meta">${p.erp_customer_id_snapshot ? `${t("customer_id_label")}: ${escapeHtml(p.erp_customer_id_snapshot)} · ` : ""}${formatDateTime(p.payment_date)}</span>
           </div>
         </div>

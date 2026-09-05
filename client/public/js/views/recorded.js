@@ -56,7 +56,7 @@ export async function renderRecorded(root, navigate) {
         </div>
         <strong>${escapeHtml(r.customer_name)}</strong>
         <p class="muted">${t("delivery_open_stop")}: ${formatDate(r.delivered_at)}</p>
-        <p><strong>${formatAmd(Number(r.total_amd))}</strong></p>
+        <p><span class="text-amount">${formatAmd(Number(r.total_amd))}</span></p>
         ${
           r.amount_collected_amd != null
             ? `<p class="muted">${t("delivery_amount_collected")}: ${formatAmd(Number(r.amount_collected_amd))}${r.payment_method ? ` · ${t(r.payment_method === "cash" ? "payment_method_cash" : "payment_method_other")}` : ""}</p>`

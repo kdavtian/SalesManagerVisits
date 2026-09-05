@@ -107,7 +107,7 @@ export async function renderDelivery(root, navigate) {
         <div class="order-detail-ids"><span>${t("order_id_label")}: ${escapeHtml(s.order_code || "")}</span></div>
         <strong>${i + 1}. ${escapeHtml(s.customer_name)}</strong>
         <p class="muted">${escapeHtml(s.address || "")}</p>
-        <p><strong>${formatAmd(Number(s.total_amd))}</strong></p>
+        <p><span class="text-amount">${formatAmd(Number(s.total_amd))}</span></p>
         ${
           s.completed_at
             ? `<span class="badge ${s.order_status === "delivered" ? "badge-success" : "badge-warning"}">${t(s.order_status === "delivered" ? "order_status_delivered" : "order_status_returned")}</span>`
@@ -236,15 +236,15 @@ export async function renderDelivery(root, navigate) {
     function newBalanceHtml() {
       if (debtBefore == null) return `<p class="muted">${t("delivery_debt_unknown")}</p>`;
       const newBalance = debtBefore + snapshot.order_amount_amd - amountCollected;
-      return `<p>${t("delivery_new_balance")}: <strong>${formatAmd(newBalance)}</strong></p>`;
+      return `<p>${t("delivery_new_balance")}: <span class="text-amount">${formatAmd(newBalance)}</span></p>`;
     }
 
     overlay.querySelector(".sheet").innerHTML = `
       <h2>${escapeHtml(stop.customer_name)}</h2>
       <p class="muted">${escapeHtml(stop.address || "")}</p>
       <div class="card" style="margin:12px 0;">
-        ${debtBefore != null ? `<p>${t("delivery_debt_before")}: <strong>${formatAmd(debtBefore)}</strong></p>` : ""}
-        <p>${t("delivery_order_amount")}: <strong>${formatAmd(snapshot.order_amount_amd)}</strong></p>
+        ${debtBefore != null ? `<p>${t("delivery_debt_before")}: <span class="text-amount">${formatAmd(debtBefore)}</span></p>` : ""}
+        <p>${t("delivery_order_amount")}: <span class="text-amount">${formatAmd(snapshot.order_amount_amd)}</span></p>
         <label class="form-label" for="amount-collected-input">${t("delivery_amount_collected")}</label>
         <input type="number" id="amount-collected-input" min="0" step="1" value="0" inputmode="numeric" />
         <div class="segmented" id="payment-method-row">

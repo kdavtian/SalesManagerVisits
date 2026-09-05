@@ -29,6 +29,31 @@
   --nav-safe-bottom: min(var(--safe-bottom), 14px);
   --safe-top: env(safe-area-inset-top, 0px);
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  /* Shared type scale -- one set of size/weight tokens per text role, so a
+     screen never has to reinvent "page title" or "big stat number" with its
+     own slightly-different numbers. See the .text-* classes below for the
+     assembled roles; keep new text either matching an existing role or
+     adding a new token here rather than a one-off font-size in a component
+     rule. */
+  --fs-title: 1.75rem;      /* 28px */
+  --fw-title: 700;
+  --fs-eyebrow: 0.76rem;    /* ~12px -- matches the established .section-title look */
+  --fw-eyebrow: 700;
+  --ls-eyebrow: 0.05em;
+  --fs-row-title: 1.0625rem; /* 17px */
+  --fw-row-title: 600;
+  --fs-row-meta: 0.875rem;  /* 14px */
+  --fw-row-meta: 400;
+  --fs-stat-lg: 2rem;       /* 32px */
+  --fw-stat-lg: 700;
+  --fs-stat-label: 0.8125rem; /* 13px */
+  --fw-stat-label: 400;
+  --fs-pill: 0.8125rem;     /* 13px */
+  --fw-pill: 500;
+  --fs-amount: 1rem;        /* 16px */
+  --fw-amount: 700;
+  --fs-nav: 0.7rem;         /* 11px */
+  --fw-nav: 500;
   --pin-border: #ffffff;
   --shadow-subtle: 0 1px 3px rgba(17, 19, 24, 0.06);
   --shadow-elevated: 0 8px 24px rgba(17, 19, 24, 0.12);
@@ -154,6 +179,61 @@ a {
 
 .muted {
   color: var(--text-dim);
+}
+
+/* Shared type-scale utility classes -- one per text role. Apply the class
+   directly where a screen renders that role instead of hardcoding a
+   font-size/weight on a screen-specific selector. */
+.text-title {
+  font-size: var(--fs-title);
+  font-weight: var(--fw-title);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.text-eyebrow {
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-eyebrow);
+  letter-spacing: var(--ls-eyebrow);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.text-row-title {
+  font-size: var(--fs-row-title);
+  font-weight: var(--fw-row-title);
+}
+
+.text-row-meta {
+  font-size: var(--fs-row-meta);
+  font-weight: var(--fw-row-meta);
+  color: var(--text-dim);
+}
+
+.text-stat-lg {
+  font-size: var(--fs-stat-lg);
+  font-weight: var(--fw-stat-lg);
+}
+
+.text-stat-label {
+  font-size: var(--fs-stat-label);
+  font-weight: var(--fw-stat-label);
+  color: var(--text-dim);
+}
+
+.text-pill {
+  font-size: var(--fs-pill);
+  font-weight: var(--fw-pill);
+}
+
+.text-amount {
+  font-size: var(--fs-amount);
+  font-weight: var(--fw-amount);
+}
+
+.text-nav {
+  font-size: var(--fs-nav);
+  font-weight: var(--fw-nav);
 }
 
 .settings-hint {
@@ -385,8 +465,8 @@ a {
      icon+label within that -- see the .nav-bar comment on align-items. */
   height: 100%;
   padding: 0 2px;
-  font-size: 0.7rem;
-  font-weight: 500;
+  font-size: var(--fs-nav);
+  font-weight: var(--fw-nav);
   cursor: pointer;
   transition: color 0.15s ease;
 }
@@ -496,8 +576,8 @@ a {
 }
 
 .nav-item-center-label {
-  font-size: 0.7rem;
-  font-weight: 600;
+  font-size: var(--fs-nav);
+  font-weight: var(--fw-nav);
   line-height: 1;
   color: var(--text-dim);
   margin-top: 1px;
@@ -949,8 +1029,8 @@ form [aria-invalid="true"] {
 
 .badge {
   display: inline-block;
-  font-size: 0.7rem;
-  font-weight: 700;
+  font-size: var(--fs-pill);
+  font-weight: var(--fw-pill);
   padding: 4px 8px;
   border-radius: 999px;
   white-space: nowrap;
@@ -1174,6 +1254,17 @@ form [aria-invalid="true"] {
   gap: 12px;
 }
 
+/* Orders and Payments build their title bar as a bare <h1> inside this row
+   (no .list-header wrapper class like Activity/Customers use), so it needs
+   its own rule pointed at the same title token -- otherwise it silently
+   falls back to the browser's default h1 size/weight. */
+.list-header-row h1 {
+  font-size: var(--fs-title);
+  font-weight: var(--fw-title);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
 .list-toolbar {
   display: flex;
   align-items: center;
@@ -1290,13 +1381,6 @@ input[type="search"]:focus {
   padding: 16px;
 }
 
-.dashboard-view h1 {
-  font-size: 1.9rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  margin: 0;
-}
-
 .detail-facts {
   color: var(--text-dim);
   font-size: 0.92rem;
@@ -1307,10 +1391,10 @@ input[type="search"]:focus {
 }
 
 .section-title {
-  font-size: 0.76rem;
-  font-weight: 700;
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-eyebrow);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--ls-eyebrow);
   color: var(--text-dim);
   margin: 26px 0 10px;
 }
@@ -1581,6 +1665,11 @@ input[type="search"]:focus {
   cursor: pointer;
   font: inherit;
   color: inherit;
+  /* Same tappable affordance as .stat-pill -- this is also a drill-down
+     stat card sharing the base .stat-card look, so it needs the same cue
+     that it's interactive. */
+  border-bottom: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  padding-bottom: 15px;
 }
 
 .stat-value {
@@ -1704,13 +1793,6 @@ input[type="search"]:focus {
 
 .settings-view {
   padding: 16px;
-}
-
-.settings-view h1 {
-  font-size: 1.9rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  margin: 0 0 4px;
 }
 
 .settings-row {
@@ -2641,8 +2723,8 @@ input[type="search"]:focus {
 }
 
 .greeting-row h1 {
-  font-size: 1.5rem;
-  font-weight: 800;
+  font-size: var(--fs-title);
+  font-weight: var(--fw-title);
   letter-spacing: -0.02em;
   margin: 0 0 2px;
 }
@@ -2709,10 +2791,11 @@ input[type="search"]:focus {
 }
 
 .leaderboard-divider {
-  font-size: 0.72rem;
-  font-weight: 700;
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-eyebrow);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: var(--ls-eyebrow);
+  color: var(--text-dim);
   margin: 8px 4px 2px;
 }
 
@@ -2766,8 +2849,8 @@ input[type="search"]:focus {
 }
 
 .progress-fraction {
-  font-size: 2.4rem;
-  font-weight: 800;
+  font-size: var(--fs-stat-lg);
+  font-weight: var(--fw-stat-lg);
   color: var(--accent);
   letter-spacing: -0.02em;
   line-height: 1;
@@ -2993,11 +3076,11 @@ input[type="search"]:focus {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 0.78rem;
-  font-weight: 700;
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-eyebrow);
   color: var(--text-dim);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--ls-eyebrow);
   margin-bottom: 10px;
 }
 
@@ -3009,8 +3092,8 @@ input[type="search"]:focus {
 }
 
 .erp-debt-amount {
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-size: var(--fs-amount);
+  font-weight: var(--fw-amount);
 }
 
 .detail-stat-grid {
@@ -3412,8 +3495,8 @@ input[type="search"]:focus {
 }
 
 .list-header h1 {
-  font-size: 1.5rem;
-  font-weight: 800;
+  font-size: var(--fs-title);
+  font-weight: var(--fw-title);
   letter-spacing: -0.02em;
   margin: 0;
   min-width: 0;
@@ -3472,8 +3555,14 @@ input[type="search"]:focus {
   flex: 1;
   background: var(--bg-card);
   border: 1px solid var(--border);
+  /* A tappable stat card (this is a selectable filter, unlike the static
+     .stat-card display used for read-only counts) gets a thin accent
+     underline at rest so it visibly differs before anything is selected --
+     the only other affordance was the browser's default button cursor,
+     which people don't reliably read as "tappable" on a touch device. */
+  border-bottom: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
   border-radius: var(--radius);
-  padding: 10px 12px;
+  padding: 10px 12px 9px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -3484,12 +3573,14 @@ input[type="search"]:focus {
 }
 
 .stat-pill strong {
-  font-size: 1.15rem;
-  font-weight: 800;
+  font-size: var(--fs-stat-lg);
+  font-weight: var(--fw-stat-lg);
+  color: var(--accent);
 }
 
 .stat-pill span {
-  font-size: 0.7rem;
+  font-size: var(--fs-stat-label);
+  font-weight: var(--fw-stat-label);
   color: var(--text-dim);
 }
 
@@ -3539,7 +3630,8 @@ input[type="search"]:focus {
 
 .expense-card-amount {
   flex-shrink: 0;
-  font-weight: 700;
+  font-size: var(--fs-amount);
+  font-weight: var(--fw-amount);
 }
 
 .expense-card-readonly {
@@ -3724,11 +3816,11 @@ input[type="search"]:focus {
 }
 
 .proposed-changes-label {
-  font-size: 0.78rem;
-  font-weight: 700;
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-eyebrow);
   color: var(--text-dim);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--ls-eyebrow);
   margin: 0 0 6px;
 }
 
@@ -4760,8 +4852,14 @@ input[type="search"]:focus {
   gap: 8px;
 }
 
+.list-row-top strong {
+  font-size: var(--fs-row-title);
+  font-weight: var(--fw-row-title);
+}
+
 .list-row-meta {
-  font-size: 0.78rem;
+  font-size: var(--fs-row-meta);
+  font-weight: var(--fw-row-meta);
 }
 
 .list-row-bottom {
@@ -4781,8 +4879,18 @@ input[type="search"]:focus {
 }
 
 .list-row-trailing-text {
-  font-size: 0.78rem;
+  font-size: var(--fs-row-meta);
   flex-shrink: 0;
+}
+
+/* Money amounts riding in the trailing slot (Orders/Payments row totals)
+   need the bold plain-text .text-amount treatment instead of the meta-text
+   size the trailing slot otherwise carries (e.g. Activity's distance
+   label) -- combined selector so it reliably wins over .list-row-trailing-text
+   regardless of source order. */
+.list-row-trailing-text.text-amount {
+  font-size: var(--fs-amount);
+  font-weight: var(--fw-amount);
 }
 
 /* The one icon-avatar shape every list row uses: a fixed 44x44 size and
@@ -4876,11 +4984,11 @@ button.list-row-icon {
 
 .list-group-heading {
   margin: 18px 0 8px;
-  font-size: 0.8rem;
-  font-weight: 700;
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-eyebrow);
   color: var(--text-dim);
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: var(--ls-eyebrow);
 }
 
 .list-group-heading:first-child {
@@ -4994,8 +5102,8 @@ button.list-row-icon {
 .settings-view h1 {
   padding: 16px 16px 0;
   margin: 0;
-  font-size: 1.5rem;
-  font-weight: 800;
+  font-size: var(--fs-title);
+  font-weight: var(--fw-title);
   letter-spacing: -0.02em;
 }
 
@@ -5473,10 +5581,10 @@ button.list-row-icon {
 
 .order-line-brand {
   display: block;
-  font-size: 0.7rem;
-  font-weight: 700;
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-eyebrow);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: var(--ls-eyebrow);
   color: var(--text-dim);
 }
 
@@ -5723,11 +5831,11 @@ form select,
 
 .visit-detail-section-title {
   margin: 14px 0 6px;
-  font-size: 0.8rem;
-  font-weight: 700;
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-eyebrow);
   color: var(--text-dim);
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: var(--ls-eyebrow);
 }
 
 .visit-detail-outcome-list {
@@ -6065,10 +6173,10 @@ form select,
   margin: 0 0 14px;
 }
 .sheet fieldset legend {
-  font-size: 0.76rem;
-  font-weight: 700;
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-eyebrow);
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: var(--ls-eyebrow);
   color: var(--text-dim);
   margin-bottom: 6px;
   padding: 0;
@@ -6264,11 +6372,11 @@ form select,
   margin-top: 4px;
 }
 .order-date-heading-label {
-  font-size: 0.8rem;
-  font-weight: 700;
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-eyebrow);
   color: var(--text-dim);
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: var(--ls-eyebrow);
 }
 .order-date-heading-stats {
   font-size: 0.78rem;

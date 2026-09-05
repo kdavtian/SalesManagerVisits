@@ -158,7 +158,7 @@ export function openVisitDetailSheet(ch, onPhotoDeleted) {
           ch.amount_collected_amd != null
             ? `<div class="visit-detail-info-row">
                 <span class="visit-detail-info-icon">${icons.payment}</span>
-                <span><strong>${formatAmd(Number(ch.amount_collected_amd))}</strong> ${t("outcome_payment_collected")}</span>
+                <span><span class="text-amount">${formatAmd(Number(ch.amount_collected_amd))}</span> ${t("outcome_payment_collected")}</span>
               </div>`
             : ""
         }

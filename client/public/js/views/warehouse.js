@@ -147,7 +147,7 @@ export async function renderWarehouse(root, navigate) {
         <div class="card-list" style="margin:8px 0;">
           ${o.items.map((i) => `<div class="order-product-row"><span>${escapeHtml(i.product_name)} × ${i.quantity}</span></div>`).join("")}
         </div>
-        <p><strong>${t("total")}: ${formatAmd(Number(o.total_amd))}</strong></p>
+        <p>${t("total")}: <span class="text-amount">${formatAmd(Number(o.total_amd))}</span></p>
         <div class="sheet-actions">
           <button type="button" class="btn btn-primary" data-mark-packed="${o.id}">${t("mark_packed")}</button>
           <button type="button" class="btn btn-danger" data-flag-issue="${o.id}">${t("flag_stock_issue")}</button>

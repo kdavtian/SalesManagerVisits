@@ -343,7 +343,7 @@ export async function renderActivity(root, navigate) {
             <div class="list-row-bottom">
               <span class="badge ${meta.badge}">${meta.label}</span>
               ${outcomeLabel ? `<span class="muted">${escapeHtml(outcomeLabel)}</span>` : ""}
-              ${c.amount_collected_amd != null ? `<span class="badge badge-success">${formatAmd(Number(c.amount_collected_amd))}</span>` : ""}
+              ${c.amount_collected_amd != null ? `<span class="text-amount">${formatAmd(Number(c.amount_collected_amd))}</span>` : ""}
             </div>
           </div>
           <span class="chevron">&#8250;</span>

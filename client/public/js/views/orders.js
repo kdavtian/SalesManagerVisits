@@ -202,7 +202,7 @@ export async function renderOrders(root, navigate) {
           <div class="list-row-body">
             <div class="list-row-top">
               <strong>${escapeHtml(o.customer_name)}</strong>
-              <span class="list-row-trailing-text">${formatAmd(Number(o.total_amd))}</span>
+              <span class="list-row-trailing-text text-amount">${formatAmd(Number(o.total_amd))}</span>
             </div>
             <div class="muted list-row-meta">${o.order_code ? `${escapeHtml(o.order_code)} · ` : ""}${escapeHtml(o.user_name)} · ${formatDate(o.created_at)}</div>
             <div class="list-row-bottom">
@@ -321,7 +321,7 @@ export async function renderOrders(root, navigate) {
         ${i.brand ? `<span class="order-line-brand">${escapeHtml(i.brand)}</span>` : ""}
         <div class="order-line-top">
           <span class="order-line-name">${escapeHtml(i.product_name)}</span>
-          <strong>${formatAmd(Number(i.line_total_amd))}</strong>
+          <strong class="text-amount">${formatAmd(Number(i.line_total_amd))}</strong>
         </div>
         <span class="order-line-meta">${formatAmd(Number(i.unit_price_amd))} &times; ${Number(i.quantity)}</span>
       </div>`;
@@ -378,7 +378,7 @@ export async function renderOrders(root, navigate) {
             ? `<p class="muted">${t("price_change_label")}: ${discountAmd > 0 ? formatAmd(discountAmd) : `${discountPct}%`}</p>`
             : ""
         }
-        <p><strong>${t("total")}: ${formatAmd(Number(order.total_amd))}</strong></p>
+        <p>${t("total")}: <span class="text-amount">${formatAmd(Number(order.total_amd))}</span></p>
         ${order.note ? `<p class="muted">${escapeHtml(order.note)}</p>` : ""}
         <p class="form-error" id="order-detail-error" hidden></p>
         <div class="sheet-actions" id="order-detail-actions" style="flex-wrap:wrap;"></div>
@@ -539,7 +539,7 @@ export async function renderOrders(root, navigate) {
             </div>
           </div>
           <p class="muted price-change-hint">${t("price_change_hint")}</p>
-          <p><strong>${t("total")}: <span id="edit-order-total">${formatAmd(total())}</span></strong></p>
+          <p>${t("total")}: <span id="edit-order-total" class="text-amount">${formatAmd(total())}</span></p>
           <p class="form-error" id="order-detail-error" hidden></p>
           <div class="sheet-actions">
             <button type="button" class="btn" id="edit-order-cancel">${t("cancel_edit")}</button>
