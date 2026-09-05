@@ -11,11 +11,18 @@ dashboardRouter.use(requireAuth);
 dashboardRouter.get("/summary", async (req, res) => {
   const seesAll = seesAllActivity(req.user.role);
   const userFilter = seesAll ? "" : "AND ch.user_id = $1";
+  // Same $1 (the viewer's own id) as userFilter above, just against the
+  // customer's owning manager instead of the checkin's actor -- keeps a
+  // sales_manager's "total customers" and "overdue" counts scoped to their
+  // own book, matching every other number on this same progress card
+  // (previously these two ran unscoped for every role, always counting the
+  // whole company's customers regardless of who was viewing).
+  const customerFilter = seesAll ? "" : "AND c.assigned_manager_id = $1";
   const params = seesAll ? [] : [req.user.id];
 
   const totalsQuery = pool.query(
     `SELECT
-       (SELECT count(*) FROM customers) AS total_customers,
+       (SELECT count(*) FROM customers c WHERE true ${customerFilter}) AS total_customers,
        (SELECT count(DISTINCT ch.customer_id) FROM checkins ch
           WHERE ch.timestamp >= date_trunc('day', now()) ${userFilter}) AS visited_today,
        (SELECT count(DISTINCT ch.customer_id) FROM checkins ch
@@ -26,6 +33,7 @@ dashboardRouter.get("/summary", async (req, res) => {
           WHERE ch.timestamp >= date_trunc('day', now()) AND ch.within_range = false ${userFilter}) AS rejected_today,
        (SELECT count(*) FROM customers c
           WHERE COALESCE(c.sales_channel, '') <> ALL(ARRAY['KF','CAS','CVO','PCO'])
+          ${customerFilter}
           AND NOT EXISTS (
             SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= date_trunc('day', now())
           )
@@ -49,11 +57,30 @@ dashboardRouter.get("/summary", async (req, res) => {
     params
   );
 
+  // Per-manager breakdown for the consolidated Director/Admin/CEO/Accountant
+  // dashboard's drill-down (item 5) -- each row carries the same three
+  // "progress card" numbers as the single-manager totals above
+  // (total_customers/visited_today/overdue), scoped to that one manager via
+  // a correlated subquery on u.id, plus the pre-existing this-week figures.
   const byManagerQuery = seesAll
     ? pool.query(
         `SELECT u.id AS user_id, u.name AS user_name,
                 count(ch.id) AS checkins_this_week,
-                count(DISTINCT ch.customer_id) AS customers_visited_this_week
+                count(DISTINCT ch.customer_id) AS customers_visited_this_week,
+                (SELECT count(*) FROM customers c WHERE c.assigned_manager_id = u.id) AS total_customers,
+                (SELECT count(DISTINCT ch2.customer_id) FROM checkins ch2
+                   WHERE ch2.user_id = u.id AND ch2.timestamp >= date_trunc('day', now())) AS visited_today,
+                (SELECT count(*) FROM customers c
+                   WHERE c.assigned_manager_id = u.id
+                   AND COALESCE(c.sales_channel, '') <> ALL(ARRAY['KF','CAS','CVO','PCO'])
+                   AND NOT EXISTS (
+                     SELECT 1 FROM checkins ch3 WHERE ch3.customer_id = c.id AND ch3.timestamp >= date_trunc('day', now())
+                   )
+                   AND (
+                     (SELECT max(ch4.timestamp) FROM checkins ch4 WHERE ch4.customer_id = c.id) IS NULL
+                     OR (SELECT max(ch4.timestamp) FROM checkins ch4 WHERE ch4.customer_id = c.id)
+                        < now() - (c.visit_frequency_days || ' days')::interval
+                   )) AS overdue
          FROM users u
          LEFT JOIN checkins ch
            ON ch.user_id = u.id AND ch.timestamp >= date_trunc('week', now())

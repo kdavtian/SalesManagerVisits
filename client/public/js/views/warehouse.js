@@ -59,7 +59,7 @@ export async function renderWarehouse(root, navigate) {
             (r) => `
         <div class="card">
           <div class="order-product-info">
-            <strong>${escapeHtml(r.product_name)}</strong>
+            <strong>${escapeHtml(r.product_name)}${r.size ? ` · ${escapeHtml(r.size)}` : ""}</strong>
             <span class="muted">${[r.brand, `${r.order_count} ${t("warehouse_orders_count_suffix")}`].filter(Boolean).map(escapeHtml).join(" · ")}</span>
           </div>
           <div class="pick-list-qty">
@@ -145,7 +145,7 @@ export async function renderWarehouse(root, navigate) {
         <strong>${escapeHtml(o.customer_name)}</strong>
         <p class="muted">${escapeHtml(o.address || "")}</p>
         <div class="card-list" style="margin:8px 0;">
-          ${o.items.map((i) => `<div class="order-product-row"><span>${escapeHtml(i.product_name)} × ${i.quantity}</span></div>`).join("")}
+          ${o.items.map((i) => `<div class="order-product-row"><span>${escapeHtml(i.product_name)}${i.size ? ` · ${escapeHtml(i.size)}` : ""} × ${i.quantity}</span></div>`).join("")}
         </div>
         <p>${t("total")}: <span class="text-amount">${formatAmd(Number(o.total_amd))}</span></p>
         <div class="sheet-actions">

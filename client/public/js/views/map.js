@@ -3,7 +3,7 @@ import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd
 import { t } from "../i18n.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
-import { canViewTeamLocations, canEditDirectly, canPlanForOthers, state } from "../state.js";
+import { canViewTeamLocations, canEditDirectly, canPlanForOthers, canReassignCustomers, state } from "../state.js";
 
 const NEARBY_RADIUS_METERS = 5000;
 
@@ -2027,7 +2027,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
                 ${SALES_CHANNELS.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")}
               </select>
             </label>
-            <label>${t("assigned_manager")}
+            <label id="new-customer-manager-wrap" ${canReassignCustomers() ? "" : "hidden"}>${t("assigned_manager")}
               <select name="assigned_manager_id" id="new-customer-manager">
                 <option value="">${t("unassigned")}</option>
               </select>

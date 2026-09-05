@@ -916,6 +916,20 @@ const dict = {
     locate_me: "My location",
     location_mode_on: "My location: on",
     location_mode_track: "My location: tracking",
+
+    qa_debt_balances: "Debt Balances",
+    debt_balances_title: "Debt Balances",
+    debt_balances_flat: "Flat",
+    debt_balances_by_manager: "By manager",
+    debt_balances_manager_filter: "Manager",
+    debt_balances_last_payment: "Last payment",
+    debt_balances_empty: "No outstanding balances",
+
+    payment_settings: "Payment settings",
+    payment_method_label: "Payment method",
+    payment_method_invoice: "Invoice",
+    credit_term_days_label: "Credit term (days)",
+    order_payment_method_label: "Payment method",
   },
   hy: {
     nav_dashboard: "Գլխավոր",
@@ -1834,6 +1848,20 @@ const dict = {
     locate_me: "Իմ տեղադրությունը",
     location_mode_on: "Իմ տեղադրությունը՝ միացված",
     location_mode_track: "Իմ տեղադրությունը՝ հետևում",
+
+    qa_debt_balances: "Պարտքի մնացորդներ",
+    debt_balances_title: "Պարտքի մնացորդներ",
+    debt_balances_flat: "Ընդհանուր",
+    debt_balances_by_manager: "Ըստ մենեջերի",
+    debt_balances_manager_filter: "Մենեջեր",
+    debt_balances_last_payment: "Վերջին վճարումը",
+    debt_balances_empty: "Չկան չմարված մնացորդներ",
+
+    payment_settings: "Վճարման կարգավորումներ",
+    payment_method_label: "Վճարման եղանակ",
+    payment_method_invoice: "Հաշիվ-ապրանքագիր",
+    credit_term_days_label: "Վարկային ժամկետ (օր)",
+    order_payment_method_label: "Վճարման եղանակ",
   },
 };
 

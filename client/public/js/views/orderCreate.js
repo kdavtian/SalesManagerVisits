@@ -196,6 +196,13 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
 
     <div class="order-cart-bar" id="order-cart-bar" hidden>
       <div class="order-discount-row">
+        <label for="order-payment-method-input">${t("order_payment_method_label")}</label>
+        <select id="order-payment-method-input">
+          <option value="invoice" ${customer.payment_method !== "cash" ? "selected" : ""}>${t("payment_method_invoice")}</option>
+          <option value="cash" ${customer.payment_method === "cash" ? "selected" : ""}>${t("payment_method_cash")}</option>
+        </select>
+      </div>
+      <div class="order-discount-row">
         <label for="order-discount-input">${t("discount_pct_label")}</label>
         <input type="number" id="order-discount-input" min="0" step="1" value="0" inputmode="numeric" />
         <div class="segmented" id="order-discount-type">
@@ -441,6 +448,8 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
     render();
   });
 
+  const paymentMethodInput = container.querySelector("#order-payment-method-input");
+
   saveBtn.addEventListener("click", async () => {
     if (!cart.size) return;
     errorEl.hidden = true;
@@ -455,6 +464,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
     const value = discountValue();
     const discountPctToSend = discountType === "pct" ? value : 0;
     const discountAmdToSend = discountType === "amd" ? value : 0;
+    const paymentMethod = paymentMethodInput.value === "cash" ? "cash" : "invoice";
     try {
       const order = await api.createOrder({
         customer_id: Number(customerId),
@@ -462,6 +472,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
         items,
         discount_pct: discountPctToSend,
         discount_amd: discountAmdToSend,
+        payment_method: paymentMethod,
       });
       showOrderSaved(order);
     } catch (err) {
@@ -473,6 +484,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
           items,
           discount_pct: discountPctToSend,
           discount_amd: discountAmdToSend,
+          payment_method: paymentMethod,
         });
         showOrderQueued();
       } else {

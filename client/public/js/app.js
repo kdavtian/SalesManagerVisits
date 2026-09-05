@@ -23,6 +23,7 @@ import { renderPayments } from "./views/payments.js";
 import { renderWarehouse } from "./views/warehouse.js";
 import { renderDelivery } from "./views/deliveryRoute.js";
 import { renderRecorded } from "./views/recorded.js";
+import { renderDebtBalances } from "./views/debtBalances.js";
 import { flushQueue, getQueue, onQueueChange } from "./offlineQueue.js";
 import { mountInstallPrompt } from "./install.js";
 import { mountUpdateBanner, initServiceWorkerUpdates } from "./updateBanner.js";
@@ -307,6 +308,8 @@ async function render() {
     renderDelivery(app, navigate);
   } else if (path === "#/recorded") {
     renderRecorded(app, navigate);
+  } else if (path === "#/debt-balances") {
+    renderDebtBalances(app, navigate);
   } else if (customerMatch) {
     renderCustomerDetail(app, navigate, customerMatch[1]);
   } else if (checkinMatch) {

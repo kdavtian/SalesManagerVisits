@@ -207,6 +207,7 @@ export async function renderOrders(root, navigate) {
             <div class="muted list-row-meta">${o.order_code ? `${escapeHtml(o.order_code)} · ` : ""}${escapeHtml(o.user_name)} · ${formatDate(o.created_at)}</div>
             <div class="list-row-bottom">
               <span class="badge ${meta.cls}">${t(meta.key)}</span>
+              ${o.payment_method ? `<span class="badge badge-neutral">${t(o.payment_method === "cash" ? "payment_method_cash" : "payment_method_invoice")}</span>` : ""}
             </div>
           </div>
           <span class="chevron">&#8250;</span>
@@ -320,7 +321,7 @@ export async function renderOrders(root, navigate) {
       <div class="order-line-row">
         ${i.brand ? `<span class="order-line-brand">${escapeHtml(i.brand)}</span>` : ""}
         <div class="order-line-top">
-          <span class="order-line-name">${escapeHtml(i.product_name)}</span>
+          <span class="order-line-name">${escapeHtml(i.product_name)}${i.size ? ` · ${escapeHtml(i.size)}` : ""}</span>
           <strong class="text-amount">${formatAmd(Number(i.line_total_amd))}</strong>
         </div>
         <span class="order-line-meta">${formatAmd(Number(i.unit_price_amd))} &times; ${Number(i.quantity)}</span>
@@ -368,6 +369,8 @@ export async function renderOrders(root, navigate) {
         </div>
         <h2>${escapeHtml(order.customer_name)}</h2>
         <p><span class="badge ${meta.cls}">${t(meta.key)}</span>${
+        order.payment_method ? ` <span class="badge badge-neutral">${t(order.payment_method === "cash" ? "payment_method_cash" : "payment_method_invoice")}</span>` : ""
+      }${
         hasDiscount && approvalMeta ? ` <span class="badge ${approvalMeta.cls}">${t(approvalMeta.key)}</span>` : ""
       }</p>
         <div class="card-list" style="margin:12px 0;">
@@ -553,7 +556,7 @@ export async function renderOrders(root, navigate) {
             (l, i) => `
           <div class="order-product-row" data-line-index="${i}">
             <div class="order-product-info">
-              <strong>${escapeHtml(l.product_name)}</strong>
+              <strong>${escapeHtml(l.product_name)}${l.size ? ` · ${escapeHtml(l.size)}` : ""}</strong>
               <span class="muted">${[l.brand, formatAmd(Number(l.unit_price_amd))].filter(Boolean).map(escapeHtml).join(" · ")}</span>
             </div>
             <div class="order-qty-stepper">

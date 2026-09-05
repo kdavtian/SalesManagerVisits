@@ -26,7 +26,7 @@ warehouseRouter.use(requireWarehouse);
 // right now", not one order at a time.
 warehouseRouter.get("/pick-list", async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT oi.product_id, oi.product_name, oi.brand,
+    `SELECT oi.product_id, oi.product_name, oi.brand, p.unit AS size,
             SUM(oi.quantity)::int AS total_quantity,
             COUNT(DISTINCT oi.order_id)::int AS order_count,
             p.stock_qty
@@ -34,7 +34,7 @@ warehouseRouter.get("/pick-list", async (req, res) => {
      JOIN orders o ON o.id = oi.order_id
      LEFT JOIN products p ON p.id = oi.product_id
      WHERE o.status = 'confirmed'
-     GROUP BY oi.product_id, oi.product_name, oi.brand, p.stock_qty
+     GROUP BY oi.product_id, oi.product_name, oi.brand, p.unit, p.stock_qty
      ORDER BY oi.brand NULLS LAST, oi.product_name`
   );
   res.json(rows);
@@ -55,7 +55,10 @@ warehouseRouter.get("/staging-list", async (req, res) => {
   );
   const orderIds = rows.map((r) => r.id);
   const { rows: items } = orderIds.length
-    ? await pool.query("SELECT * FROM order_items WHERE order_id = ANY($1) ORDER BY id", [orderIds])
+    ? await pool.query(
+        "SELECT oi.*, p.unit AS size FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ANY($1) ORDER BY oi.id",
+        [orderIds]
+      )
     : { rows: [] };
   const itemsByOrder = new Map();
   for (const item of items) {

@@ -115,10 +115,16 @@ function applyDiscount(subtotal, discountPct, discountAmd) {
 // later -- an order is what was actually agreed, and must stay correct
 // even if the catalog price changes afterward.
 ordersRouter.post("/", async (req, res) => {
-  const { customer_id, checkin_id, note, items, discount_pct, discount_amd } = req.body ?? {};
+  const { customer_id, checkin_id, note, items, discount_pct, discount_amd, payment_method } = req.body ?? {};
   const customerId = Number(customer_id);
   if (!customerId || !Array.isArray(items) || !items.length) {
     return res.status(400).json({ error: "customer_id and at least one item are required" });
+  }
+  // Required going forward (item 6) -- informational only, not a
+  // reintroduction of the rejected payment-approval workflow. Nullable at
+  // the DB level so it doesn't break pre-existing orders; enforced here.
+  if (payment_method !== "cash" && payment_method !== "invoice") {
+    return res.status(400).json({ error: "payment_method must be 'cash' or 'invoice'" });
   }
   let discountPct = discount_pct !== undefined ? Number(discount_pct) : 0;
   if (!Number.isFinite(discountPct) || discountPct < 0 || discountPct > 100) {
@@ -179,9 +185,9 @@ ordersRouter.post("/", async (req, res) => {
     await client.query("BEGIN");
     const orderCode = await nextOrderCode(client);
     const { rows } = await client.query(
-      `INSERT INTO orders (customer_id, user_id, checkin_id, status, total_amd, note, discount_pct, discount_amd, approval_status, order_code)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
-      [customerId, req.user.id, checkin_id || null, initialStatus, totalAmd, note || null, discountPct, discountAmd, approvalStatus, orderCode]
+      `INSERT INTO orders (customer_id, user_id, checkin_id, status, total_amd, note, discount_pct, discount_amd, approval_status, order_code, payment_method)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+      [customerId, req.user.id, checkin_id || null, initialStatus, totalAmd, note || null, discountPct, discountAmd, approvalStatus, orderCode, payment_method]
     );
     order = rows[0];
     for (const line of lines) {
@@ -347,7 +353,7 @@ ordersRouter.get("/:id", async (req, res) => {
   }
 
   const { rows: items } = await pool.query(
-    "SELECT * FROM order_items WHERE order_id = $1 ORDER BY id",
+    "SELECT oi.*, p.unit AS size FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1 ORDER BY oi.id",
     [order.id]
   );
   res.json({ ...order, items });
@@ -391,7 +397,7 @@ ordersRouter.post("/:id/submit", async (req, res) => {
     [order.id]
   );
   const updated = updatedRows[0];
-  const { rows: items } = await pool.query("SELECT * FROM order_items WHERE order_id = $1 ORDER BY id", [order.id]);
+  const { rows: items } = await pool.query("SELECT oi.*, p.unit AS size FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1 ORDER BY oi.id", [order.id]);
   res.json({ ...updated, items });
 
   (async () => {
@@ -571,7 +577,7 @@ ordersRouter.patch("/:id", async (req, res) => {
     client.release();
   }
 
-  const { rows: items2 } = await pool.query("SELECT * FROM order_items WHERE order_id = $1 ORDER BY id", [order.id]);
+  const { rows: items2 } = await pool.query("SELECT oi.*, p.unit AS size FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1 ORDER BY oi.id", [order.id]);
   res.json({ ...updated, items: items2 });
 
   // Only the rep who placed the order cares about its fulfillment moving

@@ -92,6 +92,39 @@ export async function renderDashboard(root, navigate) {
       <div class="progress-bar"><div class="progress-bar-fill" style="width:${totals.total_customers ? Math.round((totals.visited_today / totals.total_customers) * 100) : 0}%"></div></div>
     </div>
 
+    ${
+      // by_manager is only ever non-null for the roles that see company-wide
+      // data (director/admin/ceo/accountant) -- a sales_manager gets null
+      // here and never sees this section, since the single progress card
+      // above is already their own. Each row expands in place (no separate
+      // screen/route) into that one manager's own progress-card numbers --
+      // this is the "drill into a specific manager's breakdown from the
+      // same view" affordance, kept as one consolidated dashboard rather
+      // than scattering a separate card per manager.
+      summary.by_manager?.length
+        ? `<h2 class="section-title">${t("by_manager_week")}</h2>
+           <div class="card-list" id="by-manager-list">
+             ${summary.by_manager
+               .map(
+                 (m) => `
+               <details class="manager-drill-row">
+                 <summary>
+                   <span class="manager-drill-name">${escapeHtml(m.user_name)}</span>
+                   <span class="muted">${m.checkins_this_week} ${t("qa_check_in")} · ${m.customers_visited_this_week} ${t("stat_visited_today")}</span>
+                 </summary>
+                 <div class="manager-drill-detail">
+                   <div class="progress-side-row"><span class="dot dot-success"></span>${m.visited_today} ${t("stat_visited_today")}</div>
+                   <div class="progress-side-row"><span class="dot dot-warning"></span>${Math.max(0, m.total_customers - m.visited_today)} ${t("stat_remaining")}</div>
+                   <div class="progress-side-row"><span class="dot dot-danger"></span>${m.overdue} ${t("stat_overdue")}</div>
+                   <div class="progress-side-row">${m.total_customers} ${t("total")}</div>
+                 </div>
+               </details>`
+               )
+               .join("")}
+           </div>`
+        : ""
+    }
+
     <h2 class="section-title">${t("quick_actions")}</h2>
     <div class="quick-actions-grid">
       <button type="button" class="quick-action" id="qa-check-in">
@@ -158,6 +191,14 @@ export async function renderDashboard(root, navigate) {
         <span class="quick-action-icon">${icons.chart}</span>
         <span>${t("qa_reports")}</span>
       </button>
+      ${
+        ["admin", "ceo", "sales_director", "accountant", "sales_manager"].includes(state.user.role)
+          ? `<button type="button" class="quick-action" id="qa-debt-balances">
+        <span class="quick-action-icon">${icons.wallet}</span>
+        <span>${t("qa_debt_balances")}</span>
+      </button>`
+          : ""
+      }
     </div>
 
     ${
@@ -217,6 +258,7 @@ export async function renderDashboard(root, navigate) {
   container.querySelector("#qa-warehouse")?.addEventListener("click", () => navigate("#/warehouse"));
   container.querySelector("#qa-delivery")?.addEventListener("click", () => navigate("#/delivery"));
   container.querySelector("#qa-recorded")?.addEventListener("click", () => navigate("#/recorded"));
+  container.querySelector("#qa-debt-balances")?.addEventListener("click", () => navigate("#/debt-balances"));
   applyPaymentBadge();
   applyUnrecordedBadge();
 

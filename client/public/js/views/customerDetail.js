@@ -2,7 +2,7 @@ import { api } from "../api.js";
 import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { canEditDirectly, canReassignCustomers, canAssignErpCustomerId, isAdmin } from "../state.js";
+import { canEditDirectly, canReassignCustomers, canAssignErpCustomerId, isAdmin, seesFinancialExports } from "../state.js";
 import { openVisitDetailSheet, openPhotoLightbox } from "../visitDetail.js";
 
 const AGING_BADGE = {
@@ -109,6 +109,13 @@ export async function renderCustomerDetail(root, navigate, customerId) {
                </button>`
             : ""
         }
+        ${
+          seesFinancialExports()
+            ? `<button class="icon-btn" id="payment-settings-btn" aria-label="${t("payment_settings")}">
+                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="13" rx="2"/><path d="M2.5 10.5h19"/><path d="M6 15h4"/></svg>
+               </button>`
+            : ""
+        }
         <button class="icon-btn" id="edit-customer-btn" aria-label="${t("edit")}">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
         </button>
@@ -128,6 +135,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
           : ""
       }
       <div class="detail-fact"><span class="detail-fact-icon">${icons.repeat}</span><span>${t("visit_every_prefix")}${customer.visit_frequency_days}${t("visit_every_suffix")}</span></div>
+      <div class="detail-fact"><span class="detail-fact-icon">${icons.wallet}</span><span>${t(customer.payment_method === "cash" ? "payment_method_cash" : "payment_method_invoice")} &middot; ${t("credit_term_days_label")}: ${customer.credit_term_days}</span></div>
       ${customer.last_visit_at ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.clock}</span><span>${t("last_visit")}: ${formatDateTime(customer.last_visit_at)}</span></div>` : ""}
       ${customer.notes ? `<div class="detail-fact muted"><span class="detail-fact-icon">${icons.note}</span><span>${escapeHtml(customer.notes)}</span></div>` : ""}
     </div>
@@ -180,6 +188,9 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   });
   container.querySelector("#edit-customer-btn").addEventListener("click", () => {
     openEditSheet(customer, navigate, () => renderCustomerDetail(root, navigate, customerId));
+  });
+  container.querySelector("#payment-settings-btn")?.addEventListener("click", () => {
+    openPaymentSettingsSheet(customer, () => renderCustomerDetail(root, navigate, customerId));
   });
   container.querySelector("#customer-photos-btn").addEventListener("click", () => openCustomerPhotoGallery(customerId));
   container.querySelector("#reassign-customer-btn")?.addEventListener("click", () => {
@@ -584,6 +595,68 @@ async function openReassignSheet(customer, onDone) {
         subregion: data.get("subregion") || null,
         sales_channel: data.get("sales_channel") || null,
         assigned_manager_id: data.get("assigned_manager_id") ? Number(data.get("assigned_manager_id")) : null,
+      });
+      close();
+      onDone();
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+      submitBtn.disabled = false;
+      submitBtn.textContent = t("save");
+    }
+  });
+}
+
+// Item 6 -- Payment Method (cash/invoice) and Credit Term Days, both
+// informational/default-setting only (no approval workflow, no aging
+// view -- see migration 054's comment). Gated the same as the financial
+// CSV exports (director/admin/ceo/accountant); the server independently
+// re-checks via seesFinancialExports on the PATCH.
+function openPaymentSettingsSheet(customer, onDone) {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.innerHTML = `
+    <div class="sheet">
+      <h2>${t("payment_settings")}</h2>
+      <form id="payment-settings-form">
+        <label>${t("payment_method_label")}
+          <select name="payment_method">
+            <option value="invoice" ${customer.payment_method !== "cash" ? "selected" : ""}>${t("payment_method_invoice")}</option>
+            <option value="cash" ${customer.payment_method === "cash" ? "selected" : ""}>${t("payment_method_cash")}</option>
+          </select>
+        </label>
+        <label>${t("credit_term_days_label")}
+          <input type="number" name="credit_term_days" min="1" step="1" value="${customer.credit_term_days ?? 45}" />
+        </label>
+        <p class="form-error" id="payment-settings-error" hidden></p>
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="cancel-payment-settings">${t("cancel")}</button>
+          <button type="submit" class="btn btn-primary">${t("save")}</button>
+        </div>
+      </form>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  activateDialog(overlay);
+
+  function close() {
+    overlay.remove();
+  }
+  overlay.querySelector("#cancel-payment-settings").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => e.target === overlay && close());
+
+  const form = overlay.querySelector("#payment-settings-form");
+  const errorEl = overlay.querySelector("#payment-settings-error");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const data = new FormData(form);
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = t("saving");
+    try {
+      await api.updateCustomer(customer.id, {
+        payment_method: data.get("payment_method"),
+        credit_term_days: Number(data.get("credit_term_days")),
       });
       close();
       onDone();

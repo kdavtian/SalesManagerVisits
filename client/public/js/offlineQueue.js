@@ -63,6 +63,7 @@ function submitOrder(entry) {
     items: entry.items,
     discount_pct: entry.discount_pct,
     discount_amd: entry.discount_amd,
+    payment_method: entry.payment_method,
   });
 }
 

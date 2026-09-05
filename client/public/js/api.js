@@ -280,4 +280,8 @@ export const api = {
   getPerfHistoryList: () => request("/team-performance/history"),
   closePerfMonth: (planId) => json(`/team-performance/plans/${planId}/close`, "POST", {}),
   getPerfDataQuality: () => request("/team-performance/data-quality"),
+
+  // Debt balances (see server/src/routes/debtBalances.js) -- read-only,
+  // role-scoped server-side already.
+  getDebtBalances: () => request("/debt-balances"),
 };

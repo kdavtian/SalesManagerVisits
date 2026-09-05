@@ -33,6 +33,7 @@ import { reportsRouter } from "./routes/reports.js";
 import { paymentsRouter } from "./routes/payments.js";
 import { warehouseRouter } from "./routes/warehouse.js";
 import { deliveryRouter } from "./routes/delivery.js";
+import { debtBalancesRouter } from "./routes/debtBalances.js";
 import { startOverdueReminders } from "./overdueReminders.js";
 import { startStalePackedReminder } from "./stalePackedReminder.js";
 import { requireAuth } from "./middleware/auth.js";
@@ -108,6 +109,7 @@ app.use("/api/reports", express.json(), reportsRouter);
 app.use("/api/payments", express.json(), paymentsRouter);
 app.use("/api/warehouse", express.json(), warehouseRouter);
 app.use("/api/delivery", express.json(), deliveryRouter);
+app.use("/api/debt-balances", express.json(), debtBalancesRouter);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });

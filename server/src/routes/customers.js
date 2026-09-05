@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId } from "../roles.js";
+import { seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, seesFinancialExports } from "../roles.js";
 import { getDefaultVisitFrequencyDays } from "../settings.js";
 
 export const customersRouter = Router();
@@ -121,6 +121,8 @@ customersRouter.post("/", async (req, res) => {
     customer_tier,
     sales_channel,
     assigned_manager_id,
+    credit_term_days,
+    payment_method,
   } = req.body ?? {};
 
   if (!name || lat === undefined || lng === undefined) {
@@ -134,6 +136,12 @@ customersRouter.post("/", async (req, res) => {
   }
   if (customer_tier !== undefined && !CUSTOMER_TIERS.has(customer_tier)) {
     return res.status(400).json({ error: "Invalid customer_tier" });
+  }
+  if (payment_method !== undefined && payment_method !== "cash" && payment_method !== "invoice") {
+    return res.status(400).json({ error: "payment_method must be 'cash' or 'invoice'" });
+  }
+  if (credit_term_days !== undefined && !(Number.isInteger(Number(credit_term_days)) && Number(credit_term_days) > 0)) {
+    return res.status(400).json({ error: "credit_term_days must be a positive whole number" });
   }
 
   // Same ERP-ID-implies-at-least-Bronze rule as the PATCH handler below,
@@ -152,8 +160,8 @@ customersRouter.post("/", async (req, res) => {
   const resolvedManagerId = assigned_manager_id && canReassignCustomers(req.user.role) ? assigned_manager_id : req.user.id;
 
   const { rows } = await pool.query(
-    `INSERT INTO customers (name, category, phone, address, notes, lat, lng, created_by, assigned_manager_id, visit_frequency_days, erp_customer_id, tin, region, subregion, customer_tier, sales_channel)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $16, $9, $10, $11, $12, $13, $14, $15)
+    `INSERT INTO customers (name, category, phone, address, notes, lat, lng, created_by, assigned_manager_id, visit_frequency_days, erp_customer_id, tin, region, subregion, customer_tier, sales_channel, credit_term_days, payment_method)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $16, $9, $10, $11, $12, $13, $14, $15, $17, $18)
      RETURNING *`,
     [
       name,
@@ -172,6 +180,8 @@ customersRouter.post("/", async (req, res) => {
       initialTier,
       sales_channel || null,
       resolvedManagerId,
+      Number(credit_term_days) || 45,
+      payment_method || "invoice",
     ]
   );
   res.status(201).json(rows[0]);
@@ -255,12 +265,21 @@ export const EDITABLE_FIELDS = [
   "customer_tier",
   "assigned_manager_id",
   "sales_channel",
+  "credit_term_days",
+  "payment_method",
 ];
 
 // A director/ceo (not just admin) can fix these four directly -- everything
 // else on EDITABLE_FIELDS still needs canDeleteOrEditDirectly (admin), same
 // as before, or goes through the edit-request approval flow.
 const REASSIGNMENT_FIELDS = new Set(["region", "subregion", "assigned_manager_id", "sales_channel"]);
+
+// credit_term_days/payment_method are collections/finance settings -- same
+// visibility line as the financial CSV exports (director/admin/ceo/
+// accountant), not the admin-only default every other EDITABLE_FIELDS entry
+// falls back to. Mirrors the pre-v3 FINANCE_FIELDS/seesPaymentAging gate
+// that migration 051 removed along with credit_term_days itself.
+const FINANCE_FIELDS = new Set(["credit_term_days", "payment_method"]);
 
 customersRouter.patch("/:id", async (req, res) => {
   const fieldsPresent = EDITABLE_FIELDS.filter((f) => req.body?.[f] !== undefined);
@@ -282,7 +301,12 @@ customersRouter.patch("/:id", async (req, res) => {
     }
   } else {
     const onlyReassignmentFields = fieldsPresent.length > 0 && fieldsPresent.every((f) => REASSIGNMENT_FIELDS.has(f));
-    const allowed = onlyReassignmentFields ? canReassignCustomers(req.user.role) : canDeleteOrEditDirectly(req.user.role);
+    const onlyFinanceFields = fieldsPresent.length > 0 && fieldsPresent.every((f) => FINANCE_FIELDS.has(f));
+    const allowed = onlyReassignmentFields
+      ? canReassignCustomers(req.user.role)
+      : onlyFinanceFields
+        ? seesFinancialExports(req.user.role)
+        : canDeleteOrEditDirectly(req.user.role);
     if (!allowed) {
       return res.status(403).json({ error: "Only admins can apply this directly" });
     }
@@ -290,6 +314,19 @@ customersRouter.patch("/:id", async (req, res) => {
 
   if (req.body?.customer_tier !== undefined && !CUSTOMER_TIERS.has(req.body.customer_tier)) {
     return res.status(400).json({ error: "Invalid customer_tier" });
+  }
+  if (
+    req.body?.payment_method !== undefined &&
+    req.body.payment_method !== "cash" &&
+    req.body.payment_method !== "invoice"
+  ) {
+    return res.status(400).json({ error: "payment_method must be 'cash' or 'invoice'" });
+  }
+  if (
+    req.body?.credit_term_days !== undefined &&
+    !(Number.isInteger(Number(req.body.credit_term_days)) && Number(req.body.credit_term_days) > 0)
+  ) {
+    return res.status(400).json({ error: "credit_term_days must be a positive whole number" });
   }
   if (req.body?.lat !== undefined || req.body?.lng !== undefined) {
     const nextLat = req.body.lat;

@@ -486,6 +486,17 @@ a {
   letter-spacing: -0.025em;
 }
 
+/* Armenian glyphs carry taller ascenders/descenders than Latin in this
+   typeface -- the line-height:1 boxes above are tuned against English
+   labels and clip those extra top/bottom pixels for hy text. Loosening
+   just the line-height (not the font-size/letter-spacing tuning above)
+   keeps the icon+label pair's vertical centering intact while giving the
+   glyphs room to render in full. */
+:lang(hy) .nav-item > span:last-child,
+:lang(hy) .nav-item-center-label {
+  line-height: 1.25;
+}
+
 .nav-icon {
   position: relative;
   display: flex;
@@ -1370,6 +1381,28 @@ input[type="search"]:focus {
 .chip-active {
   background: var(--accent);
   color: #ffffff;
+}
+
+/* Standalone filter label+select outside a <form> (e.g. Debt Balances'
+   manager filter) -- same visual language as form labels above, without
+   depending on a form ancestor for its input styling. */
+.debt-manager-filter-wrap {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  margin: 12px 0 0;
+}
+
+.debt-manager-filter-wrap select {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 11px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.95rem;
 }
 
 /* Detail view */
@@ -3510,6 +3543,46 @@ input[type="search"]:focus {
   min-height: 148px;
   display: grid;
   place-items: center;
+}
+
+/* Per-manager drill-down row on the consolidated dashboard (item 5) -- a
+   <details> per manager, same expand/collapse language as
+   .dashboard-insights above so tapping a row to reveal that manager's own
+   progress-card numbers reads as one consistent interaction, not a bespoke
+   one-off. */
+.manager-drill-row {
+  border-bottom: 1px solid var(--border);
+}
+
+.manager-drill-row:last-child {
+  border-bottom: none;
+}
+
+.manager-drill-row > summary {
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 4px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.manager-drill-row > summary::-webkit-details-marker {
+  display: none;
+}
+
+.manager-drill-name {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.manager-drill-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 4px 12px;
 }
 
 /* ===== Customers list redesign ===== */
