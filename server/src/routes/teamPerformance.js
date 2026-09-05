@@ -903,3 +903,21 @@ teamPerformanceRouter.get("/data-quality", async (req, res) => {
 
   res.json({ unmappedSalesReps, unmappedErpReps, staleChannels, unassignedChannels });
 });
+
+// Company-wide brand-volume actuals (liters), aggregated across every
+// channel and grouped by month/brand -- there's no existing endpoint that
+// rolls perf_actuals_brand_monthly up past a single channel (loadChannelActuals
+// above is always scoped to one channel_code), so this is a small, purpose-
+// built read for the Company Dashboard's brand-volume section.
+teamPerformanceRouter.get("/brand-actuals-summary", async (req, res) => {
+  if (!seesAllPerformance(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+
+  const { rows } = await pool.query(
+    `SELECT month, brand, sum(liters)::numeric AS liters
+     FROM perf_actuals_brand_monthly
+     WHERE month >= date_trunc('year', now())
+     GROUP BY month, brand
+     ORDER BY month, brand`
+  );
+  res.json(rows);
+});

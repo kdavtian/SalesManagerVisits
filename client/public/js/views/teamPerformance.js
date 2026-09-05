@@ -170,9 +170,14 @@ async function openDrilldownSheet(planId, channelId, kpi) {
   }
 }
 
-export async function renderTeamPerformance(root, navigate) {
+export async function renderTeamPerformance(root, navigate, query) {
+  // A landing link from the dashboard's "By manager" drill-down (see
+  // dashboard.js's manager-drill-view-btn) carries ?manager=<user_id> so
+  // the Overview tab below can pre-scope to that one manager's channel(s)
+  // instead of the full cross-channel comparison.
+  const managerId = query?.get("manager") ? Number(query.get("manager")) : null;
   if (seesAllPerformance()) {
-    await renderManagementView(root, navigate);
+    await renderManagementView(root, navigate, managerId);
   } else {
     await renderMyPerformanceView(root, navigate);
   }
@@ -223,7 +228,7 @@ async function renderMyPerformanceView(root, navigate) {
 
 // --- Management: Overview / Planning / Approvals -----------------------
 
-async function renderManagementView(root, navigate) {
+async function renderManagementView(root, navigate, managerId) {
   let month = currentMonthStart();
   let tab = "overview";
 
@@ -288,10 +293,26 @@ async function renderManagementView(root, navigate) {
       return;
     }
     const dashboard = await api.getPerfDashboard(plan.id);
+    let channels = dashboard.channels;
+    let scopedNote = "";
+    if (managerId != null) {
+      // Channels don't carry manager_user_id on the dashboard row itself
+      // (see channelCardHtml -- it's built from perf_plan_targets joined
+      // to sales_channels), so resolve it separately via the channels
+      // list this same screen already fetches for Planning.
+      const allChannels = await api.getPerfChannels();
+      const ownedChannelIds = new Set(allChannels.filter((c) => c.manager_user_id === managerId).map((c) => c.id));
+      const filtered = channels.filter((row) => ownedChannelIds.has(row.channel_id));
+      if (filtered.length) {
+        channels = filtered;
+        scopedNote = `<p class="muted" style="margin:0 4px 10px;">${t("perf_scoped_to_manager")}</p>`;
+      }
+    }
     bodyEl.innerHTML = `
       <p class="muted" style="margin:0 4px 10px;">${t("perf_working_day_progress").replace("{elapsed}", dashboard.working_days.elapsed).replace("{total}", dashboard.working_days.total)}</p>
-      ${needsAttentionHtml(dashboard.needs_attention)}
-      ${dashboard.channels.map(channelCardHtml).join("")}
+      ${scopedNote}
+      ${managerId == null ? needsAttentionHtml(dashboard.needs_attention) : ""}
+      ${channels.map(channelCardHtml).join("")}
     `;
     wireDrilldowns(bodyEl);
   }

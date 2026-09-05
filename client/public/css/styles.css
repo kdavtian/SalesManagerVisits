@@ -2797,6 +2797,63 @@ input[type="search"]:focus {
 .progress-card {
   margin: 4px 0 18px;
   padding: 18px;
+  position: relative;
+}
+
+/* Only present when there's a by-manager section to reveal (see
+   summary.by_manager?.length gating in dashboard.js) -- a sales_manager's
+   progress card, which has nothing to expand, never gets these. */
+.progress-card[role="button"] {
+  cursor: pointer;
+  padding-right: 40px;
+}
+
+.progress-card-chevron {
+  position: absolute;
+  top: 16px;
+  right: 14px;
+  color: var(--text-dim);
+  display: flex;
+}
+
+.progress-card-chevron svg {
+  transition: transform 0.2s ease;
+}
+
+.progress-card[aria-expanded="true"] .progress-card-chevron svg {
+  transform: rotate(180deg);
+}
+
+/* Collapsed-by-default reveal for the "By manager" section -- a
+   grid-template-rows 0fr->1fr transition animates smoothly without ever
+   needing to know the content's real height (unlike max-height, which
+   requires guessing a large-enough value). See dashboard.js for the
+   .progress-card click/keyboard toggle that flips the .expanded class. */
+.by-manager-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s ease;
+}
+
+.by-manager-collapse.expanded {
+  grid-template-rows: 1fr;
+}
+
+.by-manager-collapse-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .by-manager-collapse,
+  .progress-card-chevron svg {
+    transition: none;
+  }
+}
+
+.manager-drill-view-btn {
+  align-self: flex-start;
+  margin-top: 2px;
 }
 
 .points-card {

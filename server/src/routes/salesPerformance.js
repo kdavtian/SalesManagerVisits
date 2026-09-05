@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
+import { seesAllPerformance } from "../roles.js";
 
 export const salesPerformanceRouter = Router();
 
@@ -69,7 +70,11 @@ salesPerformanceRouter.get("/me", async (req, res) => {
 // admin to see the whole team at a glance (mirrors the points leaderboard's
 // "who's ahead" framing, but for actual sales attainment).
 salesPerformanceRouter.get("/", async (req, res) => {
-  if (!["admin", "ceo", "sales_director"].includes(req.user.role)) {
+  // Same company-wide visibility as the rest of Team Performance
+  // (seesAllPerformance) -- Accountant reconciles these numbers day to
+  // day just like Sales Director/CEO/admin, so it belongs here too (used
+  // by the Company Dashboard quick action alongside those other roles).
+  if (!seesAllPerformance(req.user.role)) {
     return res.status(403).json({ error: "Not allowed" });
   }
 

@@ -18,6 +18,7 @@ import { renderCashExpenses } from "./views/cashExpenses.js";
 import { renderReports } from "./views/reports.js";
 import { renderRoutePlans } from "./views/routePlans.js";
 import { renderTeamPerformance } from "./views/teamPerformance.js";
+import { renderDashboardOverview } from "./views/dashboardOverview.js";
 import { renderPricelist } from "./views/pricelist.js";
 import { renderPayments } from "./views/payments.js";
 import { renderWarehouse } from "./views/warehouse.js";
@@ -56,8 +57,16 @@ new MutationObserver((mutations) => {
   for (const mutation of mutations) {
     for (const node of mutation.addedNodes) {
       if (!(node instanceof HTMLElement)) continue;
-      const feedback = [node, ...node.querySelectorAll(".form-error, .form-success")];
-      feedback.forEach((el) => el.classList.contains("form-error") ? el.setAttribute("role", "alert") : el.setAttribute("role", "status"));
+      // Only elements that actually carry one of these two classes get a
+      // live-region role -- `node` itself is only a candidate, not
+      // automatically a match; without this filter every freshly-rendered
+      // top-level element (nav rows, tappable cards, anything with its own
+      // role="...") had its role silently overwritten to "status" the
+      // moment it was inserted.
+      const feedback = [node, ...node.querySelectorAll(".form-error, .form-success")].filter(
+        (el) => el.classList.contains("form-error") || el.classList.contains("form-success")
+      );
+      feedback.forEach((el) => el.setAttribute("role", el.classList.contains("form-error") ? "alert" : "status"));
     }
   }
 }).observe(document.body, { childList: true, subtree: true });
@@ -299,7 +308,9 @@ async function render() {
   } else if (path === "#/route-plans") {
     renderRoutePlans(app, navigate);
   } else if (path === "#/team-performance") {
-    renderTeamPerformance(app, navigate);
+    renderTeamPerformance(app, navigate, query);
+  } else if (path === "#/company-dashboard") {
+    renderDashboardOverview(app, navigate);
   } else if (path === "#/pricelist") {
     renderPricelist(app, navigate);
   } else if (path === "#/warehouse") {

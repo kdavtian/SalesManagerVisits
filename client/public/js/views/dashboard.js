@@ -79,7 +79,13 @@ export async function renderDashboard(root, navigate) {
     </div>`
     }
 
-    <div class="card progress-card">
+    <div class="card progress-card" id="progress-card" ${
+      // Only made tappable when there's actually a by-manager section to
+      // reveal (see summary.by_manager?.length gating below) -- a
+      // sales_manager's own progress card has nothing to expand, so it
+      // stays a plain static card, not a dead-looking button.
+      summary.by_manager?.length ? `role="button" tabindex="0" aria-expanded="false" aria-controls="by-manager-section" aria-label="${t("toggle_by_manager_aria")}"` : ""
+    }>
       <span class="progress-label">${t("today_progress")}</span>
       <div class="progress-main">
         <span class="progress-fraction">${totals.visited_today}<span class="progress-fraction-total">/${totals.total_customers}</span></span>
@@ -90,37 +96,44 @@ export async function renderDashboard(root, navigate) {
         </div>
       </div>
       <div class="progress-bar"><div class="progress-bar-fill" style="width:${totals.total_customers ? Math.round((totals.visited_today / totals.total_customers) * 100) : 0}%"></div></div>
+      ${summary.by_manager?.length ? `<span class="progress-card-chevron" aria-hidden="true">${icons.chevronDown}</span>` : ""}
     </div>
 
     ${
       // by_manager is only ever non-null for the roles that see company-wide
       // data (director/admin/ceo/accountant) -- a sales_manager gets null
       // here and never sees this section, since the single progress card
-      // above is already their own. Each row expands in place (no separate
-      // screen/route) into that one manager's own progress-card numbers --
-      // this is the "drill into a specific manager's breakdown from the
-      // same view" affordance, kept as one consolidated dashboard rather
-      // than scattering a separate card per manager.
+      // above is already their own. Hidden by default (grid-template-rows
+      // 0fr -- see .by-manager-collapse) and revealed by tapping the
+      // progress card above; each row further expands in place into that
+      // one manager's own progress-card numbers for a quick glance, and
+      // carries a "View full performance" link into Team Performance
+      // pre-scoped to that manager for the real drill-down.
       summary.by_manager?.length
-        ? `<h2 class="section-title">${t("by_manager_week")}</h2>
-           <div class="card-list" id="by-manager-list">
-             ${summary.by_manager
-               .map(
-                 (m) => `
-               <details class="manager-drill-row">
-                 <summary>
-                   <span class="manager-drill-name">${escapeHtml(m.user_name)}</span>
-                   <span class="muted">${m.checkins_this_week} ${t("qa_check_in")} · ${m.customers_visited_this_week} ${t("stat_visited_today")}</span>
-                 </summary>
-                 <div class="manager-drill-detail">
-                   <div class="progress-side-row"><span class="dot dot-success"></span>${m.visited_today} ${t("stat_visited_today")}</div>
-                   <div class="progress-side-row"><span class="dot dot-warning"></span>${Math.max(0, m.total_customers - m.visited_today)} ${t("stat_remaining")}</div>
-                   <div class="progress-side-row"><span class="dot dot-danger"></span>${m.overdue} ${t("stat_overdue")}</div>
-                   <div class="progress-side-row">${m.total_customers} ${t("total")}</div>
-                 </div>
-               </details>`
-               )
-               .join("")}
+        ? `<div class="by-manager-collapse" id="by-manager-section">
+             <div class="by-manager-collapse-inner">
+               <h2 class="section-title">${t("by_manager_week")}</h2>
+               <div class="card-list" id="by-manager-list">
+                 ${summary.by_manager
+                   .map(
+                     (m) => `
+                   <details class="manager-drill-row">
+                     <summary>
+                       <span class="manager-drill-name">${escapeHtml(m.user_name)}</span>
+                       <span class="muted">${m.checkins_this_week} ${t("qa_check_in")} · ${m.customers_visited_this_week} ${t("stat_visited_today")}</span>
+                     </summary>
+                     <div class="manager-drill-detail">
+                       <div class="progress-side-row"><span class="dot dot-success"></span>${m.visited_today} ${t("stat_visited_today")}</div>
+                       <div class="progress-side-row"><span class="dot dot-warning"></span>${Math.max(0, m.total_customers - m.visited_today)} ${t("stat_remaining")}</div>
+                       <div class="progress-side-row"><span class="dot dot-danger"></span>${m.overdue} ${t("stat_overdue")}</div>
+                       <div class="progress-side-row">${m.total_customers} ${t("total")}</div>
+                       <button type="button" class="link-btn manager-drill-view-btn" data-view-manager="${m.user_id}">${t("view_full_performance")}</button>
+                     </div>
+                   </details>`
+                   )
+                   .join("")}
+               </div>
+             </div>
            </div>`
         : ""
     }
@@ -199,6 +212,14 @@ export async function renderDashboard(root, navigate) {
       </button>`
           : ""
       }
+      ${
+        ["admin", "ceo", "sales_director", "accountant"].includes(state.user.role)
+          ? `<button type="button" class="quick-action" id="qa-company-dashboard">
+        <span class="quick-action-icon">${icons.chart}</span>
+        <span>${t("qa_company_dashboard")}</span>
+      </button>`
+          : ""
+      }
     </div>
 
     ${
@@ -259,8 +280,29 @@ export async function renderDashboard(root, navigate) {
   container.querySelector("#qa-delivery")?.addEventListener("click", () => navigate("#/delivery"));
   container.querySelector("#qa-recorded")?.addEventListener("click", () => navigate("#/recorded"));
   container.querySelector("#qa-debt-balances")?.addEventListener("click", () => navigate("#/debt-balances"));
+  container.querySelector("#qa-company-dashboard")?.addEventListener("click", () => navigate("#/company-dashboard"));
   applyPaymentBadge();
   applyUnrecordedBadge();
+
+  const progressCard = container.querySelector("#progress-card");
+  const byManagerSection = container.querySelector("#by-manager-section");
+  if (progressCard && byManagerSection) {
+    const toggleByManager = () => {
+      const expanded = progressCard.getAttribute("aria-expanded") === "true";
+      progressCard.setAttribute("aria-expanded", String(!expanded));
+      byManagerSection.classList.toggle("expanded", !expanded);
+    };
+    progressCard.addEventListener("click", toggleByManager);
+    progressCard.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggleByManager();
+      }
+    });
+  }
+  container.querySelectorAll("[data-view-manager]").forEach((btn) => {
+    btn.addEventListener("click", () => navigate(`#/team-performance?manager=${encodeURIComponent(btn.dataset.viewManager)}`));
+  });
 
   const leaderboardEl = container.querySelector("#points-leaderboard");
   if (leaderboardEl && summary.points_leaderboard?.length) {

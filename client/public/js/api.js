@@ -73,6 +73,7 @@ export const api = {
   updateSettings: (data) => json("/settings", "PATCH", data),
 
   getMySalesPerformance: () => request("/sales-performance/me"),
+  getSalesPerformanceLeaderboard: () => request("/sales-performance/"),
 
   createEditRequest: (customerId, changes, note) =>
     json("/edit-requests", "POST", { customer_id: customerId, changes, note }),
@@ -280,6 +281,7 @@ export const api = {
   getPerfHistoryList: () => request("/team-performance/history"),
   closePerfMonth: (planId) => json(`/team-performance/plans/${planId}/close`, "POST", {}),
   getPerfDataQuality: () => request("/team-performance/data-quality"),
+  getPerfBrandActualsSummary: () => request("/team-performance/brand-actuals-summary"),
 
   // Debt balances (see server/src/routes/debtBalances.js) -- read-only,
   // role-scoped server-side already.
