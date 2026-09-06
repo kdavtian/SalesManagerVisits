@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v79";
+const CACHE_VERSION = "field-visits-v80";
 const TILE_CACHE = "field-visits-tiles-v4";
 
 const APP_SHELL = [
@@ -15,6 +15,7 @@ const APP_SHELL = [
   "/css/customer-social.css",
   "/css/map-marker-system.css",
   "/css/map-safe-enhancements.css",
+  "/css/customer-reference-icons.css",
   "/js/api.js",
   "/js/app.js",
   "/js/activityDatePicker.js",
@@ -26,7 +27,7 @@ const APP_SHELL = [
   "/js/fieldVisitEnhancements.js",
   "/js/customerSocialProfiles.js",
   "/js/mapMarkerEnhancements.js",
-  "/js/oilPointIconEnhancements.js",
+  "/js/customerReferenceIcons.js",
   "/js/mapSafeRuntime.js",
   "/js/mapSafeUi.js",
   "/js/competitorPolicySafe.js",
