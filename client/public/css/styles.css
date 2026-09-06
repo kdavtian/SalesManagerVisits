@@ -273,7 +273,12 @@ a {
 .nav-item,
 .card,
 .chip,
-.fab {
+.fab,
+.stat-pill,
+.filter-icon-btn,
+.icon-btn,
+.list-header-add-btn,
+.activity-search-filter-btn {
   transition: transform 0.12s ease, opacity 0.12s ease, background-color 0.12s ease;
 }
 
@@ -1699,9 +1704,10 @@ input[type="search"]:focus {
   cursor: pointer;
   font: inherit;
   color: inherit;
-  /* Same tappable affordance as .stat-pill -- this is also a drill-down
-     stat card sharing the base .stat-card look, so it needs the same cue
-     that it's interactive. */
+  /* A drill-down card sharing the base .stat-card look needs some cue that
+     it's interactive, and unlike the Customers stat pills these sit in a
+     grid of otherwise-static report cards, so the accent underline is what
+     separates the tappable ones from their read-only neighbours. */
   border-bottom: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
   padding-bottom: 15px;
 }
@@ -3704,6 +3710,24 @@ input[type="search"]:focus {
   gap: 10px;
 }
 
+/* Customers only: the debt toggle belongs WITH the headline (it changes
+   what the list shows about itself), so the row packs from the left and the
+   toggle sits right after the title text. Add Customer is a different kind
+   of action -- a new record, not a view option -- so it alone is pushed to
+   the far edge. Scoped to .list-view so Activity's and Orders' headers keep
+   their own space-between layout. */
+.list-view .list-header {
+  justify-content: flex-start;
+}
+
+.list-view .list-header h1 {
+  flex: 0 1 auto;
+}
+
+.list-view .list-header #add-customer-btn {
+  margin-left: auto;
+}
+
 .list-header h1 {
   font-size: var(--fs-title);
   font-weight: var(--fw-title);
@@ -3734,9 +3758,10 @@ input[type="search"]:focus {
   cursor: pointer;
 }
 
-/* Debt-visibility toggle sits next to Add Customer, same shape but a
-   neutral (not accent-filled) resting state -- it's off by default, so it
-   shouldn't read as "the" primary action the way Add Customer does. */
+/* Debt-visibility toggle sits next to the page title, same shape as Add
+   Customer but a neutral (not accent-filled) resting state -- it's off by
+   default, so it shouldn't read as "the" primary action the way Add
+   Customer does. */
 .list-header-add-btn#toggle-debt-btn {
   background: var(--bg-inset, var(--bg-card));
   color: var(--text-dim);
@@ -3764,15 +3789,13 @@ input[type="search"]:focus {
 .stat-pill {
   flex: 1;
   background: var(--bg-card);
+  /* Flat, single-weight border on every edge. This used to carry a thick
+     accent underline as a "tappable" hint, which read as a dated embossed
+     3D button; the :active press state below is a far clearer -- and
+     motion-based, so unmistakable -- tap affordance than a static border. */
   border: 1px solid var(--border);
-  /* A tappable stat card (this is a selectable filter, unlike the static
-     .stat-card display used for read-only counts) gets a thin accent
-     underline at rest so it visibly differs before anything is selected --
-     the only other affordance was the browser's default button cursor,
-     which people don't reliably read as "tappable" on a touch device. */
-  border-bottom: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
   border-radius: var(--radius);
-  padding: 10px 12px 9px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -3802,6 +3825,20 @@ input[type="search"]:focus {
 .stat-pill-active strong,
 .stat-pill-active span {
   color: #ffffff;
+}
+
+/* Tap feedback for the toolbar/filter controls. These are all buttons that
+   only show their result somewhere else on screen (a sheet opens, the list
+   re-filters), so without a press state a tap feels like it did nothing.
+   Same technique .card/.btn already use, so every tappable surface in the
+   app reacts the same way. */
+.stat-pill:active,
+.filter-icon-btn:active,
+.icon-btn:active,
+.list-header-add-btn:active,
+.activity-search-filter-btn:active {
+  transform: scale(0.94);
+  opacity: 0.85;
 }
 
 .customer-card {
@@ -4832,30 +4869,76 @@ input[type="search"]:focus {
   width: 100%;
 }
 
-.activity-stat-grid {
-  grid-template-columns: repeat(4, 1fr);
-  padding: 0 16px;
-  gap: 8px;
+/* Per-manager filter pills. Reuses .customer-stats-bar/.stat-pill wholesale
+   -- functionally this is the same "tappable count that filters the list
+   below" control the Customers tab already established -- with only the
+   label/percentage stacking tuned, since a manager's name is longer than
+   "Overdue" and there are as many pills as there are managers. */
+.activity-manager-bar {
+  scrollbar-width: none;
 }
 
-.activity-stat-grid .stat-card {
-  padding: 10px 8px;
-  gap: 2px;
+.activity-manager-bar::-webkit-scrollbar {
+  display: none;
 }
 
-.activity-stat-grid .stat-value {
+.activity-manager-bar .stat-pill {
+  flex: 0 0 auto;
+  min-width: 92px;
+  max-width: 140px;
+}
+
+.activity-manager-bar .stat-pill strong {
   font-size: 1.3rem;
+  line-height: 1.1;
 }
 
-.activity-stat-grid .stat-label {
-  font-size: 0.68rem;
-  font-weight: 600;
-  color: var(--text);
+.activity-manager-bar .stat-pill span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.activity-stat-grid .stat-sublabel {
-  font-size: 0.65rem;
+/* A plain sales manager only ever sees their own check-ins, so their total
+   is a read-out, not a filter -- same shape as the pills, none of the
+   tappable cues. */
+.stat-pill-static {
+  cursor: default;
+}
+
+.stat-pill-static:active {
+  transform: none;
+  opacity: 1;
+}
+
+.stat-pill-sub {
+  font-size: var(--fs-nav);
   color: var(--text-dim);
+}
+
+.stat-pill-active .stat-pill-sub {
+  color: #ffffff;
+  opacity: 0.85;
+}
+
+/* One step below .list-row-meta: this line can carry a free-text note, so
+   it needs to stay clearly subordinate to the amount collected sitting
+   next to it (--fs-amount) and to the manager/region/date line above. */
+.activity-outcome-label {
+  font-size: var(--fs-stat-label);
+  /* Kept to a single ellipsised line so a long free-text "Other" note can't
+     make one row twice the height of its neighbours. */
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The amount keeps its natural width so the ellipsis lands in the outcome
+   text next to it, never in the money. */
+.activity-outcome-label ~ .text-amount {
+  flex: 0 0 auto;
 }
 
 .activity-filters {
@@ -5147,10 +5230,21 @@ input[type="search"]:focus {
   color: var(--text-dim);
 }
 
-.list-row-icon svg,
-.list-row-icon .category-img {
+.list-row-icon svg {
   width: 24px;
   height: 24px;
+}
+
+/* The category artwork is a raster PNG carrying its own transparent margin,
+   so the drawn glyph fills noticeably less of its box than the stroke-SVGs
+   it replaced -- at 24px it read smaller and fainter than every other row
+   icon. 31px restores the intended optical weight inside the 44px avatar
+   without the artwork reaching its edges. Scoped to .list-row-icon on
+   purpose: the category selector buttons and the visit-detail avatar size
+   the same image themselves and must not inherit this. */
+.list-row-icon .category-img {
+  width: 31px;
+  height: 31px;
 }
 
 button.list-row-icon {
@@ -5315,7 +5409,6 @@ button.list-row-icon {
   }
 
   .detail-actions-grid,
-  .activity-stat-grid,
   .quick-actions-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

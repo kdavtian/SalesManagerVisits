@@ -10,11 +10,11 @@ customersRouter.use(requireAuth);
 
 const LAST_VISIT_SUBQUERY = `(SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id)`;
 
-// KF/CAS/CVO/PCO are channels Castrol serves through a route that doesn't
-// involve field visits (key accounts / distributor-managed), so these
-// customers never need to show up as "overdue" or "not visited" no matter
-// how long since their last check-in.
-const NO_VISIT_CHANNELS = ["KF", "CAS", "CVO", "PCO"];
+// KF/CAS/CVO/PCO/OEM are channels Castrol serves through a route that
+// doesn't involve field visits (key accounts / distributor-managed / OEM
+// contracts), so these customers never need to show up as "overdue" or
+// "not visited" no matter how long since their last check-in.
+const NO_VISIT_CHANNELS = ["KF", "CAS", "CVO", "PCO", "OEM"];
 const NOT_NO_VISIT_CHANNEL_SQL = `COALESCE(c.sales_channel, '') <> ALL(ARRAY[${NO_VISIT_CHANNELS.map((v) => `'${v}'`).join(",")}])`;
 
 // Derived visit status — no assignment/planning data exists yet, so
@@ -31,7 +31,13 @@ const STATUS_COLUMNS = `
       ${LAST_VISIT_SUBQUERY} IS NULL
       OR ${LAST_VISIT_SUBQUERY} < now() - (c.visit_frequency_days || ' days')::interval
     )
-  ) AS overdue
+  ) AS overdue,
+  -- Whether this customer is on a channel that is visited in the field at
+  -- all. Exposed as its own flag (rather than the client re-deriving it
+  -- from sales_channel) so the exemption list lives in exactly one place;
+  -- the Customers list uses it to suppress "Overdue"/"Not visited" labels
+  -- for channels that are never supposed to carry them.
+  ${NOT_NO_VISIT_CHANNEL_SQL} AS requires_visit
 `;
 
 customersRouter.get("/", async (req, res) => {

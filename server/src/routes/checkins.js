@@ -269,6 +269,9 @@ checkinsRouter.get("/", async (req, res) => {
   params.push(CHECKINS_PAGE_SIZE + 1, offsetNum);
   const { rows } = await pool.query(
     `SELECT ch.*, u.name AS user_name, c.name AS customer_name, c.category AS customer_category,
+       -- Aliased away from a bare "region" so it can't collide with the
+       -- check-in's own columns when the row is spread client-side.
+       c.region AS customer_region,
        COALESCE(
          (SELECT json_agg(json_build_object('id', cp.id) ORDER BY cp.id) FROM checkin_photos cp WHERE cp.checkin_id = ch.id),
          '[]'

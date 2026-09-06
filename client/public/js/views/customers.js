@@ -11,6 +11,57 @@ const FILTERS = [
   { key: "not_visited", labelKey: "filter_not_visited" },
 ];
 
+// One derived visit status per customer, used for BOTH the stat-pill counts
+// and each row's badge so the two can never disagree (they used to: the
+// pills counted "not visited" as "no check-in in the last 7 days" while
+// "overdue" was computed from each customer's own visit_frequency_days, so
+// a customer on a 30-day cadence visited 10 days ago was counted as
+// "Not visited" even though they were perfectly on schedule -- and exempt
+// channels were counted too).
+//
+// The buckets are mutually exclusive and evaluated in this order:
+//   exempt   -- channel is never visited in the field (server's
+//               requires_visit flag, i.e. KF/CAS/CVO/PCO/OEM) or the record
+//               is a competitor, not a customer: never labelled at all.
+//   today    -- checked in today.
+//   never    -- no check-in has ever been recorded. Ranked ABOVE overdue
+//               because the server counts a never-visited customer as
+//               overdue too, and "Not visited" is both the more specific
+//               and the more actionable of the two labels -- if it lost
+//               the tie, the "Not visited" pill could only ever show 0.
+//   overdue  -- visited before, but past their own visit_frequency_days
+//               window.
+//   recent   -- visited within the last 7 days and not overdue.
+//   on_track -- visited longer ago than that but still inside their own
+//               cadence window. Deliberately carries no status word:
+//               labelling these "Not visited" was the actual bug, since a
+//               customer on a 30-day cadence visited 10 days ago is on
+//               schedule, not neglected.
+function visitStatus(c) {
+  // `visit_required` is set to false by the competitor policy wrapper;
+  // `requires_visit` is the server's channel-exemption flag.
+  if (c.requires_visit === false || c.visit_required === false) return "exempt";
+  if (c.visited_today) return "today";
+  if (!c.last_visit_at) return "never";
+  if (c.overdue) return "overdue";
+  if (c.visited_this_week) return "recent";
+  return "on_track";
+}
+
+const STATUS_BADGE = {
+  today: { cls: "badge-success", labelKey: "visited_today" },
+  overdue: { cls: "badge-danger", labelKey: "filter_overdue" },
+  recent: { cls: "badge-info", labelKey: "visited_this_week" },
+  never: { cls: "badge-neutral", labelKey: "never_visited" },
+};
+
+// Which derived statuses each stat pill / list filter selects.
+const FILTER_STATUSES = {
+  visited: ["today", "recent"],
+  overdue: ["overdue"],
+  not_visited: ["never"],
+};
+
 export function renderCustomers(root, navigate, initialFilter) {
   root.innerHTML = `
     <div class="list-view">
@@ -251,10 +302,16 @@ export function renderCustomers(root, navigate, initialFilter) {
   function renderStatsBar() {
     const counts = {
       "": allCustomers.length,
-      visited: allCustomers.filter((c) => c.visited_this_week).length,
-      overdue: allCustomers.filter((c) => c.overdue).length,
-      not_visited: allCustomers.filter((c) => !c.visited_this_week).length,
+      visited: 0,
+      overdue: 0,
+      not_visited: 0,
     };
+    for (const c of allCustomers) {
+      const status = visitStatus(c);
+      for (const [key, statuses] of Object.entries(FILTER_STATUSES)) {
+        if (statuses.includes(status)) counts[key] += 1;
+      }
+    }
     statsBar.innerHTML = FILTERS.map(
       (f) => `
         <button class="stat-pill ${filter === f.key ? "stat-pill-active" : ""}" data-filter="${f.key}" aria-pressed="${filter === f.key}">
@@ -290,9 +347,7 @@ export function renderCustomers(root, navigate, initialFilter) {
     let customers = allCustomers;
     const query = searchInput.value.trim().toLowerCase();
     if (query) customers = customers.filter((c) => c.name.toLowerCase().includes(query));
-    if (filter === "visited") customers = customers.filter((c) => c.visited_this_week);
-    else if (filter === "overdue") customers = customers.filter((c) => c.overdue);
-    else if (filter === "not_visited") customers = customers.filter((c) => !c.visited_this_week);
+    if (FILTER_STATUSES[filter]) customers = customers.filter((c) => FILTER_STATUSES[filter].includes(visitStatus(c)));
     if (regionFilter) customers = customers.filter((c) => c.region === regionFilter);
     if (subregionFilter) customers = customers.filter((c) => c.subregion === subregionFilter);
     if (channelFilter) customers = customers.filter((c) => c.sales_channel === channelFilter);
@@ -307,22 +362,23 @@ export function renderCustomers(root, navigate, initialFilter) {
 
     listEl.innerHTML = customers
       .map((c) => {
-        let badgeClass = "badge-neutral";
-        let badgeText = t("not_visited");
-        if (c.visited_today) {
-          badgeClass = "badge-success";
-          badgeText = t("visited_today");
-        } else if (c.overdue) {
-          badgeClass = "badge-danger";
-          badgeText = t("filter_overdue");
-        } else if (c.visited_this_week) {
-          badgeClass = "badge-info";
-          badgeText = t("visited_this_week");
-        }
-        const lastVisit = c.last_visit_at
-          ? `${t("last_visit")}: ${formatDateTime(c.last_visit_at)}`
-          : t("never_visited");
-        const idAndType = [c.erp_customer_id ? `ID: ${escapeHtml(String(c.erp_customer_id))}` : "", c.category ? escapeHtml(categoryLabel(c.category)) : ""]
+        // Status word and last-visit date read as ONE line (e.g.
+        // "Overdue &bull; Last visit: 23 Aug, 17:20"). Exempt channels get
+        // the date only -- never a status word -- and a customer who has
+        // never been visited gets the status word only, since there's no
+        // date to pair it with.
+        const status = visitStatus(c);
+        // A never-visited customer whose cadence window has already elapsed
+        // is genuinely urgent, so it keeps the alarming colour even though
+        // the more specific "Not visited" wording wins over "Overdue".
+        const badge =
+          status === "never" && c.overdue ? { ...STATUS_BADGE.never, cls: "badge-danger" } : STATUS_BADGE[status];
+        const lastVisit = c.last_visit_at ? `${t("last_visit")}: ${formatDateTime(c.last_visit_at)}` : "";
+        const idAndType = [
+          c.erp_customer_id ? `ID: ${escapeHtml(String(c.erp_customer_id))}` : "",
+          c.category ? escapeHtml(categoryLabel(c.category)) : "",
+          c.sales_channel ? escapeHtml(String(c.sales_channel)) : "",
+        ]
           .filter(Boolean)
           .join(" &bull; ");
 
@@ -334,6 +390,19 @@ export function renderCustomers(root, navigate, initialFilter) {
         const isOthers =
           state.user.role === "sales_manager" && c.assigned_manager_id != null && c.assigned_manager_id !== state.user.id;
 
+        const debtLabel =
+          showDebt && c.debt_amd != null && Number(c.debt_amd) > 0
+            ? `<span class="customer-card-debt">${t("outstanding_debt_label")}: ${formatAmd(Number(c.debt_amd))}</span>`
+            : "";
+        const bottomRow =
+          badge || lastVisit || debtLabel
+            ? `<div class="list-row-bottom">
+              ${badge ? `<span class="badge ${badge.cls}">${t(badge.labelKey)}</span>` : ""}
+              ${lastVisit ? `<span class="muted list-row-meta">${lastVisit}</span>` : ""}
+              ${debtLabel}
+            </div>`
+            : "";
+
         return `
         <button class="card list-row ${isOthers ? "customer-card-unassigned" : ""}" data-id="${c.id}">
           ${customerListIconHtml(c)}
@@ -342,15 +411,7 @@ export function renderCustomers(root, navigate, initialFilter) {
               <strong>${escapeHtml(c.name)}</strong>
             </div>
             ${idAndType ? `<div class="muted list-row-meta">${idAndType}</div>` : ""}
-            <div class="muted list-row-meta">${lastVisit}</div>
-            <div class="list-row-bottom">
-              <span class="badge ${badgeClass}">${badgeText}</span>
-              ${
-                showDebt && c.debt_amd != null && Number(c.debt_amd) > 0
-                  ? `<span class="customer-card-debt">${t("outstanding_debt_label")}: ${formatAmd(Number(c.debt_amd))}</span>`
-                  : ""
-              }
-            </div>
+            ${bottomRow}
           </div>
           <span class="chevron">&#8250;</span>
         </button>

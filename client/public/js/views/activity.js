@@ -24,7 +24,6 @@ const STATUS_ICON = {
 };
 
 const ACTIVITY_FILTER_ICONS = {
-  manager: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17.5" cy="8.6" r="2.35"/><path d="M3.5 20v-1.2A5.5 5.5 0 0 1 9 13.3h.1a5.5 5.5 0 0 1 5.5 5.5V20"/><path d="M15.1 13.8c.7-.35 1.5-.55 2.35-.55A4.55 4.55 0 0 1 22 17.8V20"/></svg>`,
   status: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.75"/><path d="m7.9 12.1 2.6 2.7 5.8-6"/></svg>`,
   outcome: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3.75" width="14" height="16.5" rx="2.5"/><path d="M9 3.75v-.5A1.25 1.25 0 0 1 10.25 2h3.5A1.25 1.25 0 0 1 15 3.25v.5"/><path d="m8.5 11.7 1.8 1.8 4.7-5"/><path d="M8.5 17h7"/></svg>`,
   sort: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M4 7l3-3 3 3M17 20V4M14 17l3 3 3-3"/></svg>`,
@@ -33,6 +32,25 @@ const ACTIVITY_FILTER_ICONS = {
 function checkinOutcomes(c) {
   if (c.outcomes?.length) return c.outcomes;
   return c.outcome ? [c.outcome] : [];
+}
+
+// The free-text note only exists to explain an "Other" outcome, so it's
+// shown inline with that label rather than hidden behind opening the visit.
+// Only the note is truncated -- the outcome labels themselves are short and
+// fixed, while free text can run arbitrarily long and would otherwise wrap
+// the row to an unpredictable height.
+const NOTE_MAX_CHARS = 48;
+
+function outcomeSummary(c) {
+  return checkinOutcomes(c)
+    .map((o) => {
+      const label = t(`outcome_${o}`);
+      const note = String(c.note ?? "").trim();
+      if (o !== "other" || !note) return label;
+      const short = note.length > NOTE_MAX_CHARS ? `${note.slice(0, NOTE_MAX_CHARS).trimEnd()}…` : note;
+      return `${label}: ${short}`;
+    })
+    .join(", ");
 }
 
 function checkinStatus(c) {
@@ -111,18 +129,12 @@ export async function renderActivity(root, navigate) {
   }
 
   function statusMeta(status) {
-    if (status === "verified") return { cls: "status-verified", badge: "badge-success", label: t("verified") };
-    if (status === "pending") return { cls: "status-pending", badge: "badge-warning", label: t("status_pending") };
-    return { cls: "status-rejected", badge: "badge-danger", label: t("status_rejected") };
-  }
-
-  function computeStats(list) {
-    const total = list.length;
-    const verified = list.filter((c) => checkinStatus(c) === "verified").length;
-    const rejected = list.filter((c) => checkinStatus(c) === "rejected").length;
-    const pending = list.filter((c) => checkinStatus(c) === "pending").length;
-    const pct = (n) => (total ? `${((n / total) * 100).toFixed(1)}%` : "—");
-    return { total, verified, rejected, pending, verifiedPct: pct(verified), rejectedPct: pct(rejected), pendingPct: pct(pending) };
+    // No badge class here: the row's status is carried solely by the
+    // coloured status icon (which holds the label as its aria-label/title),
+    // so a second text badge repeating it was pure duplication.
+    if (status === "verified") return { cls: "status-verified", label: t("verified") };
+    if (status === "pending") return { cls: "status-pending", label: t("status_pending") };
+    return { cls: "status-rejected", label: t("status_rejected") };
   }
 
   function managerOptions() {
@@ -131,6 +143,48 @@ export async function renderActivity(root, navigate) {
       if (!seen.has(c.user_id)) seen.set(c.user_id, c.user_name);
     }
     return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }
+
+  // The old header was four read-only stat cards (total / verified /
+  // rejected / pending), which repeated what every row's own status icon
+  // already says. What the directors actually read off this screen is who
+  // did the visits, so the same slot is now a row of tappable pills -- one
+  // per sales manager present in the loaded range, with their share of the
+  // total -- doubling as the manager filter (which is why the separate
+  // manager dropdown is gone: two controls for one filter). A plain sales
+  // manager only ever sees their own check-ins, so there is nothing to
+  // split by and they keep a single total count instead.
+  function renderManagerPills() {
+    const total = allCheckins.length;
+    const pct = (n) => (total ? `${Math.round((n / total) * 100)}%` : "0%");
+    const counts = new Map();
+    for (const c of allCheckins) counts.set(String(c.user_id), (counts.get(String(c.user_id)) ?? 0) + 1);
+
+    const pills = [
+      // "All" is the denominator, so a "100%" under it would be noise.
+      { value: "", label: t("filter_all"), count: total, sub: "" },
+      ...managerOptions().map(([id, name]) => ({
+        value: String(id),
+        label: name,
+        count: counts.get(String(id)) ?? 0,
+        sub: pct(counts.get(String(id)) ?? 0),
+      })),
+    ];
+
+    return `
+      <div class="customer-stats-bar activity-manager-bar" id="activity-manager-bar" aria-label="${escapeHtml(t("all_managers"))}">
+        ${pills
+          .map(
+            (p) => `
+          <button type="button" class="stat-pill ${filters.manager === p.value ? "stat-pill-active" : ""}" data-manager="${escapeHtml(p.value)}" aria-pressed="${filters.manager === p.value}">
+            <strong>${p.count}</strong>
+            <span>${escapeHtml(p.label)}</span>
+            ${p.sub ? `<span class="stat-pill-sub">${p.sub}</span>` : ""}
+          </button>`
+          )
+          .join("")}
+      </div>
+    `;
   }
 
   function applyFilters() {
@@ -156,8 +210,6 @@ export async function renderActivity(root, navigate) {
   }
 
   function renderShell() {
-    const stats = computeStats(allCheckins);
-    const managerLabel = t("all_managers");
     const statusLabel = t("all_status");
     const outcomeLabel = t("all_outcomes");
     const sortLabel = isHy ? "Դասավորել" : t("sort");
@@ -181,18 +233,20 @@ export async function renderActivity(root, navigate) {
 
       ${checkinsCapped ? `<p class="muted activity-capped-note">${t("activity_capped_note")}</p>` : ""}
 
-      <div class="stat-grid activity-stat-grid">
-        <div class="stat-card"><span class="stat-value">${stats.total}</span><span class="stat-label">${t("stat_total_visits")}</span></div>
-        <div class="stat-card"><span class="stat-value">${stats.verified}</span><span class="stat-label">${t("verified")}</span><span class="stat-sublabel">${stats.verifiedPct}</span></div>
-        <div class="stat-card"><span class="stat-value">${stats.rejected}</span><span class="stat-label">${t("status_rejected")}</span><span class="stat-sublabel">${stats.rejectedPct}</span></div>
-        <div class="stat-card"><span class="stat-value">${stats.pending}</span><span class="stat-label">${t("status_pending")}</span><span class="stat-sublabel">${stats.pendingPct}</span></div>
-      </div>
+      ${
+        canFilterByManager
+          ? renderManagerPills()
+          : `<div class="customer-stats-bar activity-manager-bar">
+               <div class="stat-pill stat-pill-static">
+                 <strong>${allCheckins.length}</strong><span>${t("stat_total_visits")}</span>
+               </div>
+             </div>`
+      }
 
       <div class="activity-search-combined" id="activity-search-combined">
         <label class="visually-hidden" for="activity-search">${t("search_customers")}</label>
         <input type="search" id="activity-search" placeholder="${t("search_customers")}" aria-label="${t("search_customers")}" value="${escapeHtml(filters.search)}" />
         <div class="activity-search-actions" aria-label="${t("filters")}">
-          ${canFilterByManager ? iconDropdownHtml("manager", [{ value: "", label: managerLabel }, ...managerOptions().map(([id, name]) => ({ value: String(id), label: name }))], filters.manager, ACTIVITY_FILTER_ICONS.manager, managerLabel) : ""}
           ${iconDropdownHtml("status", STATUS_OPTIONS, filters.status, ACTIVITY_FILTER_ICONS.status, statusLabel)}
           ${iconDropdownHtml("outcome", OUTCOME_OPTIONS, filters.outcome, ACTIVITY_FILTER_ICONS.outcome, outcomeLabel)}
           ${iconDropdownHtml("sort", SORT_OPTIONS, sortMode, ACTIVITY_FILTER_ICONS.sort, sortLabel, sortMode !== "newest")}
@@ -203,6 +257,16 @@ export async function renderActivity(root, navigate) {
       <div class="card-list" id="activity-list"></div>
       <button class="btn btn-block" id="activity-load-more" hidden>${t("load_more")}</button>
     `;
+
+    container.querySelectorAll("#activity-manager-bar .stat-pill").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        // Tapping the pill that's already on clears the filter, so "All"
+        // isn't the only way back to the full list.
+        filters.manager = filters.manager === btn.dataset.manager ? "" : btn.dataset.manager;
+        visibleCount = PAGE_SIZE;
+        renderShell();
+      });
+    });
 
     container.querySelectorAll(".activity-tab").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -319,7 +383,7 @@ export async function renderActivity(root, navigate) {
       .map((c) => {
         const status = checkinStatus(c);
         const meta = statusMeta(status);
-        const outcomeLabel = checkinOutcomes(c).map((o) => t(`outcome_${o}`)).join(", ");
+        const outcomeLabel = outcomeSummary(c);
         const distanceLabel = status === "rejected" ? `${formatDistance(c.distance_meters)} ${t("away")}` : formatDistance(c.distance_meters);
         let managerHeading = "";
         if (sortMode === "manager" && c.user_name !== lastManager) {
@@ -339,10 +403,9 @@ export async function renderActivity(root, navigate) {
                 <span class="list-row-trailing-text ${status === "rejected" ? "activity-distance-danger" : "muted"}">${distanceLabel}</span>
               </span>
             </div>
-            <div class="muted list-row-meta">${escapeHtml(c.user_name)} · ${formatActivityDate(c.timestamp)}</div>
+            <div class="muted list-row-meta">${[escapeHtml(c.user_name), c.customer_region ? escapeHtml(c.customer_region) : "", formatActivityDate(c.timestamp)].filter(Boolean).join(" · ")}</div>
             <div class="list-row-bottom">
-              <span class="badge ${meta.badge}">${meta.label}</span>
-              ${outcomeLabel ? `<span class="muted">${escapeHtml(outcomeLabel)}</span>` : ""}
+              ${outcomeLabel ? `<span class="muted activity-outcome-label">${escapeHtml(outcomeLabel)}</span>` : ""}
               ${c.amount_collected_amd != null ? `<span class="text-amount">${formatAmd(Number(c.amount_collected_amd))}</span>` : ""}
             </div>
           </div>
