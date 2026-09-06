@@ -2,13 +2,14 @@
 // is reused across every map tier and every non-map surface so oil/shop/
 // workshop/other never drift visually between pages.
 
+// Dominant colors sampled directly from the supplied reference artwork.
 const COLORS = {
-  bronze: "#c96d16",
-  silver: "#9f9f9f",
-  gold: "#e1ac10",
-  potential: "#ff1010",
-  competitor: "#2f3033",
-  blue: "#06439a",
+  bronze: "#b7601f",
+  silver: "#9b9b9b",
+  gold: "#d1a327",
+  potential: "#f50605",
+  competitor: "#3b3c3d",
+  blue: "#073b86",
 };
 
 function detectCategoryFromSvg(svg) {
