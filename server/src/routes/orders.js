@@ -316,6 +316,7 @@ ordersRouter.get("/recorded-list", async (req, res) => {
     `SELECT o.id, o.order_code, o.total_amd, o.updated_at AS delivered_at, o.recorded, o.recorded_at,
             c.name AS customer_name, c.erp_customer_id,
             rb.name AS recorded_by_name,
+            pod.id AS pod_record_id, pod.payment_id,
             pod.debt_balance_before_amd, pod.amount_collected_amd, pod.new_balance_after_amd,
             pod.payment_method, pod.delivered_at AS pod_delivered_at
      FROM orders o

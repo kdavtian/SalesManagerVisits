@@ -7,11 +7,12 @@ import path from "node:path";
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
-import { canPlanRoutes, canDeliverOrders, seesUnrecordedBadge } from "../roles.js";
+import { canPlanRoutes, canDeliverOrders, seesUnrecordedBadge, canSubmitPaymentsForOthers } from "../roles.js";
 import { notifyUser } from "../notifications.js";
 import { DRIVER_NOTIFY_ROLES, DELIVERY_OUTCOME_NOTIFY_ROLES } from "../notificationPreferences.js";
 import { buildMatrix, optimizeOrder } from "../osrm.js";
 import { signatureUpload, uploadDirPath } from "../upload.js";
+import { insertPayment } from "./payments.js";
 
 export const deliveryRouter = Router();
 deliveryRouter.use(requireAuth);
@@ -343,6 +344,82 @@ deliveryRouter.post("/orders/:id/fail", async (req, res) => {
       console.error("Post-return notification failed:", err);
     }
   })();
+});
+
+// Accountant's "Create payment record" action on the Recorded screen
+// (v3 spec section 6): turns a POD's informational amount_collected_amd
+// into a real, reviewable row in the Payments approval table -- mirrors
+// checkins.js's "payment collected" outcome, except the money here was
+// collected by the driver at delivery, not by a rep during a visit, so
+// the sales manager credited is the customer's *owner*
+// (customers.assigned_manager_id), not whoever is clicking this button.
+// Gated the same as manual payment creation (canSubmitPaymentsForOthers);
+// that role set is already a superset of who sees this screen at all
+// (seesUnrecordedBadge), so a single check is enough -- nobody who can see
+// this screen but not create payments can reach this endpoint.
+deliveryRouter.post("/pod-records/:id/create-payment", async (req, res) => {
+  if (!canSubmitPaymentsForOthers(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+
+  const { rows } = await pool.query(
+    `SELECT pod.*, c.id AS customer_id, c.name AS customer_name, c.erp_customer_id, c.assigned_manager_id
+     FROM pod_records pod
+     JOIN orders o ON o.id = pod.order_id
+     JOIN customers c ON c.id = o.customer_id
+     WHERE pod.id = $1`,
+    [req.params.id]
+  );
+  const pod = rows[0];
+  if (!pod) return res.status(404).json({ error: "POD record not found" });
+
+  const amount = Number(pod.amount_collected_amd);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return res.status(409).json({ error: "Nothing was collected on this delivery -- there is nothing to create a payment record for" });
+  }
+  if (pod.payment_id) {
+    return res.status(409).json({ error: "Payment already created for this delivery" });
+  }
+  if (!pod.assigned_manager_id) {
+    return res.status(409).json({ error: "This customer has no assigned sales manager to credit the payment to" });
+  }
+
+  const { rows: managerRows } = await pool.query("SELECT id, name, position, role FROM users WHERE id = $1", [pod.assigned_manager_id]);
+  const manager = managerRows[0];
+  if (!manager) return res.status(409).json({ error: "Assigned sales manager not found" });
+
+  const customer = { id: pod.customer_id, name: pod.customer_name, erp_customer_id: pod.erp_customer_id };
+  const note = pod.payment_method ? `Delivery collection (${pod.payment_method})` : "Delivery collection";
+
+  const client = await pool.connect();
+  let paymentId;
+  try {
+    await client.query("BEGIN");
+    // Passing this transaction's own client into insertPayment (db: client)
+    // is what makes the insert and the pod_records.payment_id UPDATE below
+    // commit or roll back together -- a failure between the two can't leave
+    // an orphaned, un-linked payment that would let someone create a SECOND
+    // payment for the same delivery.
+    paymentId = await insertPayment({
+      customer,
+      amount,
+      paymentDate: pod.delivered_at,
+      salesManagerId: pod.assigned_manager_id,
+      manager,
+      note,
+      createdBy: req.user.id,
+      clientRef: `pod-${pod.id}`,
+      db: client,
+    });
+    if (!paymentId) throw new Error("Payment creation returned no id");
+    await client.query("UPDATE pod_records SET payment_id = $1 WHERE id = $2", [paymentId, pod.id]);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  res.status(201).json({ payment_id: paymentId });
 });
 
 // Serves a POD signature image -- gated the same way checkin photos are:

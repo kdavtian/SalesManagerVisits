@@ -202,6 +202,7 @@ export const api = {
   getRecordedList: (recorded) => request(`/orders/recorded-list?recorded=${recorded ? "true" : "false"}`),
   getUnrecordedCount: () => request("/orders/unrecorded-count"),
   setOrderRecorded: (id, recorded) => json(`/orders/${id}/recorded`, "PATCH", { recorded }),
+  createPaymentFromPod: (podRecordId) => json(`/delivery/pod-records/${podRecordId}/create-payment`, "POST"),
 
   createPayment: (data) => json("/payments", "POST", data),
   listPayments: (params = {}) => {

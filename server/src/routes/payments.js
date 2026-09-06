@@ -78,19 +78,30 @@ async function findLikelyDuplicate({ customerId, amount, salesManagerId, payment
 // client_ref is what makes this idempotent: checkins.js passes a
 // deterministic `checkin-<id>` ref, so a retried/duplicate checkin submit
 // can never create a second payment for the same collection.
-export async function insertPayment({ customer, amount, paymentDate, salesManagerId, manager, note, createdBy, clientRef, orderId }) {
+// `db` defaults to the shared pool but accepts a checked-out transaction
+// client instead -- callers that need this insert plus a follow-up write
+// (e.g. delivery.js's create-payment-from-pod, which also updates
+// pod_records.payment_id) can pass their own BEGIN/COMMIT client so the two
+// writes commit or roll back together.
+export async function insertPayment({ customer, amount, paymentDate, salesManagerId, manager, note, createdBy, clientRef, db = pool }) {
   const salesChannel = manager.role === "sales_manager" ? manager.position || null : null;
 
-  const { rows } = await pool.query(
+  // NOTE: payments has no order_id column -- migrations/050 added one, then
+  // 051 (v3 rebuild) explicitly dropped it (delivery-time collection is
+  // informational-only on pod_records, never linked into this approval
+  // table via a payments.order_id column -- see 051's section 9 and
+  // migrations/056, which links the other direction instead: pod_records.
+  // payment_id -> payments.id). This INSERT used to still reference the
+  // dropped column and 500'd on every call; fixed here.
+  const { rows } = await db.query(
     `INSERT INTO payments
-       (customer_id, order_id, customer_name_snapshot, erp_customer_id_snapshot, amount_amd, payment_date,
+       (customer_id, customer_name_snapshot, erp_customer_id_snapshot, amount_amd, payment_date,
         sales_manager_id, sales_manager_name_snapshot, sales_channel, note, status, created_by, client_ref)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', $11, $12)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, $11)
      ON CONFLICT (created_by, client_ref) WHERE client_ref IS NOT NULL DO NOTHING
      RETURNING id`,
     [
       customer.id,
-      orderId || null,
       customer.name,
       customer.erp_customer_id || null,
       amount,
@@ -109,11 +120,11 @@ export async function insertPayment({ customer, amount, paymentDate, salesManage
     // ON CONFLICT DO NOTHING means this exact client_ref already exists
     // (an idempotent retry) -- return the existing payment's id, no new
     // history row or notification.
-    const existing = await pool.query("SELECT id FROM payments WHERE created_by = $1 AND client_ref = $2", [createdBy, clientRef]);
+    const existing = await db.query("SELECT id FROM payments WHERE created_by = $1 AND client_ref = $2", [createdBy, clientRef]);
     return existing.rows[0]?.id ?? null;
   }
 
-  await pool.query(
+  await db.query(
     `INSERT INTO payment_status_history (payment_id, old_status, new_status, reason, changed_by)
      VALUES ($1, NULL, 'pending', 'Submitted', $2)`,
     [paymentId, createdBy]

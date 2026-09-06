@@ -64,6 +64,13 @@ export async function renderRecorded(root, navigate) {
         }
         ${outstanding != null ? `<p class="muted">${t("delivery_new_balance")}: ${formatAmd(outstanding)}</p>` : ""}
         <button type="button" class="link-btn" data-view-signature="${r.id}">${t("recorded_view_signature")}</button>
+        ${
+          r.pod_record_id && Number(r.amount_collected_amd) > 0
+            ? r.payment_id
+              ? `<button type="button" class="link-btn" data-view-payment="${r.payment_id}">${t("recorded_view_payment")}</button>`
+              : `<button type="button" class="link-btn" data-create-payment="${r.pod_record_id}">${t("recorded_create_payment")}</button>`
+            : ""
+        }
         <div class="sheet-actions" style="margin-top:8px;">
           ${
             r.recorded
@@ -113,6 +120,23 @@ export async function renderRecorded(root, navigate) {
           try {
             await api.setOrderRecorded(btn.dataset.unrecord, false);
             window.dispatchEvent(new Event("recorded-changed"));
+            load();
+          } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+            btn.disabled = false;
+          }
+        });
+      });
+      listEl.querySelectorAll("[data-view-payment]").forEach((btn) => {
+        btn.addEventListener("click", () => navigate(`#/payments/${btn.dataset.viewPayment}`));
+      });
+      listEl.querySelectorAll("[data-create-payment]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          btn.disabled = true;
+          errorEl.hidden = true;
+          try {
+            await api.createPaymentFromPod(btn.dataset.createPayment);
             load();
           } catch (err) {
             errorEl.textContent = err.message;
