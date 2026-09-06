@@ -149,23 +149,15 @@ async function openCustomerPickSheet({ userId, userName, days, existingCustomerI
   const errorEl = overlay.querySelector("#route-plan-picker-error");
   const saveBtn = overlay.querySelector("#save-route-plan-picker");
 
+  let selectedIds = new Set(existingCustomerIds);
+
   try {
     const customers = await api.listCustomers({ assigned_manager_id: userId });
-    const selectedIds = new Set(existingCustomerIds);
     if (!customers.length) {
       listEl.innerHTML = `<p class="empty-state">${t("no_assigned_customers")}</p>`;
       saveBtn.disabled = true;
     } else {
-      listEl.innerHTML = customers
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map(
-          (c) => `
-        <label class="plan-day-row">
-          <input type="checkbox" value="${c.id}" ${selectedIds.has(c.id) ? "checked" : ""} />
-          <span>${escapeHtml(c.name)}</span>
-        </label>`
-        )
-        .join("");
+      selectedIds = paintCustomerTree(listEl, customers, selectedIds);
     }
   } catch (err) {
     errorEl.textContent = err.message;
@@ -174,7 +166,7 @@ async function openCustomerPickSheet({ userId, userName, days, existingCustomerI
 
   saveBtn.addEventListener("click", async () => {
     saveBtn.disabled = true;
-    const ids = [...listEl.querySelectorAll("input:checked")].map((el) => Number(el.value));
+    const ids = [...selectedIds];
     try {
       for (const day of days) {
         await api.saveVisitPlanRule(day, [], userId, ids);
@@ -187,6 +179,226 @@ async function openCustomerPickSheet({ userId, userName, days, existingCustomerI
       saveBtn.disabled = false;
     }
   });
+}
+
+const NO_GROUP_KEY = "__none__";
+
+// Groups a flat customer list into Region -> Subregion -> Customer, skipping
+// the subregion level entirely for a region where every customer has no
+// subregion (true for every region except Yerevan, see YEREVAN_DISTRICTS in
+// util.js) since a single "no subregion" bucket there would just be an extra
+// tap for nothing.
+function buildCustomerTree(customers) {
+  const regionMap = new Map();
+  const regionOrder = [];
+  for (const c of customers) {
+    const rKey = c.region || NO_GROUP_KEY;
+    if (!regionMap.has(rKey)) {
+      regionMap.set(rKey, { name: c.region || t("no_region"), customers: [] });
+      regionOrder.push(rKey);
+    }
+    regionMap.get(rKey).customers.push(c);
+  }
+  regionOrder.sort((a, b) => {
+    if (a === NO_GROUP_KEY) return 1;
+    if (b === NO_GROUP_KEY) return -1;
+    return regionMap.get(a).name.localeCompare(regionMap.get(b).name);
+  });
+
+  return regionOrder.map((rKey, i) => {
+    const region = regionMap.get(rKey);
+    const key = `r${i}`;
+    const subMap = new Map();
+    const subOrder = [];
+    for (const c of region.customers) {
+      const sKey = c.subregion || NO_GROUP_KEY;
+      if (!subMap.has(sKey)) {
+        subMap.set(sKey, { name: c.subregion || t("no_subregion"), customers: [] });
+        subOrder.push(sKey);
+      }
+      subMap.get(sKey).customers.push(c);
+    }
+    const hasRealSubregions = !(subOrder.length === 1 && subOrder[0] === NO_GROUP_KEY);
+    subOrder.sort((a, b) => {
+      if (a === NO_GROUP_KEY) return 1;
+      if (b === NO_GROUP_KEY) return -1;
+      return subMap.get(a).name.localeCompare(subMap.get(b).name);
+    });
+
+    return {
+      key,
+      name: region.name,
+      allIds: region.customers.map((c) => c.id),
+      customers: hasRealSubregions ? null : [...region.customers].sort((a, b) => a.name.localeCompare(b.name)),
+      subregions: hasRealSubregions
+        ? subOrder.map((sKey, j) => {
+            const sub = subMap.get(sKey);
+            return {
+              key: `${key}-s${j}`,
+              name: sub.name,
+              ids: sub.customers.map((c) => c.id),
+              customers: [...sub.customers].sort((a, b) => a.name.localeCompare(b.name)),
+            };
+          })
+        : null,
+    };
+  });
+}
+
+function customerRowsHtml(customers) {
+  return customers
+    .map(
+      (c) => `
+    <label class="route-plan-tree-row route-plan-tree-row-leaf">
+      <input type="checkbox" class="route-plan-tree-check" data-scope="customer" data-customer-id="${c.id}" />
+      <span class="route-plan-tree-name">${escapeHtml(c.name)}</span>
+    </label>`
+    )
+    .join("");
+}
+
+function groupNodeHtml({ dataAttrs, toggleKey, name, total, childrenHtml, nested }) {
+  return `
+    <div class="route-plan-tree-node ${nested ? "route-plan-tree-node-nested" : ""}">
+      <div class="route-plan-tree-row" data-toggle="${toggleKey}" role="button" tabindex="0" aria-expanded="false">
+        <input type="checkbox" class="route-plan-tree-check" ${dataAttrs} />
+        <span class="route-plan-tree-name">${escapeHtml(name)}</span>
+        <span class="route-plan-tree-count">${total} ${t("perf_dq_customers_unit")}</span>
+        <span class="route-plan-tree-chevron" aria-hidden="true">${icons.chevronDown}</span>
+      </div>
+      <div class="route-plan-tree-children" data-children-for="${toggleKey}">
+        <div class="route-plan-tree-children-inner">${childrenHtml}</div>
+      </div>
+    </div>`;
+}
+
+function regionTreeHtml(regions) {
+  return regions
+    .map((region) => {
+      const childrenHtml = region.subregions
+        ? region.subregions
+            .map((sub) =>
+              groupNodeHtml({
+                dataAttrs: `data-scope="subregion" data-region="${region.key}" data-subregion="${sub.key}"`,
+                toggleKey: `subregion:${sub.key}`,
+                name: sub.name,
+                total: sub.ids.length,
+                childrenHtml: customerRowsHtml(sub.customers),
+                nested: true,
+              })
+            )
+            .join("")
+        : customerRowsHtml(region.customers);
+      return groupNodeHtml({
+        dataAttrs: `data-scope="region" data-region="${region.key}"`,
+        toggleKey: `region:${region.key}`,
+        name: region.name,
+        total: region.allIds.length,
+        childrenHtml,
+      });
+    })
+    .join("");
+}
+
+// Renders the Region -> Subregion -> Customer accordion into listEl and
+// wires up all its interactions. The Set of selected customer ids is the
+// single source of truth -- region/subregion checkbox checked/indeterminate
+// state is always *derived* from it (never hand-tracked), so every
+// interaction (a customer checkbox, or a region/subregion checkbox that
+// bulk (de)selects its descendants) ends by recomputing every ancestor's
+// state from scratch. Returns the live selectedIds Set so the caller can
+// read it back on Save.
+function paintCustomerTree(listEl, customers, initialSelectedIds) {
+  const regions = buildCustomerTree(customers);
+  const selectedIds = new Set(initialSelectedIds);
+
+  listEl.innerHTML = `
+    <p class="route-plan-tree-total" id="route-plan-selected-total"></p>
+    <div class="route-plan-tree">${regionTreeHtml(regions)}</div>
+  `;
+  const totalEl = listEl.querySelector("#route-plan-selected-total");
+
+  function recompute() {
+    listEl.querySelectorAll('input[data-scope="customer"]').forEach((cb) => {
+      cb.checked = selectedIds.has(Number(cb.dataset.customerId));
+    });
+    for (const region of regions) {
+      applyGroupState(listEl.querySelector(`input[data-scope="region"][data-region="${region.key}"]`), region.allIds, selectedIds);
+      for (const sub of region.subregions || []) {
+        applyGroupState(
+          listEl.querySelector(`input[data-scope="subregion"][data-region="${region.key}"][data-subregion="${sub.key}"]`),
+          sub.ids,
+          selectedIds
+        );
+      }
+    }
+    totalEl.textContent = t("customers_selected_count").replace("{n}", selectedIds.size);
+  }
+
+  function toggleExpand(row) {
+    const key = row.dataset.toggle;
+    const childrenEl = listEl.querySelector(`.route-plan-tree-children[data-children-for="${key}"]`);
+    const expanded = row.getAttribute("aria-expanded") === "true";
+    row.setAttribute("aria-expanded", String(!expanded));
+    childrenEl?.classList.toggle("expanded", !expanded);
+  }
+
+  listEl.querySelectorAll(".route-plan-tree-row[data-toggle]").forEach((row) => {
+    row.addEventListener("click", (e) => {
+      if (e.target.closest("input")) return;
+      toggleExpand(row);
+    });
+    row.addEventListener("keydown", (e) => {
+      if (e.target.closest("input")) return;
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggleExpand(row);
+      }
+    });
+  });
+
+  listEl.querySelectorAll('input[data-scope="customer"]').forEach((cb) => {
+    cb.addEventListener("change", () => {
+      const id = Number(cb.dataset.customerId);
+      if (cb.checked) selectedIds.add(id);
+      else selectedIds.delete(id);
+      recompute();
+    });
+  });
+
+  listEl.querySelectorAll('input[data-scope="region"]').forEach((cb) => {
+    cb.addEventListener("change", () => {
+      const region = regions.find((r) => r.key === cb.dataset.region);
+      setSelection(region.allIds, cb.checked, selectedIds);
+      recompute();
+    });
+  });
+
+  listEl.querySelectorAll('input[data-scope="subregion"]').forEach((cb) => {
+    cb.addEventListener("change", () => {
+      const region = regions.find((r) => r.key === cb.dataset.region);
+      const sub = region.subregions.find((s) => s.key === cb.dataset.subregion);
+      setSelection(sub.ids, cb.checked, selectedIds);
+      recompute();
+    });
+  });
+
+  recompute();
+  return selectedIds;
+}
+
+function setSelection(ids, checked, selectedIds) {
+  for (const id of ids) {
+    if (checked) selectedIds.add(id);
+    else selectedIds.delete(id);
+  }
+}
+
+function applyGroupState(checkbox, ids, selectedIds) {
+  if (!checkbox) return;
+  const checkedCount = ids.filter((id) => selectedIds.has(id)).length;
+  checkbox.checked = ids.length > 0 && checkedCount === ids.length;
+  checkbox.indeterminate = checkedCount > 0 && checkedCount < ids.length;
 }
 
 async function openEditSheet(userId, userName, dayOfWeek, onSaved) {

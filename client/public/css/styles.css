@@ -2684,6 +2684,105 @@ input[type="search"]:focus {
   accent-color: var(--accent);
 }
 
+/* Region -> Subregion -> Customer accordion inside the Route Plans
+   customer-pick sheet. Each .route-plan-tree-row is both a checkbox host
+   and (outside the checkbox) an expand/collapse trigger for its
+   .route-plan-tree-children sibling -- routePlans.js guards clicks that
+   land on the checkbox so the two don't fight. Same grid-template-rows
+   0fr->1fr reveal trick as .by-manager-collapse, reused instead of
+   reinventing an animation. */
+.route-plan-tree-total {
+  margin: 0 4px 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.route-plan-tree-node + .route-plan-tree-node {
+  margin-top: 2px;
+}
+
+.route-plan-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 8px;
+  border-radius: 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.route-plan-tree-row-leaf {
+  border-bottom: 1px solid var(--border);
+}
+
+.route-plan-tree-row:has(> input:checked) {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.route-plan-tree-check {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+
+.route-plan-tree-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-plan-tree-count {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.route-plan-tree-chevron {
+  display: flex;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.route-plan-tree-chevron svg {
+  transition: transform 0.2s ease;
+}
+
+.route-plan-tree-row[aria-expanded="true"] .route-plan-tree-chevron svg {
+  transform: rotate(180deg);
+}
+
+.route-plan-tree-children {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s ease;
+}
+
+.route-plan-tree-children.expanded {
+  grid-template-rows: 1fr;
+}
+
+.route-plan-tree-children-inner {
+  overflow: hidden;
+  min-height: 0;
+  padding-left: 16px;
+}
+
+.route-plan-tree-node-nested .route-plan-tree-row {
+  padding-left: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-plan-tree-children,
+  .route-plan-tree-chevron svg {
+    transition: none;
+  }
+}
+
 .plan-mode-tabs {
   display: flex;
   gap: 6px;
