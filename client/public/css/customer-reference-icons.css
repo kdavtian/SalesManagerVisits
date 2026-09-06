@@ -1,1 +1,78 @@
-PLACEHOLDER
+/* Approved customer artwork sizing/placement. SVG geometry is defined once in
+   customerReferenceIcons.js; CSS only controls presentation and Leaflet anchoring. */
+.customer-reference-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.customer-blue-asset {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  vertical-align: middle;
+}
+.category-icon .customer-blue-asset { width: 26px; height: 26px; }
+.list-row-icon .customer-blue-asset,
+.customer-card .customer-blue-asset { width: 28px; height: 28px; }
+
+/* The approved artwork owns the customer marker shape; remove the previous
+   generic pin shell while preserving status badges and Leaflet hit target. */
+#leaflet-map .pin.customer-reference-marker {
+  width: 22px !important;
+  height: 22px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+  isolation: isolate;
+}
+#leaflet-map .pin.customer-reference-marker::before { display: none !important; }
+
+#leaflet-map .customer-map-asset {
+  position: absolute;
+  width: 38px;
+  height: 38px;
+  left: -8px;
+  z-index: 2;
+  transform-origin: 50% 50%;
+  transition: transform .14s ease, filter .14s ease;
+}
+
+/* Gold, silver and bronze deliberately share one exact footprint and anchor. */
+#leaflet-map .pin-tier-bronze .customer-map-asset,
+#leaflet-map .pin-tier-silver .customer-map-asset,
+#leaflet-map .pin-tier-gold .customer-map-asset { top: -16px; }
+
+/* Target/circle markers are centered on the actual coordinate. */
+#leaflet-map .pin-tier-potential .customer-map-asset,
+#leaflet-map .pin-tier-competitor .customer-map-asset { top: 3px; }
+
+#leaflet-map .pin.customer-reference-marker .pin-check {
+  top: -13px;
+  right: -13px;
+  z-index: 7;
+}
+#leaflet-map .pin.customer-reference-marker.pin-status-overdue::after {
+  top: -13px;
+  right: -13px;
+  z-index: 7;
+}
+
+#leaflet-map .leaflet-marker-icon.kad-marker-selected .pin.customer-reference-marker {
+  transform: none !important;
+  box-shadow: none !important;
+}
+#leaflet-map .leaflet-marker-icon.kad-marker-selected .customer-map-asset {
+  transform: scale(1.13);
+  filter: drop-shadow(0 0 3px rgba(22,119,242,.72)) drop-shadow(0 2px 3px rgba(17,19,24,.22));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #leaflet-map .customer-map-asset { transition: none; }
+}
