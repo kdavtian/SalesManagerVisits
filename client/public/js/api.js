@@ -262,6 +262,8 @@ export const api = {
   },
 
   getPerfChannels: () => request("/team-performance/channels"),
+  updatePerfChannelManager: (channelId, managerUserId) =>
+    json(`/team-performance/channels/${channelId}`, "PATCH", { manager_user_id: managerUserId }),
   getPerfPlanForMonth: (month) => request(`/team-performance/plans?month=${month}`),
   getPerfPlan: (id) => request(`/team-performance/plans/${id}`),
   getPerfPlanHistory: (id) => request(`/team-performance/plans/${id}/history`),

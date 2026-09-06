@@ -6,12 +6,16 @@ export const routeDistributionRouter = Router();
 
 routeDistributionRouter.use(requireAuth);
 
-// Admin-only management list, newest first.
+// Admin-only management list, newest first. Manager comes from
+// sales_channels.manager_user_id (via the mapped sales_channel), not from
+// this table's own assigned_manager_id column -- that column is now dead,
+// see the /lookup comment below.
 routeDistributionRouter.get("/", requireAdmin, async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT rd.*, u.name AS assigned_manager_name
+    `SELECT rd.*, sc.manager_user_id AS channel_manager_id, u.name AS channel_manager_name
        FROM route_distribution rd
-       LEFT JOIN users u ON u.id = rd.assigned_manager_id
+       LEFT JOIN sales_channels sc ON sc.code = rd.sales_channel
+       LEFT JOIN users u ON u.id = sc.manager_user_id
       ORDER BY rd.region, rd.subregion NULLS FIRST`
   );
   res.json(rows);
@@ -20,6 +24,13 @@ routeDistributionRouter.get("/", requireAdmin, async (req, res) => {
 // Any authed user (the new-customer form calls this to suggest a channel and
 // manager for a detected region/subregion) -- read-only lookup, no admin
 // gate needed since it exposes only the resolved mapping, not the full list.
+//
+// The manager suggestion comes from sales_channels.manager_user_id (via the
+// resolved sales_channel), not from route_distribution.assigned_manager_id.
+// That column is now dead -- sales_channels is the single canonical
+// channel->manager mapping (see migration 055); this consolidates Routes
+// Distribution's suggestion onto it instead of maintaining a second,
+// independently-admin-set manager association per region.
 routeDistributionRouter.get("/lookup", async (req, res) => {
   const { region, subregion } = req.query;
   if (!region) return res.json(null);
@@ -31,14 +42,16 @@ routeDistributionRouter.get("/lookup", async (req, res) => {
   // picked first when both exist.
   const { rows } = await pool.query(
     `SELECT * FROM (
-       SELECT rd.*, u.name AS assigned_manager_name, 0 AS priority
+       SELECT rd.*, sc.manager_user_id AS assigned_manager_id, u.name AS assigned_manager_name, 0 AS priority
          FROM route_distribution rd
-         LEFT JOIN users u ON u.id = rd.assigned_manager_id
+         LEFT JOIN sales_channels sc ON sc.code = rd.sales_channel
+         LEFT JOIN users u ON u.id = sc.manager_user_id
         WHERE rd.region = $1 AND rd.subregion = $2
         UNION ALL
-       SELECT rd.*, u.name AS assigned_manager_name, 1 AS priority
+       SELECT rd.*, sc.manager_user_id AS assigned_manager_id, u.name AS assigned_manager_name, 1 AS priority
          FROM route_distribution rd
-         LEFT JOIN users u ON u.id = rd.assigned_manager_id
+         LEFT JOIN sales_channels sc ON sc.code = rd.sales_channel
+         LEFT JOIN users u ON u.id = sc.manager_user_id
         WHERE rd.region = $1 AND rd.subregion IS NULL
      ) matches
      ORDER BY priority
@@ -49,15 +62,15 @@ routeDistributionRouter.get("/lookup", async (req, res) => {
 });
 
 routeDistributionRouter.post("/", requireAdmin, async (req, res) => {
-  const { region, subregion, sales_channel, assigned_manager_id } = req.body ?? {};
+  const { region, subregion, sales_channel } = req.body ?? {};
   if (!region || !sales_channel) {
     return res.status(400).json({ error: "region and sales_channel are required" });
   }
   try {
     const { rows } = await pool.query(
-      `INSERT INTO route_distribution (region, subregion, sales_channel, assigned_manager_id)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [region, subregion || null, sales_channel, assigned_manager_id || null]
+      `INSERT INTO route_distribution (region, subregion, sales_channel)
+       VALUES ($1, $2, $3) RETURNING *`,
+      [region, subregion || null, sales_channel]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -69,7 +82,10 @@ routeDistributionRouter.post("/", requireAdmin, async (req, res) => {
 });
 
 routeDistributionRouter.patch("/:id", requireAdmin, async (req, res) => {
-  const fields = ["region", "subregion", "sales_channel", "assigned_manager_id"];
+  // assigned_manager_id is intentionally excluded: the manager is now always
+  // derived from sales_channels.manager_user_id via sales_channel, so this
+  // table no longer accepts its own manager override.
+  const fields = ["region", "subregion", "sales_channel"];
   const updates = Object.entries(req.body ?? {}).filter(([key]) => fields.includes(key));
   if (!updates.length) return res.status(400).json({ error: "No editable fields provided" });
 

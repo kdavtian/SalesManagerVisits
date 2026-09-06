@@ -963,7 +963,11 @@ export async function renderCompanyProfileSection(container) {
 // lock, so this admin screen only needs to manage the mapping itself.
 export async function renderRouteDistributionSection(container) {
   container.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
-  const [mappings, managers] = await Promise.all([api.listRouteDistribution(), api.listPlannableUsers()]);
+  const [mappings, channels] = await Promise.all([api.listRouteDistribution(), api.getPerfChannels()]);
+  // Manager comes from sales_channels.manager_user_id via the mapped
+  // channel code -- see "Sales Channel Owners" section below, the one place
+  // that association is actually set.
+  const channelManagerByCode = new Map(channels.filter((c) => c.manager_user_id).map((c) => [c.code, c.manager_name]));
 
   function subregionFieldHtml(region) {
     if (region === "Yerevan") {
@@ -991,12 +995,7 @@ export async function renderRouteDistributionSection(container) {
             ${SALES_CHANNELS.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")}
           </select>
         </label>
-        <label>${t("assigned_manager")}
-          <select name="assigned_manager_id" id="rd-manager">
-            <option value="">${t("unassigned")}</option>
-            ${managers.map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join("")}
-          </select>
-        </label>
+        <p class="muted radius-help">${t("route_distribution_manager_hint")}</p>
         <p class="form-error" id="rd-error" hidden></p>
         <button type="submit" class="btn btn-primary">${t("route_distribution_add")}</button>
       </form>
@@ -1023,7 +1022,7 @@ export async function renderRouteDistributionSection(container) {
         <div class="user-row-top">
           <div>
             <strong>${escapeHtml(m.region)}${m.subregion ? ` · ${escapeHtml(m.subregion)}` : ""}</strong>
-            <span class="muted">${escapeHtml(m.sales_channel)}${m.assigned_manager_name ? ` · ${escapeHtml(m.assigned_manager_name)}` : ""}</span>
+            <span class="muted">${escapeHtml(m.sales_channel)}${m.channel_manager_name ? ` · ${t("route_distribution_manager_from_channel")}: ${escapeHtml(m.channel_manager_name)}` : ""}</span>
           </div>
           <button type="button" class="btn-link btn-link-danger" data-delete-id="${m.id}">${t("delete")}</button>
         </div>
@@ -1053,9 +1052,8 @@ export async function renderRouteDistributionSection(container) {
         region: data.get("region"),
         subregion: data.get("subregion") || null,
         sales_channel: data.get("sales_channel"),
-        assigned_manager_id: data.get("assigned_manager_id") ? Number(data.get("assigned_manager_id")) : null,
       });
-      created.assigned_manager_name = managers.find((u) => u.id === created.assigned_manager_id)?.name || null;
+      created.channel_manager_name = channelManagerByCode.get(created.sales_channel) || null;
       mappings.push(created);
       renderList();
       form.reset();
@@ -1066,6 +1064,65 @@ export async function renderRouteDistributionSection(container) {
     } finally {
       submitBtn.disabled = false;
     }
+  });
+}
+
+// The single canonical place to set a channel's manager (sales_channels.
+// manager_user_id). Routes Distribution above, and the sales-manager
+// customer-creation autofill on the server, both now read this instead of
+// keeping their own divergent manager association.
+export async function renderSalesChannelOwnersSection(container) {
+  container.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+  // The Routes Distribution manager picker uses listPlannableUsers (sales
+  // managers only), but a channel here can just as well be owned by a
+  // Sales Director (CVO/PCO/OEM) or, in principle, an Accountant (KF/CAS)
+  // -- the full admin user list, filtered to the roles that actually own
+  // channels, is needed so those managers are selectable too.
+  const OWNER_ROLES = new Set(["sales_manager", "sales_director", "accountant"]);
+  const [channels, allUsers] = await Promise.all([api.getPerfChannels(), api.listUsers()]);
+  const managers = allUsers.filter((u) => OWNER_ROLES.has(u.role));
+
+  container.innerHTML = `
+    <p class="muted radius-help">${t("sales_channel_owners_hint")}</p>
+    <div id="sco-list" class="card-list"></div>
+  `;
+  const listEl = container.querySelector("#sco-list");
+  listEl.innerHTML = channels
+    .map(
+      (c) => `
+    <div class="card user-row">
+      <div class="user-row-top">
+        <div>
+          <strong>${escapeHtml(c.name)}</strong>
+          <span class="muted">${escapeHtml(c.code)}</span>
+        </div>
+      </div>
+      <label class="sco-manager-label">${t("assigned_manager")}
+        <select data-channel-id="${c.id}">
+          <option value="">${t("unassigned")}</option>
+          ${managers.map((u) => `<option value="${u.id}" ${Number(u.id) === Number(c.manager_user_id) ? "selected" : ""}>${escapeHtml(u.name)}</option>`).join("")}
+        </select>
+      </label>
+      <p class="form-error" id="sco-error-${c.id}" hidden></p>
+    </div>`
+    )
+    .join("");
+
+  listEl.querySelectorAll("select[data-channel-id]").forEach((select) => {
+    select.addEventListener("change", async () => {
+      const channelId = select.dataset.channelId;
+      const errorEl = container.querySelector(`#sco-error-${channelId}`);
+      errorEl.hidden = true;
+      select.disabled = true;
+      try {
+        await api.updatePerfChannelManager(channelId, select.value ? Number(select.value) : null);
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+      } finally {
+        select.disabled = false;
+      }
+    });
   });
 }
 

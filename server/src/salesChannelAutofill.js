@@ -16,9 +16,21 @@ function channelFromPosition(position = "") {
 export async function autoAssignSalesChannel(req, res, next) {
   if (req.method !== "POST" || req.user?.role !== "sales_manager") return next();
 
+  // sales_channels.manager_user_id is the canonical channel<->manager
+  // association (see migration 055) -- consult it first so a manager who is
+  // properly wired up there never falls through to the position-text
+  // heuristics below. Those heuristics remain as fallbacks for anyone not
+  // yet set up in sales_channels.
+  let resolved = "";
+  const { rows: ownedChannelRows } = await pool.query(
+    "SELECT code FROM sales_channels WHERE manager_user_id = $1 AND active = true LIMIT 1",
+    [req.user.id]
+  );
+  if (ownedChannelRows[0]) resolved = ownedChannelRows[0].code;
+
   // requireAuth already loaded the user's position. For correctly configured
   // manager accounts this resolves without another DB round trip.
-  let resolved = channelFromPosition(req.user.position);
+  if (!resolved) resolved = channelFromPosition(req.user.position);
 
   // Legacy manager records may not yet have a structured/recognizable
   // position. In that case infer from the manager's existing customer book.

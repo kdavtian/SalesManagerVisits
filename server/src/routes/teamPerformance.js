@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { isPerfCeo, canEditChannelPlan, canReviewPlan, canReviseApprovedPlan, seesAllPerformance, canCloseMonth } from "../roles.js";
 import { notifyUser } from "../notifications.js";
 import { PERF_APPROVER_ROLES } from "../notificationPreferences.js";
@@ -18,7 +18,11 @@ function isValidMonth(value) {
 
 async function loadChannels() {
   const { rows } = await pool.query(
-    "SELECT id, code, name, active, manager_user_id, owner_role, parent_channel_id, display_order FROM sales_channels ORDER BY display_order, code"
+    `SELECT c.id, c.code, c.name, c.active, c.manager_user_id, u.name AS manager_name,
+            c.owner_role, c.parent_channel_id, c.display_order
+       FROM sales_channels c
+       LEFT JOIN users u ON u.id = c.manager_user_id
+      ORDER BY c.display_order, c.code`
   );
   return rows;
 }
@@ -179,6 +183,25 @@ async function writeAudit(client, planId, actorId, action, before, after, reason
 
 teamPerformanceRouter.get("/channels", async (req, res) => {
   res.json(await loadChannels());
+});
+
+// Admin-only: set who owns a sales channel. This is the single canonical
+// place a channel gets a manager -- Routes Distribution's own
+// assigned_manager_id column and the sales-manager position-text autofill
+// are both being consolidated to read this instead of maintaining their own
+// divergent channel-to-manager association.
+teamPerformanceRouter.patch("/channels/:id", requireAdmin, async (req, res) => {
+  const { manager_user_id } = req.body ?? {};
+  if (manager_user_id !== null && manager_user_id !== undefined && !Number.isInteger(manager_user_id)) {
+    return res.status(400).json({ error: "manager_user_id must be an integer or null" });
+  }
+  const { rows } = await pool.query(
+    `UPDATE sales_channels SET manager_user_id = $1 WHERE id = $2
+     RETURNING id, code, name, active, manager_user_id, owner_role, parent_channel_id, display_order`,
+    [manager_user_id ?? null, req.params.id]
+  );
+  if (!rows[0]) return res.status(404).json({ error: "Not found" });
+  res.json(rows[0]);
 });
 
 // A Sales Manager's channel is their `position` field (same convention

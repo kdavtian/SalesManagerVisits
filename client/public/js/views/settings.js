@@ -2,7 +2,7 @@ import { api } from "../api.js";
 import { t, getLang, setLang } from "../i18n.js";
 import { getTheme, setTheme } from "../theme.js";
 import { state, isAdmin, canPlanForOthers, seesFinancialExports, canManageProducts } from "../state.js";
-import { renderTeamSection, renderPlanApprovalsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection, renderRouteDistributionSection } from "./admin.js";
+import { renderTeamSection, renderPlanApprovalsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection, renderRouteDistributionSection, renderSalesChannelOwnersSection } from "./admin.js";
 import { escapeHtml, compressImage, activateDialog, attachSwipeToDismiss, formatPhoneDisplay, normalizePhone } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
@@ -219,6 +219,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
             ? `<div class="card settings-list">
           ${settingsRow({ icon: ICON.chart, label: t("reports_management"), id: "row-reports-management" })}
           ${settingsRow({ icon: ICON.database, label: t("route_distribution_title"), id: "row-route-distribution" })}
+          ${settingsRow({ icon: ICON.database, label: t("sales_channel_owners_title"), id: "row-sales-channel-owners" })}
         </div>`
             : ""
         }
@@ -481,6 +482,9 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     });
     root.querySelector("#row-route-distribution").addEventListener("click", () => {
       openAdminSectionOverlay(t("route_distribution_title"), renderRouteDistributionSection);
+    });
+    root.querySelector("#row-sales-channel-owners").addEventListener("click", () => {
+      openAdminSectionOverlay(t("sales_channel_owners_title"), renderSalesChannelOwnersSection);
     });
   }
 
