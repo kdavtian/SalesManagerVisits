@@ -1218,7 +1218,8 @@ form [aria-invalid="true"] {
   display: flex;
 }
 
-.category-btn .category-icon svg {
+.category-btn .category-icon svg,
+.category-btn .category-icon .category-img {
   width: 18px;
   height: 18px;
 }
@@ -2114,37 +2115,6 @@ input[type="search"]:focus {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
 }
 
-/* Pin color = customer tier (matches the tier selector's own colors), so
-   the same rank a rep sees on the customer's profile is what they see
-   scattered across the map. */
-.pin-tier-potential {
-  background: #8e8e93;
-}
-
-.pin-tier-bronze {
-  background: var(--tier-bronze);
-}
-
-.pin-tier-silver {
-  background: var(--tier-silver);
-}
-
-.pin-tier-gold {
-  background: var(--tier-gold);
-}
-
-.pin-tier-competitor {
-  background: var(--danger);
-}
-
-/* bronze/silver/gold render as a plain coin (circle) instead of the
-   teardrop pin shape -- reads at a glance as "this one's a real ranked
-   account", distinct from the prospect/competitor markers. */
-.pin-coin {
-  border-radius: 50%;
-  transform: none;
-}
-
 /* The category glyph inside the pin -- centered and counter-rotated to
    stay upright against the teardrop's own -45deg rotation. Uses the same
    absolute-center-then-counter-rotate technique as .pin-check below. */
@@ -2160,23 +2130,6 @@ input[type="search"]:focus {
 .pin-glyph svg {
   width: 10px;
   height: 10px;
-}
-
-/* Coin pins aren't rotated to begin with, so their glyph just centers --
-   no counter-rotation needed. Dark instead of white: bronze/silver/gold
-   are all light/mid-toned backgrounds where a white glyph loses contrast. */
-.pin-glyph-flat {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: rgba(0, 0, 0, 0.72);
-  display: flex;
-}
-
-.pin-glyph-flat svg {
-  width: 11px;
-  height: 11px;
 }
 
 /* Visit status now shows as a ring rather than owning the pin's whole
@@ -2401,11 +2354,11 @@ input[type="search"]:focus {
 }
 
 .map-legend-swatch-pin {
-  width: 14px;
-  height: 16px;
-  border-radius: 7px 7px 8px 8px;
-  background: #fff;
-  border: 2.5px solid var(--map-tier-gold, #d4a017);
+  /* Shows the real marker artwork (one representative tier) rather than a
+     CSS approximation of it, so the legend can't drift from the map. */
+  width: 18px;
+  height: 18px;
+  background: url("/icons/markers/gold-other.png") center / contain no-repeat;
 }
 
 .map-legend-swatch-badge {
@@ -5194,7 +5147,8 @@ input[type="search"]:focus {
   color: var(--text-dim);
 }
 
-.list-row-icon svg {
+.list-row-icon svg,
+.list-row-icon .category-img {
   width: 24px;
   height: 24px;
 }
@@ -6100,7 +6054,8 @@ form select,
   color: var(--text-dim);
 }
 
-.visit-detail-avatar svg {
+.visit-detail-avatar svg,
+.visit-detail-avatar .category-img {
   width: 24px;
   height: 24px;
 }

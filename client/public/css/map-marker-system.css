@@ -2,67 +2,67 @@
 :root {
   --map-marker-blue: #1677f2;
   --map-marker-dark: #27364a;
-  --map-tier-potential: #c7cdd4;
-  --map-tier-bronze: #a96d3b;
-  --map-tier-silver: #aab2bd;
-  --map-tier-gold: #d4a017;
-  --map-tier-competitor: #b42332;
+  /* Tier colors live in the marker artwork itself (icons/markers/*.png),
+     not in CSS -- there are deliberately no --map-tier-* tokens here, so
+     nothing can drift away from the approved files. */
   --map-visited: #22a45d;
   --map-overdue: #e33b43;
 }
 
-#leaflet-map .pin:not(.pin-stop):not(.pin-new) {
-  width: 30px;
-  height: 34px;
-  border-radius: 15px 15px 16px 16px;
-  transform: none;
-  background: #fff;
-  border: 3px solid var(--map-tier-potential);
-  box-shadow: 0 2px 7px rgba(17,19,24,.22), 0 0 0 1px rgba(255,255,255,.92);
-  color: var(--map-marker-dark);
+/* Customer markers are pre-approved raster artwork (icons/markers/*.png):
+   the pin/circle/crosshair shape, its tier color and the category glyph are
+   all baked into the image, so the wrapper contributes no shape of its own.
+   It keeps the .pin / .pin-tier-* classes purely as hooks for selection,
+   the competitor toggle and the status badges below. Selector is
+   .pin.pin-img so it outranks the competitor rule in
+   map-safe-enhancements.css regardless of stylesheet order. */
+#leaflet-map .pin.pin-img {
   position: relative;
-  isolation: isolate;
-  transition: transform .14s ease, box-shadow .14s ease;
-}
-
-#leaflet-map .pin:not(.pin-stop):not(.pin-new)::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: -5px;
-  width: 9px;
-  height: 9px;
-  background: #fff;
-  border-right: 3px solid var(--map-tier-potential);
-  border-bottom: 3px solid var(--map-tier-potential);
-  transform: translateX(-50%) rotate(45deg);
-  border-radius: 0 0 2px 0;
-  z-index: -1;
-}
-
-#leaflet-map .pin-tier-potential,
-#leaflet-map .pin-tier-potential::before { border-color: var(--map-tier-potential) !important; }
-#leaflet-map .pin-tier-bronze,
-#leaflet-map .pin-tier-bronze::before { border-color: var(--map-tier-bronze) !important; }
-#leaflet-map .pin-tier-silver,
-#leaflet-map .pin-tier-silver::before { border-color: var(--map-tier-silver) !important; }
-#leaflet-map .pin-tier-gold,
-#leaflet-map .pin-tier-gold::before { border-color: var(--map-tier-gold) !important; }
-
-#leaflet-map .pin-tier-competitor {
-  border-color: var(--map-tier-competitor) !important;
-  border-style: dashed !important;
-  background: #fff;
-}
-#leaflet-map .pin-tier-competitor::before { border-color: var(--map-tier-competitor) !important; }
-
-#leaflet-map .pin-coin {
-  border-radius: 15px 15px 16px 16px;
+  width: 100%;
+  height: 100%;
+  /* Neutralizes the base .pin teardrop (rotated, bordered, colored) that
+     styles.css still defines for pin-new/pin-stop. */
   transform: none;
+  transition: transform .14s ease;
+  background: none !important;
+  border: 0 !important;
+  border-width: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  line-height: 0;
+  filter: drop-shadow(0 1px 2px rgba(17, 19, 24, 0.3));
 }
 
-#leaflet-map .pin-glyph,
-#leaflet-map .pin-glyph-flat {
+#leaflet-map .pin.pin-img::before {
+  content: none !important;
+}
+
+/* The visited/overdue badges hug the *artwork's* top-right corner, not the
+   raster's square bounding box -- the teardrop family leaves a wider
+   transparent margin than the round (crosshair/circle) family does. */
+#leaflet-map .pin.pin-img-teardrop .pin-check,
+#leaflet-map .pin.pin-img-teardrop.pin-status-overdue::after {
+  top: 0;
+  right: 8%;
+}
+
+#leaflet-map .pin.pin-img-round .pin-check,
+#leaflet-map .pin.pin-img-round.pin-status-overdue::after {
+  top: -3px;
+  right: -3px;
+}
+
+#leaflet-map .pin-img-asset {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Square asset in a square box -- no stretching, no cropping. */
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+#leaflet-map .pin-glyph {
   position: absolute;
   inset: 0;
   transform: none;
@@ -73,8 +73,7 @@
   z-index: 2;
 }
 
-#leaflet-map .pin-glyph svg,
-#leaflet-map .pin-glyph-flat svg {
+#leaflet-map .pin-glyph svg {
   width: 17px;
   height: 17px;
   stroke-width: 2 !important;
@@ -126,9 +125,8 @@
   z-index: 5;
 }
 
-#leaflet-map .leaflet-marker-icon.kad-marker-selected .pin:not(.pin-stop):not(.pin-new) {
+#leaflet-map .leaflet-marker-icon.kad-marker-selected .pin-img {
   transform: scale(1.18);
-  box-shadow: 0 3px 10px rgba(17,19,24,.26), 0 0 0 4px rgba(22,119,242,.22);
 }
 
 /* Managers use a completely different round avatar language. */
@@ -158,5 +156,23 @@
 #leaflet-map .pin-stop { box-shadow: 0 2px 6px rgba(17,19,24,.2); }
 
 @media (prefers-reduced-motion: reduce) {
-  #leaflet-map .pin:not(.pin-stop):not(.pin-new) { transition: none; }
+  #leaflet-map .pin-img { transition: none; }
+}
+
+/* --- Raster-marker overrides for the ring-style states above ---
+   A box-shadow ring on a raster marker traces the PNG's rectangular
+   bounding box rather than the pin silhouette, so the image markers opt out
+   of every ring and express the same states through their corner badges and
+   a shape-following drop-shadow instead. Specificity here (and the
+   !important) is deliberate: it has to beat the state rules above plus the
+   competitor rule in map-safe-enhancements.css, whichever loads last. */
+#leaflet-map .pin.pin-img.pin-status-overdue,
+#leaflet-map .pin.pin-img.pin-tier-competitor {
+  box-shadow: none !important;
+}
+
+#leaflet-map .leaflet-marker-icon.kad-marker-selected .pin.pin-img {
+  box-shadow: none !important;
+  filter: drop-shadow(0 0 2px rgba(22, 119, 242, 0.95)) drop-shadow(0 0 5px rgba(22, 119, 242, 0.7))
+    drop-shadow(0 1px 2px rgba(17, 19, 24, 0.35));
 }

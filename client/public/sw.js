@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v81";
+const CACHE_VERSION = "field-visits-v82";
 const TILE_CACHE = "field-visits-tiles-v4";
 
 const APP_SHELL = [
@@ -15,8 +15,6 @@ const APP_SHELL = [
   "/css/customer-social.css",
   "/css/map-marker-system.css",
   "/css/map-safe-enhancements.css",
-  "/css/customer-reference-icons.css",
-  "/icons/customer/customer-icon-atlas.png",
   "/js/api.js",
   "/js/app.js",
   "/js/activityDatePicker.js",
@@ -28,7 +26,6 @@ const APP_SHELL = [
   "/js/fieldVisitEnhancements.js",
   "/js/customerSocialProfiles.js",
   "/js/mapMarkerEnhancements.js",
-  "/js/customerReferenceIcons.js",
   "/js/mapSafeRuntime.js",
   "/js/mapSafeUi.js",
   "/js/competitorPolicySafe.js",
@@ -54,6 +51,32 @@ const APP_SHELL = [
   "/js/views/login.js",
   "/js/views/map.js",
   "/js/views/settings.js",
+  // Pre-approved marker/category artwork -- the map pins and the blue
+  // category glyphs every other screen uses (see util.js).
+  "/icons/markers/bronze-drop.png",
+  "/icons/markers/bronze-shop.png",
+  "/icons/markers/bronze-workshop.png",
+  "/icons/markers/bronze-other.png",
+  "/icons/markers/silver-drop.png",
+  "/icons/markers/silver-shop.png",
+  "/icons/markers/silver-workshop.png",
+  "/icons/markers/silver-other.png",
+  "/icons/markers/gold-drop.png",
+  "/icons/markers/gold-shop.png",
+  "/icons/markers/gold-workshop.png",
+  "/icons/markers/gold-other.png",
+  "/icons/markers/potential-drop.png",
+  "/icons/markers/potential-shop.png",
+  "/icons/markers/potential-workshop.png",
+  "/icons/markers/potential-other.png",
+  "/icons/markers/competitor-drop.png",
+  "/icons/markers/competitor-shop.png",
+  "/icons/markers/competitor-workshop.png",
+  "/icons/markers/competitor-other.png",
+  "/icons/categories/blue-drop.png",
+  "/icons/categories/blue-shop.png",
+  "/icons/categories/blue-workshop.png",
+  "/icons/categories/blue-other.png",
   "/vendor/leaflet/leaflet.js",
   "/vendor/leaflet/leaflet.css",
   "/vendor/leaflet-rotate/leaflet-rotate.js",

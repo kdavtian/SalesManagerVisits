@@ -81,13 +81,37 @@ export const TIER_OPTIONS = [
 // Armenian labels stored on the customer record -- used directly as both
 // the stored value and the display text, matching how this field always
 // worked (no separate translation layer for these fixed business terms).
+// The four category glyphs are pre-approved artwork shipped as raster
+// assets, never redrawn/re-traced in code. Two sets exist and share the
+// same four filename slugs: the blue set below (used on every non-map
+// screen) and the map's tiered marker set (icons/markers/<tier>-<slug>.png,
+// where pin shape and tier color are baked into the image). One category ->
+// slug mapping (categoryIconSlug) therefore drives both.
+const CATEGORY_ICON_SLUG = {
+  "Յուղման կետ": "drop",
+  "Խանութ": "shop",
+  "Ավտոսերվիս": "workshop",
+  "Այլ": "other",
+};
+
+// Maps a stored category value to its asset filename slug. Anything that
+// isn't one of the four current categories (e.g. legacy data) falls back to
+// the generic "other" glyph -- same rule categoryIcon() has always used.
+export function categoryIconSlug(value) {
+  return CATEGORY_ICON_SLUG[value] ?? "other";
+}
+
+function categoryIconImg(slug) {
+  return `<img class="ui-svg category-img" src="/icons/categories/blue-${slug}.png" alt="" width="22" height="22" draggable="false" />`;
+}
+
 const CATEGORY_ICON = {
   // An oil can with a drop -- stands in for "oil changing point".
-  oilPoint: `<svg class="ui-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="11.5" width="9.5" height="6.7" rx="1.2"/><path d="M9.6 11.5V8.3a.9.9 0 0 1 .9-.9h2a.9.9 0 0 1 .9.9v.6"/><rect x="9.2" y="6" width="4.2" height="1.9" rx="0.5"/><path d="M6 11.6c-3-1.3-4.3.3-3.5 2 .5 1.1 1.7 1.6 2.6 1.7"/><path d="M12.5 12.7 18.8 7"/><path d="M18.8 7v1.4"/><path d="M19.1 10v1.8"/><path d="M19.1 11.8c1.15 1.15 1.15 2.7 0 3.75-1.15-1.05-1.15-2.6 0-3.75Z"/></svg>`,
-  shop: `<svg class="ui-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M3 4h2l2.2 10.2a2 2 0 0 0 2 1.6h8.6a2 2 0 0 0 2-1.6L21 8H6"/></svg>`,
+  oilPoint: categoryIconImg("drop"),
+  shop: categoryIconImg("shop"),
   // A wrench -- the auto workshop/service point.
-  workshop: `<svg class="ui-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.1-3.1c.32-.32.86-.22.98.22a6 6 0 0 1-8.26 7.06l-7.9 7.9a1 1 0 0 1-3-3l7.9-7.9a6 6 0 0 1 7.06-8.26c.44.12.54.66.22.98z"/></svg>`,
-  other: `<svg class="ui-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 5.5-8 11-8 11S4 15.5 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>`,
+  workshop: categoryIconImg("workshop"),
+  other: categoryIconImg("other"),
 };
 
 // Armenia's 11 administrative regions (10 marzes + Yerevan, which is a

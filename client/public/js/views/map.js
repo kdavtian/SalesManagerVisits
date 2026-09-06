@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, tierSelectorHtml, activateTierSelector, categorySelectorHtml, activateCategorySelector, categoryIcon, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, tierSelectorHtml, activateTierSelector, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion } from "../util.js";
 import { t } from "../i18n.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
@@ -433,23 +433,41 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
 
   const TIERS_ON_PINS = new Set(["bronze", "silver", "gold", "competitor"]);
 
-  // Pin shape+color now encode the customer's *tier*, and the small glyph
-  // inside encodes their *category* -- so glancing at the map answers "where
-  // are my gold oil-change customers" or "where are potential workshops" in
-  // one look, instead of needing to open each pin. Visit status (today's
-  // check, overdue) is still shown, just as a smaller badge/ring rather than
-  // owning the pin's whole color the way it used to.
+  // bronze/silver/gold are teardrop *pins* whose point sits ~5% above the
+  // bottom edge of their (square) source canvas; potential/competitor are
+  // crosshair/circle marks with no point, so they read as centered on the
+  // coordinate. Hence two anchors, but ONE size/anchor formula shared by all
+  // three tiered pins -- their artwork is geometrically identical, and the
+  // code must not undermine that.
+  const PIN_SHAPED_TIERS = new Set(["bronze", "silver", "gold"]);
+  const MARKER_SIZE = 32;
+  const PIN_TIP_RATIO = 0.95;
+
+  // Marker shape+color encode the customer's *tier* and the glyph inside
+  // encodes their *category* -- so glancing at the map answers "where are my
+  // gold oil-change customers" or "where are potential workshops" in one
+  // look. Both facts come from one pre-approved raster per (tier, category)
+  // in icons/markers/ -- the artwork is the source of truth and is never
+  // reconstructed from CSS shapes or inline SVG. Visit status (today's
+  // check, overdue) stays a small badge layered over that image.
   function customerIcon(c, status) {
     const tier = TIERS_ON_PINS.has(c.customer_tier) ? c.customer_tier : "potential";
-    const isCoin = tier === "bronze" || tier === "silver" || tier === "gold";
     const check = status === "today" ? '<span class="pin-check">&#10003;</span>' : "";
     const overdueClass = status === "overdue" ? "pin-status-overdue" : "";
+    const isPinShaped = PIN_SHAPED_TIERS.has(tier);
+    const anchorY = isPinShaped ? Math.round(MARKER_SIZE * PIN_TIP_RATIO) : MARKER_SIZE / 2;
+    // Shape family also decides where the status badge hangs, since the two
+    // families fill their square canvas differently (see the CSS).
+    const shapeClass = isPinShaped ? "pin-img-teardrop" : "pin-img-round";
     return L.divIcon({
       className: "",
-      html: `<div class="pin pin-tier-${tier} ${isCoin ? "pin-coin" : ""} ${overdueClass}"><span class="${isCoin ? "pin-glyph-flat" : "pin-glyph"}">${categoryIcon(c.category)}</span>${check}</div>`,
-      iconSize: [22, 22],
-      iconAnchor: [11, 22],
-      popupAnchor: [0, -22],
+      // .pin stays on the wrapper: marker selection (mapMarkerEnhancements)
+      // and the competitor-visibility toggle (map-safe-enhancements) both
+      // key off .pin / .pin-tier-* selectors.
+      html: `<div class="pin pin-img ${shapeClass} pin-tier-${tier} ${overdueClass}"><img class="pin-img-asset" src="/icons/markers/${tier}-${categoryIconSlug(c.category)}.png" alt="" width="${MARKER_SIZE}" height="${MARKER_SIZE}" draggable="false" />${check}</div>`,
+      iconSize: [MARKER_SIZE, MARKER_SIZE],
+      iconAnchor: [MARKER_SIZE / 2, anchorY],
+      popupAnchor: [0, -anchorY],
     });
   }
 
