@@ -1,27 +1,33 @@
-/* Approved customer artwork sizing/placement. SVG geometry is defined once in
-   customerReferenceIcons.js; CSS only controls presentation and Leaflet anchoring. */
-.customer-reference-svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
+/* Exact approved customer artwork. The PNG sprite sheet is the source of truth;
+   CSS only crops, sizes and anchors it. No icon geometry is recreated here. */
+.customer-blue-asset,
+.customer-map-asset {
+  display: inline-block;
+  background-image: url("/icons/customer/customer-icon-atlas.png");
+  background-repeat: no-repeat;
+  background-size: 600% 400%;
+  background-color: transparent;
+  image-rendering: auto;
+  flex: 0 0 auto;
 }
 
 .customer-blue-asset {
   width: 22px;
   height: 22px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
   vertical-align: middle;
 }
 .category-icon .customer-blue-asset { width: 26px; height: 26px; }
 .list-row-icon .customer-blue-asset,
 .customer-card .customer-blue-asset { width: 28px; height: 28px; }
 
-/* The approved artwork owns the customer marker shape; remove the previous
-   generic pin shell while preserving status badges and Leaflet hit target. */
+/* Blue approved set occupies atlas columns 1-2, rows 1-2. */
+.customer-blue-asset.cat-oil { background-position: 0% 0%; }
+.customer-blue-asset.cat-shop { background-position: 20% 0%; }
+.customer-blue-asset.cat-workshop { background-position: 0% 33.333333%; }
+.customer-blue-asset.cat-other { background-position: 20% 33.333333%; }
+
+/* Approved artwork owns the Map marker shape. Keep the existing Leaflet hit
+   target/status UI but remove the old generic marker shell. */
 #leaflet-map .pin.customer-reference-marker {
   width: 22px !important;
   height: 22px !important;
@@ -36,31 +42,61 @@
 
 #leaflet-map .customer-map-asset {
   position: absolute;
-  width: 38px;
-  height: 38px;
-  left: -8px;
+  width: 32px;
+  height: 32px;
+  left: -5px;
   z-index: 2;
   transform-origin: 50% 50%;
   transition: transform .14s ease, filter .14s ease;
 }
 
-/* Gold, silver and bronze deliberately share one exact footprint and anchor. */
+/* Bronze/Silver/Gold: exact same footprint and coordinate anchor. */
 #leaflet-map .pin-tier-bronze .customer-map-asset,
 #leaflet-map .pin-tier-silver .customer-map-asset,
-#leaflet-map .pin-tier-gold .customer-map-asset { top: -16px; }
+#leaflet-map .pin-tier-gold .customer-map-asset { top: -10px; }
 
-/* Target/circle markers are centered on the actual coordinate. */
+/* Potential target and competitor circle are centered on the coordinate. */
 #leaflet-map .pin-tier-potential .customer-map-asset,
-#leaflet-map .pin-tier-competitor .customer-map-asset { top: 3px; }
+#leaflet-map .pin-tier-competitor .customer-map-asset { top: 6px; }
+
+/* Bronze atlas: columns 3-4, rows 1-2. */
+#leaflet-map .customer-map-asset[data-customer-tier="bronze"].cat-oil { background-position: 40% 0%; }
+#leaflet-map .customer-map-asset[data-customer-tier="bronze"].cat-shop { background-position: 60% 0%; }
+#leaflet-map .customer-map-asset[data-customer-tier="bronze"].cat-workshop { background-position: 40% 33.333333%; }
+#leaflet-map .customer-map-asset[data-customer-tier="bronze"].cat-other { background-position: 60% 33.333333%; }
+
+/* Silver atlas: columns 5-6, rows 1-2. */
+#leaflet-map .customer-map-asset[data-customer-tier="silver"].cat-oil { background-position: 80% 0%; }
+#leaflet-map .customer-map-asset[data-customer-tier="silver"].cat-shop { background-position: 100% 0%; }
+#leaflet-map .customer-map-asset[data-customer-tier="silver"].cat-workshop { background-position: 80% 33.333333%; }
+#leaflet-map .customer-map-asset[data-customer-tier="silver"].cat-other { background-position: 100% 33.333333%; }
+
+/* Gold atlas: columns 1-2, rows 3-4. */
+#leaflet-map .customer-map-asset[data-customer-tier="gold"].cat-oil { background-position: 0% 66.666667%; }
+#leaflet-map .customer-map-asset[data-customer-tier="gold"].cat-shop { background-position: 20% 66.666667%; }
+#leaflet-map .customer-map-asset[data-customer-tier="gold"].cat-workshop { background-position: 0% 100%; }
+#leaflet-map .customer-map-asset[data-customer-tier="gold"].cat-other { background-position: 20% 100%; }
+
+/* Potential atlas: columns 3-4, rows 3-4. */
+#leaflet-map .customer-map-asset[data-customer-tier="potential"].cat-oil { background-position: 40% 66.666667%; }
+#leaflet-map .customer-map-asset[data-customer-tier="potential"].cat-shop { background-position: 60% 66.666667%; }
+#leaflet-map .customer-map-asset[data-customer-tier="potential"].cat-workshop { background-position: 40% 100%; }
+#leaflet-map .customer-map-asset[data-customer-tier="potential"].cat-other { background-position: 60% 100%; }
+
+/* Competitor atlas: columns 5-6, rows 3-4. */
+#leaflet-map .customer-map-asset[data-customer-tier="competitor"].cat-oil { background-position: 80% 66.666667%; }
+#leaflet-map .customer-map-asset[data-customer-tier="competitor"].cat-shop { background-position: 100% 66.666667%; }
+#leaflet-map .customer-map-asset[data-customer-tier="competitor"].cat-workshop { background-position: 80% 100%; }
+#leaflet-map .customer-map-asset[data-customer-tier="competitor"].cat-other { background-position: 100% 100%; }
 
 #leaflet-map .pin.customer-reference-marker .pin-check {
-  top: -13px;
-  right: -13px;
+  top: -9px;
+  right: -10px;
   z-index: 7;
 }
 #leaflet-map .pin.customer-reference-marker.pin-status-overdue::after {
-  top: -13px;
-  right: -13px;
+  top: -9px;
+  right: -10px;
   z-index: 7;
 }
 
@@ -69,8 +105,8 @@
   box-shadow: none !important;
 }
 #leaflet-map .leaflet-marker-icon.kad-marker-selected .customer-map-asset {
-  transform: scale(1.13);
-  filter: drop-shadow(0 0 3px rgba(22,119,242,.72)) drop-shadow(0 2px 3px rgba(17,19,24,.22));
+  transform: scale(1.12);
+  filter: drop-shadow(0 0 3px rgba(22,119,242,.68)) drop-shadow(0 2px 3px rgba(17,19,24,.2));
 }
 
 @media (prefers-reduced-motion: reduce) {
