@@ -109,12 +109,14 @@ export async function renderCustomerDetail(root, navigate, customerId) {
         </div>
       </div>
       <div class="detail-header-actions">
-        ${
-          hasAccountSettings
-            ? `<button type="button" class="icon-btn" id="account-settings-btn" aria-label="${t("account_settings")}" title="${t("account_settings")}">${icons.settings}</button>`
-            : ""
-        }
-        <button type="button" class="icon-btn" id="edit-customer-btn" aria-label="${t("edit_customer")}" title="${t("edit_customer")}">${icons.pencil}</button>
+        <div class="detail-header-actions-primary">
+          ${
+            hasAccountSettings
+              ? `<button type="button" class="icon-btn" id="account-settings-btn" aria-label="${t("account_settings")}" title="${t("account_settings")}">${icons.settings}</button>`
+              : ""
+          }
+          <button type="button" class="icon-btn" id="edit-customer-btn" aria-label="${t("edit_customer")}" title="${t("edit_customer")}">${icons.pencil}</button>
+        </div>
       </div>
     </div>
 

@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml } from "../util.js";
+import { escapeHtml, formatDateDMY } from "../util.js";
 import { t } from "../i18n.js";
 
 function formatAmd(value) {
@@ -29,7 +29,7 @@ export async function renderCustomerOrders(root, navigate, customerId) {
         <span class="badge badge-neutral">${escapeHtml(customer.name)}</span>
       </div>
     </div>
-    <div class="card-list" id="orders-list"></div>
+    <div class="card-list card-list-spaced" id="orders-list"></div>
   `;
 
   container.querySelector("#back-btn").addEventListener("click", () => {
@@ -40,21 +40,27 @@ export async function renderCustomerOrders(root, navigate, customerId) {
   if (!orders.length) {
     listEl.innerHTML = `<p class="empty-state">${t("no_orders_found")}</p>`;
   } else {
+    const subtotal = orders.reduce((sum, o) => sum + Number(o.total_amd || 0), 0);
     listEl.innerHTML = `
       <div class="card erp-card">
         ${orders
           .map(
             (o) => `
           <div class="erp-order-row" data-order-id="${escapeHtml(o.order_id)}" role="button" tabindex="0">
-            <span>${escapeHtml(String(o.order_date).slice(0, 10))}</span>
+            <span>${escapeHtml(formatDateDMY(o.order_date))}</span>
             <span class="erp-order-id">${escapeHtml(o.order_id)}</span>
             <span>${formatAmd(o.total_amd)}</span>
           </div>`
           )
           .join("")}
+        <div class="erp-order-row erp-order-subtotal-row">
+          <span></span>
+          <span class="erp-order-subtotal-label">${t("orders_subtotal")}</span>
+          <span>${formatAmd(subtotal)}</span>
+        </div>
       </div>
     `;
-    listEl.querySelectorAll(".erp-order-row").forEach((row) => {
+    listEl.querySelectorAll(".erp-order-row:not(.erp-order-subtotal-row)").forEach((row) => {
       row.addEventListener("click", async () => {
         const { openOrderDetailSheet } = await import("./customerDetail.js");
         openOrderDetailSheet(customerId, row.dataset.orderId);

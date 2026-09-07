@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, tierSelectorHtml, activateTierSelector, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, channelDisplayLabel } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, tierSelectorHtml, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, channelDisplayLabel } from "../util.js";
 import { t } from "../i18n.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
@@ -2359,13 +2359,30 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     }
 
     erpInput.addEventListener("focus", () => renderErpSuggestions(erpInput.value));
-    erpInput.addEventListener("input", () => renderErpSuggestions(erpInput.value));
+    erpInput.addEventListener("input", () => {
+      renderErpSuggestions(erpInput.value);
+      maybeAutoUpgradeTier();
+    });
     erpInput.addEventListener("blur", () => {
       setTimeout(() => (erpSuggestList.hidden = true), 150);
     });
     activateCombobox(erpInput, erpSuggestList, (item) => {
       erpInput.value = item.dataset.id;
+      maybeAutoUpgradeTier();
     });
+
+    // Linking an ERP customer ID means this is no longer just a "Potential"
+    // lead -- bump it to Bronze automatically the moment an ID is entered,
+    // same as the PATCH-side auto-upgrade for existing customers. Only
+    // fires while the selector is still on its default "potential": once
+    // the rep has picked Silver/Gold (or Bronze already) by hand, their
+    // choice always wins and this never overrides it.
+    function maybeAutoUpgradeTier() {
+      const tierHiddenInput = overlay.querySelector('.tier-selector input[type=hidden]');
+      if (erpInput.value.trim() && tierHiddenInput?.value === "potential") {
+        setTierSelectorValue(overlay, "bronze");
+      }
+    }
 
     const form = overlay.querySelector("#new-customer-form");
     const errorEl = overlay.querySelector("#new-customer-error");
