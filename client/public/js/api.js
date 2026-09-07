@@ -169,6 +169,7 @@ export const api = {
   approveOrderDiscount: (id) => request(`/orders/${id}/approve-discount`, { method: "POST" }),
   deleteOrder: (id) => request(`/orders/${id}`, { method: "DELETE" }),
   rejectOrderDiscount: (id) => request(`/orders/${id}/reject-discount`, { method: "POST" }),
+  markOrderDeliveredWithoutRoute: (id) => request(`/orders/${id}/mark-delivered`, { method: "POST" }),
 
   // Warehouse (see server/src/routes/warehouse.js)
   getPickList: () => request("/warehouse/pick-list"),
