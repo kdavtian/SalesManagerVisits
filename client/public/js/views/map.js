@@ -4,7 +4,7 @@ import { t } from "../i18n.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
 import { canViewTeamLocations, canEditDirectly, canPlanForOthers, canReassignCustomers, state } from "../state.js";
-import { getClusterPins } from "../mapPrefs.js";
+import { getClusterPins, setClusterPins, getCompassMode, setCompassMode } from "../mapPrefs.js";
 
 const NEARBY_RADIUS_METERS = 5000;
 
@@ -168,6 +168,21 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
           <span>${t("map_legend_title")}</span>
           <button type="button" class="icon-btn" id="map-legend-close" aria-label="${t("close")}">${icons.close}</button>
         </div>
+        <div class="map-legend-prefs">
+          <div class="map-legend-pref-row">
+            <span>${t("map_cluster_pins")}</span>
+            <button type="button" class="toggle-switch" id="map-legend-toggle-cluster" role="switch" aria-checked="${getClusterPins()}" aria-label="${t("map_cluster_pins")}">
+              <span class="toggle-thumb"></span>
+            </button>
+          </div>
+          <div class="map-legend-pref-row">
+            <span>${t("map_compass_mode")}</span>
+            <button type="button" class="toggle-switch" id="map-legend-toggle-compass" role="switch" aria-checked="${getCompassMode()}" aria-label="${t("map_compass_mode")}">
+              <span class="toggle-thumb"></span>
+            </button>
+          </div>
+        </div>
+        <div class="map-legend-divider"></div>
         <p class="map-legend-note">${t("map_legend_shape_note")}</p>
         <ul class="map-legend-list">
           <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/bronze-other.png" alt="" width="20" height="20" />${t("map_legend_bronze")}</li>
@@ -401,11 +416,9 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   // that into a count badge that splits apart as you zoom in; pins already
   // spread out (a rural territory, or once you're zoomed to street level)
   // render exactly as before since there's nothing to cluster.
-  // ...unless the user turned "Group nearby pins" off in Settings, in which
-  // case every pin is drawn individually at every zoom level so the true
-  // geographic spread is visible. Read once per map mount (and re-read by
-  // applyFilter below), which is all this needs: changing it in Settings and
-  // coming back to the Map picks it up.
+  // ...unless the user turned "Group nearby pins" off in the map's own Pin
+  // key popup, in which case every pin is drawn individually at every zoom
+  // level so the true geographic spread is visible.
   const clusteringEnabled = getClusterPins();
   const plainCustomerLayer = L.layerGroup();
   const customerClusterGroup = L.markerClusterGroup({
@@ -425,9 +438,21 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   });
   // Exactly one of the two is ever on the map, and every add/clear below
   // goes through customerMarkerLayer -- so marker construction, filtering
-  // and fitBounds stay a single code path regardless of the setting.
-  const customerMarkerLayer = clusteringEnabled ? customerClusterGroup : plainCustomerLayer;
+  // and fitBounds stay a single code path regardless of the setting. `let`
+  // (not `const`) because the Pin key popup's toggle switches this live
+  // while the map is open -- see setClusteringPreference below.
+  let customerMarkerLayer = clusteringEnabled ? customerClusterGroup : plainCustomerLayer;
   customerMarkerLayer.addTo(map);
+
+  function setClusteringPreference(enabled) {
+    const target = enabled ? customerClusterGroup : plainCustomerLayer;
+    if (customerMarkerLayer === target) return;
+    map.removeLayer(customerMarkerLayer);
+    customerMarkerLayer.clearLayers();
+    customerMarkerLayer = target;
+    customerMarkerLayer.addTo(map);
+    applyFilter();
+  }
 
   // A plain solid teardrop with nothing inside read as "blank"/broken once
   // dropped -- an X glyph makes it obvious this pin is just a pending
@@ -1333,12 +1358,17 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   locateBtn.addEventListener("click", async () => {
     if (!navigator.geolocation) return;
 
+    // With compass mode off (Pin key popup), the button is a plain show/hide
+    // toggle -- "on" goes straight back to "off" instead of stepping through
+    // heading-tracking, which some reps found disorienting and don't need.
+    const skipTrack = locationMode === "on" && !getCompassMode();
+
     if (locationMode === "off") {
       locationMode = "on";
       updateLocateButtonState();
       startWatch();
       if (meMarker) map.setView(meMarker.getLatLng(), Math.max(map.getZoom(), 15));
-    } else if (locationMode === "on") {
+    } else if (locationMode === "on" && !skipTrack) {
       locationMode = "track";
       updateLocateButtonState();
       if (meMarker) map.setView(meMarker.getLatLng(), Math.max(map.getZoom(), 16));
@@ -1744,6 +1774,31 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     legendBtn.setAttribute("aria-expanded", String(open));
   });
   root.querySelector("#map-legend-close").addEventListener("click", closeLegend);
+
+  const clusterToggle = root.querySelector("#map-legend-toggle-cluster");
+  clusterToggle.addEventListener("click", () => {
+    const next = clusterToggle.getAttribute("aria-checked") !== "true";
+    clusterToggle.setAttribute("aria-checked", String(next));
+    setClusterPins(next);
+    setClusteringPreference(next);
+  });
+
+  const compassToggle = root.querySelector("#map-legend-toggle-compass");
+  compassToggle.addEventListener("click", () => {
+    const next = compassToggle.getAttribute("aria-checked") !== "true";
+    compassToggle.setAttribute("aria-checked", String(next));
+    setCompassMode(next);
+    // Turning compass mode off while already mid-track drops straight back
+    // to the plain "on" (dot visible, no heading/rotation) state instead of
+    // leaving the map stuck rotated with no way to get out of track mode
+    // short of the button's own now-skipped third tap.
+    if (!next && locationMode === "track") {
+      locationMode = "on";
+      updateLocateButtonState();
+      stopHeading();
+    }
+  });
+
   root.addEventListener("click", (event) => {
     if (!legendPanel.hidden && !legendPanel.contains(event.target) && event.target !== legendBtn && !legendBtn.contains(event.target)) {
       closeLegend();

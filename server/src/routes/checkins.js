@@ -269,6 +269,7 @@ checkinsRouter.get("/", async (req, res) => {
   params.push(CHECKINS_PAGE_SIZE + 1, offsetNum);
   const { rows } = await pool.query(
     `SELECT ch.*, u.name AS user_name, c.name AS customer_name, c.category AS customer_category,
+       c.customer_tier AS customer_tier,
        -- Aliased away from a bare "region" so it can't collide with the
        -- check-in's own columns when the row is spread client-side.
        c.region AS customer_region,

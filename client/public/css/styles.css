@@ -2385,6 +2385,36 @@ input[type="search"]:focus {
   height: 15px;
 }
 
+.map-legend-prefs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.map-legend-pref-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.map-legend-pref-row .toggle-switch {
+  width: 38px;
+  height: 22px;
+}
+
+.map-legend-pref-row .toggle-thumb {
+  width: 18px;
+  height: 18px;
+}
+
+.map-legend-pref-row .toggle-switch[aria-checked="true"] .toggle-thumb {
+  transform: translateX(16px);
+}
+
 .map-legend-list {
   list-style: none;
   margin: 0;
@@ -5569,6 +5599,25 @@ button.list-row-icon {
   color: var(--danger);
 }
 
+/* Literal gold/silver/bronze tiers -- same tokens as the tier badges/
+   selector (.tier-bronze etc.) and the map marker assets, so an account's
+   tier reads the same color everywhere instead of the generic semantic
+   info/success/warning tint an unrelated part of the UI happens to use. */
+.list-row-icon-tier-bronze {
+  background: color-mix(in srgb, var(--tier-bronze) 18%, var(--bg-card));
+  color: var(--tier-bronze);
+}
+
+.list-row-icon-tier-silver {
+  background: color-mix(in srgb, var(--tier-silver) 20%, var(--bg-card));
+  color: var(--tier-silver);
+}
+
+.list-row-icon-tier-gold {
+  background: color-mix(in srgb, var(--tier-gold) 18%, var(--bg-card));
+  color: var(--tier-gold);
+}
+
 /* Small numbered circle: the one "count badge" shape used both inline
    (e.g. a corner badge on a nav icon) and as a map marker-cluster glyph.
    Cluster markers still scale up by count tier (see .pin-cluster) since
@@ -5648,8 +5697,12 @@ button.list-row-icon {
   background: var(--warning, #ff9500);
 }
 
+/* No circular background here (unlike verified/pending) -- the triangle
+   glyph itself is the red shape (fill="currentColor"), so a second red
+   circle behind it would just show as an ill-fitting halo. */
 .status-rejected {
-  background: var(--danger);
+  background: transparent;
+  color: var(--danger);
 }
 
 /* Not a <button> (a <strong> with role="button") so it can sit inline with

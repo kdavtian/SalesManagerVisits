@@ -289,17 +289,28 @@ export function tierBadgeHtml(tier) {
 // via tierBadgeHtml wherever a row shows its status badges). Complements
 // the map pins, which encode the same two facts the other way around
 // (tier owns the pin's shape/color, category is the small glyph inside).
+// Uses the same literal gold/silver/bronze tokens as the tier badges/
+// selector and the map markers (--tier-bronze/silver/gold) rather than
+// generic semantic colors -- a silver account reading as "info blue"
+// didn't actually read as "silver" at a glance.
 const TIER_ICON_TINT = {
   potential: "neutral",
-  bronze: "warning",
-  silver: "info",
-  gold: "success",
+  bronze: "tier-bronze",
+  silver: "tier-silver",
+  gold: "tier-gold",
   competitor: "danger",
 };
 
+// Exported separately from customerListIconHtml so screens that need the
+// tint class on their own markup (e.g. Activity's tappable icon button,
+// which can't be the <span> customerListIconHtml returns) can still share
+// the same tier->color mapping instead of re-deriving it.
+export function customerIconTint(tier) {
+  return TIER_ICON_TINT[tier] ?? "neutral";
+}
+
 export function customerListIconHtml(c) {
-  const tint = TIER_ICON_TINT[c.customer_tier] ?? "neutral";
-  return `<span class="list-row-icon list-row-icon-${tint}">${categoryIcon(c.category)}</span>`;
+  return `<span class="list-row-icon list-row-icon-${customerIconTint(c.customer_tier)}">${categoryIcon(c.category)}</span>`;
 }
 
 // Wires up click behavior for a tierSelectorHtml() block already in the

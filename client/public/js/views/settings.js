@@ -1,7 +1,6 @@
 import { api } from "../api.js";
 import { t, getLang, setLang } from "../i18n.js";
 import { getTheme, setTheme } from "../theme.js";
-import { getClusterPins, setClusterPins } from "../mapPrefs.js";
 import { state, isAdmin, canPlanForOthers, seesFinancialExports, canManageProducts } from "../state.js";
 import { renderTeamSection, renderPlanApprovalsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection, renderRouteDistributionSection, renderSalesChannelOwnersSection, renderQuickActionVisibilitySection } from "./admin.js";
 import { escapeHtml, compressImage, activateDialog, attachSwipeToDismiss, formatPhoneDisplay, normalizePhone } from "../util.js";
@@ -124,9 +123,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         ${settingsToggleRow({ icon: ICON.appearance, label: t("appearance"), value: getTheme() === "dark" ? t("dark") : t("light"), id: "toggle-appearance", checked: getTheme() === "dark" })}
         ${settingsToggleRow({ icon: ICON.language, label: t("language"), value: getLang() === "hy" ? t("armenian") : t("english"), id: "toggle-language", checked: getLang() === "hy" })}
         ${settingsToggleRow({ icon: ICON.bell, label: t("push_notifications"), value: "…", id: "toggle-push-notifications", checked: false })}
-        ${settingsToggleRow({ icon: ICON.gps, label: t("map_cluster_pins"), value: getClusterPins() ? t("map_cluster_on") : t("map_cluster_off"), id: "toggle-map-cluster", checked: getClusterPins() })}
       </div>
-      <p class="muted settings-hint">${t("map_cluster_pins_help")}</p>
 
       <h2 class="section-title">${t("notification_preferences_title")}</h2>
       <div class="card settings-list" id="notification-prefs-list">
@@ -336,12 +333,6 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
   // --- Preferences ---
   root.querySelector("#toggle-appearance").addEventListener("click", () => {
     setTheme(getTheme() === "dark" ? "light" : "dark");
-    renderSettings(root, onLogout, onLanguageChange);
-  });
-  // Device-local (see ../mapPrefs.js). The Map reads it when it mounts, so
-  // re-rendering Settings here is enough -- there's no open map to update.
-  root.querySelector("#toggle-map-cluster").addEventListener("click", () => {
-    setClusterPins(!getClusterPins());
     renderSettings(root, onLogout, onLanguageChange);
   });
   root.querySelector("#toggle-language").addEventListener("click", () => {

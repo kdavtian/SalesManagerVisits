@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatDistance, formatAmd, categoryIcon } from "../util.js";
+import { escapeHtml, formatDistance, formatAmd, categoryIcon, customerIconTint } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { seesAllActivity } from "../state.js";
 import { openVisitDetailSheet } from "../visitDetail.js";
@@ -20,7 +20,13 @@ const PAGE_SIZE = 15;
 const STATUS_ICON = {
   verified: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>`,
   pending: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>`,
-  rejected: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v5"/><circle cx="12" cy="16.5" r="0.6" fill="#fff" stroke="none"/><circle cx="12" cy="12" r="9"/></svg>`,
+  // A red triangle with "!" -- the conventional warning glyph, distinct in
+  // shape (not just color) from the verified/pending circles so "rejected"
+  // reads at a glance even without color (colorblind-safe, matches how
+  // browsers/OSes already draw this exact warning). The triangle's own
+  // fill supplies the color, so .status-rejected leaves the badge
+  // background transparent instead of layering a second red circle behind it.
+  rejected: `<svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 2.5 22.5 21H1.5Z" fill="currentColor"/><path d="M12 9.5v5" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="17.4" r="1.1" fill="#fff"/></svg>`,
 };
 
 const ACTIVITY_FILTER_ICONS = {
@@ -161,11 +167,17 @@ export async function renderActivity(root, navigate) {
 
     const pills = [
       { value: "", label: t("filter_all"), count: total },
-      ...managerOptions().map(([id, name]) => ({
-        value: String(id),
-        label: name,
-        count: counts.get(String(id)) ?? 0,
-      })),
+      // Busiest manager first, not alphabetical -- who actually did the most
+      // visits is the more useful thing to see first, and it's what a
+      // director scanning this row for "who's active today" wants to read
+      // left-to-right without hunting.
+      ...managerOptions()
+        .map(([id, name]) => ({
+          value: String(id),
+          label: name,
+          count: counts.get(String(id)) ?? 0,
+        }))
+        .sort((a, b) => b.count - a.count),
     ];
 
     return `
@@ -388,15 +400,15 @@ export async function renderActivity(root, navigate) {
         }
         return `${managerHeading}
         <div class="card list-row" tabindex="0" role="button" data-checkin-id="${c.id}">
-          <button type="button" class="list-row-icon list-row-icon-neutral" data-customer-id="${c.customer_id}" aria-label="${escapeHtml(c.customer_name)}" title="${escapeHtml(c.customer_name)}">
+          <button type="button" class="list-row-icon list-row-icon-${customerIconTint(c.customer_tier)}" data-customer-id="${c.customer_id}" aria-label="${escapeHtml(c.customer_name)}" title="${escapeHtml(c.customer_name)}">
             ${categoryIcon(c.customer_category)}
           </button>
           <div class="list-row-body">
             <div class="list-row-top">
               <strong class="activity-customer-name-btn" role="button" tabindex="0" data-customer-id="${c.customer_id}">${escapeHtml(c.customer_name)}</strong>
               <span class="list-row-trailing">
-                <span class="activity-status-icon activity-status-icon-sm ${meta.cls}" aria-label="${escapeHtml(meta.label)}" title="${escapeHtml(meta.label)}">${STATUS_ICON[status]}</span>
                 <span class="list-row-trailing-text ${status === "rejected" ? "activity-distance-danger" : "muted"}">${distanceLabel}</span>
+                <span class="activity-status-icon activity-status-icon-sm ${meta.cls}" aria-label="${escapeHtml(meta.label)}" title="${escapeHtml(meta.label)}">${STATUS_ICON[status]}</span>
               </span>
             </div>
             <div class="muted list-row-meta">${[escapeHtml(c.user_name), c.customer_region ? escapeHtml(c.customer_region) : "", formatActivityDate(c.timestamp)].filter(Boolean).join(" · ")}</div>
