@@ -1347,12 +1347,22 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   let teamPollId = null;
   let teamEmptyHintTimer = null;
 
-  function teamMemberIcon() {
+  // A stable, distinguishable outline color per teammate -- keyed off their
+  // user id (not name, which two people could share) so the same manager
+  // always gets the same ring color across sessions and devices.
+  const TEAM_AVATAR_COLORS = ["#e8590c", "#2f9e44", "#1971c2", "#9c36b5", "#c2255c", "#f08c00", "#0c8599", "#5c5f66", "#e64980", "#2b8a3e"];
+  function teamAvatarColor(userId) {
+    return TEAM_AVATAR_COLORS[Math.abs(Number(userId) || 0) % TEAM_AVATAR_COLORS.length];
+  }
+
+  function teamMemberIcon(loc) {
+    const letter = escapeHtml((loc.name || "?").trim().charAt(0).toUpperCase() || "?");
+    const color = teamAvatarColor(loc.user_id);
     return L.divIcon({
       className: "",
-      html: `<div class="team-dot"></div>`,
-      iconSize: [16, 16],
-      iconAnchor: [8, 8],
+      html: `<div class="team-avatar" style="--team-color:${color}">${letter}</div>`,
+      iconSize: [30, 30],
+      iconAnchor: [15, 15],
     });
   }
 
@@ -1365,7 +1375,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     }
     teamLayer.clearLayers();
     for (const loc of locations) {
-      L.marker([loc.lat, loc.lng], { icon: teamMemberIcon() })
+      L.marker([loc.lat, loc.lng], { icon: teamMemberIcon(loc) })
         .bindPopup(
           `<div class="map-popup"><strong>${escapeHtml(loc.name)}</strong><div class="popup-category">${escapeHtml(t(`role_${loc.role}`))} · ${formatRelative(loc.updated_at)}</div></div>`
         )

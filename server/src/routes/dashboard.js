@@ -3,6 +3,7 @@ import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { seesAllActivity } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
+import { NOT_NO_VISIT_CHANNEL_SQL } from "./customers.js";
 
 export const dashboardRouter = Router();
 
@@ -32,7 +33,7 @@ dashboardRouter.get("/summary", async (req, res) => {
        (SELECT count(*) FROM checkins ch
           WHERE ch.timestamp >= date_trunc('day', now()) AND ch.within_range = false ${userFilter}) AS rejected_today,
        (SELECT count(*) FROM customers c
-          WHERE COALESCE(c.sales_channel, '') <> ALL(ARRAY['KF','CAS','CVO','PCO'])
+          WHERE ${NOT_NO_VISIT_CHANNEL_SQL}
           ${customerFilter}
           AND NOT EXISTS (
             SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= date_trunc('day', now())
@@ -72,7 +73,7 @@ dashboardRouter.get("/summary", async (req, res) => {
                    WHERE ch2.user_id = u.id AND ch2.timestamp >= date_trunc('day', now())) AS visited_today,
                 (SELECT count(*) FROM customers c
                    WHERE c.assigned_manager_id = u.id
-                   AND COALESCE(c.sales_channel, '') <> ALL(ARRAY['KF','CAS','CVO','PCO'])
+                   AND ${NOT_NO_VISIT_CHANNEL_SQL}
                    AND NOT EXISTS (
                      SELECT 1 FROM checkins ch3 WHERE ch3.customer_id = c.id AND ch3.timestamp >= date_trunc('day', now())
                    )

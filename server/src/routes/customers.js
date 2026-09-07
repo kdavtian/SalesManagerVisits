@@ -14,8 +14,8 @@ const LAST_VISIT_SUBQUERY = `(SELECT max(ch.timestamp) FROM checkins ch WHERE ch
 // doesn't involve field visits (key accounts / distributor-managed / OEM
 // contracts), so these customers never need to show up as "overdue" or
 // "not visited" no matter how long since their last check-in.
-const NO_VISIT_CHANNELS = ["KF", "CAS", "CVO", "PCO", "OEM"];
-const NOT_NO_VISIT_CHANNEL_SQL = `COALESCE(c.sales_channel, '') <> ALL(ARRAY[${NO_VISIT_CHANNELS.map((v) => `'${v}'`).join(",")}])`;
+export const NO_VISIT_CHANNELS = ["KF", "CAS", "CVO", "PCO", "OEM"];
+export const NOT_NO_VISIT_CHANNEL_SQL = `COALESCE(c.sales_channel, '') <> ALL(ARRAY[${NO_VISIT_CHANNELS.map((v) => `'${v}'`).join(",")}])`;
 
 // Derived visit status — no assignment/planning data exists yet, so
 // "overdue" is approximated from each customer's own visit_frequency_days

@@ -129,18 +129,23 @@
   transform: scale(1.18);
 }
 
-/* Managers use a completely different round avatar language. */
-#leaflet-map .team-dot {
+/* Managers use a completely different round avatar language: first letter
+   of their name on a white disc, with a per-person outline color (set
+   inline as --team-color) so teammates stay visually distinct on a
+   crowded map without needing a legend. */
+#leaflet-map .team-avatar {
   width: 30px;
   height: 30px;
-  margin: -7px;
   border-radius: 50%;
-  border: 3px solid var(--map-marker-blue);
-  background:
-    radial-gradient(circle at 77% 78%, var(--map-visited) 0 3px, #fff 3.5px 5px, transparent 5.5px),
-    radial-gradient(circle at 50% 36%, var(--map-marker-dark) 0 4px, transparent 4.5px),
-    radial-gradient(ellipse at 50% 70%, var(--map-marker-dark) 0 7px, transparent 7.5px),
-    #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border: 3px solid var(--team-color, var(--map-marker-blue));
+  color: var(--team-color, var(--map-marker-blue));
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
   box-shadow: 0 2px 8px rgba(17,19,24,.26), 0 0 0 2px rgba(255,255,255,.92);
 }
 

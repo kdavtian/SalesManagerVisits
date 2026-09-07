@@ -125,20 +125,45 @@ visitPlansRouter.post("/", async (req, res) => {
     [targetId, date]
   );
   const existing = existingRows[0];
+
+  // What the rep currently sees as their "approved" plan for this date may
+  // not be a persisted row at all -- GET /mine synthesizes one on the fly
+  // from an active recurring rule when no explicit visit_plans row exists
+  // yet. Without accounting for that here, the very first save against a
+  // rule-derived day (e.g. dragging a stop to reorder it, or resubmitting
+  // the identical rule-generated list) had no persisted "existing" row to
+  // compare against, so it always looked like a brand-new plan and got
+  // downgraded to "pending" -- silently clobbering the already-approved
+  // plan the map's Planned filter had just been showing.
+  let previousApprovedIds = null;
+  if (existing) {
+    if (existing.status === "approved") previousApprovedIds = existing.customer_ids;
+  } else {
+    const dayOfWeek = new Date(`${date}T00:00:00Z`).getUTCDay();
+    const { rows: ruleRows } = await pool.query(
+      "SELECT * FROM visit_plan_rules WHERE user_id = $1 AND day_of_week = $2 AND active",
+      [targetId, dayOfWeek]
+    );
+    const rule = ruleRows[0];
+    if (rule) {
+      const areaIds = await expandAreas(rule.areas);
+      previousApprovedIds = [...new Set([...areaIds, ...(rule.customer_ids ?? [])])];
+    }
+  }
+
   // A reorder (same customers, different sequence) isn't a content change --
   // don't make an already-approved plan drop back to pending just because
   // the rep dragged their stops into a different visiting order.
   const isReorderOnly =
-    existing &&
-    existing.status === "approved" &&
-    existing.customer_ids.length === customerIds.length &&
-    new Set(existing.customer_ids).size === new Set(customerIds).size &&
-    customerIds.every((id) => existing.customer_ids.includes(id));
+    previousApprovedIds !== null &&
+    previousApprovedIds.length === customerIds.length &&
+    new Set(previousApprovedIds).size === new Set(customerIds).size &&
+    customerIds.every((id) => previousApprovedIds.includes(id));
 
   const autoApprove = isReorderOnly || req.user.role === "admin" || targetId !== req.user.id;
   const status = autoApprove ? "approved" : "pending";
-  const reviewedBy = isReorderOnly ? existing.reviewed_by : autoApprove ? req.user.id : null;
-  const reviewedAt = isReorderOnly ? existing.reviewed_at : autoApprove ? new Date() : null;
+  const reviewedBy = isReorderOnly ? (existing ? existing.reviewed_by : null) : autoApprove ? req.user.id : null;
+  const reviewedAt = isReorderOnly ? (existing ? existing.reviewed_at : new Date()) : autoApprove ? new Date() : null;
 
   const { rows } = await pool.query(
     `INSERT INTO visit_plans (user_id, plan_date, customer_ids, status, created_by, reviewed_by, reviewed_at)
