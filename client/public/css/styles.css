@@ -4260,12 +4260,6 @@ input[type="search"]:focus {
   min-width: 0;
 }
 
-/* Nudges the back button down to the avatar's own vertical center rather
-   than sitting flush with its top edge under flex-start above. */
-.customer-detail-header-main #back-btn {
-  margin-top: 22px;
-}
-
 /* Two standard 44px row-heights tall -- this is the hero identity element of
    the page, not a list row, and it now has a row to itself to grow into.
    No background/border here (unlike the base .detail-header-icon this
@@ -4324,17 +4318,6 @@ input[type="search"]:focus {
   align-items: center;
 }
 
-/* Groups Edit + Account settings (whichever of the two the viewer has) so
-   they can be pushed to the row's right edge with a single margin-left:auto,
-   independent of the social-profile icons (Instagram/Facebook/email/website,
-   injected by customerSocialProfiles.js) which stay prepended in front of
-   this group, on the left, exactly where they already were. */
-.detail-header-actions-primary {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
-}
 
 /* This row can carry up to 4-5 icon buttons (reassign/assign-ERP/social/
    edit) on top of the back button and header icon -- at the standard 44px
@@ -4482,11 +4465,37 @@ input[type="search"]:focus {
 }
 
 .detail-facts-card {
+  position: relative;
   margin: 14px 0;
-  padding: 14px;
+  /* Extra top clearance so the Edit/Account-settings buttons anchored in
+     the corner (see .detail-facts-card-actions) never sit over the first
+     fact row's text, regardless of which fact happens to render first. */
+  padding: 52px 14px 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+/* Edit + Account settings live inside this card's own top-right corner now
+   (moved out of the header's action row per redesign) -- pushed here to
+   read as this card's own controls rather than page-level chrome floating
+   in the gap above it. */
+.detail-facts-card-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 6px;
+}
+
+.detail-facts-card-actions .icon-btn {
+  width: 36px;
+  height: 36px;
+}
+
+.detail-facts-card-actions .icon-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .detail-fact {

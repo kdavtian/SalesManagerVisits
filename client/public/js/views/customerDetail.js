@@ -108,19 +108,23 @@ export async function renderCustomerDetail(root, navigate, customerId) {
           </div>
         </div>
       </div>
-      <div class="detail-header-actions">
-        <div class="detail-header-actions-primary">
-          ${
-            hasAccountSettings
-              ? `<button type="button" class="icon-btn" id="account-settings-btn" aria-label="${t("account_settings")}" title="${t("account_settings")}">${icons.settings}</button>`
-              : ""
-          }
-          <button type="button" class="icon-btn" id="edit-customer-btn" aria-label="${t("edit_customer")}" title="${t("edit_customer")}">${icons.pencil}</button>
-        </div>
-      </div>
+      <!-- Social-profile icons (Instagram/Facebook/email/website) are the only
+           thing left in this row -- customerSocialProfiles.js finds it by this
+           class and prepends its section here. Left empty (and collapsing to
+           zero height) for any customer with none. Edit/Account settings live
+           on the facts card below now, not here -- see detail-facts-card-actions. -->
+      <div class="detail-header-actions"></div>
     </div>
 
     <div class="card detail-facts-card">
+      <div class="detail-facts-card-actions">
+        ${
+          hasAccountSettings
+            ? `<button type="button" class="icon-btn" id="account-settings-btn" aria-label="${t("account_settings")}" title="${t("account_settings")}">${icons.settings}</button>`
+            : ""
+        }
+        <button type="button" class="icon-btn" id="edit-customer-btn" aria-label="${t("edit_customer")}" title="${t("edit_customer")}">${icons.pencil}</button>
+      </div>
       ${
         customer.region || customer.address
           ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.pin}</span><span>${[customer.region, customer.subregion, customer.address].filter(Boolean).map(escapeHtml).join(" &middot; ")}</span></div>`
