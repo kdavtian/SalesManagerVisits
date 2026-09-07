@@ -10,7 +10,7 @@
 //                   broken down by sales channel so they can count the
 //                   physical notes channel by channel before confirming.
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, formatDateTime, activateDialog } from "../util.js";
+import { escapeHtml, formatAmd, formatDateTime, activateDialog, channelDisplayLabel } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 
@@ -50,7 +50,7 @@ function channelBreakdownHtml(byChannel, total) {
         ${byChannel
           .map(
             (c) => `<tr>
-              <th scope="row">${escapeHtml(c.sales_channel)}</th>
+              <th scope="row">${escapeHtml(channelDisplayLabel(c.sales_channel))}</th>
               <td class="muted">${c.count}</td>
               <td class="text-amount">${formatAmd(c.total_amd)}</td>
             </tr>`
@@ -411,7 +411,7 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId) {
               <span class="order-line-name">${escapeHtml(p.customer_name_snapshot)}</span>
               <strong class="text-amount">${formatAmd(Number(p.amount_amd))}</strong>
             </div>
-            <span class="order-line-meta">${escapeHtml(p.sales_channel || "—")} · ${escapeHtml(
+            <span class="order-line-meta">${escapeHtml(p.sales_channel ? channelDisplayLabel(p.sales_channel) : "—")} · ${escapeHtml(
               p.sales_manager_name_snapshot
             )} · ${formatDateTime(p.payment_date)}</span>
           </div>`

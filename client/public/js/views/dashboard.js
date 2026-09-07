@@ -42,22 +42,27 @@ function comparisonCardHtml(label, current, previous, sublabel) {
 // action's id, so the markup itself is written once. Which of these render
 // is decided by visibleQuickActionIds() in ../quickActions.js: the admin's
 // per-role override if one exists, otherwise that tile's shipped defaults.
+// Each tile gets its own background color (grouped by purpose -- field
+// work / money / fulfillment / analytics -- so tiles in the same family
+// read as related while still being individually distinguishable) so a
+// user can spot the right tile by color alone instead of reading every
+// label. See .quick-action-icon-* in styles.css.
 const QUICK_ACTION_ICON = {
   qa_check_in: () => `<span class="quick-action-icon quick-action-icon-checkin">${icons.mapPinCheck}</span>`,
-  qa_plan_route: () => `<span class="quick-action-icon">${icons.planDay}</span>`,
+  qa_plan_route: () => `<span class="quick-action-icon quick-action-icon-route">${icons.planDay}</span>`,
   qa_add_customer: () => `<span class="quick-action-icon quick-action-icon-accent">${icons.mapPinPlus}</span>`,
   qa_payments: () =>
-    `<span class="quick-action-icon quick-action-icon-accent">${icons.payment}<span class="nav-badge count-badge" id="qa-payments-badge" hidden></span></span>`,
-  qa_cash_expense: () => `<span class="quick-action-icon">${icons.wallet}</span>`,
-  qa_pricelist: () => `<span class="quick-action-icon">${icons.tag}</span>`,
-  qa_warehouse: () => `<span class="quick-action-icon">${icons.box}</span>`,
-  qa_delivery: () => `<span class="quick-action-icon">${icons.truck}</span>`,
+    `<span class="quick-action-icon quick-action-icon-payments">${icons.payment}<span class="nav-badge count-badge" id="qa-payments-badge" hidden></span></span>`,
+  qa_cash_expense: () => `<span class="quick-action-icon quick-action-icon-cash">${icons.wallet}</span>`,
+  qa_pricelist: () => `<span class="quick-action-icon quick-action-icon-pricelist">${icons.tag}</span>`,
+  qa_warehouse: () => `<span class="quick-action-icon quick-action-icon-warehouse">${icons.box}</span>`,
+  qa_delivery: () => `<span class="quick-action-icon quick-action-icon-delivery">${icons.truck}</span>`,
   qa_recorded: () =>
-    `<span class="quick-action-icon">${icons.clock}<span class="nav-badge count-badge" id="unrecorded-badge" hidden></span></span>`,
-  qa_team_performance: () => `<span class="quick-action-icon">${icons.target}</span>`,
-  qa_reports: () => `<span class="quick-action-icon">${icons.chart}</span>`,
-  qa_debt_balances: () => `<span class="quick-action-icon">${icons.wallet}</span>`,
-  qa_company_dashboard: () => `<span class="quick-action-icon">${icons.chart}</span>`,
+    `<span class="quick-action-icon quick-action-icon-recorded">${icons.clock}<span class="nav-badge count-badge" id="unrecorded-badge" hidden></span></span>`,
+  qa_team_performance: () => `<span class="quick-action-icon quick-action-icon-team">${icons.target}</span>`,
+  qa_reports: () => `<span class="quick-action-icon quick-action-icon-reports">${icons.chart}</span>`,
+  qa_debt_balances: () => `<span class="quick-action-icon quick-action-icon-debt">${icons.wallet}</span>`,
+  qa_company_dashboard: () => `<span class="quick-action-icon quick-action-icon-company">${icons.chart}</span>`,
 };
 
 const QUICK_ACTION_ROUTE = {

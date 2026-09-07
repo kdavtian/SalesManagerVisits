@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, tierSelectorHtml, activateTierSelector, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, tierSelectorHtml, activateTierSelector, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, channelDisplayLabel } from "../util.js";
 import { t } from "../i18n.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
@@ -25,16 +25,6 @@ function sortMapChannels(channels) {
     if (ib !== -1) return 1;
     return a.localeCompare(b);
   });
-}
-
-// customerPortfolioUi.js writes POTENTIAL/COMPETITORS in all caps into
-// sales_channel so they sort and filter like any other channel value --
-// but as filter-sheet labels they should read as normal words, not
-// shouting, same as every other channel label.
-function channelDisplayLabel(channel) {
-  if (channel === "POTENTIAL") return t("tier_potential");
-  if (channel === "COMPETITORS") return t("brand_group_competitors");
-  return channel;
 }
 
 // Mirrors the brand_status shape recorded at check-in (see BRAND_GROUPS in
@@ -1110,6 +1100,20 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     });
   }
 
+  // Shared "focus the map on one customer" mechanism -- used both by the
+  // #/map?customer=<id> deep link (customer detail's "Show on map") and,
+  // right after creating a new customer, to land on that customer's own
+  // pin instead of the fitBounds-to-everyone zoom-out applyFilter would
+  // otherwise apply while add-mode is active.
+  function focusOnCustomerMarker(id) {
+    const entry = lastCustomers.find((item) => String(item.c.id) === String(id));
+    if (entry) {
+      map.setView([entry.c.lat, entry.c.lng], Math.max(map.getZoom(), 15));
+      entry.marker.openPopup();
+    }
+    return entry;
+  }
+
   async function loadCustomers() {
     const customers = await api.listCustomers();
     markerLayer.clearLayers();
@@ -1183,11 +1187,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       // set) and yanks the map back to the user's own location the next
       // time they tap a filter chip.
       initialViewApplied = true;
-      const entry = lastCustomers.find((item) => String(item.c.id) === String(focusCustomerId));
-      if (entry) {
-        map.setView([entry.c.lat, entry.c.lng], Math.max(map.getZoom(), 15));
-        entry.marker.openPopup();
-      }
+      focusOnCustomerMarker(focusCustomerId);
     }
 
     if (!bounds.length && navigator.geolocation) {
@@ -2297,7 +2297,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
 
       try {
         const phoneDigits = normalizePhone(data.get("phone"));
-        await api.createCustomer({
+        const created = await api.createCustomer({
           name: data.get("name"),
           category: data.get("category") || null,
           phone: phoneDigits.length > 3 ? `+${phoneDigits}` : null,
@@ -2318,7 +2318,22 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
           map.removeLayer(placingMarker);
           placingMarker = null;
         }
-        loadCustomers();
+        // Land on the customer just created instead of applyFilter's
+        // fitBounds-to-everyone zoom-out -- startInAddMode staying true for
+        // the rest of this map session is exactly what makes that guard
+        // (see applyFilter above) keep re-fitting on every subsequent
+        // reload, so clear it here once the add flow is actually done, then
+        // focus the new pin the same way the #/map?customer=<id> deep link
+        // does (see focusOnCustomerMarker).
+        startInAddMode = false;
+        // Also pre-empt applyFilter's own "first settle" geolocation-recenter
+        // path (see above) -- without this, loadCustomers() below can kick
+        // off an async getCurrentPosition() that resolves after our
+        // focusOnCustomerMarker call and yanks the view back to the user's
+        // own location instead of the customer just created.
+        initialViewApplied = true;
+        await loadCustomers();
+        if (created?.id != null) focusOnCustomerMarker(created.id);
       } catch (err) {
         errorEl.textContent = err.message;
         errorEl.hidden = false;

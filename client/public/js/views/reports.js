@@ -2,7 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { REGION_LIST, YEREVAN_DISTRICTS, CATEGORY_LIST, formatAmd } from "../util.js";
+import { REGION_LIST, YEREVAN_DISTRICTS, CATEGORY_LIST, formatAmd, channelDisplayLabel } from "../util.js";
 
 const PERIOD_OPTIONS = [
   { value: "", labelKey: "period_all_time" },
@@ -360,7 +360,7 @@ async function renderPaymentsReport(root, navigate) {
                 .map(
                   (c) => `
               <button type="button" class="card report-row report-drill-card" data-href="${drillLink({ sales_channel: c.sales_channel === "—" ? "" : c.sales_channel })}">
-                <span>${escapeHtml(c.sales_channel)}</span>
+                <span>${escapeHtml(channelDisplayLabel(c.sales_channel))}</span>
                 <strong>${formatAmd(Number(c.approved_amd))}</strong>
               </button>`
                 )

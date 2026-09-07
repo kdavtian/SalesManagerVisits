@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, activateDialog } from "../util.js";
+import { escapeHtml, formatAmd, activateDialog, channelDisplayLabel } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { state } from "../state.js";
 import { icons } from "../icons.js";
@@ -100,7 +100,7 @@ export async function renderOrders(root, navigate) {
     filterMenu.innerHTML = `
       <button role="menuitemradio" aria-checked="${channelFilter === ""}" data-channel="">${t("all_channels")}</button>
       ${channels
-        .map((c) => `<button role="menuitemradio" aria-checked="${c === channelFilter}" data-channel="${escapeHtml(c)}">${escapeHtml(c)}</button>`)
+        .map((c) => `<button role="menuitemradio" aria-checked="${c === channelFilter}" data-channel="${escapeHtml(c)}">${escapeHtml(channelDisplayLabel(c))}</button>`)
         .join("")}
     `;
     filterMenu.querySelectorAll("[data-channel]").forEach((btn) => {

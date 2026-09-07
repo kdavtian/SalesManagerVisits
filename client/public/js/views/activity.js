@@ -156,18 +156,15 @@ export async function renderActivity(root, navigate) {
   // split by and they keep a single total count instead.
   function renderManagerPills() {
     const total = allCheckins.length;
-    const pct = (n) => (total ? `${Math.round((n / total) * 100)}%` : "0%");
     const counts = new Map();
     for (const c of allCheckins) counts.set(String(c.user_id), (counts.get(String(c.user_id)) ?? 0) + 1);
 
     const pills = [
-      // "All" is the denominator, so a "100%" under it would be noise.
-      { value: "", label: t("filter_all"), count: total, sub: "" },
+      { value: "", label: t("filter_all"), count: total },
       ...managerOptions().map(([id, name]) => ({
         value: String(id),
         label: name,
         count: counts.get(String(id)) ?? 0,
-        sub: pct(counts.get(String(id)) ?? 0),
       })),
     ];
 
@@ -179,7 +176,6 @@ export async function renderActivity(root, navigate) {
           <button type="button" class="stat-pill ${filters.manager === p.value ? "stat-pill-active" : ""}" data-manager="${escapeHtml(p.value)}" aria-pressed="${filters.manager === p.value}">
             <strong>${p.count}</strong>
             <span>${escapeHtml(p.label)}</span>
-            ${p.sub ? `<span class="stat-pill-sub">${p.sub}</span>` : ""}
           </button>`
           )
           .join("")}

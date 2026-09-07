@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, formatDateTime, activateDialog } from "../util.js";
+import { escapeHtml, formatAmd, formatDateTime, activateDialog, channelDisplayLabel } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 import { icons } from "../icons.js";
@@ -193,7 +193,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
     const channels = [...new Set(payments.map((p) => p.sales_channel).filter(Boolean))].sort();
     filterMenu.innerHTML = `
       <button role="menuitemradio" aria-checked="${channelFilter === ""}" data-channel="">${t("all_channels")}</button>
-      ${channels.map((c) => `<button role="menuitemradio" aria-checked="${c === channelFilter}" data-channel="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join("")}
+      ${channels.map((c) => `<button role="menuitemradio" aria-checked="${c === channelFilter}" data-channel="${escapeHtml(c)}">${escapeHtml(channelDisplayLabel(c))}</button>`).join("")}
       ${
         canSeeAll
           ? `<hr />
@@ -260,7 +260,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
             <span class="list-row-trailing-text text-amount">${formatAmd(Number(p.amount_amd))}</span>
           </div>
           <div class="muted list-row-meta">
-            ${p.erp_customer_id_snapshot ? `${t("customer_id_label")}: ${escapeHtml(p.erp_customer_id_snapshot)} · ` : ""}${escapeHtml(p.sales_manager_name_snapshot)}${p.sales_channel ? ` · ${escapeHtml(p.sales_channel)}` : ""} · ${formatDateTime(p.payment_date)}
+            ${p.erp_customer_id_snapshot ? `${t("customer_id_label")}: ${escapeHtml(p.erp_customer_id_snapshot)} · ` : ""}${escapeHtml(p.sales_manager_name_snapshot)}${p.sales_channel ? ` · ${escapeHtml(channelDisplayLabel(p.sales_channel))}` : ""} · ${formatDateTime(p.payment_date)}
           </div>
           <div class="list-row-bottom">
             <span class="badge ${meta.cls}">${t(meta.key)}</span>
@@ -303,7 +303,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
       const groups = [];
       let currentChannel = null;
       for (const p of payments) {
-        const label = p.sales_channel || t("all_channels");
+        const label = p.sales_channel ? channelDisplayLabel(p.sales_channel) : t("all_channels");
         if (label !== currentChannel) {
           groups.push({ label, rows: [] });
           currentChannel = label;
@@ -392,7 +392,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
             <span class="order-line-meta">${p.erp_customer_id_snapshot ? `${t("customer_id_label")}: ${escapeHtml(p.erp_customer_id_snapshot)} · ` : ""}${formatDateTime(p.payment_date)}</span>
           </div>
         </div>
-        <p class="muted">${t("payment_manager_label")}: ${escapeHtml(p.sales_manager_name_snapshot)}${p.sales_channel ? ` · ${escapeHtml(p.sales_channel)}` : ""}</p>
+        <p class="muted">${t("payment_manager_label")}: ${escapeHtml(p.sales_manager_name_snapshot)}${p.sales_channel ? ` · ${escapeHtml(channelDisplayLabel(p.sales_channel))}` : ""}</p>
         ${p.note ? `<p class="muted">${escapeHtml(p.note)}</p>` : ""}
         ${p.rejection_reason ? `<p class="form-error" style="position:static;">${escapeHtml(p.rejection_reason)}</p>` : ""}
         <h3 class="list-group-heading">${t("payment_history_title")}</h3>

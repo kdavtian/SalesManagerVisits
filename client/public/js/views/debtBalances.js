@@ -68,14 +68,18 @@ export async function renderDebtBalances(root, navigate) {
   }
 
   // Three rows, in the order the balance is actually read: identify the
-  // account and what it owes (ID left / amount right), then whose it is,
-  // then the two dates that explain the balance -- when they last paid and
-  // when a rep last stood in front of them.
+  // account and what it owes (ID + assigned manager left / amount right),
+  // then whose it is, then the two dates that explain the balance -- when
+  // they last paid and when a rep last stood in front of them. The manager
+  // name only belongs on this first row in flat mode -- by-manager mode
+  // already says whose customer it is via the group heading above, so
+  // repeating it on every card would be redundant.
   function rowHtml(r) {
+    const managerLabel = canGroup && mode === "flat" ? escapeHtml(r.assigned_manager_name || t("unassigned")) : "";
     return `
       <div class="card debt-balance-card">
         <div class="debt-balance-row">
-          <span class="muted">${t("customer_id_label")}: ${escapeHtml(r.customer_id || "")}</span>
+          <span class="muted">${t("customer_id_label")}: ${escapeHtml(r.customer_id || "")}${managerLabel ? ` · ${managerLabel}` : ""}</span>
           <span class="text-amount debt-balance-amount">${formatAmd(Number(r.remaining_balance))}</span>
         </div>
         <strong>${escapeHtml(r.customer_name || "")}</strong>
@@ -83,7 +87,6 @@ export async function renderDebtBalances(root, navigate) {
           <span>${t("debt_balances_last_payment")}: ${formatDate(r.last_payment_date)}</span>
           <span>${t("debt_balances_last_visit")}: ${formatDate(r.last_visit_at)}</span>
         </div>
-        ${canGroup && mode === "flat" ? `<p class="muted">${escapeHtml(r.assigned_manager_name || t("unassigned"))}</p>` : ""}
       </div>`;
   }
 

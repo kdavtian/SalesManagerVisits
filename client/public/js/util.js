@@ -186,6 +186,18 @@ export function matchSubregion(guess, region) {
 // channel (SM B2B/YVN/Davtashen/Shirak).
 export const SALES_CHANNELS = ["KF", "CAS", "OEM", "CVO", "PCO", "SM B2B", "SM YVN", "SM Davtashen", "SM Shirak"];
 
+// customerPortfolioUi.js writes the literal uppercase "POTENTIAL"/
+// "COMPETITORS" into a customer's sales_channel so it sorts and filters
+// like any other channel value -- but wherever that value is rendered as
+// text to a user it should read as a normal word, not shouting, same as
+// every other channel label. Purely a display-layer translation: the
+// stored value is untouched.
+export function channelDisplayLabel(channel) {
+  if (channel === "POTENTIAL") return t("tier_potential");
+  if (channel === "COMPETITORS") return t("brand_group_competitors");
+  return channel;
+}
+
 export const CATEGORY_LIST = [
   { value: "Յուղման կետ", labelKey: "category_oil_point", icon: CATEGORY_ICON.oilPoint, cls: "category-oil-point" },
   { value: "Խանութ", labelKey: "category_shop", icon: CATEGORY_ICON.shop, cls: "category-shop" },

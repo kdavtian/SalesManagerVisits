@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatDateTime, formatAmd, haversineMeters, getCurrentPosition, customerListIconHtml, categoryLabel, activateDialog } from "../util.js";
+import { escapeHtml, formatDateTime, formatAmd, haversineMeters, getCurrentPosition, customerListIconHtml, categoryLabel, activateDialog, channelDisplayLabel } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state, seesAllActivity } from "../state.js";
@@ -378,7 +378,7 @@ export function renderCustomers(root, navigate, initialFilter) {
     filterRow.querySelector('[data-filter-btn="channel"]')?.addEventListener("click", () => {
       openMultiFilterSheet(
         t("filter_direction_title"),
-        channels.map((c) => ({ value: c, label: c })),
+        channels.map((c) => ({ value: c, label: channelDisplayLabel(c) })),
         channelFilters,
         (selected) => {
           channelFilters = selected;
@@ -489,7 +489,7 @@ export function renderCustomers(root, navigate, initialFilter) {
         const idAndType = [
           c.erp_customer_id ? `ID: ${escapeHtml(String(c.erp_customer_id))}` : "",
           c.category ? escapeHtml(categoryLabel(c.category)) : "",
-          c.sales_channel ? escapeHtml(String(c.sales_channel)) : "",
+          c.sales_channel ? escapeHtml(channelDisplayLabel(String(c.sales_channel))) : "",
         ]
           .filter(Boolean)
           .join(" &bull; ");

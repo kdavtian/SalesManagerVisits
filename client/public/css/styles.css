@@ -64,6 +64,17 @@
   --tier-bronze: #cd7f32;
   --tier-silver: #9a9aa5;
   --tier-gold: #d4a017;
+  /* This app was built and is mostly used at phone width. On a desktop
+     browser window (e.g. a MacBook Pro at 1440-1512px) nothing had ever
+     capped the content column, so buttons (many are .btn-block/width:100%),
+     inputs, and cards stretched edge-to-edge across the whole window.
+     --app-max-width is the single source of truth for the phone-simulator
+     column width: applied to the body rule below, it constrains every
+     normal-flow element at once instead of patching dozens of screens, and
+     the same value is reused wherever a position:fixed element (nav bar,
+     banners, bottom sheets) needs the identical cap since fixed elements
+     don't inherit a parent's width constraint. */
+  --app-max-width: 480px;
 }
 
 :root[data-theme="dark"] {
@@ -117,6 +128,15 @@
   display: none !important;
 }
 
+html {
+  /* Only visible as the gutter to either side of the centered phone-width
+     column at wide (desktop) viewports -- see --app-max-width on body
+     below. A neutral "recessed" tone (already used for pressed-card
+     states) reads as backdrop behind the app rather than a stray white
+     flash, and is a no-op at phone widths where body already fills it. */
+  background: var(--bg-card-pressed);
+}
+
 html,
 body {
   height: 100%;
@@ -141,7 +161,14 @@ body {
 }
 
 body {
-  margin: 0;
+  margin: 0 auto;
+  /* Caps the phone-shaped content column at wide (desktop) viewports --
+     see --app-max-width above. At phone widths this is a no-op (the
+     viewport is already narrower than the cap). Constrains every normal-
+     flow child (sync-banner, top-bar, #app) in one place; position:fixed
+     children (nav-bar, banners, sheets) need the matching treatment
+     applied to them individually below since they escape this box. */
+  max-width: var(--app-max-width);
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
@@ -149,6 +176,10 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Wide-viewport-only: gives the centered phone-width column visible edges
+     against the browser chrome instead of blending into it. Invisible at
+     phone widths since there's no viewport space to either side. */
+  box-shadow: 0 0 0 1px var(--border);
 }
 
 button,
@@ -428,8 +459,18 @@ a {
      clipped by the map underneath it. Fixed positioning sidesteps that --
      the bar is always flush with the actual screen edge. */
   position: fixed;
-  left: 0;
-  right: 0;
+  /* position:fixed is relative to the viewport, not to <body> -- it does
+     NOT inherit body's --app-max-width cap, which is exactly what let this
+     bar stay full physical-screen width even after that cap was added on
+     the body rule above. left:50% + translateX(-50%) is the standard
+     fixed-element centering trick: center the bar on the viewport, then
+     let its own max-width clip it to the same phone-width column as
+     everything else. A no-op at phone widths since max-width already
+     exceeds the viewport there. */
+  left: 50%;
+  right: auto;
+  width: 100%;
+  max-width: var(--app-max-width);
   bottom: 0;
   /* Must sit above the isolated app/map stacking context. Leaflet uses
      internal z-index values up to 1000, but those can no longer escape
@@ -440,9 +481,11 @@ a {
      combined with backdrop-filter fails to repaint after a sibling's
      content changes underneath it (e.g. the map mounting) -- it stays in
      the DOM and clickable, just visually blank until something else forces
-     a repaint. Promoting it to its own GPU layer avoids that. */
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
+     a repaint. Promoting it to its own GPU layer avoids that. Combined
+     into one transform with the -50% centering translate above (a second
+     `transform` declaration would just overwrite the first, not compose). */
+  transform: translate3d(-50%, 0, 0);
+  -webkit-transform: translate3d(-50%, 0, 0);
   will-change: transform;
   isolation: isolate;
 }
@@ -630,10 +673,18 @@ a {
   border: 0.5px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 10px 12px;
-  margin: 0 12px calc(10px + var(--safe-bottom));
+  margin: 0 0 calc(10px + var(--safe-bottom));
   position: fixed;
-  left: 0;
-  right: 0;
+  /* Same fixed-element centering as .nav-bar above -- this banner is
+     position:fixed so it doesn't inherit body's --app-max-width cap. The
+     12px side insets are now baked into width/max-width below instead of
+     a left/right margin, which a translateX(-50%)-centered element can't
+     use to inset symmetrically. */
+  left: 50%;
+  right: auto;
+  width: calc(var(--app-max-width) - 24px);
+  max-width: calc(100% - 24px);
+  transform: translateX(-50%);
   bottom: 62px;
   z-index: 900;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
@@ -2524,6 +2575,10 @@ input[type="search"]:focus {
   background: rgba(0, 0, 0, 0.55);
   display: flex;
   align-items: flex-end;
+  /* Centers the sheet horizontally once its own max-width (see .sheet
+     below) caps it below this overlay's full viewport width -- a no-op at
+     phone widths where the sheet's width:100% already fills the overlay. */
+  justify-content: center;
   z-index: 2000;
 }
 
@@ -2546,6 +2601,8 @@ input[type="search"]:focus {
 .guide-overlay-frame {
   position: relative;
   width: 100%;
+  max-width: var(--app-max-width);
+  margin: 0 auto;
   height: 100%;
   background: var(--bg);
   display: flex;
@@ -2622,6 +2679,11 @@ input[type="search"]:focus {
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   padding: 20px 16px calc(20px + var(--safe-bottom));
   width: 100%;
+  /* Bottom sheets sit in a position:fixed overlay (see .sheet-overlay),
+     which -- like the nav bar -- doesn't inherit body's --app-max-width
+     cap. Without this a sheet stretched across the entire desktop window
+     at wide viewports instead of staying phone-width. */
+  max-width: var(--app-max-width);
   max-height: 85vh;
   overflow-y: auto;
   box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.5);
@@ -3648,6 +3710,69 @@ input[type="search"]:focus {
 
 .quick-action-icon-checkin {
   background: var(--checkin-green);
+  color: #ffffff;
+}
+
+/* Item 3 -- one distinct color per Quick Action tile, grouped by purpose
+   and built from the app's already-established palette tokens (no new
+   arbitrary hex values) so a user can find the right tile by color alone.
+   Field work: check-in (checkin-green, above) / plan route / add customer
+   (accent, above). Money: payments / cash expense / debt balances share a
+   gold-amber-bronze family but stay distinguishable from each other.
+   Fulfillment: warehouse / delivery. Analytics: team performance / reports
+   / company dashboard share a mixed family, each a different blend. */
+.quick-action-icon-route {
+  background: var(--success);
+  color: #ffffff;
+}
+
+.quick-action-icon-payments {
+  background: var(--tier-gold);
+  color: #ffffff;
+}
+
+.quick-action-icon-cash {
+  background: var(--warning);
+  color: #ffffff;
+}
+
+.quick-action-icon-debt {
+  background: var(--tier-bronze);
+  color: #ffffff;
+}
+
+.quick-action-icon-pricelist {
+  background: color-mix(in srgb, var(--checkin-green) 55%, var(--accent) 45%);
+  color: #ffffff;
+}
+
+.quick-action-icon-warehouse {
+  background: var(--tier-silver);
+  color: #ffffff;
+}
+
+.quick-action-icon-delivery {
+  background: var(--accent-dark);
+  color: #ffffff;
+}
+
+.quick-action-icon-recorded {
+  background: color-mix(in srgb, var(--tier-silver) 55%, var(--text-dim) 45%);
+  color: #ffffff;
+}
+
+.quick-action-icon-team {
+  background: color-mix(in srgb, var(--danger) 55%, var(--tier-gold) 45%);
+  color: #ffffff;
+}
+
+.quick-action-icon-reports {
+  background: color-mix(in srgb, var(--accent) 55%, var(--tier-silver) 45%);
+  color: #ffffff;
+}
+
+.quick-action-icon-company {
+  background: color-mix(in srgb, var(--accent-dark) 65%, var(--success) 35%);
   color: #ffffff;
 }
 
@@ -5055,16 +5180,6 @@ input[type="search"]:focus {
 .stat-pill-static:active {
   transform: none;
   opacity: 1;
-}
-
-.stat-pill-sub {
-  font-size: var(--fs-nav);
-  color: var(--text-dim);
-}
-
-.stat-pill-active .stat-pill-sub {
-  color: #ffffff;
-  opacity: 0.85;
 }
 
 /* One step below .list-row-meta: this line can carry a free-text note, so
