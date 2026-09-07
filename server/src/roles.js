@@ -190,9 +190,13 @@ export function canSubmitHandoffForOthers(role) {
 
 // --- Warehouse & Delivery -----------------------------------------------
 // Who sees the Warehouse Manager's pick list / staging list and can mark an
-// order packed or flag a stock issue.
+// order packed or flag a stock issue. Sales Director is included alongside
+// Warehouse Manager/admin -- the warehouse manager role isn't currently
+// using the app day to day, so the sales director covers the same ground
+// for now (see canMarkDeliveredWithoutRoute below for the equivalent gap on
+// the delivery side).
 export function canManageWarehouse(role) {
-  return role === "warehouse_manager" || role === "admin";
+  return role === "warehouse_manager" || role === "sales_director" || role === "admin";
 }
 
 // Who plans/edits a delivery route (distinct from canPlanForOthers, which
@@ -206,6 +210,27 @@ export function canPlanRoutes(role) {
 // "is this role allowed to drive at all".
 export function canDeliverOrders(role) {
   return role === "delivery_manager" || role === "admin";
+}
+
+// Who can move an order straight from packed_stock_out to delivered without
+// planning/completing a delivery route (no signature/POD captured either) --
+// the driver role (delivery_manager) isn't currently using the app, so
+// nothing ever completes a route stop through the normal confirm-with-
+// signature flow (see delivery.js's /orders/:id/confirm) and a packed order
+// planned onto a route has no way back into view once route planning
+// excludes it from the "packed and awaiting route" pool (see
+// GET /delivery/packed-orders' NOT EXISTS route_stops filter) -- this is the
+// manual override for the office-side roles who need to reconcile order
+// status by hand in the meantime, plus the driver role itself for when it
+// does have a phone in hand but no completed route to confirm against.
+export function canMarkDeliveredWithoutRoute(role) {
+  return (
+    role === "delivery_manager" ||
+    role === "sales_director" ||
+    role === "accountant" ||
+    role === "ceo" ||
+    role === "admin"
+  );
 }
 
 // Fulfillment staff who move an order between confirmed and delivered --

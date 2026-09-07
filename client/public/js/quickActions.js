@@ -31,7 +31,11 @@ export const QUICK_ACTIONS = [
   },
   { id: "qa_cash_expense", defaultRoles: ALL_ROLES },
   { id: "qa_pricelist", defaultRoles: ALL_ROLES },
-  { id: "qa_warehouse", defaultRoles: ["warehouse_manager", "admin"] },
+  // Sales Director included alongside Warehouse Manager/admin -- the
+  // warehouse manager role isn't currently using the app, so the director
+  // covers the same ground for now (see canManageWarehouse in
+  // server/src/roles.js).
+  { id: "qa_warehouse", defaultRoles: ["warehouse_manager", "sales_director", "admin"] },
   { id: "qa_delivery", defaultRoles: ["delivery_manager", "admin"] },
   { id: "qa_recorded", defaultRoles: ["admin", "ceo", "accountant"] },
   { id: "qa_team_performance", defaultRoles: ["admin", "ceo", "sales_director", "accountant", "sales_manager"] },

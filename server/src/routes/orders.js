@@ -1,10 +1,10 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { seesAllActivity, canConfirmOrders, canAssignErpCustomerId, canRecordOrders, seesUnrecordedBadge } from "../roles.js";
+import { seesAllActivity, canConfirmOrders, canAssignErpCustomerId, canRecordOrders, seesUnrecordedBadge, canMarkDeliveredWithoutRoute } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { notifyUser } from "../notifications.js";
-import { ORDER_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES } from "../notificationPreferences.js";
+import { ORDER_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES, DELIVERY_OUTCOME_NOTIFY_ROLES } from "../notificationPreferences.js";
 
 export const ordersRouter = Router();
 
@@ -732,6 +732,70 @@ ordersRouter.post("/:id/reject", async (req, res) => {
       }
     } catch (err) {
       console.error("Post-order-reject notification failed:", err);
+    }
+  })();
+});
+
+// Manual, route-independent packed_stock_out -> delivered transition -- for
+// when there's no driver actively using the app to complete a route stop
+// through delivery.js's signature-required /orders/:id/confirm. No POD/
+// signature is captured here (there's no physical delivery event to attest
+// to); this is purely an office-side status correction, gated to
+// canMarkDeliveredWithoutRoute (driver/sales director/accountant/CEO/admin).
+// Deliberately its own endpoint rather than added to GENERIC_PATCH_TARGETS
+// above, for the same reason packed_stock_out/delivered are excluded from
+// there -- so the normal signature-capturing path stays the only way to
+// reach "delivered" for anyone NOT in this explicit override list.
+ordersRouter.post("/:id/mark-delivered", async (req, res) => {
+  if (!canMarkDeliveredWithoutRoute(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const { rows } = await pool.query(
+    `SELECT o.*, c.name AS customer_name FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = $1`,
+    [req.params.id]
+  );
+  const order = rows[0];
+  if (!order) return res.status(404).json({ error: "Order not found" });
+  if (order.status !== "packed_stock_out") {
+    return res.status(409).json({ error: `Cannot mark "${order.status}" as delivered -- only a packed order can be delivered` });
+  }
+
+  const client = await pool.connect();
+  let updatedOrder;
+  try {
+    await client.query("BEGIN");
+    // Closes out any route stop this order happened to be on (harmless
+    // no-op if it was never routed) -- same bookkeeping delivery.js's own
+    // confirm/fail endpoints do, so a driver's route screen doesn't keep
+    // showing this order as an open stop after it's already been resolved
+    // here.
+    await client.query("UPDATE route_stops SET completed_at = now() WHERE order_id = $1 AND completed_at IS NULL", [order.id]);
+    const { rows: updatedRows } = await client.query(
+      "UPDATE orders SET status = 'delivered', updated_at = now() WHERE id = $1 RETURNING *",
+      [order.id]
+    );
+    updatedOrder = updatedRows[0];
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  res.json(updatedOrder);
+
+  (async () => {
+    try {
+      const { rows: recipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [DELIVERY_OUTCOME_NOTIFY_ROLES]);
+      for (const recipient of recipients) {
+        if (recipient.id === req.user.id) continue;
+        notifyUser(recipient.id, "order_delivered", {
+          title: "Order delivered",
+          body: `${order.customer_name}'s order was marked delivered (no route).`,
+          url: "/#/orders",
+        });
+      }
+    } catch (err) {
+      console.error("Post-manual-delivery notification failed:", err);
     }
   })();
 });

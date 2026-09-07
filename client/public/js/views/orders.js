@@ -29,6 +29,13 @@ const DISCOUNT_APPROVER_ROLES = new Set(["admin", "sales_director", "ceo"]);
 // Who reviews a freshly-submitted order -- mirrors canConfirmOrders in the
 // server's roles.js.
 const CONFIRM_ROLES = new Set(["admin", "sales_director", "ceo"]);
+// Who can move a packed order straight to delivered without a planned
+// route -- mirrors canMarkDeliveredWithoutRoute in the server's roles.js.
+// Exists because the driver (delivery_manager) role isn't currently using
+// the app to complete routes through the normal signature-capturing flow
+// (see views/deliveryRoute.js), which otherwise leaves a routed order with
+// no way back into view.
+const MARK_DELIVERED_ROLES = new Set(["delivery_manager", "sales_director", "accountant", "ceo", "admin"]);
 const APPROVAL_META = {
   pending: { key: "approval_status_pending", cls: "badge-warning" },
   approved: { key: "approval_status_approved", cls: "badge-success" },
@@ -410,6 +417,11 @@ export async function renderOrders(root, navigate) {
       }
       if (order.status === "packed_stock_out") {
         buttons.push({ label: t("packed_awaiting_route"), action: "noop", cls: "btn", disabledDisplay: true });
+        // No route/signature required here -- see canMarkDeliveredWithoutRoute
+        // in server/src/roles.js for why this manual override exists.
+        if (MARK_DELIVERED_ROLES.has(state.user.role)) {
+          buttons.push({ label: t("mark_delivered_no_route"), action: "mark-delivered", cls: "btn btn-primary" });
+        }
       }
       if (canEditThisOrder) {
         buttons.push({ label: t("edit_order"), action: "edit-order", cls: "btn" });
@@ -453,6 +465,7 @@ export async function renderOrders(root, navigate) {
             return;
           }
           if (btn.dataset.action === "delete-order" && !confirm(t("confirm_delete_order"))) return;
+          if (btn.dataset.action === "mark-delivered" && !confirm(t("confirm_mark_delivered_no_route"))) return;
           if (btn.dataset.action === "reject-order") {
             if (!confirm(t("confirm_reject_order"))) return;
             const note = prompt(t("reject_order_note_prompt")) || "";
@@ -490,6 +503,7 @@ export async function renderOrders(root, navigate) {
             if (btn.dataset.action === "approve-discount") await api.approveOrderDiscount(orderId);
             else if (btn.dataset.action === "reject-discount") await api.rejectOrderDiscount(orderId);
             else if (btn.dataset.action === "submit-order") await api.submitOrder(orderId);
+            else if (btn.dataset.action === "mark-delivered") await api.markOrderDeliveredWithoutRoute(orderId);
             else await api.deleteOrder(orderId);
             overlay.remove();
             notifyOrdersChanged();
