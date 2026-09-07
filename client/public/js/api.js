@@ -289,6 +289,7 @@ export const api = {
   approvePerfPlan: (planId) => json(`/team-performance/plans/${planId}/approve`, "POST", {}),
   rejectPerfPlan: (planId, reason) => json(`/team-performance/plans/${planId}/reject`, "POST", { reason }),
   revisePerfPlan: (planId, reason, targets) => json(`/team-performance/plans/${planId}/revise`, "POST", { reason, targets }),
+  reopenPerfPlanAsDraft: (planId) => json(`/team-performance/plans/${planId}/reopen-as-draft`, "POST", {}),
   getPerfApprovals: () => request("/team-performance/approvals"),
   getPerfDashboard: (planId) => request(`/team-performance/plans/${planId}/dashboard`),
   getMyPerformance: (month) => request(`/team-performance/my-performance?month=${month}`),

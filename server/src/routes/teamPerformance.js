@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { isPerfCeo, canEditChannelPlan, canReviewPlan, canReviseApprovedPlan, seesAllPerformance, canCloseMonth } from "../roles.js";
+import { isPerfCeo, canEditChannelPlan, canReviewPlan, canReviseApprovedPlan, canReopenPlanAsDraft, seesAllPerformance, canCloseMonth } from "../roles.js";
 import { notifyUser } from "../notifications.js";
 import { PERF_APPROVER_ROLES } from "../notificationPreferences.js";
 import { workingDaysForMonth } from "../workingDays.js";
@@ -764,6 +764,54 @@ teamPerformanceRouter.post("/plans/:id/revise", async (req, res) => {
   } finally {
     client.release();
   }
+});
+
+// Manual unblock: pulls a pending_approval or approved plan straight back
+// to draft, in place (same row/version -- unlike /revise above, this does
+// NOT create a new version, since the point here is exactly to let someone
+// freely re-edit and resubmit without waiting on a reviewer or being
+// limited to the CEO-only Revise flow). Clears the submit/approval/
+// rejection bookkeeping since none of it describes this plan's state once
+// it's a draft again; the transition itself stays visible in
+// perf_plan_audit either way. See canReopenPlanAsDraft in roles.js for who
+// -- the same role set that can submit a plan in the first place.
+teamPerformanceRouter.post("/plans/:id/reopen-as-draft", async (req, res) => {
+  if (!canReopenPlanAsDraft(req.user.role)) {
+    return res.status(403).json({ error: "Not allowed to reopen this plan as a draft" });
+  }
+  const { rows: planRows } = await pool.query("SELECT * FROM perf_plans WHERE id = $1", [req.params.id]);
+  const plan = planRows[0];
+  if (!plan) return res.status(404).json({ error: "Plan not found" });
+  if (plan.status !== "pending_approval" && plan.status !== "approved") {
+    return res.status(409).json({ error: "Only a plan pending approval or approved can be reopened as a draft" });
+  }
+
+  const { rows: updated } = await pool.query(
+    `UPDATE perf_plans SET status = 'draft', submitted_by = NULL, submitted_at = NULL,
+       approved_by = NULL, approved_at = NULL, rejected_reason = NULL,
+       lock_version = lock_version + 1, updated_at = now()
+     WHERE id = $1 RETURNING *`,
+    [plan.id]
+  );
+  await writeAudit(pool, plan.id, req.user.id, "reopen_as_draft", { status: plan.status }, { status: "draft" });
+  res.json(updated[0]);
+
+  (async () => {
+    try {
+      const notifyRoles = PERF_APPROVER_ROLES.includes(req.user.role) ? ["admin", "ceo", "sales_director"] : ["admin", "ceo", "accountant"];
+      const { rows: recipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [notifyRoles]);
+      for (const recipient of recipients) {
+        if (recipient.id === req.user.id) continue;
+        notifyUser(recipient.id, "perf_plan_reviewed", {
+          title: "Performance plan reopened as draft",
+          body: `The ${plan.month.toISOString?.() ?? plan.month} plan (was ${plan.status}) was reopened for editing.`,
+          url: "/#/team-performance/planning",
+        });
+      }
+    } catch (err) {
+      console.error("Post-perf-plan-reopen notification failed:", err);
+    }
+  })();
 });
 
 // All plans currently awaiting this reviewer's decision -- the Approval

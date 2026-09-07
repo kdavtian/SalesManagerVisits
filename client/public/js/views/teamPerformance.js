@@ -1,7 +1,7 @@
 import { api } from "../api.js";
 import { escapeHtml, formatAmd, activateDialog } from "../util.js";
 import { t } from "../i18n.js";
-import { state, seesAllPerformance, isPerfCeo, canEditChannelPlan, canReviewPerfPlan, canCloseMonth } from "../state.js";
+import { state, seesAllPerformance, isPerfCeo, canEditChannelPlan, canReviewPerfPlan, canCloseMonth, canReopenPerfPlanAsDraft } from "../state.js";
 
 const BRANDS = ["castrol", "lotos", "royal"];
 const PACE_COLOR = {
@@ -352,6 +352,11 @@ async function renderManagementView(root, navigate, managerId) {
       const canSubmit = isEditableStatus && plan.targets.length > 0;
       const isRevise = plan.status === "approved" && isPerfCeo();
       const canClose = plan.status === "approved" && canCloseMonth();
+      // Manual unblock: pull a pending_approval/approved plan straight back
+      // to draft instead of waiting on a reviewer or being limited to the
+      // CEO-only Revise flow -- see canReopenPerfPlanAsDraft in state.js and
+      // POST /plans/:id/reopen-as-draft in teamPerformance.js.
+      const canReopen = (plan.status === "pending_approval" || plan.status === "approved") && canReopenPerfPlanAsDraft();
       bodyEl.innerHTML = `
         <div class="card" style="margin-bottom:10px;">
           <strong>${t(`perf_status_${plan.status}`)}</strong>
@@ -360,6 +365,7 @@ async function renderManagementView(root, navigate, managerId) {
         </div>
         <div class="card-list" id="perf-channel-list"></div>
         ${isEditableStatus ? `<button type="button" class="btn btn-primary btn-block" id="perf-submit-btn" ${canSubmit ? "" : "disabled"} style="margin-top:12px;">${plan.status === "rejected" ? t("perf_resubmit_for_approval") : t("perf_submit_for_approval")}</button>` : ""}
+        ${canReopen ? `<button type="button" class="btn btn-block" id="perf-reopen-btn" style="margin-top:12px;">${t("perf_reopen_as_draft")}</button>` : ""}
         ${canClose ? `<button type="button" class="btn btn-block" id="perf-close-btn" style="margin-top:12px;">${t("perf_close_month")}</button>` : ""}
       `;
       const listEl = bodyEl.querySelector("#perf-channel-list");
@@ -395,6 +401,18 @@ async function renderManagementView(root, navigate, managerId) {
         e.currentTarget.disabled = true;
         try {
           await api.submitPerfPlan(plan.id);
+          loadTab();
+        } catch (err) {
+          alert(err.message);
+          e.currentTarget.disabled = false;
+        }
+      });
+
+      bodyEl.querySelector("#perf-reopen-btn")?.addEventListener("click", async (e) => {
+        if (!confirm(t("perf_reopen_as_draft_confirm"))) return;
+        e.currentTarget.disabled = true;
+        try {
+          await api.reopenPerfPlanAsDraft(plan.id);
           loadTab();
         } catch (err) {
           alert(err.message);
