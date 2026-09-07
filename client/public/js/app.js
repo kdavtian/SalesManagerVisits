@@ -1,5 +1,5 @@
 import { api } from "./api.js";
-import { state, setUser, isAdmin } from "./state.js";
+import { state, setUser, isAdmin, canPlanForOthers } from "./state.js";
 import { getLang, t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { renderLogin } from "./views/login.js";
@@ -204,6 +204,40 @@ async function refreshNotificationBadge() {
   applyNotificationBadge();
 }
 
+// Same pattern again, on the hamburger/settings button -- a plan stuck in
+// "Plan approvals" (Settings > Admin workspace) silently blocks that rep's
+// Map "Planned" filter with no other visible sign anything needs review,
+// so surface the count right where the button is. canPlanForOthers-gated
+// client-side too, not just server-side: GET /visit-plans/pending 403s for
+// anyone else, and there's no reason to fire that request for roles that
+// can never see this queue. admin.js's plan-approvals section fires
+// "plans-changed" after an approve/reject so this updates immediately.
+let planApprovalBadgeCount = 0;
+
+export function applyPlanApprovalBadge() {
+  const el = document.getElementById("topbar-menu-badge");
+  if (!el) return;
+  if (planApprovalBadgeCount > 0) {
+    el.textContent = planApprovalBadgeCount > 99 ? "99+" : String(planApprovalBadgeCount);
+    el.hidden = false;
+  } else {
+    el.hidden = true;
+  }
+}
+
+async function refreshPlanApprovalBadge() {
+  if (!state.user || !canPlanForOthers()) return;
+  try {
+    const plans = await api.getPendingVisitPlans();
+    planApprovalBadgeCount = plans.length;
+  } catch {
+    return;
+  }
+  applyPlanApprovalBadge();
+}
+
+window.addEventListener("plans-changed", refreshPlanApprovalBadge);
+
 // Tracks whether this SPA session has done at least one in-app navigation
 // (as opposed to just rendering whatever hash the app happened to boot
 // into, e.g. a deep link or a notification tap straight into a detail
@@ -262,6 +296,7 @@ async function render() {
       refreshPaymentBadge();
       refreshUnrecordedBadge();
       refreshNotificationBadge();
+      refreshPlanApprovalBadge();
     });
     return;
   }
@@ -398,6 +433,7 @@ function renderNav() {
       </button>
       <button type="button" class="topbar-menu-btn" id="topbar-menu-btn" aria-label="${t("nav_settings")}" ${hash === "#/settings" ? 'aria-current="page"' : ""}>
         ${icons.menu}
+        <span class="nav-badge count-badge" id="topbar-menu-badge" hidden></span>
       </button>
     </div>
   `;
@@ -411,6 +447,7 @@ function renderNav() {
     }
   });
   applyNotificationBadge();
+  applyPlanApprovalBadge();
 }
 
 function renderSyncBanner() {
@@ -469,10 +506,12 @@ async function init() {
   refreshPaymentBadge();
   refreshUnrecordedBadge();
   refreshNotificationBadge();
+  refreshPlanApprovalBadge();
   setInterval(refreshOrderBadge, 60000);
   setInterval(refreshPaymentBadge, 60000);
   setInterval(refreshUnrecordedBadge, 60000);
   setInterval(refreshNotificationBadge, 60000);
+  setInterval(refreshPlanApprovalBadge, 60000);
 }
 
 initServiceWorkerUpdates();

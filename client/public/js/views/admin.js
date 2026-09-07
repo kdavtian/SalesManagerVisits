@@ -318,6 +318,7 @@ export async function renderPlanApprovalsSection(container) {
       btn.addEventListener("click", async () => {
         btn.closest(".plan-approval-row").querySelectorAll("button").forEach((b) => (b.disabled = true));
         await api.reviewVisitPlan(btn.dataset.id, btn.dataset.action);
+        window.dispatchEvent(new Event("plans-changed"));
         load();
       });
     });
