@@ -4249,29 +4249,30 @@ input[type="search"]:focus {
 
 .customer-detail-header-main {
   display: flex;
-  /* Top-aligned (not centered) so the avatar's top edge lines up with the
-     first line of the customer name instead of floating at its vertical
-     midpoint against the taller 88px avatar. */
+  /* Top-aligned so the icon's top edge lines up with the first line of the
+     customer name -- and, now that the icon is the same 44px height as the
+     back button beside it, this also keeps both of them flush along the
+     same top edge. */
   align-items: flex-start;
-  /* Tighter than the base .detail-header's 12px -- pulls the avatar in
-     close to the back button, and the name/ERP-id column in close to the
-     avatar, buying back horizontal room for long names. */
-  gap: 8px;
+  /* 10px between back button -> icon -> name/ERP-id column, all three. */
+  gap: 10px;
   min-width: 0;
 }
 
-/* Two standard 44px row-heights tall -- this is the hero identity element of
-   the page, not a list row, and it now has a row to itself to grow into.
-   No background/border here (unlike the base .detail-header-icon this
-   overrides): that base styling made sense as a tinted backdrop behind a
-   currentColor-stroke SVG, but reads as an unwanted white box/ring around
-   the full-color pre-rendered category PNG this now always shows -- the
-   PNG (via .list-row-icon-* below) already carries its own tinted
-   background at the size it actually needs. */
+/* Same 44x44 footprint as the back button (.icon-btn) beside it, and the
+   same 12px corner radius the app's other 44px icon boxes use
+   (.list-row-icon) -- was 88px/24px when this was the page's own hero
+   avatar; sized down to match its neighbor instead. No background/border
+   here (unlike the base .detail-header-icon this overrides): that base
+   styling made sense as a tinted backdrop behind a currentColor-stroke SVG,
+   but reads as an unwanted white box/ring around the full-color
+   pre-rendered category PNG this now always shows -- the PNG (via
+   .list-row-icon-* below) already carries its own tinted background at the
+   size it actually needs. */
 .customer-detail-header .detail-header-icon {
-  width: 88px;
-  height: 88px;
-  border-radius: 24px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
   padding: 0;
   background: none;
   border: none;
@@ -4286,8 +4287,8 @@ input[type="search"]:focus {
 }
 
 .customer-detail-header .detail-header-icon .category-img {
-  width: 56px;
-  height: 56px;
+  width: 28px;
+  height: 28px;
 }
 
 .customer-detail-header .detail-header-title {
