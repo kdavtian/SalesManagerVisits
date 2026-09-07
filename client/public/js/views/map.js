@@ -954,23 +954,41 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   root.querySelector("#nearby-view-all").addEventListener("click", () => navigate("#/customers"));
 
   async function loadPlannedFilter() {
-    let plan;
+    let ids = [];
     try {
-      // canViewTeamLocations roles (admin/director/ceo) can pick a specific
-      // manager from the map's own manager filter -- the Planned filter
-      // needs to follow that same selection instead of always asking for
-      // the viewer's own plan (which is empty for these roles, since they
-      // don't have field-visit route plans of their own). This was the map
-      // "Planned" filter's actual disconnect from Route Plans: a
-      // director/admin choosing a manager and tapping Planned always saw
-      // nothing, because it silently kept querying their own account's
-      // plan regardless of who was selected.
-      plan = await api.getMyVisitPlan(undefined, managerFilter || undefined);
+      if (managerFilter || !canViewTeamLocations()) {
+        // canViewTeamLocations roles (admin/director/ceo) can pick a specific
+        // manager from the map's own manager filter -- the Planned filter
+        // needs to follow that same selection instead of always asking for
+        // the viewer's own plan (which is empty for these roles, since they
+        // don't have field-visit route plans of their own). This was the map
+        // "Planned" filter's actual disconnect from Route Plans: a
+        // director/admin choosing a manager and tapping Planned always saw
+        // nothing, because it silently kept querying their own account's
+        // plan regardless of who was selected.
+        const plan = await api.getMyVisitPlan(undefined, managerFilter || undefined);
+        ids = plan?.status === "approved" ? plan.customer_ids : [];
+      } else {
+        // Still true even with the fix above: a director/admin/CEO who
+        // hasn't picked anyone in the manager filter has no personal route
+        // of their own either, so this branch was ALSO always empty for
+        // them -- the actual most-reported case, since nobody manages by
+        // hand-picking one rep every time before checking the map. Show the
+        // union of every rep's approved plan for today instead, so
+        // "Planned" is useful the moment the tab opens.
+        const reps = await api.listPlannableUsers();
+        const plans = await Promise.all(reps.map((u) => api.getMyVisitPlan(undefined, u.id).catch(() => null)));
+        const idSet = new Set();
+        plans.forEach((plan) => {
+          if (plan?.status === "approved") plan.customer_ids.forEach((id) => idSet.add(id));
+        });
+        ids = [...idSet];
+      }
     } catch {
-      plan = null;
+      ids = [];
     }
     await customersReady;
-    plannedCustomerIds = plan?.status === "approved" ? plan.customer_ids : [];
+    plannedCustomerIds = ids;
     applyFilter();
   }
 
