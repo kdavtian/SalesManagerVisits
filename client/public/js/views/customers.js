@@ -37,7 +37,10 @@ const FILTERS = [
 //               labelling these "Not visited" was the actual bug, since a
 //               customer on a 30-day cadence visited 10 days ago is on
 //               schedule, not neglected.
-function visitStatus(c) {
+// Exported so the customer DETAIL header derives its status badge from this
+// exact function rather than re-deriving one of its own -- the two screens
+// disagreeing was the bug this helper was written to fix in the first place.
+export function visitStatus(c) {
   // `visit_required` is set to false by the competitor policy wrapper;
   // `requires_visit` is the server's channel-exemption flag.
   if (c.requires_visit === false || c.visit_required === false) return "exempt";
@@ -48,12 +51,23 @@ function visitStatus(c) {
   return "on_track";
 }
 
-const STATUS_BADGE = {
+export const STATUS_BADGE = {
   today: { cls: "badge-success", labelKey: "visited_today" },
   overdue: { cls: "badge-danger", labelKey: "filter_overdue" },
   recent: { cls: "badge-info", labelKey: "visited_this_week" },
   never: { cls: "badge-neutral", labelKey: "never_visited" },
 };
+
+// The badge (class + label key) for a customer's derived visit status, or
+// null for a status that deliberately carries no badge (exempt/on_track).
+// A never-visited customer whose cadence window has already elapsed is
+// genuinely urgent, so it keeps the alarming colour even though the more
+// specific "Not visited" wording wins over "Overdue".
+export function visitStatusBadge(c) {
+  const status = visitStatus(c);
+  if (status === "never" && c.overdue) return { ...STATUS_BADGE.never, cls: "badge-danger" };
+  return STATUS_BADGE[status] ?? null;
+}
 
 // Which derived statuses each stat pill / list filter selects.
 const FILTER_STATUSES = {
@@ -329,6 +343,21 @@ export function renderCustomers(root, navigate, initialFilter) {
 
   function sortCustomers(customers) {
     const sorted = [...customers];
+    // While the debt view is on, the whole point of the list is "who owes us
+    // the most", so debt DESC overrides the chosen sort for the duration --
+    // sortKey itself is left untouched, so flipping the toggle back off
+    // restores whatever order the user had picked rather than resetting it.
+    if (showDebt) {
+      sorted.sort((a, b) => {
+        const debtA = Number(a.debt_amd) || 0;
+        const debtB = Number(b.debt_amd) || 0;
+        // Customers with no debt at all sort last, then alphabetically among
+        // themselves so that tail of the list stays readable.
+        if (debtA !== debtB) return debtB - debtA;
+        return a.name.localeCompare(b.name);
+      });
+      return sorted;
+    }
     if (sortKey === "name") {
       sorted.sort((a, b) => a.name.localeCompare(b.name));
     } else if (sortKey === "last_visit") {
@@ -367,12 +396,7 @@ export function renderCustomers(root, navigate, initialFilter) {
         // the date only -- never a status word -- and a customer who has
         // never been visited gets the status word only, since there's no
         // date to pair it with.
-        const status = visitStatus(c);
-        // A never-visited customer whose cadence window has already elapsed
-        // is genuinely urgent, so it keeps the alarming colour even though
-        // the more specific "Not visited" wording wins over "Overdue".
-        const badge =
-          status === "never" && c.overdue ? { ...STATUS_BADGE.never, cls: "badge-danger" } : STATUS_BADGE[status];
+        const badge = visitStatusBadge(c);
         const lastVisit = c.last_visit_at ? `${t("last_visit")}: ${formatDateTime(c.last_visit_at)}` : "";
         const idAndType = [
           c.erp_customer_id ? `ID: ${escapeHtml(String(c.erp_customer_id))}` : "",

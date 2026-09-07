@@ -1,14 +1,16 @@
-import { getLang } from "./i18n.js";
+import { getLang, t } from "./i18n.js";
 
 const INSTAGRAM_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.4" cy="6.7" r="1" fill="currentColor" stroke="none"/></svg>`;
 const FACEBOOK_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M13.8 21v-8h2.7l.4-3h-3.1V8.1c0-.9.25-1.5 1.55-1.5H17V3.9c-.3-.04-1.3-.12-2.5-.12-2.48 0-4.18 1.5-4.18 4.3V10H7.5v3h2.82v8z" fill="currentColor" stroke="none"/></svg>`;
 const EDIT_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>`;
+const MAIL_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m3.8 7 7.3 5.2a1.5 1.5 0 0 0 1.8 0L20.2 7"/></svg>`;
+const GLOBE_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M3.2 9.5h17.6M3.2 14.5h17.6"/><path d="M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"/></svg>`;
 
 const labels = {
   hy: {
-    title: "Սոցիալական էջեր",
-    add: "Ավելացնել սոցիալական էջեր",
-    edit: "Փոփոխել սոցիալական էջերը",
+    title: "Կոնտակտներ և սոցիալական էջեր",
+    add: "Ավելացնել կոնտակտներ և սոցիալական էջեր",
+    edit: "Փոփոխել կոնտակտները և սոցիալական էջերը",
     instagram: "Instagram",
     facebook: "Facebook",
     save: "Պահպանել",
@@ -18,9 +20,9 @@ const labels = {
     facebookPlaceholder: "Facebook username կամ հղում",
   },
   en: {
-    title: "Social profiles",
-    add: "Add social profiles",
-    edit: "Edit social profiles",
+    title: "Contact & social profiles",
+    add: "Add contact & social profiles",
+    edit: "Edit contact & social profiles",
     instagram: "Instagram",
     facebook: "Facebook",
     save: "Save",
@@ -99,6 +101,19 @@ function socialButton(kind, value) {
   return `<button type="button" class="customer-social-link customer-social-${kind}" data-social-kind="${kind}" data-social-value="${escapeAttr(value)}" aria-label="${label}" title="${label}">${icon}</button>`;
 }
 
+// Email and website are plain links rather than the app-then-web dance the
+// Instagram/Facebook buttons do -- there is no app to try first, the OS
+// already knows what to do with a mailto:/https: URL. They still render as
+// the same icon-sized control so the row reads as one set.
+function linkButton(kind, href, icon, label) {
+  const target = kind === "email" ? "" : ` target="_blank" rel="noopener noreferrer"`;
+  return `<a class="customer-social-link customer-social-${kind}" href="${escapeAttr(href)}"${target} aria-label="${escapeAttr(label)}" title="${escapeAttr(label)}">${icon}</a>`;
+}
+
+function websiteHref(value) {
+  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+}
+
 function openEditor(customerId, data, onSaved) {
   const l = text();
   const overlay = document.createElement("div");
@@ -109,6 +124,8 @@ function openEditor(customerId, data, onSaved) {
       <form id="customer-social-form">
         <label>${escapeAttr(l.instagram)}<input name="instagram" inputmode="url" autocapitalize="none" autocomplete="off" placeholder="${escapeAttr(l.instagramPlaceholder)}" value="${data.instagram_username ? escapeAttr(`@${data.instagram_username}`) : ""}" /></label>
         <label>${escapeAttr(l.facebook)}<input name="facebook" inputmode="url" autocapitalize="none" autocomplete="off" placeholder="${escapeAttr(l.facebookPlaceholder)}" value="${escapeAttr(data.facebook_url || "")}" /></label>
+        <label>${escapeAttr(t("customer_email"))}<input name="email" type="email" inputmode="email" autocapitalize="none" autocomplete="off" placeholder="${escapeAttr(t("customer_email_placeholder"))}" value="${escapeAttr(data.email || "")}" /></label>
+        <label>${escapeAttr(t("customer_website"))}<input name="website" inputmode="url" autocapitalize="none" autocomplete="off" placeholder="${escapeAttr(t("customer_website_placeholder"))}" value="${escapeAttr(data.website || "")}" /></label>
         <p class="form-error" id="customer-social-error" hidden></p>
         <div class="sheet-actions">
           <button type="button" class="btn" id="customer-social-cancel">${escapeAttr(l.cancel)}</button>
@@ -136,7 +153,12 @@ function openEditor(customerId, data, onSaved) {
     try {
       const updated = await apiRequest(`/api/customer-social/${customerId}`, {
         method: "PATCH",
-        body: JSON.stringify({ instagram: fd.get("instagram"), facebook: fd.get("facebook") }),
+        body: JSON.stringify({
+          instagram: fd.get("instagram"),
+          facebook: fd.get("facebook"),
+          email: fd.get("email"),
+          website: fd.get("website"),
+        }),
       });
       close();
       onSaved(updated);
@@ -179,23 +201,43 @@ async function decorateCustomerDetail() {
     actions.prepend(section);
   }
 
+  // The edit action is form-heavy, so it lives in the header's "more
+  // actions" overflow menu (built by customerDetail.js) next to the other
+  // sheet-opening actions, rather than taking a slot in the icon row that
+  // is now reserved for one-tap external links.
+  const moreMenu = document.querySelector(".detail-view #detail-more-menu");
+
   function paint(nextData) {
     data = nextData;
+    // One-tap external links only -- these cost nothing to keep visible
+    // because they just hand off to another app/tab.
     const links = [
       data.instagram_username ? socialButton("instagram", data.instagram_username) : "",
       data.facebook_url ? socialButton("facebook", data.facebook_url) : "",
+      data.email ? linkButton("email", `mailto:${data.email}`, MAIL_ICON, `${t("customer_email")}: ${data.email}`) : "",
+      data.website ? linkButton("website", websiteHref(data.website), GLOBE_ICON, `${t("customer_website")}: ${data.website}`) : "",
     ].filter(Boolean).join("");
 
-    // Icon-only, matching the other header-action buttons -- aria-label/title
-    // carry the meaning the old full-row text label used to spell out.
-    section.innerHTML = `
-      ${links}
-      ${data.can_edit ? `<button type="button" class="customer-social-edit" aria-label="${escapeAttr(links ? l.edit : l.add)}" title="${escapeAttr(links ? l.edit : l.add)}">${EDIT_ICON}</button>` : ""}`;
-
+    section.innerHTML = links;
     section.querySelectorAll("[data-social-kind]").forEach((button) => {
       button.addEventListener("click", () => openPlatformProfile(button.dataset.socialKind, button.dataset.socialValue));
     });
-    section.querySelector(".customer-social-edit")?.addEventListener("click", () => openEditor(customerId, data, paint));
+
+    const hasAny = Boolean(data.instagram_username || data.facebook_url || data.email || data.website);
+    let editItem = moreMenu?.querySelector(".customer-social-edit-item");
+    if (data.can_edit && moreMenu) {
+      if (!editItem) {
+        editItem = document.createElement("button");
+        editItem.type = "button";
+        editItem.className = "detail-more-item customer-social-edit-item";
+        editItem.setAttribute("role", "menuitem");
+        editItem.addEventListener("click", () => openEditor(customerId, data, paint));
+        moreMenu.prepend(editItem);
+      }
+      editItem.innerHTML = `<span class="detail-more-item-icon">${EDIT_ICON}</span><span>${escapeAttr(hasAny ? l.edit : l.add)}</span>`;
+    } else {
+      editItem?.remove();
+    }
   }
 
   paint(data);

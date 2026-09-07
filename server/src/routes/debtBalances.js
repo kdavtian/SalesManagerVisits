@@ -17,6 +17,11 @@ debtBalancesRouter.use(requireAuth);
 // elsewhere (see seesFinancialExports in roles.js) -- accountant is
 // included explicitly by the task spec even though seesFinancialExports
 // already covers it.
+// Same shape customers.js uses for its own last-visit column, kept
+// identical on purpose so the two screens can never report a different
+// "last visit" for the same customer.
+const LAST_VISIT_SUBQUERY = `(SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id)`;
+
 debtBalancesRouter.get("/", async (req, res) => {
   const params = [];
   let where = "WHERE ecd.debt_amd IS NOT NULL AND ecd.debt_amd <> 0";
@@ -29,6 +34,7 @@ debtBalancesRouter.get("/", async (req, res) => {
             c.name AS customer_name,
             ecd.debt_amd AS remaining_balance,
             ecd.last_payment_date,
+            ${LAST_VISIT_SUBQUERY} AS last_visit_at,
             c.assigned_manager_id,
             am.name AS assigned_manager_name
      FROM erp_customer_data ecd

@@ -49,9 +49,39 @@ function cleanFacebook(value) {
   return url.toString().slice(0, 300);
 }
 
+// Email/website are informational contact details, not verified addresses --
+// a loose shape check is enough to catch a typo without rejecting the many
+// legitimate-but-unusual things people paste in here.
+function cleanEmail(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  if (!/^[^\s@]+@[^\s@.]+\.[^\s@]+$/.test(raw)) {
+    throw Object.assign(new Error("Enter a valid email address"), { status: 400 });
+  }
+  return raw.slice(0, 200);
+}
+
+function cleanWebsite(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  // A bare domain ("example.am") is what people actually type, so accept it
+  // and store the https:// form the link needs to open correctly.
+  const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  let url;
+  try {
+    url = new URL(withScheme);
+  } catch {
+    throw Object.assign(new Error("Enter a valid website address"), { status: 400 });
+  }
+  if (!/^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(url.hostname)) {
+    throw Object.assign(new Error("Enter a valid website address"), { status: 400 });
+  }
+  return url.toString().slice(0, 300);
+}
+
 async function loadCustomer(id) {
   const { rows } = await pool.query(
-    "SELECT id, created_by, assigned_manager_id, instagram_username, facebook_url FROM customers WHERE id = $1",
+    "SELECT id, created_by, assigned_manager_id, instagram_username, facebook_url, email, website FROM customers WHERE id = $1",
     [id]
   );
   return rows[0];
@@ -71,6 +101,8 @@ customerSocialRouter.get("/:id", async (req, res) => {
   res.json({
     instagram_username: customer.instagram_username,
     facebook_url: customer.facebook_url,
+    email: customer.email,
+    website: customer.website,
     can_edit: canEditSocial(req.user, customer),
   });
 });
@@ -84,19 +116,23 @@ customerSocialRouter.patch("/:id", async (req, res) => {
 
   let instagramUsername;
   let facebookUrl;
+  let email;
+  let website;
   try {
     instagramUsername = cleanInstagram(req.body?.instagram);
     facebookUrl = cleanFacebook(req.body?.facebook);
+    email = cleanEmail(req.body?.email);
+    website = cleanWebsite(req.body?.website);
   } catch (err) {
     return res.status(err.status || 400).json({ error: err.message });
   }
 
   const { rows } = await pool.query(
     `UPDATE customers
-     SET instagram_username = $1, facebook_url = $2
-     WHERE id = $3
-     RETURNING instagram_username, facebook_url`,
-    [instagramUsername, facebookUrl, req.params.id]
+     SET instagram_username = $1, facebook_url = $2, email = $3, website = $4
+     WHERE id = $5
+     RETURNING instagram_username, facebook_url, email, website`,
+    [instagramUsername, facebookUrl, email, website, req.params.id]
   );
   res.json({ ...rows[0], can_edit: true });
 });

@@ -84,7 +84,11 @@ dashboardRouter.get("/summary", async (req, res) => {
          FROM users u
          LEFT JOIN checkins ch
            ON ch.user_id = u.id AND ch.timestamp >= date_trunc('week', now())
-         WHERE u.role != 'admin'
+         -- Sales managers only: this breakdown measures progress against an
+         -- assigned customer book, and accountants/drivers/warehouse and
+         -- delivery managers don't have one -- their rows were always
+         -- 0/0/0 noise that pushed the real reps down the list.
+         WHERE u.role = 'sales_manager'
          GROUP BY u.id, u.name
          ORDER BY checkins_this_week DESC`
       )
@@ -117,7 +121,14 @@ dashboardRouter.get("/summary", async (req, res) => {
      FROM users u
      LEFT JOIN daily_visits dv ON dv.user_id = u.id
      LEFT JOIN new_customers nc ON nc.user_id = u.id
-     WHERE u.role != 'admin'
+     -- The monthly premium is a sales-rep competition, so the standings
+     -- list sales managers and nobody else. Excluding only 'admin' let
+     -- accountants/drivers/warehouse+delivery managers/directors/CEO onto
+     -- a board they aren't competing on. Kept identical to
+     -- computeMonthlyStandings() below -- a close-out that ranked a
+     -- different population than the live board would be a nasty surprise
+     -- on payout day.
+     WHERE u.role = 'sales_manager'
      GROUP BY u.id, u.name, nc.customer_points
      ORDER BY total_points DESC, u.name`
   );
@@ -146,11 +157,9 @@ dashboardRouter.get("/summary", async (req, res) => {
       photo_points: myPoints.photo_points,
       customer_points: myPoints.customer_points,
     },
-    // Everyone sees the full leaderboard, sales managers included -- they're
-    // the ones actually competing for the monthly premium, so hiding
-    // standings from exactly that audience defeated the whole point of a
-    // motivating leaderboard (seesAll only ever gated broader activity
-    // data, not this).
+    // Every role can *see* the board (management wants the standings too),
+    // but only sales managers appear *on* it -- they're the ones competing
+    // for the monthly premium (see pointsQuery's role filter above).
     points_leaderboard: points.rows,
   });
 });
@@ -230,7 +239,8 @@ async function computeMonthlyStandings(month) {
      FROM users u
      LEFT JOIN daily_visits dv ON dv.user_id = u.id
      LEFT JOIN new_customers nc ON nc.user_id = u.id
-     WHERE u.role != 'admin'
+     -- Same population as the live leaderboard in /summary above.
+     WHERE u.role = 'sales_manager'
      GROUP BY u.id, u.name, nc.customer_points
      ORDER BY total_points DESC, u.name`,
     [month]

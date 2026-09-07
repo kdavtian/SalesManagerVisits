@@ -2359,12 +2359,32 @@ input[type="search"]:focus {
   justify-content: center;
 }
 
-.map-legend-swatch-pin {
-  /* Shows the real marker artwork (one representative tier) rather than a
-     CSS approximation of it, so the legend can't drift from the map. */
-  width: 18px;
-  height: 18px;
-  background: url("/icons/markers/gold-other.png") center / contain no-repeat;
+.map-legend-swatch-img {
+  /* Real marker artwork straight out of icons/markers/, one row per tier --
+     the legend literally shows the file the map draws, so a future artwork
+     change can't leave the key describing a shape that no longer exists.
+     The "-other" category is used as the neutral stand-in; the glyph inside
+     varies by category, which the note below the list explains. */
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+.map-legend-note {
+  margin: 0 0 8px;
+  font-size: 0.7rem;
+  line-height: 1.3;
+  color: var(--text-dim);
+}
+
+.map-legend-list + .map-legend-note {
+  margin: 8px 0 0;
+}
+
+.map-legend-divider {
+  height: 1px;
+  margin: 9px 0;
+  background: var(--border);
 }
 
 .map-legend-swatch-badge {
@@ -2429,7 +2449,10 @@ input[type="search"]:focus {
   flex-direction: column;
   gap: 3px;
   margin-top: 6px;
-  min-width: 180px;
+  /* Also sets the popup's working width -- widened from 180px so the two
+     action buttons below fit their icon+label side by side without wrapping
+     in the longest locale (see .popup-actions button). */
+  min-width: 210px;
 }
 
 .popup-fact {
@@ -2465,10 +2488,20 @@ input[type="search"]:focus {
   background: var(--bg);
   color: var(--text);
   border-radius: 6px;
-  padding: 10px 8px;
+  padding: 10px 6px;
   min-height: 44px;
   font-size: 0.82rem;
   cursor: pointer;
+  /* Icon + label must stay on one line in every locale -- Armenian's
+     "Չեք-ին" plus the pin glyph used to wrap the button to two lines inside
+     Leaflet's narrow default popup. The label itself is the non-wrapping
+     part; the popup is widened via .popup-facts' min-width rather than by
+     shrinking the type. */
+  white-space: nowrap;
+}
+
+.popup-actions .popup-action-label {
+  white-space: nowrap;
 }
 
 .popup-actions button .ui-svg {
@@ -3989,6 +4022,102 @@ input[type="search"]:focus {
   flex-shrink: 0;
 }
 
+/* ===== Customer detail header: three stacked rows =====
+   1. big avatar + customer name   2. ERP ID / tier / visit status
+   3. action icons.
+   Every other screen keeps the plain single-row .detail-header, hence the
+   extra class rather than restyling .detail-header itself. Stacking is what
+   finally gives the name a full row of its own: five icon buttons sharing
+   one 390px line with the title was what squeezed it down to a single
+   letter. */
+.customer-detail-header {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.customer-detail-header-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* Two standard 44px row-heights tall -- this is the hero identity element of
+   the page, not a list row, and it now has a row to itself to grow into. */
+.customer-detail-header .detail-header-icon {
+  width: 88px;
+  height: 88px;
+  border-radius: 24px;
+  padding: 0;
+}
+
+.customer-detail-header .detail-header-icon .list-row-icon {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: none;
+}
+
+.customer-detail-header .detail-header-icon .category-img {
+  width: 56px;
+  height: 56px;
+}
+
+.customer-detail-header .detail-header-title {
+  flex: 1;
+}
+
+/* There is vertical room beside an 88px avatar, so a long name wraps onto a
+   second/third line here instead of being clipped behind an ellipsis. */
+.customer-detail-header .detail-header-title h1 {
+  white-space: normal;
+  overflow: visible;
+  font-size: 1.25rem;
+  line-height: 1.25;
+}
+
+.customer-detail-header .detail-header-status-row {
+  gap: 6px;
+}
+
+.customer-detail-header .detail-header-actions {
+  margin-left: 0;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.detail-more-wrap {
+  position: relative;
+  margin-left: auto;
+}
+
+.detail-more-menu {
+  right: 0;
+  min-width: 200px;
+}
+
+.detail-more-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.detail-more-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.detail-more-item-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
 /* This row can carry up to 4-5 icon buttons (reassign/assign-ERP/social/
    edit) on top of the back button and header icon -- at the standard 44px
    .icon-btn size that leaves the customer name almost no room to render
@@ -3996,8 +4125,7 @@ input[type="search"]:focus {
    meaningful width for the name without touching .icon-btn's size anywhere
    else in the app. */
 .detail-header-actions .icon-btn,
-.detail-header-actions .customer-social-link,
-.detail-header-actions .customer-social-edit {
+.detail-header-actions .customer-social-link {
   width: 36px;
   height: 36px;
 }
@@ -6753,4 +6881,64 @@ form select,
 .inventory-search-row input[type="search"] {
   flex: 1;
   min-width: 0;
+}
+
+/* Admin > Quick actions per role: one collapsible card per role, a checkbox
+   per quick-action tile inside. Uses the same <details> card shape as the
+   dashboard's by-manager drill-down rather than a bespoke accordion. */
+.qav-role > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.qav-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.qav-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* 44px row so each checkbox is a comfortable phone tap target -- this
+     screen is a long list of them. */
+  min-height: 44px;
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+
+.qav-action input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+}
+
+/* Debt balance card: two-up rows (ID + amount, last payment + last visit)
+   with the two halves pushed to opposite edges. */
+.debt-balance-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.debt-balance-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.85rem;
+}
+
+.debt-balance-amount {
+  font-weight: 700;
+  white-space: nowrap;
 }

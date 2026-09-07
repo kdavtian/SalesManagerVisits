@@ -4,6 +4,7 @@ import { state } from "../state.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { applyPaymentBadge, applyUnrecordedBadge } from "../app.js";
+import { QUICK_ACTIONS, visibleQuickActionIds } from "../quickActions.js";
 
 // A dependency-free CSS bar chart -- this app has no charting library, and
 // 30 bars is simple enough not to need one. Each bar's height is relative
@@ -34,6 +35,63 @@ function comparisonCardHtml(label, current, previous, sublabel) {
       <span class="stat-sublabel ${trendCls}">${arrow} ${Math.abs(delta)}% ${sublabel}</span>
     </div>
   `;
+}
+
+// The icon (and, for two tiles, a count badge) is the only thing that
+// differs between tiles -- label and DOM id both fall straight out of the
+// action's id, so the markup itself is written once. Which of these render
+// is decided by visibleQuickActionIds() in ../quickActions.js: the admin's
+// per-role override if one exists, otherwise that tile's shipped defaults.
+const QUICK_ACTION_ICON = {
+  qa_check_in: () => `<span class="quick-action-icon quick-action-icon-checkin">${icons.mapPinCheck}</span>`,
+  qa_plan_route: () => `<span class="quick-action-icon">${icons.planDay}</span>`,
+  qa_add_customer: () => `<span class="quick-action-icon quick-action-icon-accent">${icons.mapPinPlus}</span>`,
+  qa_payments: () =>
+    `<span class="quick-action-icon quick-action-icon-accent">${icons.payment}<span class="nav-badge count-badge" id="qa-payments-badge" hidden></span></span>`,
+  qa_cash_expense: () => `<span class="quick-action-icon">${icons.wallet}</span>`,
+  qa_pricelist: () => `<span class="quick-action-icon">${icons.tag}</span>`,
+  qa_warehouse: () => `<span class="quick-action-icon">${icons.box}</span>`,
+  qa_delivery: () => `<span class="quick-action-icon">${icons.truck}</span>`,
+  qa_recorded: () =>
+    `<span class="quick-action-icon">${icons.clock}<span class="nav-badge count-badge" id="unrecorded-badge" hidden></span></span>`,
+  qa_team_performance: () => `<span class="quick-action-icon">${icons.target}</span>`,
+  qa_reports: () => `<span class="quick-action-icon">${icons.chart}</span>`,
+  qa_debt_balances: () => `<span class="quick-action-icon">${icons.wallet}</span>`,
+  qa_company_dashboard: () => `<span class="quick-action-icon">${icons.chart}</span>`,
+};
+
+const QUICK_ACTION_ROUTE = {
+  qa_check_in: "#/map",
+  qa_plan_route: "#/route-plans",
+  qa_add_customer: "#/map?add=1",
+  qa_payments: "#/payments",
+  qa_cash_expense: "#/expenses",
+  qa_pricelist: "#/pricelist",
+  qa_warehouse: "#/warehouse",
+  qa_delivery: "#/delivery",
+  qa_recorded: "#/recorded",
+  qa_team_performance: "#/team-performance",
+  qa_reports: "#/reports",
+  qa_debt_balances: "#/debt-balances",
+  qa_company_dashboard: "#/company-dashboard",
+};
+
+// #qa-check-in etc. -- the DOM ids predate this refactor and other modules
+// (plus the UI verification suite) select on them, so they are derived from
+// the action id rather than changed.
+function quickActionDomId(id) {
+  return id.replace(/_/g, "-");
+}
+
+function quickActionsHtml(ids) {
+  return QUICK_ACTIONS.filter((a) => ids.includes(a.id))
+    .map(
+      (a) => `<button type="button" class="quick-action" id="${quickActionDomId(a.id)}">
+        ${QUICK_ACTION_ICON[a.id]()}
+        <span>${t(a.id)}</span>
+      </button>`
+    )
+    .join("");
 }
 
 function greeting() {
@@ -140,90 +198,14 @@ export async function renderDashboard(root, navigate) {
 
     <h2 class="section-title">${t("quick_actions")}</h2>
     <div class="quick-actions-grid">
-      <button type="button" class="quick-action" id="qa-check-in">
-        <span class="quick-action-icon quick-action-icon-checkin">${icons.mapPinCheck}</span>
-        <span>${t("qa_check_in")}</span>
-      </button>
-      <button type="button" class="quick-action" id="qa-plan-route">
-        <span class="quick-action-icon">${icons.planDay}</span>
-        <span>${t("qa_plan_route")}</span>
-      </button>
-      <button type="button" class="quick-action" id="qa-add-customer">
-        <span class="quick-action-icon quick-action-icon-accent">${icons.mapPinPlus}</span>
-        <span>${t("qa_add_customer")}</span>
-      </button>
-      ${
-        state.user.role !== "warehouse_manager" && state.user.role !== "delivery_manager"
-          ? `<button type="button" class="quick-action" id="qa-payments">
-        <span class="quick-action-icon quick-action-icon-accent">${icons.payment}<span class="nav-badge count-badge" id="qa-payments-badge" hidden></span></span>
-        <span>${t("qa_payments")}</span>
-      </button>`
-          : ""
-      }
-      <button type="button" class="quick-action" id="qa-cash-expense">
-        <span class="quick-action-icon">${icons.wallet}</span>
-        <span>${t("qa_cash_expense")}</span>
-      </button>
-      <button type="button" class="quick-action" id="qa-pricelist">
-        <span class="quick-action-icon">${icons.tag}</span>
-        <span>${t("qa_pricelist")}</span>
-      </button>
-      ${
-        state.user.role === "warehouse_manager" || state.user.role === "admin"
-          ? `<button type="button" class="quick-action" id="qa-warehouse">
-        <span class="quick-action-icon">${icons.box}</span>
-        <span>${t("qa_warehouse")}</span>
-      </button>`
-          : ""
-      }
-      ${
-        state.user.role === "delivery_manager" || state.user.role === "admin"
-          ? `<button type="button" class="quick-action" id="qa-delivery">
-        <span class="quick-action-icon">${icons.truck}</span>
-        <span>${t("qa_delivery")}</span>
-      </button>`
-          : ""
-      }
-      ${
-        ["admin", "ceo", "accountant"].includes(state.user.role)
-          ? `<button type="button" class="quick-action" id="qa-recorded">
-        <span class="quick-action-icon">${icons.clock}<span class="nav-badge count-badge" id="unrecorded-badge" hidden></span></span>
-        <span>${t("qa_recorded")}</span>
-      </button>`
-          : ""
-      }
-      ${
-        ["admin", "ceo", "sales_director", "accountant", "sales_manager"].includes(state.user.role)
-          ? `<button type="button" class="quick-action" id="qa-team-performance">
-        <span class="quick-action-icon">${icons.target}</span>
-        <span>${t("qa_team_performance")}</span>
-      </button>`
-          : ""
-      }
-      <button type="button" class="quick-action" id="qa-reports">
-        <span class="quick-action-icon">${icons.chart}</span>
-        <span>${t("qa_reports")}</span>
-      </button>
-      ${
-        ["admin", "ceo", "sales_director", "accountant", "sales_manager"].includes(state.user.role)
-          ? `<button type="button" class="quick-action" id="qa-debt-balances">
-        <span class="quick-action-icon">${icons.wallet}</span>
-        <span>${t("qa_debt_balances")}</span>
-      </button>`
-          : ""
-      }
-      ${
-        ["admin", "ceo", "sales_director", "accountant"].includes(state.user.role)
-          ? `<button type="button" class="quick-action" id="qa-company-dashboard">
-        <span class="quick-action-icon">${icons.chart}</span>
-        <span>${t("qa_company_dashboard")}</span>
-      </button>`
-          : ""
-      }
+      ${quickActionsHtml(visibleQuickActionIds(state.user.role, settings.quick_action_visibility))}
     </div>
 
     ${
-      state.user.role !== "admin"
+      // Points are a sales-rep competition (see the leaderboard's role
+      // filter server-side) -- everyone else was being shown a permanent
+      // "0 points" card for a contest they aren't in.
+      state.user.role === "sales_manager"
         ? `<div class="card points-card">
             <div class="points-card-main">
               <span class="progress-label">🏆 ${t("points_this_month")}</span>
@@ -268,19 +250,12 @@ export async function renderDashboard(root, navigate) {
   `;
 
   container.querySelector("#view-all-activity").addEventListener("click", () => navigate("#/activity"));
-  container.querySelector("#qa-check-in").addEventListener("click", () => navigate("#/map"));
-  container.querySelector("#qa-plan-route").addEventListener("click", () => navigate("#/route-plans"));
-  container.querySelector("#qa-reports").addEventListener("click", () => navigate("#/reports"));
-  container.querySelector("#qa-add-customer").addEventListener("click", () => navigate("#/map?add=1"));
-  container.querySelector("#qa-cash-expense").addEventListener("click", () => navigate("#/expenses"));
-  container.querySelector("#qa-pricelist").addEventListener("click", () => navigate("#/pricelist"));
-  container.querySelector("#qa-team-performance")?.addEventListener("click", () => navigate("#/team-performance"));
-  container.querySelector("#qa-payments")?.addEventListener("click", () => navigate("#/payments"));
-  container.querySelector("#qa-warehouse")?.addEventListener("click", () => navigate("#/warehouse"));
-  container.querySelector("#qa-delivery")?.addEventListener("click", () => navigate("#/delivery"));
-  container.querySelector("#qa-recorded")?.addEventListener("click", () => navigate("#/recorded"));
-  container.querySelector("#qa-debt-balances")?.addEventListener("click", () => navigate("#/debt-balances"));
-  container.querySelector("#qa-company-dashboard")?.addEventListener("click", () => navigate("#/company-dashboard"));
+  // Every tile is optional now (an admin can hide any of them for any role),
+  // so this wires whichever ones actually rendered rather than assuming a
+  // fixed set exists.
+  for (const [id, route] of Object.entries(QUICK_ACTION_ROUTE)) {
+    container.querySelector(`#${quickActionDomId(id)}`)?.addEventListener("click", () => navigate(route));
+  }
   applyPaymentBadge();
   applyUnrecordedBadge();
 

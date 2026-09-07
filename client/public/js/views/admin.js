@@ -2,6 +2,7 @@ import { api } from "../api.js";
 import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, parseUserAgent, SALES_CHANNELS, REGION_LIST, YEREVAN_DISTRICTS } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
+import { ALL_ROLES, QUICK_ACTIONS, defaultQuickActionIds } from "../quickActions.js";
 
 const ROLE_BADGE = {
   admin: { key: "role_admin", cls: "badge-accent", tint: "warning" },
@@ -1122,6 +1123,105 @@ export async function renderSalesChannelOwnersSection(container) {
       } finally {
         select.disabled = false;
       }
+    });
+  });
+}
+
+// Admin-configurable Home "Quick actions" per role. Pre-checked from the
+// role's *effective* list -- an explicit override if one was saved, else the
+// same shipped defaults the dashboard falls back to -- so the admin opens
+// onto the real current state rather than a blank slate they'd have to
+// reconstruct from memory. Reset clears that role's key entirely and puts it
+// back on defaults, which is not the same as saving an empty list (that
+// means "show this role no tiles at all").
+export async function renderQuickActionVisibilitySection(container) {
+  container.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+  const settings = await api.getSettings();
+  const visibility = { ...(settings.quick_action_visibility ?? {}) };
+
+  function effectiveIds(role) {
+    return Array.isArray(visibility[role]) ? visibility[role] : defaultQuickActionIds(role);
+  }
+
+  container.innerHTML = `
+    <p class="muted radius-help">${t("quick_action_visibility_hint")}</p>
+    <p class="form-error" id="qav-error" hidden></p>
+    <p class="form-success" id="qav-success" role="status" hidden>${t("saved")}</p>
+    <div class="card-list" id="qav-list">
+      ${ALL_ROLES.map(
+        (role) => `
+        <details class="card qav-role" data-role="${role}">
+          <summary>
+            <span><strong>${t(`role_${role}`)}</strong></span>
+            <span class="muted" data-qav-count="${role}"></span>
+          </summary>
+          <div class="qav-actions">
+            ${QUICK_ACTIONS.map(
+              (a) => `
+              <label class="qav-action">
+                <input type="checkbox" data-role="${role}" value="${a.id}" />
+                <span>${t(a.id)}</span>
+              </label>`
+            ).join("")}
+            <button type="button" class="link-btn" data-qav-reset="${role}">${t("quick_action_visibility_reset")}</button>
+          </div>
+        </details>`
+      ).join("")}
+    </div>
+  `;
+
+  const errorEl = container.querySelector("#qav-error");
+  const successEl = container.querySelector("#qav-success");
+
+  function paint() {
+    for (const role of ALL_ROLES) {
+      const ids = effectiveIds(role);
+      container.querySelectorAll(`input[type="checkbox"][data-role="${role}"]`).forEach((cb) => {
+        cb.checked = ids.includes(cb.value);
+      });
+      const countEl = container.querySelector(`[data-qav-count="${role}"]`);
+      countEl.textContent = `${ids.length}/${QUICK_ACTIONS.length}${
+        Array.isArray(visibility[role]) ? "" : ` · ${t("quick_action_visibility_default")}`
+      }`;
+    }
+  }
+  paint();
+
+  let saveTimer = null;
+  async function save() {
+    errorEl.hidden = true;
+    try {
+      await api.updateSettings({ quick_action_visibility: visibility });
+      successEl.hidden = false;
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        successEl.hidden = true;
+      }, 1500);
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+    }
+  }
+
+  container.querySelectorAll('input[type="checkbox"][data-role]').forEach((cb) => {
+    cb.addEventListener("change", () => {
+      const role = cb.dataset.role;
+      // First edit of a defaulted role materializes its current effective
+      // list, so unchecking one tile doesn't silently drop the other twelve.
+      const ids = new Set(effectiveIds(role));
+      if (cb.checked) ids.add(cb.value);
+      else ids.delete(cb.value);
+      visibility[role] = [...ids];
+      paint();
+      save();
+    });
+  });
+
+  container.querySelectorAll("[data-qav-reset]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      delete visibility[btn.dataset.qavReset];
+      paint();
+      save();
     });
   });
 }

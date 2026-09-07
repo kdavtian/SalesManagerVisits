@@ -46,6 +46,7 @@ export const icons = {
   box: uiSvg(`<path d="m4 7 8-4 8 4-8 4zM4 7v10l8 4 8-4V7M12 11v10"/>`),
   more: uiSvg(`<circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none"/>`),
   tag: uiSvg(`<path d="M20 13 13 20l-9-9V4h7z"/><circle cx="8" cy="8" r="1"/>`),
+  pencil: uiSvg(`<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>`),
   repeat: uiSvg(`<path d="m17 2 4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3"/>`),
   note: uiSvg(`<path d="M5 3h14v18H5zM8 8h8M8 12h8M8 16h5"/>`),
   clipboardCheck: uiSvg(`<rect x="5.5" y="4.5" width="13" height="16.5" rx="2"/><path d="M9 4.5V3.7a1.7 1.7 0 0 1 1.7-1.7h2.6A1.7 1.7 0 0 1 15 3.7v.8"/><path d="M8.8 12.2l2.1 2.1 4.3-4.8"/>`),

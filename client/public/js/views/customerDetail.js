@@ -1,9 +1,10 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { canEditDirectly, canReassignCustomers, canAssignErpCustomerId, isAdmin, seesFinancialExports } from "../state.js";
 import { openVisitDetailSheet, openPhotoLightbox } from "../visitDetail.js";
+import { visitStatusBadge } from "./customers.js";
 
 const AGING_BADGE = {
   "0-7 days": "badge-success",
@@ -50,18 +51,11 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     return;
   }
 
-  let badgeClass = "badge-neutral";
-  let badgeText = t("not_visited");
-  if (customer.visited_today) {
-    badgeClass = "badge-success";
-    badgeText = t("visited_today");
-  } else if (customer.overdue) {
-    badgeClass = "badge-danger";
-    badgeText = t("filter_overdue");
-  } else if (customer.visited_this_week) {
-    badgeClass = "badge-info";
-    badgeText = t("visited_this_week");
-  }
+  // Same derivation the Customers list uses, imported rather than re-derived
+  // here -- this page previously computed its own near-but-not-quite-equal
+  // version (it had no "exempt" or "on-track" concept at all, so a
+  // never-visited customer on an exempt channel was still labelled).
+  const statusBadge = visitStatusBadge(customer);
 
   let nextVisitHtml = "";
   if (customer.overdue) {
@@ -74,51 +68,62 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     nextVisitHtml = `<span class="muted">${t("never_visited")}</span>`;
   }
 
-  const idCategoryLine = customer.erp_customer_id
-    ? `${t("customer_id_label")}: ${escapeHtml(customer.erp_customer_id)}${customer.category ? ` · ${escapeHtml(categoryLabel(customer.category))}` : ""}`
-    : customer.category
-    ? escapeHtml(categoryLabel(customer.category))
-    : "";
+  const idCategoryLine = [
+    customer.erp_customer_id ? `${t("customer_id_label")}: ${escapeHtml(customer.erp_customer_id)}` : "",
+    customer.category ? escapeHtml(categoryLabel(customer.category)) : "",
+  ]
+    .filter(Boolean)
+    .join(" &middot; ");
+
+  // Everything sheet-shaped lives behind one "more actions" button instead
+  // of its own icon in the header row: at 390px, five competing icon buttons
+  // squeezed the customer's name down to a single letter. What stays visible
+  // as a one-tap icon is only the external links (Instagram/Facebook/email/
+  // website, injected by customerSocialProfiles.js) -- those just hand off
+  // to another app and cost nothing to keep out in the open.
+  const moreItems = [
+    canReassignCustomers()
+      ? { id: "reassign-customer-btn", icon: icons.team, label: t("assigned_manager") }
+      : null,
+    // A tag, deliberately NOT the card glyph payment settings uses -- the two
+    // actions are unrelated and used to share the same credit-card icon.
+    canAssignErpCustomerId(customer)
+      ? { id: "assign-erp-btn", icon: icons.tag, label: t("erp_customer_id") }
+      : null,
+    seesFinancialExports()
+      ? { id: "payment-settings-btn", icon: icons.payment, label: t("payment_settings") }
+      : null,
+    { id: "edit-customer-btn", icon: icons.pencil, label: t("edit_customer") },
+  ].filter(Boolean);
 
   container.innerHTML = `
-    <div class="detail-header">
-      <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-      </button>
-      <div class="detail-header-icon">${icons.store}</div>
-      <div class="detail-header-title">
-        <h1 id="customer-detail-name" tabindex="0" role="button" aria-label="${t("tap_to_show_full_name")}">${escapeHtml(customer.name)}</h1>
-        ${idCategoryLine ? `<div class="muted detail-header-subtitle">${idCategoryLine}</div>` : ""}
-        <div class="detail-header-status-row">
-          ${tierBadgeHtml(customer.customer_tier)}
-          <span class="badge ${badgeClass}">${badgeText}</span>
+    <div class="detail-header customer-detail-header">
+      <div class="customer-detail-header-main">
+        <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div class="detail-header-icon">${customerListIconHtml(customer)}</div>
+        <div class="detail-header-title">
+          <h1 id="customer-detail-name" tabindex="0" role="button" aria-label="${t("tap_to_show_full_name")}">${escapeHtml(customer.name)}</h1>
         </div>
       </div>
+      <div class="detail-header-status-row">
+        ${idCategoryLine ? `<span class="muted detail-header-subtitle">${idCategoryLine}</span>` : ""}
+        ${tierBadgeHtml(customer.customer_tier)}
+        ${statusBadge ? `<span class="badge ${statusBadge.cls}">${t(statusBadge.labelKey)}</span>` : ""}
+      </div>
       <div class="detail-header-actions">
-        ${
-          canReassignCustomers()
-            ? `<button class="icon-btn" id="reassign-customer-btn" aria-label="${t("assigned_manager")}">
-                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20v-1.25A5.75 5.75 0 0 1 8.75 13h.5A5.75 5.75 0 0 1 15 18.75V20"/><circle cx="17.5" cy="8.5" r="2.5"/><path d="M15.5 13.6c.6-.25 1.25-.38 1.9-.38A4.6 4.6 0 0 1 22 17.82V20"/></svg>
-               </button>`
-            : ""
-        }
-        ${
-          canAssignErpCustomerId(customer)
-            ? `<button class="icon-btn" id="assign-erp-btn" aria-label="${t("erp_customer_id")}">
-                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 9.5h17"/><path d="M7 13.5h4"/></svg>
-               </button>`
-            : ""
-        }
-        ${
-          seesFinancialExports()
-            ? `<button class="icon-btn" id="payment-settings-btn" aria-label="${t("payment_settings")}">
-                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="13" rx="2"/><path d="M2.5 10.5h19"/><path d="M6 15h4"/></svg>
-               </button>`
-            : ""
-        }
-        <button class="icon-btn" id="edit-customer-btn" aria-label="${t("edit")}">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
-        </button>
+        <div class="detail-more-wrap">
+          <button class="icon-btn" id="detail-more-btn" aria-label="${t("more_actions")}" title="${t("more_actions")}" aria-haspopup="menu" aria-expanded="false" aria-controls="detail-more-menu">${icons.more}</button>
+          <div class="dropdown-menu detail-more-menu" id="detail-more-menu" role="menu" hidden>
+            ${moreItems
+              .map(
+                (item) =>
+                  `<button type="button" role="menuitem" class="detail-more-item" id="${item.id}"><span class="detail-more-item-icon">${item.icon}</span><span>${escapeHtml(item.label)}</span></button>`
+              )
+              .join("")}
+          </div>
+        </div>
       </div>
     </div>
 
@@ -153,7 +158,9 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       <button class="action-btn action-btn-primary" id="checkin-btn">
         <span>${icons.mapPinCheck}</span>${t("check_in")}
       </button>
-      ${customer.phone ? `<a class="action-btn" href="tel:${escapeHtml(customer.phone)}"><span>${icons.phone}</span>${t("call")}</a>` : ""}
+      <!-- No "Call" button here on purpose: it pushed this row onto a second
+           line at 390px, and the phone number in the facts card above is
+           already a tel: link, so the action was a duplicate of it. -->
       <button type="button" class="action-btn" id="navigate-btn">
         <span>${icons.compass}</span>${t("navigate")}
       </button>
@@ -201,6 +208,40 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   });
   container.querySelector("#order-history-btn")?.addEventListener("click", () => {
     navigate(`#/customers/${customerId}/orders`);
+  });
+
+  // The "more actions" overflow menu. Items are wired above by id (and one
+  // more -- "edit contact & social profiles" -- is injected into the menu by
+  // customerSocialProfiles.js once it has loaded the customer's links), so
+  // all this needs to own is opening, closing, and keyboard nav.
+  const moreBtn = container.querySelector("#detail-more-btn");
+  const moreMenu = container.querySelector("#detail-more-menu");
+  function closeMoreMenu() {
+    moreMenu.hidden = true;
+    moreBtn.setAttribute("aria-expanded", "false");
+  }
+  moreBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    moreMenu.hidden = !moreMenu.hidden;
+    moreBtn.setAttribute("aria-expanded", String(!moreMenu.hidden));
+    if (!moreMenu.hidden) moreMenu.querySelector("button")?.focus();
+  });
+  // Any item click closes the menu, including items injected later.
+  moreMenu.addEventListener("click", closeMoreMenu);
+  document.addEventListener("click", (e) => {
+    if (!moreMenu.hidden && !moreMenu.contains(e.target) && !moreBtn.contains(e.target)) closeMoreMenu();
+  });
+  moreMenu.addEventListener("keydown", (e) => {
+    const items = [...moreMenu.querySelectorAll("button")];
+    const index = items.indexOf(document.activeElement);
+    if (e.key === "Escape") {
+      closeMoreMenu();
+      moreBtn.focus();
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const delta = e.key === "ArrowDown" ? 1 : -1;
+      items[(index + delta + items.length) % items.length]?.focus();
+    }
   });
 
   renderPendingRequest(container.querySelector("#pending-request-slot"), pendingRequests[0], () =>

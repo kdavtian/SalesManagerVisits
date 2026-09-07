@@ -67,15 +67,22 @@ export async function renderDebtBalances(root, navigate) {
     });
   }
 
+  // Three rows, in the order the balance is actually read: identify the
+  // account and what it owes (ID left / amount right), then whose it is,
+  // then the two dates that explain the balance -- when they last paid and
+  // when a rep last stood in front of them.
   function rowHtml(r) {
     return `
-      <div class="card">
-        <div class="order-detail-ids">
-          <span>${t("customer_id_label")}: ${escapeHtml(r.customer_id || "")}</span>
+      <div class="card debt-balance-card">
+        <div class="debt-balance-row">
+          <span class="muted">${t("customer_id_label")}: ${escapeHtml(r.customer_id || "")}</span>
+          <span class="text-amount debt-balance-amount">${formatAmd(Number(r.remaining_balance))}</span>
         </div>
         <strong>${escapeHtml(r.customer_name || "")}</strong>
-        <p><span class="text-amount">${formatAmd(Number(r.remaining_balance))}</span></p>
-        <p class="muted">${t("debt_balances_last_payment")}: ${formatDate(r.last_payment_date)}</p>
+        <div class="debt-balance-row muted">
+          <span>${t("debt_balances_last_payment")}: ${formatDate(r.last_payment_date)}</span>
+          <span>${t("debt_balances_last_visit")}: ${formatDate(r.last_visit_at)}</span>
+        </div>
         ${canGroup && mode === "flat" ? `<p class="muted">${escapeHtml(r.assigned_manager_name || t("unassigned"))}</p>` : ""}
       </div>`;
   }

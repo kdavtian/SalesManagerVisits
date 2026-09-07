@@ -6,8 +6,7 @@
   gap: 8px;
 }
 
-.customer-social-link,
-.customer-social-edit {
+.customer-social-link {
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -22,13 +21,12 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-.customer-social-link:active,
-.customer-social-edit:active {
+.customer-social-link:active {
   transform: scale(.94);
 }
 
 .customer-social-link svg,
-.customer-social-edit svg {
+.customer-social-edit-item .detail-more-item-icon svg {
   width: 19px;
   height: 19px;
   fill: none;
@@ -36,6 +34,13 @@
   stroke-width: 1.9;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/* Email and website render as <a> rather than <button> -- they are plain
+   mailto:/https: hand-offs with no app-then-web fallback to run first --
+   so the shared control styling above needs the anchor defaults undone. */
+a.customer-social-link {
+  text-decoration: none;
 }
 
 .customer-social-instagram {
@@ -46,7 +51,8 @@
   color: #1877f2;
 }
 
-.customer-social-edit {
+.customer-social-email,
+.customer-social-website {
   color: var(--muted, #677080);
 }
 
@@ -61,16 +67,14 @@
 }
 
 @media (max-width: 380px) {
-  .customer-social-link,
-  .customer-social-edit {
+  .customer-social-link {
     width: 34px;
     height: 34px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .customer-social-link,
-  .customer-social-edit {
+  .customer-social-link {
     transition: none;
   }
 }

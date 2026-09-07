@@ -4,6 +4,7 @@ import { t } from "../i18n.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
 import { canViewTeamLocations, canEditDirectly, canPlanForOthers, canReassignCustomers, state } from "../state.js";
+import { getClusterPins } from "../mapPrefs.js";
 
 const NEARBY_RADIUS_METERS = 5000;
 
@@ -177,13 +178,22 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
           <span>${t("map_legend_title")}</span>
           <button type="button" class="icon-btn" id="map-legend-close" aria-label="${t("close")}">${icons.close}</button>
         </div>
+        <p class="map-legend-note">${t("map_legend_shape_note")}</p>
         <ul class="map-legend-list">
-          <li><span class="map-legend-swatch map-legend-swatch-pin"></span>${t("map_legend_tier")}</li>
+          <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/bronze-other.png" alt="" width="20" height="20" />${t("map_legend_bronze")}</li>
+          <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/silver-other.png" alt="" width="20" height="20" />${t("map_legend_silver")}</li>
+          <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/gold-other.png" alt="" width="20" height="20" />${t("map_legend_gold")}</li>
+          <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/potential-other.png" alt="" width="20" height="20" />${t("map_legend_potential")}</li>
+          <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/competitor-other.png" alt="" width="20" height="20" />${t("map_legend_competitor")}</li>
+        </ul>
+        <div class="map-legend-divider"></div>
+        <ul class="map-legend-list">
           <li><span class="map-legend-swatch map-legend-swatch-badge map-legend-swatch-visited">&#10003;</span>${t("map_legend_visited")}</li>
           <li><span class="map-legend-swatch map-legend-swatch-badge map-legend-swatch-overdue">!</span>${t("map_legend_overdue")}</li>
           <li><span class="map-legend-swatch map-legend-swatch-selected"></span>${t("map_legend_selected")}</li>
           <li><span class="map-legend-swatch map-legend-swatch-cluster">9</span>${t("map_legend_cluster")}</li>
         </ul>
+        <p class="map-legend-note">${t("map_legend_glyph_note")}</p>
       </div>
 
       <button class="fab" id="add-customer-fab" title="${t("new_customer")}" aria-label="${t("new_customer")}" aria-pressed="false">${icons.mapPinPlus}</button>
@@ -401,6 +411,13 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   // that into a count badge that splits apart as you zoom in; pins already
   // spread out (a rural territory, or once you're zoomed to street level)
   // render exactly as before since there's nothing to cluster.
+  // ...unless the user turned "Group nearby pins" off in Settings, in which
+  // case every pin is drawn individually at every zoom level so the true
+  // geographic spread is visible. Read once per map mount (and re-read by
+  // applyFilter below), which is all this needs: changing it in Settings and
+  // coming back to the Map picks it up.
+  const clusteringEnabled = getClusterPins();
+  const plainCustomerLayer = L.layerGroup();
   const customerClusterGroup = L.markerClusterGroup({
     maxClusterRadius: 60,
     disableClusteringAtZoom: 17,
@@ -415,7 +432,12 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         iconSize: [size, size],
       });
     },
-  }).addTo(map);
+  });
+  // Exactly one of the two is ever on the map, and every add/clear below
+  // goes through customerMarkerLayer -- so marker construction, filtering
+  // and fitBounds stay a single code path regardless of the setting.
+  const customerMarkerLayer = clusteringEnabled ? customerClusterGroup : plainCustomerLayer;
+  customerMarkerLayer.addTo(map);
 
   // A plain solid teardrop with nothing inside read as "blank"/broken once
   // dropped -- an X glyph makes it obvious this pin is just a pending
@@ -440,7 +462,11 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   // three tiered pins -- their artwork is geometrically identical, and the
   // code must not undermine that.
   const PIN_SHAPED_TIERS = new Set(["bronze", "silver", "gold"]);
-  const MARKER_SIZE = 32;
+  // Bumped 32 -> 38: the raster artwork's own detail (category glyph inside
+  // the pin) was reading small on a phone. Both anchors below are computed
+  // from this constant rather than stored as pixel literals, so the tip/
+  // center anchoring stays exact at any size.
+  const MARKER_SIZE = 38;
   const PIN_TIP_RATIO = 0.95;
 
   // Marker shape+color encode the customer's *tier* and the glyph inside
@@ -739,7 +765,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
 
   function applyFilter() {
     markerLayer.clearLayers();
-    customerClusterGroup.clearLayers();
+    customerMarkerLayer.clearLayers();
     const bounds = [];
     let searchMatchCount = 0;
     // Competitors are hidden by default (see .map-competitor-toggle /
@@ -778,7 +804,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         }
         marker.setIcon(customerIcon(c, status));
       }
-      marker.addTo(customerClusterGroup);
+      marker.addTo(customerMarkerLayer);
       bounds.push([c.lat, c.lng]);
     }
     if (searchNoResults) searchNoResults.hidden = !(searchQuery && searchMatchCount === 0);
@@ -1073,7 +1099,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   async function loadCustomers() {
     const customers = await api.listCustomers();
     markerLayer.clearLayers();
-    customerClusterGroup.clearLayers();
+    customerMarkerLayer.clearLayers();
     lastCustomers = [];
 
     const bounds = [];
@@ -1086,8 +1112,8 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
           ${c.category ? `<div class="popup-category">${escapeHtml(categoryLabel(c.category))}</div>` : ""}
           <div class="popup-facts" id="popup-facts-${c.id}"><p class="popup-loading">${t("loading")}</p></div>
           <div class="popup-actions">
-            <button data-action="checkin" data-id="${c.id}" class="btn-accent"><span>${icons.mapPinCheck}</span>${t("check_in")}</button>
-            <button data-action="details" data-id="${c.id}">${t("more")}</button>
+            <button data-action="checkin" data-id="${c.id}" class="btn-accent"><span>${icons.mapPinCheck}</span><span class="popup-action-label">${t("check_in")}</span></button>
+            <button data-action="details" data-id="${c.id}"><span class="popup-action-label">${t("more")}</span></button>
           </div>
         </div>
       `);
