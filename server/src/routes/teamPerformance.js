@@ -476,7 +476,15 @@ teamPerformanceRouter.put("/plans/:id/targets/:channelId", async (req, res) => {
   const { rows: planRows } = await pool.query("SELECT * FROM perf_plans WHERE id = $1", [req.params.id]);
   const plan = planRows[0];
   if (!plan) return res.status(404).json({ error: "Plan not found" });
-  if (plan.status !== "draft") return res.status(409).json({ error: "Only a draft plan can be edited" });
+  // A rejected plan is editable exactly like a draft -- being sent back for
+  // revision is the whole point of "rejected"; without this it was a dead
+  // end (not editable, and not resubmittable either -- see /submit below),
+  // permanently stuck with no path back to draft and blocking a fresh plan
+  // for that month too (the "one live plan per month" index treats
+  // 'rejected' as still live).
+  if (plan.status !== "draft" && plan.status !== "rejected") {
+    return res.status(409).json({ error: "Only a draft or rejected plan can be edited" });
+  }
 
   const { rows: channelRows } = await pool.query("SELECT * FROM sales_channels WHERE id = $1", [req.params.channelId]);
   const channel = channelRows[0];
@@ -566,7 +574,12 @@ teamPerformanceRouter.post("/plans/:id/submit", async (req, res) => {
   const { rows: planRows } = await pool.query("SELECT * FROM perf_plans WHERE id = $1", [req.params.id]);
   const plan = planRows[0];
   if (!plan) return res.status(404).json({ error: "Plan not found" });
-  if (plan.status !== "draft") return res.status(409).json({ error: "Only a draft plan can be submitted" });
+  // A rejected plan can be resubmitted after fixing it up -- same status set
+  // as the edit endpoint above accepts (see its comment for why 'rejected'
+  // needs to behave like 'draft' here).
+  if (plan.status !== "draft" && plan.status !== "rejected") {
+    return res.status(409).json({ error: "Only a draft or rejected plan can be submitted" });
+  }
   if (!isPerfCeo(req.user.role) && req.user.role !== "sales_director" && req.user.role !== "accountant") {
     return res.status(403).json({ error: "Not allowed to submit this plan" });
   }
@@ -577,7 +590,8 @@ teamPerformanceRouter.post("/plans/:id/submit", async (req, res) => {
   }
 
   const { rows: updated } = await pool.query(
-    `UPDATE perf_plans SET status = 'pending_approval', submitted_by = $1, submitted_at = now(), lock_version = lock_version + 1, updated_at = now()
+    `UPDATE perf_plans SET status = 'pending_approval', submitted_by = $1, submitted_at = now(),
+       rejected_reason = NULL, lock_version = lock_version + 1, updated_at = now()
      WHERE id = $2 RETURNING *`,
     [req.user.id, plan.id]
   );
