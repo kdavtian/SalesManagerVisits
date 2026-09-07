@@ -26,7 +26,15 @@ const STATUS_ICON = {
   // browsers/OSes already draw this exact warning). The triangle's own
   // fill supplies the color, so .status-rejected leaves the badge
   // background transparent instead of layering a second red circle behind it.
-  rejected: `<svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 2.5 22.5 21H1.5Z" fill="currentColor"/><path d="M12 9.5v5" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="17.4" r="1.1" fill="#fff"/></svg>`,
+  // Verified/pending have a colored circle backdrop that gives them a
+  // consistent visual footprint regardless of how much of the 24x24 viewBox
+  // their own path fills; the triangle has no such backdrop, and its raw
+  // path (x:1.5-22.5, y:2.5-21) fills the viewBox edge-to-edge, so without
+  // scaling it down it reads noticeably larger than the other two even
+  // though the <svg> itself is the same 20x20. Scaled 0.67x around the
+  // shared (12,12) center -- matching the pending circle's r=8/24 footprint
+  // -- so all three read as the same size at a glance.
+  rejected: `<svg viewBox="0 0 24 24" width="20" height="20"><g transform="translate(12 12) scale(0.67) translate(-12 -12)"><path d="M12 2.5 22.5 21H1.5Z" fill="currentColor"/><path d="M12 9.5v5" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="17.4" r="1.1" fill="#fff"/></g></svg>`,
 };
 
 const ACTIVITY_FILTER_ICONS = {

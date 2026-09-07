@@ -4282,6 +4282,7 @@ input[type="search"]:focus {
   height: 100%;
   border-radius: inherit;
   background: none;
+  border: none;
 }
 
 .customer-detail-header .detail-header-icon .category-img {
@@ -5601,7 +5602,15 @@ input[type="search"]:focus {
   height: 44px;
   padding: 0;
   border-radius: 12px;
-  border: 0;
+  /* A visible boundary, not just a background tint -- .list-row-icon-neutral
+     (and the "potential" tier it renders for) falls all the way back to the
+     same --bg-card as the row/card it sits on, so without this border it has
+     zero contrast against its surroundings and reads as part of the row's
+     background rather than its own distinct tap target (it navigates to the
+     customer, while tapping the rest of the row opens this row's own
+     detail -- two different destinations that need to look like two
+     different controls). */
+  border: 1px solid var(--border);
   cursor: default;
   background: var(--bg-inset, var(--bg-card));
   color: var(--text-dim);
