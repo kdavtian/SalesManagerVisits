@@ -83,6 +83,10 @@ async function findLikelyDuplicate({ customerId, amount, salesManagerId, payment
 // (e.g. delivery.js's create-payment-from-pod, which also updates
 // pod_records.payment_id) can pass their own BEGIN/COMMIT client so the two
 // writes commit or roll back together.
+// current_holder_id starts as salesManagerId (the $6 reused in the INSERT
+// below): whoever the money came from/through is the first custodian in the
+// cash chain (migrations/059), including a director who logged a collection
+// themselves. Everything after that is moved only by routes/cashHandoffs.js.
 export async function insertPayment({ customer, amount, paymentDate, salesManagerId, manager, note, createdBy, clientRef, db = pool }) {
   const salesChannel = manager.role === "sales_manager" ? manager.position || null : null;
 
@@ -96,8 +100,9 @@ export async function insertPayment({ customer, amount, paymentDate, salesManage
   const { rows } = await db.query(
     `INSERT INTO payments
        (customer_id, customer_name_snapshot, erp_customer_id_snapshot, amount_amd, payment_date,
-        sales_manager_id, sales_manager_name_snapshot, sales_channel, note, status, created_by, client_ref)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, $11)
+        sales_manager_id, sales_manager_name_snapshot, sales_channel, note, status, created_by, client_ref,
+        current_holder_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, $11, $6)
      ON CONFLICT (created_by, client_ref) WHERE client_ref IS NOT NULL DO NOTHING
      RETURNING id`,
     [
@@ -322,6 +327,42 @@ paymentsRouter.get("/:id", async (req, res) => {
   res.json({ ...payment, history });
 });
 
+// --- Reconciling the old single-stage review with the cash custody chain ---
+// Before migrations/059 these three endpoints were the ONLY way a payment
+// changed status, and any accountant/CEO/admin could approve any pending
+// payment. Now the terminal accountant confirmation in
+// routes/cashHandoffs.js also flips payments to 'approved'. Two independent
+// paths to the same transition is exactly how money gets double-processed,
+// so they are reconciled here rather than left side by side:
+//
+//   1. A payment that is inside an in-flight handoff is frozen for
+//      EVERYONE, admin included -- the receiver's confirm/reject is the
+//      decision in flight, and approving underneath it would strand the
+//      handoff pointing at already-approved cash.
+//   2. Approving directly requires the cash to have actually reached an
+//      accountant's custody, i.e. the chain already ran. In practice the
+//      handoff confirmation does this for you, so this endpoint becomes a
+//      correction tool (e.g. re-approving after a return-to-pending)
+//      rather than a parallel workflow.
+//   3. admin keeps a manual override on rule 2 only. That follows this
+//      codebase's standing convention (see roles.js: "admin is treated as
+//      a CEO-equivalent superset throughout ... so a technical admin
+//      account can always unblock a stuck workflow") -- if cash is
+//      physically reconciled but the chain was never recorded in the app,
+//      someone has to be able to close it out.
+async function custodyBlocksReview(payment, user) {
+  if (payment.pending_handoff_id) {
+    return "This payment is part of a cash handoff awaiting confirmation -- resolve that handoff first";
+  }
+  if (user.role === "admin") return null;
+  if (!payment.current_holder_id) return "This payment has no recorded cash holder";
+  const { rows } = await pool.query("SELECT role FROM users WHERE id = $1", [payment.current_holder_id]);
+  if (rows[0]?.role !== "accountant") {
+    return "This payment's cash has not reached an accountant yet -- confirm it through the cash handoff chain first";
+  }
+  return null;
+}
+
 paymentsRouter.post("/:id/approve", async (req, res) => {
   if (!canReviewPayments(req.user.role)) return res.status(403).json({ error: "Not allowed to approve payments" });
   const payment = await loadPaymentRow(req.params.id);
@@ -329,6 +370,8 @@ paymentsRouter.post("/:id/approve", async (req, res) => {
   if (payment.status !== "pending") {
     return res.status(409).json({ error: "Only a pending payment can be approved" });
   }
+  const blocked = await custodyBlocksReview(payment, req.user);
+  if (blocked) return res.status(409).json({ error: blocked });
 
   await pool.query(
     `UPDATE payments SET status = 'approved', approved_by = $1, approved_at = now(),
@@ -353,6 +396,14 @@ paymentsRouter.post("/:id/reject", async (req, res) => {
   if (!payment) return res.status(404).json({ error: "Payment not found" });
   if (payment.status !== "pending") {
     return res.status(409).json({ error: "Only a pending payment can be rejected" });
+  }
+  // Only the in-flight freeze applies here, not the "must have reached an
+  // accountant" rule: rejecting a payment means "this collection record is
+  // wrong", which a reviewer may need to do while the cash is still
+  // travelling. Rejecting also takes it out of the chain -- it stops being
+  // available to hand off, since only 'pending' rows are.
+  if (payment.pending_handoff_id) {
+    return res.status(409).json({ error: "This payment is part of a cash handoff awaiting confirmation -- resolve that handoff first" });
   }
 
   await pool.query(
@@ -382,6 +433,9 @@ paymentsRouter.post("/:id/return-to-pending", async (req, res) => {
   if (payment.status === "pending") {
     return res.status(409).json({ error: "Payment is already pending" });
   }
+  // Custody is deliberately left alone -- whoever physically holds the cash
+  // still holds it; only the reconciliation status is reopened. If the
+  // holder is the accountant, re-approving afterwards passes the gate above.
 
   const oldStatus = payment.status;
   await pool.query(

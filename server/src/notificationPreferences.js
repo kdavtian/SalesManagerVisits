@@ -19,6 +19,10 @@ export const NOTIFICATION_TYPES = [
   "order_returned",
   "order_stale_packed",
   "payment_due_soon",
+  // Cash custody chain (migrations/059): the receiver is told a handoff is
+  // waiting for them to count and confirm; the sender is told the outcome.
+  "cash_handoff_submitted",
+  "cash_handoff_reviewed",
 ];
 
 // Warehouse Manager: an order just entered their queue.

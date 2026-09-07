@@ -21,6 +21,7 @@ import { renderTeamPerformance } from "./views/teamPerformance.js";
 import { renderDashboardOverview } from "./views/dashboardOverview.js";
 import { renderPricelist } from "./views/pricelist.js";
 import { renderPayments } from "./views/payments.js";
+import { renderCashHandoffs } from "./views/cashHandoffs.js";
 import { renderWarehouse } from "./views/warehouse.js";
 import { renderDelivery } from "./views/deliveryRoute.js";
 import { renderRecorded } from "./views/recorded.js";
@@ -282,6 +283,7 @@ async function render() {
   const checkinMatch = path.match(/^#\/checkin\/(\d+)$/);
   const orderCreateMatch = path.match(/^#\/orders\/new\/(\d+)$/);
   const paymentDetailMatch = path.match(/^#\/payments\/(\d+)$/);
+  const handoffDetailMatch = path.match(/^#\/cash-handoffs\/(\d+)$/);
 
   if (path === "#/dashboard") {
     renderDashboard(app, navigate);
@@ -301,6 +303,10 @@ async function render() {
     renderPayments(app, navigate, paymentDetailMatch[1]);
   } else if (path === "#/payments") {
     renderPayments(app, navigate, null, query);
+  } else if (handoffDetailMatch) {
+    renderCashHandoffs(app, navigate, handoffDetailMatch[1]);
+  } else if (path === "#/cash-handoffs") {
+    renderCashHandoffs(app, navigate);
   } else if (path === "#/expenses") {
     renderCashExpenses(app, navigate);
   } else if (path === "#/reports") {

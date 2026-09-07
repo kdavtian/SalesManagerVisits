@@ -216,6 +216,18 @@ export const api = {
   rejectPayment: (id, reason) => json(`/payments/${id}/reject`, "POST", { reason }),
   returnPaymentToPending: (id, reason) => json(`/payments/${id}/return-to-pending`, "POST", { reason }),
 
+  // Cash custody chain (see server/src/routes/cashHandoffs.js) -- the
+  // hand-to-hand journey of the physical cash, layered on top of the
+  // payment rows above.
+  getHandoffAvailable: (asUserId) =>
+    request(`/cash-handoffs/available${asUserId ? `?as_user_id=${asUserId}` : ""}`),
+  getHandoffSenders: () => request("/cash-handoffs/senders"),
+  listCashHandoffs: (offset = 0) => request(`/cash-handoffs?offset=${offset}`),
+  getCashHandoff: (id) => request(`/cash-handoffs/${id}`),
+  createCashHandoff: (data) => json("/cash-handoffs", "POST", data),
+  confirmCashHandoff: (id) => request(`/cash-handoffs/${id}/confirm`, { method: "POST" }),
+  rejectCashHandoff: (id, reason) => json(`/cash-handoffs/${id}/reject`, "POST", { reason }),
+
   getVapidPublicKey: () => request("/push/vapid-public-key"),
   subscribePush: (subscription) => json("/push", "POST", subscription),
   unsubscribePush: (endpoint) => json("/push", "DELETE", { endpoint }),

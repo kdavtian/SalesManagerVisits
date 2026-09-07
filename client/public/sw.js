@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v85";
+const CACHE_VERSION = "field-visits-v86";
 const TILE_CACHE = "field-visits-tiles-v4";
 
 const APP_SHELL = [
@@ -48,6 +48,7 @@ const APP_SHELL = [
   "/js/views/customerDetail.js",
   "/js/views/customerOrders.js",
   "/js/views/customers.js",
+  "/js/views/cashHandoffs.js",
   "/js/views/dashboard.js",
   "/js/views/dashboardOverview.js",
   "/js/views/login.js",

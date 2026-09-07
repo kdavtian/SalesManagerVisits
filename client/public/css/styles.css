@@ -6942,3 +6942,43 @@ form select,
   font-weight: 700;
   white-space: nowrap;
 }
+
+/* Cash custody chain (views/cashHandoffs.js). The channel breakdown is a
+   real table because that is exactly what it is: the receiver reads down
+   the channel column while counting physical notes, so the columns must
+   line up. */
+.handoff-breakdown {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 0.9rem;
+}
+
+.handoff-breakdown th,
+.handoff-breakdown td {
+  padding: 6px 4px;
+  text-align: left;
+}
+
+.handoff-breakdown td:last-child,
+.handoff-breakdown th:last-child {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.handoff-breakdown tfoot th,
+.handoff-breakdown tfoot td {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+/* A whole handoff card is one tap target (opens the count-and-confirm
+   sheet), so it is a button that has to shed the UA's button styling. */
+.handoff-card-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}

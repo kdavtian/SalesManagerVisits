@@ -63,6 +63,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
         </button>
       </div>
       <p class="muted" id="payments-pending-summary" hidden></p>
+      <button type="button" class="btn btn-block" id="payments-handoffs-btn">${t("cash_handoffs_open")}<span id="payments-handoffs-count"></span></button>
       <div class="order-status-filter-row" id="payment-quick-filters"></div>
       <div class="order-status-filter-row" id="payment-active-filters" hidden></div>
       <div class="list-toolbar">
@@ -345,6 +346,23 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
   }
 
   root.querySelector("#payments-new-btn").addEventListener("click", () => openAddPaymentSheet());
+
+  // Entry point into the cash custody chain (views/cashHandoffs.js). The
+  // count is how many handovers are sitting waiting for THIS user to count
+  // and confirm -- the one thing on that screen that is time-sensitive.
+  const handoffsBtn = root.querySelector("#payments-handoffs-btn");
+  handoffsBtn.addEventListener("click", () => navigate("#/cash-handoffs"));
+  (async () => {
+    try {
+      const { incoming } = await api.listCashHandoffs(0);
+      if (incoming.length) {
+        root.querySelector("#payments-handoffs-count").textContent = ` · ${incoming.length}`;
+        handoffsBtn.classList.add("btn-primary");
+      }
+    } catch {
+      /* the button still works without a count */
+    }
+  })();
 
   async function openPaymentDetail(paymentId) {
     const overlay = document.createElement("div");

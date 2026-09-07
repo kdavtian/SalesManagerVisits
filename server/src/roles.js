@@ -154,6 +154,40 @@ export function seesAllPayments(role) {
   return seesAllActivity(role);
 }
 
+// --- Cash custody chain ---------------------------------------------------
+// Physical cash moves hand to hand before anyone reconciles it, and each
+// hop is declared by the sender and confirmed by the receiver (see
+// migrations/059_cash_handoffs.sql). The chain is:
+//   sales_manager -> sales_director -> (ceo OR accountant) -> accountant
+// The director gets a real choice of who they hand the accumulated cash to;
+// a CEO who takes it is only an intermediate custodian and has no choice
+// but to pass it on to an accountant, because the accountant -- the person
+// who actually books it -- is always the last stage. Everyone else (and the
+// accountant themselves) can never be the SENDER of a handoff.
+export function validHandoffRecipientRoles(fromRole) {
+  if (fromRole === "sales_manager") return ["sales_director"];
+  if (fromRole === "sales_director") return ["ceo", "accountant"];
+  if (fromRole === "ceo") return ["accountant"];
+  return [];
+}
+
+// Reaching an accountant's custody is what completes the journey, so that
+// confirmation -- and only that one -- is what flips the underlying
+// payments to the existing 'approved' status everything downstream already
+// keys off. A CEO confirming mid-chain deliberately leaves them 'pending'.
+export function isTerminalHandoffRole(role) {
+  return role === "accountant";
+}
+
+// Who may declare a handoff on someone else's behalf. Same permission (and
+// same reasoning) as canSubmitPaymentsForOthers: the first hop is submitted
+// by the sales DIRECTOR receiving the cash, not by the field rep handing it
+// over -- the rep is out in the field and the director is the one who
+// becomes accountable at that moment. See routes/cashHandoffs.js.
+export function canSubmitHandoffForOthers(role) {
+  return canSubmitPaymentsForOthers(role);
+}
+
 // --- Warehouse & Delivery -----------------------------------------------
 // Who sees the Warehouse Manager's pick list / staging list and can mark an
 // order packed or flag a stock issue.
