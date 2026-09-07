@@ -1034,6 +1034,13 @@ form [aria-invalid="true"] {
   padding: 0 16px 16px;
 }
 
+/* All-orders screen: a bit of breathing room between the customer-name
+   header row and the order list right below it, which otherwise sat flush
+   against each other. */
+.card-list-spaced {
+  padding-top: 12px;
+}
+
 .card {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -3472,6 +3479,20 @@ input[type="search"]:focus {
   background: var(--bg-card-pressed);
 }
 
+.erp-order-subtotal-row {
+  cursor: default;
+  border-top: 2px solid var(--border);
+  font-weight: 600;
+}
+
+.erp-order-subtotal-row:active {
+  background: none;
+}
+
+.erp-order-subtotal-label {
+  text-align: right;
+}
+
 .erp-order-id {
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
@@ -4228,9 +4249,21 @@ input[type="search"]:focus {
 
 .customer-detail-header-main {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  /* Top-aligned (not centered) so the avatar's top edge lines up with the
+     first line of the customer name instead of floating at its vertical
+     midpoint against the taller 88px avatar. */
+  align-items: flex-start;
+  /* Tighter than the base .detail-header's 12px -- pulls the avatar in
+     close to the back button, and the name/ERP-id column in close to the
+     avatar, buying back horizontal room for long names. */
+  gap: 8px;
   min-width: 0;
+}
+
+/* Nudges the back button down to the avatar's own vertical center rather
+   than sitting flush with its top edge under flex-start above. */
+.customer-detail-header-main #back-btn {
+  margin-top: 22px;
 }
 
 /* Two standard 44px row-heights tall -- this is the hero identity element of
@@ -4289,6 +4322,18 @@ input[type="search"]:focus {
   margin-left: 0;
   flex-wrap: wrap;
   align-items: center;
+}
+
+/* Groups Edit + Account settings (whichever of the two the viewer has) so
+   they can be pushed to the row's right edge with a single margin-left:auto,
+   independent of the social-profile icons (Instagram/Facebook/email/website,
+   injected by customerSocialProfiles.js) which stay prepended in front of
+   this group, on the left, exactly where they already were. */
+.detail-header-actions-primary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
 }
 
 /* This row can carry up to 4-5 icon buttons (reassign/assign-ERP/social/

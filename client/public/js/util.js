@@ -333,6 +333,24 @@ export function activateTierSelector(container, onChange) {
   });
 }
 
+// Programmatically selects a tier on an already-activated tierSelectorHtml()
+// block -- e.g. auto-upgrading Potential to Bronze once an ERP customer ID
+// is linked, without simulating a click on the (possibly hidden/scrolled)
+// button. Mirrors the same active-class/aria/hidden-input update
+// activateTierSelector's click handler does, so the two stay indistinguishable
+// to anything reading the DOM afterwards.
+export function setTierSelectorValue(container, tier) {
+  const wrap = container.querySelector(".tier-selector");
+  if (!wrap) return;
+  const hiddenInput = wrap.querySelector("input[type=hidden]");
+  wrap.querySelectorAll(".tier-btn").forEach((b) => {
+    const active = b.dataset.tier === tier;
+    b.classList.toggle("tier-btn-active", active);
+    b.setAttribute("aria-checked", String(active));
+  });
+  if (hiddenInput) hiddenInput.value = tier;
+}
+
 export function formatAmd(value) {
   if (value == null) return "";
   return `${Number(value).toLocaleString()} ${t("amd")}`;
@@ -354,6 +372,19 @@ export function formatDateTime(iso) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+// dd-mm-yyyy -- used wherever an order/record date is shown as a plain date
+// (no time), so it reads consistently regardless of the viewer's locale.
+// Reads the y/m/d digits straight out of the ISO string (rather than going
+// through `Date`) so a date-only value like "2024-01-15" can't shift to the
+// previous/next day under a negative/positive UTC offset.
+export function formatDateDMY(value) {
+  if (!value) return "";
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
+  if (!match) return String(value).slice(0, 10);
+  const [, yyyy, mm, dd] = match;
+  return `${dd}-${mm}-${yyyy}`;
 }
 
 // Lightweight, dependency-free read of a raw User-Agent string for the
