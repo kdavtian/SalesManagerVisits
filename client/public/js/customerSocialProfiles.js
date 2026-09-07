@@ -154,11 +154,11 @@ let renderToken = 0;
 async function decorateCustomerDetail() {
   const customerId = customerIdFromHash();
   if (!customerId) return;
-  // Lives inline in the header's icon-action row now, next to
-  // reassign/assign-ERP/edit -- a full-width "Social profiles" row in the
-  // facts card was consuming a whole row for what is, most of the time,
-  // zero or one icon.
-  const actions = document.querySelector(".detail-view .detail-header-actions");
+  // The left slot of the facts card's own toolbar row (see
+  // detail-facts-card-actions in customerDetail.js) -- sits directly next to
+  // Account settings/Edit on the right of the same row, inside the main
+  // customer info card, rather than a separate row of its own above it.
+  const actions = document.querySelector(".detail-view .detail-facts-card-actions-social");
   if (!actions || actions.dataset.socialProfilesReady === String(customerId)) return;
   actions.dataset.socialProfilesReady = String(customerId);
   const token = ++renderToken;
@@ -172,13 +172,6 @@ async function decorateCustomerDetail() {
   }
   if (token !== renderToken || customerIdFromHash() !== customerId || !actions.isConnected) return;
 
-  let section = actions.querySelector(".customer-social-section");
-  if (!section) {
-    section = document.createElement("span");
-    section.className = "customer-social-section";
-    actions.prepend(section);
-  }
-
   // One-tap external links only -- these cost nothing to keep visible
   // because they just hand off to another app/tab. Editing these fields
   // happens inside customerDetail.js's merged "Edit" sheet (item 8) via
@@ -191,8 +184,8 @@ async function decorateCustomerDetail() {
     data.website ? linkButton("website", websiteHref(data.website), GLOBE_ICON, `${t("customer_website")}: ${data.website}`) : "",
   ].filter(Boolean).join("");
 
-  section.innerHTML = links;
-  section.querySelectorAll("[data-social-kind]").forEach((button) => {
+  actions.innerHTML = links;
+  actions.querySelectorAll("[data-social-kind]").forEach((button) => {
     button.addEventListener("click", () => openPlatformProfile(button.dataset.socialKind, button.dataset.socialValue));
   });
 }
