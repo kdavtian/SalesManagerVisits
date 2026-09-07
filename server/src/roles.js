@@ -116,6 +116,19 @@ export function canReviseApprovedPlan(role) {
   return isPerfCeo(role);
 }
 
+// Who can manually pull a pending_approval or approved plan straight back
+// to draft (see POST /plans/:id/reopen-as-draft) -- an unblock action for
+// when the review workflow has a plan stuck (submitted by mistake, waiting
+// on a reviewer who isn't available, approved with numbers that turned out
+// wrong) and someone with standing on that plan wants to fix it themselves
+// right now instead of waiting on -- or in the approved case, being limited
+// to -- the versioned CEO-only "Revise" flow above. Same role set as who
+// can submit a plan in the first place (POST /plans/:id/submit): the
+// reverse of submitting is un-submitting.
+export function canReopenPlanAsDraft(role) {
+  return isPerfCeo(role) || role === "sales_director" || role === "accountant";
+}
+
 // Who sees company-wide Team Performance data (management dashboard, all
 // channels) vs only their own channel's numbers.
 export function seesAllPerformance(role) {

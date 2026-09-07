@@ -101,3 +101,9 @@ export function canReviewPerfPlan(submittedByRole) {
 export function canCloseMonth() {
   return isPerfCeo() || state.user?.role === "accountant";
 }
+
+// Mirrors canReopenPlanAsDraft in server/src/roles.js -- who sees the
+// "Move to draft" unblock action on a pending_approval/approved plan.
+export function canReopenPerfPlanAsDraft() {
+  return isPerfCeo() || state.user?.role === "sales_director" || state.user?.role === "accountant";
+}
