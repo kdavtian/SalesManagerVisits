@@ -23,7 +23,14 @@ dashboardRouter.get("/summary", async (req, res) => {
 
   const totalsQuery = pool.query(
     `SELECT
-       (SELECT count(*) FROM customers c WHERE true ${customerFilter}) AS total_customers,
+       -- Scoped to customers that actually get field visits (see
+       -- NOT_NO_VISIT_CHANNEL_SQL) -- this is the denominator for the
+       -- progress card's "X/Y" and "remaining" figures, so it needs to
+       -- match what "overdue" already excludes below. Counting every
+       -- customer here (including KF/CAS/CVO/PCO/OEM, which are never
+       -- visited in the field) made "remaining" overstate how many
+       -- customers were actually still to be visited that day.
+       (SELECT count(*) FROM customers c WHERE ${NOT_NO_VISIT_CHANNEL_SQL} ${customerFilter}) AS total_customers,
        (SELECT count(DISTINCT ch.customer_id) FROM checkins ch
           WHERE ch.timestamp >= date_trunc('day', now()) ${userFilter}) AS visited_today,
        (SELECT count(DISTINCT ch.customer_id) FROM checkins ch
@@ -68,7 +75,7 @@ dashboardRouter.get("/summary", async (req, res) => {
         `SELECT u.id AS user_id, u.name AS user_name,
                 count(ch.id) AS checkins_this_week,
                 count(DISTINCT ch.customer_id) AS customers_visited_this_week,
-                (SELECT count(*) FROM customers c WHERE c.assigned_manager_id = u.id) AS total_customers,
+                (SELECT count(*) FROM customers c WHERE c.assigned_manager_id = u.id AND ${NOT_NO_VISIT_CHANNEL_SQL}) AS total_customers,
                 (SELECT count(DISTINCT ch2.customer_id) FROM checkins ch2
                    WHERE ch2.user_id = u.id AND ch2.timestamp >= date_trunc('day', now())) AS visited_today,
                 (SELECT count(*) FROM customers c
