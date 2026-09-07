@@ -108,22 +108,25 @@ export async function renderCustomerDetail(root, navigate, customerId) {
           </div>
         </div>
       </div>
-      <!-- Social-profile icons (Instagram/Facebook/email/website) are the only
-           thing left in this row -- customerSocialProfiles.js finds it by this
-           class and prepends its section here. Left empty (and collapsing to
-           zero height) for any customer with none. Edit/Account settings live
-           on the facts card below now, not here -- see detail-facts-card-actions. -->
-      <div class="detail-header-actions"></div>
     </div>
 
     <div class="card detail-facts-card">
+      <!-- One toolbar row: social/contact links (Instagram/Facebook/email/
+           website) on the left, Account settings + Edit on the right.
+           customerSocialProfiles.js finds the left slot by its own class and
+           fills it in -- left empty (zero width, so space-between still pins
+           the right group to the edge) for any customer with no profiles
+           linked yet. -->
       <div class="detail-facts-card-actions">
-        ${
-          hasAccountSettings
-            ? `<button type="button" class="icon-btn" id="account-settings-btn" aria-label="${t("account_settings")}" title="${t("account_settings")}">${icons.settings}</button>`
-            : ""
-        }
-        <button type="button" class="icon-btn" id="edit-customer-btn" aria-label="${t("edit_customer")}" title="${t("edit_customer")}">${icons.pencil}</button>
+        <span class="detail-facts-card-actions-social customer-social-section"></span>
+        <div class="detail-facts-card-actions-primary">
+          ${
+            hasAccountSettings
+              ? `<button type="button" class="icon-btn" id="account-settings-btn" aria-label="${t("account_settings")}" title="${t("account_settings")}">${icons.settings}</button>`
+              : ""
+          }
+          <button type="button" class="icon-btn" id="edit-customer-btn" aria-label="${t("edit_customer")}" title="${t("edit_customer")}">${icons.pencil}</button>
+        </div>
       </div>
       ${
         customer.region || customer.address
