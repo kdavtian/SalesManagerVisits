@@ -376,7 +376,10 @@ export function formatRelative(iso) {
 // could still trigger the Google fallback on top of it, opening both apps.
 // Asking the rep which app to open removes the race entirely: exactly one
 // scheme fires, with only its own web version as a same-app fallback.
-export function openNavigation(lat, lng) {
+// item 7's optional third `onShowOnMap` callback adds a "Show on map" entry
+// to this same picker sheet (an in-app alternative to leaving for an
+// external navigation app) -- omitted, this behaves exactly as before.
+export function openNavigation(lat, lng, { onShowOnMap } = {}) {
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
 
   const yandexUrl = `yandexnavi://build_route_on_map?lat_to=${lat}&lon_to=${lng}`;
@@ -413,6 +416,7 @@ export function openNavigation(lat, lng) {
       <div class="nav-choice-list">
         <button type="button" class="nav-choice-btn" data-app="yandex">${t("open_in_yandex")}</button>
         <button type="button" class="nav-choice-btn" data-app="google">${t("open_in_google_maps")}</button>
+        ${onShowOnMap ? `<button type="button" class="nav-choice-btn" data-app="in-app-map">${t("show_on_map")}</button>` : ""}
       </div>
       <div class="sheet-actions">
         <button type="button" class="btn btn-block" id="cancel-nav-choice">${t("cancel")}</button>
@@ -439,6 +443,10 @@ export function openNavigation(lat, lng) {
       // attempt needed on Android.
       window.location.href = googleWebUrl;
     }
+  });
+  overlay.querySelector('[data-app="in-app-map"]')?.addEventListener("click", () => {
+    close();
+    onShowOnMap();
   });
 }
 

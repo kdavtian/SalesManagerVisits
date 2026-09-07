@@ -560,6 +560,7 @@ const dict = {
     choose_navigation_app: "Open navigation in",
     open_in_yandex: "Yandex Navi",
     open_in_google_maps: "Google Maps",
+    show_on_map: "Show on map",
     call: "Call",
     you_are: "You are",
     from_customer: "from the customer",
@@ -1007,6 +1008,7 @@ const dict = {
     more_actions: "More actions",
     debt_balances_last_visit: "Last visit",
 
+    account_settings: "Account settings",
     payment_settings: "Payment settings",
     payment_method_label: "Payment method",
     payment_method_invoice: "Invoice",
@@ -1573,6 +1575,7 @@ const dict = {
     choose_navigation_app: "Բացել երթուղին",
     open_in_yandex: "Yandex Navi",
     open_in_google_maps: "Google Maps",
+    show_on_map: "Ցուցադրել քարտեզի վրա",
     call: "Զանգել",
     you_are: "Դուք գտնվում եք",
     from_customer: "հաճախորդից",
@@ -2021,6 +2024,7 @@ const dict = {
     more_actions: "Այլ գործողություններ",
     debt_balances_last_visit: "Վերջին այցը",
 
+    account_settings: "Հաշվի կարգավորումներ",
     payment_settings: "Վճարման կարգավորումներ",
     payment_method_label: "Վճարման եղանակ",
     payment_method_invoice: "Անկանխիկ",

@@ -53,7 +53,11 @@ function statusBadgeHtml(status) {
 // performance, dashboard row), so the shape only needs describing once.
 function kpiBlockHtml(label, kpi, { isAmd = true, unit = "" } = {}) {
   if (!kpi) return "";
-  const fmt = (v) => (v == null ? "—" : isAmd ? formatAmd(Math.round(v)) : `${Math.round(v).toLocaleString()}${unit}`);
+  // Same rounding care as the server's perfRecommendations formatNumber:
+  // a real positive fractional rate (e.g. 0.25 new customers/day) must not
+  // collapse to a misleading "0" in the required-daily-rate footer.
+  const round1 = (v) => (v > 0 && v < 1 ? Math.round(v * 10) / 10 : Math.round(v));
+  const fmt = (v) => (v == null ? "—" : isAmd ? formatAmd(Math.round(v)) : `${round1(v).toLocaleString()}${unit}`);
   const pct = kpi.achievement_pct != null ? Math.round(kpi.achievement_pct * 100) : null;
   return `
     <div class="perf-kpi-block">

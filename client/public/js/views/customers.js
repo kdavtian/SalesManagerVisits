@@ -115,7 +115,10 @@ export function renderCustomers(root, navigate, initialFilter) {
   let regionFilter = "";
   let subregionFilter = "";
   let assignmentFilter = ""; // "", "mine", "others"
-  let channelFilter = "";
+  // Sales channel is the one filter where "show me A OR B" is a real query
+  // (e.g. comparing two distribution channels side by side), so it's a
+  // multi-select Set rather than the single-value strings above.
+  let channelFilters = new Set();
   // Off by default (per task spec: "to make app run faster") -- the debt
   // lookup is a real join server-side, not free, so it's opt-in per
   // session rather than always fetched with the rest of the list.
@@ -212,11 +215,75 @@ export function renderCustomers(root, navigate, initialFilter) {
     });
   }
 
-  function filterIconButton({ key, icon, label, active, onClick }) {
-    return `<button type="button" class="filter-icon-btn ${active ? "filter-icon-btn-active" : ""}" data-filter-btn="${key}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">
+  function filterIconButton({ key, icon, label, active, count, onClick }) {
+    // A multi-select filter shows how many are selected right on the
+    // button (e.g. "Direction (2)") -- same active-state visual language
+    // (tinted icon + dot) as every single-value filter button, just with
+    // an accessible-name suffix so screen readers get the count too.
+    const a11yLabel = count > 1 ? `${label} (${count})` : label;
+    // data-filter-count survives unifiedSearchEnhancements.js's innerHTML
+    // rewrite of this button (it restyles these buttons for the combined
+    // search bar and rebuilds their icon/dot markup from scratch on every
+    // re-render) -- carrying the count as an attribute, not just as markup,
+    // is what lets that script also show the "(2)" badge in its own markup.
+    return `<button type="button" class="filter-icon-btn ${active ? "filter-icon-btn-active" : ""}" data-filter-btn="${key}" data-filter-count="${count || 0}" aria-label="${escapeHtml(a11yLabel)}" title="${escapeHtml(a11yLabel)}">
       ${icon}
-      ${active ? `<span class="filter-icon-dot" aria-hidden="true"></span>` : ""}
+      ${count > 1 ? `<span class="filter-icon-count" aria-hidden="true">${count}</span>` : active ? `<span class="filter-icon-dot" aria-hidden="true"></span>` : ""}
     </button>`;
+  }
+
+  // Checkbox-style bottom sheet for filters where selecting more than one
+  // value is a real, useful query (see channelFilters above) -- unlike
+  // openFilterSheet, tapping an option toggles it without closing the
+  // sheet; the selection only commits when Done is tapped (Cancel via the
+  // overlay/backdrop discards it, matching how the single-select sheet's
+  // tap-to-close-with-that-value reads as "commit immediately").
+  function openMultiFilterSheet(titleText, options, currentSet, onApply) {
+    const working = new Set(currentSet);
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet filter-sheet">
+        <h2>${escapeHtml(titleText)}</h2>
+        <div class="filter-sheet-options">
+          ${options
+            .map(
+              (o) => `
+            <button type="button" class="filter-sheet-option ${working.has(o.value) ? "filter-sheet-option-selected" : ""}" data-value="${escapeHtml(o.value)}">
+              <span>${escapeHtml(o.label)}</span>
+              <span class="filter-sheet-check" ${working.has(o.value) ? "" : "hidden"}>${icons.checkCircle}</span>
+            </button>
+          `
+            )
+            .join("")}
+        </div>
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="multi-filter-clear">${t("clear")}</button>
+          <button type="button" class="btn btn-primary" id="multi-filter-done">${t("done")}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+    overlay.querySelectorAll(".filter-sheet-option").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const value = btn.dataset.value;
+        if (working.has(value)) working.delete(value);
+        else working.add(value);
+        btn.classList.toggle("filter-sheet-option-selected", working.has(value));
+        btn.querySelector(".filter-sheet-check").hidden = !working.has(value);
+      });
+    });
+    overlay.querySelector("#multi-filter-clear").addEventListener("click", () => {
+      working.clear();
+      overlay.remove();
+      onApply(working);
+    });
+    overlay.querySelector("#multi-filter-done").addEventListener("click", () => {
+      overlay.remove();
+      onApply(working);
+    });
   }
 
   function renderFilterRow() {
@@ -247,7 +314,13 @@ export function renderCustomers(root, navigate, initialFilter) {
         ? filterIconButton({ key: "subregion", icon: icons.compass, label: t("subregion"), active: subregionFilter !== "" })
         : "",
       channels.length
-        ? filterIconButton({ key: "channel", icon: icons.route, label: t("filter_direction_title"), active: channelFilter !== "" })
+        ? filterIconButton({
+            key: "channel",
+            icon: icons.route,
+            label: t("filter_direction_title"),
+            active: channelFilters.size > 0,
+            count: channelFilters.size,
+          })
         : "",
     ]
       .filter(Boolean)
@@ -267,6 +340,7 @@ export function renderCustomers(root, navigate, initialFilter) {
         (value) => {
           assignmentFilter = value;
           renderFilterRow();
+          renderStatsBar();
           renderList();
         }
       );
@@ -281,6 +355,7 @@ export function renderCustomers(root, navigate, initialFilter) {
           regionFilter = value;
           subregionFilter = "";
           renderFilterRow();
+          renderStatsBar();
           renderList();
         }
       );
@@ -294,33 +369,53 @@ export function renderCustomers(root, navigate, initialFilter) {
         (value) => {
           subregionFilter = value;
           renderFilterRow();
+          renderStatsBar();
           renderList();
         }
       );
     });
 
     filterRow.querySelector('[data-filter-btn="channel"]')?.addEventListener("click", () => {
-      openFilterSheet(
+      openMultiFilterSheet(
         t("filter_direction_title"),
-        [{ value: "", label: t("all_channels") }, ...channels.map((c) => ({ value: c, label: c }))],
-        channelFilter,
-        (value) => {
-          channelFilter = value;
+        channels.map((c) => ({ value: c, label: c })),
+        channelFilters,
+        (selected) => {
+          channelFilters = selected;
           renderFilterRow();
+          renderStatsBar();
           renderList();
         }
       );
     });
   }
 
+  // Every filter EXCEPT the visited/overdue/not_visited tri-state, applied
+  // once and shared by both the pill counts and the list -- so a region
+  // filter (say) narrows the pill numbers to that region, but the pill
+  // you're currently sitting on never narrows its own sibling counts (the
+  // tri-state itself is applied separately, on top, only for the list).
+  function applyNonStatusFilters(customers) {
+    let list = customers;
+    const query = searchInput.value.trim().toLowerCase();
+    if (query) list = list.filter((c) => c.name.toLowerCase().includes(query));
+    if (regionFilter) list = list.filter((c) => c.region === regionFilter);
+    if (subregionFilter) list = list.filter((c) => c.subregion === subregionFilter);
+    if (channelFilters.size) list = list.filter((c) => c.sales_channel && channelFilters.has(c.sales_channel));
+    if (assignmentFilter === "mine") list = list.filter((c) => c.assigned_manager_id === state.user.id);
+    else if (assignmentFilter === "others") list = list.filter((c) => c.assigned_manager_id !== state.user.id);
+    return list;
+  }
+
   function renderStatsBar() {
+    const base = applyNonStatusFilters(allCustomers);
     const counts = {
-      "": allCustomers.length,
+      "": base.length,
       visited: 0,
       overdue: 0,
       not_visited: 0,
     };
-    for (const c of allCustomers) {
+    for (const c of base) {
       const status = visitStatus(c);
       for (const [key, statuses] of Object.entries(FILTER_STATUSES)) {
         if (statuses.includes(status)) counts[key] += 1;
@@ -373,15 +468,8 @@ export function renderCustomers(root, navigate, initialFilter) {
   }
 
   function renderList() {
-    let customers = allCustomers;
-    const query = searchInput.value.trim().toLowerCase();
-    if (query) customers = customers.filter((c) => c.name.toLowerCase().includes(query));
+    let customers = applyNonStatusFilters(allCustomers);
     if (FILTER_STATUSES[filter]) customers = customers.filter((c) => FILTER_STATUSES[filter].includes(visitStatus(c)));
-    if (regionFilter) customers = customers.filter((c) => c.region === regionFilter);
-    if (subregionFilter) customers = customers.filter((c) => c.subregion === subregionFilter);
-    if (channelFilter) customers = customers.filter((c) => c.sales_channel === channelFilter);
-    if (assignmentFilter === "mine") customers = customers.filter((c) => c.assigned_manager_id === state.user.id);
-    else if (assignmentFilter === "others") customers = customers.filter((c) => c.assigned_manager_id !== state.user.id);
     customers = sortCustomers(customers);
 
     if (!customers.length) {
@@ -466,7 +554,10 @@ export function renderCustomers(root, navigate, initialFilter) {
 
   searchInput.addEventListener("input", () => {
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(renderList, 300);
+    searchTimer = setTimeout(() => {
+      renderStatsBar();
+      renderList();
+    }, 300);
   });
 
   load();

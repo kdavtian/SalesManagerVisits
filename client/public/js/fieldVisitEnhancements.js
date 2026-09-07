@@ -93,102 +93,6 @@ function enhanceNewCustomerForm(root = document) {
   localizeRegionControls(form);
 }
 
-function enhancePhotoLightbox(root = document) {
-  const overlay = root.querySelector(".photo-lightbox-overlay");
-  if (!overlay || overlay.dataset.zoomEnhanced === "true") return;
-  overlay.dataset.zoomEnhanced = "true";
-
-  const img = overlay.querySelector(".photo-lightbox-img");
-  if (!img) return;
-  let scale = 1;
-  let pinchStartDistance = 0;
-  let pinchStartScale = 1;
-  let lastTap = 0;
-
-  const controls = document.createElement("div");
-  controls.className = "photo-zoom-controls";
-  controls.innerHTML = `
-    <button type="button" data-photo-zoom="out" aria-label="Zoom out">−</button>
-    <button type="button" data-photo-zoom="reset" aria-label="Reset zoom">1×</button>
-    <button type="button" data-photo-zoom="in" aria-label="Zoom in">+</button>
-  `;
-  overlay.appendChild(controls);
-
-  function applyScale(next) {
-    scale = Math.min(5, Math.max(1, next));
-    img.style.transform = `scale(${scale})`;
-    img.classList.toggle("photo-lightbox-img-zoomed", scale > 1.01);
-    const reset = controls.querySelector('[data-photo-zoom="reset"]');
-    const label = scale === 1 ? "1×" : `${scale.toFixed(1)}×`;
-    if (reset.textContent !== label) reset.textContent = label;
-  }
-
-  controls.addEventListener("click", (event) => {
-    event.stopPropagation();
-    const action = event.target.closest("button")?.dataset.photoZoom;
-    if (action === "in") applyScale(scale + 0.5);
-    else if (action === "out") applyScale(scale - 0.5);
-    else if (action === "reset") applyScale(1);
-  });
-
-  img.addEventListener("dblclick", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    applyScale(scale > 1 ? 1 : 2);
-  });
-
-  overlay.addEventListener(
-    "touchstart",
-    (event) => {
-      if (event.touches.length === 2) {
-        const [a, b] = event.touches;
-        pinchStartDistance = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-        pinchStartScale = scale;
-      } else if (event.touches.length === 1) {
-        const now = Date.now();
-        if (now - lastTap < 280) {
-          event.preventDefault();
-          applyScale(scale > 1 ? 1 : 2);
-          lastTap = 0;
-        } else {
-          lastTap = now;
-        }
-      }
-    },
-    { capture: true, passive: false }
-  );
-
-  overlay.addEventListener(
-    "touchmove",
-    (event) => {
-      if (event.touches.length !== 2 || !pinchStartDistance) return;
-      event.preventDefault();
-      const [a, b] = event.touches;
-      const distance = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-      applyScale(pinchStartScale * (distance / pinchStartDistance));
-    },
-    { capture: true, passive: false }
-  );
-
-  overlay.addEventListener(
-    "touchend",
-    (event) => {
-      if (scale > 1.01) event.stopImmediatePropagation();
-      if (event.touches.length < 2) pinchStartDistance = 0;
-    },
-    { capture: true }
-  );
-
-  overlay.addEventListener("wheel", (event) => {
-    event.preventDefault();
-    applyScale(scale + (event.deltaY < 0 ? 0.25 : -0.25));
-  }, { passive: false });
-
-  const imageObserver = new MutationObserver(() => applyScale(1));
-  imageObserver.observe(img, { attributes: true, attributeFilter: ["src"] });
-  applyScale(1);
-}
-
 function updateDisplayedVersion(root = document) {
   root.querySelectorAll(".settings-row-value").forEach((el) => {
     const current = el.textContent;
@@ -200,7 +104,6 @@ function updateDisplayedVersion(root = document) {
 
 function enhanceAll(root = document) {
   enhanceNewCustomerForm(root);
-  enhancePhotoLightbox(root);
   localizeRegionControls(root);
   updateDisplayedVersion(root);
 }

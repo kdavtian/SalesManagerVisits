@@ -3874,6 +3874,41 @@ input[type="search"]:focus {
   opacity: 0.85;
 }
 
+.activity-search-filter-btn {
+  position: relative;
+}
+
+.activity-search-filter-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 1.5px solid var(--bg-card);
+}
+
+/* Same corner as activity-search-filter-dot, for a multi-select filter
+   (e.g. Direction with 2+ channels chosen) that needs to say "how many"
+   rather than just "active" -- mirrors .filter-icon-count's look. */
+.activity-search-filter-count {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  border: 1.5px solid var(--bg-card);
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 13px;
+  text-align: center;
+}
+
 .customer-card {
   display: flex;
   align-items: center;
@@ -4044,12 +4079,20 @@ input[type="search"]:focus {
 }
 
 /* Two standard 44px row-heights tall -- this is the hero identity element of
-   the page, not a list row, and it now has a row to itself to grow into. */
+   the page, not a list row, and it now has a row to itself to grow into.
+   No background/border here (unlike the base .detail-header-icon this
+   overrides): that base styling made sense as a tinted backdrop behind a
+   currentColor-stroke SVG, but reads as an unwanted white box/ring around
+   the full-color pre-rendered category PNG this now always shows -- the
+   PNG (via .list-row-icon-* below) already carries its own tinted
+   background at the size it actually needs. */
 .customer-detail-header .detail-header-icon {
   width: 88px;
   height: 88px;
   border-radius: 24px;
   padding: 0;
+  background: none;
+  border: none;
 }
 
 .customer-detail-header .detail-header-icon .list-row-icon {
@@ -4066,6 +4109,7 @@ input[type="search"]:focus {
 
 .customer-detail-header .detail-header-title {
   flex: 1;
+  min-width: 0;
 }
 
 /* There is vertical room beside an 88px avatar, so a long name wraps onto a
@@ -4077,45 +4121,19 @@ input[type="search"]:focus {
   line-height: 1.25;
 }
 
+/* Nested inside .detail-header-title now (a sibling of the h1, not of
+   .customer-detail-header-main) so it starts at the name's own left edge
+   and sits directly under it, instead of spanning the full header width
+   starting under the avatar. */
 .customer-detail-header .detail-header-status-row {
   gap: 6px;
+  margin-top: 2px;
 }
 
 .customer-detail-header .detail-header-actions {
   margin-left: 0;
   flex-wrap: wrap;
   align-items: center;
-}
-
-.detail-more-wrap {
-  position: relative;
-  margin-left: auto;
-}
-
-.detail-more-menu {
-  right: 0;
-  min-width: 200px;
-}
-
-.detail-more-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.detail-more-item-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  color: var(--text-dim);
-  flex-shrink: 0;
-}
-
-.detail-more-item-icon svg {
-  width: 18px;
-  height: 18px;
 }
 
 /* This row can carry up to 4-5 icon buttons (reassign/assign-ERP/social/
@@ -5145,6 +5163,25 @@ input[type="search"]:focus {
   border: 1.5px solid var(--bg-card);
 }
 
+/* Same corner as filter-icon-dot, but for a multi-select filter with 2+
+   values chosen -- a plain dot can't say "how many", a number can. */
+.filter-icon-count {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  border: 1.5px solid var(--bg-card);
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 13px;
+  text-align: center;
+}
+
 /* Bottom sheet opened by a filter-icon-btn -- full Armenian option labels,
    one per row, same shell as every other sheet in the app. */
 .filter-sheet-options {
@@ -5365,14 +5402,14 @@ input[type="search"]:focus {
 
 /* The category artwork is a raster PNG carrying its own transparent margin,
    so the drawn glyph fills noticeably less of its box than the stroke-SVGs
-   it replaced -- at 24px it read smaller and fainter than every other row
-   icon. 31px restores the intended optical weight inside the 44px avatar
-   without the artwork reaching its edges. Scoped to .list-row-icon on
-   purpose: the category selector buttons and the visit-detail avatar size
-   the same image themselves and must not inherit this. */
+   it replaced. Sized to fill the 44px avatar exactly (matching
+   .list-row-icon's own size, no visible padding/ring around the glyph).
+   Scoped to .list-row-icon on purpose: the category selector buttons and
+   the visit-detail avatar size the same image themselves and must not
+   inherit this. */
 .list-row-icon .category-img {
-  width: 31px;
-  height: 31px;
+  width: 44px;
+  height: 44px;
 }
 
 button.list-row-icon {
@@ -6388,6 +6425,14 @@ form select,
   border-radius: 8px;
   -webkit-user-select: none;
   user-select: none;
+  /* The page-wide viewport meta disables native pinch/double-tap zoom
+     (see index.html), so this image implements its own scoped zoom in JS
+     (visitDetail.js's openPhotoLightbox) -- touch-action: none here hands
+     ALL touch gestures starting on the image to that JS instead of letting
+     the browser's default single-finger-scroll/pinch-refuse behavior
+     intercept them first. */
+  touch-action: none;
+  transform-origin: center center;
 }
 
 .photo-lightbox-close {

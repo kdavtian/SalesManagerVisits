@@ -68,7 +68,7 @@ const FALLBACK_TILE_URLS = [
 const TILE_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
-export function renderMap(root, navigate, relocateCustomerId, startInAddMode = false, startInPlanMode = false) {
+export function renderMap(root, navigate, relocateCustomerId, startInAddMode = false, startInPlanMode = false, focusCustomerId = null) {
   root.innerHTML = `
     <div class="map-view">
       <div id="leaflet-map"></div>
@@ -825,7 +825,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       // fitBounds-to-everyone -- fitBounds naturally zooms out to fit the
       // whole territory, which is the opposite of what someone opening the
       // map wants to see first (what's near them right now).
-      if (!initialViewApplied && !relocateCustomerId && !startInAddMode && !startInPlanMode) {
+      if (!initialViewApplied && !relocateCustomerId && !startInAddMode && !startInPlanMode && focusCustomerId == null) {
         initialViewApplied = true;
         getCurrentPosition({ timeout: 4000 })
           .then((pos) => {
@@ -966,7 +966,16 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   async function loadPlannedFilter() {
     let plan;
     try {
-      plan = await api.getMyVisitPlan();
+      // canViewTeamLocations roles (admin/director/ceo) can pick a specific
+      // manager from the map's own manager filter -- the Planned filter
+      // needs to follow that same selection instead of always asking for
+      // the viewer's own plan (which is empty for these roles, since they
+      // don't have field-visit route plans of their own). This was the map
+      // "Planned" filter's actual disconnect from Route Plans: a
+      // director/admin choosing a manager and tapping Planned always saw
+      // nothing, because it silently kept querying their own account's
+      // plan regardless of who was selected.
+      plan = await api.getMyVisitPlan(undefined, managerFilter || undefined);
     } catch {
       plan = null;
     }
@@ -1077,7 +1086,12 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
             });
             managerFilterMenu.hidden = true;
             managerFilterBtn.setAttribute("aria-expanded", "false");
-            applyFilter();
+            // Planned pulls from a per-user plan (see loadPlannedFilter),
+            // so switching managers while it's active must re-fetch --
+            // otherwise the pins shown stay whatever was loaded for the
+            // previously selected manager (or nobody, at first).
+            if (activeFilter === "planned") loadPlannedFilter();
+            else applyFilter();
           });
         });
       })
@@ -1154,6 +1168,27 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     renderIconFilterRow();
     applyFilter();
     refreshNearestCustomerBar();
+
+    // Item 7 -- customer detail's Navigate button offers "Show on map" as an
+    // in-app alternative to leaving for an external navigation app; this is
+    // the mechanism it (and any future "open map centered on customer X"
+    // caller) relies on. Runs once, right after markers first load -- a
+    // customer not in the (filtered) list just silently has nothing to
+    // focus, same as the relocate flow above handling a missing id.
+    if (focusCustomerId != null && !initialViewApplied) {
+      // Counts as the map's "first settle" too (see the geolocation-based
+      // centering this guards against in applyFilter above) -- otherwise
+      // that block keeps re-running on every later filter change (nothing
+      // else ever flips initialViewApplied while focusCustomerId stays
+      // set) and yanks the map back to the user's own location the next
+      // time they tap a filter chip.
+      initialViewApplied = true;
+      const entry = lastCustomers.find((item) => String(item.c.id) === String(focusCustomerId));
+      if (entry) {
+        map.setView([entry.c.lat, entry.c.lng], Math.max(map.getZoom(), 15));
+        entry.marker.openPopup();
+      }
+    }
 
     if (!bounds.length && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(

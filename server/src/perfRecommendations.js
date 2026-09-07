@@ -26,8 +26,13 @@ function formatAmd(n) {
   return `${Math.round(n).toLocaleString("en-US")} AMD`;
 }
 
+// Rounds for display, but never collapses a real positive requirement down
+// to "0" -- e.g. 0.25 new customers/working day is a genuine (if awkward)
+// number and must not be shown as "needs 0/working day to hit target",
+// which reads as nonsensical. Anything under 1 keeps one decimal place.
 function formatNumber(n, unit) {
-  return unit ? `${Math.round(n).toLocaleString("en-US")} ${unit}` : Math.round(n).toLocaleString("en-US");
+  const rounded = n > 0 && n < 1 ? Math.round(n * 10) / 10 : Math.round(n);
+  return unit ? `${rounded.toLocaleString("en-US")} ${unit}` : rounded.toLocaleString("en-US");
 }
 
 // One KPI's recommendations: a pace warning when behind, plus a

@@ -127,10 +127,22 @@ function customerIconFor(key) {
 function syncCustomerFilterButtons(filterRow) {
   filterRow?.querySelectorAll("[data-filter-btn]").forEach((button) => {
     const active = button.classList.contains("filter-icon-btn-active") || button.classList.contains("activity-search-filter-btn-active");
+    // A multi-select filter (see customers.js's channelFilters) stamps how
+    // many values are chosen onto the button as data-filter-count, which
+    // survives the innerHTML rewrite below -- carry it through as the same
+    // small count badge customers.js itself renders, instead of collapsing
+    // back to a plain dot once this script re-skins the button.
+    const count = Number(button.dataset.filterCount || 0);
     button.classList.remove("filter-icon-btn", "filter-icon-btn-active");
     button.classList.add("activity-search-filter-btn", "unified-customer-filter-btn");
     button.classList.toggle("activity-search-filter-btn-active", active);
-    const wanted = `${customerIconFor(button.dataset.filterBtn)}${active ? '<span class="activity-search-filter-dot" aria-hidden="true"></span>' : ""}`;
+    const badge =
+      count > 1
+        ? `<span class="activity-search-filter-count" aria-hidden="true">${count}</span>`
+        : active
+          ? '<span class="activity-search-filter-dot" aria-hidden="true"></span>'
+          : "";
+    const wanted = `${customerIconFor(button.dataset.filterBtn)}${badge}`;
     if (button.innerHTML !== wanted) button.innerHTML = wanted;
   });
 }

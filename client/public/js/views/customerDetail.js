@@ -5,6 +5,7 @@ import { icons } from "../icons.js";
 import { canEditDirectly, canReassignCustomers, canAssignErpCustomerId, isAdmin, seesFinancialExports } from "../state.js";
 import { openVisitDetailSheet, openPhotoLightbox } from "../visitDetail.js";
 import { visitStatusBadge } from "./customers.js";
+import { fetchCustomerSocial, saveCustomerSocial, socialFieldsHtml, collectSocialPayload } from "../customerSocialProfiles.js";
 
 const AGING_BADGE = {
   "0-7 days": "badge-success",
@@ -75,26 +76,17 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     .filter(Boolean)
     .join(" &middot; ");
 
-  // Everything sheet-shaped lives behind one "more actions" button instead
-  // of its own icon in the header row: at 390px, five competing icon buttons
-  // squeezed the customer's name down to a single letter. What stays visible
-  // as a one-tap icon is only the external links (Instagram/Facebook/email/
-  // website, injected by customerSocialProfiles.js) -- those just hand off
-  // to another app and cost nothing to keep out in the open.
-  const moreItems = [
-    canReassignCustomers()
-      ? { id: "reassign-customer-btn", icon: icons.team, label: t("assigned_manager") }
-      : null,
-    // A tag, deliberately NOT the card glyph payment settings uses -- the two
-    // actions are unrelated and used to share the same credit-card icon.
-    canAssignErpCustomerId(customer)
-      ? { id: "assign-erp-btn", icon: icons.tag, label: t("erp_customer_id") }
-      : null,
-    seesFinancialExports()
-      ? { id: "payment-settings-btn", icon: icons.payment, label: t("payment_settings") }
-      : null,
-    { id: "edit-customer-btn", icon: icons.pencil, label: t("edit_customer") },
-  ].filter(Boolean);
+  // The edit-type actions live as icon buttons directly on this row, not
+  // tucked behind a "•••" overflow menu -- that menu used to hold four
+  // separate entry points (reassign manager / link ERP ID / payment
+  // settings / edit customer), which is also why they're merged down to
+  // two taps here: "Account settings" (manager/ERP-ID/payment, whichever
+  // this viewer is allowed to touch) and "Edit" (core fields, plus contact
+  // & social profiles as a section of the same sheet). The one-tap
+  // external links (Instagram/Facebook/email/website, injected by
+  // customerSocialProfiles.js) stay alongside them -- those just hand off
+  // to another app and cost nothing to keep in the open.
+  const hasAccountSettings = canReassignCustomers() || canAssignErpCustomerId(customer) || seesFinancialExports();
 
   container.innerHTML = `
     <div class="detail-header customer-detail-header">
@@ -105,25 +97,24 @@ export async function renderCustomerDetail(root, navigate, customerId) {
         <div class="detail-header-icon">${customerListIconHtml(customer)}</div>
         <div class="detail-header-title">
           <h1 id="customer-detail-name" tabindex="0" role="button" aria-label="${t("tap_to_show_full_name")}">${escapeHtml(customer.name)}</h1>
-        </div>
-      </div>
-      <div class="detail-header-status-row">
-        ${idCategoryLine ? `<span class="muted detail-header-subtitle">${idCategoryLine}</span>` : ""}
-        ${tierBadgeHtml(customer.customer_tier)}
-        ${statusBadge ? `<span class="badge ${statusBadge.cls}">${t(statusBadge.labelKey)}</span>` : ""}
-      </div>
-      <div class="detail-header-actions">
-        <div class="detail-more-wrap">
-          <button class="icon-btn" id="detail-more-btn" aria-label="${t("more_actions")}" title="${t("more_actions")}" aria-haspopup="menu" aria-expanded="false" aria-controls="detail-more-menu">${icons.more}</button>
-          <div class="dropdown-menu detail-more-menu" id="detail-more-menu" role="menu" hidden>
-            ${moreItems
-              .map(
-                (item) =>
-                  `<button type="button" role="menuitem" class="detail-more-item" id="${item.id}"><span class="detail-more-item-icon">${item.icon}</span><span>${escapeHtml(item.label)}</span></button>`
-              )
-              .join("")}
+          <!-- Nested inside the same title column (not a sibling of it) so
+               this row starts at the name's own left edge, immediately
+               under it -- not under the avatar, and not the full header
+               width. -->
+          <div class="detail-header-status-row">
+            ${idCategoryLine ? `<span class="muted detail-header-subtitle">${idCategoryLine}</span>` : ""}
+            ${tierBadgeHtml(customer.customer_tier)}
+            ${statusBadge ? `<span class="badge ${statusBadge.cls}">${t(statusBadge.labelKey)}</span>` : ""}
           </div>
         </div>
+      </div>
+      <div class="detail-header-actions">
+        ${
+          hasAccountSettings
+            ? `<button type="button" class="icon-btn" id="account-settings-btn" aria-label="${t("account_settings")}" title="${t("account_settings")}">${icons.settings}</button>`
+            : ""
+        }
+        <button type="button" class="icon-btn" id="edit-customer-btn" aria-label="${t("edit_customer")}" title="${t("edit_customer")}">${icons.pencil}</button>
       </div>
     </div>
 
@@ -181,7 +172,9 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     navigate(`#/checkin/${customerId}`);
   });
   container.querySelector("#navigate-btn").addEventListener("click", () => {
-    openNavigation(customer.lat, customer.lng);
+    openNavigation(customer.lat, customer.lng, {
+      onShowOnMap: () => navigate(`#/map?customer=${customerId}`),
+    });
   });
   container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/customers"));
   // Long names truncate with an ellipsis by default (see .detail-header-title
@@ -196,52 +189,12 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   container.querySelector("#edit-customer-btn").addEventListener("click", () => {
     openEditSheet(customer, navigate, () => renderCustomerDetail(root, navigate, customerId));
   });
-  container.querySelector("#payment-settings-btn")?.addEventListener("click", () => {
-    openPaymentSettingsSheet(customer, () => renderCustomerDetail(root, navigate, customerId));
+  container.querySelector("#account-settings-btn")?.addEventListener("click", () => {
+    openAccountSettingsSheet(customer, () => renderCustomerDetail(root, navigate, customerId));
   });
   container.querySelector("#customer-photos-btn").addEventListener("click", () => openCustomerPhotoGallery(customerId));
-  container.querySelector("#reassign-customer-btn")?.addEventListener("click", () => {
-    openReassignSheet(customer, () => renderCustomerDetail(root, navigate, customerId));
-  });
-  container.querySelector("#assign-erp-btn")?.addEventListener("click", () => {
-    openAssignErpIdSheet(customer, () => renderCustomerDetail(root, navigate, customerId));
-  });
   container.querySelector("#order-history-btn")?.addEventListener("click", () => {
     navigate(`#/customers/${customerId}/orders`);
-  });
-
-  // The "more actions" overflow menu. Items are wired above by id (and one
-  // more -- "edit contact & social profiles" -- is injected into the menu by
-  // customerSocialProfiles.js once it has loaded the customer's links), so
-  // all this needs to own is opening, closing, and keyboard nav.
-  const moreBtn = container.querySelector("#detail-more-btn");
-  const moreMenu = container.querySelector("#detail-more-menu");
-  function closeMoreMenu() {
-    moreMenu.hidden = true;
-    moreBtn.setAttribute("aria-expanded", "false");
-  }
-  moreBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    moreMenu.hidden = !moreMenu.hidden;
-    moreBtn.setAttribute("aria-expanded", String(!moreMenu.hidden));
-    if (!moreMenu.hidden) moreMenu.querySelector("button")?.focus();
-  });
-  // Any item click closes the menu, including items injected later.
-  moreMenu.addEventListener("click", closeMoreMenu);
-  document.addEventListener("click", (e) => {
-    if (!moreMenu.hidden && !moreMenu.contains(e.target) && !moreBtn.contains(e.target)) closeMoreMenu();
-  });
-  moreMenu.addEventListener("keydown", (e) => {
-    const items = [...moreMenu.querySelectorAll("button")];
-    const index = items.indexOf(document.activeElement);
-    if (e.key === "Escape") {
-      closeMoreMenu();
-      moreBtn.focus();
-    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault();
-      const delta = e.key === "ArrowDown" ? 1 : -1;
-      items[(index + delta + items.length) % items.length]?.focus();
-    }
   });
 
   renderPendingRequest(container.querySelector("#pending-request-slot"), pendingRequests[0], () =>
@@ -440,25 +393,89 @@ function renderPendingRequest(slot, request, onDone) {
   }
 }
 
-// Per-customer credit term in days, used by the "Orders Due for Payment"
-// Linking a customer to its ERP record -- its own small sheet, separate
-// from the general edit-request flow (server allows it per
-// canAssignErpCustomerId: accountant/CEO/admin for any customer, a manager
-// or director only for one they created themselves).
-async function openAssignErpIdSheet(customer, onDone) {
+// Item 8 -- one consolidated "Account settings" sheet standing in for what
+// used to be three separate overflow-menu entries (Assigned manager / ERP
+// customer ID / Payment settings). Each section below only renders for a
+// viewer who's actually allowed to touch it (same gates the three old
+// buttons used), so this can render with anywhere from one section to all
+// three.
+//
+// IMPORTANT: this still issues UP TO THREE separate PATCH /customers/:id
+// calls on Save, one per section that's present -- never one combined call.
+// The server's PATCH handler authorizes a request by asking "is every field
+// in this body one this role may touch as a group" (canReassignCustomers
+// for region/subregion/sales_channel/assigned_manager_id as a set,
+// seesFinancialExports for payment_method/credit_term_days as a set,
+// canAssignErpCustomerId for erp_customer_id alone) -- a request mixing
+// fields from more than one of those groups falls through to an
+// admin-only check instead, which would 403 a sales_director who is
+// legitimately allowed to reassign but isn't an admin. Keeping the field
+// groups in separate requests is what makes each section's own permission
+// gate the one that actually applies.
+async function openAccountSettingsSheet(customer, onDone) {
+  const showReassign = canReassignCustomers();
+  const showErp = canAssignErpCustomerId(customer);
+  const showPayment = seesFinancialExports();
+
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
   overlay.innerHTML = `
     <div class="sheet">
-      <h2>${t("erp_customer_id")}</h2>
-      <form id="assign-erp-form">
-        <label class="erp-suggest-wrap">${t("erp_customer_id")}
-          <input type="text" name="erp_customer_id" value="${escapeHtml(customer.erp_customer_id ?? "")}" id="erp-customer-input" autocomplete="off" />
-          <div class="erp-suggest-list" id="erp-suggest-list" hidden></div>
-        </label>
-        <p class="form-error" id="assign-erp-error" hidden></p>
+      <h2>${t("account_settings")}</h2>
+      <form id="account-settings-form">
+        ${
+          showReassign
+            ? `<p class="proposed-changes-label">${t("assigned_manager")}</p>
+               <label>${t("region")}
+                 <select name="region" id="reassign-region">
+                   <option value="">${t("select_placeholder")}</option>
+                   ${REGION_LIST.map(
+                     (r) => `<option value="${escapeHtml(r)}" ${r === customer.region ? "selected" : ""}>${escapeHtml(r)}</option>`
+                   ).join("")}
+                 </select>
+               </label>
+               <label id="reassign-subregion-wrap">${t("subregion")}<input name="subregion" id="reassign-subregion" value="${escapeHtml(customer.subregion ?? "")}" /></label>
+               <label>${t("sales_channel")}
+                 <select name="sales_channel">
+                   <option value="">${t("select_placeholder")}</option>
+                   ${SALES_CHANNELS.map(
+                     (c) => `<option value="${escapeHtml(c)}" ${c === customer.sales_channel ? "selected" : ""}>${escapeHtml(c)}</option>`
+                   ).join("")}
+                 </select>
+               </label>
+               <label>${t("assigned_manager")}
+                 <select name="assigned_manager_id" id="reassign-manager">
+                   <option value="">${t("unassigned")}</option>
+                 </select>
+               </label>`
+            : ""
+        }
+        ${
+          showErp
+            ? `<p class="proposed-changes-label">${t("erp_customer_id")}</p>
+               <label class="erp-suggest-wrap">${t("erp_customer_id")}
+                 <input type="text" name="erp_customer_id" value="${escapeHtml(customer.erp_customer_id ?? "")}" id="erp-customer-input" autocomplete="off" />
+                 <div class="erp-suggest-list" id="erp-suggest-list" hidden></div>
+               </label>`
+            : ""
+        }
+        ${
+          showPayment
+            ? `<p class="proposed-changes-label">${t("payment_settings")}</p>
+               <label>${t("payment_method_label")}
+                 <select name="payment_method">
+                   <option value="invoice" ${customer.payment_method !== "cash" ? "selected" : ""}>${t("payment_method_invoice")}</option>
+                   <option value="cash" ${customer.payment_method === "cash" ? "selected" : ""}>${t("payment_method_cash")}</option>
+                 </select>
+               </label>
+               <label>${t("credit_term_days_label")}
+                 <input type="number" name="credit_term_days" min="1" step="1" value="${customer.credit_term_days ?? 45}" />
+               </label>`
+            : ""
+        }
+        <p class="form-error" id="account-settings-error" hidden></p>
         <div class="sheet-actions">
-          <button type="button" class="btn" id="cancel-assign-erp">${t("cancel")}</button>
+          <button type="button" class="btn" id="cancel-account-settings">${t("cancel")}</button>
           <button type="submit" class="btn btn-primary">${t("save")}</button>
         </div>
       </form>
@@ -470,160 +487,96 @@ async function openAssignErpIdSheet(customer, onDone) {
   function close() {
     overlay.remove();
   }
-  overlay.querySelector("#cancel-assign-erp").addEventListener("click", close);
+  overlay.querySelector("#cancel-account-settings").addEventListener("click", close);
   overlay.addEventListener("click", (e) => e.target === overlay && close());
 
-  const erpInput = overlay.querySelector("#erp-customer-input");
-  const erpSuggestList = overlay.querySelector("#erp-suggest-list");
-  let erpOptions = [];
-  api
-    .getUnlinkedErpCustomers()
-    .then((results) => {
-      // Sort A-Z by name client-side too -- relying only on the server's
-      // ORDER BY isn't enough since the browser's own native datalist
-      // (what this replaces) silently ignored it; keep the sort explicit
-      // and visible here so it can't regress the same way again.
-      erpOptions = [...results].sort((a, b) =>
-        (a.customer_name || "").localeCompare(b.customer_name || "", undefined, { sensitivity: "base" })
-      );
-    })
-    .catch(() => {});
-
-  function renderSuggestions(query) {
-    const q = query.trim().toLowerCase();
-    const matches = q
-      ? erpOptions.filter((r) => (r.customer_name || "").toLowerCase().includes(q) || r.erp_customer_id.includes(q))
-      : erpOptions;
-    if (!matches.length) {
-      erpSuggestList.hidden = true;
-      erpSuggestList.innerHTML = "";
-      return;
-    }
-    erpSuggestList.innerHTML = matches
-      .slice(0, 30)
-      .map(
-        (r) => `
-      <div class="erp-suggest-item" data-id="${escapeHtml(r.erp_customer_id)}">
-        <span>${escapeHtml(r.customer_name || r.erp_customer_id)}</span>
-        ${r.debt_amd > 0 ? `<span class="muted">${formatAmd(r.debt_amd)}</span>` : ""}
-      </div>`
-      )
-      .join("");
-    erpSuggestList.hidden = false;
-  }
-
-  erpInput.addEventListener("focus", () => renderSuggestions(erpInput.value));
-  erpInput.addEventListener("input", () => renderSuggestions(erpInput.value));
-  erpInput.addEventListener("blur", () => {
-    // A delay, not immediate hide, so the suggestion's own click handler
-    // (mousedown fires first, but click needs the element still present)
-    // gets a chance to run before the list disappears.
-    setTimeout(() => (erpSuggestList.hidden = true), 150);
-  });
-  activateCombobox(erpInput, erpSuggestList, (item) => {
-    erpInput.value = item.dataset.id;
-  });
-
-  const form = overlay.querySelector("#assign-erp-form");
-  const errorEl = overlay.querySelector("#assign-erp-error");
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const submitBtn = form.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-    try {
-      await api.updateCustomer(customer.id, { erp_customer_id: erpInput.value.trim() || null });
-      close();
-      onDone();
-    } catch (err) {
-      errorEl.textContent = err.message;
-      errorEl.hidden = false;
-      submitBtn.disabled = false;
-    }
-  });
-}
-
-// Region/subregion/sales channel/assigned manager -- a director/ceo/admin
-// can change these directly (server allows it per canReassignCustomers),
-// separate from the regular edit sheet below which still goes through the
-// edit-request approval flow for everyone but admin.
-async function openReassignSheet(customer, onDone) {
-  const overlay = document.createElement("div");
-  overlay.className = "sheet-overlay";
-  overlay.innerHTML = `
-    <div class="sheet">
-      <h2>${t("assigned_manager")}</h2>
-      <form id="reassign-form">
-        <label>${t("region")}
-          <select name="region" id="reassign-region">
+  if (showReassign) {
+    const regionSelect = overlay.querySelector("#reassign-region");
+    const subregionWrap = overlay.querySelector("#reassign-subregion-wrap");
+    function renderSubregionField(region, value) {
+      if (region === "Yerevan") {
+        subregionWrap.innerHTML = `${t("subregion")}
+          <select name="subregion" id="reassign-subregion">
             <option value="">${t("select_placeholder")}</option>
-            ${REGION_LIST.map(
-              (r) => `<option value="${escapeHtml(r)}" ${r === customer.region ? "selected" : ""}>${escapeHtml(r)}</option>`
+            ${YEREVAN_DISTRICTS.map(
+              (d) => `<option value="${escapeHtml(d)}" ${d === value ? "selected" : ""}>${escapeHtml(d)}</option>`
             ).join("")}
-          </select>
-        </label>
-        <label id="reassign-subregion-wrap">${t("subregion")}<input name="subregion" id="reassign-subregion" value="${escapeHtml(customer.subregion ?? "")}" /></label>
-        <label>${t("sales_channel")}
-          <select name="sales_channel">
-            <option value="">${t("select_placeholder")}</option>
-            ${SALES_CHANNELS.map(
-              (c) => `<option value="${escapeHtml(c)}" ${c === customer.sales_channel ? "selected" : ""}>${escapeHtml(c)}</option>`
-            ).join("")}
-          </select>
-        </label>
-        <label>${t("assigned_manager")}
-          <select name="assigned_manager_id" id="reassign-manager">
-            <option value="">${t("unassigned")}</option>
-          </select>
-        </label>
-        <p class="form-error" id="reassign-error" hidden></p>
-        <div class="sheet-actions">
-          <button type="button" class="btn" id="cancel-reassign">${t("cancel")}</button>
-          <button type="submit" class="btn btn-primary">${t("save")}</button>
-        </div>
-      </form>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-  activateDialog(overlay);
-
-  function close() {
-    overlay.remove();
-  }
-  overlay.querySelector("#cancel-reassign").addEventListener("click", close);
-  overlay.addEventListener("click", (e) => e.target === overlay && close());
-
-  const regionSelect = overlay.querySelector("#reassign-region");
-  const subregionWrap = overlay.querySelector("#reassign-subregion-wrap");
-  function renderSubregionField(region, value) {
-    if (region === "Yerevan") {
-      subregionWrap.innerHTML = `${t("subregion")}
-        <select name="subregion" id="reassign-subregion">
-          <option value="">${t("select_placeholder")}</option>
-          ${YEREVAN_DISTRICTS.map(
-            (d) => `<option value="${escapeHtml(d)}" ${d === value ? "selected" : ""}>${escapeHtml(d)}</option>`
-          ).join("")}
-        </select>`;
-    } else {
-      subregionWrap.innerHTML = `${t("subregion")}<input name="subregion" id="reassign-subregion" value="${escapeHtml(value ?? "")}" />`;
+          </select>`;
+      } else {
+        subregionWrap.innerHTML = `${t("subregion")}<input name="subregion" id="reassign-subregion" value="${escapeHtml(value ?? "")}" />`;
+      }
     }
+    if (customer.region === "Yerevan") renderSubregionField("Yerevan", customer.subregion);
+    regionSelect.addEventListener("change", () => renderSubregionField(regionSelect.value, ""));
+
+    const managerSelect = overlay.querySelector("#reassign-manager");
+    api
+      .listPlannableUsers()
+      .then((users) => {
+        managerSelect.innerHTML =
+          `<option value="">${t("unassigned")}</option>` +
+          users
+            .map((u) => `<option value="${u.id}" ${u.id === customer.assigned_manager_id ? "selected" : ""}>${escapeHtml(u.name)}</option>`)
+            .join("");
+      })
+      .catch(() => {});
   }
-  if (customer.region === "Yerevan") renderSubregionField("Yerevan", customer.subregion);
-  regionSelect.addEventListener("change", () => renderSubregionField(regionSelect.value, ""));
 
-  const managerSelect = overlay.querySelector("#reassign-manager");
-  api
-    .listPlannableUsers()
-    .then((users) => {
-      managerSelect.innerHTML =
-        `<option value="">${t("unassigned")}</option>` +
-        users
-          .map((u) => `<option value="${u.id}" ${u.id === customer.assigned_manager_id ? "selected" : ""}>${escapeHtml(u.name)}</option>`)
-          .join("");
-    })
-    .catch(() => {});
+  if (showErp) {
+    const erpInput = overlay.querySelector("#erp-customer-input");
+    const erpSuggestList = overlay.querySelector("#erp-suggest-list");
+    let erpOptions = [];
+    api
+      .getUnlinkedErpCustomers()
+      .then((results) => {
+        // Sort A-Z by name client-side too -- relying only on the server's
+        // ORDER BY isn't enough since the browser's own native datalist
+        // (what this replaces) silently ignored it; keep the sort explicit
+        // and visible here so it can't regress the same way again.
+        erpOptions = [...results].sort((a, b) =>
+          (a.customer_name || "").localeCompare(b.customer_name || "", undefined, { sensitivity: "base" })
+        );
+      })
+      .catch(() => {});
 
-  const form = overlay.querySelector("#reassign-form");
-  const errorEl = overlay.querySelector("#reassign-error");
+    function renderSuggestions(query) {
+      const q = query.trim().toLowerCase();
+      const matches = q
+        ? erpOptions.filter((r) => (r.customer_name || "").toLowerCase().includes(q) || r.erp_customer_id.includes(q))
+        : erpOptions;
+      if (!matches.length) {
+        erpSuggestList.hidden = true;
+        erpSuggestList.innerHTML = "";
+        return;
+      }
+      erpSuggestList.innerHTML = matches
+        .slice(0, 30)
+        .map(
+          (r) => `
+        <div class="erp-suggest-item" data-id="${escapeHtml(r.erp_customer_id)}">
+          <span>${escapeHtml(r.customer_name || r.erp_customer_id)}</span>
+          ${r.debt_amd > 0 ? `<span class="muted">${formatAmd(r.debt_amd)}</span>` : ""}
+        </div>`
+        )
+        .join("");
+      erpSuggestList.hidden = false;
+    }
+
+    erpInput.addEventListener("focus", () => renderSuggestions(erpInput.value));
+    erpInput.addEventListener("input", () => renderSuggestions(erpInput.value));
+    erpInput.addEventListener("blur", () => {
+      // A delay, not immediate hide, so the suggestion's own click handler
+      // (mousedown fires first, but click needs the element still present)
+      // gets a chance to run before the list disappears.
+      setTimeout(() => (erpSuggestList.hidden = true), 150);
+    });
+    activateCombobox(erpInput, erpSuggestList, (item) => {
+      erpInput.value = item.dataset.id;
+    });
+  }
+
+  const form = overlay.querySelector("#account-settings-form");
+  const errorEl = overlay.querySelector("#account-settings-error");
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const data = new FormData(form);
@@ -631,74 +584,30 @@ async function openReassignSheet(customer, onDone) {
     submitBtn.disabled = true;
     submitBtn.textContent = t("saving");
     try {
-      await api.updateCustomer(customer.id, {
-        region: data.get("region") || null,
-        subregion: data.get("subregion") || null,
-        sales_channel: data.get("sales_channel") || null,
-        assigned_manager_id: data.get("assigned_manager_id") ? Number(data.get("assigned_manager_id")) : null,
-      });
-      close();
-      onDone();
-    } catch (err) {
-      errorEl.textContent = err.message;
-      errorEl.hidden = false;
-      submitBtn.disabled = false;
-      submitBtn.textContent = t("save");
-    }
-  });
-}
-
-// Item 6 -- Payment Method (cash/invoice) and Credit Term Days, both
-// informational/default-setting only (no approval workflow, no aging
-// view -- see migration 054's comment). Gated the same as the financial
-// CSV exports (director/admin/ceo/accountant); the server independently
-// re-checks via seesFinancialExports on the PATCH.
-function openPaymentSettingsSheet(customer, onDone) {
-  const overlay = document.createElement("div");
-  overlay.className = "sheet-overlay";
-  overlay.innerHTML = `
-    <div class="sheet">
-      <h2>${t("payment_settings")}</h2>
-      <form id="payment-settings-form">
-        <label>${t("payment_method_label")}
-          <select name="payment_method">
-            <option value="invoice" ${customer.payment_method !== "cash" ? "selected" : ""}>${t("payment_method_invoice")}</option>
-            <option value="cash" ${customer.payment_method === "cash" ? "selected" : ""}>${t("payment_method_cash")}</option>
-          </select>
-        </label>
-        <label>${t("credit_term_days_label")}
-          <input type="number" name="credit_term_days" min="1" step="1" value="${customer.credit_term_days ?? 45}" />
-        </label>
-        <p class="form-error" id="payment-settings-error" hidden></p>
-        <div class="sheet-actions">
-          <button type="button" class="btn" id="cancel-payment-settings">${t("cancel")}</button>
-          <button type="submit" class="btn btn-primary">${t("save")}</button>
-        </div>
-      </form>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-  activateDialog(overlay);
-
-  function close() {
-    overlay.remove();
-  }
-  overlay.querySelector("#cancel-payment-settings").addEventListener("click", close);
-  overlay.addEventListener("click", (e) => e.target === overlay && close());
-
-  const form = overlay.querySelector("#payment-settings-form");
-  const errorEl = overlay.querySelector("#payment-settings-error");
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const data = new FormData(form);
-    const submitBtn = form.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-    submitBtn.textContent = t("saving");
-    try {
-      await api.updateCustomer(customer.id, {
-        payment_method: data.get("payment_method"),
-        credit_term_days: Number(data.get("credit_term_days")),
-      });
+      const calls = [];
+      if (showReassign) {
+        calls.push(
+          api.updateCustomer(customer.id, {
+            region: data.get("region") || null,
+            subregion: data.get("subregion") || null,
+            sales_channel: data.get("sales_channel") || null,
+            assigned_manager_id: data.get("assigned_manager_id") ? Number(data.get("assigned_manager_id")) : null,
+          })
+        );
+      }
+      if (showErp) {
+        const erpInput = overlay.querySelector("#erp-customer-input");
+        calls.push(api.updateCustomer(customer.id, { erp_customer_id: erpInput.value.trim() || null }));
+      }
+      if (showPayment) {
+        calls.push(
+          api.updateCustomer(customer.id, {
+            payment_method: data.get("payment_method"),
+            credit_term_days: Number(data.get("credit_term_days")),
+          })
+        );
+      }
+      await Promise.all(calls);
       close();
       onDone();
     } catch (err) {
@@ -765,7 +674,15 @@ async function openCustomerPhotoGallery(customerId) {
   });
 }
 
-function openEditSheet(customer, navigate, onDone) {
+// Item 8 -- the core customer-fields form, merged with the "Edit contact &
+// social profiles" sheet (a very recent addition) as one section at the
+// bottom of the same form/sheet, rather than two separate entry points.
+// That section only appears once the social data has loaded AND says this
+// viewer may edit it (fetchCustomerSocial's can_edit) -- it's fetched here,
+// independently of customerSocialProfiles.js's own decoration of the
+// header's one-tap links, so this sheet can open immediately without
+// waiting on that module's timing.
+async function openEditSheet(customer, navigate, onDone) {
   const fields = EDIT_FIELDS;
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
@@ -787,6 +704,7 @@ function openEditSheet(customer, navigate, onDone) {
           }
           return `<label>${t(f.labelKey)}<input type="${f.type}" name="${f.name}" value="${value}" /></label>`;
         }).join("")}
+        <div id="edit-social-section"></div>
         <p class="form-error" id="edit-customer-error" hidden></p>
         <div class="sheet-actions">
           <button type="button" class="btn" id="cancel-edit-customer">${t("cancel")}</button>
@@ -807,6 +725,15 @@ function openEditSheet(customer, navigate, onDone) {
   activateDialog(overlay);
   activateTierSelector(overlay);
   activateCategorySelector(overlay);
+
+  let socialData = null;
+  fetchCustomerSocial(customer.id)
+    .then((data) => {
+      if (!overlay.isConnected || !data.can_edit) return;
+      socialData = data;
+      overlay.querySelector("#edit-social-section").innerHTML = socialFieldsHtml(data);
+    })
+    .catch(() => {});
 
   function close() {
     overlay.remove();
@@ -847,11 +774,13 @@ function openEditSheet(customer, navigate, onDone) {
     const submitBtn = form.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
     try {
-      if (canEditDirectly()) {
-        await api.updateCustomer(customer.id, changes);
-      } else {
-        await api.createEditRequest(customer.id, changes);
-      }
+      const calls = [canEditDirectly() ? api.updateCustomer(customer.id, changes) : api.createEditRequest(customer.id, changes)];
+      // The social section only exists once fetchCustomerSocial resolved
+      // with can_edit -- if the sheet was submitted before that finished
+      // (or the viewer isn't allowed to edit it at all), there's nothing
+      // to save here, same as before this merge.
+      if (socialData) calls.push(saveCustomerSocial(customer.id, collectSocialPayload(form)));
+      await Promise.all(calls);
       close();
       onDone();
     } catch (err) {

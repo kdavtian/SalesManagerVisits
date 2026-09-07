@@ -114,61 +114,40 @@ function websiteHref(value) {
   return /^https?:\/\//i.test(value) ? value : `https://${value}`;
 }
 
-function openEditor(customerId, data, onSaved) {
+// --- Shared with customerDetail.js's merged edit sheet (item 8) ----------
+// Editing contact & social profiles used to be its own sheet, opened from
+// the header's overflow menu. That menu is gone now -- these fields are a
+// section inside customerDetail.js's one "Edit" sheet instead -- so what
+// this module exports is just the section's markup/read/save, not a whole
+// standalone dialog. The one-tap external links row below (paint/
+// decorateCustomerDetail) is unrelated and unchanged.
+export async function fetchCustomerSocial(customerId) {
+  return apiRequest(`/api/customer-social/${customerId}`);
+}
+
+export async function saveCustomerSocial(customerId, payload) {
+  return apiRequest(`/api/customer-social/${customerId}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+export function socialFieldsHtml(data) {
   const l = text();
-  const overlay = document.createElement("div");
-  overlay.className = "sheet-overlay customer-social-overlay";
-  overlay.innerHTML = `
-    <div class="sheet customer-social-sheet" role="dialog" aria-modal="true" aria-labelledby="customer-social-title">
-      <h2 id="customer-social-title">${escapeAttr(l.title)}</h2>
-      <form id="customer-social-form">
-        <label>${escapeAttr(l.instagram)}<input name="instagram" inputmode="url" autocapitalize="none" autocomplete="off" placeholder="${escapeAttr(l.instagramPlaceholder)}" value="${data.instagram_username ? escapeAttr(`@${data.instagram_username}`) : ""}" /></label>
-        <label>${escapeAttr(l.facebook)}<input name="facebook" inputmode="url" autocapitalize="none" autocomplete="off" placeholder="${escapeAttr(l.facebookPlaceholder)}" value="${escapeAttr(data.facebook_url || "")}" /></label>
-        <label>${escapeAttr(t("customer_email"))}<input name="email" type="email" inputmode="email" autocapitalize="none" autocomplete="off" placeholder="${escapeAttr(t("customer_email_placeholder"))}" value="${escapeAttr(data.email || "")}" /></label>
-        <label>${escapeAttr(t("customer_website"))}<input name="website" inputmode="url" autocapitalize="none" autocomplete="off" placeholder="${escapeAttr(t("customer_website_placeholder"))}" value="${escapeAttr(data.website || "")}" /></label>
-        <p class="form-error" id="customer-social-error" hidden></p>
-        <div class="sheet-actions">
-          <button type="button" class="btn" id="customer-social-cancel">${escapeAttr(l.cancel)}</button>
-          <button type="submit" class="btn btn-primary" id="customer-social-save">${escapeAttr(l.save)}</button>
-        </div>
-      </form>
-    </div>`;
-  document.body.appendChild(overlay);
+  return `
+    <p class="proposed-changes-label">${escapeAttr(l.title)}</p>
+    <label>${escapeAttr(l.instagram)}<input name="instagram" inputmode="url" autocapitalize="none" autocomplete="off" placeholder="${escapeAttr(l.instagramPlaceholder)}" value="${data.instagram_username ? escapeAttr(`@${data.instagram_username}`) : ""}" /></label>
+    <label>${escapeAttr(l.facebook)}<input name="facebook" inputmode="url" autocapitalize="none" autocomplete="off" placeholder="${escapeAttr(l.facebookPlaceholder)}" value="${escapeAttr(data.facebook_url || "")}" /></label>
+    <label>${escapeAttr(t("customer_email"))}<input name="email" type="email" inputmode="email" autocapitalize="none" autocomplete="off" placeholder="${escapeAttr(t("customer_email_placeholder"))}" value="${escapeAttr(data.email || "")}" /></label>
+    <label>${escapeAttr(t("customer_website"))}<input name="website" inputmode="url" autocapitalize="none" autocomplete="off" placeholder="${escapeAttr(t("customer_website_placeholder"))}" value="${escapeAttr(data.website || "")}" /></label>
+  `;
+}
 
-  const form = overlay.querySelector("#customer-social-form");
-  const error = overlay.querySelector("#customer-social-error");
-  const save = overlay.querySelector("#customer-social-save");
-  const close = () => overlay.remove();
-  overlay.addEventListener("click", (event) => event.target === overlay && close());
-  overlay.querySelector("#customer-social-cancel").addEventListener("click", close);
-  requestAnimationFrame(() => form.querySelector("input")?.focus({ preventScroll: true }));
-
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    error.hidden = true;
-    save.disabled = true;
-    const original = save.textContent;
-    save.textContent = l.saving;
-    const fd = new FormData(form);
-    try {
-      const updated = await apiRequest(`/api/customer-social/${customerId}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          instagram: fd.get("instagram"),
-          facebook: fd.get("facebook"),
-          email: fd.get("email"),
-          website: fd.get("website"),
-        }),
-      });
-      close();
-      onSaved(updated);
-    } catch (err) {
-      error.textContent = err.message;
-      error.hidden = false;
-      save.disabled = false;
-      save.textContent = original;
-    }
-  });
+export function collectSocialPayload(form) {
+  const fd = new FormData(form);
+  return {
+    instagram: fd.get("instagram"),
+    facebook: fd.get("facebook"),
+    email: fd.get("email"),
+    website: fd.get("website"),
+  };
 }
 
 let renderToken = 0;
@@ -193,7 +172,6 @@ async function decorateCustomerDetail() {
   }
   if (token !== renderToken || customerIdFromHash() !== customerId || !actions.isConnected) return;
 
-  const l = text();
   let section = actions.querySelector(".customer-social-section");
   if (!section) {
     section = document.createElement("span");
@@ -201,46 +179,22 @@ async function decorateCustomerDetail() {
     actions.prepend(section);
   }
 
-  // The edit action is form-heavy, so it lives in the header's "more
-  // actions" overflow menu (built by customerDetail.js) next to the other
-  // sheet-opening actions, rather than taking a slot in the icon row that
-  // is now reserved for one-tap external links.
-  const moreMenu = document.querySelector(".detail-view #detail-more-menu");
+  // One-tap external links only -- these cost nothing to keep visible
+  // because they just hand off to another app/tab. Editing these fields
+  // happens inside customerDetail.js's merged "Edit" sheet (item 8) via
+  // the fetchCustomerSocial/socialFieldsHtml/collectSocialPayload/
+  // saveCustomerSocial exports above, not here.
+  const links = [
+    data.instagram_username ? socialButton("instagram", data.instagram_username) : "",
+    data.facebook_url ? socialButton("facebook", data.facebook_url) : "",
+    data.email ? linkButton("email", `mailto:${data.email}`, MAIL_ICON, `${t("customer_email")}: ${data.email}`) : "",
+    data.website ? linkButton("website", websiteHref(data.website), GLOBE_ICON, `${t("customer_website")}: ${data.website}`) : "",
+  ].filter(Boolean).join("");
 
-  function paint(nextData) {
-    data = nextData;
-    // One-tap external links only -- these cost nothing to keep visible
-    // because they just hand off to another app/tab.
-    const links = [
-      data.instagram_username ? socialButton("instagram", data.instagram_username) : "",
-      data.facebook_url ? socialButton("facebook", data.facebook_url) : "",
-      data.email ? linkButton("email", `mailto:${data.email}`, MAIL_ICON, `${t("customer_email")}: ${data.email}`) : "",
-      data.website ? linkButton("website", websiteHref(data.website), GLOBE_ICON, `${t("customer_website")}: ${data.website}`) : "",
-    ].filter(Boolean).join("");
-
-    section.innerHTML = links;
-    section.querySelectorAll("[data-social-kind]").forEach((button) => {
-      button.addEventListener("click", () => openPlatformProfile(button.dataset.socialKind, button.dataset.socialValue));
-    });
-
-    const hasAny = Boolean(data.instagram_username || data.facebook_url || data.email || data.website);
-    let editItem = moreMenu?.querySelector(".customer-social-edit-item");
-    if (data.can_edit && moreMenu) {
-      if (!editItem) {
-        editItem = document.createElement("button");
-        editItem.type = "button";
-        editItem.className = "detail-more-item customer-social-edit-item";
-        editItem.setAttribute("role", "menuitem");
-        editItem.addEventListener("click", () => openEditor(customerId, data, paint));
-        moreMenu.prepend(editItem);
-      }
-      editItem.innerHTML = `<span class="detail-more-item-icon">${EDIT_ICON}</span><span>${escapeAttr(hasAny ? l.edit : l.add)}</span>`;
-    } else {
-      editItem?.remove();
-    }
-  }
-
-  paint(data);
+  section.innerHTML = links;
+  section.querySelectorAll("[data-social-kind]").forEach((button) => {
+    button.addEventListener("click", () => openPlatformProfile(button.dataset.socialKind, button.dataset.socialValue));
+  });
 }
 
 function boot() {
