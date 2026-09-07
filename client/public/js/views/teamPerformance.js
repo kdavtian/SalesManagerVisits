@@ -343,23 +343,30 @@ async function renderManagementView(root, navigate, managerId) {
     }
 
     api.getPerfChannels().then((channels) => {
-      const canSubmit = plan.status === "draft" && plan.targets.length > 0;
+      // A rejected plan is editable/resubmittable exactly like a draft --
+      // being sent back for revision is the whole point of "rejected"; see
+      // the matching comments on PUT /targets/:channelId and POST /submit
+      // in server/src/routes/teamPerformance.js for why (it used to be a
+      // dead end with no way back to draft).
+      const isEditableStatus = plan.status === "draft" || plan.status === "rejected";
+      const canSubmit = isEditableStatus && plan.targets.length > 0;
       const isRevise = plan.status === "approved" && isPerfCeo();
       const canClose = plan.status === "approved" && canCloseMonth();
       bodyEl.innerHTML = `
         <div class="card" style="margin-bottom:10px;">
           <strong>${t(`perf_status_${plan.status}`)}</strong>
           <span class="muted"> · v${plan.version}</span>
+          ${plan.status === "rejected" && plan.rejected_reason ? `<p class="muted" style="margin:6px 0 0;">${t("perf_rejected_reason_label")}: ${escapeHtml(plan.rejected_reason)}</p>` : ""}
         </div>
         <div class="card-list" id="perf-channel-list"></div>
-        ${plan.status === "draft" ? `<button type="button" class="btn btn-primary btn-block" id="perf-submit-btn" ${canSubmit ? "" : "disabled"} style="margin-top:12px;">${t("perf_submit_for_approval")}</button>` : ""}
+        ${isEditableStatus ? `<button type="button" class="btn btn-primary btn-block" id="perf-submit-btn" ${canSubmit ? "" : "disabled"} style="margin-top:12px;">${plan.status === "rejected" ? t("perf_resubmit_for_approval") : t("perf_submit_for_approval")}</button>` : ""}
         ${canClose ? `<button type="button" class="btn btn-block" id="perf-close-btn" style="margin-top:12px;">${t("perf_close_month")}</button>` : ""}
       `;
       const listEl = bodyEl.querySelector("#perf-channel-list");
       listEl.innerHTML = channels
         .map((c) => {
           const target = targetsByChannel.get(c.id);
-          const editable = (plan.status === "draft" && canEditChannelPlan(c.owner_role)) || isRevise;
+          const editable = (isEditableStatus && canEditChannelPlan(c.owner_role)) || isRevise;
           return `
         <button type="button" class="card settings-list-row" data-channel-id="${c.id}" ${editable ? "" : "disabled"}>
           <span class="settings-row-label">${escapeHtml(c.name)}</span>
