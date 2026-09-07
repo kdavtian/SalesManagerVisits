@@ -4766,7 +4766,13 @@ input[type="search"]:focus {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 1000;
+  /* Above .map-controls/.fab/.nearest-customer-bar (all z-index 1000) --
+     this full-width bottom sheet is meant to cover them the same way it
+     already covers the map underneath, but equal z-index left it losing to
+     whichever of those happened to come later in the DOM: the FAB and the
+     nearest-customer pill were rendering visibly on top of (and partly
+     swallowing taps meant for) the stop list. */
+  z-index: 1010;
   max-height: 55%;
   display: flex;
   flex-direction: column;
@@ -4802,7 +4808,10 @@ input[type="search"]:focus {
 
 .stop-list {
   overflow-y: auto;
-  padding: 4px 0;
+  /* This panel is bottom:0 underneath the opaque, position:fixed nav bar
+     (see .fab's own note on the same issue) -- without matching bottom
+     padding here, the last row(s) scroll in behind it instead of above. */
+  padding: 4px 0 calc(4px + 48px + var(--nav-safe-bottom));
 }
 
 .stop-row {
@@ -4871,7 +4880,11 @@ input[type="search"]:focus {
   color: var(--accent);
   font-weight: 600;
   font-size: 0.85rem;
-  padding: 12px;
+  /* This static footer button (not the scrolling .nearby-list above it) is
+     the element actually sitting against the panel's bottom:0 edge, which
+     is underneath the opaque, position:fixed nav bar -- same issue and fix
+     as .fab's own note on this. */
+  padding: 12px 12px calc(12px + 48px + var(--nav-safe-bottom));
   cursor: pointer;
 }
 
