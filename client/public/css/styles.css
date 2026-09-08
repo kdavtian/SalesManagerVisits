@@ -1748,6 +1748,14 @@ input[type="search"]:focus {
   gap: 6px;
   font-size: 0.82rem;
   color: var(--text-dim);
+  /* .camera-field is a flex column with align-items:center, which sizes
+     children to shrink-to-fit their content instead of the container's
+     width -- without a cap here, the longer Armenian label (no shorter
+     wrap point available) rendered on one line wider than the viewport,
+     pushing the whole check-in page into horizontal scroll instead of
+     wrapping to a second line. */
+  max-width: 100%;
+  text-align: left;
 }
 
 .photo-remove-btn {
