@@ -194,7 +194,18 @@ function boot() {
   decorateCustomerDetail();
   const app = document.querySelector("#app");
   if (!app) return;
-  const observer = new MutationObserver(() => requestAnimationFrame(decorateCustomerDetail));
+  // Coalesced -- a burst of mutations (a list re-rendering) previously
+  // queued one requestAnimationFrame callback per mutation record, all
+  // still running before the next paint; one flag caps that at one.
+  let scheduled = false;
+  const observer = new MutationObserver(() => {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      decorateCustomerDetail();
+    });
+  });
   observer.observe(app, { childList: true, subtree: true });
   window.addEventListener("hashchange", () => {
     renderToken += 1;

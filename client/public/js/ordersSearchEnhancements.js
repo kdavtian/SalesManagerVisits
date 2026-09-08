@@ -125,7 +125,18 @@ function boot() {
   enhanceOrdersView();
   const app = document.querySelector("#app");
   if (!app) return;
-  const observer = new MutationObserver(() => requestAnimationFrame(enhanceOrdersView));
+  // Coalesced, same reasoning as the other view-enhancement observers in
+  // this app -- a burst of mutations otherwise queued one rAF callback
+  // per record instead of one per frame.
+  let scheduled = false;
+  const observer = new MutationObserver(() => {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      enhanceOrdersView();
+    });
+  });
   observer.observe(app, { childList: true, subtree: true });
 }
 

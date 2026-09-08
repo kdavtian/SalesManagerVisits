@@ -168,9 +168,13 @@ async function openCustomerPickSheet({ userId, userName, days, existingCustomerI
     saveBtn.disabled = true;
     const ids = [...selectedIds];
     try {
-      for (const day of days) {
-        await api.saveVisitPlanRule(day, [], userId, ids);
-      }
+      // Each day is its own row (UNIQUE on user_id + day_of_week, see the
+      // ON CONFLICT upsert in visitPlans.js), so there's no shared state
+      // for concurrent writes to race on -- safe to fire all of them at
+      // once instead of waiting on each day's round trip before starting
+      // the next, which serialized up to 7 sequential requests on what's
+      // often a slow field connection.
+      await Promise.all(days.map((day) => api.saveVisitPlanRule(day, [], userId, ids)));
       close();
       onSaved();
     } catch (err) {

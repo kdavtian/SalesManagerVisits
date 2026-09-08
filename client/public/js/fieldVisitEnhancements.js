@@ -110,10 +110,28 @@ function enhanceAll(root = document) {
 
 function boot() {
   enhanceAll();
+  // Batched into one rAF-deferred pass per frame instead of running
+  // enhanceAll() synchronously, once per added element, inside the
+  // mutation callback itself -- a big list re-render (hundreds of rows)
+  // used to mean hundreds of synchronous enhanceAll() calls before the
+  // browser could paint the frame that triggered them.
+  let pendingNodes = [];
+  let scheduled = false;
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       mutation.addedNodes.forEach((node) => {
-        if (node.nodeType === Node.ELEMENT_NODE) enhanceAll(node);
+        if (node.nodeType === Node.ELEMENT_NODE) pendingNodes.push(node);
+      });
+    }
+    if (!scheduled && pendingNodes.length) {
+      scheduled = true;
+      requestAnimationFrame(() => {
+        scheduled = false;
+        const nodes = pendingNodes;
+        pendingNodes = [];
+        for (const node of nodes) {
+          if (node.isConnected) enhanceAll(node);
+        }
       });
     }
   });

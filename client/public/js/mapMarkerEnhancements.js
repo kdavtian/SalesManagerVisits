@@ -25,11 +25,17 @@ function bootMapMarkerEnhancements() {
   // Leaflet removes the popup when another marker closes/opens. When there is
   // no popup left, clear any stale selected halo so the map never lies about
   // which customer is active.
+  let scheduled = false;
   const observer = new MutationObserver(() => {
-    const map = document.querySelector("#leaflet-map");
-    if (!map || map.querySelector(".leaflet-popup")) return;
-    map.querySelectorAll(".leaflet-marker-icon.kad-marker-selected").forEach((el) => {
-      el.classList.remove("kad-marker-selected");
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      const map = document.querySelector("#leaflet-map");
+      if (!map || map.querySelector(".leaflet-popup")) return;
+      map.querySelectorAll(".leaflet-marker-icon.kad-marker-selected").forEach((el) => {
+        el.classList.remove("kad-marker-selected");
+      });
     });
   });
   observer.observe(document.body, { childList: true, subtree: true });
