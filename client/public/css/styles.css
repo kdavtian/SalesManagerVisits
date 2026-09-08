@@ -3283,13 +3283,50 @@ input[type="search"]:focus {
 
 /* Team Performance */
 
-.perf-month-picker {
+/* Sticky top bar: back button, title, and (when present) the month filter
+   button, all in one row that stays pinned while the rest of the page
+   (tabs, cards) scrolls underneath it. Negative margin + matching padding
+   makes it span edge-to-edge despite .detail-view's own 16px padding. */
+.perf-sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg);
+  margin: -16px -16px 12px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Combined-class selectors (not bare .perf-month-filter-*) so these beat
+   .filter-dropdown-wrap/btn/menu's own same-specificity rules regardless of
+   which comes later in the stylesheet -- this reuses that shared
+   dropdown-button component (same one the map's manager filter uses) but
+   needs a narrower, right-aligned footprint instead of its default
+   flex:1/left-aligned list-filter layout. */
+.perf-month-filter-wrap.filter-dropdown-wrap {
+  flex: 0 0 auto;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.perf-month-filter-btn.filter-dropdown-btn {
+  width: auto;
+  gap: 8px;
+}
+
+.perf-month-filter-menu.filter-dropdown-menu {
+  right: 0;
+  left: auto;
+  min-width: 0;
+}
+
+.perf-month-popover-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 14px;
-  margin-top: 12px;
-  font-size: 0.95rem;
+  gap: 10px;
+  padding: 2px 4px;
+  white-space: nowrap;
+  font-size: 0.9rem;
 }
 
 .perf-status-badge {
@@ -3326,8 +3363,61 @@ input[type="search"]:focus {
   gap: 12px;
 }
 
+.perf-channel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .perf-channel-head strong {
   font-size: 1.02rem;
+}
+
+/* One channel's own accent color pulled through so its aggregate/individual
+   bars visually match the rest of the app's progress bars. */
+.perf-aggregate-card {
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+}
+
+.perf-bar-main {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.perf-bar-actual {
+  font-weight: 700;
+  font-size: 1.15rem;
+}
+
+.perf-bar-target {
+  font-size: 0.88rem;
+}
+
+/* The bar this whole page is built around -- Sales as the fill, Collections
+   as a "|" tick at its own position on that same scale. position:relative
+   so the tick (position:absolute) places itself against this bar, not the
+   page; overflow visible so the tick's edges aren't clipped by the bar's
+   own rounded corners. */
+.perf-merged-bar {
+  position: relative;
+  height: 10px;
+  overflow: visible;
+}
+
+.perf-collections-tick {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--text);
+  transform: translateX(-50%);
+}
+
+.perf-bar-foot {
+  font-size: 0.8rem;
 }
 
 .perf-kpi-block {
