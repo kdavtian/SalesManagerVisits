@@ -458,7 +458,8 @@ export async function renderCheckin(root, navigate, customerId) {
     } catch (err) {
       if (err instanceof TypeError) {
         // Offline / network failure — queue it instead of losing the visit.
-        const photoDataUrls = await Promise.all(photos.map((photo) => blobToDataUrl(photo.blob)));
+        // Raw Blobs, not base64 -- offlineQueue.js's IndexedDB store
+        // handles Blobs natively, no data-URL round trip needed.
         enqueueCheckin({
           customerId,
           lat,
@@ -468,7 +469,7 @@ export async function renderCheckin(root, navigate, customerId) {
           outcomes,
           amountCollected,
           availableProducts: availableProductsPayload,
-          photoDataUrls,
+          photos: photos.map((photo) => photo.blob),
         });
         showQueued();
       } else {
@@ -523,13 +524,4 @@ export async function renderCheckin(root, navigate, customerId) {
       navigate(`#/customers/${customerId}`);
     });
   }
-}
-
-function blobToDataUrl(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
 }
