@@ -116,7 +116,18 @@ export async function renderDashboard(root, navigate) {
   try {
     [summary, customers, trends, settings] = await Promise.all([
       api.dashboardSummary(),
-      api.listCustomers(),
+      // The result here only ever feeds renderNextVisit below, and only
+      // for the roles that card is actually rendered for (not admin/ceo --
+      // see the nextVisitSlot markup further down). GET /customers runs
+      // 4 correlated subqueries per row and returns every customer in the
+      // company with no filter, so this was the single most expensive part
+      // of opening the dashboard for no benefit on an admin/ceo login, and
+      // (for a sales_manager, this app's most common daily user) scoped
+      // down to what "next visit" actually means for that role -- their
+      // own assigned book, not the whole company's.
+      state.user.role === "admin" || state.user.role === "ceo"
+        ? Promise.resolve([])
+        : api.listCustomers(state.user.role === "sales_manager" ? { assigned_manager_id: state.user.id } : {}),
       api.dashboardTrends(),
       api.getSettings(),
     ]);
