@@ -456,6 +456,15 @@ customersRouter.delete("/:id", requireAdmin, async (req, res) => {
     res.status(204).end();
   } catch (err) {
     await client.query("ROLLBACK");
+    // payments.customer_id is ON DELETE RESTRICT (payment records must
+    // survive a customer being removed) -- any customer with recorded
+    // payments hits this every time, so give a message that actually says
+    // why instead of bubbling a raw FK-violation 500.
+    if (err.code === "23503") {
+      return res.status(409).json({
+        error: "Can't delete this customer: it has recorded payments, which must be kept for the audit trail.",
+      });
+    }
     throw err;
   } finally {
     client.release();
