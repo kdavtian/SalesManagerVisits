@@ -278,19 +278,31 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   document.body.classList.add("map-active");
   mapEl.style.touchAction = "none";
 
-  // Efficiency mode (perfMode.js, opt-in under Settings > Preferences)
-  // leaves rotate/touchRotate on -- the compass feature (setBearing calls
-  // throughout this file) depends on the leaflet-rotate plugin actually
-  // being enabled, so turning it off would need every one of those
-  // call-sites guarded too. What it does turn off are Leaflet's own
-  // zoom/fade/marker-zoom CSS transitions, pure visual polish with no
-  // feature attached to it -- a real animation-frame cost on every pan/
-  // zoom for no functional loss on a phone that's asking to trade it away.
+  // Efficiency mode (perfMode.js, opt-in under Settings > Preferences).
+  // Leaflet's own zoom/fade/marker-zoom CSS transitions are pure visual
+  // polish with no feature attached to them, so those are always turned
+  // off. rotate/touchRotate are turned off too -- leaflet-rotate's
+  // rotation-aware math runs on every pan/zoom/tile update whether or not
+  // the map is actually rotated (bearing 0 still goes through the same
+  // extra point-rotation calls), a real ongoing cost, not just a one-time
+  // one paid while actively rotating. setBearing()/getBearing() stay safe
+  // to call either way -- the plugin defines them unconditionally on
+  // L.Map.prototype and setBearing() itself no-ops (and never fires the
+  // "rotate" event) when the map wasn't constructed with rotate: true, so
+  // every existing call site in this file (the compass reset button, the
+  // device-heading auto-rotate handlers) degrades to doing nothing rather
+  // than throwing. The one place that needed an explicit guard is the
+  // locate button's heading-tracking mode itself (see skipTrack below) --
+  // starting a device-orientation watch whose whole purpose is to spin a
+  // map that no longer rotates would silently do nothing instead of
+  // failing loudly, so Efficiency mode makes that button skip straight to
+  // its plain show/hide behavior instead, the same way the user's own
+  // compass-mode-off preference already does.
   const perfEfficiency = getPerfMode() === "efficiency";
   const map = L.map(mapEl, {
     zoomControl: false,
-    rotate: true,
-    touchRotate: true,
+    rotate: !perfEfficiency,
+    touchRotate: !perfEfficiency,
     rotateControl: false,
     bearing: 0,
     zoomAnimation: !perfEfficiency,
@@ -1436,7 +1448,11 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     // With compass mode off (Pin key popup), the button is a plain show/hide
     // toggle -- "on" goes straight back to "off" instead of stepping through
     // heading-tracking, which some reps found disorienting and don't need.
-    const skipTrack = locationMode === "on" && !getCompassMode();
+    // Efficiency mode forces the same behavior even if compass mode is on:
+    // the map itself no longer rotates (see the L.map() options above), so
+    // starting a device-orientation watch to drive a rotation that can't
+    // happen would just silently do nothing.
+    const skipTrack = locationMode === "on" && (!getCompassMode() || perfEfficiency);
 
     if (locationMode === "off") {
       locationMode = "on";
