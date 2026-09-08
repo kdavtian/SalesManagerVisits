@@ -83,7 +83,15 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
   const filterBtn = root.querySelector("#payment-filter-btn");
   const filterMenu = root.querySelector("#payment-filter-menu");
 
-  const initialStatusFilter = ["pending", "approved", "rejected"].includes(initialQuery?.get("status")) ? initialQuery.get("status") : "";
+  // Pending is the default view -- that's the queue someone opening this
+  // page almost always cares about (what still needs review/collecting),
+  // not the full history. A caller can still deep-link a specific status
+  // (or "all", via status=all) if it needs to.
+  const initialStatusFilter = initialQuery?.get("status") === "all"
+    ? ""
+    : ["pending", "approved", "rejected"].includes(initialQuery?.get("status"))
+      ? initialQuery.get("status")
+      : "pending";
   filterRow.innerHTML = QUICK_FILTERS.map(
     (f) => `<button class="map-filter-chip ${f === initialStatusFilter ? "chip-active" : ""}" data-filter="${f}" aria-pressed="${f === initialStatusFilter ? "true" : "false"}">${t(QUICK_FILTER_KEY[f])}</button>`
   ).join("");

@@ -3058,9 +3058,16 @@ input[type="search"]:focus {
 }
 
 .progress-card {
-  margin: 4px 0 18px;
-  padding: 18px;
+  margin: 4px 0 8px;
+  padding: 14px;
   position: relative;
+}
+
+/* Used only right after .progress-card (Quick Actions on the dashboard) --
+   .section-title's own 26px top margin assumes it follows plain body copy,
+   which reads as an oversized gap directly under a card. */
+.section-title-tight {
+  margin-top: 6px;
 }
 
 /* Only present when there's a by-manager section to reveal (see
@@ -3226,7 +3233,7 @@ input[type="search"]:focus {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  margin: 8px 0 14px;
+  margin: 6px 0 10px;
 }
 
 .progress-fraction {

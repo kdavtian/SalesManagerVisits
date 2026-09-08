@@ -233,6 +233,7 @@ export const api = {
   getDeliveryPendingCount: () => request("/delivery/pending-count"),
   listPackedOrders: () => request("/delivery/packed-orders"),
   listActiveStops: () => request("/delivery/active-stops"),
+  releaseRouteStop: (routeId, orderId) => request(`/delivery/routes/${routeId}/stops/${orderId}`, { method: "DELETE" }),
   planRoute: (data) => json("/delivery/routes/plan", "POST", data),
   listDrivers: () => request("/delivery/drivers"),
   getRoute: (id) => request(`/delivery/routes/${id}`),

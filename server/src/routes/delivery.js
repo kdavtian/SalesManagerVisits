@@ -61,8 +61,9 @@ deliveryRouter.get("/pending-count", async (req, res) => {
 deliveryRouter.get("/active-stops", async (req, res) => {
   if (!canPlanRoutes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const { rows } = await pool.query(
-    `SELECT rs.id, rs.route_id, rs.sequence, r.route_date, r.driver_id, u.name AS driver_name,
-            o.id AS order_id, o.order_code, o.status AS order_status, c.name AS customer_name
+    `SELECT rs.id, rs.route_id, rs.sequence, r.route_date::text AS route_date, r.driver_id, u.name AS driver_name,
+            o.id AS order_id, o.order_code, o.status AS order_status, o.total_amd,
+            c.id AS customer_id, c.name AS customer_name, c.address
      FROM route_stops rs
      JOIN delivery_routes r ON r.id = rs.route_id
      JOIN users u ON u.id = r.driver_id
@@ -72,6 +73,25 @@ deliveryRouter.get("/active-stops", async (req, res) => {
      ORDER BY r.route_date ASC, u.name ASC, rs.sequence ASC`
   );
   res.json(rows);
+});
+
+// Releases a stuck-open stop back into the unrouted pool -- the planner's
+// escape hatch for exactly what /active-stops above makes visible: a route
+// nobody's actively driving (the driver never opened the app for that date,
+// the route was planned by mistake, etc). Just removes the route_stops row;
+// the order's own status is untouched (still packed_stock_out), so it falls
+// straight back into /packed-orders and can be replanned onto a fresh route
+// the normal way. Deliberately not a delivery outcome (no fail/complete
+// semantics) -- this is "this route assignment was wrong", not "this
+// delivery happened or didn't".
+deliveryRouter.delete("/routes/:routeId/stops/:orderId", async (req, res) => {
+  if (!canPlanRoutes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const { rowCount } = await pool.query(
+    "DELETE FROM route_stops WHERE route_id = $1 AND order_id = $2 AND completed_at IS NULL",
+    [req.params.routeId, req.params.orderId]
+  );
+  if (!rowCount) return res.status(404).json({ error: "Open stop not found" });
+  res.status(204).end();
 });
 
 deliveryRouter.get("/drivers", async (req, res) => {
