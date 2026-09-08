@@ -253,7 +253,20 @@ function commitPicker() {
   currentInput.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-const observer = new MutationObserver(() => enhanceVisibleActivityDates());
+// Coalesced to one rAF-deferred pass per frame instead of running
+// enhanceVisibleActivityDates() synchronously for every mutation batch --
+// this observer watches the whole document, so any view's re-render
+// (search debounce settling, a list repainting) triggered it repeatedly
+// even though only the Activity view's own dates ever match.
+let scheduled = false;
+const observer = new MutationObserver(() => {
+  if (scheduled) return;
+  scheduled = true;
+  requestAnimationFrame(() => {
+    scheduled = false;
+    enhanceVisibleActivityDates();
+  });
+});
 observer.observe(document.documentElement, { childList: true, subtree: true });
 enhanceVisibleActivityDates();
 
