@@ -1184,52 +1184,67 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
     customerMarkerLayer.clearLayers();
     lastCustomers = [];
 
+    // Efficiency mode's fast path for "Add new customer": building a
+    // Leaflet marker + bound popup (with its own async popupopen listener)
+    // for every existing customer is the single most expensive thing this
+    // view does -- hundreds of marker objects and clustering work -- and
+    // none of it is needed just to drop one new pin. Skipped only while
+    // addMode is actually active; the moment the new customer is saved,
+    // addMode is cleared and this same function runs again (see the
+    // form-submit handler below), building the full marker set normally
+    // from then on. startAddCustomerFlow() below has its own GPS/address-
+    // search positioning, independent of the customer bounds this loop
+    // would otherwise compute, so skipping it doesn't leave the map
+    // uncentered.
+    const skipMarkers = addMode && getPerfMode() === "efficiency";
     const bounds = [];
-    for (const c of customers) {
-      const status = customerStatus(c);
-      const marker = L.marker([c.lat, c.lng], { icon: customerIcon(c, status) });
-      marker.bindPopup(`
-        <div class="map-popup">
-          <strong>${escapeHtml(c.name)}</strong>
-          ${c.category ? `<div class="popup-category">${escapeHtml(categoryLabel(c.category))}</div>` : ""}
-          <div class="popup-facts" id="popup-facts-${c.id}"><p class="popup-loading">${t("loading")}</p></div>
-          <div class="popup-actions">
-            <button data-action="checkin" data-id="${c.id}" class="btn-accent"><span>${icons.mapPinCheck}</span><span class="popup-action-label">${t("check_in")}</span></button>
-            <button data-action="details" data-id="${c.id}"><span class="popup-action-label">${t("more")}</span></button>
+    if (!skipMarkers) {
+      for (const c of customers) {
+        const status = customerStatus(c);
+        const marker = L.marker([c.lat, c.lng], { icon: customerIcon(c, status) });
+        marker.bindPopup(`
+          <div class="map-popup">
+            <strong>${escapeHtml(c.name)}</strong>
+            ${c.category ? `<div class="popup-category">${escapeHtml(categoryLabel(c.category))}</div>` : ""}
+            <div class="popup-facts" id="popup-facts-${c.id}"><p class="popup-loading">${t("loading")}</p></div>
+            <div class="popup-actions">
+              <button data-action="checkin" data-id="${c.id}" class="btn-accent"><span>${icons.mapPinCheck}</span><span class="popup-action-label">${t("check_in")}</span></button>
+              <button data-action="details" data-id="${c.id}"><span class="popup-action-label">${t("more")}</span></button>
+            </div>
           </div>
-        </div>
-      `);
-      marker.on("popupopen", async (e) => {
-        const popupEl = e.popup.getElement();
-        popupEl.querySelector('[data-action="details"]').addEventListener("click", () => {
-          navigate(`#/customers/${c.id}`);
-        });
-        popupEl.querySelector('[data-action="checkin"]').addEventListener("click", () => {
-          navigate(`#/checkin/${c.id}`);
-        });
+        `);
+        marker.on("popupopen", async (e) => {
+          const popupEl = e.popup.getElement();
+          popupEl.querySelector('[data-action="details"]').addEventListener("click", () => {
+            navigate(`#/customers/${c.id}`);
+          });
+          popupEl.querySelector('[data-action="checkin"]').addEventListener("click", () => {
+            navigate(`#/checkin/${c.id}`);
+          });
 
-        const factsEl = popupEl.querySelector(`#popup-facts-${c.id}`);
-        try {
-          const [detail, plannedVisits] = await Promise.all([
-            api.getCustomer(c.id),
-            api.customerPlannedVisits(c.id),
-          ]);
-          const lastVisitLabel = detail.last_visit_at ? formatDateTime(detail.last_visit_at) : t("never_visited");
-          const debtLabel = detail.erp_debt_amd != null ? formatAmd(detail.erp_debt_amd) : "—";
-          const plannedLabel = plannedVisits.length
-            ? plannedVisits.map((p) => new Date(p.plan_date).toLocaleDateString(undefined, { month: "short", day: "numeric" })).join(", ")
-            : t("no_planned_visits");
-          factsEl.innerHTML = `
-            <div class="popup-fact"><span class="muted">${t("outstanding_debt")}</span><strong>${escapeHtml(debtLabel)}</strong></div>
-            <div class="popup-fact"><span class="muted">${t("last_visit")}</span><strong>${escapeHtml(lastVisitLabel)}</strong></div>
-            <div class="popup-fact"><span class="muted">${t("planned_visit_dates")}</span><strong>${escapeHtml(plannedLabel)}</strong></div>
-          `;
-        } catch {
-          factsEl.innerHTML = "";
-        }
-      });
-      lastCustomers.push({ c, marker });
-      bounds.push([c.lat, c.lng]);
+          const factsEl = popupEl.querySelector(`#popup-facts-${c.id}`);
+          try {
+            const [detail, plannedVisits] = await Promise.all([
+              api.getCustomer(c.id),
+              api.customerPlannedVisits(c.id),
+            ]);
+            const lastVisitLabel = detail.last_visit_at ? formatDateTime(detail.last_visit_at) : t("never_visited");
+            const debtLabel = detail.erp_debt_amd != null ? formatAmd(detail.erp_debt_amd) : "—";
+            const plannedLabel = plannedVisits.length
+              ? plannedVisits.map((p) => new Date(p.plan_date).toLocaleDateString(undefined, { month: "short", day: "numeric" })).join(", ")
+              : t("no_planned_visits");
+            factsEl.innerHTML = `
+              <div class="popup-fact"><span class="muted">${t("outstanding_debt")}</span><strong>${escapeHtml(debtLabel)}</strong></div>
+              <div class="popup-fact"><span class="muted">${t("last_visit")}</span><strong>${escapeHtml(lastVisitLabel)}</strong></div>
+              <div class="popup-fact"><span class="muted">${t("planned_visit_dates")}</span><strong>${escapeHtml(plannedLabel)}</strong></div>
+            `;
+          } catch {
+            factsEl.innerHTML = "";
+          }
+        });
+        lastCustomers.push({ c, marker });
+        bounds.push([c.lat, c.lng]);
+      }
     }
 
     resolveCustomersReady();
@@ -1254,7 +1269,10 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       focusOnCustomerMarker(focusCustomerId);
     }
 
-    if (!bounds.length && navigator.geolocation) {
+    // Skipped alongside the marker loop above -- startAddCustomerFlow()
+    // already runs its own getCurrentPosition() to center the map, so this
+    // would otherwise race it with a second, redundant recenter.
+    if (!skipMarkers && !bounds.length && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => map.setView([pos.coords.latitude, pos.coords.longitude], 13),
         () => {}
