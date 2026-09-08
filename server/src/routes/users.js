@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { ROLES, canPlanForOthers } from "../roles.js";
+import { ROLES, canPlanForOthers, canReassignCustomers } from "../roles.js";
 import { passwordChangeLimiter } from "./auth.js";
 
 export const usersRouter = Router();
@@ -22,6 +22,26 @@ usersRouter.get(
   async (req, res) => {
     const { rows } = await pool.query(
       "SELECT id, name, position FROM users WHERE role = 'sales_manager' ORDER BY name"
+    );
+    res.json(rows);
+  }
+);
+
+// The customer card's "Assigned manager" picker -- deliberately a
+// different (wider) role set than /plannable above. /plannable backs
+// field-visit contexts (route/plan pickers, map filters) where a sales
+// director has no business appearing since they don't do field visits
+// themselves; this backs office-owned channels like OEM/CVO/PCO, which
+// are assigned to the sales director, not an individual field rep.
+usersRouter.get(
+  "/assignable-managers",
+  (req, res, next) => {
+    if (!canReassignCustomers(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+    next();
+  },
+  async (req, res) => {
+    const { rows } = await pool.query(
+      "SELECT id, name, position, role FROM users WHERE role IN ('sales_manager', 'sales_director') ORDER BY role, name"
     );
     res.json(rows);
   }

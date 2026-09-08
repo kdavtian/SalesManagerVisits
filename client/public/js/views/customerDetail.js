@@ -522,12 +522,15 @@ async function openAccountSettingsSheet(customer, onDone) {
 
     const managerSelect = overlay.querySelector("#reassign-manager");
     api
-      .listPlannableUsers()
+      .listAssignableManagers()
       .then((users) => {
         managerSelect.innerHTML =
           `<option value="">${t("unassigned")}</option>` +
           users
-            .map((u) => `<option value="${u.id}" ${u.id === customer.assigned_manager_id ? "selected" : ""}>${escapeHtml(u.name)}</option>`)
+            .map((u) => {
+              const label = u.role === "sales_director" ? `${u.name} (${t("role_sales_director")})` : u.name;
+              return `<option value="${u.id}" ${u.id === customer.assigned_manager_id ? "selected" : ""}>${escapeHtml(label)}</option>`;
+            })
             .join("");
       })
       .catch(() => {});
