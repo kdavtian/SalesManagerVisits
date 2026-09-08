@@ -33,9 +33,10 @@ const UNASSIGNED_CHANNEL = "—";
 // hold it, it is not already inside an in-flight handoff, and its journey
 // has not already ended (approved) or been voided (rejected).
 const AVAILABLE_SQL = `
-  SELECT p.id, p.amount_amd, p.sales_channel, p.customer_name_snapshot,
+  SELECT p.id, p.amount_amd, p.sales_channel, COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot,
          p.erp_customer_id_snapshot, p.sales_manager_name_snapshot, p.payment_date
   FROM payments p
+  LEFT JOIN customers c ON c.id = p.customer_id
   WHERE p.current_holder_id = $1
     AND p.pending_handoff_id IS NULL
     AND p.status = 'pending'
@@ -430,10 +431,11 @@ async function loadHandoff(id) {
   const handoff = rows[0];
   if (!handoff) return null;
   const { rows: items } = await pool.query(
-    `SELECT p.id, p.amount_amd, p.sales_channel, p.customer_name_snapshot,
+    `SELECT p.id, p.amount_amd, p.sales_channel, COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot,
             p.erp_customer_id_snapshot, p.sales_manager_name_snapshot, p.payment_date, p.status
      FROM cash_handoff_items i
      JOIN payments p ON p.id = i.payment_id
+     LEFT JOIN customers c ON c.id = p.customer_id
      WHERE i.handoff_id = $1
      ORDER BY p.sales_channel NULLS LAST, p.payment_date DESC`,
     [id]

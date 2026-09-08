@@ -2273,6 +2273,16 @@ input[type="search"]:focus {
   animation: pin-drop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+/* A plain address-search result -- distinct color from .pin-new so it
+   never reads as "a pending customer placement awaiting confirm". */
+.pin-search-result {
+  width: 26px;
+  height: 26px;
+  background: #34c759;
+  border-width: 3px;
+  animation: pin-drop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
 @keyframes pin-drop {
   from {
     transform: rotate(-45deg) translateY(-16px) scale(0.6);
@@ -4832,6 +4842,11 @@ input[type="search"]:focus {
 .map-search-row #map-manager-filter-wrap {
   flex: 0 0 auto;
   width: 130px;
+}
+
+.map-address-search-btn {
+  flex: 0 0 auto;
+  box-shadow: var(--shadow-elevated);
 }
 
 .map-filter-row {

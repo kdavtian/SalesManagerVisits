@@ -51,6 +51,29 @@ deliveryRouter.get("/pending-count", async (req, res) => {
   res.json({ count: rows[0].count });
 });
 
+// Every route stop still open (completed_at IS NULL), across every driver
+// and date -- exactly what the "pending-count" badge above sums the second
+// half of. The planner previously had no way to see this half at all: once
+// an order is routed it drops out of /packed-orders (NOT EXISTS route_stops
+// filters it out), so a stop stuck open on some driver's route (planned for
+// a date they never opened the app on, or a route nobody's actively
+// driving) was invisible everywhere except as an unexplained badge count.
+deliveryRouter.get("/active-stops", async (req, res) => {
+  if (!canPlanRoutes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const { rows } = await pool.query(
+    `SELECT rs.id, rs.route_id, rs.sequence, r.route_date, r.driver_id, u.name AS driver_name,
+            o.id AS order_id, o.order_code, o.status AS order_status, c.name AS customer_name
+     FROM route_stops rs
+     JOIN delivery_routes r ON r.id = rs.route_id
+     JOIN users u ON u.id = r.driver_id
+     JOIN orders o ON o.id = rs.order_id
+     JOIN customers c ON c.id = o.customer_id
+     WHERE rs.completed_at IS NULL
+     ORDER BY r.route_date ASC, u.name ASC, rs.sequence ASC`
+  );
+  res.json(rows);
+});
+
 deliveryRouter.get("/drivers", async (req, res) => {
   if (!canPlanRoutes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const { rows } = await pool.query("SELECT id, name FROM users WHERE role = 'delivery_manager' ORDER BY name");

@@ -61,4 +61,5 @@ export const icons = {
   // Branching path -- used for the sales-channel/"direction" filter, where
   // one customer book fans out into several named channels (SM YVN, OEM...).
   route: uiSvg(`<circle cx="6" cy="6" r="2.2"/><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="12" r="2.2"/><path d="M6 8.2v7.6M8 6h4a4 4 0 0 1 4 4M8 18h4a4 4 0 0 0 4-4"/>`),
+  search: `<svg class="map-action-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.8-4.8"/></svg>`,
 };
