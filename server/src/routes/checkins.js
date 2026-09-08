@@ -240,9 +240,13 @@ checkinsRouter.get("/", async (req, res) => {
   } else if (range === "today") {
     conditions.push(`ch.timestamp >= date_trunc('day', now())`);
   } else if (range === "week") {
-    conditions.push(`ch.timestamp >= now() - interval '7 days'`);
+    // The calendar week (Monday-Sunday, matching date_trunc's default and
+    // the dashboard's own "this week" stats below), not a rolling 7 days --
+    // "This week" on a Monday should show just that one day, not carry over
+    // six days from the previous week.
+    conditions.push(`ch.timestamp >= date_trunc('week', now())`);
   } else if (range === "month") {
-    conditions.push(`ch.timestamp >= now() - interval '30 days'`);
+    conditions.push(`ch.timestamp >= date_trunc('month', now())`);
   }
   if (isValidDateString(to)) {
     params.push(to);
