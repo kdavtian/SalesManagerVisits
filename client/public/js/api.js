@@ -231,6 +231,7 @@ export const api = {
   // Delivery routes (see server/src/routes/delivery.js)
   getDeliveryPendingCount: () => request("/delivery/pending-count"),
   listPackedOrders: () => request("/delivery/packed-orders"),
+  listActiveStops: () => request("/delivery/active-stops"),
   planRoute: (data) => json("/delivery/routes/plan", "POST", data),
   listDrivers: () => request("/delivery/drivers"),
   getRoute: (id) => request(`/delivery/routes/${id}`),

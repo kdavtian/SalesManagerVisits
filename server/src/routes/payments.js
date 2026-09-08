@@ -34,12 +34,14 @@ paymentsRouter.get("/eligible-managers", async (req, res) => {
 async function loadPaymentRow(id) {
   const { rows } = await pool.query(
     `SELECT p.*, sm.name AS current_sales_manager_name, cb.name AS created_by_name,
-            ab.name AS approved_by_name, rb.name AS rejected_by_name
+            ab.name AS approved_by_name, rb.name AS rejected_by_name,
+            COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot
      FROM payments p
      JOIN users sm ON sm.id = p.sales_manager_id
      JOIN users cb ON cb.id = p.created_by
      LEFT JOIN users ab ON ab.id = p.approved_by
      LEFT JOIN users rb ON rb.id = p.rejected_by
+     LEFT JOIN customers c ON c.id = p.customer_id
      WHERE p.id = $1`,
     [id]
   );
@@ -301,8 +303,9 @@ paymentsRouter.get("/", async (req, res) => {
 
   params.push(PAGE_SIZE + 1, offsetNum);
   const { rows } = await pool.query(
-    `SELECT p.*
+    `SELECT p.*, COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot
      FROM payments p
+     LEFT JOIN customers c ON c.id = p.customer_id
      ${where}
      ORDER BY ${orderBy}
      LIMIT $${params.length - 1} OFFSET $${params.length}`,

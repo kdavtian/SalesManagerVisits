@@ -128,7 +128,7 @@ export async function renderDelivery(root, navigate) {
   // route -- no manual checkbox selection (spec section 4). The driver
   // picker plus a single "Plan/Refresh Route" action is all that's left.
   async function loadPlanner() {
-    const [packedOrders, drivers] = await Promise.all([api.listPackedOrders(), api.listDrivers()]);
+    const [packedOrders, drivers, activeStops] = await Promise.all([api.listPackedOrders(), api.listDrivers(), api.listActiveStops()]);
     contentEl.innerHTML = `
       <label class="form-label" for="plan-driver">${t("delivery_choose_driver")}</label>
       <select id="plan-driver">${drivers.map((d) => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join("")}</select>
@@ -140,6 +140,20 @@ export async function renderDelivery(root, navigate) {
       }
       <button type="button" class="btn btn-primary btn-block" id="plan-route-btn" style="margin-top:12px;" ${packedOrders.some((o) => o.lat != null) ? "" : "disabled"}>${t("delivery_plan_route_btn")}</button>
       <div id="planned-route-result" style="margin-top:16px;"></div>
+      <h2 class="section-title" style="margin-top:20px;">${t("delivery_active_stops_title")}</h2>
+      ${
+        activeStops.length
+          ? `<div class="card-list">${activeStops
+              .map(
+                (s) => `
+            <div class="card">
+              <div class="order-line-top"><strong>${escapeHtml(s.driver_name)}</strong><span class="muted">${escapeHtml(s.route_date)}</span></div>
+              <p class="muted">${t("delivery_active_stop_line").replace("{customer}", escapeHtml(s.customer_name)).replace("{order}", escapeHtml(s.order_code || ""))}</p>
+            </div>`
+              )
+              .join("")}</div>`
+          : `<p class="empty-state">${t("delivery_active_stops_empty")}</p>`
+      }
     `;
     contentEl.querySelector("#plan-route-btn").addEventListener("click", async () => {
       const btn = contentEl.querySelector("#plan-route-btn");

@@ -114,6 +114,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           : `<div class="map-top-controls">
               <div class="map-search-row">
                 <input type="search" id="map-customer-search" placeholder="${t("map_search_placeholder")}" aria-label="${t("map_search_placeholder")}" />
+                <button type="button" class="icon-btn map-address-search-btn" id="map-address-search-btn" aria-label="${t("search_address_title")}" title="${t("search_address_title")}">${icons.search}</button>
                 ${
                   canViewTeamLocations()
                     ? `<div class="filter-dropdown-wrap" id="map-manager-filter-wrap">
@@ -462,6 +463,68 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   }
   mapEl.addEventListener("touchend", onMapTouchEnd);
 
+  // Long-press (touch) / right-click (desktop) anywhere on the map, outside
+  // of an already-active add/relocate flow, drops a new-customer pin right
+  // there -- a one-gesture shortcut for "there's a shop right here" that
+  // skips the FAB tap + GPS-fix step of the normal add flow (still there,
+  // unchanged, as the deliberate/GPS-anchored way in). Desktop gets this
+  // for free from Leaflet's own "contextmenu" event (already carries
+  // latlng); touch has no equivalent once touchAction:none above stops the
+  // browser's native long-press/context-menu gesture, so it's detected
+  // here from raw touch timing + movement, the same way onMapTouchEnd above
+  // hand-rolls double-tap detection for the same reason.
+  const LONG_PRESS_MS = 550;
+  const LONG_PRESS_MOVE_TOLERANCE = 12;
+  let longPressTimer = null;
+  let longPressStart = null;
+  let longPressFired = false;
+
+  function cancelLongPress() {
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
+    longPressStart = null;
+  }
+
+  function triggerAddAtPoint(latlng) {
+    if (relocateCustomerId || addMode) return;
+    if (navigator.vibrate) navigator.vibrate(15);
+    addMode = true;
+    fab.classList.add("fab-active");
+    fab.setAttribute("aria-pressed", "true");
+    mapEl.classList.add("map-picking");
+    placeLocationPin(latlng, { source: "dragged_pin", onConfirm: handoffToCustomerForm });
+  }
+
+  mapEl.addEventListener("touchstart", (e) => {
+    if (relocateCustomerId || addMode) return;
+    if (e.touches.length !== 1 || e.target.closest(".leaflet-control, .leaflet-popup, .fab, .map-control-btn")) {
+      cancelLongPress();
+      return;
+    }
+    longPressFired = false;
+    longPressStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    const point = map.mouseEventToContainerPoint(e.touches[0]);
+    longPressTimer = setTimeout(() => {
+      longPressFired = true;
+      longPressTimer = null;
+      triggerAddAtPoint(map.containerPointToLatLng(point));
+    }, LONG_PRESS_MS);
+  });
+  mapEl.addEventListener("touchmove", (e) => {
+    if (!longPressStart || !e.touches.length) return;
+    const dx = e.touches[0].clientX - longPressStart.x;
+    const dy = e.touches[0].clientY - longPressStart.y;
+    if (Math.hypot(dx, dy) > LONG_PRESS_MOVE_TOLERANCE) cancelLongPress();
+  });
+  mapEl.addEventListener("touchend", () => cancelLongPress());
+  mapEl.addEventListener("touchcancel", () => cancelLongPress());
+
+  map.on("contextmenu", (e) => {
+    e.originalEvent?.preventDefault();
+    if (relocateCustomerId || addMode) return;
+    triggerAddAtPoint(e.latlng);
+  });
+
   let addMode = startInAddMode && !relocateCustomerId;
   if (addMode) {
     fab.classList.add("fab-active");
@@ -521,6 +584,10 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // handler wired onto placingMarker below, in addition to the sheet's own
   // Cancel button).
   const NEW_PIN_HTML = `<div class="pin pin-new"><span class="pin-glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span></div>`;
+  // Distinct from NEW_PIN_HTML (an X, meaning "tap to cancel this pending
+  // placement") -- this one marks a plain address-search result, which
+  // isn't part of the add-customer flow at all and isn't tappable.
+  const SEARCH_PIN_HTML = `<div class="pin pin-search-result"><span class="pin-glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 21s7-6.5 7-11a7 7 0 1 0-14 0c0 4.5 7 11 7 11Z"/></svg></span></div>`;
 
   function customerStatus(c) {
     if (c.visited_today) return "today";
@@ -1189,6 +1256,26 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       searchQuery = mapSearchInput.value.trim().toLowerCase();
       applyFilter();
     }, 300);
+  });
+
+  // The customer search above only matches this rep's own customer book --
+  // an actual street address (a new lead, somewhere to meet a customer)
+  // needs real geocoding instead. Reuses the same address-search sheet the
+  // add-customer/relocate flow already has (openAddressSearchSheet,
+  // defined below), but here it's just "look at this place on the map",
+  // not a step toward saving anything -- so the result is a plain,
+  // non-interactive marker rather than the draggable "confirm to save" pin.
+  let addressSearchMarker = null;
+  root.querySelector("#map-address-search-btn")?.addEventListener("click", () => {
+    openAddressSearchSheet((result) => {
+      const latlng = L.latLng(result.lat, result.lng);
+      map.setView(latlng, 16);
+      if (addressSearchMarker) map.removeLayer(addressSearchMarker);
+      addressSearchMarker = L.marker(latlng, {
+        icon: L.divIcon({ className: "", html: SEARCH_PIN_HTML, iconSize: [26, 26], iconAnchor: [13, 26] }),
+      }).addTo(map);
+      addressSearchMarker.bindPopup(escapeHtml(result.address)).openPopup();
+    });
   });
 
   // The competitor visibility toggle is mounted separately (see
@@ -2227,6 +2314,14 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // the default, not the only way in, per the task's "let the user accept
   // it, drag it, or place it themselves" requirement.
   map.on("click", (e) => {
+    // A long-press that just fired can still produce a trailing synthetic
+    // "click" once the finger lifts -- addMode is already true and the pin
+    // already placed by then, so without this guard the same gesture would
+    // immediately re-place its own pin a second time at the same spot.
+    if (longPressFired) {
+      longPressFired = false;
+      return;
+    }
     if (relocateCustomerId) {
       placeLocationPin(e.latlng, { source: "dragged_pin", onConfirm: openRelocateConfirmDetails });
       return;
