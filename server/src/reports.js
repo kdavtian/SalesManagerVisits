@@ -34,6 +34,30 @@ export const REPORTS = [
     // for other reports, same reasoning as canReviewPayments in roles.js.
     defaultRoles: ["admin", "ceo", "sales_director", "accountant"],
   },
+  // The next three surface the same Castrol ERP extract that already feeds
+  // erp_customer_data/sales_performance/perf_actuals_brand_monthly (see
+  // erpSync.js) as in-app reports -- previously that data was only ever
+  // seen as a formatted summary from a separate Telegram bot outside this
+  // app, run from the same Windows PC that pushes the sync payload here.
+  {
+    key: "customer_debt",
+    nameKey: "report_customer_debt_name",
+    descriptionKey: "report_customer_debt_description",
+    // Accountant reconciles debt day to day, same reasoning as payments above.
+    defaultRoles: ["admin", "ceo", "sales_director", "accountant"],
+  },
+  {
+    key: "sales_budget",
+    nameKey: "report_sales_budget_name",
+    descriptionKey: "report_sales_budget_description",
+    defaultRoles: ["admin", "ceo", "sales_director"],
+  },
+  {
+    key: "brand_volume",
+    nameKey: "report_brand_volume_name",
+    descriptionKey: "report_brand_volume_description",
+    defaultRoles: ["admin", "ceo", "sales_director"],
+  },
 ];
 
 export function findReport(key) {

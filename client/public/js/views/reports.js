@@ -44,6 +44,9 @@ export async function renderReports(root, navigate, reportKey) {
   if (reportKey === "checkins") return renderCheckinsReport(root, navigate);
   if (reportKey === "brand_availability") return renderBrandAvailabilityReport(root, navigate);
   if (reportKey === "payments") return renderPaymentsReport(root, navigate);
+  if (reportKey === "customer_debt") return renderCustomerDebtReport(root, navigate);
+  if (reportKey === "sales_budget") return renderSalesBudgetReport(root, navigate);
+  if (reportKey === "brand_volume") return renderBrandVolumeReport(root, navigate);
   return renderReportsList(root, navigate);
 }
 
@@ -390,6 +393,261 @@ async function renderPaymentsReport(root, navigate) {
     body.querySelectorAll(".report-drill-card").forEach((el) => {
       el.addEventListener("click", () => navigate(el.dataset.href));
     });
+  }
+
+  form.addEventListener("change", load);
+  await load();
+}
+
+function currentYearMonth() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+let cachedChannelOptions = null;
+async function channelOptions() {
+  if (cachedChannelOptions) return cachedChannelOptions;
+  const channels = await api.getPerfChannels();
+  cachedChannelOptions = [{ value: "", label: t("all_channels") }, ...channels.map((c) => ({ value: c.code, label: c.name }))];
+  return cachedChannelOptions;
+}
+
+async function renderCustomerDebtReport(root, navigate) {
+  root.innerHTML = `
+    <div class="detail-view">
+      ${reportHeaderHtml("report_customer_debt_name")}
+      <form id="report-filters" class="report-filter-form">
+        <select name="sales_channel"><option value="">${t("all_channels")}</option></select>
+        ${selectHtml(
+          "debt_only",
+          [
+            { value: "1", label: t("report_customer_debt_with_debt_only") },
+            { value: "", label: t("report_customer_debt_all") },
+          ],
+          "1"
+        )}
+      </form>
+      <div id="report-body"><p class="loading-state" role="status">${t("loading")}</p></div>
+    </div>
+  `;
+  const container = root.querySelector(".detail-view");
+  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  const form = container.querySelector("#report-filters");
+  const body = container.querySelector("#report-body");
+
+  try {
+    const options = await channelOptions();
+    form.querySelector('select[name="sales_channel"]').outerHTML = selectHtml("sales_channel", options, "");
+  } catch {
+    // Channel list is a filter convenience only -- if it fails to load, the
+    // report itself (unfiltered) still works fine below.
+  }
+
+  async function load() {
+    body.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+    const data = new FormData(form);
+    const params = Object.fromEntries([...data.entries()].filter(([, v]) => v));
+    try {
+      const { customers, by_bucket, totals } = await api.getCustomerDebtReport(params);
+      body.innerHTML = `
+        <div class="stat-grid">
+          <div class="stat-card">
+            <span class="stat-value">${formatAmd(Number(totals.total_debt_amd))}</span>
+            <span class="stat-label">${t("report_customer_debt_total_debt")}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value">${totals.customers_with_debt}</span>
+            <span class="stat-label">${t("report_customer_debt_customers_with_debt")}</span>
+          </div>
+        </div>
+
+        <h2 class="section-title">${t("report_customer_debt_by_bucket")}</h2>
+        <div class="card-list">
+          ${
+            by_bucket.length
+              ? by_bucket
+                  .map(
+                    (b) => `
+              <div class="card report-row">
+                <span>${escapeHtml(b.aging_bucket)}</span>
+                <strong>${formatAmd(Number(b.total_debt_amd))} (${b.customer_count})</strong>
+              </div>`
+                  )
+                  .join("")
+              : `<p class="empty-state">${t("no_data")}</p>`
+          }
+        </div>
+
+        <h2 class="section-title">${t("customers")} (${customers.length})</h2>
+        <div class="card-list">
+          ${
+            customers.length
+              ? customers
+                  .map(
+                    (c) => `
+              <div class="card report-row-multiline">
+                <strong>${escapeHtml(c.customer_name)}</strong>
+                <span class="muted">${escapeHtml(channelDisplayLabel(c.assigned_sales_rep))} · ${c.aging_bucket ? escapeHtml(c.aging_bucket) : "—"}${c.days_since_payment != null ? ` · ${c.days_since_payment}d` : ""}</span>
+                <span class="muted">${formatAmd(Number(c.debt_amd))}</span>
+              </div>`
+                  )
+                  .join("")
+              : `<p class="empty-state">${t("no_data")}</p>`
+          }
+        </div>
+      `;
+    } catch (err) {
+      body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  form.addEventListener("change", load);
+  await load();
+}
+
+async function renderSalesBudgetReport(root, navigate) {
+  root.innerHTML = `
+    <div class="detail-view">
+      ${reportHeaderHtml("report_sales_budget_name")}
+      <form id="report-filters" class="report-filter-form">
+        <input type="month" name="month" value="${currentYearMonth()}" />
+      </form>
+      <div id="report-body"><p class="loading-state" role="status">${t("loading")}</p></div>
+    </div>
+  `;
+  const container = root.querySelector(".detail-view");
+  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  const form = container.querySelector("#report-filters");
+  const body = container.querySelector("#report-body");
+
+  function achievedPct(sales, budget) {
+    if (!budget) return "—";
+    return `${Math.round((sales / budget) * 100)}%`;
+  }
+
+  async function load() {
+    body.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+    const data = new FormData(form);
+    const params = Object.fromEntries([...data.entries()].filter(([, v]) => v));
+    try {
+      const { rows, totals } = await api.getSalesBudgetReport(params);
+      body.innerHTML = `
+        <div class="stat-grid">
+          <div class="stat-card">
+            <span class="stat-value">${formatAmd(totals.sales_amd)}</span>
+            <span class="stat-label">${t("report_sales_budget_sales")}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value">${formatAmd(totals.budget_amd)}</span>
+            <span class="stat-label">${t("report_sales_budget_budget")}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value">${achievedPct(totals.sales_amd, totals.budget_amd)}</span>
+            <span class="stat-label">${t("report_sales_budget_achieved")}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value">${formatAmd(totals.collected_amd)}</span>
+            <span class="stat-label">${t("report_sales_budget_collected")}</span>
+          </div>
+        </div>
+
+        <h2 class="section-title">${t("by_channel")}</h2>
+        <div class="card-list">
+          ${
+            rows.length
+              ? rows
+                  .map(
+                    (r) => `
+              <div class="card report-row-multiline">
+                <strong>${escapeHtml(r.channel_name || channelDisplayLabel(r.rep_name))}</strong>
+                <span class="muted">${formatAmd(Number(r.sales_amd))} / ${formatAmd(Number(r.budget_amd))} (${achievedPct(Number(r.sales_amd), Number(r.budget_amd))}) · ${t("report_sales_budget_collected")}: ${formatAmd(Number(r.collected_amd))}</span>
+              </div>`
+                  )
+                  .join("")
+              : `<p class="empty-state">${t("no_data")}</p>`
+          }
+        </div>
+      `;
+    } catch (err) {
+      body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  form.addEventListener("change", load);
+  await load();
+}
+
+function brandLabel(key) {
+  return BRAND_LABELS[key] || key;
+}
+
+async function renderBrandVolumeReport(root, navigate) {
+  root.innerHTML = `
+    <div class="detail-view">
+      ${reportHeaderHtml("report_brand_volume_name")}
+      <form id="report-filters" class="report-filter-form">
+        <input type="month" name="month" value="${currentYearMonth()}" />
+        <select name="sales_channel"><option value="">${t("all_channels")}</option></select>
+      </form>
+      <div id="report-body"><p class="loading-state" role="status">${t("loading")}</p></div>
+    </div>
+  `;
+  const container = root.querySelector(".detail-view");
+  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  const form = container.querySelector("#report-filters");
+  const body = container.querySelector("#report-body");
+
+  try {
+    const options = await channelOptions();
+    form.querySelector('select[name="sales_channel"]').outerHTML = selectHtml("sales_channel", options, "");
+  } catch {
+    // Filter convenience only, same as the debt report above.
+  }
+
+  async function load() {
+    body.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+    const data = new FormData(form);
+    const params = Object.fromEntries([...data.entries()].filter(([, v]) => v));
+    try {
+      const { rows, by_brand } = await api.getBrandVolumeReport(params);
+      body.innerHTML = `
+        <h2 class="section-title">${t("report_brand_volume_total")}</h2>
+        <div class="card-list">
+          ${
+            by_brand.length
+              ? by_brand
+                  .map(
+                    (b) => `
+              <div class="card report-row">
+                <span>${escapeHtml(brandLabel(b.brand))}</span>
+                <strong>${Number(b.total_liters).toLocaleString()} L</strong>
+              </div>`
+                  )
+                  .join("")
+              : `<p class="empty-state">${t("no_data")}</p>`
+          }
+        </div>
+
+        <h2 class="section-title">${t("by_channel")}</h2>
+        <div class="card-list">
+          ${
+            rows.length
+              ? rows
+                  .map(
+                    (r) => `
+              <div class="card report-row">
+                <span>${escapeHtml(r.channel_name || channelDisplayLabel(r.channel_code))} · ${escapeHtml(brandLabel(r.brand))}</span>
+                <strong>${Number(r.liters).toLocaleString()} L</strong>
+              </div>`
+                  )
+                  .join("")
+              : `<p class="empty-state">${t("no_data")}</p>`
+          }
+        </div>
+      `;
+    } catch (err) {
+      body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    }
   }
 
   form.addEventListener("change", load);

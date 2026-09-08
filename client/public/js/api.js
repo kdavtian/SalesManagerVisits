@@ -317,6 +317,18 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/reports/payments${qs ? `?${qs}` : ""}`);
   },
+  getCustomerDebtReport: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/reports/customer-debt${qs ? `?${qs}` : ""}`);
+  },
+  getSalesBudgetReport: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/reports/sales-budget${qs ? `?${qs}` : ""}`);
+  },
+  getBrandVolumeReport: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/reports/brand-volume${qs ? `?${qs}` : ""}`);
+  },
 
   getPerfChannels: () => request("/team-performance/channels"),
   updatePerfChannelManager: (channelId, managerUserId) =>

@@ -299,3 +299,117 @@ reportsRouter.get("/payments", requireReportAccess("payments"), async (req, res)
     operations: opsRows[0],
   });
 });
+
+// The next three read the Castrol ERP extract synced in by erpSync.js
+// (erp_customer_data / sales_performance / perf_actuals_brand_monthly) --
+// the same data an external Telegram bot on the sync PC already formats
+// and sends outside this app, now also browsable here.
+
+// Debt/aging -- erp_customer_data is TRUNCATE-and-replaced whole on every
+// sync (see erpSync.js), so this always reflects the latest extract, not
+// an accumulating history. sales_channel here filters on
+// assigned_sales_rep, the same free-text rep-name space sales_channels.code
+// already matches for Team Performance.
+reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async (req, res) => {
+  const { sales_channel, debt_only } = req.query;
+  const conditions = [];
+  const params = [];
+  if (sales_channel) {
+    params.push(sales_channel);
+    conditions.push(`assigned_sales_rep = $${params.length}`);
+  }
+  if (debt_only === "1") {
+    conditions.push(`debt_amd > 0`);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const { rows: customerRows } = await pool.query(
+    `SELECT erp_customer_id, customer_name, assigned_sales_rep, debt_amd, last_payment_date, days_since_payment, aging_bucket
+     FROM erp_customer_data
+     ${where}
+     ORDER BY debt_amd DESC NULLS LAST`,
+    params
+  );
+
+  const { rows: byBucket } = await pool.query(
+    `SELECT COALESCE(aging_bucket, '—') AS aging_bucket, count(*)::int AS customer_count, COALESCE(sum(debt_amd), 0) AS total_debt_amd
+     FROM erp_customer_data
+     ${where}
+     GROUP BY aging_bucket
+     ORDER BY total_debt_amd DESC`,
+    params
+  );
+
+  const { rows: totalsRows } = await pool.query(
+    `SELECT COALESCE(sum(debt_amd), 0) AS total_debt_amd, count(*) FILTER (WHERE debt_amd > 0)::int AS customers_with_debt
+     FROM erp_customer_data
+     ${where}`,
+    params
+  );
+
+  res.json({ customers: customerRows, by_bucket: byBucket, totals: totalsRows[0] });
+});
+
+// Sales vs. budget per rep/channel for one calendar month -- month comes in
+// as "YYYY-MM" from an <input type="month">, normalized to that month's
+// first day to match sales_performance's own month column (always a
+// month-truncated date, see 015_sales_performance.sql).
+reportsRouter.get("/sales-budget", requireReportAccess("sales_budget"), async (req, res) => {
+  const { month } = req.query;
+  const monthDate = /^\d{4}-\d{2}$/.test(month || "") ? `${month}-01` : null;
+
+  const { rows } = await pool.query(
+    `SELECT sp.rep_name, sc.name AS channel_name, sp.sales_amd, sp.budget_amd, sp.collected_amd
+     FROM sales_performance sp
+     LEFT JOIN sales_channels sc ON sc.code = sp.rep_name
+     WHERE sp.month = date_trunc('month', COALESCE($1::date, now()))
+     ORDER BY sp.sales_amd DESC`,
+    [monthDate]
+  );
+
+  const totals = rows.reduce(
+    (acc, r) => ({
+      sales_amd: acc.sales_amd + Number(r.sales_amd),
+      budget_amd: acc.budget_amd + Number(r.budget_amd),
+      collected_amd: acc.collected_amd + Number(r.collected_amd),
+    }),
+    { sales_amd: 0, budget_amd: 0, collected_amd: 0 }
+  );
+
+  res.json({ rows, totals });
+});
+
+// Brand volume (liters) per channel for one calendar month, plus a
+// company-wide per-brand total for the same month.
+reportsRouter.get("/brand-volume", requireReportAccess("brand_volume"), async (req, res) => {
+  const { month, sales_channel } = req.query;
+  const monthDate = /^\d{4}-\d{2}$/.test(month || "") ? `${month}-01` : null;
+  const conditions = [`p.month = date_trunc('month', COALESCE($1::date, now()))`];
+  const params = [monthDate];
+  if (sales_channel) {
+    params.push(sales_channel);
+    conditions.push(`p.channel_code = $${params.length}`);
+  }
+  const where = `WHERE ${conditions.join(" AND ")}`;
+
+  const { rows } = await pool.query(
+    `SELECT p.channel_code, sc.name AS channel_name, p.brand, p.liters
+     FROM perf_actuals_brand_monthly p
+     LEFT JOIN sales_channels sc ON sc.code = p.channel_code
+     ${where}
+     ORDER BY p.liters DESC`,
+    params
+  );
+
+  const byBrandWhere = where.replace(/p\./g, "");
+  const { rows: byBrand } = await pool.query(
+    `SELECT brand, COALESCE(sum(liters), 0) AS total_liters
+     FROM perf_actuals_brand_monthly
+     ${byBrandWhere}
+     GROUP BY brand
+     ORDER BY total_liters DESC`,
+    params
+  );
+
+  res.json({ rows, by_brand: byBrand });
+});
