@@ -28,7 +28,7 @@ badgesRouter.get("/", async (req, res) => {
   const role = req.user.role;
   const userId = req.user.id;
 
-  const [orders, payments, unrecorded, warehouse, delivery, notifications, planApprovals] = await Promise.all([
+  const [orders, payments, unrecorded, warehouse, delivery, notifications, planApprovals, editRequests] = await Promise.all([
     canConfirmOrders(role)
       ? pool.query("SELECT COUNT(*)::int AS count FROM orders WHERE status = 'submitted'")
       : Promise.resolve({ rows: [{ count: 0 }] }),
@@ -60,6 +60,13 @@ badgesRouter.get("/", async (req, res) => {
     canPlanForOthers(role)
       ? pool.query("SELECT count(*)::int AS count FROM visit_plans WHERE status = 'pending'")
       : Promise.resolve({ rows: [{ count: 0 }] }),
+
+    // Same admin-only queue as GET /edit-requests?status=pending -- only
+    // admin can review/approve these (see editRequestsRouter), so nobody
+    // else needs the count.
+    role === "admin"
+      ? pool.query("SELECT count(*)::int AS count FROM customer_edit_requests WHERE status = 'pending'")
+      : Promise.resolve({ rows: [{ count: 0 }] }),
   ]);
 
   res.json({
@@ -70,5 +77,6 @@ badgesRouter.get("/", async (req, res) => {
     delivery: delivery.rows[0].count,
     notifications: notifications.rows[0].count,
     planApprovals: planApprovals.rows[0].count,
+    editRequests: editRequests.rows[0].count,
   });
 });

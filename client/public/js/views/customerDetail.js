@@ -387,10 +387,12 @@ function renderPendingRequest(slot, request, onDone) {
     `;
     slot.querySelector("#approve-request-btn").addEventListener("click", async () => {
       await api.reviewEditRequest(request.id, "approve");
+      window.dispatchEvent(new Event("edit-requests-changed"));
       onDone();
     });
     slot.querySelector("#reject-request-btn").addEventListener("click", async () => {
       await api.reviewEditRequest(request.id, "reject");
+      window.dispatchEvent(new Event("edit-requests-changed"));
       onDone();
     });
   } else {
