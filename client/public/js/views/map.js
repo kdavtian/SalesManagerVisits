@@ -6,6 +6,7 @@ import { icons } from "../icons.js";
 import { canViewTeamLocations, canEditDirectly, canPlanForOthers, canReassignCustomers, state } from "../state.js";
 import { getClusterPins, setClusterPins, getCompassMode, setCompassMode } from "../mapPrefs.js";
 import { getPerfMode } from "../perfMode.js";
+import { ensureLeaflet } from "../leafletLoader.js";
 
 const NEARBY_RADIUS_METERS = 5000;
 
@@ -59,7 +60,42 @@ const FALLBACK_TILE_URLS = [
 const TILE_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
+// Leaflet itself is loaded on demand (see leafletLoader.js) rather than
+// unconditionally at page load -- app.js idle-preloads it right after
+// boot the same way it does the other bottom-nav view modules, so in the
+// overwhelming common case ensureLeaflet() below resolves in a single
+// microtask (window.L is already set) and this wrapper adds no
+// perceptible delay. It only shows real loading/error UI on the rare
+// path where a tap on Map/Add-customer lands before that preload has
+// finished, or the load genuinely fails (offline on first visit, e.g.).
 export function renderMap(root, navigate, relocateCustomerId, startInAddMode = false, startInPlanMode = false, focusCustomerId = null) {
+  root.innerHTML = `<div class="map-view map-view-loading"><p class="loading-state" role="status">${t("loading")}</p></div>`;
+  let cleanup = () => {};
+  let cancelled = false;
+  ensureLeaflet()
+    .then(() => {
+      if (cancelled) return;
+      cleanup = renderMapInner(root, navigate, relocateCustomerId, startInAddMode, startInPlanMode, focusCustomerId);
+    })
+    .catch((err) => {
+      if (cancelled) return;
+      root.innerHTML = `
+        <div class="map-view map-view-loading">
+          <p class="form-error">${escapeHtml(err.message)}</p>
+          <button type="button" class="btn" id="map-load-retry">${t("try_again")}</button>
+        </div>
+      `;
+      root.querySelector("#map-load-retry").addEventListener("click", () => {
+        cleanup = renderMap(root, navigate, relocateCustomerId, startInAddMode, startInPlanMode, focusCustomerId);
+      });
+    });
+  return () => {
+    cancelled = true;
+    cleanup();
+  };
+}
+
+function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = false, startInPlanMode = false, focusCustomerId = null) {
   root.innerHTML = `
     <div class="map-view">
       <div id="leaflet-map"></div>

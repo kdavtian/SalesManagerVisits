@@ -2,6 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml, formatAmd, getCurrentPosition } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
+import { ensureLeaflet } from "../leafletLoader.js";
 
 const canPlan = () => state.user.role === "delivery_manager" || state.user.role === "admin";
 const canDrive = () => state.user.role === "delivery_manager" || state.user.role === "admin";
@@ -14,11 +15,12 @@ function stopMarkerIcon(n) {
   });
 }
 
-function paintRouteMap(el, stops) {
+async function paintRouteMap(el, stops) {
   if (!stops.length) {
     el.innerHTML = `<p class="empty-state">${t("delivery_route_empty")}</p>`;
     return;
   }
+  await ensureLeaflet();
   el.innerHTML = "";
   const map = L.map(el, { zoomControl: true, attributionControl: false }).setView([stops[0].lat, stops[0].lng], 12);
   L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", { maxZoom: 19 }).addTo(map);
@@ -98,7 +100,7 @@ export async function renderDelivery(root, navigate) {
       <div id="route-map" style="height:220px;border-radius:12px;overflow:hidden;margin-bottom:12px;"></div>
       <div class="card-list" id="route-stops-list"></div>
     `;
-    paintRouteMap(contentEl.querySelector("#route-map"), route.stops);
+    await paintRouteMap(contentEl.querySelector("#route-map"), route.stops);
     const listEl = contentEl.querySelector("#route-stops-list");
     listEl.innerHTML = route.stops
       .map(
@@ -163,7 +165,7 @@ export async function renderDelivery(root, navigate) {
           <div id="planned-route-map" style="height:220px;border-radius:12px;overflow:hidden;margin:8px 0 12px;"></div>
           <div class="card-list" id="planned-route-list"></div>
         `;
-        paintRouteMap(resultEl.querySelector("#planned-route-map"), route.stops);
+        await paintRouteMap(resultEl.querySelector("#planned-route-map"), route.stops);
         renderReorderableList(resultEl.querySelector("#planned-route-list"), route);
       } catch (err) {
         errorEl.textContent = err.message;
