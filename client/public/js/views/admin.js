@@ -327,6 +327,60 @@ export async function renderPlanApprovalsSection(container) {
   load();
 }
 
+// Company-wide queue of every customer field-edit request awaiting review,
+// so admin doesn't have to remember to reopen each customer's own card to
+// notice one -- previously the only way to see a pending request was
+// customerDetail.js's own banner, which only ever showed up if you
+// happened to be looking at that specific customer. Same
+// list/approve/reject shape as renderPlanApprovalsSection above; fires
+// "edit-requests-changed" on approve/reject so app.js's topbar badge (see
+// applyPlanApprovalBadge) updates immediately instead of waiting for the
+// next 60s poll.
+export async function renderEditRequestsSection(container) {
+  container.innerHTML = `<div id="edit-requests-section"><p class="loading-state" role="status">${t("loading")}</p></div>`;
+  const section = container.querySelector("#edit-requests-section");
+
+  async function load() {
+    const requests = await api.listEditRequests({ status: "pending" });
+    if (!requests.length) {
+      section.innerHTML = `<p class="muted">${t("edit_requests_empty")}</p>`;
+      return;
+    }
+    section.innerHTML = requests
+      .map((r) => {
+        const changesList = Object.entries(r.changes)
+          .map(([field, value]) => `<div class="proposed-change"><strong>${escapeHtml(t(field))}</strong>: ${escapeHtml(String(value))}</div>`)
+          .join("");
+        return `
+        <div class="card plan-approval-row" data-id="${r.id}">
+          <div class="pending-request-header">
+            <span class="badge badge-accent">${t("review")}</span>
+            <span class="muted">${escapeHtml(r.customer_name)} · ${t("requested_by")} ${escapeHtml(r.requested_by_name)}</span>
+          </div>
+          <p class="proposed-changes-label">${t("proposed_changes")}</p>
+          ${changesList}
+          <div class="sheet-actions">
+            <button class="btn" data-action="reject" data-id="${r.id}">${t("reject")}</button>
+            <button class="btn btn-primary" data-action="approve" data-id="${r.id}">${t("approve")}</button>
+          </div>
+        </div>
+      `;
+      })
+      .join("");
+
+    section.querySelectorAll("[data-action]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        btn.closest(".plan-approval-row").querySelectorAll("button").forEach((b) => (b.disabled = true));
+        await api.reviewEditRequest(btn.dataset.id, btn.dataset.action);
+        window.dispatchEvent(new Event("edit-requests-changed"));
+        load();
+      });
+    });
+  }
+
+  load();
+}
+
 export async function renderProductsSection(container) {
   container.innerHTML = `
     <div id="product-list" class="card-list"><p class="loading-state" role="status">${t("loading")}</p></div>

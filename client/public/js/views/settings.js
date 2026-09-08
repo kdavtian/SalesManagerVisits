@@ -3,7 +3,7 @@ import { t, getLang, setLang } from "../i18n.js";
 import { getTheme, setTheme } from "../theme.js";
 import { getPerfMode, setPerfMode } from "../perfMode.js";
 import { state, isAdmin, canPlanForOthers, seesFinancialExports, canManageProducts } from "../state.js";
-import { renderTeamSection, renderPlanApprovalsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection, renderRouteDistributionSection, renderSalesChannelOwnersSection, renderQuickActionVisibilitySection } from "./admin.js";
+import { renderTeamSection, renderPlanApprovalsSection, renderEditRequestsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection, renderRouteDistributionSection, renderSalesChannelOwnersSection, renderQuickActionVisibilitySection } from "./admin.js";
 import { escapeHtml, compressImage, activateDialog, attachSwipeToDismiss, formatPhoneDisplay, normalizePhone } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
@@ -240,6 +240,12 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
           canApprovePlans
             ? `<h3 class="settings-subsection-title">${t("plan_approvals")}</h3>
           <div id="plan-approvals-slot"></div>`
+            : ""
+        }
+        ${
+          admin
+            ? `<h3 class="settings-subsection-title">${t("edit_requests_title")}</h3>
+          <div id="edit-requests-slot"></div>`
             : ""
         }
         ${
@@ -511,6 +517,10 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
 
   if (canApprovePlans) {
     renderPlanApprovalsSection(root.querySelector("#plan-approvals-slot"));
+  }
+
+  if (admin) {
+    renderEditRequestsSection(root.querySelector("#edit-requests-slot"));
   }
 
   root.querySelector("#row-user-guide").addEventListener("click", openGuideOverlay);

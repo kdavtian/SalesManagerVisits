@@ -407,13 +407,23 @@ async function refreshNotificationBadge() {
 // anyone else, and there's no reason to fire that request for roles that
 // can never see this queue. admin.js's plan-approvals section fires
 // "plans-changed" after an approve/reject so this updates immediately.
+//
+// editRequestBadgeCount shares this same badge (they both mean "something
+// in Settings > Admin workspace needs your review") rather than getting a
+// second badge of its own -- previously the only way to notice a pending
+// customer edit request was to happen to reopen that exact customer's own
+// card, reported live as "I don't get a notification about those
+// requests". admin.js's edit-requests section fires "edit-requests-changed"
+// the same way plan approvals fires "plans-changed".
 let planApprovalBadgeCount = 0;
+let editRequestBadgeCount = 0;
 
 export function applyPlanApprovalBadge() {
   const el = document.getElementById("topbar-menu-badge");
   if (!el) return;
-  if (planApprovalBadgeCount > 0) {
-    el.textContent = planApprovalBadgeCount > 99 ? "99+" : String(planApprovalBadgeCount);
+  const total = planApprovalBadgeCount + editRequestBadgeCount;
+  if (total > 0) {
+    el.textContent = total > 99 ? "99+" : String(total);
     el.hidden = false;
   } else {
     el.hidden = true;
@@ -431,7 +441,19 @@ async function refreshPlanApprovalBadge() {
   applyPlanApprovalBadge();
 }
 
+async function refreshEditRequestBadge() {
+  if (!state.user || !isAdmin()) return;
+  try {
+    const requests = await api.listEditRequests({ status: "pending" });
+    editRequestBadgeCount = requests.length;
+  } catch {
+    return;
+  }
+  applyPlanApprovalBadge();
+}
+
 window.addEventListener("plans-changed", refreshPlanApprovalBadge);
+window.addEventListener("edit-requests-changed", refreshEditRequestBadge);
 
 // Tracks whether this SPA session has done at least one in-app navigation
 // (as opposed to just rendering whatever hash the app happened to boot
@@ -729,12 +751,13 @@ async function init() {
   refreshDeliveryBadge();
   refreshNotificationBadge();
   refreshPlanApprovalBadge();
-  // The seven refresh*Badge() calls just above are the initial, right-at-
+  refreshEditRequestBadge();
+  // The refresh*Badge() calls just above are the initial, right-at-
   // boot values (each its own single-purpose endpoint, so the very first
   // paint reflects whichever ones this role can even see without waiting
   // on the others). The recurring 60s poll after that uses the combined
-  // /badges endpoint instead -- one request updating all seven counts,
-  // rather than seven separate fetches landing back to back every minute.
+  // /badges endpoint instead -- one request updating all the counts,
+  // rather than separate fetches landing back to back every minute.
   setInterval(refreshAllBadgesFromServer, 60000);
 }
 
@@ -753,6 +776,7 @@ async function refreshAllBadgesFromServer() {
   deliveryBadgeCount = counts.delivery;
   unreadNotificationCount = counts.notifications;
   planApprovalBadgeCount = counts.planApprovals;
+  editRequestBadgeCount = counts.editRequests;
   applyOrderBadge();
   applyPaymentBadge();
   applyUnrecordedBadge();

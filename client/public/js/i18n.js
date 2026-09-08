@@ -523,6 +523,8 @@ const dict = {
     planned_empty: "No approved plan for today",
     plan_approvals: "Plan approvals",
     plan_approvals_empty: "No plans waiting for approval",
+    edit_requests_title: "Customer edit requests",
+    edit_requests_empty: "No edit requests waiting for review",
 
     route_plans: "Route Plans",
     new_route_plan: "New route plan",
@@ -1587,6 +1589,8 @@ const dict = {
     planned_empty: "Այսօրվա համար հաստատված պլան չկա",
     plan_approvals: "Պլանների հաստատում",
     plan_approvals_empty: "Հաստատում սպասող պլաններ չկան",
+    edit_requests_title: "Հաճախորդների խմբագրման հայտեր",
+    edit_requests_empty: "Դիտարկում սպասող հայտեր չկան",
 
     route_plans: "Երթուղու պլաններ",
     new_route_plan: "Նոր երթուղու պլան",
