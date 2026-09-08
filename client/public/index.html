@@ -21,9 +21,11 @@
     <script src="js/theme-init.js"></script>
     <script src="js/perf-mode-init.js"></script>
 
-    <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
-    <link rel="stylesheet" href="vendor/leaflet-markercluster/MarkerCluster.css" />
-    <link rel="stylesheet" href="vendor/leaflet-markercluster/MarkerCluster.Default.css" />
+    <!-- Leaflet + its plugins' stylesheets/scripts are loaded on demand by
+         leafletLoader.js (idle-preloaded by app.js right after boot, same
+         as the bottom-nav view modules) instead of unconditionally here --
+         ~208KB of JS a session that never opens Map/Add-customer never
+         needed to parse. -->
     <link rel="stylesheet" href="css/styles.css" />
     <link rel="stylesheet" href="css/activity-search-filters.css" />
     <link rel="stylesheet" href="css/activity-date-picker.css" />
@@ -43,10 +45,6 @@
     <div id="install-root"></div>
     <div id="update-root"></div>
 
-    <script src="vendor/leaflet/leaflet.js"></script>
-    <script src="vendor/leaflet-rotate/leaflet-rotate.js"></script>
-    <script src="js/mapSafeRuntime.js"></script>
-    <script src="vendor/leaflet-markercluster/leaflet.markercluster.js"></script>
     <script type="module" src="js/competitorPolicySafe.js"></script>
     <script type="module" src="js/activityDatePicker.js"></script>
     <script type="module" src="js/ordersSearchEnhancements.js"></script>

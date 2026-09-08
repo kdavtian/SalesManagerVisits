@@ -111,6 +111,11 @@ function preloadCoreViews() {
       "./views/orders.js",
       "./views/settings.js",
     ].forEach((path) => import(path).catch(() => {}));
+    // Leaflet itself (leafletLoader.js) is loaded on demand rather than
+    // unconditionally at page load now -- warmed here alongside map.js's
+    // own module fetch so the two are usually both ready together by the
+    // time a tap actually opens Map or Add-customer.
+    import("./leafletLoader.js").then((m) => m.ensureLeaflet()).catch(() => {});
   });
 }
 
