@@ -47,6 +47,7 @@ export async function renderReports(root, navigate, reportKey) {
   if (reportKey === "customer_debt") return renderCustomerDebtReport(root, navigate);
   if (reportKey === "sales_budget") return renderSalesBudgetReport(root, navigate);
   if (reportKey === "brand_volume") return renderBrandVolumeReport(root, navigate);
+  if (reportKey === "daily_management") return renderDailyManagementReport(root, navigate);
   return renderReportsList(root, navigate);
 }
 
@@ -651,6 +652,156 @@ async function renderBrandVolumeReport(root, navigate) {
   }
 
   form.addEventListener("change", load);
+  await load();
+}
+
+function formatUsd(value) {
+  if (value == null) return "";
+  return `${Number(value).toLocaleString()} ${t("usd")}`;
+}
+
+function signedAmd(value) {
+  if (value == null) return t("no_data");
+  const n = Number(value);
+  return `${n > 0 ? "+" : ""}${formatAmd(n)}`;
+}
+
+async function renderDailyManagementReport(root, navigate) {
+  root.innerHTML = `
+    <div class="detail-view">
+      ${reportHeaderHtml("report_daily_management_name")}
+      <form id="report-filters" class="report-filter-form">
+        <select name="date"></select>
+      </form>
+      <div id="report-body"><p class="loading-state" role="status">${t("loading")}</p></div>
+    </div>
+  `;
+  const container = root.querySelector(".detail-view");
+  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  const form = container.querySelector("#report-filters");
+  const dateSelect = form.querySelector('select[name="date"]');
+  const body = container.querySelector("#report-body");
+
+  async function load(explicitDate) {
+    body.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+    try {
+      const result = await api.getDailyManagementReport(explicitDate ? { date: explicitDate } : {});
+      if (!result) {
+        dateSelect.innerHTML = "";
+        body.innerHTML = `<p class="empty-state">${t("no_data")}</p>`;
+        return;
+      }
+      const { report: r, available_dates } = result;
+
+      if (!explicitDate) {
+        dateSelect.innerHTML = available_dates.map((d) => `<option value="${d}" ${d === r.report_date ? "selected" : ""}>${formatDate(d)}</option>`).join("");
+      }
+
+      const salesRows = [
+        [t("report_daily_management_period_ytd"), r.sales_ytd_amd, r.sales_ytd_liters, r.sales_ytd_orders],
+        [t("report_daily_management_period_mtd"), r.sales_mtd_amd, r.sales_mtd_liters, r.sales_mtd_orders],
+        [t("report_daily_management_period_wtd"), r.sales_wtd_amd, r.sales_wtd_liters, r.sales_wtd_orders],
+        [t("report_daily_management_period_day"), r.sales_day_amd, r.sales_day_liters, r.sales_day_orders],
+      ];
+      const paymentsRows = [
+        [t("report_daily_management_period_ytd"), r.payments_ytd_amd, r.payments_ytd_customers],
+        [t("report_daily_management_period_mtd"), r.payments_mtd_amd, r.payments_mtd_customers],
+        [t("report_daily_management_period_wtd"), r.payments_wtd_amd, r.payments_wtd_customers],
+        [t("report_daily_management_period_day"), r.payments_day_amd, r.payments_day_customers],
+      ];
+
+      body.innerHTML = `
+        <h2 class="section-title">${t("report_daily_management_sales")}</h2>
+        <div class="card-list">
+          ${salesRows
+            .map(
+              ([label, amd, liters, orders]) => `
+            <div class="card report-row-multiline">
+              <strong>${label}</strong>
+              <span class="muted">${formatAmd(amd)} · ${liters != null ? `${Number(liters).toLocaleString()} L` : "—"} · ${orders != null ? orders : "—"}</span>
+            </div>`
+            )
+            .join("")}
+        </div>
+        <p class="muted" style="margin: 0 4px 8px;">${t("report_daily_management_change_prev")}: ${signedAmd(r.sales_change_amd)}${r.sales_change_liters != null ? ` · ${r.sales_change_liters > 0 ? "+" : ""}${Number(r.sales_change_liters).toLocaleString()} L` : ""}</p>
+        <p class="muted" style="margin: 0 4px 8px;">${t("report_daily_management_margin")}: ${formatAmd(r.sales_margin_amd)}${r.sales_margin_pct != null ? ` (${Number(r.sales_margin_pct).toFixed(1)}%)` : ""}</p>
+
+        <h2 class="section-title">${t("by_channel")} (${formatDate(r.report_date)})</h2>
+        <div class="card-list">
+          ${
+            r.sales_by_channel.length
+              ? r.sales_by_channel
+                  .map(
+                    (c) => `
+              <div class="card report-row">
+                <span>${escapeHtml(channelDisplayLabel(c.channel_code))}</span>
+                <strong>${formatAmd(c.amd)} · ${c.liters != null ? `${Number(c.liters).toLocaleString()} L` : "—"} · ${c.orders != null ? c.orders : "—"}</strong>
+              </div>`
+                  )
+                  .join("")
+              : `<p class="empty-state">${t("no_data")}</p>`
+          }
+        </div>
+
+        <h2 class="section-title">${t("report_daily_management_payments")}</h2>
+        <div class="card-list">
+          ${paymentsRows
+            .map(
+              ([label, amd, customers]) => `
+            <div class="card report-row-multiline">
+              <strong>${label}</strong>
+              <span class="muted">${formatAmd(amd)} · ${customers != null ? customers : "—"}</span>
+            </div>`
+            )
+            .join("")}
+        </div>
+
+        <h2 class="section-title">${t("by_channel")} (${formatDate(r.report_date)})</h2>
+        <div class="card-list">
+          ${
+            r.payments_by_channel.length
+              ? r.payments_by_channel
+                  .map(
+                    (c) => `
+              <div class="card report-row">
+                <span>${escapeHtml(channelDisplayLabel(c.channel_code))}</span>
+                <strong>${formatAmd(c.amd)} · ${c.customers != null ? c.customers : "—"}</strong>
+              </div>`
+                  )
+                  .join("")
+              : `<p class="empty-state">${t("no_data")}</p>`
+          }
+        </div>
+
+        <h2 class="section-title">${t("report_daily_management_balance")}</h2>
+        <div class="card-list">
+          <div class="card report-row"><span>${t("report_daily_management_balance")}</span><strong>${formatAmd(r.balance_amd)}${r.balance_usd != null ? ` (${formatUsd(r.balance_usd)})` : ""}</strong></div>
+          <div class="card report-row"><span>${t("report_daily_management_total")}</span><strong>${formatAmd(r.balance_total_amd)}${r.balance_total_usd != null ? ` (${formatUsd(r.balance_total_usd)})` : ""}</strong></div>
+          <div class="card report-row"><span>${t("report_daily_management_cash")}</span><strong>${formatAmd(r.balance_cash_amd)}${r.balance_cash_usd != null ? ` (${formatUsd(r.balance_cash_usd)})` : ""}</strong></div>
+          <div class="card report-row"><span>${t("report_daily_management_noncash")}</span><strong>${formatAmd(r.balance_noncash_amd)}${r.balance_noncash_usd != null ? ` (${formatUsd(r.balance_noncash_usd)})` : ""}</strong></div>
+          <div class="card report-row"><span>${t("report_daily_management_with_managers")}</span><strong>${formatAmd(r.balance_with_managers_amd)}</strong></div>
+          ${r.balance_with_managers_by_manager
+            .map(
+              (m) => `
+          <div class="card report-row"><span style="padding-left:12px;">${escapeHtml(m.manager_name)}</span><strong>${formatAmd(m.amd)}</strong></div>`
+            )
+            .join("")}
+          <div class="card report-row"><span>${t("report_daily_management_credit_line")}</span><strong>${formatUsd(r.credit_line_usd)}</strong></div>
+          <div class="card report-row"><span>${t("report_daily_management_receivables")}</span><strong>${formatAmd(r.receivables_total_amd)} (${t("report_daily_management_receivables_net")}: ${formatAmd(r.receivables_net_amd)})</strong></div>
+          <div class="card report-row"><span>${t("report_daily_management_warehouse")}</span><strong>${formatAmd(r.warehouse_value_amd)} · ${r.warehouse_liters != null ? `${Number(r.warehouse_liters).toLocaleString()} L` : "—"}</strong></div>
+        </div>
+        ${
+          r.prev_report_date
+            ? `<p class="muted" style="margin: 8px 4px;">${t("report_daily_management_change_since")} ${formatDate(r.prev_report_date)}: ${t("report_daily_management_total")} ${signedAmd(r.change_total_amd)}, ${t("report_daily_management_overdue")} ${signedAmd(r.change_overdue_amd)}</p>`
+            : ""
+        }
+      `;
+    } catch (err) {
+      body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  dateSelect.addEventListener("change", () => load(dateSelect.value));
   await load();
 }
 
