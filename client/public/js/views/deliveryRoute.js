@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, getCurrentPosition } from "../util.js";
+import { escapeHtml, formatAmd, formatDateDMY, getCurrentPosition } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 import { ensureLeaflet } from "../leafletLoader.js";
@@ -146,15 +146,24 @@ export async function renderDelivery(root, navigate) {
           ? `<div class="card-list">${activeStops
               .map(
                 (s) => `
-            <div class="card">
-              <div class="order-line-top"><strong>${escapeHtml(s.driver_name)}</strong><span class="muted">${escapeHtml(s.route_date)}</span></div>
-              <p class="muted">${t("delivery_active_stop_line").replace("{customer}", escapeHtml(s.customer_name)).replace("{order}", escapeHtml(s.order_code || ""))}</p>
-            </div>`
+            <button type="button" class="card settings-list-row" data-open-active-stop="${s.route_id}" data-order-id="${s.order_id}">
+              <span class="settings-row-label">
+                <span class="order-line-top"><strong>${escapeHtml(s.driver_name)}</strong><span class="muted">${formatDateDMY(s.route_date)}</span></span>
+                <span class="muted">${t("delivery_active_stop_line").replace("{customer}", escapeHtml(s.customer_name)).replace("{order}", escapeHtml(s.order_code || ""))}</span>
+              </span>
+              <span class="settings-row-chevron">&rsaquo;</span>
+            </button>`
               )
               .join("")}</div>`
           : `<p class="empty-state">${t("delivery_active_stops_empty")}</p>`
       }
     `;
+    contentEl.querySelectorAll("[data-open-active-stop]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const stop = activeStops.find((s) => s.route_id === Number(btn.dataset.openActiveStop) && s.order_id === Number(btn.dataset.orderId));
+        if (stop) openActiveStopSheet(stop, loadPlanner);
+      });
+    });
     contentEl.querySelector("#plan-route-btn").addEventListener("click", async () => {
       const btn = contentEl.querySelector("#plan-route-btn");
       btn.disabled = true;
@@ -187,6 +196,53 @@ export async function renderDelivery(root, navigate) {
       } finally {
         btn.disabled = false;
         btn.textContent = t("delivery_plan_route_btn");
+      }
+    });
+  }
+
+  // Detail sheet for one row of "Open stops on drivers' routes" -- the
+  // planner previously had no way to actually look at or act on what that
+  // list surfaces, only see it. "Remove from route" doesn't touch the
+  // order's own status (still packed_stock_out) -- it just undoes the
+  // routing so the order falls back into the unrouted pool and can be
+  // replanned normally, for exactly the stuck-route case that list exists
+  // to surface (a route nobody's driving, planned by mistake, etc).
+  function openActiveStopSheet(stop, onDone) {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>${escapeHtml(stop.customer_name)}</h2>
+        ${stop.address ? `<p class="muted">${escapeHtml(stop.address)}</p>` : ""}
+        <div class="card" style="margin:12px 0;">
+          <div class="order-detail-ids"><span>${t("order_id_label")}: ${escapeHtml(stop.order_code || "")}</span></div>
+          <p><span class="text-amount">${formatAmd(Number(stop.total_amd))}</span></p>
+          <p class="muted">${escapeHtml(stop.driver_name)} &middot; ${formatDateDMY(stop.route_date)}</p>
+        </div>
+        <p class="form-error" id="active-stop-error" hidden></p>
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="active-stop-close">${t("cancel")}</button>
+          <button type="button" class="btn btn-danger" id="active-stop-remove">${t("delivery_remove_from_route_btn")}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+    overlay.querySelector("#active-stop-close").addEventListener("click", () => overlay.remove());
+    overlay.querySelector("#active-stop-remove").addEventListener("click", async (e) => {
+      if (!confirm(t("delivery_remove_from_route_confirm"))) return;
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try {
+        await api.releaseRouteStop(stop.route_id, stop.order_id);
+        window.dispatchEvent(new Event("delivery-changed"));
+        overlay.remove();
+        onDone();
+      } catch (err) {
+        const errEl = overlay.querySelector("#active-stop-error");
+        errEl.textContent = err.message;
+        errEl.hidden = false;
+        btn.disabled = false;
       }
     });
   }

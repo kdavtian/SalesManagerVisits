@@ -138,12 +138,18 @@ export async function renderDashboard(root, navigate) {
 
   const totals = summary.totals;
   const remaining = Math.max(0, totals.total_customers - totals.visited_today);
+  // "Here's your field plan for today" only means something to someone who
+  // actually has a personal field plan -- a sales_manager (and, loosely, a
+  // delivery_manager). Office/management roles (admin/ceo/sales_director/
+  // accountant) see company-wide data here, not a plan of their own, so the
+  // line read as wrong for them.
+  const isManagementRole = !["sales_manager", "delivery_manager"].includes(state.user.role);
 
   container.innerHTML = `
     <div class="greeting-row">
       <div>
         <h1>${greeting()}, ${escapeHtml(state.user.name.split(" ")[0])}</h1>
-        <p class="muted">${t("dashboard_subtitle")}</p>
+        ${isManagementRole ? "" : `<p class="muted">${t("dashboard_subtitle")}</p>`}
       </div>
     </div>
 
@@ -220,7 +226,7 @@ export async function renderDashboard(root, navigate) {
         : ""
     }
 
-    <h2 class="section-title">${t("quick_actions")}</h2>
+    <h2 class="section-title section-title-tight">${t("quick_actions")}</h2>
     <div class="quick-actions-grid">
       ${quickActionsHtml(visibleQuickActionIds(state.user.role, settings.quick_action_visibility))}
     </div>
