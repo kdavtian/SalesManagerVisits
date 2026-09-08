@@ -578,8 +578,30 @@ async function render() {
   }
 }
 
+// Tracks the inputs renderNav()'s markup actually depends on (active tab,
+// language, display name) so a navigation that doesn't change any of them
+// -- the common case, e.g. Customers -> a customer's detail page -> back --
+// can skip tearing down and rebuilding both bars' innerHTML (every nav
+// button, the logo <img>, the bell/menu buttons, and every click listener
+// on them) and just leave the existing DOM alone. Badge counts are
+// unaffected by this -- applyOrderBadge/applyNotificationBadge/
+// applyPlanApprovalBadge below only toggle hidden/textContent on already-
+// existing elements, so they still run every call regardless.
+let lastNavSignature = null;
+
 function renderNav() {
   const hash = (location.hash || "#/dashboard").split("?")[0];
+  const signature = `${hash}|${getLang()}|${state.user.name}`;
+  if (signature !== lastNavSignature) {
+    lastNavSignature = signature;
+    rebuildNavMarkup(hash);
+  }
+  applyOrderBadge();
+  applyNotificationBadge();
+  applyPlanApprovalBadge();
+}
+
+function rebuildNavMarkup(hash) {
   const items = [
     { hash: "#/dashboard", label: t("nav_dashboard"), icon: icons.dashboard },
     { hash: "#/activity", label: t("nav_activity"), icon: icons.activity },
@@ -614,7 +636,6 @@ function renderNav() {
   navBar.querySelectorAll("[data-hash]").forEach((el) => {
     el.addEventListener("click", () => navigate(el.dataset.hash));
   });
-  applyOrderBadge();
 
   topBar.innerHTML = `
     <span class="topbar-brand">
@@ -642,8 +663,6 @@ function renderNav() {
       navigate("#/settings");
     }
   });
-  applyNotificationBadge();
-  applyPlanApprovalBadge();
 }
 
 function renderSyncBanner() {

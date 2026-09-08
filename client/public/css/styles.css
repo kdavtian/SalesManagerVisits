@@ -127,6 +127,24 @@
   scroll-behavior: auto !important;
 }
 
+/* backdrop-filter blur is one of the costliest effects on iOS Safari --
+   it forces a recomposite of the blurred region on every frame content
+   scrolls underneath it, and .top-bar/.nav-bar sit fixed/sticky above
+   exactly that kind of scrolling content on almost every screen in the
+   app. Already turned off for .nav-bar specifically while the map is
+   active (see .map-active .nav-bar above) because it's known to be
+   costly there -- Efficiency mode extends that same opaque-background-
+   instead-of-blur swap everywhere else these bars appear. Still legible
+   (--bg-elevated is already a mostly-opaque white/dark, not transparent),
+   just without the frosted-glass look. */
+:root[data-perf="efficiency"] .top-bar,
+:root[data-perf="efficiency"] .nav-bar,
+:root[data-perf="efficiency"] .install-banner {
+  background: var(--bg-card);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 * {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
