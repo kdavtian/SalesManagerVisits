@@ -1,3 +1,4 @@
 # Working notes for Claude
 
 - After shipping a change (bumping `client/public/js/version.js`), state the new `APP_VERSION` at the end of the task summary.
+- Every ship that touches anything under `client/public/` MUST also bump `CACHE_VERSION` in `client/public/sw.js` (e.g. `field-visits-v107` -> `v108`), even if `sw.js` itself has no other changes. The service worker only re-installs (and only then does the update banner / "Check for updates" button in Settings ever find anything) when `sw.js`'s own byte content changes — bumping `client/public/js/version.js` alone does nothing for update delivery. This was missed for 11 releases in a row (last bumped in PR #39, `client/public/js/version.js` bumped 11 times since) before being caught, leaving real users stuck on old versions with "no updates available" showing. Never let this drift again.
