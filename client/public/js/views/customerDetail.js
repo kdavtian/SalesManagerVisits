@@ -89,7 +89,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   const hasAccountSettings = canReassignCustomers() || canAssignErpCustomerId(customer) || seesFinancialExports();
 
   container.innerHTML = `
-    <div class="detail-header customer-detail-header customer-detail-header-sticky">
+    <div class="detail-header customer-detail-header">
       <div class="customer-detail-header-main">
         <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
@@ -154,7 +154,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       <div class="next-visit-due">${nextVisitHtml}</div>
     </div>
 
-    <div class="detail-actions-grid detail-actions-grid-sticky">
+    <div class="detail-actions-grid">
       <button class="action-btn action-btn-primary" id="checkin-btn">
         <span>${icons.mapPinCheck}</span>${t("check_in")}
       </button>
