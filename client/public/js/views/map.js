@@ -632,6 +632,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     const categories = [...new Set(lastCustomers.map(({ c }) => c.category).filter(Boolean))];
 
     iconFilterRow.innerHTML = [
+      mapFilterIconButton({ key: "planned-today", icon: icons.clipboardCheck, label: t("filter_planned_today"), active: plannedTodayOnly }),
       channels.length
         ? mapFilterIconButton({ key: "channel", icon: icons.route, label: t("filter_direction_title"), active: channelFilter !== "" })
         : "",
@@ -641,6 +642,13 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     ]
       .filter(Boolean)
       .join("");
+
+    iconFilterRow.querySelector('[data-map-filter-btn="planned-today"]')?.addEventListener("click", () => {
+      plannedTodayOnly = !plannedTodayOnly;
+      renderIconFilterRow();
+      if (plannedTodayOnly) loadPlannedTodayFilter();
+      else applyFilter();
+    });
 
     iconFilterRow.querySelector('[data-map-filter-btn="channel"]')?.addEventListener("click", () => {
       openMapFilterSheet(
@@ -859,6 +867,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       if (managerFilter && String(c.assigned_manager_id) !== managerFilter) continue;
       if (channelFilter && c.sales_channel !== channelFilter) continue;
       if (categoryFilter && c.category !== categoryFilter) continue;
+      if (plannedTodayOnly && !plannedTodayIdSet?.has(c.id)) continue;
       if (searchQuery) {
         const haystack = `${c.name} ${c.address ?? ""} ${c.category ?? ""} ${c.erp_customer_id ?? ""}`.toLowerCase();
         if (!haystack.includes(searchQuery)) continue;
@@ -1040,7 +1049,12 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   });
   root.querySelector("#nearby-view-all").addEventListener("click", () => navigate("#/customers"));
 
-  async function loadPlannedFilter() {
+  // Shared by the "Planned" chip (route-stops view below) and the
+  // "Planned today" icon toggle (an independent AND-with-everything-else
+  // filter, see plannedTodayOnly) -- both need the same "who's today's
+  // plan for, given the current manager filter" resolution, just rendered
+  // differently.
+  async function fetchTodayPlannedIds() {
     let ids = [];
     try {
       if (managerFilter || !canViewTeamLocations()) {
@@ -1074,8 +1088,32 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     } catch {
       ids = [];
     }
+    return ids;
+  }
+
+  async function loadPlannedFilter() {
+    const ids = await fetchTodayPlannedIds();
     await customersReady;
     plannedCustomerIds = ids;
+    applyFilter();
+  }
+
+  // Independent of the activeFilter chip row above -- a plain icon toggle
+  // (see mapFilterIconButton) that narrows whatever's currently shown (the
+  // active chip, channel/category pickers, search) down to just today's
+  // planned customers, instead of replacing them with the chip row's
+  // dedicated numbered-stops/route view. Same per-role id resolution as
+  // the "Planned" chip (fetchTodayPlannedIds), so a sales manager sees only
+  // their own plan and management sees everyone's (or one rep's, once the
+  // manager filter is set) -- ANDed into applyFilter() below rather than
+  // gating which layer gets drawn.
+  let plannedTodayOnly = false;
+  let plannedTodayIdSet = null;
+
+  async function loadPlannedTodayFilter() {
+    const ids = await fetchTodayPlannedIds();
+    await customersReady;
+    plannedTodayIdSet = new Set(ids);
     applyFilter();
   }
 
@@ -1191,8 +1229,10 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
             // Planned pulls from a per-user plan (see loadPlannedFilter),
             // so switching managers while it's active must re-fetch --
             // otherwise the pins shown stay whatever was loaded for the
-            // previously selected manager (or nobody, at first).
+            // previously selected manager (or nobody, at first). Same for
+            // the independent "Planned today" toggle.
             if (activeFilter === "planned") loadPlannedFilter();
+            else if (plannedTodayOnly) loadPlannedTodayFilter();
             else applyFilter();
           });
         });
@@ -1724,6 +1764,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           await api.saveVisitPlan(undefined, ids, targetUserId);
           close();
           if (activeFilter === "planned") loadPlannedFilter();
+          if (plannedTodayOnly) loadPlannedTodayFilter();
         } catch (err) {
           errorEl.textContent = err.message;
           errorEl.hidden = false;
@@ -1837,6 +1878,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           await api.saveVisitPlanRule(selectedWeekday, workingAreas, targetUserId);
           close();
           if (activeFilter === "planned") loadPlannedFilter();
+          if (plannedTodayOnly) loadPlannedTodayFilter();
         } catch (err) {
           errorEl.textContent = err.message;
           errorEl.hidden = false;
