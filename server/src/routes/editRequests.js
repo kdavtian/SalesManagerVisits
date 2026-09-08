@@ -107,10 +107,12 @@ editRequestsRouter.patch("/:id", requireAdmin, async (req, res) => {
     if (action === "approve") {
       const updates = [];
       const params = [];
+      const changedFields = [];
       for (const [field, value] of Object.entries(request.changes)) {
         if (!EDITABLE_FIELDS.includes(field)) continue;
         params.push(value);
         updates.push(`${field} = $${params.length}`);
+        changedFields.push(field);
       }
       if (updates.length) {
         params.push(request.customer_id);
@@ -118,6 +120,43 @@ editRequestsRouter.patch("/:id", requireAdmin, async (req, res) => {
           `UPDATE customers SET ${updates.join(", ")} WHERE id = $${params.length}`,
           params
         );
+
+        // Same staleness problem as a direct PATCH /customers/:id (see the
+        // comment there): another still-pending request for this same
+        // customer might propose one of the fields just applied here, with
+        // a now-outdated value snapshotted at its own submission time.
+        // Left alone, approving *that* one later would silently revert
+        // this approval right back. Strip the stale fields from it, or
+        // auto-reject it if that empties it out.
+        const { rows: otherPending } = await client.query(
+          "SELECT id, changes FROM customer_edit_requests WHERE customer_id = $1 AND status = 'pending' AND id != $2 FOR UPDATE",
+          [request.customer_id, request.id]
+        );
+        for (const pr of otherPending) {
+          const remaining = { ...pr.changes };
+          let stale = false;
+          for (const field of changedFields) {
+            if (remaining[field] !== undefined) {
+              delete remaining[field];
+              stale = true;
+            }
+          }
+          if (!stale) continue;
+          if (Object.keys(remaining).length) {
+            await client.query("UPDATE customer_edit_requests SET changes = $1 WHERE id = $2", [
+              JSON.stringify(remaining),
+              pr.id,
+            ]);
+          } else {
+            await client.query(
+              `UPDATE customer_edit_requests
+               SET status = 'rejected', reviewed_by = $1, reviewed_at = now(),
+                   note = COALESCE(note || ' — ', '') || 'Auto-rejected: superseded by another approved request'
+               WHERE id = $2`,
+              [req.user.id, pr.id]
+            );
+          }
+        }
       }
     }
 

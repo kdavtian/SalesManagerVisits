@@ -358,11 +358,13 @@ customersRouter.patch("/:id", async (req, res) => {
 
   const updates = [];
   const params = [];
+  const changedFields = [];
 
   for (const field of EDITABLE_FIELDS) {
     if (fieldsToApply[field] !== undefined) {
       params.push(fieldsToApply[field]);
       updates.push(`${field} = $${params.length}`);
+      changedFields.push(field);
     }
   }
   if (!updates.length) {
@@ -382,6 +384,47 @@ customersRouter.patch("/:id", async (req, res) => {
        VALUES ($1, 'potential', 'bronze', 'ERP ID assigned', $2)`,
       [req.params.id, req.user.id]
     );
+  }
+
+  // A pending edit request captures its proposed changes at submission
+  // time -- if a field it proposes to change gets set directly here first
+  // (an admin/director fixing it on the spot, e.g.), approving that older
+  // request later would silently reapply its now-stale value right back
+  // over the fresher direct edit, with no visible error either time.
+  // Reported live as "I changed a customer's sales channel and it later
+  // reverted" -- an earlier pending request for that same customer/field
+  // got approved after this direct edit. Strip the now-stale fields from
+  // any pending request for this customer, auto-rejecting it only if that
+  // empties it out entirely; any other fields it still proposes are left
+  // untouched for a human to review normally.
+  const { rows: pendingRequests } = await pool.query(
+    "SELECT id, changes FROM customer_edit_requests WHERE customer_id = $1 AND status = 'pending'",
+    [req.params.id]
+  );
+  for (const pr of pendingRequests) {
+    const remaining = { ...pr.changes };
+    let stale = false;
+    for (const field of changedFields) {
+      if (remaining[field] !== undefined) {
+        delete remaining[field];
+        stale = true;
+      }
+    }
+    if (!stale) continue;
+    if (Object.keys(remaining).length) {
+      await pool.query("UPDATE customer_edit_requests SET changes = $1 WHERE id = $2", [
+        JSON.stringify(remaining),
+        pr.id,
+      ]);
+    } else {
+      await pool.query(
+        `UPDATE customer_edit_requests
+         SET status = 'rejected', reviewed_by = $1, reviewed_at = now(),
+             note = COALESCE(note || ' — ', '') || 'Auto-rejected: superseded by a direct edit'
+         WHERE id = $2`,
+        [req.user.id, pr.id]
+      );
+    }
   }
 
   res.json(rows[0]);
