@@ -207,6 +207,7 @@ export const api = {
   markOrderDeliveredWithoutRoute: (id) => request(`/orders/${id}/mark-delivered`, { method: "POST" }),
 
   // Warehouse (see server/src/routes/warehouse.js)
+  getWarehousePendingCount: () => request("/warehouse/pending-count"),
   getPickList: () => request("/warehouse/pick-list"),
   getStagingList: () => request("/warehouse/staging-list"),
   getInventory: (q = "", brand = "") => {
@@ -222,6 +223,7 @@ export const api = {
   flagOrderStockIssue: (id, note) => json(`/warehouse/orders/${id}/stock-issue`, "POST", { note }),
 
   // Delivery routes (see server/src/routes/delivery.js)
+  getDeliveryPendingCount: () => request("/delivery/pending-count"),
   listPackedOrders: () => request("/delivery/packed-orders"),
   planRoute: (data) => json("/delivery/routes/plan", "POST", data),
   listDrivers: () => request("/delivery/drivers"),

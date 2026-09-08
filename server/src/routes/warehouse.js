@@ -15,6 +15,18 @@ import { STOCK_ISSUE_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES } from "../notificatio
 export const warehouseRouter = Router();
 warehouseRouter.use(requireAuth);
 
+// Backs the badge on the Home tab's Warehouse icon -- how many orders are
+// sitting confirmed, awaiting packing (the same queue staging-list below
+// shows). Declared ahead of the requireWarehouse gate below (and returns
+// {count: 0} rather than 403) so it's safe to poll unconditionally the
+// same way orders.js's own pending-count is, without every screen having
+// to know who's allowed to see it first.
+warehouseRouter.get("/pending-count", async (req, res) => {
+  if (!canManageWarehouse(req.user.role)) return res.json({ count: 0 });
+  const { rows } = await pool.query("SELECT COUNT(*)::int AS count FROM orders WHERE status = 'confirmed'");
+  res.json({ count: rows[0].count });
+});
+
 function requireWarehouse(req, res, next) {
   if (!canManageWarehouse(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   next();

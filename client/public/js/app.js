@@ -303,6 +303,70 @@ async function refreshUnrecordedBadge() {
 
 window.addEventListener("recorded-changed", refreshUnrecordedBadge);
 
+// Same pattern again, on the Warehouse quick action -- how many orders are
+// sitting confirmed, awaiting packing (role-aware server-side, see
+// warehouse.js's own pending-count). warehouse.js fires "warehouse-changed"
+// after a pack/bulk-pack/flag-stock-issue action, and orders.js fires it
+// when an order is confirmed (the moment it enters this queue), so the
+// badge doesn't lag a full poll cycle behind either direction.
+let warehouseBadgeCount = 0;
+
+export function applyWarehouseBadge() {
+  const el = document.getElementById("qa-warehouse-badge");
+  if (!el) return;
+  if (warehouseBadgeCount > 0) {
+    el.textContent = warehouseBadgeCount > 99 ? "99+" : String(warehouseBadgeCount);
+    el.hidden = false;
+  } else {
+    el.hidden = true;
+  }
+}
+
+async function refreshWarehouseBadge() {
+  if (!state.user) return;
+  try {
+    const { count } = await api.getWarehousePendingCount();
+    warehouseBadgeCount = count;
+  } catch {
+    return;
+  }
+  applyWarehouseBadge();
+}
+
+window.addEventListener("warehouse-changed", refreshWarehouseBadge);
+
+// Same pattern again, on the Delivery quick action -- packed orders still
+// awaiting a route plus route stops not yet delivered (role-aware
+// server-side, see delivery.js's own pending-count). deliveryRoute.js
+// fires "delivery-changed" after planning a route or confirming/failing a
+// delivery, and orders.js fires it on the manual mark-delivered-without-
+// route override too.
+let deliveryBadgeCount = 0;
+
+export function applyDeliveryBadge() {
+  const el = document.getElementById("qa-delivery-badge");
+  if (!el) return;
+  if (deliveryBadgeCount > 0) {
+    el.textContent = deliveryBadgeCount > 99 ? "99+" : String(deliveryBadgeCount);
+    el.hidden = false;
+  } else {
+    el.hidden = true;
+  }
+}
+
+async function refreshDeliveryBadge() {
+  if (!state.user) return;
+  try {
+    const { count } = await api.getDeliveryPendingCount();
+    deliveryBadgeCount = count;
+  } catch {
+    return;
+  }
+  applyDeliveryBadge();
+}
+
+window.addEventListener("delivery-changed", refreshDeliveryBadge);
+
 // Same pattern as the Orders badge above -- polled and also refreshed
 // on-demand (here, whenever the Notifications page marks something read)
 // so the bell badge doesn't lag behind what the user just saw.
@@ -422,6 +486,8 @@ async function render() {
       refreshOrderBadge();
       refreshPaymentBadge();
       refreshUnrecordedBadge();
+      refreshWarehouseBadge();
+      refreshDeliveryBadge();
       refreshNotificationBadge();
       refreshPlanApprovalBadge();
     });
@@ -635,17 +701,26 @@ async function init() {
   refreshOrderBadge();
   refreshPaymentBadge();
   refreshUnrecordedBadge();
+  refreshWarehouseBadge();
+  refreshDeliveryBadge();
   refreshNotificationBadge();
   refreshPlanApprovalBadge();
   // Each still refreshes every 60s (same freshness as before), just not all
-  // in the same tick -- five separate setInterval(..., 60000) calls started
+  // in the same tick -- seven separate setInterval(..., 60000) calls started
   // together fire simultaneously forever after, so every minute the app did
-  // 5 fetches + 5 JSON parses + 5 badge DOM updates back to back. Staggered
+  // 7 fetches + 7 JSON parses + 7 badge DOM updates back to back. Staggered
   // 3s apart (via a one-time startup delay before each interval begins) so
-  // that burst spreads across ~12s instead of landing in one frame.
-  [refreshOrderBadge, refreshPaymentBadge, refreshUnrecordedBadge, refreshNotificationBadge, refreshPlanApprovalBadge].forEach(
-    (fn, i) => setTimeout(() => setInterval(fn, 60000), i * 3000)
-  );
+  // that burst spreads across the better part of a minute instead of
+  // landing in one frame.
+  [
+    refreshOrderBadge,
+    refreshPaymentBadge,
+    refreshUnrecordedBadge,
+    refreshWarehouseBadge,
+    refreshDeliveryBadge,
+    refreshNotificationBadge,
+    refreshPlanApprovalBadge,
+  ].forEach((fn, i) => setTimeout(() => setInterval(fn, 60000), i * 3000));
 }
 
 initServiceWorkerUpdates();

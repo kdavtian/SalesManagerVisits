@@ -155,6 +155,7 @@ export async function renderDelivery(root, navigate) {
           start_lat: start?.lat,
           start_lng: start?.lng,
         });
+        window.dispatchEvent(new Event("delivery-changed"));
         const resultEl = contentEl.querySelector("#planned-route-result");
         resultEl.innerHTML = `
           <h2 class="section-title">${t("delivery_route_planned")}</h2>
@@ -320,6 +321,7 @@ export async function renderDelivery(root, navigate) {
       overlay.querySelectorAll("button").forEach((b) => (b.disabled = true));
       try {
         await api.failDelivery(orderId);
+        window.dispatchEvent(new Event("delivery-changed"));
         overlay.remove();
         load();
       } catch (err) {
@@ -343,6 +345,7 @@ export async function renderDelivery(root, navigate) {
         formData.append("amount_collected_amd", String(amountCollected));
         formData.append("payment_method", paymentMethod);
         await api.confirmDelivery(orderId, formData);
+        window.dispatchEvent(new Event("delivery-changed"));
         overlay.remove();
         load();
       } catch (err) {
