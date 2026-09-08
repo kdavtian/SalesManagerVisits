@@ -184,11 +184,10 @@ export function matchSubregion(guess, region) {
 // the Castrol file: the named-account channels (KF, CAS) plus the region-
 // scoped OEM/CVO/PCO trade channels and each sales manager's own territory
 // channel (SM B2B/YVN/Davtashen/Shirak/CAS). Must mirror the sales_channels
-// table's seed data (migrations 037 and 055) -- SM CAS was seeded there but
-// missing here, which meant it could never actually be selected in any of
-// the sales-channel dropdowns that use this list (customer detail's Account
-// settings sheet, admin.js, map.js's add-customer sheet).
-export const SALES_CHANNELS = ["KF", "CAS", "OEM", "CVO", "PCO", "SM B2B", "SM YVN", "SM Davtashen", "SM Shirak", "SM CAS"];
+// table's seed data/display_order (migrations 037, 055, 062) -- SM CAS is
+// kept (a legacy channel, not deleted) but sorts last since 062 dropped it
+// out of the requested 9-channel order.
+export const SALES_CHANNELS = ["SM YVN", "SM Davtashen", "SM Shirak", "SM B2B", "OEM", "CVO", "PCO", "CAS", "KF", "SM CAS"];
 
 // customerPortfolioUi.js writes the literal uppercase "POTENTIAL"/
 // "COMPETITORS" into a customer's sales_channel so it sorts and filters

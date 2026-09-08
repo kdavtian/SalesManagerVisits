@@ -4417,6 +4417,20 @@ input[type="search"]:focus {
   gap: 10px;
 }
 
+/* Sticky action banner: keeps back/name/status pinned at the top of
+   .app-main's scroll box (the nearest scrolling ancestor -- sticky has
+   nothing to stick against otherwise) while the visit history list below
+   scrolls underneath it. Needs its own opaque background since content
+   scrolls directly behind it once stuck. */
+.customer-detail-header-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg);
+  padding: 16px 0 10px;
+  margin: -16px 0 0;
+}
+
 .customer-detail-header-main {
   display: flex;
   /* Top-aligned so the icon's top edge lines up with the first line of the
@@ -4684,6 +4698,21 @@ input[type="search"]:focus {
   grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
   gap: 8px;
   margin: 18px 0;
+}
+
+/* Sticky bottom bar: pinned just above .nav-bar (fixed, 48px + safe-area,
+   see .nav-bar) rather than at bottom:0, so it never overlaps the tab bar.
+   .app-main's own padding-bottom already reserves that same height, which
+   is what stops this from covering the last item in the scrolling content
+   beneath it. */
+.detail-actions-grid-sticky {
+  position: sticky;
+  bottom: calc(48px + var(--nav-safe-bottom));
+  z-index: 5;
+  background: var(--bg);
+  padding: 10px 0;
+  margin: 10px 0 0;
+  border-top: 1px solid var(--border);
 }
 
 .action-btn {

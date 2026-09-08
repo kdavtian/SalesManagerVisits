@@ -89,7 +89,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   const hasAccountSettings = canReassignCustomers() || canAssignErpCustomerId(customer) || seesFinancialExports();
 
   container.innerHTML = `
-    <div class="detail-header customer-detail-header">
+    <div class="detail-header customer-detail-header customer-detail-header-sticky">
       <div class="customer-detail-header-main">
         <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
@@ -154,7 +154,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       <div class="next-visit-due">${nextVisitHtml}</div>
     </div>
 
-    <div class="detail-actions-grid">
+    <div class="detail-actions-grid detail-actions-grid-sticky">
       <button class="action-btn action-btn-primary" id="checkin-btn">
         <span>${icons.mapPinCheck}</span>${t("check_in")}
       </button>
@@ -597,38 +597,67 @@ async function openAccountSettingsSheet(customer, onDone) {
     const submitBtn = form.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
     submitBtn.textContent = t("saving");
-    try {
-      const calls = [];
-      if (showReassign) {
-        calls.push(
-          api.updateCustomer(customer.id, {
-            region: data.get("region") || null,
-            subregion: data.get("subregion") || null,
-            sales_channel: data.get("sales_channel") || null,
-            assigned_manager_id: data.get("assigned_manager_id") ? Number(data.get("assigned_manager_id")) : null,
-          })
-        );
-      }
-      if (showErp) {
-        const erpInput = overlay.querySelector("#erp-customer-input");
-        calls.push(api.updateCustomer(customer.id, { erp_customer_id: erpInput.value.trim() || null }));
-      }
-      if (showPayment) {
-        calls.push(
-          api.updateCustomer(customer.id, {
-            payment_method: data.get("payment_method"),
-            credit_term_days: Number(data.get("credit_term_days")),
-          })
-        );
-      }
-      await Promise.all(calls);
-      close();
-      onDone();
-    } catch (err) {
-      errorEl.textContent = err.message;
+
+    // Each section below touches a disjoint set of columns and is its own
+    // PATCH, so one section failing (e.g. a duplicate ERP ID) never rolls
+    // back another's already-committed write -- but Promise.all used to
+    // reject the whole submit the instant any one call failed, leaving the
+    // sheet open on its original (pre-save) data with nothing but a small
+    // error line to say why. That made a *successful* reassignment (region/
+    // sales channel/manager) look like it silently didn't save whenever a
+    // different section on the same form failed. allSettled + always
+    // refreshing the page behind the sheet means whatever did commit is
+    // visible immediately, and only the failed section blocks the sheet
+    // from closing.
+    const sections = [];
+    if (showReassign) {
+      sections.push({
+        label: t("assigned_manager"),
+        promise: api.updateCustomer(customer.id, {
+          region: data.get("region") || null,
+          subregion: data.get("subregion") || null,
+          sales_channel: data.get("sales_channel") || null,
+          assigned_manager_id: data.get("assigned_manager_id") ? Number(data.get("assigned_manager_id")) : null,
+        }),
+      });
+    }
+    if (showErp) {
+      const erpInput = overlay.querySelector("#erp-customer-input");
+      sections.push({
+        label: t("erp_customer_id"),
+        promise: api.updateCustomer(customer.id, { erp_customer_id: erpInput.value.trim() || null }),
+      });
+    }
+    if (showPayment) {
+      sections.push({
+        label: t("payment_settings"),
+        promise: api.updateCustomer(customer.id, {
+          payment_method: data.get("payment_method"),
+          // A stored credit_term_days of 0 would otherwise round-trip back
+          // into the number input's value, which fails its own min="1"
+          // client-side validation and silently blocks the whole submit --
+          // clamp it here instead of trusting whatever was last stored.
+          credit_term_days: Math.max(1, Number(data.get("credit_term_days")) || 45),
+        }),
+      });
+    }
+
+    const results = await Promise.allSettled(sections.map((s) => s.promise));
+    const failures = results
+      .map((r, i) => (r.status === "rejected" ? `${sections[i].label}: ${r.reason.message}` : null))
+      .filter(Boolean);
+
+    // Refresh the page underneath regardless -- some or all sections may
+    // have committed even if others failed.
+    onDone();
+
+    if (failures.length) {
+      errorEl.textContent = failures.join(" · ");
       errorEl.hidden = false;
       submitBtn.disabled = false;
       submitBtn.textContent = t("save");
+    } else {
+      close();
     }
   });
 }
@@ -760,9 +789,14 @@ async function openEditSheet(customer, navigate, onDone) {
   });
   overlay.querySelector("#delete-customer-btn")?.addEventListener("click", async () => {
     if (!confirm(t("confirm_delete_customer"))) return;
-    await api.deleteCustomer(customer.id);
-    close();
-    navigate("#/customers");
+    try {
+      await api.deleteCustomer(customer.id);
+      close();
+      navigate("#/customers");
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+    }
   });
 
   const form = overlay.querySelector("#edit-customer-form");
