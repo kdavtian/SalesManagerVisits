@@ -1380,7 +1380,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         marker.bindPopup(`
           <div class="map-popup">
             <strong>${escapeHtml(c.name)}</strong>
-            ${c.category ? `<div class="popup-category">${escapeHtml(categoryLabel(c.category))}</div>` : ""}
+            ${c.sales_channel ? `<div class="popup-category">${escapeHtml(channelDisplayLabel(c.sales_channel))}</div>` : ""}
             <div class="popup-facts" id="popup-facts-${c.id}"><p class="popup-loading">${t("loading")}</p></div>
             <div class="popup-actions">
               <button data-action="checkin" data-id="${c.id}" class="btn-accent"><span>${icons.mapPinCheck}</span><span class="popup-action-label">${t("check_in")}</span></button>
