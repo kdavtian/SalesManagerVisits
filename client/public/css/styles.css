@@ -1719,6 +1719,19 @@ input[type="search"]:focus {
   background: var(--bg-card-pressed);
 }
 
+/* Opt-in for the next photo taken -- see checkin.js's photo-input change
+   handler. Small and unobtrusive on purpose: the default (unchecked) is
+   right for the overwhelming majority of check-in photos, this is only
+   for the occasional "I need this price tag/label to actually be
+   readable" shot. */
+.high-res-photo-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
 .photo-remove-btn {
   position: absolute;
   top: 10px;
