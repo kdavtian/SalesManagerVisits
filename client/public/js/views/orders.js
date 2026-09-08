@@ -101,6 +101,7 @@ export async function renderOrders(root, navigate) {
   let orders = [];
   let hasMore = false;
   let loadingMore = false;
+  let searchDebounceTimer;
 
   function renderFilterMenu() {
     const channels = [...new Set(orders.map((o) => o.sales_channel).filter(Boolean))].sort();
@@ -186,6 +187,20 @@ export async function renderOrders(root, navigate) {
     // list's range) -- each day's header row totals just that day's
     // orders: amount, liters (see server's total_liters, computed from
     // catalog-linked lines only), and order count.
+    // Totals computed in one pass up front (a Map keyed by day) rather than
+    // re-filtering the whole `filtered` array once per row it contains --
+    // that was O(n²) (a full list scan for every single order), which on a
+    // long history noticeably added up on typing a fresh search term.
+    const dayTotals = new Map();
+    for (const o of filtered) {
+      const dateKey = orderDateKey(o.created_at);
+      const day = dayTotals.get(dateKey) ?? { total: 0, liters: 0, count: 0 };
+      day.total += Number(o.total_amd);
+      day.liters += Number(o.total_liters || 0);
+      day.count += 1;
+      dayTotals.set(dateKey, day);
+    }
+
     let lastDateKey = null;
     listEl.innerHTML = filtered
       .map((o) => {
@@ -194,13 +209,11 @@ export async function renderOrders(root, navigate) {
         let dateHeading = "";
         if (dateKey !== lastDateKey) {
           lastDateKey = dateKey;
-          const dayOrders = filtered.filter((x) => orderDateKey(x.created_at) === dateKey);
-          const dayTotal = dayOrders.reduce((sum, x) => sum + Number(x.total_amd), 0);
-          const dayLiters = dayOrders.reduce((sum, x) => sum + Number(x.total_liters || 0), 0);
+          const day = dayTotals.get(dateKey);
           dateHeading = `
             <div class="order-date-heading">
               <span class="order-date-heading-label">${formatOrderDateHeading(o.created_at)}</span>
-              <span class="order-date-heading-stats">${formatAmd(dayTotal)} | ${formatLiters(dayLiters)} | ${dayOrders.length} ${t("orders_count_label")}</span>
+              <span class="order-date-heading-stats">${formatAmd(day.total)} | ${formatLiters(day.liters)} | ${day.count} ${t("orders_count_label")}</span>
             </div>`;
         }
         return `${dateHeading}
@@ -249,7 +262,13 @@ export async function renderOrders(root, navigate) {
       load();
     });
   });
-  searchInput.addEventListener("input", paint);
+  // Debounced (300ms, same as the Customers list search) -- paint() rebuilds
+  // the full order list's HTML on every call, which on a long order history
+  // visibly stutters typing if it ran on every single keystroke.
+  searchInput.addEventListener("input", () => {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(paint, 300);
+  });
   root.querySelector("#orders-new-btn").addEventListener("click", openCustomerPicker);
 
   // Orders always belong to a customer -- picking one here just forwards

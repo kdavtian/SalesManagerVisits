@@ -1,5 +1,11 @@
-const CACHE_VERSION = "field-visits-v104";
+const CACHE_VERSION = "field-visits-v105";
 const TILE_CACHE = "field-visits-tiles-v4";
+// Anything fetched at runtime that wasn't already in APP_SHELL gets cached
+// here, kept separate from CACHE_VERSION on purpose -- see trimCache below,
+// this is the one that gets capped/evicted, and it must never be able to
+// touch the app-shell entries CACHE_VERSION holds (those are written once
+// at install and have to survive for reliable offline core-app coverage).
+const RUNTIME_CACHE = CACHE_VERSION + "-runtime";
 
 const APP_SHELL = [
   "/",
@@ -54,6 +60,27 @@ const APP_SHELL = [
   "/js/views/login.js",
   "/js/views/map.js",
   "/js/views/settings.js",
+  // The rest of app.js's routes -- all now loaded via dynamic import()
+  // rather than a static import at boot (so only the screen actually
+  // opened is fetched/parsed on startup), but still listed here so every
+  // one of them is guaranteed already in Cache Storage the first time a
+  // user navigates to it, not just on a repeat visit -- a dynamic import()
+  // is still a fetch() under the hood, and this app.js's own fetch
+  // handler below serves it from here instantly instead of hitting the
+  // network on a field rep's possibly-slow connection.
+  "/js/views/orderCreate.js",
+  "/js/views/orders.js",
+  "/js/views/notifications.js",
+  "/js/views/cashExpenses.js",
+  "/js/views/reports.js",
+  "/js/views/routePlans.js",
+  "/js/views/teamPerformance.js",
+  "/js/views/pricelist.js",
+  "/js/views/payments.js",
+  "/js/views/warehouse.js",
+  "/js/views/deliveryRoute.js",
+  "/js/views/recorded.js",
+  "/js/views/debtBalances.js",
   // Pre-approved marker/category artwork -- the map pins and the blue
   // category glyphs every other screen uses (see util.js).
   "/icons/markers/bronze-drop.png",
@@ -99,7 +126,9 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((key) => key !== CACHE_VERSION && key !== TILE_CACHE).map((key) => caches.delete(key)))
+      Promise.all(
+        keys.filter((key) => key !== CACHE_VERSION && key !== RUNTIME_CACHE && key !== TILE_CACHE).map((key) => caches.delete(key))
+      )
     ).then(() => self.clients.claim())
   );
 });
@@ -130,6 +159,24 @@ self.addEventListener("notificationclick", (event) => {
   }));
 });
 
+// The runtime cache below (anything fetched that wasn't already in
+// APP_SHELL) had no cap -- every same-origin, non-API GET response ever
+// requested got cached forever, only cleared on a full CACHE_VERSION bump.
+// On a storage-constrained device that grows without bound across a long
+// session. Trimmed to the oldest entries past a soft cap after every write,
+// same pattern Workbox's own expiration plugin uses -- cache insertion
+// order isn't formally guaranteed by the spec, but every shipping browser
+// preserves it, so this is a reliable enough approximation of "evict
+// oldest first" without pulling in a library for it. APP_SHELL itself
+// (written only at install time, in CACHE_VERSION) is never touched here.
+const RUNTIME_CACHE_MAX_ENTRIES = 150;
+async function trimCache(cache, maxEntries) {
+  const keys = await cache.keys();
+  const excess = keys.length - maxEntries;
+  if (excess <= 0) return;
+  for (const key of keys.slice(0, excess)) await cache.delete(key);
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
@@ -154,7 +201,12 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   event.respondWith(fetch(request).then((res) => {
-    if (res.ok) caches.open(CACHE_VERSION).then((cache) => cache.put(request, res.clone()));
+    if (res.ok) {
+      caches.open(RUNTIME_CACHE).then(async (cache) => {
+        await cache.put(request, res.clone());
+        trimCache(cache, RUNTIME_CACHE_MAX_ENTRIES);
+      });
+    }
     return res;
   }).catch(() => caches.match(request)));
 });

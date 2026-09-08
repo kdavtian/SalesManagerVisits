@@ -515,6 +515,7 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   let activeFilter = "";
   let managerFilter = "";
   let searchQuery = "";
+  let searchDebounceTimer;
   let selectedBrand = "";
   let channelFilter = "";
   let categoryFilter = "";
@@ -1079,9 +1080,16 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
 
   const mapSearchInput = root.querySelector("#map-customer-search");
   const searchNoResults = root.querySelector("#map-search-no-results");
+  // Debounced like the Customers list search (300ms) -- applyFilter()
+  // clears and rebuilds every marker on the map, which on a full customer
+  // book is expensive enough that running it on every single keystroke
+  // visibly stutters typing, especially on low-RAM devices.
   mapSearchInput?.addEventListener("input", () => {
-    searchQuery = mapSearchInput.value.trim().toLowerCase();
-    applyFilter();
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      searchQuery = mapSearchInput.value.trim().toLowerCase();
+      applyFilter();
+    }, 300);
   });
 
   // The competitor visibility toggle is mounted separately (see

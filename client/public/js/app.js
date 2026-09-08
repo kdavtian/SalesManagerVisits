@@ -2,30 +2,15 @@ import { api } from "./api.js";
 import { state, setUser, isAdmin, canPlanForOthers } from "./state.js";
 import { getLang, t } from "./i18n.js";
 import { icons } from "./icons.js";
-import { renderLogin } from "./views/login.js";
-import { renderMap } from "./views/map.js";
-import { renderCustomers } from "./views/customers.js";
-import { renderCustomerDetail } from "./views/customerDetail.js";
-import { renderCustomerOrders } from "./views/customerOrders.js";
-import { renderOrderCreate } from "./views/orderCreate.js";
-import { renderOrders } from "./views/orders.js";
-import { renderCheckin } from "./views/checkin.js";
-import { renderDashboard } from "./views/dashboard.js";
-import { renderActivity } from "./views/activity.js";
-import { renderSettings } from "./views/settings.js";
-import { renderNotifications } from "./views/notifications.js";
-import { renderCashExpenses } from "./views/cashExpenses.js";
-import { renderReports } from "./views/reports.js";
-import { renderRoutePlans } from "./views/routePlans.js";
-import { renderTeamPerformance } from "./views/teamPerformance.js";
-import { renderDashboardOverview } from "./views/dashboardOverview.js";
-import { renderPricelist } from "./views/pricelist.js";
-import { renderPayments } from "./views/payments.js";
-import { renderCashHandoffs } from "./views/cashHandoffs.js";
-import { renderWarehouse } from "./views/warehouse.js";
-import { renderDelivery } from "./views/deliveryRoute.js";
-import { renderRecorded } from "./views/recorded.js";
-import { renderDebtBalances } from "./views/debtBalances.js";
+// Every view module below is loaded on demand (dynamic import()) from
+// render()'s route dispatch instead of statically here -- on boot, only the
+// screen the user actually lands on needs to be fetched/parsed/evaluated,
+// not all ~24 of them. The browser's module cache means each is still only
+// fetched once per session (revisiting a route is instant, same as a static
+// import would have been); this only changes when the fetch happens, not
+// how often. This mirrors the dynamic-import pattern already used elsewhere
+// in this codebase for cross-view references (e.g. customerOrders.js's own
+// import("./customerDetail.js")).
 import { flushQueue, getQueue, onQueueChange } from "./offlineQueue.js";
 import { mountInstallPrompt } from "./install.js";
 import { mountUpdateBanner, initServiceWorkerUpdates } from "./updateBanner.js";
@@ -54,21 +39,48 @@ const updateRoot = document.getElementById("update-root");
 mountUpdateBanner(updateRoot);
 // Dynamic views and sheets share the same feedback classes. Assign live
 // semantics as they appear so async errors/success messages are announced.
+// The scan itself (querySelectorAll per added node) does real work -- on a
+// big list re-render (search results, a filtered order/customer list) the
+// observer's addedNodes can be hundreds of cards, and none of them ever
+// carry .form-error/.form-success (per this app's own convention, an error
+// swapped into a list container is the container's only child, not mixed in
+// alongside its rows) -- but the observer has no way to know that up front,
+// so it still has to check. Deferred to idle time (a Safari-safe fallback
+// stands in for requestIdleCallback, which WebKit has never implemented) so
+// this bookkeeping never competes with the same-frame work of the render
+// that triggered it -- the assistive-tech announcement lands a beat later,
+// not the visible UI.
+const runWhenIdle =
+  window.requestIdleCallback || ((cb) => setTimeout(() => cb({ didTimeout: false, timeRemaining: () => 50 }), 1));
+let pendingFeedbackNodes = [];
+let feedbackScanScheduled = false;
+function scanPendingFeedbackNodes() {
+  feedbackScanScheduled = false;
+  const nodes = pendingFeedbackNodes;
+  pendingFeedbackNodes = [];
+  for (const node of nodes) {
+    if (!node.isConnected) continue;
+    // Only elements that actually carry one of these two classes get a
+    // live-region role -- `node` itself is only a candidate, not
+    // automatically a match; without this filter every freshly-rendered
+    // top-level element (nav rows, tappable cards, anything with its own
+    // role="...") had its role silently overwritten to "status" the
+    // moment it was inserted.
+    const feedback = [node, ...node.querySelectorAll(".form-error, .form-success")].filter(
+      (el) => el.classList.contains("form-error") || el.classList.contains("form-success")
+    );
+    feedback.forEach((el) => el.setAttribute("role", el.classList.contains("form-error") ? "alert" : "status"));
+  }
+}
 new MutationObserver((mutations) => {
   for (const mutation of mutations) {
     for (const node of mutation.addedNodes) {
-      if (!(node instanceof HTMLElement)) continue;
-      // Only elements that actually carry one of these two classes get a
-      // live-region role -- `node` itself is only a candidate, not
-      // automatically a match; without this filter every freshly-rendered
-      // top-level element (nav rows, tappable cards, anything with its own
-      // role="...") had its role silently overwritten to "status" the
-      // moment it was inserted.
-      const feedback = [node, ...node.querySelectorAll(".form-error, .form-success")].filter(
-        (el) => el.classList.contains("form-error") || el.classList.contains("form-success")
-      );
-      feedback.forEach((el) => el.setAttribute("role", el.classList.contains("form-error") ? "alert" : "status"));
+      if (node instanceof HTMLElement) pendingFeedbackNodes.push(node);
     }
+  }
+  if (!feedbackScanScheduled && pendingFeedbackNodes.length) {
+    feedbackScanScheduled = true;
+    runWhenIdle(scanPendingFeedbackNodes);
   }
 }).observe(document.body, { childList: true, subtree: true });
 
@@ -288,6 +300,7 @@ async function render() {
   if (!state.user) {
     topBar.hidden = true;
     navBar.hidden = true;
+    const { renderLogin } = await import("./views/login.js");
     renderLogin(app, async () => {
       location.hash = "#/dashboard";
       startLocationBroadcast();
@@ -321,10 +334,11 @@ async function render() {
   const handoffDetailMatch = path.match(/^#\/cash-handoffs\/(\d+)$/);
 
   if (path === "#/dashboard") {
-    renderDashboard(app, navigate);
+    (await import("./views/dashboard.js")).renderDashboard(app, navigate);
   } else if (path === "#/activity") {
-    renderActivity(app, navigate);
+    (await import("./views/activity.js")).renderActivity(app, navigate);
   } else if (path === "#/map") {
+    const { renderMap } = await import("./views/map.js");
     currentCleanup = renderMap(
       app,
       navigate,
@@ -334,49 +348,49 @@ async function render() {
       query.get("customer")
     );
   } else if (path === "#/customers") {
-    renderCustomers(app, navigate, query.get("visited"));
+    (await import("./views/customers.js")).renderCustomers(app, navigate, query.get("visited"));
   } else if (customerOrdersMatch) {
-    renderCustomerOrders(app, navigate, customerOrdersMatch[1]);
+    (await import("./views/customerOrders.js")).renderCustomerOrders(app, navigate, customerOrdersMatch[1]);
   } else if (orderCreateMatch) {
-    renderOrderCreate(app, navigate, orderCreateMatch[1], query.get("checkin"));
+    (await import("./views/orderCreate.js")).renderOrderCreate(app, navigate, orderCreateMatch[1], query.get("checkin"));
   } else if (path === "#/orders") {
-    renderOrders(app, navigate);
+    (await import("./views/orders.js")).renderOrders(app, navigate);
   } else if (paymentDetailMatch) {
-    renderPayments(app, navigate, paymentDetailMatch[1]);
+    (await import("./views/payments.js")).renderPayments(app, navigate, paymentDetailMatch[1]);
   } else if (path === "#/payments") {
-    renderPayments(app, navigate, null, query);
+    (await import("./views/payments.js")).renderPayments(app, navigate, null, query);
   } else if (handoffDetailMatch) {
-    renderCashHandoffs(app, navigate, handoffDetailMatch[1]);
+    (await import("./views/cashHandoffs.js")).renderCashHandoffs(app, navigate, handoffDetailMatch[1]);
   } else if (path === "#/cash-handoffs") {
-    renderCashHandoffs(app, navigate);
+    (await import("./views/cashHandoffs.js")).renderCashHandoffs(app, navigate);
   } else if (path === "#/expenses") {
-    renderCashExpenses(app, navigate);
+    (await import("./views/cashExpenses.js")).renderCashExpenses(app, navigate);
   } else if (path === "#/reports") {
-    renderReports(app, navigate, query.get("r"));
+    (await import("./views/reports.js")).renderReports(app, navigate, query.get("r"));
   } else if (path === "#/route-plans") {
-    renderRoutePlans(app, navigate);
+    (await import("./views/routePlans.js")).renderRoutePlans(app, navigate);
   } else if (path === "#/team-performance") {
-    renderTeamPerformance(app, navigate, query);
+    (await import("./views/teamPerformance.js")).renderTeamPerformance(app, navigate, query);
   } else if (path === "#/company-dashboard") {
-    renderDashboardOverview(app, navigate);
+    (await import("./views/dashboardOverview.js")).renderDashboardOverview(app, navigate);
   } else if (path === "#/pricelist") {
-    renderPricelist(app, navigate);
+    (await import("./views/pricelist.js")).renderPricelist(app, navigate);
   } else if (path === "#/warehouse") {
-    renderWarehouse(app, navigate);
+    (await import("./views/warehouse.js")).renderWarehouse(app, navigate);
   } else if (path === "#/delivery") {
-    renderDelivery(app, navigate);
+    (await import("./views/deliveryRoute.js")).renderDelivery(app, navigate);
   } else if (path === "#/recorded") {
-    renderRecorded(app, navigate);
+    (await import("./views/recorded.js")).renderRecorded(app, navigate);
   } else if (path === "#/debt-balances") {
-    renderDebtBalances(app, navigate);
+    (await import("./views/debtBalances.js")).renderDebtBalances(app, navigate);
   } else if (customerMatch) {
-    renderCustomerDetail(app, navigate, customerMatch[1]);
+    (await import("./views/customerDetail.js")).renderCustomerDetail(app, navigate, customerMatch[1]);
   } else if (checkinMatch) {
-    renderCheckin(app, navigate, checkinMatch[1]);
+    (await import("./views/checkin.js")).renderCheckin(app, navigate, checkinMatch[1]);
   } else if (path === "#/settings") {
-    renderSettings(app, doLogout, render);
+    (await import("./views/settings.js")).renderSettings(app, doLogout, render);
   } else if (path === "#/notifications") {
-    renderNotifications(app, navigate, refreshNotificationBadge);
+    (await import("./views/notifications.js")).renderNotifications(app, navigate, refreshNotificationBadge);
   } else {
     navigate("#/dashboard");
   }
@@ -507,11 +521,15 @@ async function init() {
   refreshUnrecordedBadge();
   refreshNotificationBadge();
   refreshPlanApprovalBadge();
-  setInterval(refreshOrderBadge, 60000);
-  setInterval(refreshPaymentBadge, 60000);
-  setInterval(refreshUnrecordedBadge, 60000);
-  setInterval(refreshNotificationBadge, 60000);
-  setInterval(refreshPlanApprovalBadge, 60000);
+  // Each still refreshes every 60s (same freshness as before), just not all
+  // in the same tick -- five separate setInterval(..., 60000) calls started
+  // together fire simultaneously forever after, so every minute the app did
+  // 5 fetches + 5 JSON parses + 5 badge DOM updates back to back. Staggered
+  // 3s apart (via a one-time startup delay before each interval begins) so
+  // that burst spreads across ~12s instead of landing in one frame.
+  [refreshOrderBadge, refreshPaymentBadge, refreshUnrecordedBadge, refreshNotificationBadge, refreshPlanApprovalBadge].forEach(
+    (fn, i) => setTimeout(() => setInterval(fn, 60000), i * 3000)
+  );
 }
 
 initServiceWorkerUpdates();
