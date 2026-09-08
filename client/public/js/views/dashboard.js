@@ -3,7 +3,7 @@ import { escapeHtml, formatDistance, formatRelative, getCurrentPosition, haversi
 import { state } from "../state.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { applyPaymentBadge, applyUnrecordedBadge } from "../app.js";
+import { applyPaymentBadge, applyUnrecordedBadge, applyWarehouseBadge, applyDeliveryBadge } from "../app.js";
 import { QUICK_ACTIONS, visibleQuickActionIds } from "../quickActions.js";
 
 // A dependency-free CSS bar chart -- this app has no charting library, and
@@ -55,8 +55,10 @@ const QUICK_ACTION_ICON = {
     `<span class="quick-action-icon quick-action-icon-payments">${icons.payment}<span class="nav-badge count-badge" id="qa-payments-badge" hidden></span></span>`,
   qa_cash_expense: () => `<span class="quick-action-icon quick-action-icon-cash">${icons.wallet}</span>`,
   qa_pricelist: () => `<span class="quick-action-icon quick-action-icon-pricelist">${icons.tag}</span>`,
-  qa_warehouse: () => `<span class="quick-action-icon quick-action-icon-warehouse">${icons.box}</span>`,
-  qa_delivery: () => `<span class="quick-action-icon quick-action-icon-delivery">${icons.truck}</span>`,
+  qa_warehouse: () =>
+    `<span class="quick-action-icon quick-action-icon-warehouse">${icons.box}<span class="nav-badge count-badge" id="qa-warehouse-badge" hidden></span></span>`,
+  qa_delivery: () =>
+    `<span class="quick-action-icon quick-action-icon-delivery">${icons.truck}<span class="nav-badge count-badge" id="qa-delivery-badge" hidden></span></span>`,
   qa_recorded: () =>
     `<span class="quick-action-icon quick-action-icon-recorded">${icons.clock}<span class="nav-badge count-badge" id="unrecorded-badge" hidden></span></span>`,
   qa_team_performance: () => `<span class="quick-action-icon quick-action-icon-team">${icons.target}</span>`,
@@ -263,6 +265,8 @@ export async function renderDashboard(root, navigate) {
   }
   applyPaymentBadge();
   applyUnrecordedBadge();
+  applyWarehouseBadge();
+  applyDeliveryBadge();
 
   const progressCard = container.querySelector("#progress-card");
   const byManagerSection = container.querySelector("#by-manager-section");

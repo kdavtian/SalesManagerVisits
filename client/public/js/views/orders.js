@@ -467,6 +467,7 @@ export async function renderOrders(root, navigate) {
           actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
           try {
             await api.updateOrderStatus(orderId, btn.dataset.status);
+            if (btn.dataset.status === "confirmed") window.dispatchEvent(new Event("warehouse-changed"));
             overlay.remove();
             notifyOrdersChanged();
             load();
@@ -522,8 +523,10 @@ export async function renderOrders(root, navigate) {
             if (btn.dataset.action === "approve-discount") await api.approveOrderDiscount(orderId);
             else if (btn.dataset.action === "reject-discount") await api.rejectOrderDiscount(orderId);
             else if (btn.dataset.action === "submit-order") await api.submitOrder(orderId);
-            else if (btn.dataset.action === "mark-delivered") await api.markOrderDeliveredWithoutRoute(orderId);
-            else await api.deleteOrder(orderId);
+            else if (btn.dataset.action === "mark-delivered") {
+              await api.markOrderDeliveredWithoutRoute(orderId);
+              window.dispatchEvent(new Event("delivery-changed"));
+            } else await api.deleteOrder(orderId);
             overlay.remove();
             notifyOrdersChanged();
             load();

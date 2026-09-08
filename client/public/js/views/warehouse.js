@@ -93,6 +93,7 @@ export async function renderWarehouse(root, navigate) {
       bulkBtn.disabled = true;
       try {
         await api.bulkMarkOrdersPacked(ids);
+        window.dispatchEvent(new Event("warehouse-changed"));
         load();
       } catch (err) {
         errorEl.textContent = err.message;
@@ -106,6 +107,7 @@ export async function renderWarehouse(root, navigate) {
         btn.disabled = true;
         try {
           await api.markOrderPacked(btn.dataset.markPacked);
+          window.dispatchEvent(new Event("warehouse-changed"));
           load();
         } catch (err) {
           errorEl.textContent = err.message;
@@ -121,6 +123,7 @@ export async function renderWarehouse(root, navigate) {
         btn.disabled = true;
         try {
           await api.flagOrderStockIssue(btn.dataset.flagIssue, note.trim());
+          window.dispatchEvent(new Event("warehouse-changed"));
           load();
         } catch (err) {
           errorEl.textContent = err.message;

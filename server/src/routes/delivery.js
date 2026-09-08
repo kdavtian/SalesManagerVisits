@@ -33,6 +33,24 @@ deliveryRouter.get("/packed-orders", async (req, res) => {
   res.json(rows);
 });
 
+// Backs the badge on the Home tab's Delivery icon -- how much unfinished
+// delivery work is sitting there: packed orders nobody's routed yet
+// (needs planning) plus stops on a route that haven't been delivered yet
+// (needs driving). Not split by driver -- same shared-queue model as
+// warehouse's own badge, since canPlanRoutes/canDeliverOrders are
+// currently the same role gate (see roles.js).
+deliveryRouter.get("/pending-count", async (req, res) => {
+  if (!canPlanRoutes(req.user.role) && !canDeliverOrders(req.user.role)) return res.json({ count: 0 });
+  const { rows } = await pool.query(
+    `SELECT
+       (SELECT COUNT(*)::int FROM orders o WHERE o.status = 'packed_stock_out'
+          AND NOT EXISTS (SELECT 1 FROM route_stops rs WHERE rs.order_id = o.id))
+       + (SELECT COUNT(*)::int FROM route_stops WHERE completed_at IS NULL)
+       AS count`
+  );
+  res.json({ count: rows[0].count });
+});
+
 deliveryRouter.get("/drivers", async (req, res) => {
   if (!canPlanRoutes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const { rows } = await pool.query("SELECT id, name FROM users WHERE role = 'delivery_manager' ORDER BY name");
