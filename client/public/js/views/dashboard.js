@@ -164,14 +164,20 @@ export async function renderDashboard(root, navigate) {
     }>
       <span class="progress-label">${t("today_progress")}</span>
       <div class="progress-main">
-        <span class="progress-fraction">${totals.visited_today}<span class="progress-fraction-total">/${totals.total_customers}</span></span>
+        <!-- A running week-to-date total, not just today's numbers -- on
+             Monday this is just Monday's planned-vs-visited, but by Friday
+             it's the sum of every planned/visited count from Monday
+             through Friday (see computeWeekProgress in dashboard.js on the
+             server). planned_to_date only counts approved plans, so it can
+             legitimately be 0 (nobody's planned this week yet). -->
+        <span class="progress-fraction">${totals.visited_to_date}<span class="progress-fraction-total">/${totals.planned_to_date}</span></span>
         <div class="progress-side">
           <div class="progress-side-row"><span class="dot dot-success"></span>${totals.visited_today} ${t("stat_visited_today")}</div>
           <div class="progress-side-row"><span class="dot dot-warning"></span>${remaining} ${t("stat_remaining")}</div>
           <div class="progress-side-row"><span class="dot dot-danger"></span>${totals.overdue} ${t("stat_overdue")}</div>
         </div>
       </div>
-      <div class="progress-bar"><div class="progress-bar-fill" style="width:${totals.total_customers ? Math.round((totals.visited_today / totals.total_customers) * 100) : 0}%"></div></div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width:${totals.planned_to_date ? Math.round((totals.visited_to_date / totals.planned_to_date) * 100) : 0}%"></div></div>
       ${summary.by_manager?.length ? `<span class="progress-card-chevron" aria-hidden="true">${icons.chevronDown}</span>` : ""}
     </div>
 
