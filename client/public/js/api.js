@@ -105,6 +105,7 @@ export const api = {
 
   listUsers: () => request("/users"),
   listPlannableUsers: () => request("/users/plannable"),
+  listAssignableManagers: () => request("/users/assignable-managers"),
   createUser: (data) => json("/users", "POST", data),
   updateUser: (id, data) => json(`/users/${id}`, "PATCH", data),
   resetUserPassword: (id, password) => json(`/users/${id}/password`, "PATCH", { password }),
