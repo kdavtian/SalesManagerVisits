@@ -4,10 +4,92 @@ import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { seesAllActivity } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { NOT_NO_VISIT_CHANNEL_SQL } from "./customers.js";
+import { batchExpandAreas } from "./visitPlans.js";
 
 export const dashboardRouter = Router();
 
 dashboardRouter.use(requireAuth);
+
+// Monday of the current week through today, inclusive, as YYYY-MM-DD
+// strings -- the window the progress card's "Today's progress" figure
+// actually sums over (see computeWeekProgress below). Monday-start to
+// match Postgres's own date_trunc('week', ...), which the visited-count
+// half of that figure is computed with.
+function weekDatesToToday() {
+  const now = new Date();
+  const utcDay = now.getUTCDay(); // 0=Sun..6=Sat
+  const daysSinceMonday = utcDay === 0 ? 6 : utcDay - 1;
+  const monday = new Date(now);
+  monday.setUTCDate(now.getUTCDate() - daysSinceMonday);
+  const dates = [];
+  for (let i = 0; i <= daysSinceMonday; i++) {
+    const d = new Date(monday);
+    d.setUTCDate(monday.getUTCDate() + i);
+    dates.push(d.toISOString().slice(0, 10));
+  }
+  return dates;
+}
+
+// The progress card's big "Today's progress" fraction is actually a
+// running week-to-date total, not a single day's numbers -- on Monday it's
+// just Monday's planned-vs-visited, but by Friday it's the sum of every
+// planned/visited count from Monday through Friday. Mirrors GET
+// /visit-plans/mine's own "persisted row wins, else synthesize from an
+// active recurring rule" resolution, just batched across every date in the
+// window (and every target user, for the company-wide roles) instead of
+// one date/user per request -- same batching idea as the Route Plans
+// overview endpoint (see batchExpandAreas).
+async function computeWeekProgress(targetUserIds) {
+  if (!targetUserIds.length) return { planned_to_date: 0, visited_to_date: 0 };
+  const dates = weekDatesToToday();
+
+  const { rows: persisted } = await pool.query(
+    `SELECT user_id, plan_date::text AS plan_date, customer_ids, status
+     FROM visit_plans
+     WHERE user_id = ANY($1) AND plan_date = ANY($2::date[])`,
+    [targetUserIds, dates]
+  );
+  const persistedByKey = new Map(persisted.map((r) => [`${r.user_id}:${r.plan_date}`, r]));
+
+  const { rows: rules } = await pool.query(
+    "SELECT * FROM visit_plan_rules WHERE user_id = ANY($1) AND active",
+    [targetUserIds]
+  );
+  const areaIdsByRule = await batchExpandAreas(rules);
+  const ruleByUserDay = new Map(rules.map((r) => [`${r.user_id}:${r.day_of_week}`, r]));
+
+  let plannedToDate = 0;
+  for (const userId of targetUserIds) {
+    for (const date of dates) {
+      const persistedRow = persistedByKey.get(`${userId}:${date}`);
+      if (persistedRow) {
+        if (persistedRow.status === "approved") plannedToDate += (persistedRow.customer_ids ?? []).length;
+        continue;
+      }
+      const dayOfWeek = new Date(`${date}T00:00:00Z`).getUTCDay();
+      const rule = ruleByUserDay.get(`${userId}:${dayOfWeek}`);
+      if (!rule) continue;
+      const areaIds = areaIdsByRule.get(rule.id) ?? new Set();
+      const customerIds = new Set([...areaIds, ...(rule.customer_ids ?? [])]);
+      plannedToDate += customerIds.size;
+    }
+  }
+
+  // Per-day distinct customer counts, summed -- not one distinct-across-
+  // the-week count, so a customer visited on two different days this week
+  // still contributes to both of those days' totals (matching how each
+  // day's own planned count is a separate figure too).
+  const { rows: visitedRows } = await pool.query(
+    `SELECT count(DISTINCT ch.customer_id)::int AS visited
+     FROM checkins ch
+     WHERE ch.user_id = ANY($1) AND ch.timestamp >= date_trunc('week', now())
+     GROUP BY date_trunc('day', ch.timestamp)`,
+    [targetUserIds]
+  );
+  const visitedToDate = visitedRows.reduce((sum, r) => sum + r.visited, 0);
+
+  return { planned_to_date: plannedToDate, visited_to_date: visitedToDate };
+}
 
 dashboardRouter.get("/summary", async (req, res) => {
   const seesAll = seesAllActivity(req.user.role);
@@ -141,11 +223,19 @@ dashboardRouter.get("/summary", async (req, res) => {
      ORDER BY total_points DESC, u.name`
   );
 
-  const [totals, recentActivity, byManager, points] = await Promise.all([
+  // Company-wide roles get the whole team's week-to-date figure (matching
+  // the by_manager breakdown below); everyone else gets just their own --
+  // same population as /users/plannable (sales managers are the only role
+  // that ever has a visit plan).
+  const weekProgressQuery = (seesAll ? pool.query("SELECT id FROM users WHERE role = 'sales_manager'") : Promise.resolve({ rows: [{ id: req.user.id }] }))
+    .then((r) => computeWeekProgress(r.rows.map((row) => row.id)));
+
+  const [totals, recentActivity, byManager, points, weekProgress] = await Promise.all([
     totalsQuery,
     recentActivityQuery,
     byManagerQuery,
     pointsQuery,
+    weekProgressQuery,
   ]);
 
   const myPoints = points.rows.find((p) => p.user_id === req.user.id) ?? {
@@ -156,7 +246,7 @@ dashboardRouter.get("/summary", async (req, res) => {
   };
 
   res.json({
-    totals: totals.rows[0],
+    totals: { ...totals.rows[0], ...weekProgress },
     recent_activity: recentActivity.rows,
     by_manager: byManager.rows,
     my_points: {

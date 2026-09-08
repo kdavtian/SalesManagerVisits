@@ -53,8 +53,10 @@ async function expandAreas(areas) {
 // Same expansion as expandAreas(), but for many rules at once -- one query
 // for every customer's region/subregion instead of one query per area per
 // rule per rep, which is what the overview endpoint used to do (a real N+1
-// once a team has more than a couple of recurring rules).
-async function batchExpandAreas(rules) {
+// once a team has more than a couple of recurring rules). Exported for
+// dashboard.js's week-to-date planned-vs-actual figure, which needs the
+// same batch expansion across every rep's rules for the week so far.
+export async function batchExpandAreas(rules) {
   const result = new Map(rules.map((rule) => [rule.id, new Set()]));
   if (!rules.some((rule) => Array.isArray(rule.areas) && rule.areas.length)) return result;
   const { rows: customers } = await pool.query("SELECT id, region, subregion FROM customers");
