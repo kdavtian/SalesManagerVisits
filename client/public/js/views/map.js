@@ -5,6 +5,7 @@ import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
 import { canViewTeamLocations, canEditDirectly, canPlanForOthers, canReassignCustomers, state } from "../state.js";
 import { getClusterPins, setClusterPins, getCompassMode, setCompassMode } from "../mapPrefs.js";
+import { getPerfMode } from "../perfMode.js";
 
 const NEARBY_RADIUS_METERS = 5000;
 
@@ -241,12 +242,24 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   document.body.classList.add("map-active");
   mapEl.style.touchAction = "none";
 
+  // Efficiency mode (perfMode.js, opt-in under Settings > Preferences)
+  // leaves rotate/touchRotate on -- the compass feature (setBearing calls
+  // throughout this file) depends on the leaflet-rotate plugin actually
+  // being enabled, so turning it off would need every one of those
+  // call-sites guarded too. What it does turn off are Leaflet's own
+  // zoom/fade/marker-zoom CSS transitions, pure visual polish with no
+  // feature attached to it -- a real animation-frame cost on every pan/
+  // zoom for no functional loss on a phone that's asking to trade it away.
+  const perfEfficiency = getPerfMode() === "efficiency";
   const map = L.map(mapEl, {
     zoomControl: false,
     rotate: true,
     touchRotate: true,
     rotateControl: false,
     bearing: 0,
+    zoomAnimation: !perfEfficiency,
+    fadeAnimation: !perfEfficiency,
+    markerZoomAnimation: !perfEfficiency,
     // Attribution to OpenStreetMap/CARTO is a required condition of using
     // their free tiles (ODbL/CARTO terms) -- it can't be removed outright,
     // but the default control (with Leaflet's own "Leaflet |" branding

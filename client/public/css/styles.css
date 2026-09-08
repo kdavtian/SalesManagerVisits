@@ -103,6 +103,30 @@
    the approved design), so dark mode only applies via an explicit user
    toggle — see theme.js. */
 
+/* Settings > Preferences > Efficiency mode (perfMode.js): a rep-chosen
+   opt-in for older/lower-RAM phones, applied as a data-perf attribute on
+   <html> (by perf-mode-init.js pre-first-paint, and perfMode.js on toggle)
+   rather than @media (prefers-reduced-motion) -- that query reflects a
+   system-wide accessibility setting this app already respects separately
+   (see the per-feature prefers-reduced-motion blocks throughout these CSS
+   files), a different concern from "this specific phone is slow" that
+   shouldn't be conflated with it. One blanket kill-switch here instead of
+   threading a second reduced-motion-shaped condition through every one of
+   those existing blocks -- same technique those UA-level reduced-motion
+   polyfills use: force every transition/animation to an unnoticeable
+   duration rather than removing the properties (removing them can skip
+   `transitionend`/`animationend` handlers some components rely on to
+   finish cleanup; a near-zero duration still fires them). */
+:root[data-perf="efficiency"] *,
+:root[data-perf="efficiency"] *::before,
+:root[data-perf="efficiency"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-delay: -0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
 * {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
@@ -5941,6 +5965,15 @@ button.list-row-icon {
   padding: 4px 0;
   display: flex;
   flex-direction: column;
+}
+
+/* A short explanatory line directly under a settings card, iOS-Settings
+   style footnote -- tight to the card above it, smaller than body text so
+   it doesn't compete with the row labels for attention. */
+.settings-hint {
+  margin: 6px 4px 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
 }
 
 /* A single grouped card holding several related forms (iOS-Settings-style
