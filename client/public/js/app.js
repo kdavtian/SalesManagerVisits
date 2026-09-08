@@ -724,22 +724,37 @@ async function init() {
   refreshDeliveryBadge();
   refreshNotificationBadge();
   refreshPlanApprovalBadge();
-  // Each still refreshes every 60s (same freshness as before), just not all
-  // in the same tick -- seven separate setInterval(..., 60000) calls started
-  // together fire simultaneously forever after, so every minute the app did
-  // 7 fetches + 7 JSON parses + 7 badge DOM updates back to back. Staggered
-  // 3s apart (via a one-time startup delay before each interval begins) so
-  // that burst spreads across the better part of a minute instead of
-  // landing in one frame.
-  [
-    refreshOrderBadge,
-    refreshPaymentBadge,
-    refreshUnrecordedBadge,
-    refreshWarehouseBadge,
-    refreshDeliveryBadge,
-    refreshNotificationBadge,
-    refreshPlanApprovalBadge,
-  ].forEach((fn, i) => setTimeout(() => setInterval(fn, 60000), i * 3000));
+  // The seven refresh*Badge() calls just above are the initial, right-at-
+  // boot values (each its own single-purpose endpoint, so the very first
+  // paint reflects whichever ones this role can even see without waiting
+  // on the others). The recurring 60s poll after that uses the combined
+  // /badges endpoint instead -- one request updating all seven counts,
+  // rather than seven separate fetches landing back to back every minute.
+  setInterval(refreshAllBadgesFromServer, 60000);
+}
+
+async function refreshAllBadgesFromServer() {
+  if (!state.user) return;
+  let counts;
+  try {
+    counts = await api.getBadgeCounts();
+  } catch {
+    return;
+  }
+  orderBadgeCount = counts.orders;
+  paymentBadgeCount = counts.payments;
+  unrecordedBadgeCount = counts.unrecorded;
+  warehouseBadgeCount = counts.warehouse;
+  deliveryBadgeCount = counts.delivery;
+  unreadNotificationCount = counts.notifications;
+  planApprovalBadgeCount = counts.planApprovals;
+  applyOrderBadge();
+  applyPaymentBadge();
+  applyUnrecordedBadge();
+  applyWarehouseBadge();
+  applyDeliveryBadge();
+  applyNotificationBadge();
+  applyPlanApprovalBadge();
 }
 
 initServiceWorkerUpdates();

@@ -35,6 +35,7 @@ import { cashHandoffsRouter } from "./routes/cashHandoffs.js";
 import { warehouseRouter } from "./routes/warehouse.js";
 import { deliveryRouter } from "./routes/delivery.js";
 import { debtBalancesRouter } from "./routes/debtBalances.js";
+import { badgesRouter } from "./routes/badges.js";
 import { startOverdueReminders } from "./overdueReminders.js";
 import { startStalePackedReminder } from "./stalePackedReminder.js";
 import { requireAuth } from "./middleware/auth.js";
@@ -112,6 +113,7 @@ app.use("/api/cash-handoffs", express.json(), cashHandoffsRouter);
 app.use("/api/warehouse", express.json(), warehouseRouter);
 app.use("/api/delivery", express.json(), deliveryRouter);
 app.use("/api/debt-balances", express.json(), debtBalancesRouter);
+app.use("/api/badges", badgesRouter);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });
