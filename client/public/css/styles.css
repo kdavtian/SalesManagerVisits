@@ -4259,36 +4259,22 @@ input[type="search"]:focus {
   min-width: 0;
 }
 
-/* Same 44x44 footprint as the back button (.icon-btn) beside it, and the
-   same 12px corner radius the app's other 44px icon boxes use
-   (.list-row-icon) -- was 88px/24px when this was the page's own hero
-   avatar; sized down to match its neighbor instead. No background/border
-   here (unlike the base .detail-header-icon this overrides): that base
-   styling made sense as a tinted backdrop behind a currentColor-stroke SVG,
-   but reads as an unwanted white box/ring around the full-color
-   pre-rendered category PNG this now always shows -- the PNG (via
-   .list-row-icon-* below) already carries its own tinted background at the
-   size it actually needs. */
+/* Same 44x44 footprint as the back button (.icon-btn) beside it -- was
+   88px/24px when this was the page's own hero avatar; sized down to match
+   its neighbor instead. No background/border/radius of its own: it's just
+   a same-size transparent wrapper now, deliberately left non-visible so it
+   doesn't double up with the inner .list-row-icon span (customerListIconHtml)
+   underneath, which is left un-overridden below -- so it renders with the
+   exact same bordered/tinted-background 44px box treatment every other
+   .list-row-icon in the app uses (see styles.css's shared .list-row-icon
+   rule), the same visual weight as the back button's own bordered square
+   rather than a small icon floating in empty space. */
 .customer-detail-header .detail-header-icon {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
   padding: 0;
   background: none;
   border: none;
-}
-
-.customer-detail-header .detail-header-icon .list-row-icon {
-  width: 100%;
-  height: 100%;
-  border-radius: inherit;
-  background: none;
-  border: none;
-}
-
-.customer-detail-header .detail-header-icon .category-img {
-  width: 28px;
-  height: 28px;
 }
 
 .customer-detail-header .detail-header-title {
@@ -4467,7 +4453,8 @@ input[type="search"]:focus {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 12px;
+  /* 25% less than the original 12px. */
+  margin-bottom: 9px;
 }
 
 /* .customer-social-section already supplies the 36px-circular-button/8px-gap
