@@ -65,24 +65,16 @@ async function loadPlanDetail(planId) {
 // has actually recorded in Excel (authoritative), `pending` is what's been
 // logged in the app since that last Excel sync and hasn't reached
 // accounting yet. Never blended into one total -- see the confirmed
-// business rule this is built against.
+// business rule this is built against. Team Performance only tracks Sales
+// and Collections now (new-customer and brand-liter actuals were dropped
+// along with their targets -- Collections has no target of its own either,
+// it's shown purely as an actual against Sales' own target, see
+// buildChannelDashboardRow).
 async function loadChannelActuals(channelCode, monthStr) {
-  const [{ rows: perfRows }, { rows: brandRows }, { rows: newCustRows }] = await Promise.all([
-    pool.query("SELECT sales_amd, collected_amd, synced_at FROM sales_performance WHERE rep_name = $1 AND month = $2", [
-      channelCode,
-      monthStr,
-    ]),
-    pool.query("SELECT brand, liters FROM perf_actuals_brand_monthly WHERE channel_code = $1 AND month = $2", [
-      channelCode,
-      monthStr,
-    ]),
-    pool.query(
-      `SELECT count(*)::int AS n FROM erp_customer_first_seen fs
-       JOIN erp_customer_data d ON d.erp_customer_id = fs.erp_customer_id
-       WHERE d.assigned_sales_rep = $1 AND fs.first_seen_month = $2`,
-      [channelCode, monthStr]
-    ),
-  ]);
+  const { rows: perfRows } = await pool.query(
+    "SELECT sales_amd, collected_amd, synced_at FROM sales_performance WHERE rep_name = $1 AND month = $2",
+    [channelCode, monthStr]
+  );
 
   const perf = perfRows[0] ?? { sales_amd: 0, collected_amd: 0, synced_at: null };
   const sinceTimestamp = perf.synced_at ?? `${monthStr}T00:00:00Z`;
@@ -103,25 +95,17 @@ async function loadChannelActuals(channelCode, monthStr) {
     collected_confirmed: Number(perf.collected_amd),
     collected_pending: Number(pendingRows[0].pending),
     collected_synced_at: perf.synced_at,
-    new_customers_actual: newCustRows[0].n,
-    brand_actuals: brandRows,
   };
 }
 
-// Combines one channel's plan targets with its actuals into the shape
-// every dashboard (management, Sales Director, personal) renders --
-// achievement %, pace status, forecast, and required-daily-rate for every
-// KPI, all from the single perfCalc.js engine.
-function buildChannelDashboardRow(target, brandTargets, actuals, wd) {
+// Combines one channel's Sales plan target with its actuals into the shape
+// every dashboard (management, Sales Director, personal) renders. Only
+// Sales carries a target/pace/forecast (from the single perfCalc.js
+// engine) -- Collections is shown purely as an actual (plus what's pending
+// confirmation), plotted against Sales' own target as a marker rather than
+// tracked against a target of its own.
+function buildChannelDashboardRow(target, actuals, wd) {
   const kpiArgs = { elapsedWorkingDays: wd.elapsed, totalWorkingDays: wd.total, remainingWorkingDays: wd.remaining };
-
-  const brandTargetsByBrand = new Map(brandTargets.map((bt) => [bt.brand, Number(bt.target_liters)]));
-  const brandActualsByBrand = new Map(actuals.brand_actuals.map((ba) => [ba.brand, Number(ba.liters)]));
-  const brands = new Set([...brandTargetsByBrand.keys(), ...brandActualsByBrand.keys()]);
-  const brand_kpis = [...brands].map((brand) => ({
-    brand,
-    ...kpiProgress({ actual: brandActualsByBrand.get(brand) ?? 0, target: brandTargetsByBrand.get(brand) ?? 0, ...kpiArgs }),
-  }));
 
   const row = {
     channel_id: target.channel_id,
@@ -131,12 +115,10 @@ function buildChannelDashboardRow(target, brandTargets, actuals, wd) {
     working_days: wd,
     sales: kpiProgress({ actual: actuals.sales_actual, target: Number(target.sales_target_amd), ...kpiArgs }),
     collections: {
-      ...kpiProgress({ actual: actuals.collected_confirmed, target: Number(target.collection_target_amd), ...kpiArgs }),
+      actual: actuals.collected_confirmed,
       pending_amd: actuals.collected_pending,
       confirmed_synced_at: actuals.collected_synced_at,
     },
-    new_customers: kpiProgress({ actual: actuals.new_customers_actual, target: target.new_customers_target, ...kpiArgs }),
-    brands: brand_kpis,
   };
   row.recommendations = buildRecommendations(row);
   return row;
@@ -148,10 +130,6 @@ function buildChannelDashboardRow(target, brandTargets, actuals, wd) {
 // required_daily_rate/status just report the final outcome.
 function buildClosedChannelRow(snapshot, wd) {
   const kpiArgs = { elapsedWorkingDays: wd.elapsed, totalWorkingDays: wd.total, remainingWorkingDays: wd.remaining };
-  const brand_kpis = (snapshot.brand_actuals ?? []).map((ba) => ({
-    brand: ba.brand,
-    ...kpiProgress({ actual: Number(ba.liters), target: Number(ba.target_liters ?? 0), ...kpiArgs }),
-  }));
 
   const row = {
     channel_id: snapshot.channel_id,
@@ -162,12 +140,10 @@ function buildClosedChannelRow(snapshot, wd) {
     closed: true,
     sales: kpiProgress({ actual: Number(snapshot.sales_actual_amd), target: Number(snapshot.sales_target_amd), ...kpiArgs }),
     collections: {
-      ...kpiProgress({ actual: Number(snapshot.collection_actual_amd), target: Number(snapshot.collection_target_amd), ...kpiArgs }),
+      actual: Number(snapshot.collection_actual_amd),
       pending_amd: 0,
       confirmed_synced_at: null,
     },
-    new_customers: kpiProgress({ actual: snapshot.new_customers_actual, target: snapshot.new_customers_target, ...kpiArgs }),
-    brands: brand_kpis,
   };
   row.recommendations = [];
   return row;
@@ -230,7 +206,7 @@ teamPerformanceRouter.get("/my-performance", async (req, res) => {
 
   const { rows } = await pool.query(
     `SELECT t.channel_id, p.id AS plan_id, c.code AS channel_code, c.name AS channel_name,
-       t.sales_target_amd, t.collection_target_amd, t.new_customers_target
+       t.sales_target_amd
      FROM perf_plan_targets t
      JOIN perf_plans p ON p.id = t.plan_id
      JOIN sales_channels c ON c.id = t.channel_id
@@ -240,16 +216,9 @@ teamPerformanceRouter.get("/my-performance", async (req, res) => {
   const target = rows[0];
   if (!target) return res.json(null);
 
-  const { rows: brandTargets } = await pool.query(
-    `SELECT bt.brand, bt.target_liters FROM perf_plan_brand_targets bt
-     JOIN perf_plans p ON p.id = bt.plan_id
-     WHERE bt.channel_id = $1 AND p.month = $2 AND p.status = 'approved'`,
-    [target.channel_id, month]
-  );
-
   const monthDate = new Date(`${month}T00:00:00Z`);
   const [actuals, wd] = await Promise.all([loadChannelActuals(channelCode, month), workingDaysForMonth(monthDate)]);
-  res.json(buildChannelDashboardRow(target, brandTargets, actuals, wd));
+  res.json(buildChannelDashboardRow(target, actuals, wd));
 });
 
 // The full cross-channel dashboard for one plan -- Management/Sales
@@ -279,16 +248,10 @@ teamPerformanceRouter.get("/plans/:id/dashboard", async (req, res) => {
     );
     rows = snapshot.map((s) => buildClosedChannelRow(s, wd));
   } else {
-    const brandTargetsByChannel = new Map();
-    for (const bt of detail.brand_targets) {
-      if (!brandTargetsByChannel.has(bt.channel_id)) brandTargetsByChannel.set(bt.channel_id, []);
-      brandTargetsByChannel.get(bt.channel_id).push(bt);
-    }
-
     rows = await Promise.all(
       detail.targets.map(async (target) => {
         const actuals = await loadChannelActuals(target.channel_code, monthStr);
-        return buildChannelDashboardRow(target, brandTargetsByChannel.get(target.channel_id) ?? [], actuals, wd);
+        return buildChannelDashboardRow(target, actuals, wd);
       })
     );
   }
@@ -308,15 +271,16 @@ teamPerformanceRouter.get("/plans/:id/dashboard", async (req, res) => {
 // the Excel-authoritative sales_performance aggregate -- there is no
 // per-transaction record of those in this database to drill into (Excel is
 // the system of record; see the erpSync business rule this module is built
-// against). New customers and pending (not-yet-confirmed) collections,
-// though, are things Field Visits itself tracks, so those get a real list.
+// against). Pending (not-yet-confirmed) collections is the one thing Field
+// Visits itself tracks transaction-by-transaction, so that's the only real
+// drill-down left.
 teamPerformanceRouter.get("/plans/:id/channels/:channelId/drilldown", async (req, res) => {
   if (!seesAllPerformance(req.user.role) && req.user.role !== "sales_manager") {
     return res.status(403).json({ error: "Not allowed" });
   }
   const { kpi } = req.query;
-  if (!["new_customers", "collections_pending"].includes(kpi)) {
-    return res.status(400).json({ error: "kpi must be new_customers or collections_pending (the only drill-downs Field Visits has transaction-level data for)" });
+  if (kpi !== "collections_pending") {
+    return res.status(400).json({ error: "kpi must be collections_pending (the only drill-down Field Visits has transaction-level data for)" });
   }
 
   const { rows: planRows } = await pool.query("SELECT month FROM perf_plans WHERE id = $1", [req.params.id]);
@@ -329,18 +293,6 @@ teamPerformanceRouter.get("/plans/:id/channels/:channelId/drilldown", async (req
 
   if (req.user.role === "sales_manager" && req.user.position !== channel.code) {
     return res.status(403).json({ error: "Not allowed to view another channel's data" });
-  }
-
-  if (kpi === "new_customers") {
-    const { rows } = await pool.query(
-      `SELECT d.erp_customer_id, d.customer_name, fs.first_seen_month
-       FROM erp_customer_first_seen fs
-       JOIN erp_customer_data d ON d.erp_customer_id = fs.erp_customer_id
-       WHERE d.assigned_sales_rep = $1 AND fs.first_seen_month = $2
-       ORDER BY d.customer_name`,
-      [channel.code, monthStr]
-    );
-    return res.json(rows);
   }
 
   const { rows: perfRows } = await pool.query("SELECT synced_at FROM sales_performance WHERE rep_name = $1 AND month = $2", [
@@ -864,38 +816,22 @@ teamPerformanceRouter.post("/plans/:id/close", async (req, res) => {
 
   const monthStr = detail.month.toISOString().slice(0, 10);
 
-  const brandTargetsByChannel = new Map();
-  for (const bt of detail.brand_targets) {
-    if (!brandTargetsByChannel.has(bt.channel_id)) brandTargetsByChannel.set(bt.channel_id, []);
-    brandTargetsByChannel.get(bt.channel_id).push(bt);
-  }
-
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
     for (const target of detail.targets) {
       const actuals = await loadChannelActuals(target.channel_code, monthStr);
-      const brandTargets = brandTargetsByChannel.get(target.channel_id) ?? [];
-      const brandTargetsByBrand = new Map(brandTargets.map((bt) => [bt.brand, Number(bt.target_liters)]));
-      const brandActuals = actuals.brand_actuals.map((ba) => ({
-        brand: ba.brand,
-        liters: Number(ba.liters),
-        target_liters: brandTargetsByBrand.get(ba.brand) ?? 0,
-      }));
-      // Brand targets with no recorded actual liters still belong in the
-      // frozen snapshot (0 actual is a real outcome, not a missing one).
-      for (const [brand, targetLiters] of brandTargetsByBrand) {
-        if (!brandActuals.some((ba) => ba.brand === brand)) {
-          brandActuals.push({ brand, liters: 0, target_liters: targetLiters });
-        }
-      }
 
+      // new_customers_target/actual and brand_actuals are vestigial NOT
+      // NULL columns from when Team Performance also planned/tracked those
+      // -- always 0/[] now since only Sales is planned and only
+      // Sales+Collections are shown anywhere this snapshot is read.
       await client.query(
         `INSERT INTO perf_plan_closed_snapshot
            (plan_id, channel_id, channel_code, channel_name, sales_target_amd, sales_actual_amd,
             collection_target_amd, collection_actual_amd, new_customers_target, new_customers_actual, brand_actuals)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, 0, '[]')
          ON CONFLICT (plan_id, channel_id) DO NOTHING`,
         [
           detail.id,
@@ -906,9 +842,6 @@ teamPerformanceRouter.post("/plans/:id/close", async (req, res) => {
           actuals.sales_actual,
           target.collection_target_amd,
           actuals.collected_confirmed,
-          target.new_customers_target,
-          actuals.new_customers_actual,
-          JSON.stringify(brandActuals),
         ]
       );
     }

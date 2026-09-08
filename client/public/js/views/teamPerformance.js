@@ -3,7 +3,6 @@ import { escapeHtml, formatAmd, activateDialog } from "../util.js";
 import { t } from "../i18n.js";
 import { state, seesAllPerformance, isPerfCeo, canEditChannelPlan, canReviewPerfPlan, canCloseMonth, canReopenPerfPlanAsDraft } from "../state.js";
 
-const BRANDS = ["castrol", "lotos", "royal"];
 const PACE_COLOR = {
   excellent: "success",
   on_track: "accent",
@@ -27,19 +26,63 @@ function shiftMonth(monthStr, delta) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
-function monthPickerHtml(month) {
+// The sticky header shared by both views: back button, page title, and
+// (when showMonthFilter) a single "September 2026"-style button that opens
+// a small popover with prev/next controls -- replaces what used to be a
+// separate full-width prev/label/next row squeezed in under the header,
+// which is what made the top of this page look cluttered.
+function pageHeaderHtml(titleKey, month, showMonthFilter) {
   return `
-    <div class="perf-month-picker">
-      <button type="button" class="icon-btn" id="perf-month-prev" aria-label="Previous month">${"‹"}</button>
-      <strong>${escapeHtml(formatMonthLabel(month))}</strong>
-      <button type="button" class="icon-btn" id="perf-month-next" aria-label="Next month">${"›"}</button>
+    <div class="detail-header perf-sticky-header">
+      <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <div class="detail-header-title"><h1>${t(titleKey)}</h1></div>
+      ${
+        showMonthFilter
+          ? `<div class="filter-dropdown-wrap perf-month-filter-wrap" id="perf-month-filter-wrap">
+               <button type="button" class="filter-dropdown-btn perf-month-filter-btn" id="perf-month-filter-btn" aria-haspopup="true" aria-expanded="false">
+                 <span>${escapeHtml(formatMonthLabel(month))}</span>
+               </button>
+               <div class="filter-dropdown-menu perf-month-filter-menu" id="perf-month-filter-menu" hidden>
+                 <div class="perf-month-popover-row">
+                   <button type="button" class="icon-btn" id="perf-month-prev" aria-label="Previous month">‹</button>
+                   <strong>${escapeHtml(formatMonthLabel(month))}</strong>
+                   <button type="button" class="icon-btn" id="perf-month-next" aria-label="Next month">›</button>
+                 </div>
+               </div>
+             </div>`
+          : ""
+      }
     </div>
   `;
 }
 
-function wireMonthPicker(root, month, onChange) {
-  root.querySelector("#perf-month-prev").addEventListener("click", () => onChange(shiftMonth(month, -1)));
-  root.querySelector("#perf-month-next").addEventListener("click", () => onChange(shiftMonth(month, 1)));
+function wireMonthFilterPopover(container, month, onChange) {
+  const wrap = container.querySelector("#perf-month-filter-wrap");
+  if (!wrap) return;
+  const btn = wrap.querySelector("#perf-month-filter-btn");
+  const menu = wrap.querySelector("#perf-month-filter-menu");
+
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    menu.hidden = !menu.hidden;
+    btn.setAttribute("aria-expanded", String(!menu.hidden));
+  });
+  menu.querySelector("#perf-month-prev").addEventListener("click", (e) => {
+    e.stopPropagation();
+    onChange(shiftMonth(month, -1));
+  });
+  menu.querySelector("#perf-month-next").addEventListener("click", (e) => {
+    e.stopPropagation();
+    onChange(shiftMonth(month, 1));
+  });
+  container.addEventListener("click", () => {
+    if (!menu.hidden) {
+      menu.hidden = true;
+      btn.setAttribute("aria-expanded", "false");
+    }
+  });
 }
 
 function statusBadgeHtml(status) {
@@ -48,33 +91,36 @@ function statusBadgeHtml(status) {
   return `<span class="perf-status-badge perf-status-${color}">${t(`perf_pace_${status}`)}</span>`;
 }
 
-// One KPI's numbers -- target/actual/achievement/status/forecast/required
-// rate -- rendered the same way everywhere it appears (channel card, my
-// performance, dashboard row), so the shape only needs describing once.
-function kpiBlockHtml(label, kpi, { isAmd = true, unit = "" } = {}) {
-  if (!kpi) return "";
-  // Same rounding care as the server's perfRecommendations formatNumber:
-  // a real positive fractional rate (e.g. 0.25 new customers/day) must not
-  // collapse to a misleading "0" in the required-daily-rate footer.
-  const round1 = (v) => (v > 0 && v < 1 ? Math.round(v * 10) / 10 : Math.round(v));
-  const fmt = (v) => (v == null ? "—" : isAmd ? formatAmd(Math.round(v)) : `${round1(v).toLocaleString()}${unit}`);
-  const pct = kpi.achievement_pct != null ? Math.round(kpi.achievement_pct * 100) : null;
+// The one bar this whole page is built around: Sales' own target/actual as
+// the fill, with Collections plotted as a "|" tick at its own actual on
+// that same 0-to-sales-target scale (Collections has no target of its own
+// -- see buildChannelDashboardRow on the server). Shared by every channel
+// card, the management aggregate bar, and My Performance alike.
+function mergedBarHtml(row) {
+  const { sales, collections } = row;
+  const salesPct = sales.target ? Math.min(100, Math.max(0, (sales.actual / sales.target) * 100)) : 0;
+  const collectionsPct = sales.target ? Math.min(100, Math.max(0, (collections.actual / sales.target) * 100)) : null;
+  const achievementPct = sales.achievement_pct != null ? Math.round(sales.achievement_pct * 100) : null;
+  const canDrill = row.plan_id != null;
   return `
-    <div class="perf-kpi-block">
-      <div class="perf-kpi-head">
-        <span class="perf-kpi-label">${label}</span>
-        ${statusBadgeHtml(kpi.status)}
-      </div>
-      <div class="perf-kpi-main">
-        <span class="perf-kpi-actual">${fmt(kpi.actual)}</span>
-        <span class="perf-kpi-target muted">/ ${fmt(kpi.target)} ${pct != null ? `(${pct}%)` : ""}</span>
-      </div>
-      ${kpi.target ? `<div class="progress-bar perf-kpi-bar"><div class="progress-bar-fill" style="width:${Math.min(100, Math.max(0, (kpi.actual / kpi.target) * 100))}%"></div></div>` : ""}
-      <div class="perf-kpi-foot muted">
-        ${kpi.forecast != null ? `${t("perf_forecast")}: ${fmt(kpi.forecast)}` : ""}
-        ${kpi.required_daily_rate != null && kpi.required_daily_rate > 0 ? ` · ${t("perf_required_daily_rate")}: ${fmt(kpi.required_daily_rate)}` : ""}
-      </div>
+    <div class="perf-bar-main">
+      <span class="perf-bar-actual">${formatAmd(Math.round(sales.actual))}</span>
+      <span class="perf-bar-target muted">/ ${formatAmd(Math.round(sales.target))}${achievementPct != null ? ` (${achievementPct}%)` : ""}</span>
     </div>
+    <div class="progress-bar perf-merged-bar">
+      <div class="progress-bar-fill" style="width:${salesPct}%"></div>
+      ${collectionsPct != null ? `<div class="perf-collections-tick" style="left:${collectionsPct}%" title="${escapeHtml(t("perf_collections"))}: ${formatAmd(Math.round(collections.actual))}"></div>` : ""}
+    </div>
+    <div class="perf-bar-foot muted">
+      <span>${t("perf_collections")}: <strong>${formatAmd(Math.round(collections.actual))}</strong></span>
+      ${sales.forecast != null ? ` · ${t("perf_forecast")}: ${formatAmd(Math.round(sales.forecast))}` : ""}
+      ${sales.required_daily_rate != null && sales.required_daily_rate > 0 ? ` · ${t("perf_required_daily_rate")}: ${formatAmd(Math.round(sales.required_daily_rate))}` : ""}
+    </div>
+    ${
+      collections.pending_amd
+        ? `<p class="perf-pending-hint muted${canDrill ? " perf-drill-link" : ""}" ${canDrill ? `data-drill-plan="${row.plan_id}" data-drill-channel="${row.channel_id}" data-drill-kpi="collections_pending"` : ""}>+${formatAmd(Math.round(collections.pending_amd))} ${t("perf_pending_not_recorded")}</p>`
+        : ""
+    }
   `;
 }
 
@@ -109,25 +155,51 @@ function needsAttentionHtml(items) {
 }
 
 function channelCardHtml(row) {
-  const collections = row.collections;
-  const canDrill = row.plan_id != null;
   return `
     <div class="card perf-channel-card">
       <div class="perf-channel-head">
         <strong>${escapeHtml(row.channel_name)}</strong>
+        ${statusBadgeHtml(row.sales.status)}
       </div>
-      ${kpiBlockHtml(t("perf_sales"), row.sales)}
-      ${kpiBlockHtml(t("perf_collections"), collections)}
-      ${
-        collections?.pending_amd
-          ? `<p class="perf-pending-hint muted${canDrill ? " perf-drill-link" : ""}" ${canDrill ? `data-drill-plan="${row.plan_id}" data-drill-channel="${row.channel_id}" data-drill-kpi="collections_pending"` : ""}>+${formatAmd(Math.round(collections.pending_amd))} ${t("perf_pending_not_recorded")}</p>`
-          : ""
-      }
-      <div class="${canDrill ? "perf-drill-link" : ""}" ${canDrill ? `data-drill-plan="${row.plan_id}" data-drill-channel="${row.channel_id}" data-drill-kpi="new_customers"` : ""}>
-        ${kpiBlockHtml(t("perf_new_customers"), row.new_customers, { isAmd: false })}
-      </div>
-      ${row.brands.map((b) => kpiBlockHtml(`${b.brand[0].toUpperCase()}${b.brand.slice(1)}`, b, { isAmd: false, unit: "L" })).join("")}
+      ${mergedBarHtml(row)}
       ${recommendationsHtml(row)}
+    </div>
+  `;
+}
+
+// Management-only: one extra card at the top of Overview summing every
+// channel's Sales/Collections into a single company-wide bar, reusing the
+// exact same mergedBarHtml as each individual channel card below it.
+// plan_id/channel_id are left null so mergedBarHtml doesn't try to wire a
+// per-channel drilldown on the aggregate's own pending hint.
+function aggregateBarHtml(channels) {
+  const totals = channels.reduce(
+    (acc, row) => {
+      acc.salesActual += Number(row.sales.actual) || 0;
+      acc.salesTarget += Number(row.sales.target) || 0;
+      acc.collectionsActual += Number(row.collections.actual) || 0;
+      acc.collectionsPending += Number(row.collections.pending_amd) || 0;
+      return acc;
+    },
+    { salesActual: 0, salesTarget: 0, collectionsActual: 0, collectionsPending: 0 }
+  );
+  const aggRow = {
+    plan_id: null,
+    channel_id: null,
+    sales: {
+      actual: totals.salesActual,
+      target: totals.salesTarget,
+      achievement_pct: totals.salesTarget ? totals.salesActual / totals.salesTarget : null,
+      status: null,
+      forecast: null,
+      required_daily_rate: null,
+    },
+    collections: { actual: totals.collectionsActual, pending_amd: totals.collectionsPending },
+  };
+  return `
+    <div class="card perf-channel-card perf-aggregate-card">
+      <div class="perf-channel-head"><strong>${t("perf_total_all_channels")}</strong></div>
+      ${mergedBarHtml(aggRow)}
     </div>
   `;
 }
@@ -140,12 +212,16 @@ function wireDrilldowns(container) {
   });
 }
 
+// collections_pending is the only drill-down left (see the matching
+// simplification server-side) -- Sales/Collections themselves come only
+// from the Excel-authoritative aggregate, so there's no transaction list to
+// show for those.
 async function openDrilldownSheet(planId, channelId, kpi) {
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
   overlay.innerHTML = `
     <div class="sheet">
-      <h2>${kpi === "new_customers" ? t("perf_new_customers") : t("perf_pending_not_recorded")}</h2>
+      <h2>${t("perf_pending_not_recorded")}</h2>
       <div id="perf-drill-body"><p class="loading-state" role="status">${t("loading")}</p></div>
       <div class="sheet-actions"><button type="button" class="btn" id="close-perf-drill">${t("cancel")}</button></div>
     </div>
@@ -163,10 +239,9 @@ async function openDrilldownSheet(planId, channelId, kpi) {
       return;
     }
     bodyEl.innerHTML = `<div class="card-list">${rows
-      .map((r) =>
-        kpi === "new_customers"
-          ? `<div class="card"><strong>${escapeHtml(r.customer_name || r.erp_customer_id)}</strong><div class="muted">${escapeHtml(String(r.erp_customer_id))}</div></div>`
-          : `<div class="card"><strong>${formatAmd(Number(r.amount_collected_amd))}</strong><div class="muted">${escapeHtml(r.customer_name ?? "")} · ${escapeHtml(r.logged_by)} · ${new Date(r.timestamp).toLocaleDateString()}</div></div>`
+      .map(
+        (r) =>
+          `<div class="card"><strong>${formatAmd(Number(r.amount_collected_amd))}</strong><div class="muted">${escapeHtml(r.customer_name ?? "")} · ${escapeHtml(r.logged_by)} · ${new Date(r.timestamp).toLocaleDateString()}</div></div>`
       )
       .join("")}</div>`;
   } catch (err) {
@@ -195,19 +270,13 @@ async function renderMyPerformanceView(root, navigate) {
   function paintShell() {
     root.innerHTML = `
       <div class="detail-view">
-        <div class="detail-header">
-          <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-          </button>
-          <div class="detail-header-title"><h1>${t("my_performance")}</h1></div>
-        </div>
-        ${monthPickerHtml(month)}
+        ${pageHeaderHtml("my_performance", month, true)}
         <div id="perf-body" style="margin-top:12px;"><p class="loading-state" role="status">${t("loading")}</p></div>
       </div>
     `;
     const container = root.querySelector(".detail-view");
     container.querySelector("#back-btn").addEventListener("click", () => navigate("#/dashboard"));
-    wireMonthPicker(container, month, (newMonth) => {
+    wireMonthFilterPopover(container, month, (newMonth) => {
       month = newMonth;
       paintShell();
     });
@@ -237,14 +306,10 @@ async function renderManagementView(root, navigate, managerId) {
   let tab = "overview";
 
   function paintShell() {
+    const showMonthFilter = tab === "overview" || tab === "planning";
     root.innerHTML = `
       <div class="detail-view">
-        <div class="detail-header">
-          <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-          </button>
-          <div class="detail-header-title"><h1>${t("team_performance")}</h1></div>
-        </div>
+        ${pageHeaderHtml("team_performance", month, showMonthFilter)}
         <div class="settings-workspace-tabs" role="tablist">
           <button type="button" class="settings-workspace-tab ${tab === "overview" ? "settings-workspace-tab-active" : ""}" data-tab="overview">${t("perf_overview")}</button>
           <button type="button" class="settings-workspace-tab ${tab === "planning" ? "settings-workspace-tab-active" : ""}" data-tab="planning">${t("perf_planning")}</button>
@@ -252,7 +317,6 @@ async function renderManagementView(root, navigate, managerId) {
           <button type="button" class="settings-workspace-tab ${tab === "history" ? "settings-workspace-tab-active" : ""}" data-tab="history">${t("perf_history")}</button>
           ${isPerfCeo() ? `<button type="button" class="settings-workspace-tab ${tab === "data_quality" ? "settings-workspace-tab-active" : ""}" data-tab="data_quality">${t("perf_data_quality")}</button>` : ""}
         </div>
-        ${tab === "overview" || tab === "planning" ? monthPickerHtml(month) : ""}
         <div id="perf-body" style="margin-top:12px;"><p class="loading-state" role="status">${t("loading")}</p></div>
       </div>
     `;
@@ -264,8 +328,8 @@ async function renderManagementView(root, navigate, managerId) {
         paintShell();
       });
     });
-    if (tab === "overview" || tab === "planning") {
-      wireMonthPicker(container, month, (newMonth) => {
+    if (showMonthFilter) {
+      wireMonthFilterPopover(container, month, (newMonth) => {
         month = newMonth;
         paintShell();
       });
@@ -315,6 +379,7 @@ async function renderManagementView(root, navigate, managerId) {
     bodyEl.innerHTML = `
       <p class="muted" style="margin:0 4px 10px;">${t("perf_working_day_progress").replace("{elapsed}", dashboard.working_days.elapsed).replace("{total}", dashboard.working_days.total)}</p>
       ${scopedNote}
+      ${managerId == null && channels.length ? aggregateBarHtml(channels) : ""}
       ${managerId == null ? needsAttentionHtml(dashboard.needs_attention) : ""}
       ${channels.map(channelCardHtml).join("")}
     `;
@@ -336,11 +401,6 @@ async function renderManagementView(root, navigate, managerId) {
 
   function renderPlanningGrid(bodyEl, plan) {
     const targetsByChannel = new Map(plan.targets.map((t) => [t.channel_id, t]));
-    const brandTargetsByChannel = new Map();
-    for (const bt of plan.brand_targets) {
-      if (!brandTargetsByChannel.has(bt.channel_id)) brandTargetsByChannel.set(bt.channel_id, []);
-      brandTargetsByChannel.get(bt.channel_id).push(bt);
-    }
 
     api.getPerfChannels().then((channels) => {
       // A rejected plan is editable/resubmittable exactly like a draft --
@@ -390,7 +450,6 @@ async function renderManagementView(root, navigate, managerId) {
             channel,
             planId: plan.id,
             target: targetsByChannel.get(channelId),
-            brandTargets: brandTargetsByChannel.get(channelId) ?? [],
             mode: isRevise ? "revise" : "edit",
             onSaved: () => loadTab(),
           });
@@ -593,11 +652,12 @@ async function openHistorySheet(planId) {
   }
 }
 
-// A single channel's sales/collection/new-customer/brand targets, edited
-// as one small form -- not a spreadsheet grid, so autosave-per-cell isn't
-// needed; one Save call per channel is simple and hard to get wrong.
-function openTargetSheet({ channel, planId, target, brandTargets, mode = "edit", onSaved }) {
-  const brandValues = new Map(brandTargets.map((bt) => [bt.brand, bt.target_liters]));
+// A single channel's Sales target -- the only thing Team Performance plans
+// now (Collections/new-customers/brand-liter targets were dropped; see the
+// matching server-side simplification). Still worth its own small sheet
+// rather than an inline input on the planning grid row, since Revise needs
+// the same form with a reason prompt on submit.
+function openTargetSheet({ channel, planId, target, mode = "edit", onSaved }) {
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
   overlay.innerHTML = `
@@ -605,15 +665,6 @@ function openTargetSheet({ channel, planId, target, brandTargets, mode = "edit",
       <h2>${escapeHtml(channel.name)}</h2>
       <form id="perf-target-form">
         <label>${t("perf_sales")}<input type="number" name="sales_target_amd" min="0" value="${target ? Number(target.sales_target_amd) : ""}" /></label>
-        <label>${t("perf_collections")}<input type="number" name="collection_target_amd" min="0" value="${target ? Number(target.collection_target_amd) : ""}" /></label>
-        <label>${t("perf_new_customers")}<input type="number" name="new_customers_target" min="0" step="1" value="${target ? target.new_customers_target : ""}" /></label>
-        ${
-          mode === "edit"
-            ? BRANDS.map(
-                (b) => `<label>${b[0].toUpperCase()}${b.slice(1)} (L)<input type="number" name="brand_${b}" min="0" value="${brandValues.get(b) ?? ""}" /></label>`
-              ).join("")
-            : ""
-        }
         <p class="form-error" id="perf-target-error" hidden></p>
         <div class="sheet-actions">
           <button type="button" class="btn" id="cancel-perf-target">${t("cancel")}</button>
@@ -647,8 +698,6 @@ function openTargetSheet({ channel, planId, target, brandTargets, mode = "edit",
           {
             channel_id: channel.id,
             sales_target_amd: Number(data.get("sales_target_amd")) || 0,
-            collection_target_amd: Number(data.get("collection_target_amd")) || 0,
-            new_customers_target: Number(data.get("new_customers_target")) || 0,
           },
         ]);
         close();
@@ -665,9 +714,6 @@ function openTargetSheet({ channel, planId, target, brandTargets, mode = "edit",
     try {
       await api.savePerfTargets(planId, channel.id, {
         sales_target_amd: Number(data.get("sales_target_amd")) || 0,
-        collection_target_amd: Number(data.get("collection_target_amd")) || 0,
-        new_customers_target: Number(data.get("new_customers_target")) || 0,
-        brand_targets: BRANDS.map((b) => ({ brand: b, target_liters: Number(data.get(`brand_${b}`)) || 0 })),
       });
       close();
       onSaved();
@@ -693,7 +739,7 @@ async function openReviewSheet(planId, submittedByRole, onDone) {
             (t) => `
           <div class="card">
             <strong>${escapeHtml(t.channel_name)}</strong>
-            <div class="muted">${formatAmd(Number(t.sales_target_amd))} · ${formatAmd(Number(t.collection_target_amd))} · ${t.new_customers_target} new</div>
+            <div class="muted">${formatAmd(Number(t.sales_target_amd))}</div>
           </div>`
           )
           .join("")}

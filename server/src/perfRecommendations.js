@@ -12,8 +12,6 @@ const SEVERITY_RANK = { high: 0, medium: 1, info: 2 };
 
 const KPI_LABELS = {
   sales: "Sales",
-  collections: "Collections",
-  new_customers: "New customers",
 };
 
 function statusSeverity(status) {
@@ -70,38 +68,24 @@ function recommendationsForKpi(kpiKey, kpi, { isAmd, unit } = {}) {
 
 // Recommendations for one channel's dashboard row (as built by
 // buildChannelDashboardRow). Pure function of its inputs -- safe to call
-// on every row for every dashboard render.
+// on every row for every dashboard render. Only Sales carries a target/pace
+// now -- Collections has none of its own (see buildChannelDashboardRow), so
+// the only thing worth flagging about it is a pending balance not yet
+// confirmed in Excel.
 export function buildRecommendations(row) {
-  const out = [
-    ...recommendationsForKpi("sales", row.sales, { isAmd: true }),
-    ...recommendationsForKpi("collections", row.collections, { isAmd: true }),
-    ...recommendationsForKpi("new_customers", row.new_customers, {}),
-  ];
+  const out = [...recommendationsForKpi("sales", row.sales, { isAmd: true })];
 
-  // Collections-specific: a large pending balance not yet confirmed in
-  // Excel is worth flagging on its own, independent of pace -- it tells the
-  // reviewer "the manager says this is better than it looks," which is a
-  // different kind of attention than a pace warning.
-  if (row.collections.pending_amd > 0 && row.collections.target) {
-    const pendingRatio = row.collections.pending_amd / row.collections.target;
-    if (pendingRatio >= 0.1) {
-      out.push({
-        severity: "info",
-        kpi: "collections",
-        message: `${formatAmd(row.collections.pending_amd)} logged in-app but not yet confirmed in Excel.`,
-      });
-    }
-  }
-
-  for (const brand of row.brands ?? []) {
-    const severity = statusSeverity(brand.status);
-    if (severity && brand.required_daily_rate > 0) {
-      out.push({
-        severity,
-        kpi: `brand:${brand.brand}`,
-        message: `${brand.brand} volume ${severity === "high" ? "at risk" : "slightly behind"} pace -- needs ${formatNumber(brand.required_daily_rate, "L")}/working day.`,
-      });
-    }
+  // A large pending balance not yet confirmed in Excel is worth flagging on
+  // its own, independent of Sales pace -- it tells the reviewer "the
+  // manager says this is better than it looks," which is a different kind
+  // of attention than a pace warning. Flat AMD threshold rather than a
+  // ratio against a target, since Collections no longer has one.
+  if (row.collections.pending_amd >= 50000) {
+    out.push({
+      severity: "info",
+      kpi: "collections",
+      message: `${formatAmd(row.collections.pending_amd)} logged in-app but not yet confirmed in Excel.`,
+    });
   }
 
   return out.sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]);
