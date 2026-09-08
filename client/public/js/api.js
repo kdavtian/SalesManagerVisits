@@ -69,6 +69,12 @@ export const api = {
   logout: () => request("/auth/logout", { method: "POST" }),
   me: () => request("/me"),
 
+  // Backs app.js's periodic (every-60s) badge poll -- one request for all
+  // seven Home-tab/nav counts instead of seven separate ones. Event-driven
+  // refreshes right after a specific action still use each badge's own
+  // single-purpose endpoint below (getOrdersPendingCount etc.), unchanged.
+  getBadgeCounts: () => request("/badges"),
+
   getCustomerRegions: () => request("/customers/regions"),
   getBrandStatusByCustomer: () => request("/customers/brand-status"),
   listCustomers: (params = {}) => {
