@@ -124,6 +124,10 @@ export async function renderCheckin(root, navigate, customerId) {
           </svg>
           <span id="camera-btn-label">${t("take_photo")}</span>
         </button>
+        <label class="high-res-photo-toggle">
+          <input type="checkbox" id="high-res-photo-toggle" />
+          ${t("high_res_photo")}
+        </label>
       </div>
 
       <p class="form-error" id="checkin-error" hidden></p>
@@ -144,6 +148,7 @@ export async function renderCheckin(root, navigate, customerId) {
   const cameraBtn = container.querySelector("#camera-btn");
   const cameraBtnLabel = container.querySelector("#camera-btn-label");
   const photoThumbGrid = container.querySelector("#photo-thumb-grid");
+  const highResToggle = container.querySelector("#high-res-photo-toggle");
   const outcomeError = container.querySelector("#outcome-error");
 
   let position = null;
@@ -344,7 +349,17 @@ export async function renderCheckin(root, navigate, customerId) {
     photoInput.value = "";
     if (!file) return;
     try {
-      const compressed = await compressImage(file);
+      // Default (unchecked) compresses the same as every other photo
+      // upload in this app -- 1600px/0.75, small and fast to upload over a
+      // field connection. "High resolution" is an explicit opt-in for the
+      // cases that default would blur past legibility, a price tag or a
+      // label's fine print being the actual reason a rep took the photo --
+      // still re-encoded (not the raw multi-MB camera original) so an
+      // opted-in upload doesn't stall on a bad connection, just at a size
+      // and quality where small text stays readable.
+      const compressed = highResToggle.checked
+        ? await compressImage(file, { maxDimension: 2560, quality: 0.92 })
+        : await compressImage(file);
       photos.push({ blob: compressed, url: URL.createObjectURL(compressed) });
       paintPhotoThumbs();
     } catch (err) {
