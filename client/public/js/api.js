@@ -1,6 +1,41 @@
 import { APP_VERSION } from "./version.js";
 
+// The bottom-nav tabs (Dashboard/Activity/Customers/Orders) each re-fetch
+// their list/summary data from scratch on every visit, showing a "Loading"
+// placeholder until it resolves -- reported live as "loading every time"
+// switching tabs on an iPhone, where cellular round-trips to these
+// endpoints can run a couple of seconds each. A short-lived cache for just
+// these list/summary GETs means a tab revisited within GET_CACHE_TTL_MS
+// resolves from memory: since that happens on the microtask queue rather
+// than a real network round trip, the browser never gets a paint
+// opportunity between the view clearing to "Loading" and it filling back
+// in with content, so the flash disappears for that revisit. Any
+// non-GET request (the user actually changing something) clears the whole
+// cache, so a check-in, order, or payment the user just submitted is never
+// hidden behind stale cached data -- correctness always wins over the
+// cache. Deliberately an allowlist of exact base paths (not "every GET"):
+// endpoints this app polls for live data (team locations on the map,
+// badge counts) need to stay genuinely live, not just "fresh within 20s".
+const GET_CACHE_TTL_MS = 20000;
+const CACHEABLE_BASE_PATHS = new Set(["/dashboard/summary", "/dashboard/trends", "/settings", "/customers", "/checkins", "/orders", "/products"]);
+const getCache = new Map();
+
 async function request(path, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
+  if (method !== "GET") {
+    getCache.clear();
+  } else if (CACHEABLE_BASE_PATHS.has(path.split("?")[0])) {
+    const cached = getCache.get(path);
+    if (cached && cached.expires > Date.now()) return cached.promise;
+    const promise = doRequest(path, options);
+    getCache.set(path, { expires: Date.now() + GET_CACHE_TTL_MS, promise });
+    promise.catch(() => getCache.delete(path));
+    return promise;
+  }
+  return doRequest(path, options);
+}
+
+async function doRequest(path, options) {
   const res = await fetch(`/api${path}`, {
     credentials: "include",
     ...options,
