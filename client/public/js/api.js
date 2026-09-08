@@ -329,6 +329,10 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/reports/brand-volume${qs ? `?${qs}` : ""}`);
   },
+  getDailyManagementReport: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/reports/daily-management${qs ? `?${qs}` : ""}`);
+  },
 
   getPerfChannels: () => request("/team-performance/channels"),
   updatePerfChannelManager: (channelId, managerUserId) =>

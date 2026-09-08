@@ -413,3 +413,23 @@ reportsRouter.get("/brand-volume", requireReportAccess("brand_volume"), async (r
 
   res.json({ rows, by_brand: byBrand });
 });
+
+// Daily management report -- a stored snapshot pushed once per report_date
+// by POST /api/erp-sync/daily-report (see erpSync.js), not derived from
+// the other ERP tables above. Returns the latest snapshot by default, or
+// one specific date via ?date=YYYY-MM-DD.
+reportsRouter.get("/daily-management", requireReportAccess("daily_management"), async (req, res) => {
+  const { date } = req.query;
+  const { rows } = await pool.query(
+    `SELECT *, report_date::text AS report_date, prev_report_date::text AS prev_report_date
+     FROM erp_daily_report
+     WHERE report_date = COALESCE($1::date, (SELECT max(report_date) FROM erp_daily_report))`,
+    [/^\d{4}-\d{2}-\d{2}$/.test(date || "") ? date : null]
+  );
+  if (!rows.length) return res.json(null);
+
+  const { rows: dates } = await pool.query(
+    `SELECT report_date::text AS report_date FROM erp_daily_report ORDER BY report_date DESC LIMIT 30`
+  );
+  res.json({ report: rows[0], available_dates: dates.map((d) => d.report_date) });
+});

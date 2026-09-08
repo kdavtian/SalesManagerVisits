@@ -310,6 +310,119 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
   });
 });
 
+function isFiniteOrNull(value) {
+  return Number.isFinite(value) ? value : null;
+}
+
+function isPlainArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+// Separate from the main sync above: this is the daily sales/collections/
+// balance snapshot the CEO Telegram bot already sends as a formatted
+// message, pushed here once per report_date so the same numbers are
+// browsable in-app (see reports.js's "daily_management" report). Same
+// shared-secret auth as the main sync, since it's the same Windows PC
+// pipeline pushing it, just on its own schedule.
+erpSyncRouter.post("/daily-report", syncKeyLimiter, requireSyncKey, async (req, res) => {
+  const body = req.body ?? {};
+  const { report_date, sales, payments, balance } = body;
+  if (typeof report_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(report_date)) {
+    return res.status(400).json({ error: "report_date must be a YYYY-MM-DD string" });
+  }
+  if (!isPlainObject(sales) || !isPlainObject(payments) || !isPlainObject(balance)) {
+    return res.status(400).json({ error: "sales, payments, and balance objects are required" });
+  }
+
+  const salesByChannel = isPlainArray(sales.by_channel)
+    .filter((c) => isPlainObject(c) && c.channel_code)
+    .map((c) => ({
+      channel_code: String(c.channel_code),
+      amd: isFiniteOrNull(c.amd),
+      liters: isFiniteOrNull(c.liters),
+      orders: isFiniteOrNull(c.orders),
+    }));
+  const paymentsByChannel = isPlainArray(payments.by_channel)
+    .filter((c) => isPlainObject(c) && c.channel_code)
+    .map((c) => ({
+      channel_code: String(c.channel_code),
+      amd: isFiniteOrNull(c.amd),
+      customers: isFiniteOrNull(c.customers),
+    }));
+  const withManagers = isPlainArray(balance.with_managers_by_manager)
+    .filter((m) => isPlainObject(m) && m.manager_name)
+    .map((m) => ({ manager_name: String(m.manager_name), amd: isFiniteOrNull(m.amd) }));
+
+  await pool.query(
+    `INSERT INTO erp_daily_report (
+       report_date,
+       sales_ytd_amd, sales_ytd_liters, sales_ytd_orders,
+       sales_mtd_amd, sales_mtd_liters, sales_mtd_orders,
+       sales_wtd_amd, sales_wtd_liters, sales_wtd_orders,
+       sales_day_amd, sales_day_liters, sales_day_orders,
+       sales_change_amd, sales_change_liters,
+       sales_margin_amd, sales_margin_pct, sales_by_channel,
+       payments_ytd_amd, payments_ytd_customers,
+       payments_mtd_amd, payments_mtd_customers,
+       payments_wtd_amd, payments_wtd_customers,
+       payments_day_amd, payments_day_customers, payments_by_channel,
+       balance_amd, balance_usd, balance_total_amd, balance_total_usd,
+       balance_cash_amd, balance_cash_usd, balance_noncash_amd, balance_noncash_usd,
+       balance_with_managers_amd, balance_with_managers_by_manager,
+       credit_line_usd, receivables_total_amd, receivables_net_amd,
+       warehouse_value_amd, warehouse_liters,
+       prev_report_date, change_total_amd, change_overdue_amd, synced_at
+     ) VALUES (
+       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+       $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34,
+       $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, now()
+     )
+     ON CONFLICT (report_date) DO UPDATE SET
+       sales_ytd_amd = EXCLUDED.sales_ytd_amd, sales_ytd_liters = EXCLUDED.sales_ytd_liters, sales_ytd_orders = EXCLUDED.sales_ytd_orders,
+       sales_mtd_amd = EXCLUDED.sales_mtd_amd, sales_mtd_liters = EXCLUDED.sales_mtd_liters, sales_mtd_orders = EXCLUDED.sales_mtd_orders,
+       sales_wtd_amd = EXCLUDED.sales_wtd_amd, sales_wtd_liters = EXCLUDED.sales_wtd_liters, sales_wtd_orders = EXCLUDED.sales_wtd_orders,
+       sales_day_amd = EXCLUDED.sales_day_amd, sales_day_liters = EXCLUDED.sales_day_liters, sales_day_orders = EXCLUDED.sales_day_orders,
+       sales_change_amd = EXCLUDED.sales_change_amd, sales_change_liters = EXCLUDED.sales_change_liters,
+       sales_margin_amd = EXCLUDED.sales_margin_amd, sales_margin_pct = EXCLUDED.sales_margin_pct, sales_by_channel = EXCLUDED.sales_by_channel,
+       payments_ytd_amd = EXCLUDED.payments_ytd_amd, payments_ytd_customers = EXCLUDED.payments_ytd_customers,
+       payments_mtd_amd = EXCLUDED.payments_mtd_amd, payments_mtd_customers = EXCLUDED.payments_mtd_customers,
+       payments_wtd_amd = EXCLUDED.payments_wtd_amd, payments_wtd_customers = EXCLUDED.payments_wtd_customers,
+       payments_day_amd = EXCLUDED.payments_day_amd, payments_day_customers = EXCLUDED.payments_day_customers, payments_by_channel = EXCLUDED.payments_by_channel,
+       balance_amd = EXCLUDED.balance_amd, balance_usd = EXCLUDED.balance_usd,
+       balance_total_amd = EXCLUDED.balance_total_amd, balance_total_usd = EXCLUDED.balance_total_usd,
+       balance_cash_amd = EXCLUDED.balance_cash_amd, balance_cash_usd = EXCLUDED.balance_cash_usd,
+       balance_noncash_amd = EXCLUDED.balance_noncash_amd, balance_noncash_usd = EXCLUDED.balance_noncash_usd,
+       balance_with_managers_amd = EXCLUDED.balance_with_managers_amd, balance_with_managers_by_manager = EXCLUDED.balance_with_managers_by_manager,
+       credit_line_usd = EXCLUDED.credit_line_usd, receivables_total_amd = EXCLUDED.receivables_total_amd, receivables_net_amd = EXCLUDED.receivables_net_amd,
+       warehouse_value_amd = EXCLUDED.warehouse_value_amd, warehouse_liters = EXCLUDED.warehouse_liters,
+       prev_report_date = EXCLUDED.prev_report_date, change_total_amd = EXCLUDED.change_total_amd, change_overdue_amd = EXCLUDED.change_overdue_amd,
+       synced_at = now()`,
+    [
+      report_date,
+      isFiniteOrNull(sales.ytd_amd), isFiniteOrNull(sales.ytd_liters), isFiniteOrNull(sales.ytd_orders),
+      isFiniteOrNull(sales.mtd_amd), isFiniteOrNull(sales.mtd_liters), isFiniteOrNull(sales.mtd_orders),
+      isFiniteOrNull(sales.wtd_amd), isFiniteOrNull(sales.wtd_liters), isFiniteOrNull(sales.wtd_orders),
+      isFiniteOrNull(sales.day_amd), isFiniteOrNull(sales.day_liters), isFiniteOrNull(sales.day_orders),
+      isFiniteOrNull(sales.change_amd), isFiniteOrNull(sales.change_liters),
+      isFiniteOrNull(sales.margin_amd), isFiniteOrNull(sales.margin_pct), JSON.stringify(salesByChannel),
+      isFiniteOrNull(payments.ytd_amd), isFiniteOrNull(payments.ytd_customers),
+      isFiniteOrNull(payments.mtd_amd), isFiniteOrNull(payments.mtd_customers),
+      isFiniteOrNull(payments.wtd_amd), isFiniteOrNull(payments.wtd_customers),
+      isFiniteOrNull(payments.day_amd), isFiniteOrNull(payments.day_customers), JSON.stringify(paymentsByChannel),
+      isFiniteOrNull(balance.amd), isFiniteOrNull(balance.usd),
+      isFiniteOrNull(balance.total_amd), isFiniteOrNull(balance.total_usd),
+      isFiniteOrNull(balance.cash_amd), isFiniteOrNull(balance.cash_usd),
+      isFiniteOrNull(balance.noncash_amd), isFiniteOrNull(balance.noncash_usd),
+      isFiniteOrNull(balance.with_managers_amd), JSON.stringify(withManagers),
+      isFiniteOrNull(balance.credit_line_usd), isFiniteOrNull(balance.receivables_total_amd), isFiniteOrNull(balance.receivables_net_amd),
+      isFiniteOrNull(balance.warehouse_value_amd), isFiniteOrNull(balance.warehouse_liters),
+      balance.prev_report_date || null, isFiniteOrNull(balance.change_total_amd), isFiniteOrNull(balance.change_overdue_amd),
+    ]
+  );
+
+  res.json({ synced: true, report_date });
+});
+
 // Lets any logged-in rep browse the ERP extract by name instead of
 // guessing at raw Customer IDs when creating/linking a customer -- normal
 // cookie/JWT auth (not the sync key). Open to all roles (not admin-only)

@@ -58,6 +58,16 @@ export const REPORTS = [
     descriptionKey: "report_brand_volume_description",
     defaultRoles: ["admin", "ceo", "sales_director"],
   },
+  // Fed by its own daily push (POST /api/erp-sync/daily-report), separate
+  // from the extract above -- the CEO Telegram bot's own daily
+  // sales/collections/balance summary, computed on the sync PC and browsable
+  // here instead of only ever sent as a Telegram message.
+  {
+    key: "daily_management",
+    nameKey: "report_daily_management_name",
+    descriptionKey: "report_daily_management_description",
+    defaultRoles: ["admin", "ceo", "sales_director", "accountant"],
+  },
 ];
 
 export function findReport(key) {
