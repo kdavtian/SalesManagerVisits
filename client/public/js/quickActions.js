@@ -44,6 +44,25 @@ export const QUICK_ACTIONS = [
   { id: "qa_company_dashboard", defaultRoles: ["admin", "ceo", "sales_director", "accountant"] },
 ];
 
+// Which route each tile jumps to -- shared between the Home screen's
+// quick-actions grid (dashboard.js) and the desktop sidebar (app.js), so
+// the two never drift apart on where a given action id actually goes.
+export const QUICK_ACTION_ROUTE = {
+  qa_check_in: "#/map",
+  qa_plan_route: "#/route-plans",
+  qa_add_customer: "#/map?add=1",
+  qa_payments: "#/payments",
+  qa_cash_expense: "#/expenses",
+  qa_pricelist: "#/pricelist",
+  qa_warehouse: "#/warehouse",
+  qa_delivery: "#/delivery",
+  qa_recorded: "#/recorded",
+  qa_team_performance: "#/team-performance",
+  qa_reports: "#/reports",
+  qa_debt_balances: "#/debt-balances",
+  qa_company_dashboard: "#/company-dashboard",
+};
+
 export const QUICK_ACTION_IDS = QUICK_ACTIONS.map((a) => a.id);
 
 export function defaultQuickActionIds(role) {

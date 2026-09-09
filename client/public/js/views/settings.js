@@ -160,6 +160,8 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       </section>
 
       <section id="settings-admin-panel" role="tabpanel" aria-labelledby="settings-admin-tab" hidden>
+      <div class="settings-admin-layout">
+      <div class="settings-admin-left">
 
       ${
         admin
@@ -267,6 +269,14 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       `
           : ""
       }
+      </div>
+      <!-- Desktop only (see .settings-section-pane in styles.css): the
+           right-hand pane openAdminSection() below renders a clicked
+           section's content into, instead of the full-screen modal
+           openAdminSectionOverlay opens at mobile widths. Empty/hidden
+           until a section is selected. -->
+      <div class="settings-section-pane" id="settings-section-pane" hidden></div>
+      </div>
       </section>
     </div>
   `;
@@ -489,29 +499,29 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     renderPointsCloseoutSection(root.querySelector("#points-closeout-section"));
     renderNotificationDefaultsSection(root.querySelector("#notification-defaults-section"));
 
-    root.querySelector("#row-team-management").addEventListener("click", () => {
-      openAdminSectionOverlay(t("team_management"), renderTeamSection);
+    root.querySelector("#row-team-management").addEventListener("click", (e) => {
+      openAdminSection(root, e.currentTarget, t("team_management"), renderTeamSection);
     });
-    root.querySelector("#row-reports-management").addEventListener("click", () => {
-      openAdminSectionOverlay(t("reports_management"), renderReportsManagementSection);
+    root.querySelector("#row-reports-management").addEventListener("click", (e) => {
+      openAdminSection(root, e.currentTarget, t("reports_management"), renderReportsManagementSection);
     });
-    root.querySelector("#row-route-distribution").addEventListener("click", () => {
-      openAdminSectionOverlay(t("route_distribution_title"), renderRouteDistributionSection);
+    root.querySelector("#row-route-distribution").addEventListener("click", (e) => {
+      openAdminSection(root, e.currentTarget, t("route_distribution_title"), renderRouteDistributionSection);
     });
-    root.querySelector("#row-quick-actions").addEventListener("click", () => {
-      openAdminSectionOverlay(t("quick_action_visibility_title"), renderQuickActionVisibilitySection);
+    root.querySelector("#row-quick-actions").addEventListener("click", (e) => {
+      openAdminSection(root, e.currentTarget, t("quick_action_visibility_title"), renderQuickActionVisibilitySection);
     });
-    root.querySelector("#row-sales-channel-owners").addEventListener("click", () => {
-      openAdminSectionOverlay(t("sales_channel_owners_title"), renderSalesChannelOwnersSection);
+    root.querySelector("#row-sales-channel-owners").addEventListener("click", (e) => {
+      openAdminSection(root, e.currentTarget, t("sales_channel_owners_title"), renderSalesChannelOwnersSection);
     });
   }
 
   if (canManageProducts()) {
-    root.querySelector("#row-product-catalog").addEventListener("click", () => {
-      openAdminSectionOverlay(t("product_catalog"), renderProductsSection);
+    root.querySelector("#row-product-catalog").addEventListener("click", (e) => {
+      openAdminSection(root, e.currentTarget, t("product_catalog"), renderProductsSection);
     });
-    root.querySelector("#row-company-profile").addEventListener("click", () => {
-      openAdminSectionOverlay(t("company_profile"), renderCompanyProfileSection);
+    root.querySelector("#row-company-profile").addEventListener("click", (e) => {
+      openAdminSection(root, e.currentTarget, t("company_profile"), renderCompanyProfileSection);
     });
   }
 
@@ -893,12 +903,35 @@ function openGuideOverlay() {
   });
 }
 
+// Desktop shell (see the "Desktop shell" CSS section): at desktop width
+// (matches the app's single 1024px breakpoint), a section row's content
+// renders into the persistent right-hand #settings-section-pane sitting
+// beside the row list, instead of opening the same full-screen modal
+// mobile still gets -- no modal-over-modal, no full-screen takeover just to
+// glance at team management on a monitor that has the room to show both at
+// once. matchMedia is read fresh on every click (not cached/listened-to)
+// deliberately: this app has no other viewport-reactive JS behavior, and a
+// live mid-session resize retroactively converting an already-open pane/
+// modal is not a case worth the added complexity for v1.
+function openAdminSection(root, rowEl, title, renderFn) {
+  if (!window.matchMedia("(min-width: 1024px)").matches) {
+    openAdminSectionOverlay(title, renderFn);
+    return;
+  }
+  const pane = root.querySelector("#settings-section-pane");
+  root.querySelectorAll(".settings-list-row-active").forEach((el) => el.classList.remove("settings-list-row-active"));
+  rowEl.classList.add("settings-list-row-active");
+  pane.hidden = false;
+  pane.innerHTML = `<h2>${escapeHtml(title)}</h2><div id="settings-section-pane-content"></div>`;
+  renderFn(pane.querySelector("#settings-section-pane-content"));
+}
+
 // Product catalog and team management used to render as full inline
 // sections directly on the Settings page -- with plan approvals, financial
 // exports, notification defaults etc. also stacked there, the page got very
 // long for an admin/director. Each now collapses to a single row that opens
 // its content in a full-screen overlay instead, same shell as the guide
-// viewer.
+// viewer (mobile width -- see openAdminSection above for the desktop path).
 function openAdminSectionOverlay(title, renderFn) {
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay guide-overlay";

@@ -7465,3 +7465,161 @@ form select,
   color: inherit;
   cursor: pointer;
 }
+
+/* ============================================================
+   Desktop shell (desktop-layout project, Step 2)
+
+   Single breakpoint per the audit: min-width: 1024px. Everything above
+   this comment is the original mobile-first styling, unchanged, and stays
+   the only styling that applies below 1024px -- field-facing screens
+   (check-in, GPS capture, camera, signature pad) are never touched here.
+   Desk-primary screens get further per-screen desktop treatment in later
+   steps; this section is only the shell: sidebar nav instead of the
+   bottom tab bar, the phone-width column uncapped, and the Settings admin
+   workspace's list+content two-pane layout (see openAdminSection in
+   settings.js) instead of its mobile full-screen modal drill-down.
+   ============================================================ */
+
+:root {
+  --sidebar-width: 248px;
+}
+
+.sidebar {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  body {
+    max-width: none;
+    margin: 0;
+    box-shadow: none;
+    padding-left: var(--sidebar-width);
+  }
+
+  .nav-bar {
+    display: none;
+  }
+
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: var(--sidebar-width);
+    background: var(--bg-elevated);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-right: 0.5px solid var(--border);
+    padding: 20px 12px calc(20px + var(--safe-bottom));
+    overflow-y: auto;
+    /* Same reasoning as .nav-bar's own z-index comment: above the
+       isolated app/map stacking context Leaflet's internal z-indexes
+       (up to 1000) can otherwise escape into. */
+    z-index: 1200;
+  }
+
+  .sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px 20px;
+  }
+
+  .sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: var(--radius);
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    text-align: left;
+    cursor: pointer;
+    font-size: 0.92rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .sidebar-item:hover {
+    background: var(--bg-card-pressed);
+    color: var(--text);
+  }
+
+  .sidebar-item:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+
+  .sidebar-item-active {
+    background: var(--accent);
+    color: #ffffff;
+  }
+
+  .sidebar-item-icon {
+    flex-shrink: 0;
+    display: flex;
+    position: relative;
+  }
+
+  .sidebar-section-label {
+    font-size: var(--fs-eyebrow);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    padding: 18px 12px 6px;
+  }
+
+  /* .top-bar stays position:sticky inside the normal-flow column (see its
+     own rule above) -- body's padding-left is what insets it (and #app)
+     past the fixed sidebar, so no position/width override is needed here,
+     just breathing room now that there's no phone-width cap pinching it. */
+  .top-bar {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .app-main {
+    /* No bottom tab bar to clear anymore. */
+    padding-bottom: 24px;
+  }
+
+  /* Settings admin workspace: section list on the left, section content
+     in a persistent pane on the right (see openAdminSection in
+     settings.js) instead of the mobile full-screen modal drill-down. */
+  .settings-admin-layout {
+    display: grid;
+    grid-template-columns: minmax(280px, 380px) 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+
+  .settings-section-pane {
+    position: sticky;
+    top: 24px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    min-height: 240px;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+  }
+
+  .settings-section-pane h2 {
+    margin-top: 0;
+  }
+
+  .settings-list-row-active {
+    background: var(--bg-card-pressed);
+  }
+}

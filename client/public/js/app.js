@@ -17,10 +17,12 @@ import { mountUpdateBanner, initServiceWorkerUpdates } from "./updateBanner.js";
 import { startLocationBroadcast, stopLocationBroadcast } from "./locationBroadcast.js";
 import { escapeHtml } from "./util.js";
 import { getTheme } from "./theme.js";
+import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds } from "./quickActions.js";
 
 const app = document.getElementById("app");
 const navBar = document.getElementById("nav-bar");
 const topBar = document.getElementById("top-bar");
+const sidebar = document.getElementById("sidebar");
 
 // #app (not the document) is the app's real scroll container -- body stays
 // overflow:hidden so the fixed top/nav bars never drift with content (see
@@ -221,13 +223,18 @@ let preSettingsHash = "#/dashboard";
 let orderBadgeCount = 0;
 
 function applyOrderBadge() {
-  const el = document.getElementById("orders-nav-badge");
-  if (!el) return;
-  if (orderBadgeCount > 0) {
-    el.textContent = orderBadgeCount > 99 ? "99+" : String(orderBadgeCount);
-    el.hidden = false;
-  } else {
-    el.hidden = true;
+  // Two possible badge elements: the bottom-nav Orders tab (mobile) and
+  // the sidebar's Orders item (desktop) -- only one is ever actually in
+  // the DOM at a time (see the "Desktop shell" CSS section), but both ids
+  // are queried unconditionally rather than branching on viewport width.
+  const els = [document.getElementById("orders-nav-badge"), document.getElementById("sidebar-orders-badge")].filter(Boolean);
+  for (const el of els) {
+    if (orderBadgeCount > 0) {
+      el.textContent = orderBadgeCount > 99 ? "99+" : String(orderBadgeCount);
+      el.hidden = false;
+    } else {
+      el.hidden = true;
+    }
   }
 }
 
@@ -513,6 +520,7 @@ async function render() {
   if (!state.user) {
     topBar.hidden = true;
     navBar.hidden = true;
+    sidebar.hidden = true;
     const { renderLogin } = await import("./views/login.js");
     renderLogin(app, async () => {
       location.hash = "#/dashboard";
@@ -531,6 +539,7 @@ async function render() {
 
   topBar.hidden = false;
   navBar.hidden = false;
+  sidebar.hidden = false;
   renderNav();
   mountInstallPrompt(installRoot);
   preloadCoreViews();
@@ -623,6 +632,12 @@ async function render() {
 // applyPlanApprovalBadge below only toggle hidden/textContent on already-
 // existing elements, so they still run every call regardless.
 let lastNavSignature = null;
+// Home screen quick-action visibility (per-role, admin-configurable --
+// see quickActions.js) is what decides the desktop sidebar's item set
+// beyond the 5 core routes. Fetched once at boot (see init() below; GET
+// /settings is in api.js's short-lived GET cache anyway) and cached here
+// rather than re-fetched on every navigation.
+let cachedSettings = null;
 
 function renderNav() {
   const hash = (location.hash || "#/dashboard").split("?")[0];
@@ -630,10 +645,88 @@ function renderNav() {
   if (signature !== lastNavSignature) {
     lastNavSignature = signature;
     rebuildNavMarkup(hash);
+    rebuildSidebarMarkup(hash);
   }
   applyOrderBadge();
   applyNotificationBadge();
   applyPlanApprovalBadge();
+}
+
+// Icons for the sidebar's role-visible quick-action items that aren't
+// already one of the 5 core routes (see EXCLUDED_FROM_SIDEBAR below) --
+// plain single-color glyphs matching the core items' style, not the
+// colored-background quick-action-tile treatment those same actions get
+// on the Home screen grid (dashboard.js's own QUICK_ACTION_ICON).
+const SIDEBAR_ITEM_ICON = {
+  qa_plan_route: icons.planDay,
+  qa_payments: icons.payment,
+  qa_cash_expense: icons.wallet,
+  qa_pricelist: icons.tag,
+  qa_warehouse: icons.box,
+  qa_delivery: icons.truck,
+  qa_recorded: icons.clock,
+  qa_team_performance: icons.target,
+  qa_reports: icons.chart,
+  qa_debt_balances: icons.wallet,
+  qa_company_dashboard: icons.chart,
+};
+
+// qa_check_in and qa_add_customer both jump into #/map (with a query
+// param) -- they're "do a thing right now" shortcuts that make sense as
+// their own tile on a phone's home screen, not a second, redundant
+// destination next to the Map item the sidebar already has.
+const EXCLUDED_FROM_SIDEBAR = new Set(["qa_check_in", "qa_add_customer"]);
+
+function rebuildSidebarMarkup(hash) {
+  if (!sidebar) return;
+
+  const coreItems = [
+    { hash: "#/dashboard", label: t("nav_dashboard"), icon: icons.dashboard },
+    { hash: "#/activity", label: t("nav_activity"), icon: icons.activity },
+    { hash: "#/map", label: t("nav_map"), icon: icons.map },
+    { hash: "#/customers", label: t("nav_customers"), icon: icons.customers },
+    { hash: "#/orders", label: t("nav_orders"), icon: icons.cart, badgeId: "sidebar-orders-badge" },
+  ];
+
+  const visibleIds = visibleQuickActionIds(state.user.role, cachedSettings?.quick_action_visibility).filter(
+    (id) => !EXCLUDED_FROM_SIDEBAR.has(id)
+  );
+  const moreItems = QUICK_ACTIONS.filter((a) => visibleIds.includes(a.id) && QUICK_ACTION_ROUTE[a.id]).map((a) => ({
+    hash: QUICK_ACTION_ROUTE[a.id],
+    label: t(a.id),
+    icon: SIDEBAR_ITEM_ICON[a.id] || icons.chart,
+  }));
+
+  function itemHtml(item) {
+    const active = hash === item.hash;
+    return `
+      <button type="button" class="sidebar-item ${active ? "sidebar-item-active" : ""}" data-hash="${item.hash}" ${active ? 'aria-current="page"' : ""}>
+        <span class="sidebar-item-icon">
+          ${item.icon}
+          ${item.badgeId ? `<span class="nav-badge count-badge" id="${item.badgeId}" hidden></span>` : ""}
+        </span>
+        <span>${item.label}</span>
+      </button>
+    `;
+  }
+
+  sidebar.innerHTML = `
+    <div class="sidebar-brand">
+      <img class="topbar-logo topbar-logo-wordmark" src="/brand/kad-wordmark.png" alt="KAD" />
+      <span class="topbar-title">${t("app_name_suffix")}</span>
+    </div>
+    <nav class="sidebar-nav" aria-label="${t("nav_settings")}">
+      ${coreItems.map(itemHtml).join("")}
+      ${
+        moreItems.length
+          ? `<div class="sidebar-section-label">${t("nav_more")}</div>${moreItems.map(itemHtml).join("")}`
+          : ""
+      }
+    </nav>
+  `;
+  sidebar.querySelectorAll("[data-hash]").forEach((el) => {
+    el.addEventListener("click", () => navigate(el.dataset.hash));
+  });
 }
 
 function rebuildNavMarkup(hash) {
@@ -752,6 +845,15 @@ async function init() {
   renderSyncBanner();
   flushQueue();
   render();
+  if (state.user) {
+    api
+      .getSettings()
+      .then((settings) => {
+        cachedSettings = settings;
+        renderNav();
+      })
+      .catch(() => {});
+  }
   refreshOrderBadge();
   refreshPaymentBadge();
   refreshUnrecordedBadge();
