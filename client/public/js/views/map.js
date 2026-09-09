@@ -2252,7 +2252,13 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       }, 400);
     });
 
-    requestAnimationFrame(() => input.focus());
+    // Focused synchronously, not via requestAnimationFrame -- mobile
+    // browsers (iOS Safari especially) only reliably raise the on-screen
+    // keyboard for a focus() call that happens within the same tick as the
+    // triggering tap/click; deferring it a frame (as this used to, and as
+    // activateDialog's own auto-focus below still does) silently focuses
+    // the input without the keyboard actually opening.
+    input.focus();
   }
 
   function startAddCustomerFlow() {
