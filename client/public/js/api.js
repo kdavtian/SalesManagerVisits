@@ -336,6 +336,7 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/reports/daily-management${qs ? `?${qs}` : ""}`);
   },
+  listGeneratedReports: () => request(`/reports/documents`),
 
   getPerfChannels: () => request("/team-performance/channels"),
   updatePerfChannelManager: (channelId, managerUserId) =>

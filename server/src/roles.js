@@ -275,3 +275,11 @@ export function seesUnrecordedBadge(role) {
 // (see task spec: "CEO should NOT receive automatic payment push
 // notifications").
 export const PAYMENT_NOTIFY_ROLES = ["accountant"];
+
+// Who can download the generated report files (Sales Director workbook,
+// debt/receivables Excel, CEO management workbook) the CEO Telegram bot
+// pushes in as-is -- same audience as every other financial report/export
+// in this app (seesFinancialExports), not a narrower set per report type.
+export function seesGeneratedReports(role) {
+  return seesFinancialExports(role);
+}

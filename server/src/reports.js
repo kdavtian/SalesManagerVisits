@@ -68,6 +68,17 @@ export const REPORTS = [
     descriptionKey: "report_daily_management_description",
     defaultRoles: ["admin", "ceo", "sales_director", "accountant"],
   },
+  // Downloadable generated files (Sales Director workbook, debt/receivables
+  // Excel, CEO management workbook) pushed as-is by the bot -- see
+  // erpSync.js's POST /reports and roles.js's seesGeneratedReports. Not
+  // parsed into structured columns like the reports above; this just lists
+  // and serves whatever files have landed.
+  {
+    key: "documents",
+    nameKey: "report_documents_name",
+    descriptionKey: "report_documents_description",
+    defaultRoles: ["admin", "ceo", "sales_director", "accountant"],
+  },
 ];
 
 export function findReport(key) {

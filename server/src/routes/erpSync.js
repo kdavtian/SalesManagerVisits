@@ -1,10 +1,19 @@
 import crypto from "node:crypto";
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
+import multer from "multer";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
+import { notifyUser } from "../notifications.js";
 
 export const erpSyncRouter = Router();
+
+// In-memory, not disk -- these are pushed once, stored straight into
+// generated_reports.file_data, and never touched again on this server.
+const reportFileUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+});
 
 const syncKeyLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -324,11 +333,17 @@ function isPlainArray(value) {
 // browsable in-app (see reports.js's "daily_management" report). Same
 // shared-secret auth as the main sync, since it's the same Windows PC
 // pipeline pushing it, just on its own schedule.
+const REPORT_PERIODS = new Set(["daily", "weekly", "monthly", "quarterly", "annual"]);
+
 erpSyncRouter.post("/daily-report", syncKeyLimiter, requireSyncKey, async (req, res) => {
   const body = req.body ?? {};
   const { report_date, sales, payments, balance } = body;
+  const period = body.period !== undefined ? String(body.period) : "daily";
   if (typeof report_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(report_date)) {
     return res.status(400).json({ error: "report_date must be a YYYY-MM-DD string" });
+  }
+  if (!REPORT_PERIODS.has(period)) {
+    return res.status(400).json({ error: `period must be one of ${[...REPORT_PERIODS].join(", ")}` });
   }
   if (!isPlainObject(sales) || !isPlainObject(payments) || !isPlainObject(balance)) {
     return res.status(400).json({ error: "sales, payments, and balance objects are required" });
@@ -371,13 +386,13 @@ erpSyncRouter.post("/daily-report", syncKeyLimiter, requireSyncKey, async (req, 
        balance_with_managers_amd, balance_with_managers_by_manager,
        credit_line_usd, receivables_total_amd, receivables_net_amd,
        warehouse_value_amd, warehouse_liters,
-       prev_report_date, change_total_amd, change_overdue_amd, synced_at
+       prev_report_date, change_total_amd, change_overdue_amd, synced_at, period
      ) VALUES (
        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
        $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34,
-       $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, now()
+       $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, now(), $46
      )
-     ON CONFLICT (report_date) DO UPDATE SET
+     ON CONFLICT (period, report_date) DO UPDATE SET
        sales_ytd_amd = EXCLUDED.sales_ytd_amd, sales_ytd_liters = EXCLUDED.sales_ytd_liters, sales_ytd_orders = EXCLUDED.sales_ytd_orders,
        sales_mtd_amd = EXCLUDED.sales_mtd_amd, sales_mtd_liters = EXCLUDED.sales_mtd_liters, sales_mtd_orders = EXCLUDED.sales_mtd_orders,
        sales_wtd_amd = EXCLUDED.sales_wtd_amd, sales_wtd_liters = EXCLUDED.sales_wtd_liters, sales_wtd_orders = EXCLUDED.sales_wtd_orders,
@@ -417,10 +432,76 @@ erpSyncRouter.post("/daily-report", syncKeyLimiter, requireSyncKey, async (req, 
       isFiniteOrNull(balance.credit_line_usd), isFiniteOrNull(balance.receivables_total_amd), isFiniteOrNull(balance.receivables_net_amd),
       isFiniteOrNull(balance.warehouse_value_amd), isFiniteOrNull(balance.warehouse_liters),
       balance.prev_report_date || null, isFiniteOrNull(balance.change_total_amd), isFiniteOrNull(balance.change_overdue_amd),
+      period,
     ]
   );
 
-  res.json({ synced: true, report_date });
+  // Only the daily period is worth paging management about -- weekly/
+  // monthly/quarterly/annual snapshots land at the same time as (or well
+  // after) the daily one and would just be a duplicate ping.
+  if (period === "daily") {
+    const { rows: recipients } = await pool.query(
+      "SELECT id FROM users WHERE role IN ('admin', 'ceo', 'sales_director', 'accountant')"
+    );
+    await Promise.all(
+      recipients.map((u) =>
+        notifyUser(u.id, "daily_report_ready", {
+          title: "Daily management report ready",
+          body: `Sales, payments, and balance data for ${report_date} is now available.`,
+          url: "/#/reports?r=daily_management",
+        })
+      )
+    );
+  }
+
+  res.json({ synced: true, report_date, period });
+});
+
+const GENERATED_REPORT_TYPES = new Set(["sales_director", "debt_receivables", "ceo_management"]);
+
+// Pushes the literal generated Excel workbook (Sales Director report,
+// debt/receivables workbook, CEO management report) the bot already builds
+// correctly in Python, rather than re-parsing it into structured columns --
+// see roles.js's seesGeneratedReports for why: these are rich, multi-sheet
+// files (charts, full inventory, price lists) that would be a large,
+// drift-prone duplicate effort to re-derive as native app screens.
+// multipart/form-data, not JSON: report_type/report_date as fields, the
+// workbook itself as `file`.
+erpSyncRouter.post("/reports", syncKeyLimiter, requireSyncKey, reportFileUpload.single("file"), async (req, res) => {
+  const { report_type, report_date } = req.body ?? {};
+  if (!GENERATED_REPORT_TYPES.has(report_type)) {
+    return res.status(400).json({ error: `report_type must be one of ${[...GENERATED_REPORT_TYPES].join(", ")}` });
+  }
+  if (typeof report_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(report_date)) {
+    return res.status(400).json({ error: "report_date must be a YYYY-MM-DD string" });
+  }
+  if (!req.file) {
+    return res.status(400).json({ error: "file is required" });
+  }
+
+  await pool.query(
+    `INSERT INTO generated_reports (report_type, report_date, file_name, content_type, file_data, synced_at)
+     VALUES ($1, $2, $3, $4, $5, now())
+     ON CONFLICT (report_type, report_date) DO UPDATE SET
+       file_name = EXCLUDED.file_name, content_type = EXCLUDED.content_type,
+       file_data = EXCLUDED.file_data, synced_at = now()`,
+    [report_type, report_date, req.file.originalname || `${report_type}_${report_date}.xlsx`, req.file.mimetype, req.file.buffer]
+  );
+
+  const { rows: recipients } = await pool.query(
+    "SELECT id FROM users WHERE role IN ('admin', 'ceo', 'sales_director', 'accountant')"
+  );
+  await Promise.all(
+    recipients.map((u) =>
+      notifyUser(u.id, "generated_report_ready", {
+        title: "New report available",
+        body: `${report_type.replace(/_/g, " ")} for ${report_date} is ready to download.`,
+        url: "/#/reports?r=documents",
+      })
+    )
+  );
+
+  res.json({ synced: true, report_type, report_date });
 });
 
 // Lets any logged-in rep browse the ERP extract by name instead of

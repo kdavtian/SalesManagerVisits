@@ -23,6 +23,10 @@ export const NOTIFICATION_TYPES = [
   // waiting for them to count and confirm; the sender is told the outcome.
   "cash_handoff_submitted",
   "cash_handoff_reviewed",
+  // Pushed by the CEO Telegram bot's sync (server/src/routes/erpSync.js),
+  // not by anything happening inside this app.
+  "daily_report_ready",
+  "generated_report_ready",
 ];
 
 // Warehouse Manager: an order just entered their queue.

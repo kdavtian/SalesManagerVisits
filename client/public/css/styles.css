@@ -6628,6 +6628,11 @@ form select,
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* The Documents report renders these as <a href> download links (a plain
+     <div> can't trigger a browser download) -- override the default
+     anchor underline/color so it still reads as a card row, not a link. */
+  text-decoration: none;
+  color: inherit;
 }
 
 .report-row-multiline {
