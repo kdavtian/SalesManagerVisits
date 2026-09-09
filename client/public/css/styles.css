@@ -7623,3 +7623,53 @@ form select,
     background: var(--bg-card-pressed);
   }
 }
+
+/* ============================================================
+   Desktop shell, Step 3: Map/visits
+
+   The map view's markup wraps #leaflet-map and all of its absolutely-
+   positioned overlays (search/filter bar, legend, FAB, nearby/planned
+   panels, hints) in .map-canvas, a sibling of the new .map-side-list --
+   every one of those overlays keeps the exact offsets it always had
+   (top/left/right/bottom), just now relative to .map-canvas instead of
+   .map-view directly, so none of that positioning needed to change.
+   .map-side-list mirrors applyFilter()'s current results (see
+   renderSideList in map.js): the same customers the map is showing as
+   pins, as a scrollable filterable list next to it -- "side-by-side
+   map+filterable list" per the Step 1 audit. Hidden below 1024px and
+   during the relocate-pin flow (map.js doesn't render it there). */
+
+.map-side-list {
+  display: none;
+}
+
+.map-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+@media (min-width: 1024px) {
+  .map-view {
+    display: flex;
+  }
+
+  .map-side-list {
+    display: flex;
+    flex-direction: column;
+    width: 360px;
+    flex-shrink: 0;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+    background: var(--bg);
+  }
+
+  .map-side-list .card-list {
+    padding: 16px;
+  }
+
+  .map-canvas {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+  }
+}
