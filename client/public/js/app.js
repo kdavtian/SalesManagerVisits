@@ -497,6 +497,14 @@ async function doLogout() {
 
 async function render() {
   document.documentElement.lang = getLang();
+  // Any open sheet/dialog overlay is appended straight to document.body,
+  // outside the routed view container render() replaces below -- so
+  // navigating away (an in-app back button, but especially the browser/
+  // PWA's own edge-swipe-back gesture, which changes location.hash without
+  // going through any of this app's own close handlers) used to leave it
+  // floating on screen over whatever the new route rendered underneath,
+  // instead of closing along with the page it belonged to.
+  document.querySelectorAll(".sheet-overlay").forEach((el) => el.remove());
   if (currentCleanup) {
     currentCleanup();
     currentCleanup = null;
