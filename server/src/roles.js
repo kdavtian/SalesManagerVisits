@@ -283,3 +283,13 @@ export const PAYMENT_NOTIFY_ROLES = ["accountant"];
 export function seesGeneratedReports(role) {
   return seesFinancialExports(role);
 }
+
+// A plain sales_manager only sees ERP-sourced commercial data (debt
+// balance, order/payment history) for customers assigned to them --
+// everyone else's customer book stays visible for territory/browsing
+// purposes (name, address, category, etc.), just with that ERP data
+// withheld. Every other role already sees everyone's ERP data.
+export function seesCustomerErpData(role, assignedManagerId, userId) {
+  if (role !== "sales_manager") return true;
+  return assignedManagerId === userId;
+}

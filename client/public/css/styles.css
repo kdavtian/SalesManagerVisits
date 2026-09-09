@@ -5721,6 +5721,16 @@ input[type="search"]:focus {
 .list-row-top strong {
   font-size: var(--fs-row-title);
   font-weight: var(--fw-row-title);
+  /* Without this, a long title (a customer name, an Armenian label that
+     runs longer than its English equivalent, ...) refuses to shrink below
+     its own content width in this flex row (flex's default min-width:auto)
+     and pushes the trailing amount straight off the edge of the card
+     instead of wrapping or truncating -- reported as amounts overlapping/
+     getting cut off next to long order titles. Ellipsize instead. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .list-row-meta {

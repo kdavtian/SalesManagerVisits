@@ -251,13 +251,12 @@ export async function renderActivity(root, navigate) {
       ${checkinsCapped ? `<p class="muted activity-capped-note">${t("activity_capped_note")}</p>` : ""}
 
       ${
-        canFilterByManager
-          ? renderManagerPills()
-          : `<div class="customer-stats-bar activity-manager-bar">
-               <div class="stat-pill stat-pill-static">
-                 <strong>${allCheckins.length}</strong><span>${t("stat_total_visits")}</span>
-               </div>
-             </div>`
+        // A plain sales manager only ever sees their own check-ins, so this
+        // row -- originally a manager filter, and even its single-pill
+        // fallback below -- has nothing to show them beyond a count they
+        // already see from the list itself. Skip it entirely for that role
+        // instead of rendering a row that always reads as "1 person: you".
+        canFilterByManager ? renderManagerPills() : ""
       }
 
       <div class="activity-search-combined" id="activity-search-combined">

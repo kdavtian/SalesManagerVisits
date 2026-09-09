@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, seesFinancialExports } from "../roles.js";
+import { seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, seesFinancialExports, seesCustomerErpData } from "../roles.js";
 import { getDefaultVisitFrequencyDays } from "../settings.js";
 
 export const customersRouter = Router();
@@ -90,6 +90,14 @@ customersRouter.get("/", async (req, res) => {
      ORDER BY c.name`,
     params
   );
+  // debt_amd is ERP commercial data -- a sales_manager only sees it for
+  // customers assigned to them (see seesCustomerErpData); everyone else's
+  // rows still come back, just without that one field.
+  if (include_debt && req.user.role === "sales_manager") {
+    for (const row of rows) {
+      if (!seesCustomerErpData(req.user.role, row.assigned_manager_id, req.user.id)) row.debt_amd = null;
+    }
+  }
   res.json(rows);
 });
 
@@ -252,6 +260,21 @@ customersRouter.get("/:id", async (req, res) => {
   if (customer.erp_debt_amd != null) {
     customer.estimated_debt_amd = Math.max(0, Number(customer.erp_debt_amd) - Number(customer.collected_since_sync_amd));
   }
+
+  // ERP commercial data (debt, payment/order history) is withheld from a
+  // sales_manager for a customer that isn't theirs -- everything else on
+  // the card (name, address, category, ...) still comes back.
+  if (!seesCustomerErpData(req.user.role, customer.assigned_manager_id, req.user.id)) {
+    customer.erp_assigned_sales_rep = null;
+    customer.erp_debt_amd = null;
+    customer.erp_last_payment_date = null;
+    customer.erp_days_since_payment = null;
+    customer.erp_aging_bucket = null;
+    customer.erp_recent_orders = [];
+    customer.collected_since_sync_amd = 0;
+    customer.estimated_debt_amd = null;
+  }
+
   res.json(customer);
 });
 
@@ -478,11 +501,12 @@ customersRouter.delete("/:id", requireAdmin, async (req, res) => {
 // filter for the "show all orders" screen.
 customersRouter.get("/:id/erp-orders", async (req, res) => {
   const scope = req.query.scope === "all" ? "all" : "recent";
-  const { rows: customerRows } = await pool.query("SELECT erp_customer_id FROM customers WHERE id = $1", [
+  const { rows: customerRows } = await pool.query("SELECT erp_customer_id, assigned_manager_id FROM customers WHERE id = $1", [
     req.params.id,
   ]);
   const erpCustomerId = customerRows[0]?.erp_customer_id;
   if (!erpCustomerId) return res.json([]);
+  if (!seesCustomerErpData(req.user.role, customerRows[0].assigned_manager_id, req.user.id)) return res.json([]);
 
   const dateFilter = scope === "recent" ? "AND order_date >= now() - interval '3 months'" : "";
   const { rows } = await pool.query(
@@ -500,11 +524,14 @@ customersRouter.get("/:id/erp-orders", async (req, res) => {
 // Line-item detail for one order (product/brand/qty/price), for the
 // click-into-an-order view. Grouped by brand client-side.
 customersRouter.get("/:id/erp-orders/:orderId", async (req, res) => {
-  const { rows: customerRows } = await pool.query("SELECT erp_customer_id FROM customers WHERE id = $1", [
+  const { rows: customerRows } = await pool.query("SELECT erp_customer_id, assigned_manager_id FROM customers WHERE id = $1", [
     req.params.id,
   ]);
   const erpCustomerId = customerRows[0]?.erp_customer_id;
   if (!erpCustomerId) return res.status(404).json({ error: "Customer not linked to an ERP record" });
+  if (!seesCustomerErpData(req.user.role, customerRows[0].assigned_manager_id, req.user.id)) {
+    return res.status(403).json({ error: "Not allowed" });
+  }
 
   const { rows } = await pool.query(
     `SELECT order_id, order_date, product_id, brand, product_name, size_l, qty, unit_price_amd, revenue_amd
