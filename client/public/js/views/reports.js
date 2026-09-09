@@ -48,7 +48,48 @@ export async function renderReports(root, navigate, reportKey) {
   if (reportKey === "sales_budget") return renderSalesBudgetReport(root, navigate);
   if (reportKey === "brand_volume") return renderBrandVolumeReport(root, navigate);
   if (reportKey === "daily_management") return renderDailyManagementReport(root, navigate);
+  if (reportKey === "documents") return renderDocumentsReport(root, navigate);
   return renderReportsList(root, navigate);
+}
+
+const GENERATED_REPORT_TYPE_LABEL_KEY = {
+  sales_director: "report_documents_type_sales_director",
+  debt_receivables: "report_documents_type_debt_receivables",
+  ceo_management: "report_documents_type_ceo_management",
+};
+
+async function renderDocumentsReport(root, navigate) {
+  root.innerHTML = `
+    <div class="detail-view">
+      ${reportHeaderHtml("report_documents_name")}
+      <div id="documents-list" class="card-list"><p class="loading-state" role="status">${t("loading")}</p></div>
+    </div>
+  `;
+  const container = root.querySelector(".detail-view");
+  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  const listEl = container.querySelector("#documents-list");
+
+  try {
+    const docs = await api.listGeneratedReports();
+    if (!docs.length) {
+      listEl.innerHTML = `<p class="empty-state">${t("report_documents_empty")}</p>`;
+      return;
+    }
+    listEl.innerHTML = docs
+      .map(
+        (d) => `
+      <a class="card report-row" href="/api/reports/documents/${d.id}/download">
+        <span>
+          <strong>${t(GENERATED_REPORT_TYPE_LABEL_KEY[d.report_type] || d.report_type)}</strong>
+          <span class="muted"> · ${formatDate(d.report_date)}</span>
+        </span>
+        <span>${icons.download}</span>
+      </a>`
+      )
+      .join("");
+  } catch (err) {
+    listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+  }
 }
 
 async function renderReportsList(root, navigate) {
@@ -666,11 +707,16 @@ function signedAmd(value) {
   return `${n > 0 ? "+" : ""}${formatAmd(n)}`;
 }
 
+const REPORT_PERIODS = ["daily", "weekly", "monthly", "quarterly", "annual"];
+
 async function renderDailyManagementReport(root, navigate) {
   root.innerHTML = `
     <div class="detail-view">
       ${reportHeaderHtml("report_daily_management_name")}
       <form id="report-filters" class="report-filter-form">
+        <select name="period">
+          ${REPORT_PERIODS.map((p) => `<option value="${p}">${t(`report_daily_management_period_tab_${p}`)}</option>`).join("")}
+        </select>
         <select name="date"></select>
       </form>
       <div id="report-body"><p class="loading-state" role="status">${t("loading")}</p></div>
@@ -679,14 +725,16 @@ async function renderDailyManagementReport(root, navigate) {
   const container = root.querySelector(".detail-view");
   container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
   const form = container.querySelector("#report-filters");
+  const periodSelect = form.querySelector('select[name="period"]');
   const dateSelect = form.querySelector('select[name="date"]');
   const body = container.querySelector("#report-body");
 
   async function load(explicitDate) {
     body.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     try {
-      const result = await api.getDailyManagementReport(explicitDate ? { date: explicitDate } : {});
-      if (!result) {
+      const period = periodSelect.value;
+      const result = await api.getDailyManagementReport(explicitDate ? { date: explicitDate, period } : { period });
+      if (!result?.report) {
         dateSelect.innerHTML = "";
         body.innerHTML = `<p class="empty-state">${t("no_data")}</p>`;
         return;
@@ -802,6 +850,7 @@ async function renderDailyManagementReport(root, navigate) {
   }
 
   dateSelect.addEventListener("change", () => load(dateSelect.value));
+  periodSelect.addEventListener("change", () => load());
   await load();
 }
 

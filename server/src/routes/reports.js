@@ -414,22 +414,54 @@ reportsRouter.get("/brand-volume", requireReportAccess("brand_volume"), async (r
   res.json({ rows, by_brand: byBrand });
 });
 
-// Daily management report -- a stored snapshot pushed once per report_date
-// by POST /api/erp-sync/daily-report (see erpSync.js), not derived from
-// the other ERP tables above. Returns the latest snapshot by default, or
-// one specific date via ?date=YYYY-MM-DD.
+const REPORT_PERIODS = new Set(["daily", "weekly", "monthly", "quarterly", "annual"]);
+
+// Daily management report -- a stored snapshot pushed once per
+// (period, report_date) by POST /api/erp-sync/daily-report (see
+// erpSync.js), not derived from the other ERP tables above. "Daily" is the
+// default period (matches the name every existing caller already expects);
+// ?period=weekly|monthly|quarterly|annual switches to that period's own
+// latest-by-default/one-specific-date-via-?date= snapshot instead.
 reportsRouter.get("/daily-management", requireReportAccess("daily_management"), async (req, res) => {
   const { date } = req.query;
+  const period = REPORT_PERIODS.has(req.query.period) ? req.query.period : "daily";
   const { rows } = await pool.query(
     `SELECT *, report_date::text AS report_date, prev_report_date::text AS prev_report_date
      FROM erp_daily_report
-     WHERE report_date = COALESCE($1::date, (SELECT max(report_date) FROM erp_daily_report))`,
-    [/^\d{4}-\d{2}-\d{2}$/.test(date || "") ? date : null]
+     WHERE period = $2
+       AND report_date = COALESCE($1::date, (SELECT max(report_date) FROM erp_daily_report WHERE period = $2))`,
+    [/^\d{4}-\d{2}-\d{2}$/.test(date || "") ? date : null, period]
   );
-  if (!rows.length) return res.json(null);
+  if (!rows.length) return res.json({ report: null, available_dates: [], period });
 
   const { rows: dates } = await pool.query(
-    `SELECT report_date::text AS report_date FROM erp_daily_report ORDER BY report_date DESC LIMIT 30`
+    `SELECT report_date::text AS report_date FROM erp_daily_report WHERE period = $1 ORDER BY report_date DESC LIMIT 30`,
+    [period]
   );
-  res.json({ report: rows[0], available_dates: dates.map((d) => d.report_date) });
+  res.json({ report: rows[0], available_dates: dates.map((d) => d.report_date), period });
+});
+
+// Generated report files (Sales Director workbook, debt/receivables Excel,
+// CEO management workbook) pushed as-is by POST /api/erp-sync/reports (see
+// erpSync.js) -- metadata only, not the file bytes themselves (see the
+// /documents/:id/download route below for that).
+reportsRouter.get("/documents", requireReportAccess("documents"), async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT id, report_type, report_date::text AS report_date, file_name, synced_at
+     FROM generated_reports
+     ORDER BY report_date DESC, report_type`
+  );
+  res.json(rows);
+});
+
+reportsRouter.get("/documents/:id/download", requireReportAccess("documents"), async (req, res) => {
+  const { rows } = await pool.query(
+    "SELECT file_name, content_type, file_data FROM generated_reports WHERE id = $1",
+    [req.params.id]
+  );
+  const doc = rows[0];
+  if (!doc) return res.status(404).json({ error: "Report not found" });
+  res.setHeader("Content-Type", doc.content_type);
+  res.setHeader("Content-Disposition", `attachment; filename="${doc.file_name.replace(/"/g, "")}"`);
+  res.send(doc.file_data);
 });

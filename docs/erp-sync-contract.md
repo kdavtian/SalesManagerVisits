@@ -87,9 +87,19 @@ back `undefined`, the `brand_volume` key isn't being sent.**
 ## POST /api/erp-sync/daily-report
 
 Separate, standalone endpoint on its own daily schedule -- the CEO Telegram
-bot's daily sales/collections/balance summary, pushed here once per
-`report_date` so it's also browsable in-app (`GET /reports/daily-management`).
-Upserted by `report_date`: a same-day re-push replaces, never duplicates.
+bot's sales/collections/balance summary, pushed here once per
+`(period, report_date)` so it's also browsable in-app
+(`GET /reports/daily-management?period=...`). Upserted by `(period,
+report_date)`: a same-day re-push of the same period replaces, never
+duplicates.
+
+`period` is optional in the request and defaults to `"daily"` -- pass
+`"weekly"`, `"monthly"`, `"quarterly"`, or `"annual"` to push that period's
+own snapshot instead (e.g. `build_ceo_report.py`'s `operational_reports`
+already computes all five; loop over them and call this endpoint once per
+period). Only a `period: "daily"` push triggers the `daily_report_ready`
+push notification -- the other periods land at the same time and would
+just be a duplicate ping.
 
 **If this endpoint is never called at all, the "Daily management report"
 page has nothing to show -- it isn't derived from the other synced tables,
@@ -98,6 +108,7 @@ only from what's pushed here.**
 ```jsonc
 {
   "report_date": "2026-09-08",   // required, YYYY-MM-DD
+  "period": "daily",             // optional, default "daily" -- one of daily/weekly/monthly/quarterly/annual
 
   "sales": {
     "ytd_amd": 0, "ytd_liters": 0, "ytd_orders": 0,
@@ -138,7 +149,33 @@ omitted), but every individual field inside them is optional -- anything
 missing or non-numeric is stored as `NULL` and the report shows "—" for it
 rather than erroring. `report_date` is the only hard requirement.
 
-Response: `{ synced: true, report_date }`.
+Response: `{ synced: true, report_date, period }`.
+
+## POST /api/erp-sync/reports
+
+Pushes a generated report *file* (Sales Director workbook, debt/receivables
+Excel, CEO management workbook) exactly as the Python pipeline already
+builds it -- not re-parsed into structured columns, just stored and made
+downloadable in-app (`GET /reports/documents`, `GET
+/reports/documents/:id/download`). This is deliberate: those workbooks are
+rich, multi-sheet files (dashboards, charts, full inventory, price lists)
+that would be a large, drift-prone effort to re-derive as native app
+screens, so the app just serves the real file back.
+
+`multipart/form-data`, not JSON (same `X-Sync-Key` header auth as every
+other endpoint on this router):
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `report_type` | yes | one of `sales_director`, `debt_receivables`, `ceo_management` |
+| `report_date` | yes | `YYYY-MM-DD` |
+| `file` | yes | the workbook itself, as a file part |
+
+Upserted by `(report_type, report_date)`: a same-day re-push replaces, never
+duplicates. Triggers a `generated_report_ready` push notification to every
+admin/ceo/sales_director/accountant user.
+
+Response: `{ synced: true, report_type, report_date }`.
 
 ## Quick way to tell which side the problem is on
 
