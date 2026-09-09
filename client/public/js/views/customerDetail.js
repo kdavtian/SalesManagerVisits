@@ -464,7 +464,7 @@ async function openAccountSettingsSheet(customer, onDone) {
         ${
           showErp
             ? `<p class="proposed-changes-label">${t("erp_customer_id")}</p>
-               <label class="erp-suggest-wrap">${t("erp_customer_id")}
+               <label class="erp-suggest-wrap"><span class="visually-hidden">${t("erp_customer_id")}</span>
                  <input type="text" name="erp_customer_id" value="${escapeHtml(customer.erp_customer_id ?? "")}" id="erp-customer-input" autocomplete="off" />
                  <div class="erp-suggest-list" id="erp-suggest-list" hidden></div>
                </label>`

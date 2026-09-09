@@ -644,7 +644,11 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   }
 
   let activeFilter = "";
-  let managerFilter = "";
+  // Sales managers don't get the "team locations" manager-filter dropdown
+  // (that's canViewTeamLocations()-gated, admin/sales_director/ceo only) --
+  // default them straight to their own book instead of showing the whole
+  // company's pins with no way for them to narrow it down themselves.
+  let managerFilter = state.user?.role === "sales_manager" ? String(state.user.id) : "";
   let searchQuery = "";
   let searchDebounceTimer;
   let selectedBrand = "";
