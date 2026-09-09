@@ -2815,6 +2815,17 @@ input[type="search"]:focus {
   flex: 1;
 }
 
+/* Order detail's action row can wrap to two lines (confirm/reject/edit +
+   a standalone delete button on its own line for an admin) -- .sheet's
+   flat 20px-plus-safe-area bottom padding, tuned for a single row of
+   buttons, left a visibly oversized gap below that wrapped second row
+   instead of the buttons sitting close to the true bottom edge the way a
+   native bottom bar does. Pulled back up so only the safe-area inset (plus
+   a small margin) remains below it. */
+#order-detail-actions {
+  margin-bottom: -14px;
+}
+
 .plan-day-list {
   max-height: 45vh;
   overflow-y: auto;

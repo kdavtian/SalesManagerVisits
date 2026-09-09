@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, activateDialog, channelDisplayLabel } from "../util.js";
+import { escapeHtml, formatAmd, activateDialog, attachSwipeToDismiss, channelDisplayLabel } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { state } from "../state.js";
 import { icons } from "../icons.js";
@@ -290,6 +290,7 @@ export async function renderOrders(root, navigate) {
     document.body.appendChild(overlay);
     activateDialog(overlay);
     overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+    attachSwipeToDismiss(overlay, overlay.querySelector(".sheet"), () => overlay.remove());
     overlay.querySelector("#order-customer-cancel").addEventListener("click", () => overlay.remove());
 
     const searchEl = overlay.querySelector("#order-customer-search");
@@ -361,6 +362,12 @@ export async function renderOrders(root, navigate) {
     document.body.appendChild(overlay);
     activateDialog(overlay);
     overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+    // The .sheet element itself is never replaced across re-renders (only
+    // its innerHTML is, in renderView/renderEditMode below), so this stays
+    // valid for the sheet's whole lifetime -- a left-edge swipe closes it,
+    // matching the edge-swipe-back gesture users expect and already get on
+    // the two full-screen overlays elsewhere (see settings.js).
+    attachSwipeToDismiss(overlay, overlay.querySelector(".sheet"), () => overlay.remove());
 
     let order;
     try {
