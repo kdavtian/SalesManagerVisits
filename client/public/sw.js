@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v115";
+const CACHE_VERSION = "field-visits-v116";
 const TILE_CACHE = "field-visits-tiles-v4";
 // Anything fetched at runtime that wasn't already in APP_SHELL gets cached
 // here, kept separate from CACHE_VERSION on purpose -- see trimCache below,
