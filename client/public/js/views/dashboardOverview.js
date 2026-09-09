@@ -117,10 +117,26 @@ function renderSalesSection(leaderboard) {
   `;
 }
 
-// Section 3: inventory balance. GET /products already returns stock_qty
-// per active product (see server/src/routes/products.js) -- brand
-// grouping is a client-side reduce rather than a new server aggregation,
-// since the flat list is small enough to fold in JS.
+// "1L" -> 1, "208L" -> 208; null for a unit that isn't a plain liter size
+// (filters, non-oil items) -- same pattern as orderCreate.js's sizeLiters,
+// not imported since that helper isn't exported.
+function sizeLiters(unit) {
+  const m = /^([\d.]+)\s*L$/i.exec((unit || "").trim());
+  return m ? parseFloat(m[1]) : null;
+}
+
+function formatLiters(value) {
+  const n = Number(value) || 0;
+  return Number.isInteger(n) ? `${n.toLocaleString()} L` : `${n.toFixed(1)} L`;
+}
+
+// Section 3: inventory balance, by liters and AMD value rather than a raw
+// unit count -- a unit count on its own can't be compared across products
+// (a "1" for a 208L drum and a "1" for a 1L bottle mean very different
+// amounts of oil). GET /products already returns stock_qty per active
+// product (see server/src/routes/products.js) -- brand grouping is a
+// client-side reduce rather than a new server aggregation, since the flat
+// list is small enough to fold in JS.
 function renderInventorySection(products) {
   if (!products?.length) {
     return `
@@ -128,28 +144,42 @@ function renderInventorySection(products) {
       <p class="empty-state">${t("company_dashboard_no_data")}</p>
     `;
   }
-  const totalStock = products.reduce((sum, p) => sum + (Number(p.stock_qty) || 0), 0);
+  let totalLiters = 0;
+  let totalAmd = 0;
   const byBrand = new Map();
   for (const p of products) {
+    const qty = Number(p.stock_qty) || 0;
+    const liters = sizeLiters(p.unit);
+    const lineLiters = liters !== null ? qty * liters : 0;
+    const lineAmd = qty * (Number(p.unit_price_amd) || 0);
+    totalLiters += lineLiters;
+    totalAmd += lineAmd;
     const brand = p.brand || "—";
-    byBrand.set(brand, (byBrand.get(brand) || 0) + (Number(p.stock_qty) || 0));
+    const prev = byBrand.get(brand) || { liters: 0, amd: 0 };
+    byBrand.set(brand, { liters: prev.liters + lineLiters, amd: prev.amd + lineAmd });
   }
-  const brandRows = [...byBrand.entries()].sort((a, b) => b[1] - a[1]);
+  const brandRows = [...byBrand.entries()].sort((a, b) => b[1].amd - a[1].amd);
 
   return `
     <h2 class="section-title">${t("company_dashboard_inventory")}</h2>
-    <div class="card">
-      <span class="progress-label">${t("company_dashboard_total_stock")}</span>
-      <span class="stat-value">${totalStock.toLocaleString()}</span>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <span class="stat-value">${formatLiters(totalLiters)}</span>
+        <span class="stat-label">${t("company_dashboard_total_stock")}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value">${formatAmd(Math.round(totalAmd))}</span>
+        <span class="stat-label">${t("company_dashboard_total_stock_value")}</span>
+      </div>
     </div>
     <h3 class="section-title section-title-inline" style="margin-top:14px;">${t("company_dashboard_by_brand")}</h3>
     <div class="card-list">
       ${brandRows
         .map(
-          ([brand, qty]) => `
+          ([brand, totals]) => `
         <div class="card list-row">
           <span>${escapeHtml(brand)}</span>
-          <span class="card-trailing muted">${qty.toLocaleString()}</span>
+          <span class="card-trailing muted">${formatLiters(totals.liters)} · ${formatAmd(Math.round(totals.amd))}</span>
         </div>
       `
         )

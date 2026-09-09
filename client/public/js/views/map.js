@@ -113,8 +113,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           ? ""
           : `<div class="map-top-controls">
               <div class="map-search-row">
-                <input type="search" id="map-customer-search" placeholder="${t("map_search_placeholder")}" aria-label="${t("map_search_placeholder")}" />
                 <button type="button" class="icon-btn map-address-search-btn" id="map-address-search-btn" aria-label="${t("search_address_title")}" title="${t("search_address_title")}">${icons.search}</button>
+                <input type="search" id="map-customer-search" placeholder="${t("map_search_placeholder")}" aria-label="${t("map_search_placeholder")}" />
                 ${
                   canViewTeamLocations()
                     ? `<div class="filter-dropdown-wrap" id="map-manager-filter-wrap">
@@ -195,6 +195,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         }
         <button class="map-control-btn map-control-standalone" id="plan-day-btn" aria-label="${t("plan_day")}">
           ${icons.planDay}
+        </button>
+        <button class="map-control-btn map-control-standalone" id="planned-today-filter-btn" aria-label="${t("filter_planned_today")}" title="${t("filter_planned_today")}" aria-pressed="false">
+          ${icons.target}
         </button>
         <button class="map-control-btn map-control-standalone map-control-legend-btn" id="map-legend-btn" aria-label="${t("map_legend")}" aria-expanded="false" aria-haspopup="dialog">
           ${icons.info}
@@ -699,7 +702,6 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     const categories = [...new Set(lastCustomers.map(({ c }) => c.category).filter(Boolean))];
 
     iconFilterRow.innerHTML = [
-      mapFilterIconButton({ key: "planned-today", icon: icons.clipboardCheck, label: t("filter_planned_today"), active: plannedTodayOnly }),
       channels.length
         ? mapFilterIconButton({ key: "channel", icon: icons.route, label: t("filter_direction_title"), active: channelFilter !== "" })
         : "",
@@ -709,13 +711,6 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     ]
       .filter(Boolean)
       .join("");
-
-    iconFilterRow.querySelector('[data-map-filter-btn="planned-today"]')?.addEventListener("click", () => {
-      plannedTodayOnly = !plannedTodayOnly;
-      renderIconFilterRow();
-      if (plannedTodayOnly) loadPlannedTodayFilter();
-      else applyFilter();
-    });
 
     iconFilterRow.querySelector('[data-map-filter-btn="channel"]')?.addEventListener("click", () => {
       openMapFilterSheet(
@@ -1981,6 +1976,15 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     openPlanDaySheet();
   });
   if (startInPlanMode) openPlanDaySheet();
+
+  const plannedTodayFilterBtn = root.querySelector("#planned-today-filter-btn");
+  plannedTodayFilterBtn?.addEventListener("click", () => {
+    plannedTodayOnly = !plannedTodayOnly;
+    plannedTodayFilterBtn.classList.toggle("map-control-active", plannedTodayOnly);
+    plannedTodayFilterBtn.setAttribute("aria-pressed", String(plannedTodayOnly));
+    if (plannedTodayOnly) loadPlannedTodayFilter();
+    else applyFilter();
+  });
 
   const legendBtn = root.querySelector("#map-legend-btn");
   const legendPanel = root.querySelector("#map-legend-panel");
