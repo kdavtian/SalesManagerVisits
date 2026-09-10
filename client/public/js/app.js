@@ -668,7 +668,7 @@ const SIDEBAR_ITEM_ICON = {
   qa_team_performance: icons.target,
   qa_reports: icons.chart,
   qa_debt_balances: icons.wallet,
-  qa_company_dashboard: icons.chart,
+  qa_company_dashboard: icons.dashboard,
 };
 
 // qa_check_in and qa_add_customer both jump into #/map (with a query
@@ -681,7 +681,7 @@ function rebuildSidebarMarkup(hash) {
   if (!sidebar) return;
 
   const coreItems = [
-    { hash: "#/dashboard", label: t("nav_dashboard"), icon: icons.dashboard },
+    { hash: "#/dashboard", label: t("nav_dashboard"), icon: icons.home },
     { hash: "#/activity", label: t("nav_activity"), icon: icons.activity },
     { hash: "#/map", label: t("nav_map"), icon: icons.map },
     { hash: "#/customers", label: t("nav_customers"), icon: icons.customers },
@@ -731,7 +731,7 @@ function rebuildSidebarMarkup(hash) {
 
 function rebuildNavMarkup(hash) {
   const items = [
-    { hash: "#/dashboard", label: t("nav_dashboard"), icon: icons.dashboard },
+    { hash: "#/dashboard", label: t("nav_dashboard"), icon: icons.home },
     { hash: "#/activity", label: t("nav_activity"), icon: icons.activity },
     { hash: "#/map", label: t("nav_map"), icon: icons.map, center: true },
     { hash: "#/customers", label: t("nav_customers"), icon: icons.customers },
