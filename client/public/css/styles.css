@@ -7648,6 +7648,13 @@ form select,
   inset: 0;
 }
 
+.route-planner-map {
+  height: 220px;
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 8px 0 12px;
+}
+
 @media (min-width: 1024px) {
   .map-view {
     display: flex;
@@ -7671,5 +7678,56 @@ form select,
     position: relative;
     flex: 1;
     min-width: 0;
+  }
+}
+
+/* ============================================================
+   Desktop shell, Step 3: Warehouse & Delivery
+
+   Warehouse (Pick List / Staging / Inventory tabs): the mobile single-
+   column .card-list becomes a multi-column CSS grid at desktop, so more
+   of the same cards are visible at once instead of one long scrolling
+   column -- same markup/data (#warehouse-content in warehouse.js),
+   no separate desktop render path. Not a literal sortable <table>: the
+   three tabs' cards don't share one column shape (pick list is a
+   product+qty pair, staging is a multi-line order card with bulk-select
+   and actions, inventory is product+stock), so a shared grid layout was
+   the honest "same component, desktop variant" fit here rather than
+   forcing mismatched fields into table columns.
+
+   Delivery Planner ("Plan" tab in deliveryRoute.js, delivery_manager/
+   admin only -- NOT the driver's "My Route" view, which stays untouched
+   mobile-only): the planned route's map and its reorderable stop list go
+   side-by-side instead of stacked, with the map getting real height
+   instead of a cramped 220px strip. */
+
+@media (min-width: 1024px) {
+  #warehouse-content .card-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    align-items: start;
+  }
+
+  /* Inventory tab's brand/family group headings are section dividers
+     interspersed between cards, not cards themselves -- let them span
+     every column instead of competing for a grid cell alongside them. */
+  #warehouse-content .card-list .list-group-heading {
+    grid-column: 1 / -1;
+  }
+
+  .route-planner-result {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 16px;
+    align-items: start;
+  }
+
+  .route-planner-map {
+    height: 560px;
+  }
+
+  .route-planner-stops {
+    max-height: 560px;
+    overflow-y: auto;
   }
 }
