@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, channelDisplayLabel } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, channelDisplayLabel, parseDateOnly } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { canEditDirectly, canReassignCustomers, canAssignErpCustomerId, isAdmin, seesFinancialExports } from "../state.js";
@@ -261,14 +261,17 @@ function renderErpCard(customer, erpOrders) {
   const now = new Date();
   const salesThisMonth = orders
     .filter((o) => {
-      const d = new Date(o.order_date);
-      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      // order_date is a plain calendar date (no time) -- parseDateOnly avoids
+      // the UTC-midnight-parsing bug that shifted an order into the wrong
+      // month near a month boundary for a viewer behind UTC.
+      const d = parseDateOnly(o.order_date);
+      return d && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
     })
     .reduce((sum, o) => sum + Number(o.total_amd), 0);
   // erpOrders is already sorted order_date DESC by the API, so [0] is the
   // most recent order within the "recent" (last 3 months) scope this page
   // fetches -- good enough for a summary tile without a separate request.
-  const lastOrderDate = orders[0] ? new Date(orders[0].order_date).toLocaleDateString() : null;
+  const lastOrderDate = orders[0] ? parseDateOnly(orders[0].order_date)?.toLocaleDateString() : null;
 
   return `
     <div class="detail-stat-grid">

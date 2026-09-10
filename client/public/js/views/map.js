@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, tierSelectorHtml, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, channelDisplayLabel } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, tierSelectorHtml, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, channelDisplayLabel, parseDateOnly } from "../util.js";
 import { t } from "../i18n.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
@@ -1456,8 +1456,11 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
             ]);
             const lastVisitLabel = detail.last_visit_at ? formatDateTime(detail.last_visit_at) : t("never_visited");
             const debtLabel = detail.erp_debt_amd != null ? formatAmd(detail.erp_debt_amd) : "—";
+            // plan_date is a plain calendar date (no time) -- parseDateOnly
+            // avoids the UTC-midnight-parsing bug that showed the previous
+            // day's date for a viewer in a timezone behind UTC.
             const plannedLabel = plannedVisits.length
-              ? plannedVisits.map((p) => new Date(p.plan_date).toLocaleDateString(undefined, { month: "short", day: "numeric" })).join(", ")
+              ? plannedVisits.map((p) => parseDateOnly(p.plan_date)?.toLocaleDateString(undefined, { month: "short", day: "numeric" })).join(", ")
               : t("no_planned_visits");
             factsEl.innerHTML = `
               <div class="popup-fact"><span class="muted">${t("outstanding_debt")}</span><strong>${escapeHtml(debtLabel)}</strong></div>

@@ -8,6 +8,19 @@ import { APPROVER_ROLES } from "../notificationPreferences.js";
 
 export const visitPlansRouter = Router();
 
+// plan_date comes back from Postgres as a plain "YYYY-MM-DD" string (a
+// `date` column, no time component). `new Date(dateStr)` parses that as
+// UTC midnight, which .toLocaleDateString() then renders as the PREVIOUS
+// day whenever this process's own timezone (TZ env / host default) is
+// behind UTC -- reading the y/m/d digits straight out of the string and
+// building a local Date from them avoids the UTC round-trip entirely.
+function formatPlanDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
+  if (!match) return String(value);
+  const [, yyyy, mm, dd] = match;
+  return new Date(Number(yyyy), Number(mm) - 1, Number(dd)).toLocaleDateString();
+}
+
 visitPlansRouter.use(requireAuth);
 
 function todayDate() {
@@ -379,7 +392,7 @@ visitPlansRouter.patch("/:id", requireCanPlanForOthers, async (req, res) => {
     (async () => {
       try {
         if (action !== undefined) {
-          const dateLabel = new Date(updated[0].plan_date).toLocaleDateString();
+          const dateLabel = formatPlanDate(updated[0].plan_date);
           notifyUser(updated[0].user_id, "plan_reviewed", {
             title: action === "approve" ? "Visit plan approved" : "Visit plan rejected",
             body:
