@@ -3,6 +3,7 @@ import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, p
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 import { ALL_ROLES, QUICK_ACTIONS, defaultQuickActionIds } from "../quickActions.js";
+import { compareProducts } from "../productSort.js";
 
 const ROLE_BADGE = {
   admin: { key: "role_admin", cls: "badge-accent", tint: "warning" },
@@ -396,7 +397,14 @@ export async function renderProductsSection(container) {
   container.querySelector("#import-excel-btn").addEventListener("click", () => openImportSheet(loadProducts));
 
   async function loadProducts() {
-    const products = await api.listAllProducts();
+    const fetched = await api.listAllProducts();
+    // Active products first (as before), brand/family/viscosity/size
+    // order within each group -- see productSort.js, shared with
+    // Pricelist, Order creation and Warehouse Inventory.
+    const products = [
+      ...fetched.filter((p) => p.active).sort(compareProducts),
+      ...fetched.filter((p) => !p.active).sort(compareProducts),
+    ];
     listEl.innerHTML = products.length
       ? products
           .map(

@@ -8,6 +8,7 @@ const dict = {
     nav_activity: "Activity",
     nav_orders: "Orders",
     nav_settings: "Settings",
+    nav_more: "More",
     menu: "Menu",
     orders_title: "Orders",
     all_statuses: "All",
@@ -1070,6 +1071,7 @@ const dict = {
     debt_balances_manager_filter: "Manager",
     debt_balances_last_payment: "Last payment",
     debt_balances_empty: "No outstanding balances",
+    debt_balances_subtotal: "Total",
 
     customer_email: "Email",
     customer_email_placeholder: "name@example.com",
@@ -1092,6 +1094,7 @@ const dict = {
     nav_activity: "Ակտիվություն",
     nav_orders: "Պատվերներ",
     nav_settings: "Կարգավորումներ",
+    nav_more: "Ավելին",
     menu: "Ընտրացանկ",
     orders_title: "Պատվերներ",
     all_statuses: "Բոլորը",
@@ -2156,6 +2159,7 @@ const dict = {
     debt_balances_manager_filter: "Մենեջեր",
     debt_balances_last_payment: "Վերջին վճարումը",
     debt_balances_empty: "Չկան չմարված մնացորդներ",
+    debt_balances_subtotal: "Ընդամենը",
 
     customer_email: "Էլ. փոստ",
     customer_email_placeholder: "name@example.com",

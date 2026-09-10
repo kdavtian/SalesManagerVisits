@@ -4414,6 +4414,18 @@ input[type="search"]:focus {
   flex-shrink: 0;
 }
 
+/* Debt Balances headline total -- pushed to the right edge of the
+   .detail-header row the same way .detail-header-actions is, just text
+   instead of icon buttons. Empty (no rows to sum) collapses to nothing
+   rather than showing "Total: 0 AMD" as if there really were a balance. */
+.debt-balances-subtotal {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+}
+
 /* ===== Customer detail header: three stacked rows =====
    1. big avatar + customer name   2. ERP ID / tier / visit status
    3. action icons.
@@ -7464,4 +7476,343 @@ form select,
   font: inherit;
   color: inherit;
   cursor: pointer;
+}
+
+/* ============================================================
+   Desktop shell (desktop-layout project, Step 2)
+
+   Single breakpoint per the audit: min-width: 1024px. Everything above
+   this comment is the original mobile-first styling, unchanged, and stays
+   the only styling that applies below 1024px -- field-facing screens
+   (check-in, GPS capture, camera, signature pad) are never touched here.
+   Desk-primary screens get further per-screen desktop treatment in later
+   steps; this section is only the shell: sidebar nav instead of the
+   bottom tab bar, the phone-width column uncapped, and the Settings admin
+   workspace's list+content two-pane layout (see openAdminSection in
+   settings.js) instead of its mobile full-screen modal drill-down.
+   ============================================================ */
+
+:root {
+  --sidebar-width: 248px;
+}
+
+.sidebar {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  body {
+    max-width: none;
+    margin: 0;
+    box-shadow: none;
+    padding-left: var(--sidebar-width);
+  }
+
+  .nav-bar {
+    display: none;
+  }
+
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: var(--sidebar-width);
+    background: var(--bg-elevated);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-right: 0.5px solid var(--border);
+    padding: 20px 12px calc(20px + var(--safe-bottom));
+    overflow-y: auto;
+    /* Same reasoning as .nav-bar's own z-index comment: above the
+       isolated app/map stacking context Leaflet's internal z-indexes
+       (up to 1000) can otherwise escape into. */
+    z-index: 1200;
+  }
+
+  .sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px 20px;
+  }
+
+  .sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: var(--radius);
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    text-align: left;
+    cursor: pointer;
+    font-size: 0.92rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .sidebar-item:hover {
+    background: var(--bg-card-pressed);
+    color: var(--text);
+  }
+
+  .sidebar-item:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+
+  .sidebar-item-active {
+    background: var(--accent);
+    color: #ffffff;
+  }
+
+  .sidebar-item-icon {
+    flex-shrink: 0;
+    display: flex;
+    position: relative;
+  }
+
+  .sidebar-section-label {
+    font-size: var(--fs-eyebrow);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    padding: 18px 12px 6px;
+  }
+
+  /* .top-bar stays position:sticky inside the normal-flow column (see its
+     own rule above) -- body's padding-left is what insets it (and #app)
+     past the fixed sidebar, so no position/width override is needed here,
+     just breathing room now that there's no phone-width cap pinching it. */
+  .top-bar {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .app-main {
+    /* No bottom tab bar to clear anymore. */
+    padding-bottom: 24px;
+  }
+
+  /* Settings admin workspace: section list on the left, section content
+     in a persistent pane on the right (see openAdminSection in
+     settings.js) instead of the mobile full-screen modal drill-down. */
+  .settings-admin-layout {
+    display: grid;
+    grid-template-columns: minmax(280px, 380px) 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+
+  .settings-section-pane {
+    position: sticky;
+    top: 24px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    min-height: 240px;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+  }
+
+  .settings-section-pane h2 {
+    margin-top: 0;
+  }
+
+  .settings-list-row-active {
+    background: var(--bg-card-pressed);
+  }
+}
+
+/* ============================================================
+   Desktop shell, Step 3: Map/visits
+
+   The map view's markup wraps #leaflet-map and all of its absolutely-
+   positioned overlays (search/filter bar, legend, FAB, nearby/planned
+   panels, hints) in .map-canvas, a sibling of the new .map-side-list --
+   every one of those overlays keeps the exact offsets it always had
+   (top/left/right/bottom), just now relative to .map-canvas instead of
+   .map-view directly, so none of that positioning needed to change.
+   .map-side-list mirrors applyFilter()'s current results (see
+   renderSideList in map.js): the same customers the map is showing as
+   pins, as a scrollable filterable list next to it -- "side-by-side
+   map+filterable list" per the Step 1 audit. Hidden below 1024px and
+   during the relocate-pin flow (map.js doesn't render it there). */
+
+.map-side-list {
+  display: none;
+}
+
+.map-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.route-planner-map {
+  height: 220px;
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 8px 0 12px;
+}
+
+@media (min-width: 1024px) {
+  .map-view {
+    display: flex;
+  }
+
+  .map-side-list {
+    display: flex;
+    flex-direction: column;
+    width: 360px;
+    flex-shrink: 0;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+    background: var(--bg);
+  }
+
+  .map-side-list .card-list {
+    padding: 16px;
+  }
+
+  .map-canvas {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+/* ============================================================
+   Desktop shell, Step 3: Warehouse & Delivery
+
+   Warehouse (Pick List / Staging / Inventory tabs): the mobile single-
+   column .card-list becomes a multi-column CSS grid at desktop, so more
+   of the same cards are visible at once instead of one long scrolling
+   column -- same markup/data (#warehouse-content in warehouse.js),
+   no separate desktop render path. Not a literal sortable <table>: the
+   three tabs' cards don't share one column shape (pick list is a
+   product+qty pair, staging is a multi-line order card with bulk-select
+   and actions, inventory is product+stock), so a shared grid layout was
+   the honest "same component, desktop variant" fit here rather than
+   forcing mismatched fields into table columns.
+
+   Delivery Planner ("Plan" tab in deliveryRoute.js, delivery_manager/
+   admin only -- NOT the driver's "My Route" view, which stays untouched
+   mobile-only): the planned route's map and its reorderable stop list go
+   side-by-side instead of stacked, with the map getting real height
+   instead of a cramped 220px strip. */
+
+@media (min-width: 1024px) {
+  #warehouse-content .card-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    align-items: start;
+  }
+
+  /* Inventory tab's brand/family group headings are section dividers
+     interspersed between cards, not cards themselves -- let them span
+     every column instead of competing for a grid cell alongside them. */
+  #warehouse-content .card-list .list-group-heading {
+    grid-column: 1 / -1;
+  }
+
+  .route-planner-result {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 16px;
+    align-items: start;
+  }
+
+  .route-planner-map {
+    height: 560px;
+  }
+
+  .route-planner-stops {
+    max-height: 560px;
+    overflow-y: auto;
+  }
+}
+
+/* ============================================================
+   Desktop shell, Step 3: Customer/Admin management
+
+   The Step 1 audit found no tri-state region/subregion/customer
+   accordion anywhere in this codebase for the original spec's
+   "Customer/Admin management" screen to adapt -- admin.js's sections
+   already got their desktop two-pane treatment in Step 2
+   (.settings-admin-layout). What's left in scope here, kept to the
+   same low-risk pattern as Warehouse: the Customers list's single-
+   column .card-list becomes a multi-column grid at desktop, so more
+   customers are visible at once -- same #customer-list markup/data in
+   customers.js, no separate desktop render path. Scoped to the id
+   (not .card-list generally) since other list screens reuse that same
+   class for content that isn't meant to wrap into columns. */
+
+@media (min-width: 1024px) {
+  #customer-list.card-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    align-items: start;
+  }
+}
+
+/* ============================================================
+   Desktop shell, Step 3: Accountant POD review
+
+   List+detail split, per the Step 1 audit: a compact left-hand list
+   (recorded.js's compactRowHtml) and a persistent right-hand pane
+   (detailPaneHtml) showing the selected delivery's full detail with its
+   POD signature always visible, instead of the mobile flow's full card
+   per row plus a "View signature" modal for each one. Same data/actions
+   as mobile (record/unrecord, view/create payment) via the shared
+   wireActions() -- just laid out differently. */
+
+.recorded-detail-pane {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .recorded-layout {
+    display: grid;
+    grid-template-columns: minmax(300px, 380px) 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+
+  #recorded-list.card-list {
+    max-height: calc(100vh - 220px);
+    overflow-y: auto;
+  }
+
+  .recorded-detail-pane {
+    display: block;
+    position: sticky;
+    top: 24px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    min-height: 240px;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+  }
+
+  .recorded-detail-pane .section-title {
+    margin-top: 0;
+  }
+
+  .recorded-row-active {
+    background: var(--bg-card-pressed);
+  }
 }

@@ -185,8 +185,10 @@ export async function renderDelivery(root, navigate) {
         resultEl.innerHTML = `
           <h2 class="section-title">${t("delivery_route_planned")}</h2>
           ${route.used_osrm === false ? `<span class="badge badge-warning">${t("delivery_osrm_fallback_badge")}</span>` : ""}
-          <div id="planned-route-map" style="height:220px;border-radius:12px;overflow:hidden;margin:8px 0 12px;"></div>
-          <div class="card-list" id="planned-route-list"></div>
+          <div class="route-planner-result">
+            <div id="planned-route-map" class="route-planner-map"></div>
+            <div class="card-list route-planner-stops" id="planned-route-list"></div>
+          </div>
         `;
         await paintRouteMap(resultEl.querySelector("#planned-route-map"), route.stops);
         renderReorderableList(resultEl.querySelector("#planned-route-list"), route);

@@ -98,6 +98,14 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
 function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = false, startInPlanMode = false, focusCustomerId = null) {
   root.innerHTML = `
     <div class="map-view">
+      ${
+        relocateCustomerId
+          ? ""
+          : `<div class="map-side-list" id="map-side-list">
+              <div class="card-list" id="map-side-list-cards"></div>
+            </div>`
+      }
+      <div class="map-canvas" id="map-canvas">
       <div id="leaflet-map"></div>
       ${
         relocateCustomerId
@@ -260,6 +268,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       </div>
       <div class="map-hint" id="team-empty-hint" hidden>${t("team_locations_empty")}</div>
       <div class="map-hint" id="planned-empty-hint" hidden>${t("planned_empty")}</div>
+      </div>
     </div>
   `;
 
@@ -273,6 +282,39 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   const nearestCheckinBtn = root.querySelector("#nearest-checkin-btn");
   const nearestInfo = root.querySelector("#nearest-customer-info");
   let nearestCustomer = null;
+  // Desktop only (see .map-side-list in styles.css) -- a persistent
+  // filterable card list next to the map, mirroring whatever applyFilter()
+  // currently has passing every active filter/search. null on the
+  // relocate-pin flow, which hides the side list entirely.
+  const sideListCards = root.querySelector("#map-side-list-cards");
+
+  function renderSideList(entries) {
+    if (!sideListCards) return;
+    if (!entries.length) {
+      sideListCards.innerHTML = `<p class="muted">${t("map_search_no_results")}</p>`;
+      return;
+    }
+    sideListCards.innerHTML = entries
+      .map(({ c, status }) => {
+        const badge = customerStatusBadge(status);
+        return `
+        <button class="card customer-card" data-id="${c.id}">
+          <div class="customer-card-main">
+            <strong>${escapeHtml(c.name)}</strong>
+            ${c.category ? `<span class="muted">${escapeHtml(categoryLabel(c.category))}</span>` : ""}
+            ${c.address ? `<span class="muted">${escapeHtml(c.address)}</span>` : ""}
+          </div>
+          <span class="card-trailing">
+            <span class="badge ${badge.cls}">${badge.text}</span>
+            <span class="chevron">&#8250;</span>
+          </span>
+        </button>`;
+      })
+      .join("");
+    sideListCards.querySelectorAll(".customer-card").forEach((el) => {
+      el.addEventListener("click", () => navigate(`#/customers/${el.dataset.id}`));
+    });
+  }
 
   // Leaflet's internal pan/zoom gesture handling can fight with an ancestor
   // scroll container on iOS, producing the "freezes while panning" bug.
@@ -599,6 +641,15 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     return "pending";
   }
 
+  // Shared by the nearby-customers list and the desktop side list -- same
+  // status, same badge, one place to keep them in sync.
+  function customerStatusBadge(status) {
+    return {
+      cls: status === "today" ? "badge-success" : status === "overdue" ? "badge-danger" : status === "week" ? "badge-info" : "badge-neutral",
+      text: status === "today" ? t("visited_today") : status === "overdue" ? t("filter_overdue") : status === "week" ? t("visited_this_week") : t("not_visited"),
+    };
+  }
+
   const TIERS_ON_PINS = new Set(["bronze", "silver", "gold", "competitor"]);
 
   // bronze/silver/gold are teardrop *pins* whose point sits ~5% above the
@@ -918,6 +969,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     markerLayer.clearLayers();
     customerMarkerLayer.clearLayers();
     const bounds = [];
+    const sideListEntries = [];
     let searchMatchCount = 0;
     // Competitors are hidden by default (see .map-competitor-toggle /
     // map-safe-enhancements.css, which hides their individual pins via
@@ -958,7 +1010,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       }
       marker.addTo(customerMarkerLayer);
       bounds.push([c.lat, c.lng]);
+      sideListEntries.push({ c, status });
     }
+    renderSideList(sideListEntries);
     if (searchNoResults) searchNoResults.hidden = !(searchQuery && searchMatchCount === 0);
     if (activeFilter === "planned") {
       renderStopListPanel();
@@ -1078,9 +1132,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
     nearbyList.innerHTML = nearby
       .map(({ c, distance }) => {
-        const status = customerStatus(c);
-        const badgeClass = status === "today" ? "badge-success" : status === "overdue" ? "badge-danger" : status === "week" ? "badge-info" : "badge-neutral";
-        const badgeText = status === "today" ? t("visited_today") : status === "overdue" ? t("filter_overdue") : status === "week" ? t("visited_this_week") : t("not_visited");
+        const badge = customerStatusBadge(customerStatus(c));
         return `
         <button class="card customer-card" data-id="${c.id}">
           <div class="customer-card-main">
@@ -1089,7 +1141,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
             <span class="muted">${formatDistance(distance)}</span>
           </div>
           <span class="card-trailing">
-            <span class="badge ${badgeClass}">${badgeText}</span>
+            <span class="badge ${badge.cls}">${badge.text}</span>
             <span class="chevron">&#8250;</span>
           </span>
         </button>`;

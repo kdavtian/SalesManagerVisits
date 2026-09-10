@@ -39,6 +39,10 @@
   </head>
   <body>
     <div id="sync-banner" class="sync-banner" role="status" aria-live="polite" hidden></div>
+    <!-- Desktop-only (min-width: 1024px, see styles.css) persistent nav --
+         replaces nav-bar below at that width. Hidden by default like the
+         other shell chrome; app.js fills it in once a user is logged in. -->
+    <nav id="sidebar" class="sidebar" aria-label="Primary navigation" hidden></nav>
     <header id="top-bar" class="top-bar" hidden></header>
     <main id="app" class="app-main" tabindex="-1"></main>
     <nav id="nav-bar" class="nav-bar" aria-label="Primary navigation" hidden></nav>

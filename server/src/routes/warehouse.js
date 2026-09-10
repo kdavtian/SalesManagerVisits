@@ -96,16 +96,18 @@ warehouseRouter.get("/inventory", async (req, res) => {
     conditions.push(`brand = $${params.length}`);
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  // This is just a stable pre-sort -- the client applies the real
+  // brand/family/viscosity/size order (client/public/js/productSort.js,
+  // shared with Pricelist, Order creation, and the Product Catalog admin
+  // screen) on the response. A numeric cast on `unit` was tried here
+  // previously and crashed the whole request for any non-liter unit
+  // (e.g. "pc", "set") that doesn't end in a number+"L" -- avoided by
+  // just ordering on the raw text.
   const { rows } = await pool.query(
-    `SELECT id, name, brand, family, unit, stock_qty,
-       NULLIF(regexp_replace(unit, 'L$', ''), '')::numeric AS liters
+    `SELECT id, name, brand, family, unit, stock_qty
      FROM products
      ${where}
-     -- Brand, then family/category, then size ascending (small to big) --
-     -- a non-liter unit (no numeric size) sorts after sized ones within
-     -- its own brand/family group, then alphabetically by name as a
-     -- final tiebreaker.
-     ORDER BY brand NULLS LAST, family NULLS LAST, liters NULLS LAST, name
+     ORDER BY brand NULLS LAST, family NULLS LAST, name
      LIMIT 300`,
     params
   );

@@ -4,7 +4,7 @@ import { state } from "../state.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { applyPaymentBadge, applyUnrecordedBadge, applyWarehouseBadge, applyDeliveryBadge } from "../app.js";
-import { QUICK_ACTIONS, visibleQuickActionIds } from "../quickActions.js";
+import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds } from "../quickActions.js";
 
 // A dependency-free CSS bar chart -- this app has no charting library, and
 // 30 bars is simple enough not to need one. Each bar's height is relative
@@ -65,22 +65,6 @@ const QUICK_ACTION_ICON = {
   qa_reports: () => `<span class="quick-action-icon quick-action-icon-reports">${icons.chart}</span>`,
   qa_debt_balances: () => `<span class="quick-action-icon quick-action-icon-debt">${icons.wallet}</span>`,
   qa_company_dashboard: () => `<span class="quick-action-icon quick-action-icon-company">${icons.chart}</span>`,
-};
-
-const QUICK_ACTION_ROUTE = {
-  qa_check_in: "#/map",
-  qa_plan_route: "#/route-plans",
-  qa_add_customer: "#/map?add=1",
-  qa_payments: "#/payments",
-  qa_cash_expense: "#/expenses",
-  qa_pricelist: "#/pricelist",
-  qa_warehouse: "#/warehouse",
-  qa_delivery: "#/delivery",
-  qa_recorded: "#/recorded",
-  qa_team_performance: "#/team-performance",
-  qa_reports: "#/reports",
-  qa_debt_balances: "#/debt-balances",
-  qa_company_dashboard: "#/company-dashboard",
 };
 
 // #qa-check-in etc. -- the DOM ids predate this refactor and other modules
