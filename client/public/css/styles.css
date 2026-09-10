@@ -7754,3 +7754,53 @@ form select,
     align-items: start;
   }
 }
+
+/* ============================================================
+   Desktop shell, Step 3: Accountant POD review
+
+   List+detail split, per the Step 1 audit: a compact left-hand list
+   (recorded.js's compactRowHtml) and a persistent right-hand pane
+   (detailPaneHtml) showing the selected delivery's full detail with its
+   POD signature always visible, instead of the mobile flow's full card
+   per row plus a "View signature" modal for each one. Same data/actions
+   as mobile (record/unrecord, view/create payment) via the shared
+   wireActions() -- just laid out differently. */
+
+.recorded-detail-pane {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .recorded-layout {
+    display: grid;
+    grid-template-columns: minmax(300px, 380px) 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+
+  #recorded-list.card-list {
+    max-height: calc(100vh - 220px);
+    overflow-y: auto;
+  }
+
+  .recorded-detail-pane {
+    display: block;
+    position: sticky;
+    top: 24px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    min-height: 240px;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+  }
+
+  .recorded-detail-pane .section-title {
+    margin-top: 0;
+  }
+
+  .recorded-row-active {
+    background: var(--bg-card-pressed);
+  }
+}
