@@ -7816,3 +7816,37 @@ form select,
     background: var(--bg-card-pressed);
   }
 }
+
+/* ============================================================
+   Desktop shell, Step 3: Dashboard
+
+   The mobile dashboard is one long vertical stack of differently-shaped
+   sections (greeting, next-visit card, progress card, quick actions
+   grid, points/leaderboard, insights, recent activity) -- not a
+   homogeneous list, so a CSS Grid with fixed template areas would need
+   to hand-place every section and re-derive that layout each time a
+   role's set of visible sections changes (see the many role-conditional
+   blocks in dashboard.js). A CSS multi-column flow gets the same
+   "more than one column at desktop" result from the exact same markup
+   order instead: each top-level child of .dashboard-grid keeps
+   break-inside: avoid so a section never gets split across the column
+   break, and .greeting-row spans both columns since a name greeting
+   split into two half-width columns reads oddly. dashboard.js wraps the
+   few heading+content sibling pairs (Quick Actions, leaderboard, recent
+   activity) in a plain div each so this rule sees them as one child --
+   no other markup or logic changed. */
+
+@media (min-width: 1024px) {
+  .dashboard-grid {
+    column-count: 2;
+    column-gap: 24px;
+  }
+
+  .dashboard-grid > * {
+    break-inside: avoid;
+  }
+
+  .dashboard-grid > .greeting-row {
+    column-span: all;
+  }
+}

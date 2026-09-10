@@ -130,6 +130,7 @@ export async function renderDashboard(root, navigate) {
   const isManagementRole = !["sales_manager", "delivery_manager"].includes(state.user.role);
 
   container.innerHTML = `
+    <div class="dashboard-grid">
     <div class="greeting-row">
       <div>
         <h1>${greeting()}, ${escapeHtml(state.user.name.split(" ")[0])}</h1>
@@ -210,9 +211,11 @@ export async function renderDashboard(root, navigate) {
         : ""
     }
 
+    <div>
     <h2 class="section-title section-title-tight">${t("quick_actions")}</h2>
     <div class="quick-actions-grid">
       ${quickActionsHtml(visibleQuickActionIds(state.user.role, settings.quick_action_visibility))}
+    </div>
     </div>
 
     ${
@@ -234,11 +237,13 @@ export async function renderDashboard(root, navigate) {
 
     ${
       summary.points_leaderboard?.length
-        ? `<div class="section-heading-row">
+        ? `<div>
+           <div class="section-heading-row">
              <h2 class="section-title section-title-inline">${t("points_leaderboard")}</h2>
              <span class="muted leaderboard-prize-hint">${escapeHtml(settings.incentive_message || t("points_leaderboard_prize_hint"))}</span>
            </div>
-           <div class="card-list" id="points-leaderboard"></div>`
+           <div class="card-list" id="points-leaderboard"></div>
+           </div>`
         : ""
     }
 
@@ -255,12 +260,14 @@ export async function renderDashboard(root, navigate) {
     </div>
     </details>
 
+    <div>
     <div class="section-heading-row">
       <h2 class="section-title section-title-inline">${t("recent_activity")}</h2>
       <button class="link-btn" id="view-all-activity">${t("view_all")}</button>
     </div>
     <div class="card-list" id="recent-activity"></div>
-
+    </div>
+    </div>
   `;
 
   container.querySelector("#view-all-activity").addEventListener("click", () => navigate("#/activity"));
