@@ -3,6 +3,7 @@ import { escapeHtml, formatAmd, tierBadgeHtml, activateDialog, activateCombobox 
 import { t } from "../i18n.js";
 import { enqueueOrder } from "../offlineQueue.js";
 import { canAssignErpCustomerId } from "../state.js";
+import { compareProducts, sortedBrands } from "../productSort.js";
 
 // Reps often open "Create order" several times a visit (once per checkin);
 // the catalog rarely changes minute to minute, so cache it in module scope
@@ -29,26 +30,6 @@ function filterCatalog(list, query) {
   return list.filter((p) => [p.name, p.sku, p.brand, p.family].some((v) => v && v.toLowerCase().includes(q)));
 }
 
-// Brands the sales team actually leads with go first; anything else (a
-// brand only the ERP catalog knows about) still shows up, just after.
-const BRAND_PRIORITY = ["Castrol", "Lotos", "Royal"];
-
-function sortedBrands(products) {
-  const brands = [...new Set(products.map((p) => p.brand).filter(Boolean))];
-  return brands.sort((a, b) => {
-    const pa = BRAND_PRIORITY.indexOf(a);
-    const pb = BRAND_PRIORITY.indexOf(b);
-    if (pa !== -1 || pb !== -1) return (pa === -1 ? 99 : pa) - (pb === -1 ? 99 : pb);
-    return a.localeCompare(b);
-  });
-}
-
-// Matches the taxonomy sync_field_visits.py assigns on the Castrol side
-// (Edge/Magnatec/GTX/Vecton-CRB/Transmission oils/Other) plus Lotos/Royal's
-// simpler Engine oils/Transmission oils/Other -- ordered the way the
-// business actually leads with its lines, not alphabetically.
-const FAMILY_PRIORITY = ["Edge", "Magnatec", "GTX", "Vecton/CRB", "Engine oils", "Transmission oils", "Other"];
-
 // A broader grouping than family, for the category filter -- everything
 // is "Engine oil" except the recognized transmission family, per the
 // simple split requested until a real category taxonomy exists.
@@ -56,48 +37,12 @@ function productCategory(product) {
   return product.family === "Transmission oils" ? "Transmission" : "Engine oil";
 }
 
-// e.g. "Edge 5W-30" or "GTX 5w30" -> [5, 30]; null if the name doesn't
-// carry a viscosity grade (a non-oil line, or an unrecognized format).
-function viscosityGrade(name) {
-  const m = /\b(\d{1,2})w-?(\d{1,2})\b/i.exec(name || "");
-  return m ? [Number(m[1]), Number(m[2])] : null;
-}
-
-// "1L" -> 1, "208L" -> 208; null for a unit that isn't a plain liter size.
-function sizeLiters(unit) {
-  const m = /^([\d.]+)\s*L$/i.exec((unit || "").trim());
-  return m ? parseFloat(m[1]) : null;
-}
-
-// Groups by family (in the business's own order), then by viscosity grade
-// low-to-high within a family, then by size ascending within the same
-// variant (1L, 4L, 5L, 208L, ...) -- e.g. Edge 0w20, 0w20, 0w30, ...
-// 5w30, 5w40, 10w60, each with its sizes smallest-first, instead of a
-// flat alphabetical list that scatters "Edge 0w30 1L" and "Edge 0w30 4L"
-// away from each other by whatever else starts with the same letters.
+// Brand -> family -> viscosity grade -> size, the order a rep actually
+// presents the catalog to a customer -- see productSort.js for the full
+// priority lists (shared with Pricelist, Warehouse Inventory, and the
+// Product Catalog admin screen).
 function sortProducts(products) {
-  return [...products].sort((a, b) => {
-    const fa = FAMILY_PRIORITY.indexOf(a.family ?? "Other");
-    const fb = FAMILY_PRIORITY.indexOf(b.family ?? "Other");
-    if (fa !== fb) return (fa === -1 ? 99 : fa) - (fb === -1 ? 99 : fb);
-
-    const va = viscosityGrade(a.name);
-    const vb = viscosityGrade(b.name);
-    if (va && vb) {
-      if (va[0] !== vb[0]) return va[0] - vb[0];
-      if (va[1] !== vb[1]) return va[1] - vb[1];
-    } else if (va || vb) {
-      return va ? -1 : 1;
-    }
-
-    const nameDiff = a.name.localeCompare(b.name);
-    if (nameDiff) return nameDiff;
-
-    const sa = sizeLiters(a.unit);
-    const sb = sizeLiters(b.unit);
-    if (sa !== null && sb !== null) return sa - sb;
-    return 0;
-  });
+  return [...products].sort(compareProducts);
 }
 
 // null/undefined stock_qty means the catalog doesn't track stock for this

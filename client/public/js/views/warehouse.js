@@ -2,6 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml, formatAmd } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
+import { compareProducts } from "../productSort.js";
 
 export async function renderWarehouse(root, navigate) {
   let activeTab = "pick-list";
@@ -52,7 +53,9 @@ export async function renderWarehouse(root, navigate) {
   }
 
   async function loadPickList() {
-    const rows = await api.getPickList();
+    const rows = (await api.getPickList()).sort((a, b) =>
+      compareProducts({ name: a.product_name, brand: a.brand, unit: a.size }, { name: b.product_name, brand: b.brand, unit: b.size })
+    );
     contentEl.innerHTML = rows.length
       ? `<div class="card-list">${rows
           .map(
@@ -181,7 +184,7 @@ export async function renderWarehouse(root, navigate) {
     }
 
     async function paint(q) {
-      const rows = await api.getInventory(q, brandFilter);
+      const rows = (await api.getInventory(q, brandFilter)).sort(compareProducts);
       listEl.innerHTML = rows.length
         ? rows
             .map(

@@ -3,36 +3,17 @@ import { escapeHtml, formatAmd, activateDialog } from "../util.js";
 import { t } from "../i18n.js";
 import { state, canManageProducts } from "../state.js";
 import { icons } from "../icons.js";
-
-// Same brand ordering the order-creation flow uses, so the pricelist reads
-// in the order a rep actually presents it to a customer.
-const BRAND_PRIORITY = ["Castrol", "Lotos", "Royal"];
-
-function sortedBrands(products) {
-  const brands = [...new Set(products.map((p) => p.brand).filter(Boolean))];
-  return brands.sort((a, b) => {
-    const pa = BRAND_PRIORITY.indexOf(a);
-    const pb = BRAND_PRIORITY.indexOf(b);
-    if (pa !== -1 || pb !== -1) return (pa === -1 ? 99 : pa) - (pb === -1 ? 99 : pb);
-    return a.localeCompare(b);
-  });
-}
-
-const FAMILY_PRIORITY = ["Edge", "Magnatec", "GTX", "Vecton/CRB", "Engine oils", "Transmission oils", "Other"];
+import { compareProducts, sortedBrands } from "../productSort.js";
 
 function sortProducts(products, sortBy) {
   const sorted = [...products];
   if (sortBy === "standard_price") return sorted.sort((a, b) => a.effective_standard_amd - b.effective_standard_amd);
   if (sortBy === "retail_price") return sorted.sort((a, b) => a.effective_retail_amd - b.effective_retail_amd);
   if (sortBy === "name") return sorted.sort((a, b) => a.name.localeCompare(b.name));
-  // Default: brand's own family order, then name -- the order a rep
-  // actually presents a pricelist to a customer, not alphabetical.
-  return sorted.sort((a, b) => {
-    const fa = FAMILY_PRIORITY.indexOf(a.family ?? "Other");
-    const fb = FAMILY_PRIORITY.indexOf(b.family ?? "Other");
-    if (fa !== fb) return (fa === -1 ? 99 : fa) - (fb === -1 ? 99 : fb);
-    return a.name.localeCompare(b.name);
-  });
+  // Default: the order a rep actually presents a pricelist to a
+  // customer -- brand, then family, then viscosity grade, then size --
+  // not alphabetical. See productSort.js for the full priority lists.
+  return sorted.sort(compareProducts);
 }
 
 function debounce(fn, ms) {
