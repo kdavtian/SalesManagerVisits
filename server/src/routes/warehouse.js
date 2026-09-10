@@ -85,7 +85,13 @@ warehouseRouter.get("/staging-list", async (req, res) => {
 // we have" so a WM can sanity-check before flagging a stock issue.
 warehouseRouter.get("/inventory", async (req, res) => {
   const { q, brand } = req.query;
-  const conditions = [];
+  // `active` matters here the same way it does for the main product
+  // catalog (GET /products -- "WHERE p.active"): a product an admin has
+  // deactivated (superseded by a re-import, a corrected duplicate, a
+  // discontinued SKU) must not still show up on the warehouse floor --
+  // this was missing entirely, which is exactly what made a stale/
+  // deactivated row look like a duplicate of its live replacement.
+  const conditions = ["active"];
   const params = [];
   if (q) {
     params.push(`%${q}%`);
@@ -95,7 +101,7 @@ warehouseRouter.get("/inventory", async (req, res) => {
     params.push(brand);
     conditions.push(`brand = $${params.length}`);
   }
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const where = `WHERE ${conditions.join(" AND ")}`;
   // This is just a stable pre-sort -- the client applies the real
   // brand/family/viscosity/size order (client/public/js/productSort.js,
   // shared with Pricelist, Order creation, and the Product Catalog admin
@@ -119,7 +125,7 @@ warehouseRouter.get("/inventory", async (req, res) => {
 // filter's own option list doesn't shrink as a search narrows the results.
 warehouseRouter.get("/inventory/brands", async (req, res) => {
   const { rows } = await pool.query(
-    "SELECT DISTINCT brand FROM products WHERE brand IS NOT NULL ORDER BY brand"
+    "SELECT DISTINCT brand FROM products WHERE active AND brand IS NOT NULL ORDER BY brand"
   );
   res.json(rows.map((r) => r.brand));
 });

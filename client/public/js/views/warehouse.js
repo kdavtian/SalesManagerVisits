@@ -330,7 +330,10 @@ export async function renderWarehouse(root, navigate) {
         const fKey = p.family || "";
         let family = brand.families.get(fKey);
         if (!family) {
-          family = { key: fKey, label: p.family || null, products: [] };
+          // Family-less products (no oil family, or a non-oil item like a
+          // filter) get their own collapsible "Other" group instead of
+          // rendering flat under the brand with no header at all.
+          family = { key: fKey, label: p.family || t("warehouse_other_family"), products: [] };
           brand.families.set(fKey, family);
           brand.familyOrder.push(fKey);
         }
@@ -350,11 +353,6 @@ export async function renderWarehouse(root, navigate) {
         if (!brandExpanded) continue;
         for (const fKey of brand.familyOrder) {
           const family = brand.families.get(fKey);
-          if (!family.label) {
-            // Non-oil / no family -- no sub-header, just the products.
-            html += family.products.map(productRowHtml).join("");
-            continue;
-          }
           const familyKey = `${brand.key}||${fKey}`;
           const familyExpanded = forceExpand || expandedFamilies.has(familyKey);
           html += groupHeaderHtml({
