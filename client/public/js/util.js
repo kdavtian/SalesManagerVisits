@@ -390,6 +390,23 @@ export function formatDateDMY(value) {
   return `${dd}-${mm}-${yyyy}`;
 }
 
+// Same fix as formatDateDMY above, but returns a Date object (at local
+// midnight on that y/m/d) instead of a fixed dd-mm-yyyy string, for a call
+// site that wants its own .toLocaleDateString() formatting/options or needs
+// to do date math (month/year comparisons, day-difference calculations) on
+// a plain calendar-date value -- a Postgres `date` column with no time
+// component. `new Date(dateStr)` parses that as UTC midnight, which then
+// reads as the PREVIOUS day (via toLocaleDateString, getMonth/getFullYear,
+// etc.) in any timezone behind UTC. Returns null for a value that isn't a
+// date-only string, so callers can tell "no date" from "unparseable".
+export function parseDateOnly(value) {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
+  if (!match) return null;
+  const [, yyyy, mm, dd] = match;
+  return new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+}
+
 // Lightweight, dependency-free read of a raw User-Agent string for the
 // admin team list -- just enough to show "iPhone · Safari" / "Windows ·
 // Chrome" at a glance, not a full device-detection library (this app has

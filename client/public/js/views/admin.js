@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, parseUserAgent, SALES_CHANNELS, REGION_LIST, YEREVAN_DISTRICTS } from "../util.js";
+import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, parseUserAgent, SALES_CHANNELS, REGION_LIST, YEREVAN_DISTRICTS, parseDateOnly } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 import { ALL_ROLES, QUICK_ACTIONS, defaultQuickActionIds } from "../quickActions.js";
@@ -294,7 +294,10 @@ export async function renderPlanApprovalsSection(container) {
     }
     section.innerHTML = plans
       .map((p) => {
-        const dateLabel = new Date(p.plan_date).toLocaleDateString(undefined, {
+        // plan_date is a plain calendar date (no time) -- parseDateOnly
+        // avoids the UTC-midnight-parsing bug that showed the previous
+        // day's date for an approver in a timezone behind UTC.
+        const dateLabel = parseDateOnly(p.plan_date)?.toLocaleDateString(undefined, {
           month: "short",
           day: "numeric",
         });
