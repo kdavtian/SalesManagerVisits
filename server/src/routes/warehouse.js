@@ -38,7 +38,7 @@ warehouseRouter.use(requireWarehouse);
 // right now", not one order at a time.
 warehouseRouter.get("/pick-list", async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT oi.product_id, oi.product_name, oi.brand, p.unit AS size,
+    `SELECT oi.product_id, oi.product_name, oi.brand, p.unit AS size, p.family,
             SUM(oi.quantity)::int AS total_quantity,
             COUNT(DISTINCT oi.order_id)::int AS order_count,
             p.stock_qty
@@ -46,7 +46,7 @@ warehouseRouter.get("/pick-list", async (req, res) => {
      JOIN orders o ON o.id = oi.order_id
      LEFT JOIN products p ON p.id = oi.product_id
      WHERE o.status = 'confirmed'
-     GROUP BY oi.product_id, oi.product_name, oi.brand, p.unit, p.stock_qty
+     GROUP BY oi.product_id, oi.product_name, oi.brand, p.unit, p.family, p.stock_qty
      ORDER BY oi.brand NULLS LAST, oi.product_name`
   );
   res.json(rows);
@@ -104,7 +104,7 @@ warehouseRouter.get("/inventory", async (req, res) => {
   // (e.g. "pc", "set") that doesn't end in a number+"L" -- avoided by
   // just ordering on the raw text.
   const { rows } = await pool.query(
-    `SELECT id, name, brand, family, unit, stock_qty
+    `SELECT id, name, brand, family, unit, stock_qty, bronze_price_amd, landing_cost_amd
      FROM products
      ${where}
      ORDER BY brand NULLS LAST, family NULLS LAST, name

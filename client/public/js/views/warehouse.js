@@ -72,19 +72,32 @@ export async function renderWarehouse(root, navigate) {
     }
   }
 
+  // Same brand-then-family-then-viscosity-then-size ordering the Inventory
+  // tab uses (compareProducts), so a product's position doesn't jump
+  // between the two screens -- only the group heading collapses to brand
+  // alone here (the Inventory tab additionally splits on family).
+  function pickGroupHeadingHtml(r, prevR) {
+    if (prevR && prevR.brand === r.brand) return "";
+    return `<div class="list-group-heading">${escapeHtml(r.brand || t("warehouse_stock_unknown"))}</div>`;
+  }
+
   async function loadPickList() {
     const rows = (await api.getPickList()).sort((a, b) =>
-      compareProducts({ name: a.product_name, brand: a.brand, unit: a.size }, { name: b.product_name, brand: b.brand, unit: b.size })
+      compareProducts(
+        { name: a.product_name, brand: a.brand, family: a.family, unit: a.size },
+        { name: b.product_name, brand: b.brand, family: b.family, unit: b.size }
+      )
     );
     contentEl.innerHTML = rows.length
       ? `<div class="card-list pick-list">${rows
           .map(
-            (r) => `
+            (r, i) => `
+        ${pickGroupHeadingHtml(r, rows[i - 1])}
         <button type="button" class="card pick-item">
           <span class="pick-item-check">${icons.checkCircle}</span>
           <div class="order-product-info">
             <strong>${escapeHtml(r.product_name)}${r.size ? ` · ${escapeHtml(r.size)}` : ""}</strong>
-            <span class="muted">${[r.brand, `${r.order_count} ${t("warehouse_orders_count_suffix")}`].filter(Boolean).map(escapeHtml).join(" · ")}</span>
+            <span class="muted">${r.order_count} ${t("warehouse_orders_count_suffix")}</span>
           </div>
           <div class="pick-list-qty">
             <span class="pick-list-qty-value">${r.total_quantity}</span>
@@ -193,6 +206,12 @@ export async function renderWarehouse(root, navigate) {
     contentEl.innerHTML = `
       <div class="inventory-search-row">
         <input type="search" id="inventory-search" placeholder="${t("search")}" />
+        <button type="button" class="filter-icon-btn" id="inventory-landing-btn" aria-label="${t("warehouse_show_landing_cost")}" title="${t("warehouse_show_landing_cost")}" aria-pressed="false">
+          ${icons.download}
+        </button>
+        <button type="button" class="filter-icon-btn" id="inventory-wholesale-btn" aria-label="${t("warehouse_show_wholesale_price")}" title="${t("warehouse_show_wholesale_price")}" aria-pressed="false">
+          ${icons.wallet}
+        </button>
         <button type="button" class="filter-icon-btn" id="inventory-brand-btn" aria-label="${t("filter_brand")}" title="${t("filter_brand")}">
           ${icons.tag}
         </button>
@@ -202,8 +221,13 @@ export async function renderWarehouse(root, navigate) {
     const listEl = contentEl.querySelector("#inventory-list");
     const searchInput = contentEl.querySelector("#inventory-search");
     const brandBtn = contentEl.querySelector("#inventory-brand-btn");
+    const landingBtn = contentEl.querySelector("#inventory-landing-btn");
+    const wholesaleBtn = contentEl.querySelector("#inventory-wholesale-btn");
     let brandFilter = "";
     let brandOptions = null;
+    let showLanding = false;
+    let showWholesale = false;
+    let lastRows = [];
 
     function groupHeadingHtml(p, prevP) {
       if (prevP && prevP.brand === p.brand && prevP.family === p.family) return "";
@@ -211,25 +235,57 @@ export async function renderWarehouse(root, navigate) {
       return `<div class="list-group-heading">${escapeHtml(label)}</div>`;
     }
 
-    async function paint(q) {
-      const rows = (await api.getInventory(q, brandFilter)).sort(compareProducts);
-      listEl.innerHTML = rows.length
-        ? rows
+    // Second row: whichever of landing cost / wholesale price is currently
+    // toggled on, in that order (matching the two buttons left-to-right),
+    // joined by " | " -- omitted entirely if neither is on, or if this
+    // product has no value for what's toggled on (a still-unsynced row).
+    function pricesRowHtml(p) {
+      const parts = [];
+      if (showLanding && p.landing_cost_amd != null) parts.push(formatAmd(Number(p.landing_cost_amd)));
+      if (showWholesale && p.bronze_price_amd != null) parts.push(formatAmd(Number(p.bronze_price_amd)));
+      if (!parts.length) return "";
+      return `<div class="inventory-row-prices">${parts.join(" | ")}</div>`;
+    }
+
+    function render() {
+      listEl.innerHTML = lastRows.length
+        ? lastRows
             .map(
               (p, i) => `
-        ${groupHeadingHtml(p, rows[i - 1])}
-        <div class="card inventory-row">
-          <span class="inventory-row-name">${escapeHtml(p.name)}${p.unit ? ` <span class="inventory-row-size">${escapeHtml(p.unit)}</span>` : ""}</span>
-          <span class="inventory-row-qty ${p.stock_qty == null ? "inventory-row-qty-unknown" : p.stock_qty > 0 ? "inventory-row-qty-ok" : "inventory-row-qty-zero"}">${inventoryQtyLabel(p)}</span>
+        ${groupHeadingHtml(p, lastRows[i - 1])}
+        <div class="card inventory-row-card">
+          <div class="inventory-row">
+            <span class="inventory-row-name">${escapeHtml(p.name)}${p.unit ? ` <span class="inventory-row-size">${escapeHtml(p.unit)}</span>` : ""}</span>
+            <span class="inventory-row-qty ${p.stock_qty == null ? "inventory-row-qty-unknown" : p.stock_qty > 0 ? "inventory-row-qty-ok" : "inventory-row-qty-zero"}">${inventoryQtyLabel(p)}</span>
+          </div>
+          ${pricesRowHtml(p)}
         </div>`
             )
             .join("")
         : `<p class="empty-state">${t("no_products_found")}</p>`;
     }
+
+    async function paint(q) {
+      lastRows = (await api.getInventory(q, brandFilter)).sort(compareProducts);
+      render();
+    }
     let debounceTimer;
     searchInput.addEventListener("input", () => {
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => paint(searchInput.value.trim()), 250);
+    });
+
+    landingBtn.addEventListener("click", () => {
+      showLanding = !showLanding;
+      landingBtn.classList.toggle("filter-icon-btn-active", showLanding);
+      landingBtn.setAttribute("aria-pressed", String(showLanding));
+      render();
+    });
+    wholesaleBtn.addEventListener("click", () => {
+      showWholesale = !showWholesale;
+      wholesaleBtn.classList.toggle("filter-icon-btn-active", showWholesale);
+      wholesaleBtn.setAttribute("aria-pressed", String(showWholesale));
+      render();
     });
 
     brandBtn.addEventListener("click", async () => {

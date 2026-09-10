@@ -12,6 +12,7 @@ const uiSvg = (content, attributes = stroke) =>
 
 export const icons = {
   dashboard: navSvg(`<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>`),
+  home: navSvg(`<path d="M3.25 10.75 12 3l8.75 7.75"/><path d="M5.25 9.75v8.5c0 1.1.9 2 2 2h2.4v-5.1a2.35 2.35 0 0 1 4.7 0v5.1h2.4c1.1 0 2-.9 2-2v-8.5"/>`),
   activity: navSvg(`<rect x="2.25" y="11.25" width="3.25" height="9.5" rx="1.625"/><rect x="7.67" y="4.25" width="3.25" height="16.5" rx="1.625"/><rect x="13.08" y="9.25" width="3.25" height="11.5" rx="1.625"/><rect x="18.5" y="13.75" width="3.25" height="7" rx="1.625"/>`, `fill="currentColor"`),
   map: `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M20.75 3.25 3.55 10.1a.9.9 0 0 0 .12 1.71l6.72 1.8 1.8 6.72a.9.9 0 0 0 1.71.12l6.85-17.2Z"/></svg>`,
   customers: navSvg(`<circle cx="12" cy="6.75" r="2.75"/><circle cx="5.45" cy="8.05" r="2.15"/><circle cx="18.55" cy="8.05" r="2.15"/><path d="M6.25 20v-1.3a5.75 5.75 0 0 1 11.5 0V20"/><path d="M1.9 18.3v-.9a4.25 4.25 0 0 1 4.25-4.25c.72 0 1.4.18 2 .5M22.1 18.3v-.9a4.25 4.25 0 0 0-4.25-4.25c-.72 0-1.4.18-2 .5"/>`),

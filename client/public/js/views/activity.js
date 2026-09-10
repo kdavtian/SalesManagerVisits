@@ -20,22 +20,19 @@ const PAGE_SIZE = 25;
 const STATUS_ICON = {
   verified: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>`,
   pending: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>`,
-  // A red triangle with "!" -- the conventional warning glyph, distinct in
-  // shape (not just color) from the verified/pending circles so "rejected"
-  // reads at a glance even without color (colorblind-safe, matches how
-  // browsers/OSes already draw this exact warning). The triangle's own
-  // fill supplies the color, so .status-rejected leaves the badge
-  // background transparent instead of layering a second red circle behind it.
-  // Verified/pending get their visual weight from a colored circle backdrop
-  // (see .activity-status-icon-sm) that fills the *entire* 20x20 container
+  // A red octagon with "!" (Lucide's octagon-alert) -- the conventional
+  // stop-sign warning glyph, distinct in shape (not just color) from the
+  // verified/pending circles so "rejected" reads at a glance even without
+  // color (colorblind-safe). The octagon's own fill supplies the color, so
+  // .status-rejected leaves the badge background transparent instead of
+  // layering a second red circle behind it. Verified/pending get their
+  // visual weight from a colored circle backdrop (see
+  // .activity-status-icon-sm) that fills the *entire* 20x20 container
   // regardless of how much of the 24x24 viewBox their own glyph occupies;
-  // the triangle has no such backdrop, so its own path has to fill that same
-  // footprint alone. Rather than scaling the path (which would clip against
-  // the viewBox edges -- the triangle already spans x:1.5-22.5, y:2.5-21,
-  // almost the full 24x24 box), the viewBox itself is cropped tight around
-  // the triangle's own bounds so it renders at effectively 100% fill, same
-  // as the other two's full circle, with no distortion or clipping risk.
-  rejected: `<svg viewBox="1 2 22 20" width="20" height="20"><path d="M12 2.5 22.5 21H1.5Z" fill="currentColor"/><path d="M12 9.5v5" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="17.4" r="1.1" fill="#fff"/></svg>`,
+  // the octagon has no such backdrop, so its own path (Lucide's stock
+  // 24x24 octagon-alert shape, which already spans nearly the full box)
+  // fills that same footprint alone with no scaling/clipping needed.
+  rejected: `<svg viewBox="0 0 24 24" width="20" height="20"><path d="M15.312 2a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586l-4.688-4.688A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2z" fill="currentColor"/><path d="M12 8v4" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="16" r="1.1" fill="#fff"/></svg>`,
 };
 
 const ACTIVITY_FILTER_ICONS = {

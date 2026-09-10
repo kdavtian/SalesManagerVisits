@@ -7329,14 +7329,18 @@ form select,
 /* Inventory: one compact row per product -- name + size on the left,
    pcs / total-liters right-aligned, in place of the old two-line card with
    a separate stock-count pill. Read-only reference (see /inventory route),
-   so no pointer cursor. */
+   so no pointer cursor. An optional second row (landing cost / wholesale
+   price, toggled on via the two buttons next to the brand filter) sits
+   below it in a smaller font, right-aligned the same way. */
+.inventory-row-card {
+  padding: 10px 14px;
+  cursor: default;
+}
 .inventory-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 14px;
-  cursor: default;
 }
 .inventory-row-name {
   overflow: hidden;
@@ -7361,6 +7365,12 @@ form select,
 .inventory-row-qty-unknown {
   color: var(--text-dim);
   font-weight: 400;
+}
+.inventory-row-prices {
+  margin-top: 2px;
+  text-align: right;
+  font-size: 0.72rem;
+  color: var(--text-dim);
 }
 .plan-order-row {
   display: flex;

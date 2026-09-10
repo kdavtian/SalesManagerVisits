@@ -64,7 +64,7 @@ const QUICK_ACTION_ICON = {
   qa_team_performance: () => `<span class="quick-action-icon quick-action-icon-team">${icons.target}</span>`,
   qa_reports: () => `<span class="quick-action-icon quick-action-icon-reports">${icons.chart}</span>`,
   qa_debt_balances: () => `<span class="quick-action-icon quick-action-icon-debt">${icons.wallet}</span>`,
-  qa_company_dashboard: () => `<span class="quick-action-icon quick-action-icon-company">${icons.chart}</span>`,
+  qa_company_dashboard: () => `<span class="quick-action-icon quick-action-icon-company">${icons.dashboard}</span>`,
 };
 
 // #qa-check-in etc. -- the DOM ids predate this refactor and other modules

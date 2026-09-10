@@ -58,7 +58,8 @@ which is upsert-only and never truncated).
       "erp_product_id": "P1", "name": "...", "unit_price_amd": 12000, // all three required
       "brand": "Castrol", "unit": "L", "family": "...",
       "bronze_price_amd": 12000, "silver_price_amd": 11500, "gold_price_amd": 11000,
-      "stock_qty": 240
+      "stock_qty": 240,
+      "landing_cost_amd": 9500 // from the Pricelist sheet's own "Landing Cost" column; omit/null if not sent
     }
   ],
 
