@@ -11,7 +11,7 @@ const uiSvg = (content, attributes = stroke) =>
   `<svg class="ui-svg" viewBox="0 0 24 24" width="22" height="22" ${attributes} aria-hidden="true" focusable="false">${content}</svg>`;
 
 export const icons = {
-  dashboard: navSvg(`<path d="M3.25 10.75 12 3l8.75 7.75"/><path d="M5.25 9.75v8.5c0 1.1.9 2 2 2h2.4v-5.1a2.35 2.35 0 0 1 4.7 0v5.1h2.4c1.1 0 2-.9 2-2v-8.5"/>`),
+  dashboard: navSvg(`<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>`),
   activity: navSvg(`<rect x="2.25" y="11.25" width="3.25" height="9.5" rx="1.625"/><rect x="7.67" y="4.25" width="3.25" height="16.5" rx="1.625"/><rect x="13.08" y="9.25" width="3.25" height="11.5" rx="1.625"/><rect x="18.5" y="13.75" width="3.25" height="7" rx="1.625"/>`, `fill="currentColor"`),
   map: `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M20.75 3.25 3.55 10.1a.9.9 0 0 0 .12 1.71l6.72 1.8 1.8 6.72a.9.9 0 0 0 1.71.12l6.85-17.2Z"/></svg>`,
   customers: navSvg(`<circle cx="12" cy="6.75" r="2.75"/><circle cx="5.45" cy="8.05" r="2.15"/><circle cx="18.55" cy="8.05" r="2.15"/><path d="M6.25 20v-1.3a5.75 5.75 0 0 1 11.5 0V20"/><path d="M1.9 18.3v-.9a4.25 4.25 0 0 1 4.25-4.25c.72 0 1.4.18 2 .5M22.1 18.3v-.9a4.25 4.25 0 0 0-4.25-4.25c-.72 0-1.4.18-2 .5"/>`),
@@ -44,7 +44,7 @@ export const icons = {
   truck: uiSvg(`<rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 3v5h-7z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>`),
   warning: uiSvg(`<path d="M10.3 4.2 2.5 18a2 2 0 0 0 1.7 3h15.6a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/>`),
   mapWarning: `<svg class="map-chip-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><path d="M10.25 4.35 2.7 17.5a2.2 2.2 0 0 0 1.9 3.3h14.8a2.2 2.2 0 0 0 1.9-3.3L13.75 4.35a2 2 0 0 0-3.5 0Z"/><path d="M12 9v4.25M12 17h.01"/></svg>`,
-  box: uiSvg(`<path d="m4 7 8-4 8 4-8 4zM4 7v10l8 4 8-4V7M12 11v10"/>`),
+  box: uiSvg(`<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.73Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>`),
   more: uiSvg(`<circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none"/>`),
   tag: uiSvg(`<path d="M20 13 13 20l-9-9V4h7z"/><circle cx="8" cy="8" r="1"/>`),
   pencil: uiSvg(`<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>`),
