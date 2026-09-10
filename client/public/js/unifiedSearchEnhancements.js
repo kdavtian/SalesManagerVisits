@@ -47,6 +47,70 @@ function installClearButton(input, container, actions) {
   sync();
 }
 
+// Every remaining bare <input type="search"> in the app -- Pricelist,
+// Order creation's product search, Warehouse Inventory, Payments, Cash
+// Expenses, and every "pick a customer/product" sheet -- gets the same
+// tap-to-clear X Activity/Orders/Customers/Map already have. Those four
+// screens merge the X into a shared multi-icon toolbar pill
+// (installClearButton above); most of these don't have one, so this
+// inlines the X into the search input's own box instead via a thin
+// wrapper, which works the same regardless of whether the input's actual
+// parent is a flex row (list-toolbar, inventory-search-row, ...) or a
+// plain block stack (a sheet's own vertical layout).
+function installInlineClearButton(input) {
+  if (!input || input.dataset.inlineClearInstalled) return;
+  input.dataset.inlineClearInstalled = "true";
+  const wrap = document.createElement("div");
+  wrap.className = "search-input-clear-wrap";
+  input.replaceWith(wrap);
+  wrap.appendChild(input);
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "unified-search-clear";
+  button.setAttribute("aria-label", clearLabel());
+  button.setAttribute("title", clearLabel());
+  button.innerHTML = SEARCH_ICONS.clear;
+  wrap.appendChild(button);
+
+  const sync = () => {
+    button.hidden = input.value.length === 0;
+  };
+  input.addEventListener("input", sync);
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!input.value) return;
+    input.value = "";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.focus({ preventScroll: true });
+    sync();
+  });
+  sync();
+}
+
+// Sheet-based pickers (order-customer-search, payment-customer-search,
+// address-search-input, edit-add-product-search) mount their overlay on
+// document.body, not inside #app -- covered by widening boot()'s observer
+// to body below rather than listed as a separate concern here.
+const INLINE_CLEAR_SELECTORS = [
+  "#pricelist-search",
+  "#product-search",
+  "#inventory-search",
+  "#payment-search",
+  "#expenses-search",
+  "#order-customer-search",
+  "#payment-customer-search",
+  "#edit-add-product-search",
+  "#address-search-input",
+];
+
+function enhanceInlineClearButtons() {
+  for (const selector of INLINE_CLEAR_SELECTORS) {
+    installInlineClearButton(document.querySelector(selector));
+  }
+}
+
 function ensureSelectedCheck(menu, selector) {
   if (!menu) return;
   menu.querySelectorAll(selector).forEach((option) => {
@@ -324,12 +388,15 @@ function enhanceAll() {
   enhanceOrders();
   enhanceCustomers();
   enhanceMap();
+  enhanceInlineClearButtons();
 }
 
 function boot() {
   enhanceAll();
-  const app = document.querySelector("#app");
-  if (!app) return;
+  // document.body, not #app: several sheet-based search inputs (customer/
+  // product pickers, the map address search) mount their overlay directly
+  // on body rather than inside #app, and would never be seen by an
+  // observer scoped to #app alone.
   let scheduled = false;
   const observer = new MutationObserver(() => {
     if (scheduled) return;
@@ -339,7 +406,7 @@ function boot() {
       enhanceAll();
     });
   });
-  observer.observe(app, { childList: true, subtree: true });
+  observer.observe(document.body, { childList: true, subtree: true });
 }
 
 if (document.readyState === "loading") {

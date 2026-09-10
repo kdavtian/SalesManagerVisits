@@ -228,11 +228,23 @@ export async function renderWarehouse(root, navigate) {
     let showLanding = false;
     let showWholesale = false;
     let lastRows = [];
+    // Collapsed by default -- a WM scanning the shelf list gets brand/family
+    // totals up front and drills into only what they need. Keyed by brand
+    // name alone, and by "brand||family" for the family level, so a state
+    // survives across re-renders (a price-toggle click, a search) within
+    // this screen visit, only resetting on tab switch/reload.
+    const expandedBrands = new Set();
+    const expandedFamilies = new Set();
 
-    function groupHeadingHtml(p, prevP) {
-      if (prevP && prevP.brand === p.brand && prevP.family === p.family) return "";
-      const label = [p.brand, p.family].filter(Boolean).join(" · ") || t("warehouse_stock_unknown");
-      return `<div class="list-group-heading">${escapeHtml(label)}</div>`;
+    function productRowHtml(p) {
+      return `
+        <div class="card inventory-row-card">
+          <div class="inventory-row">
+            <span class="inventory-row-name">${escapeHtml(p.name)}${p.unit ? ` <span class="inventory-row-size">${escapeHtml(p.unit)}</span>` : ""}</span>
+            <span class="inventory-row-qty ${p.stock_qty == null ? "inventory-row-qty-unknown" : p.stock_qty > 0 ? "inventory-row-qty-ok" : "inventory-row-qty-zero"}">${inventoryQtyLabel(p)}</span>
+          </div>
+          ${pricesRowHtml(p)}
+        </div>`;
     }
 
     // Second row: whichever of landing cost / wholesale price is currently
@@ -247,22 +259,131 @@ export async function renderWarehouse(root, navigate) {
       return `<div class="inventory-row-prices">${parts.join(" | ")}</div>`;
     }
 
+    // "570pcs | 7,090L" -- a group's own stock summed across every product
+    // in it (stock_qty null counts as 0, same as the qty each row already
+    // shows individually), liters only appended when at least one product
+    // in the group has a parseable per-unit liter size.
+    function groupQtyLabel(totals) {
+      const pcsLabel = `${totals.pcs}${t("warehouse_pcs_suffix")}`;
+      return totals.liters > 0 ? `${pcsLabel} | ${formatLitersCompact(totals.liters)}` : pcsLabel;
+    }
+
+    function groupHeaderHtml({ label, toggleAttr, key, expanded, totals, extraClass = "" }) {
+      return `
+        <button type="button" class="list-group-heading list-group-heading-toggle ${extraClass}" ${toggleAttr}="${escapeHtml(key)}" aria-expanded="${expanded}">
+          <span class="list-group-heading-label">${icons.chevronDown}${escapeHtml(label)}</span>
+          <span class="list-group-heading-qty">${groupQtyLabel(totals)}</span>
+        </button>`;
+    }
+
+    // Sums stock/liters per brand and per brand+family, for the collapsible
+    // headers' own totals -- independent of which rows are actually
+    // expanded/visible right now.
+    function computeTotals(rows) {
+      const brandTotals = new Map();
+      const familyTotals = new Map();
+      for (const p of rows) {
+        const pcs = p.stock_qty ?? 0;
+        const perUnitLiters = parseLiters(p.unit);
+        const liters = perUnitLiters != null ? perUnitLiters * (p.stock_qty ?? 0) : 0;
+        const bKey = p.brand || "";
+        const bTotal = brandTotals.get(bKey) || { pcs: 0, liters: 0 };
+        bTotal.pcs += pcs;
+        bTotal.liters += liters;
+        brandTotals.set(bKey, bTotal);
+        const fKey = `${bKey}||${p.family || ""}`;
+        const fTotal = familyTotals.get(fKey) || { pcs: 0, liters: 0 };
+        fTotal.pcs += pcs;
+        fTotal.liters += liters;
+        familyTotals.set(fKey, fTotal);
+      }
+      return { brandTotals, familyTotals };
+    }
+
     function render() {
-      listEl.innerHTML = lastRows.length
-        ? lastRows
-            .map(
-              (p, i) => `
-        ${groupHeadingHtml(p, lastRows[i - 1])}
-        <div class="card inventory-row-card">
-          <div class="inventory-row">
-            <span class="inventory-row-name">${escapeHtml(p.name)}${p.unit ? ` <span class="inventory-row-size">${escapeHtml(p.unit)}</span>` : ""}</span>
-            <span class="inventory-row-qty ${p.stock_qty == null ? "inventory-row-qty-unknown" : p.stock_qty > 0 ? "inventory-row-qty-ok" : "inventory-row-qty-zero"}">${inventoryQtyLabel(p)}</span>
-          </div>
-          ${pricesRowHtml(p)}
-        </div>`
-            )
-            .join("")
-        : `<p class="empty-state">${t("no_products_found")}</p>`;
+      if (!lastRows.length) {
+        listEl.innerHTML = `<p class="empty-state">${t("no_products_found")}</p>`;
+        return;
+      }
+      // Search (and a brand filter, which already scopes the list to one
+      // brand) auto-expands everything so matches are never hidden behind a
+      // collapsed group -- without touching the remembered manual state, so
+      // clearing the search goes back to whatever the WM had open before.
+      const forceExpand = Boolean(searchInput.value.trim()) || Boolean(brandFilter);
+      const { brandTotals, familyTotals } = computeTotals(lastRows);
+
+      // Bucket the already-sorted rows into brand -> family -> [products];
+      // sort order is preserved since compareProducts already groups same
+      // brand/family runs together.
+      const brands = [];
+      const brandByKey = new Map();
+      for (const p of lastRows) {
+        const bKey = p.brand || "";
+        let brand = brandByKey.get(bKey);
+        if (!brand) {
+          brand = { key: bKey, label: p.brand || t("warehouse_stock_unknown"), families: new Map(), familyOrder: [] };
+          brandByKey.set(bKey, brand);
+          brands.push(brand);
+        }
+        const fKey = p.family || "";
+        let family = brand.families.get(fKey);
+        if (!family) {
+          family = { key: fKey, label: p.family || null, products: [] };
+          brand.families.set(fKey, family);
+          brand.familyOrder.push(fKey);
+        }
+        family.products.push(p);
+      }
+
+      let html = "";
+      for (const brand of brands) {
+        const brandExpanded = forceExpand || expandedBrands.has(brand.key);
+        html += groupHeaderHtml({
+          label: brand.label,
+          toggleAttr: "data-brand-toggle",
+          key: brand.key,
+          expanded: brandExpanded,
+          totals: brandTotals.get(brand.key) || { pcs: 0, liters: 0 },
+        });
+        if (!brandExpanded) continue;
+        for (const fKey of brand.familyOrder) {
+          const family = brand.families.get(fKey);
+          if (!family.label) {
+            // Non-oil / no family -- no sub-header, just the products.
+            html += family.products.map(productRowHtml).join("");
+            continue;
+          }
+          const familyKey = `${brand.key}||${fKey}`;
+          const familyExpanded = forceExpand || expandedFamilies.has(familyKey);
+          html += groupHeaderHtml({
+            label: family.label,
+            toggleAttr: "data-family-toggle",
+            key: familyKey,
+            expanded: familyExpanded,
+            totals: familyTotals.get(familyKey) || { pcs: 0, liters: 0 },
+            extraClass: "list-group-heading-family",
+          });
+          if (familyExpanded) html += family.products.map(productRowHtml).join("");
+        }
+      }
+      listEl.innerHTML = html;
+
+      listEl.querySelectorAll("[data-brand-toggle]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const key = btn.dataset.brandToggle;
+          if (expandedBrands.has(key)) expandedBrands.delete(key);
+          else expandedBrands.add(key);
+          render();
+        });
+      });
+      listEl.querySelectorAll("[data-family-toggle]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const key = btn.dataset.familyToggle;
+          if (expandedFamilies.has(key)) expandedFamilies.delete(key);
+          else expandedFamilies.add(key);
+          render();
+        });
+      });
     }
 
     async function paint(q) {
