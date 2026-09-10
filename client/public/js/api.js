@@ -115,7 +115,7 @@ export const api = {
   updateSettings: (data) => json("/settings", "PATCH", data),
 
   getMySalesPerformance: () => request("/sales-performance/me"),
-  getSalesPerformanceLeaderboard: () => request("/sales-performance/"),
+  getSalesPerformanceLeaderboard: (period = "ytd") => request(`/sales-performance/?period=${period}`),
 
   createEditRequest: (customerId, changes, note) =>
     json("/edit-requests", "POST", { customer_id: customerId, changes, note }),

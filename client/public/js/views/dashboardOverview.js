@@ -33,6 +33,14 @@ function comparisonBarHtml(label, actual, target) {
   `;
 }
 
+// Budget is only ever tracked per calendar month (sales_performance.month),
+// so only these two periods can show an actual-vs-budget comparison; the
+// other two read from the daily-management report's own day/wtd actuals
+// instead (see loadSalesSection below), with no budget figure at all.
+const BUDGET_PERIODS = new Set(["mtd", "ytd"]);
+const PERIODS = ["today", "wtd", "mtd", "ytd"];
+const DEFAULT_PERIOD = "mtd";
+
 export async function renderDashboardOverview(root, navigate) {
   root.innerHTML = `
     <div class="detail-view">
@@ -42,36 +50,55 @@ export async function renderDashboardOverview(root, navigate) {
         </button>
         <div class="detail-header-title"><h1>${t("company_dashboard_title")}</h1></div>
       </div>
-      <div id="company-dashboard-body" style="margin-top:12px;"><p class="loading-state" role="status">${t("loading")}</p></div>
+      <div class="company-dashboard-period-row">
+        <label class="visually-hidden" for="company-dashboard-period">${t("company_dashboard_period_label")}</label>
+        <select class="period-select" id="company-dashboard-period">
+          ${PERIODS.map((p) => `<option value="${p}" ${p === DEFAULT_PERIOD ? "selected" : ""}>${t(`company_dashboard_period_${p}`)}</option>`).join("")}
+        </select>
+      </div>
+      <div id="company-dashboard-sales"><p class="loading-state" role="status">${t("loading")}</p></div>
+      <div id="company-dashboard-rest"><p class="loading-state" role="status">${t("loading")}</p></div>
     </div>
   `;
   const container = root.querySelector(".detail-view");
   container.querySelector("#back-btn").addEventListener("click", () => navigate("#/dashboard"));
 
-  const bodyEl = container.querySelector("#company-dashboard-body");
-  let leaderboard, products, brandActuals;
+  const salesEl = container.querySelector("#company-dashboard-sales");
+  const restEl = container.querySelector("#company-dashboard-rest");
+  const periodSelect = container.querySelector("#company-dashboard-period");
+
+  // Inventory and brand-volume are point-in-time/its-own-trend-chart
+  // sections, not period-scoped -- fetched once, untouched by the period
+  // switch below, instead of refetching on every period change.
   try {
-    [leaderboard, products, brandActuals] = await Promise.all([
-      api.getSalesPerformanceLeaderboard(),
-      api.listProducts(),
-      api.getPerfBrandActualsSummary(),
-    ]);
+    const [products, brandActuals] = await Promise.all([api.listProducts(), api.getPerfBrandActualsSummary()]);
+    restEl.innerHTML = `${renderInventorySection(products)}${renderBrandVolumeSection(brandActuals)}`;
   } catch (err) {
-    bodyEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
-    return;
+    restEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
   }
 
-  bodyEl.innerHTML = `
-    ${renderSalesSection(leaderboard)}
-    ${renderInventorySection(products)}
-    ${renderBrandVolumeSection(brandActuals)}
-  `;
+  async function loadSales(period) {
+    salesEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+    try {
+      if (BUDGET_PERIODS.has(period)) {
+        const leaderboard = await api.getSalesPerformanceLeaderboard(period);
+        salesEl.innerHTML = renderBudgetSalesSection(leaderboard);
+      } else {
+        const { report } = await api.getDailyManagementReport({ period: "daily" });
+        salesEl.innerHTML = renderActualsOnlySalesSection(report, period);
+      }
+    } catch (err) {
+      salesEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    }
+  }
+  periodSelect.addEventListener("change", () => loadSales(periodSelect.value));
+  await loadSales(DEFAULT_PERIOD);
 }
 
-// Sections 1 and 2 (sales performance and money collected) both come from
-// the same YTD-per-rep rows -- collected_amd is already part of the same
-// query that gives sales/budget, so there's no separate fetch for it.
-function renderSalesSection(leaderboard) {
+// MTD/YTD: actual-vs-budget, company total + per-rep breakdown -- exactly
+// what this section always showed, just period-scoped by the caller now
+// instead of hardcoded to YTD.
+function renderBudgetSalesSection(leaderboard) {
   if (!leaderboard?.length) {
     return `
       <h2 class="section-title">${t("company_dashboard_sales")}</h2>
@@ -89,15 +116,15 @@ function renderSalesSection(leaderboard) {
 
   return `
     <h2 class="section-title">${t("company_dashboard_sales")}</h2>
-    ${comparisonBarHtml(t("company_dashboard_ytd_sales"), totals.sales_amd, totals.budget_amd)}
+    ${comparisonBarHtml(t("company_dashboard_sales_label"), totals.sales_amd, totals.budget_amd)}
     <div class="stat-grid">
       <div class="stat-card">
         <span class="stat-value">${formatAmd(Math.round(totals.collected_amd))}</span>
-        <span class="stat-label">${t("company_dashboard_collected")}</span>
+        <span class="stat-label">${t("company_dashboard_collected_label")}</span>
       </div>
       <div class="stat-card">
         <span class="stat-value">${formatAmd(Math.round(totals.budget_amd))}</span>
-        <span class="stat-label">${t("company_dashboard_ytd_budget")}</span>
+        <span class="stat-label">${t("company_dashboard_budget_label")}</span>
       </div>
     </div>
     <h3 class="section-title section-title-inline" style="margin-top:14px;">${t("company_dashboard_by_rep")}</h3>
@@ -107,13 +134,46 @@ function renderSalesSection(leaderboard) {
           (r) => `
         <div class="card">
           <strong>${escapeHtml(r.rep_name)}</strong>
-          ${comparisonBarHtml(t("company_dashboard_ytd_sales"), Number(r.sales_amd), Number(r.budget_amd))}
-          <div class="muted">${t("company_dashboard_ytd_collected")}: ${formatAmd(Math.round(Number(r.collected_amd)))}</div>
+          ${comparisonBarHtml(t("company_dashboard_sales_label"), Number(r.sales_amd), Number(r.budget_amd))}
+          <div class="muted">${t("company_dashboard_collected_label")}: ${formatAmd(Math.round(Number(r.collected_amd)))}</div>
         </div>
       `
         )
         .join("")}
     </div>
+  `;
+}
+
+// Today/WTD: total sales + total collected only, read straight off the
+// daily-management report's own day_amd/wtd_amd columns (see
+// server/src/routes/reports.js -- the same erp_daily_report row already
+// carries every period's totals). No per-rep breakdown and no budget bar
+// here: budget is a monthly figure (see BUDGET_PERIODS above), and a
+// per-rep split isn't part of this report's shape, so faking either would
+// be misleading rather than just absent.
+function renderActualsOnlySalesSection(report, period) {
+  if (!report) {
+    return `
+      <h2 class="section-title">${t("company_dashboard_sales")}</h2>
+      <p class="empty-state">${t("company_dashboard_no_data")}</p>
+    `;
+  }
+  const salesAmd = period === "today" ? report.sales_day_amd : report.sales_wtd_amd;
+  const collectedAmd = period === "today" ? report.payments_day_amd : report.payments_wtd_amd;
+
+  return `
+    <h2 class="section-title">${t("company_dashboard_sales")}</h2>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <span class="stat-value">${formatAmd(Math.round(Number(salesAmd) || 0))}</span>
+        <span class="stat-label">${t("company_dashboard_sales_label")}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value">${formatAmd(Math.round(Number(collectedAmd) || 0))}</span>
+        <span class="stat-label">${t("company_dashboard_collected_label")}</span>
+      </div>
+    </div>
+    <p class="muted" style="margin: 10px 4px 0;">${t("company_dashboard_no_budget_note")}</p>
   `;
 }
 

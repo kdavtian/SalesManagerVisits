@@ -66,9 +66,16 @@ salesPerformanceRouter.get("/me", async (req, res) => {
   });
 });
 
-// Compact YTD ranking across every rep in the sheet -- for directors/CEO/
+// Compact ranking across every rep in the sheet -- for directors/CEO/
 // admin to see the whole team at a glance (mirrors the points leaderboard's
-// "who's ahead" framing, but for actual sales attainment).
+// "who's ahead" framing, but for actual sales attainment). Budget is only
+// ever tracked per calendar month (see sales_performance.month below), so
+// this only supports the two periods a budget figure actually means
+// something for -- "mtd" (this month) or "ytd" (every month so far this
+// year, the default/only mode before the Company Dashboard's period
+// filter was added). Today/WTD have no budget concept at this grain; the
+// Company Dashboard instead reads those two from the daily-management
+// report's day/wtd actuals (see reports.js), with no budget comparison.
 salesPerformanceRouter.get("/", async (req, res) => {
   // Same company-wide visibility as the rest of Team Performance
   // (seesAllPerformance) -- Accountant reconciles these numbers day to
@@ -78,13 +85,14 @@ salesPerformanceRouter.get("/", async (req, res) => {
     return res.status(403).json({ error: "Not allowed" });
   }
 
+  const monthCondition = req.query.period === "mtd" ? "month = date_trunc('month', now())" : "month >= date_trunc('year', now())";
   const { rows } = await pool.query(
     `SELECT rep_name,
        sum(sales_amd)::numeric AS sales_amd,
        sum(collected_amd)::numeric AS collected_amd,
        sum(budget_amd)::numeric AS budget_amd
      FROM sales_performance
-     WHERE month >= date_trunc('year', now()) AND rep_name != $1
+     WHERE ${monthCondition} AND rep_name != $1
      GROUP BY rep_name
      ORDER BY sum(sales_amd) DESC`,
     [SALES_DIRECTOR_REP_NAME]
