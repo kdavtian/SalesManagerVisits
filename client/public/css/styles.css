@@ -1417,6 +1417,19 @@ input[type="search"]:focus {
   border-color: var(--accent);
 }
 
+/* Search inputs aren't inside a <form> (see form input:focus above, which
+   already overrides the global :focus-visible ring with a softer one for
+   genuine form fields), so with nothing else scoped to them they instead
+   fell back to that global ring at full strength stacked on top of the
+   border-color change directly above -- reading as one thick blue outline
+   instead of the thin border every other search bar already shows on
+   focus. The border-color change alone is a sufficient visible focus
+   indicator here, so this only drops the redundant glow, not focus
+   visibility itself. */
+input[type="search"]:focus-visible {
+  box-shadow: none;
+}
+
 .list-toolbar input[type="search"] {
   flex: 1;
   min-width: 0;

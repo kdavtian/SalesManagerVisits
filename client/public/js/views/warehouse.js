@@ -305,11 +305,13 @@ export async function renderWarehouse(root, navigate) {
         listEl.innerHTML = `<p class="empty-state">${t("no_products_found")}</p>`;
         return;
       }
-      // Search (and a brand filter, which already scopes the list to one
-      // brand) auto-expands everything so matches are never hidden behind a
-      // collapsed group -- without touching the remembered manual state, so
-      // clearing the search goes back to whatever the WM had open before.
-      const forceExpand = Boolean(searchInput.value.trim()) || Boolean(brandFilter);
+      // Search, a brand filter (already scopes the list to one brand), or
+      // either price toggle all auto-expand everything -- the price row
+      // only exists on a product card, so with groups collapsed (the
+      // default) pressing "show landing cost" would otherwise reveal
+      // nothing at all. Doesn't touch the remembered manual state, so
+      // clearing the search/toggle goes back to whatever the WM had open.
+      const forceExpand = Boolean(searchInput.value.trim()) || Boolean(brandFilter) || showLanding || showWholesale;
       const { brandTotals, familyTotals } = computeTotals(lastRows);
 
       // Bucket the already-sorted rows into brand -> family -> [products];
