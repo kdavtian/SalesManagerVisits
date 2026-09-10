@@ -4473,6 +4473,43 @@ input[type="search"]:focus-visible {
   flex-shrink: 0;
 }
 
+/* Company Dashboard's period picker sits on its own row right under the
+   header instead of packed into .detail-header alongside the title --
+   the title + a select together didn't reliably fit one row at narrow
+   widths (Armenian "Ընկերության վահանակ" plus a "Today/WTD/MTD/YTD"
+   select truncated the title behind its own ellipsis). */
+.company-dashboard-period-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 4px 0 14px;
+}
+
+/* Compact period picker -- same box-model as a form select but sized to
+   its own content instead of stretching full-width like one. */
+.period-select {
+  width: auto;
+  padding: 7px 26px 7px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.period-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Not inside a <form>, so -- same reasoning as input[type="search"]:focus-
+   visible elsewhere in this file -- it doesn't get form select:focus's
+   softer ring and would otherwise fall back to the global :focus-visible
+   ring at full strength on top of the border-color change directly above. */
+.period-select:focus-visible {
+  box-shadow: none;
+}
+
 /* Debt Balances headline total -- pushed to the right edge of the
    .detail-header row the same way .detail-header-actions is, just text
    instead of icon buttons. Empty (no rows to sum) collapses to nothing
