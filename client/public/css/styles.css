@@ -4414,6 +4414,18 @@ input[type="search"]:focus {
   flex-shrink: 0;
 }
 
+/* Debt Balances headline total -- pushed to the right edge of the
+   .detail-header row the same way .detail-header-actions is, just text
+   instead of icon buttons. Empty (no rows to sum) collapses to nothing
+   rather than showing "Total: 0 AMD" as if there really were a balance. */
+.debt-balances-subtotal {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+}
+
 /* ===== Customer detail header: three stacked rows =====
    1. big avatar + customer name   2. ERP ID / tier / visit status
    3. action icons.

@@ -9,9 +9,33 @@ import { escapeHtml, formatAmd } from "../util.js";
 import { state } from "../state.js";
 import { t } from "../i18n.js";
 
+// For last_visit_at, a real timestamp (checkins.timestamp) -- correctly
+// converted to the viewer's local calendar date, since it names an
+// actual instant.
 function formatDate(value) {
   if (!value) return "—";
   return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+// For last_payment_date, a plain calendar date (Postgres `date`, no time
+// component) from the ERP sync -- `new Date("2026-09-05")` parses that as
+// UTC midnight, which toLocaleDateString() then renders as Sep 4 in any
+// timezone behind UTC (this was the reported bug: the last-payment date
+// showing one day earlier than the ERP actually has it). Read the y/m/d
+// digits straight out of the string and build a local Date from them
+// instead, so it's never round-tripped through UTC and can't shift by a
+// day, matching the fix util.js's formatDateDMY already uses for the
+// same class of bug.
+function formatDateOnly(value) {
+  if (!value) return "—";
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
+  if (!match) return formatDate(value);
+  const [, yyyy, mm, dd] = match;
+  return new Date(Number(yyyy), Number(mm) - 1, Number(dd)).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 export async function renderDebtBalances(root, navigate) {
@@ -26,6 +50,7 @@ export async function renderDebtBalances(root, navigate) {
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
         <div class="detail-header-title"><h1>${t("debt_balances_title")}</h1></div>
+        <div class="debt-balances-subtotal" id="debt-subtotal"></div>
       </div>
       ${
         canGroup
@@ -49,6 +74,7 @@ export async function renderDebtBalances(root, navigate) {
   container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
   const listEl = container.querySelector("#debt-list");
   const errorEl = container.querySelector("#debt-error");
+  const subtotalEl = container.querySelector("#debt-subtotal");
 
   if (canGroup) {
     const tabsEl = container.querySelector("#debt-mode-tabs");
@@ -84,7 +110,7 @@ export async function renderDebtBalances(root, navigate) {
         </div>
         <strong>${escapeHtml(r.customer_name || "")}</strong>
         <div class="debt-balance-row muted">
-          <span>${t("debt_balances_last_payment")}: ${formatDate(r.last_payment_date)}</span>
+          <span>${t("debt_balances_last_payment")}: ${formatDateOnly(r.last_payment_date)}</span>
           <span>${t("debt_balances_last_visit")}: ${formatDate(r.last_visit_at)}</span>
         </div>
       </div>`;
@@ -97,6 +123,13 @@ export async function renderDebtBalances(root, navigate) {
     if (canGroup && mode === "by-manager" && managerFilter) {
       visible = visible.filter((r) => String(r.assigned_manager_id || "") === managerFilter);
     }
+
+    // Sum of exactly the rows on screen -- the manager filter (by-manager
+    // mode) narrows this the same way it narrows the list below, so the
+    // headline total always matches what's actually visible.
+    const subtotal = visible.reduce((sum, r) => sum + Number(r.remaining_balance || 0), 0);
+    subtotalEl.textContent = visible.length ? `${t("debt_balances_subtotal")}: ${formatAmd(subtotal)}` : "";
+
     if (!visible.length) {
       listEl.innerHTML = `<p class="empty-state">${t("debt_balances_empty")}</p>`;
       return;
