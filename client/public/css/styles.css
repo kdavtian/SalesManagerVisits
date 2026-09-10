@@ -5952,12 +5952,21 @@ button.list-row-icon {
   background: var(--warning, #ff9500);
 }
 
-/* No circular background here (unlike verified/pending) -- the triangle
+/* No circular background here (unlike verified/pending) -- the octagon
    glyph itself is the red shape (fill="currentColor"), so a second red
-   circle behind it would just show as an ill-fitting halo. */
+   circle behind it would just show as an ill-fitting halo. Verified/
+   pending read at the full 20px badge size because their colored circle
+   fills the whole .activity-status-icon-sm box around a small 13px glyph;
+   with no such circle, the rejected octagon needs to fill that same 20px
+   footprint itself instead of shrinking to the shared 13px glyph size, or
+   it reads visibly smaller than the other two statuses. */
 .status-rejected {
   background: transparent;
   color: var(--danger);
+}
+.status-rejected svg {
+  width: 20px;
+  height: 20px;
 }
 
 /* Not a <button> (a <strong> with role="button") so it can sit inline with
