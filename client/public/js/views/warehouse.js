@@ -2,7 +2,27 @@ import { api } from "../api.js";
 import { escapeHtml, formatAmd } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { compareProducts } from "../productSort.js";
+import { compareProducts, parseLiters } from "../productSort.js";
+
+// "624" -> "624L", "4.5" -> "4.5L" -- compact, no space, matching how a WM
+// reads a shelf tag (as opposed to util.js's own formatLiters-style helpers
+// elsewhere, which spell out " L" for a prose sentence).
+function formatLitersCompact(value) {
+  const n = Number(value) || 0;
+  const rounded = Math.round(n * 10) / 10;
+  return `${rounded.toLocaleString()}L`;
+}
+
+// Right-hand side of an inventory row: "21pcs" alone for a non-liter item
+// (filters, brake pads), "21pcs | 4368L" for an oil where p.unit is a
+// parseable container size ("208L") -- total shelf liters, not per-unit.
+function inventoryQtyLabel(p) {
+  if (p.stock_qty == null) return t("warehouse_stock_unknown");
+  const qtyLabel = `${p.stock_qty}${t("warehouse_pcs_suffix")}`;
+  const perUnitLiters = parseLiters(p.unit);
+  if (perUnitLiters == null) return qtyLabel;
+  return `${qtyLabel} | ${formatLitersCompact(perUnitLiters * p.stock_qty)}`;
+}
 
 export async function renderWarehouse(root, navigate) {
   let activeTab = "pick-list";
@@ -57,22 +77,30 @@ export async function renderWarehouse(root, navigate) {
       compareProducts({ name: a.product_name, brand: a.brand, unit: a.size }, { name: b.product_name, brand: b.brand, unit: b.size })
     );
     contentEl.innerHTML = rows.length
-      ? `<div class="card-list">${rows
+      ? `<div class="card-list pick-list">${rows
           .map(
             (r) => `
-        <div class="card">
+        <button type="button" class="card pick-item">
+          <span class="pick-item-check">${icons.checkCircle}</span>
           <div class="order-product-info">
             <strong>${escapeHtml(r.product_name)}${r.size ? ` · ${escapeHtml(r.size)}` : ""}</strong>
             <span class="muted">${[r.brand, `${r.order_count} ${t("warehouse_orders_count_suffix")}`].filter(Boolean).map(escapeHtml).join(" · ")}</span>
           </div>
           <div class="pick-list-qty">
-            <span class="badge badge-info">${r.total_quantity}</span>
-            ${r.stock_qty != null ? `<span class="muted">${t("warehouse_in_stock")}: ${r.stock_qty}</span>` : ""}
+            <span class="pick-list-qty-value">${r.total_quantity}</span>
+            ${r.stock_qty != null ? `<span class="pick-list-stock">${t("warehouse_in_stock")}: ${r.stock_qty}</span>` : ""}
           </div>
-        </div>`
+        </button>`
           )
           .join("")}</div>`
       : `<p class="empty-state">${t("warehouse_pick_list_empty")}</p>`;
+
+    // Picked state is a plain client-side toggle, not persisted anywhere --
+    // it's just a visual checklist aid for a WM walking the floor with this
+    // screen open, reset on reload/tab switch like any scratch state.
+    contentEl.querySelectorAll(".pick-item").forEach((btn) => {
+      btn.addEventListener("click", () => btn.classList.toggle("pick-item-picked"));
+    });
   }
 
   async function loadStaging() {
@@ -151,7 +179,7 @@ export async function renderWarehouse(root, navigate) {
         <strong>${escapeHtml(o.customer_name)}</strong>
         <p class="muted">${escapeHtml(o.address || "")}</p>
         <div class="card-list" style="margin:8px 0;">
-          ${o.items.map((i) => `<div class="order-product-row"><span>${escapeHtml(i.product_name)}${i.size ? ` · ${escapeHtml(i.size)}` : ""} × ${i.quantity}</span></div>`).join("")}
+          ${o.items.map((i) => `<div class="order-product-row"><span>${i.brand ? `${escapeHtml(i.brand)} · ` : ""}${escapeHtml(i.product_name)}${i.size ? ` · ${escapeHtml(i.size)}` : ""} × ${i.quantity}</span></div>`).join("")}
         </div>
         <p>${t("total")}: <span class="text-amount">${formatAmd(Number(o.total_amd))}</span></p>
         <div class="sheet-actions">
@@ -190,12 +218,9 @@ export async function renderWarehouse(root, navigate) {
             .map(
               (p, i) => `
         ${groupHeadingHtml(p, rows[i - 1])}
-        <div class="card">
-          <div class="order-product-info">
-            <strong>${escapeHtml(p.name)}</strong>
-            <span class="muted">${escapeHtml(p.unit || "")}</span>
-          </div>
-          <span class="badge ${p.stock_qty > 0 ? "badge-success" : "badge-warning"}">${p.stock_qty != null ? p.stock_qty : t("warehouse_stock_unknown")}</span>
+        <div class="card inventory-row">
+          <span class="inventory-row-name">${escapeHtml(p.name)}${p.unit ? ` <span class="inventory-row-size">${escapeHtml(p.unit)}</span>` : ""}</span>
+          <span class="inventory-row-qty ${p.stock_qty == null ? "inventory-row-qty-unknown" : p.stock_qty > 0 ? "inventory-row-qty-ok" : "inventory-row-qty-zero"}">${inventoryQtyLabel(p)}</span>
         </div>`
             )
             .join("")

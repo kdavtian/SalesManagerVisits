@@ -57,7 +57,7 @@ function parseViscosity(name) {
 
 // Matches "0.5L", "1 L", "208L", etc. in a unit string; returns the
 // numeric liter value, or null if the unit isn't a plain liter size.
-function parseLiters(unit) {
+export function parseLiters(unit) {
   if (!unit) return null;
   const m = String(unit).match(/^\s*([\d.]+)\s*L\s*$/i);
   if (!m) return null;
