@@ -7270,11 +7270,97 @@ form select,
 }
 
 /* Warehouse & Delivery module (see views/warehouse.js, views/deliveryRoute.js) */
+
+/* Pick List: compact tap-to-pick minicards -- a plain checkmark outline
+   that fills in green (and the card tints/border green) once tapped, so a
+   WM walking the floor can tell picked from left-to-pick at a glance. The
+   pick quantity is the number that matters here, so it's the larger/bolder
+   figure; "In stock" is secondary context and set smaller. */
+.pick-list {
+  gap: 8px;
+}
+.pick-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.pick-item .order-product-info {
+  flex: 1;
+  min-width: 0;
+}
+.pick-item-check {
+  flex: none;
+  display: flex;
+  color: var(--border);
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+.pick-item-check svg {
+  width: 20px;
+  height: 20px;
+}
+.pick-item-picked {
+  background: rgba(48, 209, 88, 0.12);
+  border-color: var(--success);
+}
+.pick-item-picked .pick-item-check {
+  opacity: 1;
+  color: var(--success);
+}
 .pick-list-qty {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 2px;
+  gap: 1px;
+  flex: none;
+}
+.pick-list-qty-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.pick-list-stock {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+/* Inventory: one compact row per product -- name + size on the left,
+   pcs / total-liters right-aligned, in place of the old two-line card with
+   a separate stock-count pill. Read-only reference (see /inventory route),
+   so no pointer cursor. */
+.inventory-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: default;
+}
+.inventory-row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.inventory-row-size {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+.inventory-row-qty {
+  flex: none;
+  text-align: right;
+  font-weight: 600;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.inventory-row-qty-zero {
+  color: var(--warning);
+}
+.inventory-row-qty-unknown {
+  color: var(--text-dim);
+  font-weight: 400;
 }
 .plan-order-row {
   display: flex;
