@@ -7731,3 +7731,26 @@ form select,
     overflow-y: auto;
   }
 }
+
+/* ============================================================
+   Desktop shell, Step 3: Customer/Admin management
+
+   The Step 1 audit found no tri-state region/subregion/customer
+   accordion anywhere in this codebase for the original spec's
+   "Customer/Admin management" screen to adapt -- admin.js's sections
+   already got their desktop two-pane treatment in Step 2
+   (.settings-admin-layout). What's left in scope here, kept to the
+   same low-risk pattern as Warehouse: the Customers list's single-
+   column .card-list becomes a multi-column grid at desktop, so more
+   customers are visible at once -- same #customer-list markup/data in
+   customers.js, no separate desktop render path. Scoped to the id
+   (not .card-list generally) since other list screens reuse that same
+   class for content that isn't meant to wrap into columns. */
+
+@media (min-width: 1024px) {
+  #customer-list.card-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    align-items: start;
+  }
+}
