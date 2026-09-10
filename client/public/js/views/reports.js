@@ -25,8 +25,31 @@ const OUTCOME_OPTIONS = [
   "other",
 ];
 
+// For a real timestamp (checkins.timestamp, customers.created_at, a
+// payment's created_at, ...) -- correctly converted to the viewer's
+// local calendar date, since it names an actual instant.
 function formatDate(value) {
   return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+// For a plain calendar date with no time component (erp_daily_report's
+// report_date/prev_report_date, and the day column from
+// date_trunc('day', ...)::date in the payments-approved trend) --
+// `new Date("2026-09-05")` parses that as UTC midnight, which
+// toLocaleDateString() then renders as the PREVIOUS day in any timezone
+// behind UTC (same bug fixed in debtBalances.js's formatDateOnly). Read
+// the y/m/d digits straight out of the string and build a local Date
+// from them instead, so it's never round-tripped through UTC.
+function formatDateOnly(value) {
+  if (!value) return "—";
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
+  if (!match) return formatDate(value);
+  const [, yyyy, mm, dd] = match;
+  return new Date(Number(yyyy), Number(mm) - 1, Number(dd)).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function selectHtml(name, options, value) {
@@ -81,7 +104,7 @@ async function renderDocumentsReport(root, navigate) {
       <a class="card report-row" href="/api/reports/documents/${d.id}/download">
         <span>
           <strong>${t(GENERATED_REPORT_TYPE_LABEL_KEY[d.report_type] || d.report_type)}</strong>
-          <span class="muted"> · ${formatDate(d.report_date)}</span>
+          <span class="muted"> · ${formatDateOnly(d.report_date)}</span>
         </span>
         <span>${icons.download}</span>
       </a>`
@@ -389,7 +412,7 @@ async function renderPaymentsReport(root, navigate) {
             ${daily_trend
               .map((d) => {
                 const heightPct = Math.round((Number(d.approved_amd) / maxDaily) * 100);
-                return `<div class="trend-bar" style="height:${Math.max(heightPct, Number(d.approved_amd) > 0 ? 4 : 0)}%" title="${formatDate(d.day)}: ${formatAmd(Number(d.approved_amd))}"></div>`;
+                return `<div class="trend-bar" style="height:${Math.max(heightPct, Number(d.approved_amd) > 0 ? 4 : 0)}%" title="${formatDateOnly(d.day)}: ${formatAmd(Number(d.approved_amd))}"></div>`;
               })
               .join("")}
           </div>
@@ -742,7 +765,7 @@ async function renderDailyManagementReport(root, navigate) {
       const { report: r, available_dates } = result;
 
       if (!explicitDate) {
-        dateSelect.innerHTML = available_dates.map((d) => `<option value="${d}" ${d === r.report_date ? "selected" : ""}>${formatDate(d)}</option>`).join("");
+        dateSelect.innerHTML = available_dates.map((d) => `<option value="${d}" ${d === r.report_date ? "selected" : ""}>${formatDateOnly(d)}</option>`).join("");
       }
 
       const salesRows = [
@@ -774,7 +797,7 @@ async function renderDailyManagementReport(root, navigate) {
         <p class="muted" style="margin: 0 4px 8px;">${t("report_daily_management_change_prev")}: ${signedAmd(r.sales_change_amd)}${r.sales_change_liters != null ? ` · ${r.sales_change_liters > 0 ? "+" : ""}${Number(r.sales_change_liters).toLocaleString()} L` : ""}</p>
         <p class="muted" style="margin: 0 4px 8px;">${t("report_daily_management_margin")}: ${formatAmd(r.sales_margin_amd)}${r.sales_margin_pct != null ? ` (${Number(r.sales_margin_pct).toFixed(1)}%)` : ""}</p>
 
-        <h2 class="section-title">${t("by_channel")} (${formatDate(r.report_date)})</h2>
+        <h2 class="section-title">${t("by_channel")} (${formatDateOnly(r.report_date)})</h2>
         <div class="card-list">
           ${
             r.sales_by_channel.length
@@ -804,7 +827,7 @@ async function renderDailyManagementReport(root, navigate) {
             .join("")}
         </div>
 
-        <h2 class="section-title">${t("by_channel")} (${formatDate(r.report_date)})</h2>
+        <h2 class="section-title">${t("by_channel")} (${formatDateOnly(r.report_date)})</h2>
         <div class="card-list">
           ${
             r.payments_by_channel.length
@@ -840,7 +863,7 @@ async function renderDailyManagementReport(root, navigate) {
         </div>
         ${
           r.prev_report_date
-            ? `<p class="muted" style="margin: 8px 4px;">${t("report_daily_management_change_since")} ${formatDate(r.prev_report_date)}: ${t("report_daily_management_total")} ${signedAmd(r.change_total_amd)}, ${t("report_daily_management_overdue")} ${signedAmd(r.change_overdue_amd)}</p>`
+            ? `<p class="muted" style="margin: 8px 4px;">${t("report_daily_management_change_since")} ${formatDateOnly(r.prev_report_date)}: ${t("report_daily_management_total")} ${signedAmd(r.change_total_amd)}, ${t("report_daily_management_overdue")} ${signedAmd(r.change_overdue_amd)}</p>`
             : ""
         }
       `;
