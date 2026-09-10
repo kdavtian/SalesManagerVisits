@@ -24,11 +24,21 @@ function debounce(fn, ms) {
   };
 }
 
+// dateStr is a plain calendar date (product_promos.ends_on, no time
+// component). Parsing it via `new Date(dateStr)` reads it as UTC
+// midnight; .setHours(0,0,0,0) then re-zeroes it in the LOCAL day that
+// UTC instant falls on, which is the previous day in any timezone
+// behind UTC -- shifting every promo's expiry by a day for those
+// viewers (same bug class fixed in debtBalances.js's formatDateOnly).
+// Read the y/m/d digits straight out of the string and build a local
+// Date from them instead, so it's never round-tripped through UTC.
 function daysUntil(dateStr) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateStr));
+  if (!match) return NaN;
+  const [, yyyy, mm, dd] = match;
+  const target = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const target = new Date(dateStr);
-  target.setHours(0, 0, 0, 0);
   return Math.round((target - today) / 86400000);
 }
 
