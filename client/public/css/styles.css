@@ -4444,6 +4444,12 @@ input[type="search"]:focus-visible {
   display: flex;
   align-items: center;
   gap: 12px;
+  /* Wrap instead of shrink: .detail-header-title h1 truncates with an
+     ellipsis and .detail-header-actions never shrinks (flex-shrink: 0), so
+     without wrap a long action label (e.g. Notifications' "mark all read"
+     link) squeezes the title down to a couple of characters instead of
+     dropping to its own line below. */
+  flex-wrap: wrap;
 }
 
 .detail-header-icon {
