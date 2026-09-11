@@ -32,6 +32,18 @@ export function canReassignCustomers(role) {
   return role === "admin" || role === "sales_director" || role === "ceo";
 }
 
+// Sales channel alone (not region/subregion/manager) is also carved out from
+// the rest of REASSIGNMENT_FIELDS: a sales_manager can't reassign a customer
+// to someone else's territory or book, but they legitimately need to fix the
+// channel on a customer they themselves created -- e.g. autoAssignSalesChannel
+// resolved the wrong one at creation time, or their own channel assignment
+// changed since. Same ownership shape as canAssignErpCustomerId above.
+export function canEditOwnSalesChannel(role, customerCreatedBy, userId) {
+  if (canReassignCustomers(role)) return true;
+  if (role === "sales_manager") return customerCreatedBy === userId;
+  return false;
+}
+
 // Linking a customer to its ERP record is treated separately from the rest
 // of the edit-request flow -- it's a lookup/link action, not a factual
 // change someone should have to review. Accountant/CEO/admin can link any

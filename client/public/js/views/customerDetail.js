@@ -2,7 +2,7 @@ import { api } from "../api.js";
 import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, channelDisplayLabel, parseDateOnly } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { canEditDirectly, canReassignCustomers, canAssignErpCustomerId, isAdmin, seesFinancialExports } from "../state.js";
+import { canEditDirectly, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, isAdmin, seesFinancialExports } from "../state.js";
 import { openVisitDetailSheet, openPhotoLightbox } from "../visitDetail.js";
 import { visitStatusBadge } from "./customers.js";
 import { fetchCustomerSocial, saveCustomerSocial, socialFieldsHtml, collectSocialPayload } from "../customerSocialProfiles.js";
@@ -86,7 +86,8 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   // external links (Instagram/Facebook/email/website, injected by
   // customerSocialProfiles.js) stay alongside them -- those just hand off
   // to another app and cost nothing to keep in the open.
-  const hasAccountSettings = canReassignCustomers() || canAssignErpCustomerId(customer) || seesFinancialExports();
+  const hasAccountSettings =
+    canReassignCustomers() || canAssignErpCustomerId(customer) || canEditOwnSalesChannel(customer) || seesFinancialExports();
 
   container.innerHTML = `
     <div class="detail-header customer-detail-header">
@@ -430,6 +431,11 @@ async function openAccountSettingsSheet(customer, onDone) {
   const showReassign = canReassignCustomers();
   const showErp = canAssignErpCustomerId(customer);
   const showPayment = seesFinancialExports();
+  // Sales channel alone (not region/subregion/manager) is also open to a
+  // sales_manager on a customer they created -- showReassign already covers
+  // it for admin/director/ceo, so this only adds the standalone section for
+  // that narrower case.
+  const showChannelOnly = !showReassign && canEditOwnSalesChannel(customer);
 
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
@@ -460,6 +466,19 @@ async function openAccountSettingsSheet(customer, onDone) {
                <label>${t("assigned_manager")}
                  <select name="assigned_manager_id" id="reassign-manager">
                    <option value="">${t("unassigned")}</option>
+                 </select>
+               </label>`
+            : ""
+        }
+        ${
+          showChannelOnly
+            ? `<p class="proposed-changes-label">${t("sales_channel")}</p>
+               <label><span class="visually-hidden">${t("sales_channel")}</span>
+                 <select name="sales_channel">
+                   <option value="">${t("select_placeholder")}</option>
+                   ${SALES_CHANNELS.map(
+                     (c) => `<option value="${escapeHtml(c)}" ${c === customer.sales_channel ? "selected" : ""}>${escapeHtml(c)}</option>`
+                   ).join("")}
                  </select>
                </label>`
             : ""
@@ -622,6 +641,12 @@ async function openAccountSettingsSheet(customer, onDone) {
           sales_channel: data.get("sales_channel") || null,
           assigned_manager_id: data.get("assigned_manager_id") ? Number(data.get("assigned_manager_id")) : null,
         }),
+      });
+    }
+    if (showChannelOnly) {
+      sections.push({
+        label: t("sales_channel"),
+        promise: api.updateCustomer(customer.id, { sales_channel: data.get("sales_channel") || null }),
       });
     }
     if (showErp) {

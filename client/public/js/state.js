@@ -68,6 +68,13 @@ export function canAssignErpCustomerId(customer) {
   return false;
 }
 
+// Mirrors canEditOwnSalesChannel in the server's roles.js -- UI gate only,
+// the server independently re-checks ownership on every PATCH.
+export function canEditOwnSalesChannel(customer) {
+  if (canReassignCustomers()) return true;
+  return state.user?.role === "sales_manager" && customer.created_by === state.user.id;
+}
+
 // --- Team Performance -- mirrors server/src/roles.js exactly. The server
 // enforces all of this independently; these are UI-only gates so the right
 // screen renders in the first place, not a security boundary.
