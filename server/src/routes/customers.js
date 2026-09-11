@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, seesFinancialExports, seesCustomerErpData } from "../roles.js";
+import { seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData } from "../roles.js";
 import { getDefaultVisitFrequencyDays } from "../settings.js";
 
 export const customersRouter = Router();
@@ -313,6 +313,7 @@ const FINANCE_FIELDS = new Set(["credit_term_days", "payment_method"]);
 customersRouter.patch("/:id", async (req, res) => {
   const fieldsPresent = EDITABLE_FIELDS.filter((f) => req.body?.[f] !== undefined);
   const onlyErpField = fieldsPresent.length === 1 && fieldsPresent[0] === "erp_customer_id";
+  const onlyChannelField = fieldsPresent.length === 1 && fieldsPresent[0] === "sales_channel";
 
   const { rows: currentRows } = await pool.query(
     "SELECT created_by, erp_customer_id, customer_tier FROM customers WHERE id = $1",
@@ -327,6 +328,15 @@ customersRouter.patch("/:id", async (req, res) => {
     // rule below -- it's a lookup/link action, not a factual change.
     if (!canAssignErpCustomerId(req.user.role, current.created_by, req.user.id)) {
       return res.status(403).json({ error: "Not allowed to link this customer to an ERP record" });
+    }
+  } else if (onlyChannelField) {
+    // Sales channel alone gets the same ownership-based carve-out as ERP
+    // linking above, rather than the canReassignCustomers-only rule the rest
+    // of REASSIGNMENT_FIELDS uses -- a sales_manager can fix their own
+    // customer's channel without being handed region/subregion/manager
+    // reassignment too. See canEditOwnSalesChannel.
+    if (!canEditOwnSalesChannel(req.user.role, current.created_by, req.user.id)) {
+      return res.status(403).json({ error: "Not allowed to change this customer's sales channel" });
     }
   } else {
     const onlyReassignmentFields = fieldsPresent.length > 0 && fieldsPresent.every((f) => REASSIGNMENT_FIELDS.has(f));
