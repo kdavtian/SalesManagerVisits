@@ -69,7 +69,10 @@ function periodBounds(period) {
   if (period === "today") return "date_trunc('day', now())";
   if (period === "week") return "date_trunc('week', now())";
   if (period === "year") return "date_trunc('year', now())";
-  return "date_trunc('month', now())"; // default: this month
+  // "all" is the client's explicit All-time selection (see PERIOD_OPTIONS in
+  // client/js/views/reports.js) -- no lower bound at all, not "this month".
+  if (period === "all") return "'-infinity'::timestamptz";
+  return "date_trunc('month', now())"; // default (period omitted, or "month"): this month
 }
 
 // Who created each new customer, when, and by which manager -- lets the
