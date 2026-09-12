@@ -87,6 +87,21 @@ export function renderCalculatorLock(container, onUnlock) {
     .calc-lock-btn.wide { grid-column: span 2; aspect-ratio: auto; text-align: left; padding-left: 28px; }
     .calc-lock-btn.op { background: #ff9f0a; }
     .calc-lock-btn.fn { background: #a5a5a5; color: #000; }
+
+    /* Below ~480px this is a full-bleed phone screen (the only shape a
+       real calculator app takes there). Above it -- a desktop browser
+       tab, a tablet, a resized PWA window -- stretching the same layout
+       edge to edge blows each circular button up to fill the window,
+       which reads as broken, not "a calculator app someone left open".
+       Real calculator apps on a desktop are a small fixed-size window, so
+       past this breakpoint the same markup becomes a centered card sized
+       like one instead of restretching to the viewport. */
+    @media (min-width: 480px) {
+      .calc-lock { align-items: center; justify-content: center; padding-bottom: 0; background: #3a3a3c; }
+      .calc-lock-card { width: 320px; background: #1c1c1e; border-radius: 32px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); overflow: hidden; padding-bottom: 24px; }
+      .calc-lock-display { font-size: 3rem; padding: 32px 24px 16px; }
+      .calc-lock-grid { padding: 0 16px; }
+    }
   `;
 
   let display = "0";
@@ -236,8 +251,11 @@ export function renderCalculatorLock(container, onUnlock) {
     });
   });
 
-  root.appendChild(displayEl);
-  root.appendChild(grid);
+  const card = document.createElement("div");
+  card.className = "calc-lock-card";
+  card.appendChild(displayEl);
+  card.appendChild(grid);
+  root.appendChild(card);
   document.head.appendChild(style);
   container.replaceChildren(root);
   paint();
