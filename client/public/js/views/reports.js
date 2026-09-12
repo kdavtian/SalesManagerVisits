@@ -98,17 +98,23 @@ async function renderDocumentsReport(root, navigate) {
       listEl.innerHTML = `<p class="empty-state">${t("report_documents_empty")}</p>`;
       return;
     }
+    // Grouped by report_date (already the API's primary sort) instead of one
+    // flat list -- the bot typically pushes all 3 report types for the same
+    // date together, so a flat list repeats that date on every single row
+    // and only gets harder to scan as more days pile up. The heading carries
+    // the date instead, once per group.
+    let lastDate = null;
     listEl.innerHTML = docs
-      .map(
-        (d) => `
+      .map((d) => {
+        const dateHeading = d.report_date !== lastDate ? `<p class="list-group-heading">${formatDateOnly(d.report_date)}</p>` : "";
+        lastDate = d.report_date;
+        return `
+      ${dateHeading}
       <a class="card report-row" href="/api/reports/documents/${d.id}/download">
-        <span>
-          <strong>${t(GENERATED_REPORT_TYPE_LABEL_KEY[d.report_type] || d.report_type)}</strong>
-          <span class="muted"> · ${formatDateOnly(d.report_date)}</span>
-        </span>
+        <strong>${t(GENERATED_REPORT_TYPE_LABEL_KEY[d.report_type] || d.report_type)}</strong>
         <span>${icons.download}</span>
-      </a>`
-      )
+      </a>`;
+      })
       .join("");
   } catch (err) {
     listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
@@ -159,7 +165,7 @@ async function renderReportsList(root, navigate) {
 
 function reportHeaderHtml(titleKey) {
   return `
-    <div class="detail-header">
+    <div class="detail-header report-header">
       <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
@@ -783,13 +789,14 @@ async function renderDailyManagementReport(root, navigate) {
 
       body.innerHTML = `
         <h2 class="section-title">${t("report_daily_management_sales")}</h2>
-        <div class="card-list">
+        <div class="stat-grid stat-grid-4">
           ${salesRows
             .map(
               ([label, amd, liters, orders]) => `
-            <div class="card report-row-multiline">
-              <strong>${label}</strong>
-              <span class="muted">${formatAmd(amd)} · ${liters != null ? `${Number(liters).toLocaleString()} L` : "—"} · ${orders != null ? orders : "—"}</span>
+            <div class="stat-card">
+              <span class="stat-value">${formatAmd(amd)}</span>
+              <span class="stat-label">${label}</span>
+              <span class="muted">${liters != null ? `${Number(liters).toLocaleString()} L` : "—"} · ${orders != null ? orders : "—"}</span>
             </div>`
             )
             .join("")}
@@ -797,7 +804,7 @@ async function renderDailyManagementReport(root, navigate) {
         <p class="muted" style="margin: 0 4px 8px;">${t("report_daily_management_change_prev")}: ${signedAmd(r.sales_change_amd)}${r.sales_change_liters != null ? ` · ${r.sales_change_liters > 0 ? "+" : ""}${Number(r.sales_change_liters).toLocaleString()} L` : ""}</p>
         <p class="muted" style="margin: 0 4px 8px;">${t("report_daily_management_margin")}: ${formatAmd(r.sales_margin_amd)}${r.sales_margin_pct != null ? ` (${Number(r.sales_margin_pct).toFixed(1)}%)` : ""}</p>
 
-        <h2 class="section-title">${t("by_channel")} (${formatDateOnly(r.report_date)})</h2>
+        <h2 class="section-title">${t("report_daily_management_sales")} · ${t("by_channel")} (${formatDateOnly(r.report_date)})</h2>
         <div class="card-list">
           ${
             r.sales_by_channel.length
@@ -815,19 +822,20 @@ async function renderDailyManagementReport(root, navigate) {
         </div>
 
         <h2 class="section-title">${t("report_daily_management_payments")}</h2>
-        <div class="card-list">
+        <div class="stat-grid stat-grid-4">
           ${paymentsRows
             .map(
               ([label, amd, customers]) => `
-            <div class="card report-row-multiline">
-              <strong>${label}</strong>
-              <span class="muted">${formatAmd(amd)} · ${customers != null ? customers : "—"}</span>
+            <div class="stat-card">
+              <span class="stat-value">${formatAmd(amd)}</span>
+              <span class="stat-label">${label}</span>
+              <span class="muted">${customers != null ? customers : "—"}</span>
             </div>`
             )
             .join("")}
         </div>
 
-        <h2 class="section-title">${t("by_channel")} (${formatDateOnly(r.report_date)})</h2>
+        <h2 class="section-title">${t("report_daily_management_payments")} · ${t("by_channel")} (${formatDateOnly(r.report_date)})</h2>
         <div class="card-list">
           ${
             r.payments_by_channel.length
@@ -846,17 +854,22 @@ async function renderDailyManagementReport(root, navigate) {
 
         <h2 class="section-title">${t("report_daily_management_balance")}</h2>
         <div class="card-list">
+          <p class="list-group-heading">${t("report_daily_management_group_cash")}</p>
           <div class="card report-row"><span>${t("report_daily_management_balance")}</span><strong>${formatAmd(r.balance_amd)}${r.balance_usd != null ? ` (${formatUsd(r.balance_usd)})` : ""}</strong></div>
           <div class="card report-row"><span>${t("report_daily_management_total")}</span><strong>${formatAmd(r.balance_total_amd)}${r.balance_total_usd != null ? ` (${formatUsd(r.balance_total_usd)})` : ""}</strong></div>
           <div class="card report-row"><span>${t("report_daily_management_cash")}</span><strong>${formatAmd(r.balance_cash_amd)}${r.balance_cash_usd != null ? ` (${formatUsd(r.balance_cash_usd)})` : ""}</strong></div>
           <div class="card report-row"><span>${t("report_daily_management_noncash")}</span><strong>${formatAmd(r.balance_noncash_amd)}${r.balance_noncash_usd != null ? ` (${formatUsd(r.balance_noncash_usd)})` : ""}</strong></div>
-          <div class="card report-row"><span>${t("report_daily_management_with_managers")}</span><strong>${formatAmd(r.balance_with_managers_amd)}</strong></div>
+
+          <p class="list-group-heading">${t("report_daily_management_with_managers")}</p>
+          <div class="card report-row"><span>${t("report_daily_management_total")}</span><strong>${formatAmd(r.balance_with_managers_amd)}</strong></div>
           ${r.balance_with_managers_by_manager
             .map(
               (m) => `
           <div class="card report-row"><span style="padding-left:12px;">${escapeHtml(m.manager_name)}</span><strong>${formatAmd(m.amd)}</strong></div>`
             )
             .join("")}
+
+          <p class="list-group-heading">${t("report_daily_management_group_other")}</p>
           <div class="card report-row"><span>${t("report_daily_management_credit_line")}</span><strong>${formatUsd(r.credit_line_usd)}</strong></div>
           <div class="card report-row"><span>${t("report_daily_management_receivables")}</span><strong>${formatAmd(r.receivables_total_amd)} (${t("report_daily_management_receivables_net")}: ${formatAmd(r.receivables_net_amd)})</strong></div>
           <div class="card report-row"><span>${t("report_daily_management_warehouse")}</span><strong>${formatAmd(r.warehouse_value_amd)} · ${r.warehouse_liters != null ? `${Number(r.warehouse_liters).toLocaleString()} L` : "—"}</strong></div>
