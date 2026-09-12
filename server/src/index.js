@@ -36,6 +36,7 @@ import { warehouseRouter } from "./routes/warehouse.js";
 import { deliveryRouter } from "./routes/delivery.js";
 import { debtBalancesRouter } from "./routes/debtBalances.js";
 import { badgesRouter } from "./routes/badges.js";
+import { calculatorLockRouter } from "./routes/calculatorLock.js";
 import { startOverdueReminders } from "./overdueReminders.js";
 import { startStalePackedReminder } from "./stalePackedReminder.js";
 import { requireAuth } from "./middleware/auth.js";
@@ -114,6 +115,7 @@ app.use("/api/warehouse", express.json(), warehouseRouter);
 app.use("/api/delivery", express.json(), deliveryRouter);
 app.use("/api/debt-balances", express.json(), debtBalancesRouter);
 app.use("/api/badges", badgesRouter);
+app.use("/api/calculator-lock", express.json(), calculatorLockRouter);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });
