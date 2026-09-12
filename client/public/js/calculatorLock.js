@@ -71,7 +71,15 @@ function formatNumber(n) {
 export function renderCalculatorLock(container, onUnlock) {
   const style = document.createElement("style");
   style.textContent = `
-    .calc-lock { position: fixed; inset: 0; background: #1c1c1e; display: flex; flex-direction: column; justify-content: flex-end; z-index: 9999; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    /* iOS/Android draw the home-indicator safe-area strip (and any
+       elastic overscroll) as the document's own background, which
+       .calc-lock's "position: fixed; inset: 0" doesn't reach -- without
+       this, that strip shows the real app's light page background right
+       through the bottom of an otherwise all-dark calculator screen. This
+       rule lives in the same <style> tag calc-lock removes on unlock, so
+       it never lingers into the real app's own (correctly light) look. */
+    html, body { background: #1c1c1e; }
+    .calc-lock { position: fixed; inset: 0; background: #1c1c1e; display: flex; flex-direction: column; justify-content: flex-end; z-index: 9999; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding-bottom: env(safe-area-inset-bottom); box-sizing: border-box; }
     .calc-lock-display { color: #fff; text-align: right; padding: 0 24px 16px; font-size: 4rem; font-weight: 300; line-height: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; }
     .calc-lock-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 0 12px 24px; }
     .calc-lock-btn { border: none; border-radius: 999px; aspect-ratio: 1 / 1; font-size: 1.7rem; font-weight: 500; color: #fff; background: #333335; cursor: pointer; -webkit-tap-highlight-color: transparent; }
