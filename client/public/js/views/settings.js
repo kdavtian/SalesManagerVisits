@@ -211,6 +211,15 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
             <p class="form-success" id="incentive-message-success" role="status" hidden>${t("saved")}</p>
             <button type="submit" class="btn btn-primary">${t("save")}</button>
           </form>
+          <form id="calculator-pin-form" class="settings-list-group-item">
+            <label>
+              <span class="settings-form-label">${ICON.lock}${t("calculator_pin_label")}</span>
+              <input type="text" inputmode="numeric" pattern="\\d{4,8}" name="pin" placeholder="${t("calculator_pin_placeholder")}" autocomplete="off" />
+            </label>
+            <p class="muted radius-help" id="calculator-pin-status">${t("calculator_pin_help")}</p>
+            <p class="form-success" id="calculator-pin-success" role="status" hidden>${t("saved")}</p>
+            <button type="submit" class="btn btn-primary">${t("save")}</button>
+          </form>
         </div>
       `
           : ""
@@ -450,11 +459,18 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     const incentiveForm = root.querySelector("#incentive-message-form");
     const incentiveInput = incentiveForm.querySelector('input[name="message"]');
     const incentiveSuccess = root.querySelector("#incentive-message-success");
+    const pinForm = root.querySelector("#calculator-pin-form");
+    const pinInput = pinForm.querySelector('input[name="pin"]');
+    const pinSuccess = root.querySelector("#calculator-pin-success");
+    const pinStatus = root.querySelector("#calculator-pin-status");
 
     api.getSettings().then((s) => {
       radiusInput.value = s.checkin_radius_meters;
       frequencyInput.value = s.default_visit_frequency_days;
       incentiveInput.value = s.incentive_message || "";
+      // Write-only field (see routes/settings.js) -- never pre-filled with
+      // the actual code, just a status line saying whether one is set.
+      pinStatus.textContent = s.calculator_pin_is_custom ? t("calculator_pin_help_custom") : t("calculator_pin_help");
     });
 
     radiusForm.addEventListener("submit", async (e) => {
@@ -491,6 +507,26 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       try {
         await api.updateSettings({ incentive_message: incentiveInput.value });
         incentiveSuccess.hidden = false;
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    pinForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      pinSuccess.hidden = true;
+      const value = pinInput.value.trim();
+      if (value && !/^\d{4,8}$/.test(value)) {
+        pinStatus.textContent = t("calculator_pin_error");
+        return;
+      }
+      const submitBtn = pinForm.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      try {
+        const result = await api.updateSettings({ calculator_pin: value });
+        pinInput.value = "";
+        pinStatus.textContent = result.calculator_pin_is_custom ? t("calculator_pin_help_custom") : t("calculator_pin_help");
+        pinSuccess.hidden = false;
       } finally {
         submitBtn.disabled = false;
       }

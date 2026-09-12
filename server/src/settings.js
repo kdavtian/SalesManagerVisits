@@ -53,6 +53,23 @@ export async function setQuickActionVisibility(value) {
   return rows[0].quick_action_visibility;
 }
 
+// The app-disguise unlock code's hash. NULL means "never customized" --
+// callers compare against the built-in default hash themselves (see
+// calculatorLock.js) rather than this module hardcoding that fallback, so
+// the default lives in exactly one place.
+export async function getCalculatorPinHash() {
+  const { rows } = await pool.query("SELECT calculator_pin_hash FROM app_settings WHERE id = 1");
+  return rows[0]?.calculator_pin_hash ?? null;
+}
+
+export async function setCalculatorPinHash(hash) {
+  await pool.query(
+    `INSERT INTO app_settings (id, calculator_pin_hash) VALUES (1, $1)
+     ON CONFLICT (id) DO UPDATE SET calculator_pin_hash = EXCLUDED.calculator_pin_hash`,
+    [hash]
+  );
+}
+
 export async function getDefaultVisitFrequencyDays() {
   const { rows } = await pool.query("SELECT default_visit_frequency_days FROM app_settings WHERE id = 1");
   return rows[0]?.default_visit_frequency_days ?? 14;

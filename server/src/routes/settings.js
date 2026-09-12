@@ -1,4 +1,5 @@
 import { Router } from "express";
+import bcrypt from "bcryptjs";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import {
   getCheckinRadiusMeters,
@@ -9,6 +10,8 @@ import {
   setIncentiveMessage,
   getQuickActionVisibility,
   setQuickActionVisibility,
+  getCalculatorPinHash,
+  setCalculatorPinHash,
 } from "../settings.js";
 import { ROLES } from "../roles.js";
 
@@ -17,12 +20,13 @@ export const settingsRouter = Router();
 settingsRouter.use(requireAuth);
 
 settingsRouter.get("/", async (req, res) => {
-  const [checkinRadiusMeters, defaultVisitFrequencyDays, incentiveMessage, quickActionVisibility] =
+  const [checkinRadiusMeters, defaultVisitFrequencyDays, incentiveMessage, quickActionVisibility, calculatorPinHash] =
     await Promise.all([
       getCheckinRadiusMeters(),
       getDefaultVisitFrequencyDays(),
       getIncentiveMessage(),
       getQuickActionVisibility(),
+      getCalculatorPinHash(),
     ]);
   res.json({
     checkin_radius_meters: checkinRadiusMeters,
@@ -32,6 +36,10 @@ settingsRouter.get("/", async (req, res) => {
     // tiles to render); only an admin can PATCH it, same as every other
     // app_settings field here.
     quick_action_visibility: quickActionVisibility,
+    // Never the actual PIN or its hash -- same write-only shape as a
+    // password field. This just tells Settings whether to say "custom
+    // code set" or "using the default code" next to the input.
+    calculator_pin_is_custom: calculatorPinHash != null,
   });
 });
 
@@ -84,6 +92,23 @@ settingsRouter.patch("/", requireAdmin, async (req, res) => {
         cleaned[role] = [...new Set(ids)];
       }
       result.quick_action_visibility = await setQuickActionVisibility(cleaned);
+    }
+  }
+
+  if (req.body?.calculator_pin !== undefined) {
+    const pin = req.body.calculator_pin;
+    // Empty string resets to the built-in default, same "empty clears the
+    // override" convention as incentive_message/quick_action_visibility
+    // above -- never null itself, since the client sends a plain string.
+    if (pin === "") {
+      await setCalculatorPinHash(null);
+      result.calculator_pin_is_custom = false;
+    } else {
+      if (typeof pin !== "string" || !/^\d{4,8}$/.test(pin)) {
+        return res.status(400).json({ error: "calculator_pin must be 4 to 8 digits" });
+      }
+      await setCalculatorPinHash(await bcrypt.hash(pin, 10));
+      result.calculator_pin_is_custom = true;
     }
   }
 

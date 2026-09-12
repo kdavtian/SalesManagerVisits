@@ -7,15 +7,21 @@
          visual viewport up -- that default is what was shoving the fixed
          top bar under the status bar whenever a search input got focused. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
-    <title>KAD Motors</title>
-    <meta name="theme-color" content="#f6f7f9" />
+    <!-- Disguise metadata: this app opens as a plain-looking Calculator
+         (icon, name, initial screen) until the correct unlock code is
+         entered -- see js/bootGate.js. Kept as the real <title>/manifest/
+         icons (not swapped at runtime) so the home-screen icon and app
+         switcher preview are the calculator before the real app ever
+         loads, not just the in-page content. -->
+    <title>Calculator</title>
+    <meta name="theme-color" content="#1c1c1e" />
 
     <link rel="manifest" href="manifest.json" />
     <link rel="icon" href="icons/icon-192.png" />
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="KAD Motors" />
+    <meta name="apple-mobile-web-app-title" content="Calculator" />
     <meta name="mobile-web-app-capable" content="yes" />
 
     <script src="js/theme-init.js"></script>
@@ -49,17 +55,11 @@
     <div id="install-root"></div>
     <div id="update-root"></div>
 
-    <script type="module" src="js/competitorPolicySafe.js"></script>
-    <script type="module" src="js/activityDatePicker.js"></script>
-    <script type="module" src="js/ordersSearchEnhancements.js"></script>
-    <script type="module" src="js/unifiedSearchEnhancements.js"></script>
-    <script type="module" src="js/customerPortfolioUi.js"></script>
-    <script type="module" src="js/ordersRegionStatusEnhancements.js"></script>
-    <script type="module" src="js/mapDimensionFilterPlacement.js"></script>
-    <script type="module" src="js/fieldVisitEnhancements.js"></script>
-    <script type="module" src="js/customerSocialProfiles.js"></script>
-    <script type="module" src="js/mapMarkerEnhancements.js"></script>
-    <script type="module" src="js/app.js"></script>
-    <script type="module" src="js/mapSafeUi.js"></script>
+    <!-- bootGate.js is the only script loaded unconditionally: it decides
+         whether to show the calculator lock screen or boot the real app
+         (dynamically importing everything below), so none of the real
+         app's modules -- app.js included -- ever load, run, or touch the
+         network until the correct code is entered. -->
+    <script type="module" src="js/bootGate.js"></script>
   </body>
 </html>
