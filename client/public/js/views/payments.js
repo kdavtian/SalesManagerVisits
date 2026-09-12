@@ -29,6 +29,43 @@ const QUICK_FILTER_KEY = {
   this_month: "filter_this_month",
 };
 
+// A drill-down link from the Payments report (see reports.js's
+// renderPaymentsReport/drillLink) carries the report's *period* select
+// alongside status -- e.g. "#/payments?period=today&status=pending" for
+// its "4 pending" KPI card. Before this, that period was silently
+// dropped: the page would show every pending payment ever, not just
+// today's 4. period_label/PERIOD_TO_PARAMS mirror the same period values
+// (and the same date math) reports.js's own periodBounds() uses server-
+// side, so a drilled-in list matches the count that was tapped exactly.
+const PERIOD_LABEL_KEY = {
+  today: "tab_today",
+  week: "tab_week",
+  month: "tab_month",
+  year: "period_year",
+};
+
+function periodFilterParams(period) {
+  const now = new Date();
+  if (period === "today") {
+    const iso = formatDateInput(now);
+    return { from: iso, to: iso };
+  }
+  if (period === "week") {
+    // Monday-start week, matching Postgres's date_trunc('week', now()).
+    const diffToMonday = (now.getDay() + 6) % 7;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - diffToMonday);
+    return { from: formatDateInput(monday), to: formatDateInput(now) };
+  }
+  if (period === "month") {
+    return { month: now.toISOString().slice(0, 7) };
+  }
+  if (period === "year") {
+    return { from: formatDateInput(new Date(now.getFullYear(), 0, 1)), to: formatDateInput(now) };
+  }
+  return {}; // "all" (or anything unrecognized): no date constraint
+}
+
 function monthLabel(iso) {
   return new Date(iso).toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
@@ -99,13 +136,28 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
   let activeFilter = initialStatusFilter;
   let channelFilter = initialQuery?.get("sales_channel") || "";
   let managerFilter = initialQuery?.get("sales_manager_id") || "";
+  // Only ever arrives via a Reports drill-down (no on-page control sets
+  // this) -- see PERIOD_LABEL_KEY/periodFilterParams above.
+  let periodFilter = Object.keys(PERIOD_LABEL_KEY).includes(initialQuery?.get("period")) ? initialQuery.get("period") : "";
   let sort = canSeeAll ? "" : "date";
   let payments = [];
   let hasMore = false;
   let loadingMore = false;
   let searchDebounce = null;
 
+  // Arriving already scoped by a Reports drill-down (period/channel/
+  // manager) is the one case where this unscoped "N awaiting approval"
+  // banner actively contradicts the page: it's the total across
+  // everything, sitting right above a list that's deliberately showing
+  // fewer rows than that. Elsewhere it's a useful standing reminder, so it
+  // only skips itself for that one specific entry point.
+  const arrivedViaDrillDown = Boolean(periodFilter || channelFilter || managerFilter);
+
   async function refreshPendingSummary() {
+    if (arrivedViaDrillDown) {
+      summaryEl.hidden = true;
+      return;
+    }
     try {
       const { count } = await api.getPaymentsPendingCount();
       if (count > 0) {
@@ -132,6 +184,13 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
     } else if (activeFilter === "this_month") {
       params.month = new Date().toISOString().slice(0, 7);
     }
+    // The quick-filter row above already covers "today"/"this month" as a
+    // status-exclusive chip; a drilled-in periodFilter only ever combines
+    // with a *status* activeFilter (pending/approved/rejected/""), never
+    // with those two, so this never double-applies a date constraint.
+    if (periodFilter && activeFilter !== "today" && activeFilter !== "this_month") {
+      Object.assign(params, periodFilterParams(periodFilter));
+    }
     const q = searchInput.value.trim();
     if (q) params.q = q;
     return params;
@@ -146,6 +205,14 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
   // whatever's already loaded rather than firing an extra request for it.
   function paintActiveFilters() {
     const chips = [];
+    // Shown (and clearable) for the same reason channel/manager are below --
+    // a drilled-in period has no home in the quick-filter row above (that
+    // row's own "today"/"this month" chips are status-exclusive), so
+    // without this a filtered list showing fewer rows than expected would
+    // have no visible explanation and no way back except re-navigating.
+    if (periodFilter && activeFilter !== "today" && activeFilter !== "this_month") {
+      chips.push({ label: t(PERIOD_LABEL_KEY[periodFilter]), clear: () => (periodFilter = "") });
+    }
     if (channelFilter) chips.push({ label: channelFilter, clear: () => (channelFilter = "") });
     if (managerFilter) {
       const managerName = payments.find((p) => String(p.sales_manager_id) === String(managerFilter))?.sales_manager_name_snapshot;
@@ -249,6 +316,9 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
       btn.setAttribute("aria-pressed", "true");
       btn.classList.add("chip-active");
       activeFilter = btn.dataset.filter;
+      // A manual "today"/"this month" tap is the user overriding whatever
+      // period a Reports drill-down landed them on -- never stack both.
+      if (activeFilter === "today" || activeFilter === "this_month") periodFilter = "";
       load();
     });
   });

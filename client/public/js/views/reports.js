@@ -4,8 +4,16 @@ import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { REGION_LIST, YEREVAN_DISTRICTS, CATEGORY_LIST, formatAmd, channelDisplayLabel } from "../util.js";
 
+// "all" (not "") for the All-time option: every one of this array's three
+// callers builds its request params with
+// `Object.fromEntries([...data.entries()].filter(([, v]) => v))`, which
+// drops falsy values -- an empty string here would vanish before it ever
+// reached the server, indistinguishable from the field not existing at
+// all, and periodBounds() would then fall through to its "month" default.
+// That silently turned "All time" into "this month" in every report that
+// uses this list.
 const PERIOD_OPTIONS = [
-  { value: "", labelKey: "period_all_time" },
+  { value: "all", labelKey: "period_all_time" },
   { value: "today", labelKey: "tab_today" },
   { value: "week", labelKey: "tab_week" },
   { value: "month", labelKey: "tab_month" },

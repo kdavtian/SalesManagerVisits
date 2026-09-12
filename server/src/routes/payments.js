@@ -282,7 +282,13 @@ paymentsRouter.get("/", async (req, res) => {
   }
   if (to) {
     params.push(to);
-    conditions.push(`p.payment_date <= $${params.length}`);
+    // Not "<=" -- payment_date is a timestamptz, and $N is a bare date
+    // (e.g. "2026-09-12"), so "<=" casts to that day's midnight and
+    // excludes every payment from later the same day -- i.e. the "Today"
+    // quick filter (from=to=today) matched nothing made after 00:00. Same
+    // exclusive-upper-bound pattern already used for date ranges in
+    // checkins.js/exports.js.
+    conditions.push(`p.payment_date < ($${params.length}::date + interval '1 day')`);
   }
   if (q) {
     params.push(`%${q}%`);
