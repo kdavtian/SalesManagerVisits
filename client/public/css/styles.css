@@ -4705,6 +4705,17 @@ input[type="search"]:focus-visible {
   white-space: normal;
 }
 
+/* Report titles (e.g. "Daily management report") are static copy, not
+   tap-to-reveal content like a customer name -- and several run long enough
+   in Armenian to truncate to an unreadable fragment on every single load,
+   not just as a rare edge case. No sibling ever shares this row (see
+   reportHeaderHtml), so letting it wrap costs nothing. */
+.report-header .detail-header-title h1 {
+  overflow: visible;
+  white-space: normal;
+  cursor: default;
+}
+
 .detail-header-subtitle {
   font-size: 0.82rem;
   overflow: hidden;
@@ -6820,6 +6831,12 @@ form select,
 .report-filter-form select {
   flex: 1 1 auto;
   min-width: 120px;
+  /* form select's width: 100% becomes this flex item's basis when
+     flex-basis is auto (the "auto" in flex: 1 1 auto), so without this
+     override each select claims a full-width basis and two of them can
+     never share a row -- always wrapping to one-per-line regardless of
+     how much space is actually free. */
+  width: auto;
 }
 
 .report-row {
