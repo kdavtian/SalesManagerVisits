@@ -27,6 +27,10 @@ export const NOTIFICATION_TYPES = [
   // not by anything happening inside this app.
   "daily_report_ready",
   "generated_report_ready",
+  // The inverse of the two above: the bot's sync did NOT land within the
+  // expected window (see erpSyncMonitor.js) -- this app noticing its own
+  // absence, not something the bot pushed.
+  "erp_sync_stale",
 ];
 
 // Warehouse Manager: an order just entered their queue.

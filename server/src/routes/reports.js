@@ -3,6 +3,7 @@ import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { ROLES } from "../roles.js";
 import { REPORTS, findReport, canAccessReport } from "../reports.js";
+import { erpSyncFreshness } from "../erpSyncFreshness.js";
 
 export const reportsRouter = Router();
 
@@ -437,24 +438,6 @@ reportsRouter.get("/cash-custody", requireReportAccess("cash_custody"), async (r
 // (erp_customer_data / sales_performance / perf_actuals_brand_monthly) --
 // the same data an external Telegram bot on the sync PC already formats
 // and sends outside this app, now also browsable here.
-
-// How long an ERP sync can go stale before a report flags it rather than
-// showing it as if it were current. Set above the "up to a few days between
-// syncs is fine, the Excel extract still beats app data" tolerance the
-// business actually runs on (see the comment on estimatedDebtJoin below) --
-// this is a "the pipeline looks broken" flag, not a "the number is old" one.
-const ERP_STALE_AFTER_HOURS = 72;
-
-async function erpSyncFreshness(table) {
-  const { rows } = await pool.query(`SELECT MAX(synced_at) AS synced_at FROM ${table}`);
-  const syncedAt = rows[0]?.synced_at ?? null;
-  const hoursSinceSync = syncedAt ? (Date.now() - new Date(syncedAt).getTime()) / 3.6e6 : null;
-  return {
-    synced_at: syncedAt,
-    stale: hoursSinceSync == null || hoursSinceSync > ERP_STALE_AFTER_HOURS,
-    stale_after_hours: ERP_STALE_AFTER_HOURS,
-  };
-}
 
 // Debt/aging -- erp_customer_data is TRUNCATE-and-replaced whole on every
 // sync (see erpSync.js), so this always reflects the latest extract, not

@@ -39,6 +39,7 @@ import { badgesRouter } from "./routes/badges.js";
 import { calculatorLockRouter } from "./routes/calculatorLock.js";
 import { startOverdueReminders } from "./overdueReminders.js";
 import { startStalePackedReminder } from "./stalePackedReminder.js";
+import { startErpSyncMonitor } from "./erpSyncMonitor.js";
 import { requireAuth } from "./middleware/auth.js";
 import { autoAssignSalesChannel } from "./salesChannelAutofill.js";
 import { normalizeCustomerPortfolio } from "./customerChannelPolicy.js";
@@ -143,4 +144,5 @@ app.listen(port, () => {
   console.log(`Field Visits server listening on :${port}`);
   startOverdueReminders();
   startStalePackedReminder();
+  startErpSyncMonitor();
 });
