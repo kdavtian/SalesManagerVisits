@@ -382,6 +382,57 @@ reportsRouter.get("/payments", requireReportAccess("payments"), async (req, res)
   });
 });
 
+// Real, physical cash the app already tracks custody of (see
+// payments.js/cashHandoffs.js: current_holder_id + pending_handoff_id) but
+// never rolled up into one view. Only 'pending' payments are unreconciled
+// cash still travelling through the custody chain -- 'approved' means it
+// already reached the accountant and was reconciled, 'rejected' means it
+// was never real collected cash to begin with.
+reportsRouter.get("/cash-custody", requireReportAccess("cash_custody"), async (req, res) => {
+  const { rows: byHolder } = await pool.query(
+    `SELECT p.current_holder_id, u.name AS holder_name, u.role AS holder_role,
+            count(*)::int AS payment_count,
+            COALESCE(sum(p.amount_amd), 0) AS amount_amd,
+            count(*) FILTER (WHERE p.pending_handoff_id IS NOT NULL)::int AS in_transit_count
+     FROM payments p
+     JOIN users u ON u.id = p.current_holder_id
+     WHERE p.status = 'pending'
+     GROUP BY p.current_holder_id, u.name, u.role
+     ORDER BY amount_amd DESC`
+  );
+
+  const { rows: totalsRows } = await pool.query(
+    `SELECT COALESCE(sum(amount_amd), 0) AS total_unreconciled_amd,
+            count(*)::int AS total_unreconciled_count,
+            COALESCE(sum(amount_amd) FILTER (WHERE pending_handoff_id IS NOT NULL), 0) AS in_transit_amd,
+            count(*) FILTER (WHERE pending_handoff_id IS NOT NULL)::int AS in_transit_count
+     FROM payments
+     WHERE status = 'pending'`
+  );
+
+  // In-flight handoffs -- declared by the sender, awaiting the receiver's
+  // confirm/reject. "Overdue" mirrors the same 24h convention the Payments
+  // report already uses for its own pending-approval ageing.
+  const { rows: handoffs } = await pool.query(
+    `SELECT h.id, h.amount_amd, h.submitted_at, fu.name AS from_name, tu.name AS to_name
+     FROM cash_handoffs h
+     JOIN users fu ON fu.id = h.from_user_id
+     JOIN users tu ON tu.id = h.to_user_id
+     WHERE h.status = 'pending'
+     ORDER BY h.submitted_at ASC`
+  );
+
+  const { rows: opsRows } = await pool.query(
+    `SELECT count(*)::int AS pending_handoff_count,
+            min(submitted_at) AS oldest_pending_at,
+            count(*) FILTER (WHERE submitted_at < now() - interval '24 hours')::int AS pending_over_24h
+     FROM cash_handoffs
+     WHERE status = 'pending'`
+  );
+
+  res.json({ by_holder: byHolder, totals: totalsRows[0], handoffs, operations: opsRows[0] });
+});
+
 // The next three read the Castrol ERP extract synced in by erpSync.js
 // (erp_customer_data / sales_performance / perf_actuals_brand_monthly) --
 // the same data an external Telegram bot on the sync PC already formats

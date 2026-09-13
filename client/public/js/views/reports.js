@@ -76,6 +76,7 @@ export async function renderReports(root, navigate, reportKey) {
   if (reportKey === "orders_pipeline") return renderOrdersPipelineReport(root, navigate);
   if (reportKey === "brand_availability") return renderBrandAvailabilityReport(root, navigate);
   if (reportKey === "payments") return renderPaymentsReport(root, navigate);
+  if (reportKey === "cash_custody") return renderCashCustodyReport(root, navigate);
   if (reportKey === "customer_debt") return renderCustomerDebtReport(root, navigate);
   if (reportKey === "sales_budget") return renderSalesBudgetReport(root, navigate);
   if (reportKey === "brand_volume") return renderBrandVolumeReport(root, navigate);
@@ -612,6 +613,83 @@ async function renderPaymentsReport(root, navigate) {
 
   form.addEventListener("change", load);
   await load();
+}
+
+// No period filter -- unlike every other report here, this is a snapshot
+// of custody right now (who's physically holding unreconciled cash this
+// second), not a historical query, so "this month" would be meaningless.
+async function renderCashCustodyReport(root, navigate) {
+  root.innerHTML = `
+    <div class="detail-view">
+      ${reportHeaderHtml("report_cash_custody_name")}
+      <div id="report-body"><p class="loading-state" role="status">${t("loading")}</p></div>
+    </div>
+  `;
+  const container = root.querySelector(".detail-view");
+  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  const body = container.querySelector("#report-body");
+
+  try {
+    const { by_holder, totals, handoffs, operations } = await api.getCashCustodyReport();
+    body.innerHTML = `
+      <div class="stat-grid">
+        <div class="stat-card">
+          <span class="stat-value">${formatAmd(Number(totals.total_unreconciled_amd))}</span>
+          <span class="stat-label">${t("report_cash_custody_total_unreconciled")}</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${formatAmd(Number(totals.in_transit_amd))}</span>
+          <span class="stat-label">${t("report_cash_custody_in_transit")}</span>
+        </div>
+      </div>
+
+      <h2 class="section-title">${t("report_cash_custody_by_holder")}</h2>
+      <div class="card-list">
+        ${
+          by_holder.length
+            ? by_holder
+                .map(
+                  (h) => `
+            <div class="card report-row-multiline">
+              <strong>${escapeHtml(h.holder_name)}</strong>
+              <span class="muted">${t(`role_${h.holder_role}`)} · ${h.payment_count}${
+                    Number(h.in_transit_count) > 0
+                      ? ` · <span class="sync-badge-stale">${t("report_cash_custody_holder_in_transit").replace("{n}", h.in_transit_count)}</span>`
+                      : ""
+                  }</span>
+              <span class="muted">${formatAmd(Number(h.amount_amd))}</span>
+            </div>`
+                )
+                .join("")
+            : `<p class="empty-state">${t("no_data")}</p>`
+        }
+      </div>
+
+      <h2 class="section-title">${t("report_cash_custody_handoffs_title")}</h2>
+      ${
+        Number(operations.pending_over_24h) > 0
+          ? `<p class="sync-badge sync-badge-stale">${t("report_cash_custody_handoffs_overdue").replace("{n}", operations.pending_over_24h)}</p>`
+          : ""
+      }
+      <div class="card-list">
+        ${
+          handoffs.length
+            ? handoffs
+                .map(
+                  (h) => `
+            <div class="card report-row-multiline">
+              <strong>${escapeHtml(h.from_name)} → ${escapeHtml(h.to_name)}</strong>
+              <span class="muted">${formatAmd(Number(h.amount_amd))} · ${t("report_cash_custody_since").replace("{date}", formatDateTime(h.submitted_at))}</span>
+            </div>`
+                )
+                .join("")
+            : `<p class="empty-state">${t("report_cash_custody_no_handoffs")}</p>`
+        }
+      </div>
+    `;
+  } catch (err) {
+    body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+  }
 }
 
 function currentYearMonth() {

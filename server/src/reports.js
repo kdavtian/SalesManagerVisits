@@ -44,6 +44,16 @@ export const REPORTS = [
     // for other reports, same reasoning as canReviewPayments in roles.js.
     defaultRoles: ["admin", "ceo", "sales_director", "accountant"],
   },
+  // Real, physical cash sitting with a rep/driver/accountant before it's
+  // reconciled -- had no report at all before this, despite payments.js
+  // and cashHandoffs.js already tracking exactly who holds what (see
+  // current_holder_id/pending_handoff_id).
+  {
+    key: "cash_custody",
+    nameKey: "report_cash_custody_name",
+    descriptionKey: "report_cash_custody_description",
+    defaultRoles: ["admin", "ceo", "sales_director", "accountant"],
+  },
   // The next three surface the same Castrol ERP extract that already feeds
   // erp_customer_data/sales_performance/perf_actuals_brand_monthly (see
   // erpSync.js) as in-app reports -- previously that data was only ever
