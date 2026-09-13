@@ -207,8 +207,12 @@ export async function flushQueue() {
         await removeEntry(entry.id);
         notify();
       } catch (err) {
-        if (err instanceof TypeError) {
-          // Network-level failure (offline) — stop and retry later.
+        // Network-level failure (TypeError) or a server/infra-side error
+        // (5xx, or no status at all) — stop and retry later rather than
+        // discarding a rep's check-in/order because the server hiccuped.
+        // Only a genuine 4xx (the server looked at this entry and rejected
+        // it, e.g. customer deleted) means retrying is pointless.
+        if (!(err.status >= 400 && err.status < 500)) {
           break;
         }
         // Server rejected the entry (e.g. customer deleted) — drop it, don't retry forever.

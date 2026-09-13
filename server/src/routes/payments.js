@@ -142,7 +142,7 @@ export async function insertPayment({ customer, amount, paymentDate, salesManage
       const { rows: recipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [PAYMENT_NOTIFY_ROLES]);
       for (const recipient of recipients) {
         notifyUser(recipient.id, "payment_submitted", {
-          title: "Նոր վճարում",
+          title: "New payment",
           body: `${customer.name}${customer.erp_customer_id ? ` · ID ${customer.erp_customer_id}` : ""}\n${Number(amount).toLocaleString()} AMD\n${manager.name}${salesChannel ? ` · ${salesChannel}` : ""}`,
           url: `/#/payments/${paymentId}`,
         });
@@ -374,25 +374,49 @@ async function custodyBlocksReview(payment, user) {
 
 paymentsRouter.post("/:id/approve", async (req, res) => {
   if (!canReviewPayments(req.user.role)) return res.status(403).json({ error: "Not allowed to approve payments" });
-  const payment = await loadPaymentRow(req.params.id);
-  if (!payment) return res.status(404).json({ error: "Payment not found" });
-  if (payment.status !== "pending") {
-    return res.status(409).json({ error: "Only a pending payment can be approved" });
-  }
-  const blocked = await custodyBlocksReview(payment, req.user);
-  if (blocked) return res.status(409).json({ error: blocked });
 
-  await pool.query(
-    `UPDATE payments SET status = 'approved', approved_by = $1, approved_at = now(),
-            rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL
-     WHERE id = $2`,
-    [req.user.id, req.params.id]
-  );
-  await pool.query(
-    `INSERT INTO payment_status_history (payment_id, old_status, new_status, reason, changed_by)
-     VALUES ($1, 'pending', 'approved', 'Approved', $2)`,
-    [req.params.id, req.user.id]
-  );
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // FOR UPDATE closes the race with a concurrent approve/reject/
+    // return-to-pending on the same row: the loser blocks here, then finds
+    // status already changed by the winner and bails out cleanly instead of
+    // overwriting it (see the approve+reject race that corrupted payment
+    // status and duplicated payment_status_history rows).
+    const { rows } = await client.query("SELECT * FROM payments WHERE id = $1 FOR UPDATE", [req.params.id]);
+    const payment = rows[0];
+    if (!payment) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Payment not found" });
+    }
+    if (payment.status !== "pending") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "Only a pending payment can be approved" });
+    }
+    const blocked = await custodyBlocksReview(payment, req.user);
+    if (blocked) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: blocked });
+    }
+
+    await client.query(
+      `UPDATE payments SET status = 'approved', approved_by = $1, approved_at = now(),
+              rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL
+       WHERE id = $2`,
+      [req.user.id, req.params.id]
+    );
+    await client.query(
+      `INSERT INTO payment_status_history (payment_id, old_status, new_status, reason, changed_by)
+       VALUES ($1, 'pending', 'approved', 'Approved', $2)`,
+      [req.params.id, req.user.id]
+    );
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
   res.json(await loadPaymentRow(req.params.id));
 });
 
@@ -401,30 +425,46 @@ paymentsRouter.post("/:id/reject", async (req, res) => {
   const { reason } = req.body ?? {};
   if (!reason || !reason.trim()) return res.status(400).json({ error: "A rejection reason is required" });
 
-  const payment = await loadPaymentRow(req.params.id);
-  if (!payment) return res.status(404).json({ error: "Payment not found" });
-  if (payment.status !== "pending") {
-    return res.status(409).json({ error: "Only a pending payment can be rejected" });
-  }
-  // Only the in-flight freeze applies here, not the "must have reached an
-  // accountant" rule: rejecting a payment means "this collection record is
-  // wrong", which a reviewer may need to do while the cash is still
-  // travelling. Rejecting also takes it out of the chain -- it stops being
-  // available to hand off, since only 'pending' rows are.
-  if (payment.pending_handoff_id) {
-    return res.status(409).json({ error: "This payment is part of a cash handoff awaiting confirmation -- resolve that handoff first" });
-  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query("SELECT * FROM payments WHERE id = $1 FOR UPDATE", [req.params.id]);
+    const payment = rows[0];
+    if (!payment) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Payment not found" });
+    }
+    if (payment.status !== "pending") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "Only a pending payment can be rejected" });
+    }
+    // Only the in-flight freeze applies here, not the "must have reached an
+    // accountant" rule: rejecting a payment means "this collection record is
+    // wrong", which a reviewer may need to do while the cash is still
+    // travelling. Rejecting also takes it out of the chain -- it stops being
+    // available to hand off, since only 'pending' rows are.
+    if (payment.pending_handoff_id) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "This payment is part of a cash handoff awaiting confirmation -- resolve that handoff first" });
+    }
 
-  await pool.query(
-    `UPDATE payments SET status = 'rejected', rejected_by = $1, rejected_at = now(), rejection_reason = $2
-     WHERE id = $3`,
-    [req.user.id, reason.trim(), req.params.id]
-  );
-  await pool.query(
-    `INSERT INTO payment_status_history (payment_id, old_status, new_status, reason, changed_by)
-     VALUES ($1, 'pending', 'rejected', $2, $3)`,
-    [req.params.id, reason.trim(), req.user.id]
-  );
+    await client.query(
+      `UPDATE payments SET status = 'rejected', rejected_by = $1, rejected_at = now(), rejection_reason = $2
+       WHERE id = $3`,
+      [req.user.id, reason.trim(), req.params.id]
+    );
+    await client.query(
+      `INSERT INTO payment_status_history (payment_id, old_status, new_status, reason, changed_by)
+       VALUES ($1, 'pending', 'rejected', $2, $3)`,
+      [req.params.id, reason.trim(), req.user.id]
+    );
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
   res.json(await loadPaymentRow(req.params.id));
 });
 
@@ -437,26 +477,41 @@ paymentsRouter.post("/:id/return-to-pending", async (req, res) => {
   const { reason } = req.body ?? {};
   if (!reason || !reason.trim()) return res.status(400).json({ error: "A reason is required" });
 
-  const payment = await loadPaymentRow(req.params.id);
-  if (!payment) return res.status(404).json({ error: "Payment not found" });
-  if (payment.status === "pending") {
-    return res.status(409).json({ error: "Payment is already pending" });
-  }
-  // Custody is deliberately left alone -- whoever physically holds the cash
-  // still holds it; only the reconciliation status is reopened. If the
-  // holder is the accountant, re-approving afterwards passes the gate above.
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query("SELECT * FROM payments WHERE id = $1 FOR UPDATE", [req.params.id]);
+    const payment = rows[0];
+    if (!payment) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Payment not found" });
+    }
+    if (payment.status === "pending") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "Payment is already pending" });
+    }
+    // Custody is deliberately left alone -- whoever physically holds the cash
+    // still holds it; only the reconciliation status is reopened. If the
+    // holder is the accountant, re-approving afterwards passes the gate above.
 
-  const oldStatus = payment.status;
-  await pool.query(
-    `UPDATE payments SET status = 'pending', approved_by = NULL, approved_at = NULL,
-            rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL
-     WHERE id = $1`,
-    [req.params.id]
-  );
-  await pool.query(
-    `INSERT INTO payment_status_history (payment_id, old_status, new_status, reason, changed_by)
-     VALUES ($1, $2, 'pending', $3, $4)`,
-    [req.params.id, oldStatus, reason.trim(), req.user.id]
-  );
+    const oldStatus = payment.status;
+    await client.query(
+      `UPDATE payments SET status = 'pending', approved_by = NULL, approved_at = NULL,
+              rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL
+       WHERE id = $1`,
+      [req.params.id]
+    );
+    await client.query(
+      `INSERT INTO payment_status_history (payment_id, old_status, new_status, reason, changed_by)
+       VALUES ($1, $2, 'pending', $3, $4)`,
+      [req.params.id, oldStatus, reason.trim(), req.user.id]
+    );
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
   res.json(await loadPaymentRow(req.params.id));
 });

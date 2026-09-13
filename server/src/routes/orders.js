@@ -393,11 +393,18 @@ ordersRouter.post("/:id/submit", async (req, res) => {
     await pool.query("UPDATE customers SET erp_customer_id = $1 WHERE id = $2", [erpCustomerId, order.customer_id]);
   }
 
+  // Guard the WHERE clause against a concurrent submit of the same order
+  // (e.g. a double-tap or two tabs) racing this one -- the loser gets 0
+  // rows back and a 409 instead of silently re-submitting an already-moved
+  // order.
   const { rows: updatedRows } = await pool.query(
-    "UPDATE orders SET status = 'submitted', updated_at = now() WHERE id = $1 RETURNING *",
+    "UPDATE orders SET status = 'submitted', updated_at = now() WHERE id = $1 AND status = 'draft' RETURNING *",
     [order.id]
   );
   const updated = updatedRows[0];
+  if (!updated) {
+    return res.status(409).json({ error: "This order was already submitted (or changed) by another request" });
+  }
   const { rows: items } = await pool.query("SELECT oi.*, p.unit AS size FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1 ORDER BY oi.id", [order.id]);
   res.json({ ...updated, items });
 
@@ -551,14 +558,23 @@ ordersRouter.patch("/:id", async (req, res) => {
   let updated;
   try {
     await client.query("BEGIN");
+    // Guarding on the status/approval_status this handler's checks above
+    // were computed against closes the race with a second concurrent PATCH
+    // (or a discount approve/reject) landing between our initial read and
+    // this write -- the loser gets 0 rows back instead of clobbering
+    // whatever the winner just set.
     const { rows: updatedRows } = await client.query(
       `UPDATE orders
        SET status = $1, total_amd = $2, note = COALESCE($3, note),
            discount_pct = $4, discount_amd = $7, approval_status = $5, updated_at = now()
-       WHERE id = $6 RETURNING *`,
-      [nextStatus, nextTotal, note ?? null, nextDiscountPct, nextApprovalStatus, order.id, nextDiscountAmd]
+       WHERE id = $6 AND status = $8 AND approval_status = $9 RETURNING *`,
+      [nextStatus, nextTotal, note ?? null, nextDiscountPct, nextApprovalStatus, order.id, nextDiscountAmd, order.status, order.approval_status]
     );
     updated = updatedRows[0];
+    if (!updated) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "This order was changed by someone else -- refresh and try again" });
+    }
 
     if (nextLines) {
       await client.query("DELETE FROM order_items WHERE order_id = $1", [order.id]);
@@ -628,9 +644,10 @@ ordersRouter.post("/:id/approve-discount", async (req, res) => {
 
   const { rows: updatedRows } = await pool.query(
     `UPDATE orders SET approval_status = 'approved', approved_by = $1, approved_at = now(), updated_at = now()
-     WHERE id = $2 RETURNING *`,
+     WHERE id = $2 AND approval_status = 'pending' RETURNING *`,
     [req.user.id, order.id]
   );
+  if (!updatedRows[0]) return res.status(409).json({ error: "This order has no pending discount to approve" });
   res.json(updatedRows[0]);
 
   (async () => {
@@ -674,9 +691,10 @@ ordersRouter.post("/:id/reject-discount", async (req, res) => {
 
   const { rows: updatedRows } = await pool.query(
     `UPDATE orders SET approval_status = 'rejected', approved_by = $1, approved_at = now(), updated_at = now()
-     WHERE id = $2 RETURNING *`,
+     WHERE id = $2 AND approval_status = 'pending' RETURNING *`,
     [req.user.id, order.id]
   );
+  if (!updatedRows[0]) return res.status(409).json({ error: "This order has no pending discount to reject" });
   res.json(updatedRows[0]);
 
   (async () => {
@@ -716,9 +734,10 @@ ordersRouter.post("/:id/reject", async (req, res) => {
   }
 
   const { rows: updatedRows } = await pool.query(
-    "UPDATE orders SET status = 'draft', draft_reason = $1, updated_at = now() WHERE id = $2 RETURNING *",
+    "UPDATE orders SET status = 'draft', draft_reason = $1, updated_at = now() WHERE id = $2 AND status = 'submitted' RETURNING *",
     [note?.trim() || null, order.id]
   );
+  if (!updatedRows[0]) return res.status(409).json({ error: "Cannot reject an order that is no longer \"submitted\"" });
   res.json(updatedRows[0]);
 
   (async () => {
@@ -769,10 +788,14 @@ ordersRouter.post("/:id/mark-delivered", async (req, res) => {
     // here.
     await client.query("UPDATE route_stops SET completed_at = now() WHERE order_id = $1 AND completed_at IS NULL", [order.id]);
     const { rows: updatedRows } = await client.query(
-      "UPDATE orders SET status = 'delivered', updated_at = now() WHERE id = $1 RETURNING *",
+      "UPDATE orders SET status = 'delivered', updated_at = now() WHERE id = $1 AND status = 'packed_stock_out' RETURNING *",
       [order.id]
     );
     updatedOrder = updatedRows[0];
+    if (!updatedOrder) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "Cannot mark as delivered -- only a packed order can be delivered" });
+    }
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
