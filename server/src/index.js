@@ -37,6 +37,10 @@ import { deliveryRouter } from "./routes/delivery.js";
 import { debtBalancesRouter } from "./routes/debtBalances.js";
 import { badgesRouter } from "./routes/badges.js";
 import { calculatorLockRouter } from "./routes/calculatorLock.js";
+import { lockdownRouter } from "./routes/lockdown.js";
+import { lockdownGate } from "./middleware/lockdown.js";
+import { getCalculatorModeEnabled } from "./settings.js";
+import fs from "node:fs";
 import { startOverdueReminders } from "./overdueReminders.js";
 import { startStalePackedReminder } from "./stalePackedReminder.js";
 import { startErpSyncMonitor } from "./erpSyncMonitor.js";
@@ -82,6 +86,7 @@ app.use(
   })
 );
 app.use(cookieParser());
+app.use(lockdownGate);
 
 app.use("/api/auth", express.json(), authRouter);
 app.use("/api/me", express.json(), meRouter);
@@ -117,19 +122,66 @@ app.use("/api/delivery", express.json(), deliveryRouter);
 app.use("/api/debt-balances", express.json(), debtBalancesRouter);
 app.use("/api/badges", badgesRouter);
 app.use("/api/calculator-lock", express.json(), calculatorLockRouter);
+app.use("/api/lockdown", express.json(), lockdownRouter);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });
 });
 
-app.use(express.static(clientDir));
+// index.html and manifest.json are excluded from static serving (index:
+// false, and manifest.json is shadowed by the explicit route below) --
+// both are generated per-request from the calculator-mode setting instead;
+// everything else in client/public (icons included) still serves directly.
+app.use(express.static(clientDir, { index: false }));
 
 app.use("/api", (req, res) => {
   res.status(404).json({ error: "Not found" });
 });
 
-app.get("*", (req, res) => {
-  res.sendFile(path.join(clientDir, "index.html"));
+const indexHtmlPath = path.join(clientDir, "index.html");
+const indexHtmlTemplate = fs.readFileSync(indexHtmlPath, "utf8");
+
+const CALCULATOR_BRANDING = {
+  title: "Calculator",
+  themeColor: "#1c1c1e",
+  manifest: "manifest.calculator.json",
+  icon192: "icons/icon-192.png",
+  appleTouchIcon: "icons/apple-touch-icon.png",
+};
+const REAL_APP_BRANDING = {
+  title: "KAD Motors",
+  themeColor: "#f6f7f9",
+  manifest: "manifest.app.json",
+  icon192: "icons/app/icon-192.png",
+  appleTouchIcon: "icons/app/apple-touch-icon.png",
+};
+
+app.get("/manifest.json", async (req, res) => {
+  const calculatorModeEnabled = await getCalculatorModeEnabled();
+  res.sendFile(
+    path.join(clientDir, calculatorModeEnabled ? "manifest.calculator.json" : "manifest.app.json")
+  );
+});
+
+app.get("*", async (req, res) => {
+  // Read server-side (never fetched by the client) so the calculator
+  // disguise's "touches no network before unlock" property holds whether
+  // the feature is on or off -- see bootGate.js.
+  const calculatorModeEnabled = await getCalculatorModeEnabled();
+  const b = calculatorModeEnabled ? CALCULATOR_BRANDING : REAL_APP_BRANDING;
+  const head = `<title>${b.title}</title>
+    <meta name="theme-color" content="${b.themeColor}" />
+    <link rel="manifest" href="${b.manifest}" />
+    <link rel="icon" href="${b.icon192}" />
+    <link rel="apple-touch-icon" href="${b.appleTouchIcon}" />
+    <meta name="apple-mobile-web-app-title" content="${b.title}" />`;
+  // A <meta> tag, not an inline <script>, because the CSP above has no
+  // 'unsafe-inline' in script-src -- bootGate.js reads this via
+  // document.querySelector instead.
+  const html = indexHtmlTemplate
+    .replace("<!--CALCULATOR_MODE_HEAD-->", head)
+    .replace("<!--CALCULATOR_MODE_FLAG-->", `<meta name="calc-mode" content="${calculatorModeEnabled}" />`);
+  res.type("html").send(html);
 });
 
 app.use((err, req, res, next) => {

@@ -7,21 +7,17 @@
          visual viewport up -- that default is what was shoving the fixed
          top bar under the status bar whenever a search input got focused. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
-    <!-- Disguise metadata: this app opens as a plain-looking Calculator
-         (icon, name, initial screen) until the correct unlock code is
-         entered -- see js/bootGate.js. Kept as the real <title>/manifest/
-         icons (not swapped at runtime) so the home-screen icon and app
-         switcher preview are the calculator before the real app ever
-         loads, not just the in-page content. -->
-    <title>Calculator</title>
-    <meta name="theme-color" content="#1c1c1e" />
+    <!-- Disguise metadata: when the admin has turned Calculator Mode on
+         (Settings > Administration), this app opens as a plain-looking
+         Calculator (icon, name, initial screen) until the correct unlock
+         code is entered -- see js/bootGate.js. Filled in server-side, not
+         swapped at runtime, so the home-screen icon and app switcher
+         preview are correct before the real app's code ever loads. -->
+    <!--CALCULATOR_MODE_HEAD-->
+    <!--CALCULATOR_MODE_FLAG-->
 
-    <link rel="manifest" href="manifest.json" />
-    <link rel="icon" href="icons/icon-192.png" />
-    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Calculator" />
     <meta name="mobile-web-app-capable" content="yes" />
 
     <script src="js/theme-init.js"></script>

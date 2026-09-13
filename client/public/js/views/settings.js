@@ -220,6 +220,19 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
             <p class="form-success" id="calculator-pin-success" role="status" hidden>${t("saved")}</p>
             <button type="submit" class="btn btn-primary">${t("save")}</button>
           </form>
+          <div class="settings-list-group-item">
+            ${settingsToggleRow({ icon: ICON.lock, label: t("calculator_mode_label"), value: "", id: "toggle-calculator-mode", checked: false })}
+            <p class="muted radius-help" id="calculator-mode-help">${t("calculator_mode_help_off")}</p>
+          </div>
+        </div>
+
+        <h2 class="section-title">${t("emergency_disconnect_title")}</h2>
+        <div class="card settings-list-group">
+          <div class="settings-list-group-item">
+            <p class="muted radius-help">${t("emergency_disconnect_help")}</p>
+            <p class="form-success" id="emergency-disconnect-success" role="status" hidden>${t("emergency_disconnect_lifted")}</p>
+            <button type="button" class="btn btn-danger" id="emergency-disconnect-btn">${t("emergency_disconnect_button")}</button>
+          </div>
         </div>
       `
           : ""
@@ -463,6 +476,17 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     const pinInput = pinForm.querySelector('input[name="pin"]');
     const pinSuccess = root.querySelector("#calculator-pin-success");
     const pinStatus = root.querySelector("#calculator-pin-status");
+    const calcModeToggle = root.querySelector("#toggle-calculator-mode");
+    const calcModeToggleValue = calcModeToggle.closest(".settings-toggle-row").querySelector(".settings-row-value");
+    const calcModeHelp = root.querySelector("#calculator-mode-help");
+    const disconnectBtn = root.querySelector("#emergency-disconnect-btn");
+    const disconnectSuccess = root.querySelector("#emergency-disconnect-success");
+
+    function paintCalcModeToggle(enabled) {
+      calcModeToggle.setAttribute("aria-checked", String(enabled));
+      calcModeToggleValue.textContent = enabled ? t("toggle_on") : t("toggle_off");
+      calcModeHelp.textContent = enabled ? t("calculator_mode_help_on") : t("calculator_mode_help_off");
+    }
 
     api.getSettings().then((s) => {
       radiusInput.value = s.checkin_radius_meters;
@@ -471,6 +495,37 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       // Write-only field (see routes/settings.js) -- never pre-filled with
       // the actual code, just a status line saying whether one is set.
       pinStatus.textContent = s.calculator_pin_is_custom ? t("calculator_pin_help_custom") : t("calculator_pin_help");
+      paintCalcModeToggle(s.calculator_mode_enabled);
+    });
+
+    calcModeToggle.addEventListener("click", async () => {
+      const turningOn = calcModeToggle.getAttribute("aria-checked") !== "true";
+      if (!confirm(turningOn ? t("calculator_mode_confirm_on") : t("calculator_mode_confirm_off"))) return;
+      calcModeToggle.disabled = true;
+      try {
+        const result = await api.updateSettings({ calculator_mode_enabled: turningOn });
+        paintCalcModeToggle(result.calculator_mode_enabled);
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        calcModeToggle.disabled = false;
+      }
+    });
+
+    disconnectBtn.addEventListener("click", async () => {
+      if (!confirm(t("emergency_disconnect_confirm"))) return;
+      disconnectBtn.disabled = true;
+      try {
+        await api.engageLockdown();
+        // Our own session just got invalidated along with everyone
+        // else's -- reload so bootGate/app.js's lockdown check takes over
+        // and shows the lockdown screen instead of a broken half-logged-in
+        // state.
+        location.reload();
+      } catch (err) {
+        alert(err.message);
+        disconnectBtn.disabled = false;
+      }
     });
 
     radiusForm.addEventListener("submit", async (e) => {

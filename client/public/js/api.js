@@ -48,6 +48,15 @@ async function doRequest(path, options) {
   const body = isJson ? await res.json() : null;
 
   if (!res.ok) {
+    if (res.status === 423 && body?.locked) {
+      // Emergency Disconnect just engaged (or was already on) -- take the
+      // whole tab over immediately rather than letting whichever view
+      // triggered this request quietly swallow it in its own try/catch
+      // (most callers do), which would leave stale data on screen. Fires
+      // for every in-flight request the same instant, but the overlay
+      // itself is idempotent about being shown twice.
+      import("./lockdownScreen.js").then((m) => m.showLockdownOverlay());
+    }
     const err = new Error(body?.message || body?.error || `Request failed (${res.status})`);
     err.status = res.status;
     err.body = body;
@@ -113,6 +122,11 @@ export const api = {
 
   getSettings: () => request("/settings"),
   updateSettings: (data) => json("/settings", "PATCH", data),
+
+  // Unauthenticated on purpose -- see routes/lockdown.js.
+  getLockdownStatus: () => request("/lockdown"),
+  engageLockdown: () => json("/lockdown/engage", "POST", {}),
+  liftLockdown: () => json("/lockdown/lift", "POST", {}),
 
   getMySalesPerformance: () => request("/sales-performance/me"),
   getSalesPerformanceLeaderboard: (period = "ytd") => request(`/sales-performance/?period=${period}`),

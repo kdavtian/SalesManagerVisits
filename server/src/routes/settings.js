@@ -12,6 +12,8 @@ import {
   setQuickActionVisibility,
   getCalculatorPinHash,
   setCalculatorPinHash,
+  getCalculatorModeEnabled,
+  setCalculatorModeEnabled,
 } from "../settings.js";
 import { ROLES } from "../roles.js";
 
@@ -20,14 +22,21 @@ export const settingsRouter = Router();
 settingsRouter.use(requireAuth);
 
 settingsRouter.get("/", async (req, res) => {
-  const [checkinRadiusMeters, defaultVisitFrequencyDays, incentiveMessage, quickActionVisibility, calculatorPinHash] =
-    await Promise.all([
-      getCheckinRadiusMeters(),
-      getDefaultVisitFrequencyDays(),
-      getIncentiveMessage(),
-      getQuickActionVisibility(),
-      getCalculatorPinHash(),
-    ]);
+  const [
+    checkinRadiusMeters,
+    defaultVisitFrequencyDays,
+    incentiveMessage,
+    quickActionVisibility,
+    calculatorPinHash,
+    calculatorModeEnabled,
+  ] = await Promise.all([
+    getCheckinRadiusMeters(),
+    getDefaultVisitFrequencyDays(),
+    getIncentiveMessage(),
+    getQuickActionVisibility(),
+    getCalculatorPinHash(),
+    getCalculatorModeEnabled(),
+  ]);
   res.json({
     checkin_radius_meters: checkinRadiusMeters,
     default_visit_frequency_days: defaultVisitFrequencyDays,
@@ -40,6 +49,7 @@ settingsRouter.get("/", async (req, res) => {
     // password field. This just tells Settings whether to say "custom
     // code set" or "using the default code" next to the input.
     calculator_pin_is_custom: calculatorPinHash != null,
+    calculator_mode_enabled: calculatorModeEnabled,
   });
 });
 
@@ -110,6 +120,13 @@ settingsRouter.patch("/", requireAdmin, async (req, res) => {
       await setCalculatorPinHash(await bcrypt.hash(pin, 10));
       result.calculator_pin_is_custom = true;
     }
+  }
+
+  if (req.body?.calculator_mode_enabled !== undefined) {
+    if (typeof req.body.calculator_mode_enabled !== "boolean") {
+      return res.status(400).json({ error: "calculator_mode_enabled must be a boolean" });
+    }
+    result.calculator_mode_enabled = await setCalculatorModeEnabled(req.body.calculator_mode_enabled);
   }
 
   res.json(result);

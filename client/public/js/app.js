@@ -837,6 +837,19 @@ document.addEventListener("input", (event) => {
 
 async function init() {
   try {
+    const lockdownStatus = await api.getLockdownStatus();
+    if (lockdownStatus.enabled) {
+      const { showLockdownOverlay } = await import("./lockdownScreen.js");
+      showLockdownOverlay(lockdownStatus);
+      return;
+    }
+  } catch {
+    // Unreachable/offline: fall through to the normal boot path below
+    // rather than blocking the whole app on a status check that can't
+    // even complete.
+  }
+
+  try {
     setUser(await api.me());
     startLocationBroadcast();
   } catch {

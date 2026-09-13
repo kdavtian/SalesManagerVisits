@@ -70,6 +70,56 @@ export async function setCalculatorPinHash(hash) {
   );
 }
 
+// Global emergency kill-switch (see middleware/lockdown.js). lockdown_by/at
+// record who triggered it and when -- shown next to the toggle so admins
+// know it wasn't left on by accident.
+export async function getLockdownState() {
+  const { rows } = await pool.query(
+    `SELECT lockdown_enabled, lockdown_by, lockdown_at, u.name AS lockdown_by_name
+     FROM app_settings
+     LEFT JOIN users u ON u.id = app_settings.lockdown_by
+     WHERE app_settings.id = 1`
+  );
+  const row = rows[0];
+  return {
+    enabled: row?.lockdown_enabled ?? false,
+    by: row?.lockdown_by ?? null,
+    byName: row?.lockdown_by_name ?? null,
+    at: row?.lockdown_at ?? null,
+  };
+}
+
+export async function setLockdown(enabled, byUserId) {
+  await pool.query(
+    `INSERT INTO app_settings (id, lockdown_enabled, lockdown_by, lockdown_at)
+     VALUES (1, $1, $2, CASE WHEN $1 THEN now() ELSE NULL END)
+     ON CONFLICT (id) DO UPDATE SET
+       lockdown_enabled = EXCLUDED.lockdown_enabled,
+       lockdown_by = EXCLUDED.lockdown_by,
+       lockdown_at = EXCLUDED.lockdown_at`,
+    [enabled, enabled ? byUserId : null]
+  );
+}
+
+// Admin on/off switch for the calculator disguise (see bootGate.js). Read
+// server-side while rendering index.html, not fetched by the client, so
+// the disguise's "never touches the network before unlock" property holds
+// regardless of whether the feature is on or off.
+export async function getCalculatorModeEnabled() {
+  const { rows } = await pool.query("SELECT calculator_mode_enabled FROM app_settings WHERE id = 1");
+  return rows[0]?.calculator_mode_enabled ?? false;
+}
+
+export async function setCalculatorModeEnabled(enabled) {
+  const { rows } = await pool.query(
+    `INSERT INTO app_settings (id, calculator_mode_enabled) VALUES (1, $1)
+     ON CONFLICT (id) DO UPDATE SET calculator_mode_enabled = EXCLUDED.calculator_mode_enabled
+     RETURNING calculator_mode_enabled`,
+    [enabled]
+  );
+  return rows[0].calculator_mode_enabled;
+}
+
 export async function getDefaultVisitFrequencyDays() {
   const { rows } = await pool.query("SELECT default_visit_frequency_days FROM app_settings WHERE id = 1");
   return rows[0]?.default_visit_frequency_days ?? 14;

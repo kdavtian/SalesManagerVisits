@@ -52,6 +52,12 @@ async function showLockScreen() {
   renderCalculatorLock(document.getElementById("app"), bootRealApp);
 }
 
+// Set server-side into a <meta> tag on every response (see index.js) --
+// not fetched, so whether the feature is on or off, this file still never
+// makes a network request before deciding what to show. Admin-toggled via
+// Settings > Administration; defaults to off (normal app boot).
+const calculatorModeEnabled = document.querySelector('meta[name="calc-mode"]')?.content === "true";
+
 let alreadyUnlocked = false;
 try {
   alreadyUnlocked = sessionStorage.getItem(UNLOCK_KEY) === "1";
@@ -59,7 +65,7 @@ try {
   // Same fallback direction as above: treat as locked.
 }
 
-if (alreadyUnlocked) {
+if (!calculatorModeEnabled || alreadyUnlocked) {
   bootRealApp();
 } else {
   showLockScreen();
