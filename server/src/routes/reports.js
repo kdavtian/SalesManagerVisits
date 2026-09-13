@@ -175,6 +175,85 @@ reportsRouter.get("/checkins", requireReportAccess("checkins"), async (req, res)
   res.json({ checkins: rows, total: rows.length });
 });
 
+// Order fulfillment pipeline -- no per-transition audit trail exists for
+// orders (unlike payments/cash handoffs, which log every status change to
+// their own history table; see migrations/018 and 051: orders only ever
+// carries created_at/updated_at). So "average time in status" per stage
+// isn't honestly derivable after the fact -- what this can show instead:
+// where this period's orders ended up, how long orders still sitting in
+// an unfinished status have been there (updated_at only moves when status
+// changes, so "now - updated_at" is really "time in current status"), and
+// discount-approval turnaround for orders still waiting on one.
+reportsRouter.get("/orders-pipeline", requireReportAccess("orders_pipeline"), async (req, res) => {
+  const { period, manager_id } = req.query;
+  const conditions = [`o.created_at >= ${periodBounds(period)}`];
+  const params = [];
+  if (manager_id) {
+    params.push(manager_id);
+    conditions.push(`o.user_id = $${params.length}`);
+  }
+  const where = `WHERE ${conditions.join(" AND ")}`;
+
+  const { rows: byStatus } = await pool.query(
+    `SELECT o.status, count(*)::int AS count, COALESCE(sum(o.total_amd), 0) AS total_amd
+     FROM orders o
+     ${where}
+     GROUP BY o.status
+     ORDER BY count DESC`,
+    params
+  );
+
+  const { rows: deliveredRows } = await pool.query(
+    `SELECT count(*)::int AS delivered_count,
+            AVG(EXTRACT(EPOCH FROM (o.updated_at - o.created_at)) / 3600) AS avg_cycle_hours
+     FROM orders o
+     ${where} AND o.status = 'delivered'`,
+    params
+  );
+
+  // Deliberately not scoped to the period filter -- an order created two
+  // months ago and still sitting in "confirmed" is exactly what this
+  // should surface regardless of which period is selected, the same way
+  // Payments' "oldest pending" ignores its own period filter for the same
+  // reason.
+  const stuckConditions = ["o.status IN ('draft', 'submitted', 'confirmed', 'packed_stock_out')"];
+  const stuckParams = [];
+  if (manager_id) {
+    stuckParams.push(manager_id);
+    stuckConditions.push(`o.user_id = $${stuckParams.length}`);
+  }
+  const stuckWhere = `WHERE ${stuckConditions.join(" AND ")}`;
+
+  const { rows: activeByStatus } = await pool.query(
+    `SELECT o.status, count(*)::int AS count,
+            MIN(o.updated_at) AS oldest_updated_at,
+            count(*) FILTER (WHERE o.updated_at < now() - interval '48 hours')::int AS stuck_over_48h
+     FROM orders o
+     ${stuckWhere}
+     GROUP BY o.status
+     ORDER BY count DESC`,
+    stuckParams
+  );
+
+  const { rows: discountRows } = await pool.query(
+    `SELECT
+       count(*) FILTER (WHERE o.approval_status = 'pending')::int AS pending_count,
+       min(o.updated_at) FILTER (WHERE o.approval_status = 'pending') AS oldest_pending_at,
+       count(*) FILTER (WHERE o.approval_status = 'approved')::int AS approved_count,
+       count(*) FILTER (WHERE o.approval_status = 'rejected')::int AS rejected_count
+     FROM orders o
+     ${where}`,
+    params
+  );
+
+  res.json({
+    by_status: byStatus,
+    active: activeByStatus,
+    delivered: deliveredRows[0],
+    discount: discountRows[0],
+  });
+});
+
 // Brand presence per customer, from the latest check-in that actually
 // recorded a brand_status -- both our own brands and the named
 // competitors, so the office can see e.g. how Mobil is distributed across

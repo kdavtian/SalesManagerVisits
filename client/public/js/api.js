@@ -324,6 +324,10 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/reports/customer-debt${qs ? `?${qs}` : ""}`);
   },
+  getOrdersPipelineReport: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/reports/orders-pipeline${qs ? `?${qs}` : ""}`);
+  },
   getSalesBudgetReport: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/reports/sales-budget${qs ? `?${qs}` : ""}`);

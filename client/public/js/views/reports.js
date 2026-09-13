@@ -73,6 +73,7 @@ function selectHtml(name, options, value) {
 export async function renderReports(root, navigate, reportKey) {
   if (reportKey === "new_customers") return renderNewCustomersReport(root, navigate);
   if (reportKey === "checkins") return renderCheckinsReport(root, navigate);
+  if (reportKey === "orders_pipeline") return renderOrdersPipelineReport(root, navigate);
   if (reportKey === "brand_availability") return renderBrandAvailabilityReport(root, navigate);
   if (reportKey === "payments") return renderPaymentsReport(root, navigate);
   if (reportKey === "customer_debt") return renderCustomerDebtReport(root, navigate);
@@ -341,6 +342,119 @@ async function renderCheckinsReport(root, navigate) {
                   .join("")
               : `<p class="empty-state">${t("no_data")}</p>`
           }
+        </div>
+      `;
+    } catch (err) {
+      body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  form.addEventListener("change", load);
+  await load();
+}
+
+const ORDER_PIPELINE_STATUS_KEYS = {
+  draft: "order_status_draft",
+  submitted: "order_status_submitted",
+  confirmed: "order_status_confirmed",
+  packed_stock_out: "order_status_packed_stock_out",
+  delivered: "order_status_delivered",
+};
+
+async function renderOrdersPipelineReport(root, navigate) {
+  root.innerHTML = `
+    <div class="detail-view">
+      ${reportHeaderHtml("report_orders_pipeline_name")}
+      <form id="report-filters" class="report-filter-form">
+        ${selectHtml(
+          "period",
+          PERIOD_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) })),
+          "month"
+        )}
+      </form>
+      <div id="report-body"><p class="loading-state" role="status">${t("loading")}</p></div>
+    </div>
+  `;
+  const container = root.querySelector(".detail-view");
+  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  const form = container.querySelector("#report-filters");
+  const body = container.querySelector("#report-body");
+
+  async function load() {
+    body.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+    const data = new FormData(form);
+    const params = Object.fromEntries([...data.entries()].filter(([, v]) => v));
+    try {
+      const { by_status, active, delivered, discount } = await api.getOrdersPipelineReport(params);
+      const statusLabel = (s) => (ORDER_PIPELINE_STATUS_KEYS[s] ? t(ORDER_PIPELINE_STATUS_KEYS[s]) : s);
+
+      body.innerHTML = `
+        <h2 class="section-title">${t("report_orders_pipeline_by_status")}</h2>
+        <div class="card-list">
+          ${
+            by_status.length
+              ? by_status
+                  .map(
+                    (r) => `
+              <div class="card report-row">
+                <span>${escapeHtml(statusLabel(r.status))}</span>
+                <strong>${r.count} · ${formatAmd(Number(r.total_amd))}</strong>
+              </div>`
+                  )
+                  .join("")
+              : `<p class="empty-state">${t("no_data")}</p>`
+          }
+        </div>
+
+        <h2 class="section-title">${t("report_orders_pipeline_active_title")}</h2>
+        <div class="card-list">
+          ${
+            active.length
+              ? active
+                  .map(
+                    (r) => `
+              <div class="card report-row-multiline">
+                <strong>${escapeHtml(statusLabel(r.status))} · ${r.count}</strong>
+                <span class="muted">${t("report_orders_pipeline_oldest_since").replace("{date}", formatDateTime(r.oldest_updated_at))}${
+                      Number(r.stuck_over_48h) > 0
+                        ? ` · <span class="sync-badge-stale">${t("report_orders_pipeline_stuck_over_48h").replace("{n}", r.stuck_over_48h)}</span>`
+                        : ""
+                    }</span>
+              </div>`
+                  )
+                  .join("")
+              : `<p class="empty-state">${t("no_data")}</p>`
+          }
+        </div>
+
+        <h2 class="section-title">${t("report_orders_pipeline_delivered_title")}</h2>
+        <div class="stat-grid">
+          <div class="stat-card">
+            <span class="stat-value">${delivered.avg_cycle_hours != null ? `${Number(delivered.avg_cycle_hours).toFixed(1)}h` : "—"}</span>
+            <span class="stat-label">${t("report_orders_pipeline_delivered_cycle")}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value">${delivered.delivered_count}</span>
+            <span class="stat-label">${t("report_orders_pipeline_delivered_count")}</span>
+          </div>
+        </div>
+
+        <h2 class="section-title">${t("report_orders_pipeline_discount_title")}</h2>
+        <div class="card-list">
+          <div class="card report-row">
+            <span>${t("report_orders_pipeline_discount_pending")}</span>
+            <strong>${discount.pending_count}${
+              discount.oldest_pending_at ? ` · ${t("report_orders_pipeline_oldest_since").replace("{date}", formatDateTime(discount.oldest_pending_at))}` : ""
+            }</strong>
+          </div>
+          <div class="card report-row">
+            <span>${t("report_orders_pipeline_discount_approved")}</span>
+            <strong>${discount.approved_count}</strong>
+          </div>
+          <div class="card report-row">
+            <span>${t("report_orders_pipeline_discount_rejected")}</span>
+            <strong>${discount.rejected_count}</strong>
+          </div>
         </div>
       `;
     } catch (err) {
