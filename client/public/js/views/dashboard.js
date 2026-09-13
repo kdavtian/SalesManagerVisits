@@ -5,6 +5,7 @@ import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { applyPaymentBadge, applyUnrecordedBadge, applyWarehouseBadge, applyDeliveryBadge } from "../app.js";
 import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds } from "../quickActions.js";
+import { loadWithCache } from "../listCache.js";
 
 // A dependency-free CSS bar chart -- this app has no charting library, and
 // 30 bars is simple enough not to need one. Each bar's height is relative
@@ -96,30 +97,42 @@ export async function renderDashboard(root, navigate) {
   root.innerHTML = `<div class="dashboard-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".dashboard-view");
 
-  let summary, customers, trends, settings;
+  // Stale-while-revalidate: a returning user has almost certainly seen
+  // this exact screen recently, so paint whatever was cached from last
+  // time immediately (see listCache.js) and repaint with the live network
+  // response the moment it lands, instead of sitting on the loading state
+  // above for an entire round trip every single time the app opens.
   try {
-    [summary, customers, trends, settings] = await Promise.all([
-      api.dashboardSummary(),
-      // The result here only ever feeds renderNextVisit below, and only
-      // for the roles that card is actually rendered for (not admin/ceo --
-      // see the nextVisitSlot markup further down). GET /customers runs
-      // 4 correlated subqueries per row and returns every customer in the
-      // company with no filter, so this was the single most expensive part
-      // of opening the dashboard for no benefit on an admin/ceo login, and
-      // (for a sales_manager, this app's most common daily user) scoped
-      // down to what "next visit" actually means for that role -- their
-      // own assigned book, not the whole company's.
-      state.user.role === "admin" || state.user.role === "ceo"
-        ? Promise.resolve([])
-        : api.listCustomers(state.user.role === "sales_manager" ? { assigned_manager_id: state.user.id } : {}),
-      api.dashboardTrends(),
-      api.getSettings(),
-    ]);
+    await loadWithCache(
+      `dashboard-summary:${state.user.id}`,
+      async () => {
+        const [summary, customers, trends, settings] = await Promise.all([
+          api.dashboardSummary(),
+          // The result here only ever feeds renderNextVisit below, and only
+          // for the roles that card is actually rendered for (not admin/ceo --
+          // see the nextVisitSlot markup further down). GET /customers runs
+          // 4 correlated subqueries per row and returns every customer in the
+          // company with no filter, so this was the single most expensive part
+          // of opening the dashboard for no benefit on an admin/ceo login, and
+          // (for a sales_manager, this app's most common daily user) scoped
+          // down to what "next visit" actually means for that role -- their
+          // own assigned book, not the whole company's.
+          state.user.role === "admin" || state.user.role === "ceo"
+            ? Promise.resolve([])
+            : api.listCustomers(state.user.role === "sales_manager" ? { assigned_manager_id: state.user.id } : {}),
+          api.dashboardTrends(),
+          api.getSettings(),
+        ]);
+        return { summary, customers, trends, settings };
+      },
+      (data) => paint(data)
+    );
   } catch (err) {
     container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     return;
   }
 
+  function paint({ summary, customers, trends, settings }) {
   const totals = summary.totals;
   const remaining = Math.max(0, totals.total_customers - totals.visited_today);
   // "Here's your field plan for today" only means something to someone who
@@ -354,6 +367,7 @@ export async function renderDashboard(root, navigate) {
 
   const nextVisitSlot = container.querySelector("#next-visit-slot");
   if (nextVisitSlot) renderNextVisit(nextVisitSlot, customers, navigate);
+  }
 }
 
 async function renderNextVisit(slot, customers, navigate) {
