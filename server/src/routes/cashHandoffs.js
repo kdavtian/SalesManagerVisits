@@ -230,7 +230,7 @@ cashHandoffsRouter.post("/", async (req, res) => {
     await client.query("COMMIT");
 
     notifyHandoff(recipient.id, "cash_handoff_submitted", {
-      title: "Կանխիկի հանձնում",
+      title: "Cash handoff",
       body: `${sender.name} → ${Number(total).toLocaleString()} AMD (${ids.length})`,
       url: `/#/cash-handoffs/${handoffId}`,
     });
@@ -337,13 +337,13 @@ cashHandoffsRouter.post("/:id/confirm", async (req, res) => {
     await client.query("COMMIT");
 
     notifyHandoff(handoff.from_user_id, "cash_handoff_reviewed", {
-      title: "Կանխիկի հանձնումը հաստատվեց",
+      title: "Cash handoff confirmed",
       body: `${recipient.name} · ${Number(handoff.amount_amd).toLocaleString()} AMD`,
       url: `/#/cash-handoffs/${handoff.id}`,
     });
     if (handoff.submitted_by !== handoff.from_user_id) {
       notifyHandoff(handoff.submitted_by, "cash_handoff_reviewed", {
-        title: "Կանխիկի հանձնումը հաստատվեց",
+        title: "Cash handoff confirmed",
         body: `${recipient.name} · ${Number(handoff.amount_amd).toLocaleString()} AMD`,
         url: `/#/cash-handoffs/${handoff.id}`,
       });
@@ -398,7 +398,7 @@ cashHandoffsRouter.post("/:id/reject", async (req, res) => {
     const rejector = await getUser(req.user.id);
     for (const target of new Set([handoff.from_user_id, handoff.submitted_by])) {
       notifyHandoff(target, "cash_handoff_reviewed", {
-        title: "Կանխիկի հանձնումը մերժվեց",
+        title: "Cash handoff rejected",
         body: `${rejector.name} · ${reason}`,
         url: `/#/cash-handoffs/${handoff.id}`,
       });
