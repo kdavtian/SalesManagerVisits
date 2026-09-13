@@ -308,49 +308,102 @@ reportsRouter.get("/payments", requireReportAccess("payments"), async (req, res)
 // the same data an external Telegram bot on the sync PC already formats
 // and sends outside this app, now also browsable here.
 
+// How long an ERP sync can go stale before a report flags it rather than
+// showing it as if it were current. Set above the "up to a few days between
+// syncs is fine, the Excel extract still beats app data" tolerance the
+// business actually runs on (see the comment on estimatedDebtJoin below) --
+// this is a "the pipeline looks broken" flag, not a "the number is old" one.
+const ERP_STALE_AFTER_HOURS = 72;
+
+async function erpSyncFreshness(table) {
+  const { rows } = await pool.query(`SELECT MAX(synced_at) AS synced_at FROM ${table}`);
+  const syncedAt = rows[0]?.synced_at ?? null;
+  const hoursSinceSync = syncedAt ? (Date.now() - new Date(syncedAt).getTime()) / 3.6e6 : null;
+  return {
+    synced_at: syncedAt,
+    stale: hoursSinceSync == null || hoursSinceSync > ERP_STALE_AFTER_HOURS,
+    stale_after_hours: ERP_STALE_AFTER_HOURS,
+  };
+}
+
 // Debt/aging -- erp_customer_data is TRUNCATE-and-replaced whole on every
 // sync (see erpSync.js), so this always reflects the latest extract, not
 // an accumulating history. sales_channel here filters on
 // assigned_sales_rep, the same free-text rep-name space sales_channels.code
 // already matches for Team Performance.
+//
+// The Castrol Excel extract stays the trusted source of debt for as long as
+// the app and ERP run in parallel (expected: months, not days) -- this
+// never recomputes debt from app data wholesale, even though the app now
+// tracks collections of its own. Instead, estimated_debt_amd narrows the
+// gap between syncs the same way an individual customer's own card already
+// does (see routes/customers.js GET /:id, "estimated_debt_amd"): subtract
+// collections the app has recorded since the last sync, floored at zero.
+// Both the raw ERP figure and the adjusted one are returned so a reviewer
+// can see the gap, not just the result.
+const estimatedDebtJoin = `
+  LEFT JOIN LATERAL (
+    SELECT SUM(ch.amount_collected_amd) AS amount
+    FROM checkins ch
+    JOIN customers c ON c.id = ch.customer_id
+    WHERE c.erp_customer_id = erp.erp_customer_id
+      AND ch.amount_collected_amd IS NOT NULL
+      AND ch.timestamp > erp.synced_at
+  ) collected ON true`;
+const estimatedDebtExpr = "GREATEST(erp.debt_amd - COALESCE(collected.amount, 0), 0)";
+
 reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async (req, res) => {
   const { sales_channel, debt_only } = req.query;
   const conditions = [];
   const params = [];
   if (sales_channel) {
     params.push(sales_channel);
-    conditions.push(`assigned_sales_rep = $${params.length}`);
+    conditions.push(`erp.assigned_sales_rep = $${params.length}`);
   }
   if (debt_only === "1") {
-    conditions.push(`debt_amd > 0`);
+    conditions.push(`${estimatedDebtExpr} > 0`);
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
   const { rows: customerRows } = await pool.query(
-    `SELECT erp_customer_id, customer_name, assigned_sales_rep, debt_amd, last_payment_date, days_since_payment, aging_bucket
-     FROM erp_customer_data
+    `SELECT erp.erp_customer_id, erp.customer_name, erp.assigned_sales_rep, erp.debt_amd,
+            erp.last_payment_date, erp.days_since_payment, erp.aging_bucket,
+            COALESCE(collected.amount, 0) AS collected_since_sync_amd,
+            ${estimatedDebtExpr} AS estimated_debt_amd
+     FROM erp_customer_data erp
+     ${estimatedDebtJoin}
      ${where}
-     ORDER BY debt_amd DESC NULLS LAST`,
+     ORDER BY estimated_debt_amd DESC NULLS LAST`,
     params
   );
 
   const { rows: byBucket } = await pool.query(
-    `SELECT COALESCE(aging_bucket, '—') AS aging_bucket, count(*)::int AS customer_count, COALESCE(sum(debt_amd), 0) AS total_debt_amd
-     FROM erp_customer_data
+    `SELECT COALESCE(erp.aging_bucket, '—') AS aging_bucket, count(*)::int AS customer_count,
+            COALESCE(sum(${estimatedDebtExpr}), 0) AS total_debt_amd
+     FROM erp_customer_data erp
+     ${estimatedDebtJoin}
      ${where}
-     GROUP BY aging_bucket
+     GROUP BY erp.aging_bucket
      ORDER BY total_debt_amd DESC`,
     params
   );
 
   const { rows: totalsRows } = await pool.query(
-    `SELECT COALESCE(sum(debt_amd), 0) AS total_debt_amd, count(*) FILTER (WHERE debt_amd > 0)::int AS customers_with_debt
-     FROM erp_customer_data
+    `SELECT COALESCE(sum(${estimatedDebtExpr}), 0) AS total_debt_amd,
+            COALESCE(sum(erp.debt_amd), 0) AS total_debt_amd_erp,
+            count(*) FILTER (WHERE ${estimatedDebtExpr} > 0)::int AS customers_with_debt
+     FROM erp_customer_data erp
+     ${estimatedDebtJoin}
      ${where}`,
     params
   );
 
-  res.json({ customers: customerRows, by_bucket: byBucket, totals: totalsRows[0] });
+  res.json({
+    customers: customerRows,
+    by_bucket: byBucket,
+    totals: totalsRows[0],
+    sync: await erpSyncFreshness("erp_customer_data"),
+  });
 });
 
 // Sales vs. budget per rep/channel for one calendar month -- month comes in
@@ -379,7 +432,7 @@ reportsRouter.get("/sales-budget", requireReportAccess("sales_budget"), async (r
     { sales_amd: 0, budget_amd: 0, collected_amd: 0 }
   );
 
-  res.json({ rows, totals });
+  res.json({ rows, totals, sync: await erpSyncFreshness("sales_performance") });
 });
 
 // Brand volume (liters) per channel for one calendar month, plus a
@@ -414,7 +467,7 @@ reportsRouter.get("/brand-volume", requireReportAccess("brand_volume"), async (r
     params
   );
 
-  res.json({ rows, by_brand: byBrand });
+  res.json({ rows, by_brand: byBrand, sync: await erpSyncFreshness("perf_actuals_brand_monthly") });
 });
 
 const REPORT_PERIODS = new Set(["daily", "weekly", "monthly", "quarterly", "annual"]);

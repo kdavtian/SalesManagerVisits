@@ -6858,6 +6858,25 @@ form select,
   text-align: left;
 }
 
+/* Freshness note on a report backed by the Castrol Excel sync (see
+   syncBadgeHtml in views/reports.js) -- quiet by default, only turns
+   attention-getting once the sync itself looks broken. */
+.sync-badge {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: 0 4px 12px;
+}
+
+.sync-badge-stale {
+  color: var(--warning);
+  font-weight: 500;
+}
+
+.sync-adjusted-note {
+  font-weight: 400;
+  opacity: 0.8;
+}
+
 .route-plan-rep-card {
   margin-bottom: 10px;
 }

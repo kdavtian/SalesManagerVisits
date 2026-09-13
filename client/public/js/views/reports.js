@@ -182,6 +182,28 @@ function reportHeaderHtml(titleKey) {
   `;
 }
 
+function formatDateTime(value) {
+  if (!value) return "—";
+  return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+// Every report backed by the Castrol Excel extract (customer_debt,
+// sales_budget, brand_volume) carries a `sync` object from the server --
+// this is the one place that renders it, so "how stale is this" always
+// looks the same regardless of which report it's on. The extract stays the
+// trusted source of truth for these numbers while the app and ERP run in
+// parallel (see routes/reports.js's ERP_STALE_AFTER_HOURS) -- this badge is
+// a "the pipeline looks broken" flag, not a "the number is old" one, so it
+// only turns into a warning well past a normal sync gap.
+function syncBadgeHtml(sync) {
+  if (!sync) return "";
+  if (!sync.synced_at) return `<p class="sync-badge sync-badge-stale">${t("report_sync_never")}</p>`;
+  const label = t("report_sync_as_of").replace("{time}", formatDateTime(sync.synced_at));
+  if (!sync.stale) return `<p class="sync-badge">${label}</p>`;
+  const warning = t("report_sync_stale_note").replace("{h}", sync.stale_after_hours);
+  return `<p class="sync-badge sync-badge-stale">${label} — ${warning}</p>`;
+}
+
 function subregionOptions(region) {
   if (region === "Yerevan") return YEREVAN_DISTRICTS;
   return [];
@@ -527,8 +549,9 @@ async function renderCustomerDebtReport(root, navigate) {
     const data = new FormData(form);
     const params = Object.fromEntries([...data.entries()].filter(([, v]) => v));
     try {
-      const { customers, by_bucket, totals } = await api.getCustomerDebtReport(params);
+      const { customers, by_bucket, totals, sync } = await api.getCustomerDebtReport(params);
       body.innerHTML = `
+        ${syncBadgeHtml(sync)}
         <div class="stat-grid">
           <div class="stat-card">
             <span class="stat-value">${formatAmd(Number(totals.total_debt_amd))}</span>
@@ -539,6 +562,13 @@ async function renderCustomerDebtReport(root, navigate) {
             <span class="stat-label">${t("report_customer_debt_customers_with_debt")}</span>
           </div>
         </div>
+        ${
+          Number(totals.total_debt_amd_erp) !== Number(totals.total_debt_amd)
+            ? `<p class="muted" style="margin: 0 4px 12px;">${t("report_customer_debt_adjusted_note")
+                .replace("{erp}", formatAmd(Number(totals.total_debt_amd_erp)))
+                .replace("{adjusted}", formatAmd(Number(totals.total_debt_amd)))}</p>`
+            : ""
+        }
 
         <h2 class="section-title">${t("report_customer_debt_by_bucket")}</h2>
         <div class="card-list">
@@ -562,14 +592,19 @@ async function renderCustomerDebtReport(root, navigate) {
           ${
             customers.length
               ? customers
-                  .map(
-                    (c) => `
+                  .map((c) => {
+                    const collected = Number(c.collected_since_sync_amd);
+                    return `
               <div class="card report-row-multiline">
                 <strong>${escapeHtml(c.customer_name)}</strong>
                 <span class="muted">${escapeHtml(channelDisplayLabel(c.assigned_sales_rep))} · ${c.aging_bucket ? escapeHtml(c.aging_bucket) : "—"}${c.days_since_payment != null ? ` · ${c.days_since_payment}d` : ""}</span>
-                <span class="muted">${formatAmd(Number(c.debt_amd))}</span>
-              </div>`
-                  )
+                <span class="muted">${formatAmd(Number(c.estimated_debt_amd))}${
+                      collected > 0
+                        ? ` <span class="sync-adjusted-note">(${formatAmd(Number(c.debt_amd))} ${t("report_customer_debt_per_sync")} − ${formatAmd(collected)} ${t("report_customer_debt_collected_since")})</span>`
+                        : ""
+                    }</span>
+              </div>`;
+                  })
                   .join("")
               : `<p class="empty-state">${t("no_data")}</p>`
           }
@@ -609,8 +644,9 @@ async function renderSalesBudgetReport(root, navigate) {
     const data = new FormData(form);
     const params = Object.fromEntries([...data.entries()].filter(([, v]) => v));
     try {
-      const { rows, totals } = await api.getSalesBudgetReport(params);
+      const { rows, totals, sync } = await api.getSalesBudgetReport(params);
       body.innerHTML = `
+        ${syncBadgeHtml(sync)}
         <div class="stat-grid">
           <div class="stat-card">
             <span class="stat-value">${formatAmd(totals.sales_amd)}</span>
@@ -688,8 +724,9 @@ async function renderBrandVolumeReport(root, navigate) {
     const data = new FormData(form);
     const params = Object.fromEntries([...data.entries()].filter(([, v]) => v));
     try {
-      const { rows, by_brand } = await api.getBrandVolumeReport(params);
+      const { rows, by_brand, sync } = await api.getBrandVolumeReport(params);
       body.innerHTML = `
+        ${syncBadgeHtml(sync)}
         <h2 class="section-title">${t("report_brand_volume_total")}</h2>
         <div class="card-list">
           ${
