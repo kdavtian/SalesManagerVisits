@@ -19,6 +19,16 @@ export const REPORTS = [
     descriptionKey: "report_checkins_description",
     defaultRoles: ["admin", "ceo", "sales_director"],
   },
+  // The order fulfillment pipeline (draft -> submitted -> confirmed ->
+  // packed_stock_out -> delivered, plus the discount-approval side branch)
+  // had no report at all before this -- warehouse/delivery are pulled in
+  // as default viewers since it's their queue as much as sales/office's.
+  {
+    key: "orders_pipeline",
+    nameKey: "report_orders_pipeline_name",
+    descriptionKey: "report_orders_pipeline_description",
+    defaultRoles: ["admin", "ceo", "sales_director", "warehouse_manager", "delivery_manager"],
+  },
   {
     key: "brand_availability",
     nameKey: "report_brand_availability_name",
