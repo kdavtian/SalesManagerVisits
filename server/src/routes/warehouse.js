@@ -154,8 +154,8 @@ async function markPacked(orderId) {
       const { rows: deliveryRows } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [WAREHOUSE_NOTIFY_ROLES]);
       for (const d of deliveryRows) {
         notifyUser(d.id, "order_packed", {
-          title: "Order packed",
-          body: `${order.customer_name}'s order is packed and ready to route.`,
+          title: "Պատվերը փաթեթավորվեց",
+          body: `${order.customer_name}-ի պատվերը փաթեթավորված է և պատրաստ երթուղավորման։`,
           url: "/#/delivery",
         });
       }
@@ -216,8 +216,8 @@ warehouseRouter.post("/orders/:id/stock-issue", async (req, res) => {
       const { rows: recipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [STOCK_ISSUE_NOTIFY_ROLES]);
       for (const recipient of recipients) {
         notifyUser(recipient.id, "order_stock_issue", {
-          title: "Stock issue flagged",
-          body: `${order.customer_name}'s order: ${note.trim()}`,
+          title: "Հայտնվել է պաշարի խնդիր",
+          body: `${order.customer_name}-ի պատվեր. ${note.trim()}`,
           url: "/#/orders",
         });
       }

@@ -40,8 +40,8 @@ export async function checkStalePackedOrders() {
     alreadyNotified.add(order.id);
     for (const recipient of recipients) {
       await notifyUser(recipient.id, "order_stale_packed", {
-        title: "Packed order waiting",
-        body: `${order.customer_name}'s order (${order.order_code || order.id}) has been packed for over ${STALE_HOURS}h without being delivered.`,
+        title: "Փաթեթավորված պատվերը սպասում է",
+        body: `${order.customer_name}-ի պատվերը (${order.order_code || order.id}) փաթեթավորված է ${STALE_HOURS} ժամից ավելի, բայց դեռ չի առաքվել։`,
         url: "/#/delivery",
       });
     }

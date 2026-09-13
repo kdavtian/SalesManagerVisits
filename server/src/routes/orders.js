@@ -224,6 +224,12 @@ ordersRouter.post("/", async (req, res) => {
           : discountPct > 0
           ? ` (${discountPct}% discount, pending director approval)`
           : "";
+      const discountSuffixHy =
+        discountAmd > 0
+          ? ` (զեղչ՝ ${discountAmd.toLocaleString()} ԱՄԴ, սպասում է տնօրենի հաստատմանը)`
+          : discountPct > 0
+          ? ` (զեղչ՝ ${discountPct}%, սպասում է տնօրենի հաստատմանը)`
+          : "";
       notifyTelegram(
         `🛒 <b>New order</b>\n${escapeHtml(repName)} — ${escapeHtml(customer.name)}\n${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD${escapeHtml(discountSuffix)}`
       );
@@ -231,8 +237,8 @@ ordersRouter.post("/", async (req, res) => {
       const { rows: notifyRecipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [ORDER_NOTIFY_ROLES]);
       for (const recipient of notifyRecipients) {
         notifyUser(recipient.id, "order_placed", {
-          title: "New order placed",
-          body: `${repName} placed an order for ${customer.name} — ${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD.${discountSuffix}`,
+          title: "Նոր պատվեր",
+          body: `${repName}-ը պատվեր է ձևակերպել ${customer.name}-ի համար — ${lines.length} ապրանք, ${Number(totalAmd).toLocaleString()} ԱՄԴ${discountSuffixHy}`,
           url: "/#/orders",
         });
       }
@@ -418,8 +424,8 @@ ordersRouter.post("/:id/submit", async (req, res) => {
       const { rows: notifyRecipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [ORDER_NOTIFY_ROLES]);
       for (const recipient of notifyRecipients) {
         notifyUser(recipient.id, "order_placed", {
-          title: "New order placed",
-          body: `${repName} submitted an order for ${order.customer_name} — ${Number(order.total_amd).toLocaleString()} AMD.`,
+          title: "Նոր պատվեր",
+          body: `${repName}-ը պատվեր է ուղարկել ${order.customer_name}-ի համար — ${Number(order.total_amd).toLocaleString()} ԱՄԴ։`,
           url: "/#/orders",
         });
       }
@@ -605,19 +611,19 @@ ordersRouter.patch("/:id", async (req, res) => {
       if (status !== undefined && nextStatus !== order.status && req.user.id !== order.user_id) {
         const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
         notifyUser(order.user_id, "order_status_changed", {
-          title: "Order update",
-          body: `${customerRows[0]?.name || "Order"} is now "${nextStatus}".`,
+          title: "Պատվերի թարմացում",
+          body: `${customerRows[0]?.name || "Պատվերի"} կարգավիճակը այժմ՝ "${nextStatus}"։`,
           url: "/#/orders",
         });
       }
       if (enteringWarehouseQueue) {
         const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
-        const customerName = customerRows[0]?.name || "Order";
+        const customerName = customerRows[0]?.name || "Պատվերի";
         const { rows: wmRows } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [WAREHOUSE_NOTIFY_ROLES]);
         for (const wm of wmRows) {
           notifyUser(wm.id, "order_warehouse_review", {
-            title: "Order ready for warehouse",
-            body: `${customerName}'s order was confirmed and is ready to pick and pack.`,
+            title: "Պատվերը պատրաստ է պահեստի համար",
+            body: `${customerName}-ի պատվերը հաստատվել է և պատրաստ է հավաքման ու փաթեթավորման համար։`,
             url: "/#/warehouse",
           });
         }
@@ -653,22 +659,22 @@ ordersRouter.post("/:id/approve-discount", async (req, res) => {
   (async () => {
     try {
       const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
-      const customerName = customerRows[0]?.name || "Order";
+      const customerName = customerRows[0]?.name || "Պատվերի";
 
       // Now that the discount is cleared, the accountant is the next stop --
       // same order_placed preference gate a rep's original order used.
       const { rows: accountants } = await pool.query("SELECT id FROM users WHERE role = 'accountant'");
       for (const accountant of accountants) {
         notifyUser(accountant.id, "order_placed", {
-          title: "Order discount approved",
-          body: `${customerName}'s discounted order was approved and is ready for fulfillment.`,
+          title: "Պատվերի զեղչը հաստատվեց",
+          body: `${customerName}-ի զեղչված պատվերը հաստատվել է և պատրաստ է կատարման համար։`,
           url: "/#/orders",
         });
       }
       if (req.user.id !== order.user_id) {
         notifyUser(order.user_id, "order_status_changed", {
-          title: "Discount approved",
-          body: `${customerName}'s order discount was approved.`,
+          title: "Զեղչը հաստատվեց",
+          body: `${customerName}-ի պատվերի զեղչը հաստատվել է։`,
           url: "/#/orders",
         });
       }
@@ -702,8 +708,8 @@ ordersRouter.post("/:id/reject-discount", async (req, res) => {
       if (req.user.id !== order.user_id) {
         const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
         notifyUser(order.user_id, "order_status_changed", {
-          title: "Discount rejected",
-          body: `${customerRows[0]?.name || "Order"}'s discount was rejected -- edit the order or remove the discount to proceed.`,
+          title: "Զեղչը մերժվեց",
+          body: `${customerRows[0]?.name || "Պատվերի"} զեղչը մերժվել է -- խմբագրեք պատվերը կամ հեռացրեք զեղչը շարունակելու համար։`,
           url: "/#/orders",
         });
       }
@@ -744,8 +750,8 @@ ordersRouter.post("/:id/reject", async (req, res) => {
     try {
       if (req.user.id !== order.user_id) {
         notifyUser(order.user_id, "order_status_changed", {
-          title: "Order rejected",
-          body: `${order.customer_name}'s order was rejected${note?.trim() ? `: ${note.trim()}` : ""} -- edit and resubmit it.`,
+          title: "Պատվերը մերժվեց",
+          body: `${order.customer_name}-ի պատվերը մերժվել է${note?.trim() ? `՝ ${note.trim()}` : ""} -- խմբագրեք և կրկին ուղարկեք։`,
           url: "/#/orders",
         });
       }
@@ -812,8 +818,8 @@ ordersRouter.post("/:id/mark-delivered", async (req, res) => {
       for (const recipient of recipients) {
         if (recipient.id === req.user.id) continue;
         notifyUser(recipient.id, "order_delivered", {
-          title: "Order delivered",
-          body: `${order.customer_name}'s order was marked delivered (no route).`,
+          title: "Պատվերն առաքվեց",
+          body: `${order.customer_name}-ի պատվերը նշվել է որպես առաքված (առանց երթուղու)։`,
           url: "/#/orders",
         });
       }

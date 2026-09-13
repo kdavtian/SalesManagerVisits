@@ -206,8 +206,8 @@ visitPlansRouter.post("/", async (req, res) => {
         const { rows: approvers } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [APPROVER_ROLES]);
         for (const approver of approvers) {
           notifyUser(approver.id, "plan_submitted", {
-            title: "Plan needs review",
-            body: `${repName} submitted a plan for ${date} (${customerIds.length} stop${customerIds.length === 1 ? "" : "s"}).`,
+            title: "Պլանը սպասում է վերանայման",
+            body: `${repName}-ը ուղարկել է պլան ${date}-ի համար (${customerIds.length} կանգառ)։`,
             url: "/#/settings",
           });
         }
@@ -394,11 +394,11 @@ visitPlansRouter.patch("/:id", requireCanPlanForOthers, async (req, res) => {
         if (action !== undefined) {
           const dateLabel = formatPlanDate(updated[0].plan_date);
           notifyUser(updated[0].user_id, "plan_reviewed", {
-            title: action === "approve" ? "Visit plan approved" : "Visit plan rejected",
+            title: action === "approve" ? "Այցելության պլանը հաստատվեց" : "Այցելության պլանը մերժվեց",
             body:
               action === "approve"
-                ? `Your plan for ${dateLabel} was approved.`
-                : `Your plan for ${dateLabel} was rejected -- please revise it.`,
+                ? `Ձեր ${dateLabel} պլանը հաստատվել է։`
+                : `Ձեր ${dateLabel} պլանը մերժվել է -- խնդրում ենք վերանայել այն։`,
             url: "/#/map",
           });
         }

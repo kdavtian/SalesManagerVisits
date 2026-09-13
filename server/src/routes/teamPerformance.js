@@ -556,8 +556,8 @@ teamPerformanceRouter.post("/plans/:id/submit", async (req, res) => {
       const { rows: reviewers } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [roles]);
       for (const reviewer of reviewers) {
         notifyUser(reviewer.id, "perf_plan_submitted", {
-          title: "Performance plan needs review",
-          body: `A plan for ${plan.month.toISOString?.() ?? plan.month} was submitted for approval.`,
+          title: "Աշխատանքային պլանը սպասում է վերանայման",
+          body: `${plan.month.toISOString?.() ?? plan.month}-ի պլանն ուղարկվել է հաստատման։`,
           url: "/#/team-performance/approvals",
         });
       }
@@ -604,11 +604,11 @@ async function reviewPlan(req, res, nextStatus, reason) {
     try {
       if (plan.submitted_by) {
         notifyUser(plan.submitted_by, "perf_plan_reviewed", {
-          title: nextStatus === "approved" ? "Performance plan approved" : "Performance plan rejected",
+          title: nextStatus === "approved" ? "Աշխատանքային պլանը հաստատվեց" : "Աշխատանքային պլանը մերժվեց",
           body:
             nextStatus === "approved"
-              ? `Your plan was approved.`
-              : `Your plan was rejected: ${reason}`,
+              ? `Ձեր պլանը հաստատվել է։`
+              : `Ձեր պլանը մերժվել է՝ ${reason}`,
           url: "/#/team-performance/planning",
         });
       }
@@ -701,8 +701,8 @@ teamPerformanceRouter.post("/plans/:id/revise", async (req, res) => {
         for (const recipient of notifyRecipients) {
           if (recipient.id === req.user.id) continue;
           notifyUser(recipient.id, "perf_plan_reviewed", {
-            title: "Performance plan revised by CEO",
-            body: `The ${plan.month.toISOString?.() ?? plan.month} plan was revised: ${reason.trim()}`,
+            title: "Աշխատանքային պլանը վերանայվեց ԳՏ-ի կողմից",
+            body: `${plan.month.toISOString?.() ?? plan.month}-ի պլանը վերանայվել է՝ ${reason.trim()}`,
             url: "/#/team-performance/planning",
           });
         }
@@ -755,8 +755,8 @@ teamPerformanceRouter.post("/plans/:id/reopen-as-draft", async (req, res) => {
       for (const recipient of recipients) {
         if (recipient.id === req.user.id) continue;
         notifyUser(recipient.id, "perf_plan_reviewed", {
-          title: "Performance plan reopened as draft",
-          body: `The ${plan.month.toISOString?.() ?? plan.month} plan (was ${plan.status}) was reopened for editing.`,
+          title: "Աշխատանքային պլանը վերաբացվեց որպես սևագիր",
+          body: `${plan.month.toISOString?.() ?? plan.month}-ի պլանը (եղել է՝ ${plan.status}) վերաբացվել է խմբագրման համար։`,
           url: "/#/team-performance/planning",
         });
       }
