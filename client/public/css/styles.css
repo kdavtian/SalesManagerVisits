@@ -4965,12 +4965,35 @@ input[type="search"]:focus-visible {
   gap: 8px;
 }
 
-.map-search-row input[type="search"] {
+/* The address-search icon used to be its own separate 44px button beside
+   the input, eating into the input's width before a single character of
+   the placeholder -- tight already, and worse for admin/director/CEO
+   roles who also get the manager-filter dropdown on this same row (see
+   below), which was truncating the placeholder to a few letters. It's now
+   an inline leading icon inside the field itself (like a standard search
+   bar), reclaiming that width for the text and putting the icon flush
+   against the field's own left edge instead of floating to its left. */
+.map-search-input-wrap {
+  position: relative;
   flex: 1;
   min-width: 0;
+}
+
+/* .map-top-controls prefixed on top of the wrap class (three class
+   selectors instead of two) so this reliably beats
+   .activity-search-combined input[type="search"] in activity-search-
+   filters.css, which sets padding-left back to 0 -- that rule is equal
+   specificity and loads after this file, so without the extra selector it
+   would win and silently undo the left-icon padding below regardless of
+   source order in this file. unifiedSearchEnhancements.js adds the
+   .activity-search-combined class to this same row at runtime for its own
+   (right-hand) action-icon toolbar; this input's icon is on the left
+   instead, so it needs its own padding independent of that shared rule. */
+.map-top-controls .map-search-input-wrap input[type="search"] {
+  width: 100%;
   height: 44px;
   box-sizing: border-box;
-  padding: 0 14px;
+  padding: 0 14px 0 42px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -4979,17 +5002,35 @@ input[type="search"]:focus-visible {
   box-shadow: var(--shadow-elevated);
 }
 
+/* Overrides .icon-btn's own 44x44 box (sized to sit beside the input, not
+   inside it) down to a plain, unboxed 24x24 hit area so the glyph clears
+   the input's own left padding above instead of visually colliding with
+   the placeholder text. */
+.map-search-input-wrap .map-address-search-btn {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  background: none;
+  border: none;
+  box-shadow: none;
+  color: var(--text-dim);
+  z-index: 1;
+}
+
+.map-search-input-wrap .map-address-search-btn .map-action-svg {
+  width: 18px;
+  height: 18px;
+}
+
 /* The manager filter reuses the plain filter-dropdown-btn/menu look from
    the Customers page, but needs a fixed (not flex:1) width here since it
    sits beside the search input rather than alone in its own row. */
 .map-search-row #map-manager-filter-wrap {
   flex: 0 0 auto;
   width: 130px;
-}
-
-.map-address-search-btn {
-  flex: 0 0 auto;
-  box-shadow: var(--shadow-elevated);
 }
 
 .map-filter-row {
@@ -7900,6 +7941,16 @@ form select,
   .app-main {
     /* No bottom tab bar to clear anymore. */
     padding-bottom: 24px;
+  }
+
+  /* The Personal tab is just a stack of profile/toggle rows -- .settings-
+     view's own 960px cap (see above) still left each row's control (a
+     toggle switch, a value label) stranded most of a screen-width away
+     from its own icon/label, since a boolean row has no reason to fill a
+     wide container the way the Admin tab's two-pane grid below does.
+     Capped independently, tighter, so a row reads as one unit again. */
+  #settings-personal-panel {
+    max-width: 640px;
   }
 
   /* Settings admin workspace: section list on the left, section content

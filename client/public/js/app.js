@@ -653,22 +653,25 @@ function renderNav() {
 }
 
 // Icons for the sidebar's role-visible quick-action items that aren't
-// already one of the 5 core routes (see EXCLUDED_FROM_SIDEBAR below) --
-// plain single-color glyphs matching the core items' style, not the
-// colored-background quick-action-tile treatment those same actions get
-// on the Home screen grid (dashboard.js's own QUICK_ACTION_ICON).
+// already one of the 5 core routes (see EXCLUDED_FROM_SIDEBAR below).
+// colorClass is the exact same quick-action-icon-* class the Home screen's
+// grid uses for this same action (dashboard.js's QUICK_ACTION_ICON) -- the
+// two used to diverge (plain glyph here, colored tile there) for the
+// identical destination; reusing the same class instead of inventing a
+// second palette keeps them looking like the same action everywhere it
+// appears, not two different ones.
 const SIDEBAR_ITEM_ICON = {
-  qa_plan_route: icons.planDay,
-  qa_payments: icons.payment,
-  qa_cash_expense: icons.wallet,
-  qa_pricelist: icons.tag,
-  qa_warehouse: icons.box,
-  qa_delivery: icons.truck,
-  qa_recorded: icons.clock,
-  qa_team_performance: icons.target,
-  qa_reports: icons.chart,
-  qa_debt_balances: icons.wallet,
-  qa_company_dashboard: icons.dashboard,
+  qa_plan_route: { icon: icons.planDay, colorClass: "quick-action-icon-route" },
+  qa_payments: { icon: icons.payment, colorClass: "quick-action-icon-payments" },
+  qa_cash_expense: { icon: icons.wallet, colorClass: "quick-action-icon-cash" },
+  qa_pricelist: { icon: icons.tag, colorClass: "quick-action-icon-pricelist" },
+  qa_warehouse: { icon: icons.box, colorClass: "quick-action-icon-warehouse" },
+  qa_delivery: { icon: icons.truck, colorClass: "quick-action-icon-delivery" },
+  qa_recorded: { icon: icons.clock, colorClass: "quick-action-icon-recorded" },
+  qa_team_performance: { icon: icons.target, colorClass: "quick-action-icon-team" },
+  qa_reports: { icon: icons.chart, colorClass: "quick-action-icon-reports" },
+  qa_debt_balances: { icon: icons.wallet, colorClass: "quick-action-icon-debt" },
+  qa_company_dashboard: { icon: icons.dashboard, colorClass: "quick-action-icon-company" },
 };
 
 // qa_check_in and qa_add_customer both jump into #/map (with a query
@@ -691,17 +694,21 @@ function rebuildSidebarMarkup(hash) {
   const visibleIds = visibleQuickActionIds(state.user.role, cachedSettings?.quick_action_visibility).filter(
     (id) => !EXCLUDED_FROM_SIDEBAR.has(id)
   );
-  const moreItems = QUICK_ACTIONS.filter((a) => visibleIds.includes(a.id) && QUICK_ACTION_ROUTE[a.id]).map((a) => ({
-    hash: QUICK_ACTION_ROUTE[a.id],
-    label: t(a.id),
-    icon: SIDEBAR_ITEM_ICON[a.id] || icons.chart,
-  }));
+  const moreItems = QUICK_ACTIONS.filter((a) => visibleIds.includes(a.id) && QUICK_ACTION_ROUTE[a.id]).map((a) => {
+    const entry = SIDEBAR_ITEM_ICON[a.id];
+    return {
+      hash: QUICK_ACTION_ROUTE[a.id],
+      label: t(a.id),
+      icon: entry?.icon || icons.chart,
+      colorClass: entry?.colorClass,
+    };
+  });
 
   function itemHtml(item) {
     const active = hash === item.hash;
     return `
       <button type="button" class="sidebar-item ${active ? "sidebar-item-active" : ""}" data-hash="${item.hash}" ${active ? 'aria-current="page"' : ""}>
-        <span class="sidebar-item-icon">
+        <span class="sidebar-item-icon ${item.colorClass ? `quick-action-icon ${item.colorClass}` : ""}">
           ${item.icon}
           ${item.badgeId ? `<span class="nav-badge count-badge" id="${item.badgeId}" hidden></span>` : ""}
         </span>

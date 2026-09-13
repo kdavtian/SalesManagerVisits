@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import helmet from "helmet";
+import compression from "compression";
 import cookieParser from "cookie-parser";
 import { authRouter, meRouter } from "./routes/auth.js";
 import { usersRouter } from "./routes/users.js";
@@ -68,6 +69,12 @@ const app = express();
 
 app.set("trust proxy", 1);
 
+// Every response through here is currently sent uncompressed -- CSS/JS/JSON
+// gzipped for free at essentially no CPU cost, which matters most on the
+// slow cellular connections this app already optimizes hard for elsewhere
+// (see api.js's GET cache, the offline queue, etc.).
+app.use(compression());
+
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -126,6 +133,31 @@ app.use("/api/lockdown", express.json(), lockdownRouter);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });
+});
+
+// The stylesheets are hand-edited source (comments, full indentation) --
+// minifying here at request time, rather than as a separate build step,
+// means the served bytes can never drift out of sync with the source the
+// way CACHE_VERSION did (see CLAUDE.md): there's nothing to remember to
+// rebuild, since every deploy already restarts the process. Cached in
+// memory per file after the first request so the minify cost is paid once,
+// not per request; skipped entirely outside production so editing a
+// stylesheet locally shows up on the next reload without a restart.
+const cssMinifyCache = new Map();
+app.get(/^\/css\/.*\.css$/, async (req, res, next) => {
+  const filePath = path.join(clientDir, req.path);
+  try {
+    let minified = cssMinifyCache.get(filePath);
+    if (!minified) {
+      const { default: CleanCSS } = await import("clean-css");
+      const raw = await fs.promises.readFile(filePath, "utf8");
+      minified = new CleanCSS({}).minify(raw).styles;
+      if (process.env.NODE_ENV === "production") cssMinifyCache.set(filePath, minified);
+    }
+    res.type("css").send(minified);
+  } catch {
+    next();
+  }
 });
 
 // index.html and manifest.json are excluded from static serving (index:

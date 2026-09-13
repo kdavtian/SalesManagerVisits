@@ -121,8 +121,10 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           ? ""
           : `<div class="map-top-controls">
               <div class="map-search-row">
-                <button type="button" class="icon-btn map-address-search-btn" id="map-address-search-btn" aria-label="${t("search_address_title")}" title="${t("search_address_title")}">${icons.search}</button>
-                <input type="search" id="map-customer-search" placeholder="${t("map_search_placeholder")}" aria-label="${t("map_search_placeholder")}" />
+                <div class="map-search-input-wrap">
+                  <button type="button" class="icon-btn map-address-search-btn" id="map-address-search-btn" aria-label="${t("search_address_title")}" title="${t("search_address_title")}">${icons.search}</button>
+                  <input type="search" id="map-customer-search" placeholder="${t("map_search_placeholder")}" aria-label="${t("map_search_placeholder")}" />
+                </div>
                 ${
                   canViewTeamLocations()
                     ? `<div class="filter-dropdown-wrap" id="map-manager-filter-wrap">
