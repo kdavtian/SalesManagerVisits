@@ -3,6 +3,7 @@ import { escapeHtml, formatDistance, formatAmd, categoryIcon, customerIconTint }
 import { t, getLang } from "../i18n.js";
 import { seesAllActivity } from "../state.js";
 import { openVisitDetailSheet } from "../visitDetail.js";
+import { loadWithCache } from "../listCache.js";
 
 const OUTCOMES = [
   "order_placed",
@@ -476,20 +477,31 @@ export async function renderActivity(root, navigate) {
       params.range = range;
     }
 
-    try {
-      if (range === "custom" && (!customFrom || !customTo)) {
-        allCheckins = [];
-        checkinsCapped = false;
-      } else {
-        const result = await api.listCheckins(params);
-        allCheckins = result.rows;
-        checkinsCapped = result.has_more;
-      }
-    } catch (err) {
-      container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    if (range === "custom" && (!customFrom || !customTo)) {
+      allCheckins = [];
+      checkinsCapped = false;
+      renderShell();
       return;
     }
-    renderShell();
+
+    // Stale-while-revalidate (see listCache.js), keyed by the exact date
+    // range so switching tabs never shows another range's cached rows.
+    const cacheKey = `activity-list:${range === "custom" ? `${customFrom}..${customTo}` : range}`;
+    let paintedOnce = false;
+    try {
+      await loadWithCache(
+        cacheKey,
+        () => api.listCheckins(params),
+        (result) => {
+          allCheckins = result.rows;
+          checkinsCapped = result.has_more;
+          renderShell();
+          paintedOnce = true;
+        }
+      );
+    } catch (err) {
+      if (!paintedOnce) container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    }
   }
 
   load();

@@ -4,6 +4,7 @@ import { t, getLang } from "../i18n.js";
 import { state } from "../state.js";
 import { icons } from "../icons.js";
 import { ORDER_STATUS_ICONS } from "../ordersSearchEnhancements.js";
+import { loadWithCache } from "../listCache.js";
 
 // v3 5-state machine (see migrations/051_warehouse_delivery_v3.sql):
 // draft -> submitted -> confirmed -> packed_stock_out -> delivered, every
@@ -141,17 +142,27 @@ export async function renderOrders(root, navigate) {
   });
 
   async function load() {
+    // Stale-while-revalidate (see listCache.js): repaint from last
+    // session's first page for this exact status tab immediately, then
+    // swap in the live page once it lands -- pagination (loadMore below)
+    // stays fully live, only the first page benefits from this.
     listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+    let paintedOnce = false;
     try {
       const params = activeStatus ? { status: activeStatus } : {};
-      const result = await api.listOrders(params);
-      orders = result.rows;
-      hasMore = result.has_more;
+      await loadWithCache(
+        `orders-list:${activeStatus || "all"}`,
+        () => api.listOrders(params),
+        (result) => {
+          orders = result.rows;
+          hasMore = result.has_more;
+          paint();
+          paintedOnce = true;
+        }
+      );
     } catch (err) {
-      listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
-      return;
+      if (!paintedOnce) listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     }
-    paint();
   }
 
   async function loadMore() {

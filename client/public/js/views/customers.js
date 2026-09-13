@@ -3,6 +3,7 @@ import { escapeHtml, formatDateTime, formatAmd, haversineMeters, getCurrentPosit
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state, seesAllActivity } from "../state.js";
+import { loadWithCache } from "../listCache.js";
 
 const FILTERS = [
   { key: "", labelKey: "filter_all" },
@@ -543,12 +544,29 @@ export function renderCustomers(root, navigate, initialFilter) {
   }
 
   async function load() {
+    // Stale-while-revalidate (see listCache.js): show last session's list
+    // instantly, then swap in the live one the moment it arrives, instead
+    // of a loading spinner every single time this screen opens. Keyed by
+    // showDebt since that toggle changes the shape of the data (an extra
+    // debt column/join), not just a filter over what's already fetched.
+    // Only shown if there's no cached list to paint over it immediately --
+    // set here rather than left from before so a debt-toggle reload (which
+    // calls load() again) doesn't flash a blank loading state over an
+    // already-visible list while its own cache lookup resolves.
     listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+    let paintedOnce = false;
     try {
-      allCustomers = await api.listCustomers(showDebt ? { include_debt: 1 } : {});
-      render();
+      await loadWithCache(
+        `customers-list:${showDebt ? "with-debt" : "plain"}`,
+        () => api.listCustomers(showDebt ? { include_debt: 1 } : {}),
+        (data) => {
+          allCustomers = data;
+          render();
+          paintedOnce = true;
+        }
+      );
     } catch (err) {
-      listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+      if (!paintedOnce) listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     }
   }
 
