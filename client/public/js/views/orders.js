@@ -86,9 +86,16 @@ export async function renderOrders(root, navigate) {
     </div>
   `;
 
+  // Submitted is the default view -- that's the queue someone opening this
+  // page almost always cares about (what still needs confirming), not the
+  // full history. Mirrors Payments' own "pending by default" convention,
+  // and matches what the Orders nav badge itself counts, so tapping a
+  // badge showing "3" lands on exactly those 3 instead of every order.
+  const DEFAULT_STATUS_FILTER = "submitted";
+
   const filterRow = root.querySelector("#order-status-filters");
   filterRow.innerHTML = STATUS_FILTERS.map(
-    (s) => `<button class="map-filter-chip ${s === "" ? "chip-active" : ""}" data-status="${s}" aria-pressed="${s === "" ? "true" : "false"}">${s ? t(STATUS_META[s].key) : t("all_statuses")}</button>`
+    (s) => `<button class="map-filter-chip ${s === DEFAULT_STATUS_FILTER ? "chip-active" : ""}" data-status="${s}" aria-pressed="${s === DEFAULT_STATUS_FILTER ? "true" : "false"}">${s ? t(STATUS_META[s].key) : t("all_statuses")}</button>`
   ).join("");
 
   const listEl = root.querySelector("#orders-list");
@@ -96,7 +103,7 @@ export async function renderOrders(root, navigate) {
   const filterBtn = root.querySelector("#order-filter-btn");
   const filterMenu = root.querySelector("#order-filter-menu");
 
-  let activeStatus = "";
+  let activeStatus = DEFAULT_STATUS_FILTER;
   let channelFilter = "";
   let orders = [];
   let hasMore = false;
