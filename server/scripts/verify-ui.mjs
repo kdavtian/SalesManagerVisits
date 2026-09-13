@@ -9,7 +9,12 @@ const files = Object.fromEntries(
   await Promise.all(
     [
       "index.html",
-      "manifest.json",
+      // manifest.json itself no longer exists as a static file -- it's
+      // generated per-request from the calculator_mode_enabled admin
+      // setting (see server/src/index.js) -- so both variants it can
+      // serve are checked directly instead.
+      "manifest.app.json",
+      "manifest.calculator.json",
       "css/styles.css",
       "js/app.js",
       "js/util.js",
@@ -26,7 +31,8 @@ const checks = [
   ["main content can receive routed focus", "index.html", /<main[^>]+tabindex="-1"/],
   ["primary navigation has an accessible name", "index.html", /<nav[^>]+aria-label="Primary navigation"/],
   ["page-level pinch/double-tap zoom is disabled outside the map", "index.html", /<meta name="viewport"[^>]*maximum-scale=1[^>]*>/],
-  ["landscape is allowed by the PWA", "manifest.json", /"orientation"\s*:\s*"any"/],
+  ["landscape is allowed by the PWA (normal branding)", "manifest.app.json", /"orientation"\s*:\s*"any"/],
+  ["landscape is allowed by the PWA (calculator disguise)", "manifest.calculator.json", /"orientation"\s*:\s*"any"/],
   ["application content creates an isolated stacking context", "css/styles.css", /\.app-main\s*\{[^}]*isolation:\s*isolate/s],
   ["navigation stays above map controls", "css/styles.css", /\.nav-bar\s*\{[^}]*z-index:\s*1200/s],
   ["map route keeps navigation opaque", "css/styles.css", /\.map-active\s+\.nav-bar\s*\{/],
