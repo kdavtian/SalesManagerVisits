@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v151";
+const CACHE_VERSION = "field-visits-v152";
 const TILE_CACHE = "field-visits-tiles-v4";
 // Anything fetched at runtime that wasn't already in APP_SHELL gets cached
 // here, kept separate from CACHE_VERSION on purpose -- see trimCache below,
@@ -10,7 +10,15 @@ const RUNTIME_CACHE = CACHE_VERSION + "-runtime";
 const APP_SHELL = [
   "/",
   "/index.html",
-  "/manifest.json",
+  // manifest.json is deliberately NOT precached here -- it's generated
+  // per-request from the calculator-mode admin setting (see index.js), not
+  // a static file, so baking a snapshot of it into this versioned cache
+  // would mean whichever branding was active at the moment this service
+  // worker installed could keep being served as the "offline" fallback
+  // indefinitely, regardless of later toggles. The fetch handler below is
+  // already network-first for it; going without an offline fallback here
+  // is the safer failure direction for a file that's only actually read
+  // at PWA-install time anyway.
   "/css/styles.css",
   "/css/activity-search-filters.css",
   "/css/activity-date-picker.css",

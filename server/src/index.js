@@ -158,6 +158,14 @@ const REAL_APP_BRANDING = {
 
 app.get("/manifest.json", async (req, res) => {
   const calculatorModeEnabled = await getCalculatorModeEnabled();
+  // no-store: this file's content depends on an admin setting that can
+  // change at any time -- a browser or intermediary cache serving a stale
+  // copy would mean a device stuck on the old icon/name after Calculator
+  // Mode is toggled, the exact staleness this route exists to avoid. The
+  // service worker's own fetch handler is already network-first for this
+  // path, so this header is belt-and-suspenders for the HTTP cache layer
+  // underneath it (and any proxy in between).
+  res.set("Cache-Control", "no-store");
   res.sendFile(
     path.join(clientDir, calculatorModeEnabled ? "manifest.calculator.json" : "manifest.app.json")
   );
@@ -181,6 +189,9 @@ app.get("*", async (req, res) => {
   const html = indexHtmlTemplate
     .replace("<!--CALCULATOR_MODE_HEAD-->", head)
     .replace("<!--CALCULATOR_MODE_FLAG-->", `<meta name="calc-mode" content="${calculatorModeEnabled}" />`);
+  // Same reasoning as /manifest.json above -- this page's branding depends
+  // on the same admin setting and must never be served stale from cache.
+  res.set("Cache-Control", "no-store");
   res.type("html").send(html);
 });
 
