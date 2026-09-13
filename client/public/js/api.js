@@ -320,6 +320,7 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/reports/payments${qs ? `?${qs}` : ""}`);
   },
+  getCashCustodyReport: () => request(`/reports/cash-custody`),
   getCustomerDebtReport: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/reports/customer-debt${qs ? `?${qs}` : ""}`);
