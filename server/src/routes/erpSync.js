@@ -451,8 +451,8 @@ erpSyncRouter.post("/daily-report", syncKeyLimiter, requireSyncKey, async (req, 
     await Promise.all(
       recipients.map((u) =>
         notifyUser(u.id, "daily_report_ready", {
-          title: "Daily management report ready",
-          body: `Sales, payments, and balance data for ${report_date} is now available.`,
+          title: "Օրական հաշվետվությունը պատրաստ է",
+          body: `${report_date}-ի վաճառքի, վճարումների և մնացորդի տվյալներն այժմ հասանելի են։`,
           url: "/#/reports?r=daily_management",
         })
       )
@@ -463,6 +463,15 @@ erpSyncRouter.post("/daily-report", syncKeyLimiter, requireSyncKey, async (req, 
 });
 
 const GENERATED_REPORT_TYPES = new Set(["sales_director", "debt_receivables", "ceo_management"]);
+
+// Mirrors the client's own report_documents_type_* i18n labels (see
+// client/public/js/i18n.js) so the notification names the report the same
+// way the Reports & Documents page does.
+const GENERATED_REPORT_TYPE_LABELS_HY = {
+  sales_director: "Sales Director հաշվետվություն",
+  debt_receivables: "Դեբիտորական հաշվետվություն",
+  ceo_management: "CEO կառավարման հաշվետվություն",
+};
 
 // Pushes the literal generated Excel workbook (Sales Director report,
 // debt/receivables workbook, CEO management report) the bot already builds
@@ -499,8 +508,8 @@ erpSyncRouter.post("/reports", syncKeyLimiter, requireSyncKey, reportFileUpload.
   await Promise.all(
     recipients.map((u) =>
       notifyUser(u.id, "generated_report_ready", {
-        title: "New report available",
-        body: `${report_type.replace(/_/g, " ")} for ${report_date} is ready to download.`,
+        title: "Նոր հաշվետվություն է հասանելի",
+        body: `${GENERATED_REPORT_TYPE_LABELS_HY[report_type] ?? report_type}-ը ${report_date}-ի համար պատրաստ է ներբեռնման։`,
         url: "/#/reports?r=documents",
       })
     )

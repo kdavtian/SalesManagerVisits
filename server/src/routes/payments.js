@@ -142,7 +142,7 @@ export async function insertPayment({ customer, amount, paymentDate, salesManage
       const { rows: recipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [PAYMENT_NOTIFY_ROLES]);
       for (const recipient of recipients) {
         notifyUser(recipient.id, "payment_submitted", {
-          title: "New payment",
+          title: "Նոր վճարում",
           body: `${customer.name}${customer.erp_customer_id ? ` · ID ${customer.erp_customer_id}` : ""}\n${Number(amount).toLocaleString()} AMD\n${manager.name}${salesChannel ? ` · ${salesChannel}` : ""}`,
           url: `/#/payments/${paymentId}`,
         });

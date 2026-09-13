@@ -197,14 +197,14 @@ deliveryRouter.post("/routes/plan", async (req, res) => {
       for (const recipient of await pool.query("SELECT id FROM users WHERE role = ANY($1)", [DRIVER_NOTIFY_ROLES]).then((r) => r.rows)) {
         if (recipient.id === driverId) continue;
         notifyUser(recipient.id, "order_packed", {
-          title: "Delivery route planned",
-          body: `A route with ${orders.length} stop${orders.length === 1 ? "" : "s"} was planned for today.`,
+          title: "Առաքման երթուղին պլանավորվեց",
+          body: `Այսօրվա համար պլանավորվել է ${orders.length} կանգառով երթուղի։`,
           url: "/#/delivery",
         });
       }
       notifyUser(driverId, "order_packed", {
-        title: "New delivery route",
-        body: `You have ${orders.length} stop${orders.length === 1 ? "" : "s"} on today's route.`,
+        title: "Նոր առաքման երթուղի",
+        body: `Ձեզ մոտ կա ${orders.length} կանգառ այսօրվա երթուղում։`,
         url: "/#/delivery",
       });
     } catch (err) {
@@ -357,8 +357,8 @@ deliveryRouter.post("/orders/:id/confirm", (req, res, next) => {
       const { rows: recipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [DELIVERY_OUTCOME_NOTIFY_ROLES]);
       for (const recipient of recipients) {
         notifyUser(recipient.id, "order_delivered", {
-          title: "Order delivered",
-          body: `${order.customer_name}'s order was delivered.`,
+          title: "Պատվերն առաքվեց",
+          body: `${order.customer_name}-ի պատվերն առաքվել է։`,
           url: "/#/orders",
         });
       }
@@ -396,8 +396,8 @@ deliveryRouter.post("/orders/:id/fail", async (req, res) => {
       const { rows: recipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [DELIVERY_OUTCOME_NOTIFY_ROLES]);
       for (const recipient of recipients) {
         notifyUser(recipient.id, "order_returned", {
-          title: "Delivery failed",
-          body: `${order.customer_name}'s delivery attempt failed and was returned to draft.`,
+          title: "Առաքումը ձախողվեց",
+          body: `${order.customer_name}-ի առաքման փորձը ձախողվել է և վերադարձվել է սևագիր։`,
           url: "/#/orders",
         });
       }

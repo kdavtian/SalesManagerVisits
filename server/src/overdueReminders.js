@@ -53,8 +53,8 @@ export async function checkOverdueReminders() {
 
     lastNotifiedDate.set(plan.user_id, today);
     await notifyUser(plan.user_id, "visit_reminder", {
-      title: "Planned visits waiting",
-      body: `You still have ${remaining.length} planned stop${remaining.length === 1 ? "" : "s"} to visit today.`,
+      title: "Պլանավորված այցելություններ են սպասում",
+      body: `Ձեզ դեռ մնացել է ${remaining.length} պլանավորված կանգառ այսօրվա համար։`,
       url: "/#/map",
     });
   }
