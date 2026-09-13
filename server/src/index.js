@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import helmet from "helmet";
+import compression from "compression";
 import cookieParser from "cookie-parser";
 import { authRouter, meRouter } from "./routes/auth.js";
 import { usersRouter } from "./routes/users.js";
@@ -68,6 +69,12 @@ const app = express();
 
 app.set("trust proxy", 1);
 
+// Every response through here is currently sent uncompressed -- CSS/JS/JSON
+// gzipped for free at essentially no CPU cost, which matters most on the
+// slow cellular connections this app already optimizes hard for elsewhere
+// (see api.js's GET cache, the offline queue, etc.).
+app.use(compression());
+
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -128,6 +135,31 @@ app.get("/api/health", (req, res) => {
   res.json({ ok: true });
 });
 
+// The stylesheets are hand-edited source (comments, full indentation) --
+// minifying here at request time, rather than as a separate build step,
+// means the served bytes can never drift out of sync with the source the
+// way CACHE_VERSION did (see CLAUDE.md): there's nothing to remember to
+// rebuild, since every deploy already restarts the process. Cached in
+// memory per file after the first request so the minify cost is paid once,
+// not per request; skipped entirely outside production so editing a
+// stylesheet locally shows up on the next reload without a restart.
+const cssMinifyCache = new Map();
+app.get(/^\/css\/.*\.css$/, async (req, res, next) => {
+  const filePath = path.join(clientDir, req.path);
+  try {
+    let minified = cssMinifyCache.get(filePath);
+    if (!minified) {
+      const { default: CleanCSS } = await import("clean-css");
+      const raw = await fs.promises.readFile(filePath, "utf8");
+      minified = new CleanCSS({}).minify(raw).styles;
+      if (process.env.NODE_ENV === "production") cssMinifyCache.set(filePath, minified);
+    }
+    res.type("css").send(minified);
+  } catch {
+    next();
+  }
+});
+
 // index.html and manifest.json are excluded from static serving (index:
 // false, and manifest.json is shadowed by the explicit route below) --
 // both are generated per-request from the calculator-mode setting instead;
@@ -158,6 +190,14 @@ const REAL_APP_BRANDING = {
 
 app.get("/manifest.json", async (req, res) => {
   const calculatorModeEnabled = await getCalculatorModeEnabled();
+  // no-store: this file's content depends on an admin setting that can
+  // change at any time -- a browser or intermediary cache serving a stale
+  // copy would mean a device stuck on the old icon/name after Calculator
+  // Mode is toggled, the exact staleness this route exists to avoid. The
+  // service worker's own fetch handler is already network-first for this
+  // path, so this header is belt-and-suspenders for the HTTP cache layer
+  // underneath it (and any proxy in between).
+  res.set("Cache-Control", "no-store");
   res.sendFile(
     path.join(clientDir, calculatorModeEnabled ? "manifest.calculator.json" : "manifest.app.json")
   );
@@ -181,6 +221,9 @@ app.get("*", async (req, res) => {
   const html = indexHtmlTemplate
     .replace("<!--CALCULATOR_MODE_HEAD-->", head)
     .replace("<!--CALCULATOR_MODE_FLAG-->", `<meta name="calc-mode" content="${calculatorModeEnabled}" />`);
+  // Same reasoning as /manifest.json above -- this page's branding depends
+  // on the same admin setting and must never be served stale from cache.
+  res.set("Cache-Control", "no-store");
   res.type("html").send(html);
 });
 

@@ -15,6 +15,11 @@ const statusSvg = (content) =>
 // "moving through the warehouse" stage (packed_stock_out's plain arrow,
 // deliberately badge-less so it doesn't get confused with either).
 export const ORDER_STATUS_ICONS = {
+  // The "All" filter tab -- a stack of rows, distinct from every per-stage
+  // silhouette below it but drawn in the same stroke/viewBox convention so
+  // it reads as part of the same icon family instead of standing out as
+  // the one tab nothing was designed for.
+  all: statusSvg(`<rect x="5" y="5" width="22" height="6" rx="1.5"/><rect x="5" y="13" width="22" height="6" rx="1.5"/><rect x="5" y="21" width="22" height="6" rx="1.5"/>`),
   draft: statusSvg(`<path d="M7 3.5h11l6 6V27a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 27V5A1.5 1.5 0 0 1 7 3.5Z"/><path d="M18 3.5v6h6M10 13h8M10 17h7M10 21h4"/><path d="m15.5 25.5 8.1-8.1 2.9 2.9-8.1 8.1-4 .9z"/>`),
   submitted: statusSvg(`<path d="M7 3.5h11l6 6V27a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 27V5A1.5 1.5 0 0 1 7 3.5Z"/><path d="M18 3.5v6h6M10 13h8M10 17h7M10 21h4"/><path d="m15 23 13-6-6 13-2.1-5z"/><path d="m19.9 25 4.2-4.1"/>`),
   confirmed: statusSvg(`<path d="M6.5 3.5h13l6 6V26A2.5 2.5 0 0 1 23 28.5H6.5A2.5 2.5 0 0 1 4 26V6A2.5 2.5 0 0 1 6.5 3.5Z"/><path d="M19.5 3.5v6h6"/><path d="m8 11 5-2.7 5 2.7-5 2.7zM8 11v5.5l5 2.7 5-2.7V11M13 13.7v5.5"/><path d="M9 22h8"/><circle cx="23" cy="23" r="6"/><path d="m20.2 23 1.9 2 3.8-4.2"/>`),
@@ -34,8 +39,12 @@ export const ORDER_STATUS_ICONS = {
 function decorateOrdersStatusUi() {
   const filterRow = document.querySelector("#order-status-filters");
   filterRow?.querySelectorAll("[data-status]").forEach((btn) => {
-    const status = btn.dataset.status || "";
-    if (!status || !ORDER_STATUS_ICONS[status]) return;
+    // The "All" tab's data-status is "" (see STATUS_FILTERS in
+    // views/orders.js) -- mapped to the "all" icon key here rather than
+    // skipped, so every tab in the row gets one, not just the 5 with an
+    // actual order status behind them.
+    const status = btn.dataset.status || "all";
+    if (!ORDER_STATUS_ICONS[status]) return;
     let icon = btn.querySelector(".order-filter-status-icon");
     if (!icon) {
       icon = document.createElement("span");

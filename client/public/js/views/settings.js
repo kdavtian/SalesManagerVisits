@@ -125,9 +125,16 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         ${settingsToggleRow({ icon: ICON.appearance, label: t("appearance"), value: getTheme() === "dark" ? t("dark") : t("light"), id: "toggle-appearance", checked: getTheme() === "dark" })}
         ${settingsToggleRow({ icon: ICON.language, label: t("language"), value: getLang() === "hy" ? t("armenian") : t("english"), id: "toggle-language", checked: getLang() === "hy" })}
         ${settingsToggleRow({ icon: ICON.bolt, label: t("efficiency_mode"), value: getPerfMode() === "efficiency" ? t("toggle_on") : t("toggle_off"), id: "toggle-perf-mode", checked: getPerfMode() === "efficiency" })}
+      </div>
+      <!-- .settings-hint is styled as a footnote directly under the card
+           above it (see styles.css) -- efficiency mode is that card's last
+           row, so the hint explaining it needs to end the card, not sit
+           after push notifications too where it reads as a disclaimer for
+           the whole preferences section. -->
+      <p class="muted settings-hint">${t("efficiency_mode_hint")}</p>
+      <div class="card settings-list">
         ${settingsToggleRow({ icon: ICON.bell, label: t("push_notifications"), value: "…", id: "toggle-push-notifications", checked: false })}
       </div>
-      <p class="muted settings-hint">${t("efficiency_mode_hint")}</p>
 
       <h2 class="section-title">${t("notification_preferences_title")}</h2>
       <div class="card settings-list" id="notification-prefs-list">

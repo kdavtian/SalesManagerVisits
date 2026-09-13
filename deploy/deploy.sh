@@ -44,14 +44,20 @@ until docker compose exec -T db pg_isready -U "${POSTGRES_USER:-fieldvisits}" >/
   sleep 1
 done
 
+echo "==> Running database migrations"
+# Via a one-off container (docker compose run, not exec) so this runs
+# against the *new* image's migrations before the app service itself is
+# ever started -- migrating after starting it (the previous order) left a
+# window where already-running requests could hit new code expecting a
+# column/table the database didn't have yet, since nothing here waits for
+# that gap to close before traffic can reach the app.
+docker compose run --rm app npm run migrate
+
 echo "==> Starting app"
 docker compose up -d app
 
 echo "==> Running UI regression checks"
 docker compose exec -T app npm run verify:ui
-
-echo "==> Running database migrations"
-docker compose exec -T app npm run migrate
 
 echo "==> Waiting for app health and checking served assets"
 docker compose exec -T app npm run verify:deployment
