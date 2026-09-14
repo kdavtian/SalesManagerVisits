@@ -6106,16 +6106,18 @@ input[type="search"]:focus-visible {
 
 /* The customer-tier avatar (a category glyph tinted via .list-row-icon-
    tier-bronze/-silver/-tier-gold/etc, currentColor-driven now that the
-   glyph itself is an inline SVG) shows tier color through the glyph, not a
-   background ring -- the base .list-row-icon background/border above is
-   still wanted by every OTHER user of this shared class (admin.js's
-   initials avatar, orders.js's status icon, both of which have no glyph
-   of their own to carry color), just not here, where it was a second,
-   redundant frame around artwork that used to carry its own baked-in one
-   too (reported as "icon inside an icon frame"). */
-.list-row-icon-glyph-only {
+   glyph itself is an inline SVG): fill stays empty (the row's own
+   background shows through, not a tier-tinted wash) and the tier color
+   shows on the outline + glyph instead -- the base .list-row-icon
+   background/border above is still wanted by every OTHER user of this
+   shared class (admin.js's initials avatar, orders.js's status icon, both
+   of which have no glyph of their own to carry color), just not here.
+   Doubled up as .list-row-icon.list-row-icon-glyph-only so this beats the
+   tier classes' own background on specificity regardless of each class's
+   position in this file, rather than depending on source order. */
+.list-row-icon.list-row-icon-glyph-only {
   background: none;
-  border: none;
+  border: 1.5px solid currentColor;
 }
 
 button.list-row-icon {
