@@ -385,4 +385,13 @@ export const api = {
   // Debt balances (see server/src/routes/debtBalances.js) -- read-only,
   // role-scoped server-side already.
   getDebtBalances: () => request("/debt-balances"),
+
+  // Sales records (see server/src/routes/sales.js) -- read-only ERP order
+  // history, role-scoped server-side already.
+  getSales: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/sales${qs ? `?${qs}` : ""}`);
+  },
+  getSalesOrder: (erpCustomerId, orderId) =>
+    request(`/sales/order?${new URLSearchParams({ erp_customer_id: erpCustomerId, order_id: orderId }).toString()}`),
 };
