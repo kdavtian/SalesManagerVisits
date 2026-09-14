@@ -9,9 +9,23 @@
 // Backed by IndexedDB (not localStorage) since a customer/orders list can
 // run well past what localStorage's synchronous ~5-10MB budget comfortably
 // holds, and this module already needs to be async either way.
+import { state } from "./state.js";
+
 const DB_NAME = "fieldvisits_list_cache";
 const STORE = "responses";
 let dbPromise = null;
+
+// Every stored key is scoped to the signed-in user -- this store isn't
+// cleared on logout (an entry losing its instant-open on the next login is
+// a worse tradeoff than wiping every screen's cache on every logout), so
+// without this a second rep signing into the same device would see the
+// first rep's cached orders/customers/activity flash on screen before the
+// real fetch overwrote it (reported as "another user's orders can
+// appear"). clearListCache() below is still called on logout as
+// defense-in-depth, not a substitute for this.
+function scopedKey(key) {
+  return `${state.user?.id ?? "anon"}:${key}`;
+}
 
 function openDb() {
   if (!dbPromise) {
@@ -29,7 +43,7 @@ async function getCached(key) {
   try {
     const db = await openDb();
     return await new Promise((resolve, reject) => {
-      const req = db.transaction(STORE, "readonly").objectStore(STORE).get(key);
+      const req = db.transaction(STORE, "readonly").objectStore(STORE).get(scopedKey(key));
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
@@ -44,12 +58,29 @@ async function setCached(key, value) {
   try {
     const db = await openDb();
     await new Promise((resolve, reject) => {
-      const req = db.transaction(STORE, "readwrite").objectStore(STORE).put(value, key);
+      const req = db.transaction(STORE, "readwrite").objectStore(STORE).put(value, scopedKey(key));
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
   } catch {
     // Best-effort cache write; losing it only costs the next instant-open.
+  }
+}
+
+// Called on logout, alongside scopedKey() above -- belt and suspenders
+// against a shared device ever showing one rep's cached list data to the
+// next rep who signs in, in case some key is ever cached without going
+// through getCached/setCached's own scoping.
+export async function clearListCache() {
+  try {
+    const db = await openDb();
+    await new Promise((resolve, reject) => {
+      const req = db.transaction(STORE, "readwrite").objectStore(STORE).clear();
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    // Nothing to clean up if IndexedDB never opened in the first place.
   }
 }
 
