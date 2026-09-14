@@ -83,7 +83,7 @@ export function renderCustomers(root, navigate, initialFilter) {
       <div class="list-header">
         <h1>${t("nav_customers")}</h1>
         <button class="list-header-add-btn" id="toggle-debt-btn" aria-label="${t("show_outstanding_debt")}" title="${t("show_outstanding_debt")}" aria-pressed="false">${icons.payment}</button>
-        <button class="list-header-add-btn" id="add-customer-btn" aria-label="${t("add_customer")}" title="${t("add_customer")}">${icons.plus}</button>
+        <button class="list-header-add-btn customer-map-add-action" id="add-customer-btn" aria-label="${t("add_customer")}" title="${t("add_customer")}">${icons.mapPinPlus}</button>
       </div>
 
       <div class="customer-stats-bar" id="customer-stats-bar"></div>

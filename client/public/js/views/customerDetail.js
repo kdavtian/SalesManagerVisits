@@ -269,10 +269,19 @@ function renderErpCard(customer, erpOrders) {
       return d && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
     })
     .reduce((sum, o) => sum + Number(o.total_amd), 0);
-  // erpOrders is already sorted order_date DESC by the API, so [0] is the
-  // most recent order within the "recent" (last 3 months) scope this page
-  // fetches -- good enough for a summary tile without a separate request.
-  const lastOrderDate = orders[0] ? parseDateOnly(orders[0].order_date)?.toLocaleDateString() : null;
+  // customer.erp_last_order_date is unbounded (a plain MAX(order_date), see
+  // GET /customers/:id) -- unlike orders[0], which only reflects the
+  // "recent" (last 3 months) scope this page's own order list fetches for
+  // the "Sales this month" tile above. Without it, a customer whose last
+  // order predates that window showed "-" here despite having order
+  // history, just not within it. orders[0] is still the fallback for an
+  // older cached customer object (offline/stale listCache) that hasn't
+  // picked up the new field yet.
+  const lastOrderDate = customer.erp_last_order_date
+    ? parseDateOnly(customer.erp_last_order_date)?.toLocaleDateString()
+    : orders[0]
+      ? parseDateOnly(orders[0].order_date)?.toLocaleDateString()
+      : null;
 
   return `
     <div class="detail-stat-grid">

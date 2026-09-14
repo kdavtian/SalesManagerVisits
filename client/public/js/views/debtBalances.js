@@ -103,7 +103,7 @@ export async function renderDebtBalances(root, navigate) {
   function rowHtml(r) {
     const managerLabel = canGroup && mode === "flat" ? escapeHtml(r.assigned_manager_name || t("unassigned")) : "";
     return `
-      <div class="card debt-balance-card">
+      <button type="button" class="card debt-balance-card" data-customer-id="${r.internal_customer_id}">
         <div class="debt-balance-row">
           <span class="muted">${t("customer_id_label")}: ${escapeHtml(r.customer_id || "")}${managerLabel ? ` · ${managerLabel}` : ""}</span>
           <span class="text-amount debt-balance-amount">${formatAmd(Number(r.remaining_balance))}</span>
@@ -113,7 +113,7 @@ export async function renderDebtBalances(root, navigate) {
           <span>${t("debt_balances_last_payment")}: ${formatDateOnly(r.last_payment_date)}</span>
           <span>${t("debt_balances_last_visit")}: ${formatDate(r.last_visit_at)}</span>
         </div>
-      </div>`;
+      </button>`;
   }
 
   let rows = [];
@@ -153,6 +153,9 @@ export async function renderDebtBalances(root, navigate) {
     } else {
       listEl.innerHTML = visible.map(rowHtml).join("");
     }
+    listEl.querySelectorAll(".debt-balance-card").forEach((card) => {
+      card.addEventListener("click", () => navigate(`#/customers/${card.dataset.customerId}`));
+    });
   }
 
   async function load() {

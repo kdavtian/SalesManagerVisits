@@ -243,7 +243,13 @@ customersRouter.get("/:id", async (req, res) => {
           WHERE ch.customer_id = c.id
             AND ch.amount_collected_amd IS NOT NULL
             AND (erp.synced_at IS NULL OR ch.timestamp > erp.synced_at)
-       ) AS collected_since_sync_amd
+       ) AS collected_since_sync_amd,
+       -- Unbounded, unlike GET /:id/erp-orders?scope=recent (which windows
+       -- to the last 3 months for the "Sales this month" tile's purposes)
+       -- -- a customer whose last order is older than that window was
+       -- showing "-" here even though they do have order history, just
+       -- not within that window.
+       (SELECT MAX(eol.order_date) FROM erp_order_lines eol WHERE eol.erp_customer_id = c.erp_customer_id) AS erp_last_order_date
      FROM customers c
      LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
      LEFT JOIN users am ON am.id = c.assigned_manager_id
@@ -271,6 +277,7 @@ customersRouter.get("/:id", async (req, res) => {
     customer.erp_days_since_payment = null;
     customer.erp_aging_bucket = null;
     customer.erp_recent_orders = [];
+    customer.erp_last_order_date = null;
     customer.collected_since_sync_amd = 0;
     customer.estimated_debt_amd = null;
   }

@@ -48,7 +48,8 @@ debtBalancesRouter.get("/", async (req, res) => {
     where += ` AND c.assigned_manager_id = $${params.length}`;
   }
   const { rows } = await pool.query(
-    `SELECT c.erp_customer_id AS customer_id,
+    `SELECT c.id AS internal_customer_id,
+            c.erp_customer_id AS customer_id,
             c.name AS customer_name,
             ecd.debt_amd AS remaining_balance,
             GREATEST(ecd.last_payment_date, ${LAST_APP_PAYMENT_SUBQUERY}) AS last_payment_date,
