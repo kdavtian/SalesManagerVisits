@@ -4596,41 +4596,31 @@ input[type="search"]:focus-visible {
   flex-shrink: 0;
 }
 
-/* Company Dashboard's period picker sits on its own row right under the
-   header instead of packed into .detail-header alongside the title --
-   the title + a select together didn't reliably fit one row at narrow
-   widths (Armenian "Ընկերության վահանակ" plus a "Today/WTD/MTD/YTD"
-   select truncated the title behind its own ellipsis). */
-.company-dashboard-period-row {
-  display: flex;
-  justify-content: flex-end;
-  margin: 4px 0 14px;
+/* Company Dashboard's period row reuses Activity's own tab look
+   (.activity-tabs/.activity-tab) instead of a plain <select>, so it reads
+   as the same kind of control as every other range filter in the app. */
+.company-dashboard-period-tabs {
+  padding: 14px 16px 0;
+  margin: 0 -16px 14px;
 }
 
-/* Compact period picker -- same box-model as a form select but sized to
-   its own content instead of stretching full-width like one. */
-.period-select {
-  width: auto;
-  padding: 7px 26px 7px 10px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text);
-  font-size: 0.85rem;
-  font-weight: 600;
+/* Large AMD totals (Sales/Collected/Plan) were wrapping onto a second line
+   inside their half-width .stat-card, and the Sales-vs-Plan comparison
+   line (.perf-kpi-main) could do the same -- both are scoped to this page
+   only (.stat-value/.perf-kpi-* are shared components elsewhere) so a
+   large company-wide total always reads on one line instead of wrapping. */
+.company-dashboard-view .stat-value {
+  font-size: 1.3rem;
+  white-space: nowrap;
 }
 
-.period-select:focus {
-  outline: none;
-  border-color: var(--accent);
+.company-dashboard-view .perf-kpi-main {
+  flex-wrap: nowrap;
 }
 
-/* Not inside a <form>, so -- same reasoning as input[type="search"]:focus-
-   visible elsewhere in this file -- it doesn't get form select:focus's
-   softer ring and would otherwise fall back to the global :focus-visible
-   ring at full strength on top of the border-color change directly above. */
-.period-select:focus-visible {
-  box-shadow: none;
+.company-dashboard-view .perf-kpi-actual,
+.company-dashboard-view .perf-kpi-target {
+  white-space: nowrap;
 }
 
 /* Debt Balances headline total -- pushed to the right edge of the
@@ -6180,24 +6170,43 @@ button.list-row-icon {
   font: inherit;
 }
 
-/* The amount now rides on the same line as the status badge (inside
-   .payment-row-main's own .list-row-bottom), so a card only grows this
-   extra line -- just the Approve button, right-aligned -- on rows that
-   actually have one to review; every other row is a line shorter than it
-   used to be. */
-.list-row:has(.payment-row-action-line) {
+/* Status, amount and (on a pending row) Approve all sit on one shared
+   line below the name/meta -- .payment-row-main only ever holds the name
+   and meta line now. */
+.list-row:has(.payment-row-bottom-line) {
   flex-wrap: wrap;
 }
 
-.list-row:has(.payment-row-action-line) .payment-row-main {
+.list-row:has(.payment-row-bottom-line) .payment-row-main {
   flex-basis: 100%;
 }
 
-.payment-row-action-line {
+.payment-row-bottom-line {
   flex-basis: 100%;
   display: flex;
-  justify-content: flex-end;
-  margin-top: 2px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* The status badge is the one piece here with unpredictable width (a long
+   Armenian label in particular) -- letting it wrap onto a second line
+   instead of forcing a fixed width keeps the amount and Approve button on
+   the same row and at their natural size regardless of label length. */
+.payment-row-bottom-line .payment-status-badge {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: normal;
+  line-height: 1.15;
+}
+
+.payment-row-bottom-line .text-amount {
+  flex: 0 0 auto;
+}
+
+.payment-row-bottom-line .payment-approve-btn {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .list-group-heading {
