@@ -32,8 +32,18 @@ function safeAmd(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
-function comparisonBarHtml(label, actual, target) {
+// collected is optional -- when given (and there's a target to place it
+// against), a "|" tick mark is overlaid on the bar at the collected
+// amount's own percent-of-target position, so actual sales and actual
+// cash collected can be compared on the same bar instead of only seeing
+// collected as a separate number below it.
+function comparisonBarHtml(label, actual, target, collected) {
   const pct = target > 0 ? Math.min(100, Math.round((actual / target) * 100)) : 0;
+  const collectedPct = target > 0 && collected != null ? Math.min(100, Math.round((collected / target) * 100)) : null;
+  const mark =
+    collectedPct !== null
+      ? `<div class="perf-kpi-bar-mark" style="left:${collectedPct}%" title="${escapeHtml(t("company_dashboard_collected_label"))}: ${escapeHtml(formatAmd(Math.round(collected)))}"></div>`
+      : "";
   return `
     <div class="perf-kpi-block">
       <div class="perf-kpi-head"><span class="perf-kpi-label">${escapeHtml(label)}</span></div>
@@ -41,7 +51,7 @@ function comparisonBarHtml(label, actual, target) {
         <span class="perf-kpi-actual">${formatAmd(Math.round(actual))}</span>
         <span class="perf-kpi-target muted">/ ${formatAmd(Math.round(target))}${target ? ` (${pct}%)` : ""}</span>
       </div>
-      ${target ? `<div class="progress-bar perf-kpi-bar"><div class="progress-bar-fill" style="width:${pct}%"></div></div>` : ""}
+      ${target ? `<div class="progress-bar perf-kpi-bar"><div class="progress-bar-fill" style="width:${pct}%"></div>${mark}</div>` : ""}
     </div>
   `;
 }
@@ -147,7 +157,7 @@ function renderPlanSalesSection(leaderboard) {
 
   return `
     <h2 class="section-title">${t("company_dashboard_sales")}</h2>
-    ${comparisonBarHtml(t("company_dashboard_sales_label"), totals.sales_amd, totals.plan_amd)}
+    ${comparisonBarHtml(t("company_dashboard_sales_label"), totals.sales_amd, totals.plan_amd, totals.collected_amd)}
     <div class="stat-grid">
       <div class="stat-card">
         <span class="stat-value">${formatAmd(Math.round(totals.collected_amd))}</span>
@@ -165,7 +175,7 @@ function renderPlanSalesSection(leaderboard) {
           (r) => `
         <div class="card">
           <strong>${escapeHtml(r.rep_name)}</strong>
-          ${comparisonBarHtml(t("company_dashboard_sales_label"), safeAmd(r.sales_amd), safeAmd(r.plan_amd))}
+          ${comparisonBarHtml(t("company_dashboard_sales_label"), safeAmd(r.sales_amd), safeAmd(r.plan_amd), safeAmd(r.collected_amd))}
           <div class="muted">${t("company_dashboard_collected_label")}: ${formatAmd(Math.round(safeAmd(r.collected_amd)))}</div>
         </div>
       `
@@ -175,13 +185,46 @@ function renderPlanSalesSection(leaderboard) {
   `;
 }
 
-// Today/WTD: total sales + total collected only, read straight off the
+// Today/WTD: total sales + total collected read straight off the
 // daily-management report's own day_amd/wtd_amd columns (see
 // server/src/routes/reports.js -- the same erp_daily_report row already
-// carries every period's totals). No per-rep breakdown and no plan bar
-// here: the plan figure is a monthly one (see PLAN_PERIODS above), and a
-// per-rep split isn't part of this report's shape, so faking either would
-// be misleading rather than just absent.
+// carries every period's totals). No plan bar here: the plan figure is a
+// monthly one (see PLAN_PERIODS above), and there's no daily/weekly target
+// to compare against, so faking one would be misleading rather than just
+// absent.
+//
+// A per-rep breakdown IS shown, but numbers-only (no bar, for the same
+// no-target reason): sales_by_channel/payments_by_channel on the report
+// row are real ERP figures for report_date, pushed by the same sync PC
+// that already supplies the totals above (see erpSync.js's POST
+// /daily-report and migration 061). The *_wtd counterparts (migration 067)
+// aren't sent by that pipeline yet -- until it's updated to compute a
+// weekly-by-channel breakdown from the same Cash/Sales sheet, those come
+// back as "[]" and renderByChannelNumbers below simply renders nothing for
+// This Week, same as before those columns existed.
+function renderByChannelNumbers(salesByChannel, paymentsByChannel) {
+  const salesMap = new Map((salesByChannel || []).filter((c) => c?.channel_code).map((c) => [c.channel_code, safeAmd(c.amd)]));
+  const paymentsMap = new Map((paymentsByChannel || []).filter((c) => c?.channel_code).map((c) => [c.channel_code, safeAmd(c.amd)]));
+  const channels = [...new Set([...salesMap.keys(), ...paymentsMap.keys()])];
+  if (!channels.length) return "";
+  return `
+    <h3 class="section-title section-title-inline" style="margin-top:14px;">${t("company_dashboard_by_rep")}</h3>
+    <div class="card-list">
+      ${channels
+        .map(
+          (code) => `
+        <div class="card">
+          <strong>${escapeHtml(code)}</strong>
+          <div class="muted">${t("company_dashboard_sales_label")}: ${formatAmd(Math.round(salesMap.get(code) || 0))}</div>
+          <div class="muted">${t("company_dashboard_collected_label")}: ${formatAmd(Math.round(paymentsMap.get(code) || 0))}</div>
+        </div>
+      `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
 function renderActualsOnlySalesSection(report, period) {
   if (!report) {
     return `
@@ -191,6 +234,8 @@ function renderActualsOnlySalesSection(report, period) {
   }
   const salesAmd = period === "today" ? report.sales_day_amd : report.sales_wtd_amd;
   const collectedAmd = period === "today" ? report.payments_day_amd : report.payments_wtd_amd;
+  const salesByChannel = period === "today" ? report.sales_by_channel : report.sales_by_channel_wtd;
+  const paymentsByChannel = period === "today" ? report.payments_by_channel : report.payments_by_channel_wtd;
 
   return `
     <h2 class="section-title">${t("company_dashboard_sales")}</h2>
@@ -205,6 +250,7 @@ function renderActualsOnlySalesSection(report, period) {
       </div>
     </div>
     <p class="muted" style="margin: 10px 4px 0;">${t("company_dashboard_no_plan_note")}</p>
+    ${renderByChannelNumbers(salesByChannel, paymentsByChannel)}
   `;
 }
 

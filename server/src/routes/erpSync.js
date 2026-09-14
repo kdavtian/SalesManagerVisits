@@ -383,6 +383,24 @@ erpSyncRouter.post("/daily-report", syncKeyLimiter, requireSyncKey, async (req, 
       amd: isFiniteOrNull(c.amd),
       customers: isFiniteOrNull(c.customers),
     }));
+  // Same shape as the two above, but for the week -- optional, since the
+  // sync PC doesn't send these yet (see migration 067). Parsed the same
+  // way so it starts working the moment it does, no further code change.
+  const salesByChannelWtd = isPlainArray(sales.by_channel_wtd)
+    .filter((c) => isPlainObject(c) && c.channel_code)
+    .map((c) => ({
+      channel_code: String(c.channel_code),
+      amd: isFiniteOrNull(c.amd),
+      liters: isFiniteOrNull(c.liters),
+      orders: isFiniteOrNull(c.orders),
+    }));
+  const paymentsByChannelWtd = isPlainArray(payments.by_channel_wtd)
+    .filter((c) => isPlainObject(c) && c.channel_code)
+    .map((c) => ({
+      channel_code: String(c.channel_code),
+      amd: isFiniteOrNull(c.amd),
+      customers: isFiniteOrNull(c.customers),
+    }));
   const withManagers = isPlainArray(balance.with_managers_by_manager)
     .filter((m) => isPlainObject(m) && m.manager_name)
     .map((m) => ({ manager_name: String(m.manager_name), amd: isFiniteOrNull(m.amd) }));
@@ -395,11 +413,11 @@ erpSyncRouter.post("/daily-report", syncKeyLimiter, requireSyncKey, async (req, 
        sales_wtd_amd, sales_wtd_liters, sales_wtd_orders,
        sales_day_amd, sales_day_liters, sales_day_orders,
        sales_change_amd, sales_change_liters,
-       sales_margin_amd, sales_margin_pct, sales_by_channel,
+       sales_margin_amd, sales_margin_pct, sales_by_channel, sales_by_channel_wtd,
        payments_ytd_amd, payments_ytd_customers,
        payments_mtd_amd, payments_mtd_customers,
        payments_wtd_amd, payments_wtd_customers,
-       payments_day_amd, payments_day_customers, payments_by_channel,
+       payments_day_amd, payments_day_customers, payments_by_channel, payments_by_channel_wtd,
        balance_amd, balance_usd, balance_total_amd, balance_total_usd,
        balance_cash_amd, balance_cash_usd, balance_noncash_amd, balance_noncash_usd,
        balance_with_managers_amd, balance_with_managers_by_manager,
@@ -407,9 +425,9 @@ erpSyncRouter.post("/daily-report", syncKeyLimiter, requireSyncKey, async (req, 
        warehouse_value_amd, warehouse_liters,
        prev_report_date, change_total_amd, change_overdue_amd, synced_at, period
      ) VALUES (
-       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
-       $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34,
-       $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, now(), $46
+       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,
+       $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35,
+       $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, now(), $48
      )
      ON CONFLICT (period, report_date) DO UPDATE SET
        sales_ytd_amd = EXCLUDED.sales_ytd_amd, sales_ytd_liters = EXCLUDED.sales_ytd_liters, sales_ytd_orders = EXCLUDED.sales_ytd_orders,
@@ -417,11 +435,11 @@ erpSyncRouter.post("/daily-report", syncKeyLimiter, requireSyncKey, async (req, 
        sales_wtd_amd = EXCLUDED.sales_wtd_amd, sales_wtd_liters = EXCLUDED.sales_wtd_liters, sales_wtd_orders = EXCLUDED.sales_wtd_orders,
        sales_day_amd = EXCLUDED.sales_day_amd, sales_day_liters = EXCLUDED.sales_day_liters, sales_day_orders = EXCLUDED.sales_day_orders,
        sales_change_amd = EXCLUDED.sales_change_amd, sales_change_liters = EXCLUDED.sales_change_liters,
-       sales_margin_amd = EXCLUDED.sales_margin_amd, sales_margin_pct = EXCLUDED.sales_margin_pct, sales_by_channel = EXCLUDED.sales_by_channel,
+       sales_margin_amd = EXCLUDED.sales_margin_amd, sales_margin_pct = EXCLUDED.sales_margin_pct, sales_by_channel = EXCLUDED.sales_by_channel, sales_by_channel_wtd = EXCLUDED.sales_by_channel_wtd,
        payments_ytd_amd = EXCLUDED.payments_ytd_amd, payments_ytd_customers = EXCLUDED.payments_ytd_customers,
        payments_mtd_amd = EXCLUDED.payments_mtd_amd, payments_mtd_customers = EXCLUDED.payments_mtd_customers,
        payments_wtd_amd = EXCLUDED.payments_wtd_amd, payments_wtd_customers = EXCLUDED.payments_wtd_customers,
-       payments_day_amd = EXCLUDED.payments_day_amd, payments_day_customers = EXCLUDED.payments_day_customers, payments_by_channel = EXCLUDED.payments_by_channel,
+       payments_day_amd = EXCLUDED.payments_day_amd, payments_day_customers = EXCLUDED.payments_day_customers, payments_by_channel = EXCLUDED.payments_by_channel, payments_by_channel_wtd = EXCLUDED.payments_by_channel_wtd,
        balance_amd = EXCLUDED.balance_amd, balance_usd = EXCLUDED.balance_usd,
        balance_total_amd = EXCLUDED.balance_total_amd, balance_total_usd = EXCLUDED.balance_total_usd,
        balance_cash_amd = EXCLUDED.balance_cash_amd, balance_cash_usd = EXCLUDED.balance_cash_usd,
@@ -438,11 +456,11 @@ erpSyncRouter.post("/daily-report", syncKeyLimiter, requireSyncKey, async (req, 
       isFiniteOrNull(sales.wtd_amd), isFiniteOrNull(sales.wtd_liters), isFiniteOrNull(sales.wtd_orders),
       isFiniteOrNull(sales.day_amd), isFiniteOrNull(sales.day_liters), isFiniteOrNull(sales.day_orders),
       isFiniteOrNull(sales.change_amd), isFiniteOrNull(sales.change_liters),
-      isFiniteOrNull(sales.margin_amd), isFiniteOrNull(sales.margin_pct), JSON.stringify(salesByChannel),
+      isFiniteOrNull(sales.margin_amd), isFiniteOrNull(sales.margin_pct), JSON.stringify(salesByChannel), JSON.stringify(salesByChannelWtd),
       isFiniteOrNull(payments.ytd_amd), isFiniteOrNull(payments.ytd_customers),
       isFiniteOrNull(payments.mtd_amd), isFiniteOrNull(payments.mtd_customers),
       isFiniteOrNull(payments.wtd_amd), isFiniteOrNull(payments.wtd_customers),
-      isFiniteOrNull(payments.day_amd), isFiniteOrNull(payments.day_customers), JSON.stringify(paymentsByChannel),
+      isFiniteOrNull(payments.day_amd), isFiniteOrNull(payments.day_customers), JSON.stringify(paymentsByChannel), JSON.stringify(paymentsByChannelWtd),
       isFiniteOrNull(balance.amd), isFiniteOrNull(balance.usd),
       isFiniteOrNull(balance.total_amd), isFiniteOrNull(balance.total_usd),
       isFiniteOrNull(balance.cash_amd), isFiniteOrNull(balance.cash_usd),

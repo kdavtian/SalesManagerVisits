@@ -3590,6 +3590,25 @@ input[type="search"]:focus-visible {
 
 .perf-kpi-bar {
   margin-top: 2px;
+  position: relative;
+}
+
+/* The "|" tick mark on a perf-kpi-bar showing where collected-so-far
+   lands as a percent of target, next to the sales-vs-target fill.
+   Positioned via inline left:% (comparisonBarHtml in dashboardOverview.js)
+   and translated back by its own width so the mark itself, not its left
+   edge, sits at that percent. Full bar height, not overhanging it --
+   .progress-bar has overflow:hidden for the fill's rounded corners, and
+   this stays inside that same clip rather than carving out an exception
+   to it just for a bit of visual overhang. */
+.perf-kpi-bar-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  transform: translateX(-50%);
+  background: var(--text);
+  opacity: 0.55;
 }
 
 .perf-kpi-foot {
