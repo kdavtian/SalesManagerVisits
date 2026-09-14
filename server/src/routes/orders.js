@@ -457,6 +457,15 @@ ordersRouter.patch("/:id", async (req, res) => {
   // -- but only while it's still "submitted"; once it's moved on, editing
   // goes back to owner/admin only.
   const canEditSubmitted = isOwnerOrAdmin || (order.status === "submitted" && canConfirmOrders(req.user.role));
+
+  // A note-only PATCH (no status/items/discount) fell through every check
+  // below untouched -- none of them run when their own field is absent --
+  // so any authenticated rep could overwrite any other rep's order note
+  // regardless of ownership. Same ownership rule as items/discount edits.
+  if (note !== undefined && !canEditSubmitted) {
+    return res.status(403).json({ error: "Not allowed to edit this order" });
+  }
+
   let nextLines = null;
   let nextTotal = order.total_amd;
   let nextDiscountPct = Number(order.discount_pct);

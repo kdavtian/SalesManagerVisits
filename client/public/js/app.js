@@ -12,6 +12,7 @@ import { icons } from "./icons.js";
 // in this codebase for cross-view references (e.g. customerOrders.js's own
 // import("./customerDetail.js")).
 import { flushQueue, getQueue, onQueueChange } from "./offlineQueue.js";
+import { clearListCache } from "./listCache.js";
 import { mountInstallPrompt } from "./install.js";
 import { mountUpdateBanner, initServiceWorkerUpdates } from "./updateBanner.js";
 import { startLocationBroadcast, stopLocationBroadcast } from "./locationBroadcast.js";
@@ -502,6 +503,11 @@ async function doLogout() {
   await api.logout();
   setUser(null);
   stopLocationBroadcast();
+  // Defense-in-depth alongside listCache.js's own per-user key scoping --
+  // a shared device's next sign-in should never be able to see this rep's
+  // cached orders/customers/activity data (reported as "another user's
+  // orders can appear").
+  await clearListCache();
   location.hash = "";
   render();
 }
