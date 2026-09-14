@@ -33,28 +33,31 @@ function comparisonBarHtml(label, actual, target) {
   `;
 }
 
-// Budget is only ever tracked per calendar month (sales_performance.month),
-// so only these two periods can show an actual-vs-budget comparison; the
-// other two read from the daily-management report's own day/wtd actuals
-// instead (see loadSalesSection below), with no budget figure at all.
-const BUDGET_PERIODS = new Set(["mtd", "ytd"]);
+// The plan figure is only ever tracked per calendar month
+// (sales_performance.month), so only these two periods can show an
+// actual-vs-plan comparison; the other two read from the daily-management
+// report's own day/wtd actuals instead (see loadSalesSection below), with
+// no plan figure at all.
+const PLAN_PERIODS = new Set(["mtd", "ytd"]);
 const PERIODS = ["today", "wtd", "mtd", "ytd"];
 const DEFAULT_PERIOD = "mtd";
 
 export async function renderDashboardOverview(root, navigate) {
+  let period = DEFAULT_PERIOD;
+
   root.innerHTML = `
-    <div class="detail-view">
+    <div class="detail-view company-dashboard-view">
       <div class="detail-header">
         <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
         <div class="detail-header-title"><h1>${t("company_dashboard_title")}</h1></div>
       </div>
-      <div class="company-dashboard-period-row">
-        <label class="visually-hidden" for="company-dashboard-period">${t("company_dashboard_period_label")}</label>
-        <select class="period-select" id="company-dashboard-period">
-          ${PERIODS.map((p) => `<option value="${p}" ${p === DEFAULT_PERIOD ? "selected" : ""}>${t(`company_dashboard_period_${p}`)}</option>`).join("")}
-        </select>
+      <div class="activity-tabs company-dashboard-period-tabs" role="tablist" aria-label="${t("company_dashboard_period_label")}">
+        ${PERIODS.map(
+          (p) =>
+            `<button type="button" role="tab" aria-selected="${p === period}" class="activity-tab ${p === period ? "activity-tab-active" : ""}" data-period="${p}">${t(`company_dashboard_period_${p}`)}</button>`
+        ).join("")}
       </div>
       <div id="company-dashboard-sales"><p class="loading-state" role="status">${t("loading")}</p></div>
       <div id="company-dashboard-rest"><p class="loading-state" role="status">${t("loading")}</p></div>
@@ -65,7 +68,7 @@ export async function renderDashboardOverview(root, navigate) {
 
   const salesEl = container.querySelector("#company-dashboard-sales");
   const restEl = container.querySelector("#company-dashboard-rest");
-  const periodSelect = container.querySelector("#company-dashboard-period");
+  const periodTabs = container.querySelectorAll(".company-dashboard-period-tabs .activity-tab");
 
   // Inventory and brand-volume are point-in-time/its-own-trend-chart
   // sections, not period-scoped -- fetched once, untouched by the period
@@ -77,12 +80,12 @@ export async function renderDashboardOverview(root, navigate) {
     restEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
   }
 
-  async function loadSales(period) {
+  async function loadSales() {
     salesEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     try {
-      if (BUDGET_PERIODS.has(period)) {
+      if (PLAN_PERIODS.has(period)) {
         const leaderboard = await api.getSalesPerformanceLeaderboard(period);
-        salesEl.innerHTML = renderBudgetSalesSection(leaderboard);
+        salesEl.innerHTML = renderPlanSalesSection(leaderboard);
       } else {
         const { report } = await api.getDailyManagementReport({ period: "daily" });
         salesEl.innerHTML = renderActualsOnlySalesSection(report, period);
@@ -91,14 +94,28 @@ export async function renderDashboardOverview(root, navigate) {
       salesEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     }
   }
-  periodSelect.addEventListener("change", () => loadSales(periodSelect.value));
-  await loadSales(DEFAULT_PERIOD);
+  periodTabs.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      period = btn.dataset.period;
+      periodTabs.forEach((b) => {
+        const active = b === btn;
+        b.classList.toggle("activity-tab-active", active);
+        b.setAttribute("aria-selected", String(active));
+      });
+      loadSales();
+    });
+  });
+  await loadSales();
 }
 
-// MTD/YTD: actual-vs-budget, company total + per-rep breakdown -- exactly
+// MTD/YTD: actual-vs-plan, company total + per-rep breakdown -- exactly
 // what this section always showed, just period-scoped by the caller now
-// instead of hardcoded to YTD.
-function renderBudgetSalesSection(leaderboard) {
+// instead of hardcoded to YTD. (The server's own field is still named
+// budget_amd -- see server/src/routes/reports.js's sales_performance query
+// -- only the label shown here changed, since "budget" read as an unclear
+// term while "plan" already means the same figure everywhere else in this
+// app, e.g. Team Performance's own sales targets.)
+function renderPlanSalesSection(leaderboard) {
   if (!leaderboard?.length) {
     return `
       <h2 class="section-title">${t("company_dashboard_sales")}</h2>
@@ -109,22 +126,22 @@ function renderBudgetSalesSection(leaderboard) {
     (sum, r) => ({
       sales_amd: sum.sales_amd + Number(r.sales_amd),
       collected_amd: sum.collected_amd + Number(r.collected_amd),
-      budget_amd: sum.budget_amd + Number(r.budget_amd),
+      plan_amd: sum.plan_amd + Number(r.budget_amd),
     }),
-    { sales_amd: 0, collected_amd: 0, budget_amd: 0 }
+    { sales_amd: 0, collected_amd: 0, plan_amd: 0 }
   );
 
   return `
     <h2 class="section-title">${t("company_dashboard_sales")}</h2>
-    ${comparisonBarHtml(t("company_dashboard_sales_label"), totals.sales_amd, totals.budget_amd)}
+    ${comparisonBarHtml(t("company_dashboard_sales_label"), totals.sales_amd, totals.plan_amd)}
     <div class="stat-grid">
       <div class="stat-card">
         <span class="stat-value">${formatAmd(Math.round(totals.collected_amd))}</span>
         <span class="stat-label">${t("company_dashboard_collected_label")}</span>
       </div>
       <div class="stat-card">
-        <span class="stat-value">${formatAmd(Math.round(totals.budget_amd))}</span>
-        <span class="stat-label">${t("company_dashboard_budget_label")}</span>
+        <span class="stat-value">${formatAmd(Math.round(totals.plan_amd))}</span>
+        <span class="stat-label">${t("company_dashboard_plan_label")}</span>
       </div>
     </div>
     <h3 class="section-title section-title-inline" style="margin-top:14px;">${t("company_dashboard_by_rep")}</h3>
@@ -147,8 +164,8 @@ function renderBudgetSalesSection(leaderboard) {
 // Today/WTD: total sales + total collected only, read straight off the
 // daily-management report's own day_amd/wtd_amd columns (see
 // server/src/routes/reports.js -- the same erp_daily_report row already
-// carries every period's totals). No per-rep breakdown and no budget bar
-// here: budget is a monthly figure (see BUDGET_PERIODS above), and a
+// carries every period's totals). No per-rep breakdown and no plan bar
+// here: the plan figure is a monthly one (see PLAN_PERIODS above), and a
 // per-rep split isn't part of this report's shape, so faking either would
 // be misleading rather than just absent.
 function renderActualsOnlySalesSection(report, period) {
@@ -173,7 +190,7 @@ function renderActualsOnlySalesSection(report, period) {
         <span class="stat-label">${t("company_dashboard_collected_label")}</span>
       </div>
     </div>
-    <p class="muted" style="margin: 10px 4px 0;">${t("company_dashboard_no_budget_note")}</p>
+    <p class="muted" style="margin: 10px 4px 0;">${t("company_dashboard_no_plan_note")}</p>
   `;
 }
 
