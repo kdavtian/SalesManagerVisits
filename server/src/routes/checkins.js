@@ -165,6 +165,7 @@ checkinsRouter.post("/", (req, res, next) => {
 
   const client = await pool.connect();
   let checkin;
+  let rep = null;
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
@@ -180,6 +181,39 @@ checkinsRouter.post("/", (req, res, next) => {
         file.filename,
       ]);
     }
+
+    // In the same transaction as the check-in itself, not a fire-and-forget
+    // call after the response was already sent -- that used to mean a
+    // failure here (a transient DB error, nothing to do with the check-in
+    // data itself) silently discarded the payment while the check-in still
+    // saved and returned 201, leaving money marked "collected" on the visit
+    // with no corresponding row in the accountant's reconciliation queue.
+    // Now either both commit or neither does, and the rep sees the actual
+    // error instead of a false success. client_ref ties it 1:1 to this
+    // check-in, so it can never double-sync.
+    if (amountCollected != null) {
+      const { rows: repRows } = await client.query("SELECT name, position, role FROM users WHERE id = $1", [req.user.id]);
+      rep = repRows[0] ?? null;
+      if (rep) {
+        // The check-in itself is the field-visit record of the money
+        // changing hands; this mirrors it into the reviewed Payments
+        // workflow so an accountant sees and reconciles it the same way
+        // as a manually-submitted payment, instead of it sitting invisibly
+        // on amount_collected_amd where only checkin/activity views show it.
+        await insertPayment({
+          customer,
+          amount: amountCollected,
+          paymentDate: checkin.timestamp,
+          salesManagerId: req.user.id,
+          manager: rep,
+          note: null,
+          createdBy: req.user.id,
+          clientRef: `checkin-${checkin.id}`,
+          db: client,
+        });
+      }
+    }
+
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -201,41 +235,11 @@ checkinsRouter.post("/", (req, res, next) => {
 
   res.status(201).json({ ...checkin, photo_count: files.length });
 
-  (async () => {
-    try {
-      if (amountCollected != null) {
-        const { rows: repRows } = await pool.query("SELECT name, position, role FROM users WHERE id = $1", [req.user.id]);
-        const rep = repRows[0];
-
-        if (rep) {
-          // The check-in itself is the field-visit record of the money
-          // changing hands; this mirrors it into the reviewed Payments
-          // workflow so an accountant sees and reconciles it the same way
-          // as a manually-submitted payment, instead of it sitting invisibly
-          // on amount_collected_amd where only checkin/activity views show it.
-          // client_ref ties it 1:1 to this checkin, so it can never double-sync.
-          await insertPayment({
-            customer,
-            amount: amountCollected,
-            paymentDate: checkin.timestamp,
-            salesManagerId: req.user.id,
-            manager: rep,
-            note: null,
-            createdBy: req.user.id,
-            clientRef: `checkin-${checkin.id}`,
-          });
-        }
-
-        if (amountCollected >= LARGE_PAYMENT_THRESHOLD_AMD) {
-          notifyTelegram(
-            `💰 <b>Large payment collected</b>\n${escapeHtml(rep?.name || "Someone")} — ${escapeHtml(customer.name)}\n${Math.round(amountCollected).toLocaleString()} AMD`
-          );
-        }
-      }
-    } catch (err) {
-      console.error("Post-checkin notification failed:", err);
-    }
-  })();
+  if (amountCollected != null && amountCollected >= LARGE_PAYMENT_THRESHOLD_AMD) {
+    notifyTelegram(
+      `💰 <b>Large payment collected</b>\n${escapeHtml(rep?.name || "Someone")} — ${escapeHtml(customer.name)}\n${Math.round(amountCollected).toLocaleString()} AMD`
+    );
+  }
 });
 
 function isValidDateString(value) {
