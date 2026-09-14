@@ -97,7 +97,8 @@ const INLINE_CLEAR_SELECTORS = [
   "#pricelist-search",
   "#product-search",
   "#inventory-search",
-  "#payment-search",
+  // #payment-search moved to the full combined-search treatment --
+  // see enhancePayments() below -- which installs its own clear button.
   "#expenses-search",
   "#order-customer-search",
   "#payment-customer-search",
@@ -178,6 +179,45 @@ function enhanceOrders() {
     add.classList.add("orders-new-action");
     add.innerHTML = SEARCH_ICONS.orderAdd;
   }
+}
+
+// Payments' search bar was still the older plain-input-plus-separate-button
+// layout every other list screen has already moved off of (see
+// enhanceCustomers/enhanceOrders above) -- reported as not matching
+// Customers/Activity and the filter icon sitting outside the search field
+// instead of inside it. Same reparent-in-place approach: the button and
+// its menu already exist in payments.js's own markup (so their click
+// handlers survive being moved, DOM listeners aren't lost on reparenting),
+// this just wraps them into the shared combined-search look.
+function enhancePayments() {
+  const input = document.querySelector("#payment-search");
+  const toolbar = input?.closest(".list-toolbar");
+  if (!input || !toolbar) return;
+
+  if (!toolbar.dataset.unifiedPaymentsSearch) {
+    toolbar.dataset.unifiedPaymentsSearch = "true";
+    toolbar.classList.add("activity-search-combined", "payments-search-combined");
+    const actions = document.createElement("div");
+    actions.className = "activity-search-actions payments-search-actions";
+    toolbar.appendChild(actions);
+
+    const filterBtn = toolbar.querySelector("#payment-filter-btn");
+    const filterMenu = toolbar.querySelector("#payment-filter-menu");
+    if (filterBtn && filterMenu) {
+      const wrap = document.createElement("div");
+      wrap.className = "activity-icon-dropdown payments-filter-wrap";
+      actions.appendChild(wrap);
+      wrap.append(filterBtn, filterMenu);
+      filterBtn.classList.remove("icon-btn");
+      filterBtn.classList.add("activity-search-filter-btn");
+      filterBtn.innerHTML = SEARCH_ICONS.channel;
+      filterMenu.classList.remove("dropdown-menu");
+      filterMenu.classList.add("activity-search-menu", "payments-search-menu");
+    }
+  }
+
+  const actions = toolbar.querySelector(":scope > .activity-search-actions");
+  installClearButton(input, toolbar, actions);
 }
 
 function customerIconFor(key) {
@@ -387,6 +427,7 @@ function enhanceAll() {
   enhanceActivity();
   enhanceOrders();
   enhanceCustomers();
+  enhancePayments();
   enhanceMap();
   enhanceInlineClearButtons();
 }

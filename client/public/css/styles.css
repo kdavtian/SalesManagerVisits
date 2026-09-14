@@ -5558,6 +5558,20 @@ input[type="search"]:focus-visible {
   color: var(--accent);
 }
 
+/* Replaces the old full-sentence "showing the first 200 results" note --
+   sits right on the tab whose own range actually hit the server cap. */
+.activity-tab-cap-badge {
+  display: inline-block;
+  margin-left: 2px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--warning);
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
 .activity-custom-range {
   display: flex;
   gap: 10px;
@@ -6068,22 +6082,26 @@ button.list-row-icon {
 
 /* Reported as the button "overlapping" the row: a customer name long
    enough to matter, its amount, and the Approve button's own label all
-   competing for one row's width on a phone has nowhere near enough room
-   even once the name is free to ellipsize (see .list-row-top strong
-   above) -- the name was getting crushed down to a few characters to make
-   space. Rather than fight that math, the button drops to its own line
-   below the row's content on any card that has one, scoped with :has() so
-   every other .list-row (checkins, orders, ...) that never has this
-   button is completely unaffected. */
-.list-row:has(.payment-approve-btn) {
+   competing for one row's width on a phone had nowhere near enough room
+   even once the name was free to ellipsize (see .list-row-top strong
+   above). The amount now lives here instead of on the name line, sharing
+   its own row with Approve (amount left, button right) below the rest of
+   the card's content -- .payment-row-main only ever holds the name, meta
+   line, and status badge now. */
+.list-row:has(.payment-row-action-line) {
   flex-wrap: wrap;
 }
 
-.list-row:has(.payment-approve-btn) .payment-row-main {
+.list-row:has(.payment-row-action-line) .payment-row-main {
   flex-basis: 100%;
 }
 
-.payment-approve-btn {
+.payment-row-action-line {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-top: 4px;
 }
 
