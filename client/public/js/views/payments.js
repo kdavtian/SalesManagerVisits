@@ -330,10 +330,11 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
 
   function paymentRowHtml(p) {
     const meta = STATUS_META[p.status] ?? STATUS_META.pending;
-    // Amount moved off the name line (see .payment-row-action-line below) and
-    // onto its own line shared with the Approve button -- a long customer
-    // name, the amount, AND the button were all fighting for the same row's
-    // width, reported as the button overlapping/crowding the row.
+    // Amount now sits right beside the status badge (both read together --
+    // "awaiting approval, 45,000 ֏"), so the card only grows a whole extra
+    // line for the Approve button itself, and only on rows that actually
+    // have one, instead of every row always carrying that line just for
+    // the amount.
     return `
       <div class="card list-row" data-payment-id="${p.id}">
         <button class="payment-row-main" data-payment-id="${p.id}">
@@ -345,16 +346,16 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
           </div>
           <div class="list-row-bottom">
             <span class="badge ${meta.cls}">${t(meta.key)}</span>
+            <span class="text-amount">${formatAmd(Number(p.amount_amd))}</span>
           </div>
         </button>
-        <div class="payment-row-action-line">
-          <span class="text-amount">${formatAmd(Number(p.amount_amd))}</span>
-          ${
-            p.status === "pending" && canReview
-              ? `<button type="button" class="btn btn-primary btn-sm payment-approve-btn" data-approve-id="${p.id}">${t("approve")}</button>`
-              : ""
-          }
-        </div>
+        ${
+          p.status === "pending" && canReview
+            ? `<div class="payment-row-action-line">
+                 <button type="button" class="btn btn-primary btn-sm payment-approve-btn" data-approve-id="${p.id}">${t("approve")}</button>
+               </div>`
+            : ""
+        }
       </div>
     `;
   }

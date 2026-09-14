@@ -30,10 +30,6 @@ const dict = {
     not_allowed: "Not allowed",
     no_orders_found: "No orders found",
     load_more: "Load more",
-    // On the active range tab when its own query hit the 200-row server
-    // cap -- narrowing the date range is still how to see the rest, but
-    // that's no longer spelled out in a full sentence, just this badge.
-    activity_capped_badge: "200+",
     total: "Total",
     orders_count_label: "orders",
     confirm_order: "Confirm order",
@@ -1181,7 +1177,6 @@ const dict = {
     not_allowed: "Չի թույլատրվում",
     no_orders_found: "Պատվերներ չեն գտնվել",
     load_more: "Բեռնել ավելին",
-    activity_capped_badge: "200+",
     total: "Ընդամենը",
     orders_count_label: "պատվեր",
     confirm_order: "Հաստատել պատվերը",

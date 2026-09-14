@@ -1,7 +1,14 @@
 import { api } from "../api.js";
 import { escapeHtml, formatAmd, activateDialog } from "../util.js";
+import { icons } from "../icons.js";
 import { t } from "../i18n.js";
 import { state, seesAllPerformance, isPerfCeo, canEditChannelPlan, canReviewPerfPlan, canCloseMonth, canReopenPerfPlanAsDraft } from "../state.js";
+
+// A red hexagon "!" -- distinct in shape from the round/triangular warning
+// glyphs used elsewhere (Activity's rejected-status octagon is the closest
+// relative), used only as the one icon that reveals the Needs Attention
+// panel below.
+const HEXAGON_ALERT_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path d="M15.75 2.5a2 2 0 0 1 1.73 1L21.96 11a2 2 0 0 1 0 2l-4.48 7.5a2 2 0 0 1-1.73 1H8.25a2 2 0 0 1-1.73-1L2.04 13a2 2 0 0 1 0-2l4.48-7.5a2 2 0 0 1 1.73-1Z" fill="currentColor"/><path d="M12 7.5v5.25" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="16.25" r="1.15" fill="#fff"/></svg>`;
 
 const PACE_COLOR = {
   excellent: "success",
@@ -20,6 +27,14 @@ function formatMonthLabel(monthStr) {
   return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString(undefined, { year: "numeric", month: "long" });
 }
 
+// Compact form for the sticky header's own filter button ("SEP 2026")
+// instead of the full "September 2026" -- formatMonthLabel above is still
+// used everywhere the month needs to read out in full (sheets, history).
+function formatMonthLabelShort(monthStr) {
+  const [y, m] = String(monthStr).slice(0, 10).split("-");
+  return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString(undefined, { month: "short", year: "numeric" }).toUpperCase();
+}
+
 function shiftMonth(monthStr, delta) {
   const [y, m] = monthStr.split("-").map(Number);
   const d = new Date(y, m - 1 + delta, 1);
@@ -27,10 +42,11 @@ function shiftMonth(monthStr, delta) {
 }
 
 // The sticky header shared by both views: back button, page title, and
-// (when showMonthFilter) a single "September 2026"-style button that opens
-// a small popover with prev/next controls -- replaces what used to be a
-// separate full-width prev/label/next row squeezed in under the header,
-// which is what made the top of this page look cluttered.
+// (when showMonthFilter) a compact "SEP 2026" button. Tapping it opens the
+// device's own native month/year picker (via a same-size, invisible
+// <input type="month"> laid directly on top of the button -- see
+// wireMonthPicker below) instead of a prev/next arrow popover, so jumping
+// several months no longer takes that many taps.
 function pageHeaderHtml(titleKey, month, showMonthFilter) {
   return `
     <div class="detail-header perf-sticky-header">
@@ -40,17 +56,11 @@ function pageHeaderHtml(titleKey, month, showMonthFilter) {
       <div class="detail-header-title"><h1>${t(titleKey)}</h1></div>
       ${
         showMonthFilter
-          ? `<div class="filter-dropdown-wrap perf-month-filter-wrap" id="perf-month-filter-wrap">
-               <button type="button" class="filter-dropdown-btn perf-month-filter-btn" id="perf-month-filter-btn" aria-haspopup="true" aria-expanded="false">
-                 <span>${escapeHtml(formatMonthLabel(month))}</span>
+          ? `<div class="perf-month-filter-wrap" id="perf-month-filter-wrap">
+               <button type="button" class="perf-month-filter-btn" id="perf-month-filter-btn" tabindex="-1" aria-hidden="true">
+                 <span>${escapeHtml(formatMonthLabelShort(month))}</span>
                </button>
-               <div class="filter-dropdown-menu perf-month-filter-menu" id="perf-month-filter-menu" hidden>
-                 <div class="perf-month-popover-row">
-                   <button type="button" class="icon-btn" id="perf-month-prev" aria-label="Previous month">‹</button>
-                   <strong>${escapeHtml(formatMonthLabel(month))}</strong>
-                   <button type="button" class="icon-btn" id="perf-month-next" aria-label="Next month">›</button>
-                 </div>
-               </div>
+               <input type="month" class="perf-month-picker-input" id="perf-month-picker-input" value="${escapeHtml(month.slice(0, 7))}" aria-label="${escapeHtml(formatMonthLabel(month))}" />
              </div>`
           : ""
       }
@@ -58,30 +68,13 @@ function pageHeaderHtml(titleKey, month, showMonthFilter) {
   `;
 }
 
-function wireMonthFilterPopover(container, month, onChange) {
+function wireMonthPicker(container, month, onChange) {
   const wrap = container.querySelector("#perf-month-filter-wrap");
   if (!wrap) return;
-  const btn = wrap.querySelector("#perf-month-filter-btn");
-  const menu = wrap.querySelector("#perf-month-filter-menu");
-
-  btn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    menu.hidden = !menu.hidden;
-    btn.setAttribute("aria-expanded", String(!menu.hidden));
-  });
-  menu.querySelector("#perf-month-prev").addEventListener("click", (e) => {
-    e.stopPropagation();
-    onChange(shiftMonth(month, -1));
-  });
-  menu.querySelector("#perf-month-next").addEventListener("click", (e) => {
-    e.stopPropagation();
-    onChange(shiftMonth(month, 1));
-  });
-  container.addEventListener("click", () => {
-    if (!menu.hidden) {
-      menu.hidden = true;
-      btn.setAttribute("aria-expanded", "false");
-    }
+  const input = wrap.querySelector("#perf-month-picker-input");
+  input.addEventListener("change", () => {
+    if (!input.value) return;
+    onChange(`${input.value}-01`);
   });
 }
 
@@ -137,21 +130,49 @@ function recommendationsHtml(row) {
   `;
 }
 
+// Tucked behind its own icon button (the red hexagon "!") instead of
+// always sitting open on the page -- on a busy month this used to be the
+// tallest card above the fold, pushing every channel card down, for
+// something that's only actionable a few times a month.
 function needsAttentionHtml(items) {
   if (!items?.length) return "";
   return `
-    <div class="card perf-needs-attention">
-      <strong>${t("perf_needs_attention")}</strong>
-      <div class="perf-recommendations">
-        ${items
-          .map(
-            (i) =>
-              `<p class="perf-recommendation perf-recommendation-${i.severity}">${REC_ICON[i.severity] ?? ""} <strong>${escapeHtml(i.channel_name)}</strong> — ${escapeHtml(i.message)}</p>`
-          )
-          .join("")}
+    <div class="perf-attention-wrap" id="perf-attention-wrap">
+      <button type="button" class="perf-attention-btn" id="perf-attention-btn" aria-haspopup="true" aria-expanded="false" aria-controls="perf-attention-menu" aria-label="${t("perf_needs_attention")}" title="${t("perf_needs_attention")}">
+        ${HEXAGON_ALERT_ICON}
+        <span class="perf-attention-count">${items.length}</span>
+      </button>
+      <div class="card perf-attention-menu" id="perf-attention-menu" hidden>
+        <strong>${t("perf_needs_attention")}</strong>
+        <div class="perf-recommendations">
+          ${items
+            .map(
+              (i) =>
+                `<p class="perf-recommendation perf-recommendation-${i.severity}">${REC_ICON[i.severity] ?? ""} <strong>${escapeHtml(i.channel_name)}</strong> — ${escapeHtml(i.message)}</p>`
+            )
+            .join("")}
+        </div>
       </div>
     </div>
   `;
+}
+
+function wireNeedsAttention(container) {
+  const wrap = container.querySelector("#perf-attention-wrap");
+  if (!wrap) return;
+  const btn = wrap.querySelector("#perf-attention-btn");
+  const menu = wrap.querySelector("#perf-attention-menu");
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    menu.hidden = !menu.hidden;
+    btn.setAttribute("aria-expanded", String(!menu.hidden));
+  });
+  container.addEventListener("click", () => {
+    if (!menu.hidden) {
+      menu.hidden = true;
+      btn.setAttribute("aria-expanded", "false");
+    }
+  });
 }
 
 function channelCardHtml(row) {
@@ -276,7 +297,7 @@ async function renderMyPerformanceView(root, navigate) {
     `;
     const container = root.querySelector(".detail-view");
     container.querySelector("#back-btn").addEventListener("click", () => navigate("#/dashboard"));
-    wireMonthFilterPopover(container, month, (newMonth) => {
+    wireMonthPicker(container, month, (newMonth) => {
       month = newMonth;
       paintShell();
     });
@@ -305,31 +326,62 @@ async function renderManagementView(root, navigate, managerId) {
   let month = currentMonthStart();
   let tab = "overview";
 
+  const TABS = [
+    { key: "overview", label: t("perf_overview") },
+    { key: "planning", label: t("perf_planning") },
+    { key: "approvals", label: t("perf_approvals") },
+    { key: "history", label: t("perf_history") },
+    ...(isPerfCeo() ? [{ key: "data_quality", label: t("perf_data_quality") }] : []),
+  ];
+
   function paintShell() {
     const showMonthFilter = tab === "overview" || tab === "planning";
+    const activeLabel = TABS.find((x) => x.key === tab)?.label ?? "";
     root.innerHTML = `
       <div class="detail-view">
         ${pageHeaderHtml("team_performance", month, showMonthFilter)}
-        <div class="settings-workspace-tabs" role="tablist">
-          <button type="button" class="settings-workspace-tab ${tab === "overview" ? "settings-workspace-tab-active" : ""}" data-tab="overview">${t("perf_overview")}</button>
-          <button type="button" class="settings-workspace-tab ${tab === "planning" ? "settings-workspace-tab-active" : ""}" data-tab="planning">${t("perf_planning")}</button>
-          <button type="button" class="settings-workspace-tab ${tab === "approvals" ? "settings-workspace-tab-active" : ""}" data-tab="approvals">${t("perf_approvals")}</button>
-          <button type="button" class="settings-workspace-tab ${tab === "history" ? "settings-workspace-tab-active" : ""}" data-tab="history">${t("perf_history")}</button>
-          ${isPerfCeo() ? `<button type="button" class="settings-workspace-tab ${tab === "data_quality" ? "settings-workspace-tab-active" : ""}" data-tab="data_quality">${t("perf_data_quality")}</button>` : ""}
+        <div class="filter-dropdown-wrap perf-tab-filter-wrap" id="perf-tab-filter-wrap">
+          <button type="button" class="filter-dropdown-btn perf-tab-filter-btn" id="perf-tab-filter-btn" aria-haspopup="true" aria-expanded="false" aria-controls="perf-tab-filter-menu">
+            ${icons.menu}
+            <span>${escapeHtml(activeLabel)}</span>
+          </button>
+          <div class="filter-dropdown-menu perf-tab-filter-menu" id="perf-tab-filter-menu" role="menu" hidden>
+            ${TABS.map(
+              (x) =>
+                `<button type="button" role="menuitemradio" aria-checked="${x.key === tab}" class="${x.key === tab ? "perf-tab-menu-selected" : ""}" data-tab="${x.key}">${escapeHtml(x.label)}</button>`
+            ).join("")}
+          </div>
         </div>
         <div id="perf-body" style="margin-top:12px;"><p class="loading-state" role="status">${t("loading")}</p></div>
       </div>
     `;
     const container = root.querySelector(".detail-view");
     container.querySelector("#back-btn").addEventListener("click", () => navigate("#/dashboard"));
-    container.querySelectorAll(".settings-workspace-tab").forEach((btn) => {
-      btn.addEventListener("click", () => {
+
+    const tabWrap = container.querySelector("#perf-tab-filter-wrap");
+    const tabBtn = tabWrap.querySelector("#perf-tab-filter-btn");
+    const tabMenu = tabWrap.querySelector("#perf-tab-filter-menu");
+    tabBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      tabMenu.hidden = !tabMenu.hidden;
+      tabBtn.setAttribute("aria-expanded", String(!tabMenu.hidden));
+    });
+    tabMenu.querySelectorAll("[data-tab]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
         tab = btn.dataset.tab;
         paintShell();
       });
     });
+    container.addEventListener("click", () => {
+      if (!tabMenu.hidden) {
+        tabMenu.hidden = true;
+        tabBtn.setAttribute("aria-expanded", "false");
+      }
+    });
+
     if (showMonthFilter) {
-      wireMonthFilterPopover(container, month, (newMonth) => {
+      wireMonthPicker(container, month, (newMonth) => {
         month = newMonth;
         paintShell();
       });
@@ -377,13 +429,16 @@ async function renderManagementView(root, navigate, managerId) {
       }
     }
     bodyEl.innerHTML = `
-      <p class="muted" style="margin:0 4px 10px;">${t("perf_working_day_progress").replace("{elapsed}", dashboard.working_days.elapsed).replace("{total}", dashboard.working_days.total)}</p>
+      <div class="perf-overview-toolbar">
+        <p class="muted" style="margin:0;">${t("perf_working_day_progress").replace("{elapsed}", dashboard.working_days.elapsed).replace("{total}", dashboard.working_days.total)}</p>
+        ${managerId == null ? needsAttentionHtml(dashboard.needs_attention) : ""}
+      </div>
       ${scopedNote}
       ${managerId == null && channels.length ? aggregateBarHtml(channels) : ""}
-      ${managerId == null ? needsAttentionHtml(dashboard.needs_attention) : ""}
       ${channels.map(channelCardHtml).join("")}
     `;
     wireDrilldowns(bodyEl);
+    wireNeedsAttention(bodyEl);
   }
 
   async function loadPlanning(bodyEl) {

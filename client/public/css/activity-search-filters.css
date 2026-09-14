@@ -192,6 +192,17 @@
   display: none;
 }
 
+/* Payments (unlike Activity/Customers/Orders) wraps its content in
+   .detail-view, which already carries its own 16px side padding -- so the
+   base .activity-search-combined rule's own 16px side margin was stacking
+   on top of that padding and making the bar noticeably narrower than every
+   other screen's. .detail-view supplies the inset here instead, same as
+   Orders' own list-view already does for it (see orders-search-filters.css). */
+.payments-search-combined {
+  margin-left: 0;
+  margin-right: 0;
+}
+
 @media (max-width: 380px) {
   .activity-search-combined {
     margin-left: 12px;
