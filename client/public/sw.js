@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v165";
+const CACHE_VERSION = "field-visits-v166";
 const TILE_CACHE = "field-visits-tiles-v4";
 // Anything fetched at runtime that wasn't already in APP_SHELL gets cached
 // here, kept separate from CACHE_VERSION on purpose -- see trimCache below,
@@ -95,6 +95,7 @@ const APP_SHELL = [
   "/js/views/deliveryRoute.js",
   "/js/views/recorded.js",
   "/js/views/debtBalances.js",
+  "/js/views/sales.js",
   // Pre-approved marker/category artwork -- the map pins and the blue
   // category glyphs every other screen uses (see util.js).
   "/icons/markers/bronze-drop.png",

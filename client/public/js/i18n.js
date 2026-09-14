@@ -1134,6 +1134,14 @@ const dict = {
     debt_balances_empty: "No outstanding balances",
     debt_balances_subtotal: "Total",
 
+    qa_sales: "Sales",
+    sales_title: "Sales",
+    sales_channel_filter: "Channel",
+    sales_search_placeholder: "Search customer",
+    sales_empty: "No orders in this range",
+    sales_subtotal: "Total",
+    sales_order_count: "orders",
+
     customer_email: "Email",
     customer_email_placeholder: "name@example.com",
     customer_website: "Website",
@@ -2282,6 +2290,14 @@ const dict = {
     debt_balances_last_payment: "Վերջին վճարումը",
     debt_balances_empty: "Չկան չմարված մնացորդներ",
     debt_balances_subtotal: "Ընդամենը",
+
+    qa_sales: "Վաճառք",
+    sales_title: "Վաճառք",
+    sales_channel_filter: "Ուղղություն",
+    sales_search_placeholder: "Որոնել հաճախորդ",
+    sales_empty: "Այս ժամանակահատվածում պատվերներ չկան",
+    sales_subtotal: "Ընդամենը",
+    sales_order_count: "պատվեր",
 
     customer_email: "Էլ. փոստ",
     customer_email_placeholder: "name@example.com",

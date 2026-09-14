@@ -613,6 +613,8 @@ async function render() {
     (await import("./views/recorded.js")).renderRecorded(app, navigate);
   } else if (path === "#/debt-balances") {
     (await import("./views/debtBalances.js")).renderDebtBalances(app, navigate);
+  } else if (path === "#/sales") {
+    (await import("./views/sales.js")).renderSales(app, navigate);
   } else if (customerMatch) {
     (await import("./views/customerDetail.js")).renderCustomerDetail(app, navigate, customerMatch[1]);
   } else if (checkinMatch) {
@@ -676,6 +678,7 @@ const SIDEBAR_ITEM_ICON = {
   qa_reports: { icon: icons.chart, colorClass: "quick-action-icon-reports" },
   qa_debt_balances: { icon: icons.wallet, colorClass: "quick-action-icon-debt" },
   qa_company_dashboard: { icon: icons.dashboard, colorClass: "quick-action-icon-company" },
+  qa_sales: { icon: icons.trendUp, colorClass: "quick-action-icon-sales" },
 };
 
 // qa_check_in and qa_add_customer both jump into #/map (with a query

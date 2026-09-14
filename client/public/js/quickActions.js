@@ -42,6 +42,12 @@ export const QUICK_ACTIONS = [
   { id: "qa_reports", defaultRoles: ALL_ROLES },
   { id: "qa_debt_balances", defaultRoles: ["admin", "ceo", "sales_director", "accountant", "sales_manager"] },
   { id: "qa_company_dashboard", defaultRoles: ["admin", "ceo", "sales_director", "accountant"] },
+  // Same visibility as the financial exports/Company Dashboard -- raw
+  // per-order ERP revenue is the same sensitivity class (see
+  // seesFinancialExports in server/src/roles.js, which server/src/routes/
+  // sales.js gates on too). A sales_manager already has their own
+  // customers' order history via the customer detail page.
+  { id: "qa_sales", defaultRoles: ["admin", "ceo", "sales_director", "accountant"] },
 ];
 
 // Which route each tile jumps to -- shared between the Home screen's
@@ -61,6 +67,7 @@ export const QUICK_ACTION_ROUTE = {
   qa_reports: "#/reports",
   qa_debt_balances: "#/debt-balances",
   qa_company_dashboard: "#/company-dashboard",
+  qa_sales: "#/sales",
 };
 
 export const QUICK_ACTION_IDS = QUICK_ACTIONS.map((a) => a.id);

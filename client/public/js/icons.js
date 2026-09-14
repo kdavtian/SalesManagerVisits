@@ -34,6 +34,7 @@ export const icons = {
   pin: uiSvg(`<path d="M20 10c0 5.5-8 11-8 11S4 15.5 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>`),
   clock: uiSvg(`<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>`),
   chart: uiSvg(`<path d="M4 20V11M10 20V4M16 20v-7M22 20V8"/>`),
+  trendUp: uiSvg(`<path d="M3 17 9.5 10.5 14 15 21 7"/><path d="M15 7h6v6"/>`),
   compass: uiSvg(`<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2.1 4.9-4.9 2.1 2.1-4.9z"/>`),
   phone: uiSvg(`<path d="M7.2 3.5 10 7.8 8.2 10a15.5 15.5 0 0 0 5.8 5.8l2.2-1.8 4.3 2.8-.8 3.2c-.2.8-1 1.3-1.8 1.2A18 18 0 0 1 2.8 6.1C2.7 5.3 3.2 4.5 4 4.3z"/>`),
   history: uiSvg(`<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>`),
