@@ -19,6 +19,19 @@ function barChartHtml(items, { labelKey, valueKey, unit = "", ariaLabel = "" } =
   return `<div class="trend-chart" role="img" aria-label="${escapeHtml(ariaLabel)}">${bars}</div>`;
 }
 
+// Coerces a server-sourced amount to a real number, never NaN -- a stale
+// cached client build talking to an already-updated server (or vice
+// versa) across a deploy can mean a field the client expects is simply
+// missing from the response (undefined, not null/0), and Number(undefined)
+// is NaN, which then propagates through every sum/formatAmd downstream and
+// renders literally as "NaN դր." Falls back to 0, the same as a field that
+// legitimately came back empty, so a version-skewed response degrades to
+// "no data yet" instead of visibly broken text.
+function safeAmd(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
 function comparisonBarHtml(label, actual, target) {
   const pct = target > 0 ? Math.min(100, Math.round((actual / target) * 100)) : 0;
   return `
@@ -125,9 +138,9 @@ function renderPlanSalesSection(leaderboard) {
   }
   const totals = leaderboard.reduce(
     (sum, r) => ({
-      sales_amd: sum.sales_amd + Number(r.sales_amd),
-      collected_amd: sum.collected_amd + Number(r.collected_amd),
-      plan_amd: sum.plan_amd + Number(r.plan_amd),
+      sales_amd: sum.sales_amd + safeAmd(r.sales_amd),
+      collected_amd: sum.collected_amd + safeAmd(r.collected_amd),
+      plan_amd: sum.plan_amd + safeAmd(r.plan_amd),
     }),
     { sales_amd: 0, collected_amd: 0, plan_amd: 0 }
   );
@@ -152,8 +165,8 @@ function renderPlanSalesSection(leaderboard) {
           (r) => `
         <div class="card">
           <strong>${escapeHtml(r.rep_name)}</strong>
-          ${comparisonBarHtml(t("company_dashboard_sales_label"), Number(r.sales_amd), Number(r.plan_amd))}
-          <div class="muted">${t("company_dashboard_collected_label")}: ${formatAmd(Math.round(Number(r.collected_amd)))}</div>
+          ${comparisonBarHtml(t("company_dashboard_sales_label"), safeAmd(r.sales_amd), safeAmd(r.plan_amd))}
+          <div class="muted">${t("company_dashboard_collected_label")}: ${formatAmd(Math.round(safeAmd(r.collected_amd)))}</div>
         </div>
       `
         )
