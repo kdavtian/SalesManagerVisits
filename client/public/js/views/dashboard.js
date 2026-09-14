@@ -273,17 +273,28 @@ export async function renderDashboard(root, navigate) {
     </div>
     </details>
 
-    <div>
-    <div class="section-heading-row">
-      <h2 class="section-title section-title-inline">${t("recent_activity")}</h2>
-      <button class="link-btn" id="view-all-activity">${t("view_all")}</button>
-    </div>
-    <div class="card-list" id="recent-activity"></div>
-    </div>
+    ${
+      // CEO/admin already have the full company-wide feed one tap away
+      // (the Activity tab shows them the same seesAll-scoped checkins this
+      // section pulls its own rows from -- see GET /dashboard's
+      // recentActivityQuery), so this was just a smaller, more limited
+      // duplicate of a screen they already have. Every other role keeps
+      // it: for them it's a quick "did my last few check-ins register OK"
+      // glance, not a shrunk copy of something else on their home tab.
+      ["ceo", "admin"].includes(state.user.role)
+        ? ""
+        : `<div>
+          <div class="section-heading-row">
+            <h2 class="section-title section-title-inline">${t("recent_activity")}</h2>
+            <button class="link-btn" id="view-all-activity">${t("view_all")}</button>
+          </div>
+          <div class="card-list" id="recent-activity"></div>
+          </div>`
+    }
     </div>
   `;
 
-  container.querySelector("#view-all-activity").addEventListener("click", () => navigate("#/activity"));
+  container.querySelector("#view-all-activity")?.addEventListener("click", () => navigate("#/activity"));
   // Every tile is optional now (an admin can hide any of them for any role),
   // so this wires whichever ones actually rendered rather than assuming a
   // fixed set exists.
@@ -338,13 +349,14 @@ export async function renderDashboard(root, navigate) {
   }
 
   const activityEl = container.querySelector("#recent-activity");
-  const recent = summary.recent_activity.slice(0, 3);
-  if (!recent.length) {
-    activityEl.innerHTML = `<p class="empty-state">${t("no_checkins_yet")}</p>`;
-  } else {
-    activityEl.innerHTML = recent
-      .map(
-        (a) => `
+  if (activityEl) {
+    const recent = summary.recent_activity.slice(0, 3);
+    if (!recent.length) {
+      activityEl.innerHTML = `<p class="empty-state">${t("no_checkins_yet")}</p>`;
+    } else {
+      activityEl.innerHTML = recent
+        .map(
+          (a) => `
         <button class="card activity-row" data-customer-id="${a.customer_id}">
           <div class="activity-row-main">
             <strong>${escapeHtml(a.customer_name)}</strong>
@@ -358,11 +370,12 @@ export async function renderDashboard(root, navigate) {
           </span>
         </button>
       `
-      )
-      .join("");
-    activityEl.querySelectorAll(".activity-row").forEach((el) => {
-      el.addEventListener("click", () => navigate(`#/customers/${el.dataset.customerId}`));
-    });
+        )
+        .join("");
+      activityEl.querySelectorAll(".activity-row").forEach((el) => {
+        el.addEventListener("click", () => navigate(`#/customers/${el.dataset.customerId}`));
+      });
+    }
   }
 
   const nextVisitSlot = container.querySelector("#next-visit-slot");
