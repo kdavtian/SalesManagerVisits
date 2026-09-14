@@ -68,14 +68,29 @@ salesPerformanceRouter.get("/me", async (req, res) => {
 
 // Compact ranking across every rep in the sheet -- for directors/CEO/
 // admin to see the whole team at a glance (mirrors the points leaderboard's
-// "who's ahead" framing, but for actual sales attainment). Budget is only
-// ever tracked per calendar month (see sales_performance.month below), so
-// this only supports the two periods a budget figure actually means
-// something for -- "mtd" (this month) or "ytd" (every month so far this
-// year, the default/only mode before the Company Dashboard's period
-// filter was added). Today/WTD have no budget concept at this grain; the
+// "who's ahead" framing, but for actual sales attainment). Sales/Collected
+// are only ever tracked per calendar month (see sales_performance.month
+// below), so this only supports the two periods that figure actually
+// means something for -- "mtd" (this month) or "ytd" (every month so far
+// this year, the default/only mode before the Company Dashboard's period
+// filter was added). Today/WTD have no plan concept at this grain; the
 // Company Dashboard instead reads those two from the daily-management
-// report's day/wtd actuals (see reports.js), with no budget comparison.
+// report's day/wtd actuals (see reports.js), with no plan comparison.
+//
+// The "plan" figure compared against here used to be sales_performance's
+// own budget_amd column (an Excel-synced field, separate from and never
+// reconciled with Team Performance's own approved targets) -- that column
+// turned out to carry stale/unreliable values (reported as Company
+// Dashboard's Sales-vs-Plan bar reading e.g. "12,102,300 / 86,694 (100%)",
+// a plan two orders of magnitude below actual sales). Team Performance
+// already has a real, actively-maintained Sales plan per channel per
+// month -- perf_plan_targets.sales_target_amd, entered through its own
+// Planning workflow and gated on the plan being 'approved' -- so this now
+// sums that instead, joined to sales_channels by code the same way
+// teamPerformance.js's own loadChannelActuals matches a channel's actuals
+// (rep_name = sales_channels.code). budget_amd itself is left as-is
+// (still synced, just no longer read here) in case something else needs
+// it later; nothing else in the app reads it.
 salesPerformanceRouter.get("/", async (req, res) => {
   // Same company-wide visibility as the rest of Team Performance
   // (seesAllPerformance) -- Accountant reconciles these numbers day to
@@ -85,16 +100,26 @@ salesPerformanceRouter.get("/", async (req, res) => {
     return res.status(403).json({ error: "Not allowed" });
   }
 
-  const monthCondition = req.query.period === "mtd" ? "month = date_trunc('month', now())" : "month >= date_trunc('year', now())";
+  const isMtd = req.query.period === "mtd";
+  const spMonthCondition = isMtd ? "sp.month = date_trunc('month', now())" : "sp.month >= date_trunc('year', now())";
+  const planMonthCondition = isMtd ? "pp.month = date_trunc('month', now())" : "pp.month >= date_trunc('year', now())";
   const { rows } = await pool.query(
-    `SELECT rep_name,
-       sum(sales_amd)::numeric AS sales_amd,
-       sum(collected_amd)::numeric AS collected_amd,
-       sum(budget_amd)::numeric AS budget_amd
-     FROM sales_performance
-     WHERE ${monthCondition} AND rep_name != $1
-     GROUP BY rep_name
-     ORDER BY sum(sales_amd) DESC`,
+    `SELECT sp.rep_name,
+       sum(sp.sales_amd)::numeric AS sales_amd,
+       sum(sp.collected_amd)::numeric AS collected_amd,
+       COALESCE(plans.plan_amd, 0)::numeric AS plan_amd
+     FROM sales_performance sp
+     LEFT JOIN (
+       SELECT sc.code, sum(pt.sales_target_amd) AS plan_amd
+       FROM perf_plan_targets pt
+       JOIN perf_plans pp ON pp.id = pt.plan_id AND pp.status = 'approved'
+       JOIN sales_channels sc ON sc.id = pt.channel_id
+       WHERE ${planMonthCondition}
+       GROUP BY sc.code
+     ) plans ON plans.code = sp.rep_name
+     WHERE ${spMonthCondition} AND sp.rep_name != $1
+     GROUP BY sp.rep_name, plans.plan_amd
+     ORDER BY sum(sp.sales_amd) DESC`,
     [SALES_DIRECTOR_REP_NAME]
   );
   res.json(rows);
