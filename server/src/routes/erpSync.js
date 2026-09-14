@@ -284,10 +284,24 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
            unit_price_amd = EXCLUDED.unit_price_amd, family = EXCLUDED.family,
            bronze_price_amd = EXCLUDED.bronze_price_amd, silver_price_amd = EXCLUDED.silver_price_amd,
            gold_price_amd = EXCLUDED.gold_price_amd, stock_qty = EXCLUDED.stock_qty,
-           landing_cost_amd = EXCLUDED.landing_cost_amd,
            synced_at = now(), updated_at = now()
          WHERE products.manually_edited_at IS NULL`,
         [prodErpIds, prodNames, prodBrands, prodUnits, prodPrices, prodFamilies, prodBronzePrices, prodSilverPrices, prodGoldPrices, prodStockQtys, prodLandingCosts]
+      );
+      // landing_cost_amd specifically is never exposed on any product edit
+      // form (see migration 064 -- "read-only in the app: ... only ever
+      // written by the sync"), so unlike every other column in the upsert
+      // above, no manual correction could ever conflict with the sync
+      // writing it. Gating it behind manually_edited_at the same way meant
+      // an admin fixing one unrelated field on a product -- a stock
+      // recount, a name typo -- silently froze that product's landing cost
+      // forever, with nothing on screen to show anything was wrong. Always
+      // applied, for every synced product regardless of manual-edit state.
+      await client.query(
+        `UPDATE products SET landing_cost_amd = t.landing_cost_amd
+         FROM unnest($1::text[], $2::numeric[]) AS t(erp_product_id, landing_cost_amd)
+         WHERE products.erp_product_id = t.erp_product_id`,
+        [prodErpIds, prodLandingCosts]
       );
     }
 

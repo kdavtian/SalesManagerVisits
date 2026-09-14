@@ -108,13 +108,14 @@ export async function renderDashboardOverview(root, navigate) {
   await loadSales();
 }
 
-// MTD/YTD: actual-vs-plan, company total + per-rep breakdown -- exactly
-// what this section always showed, just period-scoped by the caller now
-// instead of hardcoded to YTD. (The server's own field is still named
-// budget_amd -- see server/src/routes/reports.js's sales_performance query
-// -- only the label shown here changed, since "budget" read as an unclear
-// term while "plan" already means the same figure everywhere else in this
-// app, e.g. Team Performance's own sales targets.)
+// MTD/YTD: actual-vs-plan, company total + per-rep breakdown. The plan
+// figure now comes from Team Performance's own approved Sales targets
+// (perf_plan_targets.sales_target_amd, summed per channel/rep) instead of
+// sales_performance's Excel-synced budget_amd column -- that column
+// carried stale/unreliable values unrelated to the real approved plan
+// (see server/src/routes/salesPerformance.js's GET / for the full story),
+// so the server now does that join itself and returns the field already
+// named plan_amd.
 function renderPlanSalesSection(leaderboard) {
   if (!leaderboard?.length) {
     return `
@@ -126,7 +127,7 @@ function renderPlanSalesSection(leaderboard) {
     (sum, r) => ({
       sales_amd: sum.sales_amd + Number(r.sales_amd),
       collected_amd: sum.collected_amd + Number(r.collected_amd),
-      plan_amd: sum.plan_amd + Number(r.budget_amd),
+      plan_amd: sum.plan_amd + Number(r.plan_amd),
     }),
     { sales_amd: 0, collected_amd: 0, plan_amd: 0 }
   );
@@ -151,7 +152,7 @@ function renderPlanSalesSection(leaderboard) {
           (r) => `
         <div class="card">
           <strong>${escapeHtml(r.rep_name)}</strong>
-          ${comparisonBarHtml(t("company_dashboard_sales_label"), Number(r.sales_amd), Number(r.budget_amd))}
+          ${comparisonBarHtml(t("company_dashboard_sales_label"), Number(r.sales_amd), Number(r.plan_amd))}
           <div class="muted">${t("company_dashboard_collected_label")}: ${formatAmd(Math.round(Number(r.collected_amd)))}</div>
         </div>
       `
