@@ -7982,6 +7982,8 @@ form select,
 .sales-order-amount {
   font-weight: 700;
   white-space: nowrap;
+  text-align: right;
+  margin-left: auto;
 }
 
 /* Sales screen's From/To/Channel filter row -- same layout language as
@@ -8008,6 +8010,35 @@ form select,
 .sales-filter-row input,
 .sales-filter-row select {
   width: 100%;
+}
+
+/* Sales screen's channel filter -- same tappable-pill pattern as
+   .activity-manager-bar (Activity's "by sales manager" bar): a horizontal-
+   scrolling row of .stat-pill buttons instead of a <select>, count + label
+   doubling as the filter. */
+.sales-channel-bar {
+  scrollbar-width: none;
+}
+
+.sales-channel-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.sales-channel-bar .stat-pill {
+  flex: 0 0 auto;
+  min-width: 80px;
+  max-width: 120px;
+}
+
+.sales-channel-bar .stat-pill strong {
+  font-size: 1.3rem;
+  line-height: 1.1;
+}
+
+.sales-channel-bar .stat-pill span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Sales screen's headline total -- its own line below the filters rather
