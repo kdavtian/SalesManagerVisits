@@ -6074,16 +6074,29 @@ input[type="search"]:focus-visible {
   height: 24px;
 }
 
-/* The category artwork is a raster PNG carrying its own transparent margin,
-   so the drawn glyph fills noticeably less of its box than the stroke-SVGs
-   it replaced. Sized to fill the 44px avatar exactly (matching
-   .list-row-icon's own size, no visible padding/ring around the glyph).
-   Scoped to .list-row-icon on purpose: the category selector buttons and
-   the visit-detail avatar size the same image themselves and must not
-   inherit this. */
+/* Customer category glyphs (util.js's CATEGORY_ICON) are inline SVGs now,
+   sized the same as every other .list-row-icon svg above -- no longer a
+   raster image needing its own oversized rule to compensate for internal
+   padding. Scoped to .list-row-icon on purpose: the category selector
+   buttons and the visit-detail avatar size the same glyph themselves and
+   must not inherit this. */
 .list-row-icon .category-img {
-  width: 44px;
-  height: 44px;
+  width: 24px;
+  height: 24px;
+}
+
+/* The customer-tier avatar (a category glyph tinted via .list-row-icon-
+   tier-bronze/-silver/-tier-gold/etc, currentColor-driven now that the
+   glyph itself is an inline SVG) shows tier color through the glyph, not a
+   background ring -- the base .list-row-icon background/border above is
+   still wanted by every OTHER user of this shared class (admin.js's
+   initials avatar, orders.js's status icon, both of which have no glyph
+   of their own to carry color), just not here, where it was a second,
+   redundant frame around artwork that used to carry its own baked-in one
+   too (reported as "icon inside an icon frame"). */
+.list-row-icon-glyph-only {
+  background: none;
+  border: none;
 }
 
 button.list-row-icon {
