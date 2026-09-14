@@ -410,6 +410,11 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
     const discountPctToSend = discountType === "pct" ? value : 0;
     const discountAmdToSend = discountType === "amd" ? value : 0;
     const paymentMethod = paymentMethodInput.value === "cash" ? "cash" : "invoice";
+    // Generated once, before the first (online) attempt -- reused as-is if
+    // this falls through to enqueueOrder below, so a retry after a lost
+    // response can't create a second order. See server/src/routes/orders.js
+    // and offlineQueue.js.
+    const clientRef = crypto.randomUUID();
     try {
       const order = await api.createOrder({
         customer_id: Number(customerId),
@@ -418,12 +423,14 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
         discount_pct: discountPctToSend,
         discount_amd: discountAmdToSend,
         payment_method: paymentMethod,
+        client_ref: clientRef,
       });
       showOrderSaved(order);
     } catch (err) {
       if (err instanceof TypeError) {
         // Offline / network failure -- queue it instead of losing the order.
         enqueueOrder({
+          clientRef,
           customerId: Number(customerId),
           checkinId: checkinId ? Number(checkinId) : undefined,
           items,

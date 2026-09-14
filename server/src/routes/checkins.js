@@ -107,7 +107,7 @@ checkinsRouter.post("/", (req, res, next) => {
     next();
   });
 }, async (req, res) => {
-  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd, available_products } = req.body ?? {};
+  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref } = req.body ?? {};
   const customerId = Number(customer_id);
   const latNum = Number(lat);
   const lngNum = Number(lng);
@@ -117,6 +117,22 @@ checkinsRouter.post("/", (req, res, next) => {
   if (!customerId || Number.isNaN(latNum) || Number.isNaN(lngNum) || !outcomeValues.length) {
     files.forEach((f) => fs.unlink(f.path, () => {}));
     return res.status(400).json({ error: "customer_id, lat, lng and at least one outcome are required" });
+  }
+
+  // A retried submission (the offline queue's flushQueue() re-sending an
+  // entry whose earlier attempt actually succeeded but whose response was
+  // lost) carries the same client_ref every time -- recognize it here and
+  // return the original check-in instead of creating a duplicate. The
+  // photos on this retry are discarded (already saved with the original).
+  if (client_ref) {
+    const { rows: existingRows } = await pool.query("SELECT *, (SELECT count(*)::int FROM checkin_photos WHERE checkin_id = checkins.id) AS photo_count FROM checkins WHERE user_id = $1 AND client_ref = $2", [
+      req.user.id,
+      client_ref,
+    ]);
+    if (existingRows[0]) {
+      files.forEach((f) => fs.unlink(f.path, () => {}));
+      return res.status(201).json(existingRows[0]);
+    }
   }
 
   // Only meaningful (and required) when the rep actually flagged this visit
@@ -152,10 +168,10 @@ checkinsRouter.post("/", (req, res, next) => {
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
-      `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, note, brand_status, outcomes, amount_collected_amd, available_products)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING *`,
-      [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, brandStatusValue, outcomeValues, amountCollected, availableProductsValue]
+      [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, brandStatusValue, outcomeValues, amountCollected, availableProductsValue, client_ref || null]
     );
     checkin = rows[0];
     for (const file of files) {
@@ -168,6 +184,16 @@ checkinsRouter.post("/", (req, res, next) => {
   } catch (err) {
     await client.query("ROLLBACK");
     files.forEach((f) => fs.unlink(f.path, () => {}));
+    // 23505 = unique_violation -- two near-simultaneous retries of the same
+    // queued entry both passed the client_ref check above before either had
+    // committed; the loser here just needs the winner's row, not an error.
+    if (err.code === "23505" && client_ref) {
+      const { rows: existingRows } = await pool.query(
+        "SELECT *, (SELECT count(*)::int FROM checkin_photos WHERE checkin_id = checkins.id) AS photo_count FROM checkins WHERE user_id = $1 AND client_ref = $2",
+        [req.user.id, client_ref]
+      );
+      if (existingRows[0]) return res.status(201).json(existingRows[0]);
+    }
     throw err;
   } finally {
     client.release();
