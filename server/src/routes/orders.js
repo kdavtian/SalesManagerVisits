@@ -504,8 +504,14 @@ ordersRouter.patch("/:id", async (req, res) => {
 
   if (discount_pct !== undefined || discount_amd !== undefined) {
     if (!canEditSubmitted) return res.status(403).json({ error: "Not allowed to edit this order" });
-    if (order.status !== "submitted") {
-      return res.status(409).json({ error: "Only a submitted order's discount can still be changed" });
+    // A draft is editable too, not just "submitted" -- it has no reviewer
+    // yet (canEditSubmitted's director clause only ever applies once
+    // status is "submitted", so this naturally stays owner/admin-only for
+    // a draft), and there was previously no way at all to fix a draft
+    // order's discount before submitting it short of deleting and
+    // recreating the whole order.
+    if (order.status !== "submitted" && order.status !== "draft") {
+      return res.status(409).json({ error: "Only a draft or submitted order's discount can still be changed" });
     }
     if (discount_pct !== undefined) {
       const parsed = Number(discount_pct);
@@ -533,8 +539,9 @@ ordersRouter.patch("/:id", async (req, res) => {
 
   if (items !== undefined) {
     if (!canEditSubmitted) return res.status(403).json({ error: "Not allowed to edit this order" });
-    if (order.status !== "submitted") {
-      return res.status(409).json({ error: "Only a submitted order's items can still be edited" });
+    // Same draft-or-submitted allowance as the discount block above.
+    if (order.status !== "submitted" && order.status !== "draft") {
+      return res.status(409).json({ error: "Only a draft or submitted order's items can still be edited" });
     }
     if (!Array.isArray(items) || !items.length) {
       return res.status(400).json({ error: "At least one item is required" });
@@ -567,10 +574,20 @@ ordersRouter.patch("/:id", async (req, res) => {
     if (!canReviewSubmitted) {
       return res.status(403).json({ error: "Only a director confirming a submitted order can update its status here" });
     }
-    if (order.approval_status === "pending" || order.approval_status === "rejected") {
+    // nextApprovalStatus, not order.approval_status -- a discount_pct/
+    // discount_amd sent in this SAME request already recomputed it above
+    // (any new discount always resets to "pending"), and checking the
+    // pre-request value here let a single PATCH combining a fresh discount
+    // with status: "confirmed" sail straight through: order.approval_status
+    // was still "not_required" from before this request touched it, so this
+    // guard passed, and the UPDATE below wrote status="confirmed" and
+    // approval_status="pending" together -- an order entering the warehouse
+    // queue with a discount no director had actually signed off on
+    // (reported as "confirmation can leave a new discount unapproved").
+    if (nextApprovalStatus === "pending" || nextApprovalStatus === "rejected") {
       return res.status(409).json({
         error:
-          order.approval_status === "pending"
+          nextApprovalStatus === "pending"
             ? "This order's price change is awaiting director approval"
             : "This order's price change was rejected -- edit the order to remove or adjust it before it can proceed",
       });
