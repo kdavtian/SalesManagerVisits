@@ -224,6 +224,18 @@ export async function renderActivity(root, navigate) {
     return list;
   }
 
+  // The 200+ badge only ever applies to the currently active range's own
+  // tab -- checkinsCapped is set from that range's own query, not the
+  // other three, which haven't been fetched and could be under or over
+  // the cap themselves. Replaces the old standalone "showing the first
+  // 200 results" paragraph, which took a whole line to say what the tab
+  // itself can just wear a badge for.
+  function activityTabHtml(key, label) {
+    const active = range === key;
+    const badge = active && checkinsCapped ? ` <span class="activity-tab-cap-badge">${t("activity_capped_badge")}</span>` : "";
+    return `<button role="tab" aria-selected="${active}" class="activity-tab ${active ? "activity-tab-active" : ""}" data-range="${key}">${label}${badge}</button>`;
+  }
+
   function renderShell() {
     const statusLabel = t("all_status");
     const outcomeLabel = t("all_outcomes");
@@ -235,18 +247,16 @@ export async function renderActivity(root, navigate) {
       </div>
 
       <div class="activity-tabs" role="tablist">
-        <button role="tab" aria-selected="${range === "today"}" class="activity-tab ${range === "today" ? "activity-tab-active" : ""}" data-range="today">${t("tab_today")}</button>
-        <button role="tab" aria-selected="${range === "week"}" class="activity-tab ${range === "week" ? "activity-tab-active" : ""}" data-range="week">${t("tab_week")}</button>
-        <button role="tab" aria-selected="${range === "month"}" class="activity-tab ${range === "month" ? "activity-tab-active" : ""}" data-range="month">${t("tab_month")}</button>
-        <button role="tab" aria-selected="${range === "custom"}" class="activity-tab ${range === "custom" ? "activity-tab-active" : ""}" data-range="custom">${t("tab_custom")}</button>
+        ${activityTabHtml("today", t("tab_today"))}
+        ${activityTabHtml("week", t("tab_week"))}
+        ${activityTabHtml("month", t("tab_month"))}
+        ${activityTabHtml("custom", t("tab_custom"))}
       </div>
 
       ${range === "custom" ? `<div class="activity-custom-range">
         <label>${t("date_from")}<input type="date" id="custom-from" value="${customFrom}" /></label>
         <label>${t("date_to")}<input type="date" id="custom-to" value="${customTo}" /></label>
       </div>` : ""}
-
-      ${checkinsCapped ? `<p class="muted activity-capped-note">${t("activity_capped_note")}</p>` : ""}
 
       ${
         // A plain sales manager only ever sees their own check-ins, so this

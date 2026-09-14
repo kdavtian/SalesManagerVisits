@@ -330,12 +330,15 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
 
   function paymentRowHtml(p) {
     const meta = STATUS_META[p.status] ?? STATUS_META.pending;
+    // Amount moved off the name line (see .payment-row-action-line below) and
+    // onto its own line shared with the Approve button -- a long customer
+    // name, the amount, AND the button were all fighting for the same row's
+    // width, reported as the button overlapping/crowding the row.
     return `
       <div class="card list-row" data-payment-id="${p.id}">
         <button class="payment-row-main" data-payment-id="${p.id}">
           <div class="list-row-top">
             <strong>${escapeHtml(p.customer_name_snapshot)}</strong>
-            <span class="list-row-trailing-text text-amount">${formatAmd(Number(p.amount_amd))}</span>
           </div>
           <div class="muted list-row-meta">
             ${p.erp_customer_id_snapshot ? `${t("customer_id_label")}: ${escapeHtml(p.erp_customer_id_snapshot)} · ` : ""}${escapeHtml(p.sales_manager_name_snapshot)}${p.sales_channel ? ` · ${escapeHtml(channelDisplayLabel(p.sales_channel))}` : ""} · ${formatDateTime(p.payment_date)}
@@ -344,11 +347,14 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
             <span class="badge ${meta.cls}">${t(meta.key)}</span>
           </div>
         </button>
-        ${
-          p.status === "pending" && canReview
-            ? `<button type="button" class="btn btn-primary btn-sm payment-approve-btn" data-approve-id="${p.id}">${t("approve")}</button>`
-            : ""
-        }
+        <div class="payment-row-action-line">
+          <span class="text-amount">${formatAmd(Number(p.amount_amd))}</span>
+          ${
+            p.status === "pending" && canReview
+              ? `<button type="button" class="btn btn-primary btn-sm payment-approve-btn" data-approve-id="${p.id}">${t("approve")}</button>`
+              : ""
+          }
+        </div>
       </div>
     `;
   }
