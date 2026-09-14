@@ -3384,36 +3384,84 @@ input[type="search"]:focus-visible {
   border-bottom: 1px solid var(--border);
 }
 
-/* Combined-class selectors (not bare .perf-month-filter-*) so these beat
-   .filter-dropdown-wrap/btn/menu's own same-specificity rules regardless of
-   which comes later in the stylesheet -- this reuses that shared
-   dropdown-button component (same one the map's manager filter uses) but
-   needs a narrower, right-aligned footprint instead of its default
-   flex:1/left-aligned list-filter layout. */
-.perf-month-filter-wrap.filter-dropdown-wrap {
+.perf-month-filter-wrap {
+  position: relative;
   flex: 0 0 auto;
   min-width: 0;
   margin-left: auto;
 }
 
-.perf-month-filter-btn.filter-dropdown-btn {
+.perf-month-filter-btn {
+  box-sizing: border-box;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  pointer-events: none; /* the real <input type="month"> laid on top (see
+                            .perf-month-picker-input) is what actually
+                            receives the tap. */
+}
+
+/* A native <input type="month"> laid invisibly on top of the button so a
+   tap anywhere on it opens each browser/OS's own month-and-year picker
+   directly -- far more reliable cross-browser than driving .showPicker()
+   from JS, and needs no custom calendar UI of its own to build/maintain. */
+.perf-month-picker-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 34px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  opacity: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Combined-class selector (not bare .perf-tab-filter-btn) so this beats
+   .filter-dropdown-btn's own same-specificity width:100% regardless of
+   which comes later in the stylesheet -- reuses that shared dropdown-
+   button component (same one the month filter above and the map's manager
+   filter use) but sized to its own content instead of stretching to fill
+   the row, since it now replaces what used to be a whole row of tabs. */
+.perf-tab-filter-wrap {
+  flex: 0 0 auto;
+  min-width: 0;
+  width: fit-content;
+  margin: 12px 16px 4px;
+}
+
+.perf-tab-filter-btn.filter-dropdown-btn {
   width: auto;
   gap: 8px;
 }
 
-.perf-month-filter-menu.filter-dropdown-menu {
-  right: 0;
-  left: auto;
-  min-width: 0;
+.perf-tab-filter-btn svg {
+  width: 18px;
+  height: 18px;
 }
 
-.perf-month-popover-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 2px 4px;
-  white-space: nowrap;
-  font-size: 0.9rem;
+.perf-tab-filter-menu.filter-dropdown-menu {
+  min-width: 190px;
+}
+
+.perf-tab-menu-selected {
+  color: var(--accent) !important;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
 }
 
 .perf-status-badge {
@@ -3592,8 +3640,74 @@ input[type="search"]:focus-visible {
   background-color: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
-.perf-needs-attention {
-  margin-bottom: 14px;
+/* Row pairing the working-day-progress note with the Needs Attention
+   icon button, so the button doesn't need a header row of its own. */
+.perf-overview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 4px 10px;
+}
+
+.perf-attention-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.perf-attention-btn {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--danger);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.perf-attention-btn:active {
+  background: var(--bg-card-pressed);
+}
+
+.perf-attention-count {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  min-width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #ffffff;
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1;
+  border: 1.5px solid var(--bg);
+}
+
+.perf-attention-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  width: max(280px, 80vw);
+  max-width: min(360px, calc(100vw - 32px));
+  max-height: 60vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-elevated);
+}
+
+.perf-attention-menu .perf-recommendations {
+  margin-top: 8px;
 }
 
 .perf-comments {
@@ -5558,20 +5672,6 @@ input[type="search"]:focus-visible {
   color: var(--accent);
 }
 
-/* Replaces the old full-sentence "showing the first 200 results" note --
-   sits right on the tab whose own range actually hit the server cap. */
-.activity-tab-cap-badge {
-  display: inline-block;
-  margin-left: 2px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--warning);
-  color: #ffffff;
-  font-size: 0.68rem;
-  font-weight: 700;
-  vertical-align: middle;
-}
-
 .activity-custom-range {
   display: flex;
   gap: 10px;
@@ -6080,14 +6180,11 @@ button.list-row-icon {
   font: inherit;
 }
 
-/* Reported as the button "overlapping" the row: a customer name long
-   enough to matter, its amount, and the Approve button's own label all
-   competing for one row's width on a phone had nowhere near enough room
-   even once the name was free to ellipsize (see .list-row-top strong
-   above). The amount now lives here instead of on the name line, sharing
-   its own row with Approve (amount left, button right) below the rest of
-   the card's content -- .payment-row-main only ever holds the name, meta
-   line, and status badge now. */
+/* The amount now rides on the same line as the status badge (inside
+   .payment-row-main's own .list-row-bottom), so a card only grows this
+   extra line -- just the Approve button, right-aligned -- on rows that
+   actually have one to review; every other row is a line shorter than it
+   used to be. */
 .list-row:has(.payment-row-action-line) {
   flex-wrap: wrap;
 }
@@ -6099,10 +6196,8 @@ button.list-row-icon {
 .payment-row-action-line {
   flex-basis: 100%;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 4px;
+  justify-content: flex-end;
+  margin-top: 2px;
 }
 
 .list-group-heading {

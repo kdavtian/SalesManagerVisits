@@ -190,13 +190,22 @@ export async function renderActivity(root, navigate) {
     return `
       <div class="customer-stats-bar activity-manager-bar" id="activity-manager-bar" aria-label="${escapeHtml(t("all_managers"))}">
         ${pills
-          .map(
-            (p) => `
+          .map((p) => {
+            // The server only tells us the *whole active range's* query hit
+            // the 200-row cap (checkinsCapped), not each manager's true
+            // total -- allCheckins itself is already truncated at that
+            // point, so a manager's own count here can only be trusted as
+            // "hit the cap" when it accounts for every row in the capped
+            // set (their pill's count equals the capped total). That's
+            // always true for "All"; for an individual manager it's only
+            // true when that manager alone filled the entire capped batch.
+            const hitCap = checkinsCapped && p.count === total && total > 0;
+            return `
           <button type="button" class="stat-pill ${filters.manager === p.value ? "stat-pill-active" : ""}" data-manager="${escapeHtml(p.value)}" aria-pressed="${filters.manager === p.value}">
-            <strong>${p.count}</strong>
+            <strong>${p.count}${hitCap ? "+" : ""}</strong>
             <span>${escapeHtml(p.label)}</span>
-          </button>`
-          )
+          </button>`;
+          })
           .join("")}
       </div>
     `;
@@ -224,16 +233,9 @@ export async function renderActivity(root, navigate) {
     return list;
   }
 
-  // The 200+ badge only ever applies to the currently active range's own
-  // tab -- checkinsCapped is set from that range's own query, not the
-  // other three, which haven't been fetched and could be under or over
-  // the cap themselves. Replaces the old standalone "showing the first
-  // 200 results" paragraph, which took a whole line to say what the tab
-  // itself can just wear a badge for.
   function activityTabHtml(key, label) {
     const active = range === key;
-    const badge = active && checkinsCapped ? ` <span class="activity-tab-cap-badge">${t("activity_capped_badge")}</span>` : "";
-    return `<button role="tab" aria-selected="${active}" class="activity-tab ${active ? "activity-tab-active" : ""}" data-range="${key}">${label}${badge}</button>`;
+    return `<button role="tab" aria-selected="${active}" class="activity-tab ${active ? "activity-tab-active" : ""}" data-range="${key}">${label}</button>`;
   }
 
   function renderShell() {
