@@ -472,11 +472,15 @@ let hasNavigatedInApp = false;
 
 function navigate(hash) {
   if (location.hash === hash) {
-    render();
-  } else {
-    hasNavigatedInApp = true;
-    location.hash = hash;
+    // Already exactly on this route (tapping the same active nav icon
+    // again, e.g. Customers while already at the Customers list root) --
+    // a no-op. This used to force a full render(), which tears the whole
+    // view down and rebuilds it (a visible reload/loading flash every
+    // single tap) for a screen that hasn't gone anywhere.
+    return;
   }
+  hasNavigatedInApp = true;
+  location.hash = hash;
 }
 
 // A detail-style page's back button should return wherever the user
