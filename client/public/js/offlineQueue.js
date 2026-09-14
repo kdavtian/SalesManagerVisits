@@ -150,6 +150,13 @@ async function submitCheckin(entry) {
   form.set("customer_id", entry.customerId);
   form.set("lat", entry.lat);
   form.set("lng", entry.lng);
+  // entry.clientRef, when the caller generated one before its own first
+  // (online) attempt, ties this queued retry back to that same attempt --
+  // whichever one the server actually saved wins, the other is recognized
+  // as a duplicate. Falls back to entry.id (stable across retries of this
+  // queued entry either way) for an entry queued by an older client build
+  // that never set clientRef. See server/src/routes/checkins.js.
+  form.set("client_ref", entry.clientRef || entry.id);
   if (entry.note) form.set("note", entry.note);
   if (entry.brandStatus && Object.keys(entry.brandStatus).length) form.set("brand_status", JSON.stringify(entry.brandStatus));
   if (entry.outcomes?.length) form.set("outcomes", JSON.stringify(entry.outcomes));
@@ -171,6 +178,8 @@ async function submitCheckin(entry) {
 }
 
 function submitOrder(entry) {
+  // Same client_ref idempotency as submitCheckin above. See
+  // server/src/routes/orders.js.
   return api.createOrder({
     customer_id: entry.customerId,
     checkin_id: entry.checkinId,
@@ -178,6 +187,7 @@ function submitOrder(entry) {
     discount_pct: entry.discount_pct,
     discount_amd: entry.discount_amd,
     payment_method: entry.payment_method,
+    client_ref: entry.clientRef || entry.id,
   });
 }
 
@@ -207,6 +217,17 @@ export async function flushQueue() {
         await removeEntry(entry.id);
         notify();
       } catch (err) {
+        // 401 (session expired -- very plausible after being offline for a
+        // while) and 429 (rate limited) are both 4xx, but neither means the
+        // server actually looked at this entry's content and rejected it --
+        // they mean "try again once you're re-authenticated / once the
+        // limit clears". Treating them like a genuine rejection deleted a
+        // rep's real, un-submitted check-in/order just because their token
+        // had expired while offline (reported as "offline queue deletes
+        // work after session expiry or other 4xx errors").
+        if (err.status === 401 || err.status === 429) {
+          break;
+        }
         // Network-level failure (TypeError) or a server/infra-side error
         // (5xx, or no status at all) — stop and retry later rather than
         // discarding a rep's check-in/order because the server hiccuped.

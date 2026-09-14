@@ -114,11 +114,34 @@ function applyDiscount(subtotal, discountPct, discountAmd) {
 // Prices are snapshotted from the catalog at save time, not looked up live
 // later -- an order is what was actually agreed, and must stay correct
 // even if the catalog price changes afterward.
+// Same idempotency shape GET /:id returns (order + items), used both for a
+// retried submission recognized before the insert and one recognized via
+// the unique-violation race below.
+async function loadOrderWithItems(orderId) {
+  const { rows } = await pool.query("SELECT * FROM orders WHERE id = $1", [orderId]);
+  const order = rows[0];
+  if (!order) return null;
+  const { rows: items } = await pool.query(
+    "SELECT oi.*, p.unit AS size FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1 ORDER BY oi.id",
+    [orderId]
+  );
+  return { ...order, items };
+}
+
 ordersRouter.post("/", async (req, res) => {
-  const { customer_id, checkin_id, note, items, discount_pct, discount_amd, payment_method } = req.body ?? {};
+  const { customer_id, checkin_id, note, items, discount_pct, discount_amd, payment_method, client_ref } = req.body ?? {};
   const customerId = Number(customer_id);
   if (!customerId || !Array.isArray(items) || !items.length) {
     return res.status(400).json({ error: "customer_id and at least one item are required" });
+  }
+
+  // A retried submission (the offline queue's flushQueue() re-sending an
+  // entry whose earlier attempt actually succeeded but whose response was
+  // lost) carries the same client_ref every time -- recognize it here and
+  // return the original order instead of creating a duplicate.
+  if (client_ref) {
+    const { rows: existingRows } = await pool.query("SELECT id FROM orders WHERE user_id = $1 AND client_ref = $2", [req.user.id, client_ref]);
+    if (existingRows[0]) return res.status(201).json(await loadOrderWithItems(existingRows[0].id));
   }
   // Required going forward (item 6) -- informational only, not a
   // reintroduction of the rejected payment-approval workflow. Nullable at
@@ -185,9 +208,9 @@ ordersRouter.post("/", async (req, res) => {
     await client.query("BEGIN");
     const orderCode = await nextOrderCode(client);
     const { rows } = await client.query(
-      `INSERT INTO orders (customer_id, user_id, checkin_id, status, total_amd, note, discount_pct, discount_amd, approval_status, order_code, payment_method)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-      [customerId, req.user.id, checkin_id || null, initialStatus, totalAmd, note || null, discountPct, discountAmd, approvalStatus, orderCode, payment_method]
+      `INSERT INTO orders (customer_id, user_id, checkin_id, status, total_amd, note, discount_pct, discount_amd, approval_status, order_code, payment_method, client_ref)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+      [customerId, req.user.id, checkin_id || null, initialStatus, totalAmd, note || null, discountPct, discountAmd, approvalStatus, orderCode, payment_method, client_ref || null]
     );
     order = rows[0];
     for (const line of lines) {
@@ -200,6 +223,13 @@ ordersRouter.post("/", async (req, res) => {
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
+    // 23505 = unique_violation -- two near-simultaneous retries of the same
+    // queued entry both passed the client_ref check above before either had
+    // committed; the loser here just needs the winner's row, not an error.
+    if (err.code === "23505" && client_ref) {
+      const { rows: existingRows } = await pool.query("SELECT id FROM orders WHERE user_id = $1 AND client_ref = $2", [req.user.id, client_ref]);
+      if (existingRows[0]) return res.status(201).json(await loadOrderWithItems(existingRows[0].id));
+    }
     throw err;
   } finally {
     client.release();

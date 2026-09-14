@@ -440,10 +440,17 @@ export async function renderCheckin(root, navigate, customerId) {
     const brandStatusPayload = Object.fromEntries(Object.entries(brandStatus).filter(([, v]) => v.length));
     const { latitude: lat, longitude: lng } = position.coords;
 
+    // Generated once, before the first (online) attempt -- reused as-is if
+    // this falls through to enqueueCheckin below, so a retry after a lost
+    // response (the fetch throws even though the server actually received
+    // and saved this exact request) can't create a second check-in. See
+    // server/src/routes/checkins.js and offlineQueue.js.
+    const clientRef = crypto.randomUUID();
     const formData = new FormData();
     formData.set("customer_id", customerId);
     formData.set("lat", lat);
     formData.set("lng", lng);
+    formData.set("client_ref", clientRef);
     if (note) formData.set("note", note);
     formData.set("outcomes", JSON.stringify(outcomes));
     if (amountCollected != null) formData.set("amount_collected_amd", amountCollected);
@@ -461,6 +468,7 @@ export async function renderCheckin(root, navigate, customerId) {
         // Raw Blobs, not base64 -- offlineQueue.js's IndexedDB store
         // handles Blobs natively, no data-URL round trip needed.
         enqueueCheckin({
+          clientRef,
           customerId,
           lat,
           lng,

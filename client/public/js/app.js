@@ -535,6 +535,13 @@ async function render() {
     renderLogin(app, async () => {
       location.hash = "#/dashboard";
       startLocationBroadcast();
+      // A session that expired while this device had queued offline work
+      // stops flushQueue() at the first 401 rather than deleting that work
+      // (see offlineQueue.js) -- nothing else re-triggers a flush once the
+      // rep is back online AND re-authenticated (the 'online' listener
+      // already fired before they logged back in), so a fresh login is the
+      // other point that needs its own retry.
+      flushQueue();
       render();
       refreshOrderBadge();
       refreshPaymentBadge();
