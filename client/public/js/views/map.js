@@ -855,13 +855,24 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     });
   }
 
-  function renderStopListPanel() {
+  // Pulled out of renderStopListPanel so applyFilter's own "no longer on
+  // the planned filter" branch can call just the cleanup half -- it used
+  // to only hide the stop-list panel there, never touching the numbered
+  // stop markers or the dashed route polyline renderStopListPanel had
+  // drawn, so switching off "Planned" left that route line stuck on the
+  // map until the filter was tapped back on (which redraws over it, but
+  // never happening again left it there for good).
+  function clearRouteAndStops() {
     stopMarkers.forEach((m) => markerLayer.removeLayer(m));
     stopMarkers.length = 0;
     if (routeLine) {
       map.removeLayer(routeLine);
       routeLine = null;
     }
+  }
+
+  function renderStopListPanel() {
+    clearRouteAndStops();
 
     if (activeFilter !== "planned" || !plannedCustomerIds?.length) {
       plannedStopsPanel.hidden = true;
@@ -1023,6 +1034,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       }
       plannedEmptyHint.hidden = bounds.length > 0 || plannedCustomerIds === null;
     } else {
+      clearRouteAndStops();
       plannedStopsPanel.hidden = true;
       plannedEmptyHint.hidden = true;
     }

@@ -17,12 +17,11 @@ export function setClusterPins(enabled) {
 }
 
 // Whether the locate button's third tap enters compass/heading-tracking
-// mode. Default ON (the location button's existing off -> on -> track
-// cycle) so an install with nothing stored behaves exactly as before; off
-// makes the button a plain show/hide toggle for reps who found the
-// tracking step disorienting or don't need it.
+// mode. Default OFF -- an install with nothing stored gets the plain
+// show/hide locate toggle; a rep can opt into the tracking step from the
+// map legend's own preference switch if they want it.
 export function getCompassMode() {
-  return localStorage.getItem(COMPASS_KEY) !== "off";
+  return localStorage.getItem(COMPASS_KEY) === "on";
 }
 
 export function setCompassMode(enabled) {
