@@ -23,11 +23,20 @@ export async function getPushSubscriptionState() {
 }
 
 export async function enablePushNotifications() {
-  const { enabled, key } = await api.getVapidPublicKey();
-  if (!enabled || !key) throw new Error("Push notifications are not configured on the server");
-
+  // Notification.requestPermission() MUST be the first await here, called
+  // directly off the toggle's click handler with nothing else awaited
+  // first. iOS Safari (including a standalone home-screen PWA) only shows
+  // the permission prompt while the click's transient user-activation is
+  // still live; an earlier await (the VAPID key fetch used to run first)
+  // burns that activation on a network round-trip, so by the time this
+  // call finally runs, WebKit just silently declines to prompt at all --
+  // no dialog, no error, the toggle simply never turns on. Reported as
+  // "I cannot turn on notifications" / "nothing happens" on an iPhone PWA.
   const permission = await Notification.requestPermission();
   if (permission !== "granted") throw new Error("Notification permission was not granted");
+
+  const { enabled, key } = await api.getVapidPublicKey();
+  if (!enabled || !key) throw new Error("Push notifications are not configured on the server");
 
   const registration = await navigator.serviceWorker.ready;
   const subscription = await registration.pushManager.subscribe({
