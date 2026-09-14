@@ -4244,10 +4244,13 @@ input[type="search"]:focus-visible {
      motion-based, so unmistakable -- tap affordance than a static border. */
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 10px 12px;
+  /* Tightened from 10px 12px -- the stacked number+label was taking more
+     vertical space than either needed, on every screen using this filter
+     row (Customers, Activity). */
+  padding: 6px 12px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0;
   min-width: 84px;
   cursor: pointer;
   text-align: left;
@@ -6061,6 +6064,27 @@ button.list-row-icon {
   cursor: pointer;
   color: inherit;
   font: inherit;
+}
+
+/* Reported as the button "overlapping" the row: a customer name long
+   enough to matter, its amount, and the Approve button's own label all
+   competing for one row's width on a phone has nowhere near enough room
+   even once the name is free to ellipsize (see .list-row-top strong
+   above) -- the name was getting crushed down to a few characters to make
+   space. Rather than fight that math, the button drops to its own line
+   below the row's content on any card that has one, scoped with :has() so
+   every other .list-row (checkins, orders, ...) that never has this
+   button is completely unaffected. */
+.list-row:has(.payment-approve-btn) {
+  flex-wrap: wrap;
+}
+
+.list-row:has(.payment-approve-btn) .payment-row-main {
+  flex-basis: 100%;
+}
+
+.payment-approve-btn {
+  margin-top: 4px;
 }
 
 .list-group-heading {
