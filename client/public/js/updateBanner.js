@@ -70,8 +70,17 @@ function maybeShowBanner() {
   if (updateReady) renderBanner();
 }
 
-export function checkForUpdateManually() {
-  if (!registration) return Promise.resolve({ updateFound: false });
+export async function checkForUpdateManually() {
+  // `registration` is only set once register("/sw.js").then(...) resolves
+  // (see initServiceWorkerUpdates below) -- a tap on "Check for updates"
+  // that lands before that promise settles (a slow cold start) used to
+  // silently report "up to date" here instead of actually checking, since
+  // there was nothing else to fall back to. navigator.serviceWorker.ready
+  // resolves as soon as this page has *any* active registration, so it's a
+  // reliable fallback for exactly that race.
+  const reg = registration || (await navigator.serviceWorker.ready.catch(() => null));
+  if (!reg) return { updateFound: false };
+  registration = reg;
   return new Promise((resolve) => {
     let settled = false;
     function onUpdateFound() {
@@ -80,12 +89,16 @@ export function checkForUpdateManually() {
     function finish(found) {
       if (settled) return;
       settled = true;
-      registration.removeEventListener("updatefound", onUpdateFound);
+      reg.removeEventListener("updatefound", onUpdateFound);
       resolve({ updateFound: found });
     }
-    registration.addEventListener("updatefound", onUpdateFound);
-    registration.update().catch(() => finish(false));
-    setTimeout(() => finish(false), 5000);
+    reg.addEventListener("updatefound", onUpdateFound);
+    reg.update().catch(() => finish(false));
+    // A rep in the field often has a slow/unstable connection (the whole
+    // reason this app has an offline queue) -- 5s was long enough to
+    // misreport "up to date" on a check that was still genuinely in
+    // flight, not actually finished.
+    setTimeout(() => finish(false), 12000);
   });
 }
 

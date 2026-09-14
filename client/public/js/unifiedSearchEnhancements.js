@@ -257,13 +257,6 @@ function enhanceCustomers() {
   const view = input?.closest(".list-view");
   if (!input || !toolbar || !view) return;
 
-  const add = view.querySelector("#add-customer-btn");
-  if (add && !add.dataset.mapAddIcon) {
-    add.dataset.mapAddIcon = "true";
-    add.classList.add("customer-map-add-action");
-    add.innerHTML = icons.mapPinPlus;
-  }
-
   let actions = toolbar.querySelector(":scope > .activity-search-actions");
   if (!toolbar.dataset.unifiedCustomersSearch) {
     toolbar.dataset.unifiedCustomersSearch = "true";

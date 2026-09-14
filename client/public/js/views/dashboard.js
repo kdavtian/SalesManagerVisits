@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatDistance, formatRelative, getCurrentPosition, haversineMeters, categoryLabel } from "../util.js";
+import { escapeHtml, formatDistance, formatRelative, formatAmd, getCurrentPosition, haversineMeters, categoryLabel } from "../util.js";
 import { state } from "../state.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
@@ -86,6 +86,38 @@ function quickActionsHtml(ids) {
     .join("");
 }
 
+// CEO/admin home tab, replacing the "Recent activity" section removed for
+// those roles (see the role check further down) -- a tap-through glance at
+// today's MTD Sales-vs-Plan and Collected, from the same leaderboard
+// Company Dashboard's own Overview reads (see GET /api/sales-performance,
+// now returning plan_amd instead of the old unreliable budget_amd).
+function companyDashboardPreviewHtml(planPreview) {
+  if (!Array.isArray(planPreview) || !planPreview.length) return "";
+  const totals = planPreview.reduce(
+    (sum, r) => ({
+      sales: sum.sales + (Number(r.sales_amd) || 0),
+      plan: sum.plan + (Number(r.plan_amd) || 0),
+      collected: sum.collected + (Number(r.collected_amd) || 0),
+    }),
+    { sales: 0, plan: 0, collected: 0 }
+  );
+  const pct = totals.plan > 0 ? Math.min(100, Math.round((totals.sales / totals.plan) * 100)) : 0;
+  return `
+    <button type="button" class="card report-drill-card" id="company-dashboard-preview-card">
+      <div class="section-heading-row">
+        <h2 class="section-title section-title-inline">${t("company_dashboard_title")}</h2>
+        <span class="chevron">&#8250;</span>
+      </div>
+      <div class="perf-bar-main">
+        <span class="perf-bar-actual">${formatAmd(Math.round(totals.sales))}</span>
+        <span class="muted"> / ${formatAmd(Math.round(totals.plan))}${totals.plan ? ` (${pct}%)` : ""}</span>
+      </div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
+      <p class="muted" style="margin:8px 0 0;">${t("company_dashboard_collected_label")}: ${formatAmd(Math.round(totals.collected))}</p>
+    </button>
+  `;
+}
+
 function greeting() {
   const hour = new Date().getHours();
   if (hour < 12) return t("greeting_morning");
@@ -106,7 +138,8 @@ export async function renderDashboard(root, navigate) {
     await loadWithCache(
       `dashboard-summary:${state.user.id}`,
       async () => {
-        const [summary, customers, trends, settings] = await Promise.all([
+        const isCeoOrAdmin = state.user.role === "admin" || state.user.role === "ceo";
+        const [summary, customers, trends, settings, planPreview] = await Promise.all([
           api.dashboardSummary(),
           // The result here only ever feeds renderNextVisit below, and only
           // for the roles that card is actually rendered for (not admin/ceo --
@@ -117,13 +150,17 @@ export async function renderDashboard(root, navigate) {
           // (for a sales_manager, this app's most common daily user) scoped
           // down to what "next visit" actually means for that role -- their
           // own assigned book, not the whole company's.
-          state.user.role === "admin" || state.user.role === "ceo"
-            ? Promise.resolve([])
-            : api.listCustomers(state.user.role === "sales_manager" ? { assigned_manager_id: state.user.id } : {}),
+          isCeoOrAdmin ? Promise.resolve([]) : api.listCustomers(state.user.role === "sales_manager" ? { assigned_manager_id: state.user.id } : {}),
           api.dashboardTrends(),
           api.getSettings(),
+          // Company Dashboard preview card (ceo/admin only, see paint()
+          // below) -- same MTD leaderboard Company Dashboard's own Overview
+          // reads (now plan_amd, not the old unreliable budget_amd). A
+          // failure here shouldn't break the rest of the home tab, so it
+          // degrades to no preview card instead of a load error.
+          isCeoOrAdmin ? api.getSalesPerformanceLeaderboard("mtd").catch(() => null) : Promise.resolve(null),
         ]);
-        return { summary, customers, trends, settings };
+        return { summary, customers, trends, settings, planPreview };
       },
       (data) => paint(data)
     );
@@ -132,7 +169,7 @@ export async function renderDashboard(root, navigate) {
     return;
   }
 
-  function paint({ summary, customers, trends, settings }) {
+  function paint({ summary, customers, trends, settings, planPreview }) {
   const totals = summary.totals;
   const remaining = Math.max(0, totals.total_customers - totals.visited_today);
   // "Here's your field plan for today" only means something to someone who
@@ -282,7 +319,7 @@ export async function renderDashboard(root, navigate) {
       // it: for them it's a quick "did my last few check-ins register OK"
       // glance, not a shrunk copy of something else on their home tab.
       ["ceo", "admin"].includes(state.user.role)
-        ? ""
+        ? companyDashboardPreviewHtml(planPreview)
         : `<div>
           <div class="section-heading-row">
             <h2 class="section-title section-title-inline">${t("recent_activity")}</h2>
@@ -295,6 +332,7 @@ export async function renderDashboard(root, navigate) {
   `;
 
   container.querySelector("#view-all-activity")?.addEventListener("click", () => navigate("#/activity"));
+  container.querySelector("#company-dashboard-preview-card")?.addEventListener("click", () => navigate("#/company-dashboard"));
   // Every tile is optional now (an admin can hide any of them for any role),
   // so this wires whichever ones actually rendered rather than assuming a
   // fixed set exists.

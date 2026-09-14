@@ -207,7 +207,7 @@ export async function renderWarehouse(root, navigate) {
       <div class="inventory-search-row">
         <input type="search" id="inventory-search" placeholder="${t("search")}" />
         <button type="button" class="filter-icon-btn" id="inventory-landing-btn" aria-label="${t("warehouse_show_landing_cost")}" title="${t("warehouse_show_landing_cost")}" aria-pressed="false">
-          ${icons.download}
+          ${icons.costLetter}
         </button>
         <button type="button" class="filter-icon-btn" id="inventory-wholesale-btn" aria-label="${t("warehouse_show_wholesale_price")}" title="${t("warehouse_show_wholesale_price")}" aria-pressed="false">
           ${icons.wallet}
