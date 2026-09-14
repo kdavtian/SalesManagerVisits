@@ -1,13 +1,20 @@
 import { api } from "./api.js";
 
 // Potential and Competitors are portfolio-level channels in filters, not
-// operational routing values written into customers.sales_channel.
+// operational routing values written into customers.sales_channel. Only
+// stand in for a MISSING sales_channel -- a customer an SM has already
+// assigned a real channel to (e.g. OEM, PCO) keeps showing that channel
+// everywhere even before it's ERP-linked; erp_customer_id alone is not
+// reason enough to hide it behind "Potential" (that used to happen here
+// unconditionally, which is why the map's channel filter/pins only ever
+// showed SM channels + Potential -- every not-yet-ERP-linked customer's
+// real channel was being overwritten regardless of whether it had one).
 function normalizeCustomer(customer) {
   if (!customer || typeof customer !== "object") return customer;
   const copy = { ...customer };
   if (copy.customer_tier === "competitor") {
     copy.sales_channel = "COMPETITORS";
-  } else if (!String(copy.erp_customer_id ?? "").trim()) {
+  } else if (!String(copy.erp_customer_id ?? "").trim() && !String(copy.sales_channel ?? "").trim()) {
     copy.customer_tier = "potential";
     copy.sales_channel = "POTENTIAL";
   }

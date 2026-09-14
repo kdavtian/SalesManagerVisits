@@ -705,8 +705,12 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   let searchQuery = "";
   let searchDebounceTimer;
   let selectedBrand = "";
-  let channelFilter = "";
-  let categoryFilter = "";
+  // Multi-select ("show me A OR B") like Customers.js's own channel
+  // filter -- comparing two channels or categories side by side on the map
+  // is a real, common query, and a single-value filter forced picking one
+  // at a time to do it.
+  let channelFilters = new Set();
+  let categoryFilters = new Set();
   let brandStatusByCustomer = null;
 
   // Same 44px icon-button + bottom-sheet pattern as the Customers tab's own
@@ -744,10 +748,66 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     });
   }
 
-  function mapFilterIconButton({ key, icon, label, active }) {
-    return `<button type="button" class="filter-icon-btn ${active ? "filter-icon-btn-active" : ""}" data-map-filter-btn="${key}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">
+  // Multi-select variant (checkbox-style, Clear/Done actions) -- same
+  // pattern as Customers.js's own openMultiFilterSheet, duplicated here for
+  // the same reason openMapFilterSheet above is: private closure state.
+  function openMapMultiFilterSheet(titleText, options, currentSet, onApply) {
+    const working = new Set(currentSet);
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet filter-sheet">
+        <h2>${escapeHtml(titleText)}</h2>
+        <div class="filter-sheet-options">
+          ${options
+            .map(
+              (o) => `
+            <button type="button" class="filter-sheet-option ${working.has(o.value) ? "filter-sheet-option-selected" : ""}" data-value="${escapeHtml(o.value)}">
+              <span>${escapeHtml(o.label)}</span>
+              <span class="filter-sheet-check" ${working.has(o.value) ? "" : "hidden"}>${icons.checkCircle}</span>
+            </button>
+          `
+            )
+            .join("")}
+        </div>
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="map-multi-filter-clear">${t("clear")}</button>
+          <button type="button" class="btn btn-primary" id="map-multi-filter-done">${t("done")}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+    overlay.querySelectorAll(".filter-sheet-option").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const value = btn.dataset.value;
+        if (working.has(value)) working.delete(value);
+        else working.add(value);
+        btn.classList.toggle("filter-sheet-option-selected", working.has(value));
+        btn.querySelector(".filter-sheet-check").hidden = !working.has(value);
+      });
+    });
+    overlay.querySelector("#map-multi-filter-clear").addEventListener("click", () => {
+      working.clear();
+      overlay.remove();
+      onApply(working);
+    });
+    overlay.querySelector("#map-multi-filter-done").addEventListener("click", () => {
+      overlay.remove();
+      onApply(working);
+    });
+  }
+
+  function mapFilterIconButton({ key, icon, label, active, count }) {
+    // Same "(2)" count-badge language as Customers.js's own multi-select
+    // filter buttons -- a plain dot for zero/one selection, the actual
+    // number once there's more than one to distinguish from a single-value
+    // filter's own active state.
+    const a11yLabel = count > 1 ? `${label} (${count})` : label;
+    return `<button type="button" class="filter-icon-btn ${active ? "filter-icon-btn-active" : ""}" data-map-filter-btn="${key}" aria-label="${escapeHtml(a11yLabel)}" title="${escapeHtml(a11yLabel)}">
       ${icon}
-      ${active ? `<span class="filter-icon-dot" aria-hidden="true"></span>` : ""}
+      ${count > 1 ? `<span class="filter-icon-count" aria-hidden="true">${count}</span>` : active ? `<span class="filter-icon-dot" aria-hidden="true"></span>` : ""}
     </button>`;
   }
 
@@ -760,22 +820,22 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
     iconFilterRow.innerHTML = [
       channels.length
-        ? mapFilterIconButton({ key: "channel", icon: icons.route, label: t("filter_direction_title"), active: channelFilter !== "" })
+        ? mapFilterIconButton({ key: "channel", icon: icons.route, label: t("filter_direction_title"), active: channelFilters.size > 0, count: channelFilters.size })
         : "",
       categories.length
-        ? mapFilterIconButton({ key: "category", icon: icons.store, label: t("category"), active: categoryFilter !== "" })
+        ? mapFilterIconButton({ key: "category", icon: icons.store, label: t("category"), active: categoryFilters.size > 0, count: categoryFilters.size })
         : "",
     ]
       .filter(Boolean)
       .join("");
 
     iconFilterRow.querySelector('[data-map-filter-btn="channel"]')?.addEventListener("click", () => {
-      openMapFilterSheet(
+      openMapMultiFilterSheet(
         t("filter_direction_title"),
-        [{ value: "", label: t("all_channels") }, ...channels.map((c) => ({ value: c, label: channelDisplayLabel(c) }))],
-        channelFilter,
-        (value) => {
-          channelFilter = value;
+        channels.map((c) => ({ value: c, label: channelDisplayLabel(c) })),
+        channelFilters,
+        (selected) => {
+          channelFilters = selected;
           renderIconFilterRow();
           applyFilter();
         }
@@ -783,12 +843,12 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     });
 
     iconFilterRow.querySelector('[data-map-filter-btn="category"]')?.addEventListener("click", () => {
-      openMapFilterSheet(
+      openMapMultiFilterSheet(
         t("category"),
-        [{ value: "", label: t("all_categories") }, ...categories.map((v) => ({ value: v, label: categoryLabel(v) }))],
-        categoryFilter,
-        (value) => {
-          categoryFilter = value;
+        categories.map((v) => ({ value: v, label: categoryLabel(v) })),
+        categoryFilters,
+        (selected) => {
+          categoryFilters = selected;
           renderIconFilterRow();
           applyFilter();
         }
@@ -996,8 +1056,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       const status = customerStatus(c);
       if (c.customer_tier === "competitor" && !showCompetitors) continue;
       if (managerFilter && String(c.assigned_manager_id) !== managerFilter) continue;
-      if (channelFilter && c.sales_channel !== channelFilter) continue;
-      if (categoryFilter && c.category !== categoryFilter) continue;
+      if (channelFilters.size && !channelFilters.has(c.sales_channel)) continue;
+      if (categoryFilters.size && !categoryFilters.has(c.category)) continue;
       if (plannedTodayOnly && !plannedTodayIdSet?.has(c.id)) continue;
       if (searchQuery) {
         const haystack = `${c.name} ${c.address ?? ""} ${c.category ?? ""} ${c.erp_customer_id ?? ""}`.toLowerCase();

@@ -418,7 +418,7 @@ export async function renderActivity(root, navigate) {
         }
         return `${managerHeading}
         <div class="card list-row" tabindex="0" role="button" data-checkin-id="${c.id}">
-          <button type="button" class="list-row-icon list-row-icon-${customerIconTint(c.customer_tier)}" data-customer-id="${c.customer_id}" aria-label="${escapeHtml(c.customer_name)}" title="${escapeHtml(c.customer_name)}">
+          <button type="button" class="list-row-icon list-row-icon-glyph-only list-row-icon-${customerIconTint(c.customer_tier)}" data-customer-id="${c.customer_id}" aria-label="${escapeHtml(c.customer_name)}" title="${escapeHtml(c.customer_name)}">
             ${categoryIcon(c.customer_category)}
           </button>
           <div class="list-row-body">

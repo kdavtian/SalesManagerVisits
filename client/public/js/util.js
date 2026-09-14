@@ -81,12 +81,15 @@ export const TIER_OPTIONS = [
 // Armenian labels stored on the customer record -- used directly as both
 // the stored value and the display text, matching how this field always
 // worked (no separate translation layer for these fixed business terms).
-// The four category glyphs are pre-approved artwork shipped as raster
-// assets, never redrawn/re-traced in code. Two sets exist and share the
-// same four filename slugs: the blue set below (used on every non-map
-// screen) and the map's tiered marker set (icons/markers/<tier>-<slug>.png,
-// where pin shape and tier color are baked into the image). One category ->
-// slug mapping (categoryIconSlug) therefore drives both.
+// The map's own tiered marker set (icons/markers/<tier>-<slug>.png, pin
+// shape and tier color baked into the image) still uses the same four
+// slugs below and is unaffected by this. The old flat "blue set" raster
+// icons used everywhere else were replaced with inline stroke SVGs
+// (currentColor-based, like every other icon in this app) so a customer's
+// tier color can actually show through the glyph itself -- a fixed-color
+// raster image can't pick up .list-row-icon-tier-*'s color, and was also
+// carrying its own baked-in frame that doubled up with .list-row-icon's
+// own frame around it (reported as "icon inside an icon frame").
 const CATEGORY_ICON_SLUG = {
   "Յուղման կետ": "drop",
   "Խանութ": "shop",
@@ -101,17 +104,24 @@ export function categoryIconSlug(value) {
   return CATEGORY_ICON_SLUG[value] ?? "other";
 }
 
-function categoryIconImg(slug) {
-  return `<img class="ui-svg category-img" src="/icons/categories/blue-${slug}.png" alt="" width="22" height="22" draggable="false" />`;
+const CATEGORY_ICON_STROKE = 'fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"';
+function categoryIconSvg(content) {
+  return `<svg class="category-img" viewBox="0 0 24 24" ${CATEGORY_ICON_STROKE} aria-hidden="true" focusable="false">${content}</svg>`;
 }
 
 const CATEGORY_ICON = {
-  // An oil can with a drop -- stands in for "oil changing point".
-  oilPoint: categoryIconImg("drop"),
-  shop: categoryIconImg("shop"),
+  // A drop -- "oil changing point".
+  oilPoint: categoryIconSvg(`<path d="M12 3.3c2.8 3.8 6 8.1 6 11.4a6 6 0 1 1-12 0c0-3.3 3.2-7.6 6-11.4Z"/>`),
+  // A shopping cart, matching the old artwork's own glyph.
+  shop: categoryIconSvg(
+    `<circle cx="9" cy="20" r="1" fill="currentColor" stroke="none"/><circle cx="18" cy="20" r="1" fill="currentColor" stroke="none"/><path d="M3 4h2l2.2 10.2a2 2 0 0 0 2 1.6h8.6a2 2 0 0 0 2-1.6L21 8H6"/>`
+  ),
   // A wrench -- the auto workshop/service point.
-  workshop: categoryIconImg("workshop"),
-  other: categoryIconImg("other"),
+  workshop: categoryIconSvg(
+    `<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94Z"/>`
+  ),
+  // A generic six-point asterisk -- catch-all "other".
+  other: categoryIconSvg(`<path d="M12 3v18M4.7 7.5l14.6 9M19.3 7.5l-14.6 9"/>`),
 };
 
 // Armenia's 11 administrative regions (10 marzes + Yerevan, which is a
@@ -313,7 +323,7 @@ export function customerIconTint(tier) {
 }
 
 export function customerListIconHtml(c) {
-  return `<span class="list-row-icon list-row-icon-${customerIconTint(c.customer_tier)}">${categoryIcon(c.category)}</span>`;
+  return `<span class="list-row-icon list-row-icon-glyph-only list-row-icon-${customerIconTint(c.customer_tier)}">${categoryIcon(c.category)}</span>`;
 }
 
 // Wires up click behavior for a tierSelectorHtml() block already in the
