@@ -2781,8 +2781,12 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     const form = overlay.querySelector("#new-customer-form");
     const errorEl = overlay.querySelector("#new-customer-error");
 
-    form.addEventListener("submit", async (e) => {
+    form.addEventListener("submit", (e) => {
       e.preventDefault();
+      submitNewCustomer(false);
+    });
+
+    async function submitNewCustomer(confirmDuplicate) {
       const data = new FormData(form);
       const submitBtn = form.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
@@ -2806,6 +2810,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           assigned_manager_id: data.get("assigned_manager_id") ? Number(data.get("assigned_manager_id")) : null,
           lat: latlng.lat,
           lng: latlng.lng,
+          confirm_duplicate: confirmDuplicate || undefined,
         });
         overlay.remove();
         if (placingMarker) {
@@ -2829,13 +2834,28 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         await loadCustomers();
         if (created?.id != null) focusOnCustomerMarker(created.id);
       } catch (err) {
+        // Same "duplicate_warning" convention payments.js's own duplicate
+        // check uses -- offer to proceed anyway (a name/location match
+        // this close is usually the same shop re-entered, but a genuine
+        // coincidence should still be a one-tap override, not a hard
+        // block) instead of surfacing it as a plain validation error.
+        if (err.status === 409 && err.body?.error === "duplicate_warning") {
+          if (confirm(`${err.body.message}\n\n${t("add_anyway")}`)) {
+            await submitNewCustomer(true);
+            return;
+          }
+          submitBtn.disabled = false;
+          submitBtn.textContent = t("save_customer");
+          form.removeAttribute("aria-busy");
+          return;
+        }
         errorEl.textContent = err.message;
         errorEl.hidden = false;
         submitBtn.disabled = false;
         submitBtn.textContent = t("save_customer");
         form.removeAttribute("aria-busy");
       }
-    });
+    }
   }
 
   map.whenReady(loadCustomers);
