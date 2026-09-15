@@ -399,11 +399,38 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       clearTimeout(tileHealthTimer);
       hideMapError();
     });
+    // A provider actively rejecting us (403, or any other real HTTP error
+    // response) fires this almost immediately per tile, unlike a genuinely
+    // unreachable/slow provider which just never responds -- waiting out
+    // the full 15s health-check timeout below in that case leaves the map
+    // visibly broken far longer than necessary once several tiles have
+    // already come back with a real error. Requiring a few errors (not
+    // just one) avoids over-reacting to a single edge/stale tile at the
+    // map's boundary, which 404s/errors normally and isn't a sign the
+    // whole provider is down.
+    let errorCount = 0;
+    layer.on("tileerror", () => {
+      if (tileEverLoaded) return;
+      errorCount += 1;
+      if (errorCount >= 3) advanceProvider();
+    });
     return layer;
   }
 
   function primaryTileUrl() {
     return TILE_URLS[getTheme()];
+  }
+
+  function advanceProvider() {
+    clearTimeout(tileHealthTimer);
+    if (providerIndex <= FALLBACK_TILE_URLS.length - 1) {
+      providerIndex += 1;
+      map.removeLayer(tileLayer);
+      tileLayer = makeTileLayer(currentProvider()).addTo(map);
+      startTileHealthCheck();
+    } else {
+      showMapError();
+    }
   }
 
   // Real-world mobile latency to a foreign tile CDN (DNS + TLS + first byte,
@@ -416,19 +443,15 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // (CARTO -> OSM -> Wikimedia) before showing a real error -- three
   // independent hosts/CDNs failing in a row is a strong signal the device
   // has no route to any map tiles at all, not a problem with one of them.
+  // A provider returning real HTTP errors (see tileerror above) doesn't
+  // have to wait out this whole window -- this is the backstop for a
+  // provider that simply never responds at all.
   function startTileHealthCheck() {
     tileEverLoaded = false;
     clearTimeout(tileHealthTimer);
     tileHealthTimer = setTimeout(() => {
       if (tileEverLoaded) return;
-      if (providerIndex <= FALLBACK_TILE_URLS.length - 1) {
-        providerIndex += 1;
-        map.removeLayer(tileLayer);
-        tileLayer = makeTileLayer(currentProvider()).addTo(map);
-        startTileHealthCheck();
-      } else {
-        showMapError();
-      }
+      advanceProvider();
     }, 15000);
   }
 
