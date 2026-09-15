@@ -33,9 +33,6 @@ git pull --ff-only
 echo "==> Building app image"
 docker compose build app
 
-echo "==> Running unit tests"
-docker compose run --rm app npm test
-
 echo "==> Starting database"
 docker compose up -d db
 
@@ -52,6 +49,18 @@ echo "==> Running database migrations"
 # column/table the database didn't have yet, since nothing here waits for
 # that gap to close before traffic can reach the app.
 docker compose run --rm app npm run migrate
+
+echo "==> Running unit tests"
+# Deliberately AFTER migrations, not before: the test suite exercises
+# columns/tables this deploy's own migrations may just have added (e.g. the
+# account-lockout columns), and `db` here is the *persistent* database
+# service carried over from the previous deploy, not a fresh one -- running
+# the tests first meant they ran against last deploy's schema instead of
+# this one's, failing every login-dependent test with a missing-column
+# error the moment a migration and the tests that depend on it shipped in
+# the same deploy. Still strictly before `docker compose up -d app` below,
+# so a real test failure still blocks the app from ever serving traffic.
+docker compose run --rm app npm test
 
 echo "==> Starting app"
 docker compose up -d app
