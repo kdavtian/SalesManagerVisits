@@ -7,7 +7,12 @@ and whether the location matched.
 
 ## Status
 
-Early scaffold — see the build order below for progress. Not yet deployed.
+In production, in active use by one company's field sales/warehouse/
+delivery/accounting teams. The "Build order" section below is the
+original scaffold checklist and is kept for history; the app has grown
+well past it since. See [`docs/governance/`](docs/governance/README.md)
+for the current-state architecture, known risks, and the process that
+governs changes from here forward.
 
 ## Stack
 
@@ -61,7 +66,16 @@ Docker Compose (app + Postgres) behind nginx with Let's Encrypt, on a
 DigitalOcean droplet. Full walkthrough: [`deploy/digitalocean.md`](deploy/digitalocean.md).
 Once set up, redeploying is `./deploy/deploy.sh` on the droplet.
 
-## Build order
+## Governance
+
+`main` is the maintained quality baseline. Every change goes through a
+reviewed PR and passing CI (`.github/workflows/ci.yml`) before merging —
+see [`docs/governance/`](docs/governance/README.md) for the full policy,
+the current-state architecture diagram, the risk/technical-debt register,
+critical user journeys, Definition of Done, and the release/incident
+ownership matrix.
+
+## Build order (original scaffold, kept for history)
 
 1. [x] Repo scaffold, `.gitignore`, README
 2. [x] Backend: Express app, Postgres connection, migrations, auth, seed script
@@ -70,3 +84,8 @@ Once set up, redeploying is `./deploy/deploy.sh` on the droplet.
 5. [x] PWA layer: manifest, icons, service worker, install prompt/walkthrough
 6. [x] Dockerize: Dockerfile, docker-compose.yml, nginx + HTTPS config
 7. [x] Deployment docs/script for the DigitalOcean droplet
+
+The app has since grown to 8 major feature areas (data quality, reporting,
+map/field experience, order workflow, payments/cash control, notifications,
+performance, and security hardening) well beyond this original scaffold —
+see `docs/governance/architecture.md` for what actually exists today.

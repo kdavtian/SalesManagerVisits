@@ -1,0 +1,9 @@
+# Code ownership (see docs/governance/release-and-incident-ownership-matrix.md)
+#
+# This repo currently has one collaborator, so this file names them for
+# every path rather than pretending a review structure exists that
+# doesn't. Split this out by area (server/src/routes/payments.js,
+# migrations/, etc.) the moment a second person with relevant context
+# joins — don't leave everything pointed at one person past that point.
+
+* @kdavtian
