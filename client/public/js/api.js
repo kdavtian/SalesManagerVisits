@@ -260,7 +260,8 @@ export const api = {
 
   // Order rejection + accountant "Recorded" screen (see server/src/routes/orders.js)
   rejectOrder: (id, note) => json(`/orders/${id}/reject`, "POST", { note }),
-  getRecordedList: (recorded) => request(`/orders/recorded-list?recorded=${recorded ? "true" : "false"}`),
+  getRecordedList: (recorded, offset = 0) =>
+    request(`/orders/recorded-list?recorded=${recorded ? "true" : "false"}&offset=${offset}`),
   getUnrecordedCount: () => request("/orders/unrecorded-count"),
   setOrderRecorded: (id, recorded) => json(`/orders/${id}/recorded`, "PATCH", { recorded }),
   createPaymentFromPod: (podRecordId) => json(`/delivery/pod-records/${podRecordId}/create-payment`, "POST"),
@@ -400,4 +401,9 @@ export const api = {
   },
   getSalesOrder: (erpCustomerId, orderId) =>
     request(`/sales/order?${new URLSearchParams({ erp_customer_id: erpCustomerId, order_id: orderId }).toString()}`),
+
+  // Frontend error monitoring (see errorMonitoring.js) -- fire-and-forget,
+  // the caller there never awaits or surfaces a failure from this.
+  reportClientError: (report) => json("/client-errors", "POST", { ...report, user_agent: navigator.userAgent }),
+  getClientErrorLog: (limit = 100) => request(`/client-errors?limit=${limit}`),
 };

@@ -26,6 +26,8 @@ export async function renderRecorded(root, navigate) {
   let activeTab = "unrecorded";
   let lastRows = [];
   let selectedId = null;
+  let hasMore = false;
+  let loadingMore = false;
 
   root.innerHTML = `
     <div class="detail-view">
@@ -226,31 +228,57 @@ export async function renderRecorded(root, navigate) {
     wireActions(detailPane);
   }
 
+  function paintRows() {
+    const rows = lastRows;
+    const desktop = isDesktopView();
+    listEl.innerHTML = rows.length
+      ? rows.map((r) => (desktop ? compactRowHtml(r) : rowHtml(r))).join("")
+      : `<p class="empty-state">${t(activeTab === "recorded" ? "recorded_empty_recorded" : "recorded_empty_unrecorded")}</p>`;
+
+    if (hasMore) {
+      listEl.insertAdjacentHTML("beforeend", `<button type="button" class="btn btn-block" id="recorded-load-more">${t("load_more")}</button>`);
+      listEl.querySelector("#recorded-load-more").addEventListener("click", loadMore);
+    }
+
+    if (desktop) {
+      if (rows.length) {
+        listEl.querySelectorAll("[data-select-row]").forEach((btn) => {
+          btn.addEventListener("click", () => selectRow(Number(btn.dataset.selectRow)));
+        });
+        selectRow(rows.some((r) => r.id === selectedId) ? selectedId : rows[0].id);
+      } else {
+        detailPane.hidden = true;
+        detailPane.innerHTML = "";
+      }
+    } else {
+      detailPane.hidden = true;
+      wireActions(listEl);
+    }
+  }
+
+  async function loadMore() {
+    if (loadingMore || !hasMore) return;
+    loadingMore = true;
+    const btn = listEl.querySelector("#recorded-load-more");
+    if (btn) btn.disabled = true;
+    try {
+      const result = await api.getRecordedList(activeTab === "recorded", lastRows.length);
+      lastRows = lastRows.concat(result.rows);
+      hasMore = result.has_more;
+    } finally {
+      loadingMore = false;
+    }
+    paintRows();
+  }
+
   async function load() {
     listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     errorEl.hidden = true;
     try {
-      const rows = await api.getRecordedList(activeTab === "recorded");
-      lastRows = rows;
-      const desktop = isDesktopView();
-      listEl.innerHTML = rows.length
-        ? rows.map((r) => (desktop ? compactRowHtml(r) : rowHtml(r))).join("")
-        : `<p class="empty-state">${t(activeTab === "recorded" ? "recorded_empty_recorded" : "recorded_empty_unrecorded")}</p>`;
-
-      if (desktop) {
-        if (rows.length) {
-          listEl.querySelectorAll("[data-select-row]").forEach((btn) => {
-            btn.addEventListener("click", () => selectRow(Number(btn.dataset.selectRow)));
-          });
-          selectRow(rows.some((r) => r.id === selectedId) ? selectedId : rows[0].id);
-        } else {
-          detailPane.hidden = true;
-          detailPane.innerHTML = "";
-        }
-      } else {
-        detailPane.hidden = true;
-        wireActions(listEl);
-      }
+      const result = await api.getRecordedList(activeTab === "recorded");
+      lastRows = result.rows;
+      hasMore = result.has_more;
+      paintRows();
     } catch (err) {
       errorEl.textContent = err.message;
       errorEl.hidden = false;

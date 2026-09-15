@@ -353,6 +353,10 @@ ordersRouter.get("/pending-count", async (req, res) => {
 ordersRouter.get("/recorded-list", async (req, res) => {
   if (!seesUnrecordedBadge(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const recorded = req.query.recorded === "true";
+  const offsetNum = Math.max(0, Number(req.query.offset) || 0);
+  // The "recorded" tab only ever grows (every delivered order eventually
+  // lands here), so unlike the "unrecorded" backlog it can't be assumed
+  // small -- same fetch-one-extra-row-for-has_more pattern as GET / above.
   const { rows } = await pool.query(
     `SELECT o.id, o.order_code, o.total_amd, o.updated_at AS delivered_at, o.recorded, o.recorded_at,
             c.name AS customer_name, c.erp_customer_id,
@@ -367,10 +371,11 @@ ordersRouter.get("/recorded-list", async (req, res) => {
        SELECT * FROM pod_records WHERE order_id = o.id ORDER BY id DESC LIMIT 1
      ) pod ON true
      WHERE o.status = 'delivered' AND o.recorded = $1
-     ORDER BY o.updated_at DESC`,
-    [recorded]
+     ORDER BY o.updated_at DESC
+     LIMIT $2 OFFSET $3`,
+    [recorded, PAGE_SIZE + 1, offsetNum]
   );
-  res.json(rows);
+  res.json({ rows: rows.slice(0, PAGE_SIZE), has_more: rows.length > PAGE_SIZE });
 });
 
 ordersRouter.get("/unrecorded-count", async (req, res) => {
