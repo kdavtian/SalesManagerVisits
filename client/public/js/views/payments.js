@@ -476,6 +476,15 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
           </div>
         </div>
         <p class="muted">${t("payment_manager_label")}: ${escapeHtml(p.sales_manager_name_snapshot)}${p.sales_channel ? ` · ${escapeHtml(channelDisplayLabel(p.sales_channel))}` : ""}</p>
+        ${
+          p.current_holder_name
+            ? `<p class="muted">${t("payment_current_holder_label")}: ${escapeHtml(p.current_holder_name)}${
+                p.pending_handoff_to_name
+                  ? ` · ${t("payment_handoff_pending_to").replace("{name}", escapeHtml(p.pending_handoff_to_name))}`
+                  : ""
+              }</p>`
+            : ""
+        }
         ${p.note ? `<p class="muted">${escapeHtml(p.note)}</p>` : ""}
         ${p.rejection_reason ? `<p class="form-error" style="position:static;">${escapeHtml(p.rejection_reason)}</p>` : ""}
         <h3 class="list-group-heading">${t("payment_history_title")}</h3>
