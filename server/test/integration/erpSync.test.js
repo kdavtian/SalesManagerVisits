@@ -17,9 +17,46 @@ import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createCustomer, createUser, apiRequest } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
 
-test.before(startTestServer);
+// POST /api/erp-sync unconditionally TRUNCATEs erp_customer_data on every
+// successful call (see erpSync.js's "whole table replaced on every sync"
+// comment) -- real behavior this file deliberately exercises below. But
+// this test suite is also run by deploy/deploy.sh directly against the
+// production database (there is no separate disposable test database in
+// that environment), so without this snapshot/restore, every deploy that
+// reaches this file would silently wipe real ERP debt/aging data down to
+// just this file's fake test rows, restored only whenever the next real
+// sync from the Windows PC pipeline happens to run. Snapshotting the whole
+// table before and restoring it in test.after (which node:test still runs
+// even if a test above throws) closes that window back down to the
+// duration of this file's own run instead of leaving it open indefinitely.
+let erpCustomerDataSnapshot;
+
+test.before(async () => {
+  await startTestServer();
+  erpCustomerDataSnapshot = (await pool.query("SELECT * FROM erp_customer_data")).rows;
+});
 test.after(async () => {
   await cleanupAll();
+  await pool.query("TRUNCATE erp_customer_data");
+  if (erpCustomerDataSnapshot.length) {
+    for (const row of erpCustomerDataSnapshot) {
+      await pool.query(
+        `INSERT INTO erp_customer_data
+           (erp_customer_id, assigned_sales_rep, debt_amd, last_payment_date, days_since_payment, aging_bucket, recent_orders, synced_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          row.erp_customer_id,
+          row.assigned_sales_rep,
+          row.debt_amd,
+          row.last_payment_date,
+          row.days_since_payment,
+          row.aging_bucket,
+          JSON.stringify(row.recent_orders),
+          row.synced_at,
+        ]
+      );
+    }
+  }
   await stopTestServer();
 });
 
