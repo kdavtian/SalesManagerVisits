@@ -7,6 +7,7 @@ import { canViewTeamLocations, canEditDirectly, canPlanForOthers, canReassignCus
 import { getClusterPins, setClusterPins, getCompassMode, setCompassMode } from "../mapPrefs.js";
 import { getPerfMode } from "../perfMode.js";
 import { ensureLeaflet } from "../leafletLoader.js";
+import { loadWithCache } from "../listCache.js";
 
 const NEARBY_RADIUS_METERS = 5000;
 
@@ -913,6 +914,13 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     });
   }
   let lastCustomers = [];
+  // Guards the empty-bounds geolocation recenter at the bottom of
+  // paintCustomers() -- loadCustomersCached() below can paint twice (a
+  // cached list, then the live fetch), and without this a customer base
+  // that's genuinely empty (or every customer skipped) would prompt for
+  // location access / recenter a second time instead of the once a real
+  // page load ever needs.
+  let emptyBoundsRecenterAttempted = false;
   let resolveCustomersReady;
   // Lets anything that needs the full customer list (like the plan sheet)
   // wait for the initial load instead of racing it -- lastCustomers is
@@ -1538,8 +1546,11 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     return entry;
   }
 
-  async function loadCustomers() {
-    const customers = await api.listCustomers();
+  // Split from the actual fetch (see loadCustomers/loadCustomersCached
+  // below) so the initial mount can paint a cached list instantly and
+  // repaint once the live fetch lands, without duplicating this whole
+  // marker-build/applyFilter/nearest-bar pipeline at each call site.
+  function paintCustomers(customers) {
     markerLayer.clearLayers();
     customerMarkerLayer.clearLayers();
     lastCustomers = [];
@@ -1634,13 +1645,33 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
     // Skipped alongside the marker loop above -- startAddCustomerFlow()
     // already runs its own getCurrentPosition() to center the map, so this
-    // would otherwise race it with a second, redundant recenter.
-    if (!skipMarkers && !bounds.length && navigator.geolocation) {
+    // would otherwise race it with a second, redundant recenter. Also
+    // one-time-guarded (see emptyBoundsRecenterAttempted above).
+    if (!skipMarkers && !bounds.length && navigator.geolocation && !emptyBoundsRecenterAttempted) {
+      emptyBoundsRecenterAttempted = true;
       navigator.geolocation.getCurrentPosition(
         (pos) => map.setView([pos.coords.latitude, pos.coords.longitude], 13),
         () => {}
       );
     }
+  }
+
+  // Always-fresh fetch + paint -- used after an action that changed the
+  // customer list itself (adding a new customer below) and must show up
+  // immediately, never behind a stale cached paint.
+  async function loadCustomers() {
+    const customers = await api.listCustomers();
+    paintCustomers(customers);
+  }
+
+  // Cached stale-while-revalidate variant, used only for the view's
+  // initial mount (see map.whenReady below) -- paints whatever customer
+  // list was cached from the last visit instantly, then repaints with the
+  // live fetch once it lands. Never used for the post-add-customer reload
+  // above: that one needs the just-added customer to appear right away,
+  // not possibly flash the old (cached, pre-add) list first.
+  async function loadCustomersCached() {
+    await loadWithCache("map-customers", () => api.listCustomers(), paintCustomers);
   }
 
   // "My location" — blue dot + accuracy circle, kept live with watchPosition.
@@ -2895,7 +2926,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     }
   }
 
-  map.whenReady(loadCustomers);
+  map.whenReady(loadCustomersCached);
 
   return () => {
     if (watchId != null) navigator.geolocation.clearWatch(watchId);
