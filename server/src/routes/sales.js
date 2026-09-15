@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { seesFinancialExports } from "../roles.js";
+import { yerevanToday, yerevanMonthStart } from "../utils/yerevanDate.js";
 
 export const salesRouter = Router();
 
@@ -23,13 +24,12 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // Defaults to the current calendar month -- same "this month" framing the
 // rest of the app's period pickers default to (see dashboardOverview.js's
-// DEFAULT_PERIOD).
+// DEFAULT_PERIOD). Both computed in Yerevan's own calendar (see
+// utils/yerevanDate.js), not the server's UTC clock -- this used to read
+// yesterday's date as "today"/"the 1st" for part of every day.
 function resolveDateRange(query) {
-  const now = new Date();
-  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-  const today = now.toISOString().slice(0, 10);
-  const from = DATE_RE.test(query.from || "") ? query.from : monthStart;
-  const to = DATE_RE.test(query.to || "") ? query.to : today;
+  const from = DATE_RE.test(query.from || "") ? query.from : yerevanMonthStart();
+  const to = DATE_RE.test(query.to || "") ? query.to : yerevanToday();
   return { from, to };
 }
 
