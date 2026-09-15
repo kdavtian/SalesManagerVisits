@@ -387,6 +387,24 @@ export function formatDateTime(iso) {
   });
 }
 
+// Shared by every screen showing ERP-synced data (reports.js, sales.js,
+// debtBalances.js) so "data as of" reads the same everywhere instead of
+// each screen inventing its own freshness wording. The extract stays the
+// trusted source of truth for these numbers while the app and ERP run in
+// parallel (see server/src/erpSyncFreshness.js's ERP_STALE_AFTER_HOURS) --
+// this badge is a "the sync pipeline looks broken" flag, not a "the
+// number is old" one, so it only turns into a warning well past a normal
+// sync gap. `sync` is the {synced_at, stale, stale_after_hours} shape
+// erpSyncFreshness() returns.
+export function syncBadgeHtml(sync) {
+  if (!sync) return "";
+  if (!sync.synced_at) return `<p class="sync-badge sync-badge-stale">${t("report_sync_never")}</p>`;
+  const label = t("report_sync_as_of").replace("{time}", formatDateTime(sync.synced_at));
+  if (!sync.stale) return `<p class="sync-badge">${label}</p>`;
+  const warning = t("report_sync_stale_note").replace("{h}", sync.stale_after_hours);
+  return `<p class="sync-badge sync-badge-stale">${label} — ${warning}</p>`;
+}
+
 // dd-mm-yyyy -- used wherever an order/record date is shown as a plain date
 // (no time), so it reads consistently regardless of the viewer's locale.
 // Reads the y/m/d digits straight out of the ISO string (rather than going

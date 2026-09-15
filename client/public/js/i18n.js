@@ -1151,6 +1151,7 @@ const dict = {
 
     qa_sales: "Sales",
     sales_title: "Sales",
+    sales_source_hint: "ERP-invoiced revenue (Excel extract), not the app's own order pipeline -- see Reports for submitted/confirmed/delivered order totals.",
     sales_channel_filter: "Channel",
     sales_search_placeholder: "Search customer",
     sales_empty: "No orders in this range",
@@ -2323,6 +2324,7 @@ const dict = {
 
     qa_sales: "Վաճառք",
     sales_title: "Վաճառք",
+    sales_source_hint: "ERP-ում հաշվագրված եկամուտ (Excel տվյալներ), ոչ թե հավելվածի պատվերների հոսքը -- Ուղարկված/Հաստատված/Առաքված պատվերների գումարների համար տե՛ս Հաշվետվություններ։",
     sales_channel_filter: "Ուղղություն",
     sales_search_placeholder: "Որոնել հաճախորդ",
     sales_empty: "Այս ժամանակահատվածում պատվերներ չկան",

@@ -2,7 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { REGION_LIST, YEREVAN_DISTRICTS, CATEGORY_LIST, formatAmd, channelDisplayLabel } from "../util.js";
+import { REGION_LIST, YEREVAN_DISTRICTS, CATEGORY_LIST, formatAmd, channelDisplayLabel, syncBadgeHtml } from "../util.js";
 
 // "all" (not "") for the All-time option: every one of this array's three
 // callers builds its request params with
@@ -189,22 +189,8 @@ function formatDateTime(value) {
   return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-// Every report backed by the Castrol Excel extract (customer_debt,
-// sales_budget, brand_volume) carries a `sync` object from the server --
-// this is the one place that renders it, so "how stale is this" always
-// looks the same regardless of which report it's on. The extract stays the
-// trusted source of truth for these numbers while the app and ERP run in
-// parallel (see routes/reports.js's ERP_STALE_AFTER_HOURS) -- this badge is
-// a "the pipeline looks broken" flag, not a "the number is old" one, so it
-// only turns into a warning well past a normal sync gap.
-function syncBadgeHtml(sync) {
-  if (!sync) return "";
-  if (!sync.synced_at) return `<p class="sync-badge sync-badge-stale">${t("report_sync_never")}</p>`;
-  const label = t("report_sync_as_of").replace("{time}", formatDateTime(sync.synced_at));
-  if (!sync.stale) return `<p class="sync-badge">${label}</p>`;
-  const warning = t("report_sync_stale_note").replace("{h}", sync.stale_after_hours);
-  return `<p class="sync-badge sync-badge-stale">${label} — ${warning}</p>`;
-}
+// syncBadgeHtml now lives in util.js, shared with sales.js and
+// debtBalances.js (see its own comment there for why).
 
 function subregionOptions(region) {
   if (region === "Yerevan") return YEREVAN_DISTRICTS;

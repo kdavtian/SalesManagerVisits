@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
+import { erpSyncFreshness } from "../erpSyncFreshness.js";
 
 export const debtBalancesRouter = Router();
 
@@ -63,5 +64,5 @@ debtBalancesRouter.get("/", async (req, res) => {
      ORDER BY ecd.debt_amd DESC`,
     params
   );
-  res.json(rows);
+  res.json({ rows, sync: await erpSyncFreshness("erp_customer_data") });
 });

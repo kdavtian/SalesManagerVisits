@@ -11,10 +11,22 @@ function csvCell(value) {
   return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
 }
 
-export function toCsv(headers, rows) {
+// summaryRows: optional [label, value] pairs appended after a blank line
+// -- a row count plus whatever totals make sense for that export (e.g.
+// "Total amount_amd", or one total per order status) -- so whoever opens
+// the file in Excel has something to check their own SUM()/COUNT() against
+// without cross-referencing another screen. See exports.js's own callers
+// for what each export summarizes.
+export function toCsv(headers, rows, summaryRows = []) {
   const lines = [headers.map(csvCell).join(",")];
   for (const row of rows) {
     lines.push(headers.map((h) => csvCell(row[h])).join(","));
+  }
+  if (summaryRows.length) {
+    lines.push("");
+    for (const [label, value] of summaryRows) {
+      lines.push(`${csvCell(label)},${csvCell(value)}`);
+    }
   }
   // A leading BOM so Excel (which guesses encoding without one) doesn't
   // mangle non-ASCII characters -- Armenian names in this app aren't rare.

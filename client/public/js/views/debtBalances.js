@@ -5,7 +5,7 @@
 // accountant additionally get a Flat/By-manager toggle and a manager
 // filter, grouping the same payload client-side.
 import { api } from "../api.js";
-import { escapeHtml, formatAmd } from "../util.js";
+import { escapeHtml, formatAmd, syncBadgeHtml } from "../util.js";
 import { state } from "../state.js";
 import { t } from "../i18n.js";
 
@@ -52,6 +52,7 @@ export async function renderDebtBalances(root, navigate) {
         <div class="detail-header-title"><h1>${t("debt_balances_title")}</h1></div>
         <div class="debt-balances-subtotal" id="debt-subtotal"></div>
       </div>
+      <div id="debt-sync-badge"></div>
       ${
         canGroup
           ? `<div class="segmented" id="debt-mode-tabs">
@@ -75,6 +76,7 @@ export async function renderDebtBalances(root, navigate) {
   const listEl = container.querySelector("#debt-list");
   const errorEl = container.querySelector("#debt-error");
   const subtotalEl = container.querySelector("#debt-subtotal");
+  const syncBadgeEl = container.querySelector("#debt-sync-badge");
 
   if (canGroup) {
     const tabsEl = container.querySelector("#debt-mode-tabs");
@@ -162,7 +164,9 @@ export async function renderDebtBalances(root, navigate) {
     listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     errorEl.hidden = true;
     try {
-      rows = await api.getDebtBalances();
+      const data = await api.getDebtBalances();
+      rows = data.rows;
+      syncBadgeEl.innerHTML = syncBadgeHtml(data.sync);
       if (canGroup) {
         const managerFilterEl = container.querySelector("#debt-manager-filter");
         const managers = new Map();
