@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, activateDialog, channelDisplayLabel } from "../util.js";
+import { escapeHtml, formatAmd, activateDialog, channelDisplayLabel, formatDateTime } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { state } from "../state.js";
 import { icons } from "../icons.js";
@@ -20,6 +20,34 @@ const STATUS_META = {
 };
 
 const STATUS_FILTERS = ["", "draft", "submitted", "confirmed", "packed_stock_out", "delivered"];
+
+// Full created -> submitted -> confirmed -> packed -> delivered timeline
+// (server/src/routes/orders.js's order_status_history, populated at every
+// real transition -- see migration 070). A draft-exception loop (rejected/
+// stock-issue/delivery-failure) shows up here too since it's a real status
+// change, not something to hide -- it's exactly the kind of thing this was
+// asked to make visible.
+function orderTimelineHtml(history) {
+  if (!history?.length) return "";
+  return `
+    <h3 class="list-group-heading">${t("order_timeline_title")}</h3>
+    <div class="order-timeline">
+      ${history
+        .map((h) => {
+          const meta = STATUS_META[h.new_status];
+          const label = meta ? t(meta.key) : escapeHtml(h.new_status);
+          return `
+        <div class="order-timeline-step">
+          <span class="order-timeline-dot ${meta ? meta.cls : "badge-neutral"}"></span>
+          <div class="order-timeline-body">
+            <strong>${label}</strong>
+            <span class="order-line-meta">${formatDateTime(h.changed_at)}${h.changed_by_name ? ` · ${escapeHtml(h.changed_by_name)}` : ""}${h.reason ? ` · ${escapeHtml(h.reason)}` : ""}</span>
+          </div>
+        </div>`;
+        })
+        .join("")}
+    </div>`;
+}
 
 // Fulfillment status changes (packed_stock_out/delivered) go through the
 // dedicated Warehouse and Delivery screens (see views/warehouse.js and
@@ -431,6 +459,7 @@ export async function renderOrders(root, navigate) {
         }
         <p>${t("total")}: <span class="text-amount">${formatAmd(Number(order.total_amd))}</span></p>
         ${order.note ? `<p class="muted">${escapeHtml(order.note)}</p>` : ""}
+        ${orderTimelineHtml(order.history)}
         <p class="form-error" id="order-detail-error" hidden></p>
         <div class="sheet-actions" id="order-detail-actions" style="flex-wrap:wrap;"></div>
       `;

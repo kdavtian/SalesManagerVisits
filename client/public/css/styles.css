@@ -6997,6 +6997,57 @@ button.list-row-icon {
   margin-bottom: 2px;
 }
 
+/* Order detail sheet's status timeline (created -> submitted -> confirmed
+   -> packed -> delivered, exception loops back to draft included) -- a
+   vertical connecting line through each step's dot, same idea as a
+   delivery-tracking timeline. */
+.order-timeline {
+  display: flex;
+  flex-direction: column;
+  margin: 4px 0 12px;
+}
+
+.order-timeline-step {
+  display: flex;
+  gap: 10px;
+  position: relative;
+  padding-bottom: 14px;
+}
+
+.order-timeline-step:last-child {
+  padding-bottom: 0;
+}
+
+.order-timeline-step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 14px;
+  bottom: 0;
+  width: 2px;
+  background: var(--border);
+}
+
+.order-timeline-dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-top: 3px;
+  /* The badge-* classes (badge-success, badge-info, ...) set a translucent
+     `background` + a saturated `color` sized for text-on-a-pill, not a
+     small solid dot -- using their `color` as this dot's own background
+     via currentColor gives a bold, readable fill instead of the washed-out
+     15%-opacity tint the badge background alone would produce. */
+  background: currentColor;
+}
+
+.order-timeline-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 /* One order line: brand (tiny, uppercase) above the product name + line
    total, with unit price x quantity in small type underneath -- keeps a
    multi-brand order (e.g. Lotos 5W-30 1L and Royal 5W-30 1L) from reading

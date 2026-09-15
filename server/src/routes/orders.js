@@ -220,6 +220,11 @@ ordersRouter.post("/", async (req, res) => {
         [order.id, line.product_id, line.product_name, line.brand, line.unit_price_amd, line.quantity, line.line_total_amd]
       );
     }
+    await client.query(
+      `INSERT INTO order_status_history (order_id, old_status, new_status, reason, changed_by)
+       VALUES ($1, NULL, $2, 'Created', $3)`,
+      [order.id, initialStatus, req.user.id]
+    );
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -393,7 +398,15 @@ ordersRouter.get("/:id", async (req, res) => {
     "SELECT oi.*, p.unit AS size FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1 ORDER BY oi.id",
     [order.id]
   );
-  res.json({ ...order, items });
+  const { rows: history } = await pool.query(
+    `SELECT h.*, u.name AS changed_by_name
+     FROM order_status_history h
+     LEFT JOIN users u ON u.id = h.changed_by
+     WHERE h.order_id = $1
+     ORDER BY h.changed_at ASC`,
+    [order.id]
+  );
+  res.json({ ...order, items, history });
 });
 
 // Moves a draft order to "submitted" -- the only path that transition can
@@ -441,6 +454,11 @@ ordersRouter.post("/:id/submit", async (req, res) => {
   if (!updated) {
     return res.status(409).json({ error: "This order was already submitted (or changed) by another request" });
   }
+  await pool.query(
+    `INSERT INTO order_status_history (order_id, old_status, new_status, reason, changed_by)
+     VALUES ($1, 'draft', 'submitted', 'Submitted', $2)`,
+    [order.id, req.user.id]
+  );
   const { rows: items } = await pool.query("SELECT oi.*, p.unit AS size FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1 ORDER BY oi.id", [order.id]);
   res.json({ ...updated, items });
 
@@ -648,6 +666,16 @@ ordersRouter.patch("/:id", async (req, res) => {
         );
       }
     }
+    // Only a real status transition (this endpoint doubles as a plain
+    // items/discount/note editor, which never touches status) belongs in
+    // the timeline.
+    if (status !== undefined && nextStatus !== order.status) {
+      await client.query(
+        `INSERT INTO order_status_history (order_id, old_status, new_status, reason, changed_by)
+         VALUES ($1, $2, $3, 'Confirmed', $4)`,
+        [order.id, order.status, nextStatus, req.user.id]
+      );
+    }
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -800,6 +828,11 @@ ordersRouter.post("/:id/reject", async (req, res) => {
     [note?.trim() || null, order.id]
   );
   if (!updatedRows[0]) return res.status(409).json({ error: "Cannot reject an order that is no longer \"submitted\"" });
+  await pool.query(
+    `INSERT INTO order_status_history (order_id, old_status, new_status, reason, changed_by)
+     VALUES ($1, 'submitted', 'draft', $2, $3)`,
+    [order.id, note?.trim() || "Rejected", req.user.id]
+  );
   res.json(updatedRows[0]);
 
   (async () => {
@@ -858,6 +891,11 @@ ordersRouter.post("/:id/mark-delivered", async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(409).json({ error: "Cannot mark as delivered -- only a packed order can be delivered" });
     }
+    await client.query(
+      `INSERT INTO order_status_history (order_id, old_status, new_status, reason, changed_by)
+       VALUES ($1, 'packed_stock_out', 'delivered', 'Marked delivered (no route)', $2)`,
+      [order.id, req.user.id]
+    );
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");

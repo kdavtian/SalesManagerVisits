@@ -100,6 +100,20 @@ test("full order lifecycle: draft -> submit -> confirm -> pack -> deliver -> rec
   });
   assert.equal(recorded.status, 200);
   assert.equal(recorded.data.recorded, true);
+
+  // The full created -> submitted -> confirmed -> packed -> delivered
+  // timeline (order_status_history, migration 070) should have exactly one
+  // entry per real transition above, in order -- this is what the order
+  // detail screen's own timeline renders.
+  const withHistory = await apiRequest(`/api/orders/${orderId}`, { cookie: adminCookie });
+  const transitions = withHistory.data.history.map((h) => `${h.old_status}->${h.new_status}`);
+  assert.deepEqual(transitions, [
+    "null->draft",
+    "draft->submitted",
+    "submitted->confirmed",
+    "confirmed->packed_stock_out",
+    "packed_stock_out->delivered",
+  ]);
 });
 
 test("rejecting a submitted order returns it to draft, and the owner can then edit and resubmit", async () => {

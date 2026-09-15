@@ -356,6 +356,11 @@ deliveryRouter.post("/orders/:id/confirm", (req, res, next) => {
       [order.id, req.user.id, driverName, signaturePath, debtBefore, order.total_amd, amountCollected, newBalance, paymentMethod]
     );
     await client.query("UPDATE route_stops SET completed_at = now() WHERE order_id = $1", [order.id]);
+    await client.query(
+      `INSERT INTO order_status_history (order_id, old_status, new_status, reason, changed_by)
+       VALUES ($1, 'packed_stock_out', 'delivered', 'Delivered (signature captured)', $2)`,
+      [order.id, req.user.id]
+    );
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -411,6 +416,11 @@ deliveryRouter.post("/orders/:id/fail", async (req, res) => {
     return res.status(409).json({ error: `Cannot fail delivery for an order that is "${order.status}"` });
   }
   await pool.query("UPDATE route_stops SET completed_at = now() WHERE order_id = $1", [order.id]);
+  await pool.query(
+    `INSERT INTO order_status_history (order_id, old_status, new_status, reason, changed_by)
+     VALUES ($1, 'packed_stock_out', 'draft', 'Delivery attempt failed', $2)`,
+    [order.id, req.user.id]
+  );
   res.json(updatedRows[0]);
 
   (async () => {
