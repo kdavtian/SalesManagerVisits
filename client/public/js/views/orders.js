@@ -5,6 +5,7 @@ import { state } from "../state.js";
 import { icons } from "../icons.js";
 import { ORDER_STATUS_ICONS } from "../ordersSearchEnhancements.js";
 import { loadWithCache } from "../listCache.js";
+import { getProductCatalog } from "../productCatalog.js";
 
 // v3 5-state machine (see migrations/051_warehouse_delivery_v3.sql):
 // draft -> submitted -> confirmed -> packed_stock_out -> delivered, every
@@ -674,7 +675,7 @@ export async function renderOrders(root, navigate) {
           showAddProduct = !showAddProduct;
           if (showAddProduct && !productCatalog) {
             try {
-              productCatalog = await api.listProducts();
+              productCatalog = await getProductCatalog();
             } catch {
               productCatalog = [];
             }
