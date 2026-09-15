@@ -67,11 +67,20 @@ test("range=today includes a check-in logged between Yerevan midnight and the ol
   const ids = (todayList.data.rows ?? todayList.data).map((r) => r.id);
   assert.ok(ids.includes(checkinId), "a check-in just after Yerevan midnight must show under range=today");
 
-  // Sanity: if the UTC cutoff differs from the Yerevan one right now (i.e.
-  // we're in the actual bug window), the OLD (buggy) boundary would NOT
-  // have included this check-in -- confirms the test is actually exercising
-  // the fix when the clock allows it, not just trivially passing.
-  if (utcMidnight.getTime() !== yerevanMidnightUtc.getTime()) {
+  // Sanity: the OLD (buggy) boundary only actually excluded this check-in
+  // when Yerevan's current-day midnight falls in an EARLIER UTC calendar
+  // day than "now" -- roughly UTC 00:00-19:59 (Yerevan 04:00-23:59), where
+  // yerevanMidnightUtc (and the checkin 1 minute after it) lands strictly
+  // before the naive range's own start (utcMidnight). The other direction
+  // (UTC 20:00-23:59, Yerevan already past midnight into 00:00-03:59) was
+  // wrongly treated as the same bug window by a plain `!==` check here --
+  // there, yerevanMidnightUtc falls on the SAME UTC calendar day as now(),
+  // so the checkin lands inside the naive UTC-day range by coincidence and
+  // was never actually excluded, making this assertion unconditionally
+  // false (not a real assertion failure, an incorrect premise) for a ~4
+  // hour window every single day. Narrowed to the one direction where the
+  // premise is actually true.
+  if (yerevanMidnightUtc.getTime() < utcMidnight.getTime()) {
     assert.ok(
       justAfterYerevanMidnight.getTime() < utcMidnight.getTime(),
       "expected this check-in to fall inside the old bug's exclusion window"
