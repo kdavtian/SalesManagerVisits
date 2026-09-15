@@ -130,7 +130,7 @@ warehouseRouter.get("/inventory/brands", async (req, res) => {
   res.json(rows.map((r) => r.brand));
 });
 
-async function markPacked(orderId) {
+async function markPacked(orderId, changedBy) {
   const { rows } = await pool.query(
     `SELECT o.*, c.name AS customer_name FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = $1`,
     [orderId]
@@ -154,6 +154,11 @@ async function markPacked(orderId) {
   if (!updatedRows[0]) {
     return { error: `Cannot mark "${order.status}" as packed -- only a confirmed order can be packed`, status: 409 };
   }
+  await pool.query(
+    `INSERT INTO order_status_history (order_id, old_status, new_status, reason, changed_by)
+     VALUES ($1, 'confirmed', 'packed_stock_out', 'Packed', $2)`,
+    [order.id, changedBy]
+  );
 
   (async () => {
     try {
@@ -177,7 +182,7 @@ async function markPacked(orderId) {
 }
 
 warehouseRouter.post("/orders/:id/packed", async (req, res) => {
-  const result = await markPacked(req.params.id);
+  const result = await markPacked(req.params.id, req.user.id);
   if (result.error) return res.status(result.status).json({ error: result.error });
   res.json(result.order);
 });
@@ -193,7 +198,7 @@ warehouseRouter.post("/orders/bulk-packed", async (req, res) => {
   const packed = [];
   const failed = [];
   for (const id of order_ids) {
-    const result = await markPacked(id);
+    const result = await markPacked(id, req.user.id);
     if (result.error) failed.push({ id, error: result.error });
     else packed.push(result.order);
   }
@@ -224,6 +229,11 @@ warehouseRouter.post("/orders/:id/stock-issue", async (req, res) => {
   if (!updatedRows[0]) {
     return res.status(409).json({ error: `Cannot flag a stock issue on "${order.status}" -- only a confirmed order qualifies` });
   }
+  await pool.query(
+    `INSERT INTO order_status_history (order_id, old_status, new_status, reason, changed_by)
+     VALUES ($1, 'confirmed', 'draft', $2, $3)`,
+    [order.id, note.trim(), req.user.id]
+  );
   res.json(updatedRows[0]);
 
   (async () => {
