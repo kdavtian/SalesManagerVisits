@@ -333,6 +333,22 @@ deliveryRouter.post("/orders/:id/confirm", (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    // The status===packed_stock_out check above is only a pre-check --
+    // two drivers (or one driver double-tapping on a slow connection)
+    // confirming the same order at the same instant would both pass it.
+    // This guarded UPDATE inside the transaction is the actual lock: only
+    // the request that flips the status keeps its POD insert; the loser's
+    // whole transaction rolls back instead of leaving a second signature/
+    // POD record and re-running the debt math against a now-stale
+    // debtBefore snapshot.
+    const { rowCount } = await client.query(
+      "UPDATE orders SET status = 'delivered', updated_at = now() WHERE id = $1 AND status = 'packed_stock_out'",
+      [order.id]
+    );
+    if (!rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: `Cannot confirm delivery for an order that is "${order.status}"` });
+    }
     await client.query(
       `INSERT INTO pod_records
          (order_id, driver_id, driver_name_snapshot, signature_path, debt_balance_before_amd, order_amount_amd, amount_collected_amd, new_balance_after_amd, payment_method)
@@ -340,7 +356,6 @@ deliveryRouter.post("/orders/:id/confirm", (req, res, next) => {
       [order.id, req.user.id, driverName, signaturePath, debtBefore, order.total_amd, amountCollected, newBalance, paymentMethod]
     );
     await client.query("UPDATE route_stops SET completed_at = now() WHERE order_id = $1", [order.id]);
-    await client.query("UPDATE orders SET status = 'delivered', updated_at = now() WHERE id = $1", [order.id]);
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -384,11 +399,18 @@ deliveryRouter.post("/orders/:id/fail", async (req, res) => {
     return res.status(409).json({ error: `Cannot fail delivery for an order that is "${order.status}"` });
   }
 
-  await pool.query("UPDATE route_stops SET completed_at = now() WHERE order_id = $1", [order.id]);
+  // Same guarded-UPDATE reasoning as /orders/:id/confirm just above -- the
+  // status check on `order` above is stale the instant another request
+  // (e.g. this same "fail" tapped twice, or a race against /confirm) beats
+  // it to the actual UPDATE.
   const { rows: updatedRows } = await pool.query(
-    "UPDATE orders SET status = 'draft', draft_reason = 'Delivery attempt failed', updated_at = now() WHERE id = $1 RETURNING *",
+    "UPDATE orders SET status = 'draft', draft_reason = 'Delivery attempt failed', updated_at = now() WHERE id = $1 AND status = 'packed_stock_out' RETURNING *",
     [order.id]
   );
+  if (!updatedRows[0]) {
+    return res.status(409).json({ error: `Cannot fail delivery for an order that is "${order.status}"` });
+  }
+  await pool.query("UPDATE route_stops SET completed_at = now() WHERE order_id = $1", [order.id]);
   res.json(updatedRows[0]);
 
   (async () => {
@@ -471,7 +493,23 @@ deliveryRouter.post("/pod-records/:id/create-payment", async (req, res) => {
       db: client,
     });
     if (!paymentId) throw new Error("Payment creation returned no id");
-    await client.query("UPDATE pod_records SET payment_id = $1 WHERE id = $2", [paymentId, pod.id]);
+    // The pod.payment_id check above is only a pre-check -- two accountants
+    // tapping "Create payment" on the same delivery at the same instant
+    // would both pass it and both insert a payment (payments' own
+    // client_ref uniqueness is scoped to (created_by, client_ref), so two
+    // DIFFERENT accountants racing wouldn't even collide there). Re-checking
+    // payment_id IS NULL here, inside the same transaction as the insert
+    // above, is the actual guard: only the request that wins this UPDATE
+    // keeps its insert -- the loser's whole transaction (payment included)
+    // rolls back instead of leaving a second, orphaned payment record.
+    const { rowCount } = await client.query(
+      "UPDATE pod_records SET payment_id = $1 WHERE id = $2 AND payment_id IS NULL",
+      [paymentId, pod.id]
+    );
+    if (!rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "Payment already created for this delivery" });
+    }
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
