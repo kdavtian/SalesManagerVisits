@@ -620,6 +620,11 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     disableClusteringAtZoom: 17,
     spiderfyOnMaxZoom: true,
     showCoverageOnHover: false,
+    // Splits a big addLayers() batch (see applyFilter below) across
+    // animation frames instead of clustering all of it synchronously in
+    // one go -- keeps a filter change from janking the UI thread once the
+    // customer base is past a couple hundred pins.
+    chunkedLoading: true,
     iconCreateFunction(cluster) {
       const count = cluster.getChildCount();
       const size = count < 10 ? 32 : count < 50 ? 38 : 44;
@@ -1066,6 +1071,16 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     customerMarkerLayer.clearLayers();
     const bounds = [];
     const sideListEntries = [];
+    // Collected and added to customerMarkerLayer in one addLayers() call
+    // after the loop, instead of marker.addTo() inside it -- each
+    // individual addLayer() on a MarkerClusterGroup re-runs its own
+    // clustering pass, so adding one at a time turned every filter change
+    // (search keystroke, toggle tap) into O(n) separate re-clusters for a
+    // customer base past ~180 pins. One addLayers() call clusters the
+    // whole batch in a single pass. Falls back to individual addTo() for
+    // the plain (non-clustered) layer group, which has no addLayers() and
+    // no per-add clustering cost to batch away anyway.
+    const markersToAdd = [];
     let searchMatchCount = 0;
     // Competitors are hidden by default (see .map-competitor-toggle /
     // map-safe-enhancements.css, which hides their individual pins via
@@ -1104,9 +1119,14 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         }
         marker.setIcon(customerIcon(c, status));
       }
-      marker.addTo(customerMarkerLayer);
+      markersToAdd.push(marker);
       bounds.push([c.lat, c.lng]);
       sideListEntries.push({ c, status });
+    }
+    if (typeof customerMarkerLayer.addLayers === "function") {
+      customerMarkerLayer.addLayers(markersToAdd);
+    } else {
+      markersToAdd.forEach((m) => m.addTo(customerMarkerLayer));
     }
     renderSideList(sideListEntries);
     if (searchNoResults) searchNoResults.hidden = !(searchQuery && searchMatchCount === 0);
