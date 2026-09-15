@@ -4,7 +4,7 @@
 // check-in. Kept as its own module (not exported from customerDetail.js)
 // so neither view has to import the other's file to reuse it.
 import { api } from "./api.js";
-import { activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, categoryIcon } from "./util.js";
+import { activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, categoryIcon, customerNameLinkHtml, activateCustomerNameLinks } from "./util.js";
 import { t } from "./i18n.js";
 import { isAdmin } from "./state.js";
 import { icons } from "./icons.js";
@@ -227,7 +227,7 @@ export function openPhotoLightbox(urls, startIndex) {
 // from a tap on its compact row. All the data is already in the checkin
 // object the caller has (from either the customer's visit history or the
 // Activity feed), so this needs no separate request.
-export function openVisitDetailSheet(ch, onPhotoDeleted) {
+export function openVisitDetailSheet(ch, onPhotoDeleted, navigate) {
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
   const outcomeValues = checkinOutcomeValues(ch);
@@ -243,7 +243,7 @@ export function openVisitDetailSheet(ch, onPhotoDeleted) {
         </button>
         ${hasCustomer ? `<span class="visit-detail-avatar">${categoryIcon(ch.customer_category)}</span>` : ""}
         <div>
-          <h2>${escapeHtml(hasCustomer ? ch.customer_name : ch.user_name)}</h2>
+          <h2>${hasCustomer ? customerNameLinkHtml(ch.customer_name, ch.customer_id) : escapeHtml(ch.user_name)}</h2>
           <p class="muted">${hasCustomer ? `${escapeHtml(ch.user_name)} · ` : ""}${formatDateTime(ch.timestamp)}</p>
         </div>
       </div>
@@ -323,6 +323,16 @@ export function openVisitDetailSheet(ch, onPhotoDeleted) {
   }
   overlay.querySelector("#visit-detail-back").addEventListener("click", close);
   overlay.addEventListener("click", (e) => e.target === overlay && close());
+
+  // Close this sheet before navigating, not after -- otherwise it's still
+  // sitting open (as dead DOM behind the new route) once the customer card
+  // renders underneath it.
+  if (navigate) {
+    activateCustomerNameLinks(overlay, (hash) => {
+      close();
+      navigate(hash);
+    });
+  }
 
   overlay.querySelectorAll(".checkin-photo").forEach((img) => {
     img.addEventListener("click", () => {

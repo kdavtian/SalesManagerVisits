@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd } from "../util.js";
+import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { compareProducts, parseLiters } from "../productSort.js";
@@ -123,6 +123,8 @@ export async function renderWarehouse(root, navigate) {
          <div class="card-list" style="margin-top:8px;">${rows.map((o) => stagingRowHtml(o)).join("")}</div>`
       : `<p class="empty-state">${t("warehouse_staging_empty")}</p>`;
 
+    activateCustomerNameLinks(contentEl, navigate);
+
     const bulkBtn = contentEl.querySelector("#bulk-mark-packed-btn");
     function updateBulkBtn() {
       const checked = contentEl.querySelectorAll('[data-select-order]:checked').length;
@@ -189,7 +191,7 @@ export async function renderWarehouse(root, navigate) {
           <span>${t("customer_id_label")}: ${escapeHtml(o.erp_customer_id || "")}</span>
           ${o.order_code ? `<span>${t("order_id_label")}: ${escapeHtml(o.order_code)}</span>` : ""}
         </div>
-        <strong>${escapeHtml(o.customer_name)}</strong>
+        <strong>${customerNameLinkHtml(o.customer_name, o.customer_id)}</strong>
         <p class="muted">${escapeHtml(o.address || "")}</p>
         <div class="card-list" style="margin:8px 0;">
           ${o.items.map((i) => `<div class="order-product-row"><span>${i.brand ? `${escapeHtml(i.brand)} · ` : ""}${escapeHtml(i.product_name)}${i.size ? ` · ${escapeHtml(i.size)}` : ""} × ${i.quantity}</span></div>`).join("")}

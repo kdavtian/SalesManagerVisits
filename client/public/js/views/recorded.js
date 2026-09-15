@@ -5,7 +5,7 @@
 // whether an order is paid -- Excel remains that source of truth -- it
 // only tracks whether someone has looked at each delivered order.
 import { api } from "../api.js";
-import { escapeHtml, formatAmd } from "../util.js";
+import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks } from "../util.js";
 import { t } from "../i18n.js";
 
 function formatDate(value) {
@@ -90,7 +90,7 @@ export async function renderRecorded(root, navigate) {
           <span>${t("customer_id_label")}: ${escapeHtml(r.erp_customer_id || "")}</span>
           ${r.order_code ? `<span>${t("order_id_label")}: ${escapeHtml(r.order_code)}</span>` : ""}
         </div>
-        <strong>${escapeHtml(r.customer_name)}</strong>
+        <strong>${customerNameLinkHtml(r.customer_name, r.customer_id)}</strong>
         <p class="muted">${t("delivery_open_stop")}: ${formatDate(r.delivered_at)}</p>
         <p><span class="text-amount">${formatAmd(Number(r.total_amd))}</span></p>
         ${
@@ -129,7 +129,7 @@ export async function renderRecorded(root, navigate) {
         <span>${t("customer_id_label")}: ${escapeHtml(r.erp_customer_id || "")}</span>
         ${r.order_code ? `<span>${t("order_id_label")}: ${escapeHtml(r.order_code)}</span>` : ""}
       </div>
-      <h2 class="section-title">${escapeHtml(r.customer_name)}</h2>
+      <h2 class="section-title">${customerNameLinkHtml(r.customer_name, r.customer_id)}</h2>
       <p class="muted">${t("delivery_open_stop")}: ${formatDate(r.delivered_at)}</p>
       <p><span class="text-amount">${formatAmd(Number(r.total_amd))}</span></p>
       ${
@@ -160,6 +160,7 @@ export async function renderRecorded(root, navigate) {
   // record/unrecord/payment actions, wherever the markup they act on
   // happens to be rendered.
   function wireActions(scopeEl) {
+    activateCustomerNameLinks(scopeEl, navigate);
     scopeEl.querySelectorAll("[data-view-signature]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const overlay = document.createElement("div");

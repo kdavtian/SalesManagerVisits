@@ -449,7 +449,7 @@ export async function renderActivity(root, navigate) {
     listEl.querySelectorAll(".list-row").forEach((el) => {
       const openDetails = () => {
         const checkin = visible.find((c) => String(c.id) === el.dataset.checkinId);
-        if (checkin) openVisitDetailSheet(checkin, load);
+        if (checkin) openVisitDetailSheet(checkin, load, navigate);
       };
       el.addEventListener("click", openDetails);
       el.addEventListener("keydown", (e) => {

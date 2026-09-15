@@ -10,7 +10,7 @@
 //                   broken down by sales channel so they can count the
 //                   physical notes channel by channel before confirming.
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, formatDateTime, activateDialog, channelDisplayLabel } from "../util.js";
+import { escapeHtml, formatAmd, formatDateTime, activateDialog, channelDisplayLabel, customerNameLinkHtml, activateCustomerNameLinks } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 
@@ -408,7 +408,7 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId) {
             (p) => `
           <div class="order-line-row">
             <div class="order-line-top">
-              <span class="order-line-name">${escapeHtml(p.customer_name_snapshot)}</span>
+              ${customerNameLinkHtml(p.customer_name_snapshot, p.customer_id, "span", "order-line-name")}
               <strong class="text-amount">${formatAmd(Number(p.amount_amd))}</strong>
             </div>
             <span class="order-line-meta">${escapeHtml(p.sales_channel ? channelDisplayLabel(p.sales_channel) : "—")} · ${escapeHtml(
@@ -433,6 +433,10 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId) {
 
     const errorEl = overlay.querySelector("#handoff-detail-error");
     overlay.querySelector("#handoff-close-btn").addEventListener("click", () => overlay.remove());
+    activateCustomerNameLinks(overlay, (hash) => {
+      overlay.remove();
+      navigate(hash);
+    });
 
     async function act(fn) {
       overlay.querySelectorAll("button").forEach((b) => (b.disabled = true));

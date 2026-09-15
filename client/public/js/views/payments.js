@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, formatDateTime, activateDialog, channelDisplayLabel } from "../util.js";
+import { escapeHtml, formatAmd, formatDateTime, activateDialog, channelDisplayLabel, customerNameLinkHtml, activateCustomerNameLinks } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 import { icons } from "../icons.js";
@@ -471,7 +471,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
         <p><span class="badge ${meta.cls}">${t(meta.key)}</span></p>
         <div class="card-list" style="margin:12px 0;">
           <div class="order-line-row">
-            <div class="order-line-top"><span class="order-line-name">${escapeHtml(p.customer_name_snapshot)}</span><strong class="text-amount">${formatAmd(Number(p.amount_amd))}</strong></div>
+            <div class="order-line-top">${customerNameLinkHtml(p.customer_name_snapshot, p.customer_id, "span", "order-line-name")}<strong class="text-amount">${formatAmd(Number(p.amount_amd))}</strong></div>
             <span class="order-line-meta">${p.erp_customer_id_snapshot ? `${t("customer_id_label")}: ${escapeHtml(p.erp_customer_id_snapshot)} · ` : ""}${formatDateTime(p.payment_date)}</span>
           </div>
         </div>
@@ -504,6 +504,12 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
 
       const actionsEl = overlay.querySelector("#payment-detail-actions");
       const errorEl = overlay.querySelector("#payment-detail-error");
+
+      activateCustomerNameLinks(overlay, (hash) => {
+        overlay.remove();
+        navigate(hash);
+      });
+
       const buttons = [];
       if (p.status === "pending" && canReview) {
         buttons.push({ label: t("approve_payment"), action: "approve", cls: "btn btn-primary" });

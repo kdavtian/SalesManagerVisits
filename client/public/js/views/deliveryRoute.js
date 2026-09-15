@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, formatDateDMY, getCurrentPosition } from "../util.js";
+import { escapeHtml, formatAmd, formatDateDMY, getCurrentPosition, customerNameLinkHtml, activateCustomerNameLinks } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 import { ensureLeaflet } from "../leafletLoader.js";
@@ -214,7 +214,7 @@ export async function renderDelivery(root, navigate) {
     overlay.className = "sheet-overlay";
     overlay.innerHTML = `
       <div class="sheet">
-        <h2>${escapeHtml(stop.customer_name)}</h2>
+        <h2>${customerNameLinkHtml(stop.customer_name, stop.customer_id)}</h2>
         ${stop.address ? `<p class="muted">${escapeHtml(stop.address)}</p>` : ""}
         <div class="card" style="margin:12px 0;">
           <div class="order-detail-ids"><span>${t("order_id_label")}: ${escapeHtml(stop.order_code || "")}</span></div>
@@ -231,6 +231,10 @@ export async function renderDelivery(root, navigate) {
     document.body.appendChild(overlay);
     overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
     overlay.querySelector("#active-stop-close").addEventListener("click", () => overlay.remove());
+    activateCustomerNameLinks(overlay, (hash) => {
+      overlay.remove();
+      navigate(hash);
+    });
     overlay.querySelector("#active-stop-remove").addEventListener("click", async (e) => {
       if (!confirm(t("delivery_remove_from_route_confirm"))) return;
       const btn = e.currentTarget;

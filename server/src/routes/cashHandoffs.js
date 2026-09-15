@@ -431,7 +431,7 @@ async function loadHandoff(id) {
   const handoff = rows[0];
   if (!handoff) return null;
   const { rows: items } = await pool.query(
-    `SELECT p.id, p.amount_amd, p.sales_channel, COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot,
+    `SELECT p.id, p.amount_amd, p.sales_channel, c.id AS customer_id, COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot,
             p.erp_customer_id_snapshot, p.sales_manager_name_snapshot, p.payment_date, p.status
      FROM cash_handoff_items i
      JOIN payments p ON p.id = i.payment_id
