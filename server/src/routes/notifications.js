@@ -1,10 +1,30 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, requireAdmin } from "../middleware/auth.js";
 
 export const notificationsRouter = Router();
 
 notificationsRouter.use(requireAuth);
+
+// Admin-only oversight: recent push-delivery attempts across every user,
+// including retries (see push.js) -- what used to be visible only in
+// server console logs. Newest first, capped the same way the personal
+// inbox above is.
+notificationsRouter.get("/delivery-log", requireAdmin, async (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
+  const { rows } = await pool.query(
+    `SELECT dl.id, dl.notification_id, dl.user_id, u.name AS user_name, dl.subscription_id,
+            dl.status, dl.status_code, dl.error_message, dl.attempt, dl.attempted_at,
+            n.type AS notification_type, n.title AS notification_title
+     FROM notification_delivery_log dl
+     JOIN users u ON u.id = dl.user_id
+     LEFT JOIN notifications n ON n.id = dl.notification_id
+     ORDER BY dl.attempted_at DESC
+     LIMIT $1`,
+    [limit]
+  );
+  res.json(rows);
+});
 
 function isValidId(value) {
   return /^\d+$/.test(String(value ?? ""));

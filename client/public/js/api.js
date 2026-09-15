@@ -306,6 +306,7 @@ export const api = {
     return request(`/notifications${qs ? `?${qs}` : ""}`);
   },
   getUnreadNotificationCount: () => request("/notifications/unread-count"),
+  getNotificationDeliveryLog: () => request("/notifications/delivery-log"),
   markNotificationRead: (id) => request(`/notifications/${id}/read`, { method: "PATCH" }),
   markAllNotificationsRead: () => request("/notifications/read-all", { method: "PATCH" }),
 

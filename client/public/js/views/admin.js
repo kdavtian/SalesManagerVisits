@@ -1436,3 +1436,44 @@ export async function renderDataQualitySection(container) {
     <div class="card-list">${duplicateRows}</div>
   `;
 }
+
+const DELIVERY_STATUS_BADGE = {
+  delivered: "badge-success",
+  failed: "badge-danger",
+  expired: "badge-neutral",
+};
+
+// Admin-only oversight (server/src/routes/notifications.js's GET
+// /delivery-log): what used to be visible only in server console output --
+// every push-delivery attempt, including retries (push.js retries a
+// transient failure twice more before giving up; each attempt is its own
+// row here, so a notification that failed then succeeded on retry shows
+// both).
+export async function renderNotificationDeliveryLogSection(container) {
+  container.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+  const rows = await api.getNotificationDeliveryLog();
+
+  container.innerHTML = `
+    <p class="muted radius-help">${t("notification_delivery_log_hint")}</p>
+    <div class="card-list">
+      ${
+        rows.length
+          ? rows
+              .map(
+                (r) => `
+        <div class="card dq-row">
+          <div class="dq-row-main">
+            <strong>${escapeHtml(r.user_name)}${r.notification_title ? ` · ${escapeHtml(r.notification_title)}` : ""}</strong>
+            <span class="muted">${formatDateTime(r.attempted_at)} · ${t("notification_delivery_log_attempt")} ${r.attempt}${r.error_message ? ` · ${escapeHtml(r.error_message)}` : ""}</span>
+          </div>
+          <div class="dq-row-flags">
+            <span class="badge ${DELIVERY_STATUS_BADGE[r.status] || "badge-neutral"}">${t(`notification_delivery_status_${r.status}`)}</span>
+          </div>
+        </div>`
+              )
+              .join("")
+          : `<p class="muted">${t("notification_delivery_log_empty")}</p>`
+      }
+    </div>
+  `;
+}
