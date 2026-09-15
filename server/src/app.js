@@ -50,6 +50,7 @@ import { calculatorLockRouter } from "./routes/calculatorLock.js";
 import { lockdownRouter } from "./routes/lockdown.js";
 import { lockdownGate } from "./middleware/lockdown.js";
 import { requestTiming } from "./middleware/requestTiming.js";
+import { requireCsrf } from "./middleware/csrf.js";
 import { clientErrorsRouter } from "./routes/clientErrors.js";
 import { getCalculatorModeEnabled } from "./settings.js";
 import { requireAuth } from "./middleware/auth.js";
@@ -102,6 +103,7 @@ app.use(
 app.use(cookieParser());
 app.use(lockdownGate);
 app.use(requestTiming);
+app.use(requireCsrf);
 
 app.use("/api/auth", express.json(), authRouter);
 app.use("/api/me", express.json(), meRouter);

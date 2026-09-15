@@ -35,11 +35,26 @@ async function request(path, options = {}) {
   return doRequest(path, options);
 }
 
+// Double-submit-cookie CSRF token (see server/src/middleware/csrf.js) --
+// the server sets this as a plain (non-httpOnly) cookie alongside the
+// session cookie on login, specifically so this can read it back and echo
+// it in a header the server then compares against its own cookie copy.
+function getCsrfToken() {
+  const match = document.cookie.match(/(?:^|; )csrf_token=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 async function doRequest(path, options) {
+  const method = (options.method || "GET").toUpperCase();
+  const csrfToken = method !== "GET" ? getCsrfToken() : null;
   const res = await fetch(`/api${path}`, {
     credentials: "include",
     ...options,
-    headers: { "X-App-Version": APP_VERSION, ...options.headers },
+    headers: {
+      "X-App-Version": APP_VERSION,
+      ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+      ...options.headers,
+    },
   });
 
   if (res.status === 204) return null;

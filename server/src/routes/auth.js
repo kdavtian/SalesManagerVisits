@@ -17,6 +17,15 @@ const loginLimiter = rateLimit({
   message: { error: "Too many login attempts. Try again later." },
 });
 
+// Per-account lockout, on top of loginLimiter's IP-scoped rate limit above:
+// that one catches an attacker hammering many accounts from one IP, this
+// one catches a targeted brute force against a single account spread
+// across many IPs. LOCKOUT_THRESHOLD consecutive failures locks the
+// account for LOCKOUT_MINUTES; a single successful login (or the lock
+// simply expiring) clears the counter.
+const LOCKOUT_THRESHOLD = 5;
+const LOCKOUT_MINUTES = 15;
+
 authRouter.post("/login", loginLimiter, async (req, res) => {
   const { email, password } = req.body ?? {};
   if (!email || !password) {
@@ -24,13 +33,29 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
   }
 
   const { rows } = await pool.query(
-    "SELECT id, email, password_hash, name, role, token_version FROM users WHERE email = $1",
+    "SELECT id, email, password_hash, name, role, token_version, failed_login_attempts, locked_until FROM users WHERE email = $1",
     [String(email).toLowerCase()]
   );
   const user = rows[0];
 
+  if (user?.locked_until && new Date(user.locked_until) > new Date()) {
+    return res.status(423).json({ error: "Account temporarily locked due to repeated failed logins. Try again later." });
+  }
+
   if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+    if (user) {
+      const attempts = user.failed_login_attempts + 1;
+      const lockedUntil = attempts >= LOCKOUT_THRESHOLD ? new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000) : null;
+      await pool.query(
+        "UPDATE users SET failed_login_attempts = $2, locked_until = $3 WHERE id = $1",
+        [user.id, lockedUntil ? 0 : attempts, lockedUntil]
+      );
+    }
     return res.status(401).json({ error: "Invalid email or password" });
+  }
+
+  if (user.failed_login_attempts > 0 || user.locked_until) {
+    await pool.query("UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = $1", [user.id]);
   }
 
   issueSession(res, user);

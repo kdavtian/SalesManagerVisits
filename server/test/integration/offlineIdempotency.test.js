@@ -70,11 +70,16 @@ test("creating a checkin twice with the same client_ref returns the same checkin
 
   const { pool } = await import("../../src/db/pool.js");
   const port = new URL((await startTestServer())).port;
-  const first = await fetch(`http://127.0.0.1:${port}/api/checkins`, { method: "POST", headers: { Cookie: cookie }, body: form });
+  // Multipart checkin submission bypasses apiRequest() (which auto-attaches
+  // this from `cookie`), so the CSRF double-submit header is pulled out
+  // and attached here by hand, same as apiRequest() does internally.
+  const csrfToken = cookie.match(/(?:^|; )csrf_token=([^;]+)/)?.[1];
+  const csrfHeaders = { Cookie: cookie, ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}) };
+  const first = await fetch(`http://127.0.0.1:${port}/api/checkins`, { method: "POST", headers: csrfHeaders, body: form });
   const firstData = await first.json();
   assert.equal(first.status, 201);
 
-  const second = await fetch(`http://127.0.0.1:${port}/api/checkins`, { method: "POST", headers: { Cookie: cookie }, body: form });
+  const second = await fetch(`http://127.0.0.1:${port}/api/checkins`, { method: "POST", headers: csrfHeaders, body: form });
   const secondData = await second.json();
   assert.equal(second.status, 201);
   assert.equal(secondData.id, firstData.id, "retrying with the same client_ref must return the SAME checkin, not create a new one");
