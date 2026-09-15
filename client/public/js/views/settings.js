@@ -9,6 +9,7 @@ import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offline
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
 import { checkForUpdateManually } from "../updateBanner.js";
 import { APP_VERSION } from "../version.js";
+import { refreshProductCatalog } from "../productCatalog.js";
 
 const ICON = {
   camera: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg>`,
@@ -146,6 +147,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         ${settingsRow({ icon: ICON.cloud, label: t("sync_status"), value: `<span id="sync-status-value"></span>`, interactive: false })}
         ${settingsRow({ icon: ICON.clock, label: t("last_sync"), value: `<span id="last-sync-value"></span>`, interactive: false })}
         ${settingsRow({ icon: ICON.refresh, label: t("refresh_data"), id: "row-refresh" })}
+        ${settingsRow({ icon: ICON.refresh, label: t("refresh_product_catalog"), id: "row-refresh-catalog" })}
         ${settingsRow({ icon: ICON.database, label: t("offline_storage"), value: `<span id="storage-value">…</span>`, interactive: false })}
       </div>
       <p class="settings-hint sync-needs-attention-hint" id="sync-needs-attention-hint" role="status" hidden></p>
@@ -480,6 +482,25 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     } finally {
       valueLabel.textContent = originalLabel;
       row.disabled = false;
+    }
+  });
+
+  root.querySelector("#row-refresh-catalog").addEventListener("click", async (e) => {
+    const row = e.currentTarget;
+    const valueLabel = row.querySelector(".settings-row-label");
+    const originalLabel = valueLabel.textContent;
+    valueLabel.textContent = t("refreshing");
+    row.disabled = true;
+    try {
+      await refreshProductCatalog();
+      valueLabel.textContent = t("product_catalog_refreshed");
+    } catch {
+      valueLabel.textContent = t("product_catalog_refresh_failed");
+    } finally {
+      row.disabled = false;
+      setTimeout(() => {
+        valueLabel.textContent = originalLabel;
+      }, 2000);
     }
   });
 

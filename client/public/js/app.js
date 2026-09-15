@@ -1,5 +1,5 @@
 import { api } from "./api.js";
-import { state, setUser, isAdmin, canPlanForOthers } from "./state.js";
+import { state, setUser, isAdmin, canPlanForOthers, loadCachedUser } from "./state.js";
 import { getLang, t } from "./i18n.js";
 import { icons } from "./icons.js";
 // Every view module below is loaded on demand (dynamic import()) from
@@ -868,6 +868,40 @@ window.addEventListener("online", renderSyncBanner);
 window.addEventListener("offline", renderSyncBanner);
 window.addEventListener("hashchange", render);
 
+// Background session/role refresh when the app regains focus (switching
+// back from another app, unlocking the phone) -- catches a role change an
+// admin made elsewhere, or a session nearing its 30-day cookie expiry,
+// sooner than the next real navigation would happen to notice, without
+// ever blocking the UI on it. Throttled so rapid focus/blur (alt-tabbing)
+// doesn't turn into a request storm.
+let lastFocusRefreshAt = 0;
+const FOCUS_REFRESH_MIN_INTERVAL_MS = 60 * 1000;
+async function refreshSessionOnFocus() {
+  if (!state.user) return;
+  const now = Date.now();
+  if (now - lastFocusRefreshAt < FOCUS_REFRESH_MIN_INTERVAL_MS) return;
+  lastFocusRefreshAt = now;
+  try {
+    const user = await api.me();
+    const roleChanged = user.role !== state.user.role;
+    setUser(user);
+    if (roleChanged) {
+      await clearCacheIfRoleChanged(user);
+      render();
+    }
+  } catch {
+    // A genuinely expired/revoked session behaves exactly like any other
+    // failed request elsewhere in the app (surfaced inline by whatever the
+    // rep does next) -- a background focus check has no form/action of its
+    // own to show that error in, and silently forcing a logout here could
+    // drop unsaved work on what might just be a transient network blip.
+  }
+}
+window.addEventListener("focus", refreshSessionOnFocus);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") refreshSessionOnFocus();
+});
+
 document.addEventListener("invalid", (event) => {
   const field = event.target;
   field.setAttribute("aria-invalid", "true");
@@ -893,6 +927,25 @@ document.addEventListener("input", (event) => {
 });
 
 async function init() {
+  // Optimistic paint from whatever /api/me last returned successfully, so a
+  // slow/high-latency network doesn't leave the screen blank through the
+  // two sequential round trips below (lockdown status, then the real
+  // /api/me) before it can render anything at all. Set directly on state
+  // rather than through setUser() -- this is provisional and hasn't been
+  // confirmed, so it shouldn't re-write the cache with a copy of itself.
+  // Both checks below still run unconditionally right after and are what
+  // actually decide anything security-sensitive: showLockdownOverlay fully
+  // replaces this render if lockdown turns out to be engaged (a rare,
+  // split-second flash of the ordinary app shell is an acceptable cost for
+  // not blocking the common case on it), and the real /api/me response
+  // corrects whatever this optimistic one showed if it disagrees (role
+  // changed, session gone).
+  const cachedUser = loadCachedUser();
+  if (cachedUser) {
+    state.user = cachedUser;
+    render();
+  }
+
   try {
     const lockdownStatus = await api.getLockdownStatus();
     if (lockdownStatus.enabled) {

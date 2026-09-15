@@ -4,24 +4,19 @@ import { t } from "../i18n.js";
 import { enqueueOrder } from "../offlineQueue.js";
 import { canAssignErpCustomerId } from "../state.js";
 import { compareProducts, sortedBrands } from "../productSort.js";
+import { getProductCatalog } from "../productCatalog.js";
 
 // Reps often open "Create order" several times a visit (once per checkin);
-// the catalog rarely changes minute to minute, so cache it in module scope
-// (persists for the app session) instead of refetching on every open. Order
-// pricing is still snapshotted server-side from the live catalog at save
-// time (see buildOrderLines in orders.js), so a stale cached price here is
-// cosmetic only -- it never lets a rep submit an order at an outdated price.
-let catalogCache = null;
-let catalogCacheAt = 0;
-const CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
-
+// the catalog rarely changes minute to minute, so this reads from the
+// shared, IndexedDB-persisted catalog cache (productCatalog.js) instead of
+// refetching every open -- persisted rather than just module-scope means it
+// also survives a full app restart and works the first time offline, not
+// only for the rest of one session. Order pricing is still snapshotted
+// server-side from the live catalog at save time (see buildOrderLines in
+// orders.js), so a stale cached price here is cosmetic only -- it never
+// lets a rep submit an order at an outdated price.
 async function getCatalog() {
-  if (catalogCache && Date.now() - catalogCacheAt < CATALOG_CACHE_TTL_MS) {
-    return catalogCache;
-  }
-  catalogCache = await api.listProducts();
-  catalogCacheAt = Date.now();
-  return catalogCache;
+  return getProductCatalog();
 }
 
 function filterCatalog(list, query) {

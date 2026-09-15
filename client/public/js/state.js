@@ -2,8 +2,34 @@ export const state = {
   user: null,
 };
 
+const USER_CACHE_KEY = "fieldvisits_cached_user";
+
 export function setUser(user) {
   state.user = user;
+  // Best-effort cache of the logged-in user's own profile -- read once at
+  // boot (see app.js's init()) so the very first paint doesn't have to wait
+  // on a full /api/me round trip before it knows whether to show the login
+  // screen or the app shell, and with which role's nav/visibility. Always
+  // provisional: the real /api/me response that follows on every boot is
+  // what actually decides anything security-sensitive -- the server
+  // re-checks role on every request regardless of what's cached here.
+  try {
+    if (user) localStorage.setItem(USER_CACHE_KEY, JSON.stringify(user));
+    else localStorage.removeItem(USER_CACHE_KEY);
+  } catch {
+    // localStorage unavailable (private browsing, storage pressure) --
+    // just means the next cold boot can't optimistically render before
+    // /api/me resolves, not a reason to fail the actual sign-in/out.
+  }
+}
+
+export function loadCachedUser() {
+  try {
+    const raw = localStorage.getItem(USER_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
 }
 
 export function isAdmin() {
