@@ -36,6 +36,9 @@ const CLEANUP_ORDER = [
   "pod_records",
   "route_stops",
   "delivery_routes",
+  // cash_handoffs cascades to cash_handoff_items, which RESTRICTs deleting
+  // a referenced payment -- must go before "payments" below.
+  "cash_handoffs",
   "payments",
   "orders",
   "customer_level_audit",
@@ -113,11 +116,23 @@ export async function createProduct(overrides = {}) {
   return rows[0];
 }
 
+export function trackCustomer(id) {
+  return track("customers", id);
+}
+export function trackProduct(id) {
+  return track("products", id);
+}
 export function trackOrder(id) {
   return track("orders", id);
 }
 export function trackCheckin(id) {
   return track("checkins", id);
+}
+export function trackPayment(id) {
+  return track("payments", id);
+}
+export function trackHandoff(id) {
+  return track("cash_handoffs", id);
 }
 
 // Thin fetch wrapper: resolves against the running test server, sends/
@@ -147,6 +162,28 @@ export async function apiRequest(path, { method = "GET", body, cookie, headers =
   const data = isJson ? await res.json().catch(() => null) : await res.text();
   const newCookie = setCookies.length ? setCookies.map((c) => c.split(";")[0]).join("; ") : cookie;
   return { status: res.status, data, cookie: newCookie };
+}
+
+// Multipart counterpart to apiRequest(), for the one route (POST
+// /api/checkins) that accepts file uploads via multer -- a JSON body can't
+// carry files, so this sends a real FormData body instead, attaching the
+// CSRF header by hand the same way apiRequest() does internally.
+export async function apiFormRequest(path, { method = "POST", form, cookie, headers = {} } = {}) {
+  const csrfMatch = cookie?.match(/(?:^|; )csrf_token=([^;]+)/);
+  const csrfToken = csrfMatch ? csrfMatch[1] : null;
+  const res = await fetch(`${baseUrl}${path}`, {
+    method,
+    headers: {
+      ...(cookie ? { Cookie: cookie } : {}),
+      ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+      ...headers,
+    },
+    body: form,
+    redirect: "manual",
+  });
+  const isJson = res.headers.get("content-type")?.includes("application/json");
+  const data = isJson ? await res.json().catch(() => null) : await res.text();
+  return { status: res.status, data };
 }
 
 export async function loginAs(email, password = TEST_PASSWORD) {
