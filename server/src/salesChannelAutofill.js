@@ -2,7 +2,7 @@ import { pool } from "./db/pool.js";
 
 const VALID_CHANNELS = new Set(["KF", "CAS", "OEM", "CVO", "PCO", "SM B2B", "SM YVN", "SM Davtashen", "SM Shirak", "SM CAS"]);
 
-function channelFromPosition(position = "") {
+export function channelFromPosition(position = "") {
   const value = String(position).trim().toLowerCase();
   if (!value) return "";
   if (value.includes("davtashen") || value.includes("դավթաշեն")) return "SM Davtashen";

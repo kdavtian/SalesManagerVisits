@@ -86,3 +86,22 @@ test("buildRecommendations: a channel fully on pace with no pending balance prod
   const row = makeRow({ salesActual: 5000, salesTarget: 10000 });
   assert.deepEqual(buildRecommendations(row), []);
 });
+
+test("buildRecommendations: a slightly-behind (not at-risk) KPI whose run-rate forecast still misses target gets a separate medium-severity forecast warning", () => {
+  // actualPace 0.45 / expectedPace 0.5 = 0.9 ratio -> slightly_behind (medium),
+  // not at_risk -- so the forecast-miss rule (severity !== "high") also fires.
+  const row = makeRow({ salesActual: 450, salesTarget: 1000 });
+  const recs = buildRecommendations(row);
+  const paceRec = recs.find((r) => r.message.match(/slightly behind/i));
+  const forecastRec = recs.find((r) => r.message.match(/projected to miss target/i));
+  assert.ok(paceRec, "expected the slightly-behind pace warning");
+  assert.equal(paceRec.severity, "medium");
+  assert.ok(forecastRec, "expected a separate forecast-miss warning");
+  assert.equal(forecastRec.severity, "medium");
+});
+
+test("buildRecommendations: an at-risk KPI does NOT get a duplicate forecast-miss warning (pace warning already covers it)", () => {
+  const row = makeRow({ salesActual: 500, salesTarget: 10000 }); // at_risk, high severity
+  const recs = buildRecommendations(row);
+  assert.equal(recs.filter((r) => r.kpi === "sales").length, 1, "only the one high-severity pace warning, no separate forecast rule");
+});
