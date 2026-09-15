@@ -64,11 +64,20 @@ salesRouter.get("/", async (req, res) => {
             sum(eol.revenue_amd) AS total_amd,
             sum(eol.qty) AS total_qty,
             -- size_l is free-text from the ERP extract (usually a plain
-            -- number, occasionally with a trailing "L" like products.unit)
-            -- -- stripped to digits/decimal point before casting so an
-            -- unexpected format degrades to 0 for that line instead of
-            -- failing the whole query.
-            sum(eol.qty * COALESCE(NULLIF(regexp_replace(eol.size_l, '[^0-9.]', '', 'g'), '')::numeric, 0)) AS total_liters
+            -- number, occasionally with a trailing "L" like products.unit).
+            -- Stripping to just digits/dots (as an earlier version of this
+            -- query did) isn't safe on its own: malformed text with more
+            -- than one dot or number (e.g. "1.5/2.0L") strips down to
+            -- something like "1.52.0", which isn't valid numeric syntax and
+            -- throws instead of degrading -- turning one bad ERP row into a
+            -- 500 for the whole date range. So the trailing "L" is stripped
+            -- first, then the WHOLE remaining string is validated as a
+            -- single clean number before ever being cast; anything that
+            -- doesn't match (multiple numbers, stray punctuation, empty)
+            -- degrades to 0 for that line, same as size_l being unset.
+            sum(eol.qty * (CASE WHEN regexp_replace(trim(eol.size_l), '[Ll]$', '') ~ '^[0-9]+(\.[0-9]+)?$'
+                                 THEN regexp_replace(trim(eol.size_l), '[Ll]$', '')::numeric
+                                 ELSE 0 END)) AS total_liters
      FROM erp_order_lines eol
      LEFT JOIN customers c ON c.erp_customer_id = eol.erp_customer_id
      LEFT JOIN erp_customer_data ecd ON ecd.erp_customer_id = eol.erp_customer_id
