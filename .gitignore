@@ -20,3 +20,8 @@ npm-debug.log*
 Thumbs.db
 .vscode/
 .idea/
+
+# Playwright E2E suite (server/test/e2e) run artifacts
+server/test-results/
+server/playwright-report/
+server/playwright.local.config.mjs

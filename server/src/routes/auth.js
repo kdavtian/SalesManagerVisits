@@ -15,6 +15,17 @@ const loginLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many login attempts. Try again later." },
+  // The browser E2E suite (test/e2e) drives real logins through the actual
+  // form on every spec -- several specs need two (a multi-identity flow,
+  // e.g. rep + director), so the full suite blows past this IP-scoped
+  // budget well before it's done. Bypassed only when E2E_RATE_LIMIT_BYPASS_TOKEN
+  // is set AND matched by the request header (see playwright.config.mjs) --
+  // that env var is never set outside the E2E run, so this is a no-op in
+  // production and doesn't touch the node:test integration suite's own
+  // lockout/rate-limit tests, which never send the header.
+  skip: (req) =>
+    Boolean(process.env.E2E_RATE_LIMIT_BYPASS_TOKEN) &&
+    req.get("x-e2e-rate-limit-bypass") === process.env.E2E_RATE_LIMIT_BYPASS_TOKEN,
 });
 
 // Per-account lockout, on top of loginLimiter's IP-scoped rate limit above:
