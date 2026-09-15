@@ -1363,3 +1363,76 @@ export async function renderPointsCloseoutSection(container) {
 
   loadHistory();
 }
+
+const DATA_QUALITY_FLAG_LABELS = {
+  no_owner: "data_quality_flag_no_owner",
+  no_channel: "data_quality_flag_no_channel",
+  no_location: "data_quality_flag_no_location",
+};
+
+// Admin-only oversight tool (server/src/routes/dataQuality.js): surfaces
+// customers missing an owner or sales channel (both nullable, and both a
+// silent gap in the app's own visibility/reporting logic rather than a
+// hard failure anywhere -- see the route's own comment), plus a same-
+// name/same-location scan for likely duplicate customer records. Not
+// meant for daily use by anyone but an admin doing periodic cleanup, so
+// this is a plain read + fix-elsewhere flow (each row deep-links to the
+// customer's own detail page to actually fix it), not a dedicated editor.
+export async function renderDataQualitySection(container) {
+  container.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+  const data = await api.getDataQuality();
+
+  const countChip = (count, label) =>
+    `<div class="dq-count-chip"><strong>${count}</strong><span>${t(label)}</span></div>`;
+
+  const flagBadges = (flags) =>
+    flags
+      .map((f) => `<span class="badge badge-warning">${t(DATA_QUALITY_FLAG_LABELS[f] || f)}</span>`)
+      .join(" ");
+
+  const flaggedRows = data.flagged_customers.length
+    ? data.flagged_customers
+        .map(
+          (c) => `
+      <a class="card list-row dq-row" href="#/customers/${c.id}">
+        <div class="dq-row-main">
+          <strong>${escapeHtml(c.name)}</strong>
+          <span class="muted">${c.erp_customer_id ? `ID: ${escapeHtml(String(c.erp_customer_id))}` : t("data_quality_no_erp_id")}</span>
+        </div>
+        <div class="dq-row-flags">${flagBadges(c.flags)}</div>
+      </a>`
+        )
+        .join("")
+    : `<p class="muted">${t("data_quality_no_issues")}</p>`;
+
+  const duplicateRows = data.duplicate_groups.length
+    ? data.duplicate_groups
+        .map(
+          (g) => `
+      <div class="card dq-row">
+        <div class="dq-row-main">
+          <strong>${escapeHtml(g.name)}</strong>
+          <span class="badge badge-danger">${t("data_quality_flag_duplicate")}</span>
+        </div>
+        <div class="dq-row-flags">
+          ${g.customers.map((c) => `<a href="#/customers/${c.id}">#${c.id}</a>`).join(", ")}
+        </div>
+      </div>`
+        )
+        .join("")
+    : `<p class="muted">${t("data_quality_no_duplicates")}</p>`;
+
+  container.innerHTML = `
+    <p class="muted radius-help">${t("data_quality_hint")}</p>
+    <div class="dq-counts">
+      ${countChip(data.counts.no_owner, "data_quality_flag_no_owner")}
+      ${countChip(data.counts.no_channel, "data_quality_flag_no_channel")}
+      ${countChip(data.counts.no_location, "data_quality_flag_no_location")}
+      ${countChip(data.counts.duplicate_groups, "data_quality_flag_duplicate")}
+    </div>
+    <h3 class="dq-subhead">${t("data_quality_flagged_heading")}</h3>
+    <div class="card-list">${flaggedRows}</div>
+    <h3 class="dq-subhead">${t("data_quality_duplicates_heading")}</h3>
+    <div class="card-list">${duplicateRows}</div>
+  `;
+}

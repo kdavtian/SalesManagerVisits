@@ -386,6 +386,10 @@ export const api = {
   // role-scoped server-side already.
   getDebtBalances: () => request("/debt-balances"),
 
+  // Admin data-quality dashboard (see server/src/routes/dataQuality.js) --
+  // admin-only server-side already.
+  getDataQuality: () => request("/data-quality"),
+
   // Sales records (see server/src/routes/sales.js) -- read-only ERP order
   // history, role-scoped server-side already.
   getSales: (params = {}) => {

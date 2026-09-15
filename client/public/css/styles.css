@@ -4412,6 +4412,64 @@ input[type="search"]:focus-visible {
   color: var(--text-dim);
 }
 
+/* Admin data-quality dashboard (renderDataQualitySection, admin.js) */
+
+.dq-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 16px;
+}
+
+.dq-count-chip {
+  flex: 1;
+  min-width: 84px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.dq-count-chip strong {
+  font-size: var(--fs-stat-lg);
+  font-weight: var(--fw-stat-lg);
+  color: var(--accent);
+}
+
+.dq-count-chip span {
+  font-size: var(--fs-stat-label);
+  font-weight: var(--fw-stat-label);
+  color: var(--text-dim);
+}
+
+.dq-subhead {
+  margin: 16px 0 8px;
+  font-size: 0.95rem;
+}
+
+.dq-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  text-decoration: none;
+  color: inherit;
+}
+
+.dq-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dq-row-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .stat-pill-active {
   background: var(--accent);
   border-color: var(--accent);

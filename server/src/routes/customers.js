@@ -3,6 +3,7 @@ import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData } from "../roles.js";
 import { getDefaultVisitFrequencyDays } from "../settings.js";
+import { haversineMeters } from "../utils/geo.js";
 
 export const customersRouter = Router();
 
@@ -141,6 +142,47 @@ async function findErpCustomerIdConflict(erpCustomerId, excludeId) {
   return { error: `ERP customer ID "${erpCustomerId}" is already linked to another customer (${rows[0].name})` };
 }
 
+export function normalizeCustomerName(name) {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+// Same name within a tight radius is a near-certain sign the same physical
+// shop got entered twice (two reps visiting the same place independently,
+// or one rep re-adding a customer they couldn't find in search) rather
+// than two different businesses that happen to share a name -- a real
+// coincidence needs to be much farther apart than this to both be real.
+// Deliberately NOT a DB-level constraint (unlike erp_customer_id): a name
+// isn't a stable enough identity for a hard block, so this is a soft
+// pre-check the caller can override with confirm_duplicate: true after
+// being shown the match, not an unconditional 409 the way an ERP-id clash
+// is.
+export const DUPLICATE_CUSTOMER_RADIUS_METERS = 30;
+
+async function findDuplicateCustomer(name, lat, lng, excludeId) {
+  const normalized = normalizeCustomerName(name);
+  // Bounding-box pre-filter in SQL (cheap, index-friendly-enough at this
+  // scale) -- exact haversine distance is only computed in JS against the
+  // handful of candidates it returns, not the whole table.
+  const latDelta = DUPLICATE_CUSTOMER_RADIUS_METERS / 111000; // ~111km per degree of latitude
+  const lngDelta = latDelta / Math.max(Math.cos((lat * Math.PI) / 180), 0.01);
+  const params = [lat - latDelta, lat + latDelta, lng - lngDelta, lng + lngDelta];
+  let where = "lat BETWEEN $1 AND $2 AND lng BETWEEN $3 AND $4";
+  if (excludeId) {
+    params.push(excludeId);
+    where += ` AND id != $${params.length}`;
+  }
+  const { rows } = await pool.query(`SELECT id, name, lat, lng FROM customers WHERE ${where}`, params);
+  for (const row of rows) {
+    if (
+      normalizeCustomerName(row.name) === normalized &&
+      haversineMeters(lat, lng, row.lat, row.lng) <= DUPLICATE_CUSTOMER_RADIUS_METERS
+    ) {
+      return row;
+    }
+  }
+  return null;
+}
+
 customersRouter.post("/", async (req, res) => {
   const {
     name,
@@ -183,6 +225,20 @@ customersRouter.post("/", async (req, res) => {
   if (erp_customer_id) {
     const conflict = await findErpCustomerIdConflict(erp_customer_id);
     if (conflict) return res.status(409).json(conflict);
+  }
+  if (!req.body?.confirm_duplicate) {
+    const duplicate = await findDuplicateCustomer(name, lat, lng);
+    if (duplicate) {
+      // Same "duplicate_warning" + confirm_duplicate override shape
+      // payments.js's own findLikelyDuplicate check already established --
+      // one convention for "this looks like a repeat, are you sure" across
+      // the app instead of a bespoke one per resource.
+      return res.status(409).json({
+        error: "duplicate_warning",
+        message: `A customer named "${duplicate.name}" already exists within ${DUPLICATE_CUSTOMER_RADIUS_METERS}m of this location -- likely the same shop entered twice`,
+        similar_customer: duplicate,
+      });
+    }
   }
 
   // Same ERP-ID-implies-at-least-Bronze rule as the PATCH handler below,
@@ -362,7 +418,7 @@ customersRouter.patch("/:id", async (req, res) => {
   const onlyChannelField = fieldsPresent.length === 1 && fieldsPresent[0] === "sales_channel";
 
   const { rows: currentRows } = await pool.query(
-    "SELECT created_by, erp_customer_id, customer_tier FROM customers WHERE id = $1",
+    "SELECT created_by, erp_customer_id, customer_tier, name, lat, lng FROM customers WHERE id = $1",
     [req.params.id]
   );
   const current = currentRows[0];
@@ -435,6 +491,23 @@ customersRouter.patch("/:id", async (req, res) => {
   if (newErpId && newErpId !== current.erp_customer_id) {
     const conflict = await findErpCustomerIdConflict(newErpId, req.params.id);
     if (conflict) return res.status(409).json(conflict);
+  }
+
+  // Only re-check for a duplicate when this edit actually moves the pin
+  // and/or renames the customer -- an edit that touches neither can't
+  // newly collide with anything.
+  const nextName = req.body?.name !== undefined ? req.body.name : current.name;
+  const nextLat = req.body?.lat !== undefined ? req.body.lat : current.lat;
+  const nextLng = req.body?.lng !== undefined ? req.body.lng : current.lng;
+  if ((req.body?.name !== undefined || req.body?.lat !== undefined || req.body?.lng !== undefined) && !req.body?.confirm_duplicate) {
+    const duplicate = await findDuplicateCustomer(nextName, nextLat, nextLng, req.params.id);
+    if (duplicate) {
+      return res.status(409).json({
+        error: "duplicate_warning",
+        message: `A customer named "${duplicate.name}" already exists within ${DUPLICATE_CUSTOMER_RADIUS_METERS}m of this location -- likely the same shop entered twice`,
+        similar_customer: duplicate,
+      });
+    }
   }
 
   const fieldsToApply = { ...req.body };
