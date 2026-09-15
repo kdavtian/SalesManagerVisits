@@ -17,16 +17,12 @@ async function holidaysInRange(startDate, endDate) {
   return new Set(rows.map((r) => r.holiday_date.toISOString().slice(0, 10)));
 }
 
-// Total working days in the given month, and how many have elapsed as of
-// `asOf` (defaults to now; capped at the month's last day, so a past
-// month's plan doesn't read as "elapsed > total").
-export async function workingDaysForMonth(monthDate, asOf = new Date()) {
-  const year = monthDate.getUTCFullYear();
-  const month = monthDate.getUTCMonth();
-  const firstDay = new Date(Date.UTC(year, month, 1));
-  const lastDay = new Date(Date.UTC(year, month + 1, 0));
-  const holidays = await holidaysInRange(firstDay, lastDay);
-
+// Pure day-counting math, given the month's bounds and its holiday set --
+// split out from workingDaysForMonth below so this (the actual business
+// logic: what counts as a working day, and how "elapsed" is capped) is
+// unit-testable without a database. `holidays` is a Set of "YYYY-MM-DD"
+// strings, matching what holidaysInRange returns.
+export function computeWorkingDays(firstDay, lastDay, asOf, holidays) {
   const cappedAsOf = asOf < firstDay ? new Date(firstDay.getTime() - 86400000) : asOf < lastDay ? asOf : lastDay;
 
   let total = 0;
@@ -38,4 +34,16 @@ export async function workingDaysForMonth(monthDate, asOf = new Date()) {
     if (d <= cappedAsOf) elapsed += 1;
   }
   return { total, elapsed, remaining: total - elapsed };
+}
+
+// Total working days in the given month, and how many have elapsed as of
+// `asOf` (defaults to now; capped at the month's last day, so a past
+// month's plan doesn't read as "elapsed > total").
+export async function workingDaysForMonth(monthDate, asOf = new Date()) {
+  const year = monthDate.getUTCFullYear();
+  const month = monthDate.getUTCMonth();
+  const firstDay = new Date(Date.UTC(year, month, 1));
+  const lastDay = new Date(Date.UTC(year, month + 1, 0));
+  const holidays = await holidaysInRange(firstDay, lastDay);
+  return computeWorkingDays(firstDay, lastDay, asOf, holidays);
 }

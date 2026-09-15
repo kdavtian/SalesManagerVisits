@@ -46,7 +46,7 @@ const AVAILABLE_SQL = `
 // Both the "available to hand off" screen and the receiver's "count the
 // cash against this" screen need the same shape: per-channel subtotals so
 // physical notes can be counted channel by channel, plus a grand total.
-function summarize(rows) {
+export function summarize(rows) {
   const byChannel = new Map();
   let total = 0;
   for (const row of rows) {
@@ -77,7 +77,7 @@ async function getUser(id, db = pool) {
 // your own hands, never move cash between two other people. Admin is the
 // usual backstop exception (see roles.js: admin is a full-authority
 // superset throughout this app) so a stuck chain can always be unblocked.
-function checkOnBehalf(actor, sender, recipient) {
+export function checkOnBehalf(actor, sender, recipient) {
   if (sender.id === actor.id) return null;
   if (!canSubmitHandoffForOthers(actor.role)) {
     return "Not allowed to submit a handoff for another user";
@@ -446,7 +446,7 @@ async function loadHandoff(id) {
 // Anyone on either end of the handoff, whoever declared it, or a role that
 // already sees every payment company-wide (see seesAllPayments) -- a
 // handoff exposes nothing a payment row doesn't.
-function canSeeHandoff(user, handoff) {
+export function canSeeHandoff(user, handoff) {
   if (user.role !== "sales_manager") return true;
   return handoff.from_user_id === user.id || handoff.to_user_id === user.id || handoff.submitted_by === user.id;
 }

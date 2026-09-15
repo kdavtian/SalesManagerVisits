@@ -67,20 +67,29 @@ export const PERF_APPROVER_ROLES = ["admin", "ceo", "accountant"];
 // only sets the default to "on", not "forced".
 export const ORDER_NOTIFY_ROLES = ["sales_director", "accountant", "ceo"];
 
-// A user-scoped row always wins over a role-scoped row for the same type;
-// with neither, the notification is enabled by default (opt-out, not
-// opt-in, so a fresh install doesn't silently go quiet).
+// Precedence rule, pulled out of the SQL's ORDER BY so it's testable
+// without a database: a user-scoped row always wins over a role-scoped row
+// for the same type; with neither, the notification is enabled by default
+// (opt-out, not opt-in, so a fresh install doesn't silently go quiet).
+// `rows` is whatever matching scope_type='user'/'role' settings rows exist
+// for this user+type (unordered, any number from 0-2).
+export function resolveNotificationEnabled(rows) {
+  const userRow = rows.find((r) => r.scope_type === "user");
+  if (userRow) return userRow.enabled;
+  const roleRow = rows.find((r) => r.scope_type === "role");
+  if (roleRow) return roleRow.enabled;
+  return true;
+}
+
 export async function isNotificationEnabled(userId, type) {
   const { rows } = await pool.query(
-    `SELECT ns.enabled
+    `SELECT ns.enabled, ns.scope_type
      FROM notification_settings ns
      JOIN users u ON u.id = $1
      WHERE ns.notification_type = $2
        AND ((ns.scope_type = 'user' AND ns.scope_value = $1::text)
-         OR (ns.scope_type = 'role' AND ns.scope_value = u.role))
-     ORDER BY (ns.scope_type = 'user') DESC
-     LIMIT 1`,
+         OR (ns.scope_type = 'role' AND ns.scope_value = u.role))`,
     [userId, type]
   );
-  return rows.length ? rows[0].enabled : true;
+  return resolveNotificationEnabled(rows);
 }

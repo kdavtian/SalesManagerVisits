@@ -53,7 +53,7 @@ async function loadPaymentRow(id) {
   return rows[0];
 }
 
-function canSeePayment(user, payment) {
+export function canSeePayment(user, payment) {
   if (seesAllPayments(user.role)) return true;
   return payment.sales_manager_id === user.id;
 }

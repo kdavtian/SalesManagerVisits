@@ -73,7 +73,7 @@ class OrderValidationError extends Error {}
 
 // YYMMDD + a 2-digit daily sequence, e.g. the 1st order on 2026-05-30 is
 // "26053001" and the 27th on 2026-07-18 is "26071827".
-function formatOrderCode(date, seq) {
+export function formatOrderCode(date, seq) {
   const yy = String(date.getFullYear()).slice(-2);
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const dd = String(date.getDate()).padStart(2, "0");
@@ -104,7 +104,7 @@ async function nextOrderCode(client) {
 // A flat-AMD discount and a percent discount are mutually exclusive on one
 // order -- discount_amd wins if both are somehow nonzero (shouldn't happen,
 // since the two setters below reset the other), and never goes below 0.
-function applyDiscount(subtotal, discountPct, discountAmd) {
+export function applyDiscount(subtotal, discountPct, discountAmd) {
   if (discountAmd > 0) return Math.max(0, subtotal - discountAmd);
   return subtotal * (1 - discountPct / 100);
 }
