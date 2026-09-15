@@ -217,15 +217,21 @@ export async function flushQueue() {
         await removeEntry(entry.id);
         notify();
       } catch (err) {
-        // 401 (session expired -- very plausible after being offline for a
-        // while) and 429 (rate limited) are both 4xx, but neither means the
-        // server actually looked at this entry's content and rejected it --
-        // they mean "try again once you're re-authenticated / once the
-        // limit clears". Treating them like a genuine rejection deleted a
-        // rep's real, un-submitted check-in/order just because their token
-        // had expired while offline (reported as "offline queue deletes
-        // work after session expiry or other 4xx errors").
-        if (err.status === 401 || err.status === 429) {
+        // None of these mean the server actually looked at this entry's
+        // content and rejected it -- they all mean "try again later", not
+        // "this entry is invalid":
+        //   401 session expired -- very plausible after being offline a while
+        //   403 forbidden -- e.g. a role change mid-flight; the entry may be
+        //       submittable again once the client's own state resyncs
+        //   409 conflict -- e.g. a duplicate-detection race on the other
+        //       idempotency check this same request could still hit
+        //   423 locked -- the app-wide emergency-lockdown middleware
+        //   429 rate limited
+        // Treating any of these like a genuine rejection deleted a rep's
+        // real, un-submitted check-in/order just because their token had
+        // expired while offline (reported as "offline queue deletes work
+        // after session expiry or other 4xx errors").
+        if ([401, 403, 409, 423, 429].includes(err.status)) {
           break;
         }
         // Network-level failure (TypeError) or a server/infra-side error
