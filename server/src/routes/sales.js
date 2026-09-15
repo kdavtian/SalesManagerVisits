@@ -62,7 +62,13 @@ salesRouter.get("/", async (req, res) => {
             COALESCE(c.name, eol.erp_customer_id) AS customer_name,
             COALESCE(ecd.assigned_sales_rep, c.sales_channel) AS channel,
             sum(eol.revenue_amd) AS total_amd,
-            sum(eol.qty) AS total_qty
+            sum(eol.qty) AS total_qty,
+            -- size_l is free-text from the ERP extract (usually a plain
+            -- number, occasionally with a trailing "L" like products.unit)
+            -- -- stripped to digits/decimal point before casting so an
+            -- unexpected format degrades to 0 for that line instead of
+            -- failing the whole query.
+            sum(eol.qty * COALESCE(NULLIF(regexp_replace(eol.size_l, '[^0-9.]', '', 'g'), '')::numeric, 0)) AS total_liters
      FROM erp_order_lines eol
      LEFT JOIN customers c ON c.erp_customer_id = eol.erp_customer_id
      LEFT JOIN erp_customer_data ecd ON ecd.erp_customer_id = eol.erp_customer_id

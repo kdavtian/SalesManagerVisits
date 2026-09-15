@@ -5,8 +5,8 @@
 // sales.js: no write-back, ERP/Excel stays the source of truth, same
 // contract as Debt Balances.
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, formatDateDMY, channelDisplayLabel, activateDialog, syncBadgeHtml } from "../util.js";
-import { t } from "../i18n.js";
+import { escapeHtml, formatAmd, formatLiters, channelDisplayLabel, activateDialog, syncBadgeHtml, parseDateOnly, customerNameLinkHtml, activateCustomerNameLinks } from "../util.js";
+import { t, getLang } from "../i18n.js";
 
 // Local calendar-date components, not toISOString() -- that converts to
 // UTC first, so a local midnight east of UTC (Yerevan is UTC+4) lands on
@@ -21,6 +21,18 @@ function formatDateInput(date) {
   return `${y}-${m}-${d}`;
 }
 
+// "15 Sep" style heading, same short-date convention as Orders' own
+// per-day group heading (views/orders.js's formatOrderDateHeading) --
+// parseDateOnly rather than `new Date(value)` since order_date here is a
+// date-only string ("YYYY-MM-DD"), which `new Date()` parses as UTC
+// midnight and would show the previous day in any timezone behind UTC.
+function formatSalesDateHeading(dateOnly) {
+  const d = parseDateOnly(dateOnly);
+  if (!d) return String(dateOnly ?? "");
+  const month = d.toLocaleDateString(getLang() === "hy" ? "hy" : "en", { month: "short" });
+  return `${d.getDate()} ${month}`;
+}
+
 function groupLinesByBrand(lines) {
   const byBrand = new Map();
   for (const line of lines) {
@@ -31,7 +43,7 @@ function groupLinesByBrand(lines) {
   return byBrand;
 }
 
-async function openSalesOrderSheet(erpCustomerId, orderId) {
+async function openSalesOrderSheet(erpCustomerId, orderId, navigate) {
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
   overlay.innerHTML = `<div class="sheet"><p class="loading-state" role="status">${t("loading")}</p></div>`;
@@ -73,13 +85,17 @@ async function openSalesOrderSheet(erpCustomerId, orderId) {
       </button>
     </div>
     <div class="order-detail-meta">
-      <span>${escapeHtml(detail.customer_name || "")}</span>
+      ${customerNameLinkHtml(detail.customer_name, detail.internal_customer_id)}
       <span class="erp-debt-amount">${formatAmd(detail.total_amd)}</span>
     </div>
     <p class="muted" style="margin: -4px 0 10px;">${escapeHtml(String(detail.order_date).slice(0, 10))}${detail.channel ? ` · ${escapeHtml(channelDisplayLabel(detail.channel))}` : ""}</p>
     ${brandSections}
   `;
   overlay.querySelector("#close-order-detail").addEventListener("click", () => overlay.remove());
+  activateCustomerNameLinks(overlay, (hash) => {
+    overlay.remove();
+    navigate(hash);
+  });
 }
 
 export async function renderSales(root, navigate) {
@@ -149,20 +165,26 @@ export async function renderSales(root, navigate) {
     });
   }
 
+  // Row 1: order id · sales channel -------- amount. Row 2: customer name
+  // (bold). The date itself lives on the group heading above, not the row
+  // -- order_date is a date-only server field, so it's identical across
+  // every card in one group and would just repeat.
   function rowHtml(o) {
     return `
       <button type="button" class="card sales-order-card" data-erp-customer-id="${escapeHtml(o.erp_customer_id)}" data-order-id="${escapeHtml(o.order_id)}">
         <div class="sales-order-row">
-          <span class="muted">${formatDateDMY(o.order_date)}${o.channel ? ` · ${escapeHtml(channelDisplayLabel(o.channel))}` : ""}</span>
+          <span class="muted">${escapeHtml(o.order_id)}${o.channel ? ` · ${escapeHtml(channelDisplayLabel(o.channel))}` : ""}</span>
           <span class="text-amount sales-order-amount">${formatAmd(Number(o.total_amd))}</span>
         </div>
         <strong>${escapeHtml(o.customer_name || "")}</strong>
-        <div class="sales-order-row muted">
-          <span>${escapeHtml(o.order_id)}</span>
-        </div>
       </button>`;
   }
 
+  // Grouped by the order's own calendar day -- each day's header row totals
+  // just that day's orders: amount, liters (server's total_liters, summed
+  // from size_l), and order count. Same one-pass-totals-then-render shape
+  // as Orders' own per-day grouping (views/orders.js's paint()), so a long
+  // date range doesn't re-scan `rows` once per row it contains.
   function render(rows) {
     if (!rows.length) {
       subtotalEl.textContent = "";
@@ -171,9 +193,37 @@ export async function renderSales(root, navigate) {
     }
     const subtotal = rows.reduce((sum, o) => sum + Number(o.total_amd || 0), 0);
     subtotalEl.textContent = `${t("sales_subtotal")}: ${formatAmd(subtotal)} (${rows.length} ${t("sales_order_count")})`;
-    listEl.innerHTML = rows.map(rowHtml).join("");
+
+    const dayTotals = new Map();
+    for (const o of rows) {
+      const dateKey = String(o.order_date).slice(0, 10);
+      const day = dayTotals.get(dateKey) ?? { total: 0, liters: 0, count: 0 };
+      day.total += Number(o.total_amd || 0);
+      day.liters += Number(o.total_liters || 0);
+      day.count += 1;
+      dayTotals.set(dateKey, day);
+    }
+
+    let lastDateKey = null;
+    listEl.innerHTML = rows
+      .map((o) => {
+        const dateKey = String(o.order_date).slice(0, 10);
+        let dateHeading = "";
+        if (dateKey !== lastDateKey) {
+          lastDateKey = dateKey;
+          const day = dayTotals.get(dateKey);
+          dateHeading = `
+            <div class="order-date-heading">
+              <span class="order-date-heading-label">${formatSalesDateHeading(dateKey)}</span>
+              <span class="order-date-heading-stats">${formatAmd(day.total)} | ${formatLiters(day.liters)} | ${day.count} ${t("sales_order_count")}</span>
+            </div>`;
+        }
+        return `${dateHeading}${rowHtml(o)}`;
+      })
+      .join("");
+
     listEl.querySelectorAll(".sales-order-card").forEach((card) => {
-      card.addEventListener("click", () => openSalesOrderSheet(card.dataset.erpCustomerId, card.dataset.orderId));
+      card.addEventListener("click", () => openSalesOrderSheet(card.dataset.erpCustomerId, card.dataset.orderId, navigate));
     });
   }
 

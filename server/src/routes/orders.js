@@ -359,7 +359,7 @@ ordersRouter.get("/recorded-list", async (req, res) => {
   // small -- same fetch-one-extra-row-for-has_more pattern as GET / above.
   const { rows } = await pool.query(
     `SELECT o.id, o.order_code, o.total_amd, o.updated_at AS delivered_at, o.recorded, o.recorded_at,
-            c.name AS customer_name, c.erp_customer_id,
+            c.id AS customer_id, c.name AS customer_name, c.erp_customer_id,
             rb.name AS recorded_by_name,
             pod.id AS pod_record_id, pod.payment_id,
             pod.debt_balance_before_amd, pod.amount_collected_amd, pod.new_balance_after_amd,

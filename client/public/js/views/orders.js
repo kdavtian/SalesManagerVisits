@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, activateDialog, channelDisplayLabel, formatDateTime } from "../util.js";
+import { escapeHtml, formatAmd, activateDialog, channelDisplayLabel, formatDateTime, formatLiters, customerNameLinkHtml, activateCustomerNameLinks } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { state } from "../state.js";
 import { icons } from "../icons.js";
@@ -87,13 +87,6 @@ function formatOrderDateHeading(value) {
   const d = new Date(value);
   const month = d.toLocaleDateString(getLang() === "hy" ? "hy" : "en", { month: "short" });
   return `${d.getDate()} ${month}`;
-}
-
-function formatLiters(value) {
-  const n = Number(value) || 0;
-  // Whole liters show as-is; fractional totals (e.g. half-liter items) keep
-  // one decimal so 4.5L doesn't silently round away.
-  return Number.isInteger(n) ? `${n}L` : `${n.toFixed(1)}L`;
 }
 
 export async function renderOrders(root, navigate) {
@@ -443,7 +436,7 @@ export async function renderOrders(root, navigate) {
           <span>${t("customer_id_label")}: ${escapeHtml(order.erp_customer_id || String(order.customer_id))}</span>
           ${order.order_code ? `<span>${t("order_id_label")}: ${escapeHtml(order.order_code)}</span>` : ""}
         </div>
-        <h2>${escapeHtml(order.customer_name)}</h2>
+        <h2>${customerNameLinkHtml(order.customer_name, order.customer_id)}</h2>
         <p><span class="badge ${meta.cls}">${t(meta.key)}</span>${
         order.payment_method ? ` <span class="badge badge-neutral">${t(order.payment_method === "cash" ? "payment_method_cash" : "payment_method_invoice")}</span>` : ""
       }${
@@ -466,6 +459,11 @@ export async function renderOrders(root, navigate) {
 
       const actionsEl = overlay.querySelector("#order-detail-actions");
       const errorEl = overlay.querySelector("#order-detail-error");
+
+      activateCustomerNameLinks(overlay, (hash) => {
+        overlay.remove();
+        navigate(hash);
+      });
 
       const buttons = [];
       if (order.status === "draft" && isOwnerOrAdmin) {

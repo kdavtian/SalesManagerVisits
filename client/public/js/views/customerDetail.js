@@ -241,8 +241,10 @@ export async function renderCustomerDetail(root, navigate, customerId) {
 
     historyEl.querySelectorAll("[data-checkin-index]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        openVisitDetailSheet(checkins[Number(btn.dataset.checkinIndex)], () =>
-          renderCustomerDetail(root, navigate, customerId)
+        openVisitDetailSheet(
+          checkins[Number(btn.dataset.checkinIndex)],
+          () => renderCustomerDetail(root, navigate, customerId),
+          navigate
         );
       });
     });

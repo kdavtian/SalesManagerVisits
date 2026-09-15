@@ -7,6 +7,44 @@ export function escapeHtml(str) {
   );
 }
 
+// A customer's name shown as plain text somewhere in a detail sheet (order
+// detail, payment detail, a check-in's visit detail, ...), made tappable to
+// jump straight to that customer's own card -- one shared convention
+// (markup + wiring) instead of every view inventing its own link styling.
+// Falls back to plain escaped text when no id is available (an ERP order
+// whose customer was never linked into this app, e.g.) rather than linking
+// to a route that would 404. `tag` defaults to a <span> so this can sit
+// inline inside a heading like <h2>; role="button" gives it the same
+// keyboard/AT semantics a real <button> would, without the nesting
+// restriction a <button> has against sitting inside another interactive row.
+export function customerNameLinkHtml(name, customerId, tag = "span", extraClass = "") {
+  if (!customerId) return escapeHtml(name || "");
+  const cls = extraClass ? `customer-name-link ${extraClass}` : "customer-name-link";
+  return `<${tag} class="${cls}" role="button" tabindex="0" data-customer-id="${escapeHtml(String(customerId))}">${escapeHtml(name || "")}</${tag}>`;
+}
+
+// Wires up every customerNameLinkHtml() the given container currently
+// contains -- call once after setting .innerHTML, same as any other
+// delegated-listener activation helper in this file (activateDialog,
+// activateCombobox, ...). `navigate` is the app's own navigate(hash)
+// function, threaded through from the view same as everywhere else it's
+// used (see app.js) -- this module has no direct import for it since it's
+// per-render state, not a singleton.
+export function activateCustomerNameLinks(container, navigate) {
+  container.querySelectorAll(".customer-name-link[data-customer-id]").forEach((el) => {
+    const go = (e) => {
+      e.stopPropagation();
+      navigate(`#/customers/${el.dataset.customerId}`);
+    };
+    el.addEventListener("click", go);
+    el.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      go(e);
+    });
+  });
+}
+
 // Normalizes any Armenian phone number a user might type/paste (with or
 // without +374, spaces, dashes, a leading 0, or a leading 8) into a plain
 // digit string prefixed with the country code, e.g. "374910070 19" or
@@ -403,6 +441,15 @@ export function syncBadgeHtml(sync) {
   if (!sync.stale) return `<p class="sync-badge">${label}</p>`;
   const warning = t("report_sync_stale_note").replace("{h}", sync.stale_after_hours);
   return `<p class="sync-badge sync-badge-stale">${label} — ${warning}</p>`;
+}
+
+// Shared by any per-day subtotal heading (Orders, Sales) that sums a
+// server-computed liters total. Whole liters show as-is; fractional totals
+// (e.g. half-liter items) keep one decimal so 4.5L doesn't silently round
+// away.
+export function formatLiters(value) {
+  const n = Number(value) || 0;
+  return Number.isInteger(n) ? `${n}L` : `${n.toFixed(1)}L`;
 }
 
 // dd-mm-yyyy -- used wherever an order/record date is shown as a plain date

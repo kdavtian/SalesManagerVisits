@@ -109,7 +109,7 @@ async function loadRoute(routeId) {
   const route = routeRows[0];
   if (!route) return null;
   const { rows: stops } = await pool.query(
-    `SELECT rs.*, o.order_code, o.total_amd, o.status AS order_status, c.name AS customer_name, c.address, c.lat, c.lng, c.erp_customer_id
+    `SELECT rs.*, o.order_code, o.total_amd, o.status AS order_status, c.id AS customer_id, c.name AS customer_name, c.address, c.lat, c.lng, c.erp_customer_id
      FROM route_stops rs
      JOIN orders o ON o.id = rs.order_id
      JOIN customers c ON c.id = o.customer_id

@@ -6443,6 +6443,17 @@ button.list-row-icon {
   font-weight: 700;
 }
 
+/* A customer name made tappable inside a detail sheet (see util.js's
+   customerNameLinkHtml) -- accent-colored so it still reads as a link even
+   sitting inline inside a plain heading like <h2>. */
+.customer-name-link {
+  cursor: pointer;
+  color: var(--accent);
+}
+.customer-name-link:active {
+  opacity: 0.7;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
