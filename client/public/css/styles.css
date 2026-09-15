@@ -8092,6 +8092,22 @@ form select,
 .debt-balance-amount {
   font-weight: 700;
   white-space: nowrap;
+  text-align: right;
+}
+
+/* The dates row (last payment / last visit): plain flex space-between only
+   right-aligns the SECOND span by accident of being the last flex child --
+   the first one (last payment) stayed flush left, so the two dates never
+   actually lined up as a column between cards the way the amount column
+   above them does. A fixed two-column grid with both halves right-aligned
+   gives each date its own consistently-positioned right edge instead. */
+.debt-balance-row-dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.debt-balance-row-dates > span {
+  text-align: right;
 }
 
 /* Sales order card: identical two-up-row layout to the debt balance card
