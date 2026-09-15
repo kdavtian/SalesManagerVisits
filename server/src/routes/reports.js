@@ -434,6 +434,61 @@ reportsRouter.get("/cash-custody", requireReportAccess("cash_custody"), async (r
   res.json({ by_holder: byHolder, totals: totalsRows[0], handoffs, operations: opsRows[0] });
 });
 
+// A day where cash collected in the field diverges from what got
+// submitted as a payment that same day is exactly what a daily cash
+// reconciliation is meant to catch -- not a perfectly precise per-
+// transaction match (a rep's collection and its eventual payment
+// submission can legitimately land a day apart), but a divergence past
+// CASH_RECONCILIATION_ALERT_AMD is worth an accountant's eye rather than
+// staying buried in two separate screens that never get compared.
+// "Collected" sums both field collections (checkins.amount_collected_amd)
+// and delivery-time collections (pod_records.amount_collected_amd);
+// "submitted" is every non-rejected payment created that day -- rejected
+// payments were never real money received, so they'd only ever
+// misrepresent a day as under-submitted.
+const CASH_RECONCILIATION_ALERT_AMD = 10000;
+reportsRouter.get("/cash-reconciliation", requireReportAccess("cash_reconciliation"), async (req, res) => {
+  const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 90);
+  const { rows } = await pool.query(
+    `WITH days AS (
+       SELECT generate_series((now() AT TIME ZONE 'Asia/Yerevan')::date - ($1::int - 1), (now() AT TIME ZONE 'Asia/Yerevan')::date, interval '1 day')::date AS day
+     ),
+     collected AS (
+       SELECT (ch.timestamp AT TIME ZONE 'Asia/Yerevan')::date AS day, SUM(ch.amount_collected_amd) AS amount
+       FROM checkins ch
+       WHERE ch.amount_collected_amd IS NOT NULL
+       GROUP BY 1
+     ),
+     pod_collected AS (
+       SELECT (pod.delivered_at AT TIME ZONE 'Asia/Yerevan')::date AS day, SUM(pod.amount_collected_amd) AS amount
+       FROM pod_records pod
+       WHERE pod.amount_collected_amd > 0
+       GROUP BY 1
+     ),
+     submitted AS (
+       SELECT (p.created_at AT TIME ZONE 'Asia/Yerevan')::date AS day, SUM(p.amount_amd) AS amount
+       FROM payments p
+       WHERE p.status != 'rejected'
+       GROUP BY 1
+     )
+     SELECT d.day,
+            COALESCE(c.amount, 0) + COALESCE(pc.amount, 0) AS collected_amd,
+            COALESCE(s.amount, 0) AS submitted_amd,
+            (COALESCE(c.amount, 0) + COALESCE(pc.amount, 0)) - COALESCE(s.amount, 0) AS difference_amd
+     FROM days d
+     LEFT JOIN collected c ON c.day = d.day
+     LEFT JOIN pod_collected pc ON pc.day = d.day
+     LEFT JOIN submitted s ON s.day = d.day
+     ORDER BY d.day DESC`,
+    [days]
+  );
+  const withAlerts = rows.map((r) => ({
+    ...r,
+    alert: Math.abs(Number(r.difference_amd)) > CASH_RECONCILIATION_ALERT_AMD,
+  }));
+  res.json({ rows: withAlerts, alert_threshold_amd: CASH_RECONCILIATION_ALERT_AMD });
+});
+
 // The next three read the Castrol ERP extract synced in by erpSync.js
 // (erp_customer_data / sales_performance / perf_actuals_brand_monthly) --
 // the same data an external Telegram bot on the sync PC already formats

@@ -54,6 +54,17 @@ export const REPORTS = [
     descriptionKey: "report_cash_custody_description",
     defaultRoles: ["admin", "ceo", "sales_director", "accountant"],
   },
+  // cash_custody above is a live snapshot of who holds what right now;
+  // this is the historical, day-by-day counterpart -- what reps/drivers
+  // reported collecting in the field each day versus what actually became
+  // a payment submission that day, flagging a day where the two diverge
+  // by more than a small, easily-missed rounding gap.
+  {
+    key: "cash_reconciliation",
+    nameKey: "report_cash_reconciliation_name",
+    descriptionKey: "report_cash_reconciliation_description",
+    defaultRoles: ["admin", "ceo", "accountant"],
+  },
   // The next three surface the same Castrol ERP extract that already feeds
   // erp_customer_data/sales_performance/perf_actuals_brand_monthly (see
   // erpSync.js) as in-app reports -- previously that data was only ever

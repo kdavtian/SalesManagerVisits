@@ -2,7 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { REGION_LIST, YEREVAN_DISTRICTS, CATEGORY_LIST, formatAmd, channelDisplayLabel, syncBadgeHtml } from "../util.js";
+import { REGION_LIST, YEREVAN_DISTRICTS, CATEGORY_LIST, formatAmd, channelDisplayLabel, syncBadgeHtml, formatDateDMY } from "../util.js";
 
 // "all" (not "") for the All-time option: every one of this array's three
 // callers builds its request params with
@@ -77,6 +77,7 @@ export async function renderReports(root, navigate, reportKey) {
   if (reportKey === "brand_availability") return renderBrandAvailabilityReport(root, navigate);
   if (reportKey === "payments") return renderPaymentsReport(root, navigate);
   if (reportKey === "cash_custody") return renderCashCustodyReport(root, navigate);
+  if (reportKey === "cash_reconciliation") return renderCashReconciliationReport(root, navigate);
   if (reportKey === "customer_debt") return renderCustomerDebtReport(root, navigate);
   if (reportKey === "sales_budget") return renderSalesBudgetReport(root, navigate);
   if (reportKey === "brand_volume") return renderBrandVolumeReport(root, navigate);
@@ -671,6 +672,51 @@ async function renderCashCustodyReport(root, navigate) {
                 .join("")
             : `<p class="empty-state">${t("report_cash_custody_no_handoffs")}</p>`
         }
+      </div>
+    `;
+  } catch (err) {
+    body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+  }
+}
+
+// Day-by-day history, unlike cash_custody's live snapshot above -- flags
+// any day where field-collected cash and same-day payment submissions
+// diverge by more than the server's own alert threshold (see
+// CASH_RECONCILIATION_ALERT_AMD in routes/reports.js), which is a real
+// signal something didn't make it from "collected" to "submitted" (or
+// vice versa), not just a rep's collection landing a day later than usual.
+async function renderCashReconciliationReport(root, navigate) {
+  root.innerHTML = `
+    <div class="detail-view">
+      ${reportHeaderHtml("report_cash_reconciliation_name")}
+      <div id="report-body"><p class="loading-state" role="status">${t("loading")}</p></div>
+    </div>
+  `;
+  const container = root.querySelector(".detail-view");
+  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  const body = container.querySelector("#report-body");
+
+  try {
+    const { rows, alert_threshold_amd } = await api.getCashReconciliationReport();
+    const alertCount = rows.filter((r) => r.alert).length;
+    body.innerHTML = `
+      ${
+        alertCount
+          ? `<p class="sync-badge sync-badge-stale">${t("report_cash_reconciliation_alert_summary").replace("{n}", alertCount).replace("{amount}", formatAmd(alert_threshold_amd))}</p>`
+          : `<p class="muted">${t("report_cash_reconciliation_no_alerts")}</p>`
+      }
+      <div class="card-list">
+        ${rows
+          .map((r) => {
+            const diff = Number(r.difference_amd);
+            return `
+            <div class="card report-row-multiline${r.alert ? " report-row-alert" : ""}">
+              <strong>${formatDateDMY(r.day)}</strong>
+              <span class="muted">${t("report_cash_reconciliation_collected")}: ${formatAmd(Number(r.collected_amd))} · ${t("report_cash_reconciliation_submitted")}: ${formatAmd(Number(r.submitted_amd))}</span>
+              <span class="${r.alert ? "text-amount" : "muted"}">${t("report_cash_reconciliation_difference")}: ${diff >= 0 ? "+" : ""}${formatAmd(diff)}</span>
+            </div>`;
+          })
+          .join("")}
       </div>
     `;
   } catch (err) {
