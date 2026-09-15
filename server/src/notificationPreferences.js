@@ -31,6 +31,9 @@ export const NOTIFICATION_TYPES = [
   // expected window (see erpSyncMonitor.js) -- this app noticing its own
   // absence, not something the bot pushed.
   "erp_sync_stale",
+  // Once-a-day digest of unresolved orders/payments/overdue visits (see
+  // dailySummary.js) -- distinct from any single event above.
+  "daily_summary",
 ];
 
 // Warehouse Manager: an order just entered their queue.

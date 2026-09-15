@@ -12,10 +12,10 @@ import { notifyUser as sendPush } from "./push.js";
 export async function notifyUser(userId, type, { title, body, url } = {}) {
   if (!(await isNotificationEnabled(userId, type))) return;
 
-  await pool.query(
-    `INSERT INTO notifications (user_id, type, title, body, url) VALUES ($1, $2, $3, $4, $5)`,
+  const { rows } = await pool.query(
+    `INSERT INTO notifications (user_id, type, title, body, url) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
     [userId, type, title, body, url ?? null]
   );
 
-  sendPush(userId, { title, body, url });
+  sendPush(userId, { title, body, url }, rows[0].id);
 }
