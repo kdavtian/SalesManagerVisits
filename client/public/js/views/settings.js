@@ -148,6 +148,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         ${settingsRow({ icon: ICON.refresh, label: t("refresh_data"), id: "row-refresh" })}
         ${settingsRow({ icon: ICON.database, label: t("offline_storage"), value: `<span id="storage-value">…</span>`, interactive: false })}
       </div>
+      <p class="settings-hint sync-needs-attention-hint" id="sync-needs-attention-hint" role="status" hidden></p>
 
       <h2 class="section-title">${t("security")}</h2>
       <div class="card settings-list">
@@ -433,14 +434,30 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
   const syncStatusValue = root.querySelector("#sync-status-value");
   const lastSyncValue = root.querySelector("#last-sync-value");
   const storageValue = root.querySelector("#storage-value");
+  const needsAttentionHint = root.querySelector("#sync-needs-attention-hint");
 
   function paintSyncStatus() {
-    const pending = getQueue().length;
-    syncStatusValue.textContent = pending ? `${pending} ${t("sync_status_pending")}` : t("sync_status_synced");
+    const queue = getQueue();
+    const pending = queue.length;
+    const stuck = queue.filter((e) => e.needsAttention);
+    syncStatusValue.textContent = stuck.length
+      ? `${stuck.length} ${t("sync_status_needs_attention")}`
+      : pending
+        ? `${pending} ${t("sync_status_pending")}`
+        : t("sync_status_synced");
     const lastSyncedAt = getLastSyncedAt();
     lastSyncValue.textContent = lastSyncedAt
       ? new Date(lastSyncedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
       : t("never_synced");
+    // Stopped auto-retrying (see offlineQueue.js's NEEDS_ATTENTION_THRESHOLD)
+    // -- surface the actual last error so the rep isn't just told "stuck"
+    // with no idea why, and knows Refresh data below will try again.
+    if (stuck.length) {
+      needsAttentionHint.hidden = false;
+      needsAttentionHint.textContent = t("sync_needs_attention_detail").replace("{error}", stuck[0].lastError || "?");
+    } else {
+      needsAttentionHint.hidden = true;
+    }
   }
   paintSyncStatus();
   const unsubscribeQueue = onQueueChange(paintSyncStatus);
@@ -452,7 +469,10 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     valueLabel.textContent = t("refreshing");
     row.disabled = true;
     try {
-      await flushQueue();
+      // force: true -- an explicit tap here is exactly the "manual retry
+      // control" a needs-attention entry is waiting for; the automatic
+      // passes (app boot, 'online' event) intentionally skip it.
+      await flushQueue({ force: true });
       paintSyncStatus();
     } finally {
       valueLabel.textContent = originalLabel;

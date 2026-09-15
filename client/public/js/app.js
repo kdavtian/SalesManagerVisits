@@ -821,16 +821,45 @@ function rebuildNavMarkup(hash) {
 }
 
 function renderSyncBanner() {
-  const pending = getQueue().length;
+  const queue = getQueue();
+  const pending = queue.length;
   if (!pending) {
     syncBanner.hidden = true;
+    syncBanner.onclick = null;
+    syncBanner.onkeydown = null;
+    syncBanner.removeAttribute("tabindex");
+    syncBanner.setAttribute("role", "status");
     return;
   }
   syncBanner.hidden = false;
-  const template = t(navigator.onLine ? "syncing_checkins" : "offline_checkins_waiting");
-  syncBanner.textContent = template
-    .replace("{n}", pending)
-    .replace("{s}", pending > 1 ? "s" : "");
+  const needsAttention = queue.filter((e) => e.needsAttention).length;
+  if (needsAttention) {
+    // Stuck items stopped auto-retrying (see offlineQueue.js) -- point the
+    // rep at Settings > Data & Sync, the one place with a manual retry
+    // control, instead of leaving them wondering why nothing is happening.
+    const template = t("sync_needs_attention_banner");
+    syncBanner.textContent = template
+      .replace("{n}", needsAttention)
+      .replace("{s}", needsAttention > 1 ? "s" : "");
+    syncBanner.setAttribute("role", "button");
+    syncBanner.setAttribute("tabindex", "0");
+    syncBanner.onclick = () => navigate("#/settings");
+    syncBanner.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        navigate("#/settings");
+      }
+    };
+  } else {
+    const template = t(navigator.onLine ? "syncing_checkins" : "offline_checkins_waiting");
+    syncBanner.textContent = template
+      .replace("{n}", pending)
+      .replace("{s}", pending > 1 ? "s" : "");
+    syncBanner.onclick = null;
+    syncBanner.onkeydown = null;
+    syncBanner.removeAttribute("tabindex");
+    syncBanner.setAttribute("role", "status");
+  }
 }
 
 onQueueChange(renderSyncBanner);
