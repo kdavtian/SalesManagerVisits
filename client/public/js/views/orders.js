@@ -397,7 +397,11 @@ export async function renderOrders(root, navigate) {
       // the rep who placed it (or an admin) can still edit it too while
       // it's waiting on that review.
       const canReviewSubmitted = CONFIRM_ROLES.has(state.user.role) && order.status === "submitted";
-      const canEditThisOrder = order.status === "submitted" && (isOwnerOrAdmin || canReviewSubmitted);
+      // A draft is editable too (server/src/routes/orders.js's PATCH /:id
+      // already accepted this -- this button just never offered it), owner/
+      // admin only since canReviewSubmitted is always false for a draft (a
+      // director has nothing to review yet).
+      const canEditThisOrder = (order.status === "submitted" || order.status === "draft") && (isOwnerOrAdmin || canReviewSubmitted);
       const discountAmd = Number(order.discount_amd) || 0;
       const discountPct = Number(order.discount_pct) || 0;
       const hasDiscount = discountAmd > 0 || discountPct > 0;
