@@ -52,3 +52,54 @@ jobs:
       # doesn't turn every PR red on its own -- ratchet this down once
       # that's cleared.
       - run: npm audit --audit-level=high
+
+  # Fast browser-driven subset (step 4 of the stabilization plan, test/e2e) --
+  # only the @smoke-tagged specs, so a real-browser run doesn't gate every PR
+  # on the full suite's runtime. The complete suite runs nightly instead
+  # (see e2e-nightly.yml).
+  e2e-smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fieldvisits_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/fieldvisits_test
+      JWT_SECRET: ci-test-secret-not-used-anywhere-real
+      NODE_ENV: test
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: server/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run migrate
+
+      - run: npx playwright install --with-deps chromium
+
+      - run: npm run test:e2e:smoke
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-smoke-report
+          path: server/playwright-report/
+          retention-days: 7
