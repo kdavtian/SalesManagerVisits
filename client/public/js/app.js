@@ -12,7 +12,7 @@ import { icons } from "./icons.js";
 // in this codebase for cross-view references (e.g. customerOrders.js's own
 // import("./customerDetail.js")).
 import { flushQueue, getQueue, onQueueChange } from "./offlineQueue.js";
-import { clearListCache } from "./listCache.js";
+import { clearListCache, clearCacheIfRoleChanged } from "./listCache.js";
 import { mountInstallPrompt } from "./install.js";
 import { mountUpdateBanner, initServiceWorkerUpdates } from "./updateBanner.js";
 import { startLocationBroadcast, stopLocationBroadcast } from "./locationBroadcast.js";
@@ -877,7 +877,14 @@ async function init() {
   }
 
   try {
-    setUser(await api.me());
+    const user = await api.me();
+    setUser(user);
+    // Catches a role change (e.g. sales_manager -> sales_director) an admin
+    // made while this device stayed signed in -- server-side auth is always
+    // correct regardless (requireAuth re-fetches role every request), this
+    // is just to stop a stale cached list screen from flashing data scoped
+    // to the OLD role's visibility for a moment on next open.
+    await clearCacheIfRoleChanged(user);
     startLocationBroadcast();
   } catch {
     setUser(null);
