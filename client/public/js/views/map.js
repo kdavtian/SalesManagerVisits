@@ -143,6 +143,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
                 <button class="map-filter-chip chip-active" data-filter="" aria-pressed="true"><span class="map-filter-chip-icon">${icons.filter}</span>${t("filter_all")}</button>
                 <button class="map-filter-chip" data-filter="overdue" aria-pressed="false"><span class="map-filter-chip-icon">${icons.mapWarning}</span>${t("filter_overdue")}</button>
                 <button class="map-filter-chip" data-filter="visited" aria-pressed="false"><span class="map-filter-chip-icon">${icons.checkCircle}</span>${t("filter_visited")}</button>
+                <button class="map-filter-chip" data-filter="visited-today" aria-pressed="false"><span class="map-filter-chip-icon">${icons.checkCircle}</span>${t("filter_visited_today")}</button>
+                <button class="map-filter-chip" data-filter="visited-7days" aria-pressed="false"><span class="map-filter-chip-icon">${icons.clock}</span>${t("filter_visited_7days")}</button>
                 <button class="map-filter-chip" data-filter="planned" aria-pressed="false"><span class="map-filter-chip-icon">${icons.send}</span>${t("filter_planned")}</button>
                 <button class="map-filter-chip" data-filter="nearby" aria-pressed="false"><span class="map-filter-chip-icon">${icons.locate}</span>${t("filter_nearby")}</button>
                 <button class="map-filter-chip" data-filter="brands" aria-pressed="false"><span class="map-filter-chip-icon">${icons.tag}</span>${t("filter_brands")}</button>
@@ -1111,9 +1113,24 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       } else if (activeFilter === "planned") {
         continue;
       } else {
+        // visited-today/visited-7days read straight off the same
+        // visited_today/visited_this_week booleans customerStatus() itself
+        // derives status from -- visited_this_week is already a rolling
+        // 7-day window server-side (see routes/customers.js), not a
+        // calendar week, despite the "week" status label. "visited" stays
+        // the existing combined today-or-last-7-days filter; the two new
+        // chips split it into its two more specific halves.
         if (
           activeFilter &&
-          !(activeFilter === "overdue" ? status === "overdue" : activeFilter === "visited" ? status === "today" || status === "week" : true)
+          !(activeFilter === "overdue"
+            ? status === "overdue"
+            : activeFilter === "visited"
+              ? status === "today" || status === "week"
+              : activeFilter === "visited-today"
+                ? c.visited_today
+                : activeFilter === "visited-7days"
+                  ? c.visited_today || c.visited_this_week
+                  : true)
         ) {
           continue;
         }

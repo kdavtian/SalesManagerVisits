@@ -310,6 +310,8 @@ function enhanceCustomers() {
 function mapFilterIcon(value) {
   if (value === "overdue") return icons.mapWarning;
   if (value === "visited") return SEARCH_ICONS.status;
+  if (value === "visited-today") return SEARCH_ICONS.status;
+  if (value === "visited-7days") return icons.clock;
   if (value === "planned") return SEARCH_ICONS.outcome;
   if (value === "nearby") return SEARCH_ICONS.region;
   if (value === "brands") return icons.tag;
