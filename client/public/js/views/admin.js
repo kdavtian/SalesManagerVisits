@@ -1477,3 +1477,42 @@ export async function renderNotificationDeliveryLogSection(container) {
     </div>
   `;
 }
+
+const CLIENT_ERROR_KIND_BADGE = {
+  error: "badge-danger",
+  unhandledrejection: "badge-danger",
+  slow_load: "badge-warning",
+};
+
+// Admin-only oversight (server/src/routes/clientErrors.js's GET /) --
+// window.onerror/unhandledrejection reports plus slow-page-load reports
+// from every user's device (see client/public/js/errorMonitoring.js),
+// which previously left no trace anywhere.
+export async function renderClientErrorLogSection(container) {
+  container.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+  const rows = await api.getClientErrorLog();
+
+  container.innerHTML = `
+    <p class="muted radius-help">${t("client_error_log_hint")}</p>
+    <div class="card-list">
+      ${
+        rows.length
+          ? rows
+              .map(
+                (r) => `
+        <div class="card dq-row">
+          <div class="dq-row-main">
+            <strong>${escapeHtml(r.user_name || t("client_error_log_unknown_user"))}${r.url ? ` · ${escapeHtml(r.url)}` : ""}</strong>
+            <span class="muted">${formatDateTime(r.created_at)} · ${escapeHtml(r.message)}</span>
+          </div>
+          <div class="dq-row-flags">
+            <span class="badge ${CLIENT_ERROR_KIND_BADGE[r.kind] || "badge-neutral"}">${t(`client_error_kind_${r.kind}`)}</span>
+          </div>
+        </div>`
+              )
+              .join("")
+          : `<p class="muted">${t("client_error_log_empty")}</p>`
+      }
+    </div>
+  `;
+}

@@ -19,6 +19,7 @@ import { startLocationBroadcast, stopLocationBroadcast } from "./locationBroadca
 import { escapeHtml } from "./util.js";
 import { getTheme } from "./theme.js";
 import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds } from "./quickActions.js";
+import { startErrorMonitoring } from "./errorMonitoring.js";
 
 const app = document.getElementById("app");
 const navBar = document.getElementById("nav-bar");
@@ -915,6 +916,7 @@ async function init() {
     // to the OLD role's visibility for a moment on next open.
     await clearCacheIfRoleChanged(user);
     startLocationBroadcast();
+    startErrorMonitoring();
   } catch {
     setUser(null);
   }

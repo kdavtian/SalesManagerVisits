@@ -49,6 +49,8 @@ import { badgesRouter } from "./routes/badges.js";
 import { calculatorLockRouter } from "./routes/calculatorLock.js";
 import { lockdownRouter } from "./routes/lockdown.js";
 import { lockdownGate } from "./middleware/lockdown.js";
+import { requestTiming } from "./middleware/requestTiming.js";
+import { clientErrorsRouter } from "./routes/clientErrors.js";
 import { getCalculatorModeEnabled } from "./settings.js";
 import { requireAuth } from "./middleware/auth.js";
 import { autoAssignSalesChannel } from "./salesChannelAutofill.js";
@@ -99,6 +101,7 @@ app.use(
 );
 app.use(cookieParser());
 app.use(lockdownGate);
+app.use(requestTiming);
 
 app.use("/api/auth", express.json(), authRouter);
 app.use("/api/me", express.json(), meRouter);
@@ -137,6 +140,7 @@ app.use("/api/sales", express.json(), salesRouter);
 app.use("/api/badges", badgesRouter);
 app.use("/api/calculator-lock", express.json(), calculatorLockRouter);
 app.use("/api/lockdown", express.json(), lockdownRouter);
+app.use("/api/client-errors", express.json(), clientErrorsRouter);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });

@@ -42,10 +42,24 @@ const STATUS_COLUMNS = `
 `;
 
 customersRouter.get("/", async (req, res) => {
-  const { search, visited, region, subregion, assigned_manager_id, include_debt } = req.query;
+  const { search, visited, region, subregion, assigned_manager_id, include_debt, min_lat, max_lat, min_lng, max_lng } = req.query;
   const conditions = [];
   const params = [];
 
+  // Optional viewport/region payload limit (improvement list 7.4) -- not
+  // used by the map's own default fetch yet (that still needs the full
+  // list for its filters, route planning, and "nearby" search, all of
+  // which read from the complete customer set), but available for any
+  // consumer that only cares about what's on screen right now, e.g. a
+  // future paginated/viewport-only map mode.
+  if (min_lat && max_lat) {
+    params.push(min_lat, max_lat);
+    conditions.push(`c.lat BETWEEN $${params.length - 1} AND $${params.length}`);
+  }
+  if (min_lng && max_lng) {
+    params.push(min_lng, max_lng);
+    conditions.push(`c.lng BETWEEN $${params.length - 1} AND $${params.length}`);
+  }
   if (search) {
     params.push(`%${search}%`);
     conditions.push(`c.name ILIKE $${params.length}`);
