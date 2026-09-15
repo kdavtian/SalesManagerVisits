@@ -122,18 +122,31 @@ export function trackCheckin(id) {
 
 // Thin fetch wrapper: resolves against the running test server, sends/
 // receives JSON, and carries a session cookie string across calls so a
-// test can act as one logged-in user across several requests.
+// test can act as one logged-in user across several requests. Since
+// issueSession() sets both the session cookie and the CSRF double-submit
+// cookie (see server/src/middleware/csrf.js) together, `cookie` here
+// carries both, semicolon-joined -- and any mutating call auto-attaches
+// the matching X-CSRF-Token header pulled out of that same string, the
+// same way api.js's doRequest does for the real app.
 export async function apiRequest(path, { method = "GET", body, cookie, headers = {} } = {}) {
+  const csrfMatch = cookie?.match(/(?:^|; )csrf_token=([^;]+)/);
+  const csrfToken = csrfMatch ? csrfMatch[1] : null;
   const res = await fetch(`${baseUrl}${path}`, {
     method,
-    headers: { "Content-Type": "application/json", ...(cookie ? { Cookie: cookie } : {}), ...headers },
+    headers: {
+      "Content-Type": "application/json",
+      ...(cookie ? { Cookie: cookie } : {}),
+      ...(csrfToken && method !== "GET" ? { "X-CSRF-Token": csrfToken } : {}),
+      ...headers,
+    },
     body: body !== undefined ? JSON.stringify(body) : undefined,
     redirect: "manual",
   });
-  const setCookie = res.headers.get("set-cookie");
+  const setCookies = res.headers.getSetCookie?.() ?? (res.headers.get("set-cookie") ? [res.headers.get("set-cookie")] : []);
   const isJson = res.headers.get("content-type")?.includes("application/json");
   const data = isJson ? await res.json().catch(() => null) : await res.text();
-  return { status: res.status, data, cookie: setCookie ? setCookie.split(";")[0] : cookie };
+  const newCookie = setCookies.length ? setCookies.map((c) => c.split(";")[0]).join("; ") : cookie;
+  return { status: res.status, data, cookie: newCookie };
 }
 
 export async function loginAs(email, password = TEST_PASSWORD) {

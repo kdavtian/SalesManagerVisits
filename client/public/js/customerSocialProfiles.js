@@ -52,10 +52,25 @@ function customerIdFromHash() {
   return match ? Number(match[1]) : null;
 }
 
+// Matches server/src/middleware/csrf.js's double-submit-cookie check --
+// this module bypasses api.js's shared request() helper (which attaches
+// this header for every mutating call already), so it has to attach it
+// itself for its own PATCH call below.
+function csrfToken() {
+  const match = document.cookie.match(/(?:^|; )csrf_token=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 async function apiRequest(path, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
+  const token = method !== "GET" ? csrfToken() : null;
   const response = await fetch(path, {
     credentials: "same-origin",
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { "X-CSRF-Token": token } : {}),
+      ...(options.headers || {}),
+    },
     ...options,
   });
   const body = response.status === 204 ? null : await response.json().catch(() => ({}));

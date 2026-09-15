@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import { pool } from "../db/pool.js";
 import { canDeleteOrEditDirectly, canViewTeamLocations, canManageProducts } from "../roles.js";
+import { issueCsrfToken, clearCsrfToken } from "./csrf.js";
 
 const COOKIE_NAME = "session";
 
@@ -17,10 +18,12 @@ export function issueSession(res, user) {
     sameSite: "lax",
     maxAge: 30 * 24 * 60 * 60 * 1000,
   });
+  issueCsrfToken(res);
 }
 
 export function clearSession(res) {
   res.clearCookie(COOKIE_NAME);
+  clearCsrfToken(res);
 }
 
 // Re-checks the DB on every request (not just role/signature from the JWT)

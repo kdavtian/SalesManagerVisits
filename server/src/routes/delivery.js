@@ -4,6 +4,7 @@
 // using the self-hosted OSRM engine (server/src/osrm.js) with a
 // straight-line fallback. See migrations/050_warehouse_delivery.sql.
 import path from "node:path";
+import fs from "node:fs";
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -304,7 +305,19 @@ deliveryRouter.post("/orders/:id/confirm", (req, res, next) => {
     next();
   });
 }, async (req, res) => {
-  if (!canDeliverOrders(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  // Every early return below used to leave the just-uploaded signature file
+  // sitting on disk forever -- nothing referenced it once the request
+  // bailed (wrong role, stale/missing order, the loser of the double-tap
+  // race below), so it could never be cleaned up. Unlinked on every path
+  // out of this handler that doesn't end in a committed pod_records row.
+  const cleanupUpload = () => {
+    if (req.file) fs.unlink(req.file.path, () => {});
+  };
+
+  if (!canDeliverOrders(req.user.role)) {
+    cleanupUpload();
+    return res.status(403).json({ error: "Not allowed" });
+  }
   if (!req.file) return res.status(400).json({ error: "A signature image is required" });
 
   const { rows: driverRows } = await pool.query("SELECT name FROM users WHERE id = $1", [req.user.id]);
@@ -316,8 +329,12 @@ deliveryRouter.post("/orders/:id/confirm", (req, res, next) => {
     [req.params.id]
   );
   const order = rows[0];
-  if (!order) return res.status(404).json({ error: "Order not found" });
+  if (!order) {
+    cleanupUpload();
+    return res.status(404).json({ error: "Order not found" });
+  }
   if (order.status !== "packed_stock_out") {
+    cleanupUpload();
     return res.status(409).json({ error: `Cannot confirm delivery for an order that is "${order.status}"` });
   }
 
@@ -347,6 +364,7 @@ deliveryRouter.post("/orders/:id/confirm", (req, res, next) => {
     );
     if (!rowCount) {
       await client.query("ROLLBACK");
+      cleanupUpload();
       return res.status(409).json({ error: `Cannot confirm delivery for an order that is "${order.status}"` });
     }
     await client.query(
@@ -364,6 +382,7 @@ deliveryRouter.post("/orders/:id/confirm", (req, res, next) => {
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
+    cleanupUpload();
     throw err;
   } finally {
     client.release();
