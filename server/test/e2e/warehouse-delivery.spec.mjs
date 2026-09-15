@@ -1,4 +1,4 @@
-import { test, expect, loginViaUi } from "./fixtures.mjs";
+import { test, expect, loginViaUi, newIdentityPage } from "./fixtures.mjs";
 
 test.describe("Warehouse packing and delivery", () => {
   test("a confirmed order moves through staging (marked packed) to delivered", async ({ browser, fixtures }) => {
@@ -19,18 +19,8 @@ test.describe("Warehouse packing and delivery", () => {
     // warehouse manager and delivery manager logged in at once, and a
     // second loginViaUi() on the same already-authenticated page would
     // just land back on that user's own dashboard instead of a login form.
-    // Each gets its own English-forced init script, same as the shared
-    // page fixture normally provides, since a manually created context
-    // doesn't inherit it.
-    async function newEnglishPage() {
-      const context = await browser.newContext();
-      const page = await context.newPage();
-      await page.addInitScript(() => localStorage.setItem("fieldvisits_lang", "en"));
-      return { context, page };
-    }
-
     // --- Warehouse: pack the order ---
-    const { context: warehouseContext, page: warehousePage } = await newEnglishPage();
+    const { context: warehouseContext, page: warehousePage } = await newIdentityPage(browser);
     await loginViaUi(warehousePage, warehouseManager.email);
     await warehousePage.goto("/#/warehouse");
     await warehousePage.getByRole("button", { name: /staging/i }).click();
@@ -44,7 +34,7 @@ test.describe("Warehouse packing and delivery", () => {
     await warehouseContext.close();
 
     // --- Delivery: mark delivered without a planned route ---
-    const { context: deliveryContext, page: deliveryPage } = await newEnglishPage();
+    const { context: deliveryContext, page: deliveryPage } = await newIdentityPage(browser);
     deliveryPage.on("dialog", (d) => d.accept());
     await loginViaUi(deliveryPage, deliveryManager.email);
     await deliveryPage.goto("/#/orders");

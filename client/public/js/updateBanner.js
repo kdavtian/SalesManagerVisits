@@ -117,7 +117,7 @@ export function initServiceWorkerUpdates() {
     renderBanner();
   });
 
-  window.addEventListener("load", () => {
+  function registerServiceWorker() {
     navigator.serviceWorker
       .register("/sw.js")
       .then((reg) => {
@@ -139,5 +139,20 @@ export function initServiceWorkerUpdates() {
       .catch((err) => {
         console.error("Service worker registration failed:", err);
       });
-  });
+  }
+
+  // This module only runs once index.html's bootGate.js has dynamically
+  // import()-ed app.js (see bootGate.js's bootRealApp()) -- an async step
+  // with no fixed timing relative to the page's own 'load' event. On a
+  // small/fast/cached page load (every automated test, and plenty of real
+  // repeat visits) 'load' can fire before that import resolves, so a
+  // listener registered here would just never run and the service worker
+  // would silently never register at all. document.readyState is already
+  // "complete" by the time 'load' has fired, so checking it covers exactly
+  // that race without waiting a second time for an event that already happened.
+  if (document.readyState === "complete") {
+    registerServiceWorker();
+  } else {
+    window.addEventListener("load", registerServiceWorker);
+  }
 }

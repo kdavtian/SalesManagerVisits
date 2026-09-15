@@ -207,6 +207,25 @@ export async function loginViaUi(page, email, password = TEST_PASSWORD) {
   await expect(page.locator("#top-bar")).toBeVisible({ timeout: 10000 });
 }
 
+// For specs that need a SECOND independent identity (one cookie jar can't
+// hold two logged-in users at once) -- a plain browser.newContext() does
+// NOT inherit playwright.config.mjs's own `use` options (baseURL,
+// extraHTTPHeaders), those only apply to the fixture-provided page/context,
+// so a bare newContext() page would fail page.goto("/") (no base URL to
+// resolve against) and never send the login rate-limit bypass header
+// either. Mirrors both, plus the same English-language init script the
+// `page` fixture below gives the primary identity, so every context in a
+// multi-identity spec behaves identically.
+export async function newIdentityPage(browser) {
+  const context = await browser.newContext({
+    baseURL: process.env.E2E_BASE_URL ?? "http://127.0.0.1:3101",
+    extraHTTPHeaders: { "x-e2e-rate-limit-bypass": process.env.E2E_RATE_LIMIT_BYPASS_TOKEN ?? "e2e-suite-local-bypass" },
+  });
+  const page = await context.newPage();
+  await page.addInitScript(() => localStorage.setItem("fieldvisits_lang", "en"));
+  return { context, page };
+}
+
 export const test = base.extend({
   // App defaults to Armenian (i18n.js's getLang()) unless localStorage
   // already says "en" -- forced here, before the app's own first script

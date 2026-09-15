@@ -1,4 +1,4 @@
-import { test, expect, loginViaUi } from "./fixtures.mjs";
+import { test, expect, loginViaUi, newIdentityPage } from "./fixtures.mjs";
 
 test.describe("Discount approval", () => {
   test("a discounted order needs a director's approval before it can proceed", async ({ browser, fixtures }) => {
@@ -13,8 +13,7 @@ test.describe("Discount approval", () => {
     // Two independent sessions -- the rep placing the order and the
     // director reviewing it are two different logged-in identities, which
     // a single browser context (one cookie jar) can't represent.
-    const repContext = await browser.newContext();
-    const repPage = await repContext.newPage();
+    const { context: repContext, page: repPage } = await newIdentityPage(browser);
     await loginViaUi(repPage, manager.email);
     await repPage.goto(`/#/orders/new/${customer.id}`);
     // The picker navigates brand-first -- a brand chip, not the flat product
@@ -33,8 +32,7 @@ test.describe("Discount approval", () => {
     expect(order.approval_status).toBe("pending");
     await repContext.close();
 
-    const directorContext = await browser.newContext();
-    const directorPage = await directorContext.newPage();
+    const { context: directorContext, page: directorPage } = await newIdentityPage(browser);
     await loginViaUi(directorPage, director.email);
     await directorPage.goto("/#/orders");
     // Default filter is "submitted" (see orders.js) -- the pending-discount
