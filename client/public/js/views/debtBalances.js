@@ -111,7 +111,7 @@ export async function renderDebtBalances(root, navigate) {
           <span class="text-amount debt-balance-amount">${formatAmd(Number(r.remaining_balance))}</span>
         </div>
         <strong>${escapeHtml(r.customer_name || "")}</strong>
-        <div class="debt-balance-row muted">
+        <div class="debt-balance-row debt-balance-row-dates muted">
           <span>${t("debt_balances_last_payment")}: ${formatDateOnly(r.last_payment_date)}</span>
           <span>${t("debt_balances_last_visit")}: ${formatDate(r.last_visit_at)}</span>
         </div>
