@@ -37,7 +37,18 @@ export function clearCsrfToken(res) {
 // login/register have no session cookie yet, and the ERP bot's sync
 // endpoint authenticates with a bearer key (ERP_SYNC_KEY), not a cookie,
 // so neither needs (or could supply) a CSRF token.
+//
+// Login itself is always exempt, regardless of whether a `session` cookie
+// happens to be present: a stale/expired JWT left over from a previous
+// install (token_version bumped, JWT_SECRET rotated, or it just expired)
+// still counts as "a session cookie is present" for the check below, but
+// the device was never issued a matching csrf_token for it -- gating login
+// on that turned an expired cookie into a permanent "Missing or invalid
+// CSRF token" lockout screen with no way for the user to recover short of
+// manually clearing cookies, since the login form itself has no CSRF token
+// to send yet.
 export function requireCsrf(req, res, next) {
+  if (req.path === "/api/auth/login") return next();
   if (!MUTATING_METHODS.has(req.method)) return next();
   if (!req.cookies?.session) return next();
 
