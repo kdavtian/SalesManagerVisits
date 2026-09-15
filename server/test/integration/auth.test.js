@@ -38,7 +38,7 @@ test("login: a valid email/password succeeds, an invalid password fails", async 
   assert.ok(good.cookie.includes("session="), "a session cookie must be set on success");
 });
 
-test("login: an unknown email returns the same 401 as a wrong password (no user-existence oracle)", async () => {
+test("login: an unknown email returns the same 401 as a wrong password (no user-existence oracle), and is never a 423 (no row to lock)", async () => {
   const res = await apiRequest("/api/auth/login", { method: "POST", body: { email: "nobody-itest@kadmotors.local", password: "whatever123" } });
   assert.equal(res.status, 401);
   assert.equal(res.data.error, "Invalid email or password");
@@ -47,6 +47,27 @@ test("login: an unknown email returns the same 401 as a wrong password (no user-
 test("login: a missing password is a 400, not a 401 (doesn't even reach the credential check)", async () => {
   const res = await apiRequest("/api/auth/login", { method: "POST", body: { email: "x@example.com" } });
   assert.equal(res.status, 400);
+});
+
+test("login: a stale/expired session cookie already on the device must not block a fresh login with a CSRF error", async () => {
+  // Reproduces a real-world stuck-login report: a device carries a
+  // `session` cookie from a previous install (expired JWT, a rotated
+  // JWT_SECRET, or a token_version bump from a password reset elsewhere),
+  // but was never issued a matching csrf_token for it -- the login form
+  // itself has no CSRF token to send yet. requireCsrf must not gate
+  // POST /api/auth/login on cookie presence, or this becomes a permanent
+  // "Missing or invalid CSRF token" screen with no recovery but manually
+  // clearing cookies.
+  const user = await createUser("sales_manager");
+
+  const res = await fetch(`${baseUrl}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: "session=stale-or-expired-token-from-a-previous-install" },
+    body: JSON.stringify({ email: user.email, password: TEST_PASSWORD }),
+  });
+  assert.equal(res.status, 200, "a stale session cookie with no CSRF token must not block login");
+  const body = await res.json();
+  assert.equal(body.email, user.email);
 });
 
 // --- Account lockout --------------------------------------------------------
@@ -80,14 +101,6 @@ test("account lockout: a successful login resets both failed_login_attempts and 
   const { rows } = await pool.query("SELECT failed_login_attempts, locked_until FROM users WHERE id = $1", [user.id]);
   assert.equal(rows[0].failed_login_attempts, 0);
   assert.equal(rows[0].locked_until, null);
-});
-
-test("account lockout: a repeated login against a nonexistent email is never a 423 (no row to lock)", async () => {
-  // Set up directly via SQL rather than 6 real POSTs -- proves the lockout
-  // logic requires a real user row (an attacker probing a made-up address
-  // can't be "locked out" of an account that was never there).
-  const res = await apiRequest("/api/auth/login", { method: "POST", body: { email: "ghost-itest@kadmotors.local", password: "wrong" } });
-  assert.equal(res.status, 401);
 });
 
 // --- Unauthenticated access --------------------------------------------------
