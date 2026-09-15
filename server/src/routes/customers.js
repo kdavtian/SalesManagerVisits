@@ -118,6 +118,29 @@ function isWithinArmenia(lat, lng) {
   );
 }
 
+// Two different app customer records linking to the same real-world ERP
+// customer (a plausible data-entry mistake -- e.g. the same shop visited
+// and separately entered by two reps, each later linking their own record
+// to the same ERP ID) used to be silently allowed, with nothing enforcing
+// erp_customer_id was actually unique. debtBalances.js's own
+// JOIN customers c ON c.erp_customer_id = ecd.erp_customer_id would then
+// match more than one customer per ERP debt record, each potentially
+// carrying a different (or missing) assigned_manager_id -- reported as
+// "missing/incorrect assignment data in debt balances". Checked before
+// every create/link below, on top of the DB-level uniqueness constraint
+// itself (migration 069) that's the actual backstop against a race.
+async function findErpCustomerIdConflict(erpCustomerId, excludeId) {
+  const params = [erpCustomerId];
+  let where = "erp_customer_id = $1";
+  if (excludeId) {
+    params.push(excludeId);
+    where += ` AND id != $${params.length}`;
+  }
+  const { rows } = await pool.query(`SELECT id, name FROM customers WHERE ${where}`, params);
+  if (!rows[0]) return null;
+  return { error: `ERP customer ID "${erpCustomerId}" is already linked to another customer (${rows[0].name})` };
+}
+
 customersRouter.post("/", async (req, res) => {
   const {
     name,
@@ -157,6 +180,10 @@ customersRouter.post("/", async (req, res) => {
   if (credit_term_days !== undefined && !(Number.isInteger(Number(credit_term_days)) && Number(credit_term_days) > 0)) {
     return res.status(400).json({ error: "credit_term_days must be a positive whole number" });
   }
+  if (erp_customer_id) {
+    const conflict = await findErpCustomerIdConflict(erp_customer_id);
+    if (conflict) return res.status(409).json(conflict);
+  }
 
   // Same ERP-ID-implies-at-least-Bronze rule as the PATCH handler below,
   // applied at creation time: a brand-new customer entered with an ERP ID
@@ -173,31 +200,43 @@ customersRouter.post("/", async (req, res) => {
   // default suggestion back is the common case.
   const resolvedManagerId = assigned_manager_id && canReassignCustomers(req.user.role) ? assigned_manager_id : req.user.id;
 
-  const { rows } = await pool.query(
-    `INSERT INTO customers (name, category, phone, address, notes, lat, lng, created_by, assigned_manager_id, visit_frequency_days, erp_customer_id, tin, region, subregion, customer_tier, sales_channel, credit_term_days, payment_method)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $16, $9, $10, $11, $12, $13, $14, $15, $17, $18)
-     RETURNING *`,
-    [
-      name,
-      category ?? null,
-      phone ?? null,
-      address ?? null,
-      notes ?? null,
-      lat,
-      lng,
-      req.user.id,
-      Number(visit_frequency_days) || (await getDefaultVisitFrequencyDays()),
-      erp_customer_id || null,
-      tin || null,
-      region || null,
-      subregion || null,
-      initialTier,
-      sales_channel || null,
-      resolvedManagerId,
-      Number(credit_term_days) || 45,
-      payment_method || "invoice",
-    ]
-  );
+  let rows;
+  try {
+    ({ rows } = await pool.query(
+      `INSERT INTO customers (name, category, phone, address, notes, lat, lng, created_by, assigned_manager_id, visit_frequency_days, erp_customer_id, tin, region, subregion, customer_tier, sales_channel, credit_term_days, payment_method)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $16, $9, $10, $11, $12, $13, $14, $15, $17, $18)
+       RETURNING *`,
+      [
+        name,
+        category ?? null,
+        phone ?? null,
+        address ?? null,
+        notes ?? null,
+        lat,
+        lng,
+        req.user.id,
+        Number(visit_frequency_days) || (await getDefaultVisitFrequencyDays()),
+        erp_customer_id || null,
+        tin || null,
+        region || null,
+        subregion || null,
+        initialTier,
+        sales_channel || null,
+        resolvedManagerId,
+        Number(credit_term_days) || 45,
+        payment_method || "invoice",
+      ]
+    ));
+  } catch (err) {
+    // The pre-check above closes the common case; this catches the rare
+    // race of two requests linking the same erp_customer_id at once (see
+    // customers_erp_customer_id_unique_idx, migration 069).
+    if (err.code === "23505" && erp_customer_id) {
+      const conflict = await findErpCustomerIdConflict(erp_customer_id);
+      if (conflict) return res.status(409).json(conflict);
+    }
+    throw err;
+  }
   res.status(201).json(rows[0]);
 });
 
@@ -393,6 +432,11 @@ customersRouter.patch("/:id", async (req, res) => {
   const isNewErpLink = newErpId && !current.erp_customer_id;
   const autoUpgradeToBronze = isNewErpLink && req.body?.customer_tier === undefined && current.customer_tier === "potential";
 
+  if (newErpId && newErpId !== current.erp_customer_id) {
+    const conflict = await findErpCustomerIdConflict(newErpId, req.params.id);
+    if (conflict) return res.status(409).json(conflict);
+  }
+
   const fieldsToApply = { ...req.body };
   if (autoUpgradeToBronze) fieldsToApply.customer_tier = "bronze";
 
@@ -412,10 +456,22 @@ customersRouter.patch("/:id", async (req, res) => {
   }
 
   params.push(req.params.id);
-  const { rows } = await pool.query(
-    `UPDATE customers SET ${updates.join(", ")} WHERE id = $${params.length} RETURNING *`,
-    params
-  );
+  let rows;
+  try {
+    ({ rows } = await pool.query(
+      `UPDATE customers SET ${updates.join(", ")} WHERE id = $${params.length} RETURNING *`,
+      params
+    ));
+  } catch (err) {
+    // The pre-check above closes the common case; this catches the rare
+    // race of two requests linking the same erp_customer_id at once (see
+    // customers_erp_customer_id_unique_idx, migration 069).
+    if (err.code === "23505" && newErpId) {
+      const conflict = await findErpCustomerIdConflict(newErpId, req.params.id);
+      if (conflict) return res.status(409).json(conflict);
+    }
+    throw err;
+  }
   if (!rows[0]) return res.status(404).json({ error: "Customer not found" });
 
   if (autoUpgradeToBronze) {
