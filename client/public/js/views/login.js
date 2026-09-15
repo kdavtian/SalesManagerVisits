@@ -1,6 +1,7 @@
 import { api } from "../api.js";
 import { setUser } from "../state.js";
 import { t } from "../i18n.js";
+import { clearCacheIfRoleChanged } from "../listCache.js";
 
 export function renderLogin(root, onSuccess) {
   root.innerHTML = `
@@ -41,6 +42,9 @@ export function renderLogin(root, onSuccess) {
     try {
       const user = await api.login(data.get("email"), data.get("password"));
       setUser(user);
+      // Catches a role change made while this device stayed signed in on a
+      // shared login screen (see app.js's own boot-time call for why).
+      await clearCacheIfRoleChanged(user);
       onSuccess();
     } catch (err) {
       errorEl.textContent = err.message;

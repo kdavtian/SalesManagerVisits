@@ -84,6 +84,37 @@ export async function clearListCache() {
   }
 }
 
+const LAST_ROLE_KEY_PREFIX = "fieldvisits_last_role:";
+
+// scopedKey() above already stops one *account* from ever seeing another's
+// cached data, but the same account's own cache can still go stale in a
+// way that's a permissions problem, not just a freshness one: if an admin
+// promotes/demotes this user (sales_manager <-> sales_director, say) while
+// they're still signed in, their next app load re-authenticates fine, but
+// a stale cached page (the deliberate stale:true instant-open in
+// loadWithCache) could still flash data scoped to their OLD role's
+// visibility for a moment before the real fetch corrects it. Call this
+// right after every successful api.me()/login with the freshly-returned
+// user -- it wipes the cache the one time it actually detects a role
+// change for this account, and is a no-op every other time (same role as
+// last time, or the very first time this account is ever seen here).
+export async function clearCacheIfRoleChanged(user) {
+  if (!user?.id || !user?.role) return;
+  const storageKey = `${LAST_ROLE_KEY_PREFIX}${user.id}`;
+  let lastRole;
+  try {
+    lastRole = localStorage.getItem(storageKey);
+  } catch {
+    return; // localStorage unavailable -- nothing to compare against safely.
+  }
+  if (lastRole && lastRole !== user.role) await clearListCache();
+  try {
+    localStorage.setItem(storageKey, user.role);
+  } catch {
+    // Best-effort; losing this just means the next role change isn't caught.
+  }
+}
+
 // key: a string unique to this screen + whatever params it was fetched
 // with (e.g. "orders-list:status=confirmed") -- different filter/search
 // state must not show stale data from a different filter.
