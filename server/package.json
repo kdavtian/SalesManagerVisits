@@ -13,7 +13,7 @@
     "test": "node --test"
   },
   "dependencies": {
-    "bcryptjs": "^2.4.3",
+    "bcryptjs": "^3.0.3",
     "clean-css": "^5.3.3",
     "compression": "^1.8.2",
     "cookie-parser": "^1.4.6",
