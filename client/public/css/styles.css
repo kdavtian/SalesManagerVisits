@@ -703,6 +703,11 @@ a {
   padding-top: calc(6px + var(--safe-top));
 }
 
+.sync-banner[role="button"] {
+  cursor: pointer;
+  background: var(--danger, #d33);
+}
+
 /* Install banner */
 
 .install-banner {

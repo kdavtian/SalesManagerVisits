@@ -118,6 +118,17 @@ async function removeEntry(id) {
   }
 }
 
+// Persists an entry already updated in-place in memoryQueue (e.g. a bumped
+// attempts count) -- same idea as persistNewEntry, just an overwrite of an
+// existing id instead of a first insert.
+async function persistEntry(entry) {
+  if (useIndexedDb && dbInstance) {
+    await idbPut(dbInstance, entry);
+  } else {
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(memoryQueue));
+  }
+}
+
 export function getQueue() {
   return memoryQueue;
 }
@@ -200,39 +211,67 @@ function submitEntry(entry) {
 
 let flushing = false;
 
+// How many entry-specific failures (403/409, see below) an entry can rack up
+// before automatic flushes stop retrying it on their own -- a broken record
+// (e.g. a customer reassigned out from under a queued order) would otherwise
+// get silently re-attempted forever on every 'online' event and app boot,
+// with the rep never told anything is actually wrong. Past this, the entry
+// is flagged needsAttention and only retried again on an explicit, manual
+// "Refresh data" tap (flushQueue({ force: true })) -- see settings.js.
+const NEEDS_ATTENTION_THRESHOLD = 3;
+
 export function getLastSyncedAt() {
   const raw = localStorage.getItem(LAST_SYNC_KEY);
   return raw ? Number(raw) : null;
 }
 
-export async function flushQueue() {
+export async function flushQueue({ force = false } = {}) {
   if (flushing) return;
   flushing = true;
   try {
     await ready;
     for (const entry of [...memoryQueue]) {
+      // A flagged entry is skipped by the automatic passes (online event,
+      // app boot) -- it already proved it won't succeed by itself. A manual
+      // retry (force: true) always gets another attempt, since the rep
+      // presumably did something about the underlying cause first.
+      if (entry.needsAttention && !force) continue;
       try {
         await submitEntry(entry);
         memoryQueue = memoryQueue.filter((e) => e.id !== entry.id);
         await removeEntry(entry.id);
         notify();
       } catch (err) {
-        // None of these mean the server actually looked at this entry's
-        // content and rejected it -- they all mean "try again later", not
-        // "this entry is invalid":
-        //   401 session expired -- very plausible after being offline a while
-        //   403 forbidden -- e.g. a role change mid-flight; the entry may be
-        //       submittable again once the client's own state resyncs
-        //   409 conflict -- e.g. a duplicate-detection race on the other
-        //       idempotency check this same request could still hit
-        //   423 locked -- the app-wide emergency-lockdown middleware
-        //   429 rate limited
-        // Treating any of these like a genuine rejection deleted a rep's
-        // real, un-submitted check-in/order just because their token had
-        // expired while offline (reported as "offline queue deletes work
-        // after session expiry or other 4xx errors").
-        if ([401, 403, 409, 423, 429].includes(err.status)) {
+        // 401 (session expired) and 429/423 (rate-limited / app-wide
+        // emergency lockdown) are conditions affecting every request this
+        // device makes right now, not just this one entry -- stop the whole
+        // pass rather than burning through the rest of the queue against
+        // the same wall; the 'online' listener or next login retries later.
+        if ([401, 429, 423].includes(err.status)) {
           break;
+        }
+        // 403/409 are usually entry-specific (a role change mid-flight, an
+        // idempotency-check race, a stale reference) rather than a
+        // device-wide condition, so they don't have to block entries queued
+        // behind this one -- but blindly retrying the same broken entry
+        // forever, forever, silently, is also wrong (reported as needing a
+        // "needs attention" status). Track it per entry and stop
+        // auto-retrying past the threshold.
+        if (err.status === 403 || err.status === 409) {
+          const idx = memoryQueue.findIndex((e) => e.id === entry.id);
+          if (idx !== -1) {
+            const attempts = (memoryQueue[idx].attempts || 0) + 1;
+            const updated = {
+              ...memoryQueue[idx],
+              attempts,
+              needsAttention: attempts >= NEEDS_ATTENTION_THRESHOLD,
+              lastError: err.message,
+            };
+            memoryQueue = [...memoryQueue.slice(0, idx), updated, ...memoryQueue.slice(idx + 1)];
+            await persistEntry(updated);
+            notify();
+          }
+          continue;
         }
         // Network-level failure (TypeError) or a server/infra-side error
         // (5xx, or no status at all) — stop and retry later rather than
