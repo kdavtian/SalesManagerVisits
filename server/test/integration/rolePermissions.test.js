@@ -113,7 +113,7 @@ test("a sales_manager only sees their own book in debt balances, not another man
   const cookieA = await loginAs(managerA.email);
   const listA = await apiRequest("/api/debt-balances", { cookie: cookieA });
   assert.equal(listA.status, 200);
-  const idsA = listA.data.map((r) => r.internal_customer_id);
+  const idsA = listA.data.rows.map((r) => r.internal_customer_id);
   assert.ok(idsA.includes(customerA.id), "manager A should see their own customer's debt");
   assert.ok(!idsA.includes(customerB.id), "manager A should NOT see manager B's customer debt");
 

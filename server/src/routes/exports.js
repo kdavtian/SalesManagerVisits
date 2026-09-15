@@ -16,10 +16,10 @@ function isValidDateString(value) {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
-function sendCsv(res, filename, headers, rows) {
+function sendCsv(res, filename, headers, rows, summaryRows) {
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-  res.send(toCsv(headers, rows));
+  res.send(toCsv(headers, rows, summaryRows));
 }
 
 // Every checkin where a rep recorded a collection -- the accountant's raw
@@ -47,6 +47,7 @@ exportsRouter.get("/payments.csv", async (req, res) => {
     params
   );
 
+  const totalAmd = rows.reduce((sum, r) => sum + Number(r.amount_collected_amd || 0), 0);
   sendCsv(
     res,
     "payments.csv",
@@ -56,7 +57,11 @@ exportsRouter.get("/payments.csv", async (req, res) => {
       rep: r.rep_name,
       customer: r.customer_name,
       amount_amd: r.amount_collected_amd,
-    }))
+    })),
+    [
+      ["Rows", rows.length],
+      ["Total amount_amd", totalAmd],
+    ]
   );
 });
 
@@ -85,7 +90,11 @@ exportsRouter.get("/debt.csv", async (req, res) => {
       days_since_payment: r.days_since_payment,
       aging_bucket: r.aging_bucket,
       synced_at: r.synced_at ? new Date(r.synced_at).toISOString() : "",
-    }))
+    })),
+    [
+      ["Rows", rows.length],
+      ["Total debt_amd", rows.reduce((sum, r) => sum + Number(r.debt_amd || 0), 0)],
+    ]
   );
 });
 
@@ -136,6 +145,29 @@ exportsRouter.get("/orders.csv", async (req, res) => {
       quantity: r.quantity,
       unit_price_amd: r.unit_price_amd,
       line_total_amd: r.line_total_amd,
-    }))
+    })),
+    orderStatusSummary(rows)
   );
 });
+
+// A single grand total across every status here would blend draft/rejected
+// lines in with delivered ones, which isn't a number anyone actually wants
+// to reconcile against -- one total PER STATUS is what separates "what's
+// actually been delivered" from "what's still in the pipeline" (see the
+// improvement item this addresses: "clearly separate submitted, approved,
+// delivered and recorded amounts").
+function orderStatusSummary(rows) {
+  const byStatus = new Map();
+  for (const r of rows) {
+    const entry = byStatus.get(r.status) ?? { count: 0, total: 0 };
+    entry.count += 1;
+    entry.total += Number(r.line_total_amd || 0);
+    byStatus.set(r.status, entry);
+  }
+  const summary = [["Rows", rows.length]];
+  for (const [status, { count, total }] of byStatus) {
+    summary.push([`${status} rows`, count]);
+    summary.push([`${status} line_total_amd`, total]);
+  }
+  return summary;
+}

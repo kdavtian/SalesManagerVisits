@@ -5,7 +5,7 @@
 // sales.js: no write-back, ERP/Excel stays the source of truth, same
 // contract as Debt Balances.
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, formatDateDMY, channelDisplayLabel, activateDialog } from "../util.js";
+import { escapeHtml, formatAmd, formatDateDMY, channelDisplayLabel, activateDialog, syncBadgeHtml } from "../util.js";
 import { t } from "../i18n.js";
 
 // Local calendar-date components, not toISOString() -- that converts to
@@ -99,6 +99,8 @@ export async function renderSales(root, navigate) {
         </button>
         <div class="detail-header-title"><h1>${t("sales_title")}</h1></div>
       </div>
+      <div id="sales-sync-badge"></div>
+      <p class="muted sales-source-hint">${t("sales_source_hint")}</p>
       <div class="sales-filter-row">
         <label>${t("date_from")}<input type="date" id="sales-from" value="${from}" /></label>
         <label>${t("date_to")}<input type="date" id="sales-to" value="${to}" /></label>
@@ -119,6 +121,7 @@ export async function renderSales(root, navigate) {
   const listEl = container.querySelector("#sales-list");
   const errorEl = container.querySelector("#sales-error");
   const subtotalEl = container.querySelector("#sales-subtotal");
+  const syncBadgeEl = container.querySelector("#sales-sync-badge");
   const fromInput = container.querySelector("#sales-from");
   const toInput = container.querySelector("#sales-to");
   const channelBarEl = container.querySelector("#sales-channel-bar");
@@ -181,7 +184,8 @@ export async function renderSales(root, navigate) {
       const params = { from, to };
       if (channel) params.channel = channel;
       if (q) params.q = q;
-      const { rows } = await api.getSales(params);
+      const { rows, sync } = await api.getSales(params);
+      syncBadgeEl.innerHTML = syncBadgeHtml(sync);
 
       // Pill counts are only ever refreshed from an unfiltered-by-channel
       // fetch (this one, since `channel` is only added to params after a

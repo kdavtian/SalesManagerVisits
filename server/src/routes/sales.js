@@ -3,6 +3,7 @@ import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { seesFinancialExports } from "../roles.js";
 import { yerevanToday, yerevanMonthStart } from "../utils/yerevanDate.js";
+import { erpSyncFreshness } from "../erpSyncFreshness.js";
 
 export const salesRouter = Router();
 
@@ -71,7 +72,11 @@ salesRouter.get("/", async (req, res) => {
      LIMIT 500`,
     params
   );
-  res.json({ from, to, rows });
+  // erp_order_lines has no synced_at column of its own (it's TRUNCATEd
+  // and re-inserted in the same transaction as erp_customer_data on every
+  // sync -- see routes/erpSync.js), so erp_customer_data's own synced_at
+  // is an accurate proxy for "when was this order data last refreshed".
+  res.json({ from, to, rows, sync: await erpSyncFreshness("erp_customer_data") });
 });
 
 // Line-item detail for one order -- erp_customer_id + order_id together,
