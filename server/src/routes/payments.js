@@ -35,12 +35,17 @@ async function loadPaymentRow(id) {
   const { rows } = await pool.query(
     `SELECT p.*, sm.name AS current_sales_manager_name, cb.name AS created_by_name,
             ab.name AS approved_by_name, rb.name AS rejected_by_name,
+            ch.name AS current_holder_name,
+            pending_to.name AS pending_handoff_to_name,
             COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot
      FROM payments p
      JOIN users sm ON sm.id = p.sales_manager_id
      JOIN users cb ON cb.id = p.created_by
      LEFT JOIN users ab ON ab.id = p.approved_by
      LEFT JOIN users rb ON rb.id = p.rejected_by
+     LEFT JOIN users ch ON ch.id = p.current_holder_id
+     LEFT JOIN cash_handoffs h ON h.id = p.pending_handoff_id
+     LEFT JOIN users pending_to ON pending_to.id = h.to_user_id
      LEFT JOIN customers c ON c.id = p.customer_id
      WHERE p.id = $1`,
     [id]
@@ -57,8 +62,8 @@ function canSeePayment(user, payment) {
 // within a short window is flagged, not blocked (see task spec: "warn, do
 // not automatically reject"). The client re-submits with confirm_duplicate
 // to push it through anyway.
-async function findLikelyDuplicate({ customerId, amount, salesManagerId, paymentDate }) {
-  const { rows } = await pool.query(
+async function findLikelyDuplicate({ customerId, amount, salesManagerId, paymentDate, db = pool }) {
+  const { rows } = await db.query(
     `SELECT id, amount_amd, payment_date, status
      FROM payments
      WHERE customer_id = $1
@@ -191,44 +196,76 @@ paymentsRouter.post("/", async (req, res) => {
   const customer = customerRows[0];
   if (!customer) return res.status(400).json({ error: "Customer not found" });
 
-  if (client_ref) {
-    const { rows: existing } = await pool.query(
-      "SELECT id FROM payments WHERE created_by = $1 AND client_ref = $2",
-      [req.user.id, client_ref]
-    );
-    if (existing[0]) {
-      // Same client retried (e.g. after a flaky connection) -- return the
-      // already-created payment instead of creating a second one.
-      return res.status(201).json(await loadPaymentRow(existing[0].id));
-    }
-  }
+  // findLikelyDuplicate() below is a plain SELECT -- on its own, two
+  // near-simultaneous submissions of the same customer/manager/amount
+  // (two reps' devices both regaining signal at once, say) would both run
+  // it before either had committed an INSERT, so both would see "no
+  // duplicate yet" and both would go through. An advisory lock keyed on
+  // this exact (customer, manager, amount) shape serializes any concurrent
+  // request matching it for the rest of this transaction -- the second one
+  // blocks here until the first commits or rolls back, then re-runs the
+  // check against a database that now actually reflects the first's
+  // outcome. This is the database-level backstop behind the existing
+  // app-level warn-not-block UX (see findLikelyDuplicate's own comment);
+  // an unrelated payment (different customer/manager/amount) never
+  // contends for this lock at all.
+  const client = await pool.connect();
+  let paymentId;
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1)::bigint)", [
+      `payment-dup:${customer.id}:${salesManagerId}:${amount}`,
+    ]);
 
-  if (!confirm_duplicate) {
-    const duplicate = await findLikelyDuplicate({
-      customerId: customer.id,
-      amount,
-      salesManagerId,
-      paymentDate: paymentDateObj.toISOString(),
-    });
-    if (duplicate) {
-      return res.status(409).json({
-        error: "duplicate_warning",
-        message: "Possible duplicate payment",
-        similar_payment: duplicate,
+    if (client_ref) {
+      const { rows: existing } = await client.query(
+        "SELECT id FROM payments WHERE created_by = $1 AND client_ref = $2",
+        [req.user.id, client_ref]
+      );
+      if (existing[0]) {
+        // Same client retried (e.g. after a flaky connection) -- return
+        // the already-created payment instead of creating a second one.
+        await client.query("COMMIT");
+        return res.status(201).json(await loadPaymentRow(existing[0].id));
+      }
+    }
+
+    if (!confirm_duplicate) {
+      const duplicate = await findLikelyDuplicate({
+        customerId: customer.id,
+        amount,
+        salesManagerId,
+        paymentDate: paymentDateObj.toISOString(),
+        db: client,
       });
+      if (duplicate) {
+        await client.query("COMMIT");
+        return res.status(409).json({
+          error: "duplicate_warning",
+          message: "Possible duplicate payment",
+          similar_payment: duplicate,
+        });
+      }
     }
-  }
 
-  const paymentId = await insertPayment({
-    customer,
-    amount,
-    paymentDate: paymentDateObj.toISOString(),
-    salesManagerId,
-    manager,
-    note,
-    createdBy: req.user.id,
-    clientRef: client_ref,
-  });
+    paymentId = await insertPayment({
+      customer,
+      amount,
+      paymentDate: paymentDateObj.toISOString(),
+      salesManagerId,
+      manager,
+      note,
+      createdBy: req.user.id,
+      clientRef: client_ref,
+      db: client,
+    });
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 
   const payment = await loadPaymentRow(paymentId);
   res.status(201).json(payment);
@@ -309,9 +346,10 @@ paymentsRouter.get("/", async (req, res) => {
 
   params.push(PAGE_SIZE + 1, offsetNum);
   const { rows } = await pool.query(
-    `SELECT p.*, COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot
+    `SELECT p.*, ch.name AS current_holder_name, COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot
      FROM payments p
      LEFT JOIN customers c ON c.id = p.customer_id
+     LEFT JOIN users ch ON ch.id = p.current_holder_id
      ${where}
      ORDER BY ${orderBy}
      LIMIT $${params.length - 1} OFFSET $${params.length}`,
