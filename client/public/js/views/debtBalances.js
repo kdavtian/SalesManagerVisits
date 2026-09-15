@@ -8,6 +8,7 @@ import { api } from "../api.js";
 import { escapeHtml, formatAmd, syncBadgeHtml } from "../util.js";
 import { state } from "../state.js";
 import { t } from "../i18n.js";
+import { loadWithCache } from "../listCache.js";
 
 // For last_visit_at, a real timestamp (checkins.timestamp) -- correctly
 // converted to the viewer's local calendar date, since it names an
@@ -160,30 +161,52 @@ export async function renderDebtBalances(root, navigate) {
     });
   }
 
-  async function load() {
-    listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
-    errorEl.hidden = true;
-    try {
-      const data = await api.getDebtBalances();
-      rows = data.rows;
-      syncBadgeEl.innerHTML = syncBadgeHtml(data.sync);
-      if (canGroup) {
-        const managerFilterEl = container.querySelector("#debt-manager-filter");
-        const managers = new Map();
-        for (const r of rows) {
-          if (r.assigned_manager_id) managers.set(r.assigned_manager_id, r.assigned_manager_name);
-        }
-        managerFilterEl.innerHTML =
-          `<option value="">${t("all_statuses")}</option>` +
-          [...managers.entries()].map(([id, name]) => `<option value="${id}">${escapeHtml(name || "")}</option>`).join("");
+  function paintData(data) {
+    rows = data.rows;
+    syncBadgeEl.innerHTML = syncBadgeHtml(data.sync);
+    if (canGroup) {
+      const managerFilterEl = container.querySelector("#debt-manager-filter");
+      // Preserve whatever the user already has selected -- loadWithCache
+      // can repaint this select a second time (stale cache, then the real
+      // fetch landing), and resetting it back to "" mid-session would
+      // silently drop their filter choice out from under them.
+      const previousSelection = managerFilterEl.value;
+      // String-keyed to match both <select> option values (always strings)
+      // and previousSelection (read from .value, also always a string) --
+      // assigned_manager_id itself comes back as a number from the API.
+      const managers = new Map();
+      for (const r of rows) {
+        if (r.assigned_manager_id) managers.set(String(r.assigned_manager_id), r.assigned_manager_name);
       }
-      render();
+      managerFilterEl.innerHTML =
+        `<option value="">${t("all_statuses")}</option>` +
+        [...managers.entries()].map(([id, name]) => `<option value="${id}">${escapeHtml(name || "")}</option>`).join("");
+      if (previousSelection && managers.has(previousSelection)) managerFilterEl.value = previousSelection;
+    }
+    render();
+  }
+
+  async function load() {
+    let paintedOnce = false;
+    try {
+      await loadWithCache(
+        "debt-balances",
+        () => api.getDebtBalances(),
+        (data) => {
+          paintData(data);
+          paintedOnce = true;
+        }
+      );
     } catch (err) {
-      errorEl.textContent = err.message;
-      errorEl.hidden = false;
-      listEl.innerHTML = "";
+      if (!paintedOnce) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+        listEl.innerHTML = "";
+      }
     }
   }
 
+  listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+  errorEl.hidden = true;
   load();
 }
