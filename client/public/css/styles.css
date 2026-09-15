@@ -7198,6 +7198,14 @@ form select,
   text-align: left;
 }
 
+/* A day whose cash-reconciliation difference exceeds the server's alert
+   threshold (renderCashReconciliationReport) -- same left-edge treatment
+   the sync-badge-stale warning already uses elsewhere, so "needs a look"
+   reads consistently across screens. */
+.report-row-alert {
+  border-left: 3px solid var(--danger);
+}
+
 /* Freshness note on a report backed by the Castrol Excel sync (see
    syncBadgeHtml in views/reports.js) -- quiet by default, only turns
    attention-getting once the sync itself looks broken. */
