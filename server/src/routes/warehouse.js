@@ -141,10 +141,19 @@ async function markPacked(orderId) {
     return { error: `Cannot mark "${order.status}" as packed -- only a confirmed order can be packed`, status: 409 };
   }
 
+  // The status check above is only a pre-check -- the bulk-packed endpoint
+  // below can process the same order twice in the same request via a
+  // duplicated id, and two warehouse staff can double-tap the same order
+  // in the UI at once. This guarded UPDATE is the actual lock: only the
+  // first to reach it flips the status; the second gets nothing back and
+  // is treated as already-packed rather than silently re-packing it.
   const { rows: updatedRows } = await pool.query(
-    "UPDATE orders SET status = 'packed_stock_out', updated_at = now() WHERE id = $1 RETURNING *",
+    "UPDATE orders SET status = 'packed_stock_out', updated_at = now() WHERE id = $1 AND status = 'confirmed' RETURNING *",
     [order.id]
   );
+  if (!updatedRows[0]) {
+    return { error: `Cannot mark "${order.status}" as packed -- only a confirmed order can be packed`, status: 409 };
+  }
 
   (async () => {
     try {
@@ -205,10 +214,16 @@ warehouseRouter.post("/orders/:id/stock-issue", async (req, res) => {
     return res.status(409).json({ error: `Cannot flag a stock issue on "${order.status}" -- only a confirmed order qualifies` });
   }
 
+  // Guarded the same way as markPacked() above -- a race against a
+  // concurrent "mark packed" tap on the same order shouldn't be able to
+  // flag a stock issue on an order that already moved on.
   const { rows: updatedRows } = await pool.query(
-    "UPDATE orders SET status = 'draft', draft_reason = $1, updated_at = now() WHERE id = $2 RETURNING *",
+    "UPDATE orders SET status = 'draft', draft_reason = $1, updated_at = now() WHERE id = $2 AND status = 'confirmed' RETURNING *",
     [note.trim(), order.id]
   );
+  if (!updatedRows[0]) {
+    return res.status(409).json({ error: `Cannot flag a stock issue on "${order.status}" -- only a confirmed order qualifies` });
+  }
   res.json(updatedRows[0]);
 
   (async () => {
