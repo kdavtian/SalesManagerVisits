@@ -8,6 +8,7 @@ import { activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, 
 import { t } from "./i18n.js";
 import { isAdmin } from "./state.js";
 import { icons } from "./icons.js";
+import { openOrderDetailSheet } from "./orderDetailSheet.js";
 
 const BRAND_GROUP_LABEL_KEY = {
   castrol: "brand_group_castrol",
@@ -270,13 +271,20 @@ export function openVisitDetailSheet(ch, onPhotoDeleted, navigate) {
           ? `<h3 class="visit-detail-section-title">${t("visit_outcome_label")}</h3>
              <div class="visit-detail-outcome-list">
                ${outcomeValues
-                 .map(
-                   (o, i) => `
-                 <div class="visit-detail-outcome-row">
+                 .map((o, i) => {
+                   // Only the order_placed row can link anywhere -- a
+                   // checkin's order_id (added server-side, see
+                   // checkins.js's GET /) is the order *this* outcome
+                   // created, so other outcomes have nothing to open.
+                   const linkable = o === "order_placed" && ch.order_id;
+                   const tag = linkable ? "button" : "div";
+                   return `
+                 <${tag} ${linkable ? `type="button" data-order-id="${ch.order_id}"` : ""} class="visit-detail-outcome-row${linkable ? " visit-detail-outcome-row-link" : ""}">
                    <span class="visit-detail-outcome-icon">${OUTCOME_ICON[o] || icons.more}</span>
                    <span>${escapeHtml(outcomeLabels[i])}</span>
-                 </div>`
-                 )
+                   ${linkable ? `<span class="chevron">&#8250;</span>` : ""}
+                 </${tag}>`;
+                 })
                  .join("")}
              </div>`
           : ""
@@ -333,6 +341,12 @@ export function openVisitDetailSheet(ch, onPhotoDeleted, navigate) {
       navigate(hash);
     });
   }
+
+  overlay.querySelectorAll("[data-order-id]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      openOrderDetailSheet(Number(btn.dataset.orderId), { navigate });
+    });
+  });
 
   overlay.querySelectorAll(".checkin-photo").forEach((img) => {
     img.addEventListener("click", () => {
