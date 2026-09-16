@@ -14,7 +14,8 @@
     "test:lockdown": "node --test test/integration/lockdownEngage.test.js",
     "test:e2e": "playwright test",
     "test:e2e:smoke": "playwright test --grep @smoke",
-    "check:version": "node scripts/check-version-consistency.mjs"
+    "check:version": "node scripts/check-version-consistency.mjs",
+    "find:orphan-uploads": "node scripts/find-orphan-uploads.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

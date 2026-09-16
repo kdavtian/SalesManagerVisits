@@ -13,6 +13,7 @@ import { notifyUser } from "../notifications.js";
 import { DRIVER_NOTIFY_ROLES, DELIVERY_OUTCOME_NOTIFY_ROLES } from "../notificationPreferences.js";
 import { buildMatrix, optimizeOrder } from "../osrm.js";
 import { signatureUpload, uploadDirPath } from "../upload.js";
+import { matchesDeclaredImageType } from "../utils/imageSniff.js";
 import { insertPayment } from "./payments.js";
 
 export const deliveryRouter = Router();
@@ -319,6 +320,10 @@ deliveryRouter.post("/orders/:id/confirm", (req, res, next) => {
     return res.status(403).json({ error: "Not allowed" });
   }
   if (!req.file) return res.status(400).json({ error: "A signature image is required" });
+  if (!matchesDeclaredImageType(req.file.path, req.file.mimetype)) {
+    cleanupUpload();
+    return res.status(400).json({ error: "The uploaded file is not a valid image" });
+  }
 
   const { rows: driverRows } = await pool.query("SELECT name FROM users WHERE id = $1", [req.user.id]);
   const driverName = driverRows[0]?.name || "Driver";

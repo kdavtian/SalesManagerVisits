@@ -1,14 +1,18 @@
 # Backup and restore
 
-**Honest status**: backups are a manual command someone has to remember to
-run, not an automated job, and the restore procedure below has **not been
-rehearsed against production** — see risk **R-02** in
+**Honest status**: `deploy/backup.sh` (below) automates *taking* a backup —
+one command instead of two remembered-by-hand ones — but installing it on
+a schedule (cron) is still a one-time manual step on the real droplet, and
+so is pointing it at a genuine off-server destination (`BACKUP_REMOTE`);
+neither has happened on production yet. The restore procedure has been
+rehearsed against a real Postgres database (see
+[Doing a practice restore](#doing-a-practice-restore) below) but **not
+against the actual Docker Compose deployment shape** — the uploads-volume
+tar step and an off-server transfer are still unverified in this
+environment. See risk **R-02** in
 [`governance/risk-and-technical-debt-register.md`](governance/risk-and-technical-debt-register.md)
 and the RPO/RTO gap noted in
 [`governance/service-objectives-and-security.md`](governance/service-objectives-and-security.md).
-This doc describes the correct commands for the current setup, not a
-tested-and-proven runbook. Do a practice restore onto a scratch instance
-before you need to trust this during a real incident.
 
 There are two things to back up on the production droplet, independently:
 the Postgres database, and the `uploads_data` volume (check-in photos,
@@ -16,25 +20,40 @@ POD signatures).
 
 ## Backup
 
-Run from `/opt/field-visits` (or wherever the repo is checked out) on the
-droplet, with the stack running.
+**Automated (recommended):** from `/opt/field-visits` on the droplet, with
+the stack running:
 
-**Database:**
 ```bash
-docker compose exec db pg_dump -U fieldvisits fieldvisits > backup-$(date +%Y%m%d).sql
+./deploy/backup.sh
 ```
 
-**Uploads volume:**
+Writes a timestamped `db-*.sql` and `uploads-*.tar.gz` into `./backups/`
+(override with `BACKUP_DIR`), prunes anything older than 14 days
+(`BACKUP_RETENTION_DAYS`), and — only if you set `BACKUP_REMOTE` to an
+rsync/scp destination (e.g. `BACKUP_REMOTE=user@backup-host:/backups/field-visits/`)
+— pushes both files there right after. Without `BACKUP_REMOTE` set, it
+still runs and prints a loud warning: the result is local-only, on the
+same disk as what it's backing up, which doesn't survive a droplet-level
+failure.
+
+To actually run this on a schedule (the "automated" part), add it to the
+droplet's crontab once:
+
 ```bash
+crontab -e
+# then add:
+0 3 * * * cd /opt/field-visits && ./deploy/backup.sh >> /var/log/field-visits-backup.log 2>&1
+```
+
+**Manual (what the script above does, if you need to run one step by hand):**
+
+```bash
+docker compose exec db pg_dump -U fieldvisits fieldvisits > backup-$(date +%Y%m%d).sql
 docker run --rm \
   -v field-visits_uploads_data:/data \
   -v $(pwd):/backup \
   alpine tar czf /backup/uploads-backup-$(date +%Y%m%d).tar.gz -C /data .
 ```
-
-Copy both off the droplet (`scp`, an object-storage bucket, wherever) —
-a backup that only lives on the same disk as the thing it's backing up
-doesn't survive a droplet-level failure.
 
 ## Restore
 
@@ -77,19 +96,38 @@ right, do check-in photos load.
 - **Point-in-time recovery.** `pg_dump` is a snapshot at the moment it
   ran — anything written after the last backup and before an incident is
   gone. There's no WAL-archiving/continuous-backup setup.
-- **Automated scheduling.** Nothing runs these commands on a timer today.
-  Until that's automated (R-02), treat "when did anyone last actually run
-  this" as an open question worth checking periodically.
-- **A tested restore time.** The RTO target in
-  [`governance/service-objectives-and-security.md`](governance/service-objectives-and-security.md)
-  is explicitly marked untested — don't assume the restore above is fast
-  or trouble-free under real pressure until someone has actually timed it
-  once.
+- **A cron job actually installed on production.** `deploy/backup.sh`
+  exists and works; nobody has added the crontab line above to the real
+  droplet yet. Until that happens, treat "when did anyone last actually
+  run this" as an open question worth checking periodically.
+- **A genuine off-server copy.** Same gap — `BACKUP_REMOTE` needs a real
+  destination (another host, object storage) configured once; without it,
+  every backup produced today is local-only.
+- **The Docker-Compose-shaped restore, end to end.** See below — what's
+  actually been rehearsed is the database dump/restore mechanism itself,
+  not the uploads-volume tar step, not a restore through Compose, and not
+  an off-server transfer.
 
 ## Doing a practice restore
 
-The responsible next step, not yet done: spin up a scratch Postgres +
-uploads volume (a second droplet, or even a local Docker Compose stack),
-run the restore steps above against a real recent backup, verify the app
-actually works against the restored data, and record how long it took.
-That result belongs in this doc once it exists.
+**Done, partially** — the database half of this, rehearsed directly
+against Postgres (not through Docker, since that requires the real
+droplet's Compose stack):
+
+1. `pg_dump`'d the working database (89 users, 3,320 notifications, plus
+   the rest of the schema) — took **~1s**.
+2. Restored it into a freshly created, empty scratch database with
+   `psql -f` — took **~0.5s**, zero errors.
+3. Verified row counts in two tables matched the source exactly (89 users,
+   3,320 notifications) before dropping the scratch database.
+
+This confirms the dump/restore *mechanism* is sound and the documented
+command is correct. It does **not** confirm timing at production scale
+(this test database is far smaller than a real multi-year dataset would
+be), and it does **not** exercise the uploads-volume tar/untar step, a
+restore through `docker compose`, or pushing/pulling a backup off-server
+— none of which can be driven from this environment (no Docker daemon
+available here). The responsible next step, still not done: run the full
+`backup.sh` → transfer → restore sequence against the actual droplet (or
+a second scratch droplet), confirm the app itself works against the
+restored data end to end, and record that timing here too.

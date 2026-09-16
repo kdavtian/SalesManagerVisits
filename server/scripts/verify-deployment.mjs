@@ -31,6 +31,28 @@ for (let attempt = 1; attempt <= attempts; attempt += 1) {
   }
 }
 
+// /api/health only confirms the process is up -- a deploy that came up but
+// can't reach Postgres (bad credentials after a .env edit, migrations ran
+// against a different db than the app connects to) would otherwise pass
+// verification and get recorded as a known-good deploy. Checked separately
+// from health (not folded into the loop above) since it's a distinct
+// failure mode worth its own clear message.
+for (let attempt = 1; attempt <= attempts; attempt += 1) {
+  try {
+    const ready = await request("/api/ready");
+    const payload = JSON.parse(ready.body);
+    if (payload.ok !== true) throw new Error("ready response did not contain ok: true");
+    console.log(`PASS  API ready / database reachable (${attempt}/${attempts})`);
+    break;
+  } catch (error) {
+    if (attempt === attempts) {
+      console.error(`FAIL  API ready (database reachability) after ${attempts} attempts: ${error.message}`);
+      process.exit(1);
+    }
+    await sleep(delayMs);
+  }
+}
+
 const checks = [
   ["application shell", "/", /<main[^>]+id="app"/],
   ["primary stylesheet", "/css/styles.css", /\.nav-bar\s*\{/],

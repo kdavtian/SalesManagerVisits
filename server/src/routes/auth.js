@@ -6,6 +6,7 @@ import rateLimit from "express-rate-limit";
 import { pool } from "../db/pool.js";
 import { issueSession, clearSession, requireAuth } from "../middleware/auth.js";
 import { photoUpload, uploadDirPath } from "../upload.js";
+import { matchesDeclaredImageType } from "../utils/imageSniff.js";
 
 export const authRouter = Router();
 
@@ -157,6 +158,10 @@ meRouter.post("/avatar", requireAuth, (req, res, next) => {
   });
 }, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "avatar file is required" });
+  if (!matchesDeclaredImageType(req.file.path, req.file.mimetype)) {
+    fs.unlink(req.file.path, () => {});
+    return res.status(400).json({ error: "The uploaded file is not a valid image" });
+  }
 
   const { rows } = await pool.query("SELECT avatar_path FROM users WHERE id = $1", [req.user.id]);
   const previousPath = rows[0]?.avatar_path;

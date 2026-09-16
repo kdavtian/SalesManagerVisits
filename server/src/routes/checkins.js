@@ -4,6 +4,7 @@ import path from "node:path";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { photoUpload, uploadDirPath } from "../upload.js";
+import { matchesDeclaredImageType } from "../utils/imageSniff.js";
 import { haversineMeters } from "../utils/geo.js";
 import { getCheckinRadiusMeters } from "../settings.js";
 import { seesAllActivity } from "../roles.js";
@@ -113,6 +114,15 @@ checkinsRouter.post("/", (req, res, next) => {
   const lngNum = Number(lng);
   const outcomeValues = parseOutcomes(outcomes);
   const files = req.files ?? [];
+
+  // multer's fileFilter only ever sees the client-declared Content-Type
+  // (see upload.js) -- this checks the bytes actually written to disk
+  // match one of the allowed image signatures, catching a renamed
+  // non-image file fileFilter alone can't.
+  if (files.some((f) => !matchesDeclaredImageType(f.path, f.mimetype))) {
+    files.forEach((f) => fs.unlink(f.path, () => {}));
+    return res.status(400).json({ error: "One or more uploaded files are not valid images" });
+  }
 
   if (!customerId || Number.isNaN(latNum) || Number.isNaN(lngNum) || !outcomeValues.length) {
     files.forEach((f) => fs.unlink(f.path, () => {}));
