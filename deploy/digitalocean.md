@@ -147,10 +147,10 @@ cd /opt/field-visits
 
 ## Notes
 
-- **Uploaded photos** live in the `uploads_data` Docker volume, so they
-  survive container rebuilds/restarts. Back it up with
-  `docker run --rm -v field-visits_uploads_data:/data -v $(pwd):/backup alpine tar czf /backup/uploads-backup.tar.gz -C /data .`
-  if you want an off-droplet copy.
-- **Database backups**: `docker compose exec db pg_dump -U fieldvisits fieldvisits > backup.sql`
+- **Backups**: `./deploy/backup.sh` dumps the database and the
+  `uploads_data` volume in one command — see
+  [`../docs/backup-restore.md`](../docs/backup-restore.md) for the cron
+  line to actually schedule it and the `BACKUP_REMOTE` env var for an
+  off-droplet copy.
 - The app only binds to `127.0.0.1:3000` (see `docker-compose.yml`), so it's
   only reachable through nginx — not directly from the internet.

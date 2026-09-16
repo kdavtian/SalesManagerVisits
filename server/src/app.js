@@ -56,6 +56,7 @@ import { getCalculatorModeEnabled } from "./settings.js";
 import { requireAuth } from "./middleware/auth.js";
 import { autoAssignSalesChannel } from "./salesChannelAutofill.js";
 import { normalizeCustomerPortfolio } from "./customerChannelPolicy.js";
+import { pool } from "./db/pool.js";
 
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
   console.error(
@@ -100,6 +101,34 @@ app.use(
     },
   })
 );
+// Liveness only -- "the Node process is up and answering HTTP", nothing
+// about its dependencies. What the Docker HEALTHCHECK and deploy.sh's
+// verify-deployment.mjs actually want (see docs/monitoring.md).
+app.get("/api/health", (req, res) => {
+  res.json({ ok: true });
+});
+
+// Readiness -- also confirms Postgres is actually reachable, not just that
+// the process started. Distinct from /api/health on purpose: a container
+// can be "alive" (the process is running) while its one dependency is
+// down (db container still starting, wrong credentials after a config
+// change, connection pool exhausted) -- that's a real, distinguishable
+// failure mode this app had no way to detect before. Registered ahead of
+// lockdownGate/requireCsrf deliberately -- both also touch the database
+// (lockdownGate queries app_settings on every request), so a check meant
+// to diagnose "is the database reachable" can't sit behind middleware
+// that itself breaks the same way DB is down, or the check never runs at
+// all and a caller just sees a generic 500 instead of an honest "db down".
+// A short query timeout so a hung Postgres doesn't hang this check itself.
+app.get("/api/ready", async (req, res) => {
+  try {
+    await pool.query({ text: "SELECT 1", query_timeout: 3000 });
+    res.json({ ok: true, db: "ok" });
+  } catch (err) {
+    res.status(503).json({ ok: false, db: "unreachable", error: err.message });
+  }
+});
+
 app.use(cookieParser());
 app.use(lockdownGate);
 app.use(requestTiming);
@@ -143,10 +172,6 @@ app.use("/api/badges", badgesRouter);
 app.use("/api/calculator-lock", express.json(), calculatorLockRouter);
 app.use("/api/lockdown", express.json(), lockdownRouter);
 app.use("/api/client-errors", express.json(), clientErrorsRouter);
-
-app.get("/api/health", (req, res) => {
-  res.json({ ok: true });
-});
 
 // The stylesheets are hand-edited source (comments, full indentation) --
 // minifying here at request time, rather than as a separate build step,

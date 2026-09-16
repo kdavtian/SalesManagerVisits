@@ -7,6 +7,7 @@ import { pool } from "../db/pool.js";
 import { requireAuth, requireProductManager } from "../middleware/auth.js";
 import { getEffectiveProductPricing } from "../pricingService.js";
 import { photoUpload, uploadDirPath } from "../upload.js";
+import { matchesDeclaredImageType } from "../utils/imageSniff.js";
 import { parseImportFile, classifyImportRows, applyImportRows } from "../productImport.js";
 
 // In-memory (not disk) -- an import workbook is parsed and discarded, never
@@ -313,6 +314,10 @@ productsRouter.post(
   },
   async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "image file is required" });
+    if (!matchesDeclaredImageType(req.file.path, req.file.mimetype)) {
+      fs.unlink(req.file.path, () => {});
+      return res.status(400).json({ error: "The uploaded file is not a valid image" });
+    }
 
     const { rows } = await pool.query("SELECT image_path FROM products WHERE id = $1", [req.params.id]);
     if (!rows[0]) {

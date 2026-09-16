@@ -8,20 +8,31 @@ what's genuinely missing.
 
 ## What exists today
 
-### Health endpoint
+### Health and readiness endpoints
 
-`GET /api/health` — used by:
+`GET /api/health` — liveness only, no dependency checks. Used by:
 - The Docker `HEALTHCHECK` in `Dockerfile` (container-level restart
-  trigger if the process stops responding).
+  trigger if the process stops responding). Deliberately stays on this
+  endpoint, not `/api/ready` below — a DB outage shouldn't make Docker
+  restart the app container in a loop, since restarting the app can't fix
+  a downstream database problem.
 - `deploy/deploy.sh`'s `docker compose run --rm app npm run migrate` step
   implicitly depends on the `db` health check passing first.
-- `server/scripts/verify-deployment.mjs` (run at the end of every deploy)
-  polls this to confirm the app actually came up before declaring the
-  deploy successful.
 
-Nothing external polls it — no uptime service is wired up. **Adding one
-(even a free-tier external check hitting this endpoint) is the single
-highest-value gap to close here.**
+`GET /api/ready` — also confirms Postgres is actually reachable (a short
+`SELECT 1` with a 3s timeout), returning `503` if not. Registered ahead of
+`lockdownGate`/CSRF middleware in `app.js` on purpose, since those also
+touch the database — a DB-down check has to survive the DB being down.
+Used by:
+- `server/scripts/verify-deployment.mjs` (run at the end of every deploy)
+  polls both endpoints — health first, then readiness — before declaring
+  the deploy successful, so a deploy that came up but can't reach the
+  database (bad credentials after a `.env` edit, wrong database) fails
+  verification instead of getting recorded as a known-good deploy.
+
+Nothing external polls either endpoint — no uptime service is wired up.
+**Adding one (even a free-tier external check hitting `/api/health`) is
+the single highest-value gap to close here.**
 
 ### Application-level monitors (in-process, no separate infra)
 
@@ -73,7 +84,8 @@ closest thing this repo has to automated security observability — see
 
 ## Where to look when something seems wrong
 
-1. `GET /api/health` — is the process even responding?
+1. `GET /api/health` — is the process even responding? Then `GET
+   /api/ready` — can it actually reach Postgres?
 2. `docker compose ps` on the droplet — are all three containers
    (`app`, `db`, `osrm`) up?
 3. `docker compose logs --tail=200 app` — recent errors.
