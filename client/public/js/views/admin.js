@@ -167,19 +167,29 @@ export async function renderTeamSection(container) {
     overlay.querySelector("#cancel-edit-user").addEventListener("click", close);
     overlay.addEventListener("click", (e) => e.target === overlay && close());
 
+    const errorEl = overlay.querySelector("#edit-user-error");
+
     overlay.querySelector("#edit-user-reset").addEventListener("click", () => {
       close();
       openResetPasswordSheet(u.id, u.name);
     });
     overlay.querySelector("#edit-user-delete")?.addEventListener("click", async () => {
       if (!confirm(t("confirm_delete_user"))) return;
-      await api.deleteUser(u.id);
-      close();
-      loadUsers();
+      try {
+        await api.deleteUser(u.id);
+        close();
+        loadUsers();
+      } catch (err) {
+        // Previously unhandled -- a blocked delete (the common case: this
+        // account has check-ins/orders/payments on record) just silently
+        // did nothing from the admin's point of view, sheet still open,
+        // no indication tapping "Delete" had even registered.
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+      }
     });
 
     const form = overlay.querySelector("#edit-user-form");
-    const errorEl = overlay.querySelector("#edit-user-error");
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       errorEl.hidden = true;
