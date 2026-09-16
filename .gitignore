@@ -25,3 +25,7 @@ Thumbs.db
 server/test-results/
 server/playwright-report/
 server/playwright.local.config.mjs
+
+# Droplet-local deploy state (deploy/deploy.sh's fast/full auto-detection) --
+# never meant to be shared across checkouts or committed.
+.last-deploy-sha
