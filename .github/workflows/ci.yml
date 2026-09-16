@@ -40,6 +40,8 @@ jobs:
 
       - run: npm ci
 
+      - run: npm run check:version
+
       - run: npm run migrate
 
       - run: npm test

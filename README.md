@@ -12,7 +12,9 @@ delivery/accounting teams. The "Build order" section below is the
 original scaffold checklist and is kept for history; the app has grown
 well past it since. See [`docs/governance/`](docs/governance/README.md)
 for the current-state architecture, known risks, and the process that
-governs changes from here forward.
+governs changes from here forward, and [`docs/README.md`](docs/README.md)
+for the task-oriented docs index (local setup, configuration, data model,
+deployment, and more).
 
 ## Stack
 

@@ -1,6 +1,6 @@
 {
   "name": "field-visits-server",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,7 +13,8 @@
     "test": "node --test $(find test -name '*.test.js' -not -path 'test/integration/lockdownEngage.test.js') && npm run test:lockdown",
     "test:lockdown": "node --test test/integration/lockdownEngage.test.js",
     "test:e2e": "playwright test",
-    "test:e2e:smoke": "playwright test --grep @smoke"
+    "test:e2e:smoke": "playwright test --grep @smoke",
+    "check:version": "node scripts/check-version-consistency.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
