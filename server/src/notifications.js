@@ -17,5 +17,20 @@ export async function notifyUser(userId, type, { title, body, url } = {}) {
     [userId, type, title, body, url ?? null]
   );
 
-  sendPush(userId, { title, body, url }, rows[0].id);
+  // Awaited and caught here, not left to run unattached -- most callers
+  // (order/payment/plan notification fan-outs) call notifyUser() itself
+  // without awaiting it, inside a try/catch that only guards synchronous
+  // work in the same tick. An unawaited sendPush() failing later (e.g. a
+  // push subscription row whose user was deleted in the meantime) used to
+  // surface as an unhandled rejection with no connection to whatever
+  // request or test triggered it (see R-07 in the risk register --
+  // observed as an intermittent, hard-to-reproduce CI failure in
+  // orderLifecycle.test.js). notifyUser() now never rejects because of a
+  // push-delivery failure; a real DB outage on the INSERT above still
+  // throws normally, since that's a genuine failure the caller should see.
+  try {
+    await sendPush(userId, { title, body, url }, rows[0].id);
+  } catch (err) {
+    console.error(`Push delivery failed for user ${userId}:`, err);
+  }
 }
