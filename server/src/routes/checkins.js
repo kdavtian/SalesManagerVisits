@@ -322,7 +322,12 @@ checkinsRouter.get("/", async (req, res) => {
        COALESCE(
          (SELECT json_agg(json_build_object('id', cp.id) ORDER BY cp.id) FROM checkin_photos cp WHERE cp.checkin_id = ch.id),
          '[]'
-       ) AS photos
+       ) AS photos,
+       -- Lets an "Order placed" outcome row link straight to the order it
+       -- created (see visitDetail.js). A scalar subquery, not a join, so a
+       -- checkin never fans out into multiple rows even in the unlikely
+       -- case of more than one order referencing the same checkin_id.
+       (SELECT o.id FROM orders o WHERE o.checkin_id = ch.id ORDER BY o.id DESC LIMIT 1) AS order_id
      FROM checkins ch
      JOIN users u ON u.id = ch.user_id
      JOIN customers c ON c.id = ch.customer_id

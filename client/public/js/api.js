@@ -134,6 +134,8 @@ export const api = {
   updateUser: (id, data) => json(`/users/${id}`, "PATCH", data),
   resetUserPassword: (id, password) => json(`/users/${id}/password`, "PATCH", { password }),
   deleteUser: (id) => request(`/users/${id}`, { method: "DELETE" }),
+  getUserDeletionReport: (id) => request(`/users/${id}/deletion-report`),
+  deleteUserRecords: (id) => request(`/users/${id}/records`, { method: "DELETE" }),
 
   getSettings: () => request("/settings"),
   updateSettings: (data) => json("/settings", "PATCH", data),

@@ -6324,6 +6324,26 @@ button.list-row-icon {
   margin-top: 4px;
 }
 
+.connected-records-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.connected-records-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 0.92rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.connected-records-row:last-child {
+  border-bottom: none;
+}
+
 /* Interactive variant: Warehouse Inventory's collapsible brand/family
    headers (see views/warehouse.js render()). Same look as the plain
    .list-group-heading elsewhere, just as a full-width <button> with a
@@ -7381,6 +7401,21 @@ form select,
   align-items: center;
   gap: 10px;
   font-size: 0.92rem;
+}
+
+.visit-detail-outcome-row-link {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.visit-detail-outcome-row-link .chevron {
+  margin-left: auto;
 }
 
 .visit-detail-outcome-icon {

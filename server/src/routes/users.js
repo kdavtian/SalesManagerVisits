@@ -153,6 +153,136 @@ usersRouter.patch("/:id/password", passwordChangeLimiter, async (req, res) => {
   res.status(204).end();
 });
 
+// The DELETE /:id 23503 case below ("they have activity records") is real
+// -- most tables referencing users(id) aren't ON DELETE CASCADE/SET NULL on
+// purpose, so the audit trail survives a rep leaving. But it also means a
+// throwaway test account that did a couple of check-ins can never be
+// removed at all. These three groups back a narrow admin escape hatch for
+// exactly that case: "show me everything connected to this account, let me
+// clear the safe stuff, then delete the user."
+//
+// AUTO_CLEAR: rows that are this user's *own* activity (or a stale
+// reviewer/approver pointer on someone else's row that's safe to null out)
+// -- clearing these never touches another person's business record.
+const AUTO_CLEAR = [
+  { table: "checkins", column: "user_id", mode: "delete", label: "checkins" },
+  { table: "cash_expenses", column: "user_id", mode: "delete", label: "cash_expenses" },
+  { table: "customer_edit_requests", column: "requested_by", mode: "delete", label: "edit_requests_made" },
+  { table: "customer_edit_requests", column: "reviewed_by", mode: "null", label: "edit_requests_reviewed" },
+  { table: "visit_plans", column: "reviewed_by", mode: "null", label: "visit_plans_reviewed" },
+  { table: "perf_plans", column: "submitted_by", mode: "null", label: "perf_plans_submitted" },
+  { table: "perf_plans", column: "approved_by", mode: "null", label: "perf_plans_approved" },
+  { table: "perf_plans", column: "closed_by", mode: "null", label: "perf_plans_closed" },
+];
+
+// MUST_RESOLVE: rows that are someone *else's* real record (a customer, a
+// payment, a cash handoff, a delivery/warehouse assignment, a plan this
+// user authored for someone else) -- auto-deleting or renumbering these
+// would silently destroy business data or an audit trail, so the admin has
+// to resolve each by hand (reassign the customer, wait out the handoff
+// history, etc.) first. The delete-records action below refuses outright
+// while any of these is non-zero.
+const MUST_RESOLVE = [
+  { table: "customers", column: "created_by", label: "customers_created" },
+  { table: "customers", column: "assigned_manager_id", label: "customers_assigned" },
+  { table: "visit_plans", column: "created_by", label: "visit_plans_authored_for_others", extra: "user_id != $1" },
+  { table: "visit_plan_rules", column: "created_by", label: "visit_plan_rules_authored_for_others", extra: "user_id != $1" },
+  { table: "perf_plans", column: "created_by", label: "perf_plans_authored" },
+  { table: "perf_plan_audit", column: "actor_id", label: "perf_plan_audit_entries" },
+  { table: "perf_plan_comments", column: "author_id", label: "perf_plan_comments" },
+  { table: "payments", column: "sales_manager_id", label: "payments_as_sales_manager" },
+  { table: "payments", column: "created_by", label: "payments_created" },
+  { table: "pod_records", column: "driver_id", label: "deliveries_as_driver" },
+  { table: "delivery_routes", column: "driver_id", label: "delivery_routes_as_driver" },
+  { table: "delivery_routes", column: "created_by", label: "delivery_routes_created" },
+  { table: "cash_handoffs", column: "from_user_id", label: "cash_handoffs_sent" },
+  { table: "cash_handoffs", column: "to_user_id", label: "cash_handoffs_received" },
+  { table: "cash_handoffs", column: "submitted_by", label: "cash_handoffs_submitted" },
+  { table: "cash_handoffs", column: "confirmed_by", label: "cash_handoffs_confirmed" },
+  { table: "cash_handoffs", column: "rejected_by", label: "cash_handoffs_rejected" },
+];
+
+// WILL_CASCADE: already ON DELETE CASCADE, so deleting the user row itself
+// takes care of these with no action needed here -- never blocking. Purely
+// informational, so an admin sees "this also deletes N orders" up front
+// instead of discovering it after the fact.
+const WILL_CASCADE = [
+  { table: "orders", column: "user_id", label: "orders" },
+  { table: "visit_plans", column: "user_id", label: "visit_plans" },
+  { table: "visit_plan_rules", column: "user_id", label: "visit_plan_rules" },
+  { table: "push_subscriptions", column: "user_id", label: "push_subscriptions" },
+  { table: "notifications", column: "user_id", label: "notifications" },
+];
+
+async function countRows(pool, list, userId) {
+  const out = {};
+  for (const { table, column, label, extra } of list) {
+    const where = extra ? `${column} = $1 AND ${extra}` : `${column} = $1`;
+    // table/column/extra all come from the fixed arrays above, never from
+    // request input, so this interpolation carries no injection risk.
+    const { rows } = await pool.query(`SELECT count(*)::int AS n FROM ${table} WHERE ${where}`, [userId]);
+    out[label || `${table}.${column}`] = rows[0].n;
+  }
+  return out;
+}
+
+// What's connected to this account -- backs the admin's "records connected
+// to this user" sheet before they attempt DELETE /:id/records.
+usersRouter.get("/:id/deletion-report", async (req, res) => {
+  const userId = Number(req.params.id);
+  if (!userId) return res.status(400).json({ error: "Invalid user id" });
+  const { rows } = await pool.query("SELECT id, name, email FROM users WHERE id = $1", [userId]);
+  if (!rows[0]) return res.status(404).json({ error: "User not found" });
+
+  const mustResolve = await countRows(pool, MUST_RESOLVE, userId);
+  const willClear = await countRows(pool, AUTO_CLEAR, userId);
+  const willCascade = await countRows(pool, WILL_CASCADE, userId);
+
+  res.json({
+    user: rows[0],
+    mustResolve,
+    willClear,
+    willCascade,
+    canDeleteRecords: Object.values(mustResolve).every((n) => n === 0),
+  });
+});
+
+// Clears every AUTO_CLEAR row for this user, so a subsequent DELETE /:id no
+// longer 23503s on them -- refuses if anything in MUST_RESOLVE is still
+// non-zero (re-checked here, inside the transaction, in case the admin's
+// last report is stale).
+usersRouter.delete("/:id/records", async (req, res) => {
+  const userId = Number(req.params.id);
+  if (!userId) return res.status(400).json({ error: "Invalid user id" });
+  if (userId === req.user.id) {
+    return res.status(400).json({ error: "You can't delete your own records" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const mustResolve = await countRows(client, MUST_RESOLVE, userId);
+    if (Object.values(mustResolve).some((n) => n > 0)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        error: "This user still has records that must be resolved manually (customers, payments, cash handoffs, or delivery/warehouse assignments) before their records can be cleared.",
+        mustResolve,
+      });
+    }
+    for (const { table, column, mode } of AUTO_CLEAR) {
+      const sql = mode === "delete" ? `DELETE FROM ${table} WHERE ${column} = $1` : `UPDATE ${table} SET ${column} = NULL WHERE ${column} = $1`;
+      await client.query(sql, [userId]);
+    }
+    await client.query("COMMIT");
+    res.status(204).end();
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+});
+
 usersRouter.delete("/:id", async (req, res) => {
   if (Number(req.params.id) === req.user.id) {
     return res.status(400).json({ error: "You can't delete your own account" });

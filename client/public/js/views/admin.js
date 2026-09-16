@@ -35,6 +35,95 @@ function lastSeenSummary(u) {
   return `${formatDateTime(u.last_seen_at)} · ${version} · ${device}`;
 }
 
+function recordCountRows(counts) {
+  return Object.entries(counts)
+    .filter(([, n]) => n > 0)
+    .map(([key, n]) => `<div class="connected-records-row"><span>${escapeHtml(t(`record_${key}`))}</span><strong>${n}</strong></div>`)
+    .join("");
+}
+
+// The one-case escape hatch for a test account that accumulated enough
+// check-ins/edit-requests/etc. to permanently 23503 out of DELETE /:id --
+// see server/src/routes/users.js's AUTO_CLEAR/MUST_RESOLVE for what's safe
+// to auto-clear vs. what represents someone else's real record and has to
+// be resolved by hand first. `retryDelete` is the caller's own delete
+// attempt (already wired to show this sheet again on another 409), so a
+// successful clear here can immediately re-attempt it instead of making
+// the admin tap "Delete" a second time.
+function openUserRecordsSheet(u, retryDelete) {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.innerHTML = `<div class="sheet"><p class="loading-state" role="status">${t("loading")}</p></div>`;
+  document.body.appendChild(overlay);
+  activateDialog(overlay);
+  overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+
+  api.getUserDeletionReport(u.id).then(
+    (report) => renderReport(report),
+    (err) => {
+      overlay.querySelector(".sheet").innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    }
+  );
+
+  function renderReport(report) {
+    const willClearRows = recordCountRows(report.willClear);
+    const willCascadeRows = recordCountRows(report.willCascade);
+    const mustResolveRows = recordCountRows(report.mustResolve);
+    const hasAnything = willClearRows || willCascadeRows || mustResolveRows;
+
+    overlay.querySelector(".sheet").innerHTML = `
+      <h2>${t("connected_records_title")}</h2>
+      <p class="muted">${escapeHtml(u.name)} · ${escapeHtml(u.email)}</p>
+      ${!hasAnything ? `<p class="empty-state">${t("connected_records_none")}</p>` : ""}
+      ${
+        mustResolveRows
+          ? `<h3 class="list-group-heading">${t("connected_records_must_resolve")}</h3>
+             <p class="muted">${t("connected_records_must_resolve_hint")}</p>
+             <div class="connected-records-list">${mustResolveRows}</div>`
+          : ""
+      }
+      ${
+        willClearRows
+          ? `<h3 class="list-group-heading">${t("connected_records_will_clear")}</h3>
+             <div class="connected-records-list">${willClearRows}</div>`
+          : ""
+      }
+      ${
+        willCascadeRows
+          ? `<h3 class="list-group-heading">${t("connected_records_will_cascade")}</h3>
+             <div class="connected-records-list">${willCascadeRows}</div>`
+          : ""
+      }
+      <p class="form-error" id="records-sheet-error" hidden></p>
+      <div class="sheet-actions">
+        <button type="button" class="btn" id="records-sheet-close">${t("done")}</button>
+        ${report.canDeleteRecords && willClearRows ? `<button type="button" class="btn btn-danger" id="records-sheet-clear">${t("connected_records_clear_btn")}</button>` : ""}
+      </div>
+    `;
+
+    overlay.querySelector("#records-sheet-close").addEventListener("click", () => overlay.remove());
+    overlay.querySelector("#records-sheet-clear")?.addEventListener("click", async (e) => {
+      if (!confirm(t("confirm_clear_records"))) return;
+      const btn = e.currentTarget;
+      const errorEl = overlay.querySelector("#records-sheet-error");
+      btn.disabled = true;
+      try {
+        await api.deleteUserRecords(u.id);
+        btn.textContent = t("connected_records_cleared_now_delete");
+        // Either outcome closes this sheet -- a success already closed the
+        // edit sheet too (via retryDelete's own close()+loadUsers()); a
+        // failure leaves the edit sheet open showing its own fresh error.
+        await retryDelete();
+        overlay.remove();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+        btn.disabled = false;
+      }
+    });
+  }
+}
+
 export async function renderTeamSection(container) {
   container.innerHTML = `
     <div id="user-list" class="card-list"><p class="loading-state" role="status">${t("loading")}</p></div>
@@ -173,20 +262,37 @@ export async function renderTeamSection(container) {
       close();
       openResetPasswordSheet(u.id, u.name);
     });
-    overlay.querySelector("#edit-user-delete")?.addEventListener("click", async () => {
-      if (!confirm(t("confirm_delete_user"))) return;
+    async function attemptDelete() {
       try {
         await api.deleteUser(u.id);
         close();
         loadUsers();
+        return true;
       } catch (err) {
         // Previously unhandled -- a blocked delete (the common case: this
         // account has check-ins/orders/payments on record) just silently
         // did nothing from the admin's point of view, sheet still open,
         // no indication tapping "Delete" had even registered.
-        errorEl.textContent = err.message;
+        errorEl.innerHTML = "";
+        errorEl.append(document.createTextNode(err.message + " "));
+        // Only the 409 "activity records" case has anything a records sheet
+        // could help with -- a 403/404/etc has no connected-records path.
+        if (err.status === 409) {
+          const link = document.createElement("button");
+          link.type = "button";
+          link.className = "btn-link";
+          link.textContent = t("view_connected_records");
+          link.addEventListener("click", () => openUserRecordsSheet(u, attemptDelete));
+          errorEl.append(link);
+        }
         errorEl.hidden = false;
+        return false;
       }
+    }
+
+    overlay.querySelector("#edit-user-delete")?.addEventListener("click", async () => {
+      if (!confirm(t("confirm_delete_user"))) return;
+      await attemptDelete();
     });
 
     const form = overlay.querySelector("#edit-user-form");
