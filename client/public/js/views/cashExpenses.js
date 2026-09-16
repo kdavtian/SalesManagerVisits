@@ -36,11 +36,32 @@ export async function renderCashExpenses(root, navigate) {
   const dateInput = container.querySelector("#expenses-date");
 
   let allExpenses = [];
+  let hasMore = false;
 
+  // Server-paginated (see cashExpenses.js's GET / -- unbounded org-wide
+  // history for director/accountant/admin/ceo otherwise) -- "Load more"
+  // fetches the next page and appends, same as views/orders.js. Once a
+  // local search/date filter is active there's no meaningful "next page"
+  // of that filtered view to fetch, only of the whole list, so the button
+  // hides (same reasoning as orders.js).
   async function load() {
     listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     try {
-      allExpenses = await api.listCashExpenses();
+      const { rows, has_more } = await api.listCashExpenses();
+      allExpenses = rows;
+      hasMore = has_more;
+      paintFiltered();
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+    }
+  }
+
+  async function loadMore() {
+    try {
+      const { rows, has_more } = await api.listCashExpenses({ offset: allExpenses.length });
+      allExpenses = allExpenses.concat(rows);
+      hasMore = has_more;
       paintFiltered();
     } catch (err) {
       errorEl.textContent = err.message;
@@ -56,13 +77,13 @@ export async function renderCashExpenses(root, navigate) {
       if (date && e.created_at.slice(0, 10) !== date) return false;
       return true;
     });
-    paint(filtered);
+    paint(filtered, !query && !date);
   }
 
   searchInput.addEventListener("input", paintFiltered);
   dateInput.addEventListener("change", paintFiltered);
 
-  function paint(expenses) {
+  function paint(expenses, canLoadMore) {
     if (!expenses.length) {
       listEl.innerHTML = `<p class="empty-state">${t("no_expenses_yet")}</p>`;
       return;
@@ -81,6 +102,11 @@ export async function renderCashExpenses(root, navigate) {
       </button>`;
       })
       .join("");
+
+    if (hasMore && canLoadMore) {
+      listEl.insertAdjacentHTML("beforeend", `<button type="button" class="btn btn-block" id="expenses-load-more">${t("load_more")}</button>`);
+      listEl.querySelector("#expenses-load-more").addEventListener("click", loadMore);
+    }
 
     listEl.querySelectorAll(".expense-card").forEach((el) => {
       const expense = expenses.find((e) => e.id === Number(el.dataset.id));
