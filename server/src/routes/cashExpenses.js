@@ -7,9 +7,14 @@ export const cashExpensesRouter = Router();
 
 cashExpensesRouter.use(requireAuth);
 
-// A manager sees only their own spend; director/ceo/accountant/admin see
-// everyone's -- same visibility line as the financial CSV exports, since
-// this is the same kind of money-reporting data.
+const PAGE_SIZE = 100;
+
+// A manager sees only their own spend (naturally bounded -- one person's
+// field expenses); director/ceo/accountant/admin see everyone's, which
+// grows without bound over the org's lifetime -- same LIMIT n+1/has_more
+// convention as GET /api/orders (improvement list 7.3). The frontend's own
+// search/date filter still works against whatever's been loaded so far,
+// same as views/orders.js's own "load more" list.
 cashExpensesRouter.get("/", async (req, res) => {
   const params = [];
   let where = "";
@@ -17,15 +22,18 @@ cashExpensesRouter.get("/", async (req, res) => {
     params.push(req.user.id);
     where = `WHERE ce.user_id = $${params.length}`;
   }
+  const offsetNum = Math.max(0, Number(req.query.offset) || 0);
+  params.push(PAGE_SIZE + 1, offsetNum);
   const { rows } = await pool.query(
     `SELECT ce.*, u.name AS user_name
      FROM cash_expenses ce
      JOIN users u ON u.id = ce.user_id
      ${where}
-     ORDER BY ce.created_at DESC`,
+     ORDER BY ce.created_at DESC
+     LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params
   );
-  res.json(rows);
+  res.json({ rows: rows.slice(0, PAGE_SIZE), has_more: rows.length > PAGE_SIZE });
 });
 
 cashExpensesRouter.post("/", async (req, res) => {
