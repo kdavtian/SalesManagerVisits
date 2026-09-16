@@ -5,7 +5,10 @@
 // the thin "run this for real" entrypoint; this file is the "build the
 // app" one. See test/integration/testServer.js for how tests use this.
 import "dotenv/config";
-import "express-async-errors";
+// Express 5 (see package.json) catches a rejected promise from an async
+// route handler natively and forwards it to the error-handling middleware
+// below -- express-async-errors existed only to patch that behavior into
+// Express 4 and is no longer needed.
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
@@ -241,7 +244,13 @@ app.get("/manifest.json", async (req, res) => {
   );
 });
 
-app.get("*", async (req, res) => {
+// A raw RegExp, not the string "*" -- Express 5's path-to-regexp no longer
+// accepts a bare "*" (its named-wildcard replacement, "/*splat", requires
+// at least one path segment after the slash and so wouldn't match the
+// root path "/" itself, which this route must still serve). A RegExp
+// bypasses that string-pattern parsing entirely and is matched directly,
+// same approach already used above for the CSS route.
+app.get(/.*/, async (req, res) => {
   // Read server-side (never fetched by the client) so the calculator
   // disguise's "touches no network before unlock" property holds whether
   // the feature is on or off -- see bootGate.js.
