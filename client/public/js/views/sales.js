@@ -115,9 +115,14 @@ export async function renderSales(root, navigate) {
         </button>
         <div class="detail-header-title"><h1>${t("sales_title")}</h1></div>
       </div>
-      <div id="sales-sync-badge"></div>
-      <p class="muted sales-source-hint">${t("sales_source_hint")}</p>
-      <div class="sales-filter-row">
+      <div class="sales-info-row">
+        <div id="sales-sync-badge"></div>
+        <button type="button" class="sales-info-toggle" id="sales-info-toggle" aria-expanded="false" aria-label="${escapeHtml(t("sales_source_hint"))}">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><circle cx="12" cy="7.75" r="0.15" fill="currentColor" stroke="currentColor" stroke-width="2.4"/></svg>
+        </button>
+      </div>
+      <p class="muted sales-source-hint" id="sales-source-hint" hidden>${t("sales_source_hint")}</p>
+      <div class="activity-custom-range">
         <label>${t("date_from")}<input type="date" id="sales-from" value="${from}" /></label>
         <label>${t("date_to")}<input type="date" id="sales-to" value="${to}" /></label>
       </div>
@@ -142,7 +147,19 @@ export async function renderSales(root, navigate) {
   const toInput = container.querySelector("#sales-to");
   const channelBarEl = container.querySelector("#sales-channel-bar");
   const searchInput = container.querySelector("#sales-search");
+  const infoToggleBtn = container.querySelector("#sales-info-toggle");
+  const sourceHintEl = container.querySelector("#sales-source-hint");
   let channelPills = [{ value: "", label: t("all_statuses"), count: 0 }];
+
+  // Both header texts (the sync-freshness note and the longer "what this
+  // data is" explanation) used to sit stacked under the title by default --
+  // collapsed here into the one sync badge plus a small (i) toggle, so the
+  // header stays one line unless a rep actually wants the explanation.
+  infoToggleBtn.addEventListener("click", () => {
+    const expanded = infoToggleBtn.getAttribute("aria-expanded") === "true";
+    infoToggleBtn.setAttribute("aria-expanded", String(!expanded));
+    sourceHintEl.hidden = expanded;
+  });
 
   // Same tappable-pill filter as Activity's "by sales manager" bar (see
   // views/activity.js's renderManagerPills) -- tapping the pill that's

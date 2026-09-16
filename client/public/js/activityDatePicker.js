@@ -52,6 +52,18 @@ function isoFromLocalDate(date) {
   return `${year}-${month}-${day}`;
 }
 
+// Structural "from"/"to" check (DOM order within the shared range
+// container) instead of hardcoded ids -- this module enhances any
+// .activity-custom-range date pair, not just Activity's own "custom-from"/
+// "custom-to" (e.g. Sales' from/to reuses it too), and a fixed id pair
+// would only ever match one of them.
+function isFromInput(input) {
+  const counterpart = [...(input.closest(".activity-custom-range")?.querySelectorAll('input[type="date"]') ?? [])].find(
+    (el) => el !== input
+  );
+  return Boolean(counterpart && input.compareDocumentPosition(counterpart) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
 function sameDay(a, b) {
   return Boolean(a && b)
     && a.getFullYear() === b.getFullYear()
@@ -142,7 +154,7 @@ function renderPicker() {
   const today = new Date();
   const month = visibleMonth || draftDate || today;
   const selectedIso = isoFromLocalDate(draftDate);
-  const targetLabel = activeInput.id === "custom-from" ? copy.start : copy.end;
+  const targetLabel = isFromInput(activeInput) ? copy.start : copy.end;
   const cells = getDaysForMonth(month);
 
   overlay.innerHTML = `
@@ -234,17 +246,19 @@ function commitPicker() {
   if (!activeInput) return;
   const value = isoFromLocalDate(draftDate);
   const currentInput = activeInput;
-  const counterpartId = currentInput.id === "custom-from" ? "custom-to" : "custom-from";
-  const counterpart = document.getElementById(counterpartId);
+  const counterpart = [...currentInput.closest(".activity-custom-range").querySelectorAll('input[type="date"]')].find(
+    (el) => el !== currentInput
+  );
+  const isFrom = isFromInput(currentInput);
 
   currentInput.value = value;
 
   // Keep the range valid without forcing the user through an error state.
   // If a chosen boundary crosses the other boundary, move the other side to
-  // the same day; the existing Activity change handler then performs one load.
+  // the same day; the existing change handler then performs one load.
   if (value && counterpart?.value) {
-    if (currentInput.id === "custom-from" && value > counterpart.value) counterpart.value = value;
-    if (currentInput.id === "custom-to" && value < counterpart.value) counterpart.value = value;
+    if (isFrom && value > counterpart.value) counterpart.value = value;
+    if (!isFrom && value < counterpart.value) counterpart.value = value;
     updateFieldButton(counterpart);
   }
 

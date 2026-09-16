@@ -157,7 +157,23 @@ usersRouter.delete("/:id", async (req, res) => {
   if (Number(req.params.id) === req.user.id) {
     return res.status(400).json({ error: "You can't delete your own account" });
   }
-  const { rowCount } = await pool.query("DELETE FROM users WHERE id = $1", [req.params.id]);
-  if (!rowCount) return res.status(404).json({ error: "User not found" });
-  res.status(204).end();
+  try {
+    const { rowCount } = await pool.query("DELETE FROM users WHERE id = $1", [req.params.id]);
+    if (!rowCount) return res.status(404).json({ error: "User not found" });
+    res.status(204).end();
+  } catch (err) {
+    // Many tables reference users(id) without ON DELETE CASCADE (checkins,
+    // customers.created_by, cash expenses, visit plans, cash handoffs,
+    // performance records, ...) -- any account that ever actually did
+    // something in the app hits this, and the admin UI had no handling for
+    // it at all (a raw 500 the delete button's click handler silently
+    // swallowed, so tapping "delete" looked like it did nothing).
+    if (err.code === "23503") {
+      return res.status(409).json({
+        error:
+          "Can't delete this user: they have activity records (check-ins, orders, payments, etc.) that must be kept for the audit trail. Reset their password instead if you just want to disable access.",
+      });
+    }
+    throw err;
+  }
 });
