@@ -8,22 +8,23 @@ decisions made while implementing it — read this before touching any
 resolve real ambiguity in the original brief against this app's actual
 code, not just restate the brief.
 
-**Status**: Phase 6 (employee UI and Home integration) in progress;
-Phases 2-5 (schema, pure rule engine, source integration and ledger,
-challenge engine and administration, reward accounting and permissions)
-shipped separately. See the phase list in
+**Status**: Phase 7 (gamification polish) in progress; Phases 2-6 (schema,
+pure rule engine, source integration and ledger, challenge engine and
+administration, reward accounting and permissions, employee UI and Home
+integration) shipped separately. See the phase list in
 [`release-process.md`](release-process.md) conventions — this module ships
 as a sequence of separately reviewed PRs, one per phase, each fully tested
 before the next starts. As of this phase there's a real (if minimal)
 employee-facing surface: a "Bonuses" Home Quick Action → `#/bonuses` screen
-showing points/level/active-challenge progress/reward claims, plus the
-admin-only screens from earlier phases (Settings → Admin Workspace →
-Bonuses: template management gated to `canManageBonusChallenges`,
-reward-claim review gated to `canApproveBonusRewards`/`canRecordBonusPayouts`)
-and two in-process workers (`src/bonusReconciliation.js`,
-`src/bonusChallengeWorker.js`). Everything stays invisible/inert while
-`app_settings.bonuses_enabled` is `false` (the default in every
-environment, including production).
+showing points/level/active-challenge progress/reward claims/badges/
+personal bests, plus the admin-only screens from earlier phases (Settings
+→ Admin Workspace → Bonuses: template management gated to
+`canManageBonusChallenges`, reward-claim review gated to
+`canApproveBonusRewards`/`canRecordBonusPayouts`) and three in-process
+workers (`src/bonusReconciliation.js`, `src/bonusChallengeWorker.js`, the
+latter now also updating personal bests each tick). Everything stays
+invisible/inert while `app_settings.bonuses_enabled` is `false` (the
+default in every environment, including production).
 
 ## Decisions resolved during Phase 1 discovery
 
@@ -373,10 +374,61 @@ the shape follows existing conventions directly:
   not referenced yet — there is nothing in the database to show for them
   until that phase seeds/awards them.
 
+## Decisions made during Phase 7
+
+- **Badges are gamification-only, tracked as a followup side effect of
+  the triggering event's own transaction, never nested inside it.**
+  `bonusBadges.js`'s `awardBadge()` opens its own `pool.connect()` +
+  `BEGIN`/`COMMIT` and is called only *after* the ingest/claim/progress
+  code path that triggers it has already committed — awarding a badge is
+  purely informational (no cash/points effect) and must never be able to
+  roll back or block the underlying business transaction it observes.
+  Idempotency reuses the same `operation_key` UNIQUE-constraint pattern as
+  every other phase (`badge:${code}:${userId}`), which also elegantly
+  answers "is this the user's first X" without scanning history.
+
+- **Only the 4 Release-1 badges from the brief are wired**: first
+  delivered order, first accepted collection, first approved reward claim,
+  first completed balanced-basket challenge — matching the four rows
+  seeded in `bonus_badge_definitions` (migrations/076). Each is awarded at
+  its natural trigger point (`bonusSourceIngest.js`'s
+  `ingestOrderDelivery`/`ingestCollectionContribution`,
+  `bonusRewardClaims.js`'s `approveClaim`,
+  `bonusChallengeProgress.js`'s `recomputeParticipantProgress`) rather
+  than via a separate sweep.
+
+- **Personal bests are "highest confirmed full-calendar-week total,"
+  never the in-progress week.** `bonusPersonalBests.js`'s
+  `updatePersonalBestsForWeek` is only ever called by the challenge
+  worker's tick with *last* week's bounds
+  (`lastCompletedWeekBounds`) — an in-progress week's partial total could
+  never fairly compete with a past full week's total, and would keep
+  changing underneath a displayed "personal best" as the week continues.
+  The UPSERT's `GREATEST()` means a best can only ever hold steady or
+  rise, never fall, even though the worker recomputes the same completed
+  week's totals on every hourly tick.
+
+- **Next-action messaging is a single static line above the active-
+  challenges list**, chosen from three states (no active challenge /
+  in-progress / target reached) rather than a rules engine — the brief
+  asks for "clear next-step guidance," which these three states already
+  cover for Release 1's challenge types.
+
+- **Reduced-motion celebrations are satisfied by having no celebration
+  animation at all**, on any device or `prefers-reduced-motion` setting —
+  the employee screen's badge/personal-best/level UI is entirely static
+  HTML, so there's nothing to disable. `npm run verify:ui`'s existing
+  "reduced-motion preference is respected" check continues to pass
+  unchanged.
+
+- **No Armenian translations for the new badge/personal-best/next-action
+  i18n keys**, consistent with the rest of the Bonuses module's existing
+  `en`-only keys (see Phase 6's scope notes) — `hy` falls back to `en`
+  for every `bonuses_*`/`bonus_*` key already, not just these new ones.
+
 ## Not yet built
 
-Gamification polish (levels/badges/milestones/personal bests, Phase 7) and
-end-to-end validation (Phase 8), each its own PR. Also still open, per the
+End-to-end validation (Phase 8), its own PR. Also still open, per the
 scope notes above: Phase 4 admin UI's gaps (no wizard, no product-sales
 form) and Phase 6's deliberate non-removal of Monthly Leaders. See the
 brief itself for the full acceptance-test matrix each later phase is

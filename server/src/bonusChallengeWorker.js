@@ -16,6 +16,7 @@ import { recomputeRoundProgress } from "./bonusChallengeProgress.js";
 import { syncProductSalesContributions } from "./bonusProductContributions.js";
 import { issueWatermelonAward } from "./bonusChallengeAwards.js";
 import { createClaimsForFinalizedRound } from "./bonusRewardClaims.js";
+import { updatePersonalBestsForWeek, lastCompletedWeekBounds } from "./bonusPersonalBests.js";
 
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // hourly, same cadence as the other Bonuses/summary workers
 
@@ -80,6 +81,9 @@ export async function runChallengeEngineTick(now = new Date()) {
     if (result.finalized) roundsFinalized += 1;
     claimsCreated += result.claimsCreated;
   }
+
+  const lastWeek = lastCompletedWeekBounds(now);
+  await updatePersonalBestsForWeek(lastWeek.startAt, lastWeek.endAt);
 
   return { roundsCreated, roundsRecomputed, awardsIssued, roundsFinalized, claimsCreated };
 }

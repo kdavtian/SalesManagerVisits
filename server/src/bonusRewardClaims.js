@@ -11,6 +11,7 @@
 // guarding against two admins approving/paying the same claim at once.
 import { pool } from "./db/pool.js";
 import { canApproveBonusRewards, canRecordBonusPayouts } from "./roles.js";
+import { awardFirstApprovedRewardBadge } from "./bonusBadges.js";
 
 const AWAITING = "awaiting_validation";
 
@@ -121,7 +122,7 @@ function requireStatus(claim, allowed, verb) {
 // challenge's participant).
 export async function approveClaim(claimId, actorRole, actorId, expectedVersion) {
   if (!canApproveBonusRewards(actorRole)) throw new Error("Not allowed to approve reward claims");
-  return withClaimLock(claimId, expectedVersion, "approve", actorId, (claim) => {
+  const updated = await withClaimLock(claimId, expectedVersion, "approve", actorId, (claim) => {
     if (claim.user_id === actorId) throw new Error("Cannot approve your own reward claim");
     requireStatus(claim, [AWAITING, "on_hold"], "approve");
     return {
@@ -131,6 +132,8 @@ export async function approveClaim(claimId, actorRole, actorId, expectedVersion)
       after: { status: "approved" },
     };
   });
+  await awardFirstApprovedRewardBadge(updated.user_id, claimId);
+  return updated;
 }
 
 export async function rejectClaim(claimId, actorRole, actorId, reason, expectedVersion) {

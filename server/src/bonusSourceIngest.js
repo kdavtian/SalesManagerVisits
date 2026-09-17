@@ -25,6 +25,7 @@ import { evidenceFromCheckin, findNearbyCheckinForLinkage } from "./bonusGpsEvid
 import { getEarningUnitForUpdate, addToEarningUnit, lockEarningUnitById } from "./bonusEarningUnits.js";
 import { postLedgerEntry, reverseLedgerEntry } from "./bonusLedger.js";
 import { insertIdempotent } from "./bonusIdempotency.js";
+import { awardFirstDeliveredOrderBadge, awardFirstAcceptedCollectionBadge } from "./bonusBadges.js";
 
 const FULL_CREDIT_SCALED = toScaled(1); // 2
 const HALF_CREDIT_SCALED = toScaled(0.5); // 1
@@ -183,6 +184,7 @@ export async function ingestCollectionContribution(paymentId) {
       }));
     }
     await client.query("COMMIT");
+    if (ledger) await awardFirstAcceptedCollectionBadge(payment.sales_manager_id, paymentId);
     return { contribution, ledger };
   } catch (err) {
     await client.query("ROLLBACK");
@@ -265,6 +267,7 @@ export async function ingestOrderDelivery(orderId) {
       }));
     }
     await client.query("COMMIT");
+    if (ledger) await awardFirstDeliveredOrderBadge(order.user_id, orderId);
     return { contribution, ledger };
   } catch (err) {
     await client.query("ROLLBACK");

@@ -6,6 +6,8 @@
 // ingest/worker code.
 import { pool } from "./db/pool.js";
 import { fromScaled } from "./bonusUnits.js";
+import { listBadgesForUser } from "./bonusBadges.js";
+import { listPersonalBestsForUser } from "./bonusPersonalBests.js";
 
 const COLLECTIBLE_ACTIVITIES = ["strawberry", "carrot", "apple", "cherry", "watermelon"];
 
@@ -77,5 +79,11 @@ export async function getBonusSummaryForUser(userId) {
     [userId]
   );
 
-  return { pointsTotal, collectibleCounts, level, activeChallenges, claims };
+  const badges = await listBadgesForUser(userId);
+  const personalBestsRaw = await listPersonalBestsForUser(userId);
+  const personalBests = Object.fromEntries(
+    personalBestsRaw.map((b) => [b.metric, { value: fromScaled(b.best_value_scaled), achievedWeekStart: b.achieved_week_start }])
+  );
+
+  return { pointsTotal, collectibleCounts, level, activeChallenges, claims, badges, personalBests };
 }

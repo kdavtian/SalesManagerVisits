@@ -103,6 +103,43 @@ export async function renderBonuses(root, navigate) {
         .join("")
     : `<p class="empty-state">${t("bonuses_no_active_challenges")}</p>`;
 
+  const nextActionKey = summary.activeChallenges.length
+    ? summary.activeChallenges.some((c) => c.overall_status === "target_reached")
+      ? "bonuses_next_action_target_reached"
+      : "bonuses_next_action_in_progress"
+    : "bonuses_next_action_no_challenges";
+
+  const badgesHtml = summary.badges.length
+    ? summary.badges
+        .map(
+          (b) => `
+    <div class="card">
+      <div class="user-row-top">
+        <strong>${t(b.title_key)}</strong>
+      </div>
+      <div class="user-row-meta">
+        <span class="muted">${escapeHtml(b.description_key ? t(b.description_key) : "")}</span>
+      </div>
+    </div>
+  `
+        )
+        .join("")
+    : `<p class="empty-state">${t("bonuses_no_badges")}</p>`;
+
+  const personalBestEntries = Object.entries(summary.personalBests || {});
+  const personalBestsHtml = personalBestEntries.length
+    ? personalBestEntries
+        .map(
+          ([metric, best]) => `
+    <div class="stat-card">
+      <span class="stat-value">${best.value}</span>
+      <span class="stat-label">${t(`bonuses_personal_best_${metric}`)}</span>
+    </div>
+  `
+        )
+        .join("")
+    : `<p class="empty-state">${t("bonuses_no_personal_bests")}</p>`;
+
   const claimsHtml = summary.claims.length
     ? summary.claims
         .map(
@@ -143,7 +180,18 @@ export async function renderBonuses(root, navigate) {
 
       <div>
         <h2 class="section-title section-title-tight">${t("bonuses_active_challenges")}</h2>
+        <p class="muted">${t(nextActionKey)}</p>
         <div class="card-list">${challengesHtml}</div>
+      </div>
+
+      <div>
+        <h2 class="section-title section-title-tight">${t("bonuses_badges_title")}</h2>
+        <div class="card-list">${badgesHtml}</div>
+      </div>
+
+      <div>
+        <h2 class="section-title section-title-tight">${t("bonuses_personal_bests_title")}</h2>
+        <div class="quick-actions-grid">${personalBestsHtml}</div>
       </div>
 
       <div>
