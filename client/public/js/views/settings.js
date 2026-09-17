@@ -122,9 +122,9 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       </div>
 
       ${
-        ["sales_manager", "sales_director"].includes(state.user.role)
-          ? `<div id="sales-performance-slot"></div>`
-          : ""
+        // Per explicit request: removed entirely for sales_manager (a
+        // sales_director still sees their own performance card).
+        state.user.role === "sales_director" ? `<div id="sales-performance-slot"></div>` : ""
       }
 
       <h2 class="section-title">${t("contact_info")}</h2>
@@ -204,6 +204,18 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         canManageChallenges || canReviewBonusRewards
           ? `
         <h2 class="section-title">${t("bonuses_title")}</h2>
+        ${
+          admin
+            ? `
+          <div class="card settings-list-group">
+            <div class="settings-list-group-item">
+              ${settingsToggleRow({ icon: ICON.bolt, label: t("bonuses_enabled_label"), value: "", id: "toggle-bonuses-enabled", checked: false })}
+              <p class="muted radius-help" id="bonuses-enabled-help">${t("bonuses_enabled_help_off")}</p>
+            </div>
+          </div>
+        `
+            : ""
+        }
         <div class="card settings-list">
           ${canManageChallenges ? settingsRow({ icon: ICON.bolt, label: t("bonuses_admin_challenges"), id: "row-bonus-challenges" }) : ""}
           ${canReviewBonusRewards ? settingsRow({ icon: ICON.chart, label: t("bonuses_reward_claims"), id: "row-bonus-reward-claims" }) : ""}
@@ -553,6 +565,9 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     const calcModeToggle = root.querySelector("#toggle-calculator-mode");
     const calcModeToggleValue = calcModeToggle.closest(".settings-toggle-row").querySelector(".settings-row-value");
     const calcModeHelp = root.querySelector("#calculator-mode-help");
+    const bonusesToggle = root.querySelector("#toggle-bonuses-enabled");
+    const bonusesToggleValue = bonusesToggle?.closest(".settings-toggle-row").querySelector(".settings-row-value");
+    const bonusesHelp = root.querySelector("#bonuses-enabled-help");
     const disconnectBtn = root.querySelector("#emergency-disconnect-btn");
     const disconnectSuccess = root.querySelector("#emergency-disconnect-success");
 
@@ -570,6 +585,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       // the actual code, just a status line saying whether one is set.
       pinStatus.textContent = s.calculator_pin_is_custom ? t("calculator_pin_help_custom") : t("calculator_pin_help");
       paintCalcModeToggle(s.calculator_mode_enabled);
+      if (bonusesToggle) paintBonusesToggle(s.bonuses_enabled);
     });
 
     calcModeToggle.addEventListener("click", async () => {
@@ -585,6 +601,27 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         calcModeToggle.disabled = false;
       }
     });
+
+    function paintBonusesToggle(enabled) {
+      bonusesToggle.setAttribute("aria-checked", String(enabled));
+      bonusesToggleValue.textContent = enabled ? t("toggle_on") : t("toggle_off");
+      bonusesHelp.textContent = enabled ? t("bonuses_enabled_help_on") : t("bonuses_enabled_help_off");
+    }
+
+    if (bonusesToggle) {
+      bonusesToggle.addEventListener("click", async () => {
+        const turningOn = bonusesToggle.getAttribute("aria-checked") !== "true";
+        bonusesToggle.disabled = true;
+        try {
+          const result = await api.updateSettings({ bonuses_enabled: turningOn });
+          paintBonusesToggle(result.bonuses_enabled);
+        } catch (err) {
+          alert(err.message);
+        } finally {
+          bonusesToggle.disabled = false;
+        }
+      });
+    }
 
     disconnectBtn.addEventListener("click", async () => {
       if (!confirm(t("emergency_disconnect_confirm"))) return;

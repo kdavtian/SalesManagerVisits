@@ -1822,7 +1822,7 @@ input[type="search"]:focus-visible {
    readable" shot. */
 .high-res-photo-toggle {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   font-size: 0.82rem;
   color: var(--text-dim);
@@ -1834,6 +1834,31 @@ input[type="search"]:focus-visible {
      wrapping to a second line. */
   max-width: 100%;
   text-align: left;
+}
+
+.high-res-photo-toggle input[type="checkbox"] {
+  /* This is inside a <form>, so the generic `form input { width: 100% }`
+     rule above would otherwise stretch the checkbox itself to fill the
+     row -- same fix as .qav-action's own checkbox reset. That, not the
+     label text's own wrapping, was the actual cause of the reported
+     overflow: the checkbox ate the row's width and pushed the label text
+     into a sliver at the far right edge. */
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+/* The label text is a flex item too (this label is itself a flex
+   container) -- a flex item's default min-width is "auto", i.e. its own
+   unbroken content width, not 0. Without min-width:0 here, the browser
+   never lets this text wrap at all: it just keeps growing the label (and
+   the whole page) wider than the viewport instead, which is exactly what
+   the max-width above was trying to prevent one level up. */
+.high-res-photo-label {
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 
 .photo-remove-btn {
@@ -2934,6 +2959,39 @@ label.checkbox-row input[type="checkbox"] {
    a small margin) remains below it. */
 #order-detail-actions {
   margin-bottom: -14px;
+}
+
+/* Direction/region/subregion narrowing above the Plan Day/Today checklist
+   (openPlanDaySheet's renderTodayMode in map.js) -- each dropdown only
+   appears once its own candidate set actually has more than one value, so
+   a manager who only ever works one direction never sees an empty-feeling
+   single-option dropdown. */
+.plan-day-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.plan-day-filter {
+  flex: 1;
+  min-width: 120px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.plan-day-filter select {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  box-sizing: border-box;
+  min-height: 40px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 0 8px;
+  font-size: 0.85rem;
 }
 
 .plan-day-list {
@@ -4085,9 +4143,25 @@ label.checkbox-row input[type="checkbox"] {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
   font-size: 0.82rem;
   font-weight: 700;
   color: var(--accent);
+  cursor: pointer;
+}
+
+.today-plan-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.today-plan-header-right svg {
+  width: 16px;
+  height: 16px;
 }
 
 .today-plan-list {
@@ -4096,6 +4170,28 @@ label.checkbox-row input[type="checkbox"] {
   max-height: 260px;
   overflow-y: auto;
   margin-top: 10px;
+}
+
+.today-plan-tick {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  color: transparent;
+}
+
+.today-plan-tick-done {
+  border-color: var(--success, #2e7d32);
+  color: var(--success, #2e7d32);
+}
+
+.today-plan-tick svg {
+  width: 16px;
+  height: 16px;
 }
 
 .today-plan-row {
@@ -6085,6 +6181,65 @@ label.checkbox-row input[type="checkbox"] {
 .filter-sheet-check svg {
   width: 18px;
   height: 18px;
+}
+
+/* Region filter sheet (customers.js's openRegionFilterSheet): each region
+   row pairs its own filter-sheet-option (tap = select the whole region)
+   with a separate expand button that reveals that region's subregions as
+   an indented list of their own filter-sheet-options underneath. */
+.region-filter-group {
+  border-bottom: 1px solid var(--border);
+}
+
+.region-filter-group:last-child {
+  border-bottom: none;
+}
+
+.region-filter-row {
+  display: flex;
+  align-items: stretch;
+}
+
+.region-filter-row .region-filter-option {
+  flex: 1;
+  border-bottom: none;
+}
+
+.region-filter-expand {
+  flex-shrink: 0;
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.region-filter-subregions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 20px;
+  padding-bottom: 4px;
+}
+
+.region-filter-subregions .subregion-filter-option {
+  border-bottom: none;
+  min-height: 40px;
+  font-size: 0.88rem;
+}
+
+/* Shown on a region row when only SOME of its subregions are selected --
+   a dot rather than the full check-circle used for "all", so the two
+   states (whole region vs. a subset of it) never read as identical. */
+.filter-sheet-check-partial {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--accent);
 }
 
 .filter-dropdown-wrap {

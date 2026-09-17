@@ -2043,29 +2043,124 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       const sortedCustomers = lastCustomers
         .filter(({ c }) => Number(c.assigned_manager_id) === effectiveTargetId)
         .sort((a, b) => a.c.name.localeCompare(b.c.name));
+
+      // Checked state is tracked here rather than read from the DOM at save
+      // time, because the direction/region/subregion dropdowns below hide
+      // (not remove) rows that don't match -- a customer checked while one
+      // filter was active must stay checked after switching to another.
+      const checkedIds = new Set(selectedIds);
+      let directionFilterValue = "";
+      let regionFilterValue = "";
+      let subregionFilterValue = "";
+
       bodyEl.innerHTML = `
         <p class="badge ${statusClass}" id="plan-status-badge">${statusLabel}</p>
         <p class="muted">${t("plan_day_hint")}</p>
-        <div class="plan-day-list" id="plan-day-list">
+        <div class="plan-day-filters" id="plan-day-filters"></div>
+        <div class="plan-day-list" id="plan-day-list"></div>
+      `;
+      const filtersEl = bodyEl.querySelector("#plan-day-filters");
+      const listEl = bodyEl.querySelector("#plan-day-list");
+
+      function renderFilters() {
+        // A manager who only ever works one sales direction (the common
+        // case -- see salesChannelAutofill.js's channelFromPosition) has
+        // nothing to filter there, so the dropdown only appears once their
+        // book actually spans more than one, same convention as the
+        // Customers list's own direction filter (customers.js).
+        const directions = [...new Set(sortedCustomers.map(({ c }) => c.sales_channel).filter(Boolean))].sort();
+        const afterDirection = directionFilterValue
+          ? sortedCustomers.filter(({ c }) => c.sales_channel === directionFilterValue)
+          : sortedCustomers;
+        const regions = [...new Set(afterDirection.map(({ c }) => c.region).filter(Boolean))].sort();
+        const afterRegion = regionFilterValue ? afterDirection.filter(({ c }) => c.region === regionFilterValue) : afterDirection;
+        const subregions = [...new Set(afterRegion.map(({ c }) => c.subregion).filter(Boolean))].sort();
+
+        filtersEl.innerHTML = `
           ${
-            sortedCustomers.length
-              ? sortedCustomers
-                  .map(
-                    ({ c }) => `
+            directions.length > 1
+              ? `<label class="plan-day-filter">${t("filter_direction_title")}
+                  <select id="plan-day-direction-filter">
+                    <option value="">${t("all_customers")}</option>
+                    ${directions.map((d) => `<option value="${escapeHtml(d)}" ${d === directionFilterValue ? "selected" : ""}>${escapeHtml(channelDisplayLabel(d))}</option>`).join("")}
+                  </select>
+                </label>`
+              : ""
+          }
+          ${
+            regions.length > 1
+              ? `<label class="plan-day-filter">${t("region")}
+                  <select id="plan-day-region-filter">
+                    <option value="">${t("all_regions")}</option>
+                    ${regions.map((r) => `<option value="${escapeHtml(r)}" ${r === regionFilterValue ? "selected" : ""}>${escapeHtml(r)}</option>`).join("")}
+                  </select>
+                </label>`
+              : ""
+          }
+          ${
+            subregions.length > 1
+              ? `<label class="plan-day-filter">${t("subregion")}
+                  <select id="plan-day-subregion-filter">
+                    <option value="">${t("all_subregions")}</option>
+                    ${subregions.map((s) => `<option value="${escapeHtml(s)}" ${s === subregionFilterValue ? "selected" : ""}>${escapeHtml(s)}</option>`).join("")}
+                  </select>
+                </label>`
+              : ""
+          }
+        `;
+
+        filtersEl.querySelector("#plan-day-direction-filter")?.addEventListener("change", (e) => {
+          directionFilterValue = e.target.value;
+          regionFilterValue = "";
+          subregionFilterValue = "";
+          renderFilters();
+          renderChecklist();
+        });
+        filtersEl.querySelector("#plan-day-region-filter")?.addEventListener("change", (e) => {
+          regionFilterValue = e.target.value;
+          subregionFilterValue = "";
+          renderFilters();
+          renderChecklist();
+        });
+        filtersEl.querySelector("#plan-day-subregion-filter")?.addEventListener("change", (e) => {
+          subregionFilterValue = e.target.value;
+          renderChecklist();
+        });
+      }
+
+      function renderChecklist() {
+        const filtered = sortedCustomers.filter(({ c }) => {
+          if (directionFilterValue && c.sales_channel !== directionFilterValue) return false;
+          if (regionFilterValue && c.region !== regionFilterValue) return false;
+          if (subregionFilterValue && c.subregion !== subregionFilterValue) return false;
+          return true;
+        });
+        listEl.innerHTML = filtered.length
+          ? filtered
+              .map(
+                ({ c }) => `
             <label class="plan-day-row">
-              <input type="checkbox" value="${c.id}" ${selectedIds.has(c.id) ? "checked" : ""} />
+              <input type="checkbox" value="${c.id}" ${checkedIds.has(c.id) ? "checked" : ""} />
               <span>${escapeHtml(c.name)}</span>
             </label>`
-                  )
-                  .join("")
-              : `<p class="empty-state">${t("no_assigned_customers")}</p>`
-          }
-        </div>
-      `;
+              )
+              .join("")
+          : `<p class="empty-state">${t("no_assigned_customers")}</p>`;
+        listEl.querySelectorAll('input[type="checkbox"]').forEach((box) => {
+          box.addEventListener("change", () => {
+            const id = Number(box.value);
+            if (box.checked) checkedIds.add(id);
+            else checkedIds.delete(id);
+          });
+        });
+      }
+
+      renderFilters();
+      renderChecklist();
 
       saveBtn.onclick = async () => {
         saveBtn.disabled = true;
-        const ids = [...bodyEl.querySelectorAll("#plan-day-list input:checked")].map((el) => Number(el.value));
+        const ids = [...checkedIds];
         try {
           await api.saveVisitPlan(undefined, ids, targetUserId);
           close();

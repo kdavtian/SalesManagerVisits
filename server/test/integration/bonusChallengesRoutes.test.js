@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
 import { ensureCurrentRound } from "../../src/bonusChallengeRounds.js";
+import { setBonusesEnabled } from "../../src/bonusSettings.js";
 
 let admin;
 let manager;
@@ -104,4 +105,43 @@ test("POST /api/bonus-challenges/templates/:id/publish then GET rounds/:id/progr
 
   const asOutsider = await apiRequest(`/api/bonus-challenges/rounds/${round.id}/progress`, { cookie: cookies.outsider });
   assert.equal(asOutsider.status, 403);
+});
+
+// Regression for a real production report: an admin published a challenge
+// and it never appeared for the assigned sales_manager, because round
+// creation previously only happened on bonusChallengeWorker.js's hourly
+// tick -- up to an hour after publish, and not at all until that worker's
+// first tick after server boot. The publish route now creates the round
+// inline (see routes/bonusChallenges.js), so this must hold with no manual
+// ensureCurrentRound/tick call in between.
+test("POST /api/bonus-challenges/templates/:id/publish: creates the round immediately, with no worker tick needed", async () => {
+  await setBonusesEnabled(true);
+  try {
+    const created = await apiRequest("/api/bonus-challenges/templates", {
+      method: "POST",
+      cookie: cookies.admin,
+      body: {
+        title: "Immediate round on publish",
+        type: "single_metric",
+        audienceMode: "individual",
+        audienceUserIds: [manager.id],
+        recurrence: "daily",
+        validationGraceDays: 3,
+        targets: [{ metric: "strawberry", targetScaled: 2 }],
+      },
+    });
+    templateIds.push(created.data.id);
+
+    const publishRes = await apiRequest(`/api/bonus-challenges/templates/${created.data.id}/publish`, { method: "POST", cookie: cookies.admin });
+    assert.equal(publishRes.status, 200);
+
+    const { rows: roundRows } = await pool.query("SELECT * FROM bonus_challenge_rounds WHERE template_id = $1", [created.data.id]);
+    assert.equal(roundRows.length, 1, "the round should already exist right after publish, before any worker tick");
+    assert.equal(roundRows[0].status, "active");
+
+    const asManager = await apiRequest(`/api/bonus-challenges/rounds/${roundRows[0].id}/progress`, { cookie: cookies.manager });
+    assert.equal(asManager.status, 200, "the assigned manager should already be a participant, not 403");
+  } finally {
+    await setBonusesEnabled(false);
+  }
 });

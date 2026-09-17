@@ -15,8 +15,10 @@ import {
   getCalculatorModeEnabled,
   setCalculatorModeEnabled,
 } from "../settings.js";
-import { getBonusesEnabled } from "../bonusSettings.js";
+import { getBonusesEnabled, setBonusesEnabled } from "../bonusSettings.js";
+import { ensureCurrentRound, ensureOnceRound } from "../bonusChallengeRounds.js";
 import { ROLES } from "../roles.js";
+import { pool } from "../db/pool.js";
 
 export const settingsRouter = Router();
 
@@ -135,6 +137,24 @@ settingsRouter.patch("/", requireAdmin, async (req, res) => {
       return res.status(400).json({ error: "calculator_mode_enabled must be a boolean" });
     }
     result.calculator_mode_enabled = await setCalculatorModeEnabled(req.body.calculator_mode_enabled);
+  }
+
+  if (req.body?.bonuses_enabled !== undefined) {
+    if (typeof req.body.bonuses_enabled !== "boolean") {
+      return res.status(400).json({ error: "bonuses_enabled must be a boolean" });
+    }
+    result.bonuses_enabled = await setBonusesEnabled(req.body.bonuses_enabled);
+    // Turning the flag on shouldn't leave every already-published template
+    // waiting on the next hourly bonusChallengeWorker.js tick (see
+    // routes/bonusChallenges.js's own publish handler for the same fix on
+    // the publish path) -- create each one's current round right away.
+    if (result.bonuses_enabled) {
+      const { rows: templates } = await pool.query("SELECT * FROM bonus_challenge_templates WHERE status = 'published'");
+      for (const template of templates) {
+        if (template.recurrence === "once") await ensureOnceRound(template);
+        else await ensureCurrentRound(template);
+      }
+    }
   }
 
   res.json(result);

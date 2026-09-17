@@ -14,6 +14,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
+import { setBonusesEnabled } from "../../src/bonusSettings.js";
+import { createDraftTemplate, publishTemplate } from "../../src/bonusChallengeTemplates.js";
 
 let admin;
 let manager;
@@ -128,6 +130,62 @@ test("PATCH /api/settings: calculator_pin must be 4-8 digits; empty string reset
 test("PATCH /api/settings: calculator_mode_enabled must be a boolean", async () => {
   const res = await apiRequest("/api/settings", { method: "PATCH", cookie: adminCookie, body: { calculator_mode_enabled: "yes" } });
   assert.equal(res.status, 400);
+});
+
+// --- bonuses_enabled: admin-only toggle, and turning it on backfills rounds --------
+//
+// Regression for a real production report: this flag previously had no
+// admin-facing control at all (setBonusesEnabled existed but nothing ever
+// called it outside tests) -- the only way to turn Bonuses on was a raw SQL
+// UPDATE. Beyond just wiring up the toggle, flipping it on must not leave
+// every already-published template stranded until the next hourly
+// bonusChallengeWorker.js tick (same fix as the publish route itself).
+
+test("PATCH /api/settings: bonuses_enabled is admin-only and must be a boolean", async () => {
+  const forbidden = await apiRequest("/api/settings", { method: "PATCH", cookie: managerCookie, body: { bonuses_enabled: true } });
+  assert.equal(forbidden.status, 403);
+
+  const badType = await apiRequest("/api/settings", { method: "PATCH", cookie: adminCookie, body: { bonuses_enabled: "yes" } });
+  assert.equal(badType.status, 400);
+});
+
+test("PATCH /api/settings: turning bonuses_enabled on immediately creates rounds for already-published templates", async () => {
+  await setBonusesEnabled(false);
+  const draft = await createDraftTemplate(
+    {
+      title: "Backfilled on flag flip",
+      type: "single_metric",
+      audienceMode: "individual",
+      audienceUserIds: [manager.id],
+      recurrence: "daily",
+      validationGraceDays: 3,
+      targets: [{ metric: "strawberry", targetScaled: 2 }],
+    },
+    admin.id
+  );
+  await publishTemplate(draft.id, admin.id);
+  try {
+    const { rows: beforeRows } = await pool.query("SELECT id FROM bonus_challenge_rounds WHERE template_id = $1", [draft.id]);
+    assert.equal(beforeRows.length, 0, "no round yet -- the flag is still off");
+
+    const res = await apiRequest("/api/settings", { method: "PATCH", cookie: adminCookie, body: { bonuses_enabled: true } });
+    assert.equal(res.status, 200);
+    assert.equal(res.data.bonuses_enabled, true);
+
+    const { rows: afterRows } = await pool.query("SELECT id FROM bonus_challenge_rounds WHERE template_id = $1", [draft.id]);
+    assert.equal(afterRows.length, 1, "the round should exist right after the PATCH response, before any worker tick");
+  } finally {
+    const { rows: roundRows } = await pool.query("SELECT id FROM bonus_challenge_rounds WHERE template_id = $1", [draft.id]);
+    const roundIds = roundRows.map((r) => r.id);
+    if (roundIds.length) {
+      await pool.query("DELETE FROM bonus_progress WHERE round_id = ANY($1)", [roundIds]);
+      await pool.query("DELETE FROM bonus_round_participants WHERE round_id = ANY($1)", [roundIds]);
+      await pool.query("DELETE FROM bonus_challenge_rounds WHERE id = ANY($1)", [roundIds]);
+    }
+    await pool.query("DELETE FROM bonus_challenge_template_targets WHERE template_id = $1", [draft.id]);
+    await pool.query("DELETE FROM bonus_challenge_templates WHERE id = $1", [draft.id]);
+    await setBonusesEnabled(false);
+  }
 });
 
 // --- Lockdown: works unauthenticated, admin-only engage/lift ------------------------
