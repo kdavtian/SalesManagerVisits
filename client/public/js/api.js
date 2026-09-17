@@ -446,4 +446,8 @@ export const api = {
   holdBonusRewardClaim: (id, reason, expectedVersion) => json(`/bonus-reward-claims/${id}/hold`, "POST", { reason, expected_version: expectedVersion }),
   payBonusRewardClaim: (id, paymentReference, expectedVersion) =>
     json(`/bonus-reward-claims/${id}/pay`, "POST", { payment_reference: paymentReference, expected_version: expectedVersion }),
+
+  // Employee-facing "my Bonuses" summary (see server/src/routes/bonusSummary.js)
+  // -- always scoped to the caller; 404s while bonuses_enabled is off.
+  getBonusSummary: () => request("/bonus-summary"),
 };

@@ -637,6 +637,8 @@ async function render() {
     (await import("./views/settings.js")).renderSettings(app, doLogout, render);
   } else if (path === "#/notifications") {
     (await import("./views/notifications.js")).renderNotifications(app, navigate, refreshNotificationBadge);
+  } else if (path === "#/bonuses") {
+    (await import("./views/bonuses.js")).renderBonuses(app, navigate);
   } else {
     navigate("#/dashboard");
   }
@@ -693,6 +695,7 @@ const SIDEBAR_ITEM_ICON = {
   qa_debt_balances: { icon: icons.wallet, colorClass: "quick-action-icon-debt" },
   qa_company_dashboard: { icon: icons.dashboard, colorClass: "quick-action-icon-company" },
   qa_sales: { icon: icons.trendUp, colorClass: "quick-action-icon-sales" },
+  qa_bonuses: { icon: icons.gift, colorClass: "quick-action-icon-bonuses" },
 };
 
 // qa_check_in and qa_add_customer both jump into #/map (with a query
@@ -713,7 +716,7 @@ function rebuildSidebarMarkup(hash) {
   ];
 
   const visibleIds = visibleQuickActionIds(state.user.role, cachedSettings?.quick_action_visibility).filter(
-    (id) => !EXCLUDED_FROM_SIDEBAR.has(id)
+    (id) => !EXCLUDED_FROM_SIDEBAR.has(id) && (id !== "qa_bonuses" || cachedSettings?.bonuses_enabled)
   );
   const moreItems = QUICK_ACTIONS.filter((a) => visibleIds.includes(a.id) && QUICK_ACTION_ROUTE[a.id]).map((a) => {
     const entry = SIDEBAR_ITEM_ICON[a.id];

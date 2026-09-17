@@ -8,20 +8,22 @@ decisions made while implementing it — read this before touching any
 resolve real ambiguity in the original brief against this app's actual
 code, not just restate the brief.
 
-**Status**: Phase 5 (reward accounting and permissions) in progress;
-Phases 2-4 (schema, pure rule engine, source integration and ledger,
-challenge engine and administration) shipped separately. See the phase
-list in [`release-process.md`](release-process.md) conventions — this
-module ships as a sequence of separately reviewed PRs, one per phase, each
-fully tested before the next starts. Still no employee-facing UI and no
-Home integration (Phase 6) — the only things wired into the running app
-are two in-process workers (`src/bonusReconciliation.js`,
-`src/bonusChallengeWorker.js`) plus admin-only screens (Settings → Admin
-Workspace → Bonuses: template management gated to
-`canManageBonusChallenges`, reward-claim review gated to
-`canApproveBonusRewards`/`canRecordBonusPayouts`), all inert while
-`app_settings.bonuses_enabled`
-is `false` (the default in every environment, including production).
+**Status**: Phase 6 (employee UI and Home integration) in progress;
+Phases 2-5 (schema, pure rule engine, source integration and ledger,
+challenge engine and administration, reward accounting and permissions)
+shipped separately. See the phase list in
+[`release-process.md`](release-process.md) conventions — this module ships
+as a sequence of separately reviewed PRs, one per phase, each fully tested
+before the next starts. As of this phase there's a real (if minimal)
+employee-facing surface: a "Bonuses" Home Quick Action → `#/bonuses` screen
+showing points/level/active-challenge progress/reward claims, plus the
+admin-only screens from earlier phases (Settings → Admin Workspace →
+Bonuses: template management gated to `canManageBonusChallenges`,
+reward-claim review gated to `canApproveBonusRewards`/`canRecordBonusPayouts`)
+and two in-process workers (`src/bonusReconciliation.js`,
+`src/bonusChallengeWorker.js`). Everything stays invisible/inert while
+`app_settings.bonuses_enabled` is `false` (the default in every
+environment, including production).
 
 ## Decisions resolved during Phase 1 discovery
 
@@ -332,12 +334,50 @@ the shape follows existing conventions directly:
   (Home integration), where it belongs alongside the rest of the
   employee-facing Bonuses experience rather than bolted onto Settings.
 
+## Decisions made during Phase 6
+
+- **`app_settings.bonuses_enabled` is now exposed to every authenticated
+  role via `GET /api/settings`** (read-only there; still only written via
+  the Bonuses admin surface) — the same pattern as `calculator_mode_enabled`.
+  This is what the Home Quick Action tile and desktop sidebar entry gate
+  on: both filter the `qa_bonuses` id out unless the flag is true, so the
+  entry point stays invisible everywhere until an admin turns the module
+  on, matching every prior phase's "inert by default" requirement.
+
+- **Monthly Leaders is left untouched, not removed.** The brief says to
+  replace the Home *presentation*, but doing that safely means fully
+  understanding and re-testing an existing, live, unrelated feature
+  (`points_leaderboard`/`monthly_points_closeouts`) under real time
+  pressure — a real risk for a feature this phase doesn't otherwise need
+  to touch, especially since Bonuses stays invisible by default anyway
+  (`bonuses_enabled=false` in every environment). The new "Bonuses" entry
+  point (Quick Action tile → `#/bonuses`) is purely additive: it shares no
+  DOM ids, CSS classes, or state with the Monthly Leaders block in
+  `dashboard.js`. Removing/replacing Monthly Leaders is left as an explicit
+  follow-up decision for whoever turns `bonuses_enabled` on for real,
+  rather than bundled into this PR.
+
+- **The summary endpoint (`GET /api/bonus-summary`) 404s while disabled**,
+  not a 200 with empty data — consistent with the module being genuinely
+  unreachable, not just quietly showing nothing, while off.
+
+- **Level lookup mirrors the earning-rule versioned-lookup shape**
+  (`bonusRules.js`'s `getEarningRuleAt`): `bonus_level_thresholds` is
+  append-only per `level_number`, so "the threshold in force now" is the
+  latest version with `effective_at <= now`, looked up the same way a
+  challenge round's snapshot already looks up earning rates.
+
+- **The employee screen shows only what's actually been built**: points,
+  level, collectible counts, active-challenge progress, and reward claim
+  history. Badges, personal bests, and milestone messaging (Phase 7) are
+  not referenced yet — there is nothing in the database to show for them
+  until that phase seeds/awards them.
+
 ## Not yet built
 
-Everything else in the brief — employee UI and Home integration (Phase 6),
-gamification polish (levels/badges/milestones/personal bests, Phase 7), and
-end-to-end validation (Phase 8) — each its own PR. The Phase 4 admin UI's
-own gaps (no wizard, no product-sales form) and Phase 5's missing
-employee-facing claim history are both still open, per the scope notes
-above. See the brief itself for the full acceptance-test matrix each later
-phase is validated against.
+Gamification polish (levels/badges/milestones/personal bests, Phase 7) and
+end-to-end validation (Phase 8), each its own PR. Also still open, per the
+scope notes above: Phase 4 admin UI's gaps (no wizard, no product-sales
+form) and Phase 6's deliberate non-removal of Monthly Leaders. See the
+brief itself for the full acceptance-test matrix each later phase is
+validated against.

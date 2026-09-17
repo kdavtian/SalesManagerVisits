@@ -67,6 +67,7 @@ const QUICK_ACTION_ICON = {
   qa_debt_balances: () => `<span class="quick-action-icon quick-action-icon-debt">${icons.wallet}</span>`,
   qa_company_dashboard: () => `<span class="quick-action-icon quick-action-icon-company">${icons.dashboard}</span>`,
   qa_sales: () => `<span class="quick-action-icon quick-action-icon-sales">${icons.trendUp}</span>`,
+  qa_bonuses: () => `<span class="quick-action-icon quick-action-icon-bonuses">${icons.gift}</span>`,
 };
 
 // #qa-check-in etc. -- the DOM ids predate this refactor and other modules
@@ -265,7 +266,11 @@ export async function renderDashboard(root, navigate) {
     <div>
     <h2 class="section-title section-title-tight">${t("quick_actions")}</h2>
     <div class="quick-actions-grid">
-      ${quickActionsHtml(visibleQuickActionIds(state.user.role, settings.quick_action_visibility))}
+      ${quickActionsHtml(
+        visibleQuickActionIds(state.user.role, settings.quick_action_visibility).filter(
+          (id) => id !== "qa_bonuses" || settings.bonuses_enabled
+        )
+      )}
     </div>
     </div>
 

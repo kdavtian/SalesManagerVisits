@@ -3373,6 +3373,22 @@ input[type="search"]:focus-visible {
   transition: width 0.3s ease;
 }
 
+/* Bonuses -- one labeled progress bar per challenge component
+   (views/bonuses.js's componentProgressHtml). */
+.bonuses-component-row {
+  margin-top: 10px;
+}
+
+.bonuses-component-row:first-child {
+  margin-top: 4px;
+}
+
+.bonuses-component-label {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
 /* Team Performance */
 
 /* Sticky top bar: back button, title, and (when present) the month filter
@@ -4207,6 +4223,11 @@ input[type="search"]:focus-visible {
 
 .quick-action-icon-sales {
   background: color-mix(in srgb, var(--success) 60%, var(--accent) 40%);
+  color: #ffffff;
+}
+
+.quick-action-icon-bonuses {
+  background: color-mix(in srgb, var(--tier-gold) 65%, var(--danger) 35%);
   color: #ffffff;
 }
 
