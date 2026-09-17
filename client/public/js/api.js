@@ -426,4 +426,13 @@ export const api = {
   // the caller there never awaits or surfaces a failure from this.
   reportClientError: (report) => json("/client-errors", "POST", { ...report, user_agent: navigator.userAgent }),
   getClientErrorLog: (limit = 100) => request(`/client-errors?limit=${limit}`),
+
+  // Bonuses challenge templates/rounds admin (see server/src/routes/bonusChallenges.js)
+  // -- canManageBonusChallenges (admin/ceo) server-side already.
+  listChallengeTemplates: (status) => request(`/bonus-challenges/templates${status ? `?status=${status}` : ""}`),
+  getChallengeTemplate: (id) => request(`/bonus-challenges/templates/${id}`),
+  createChallengeTemplate: (data) => json("/bonus-challenges/templates", "POST", data),
+  updateChallengeTemplate: (id, data) => json(`/bonus-challenges/templates/${id}`, "PATCH", data),
+  publishChallengeTemplate: (id) => json(`/bonus-challenges/templates/${id}/publish`, "POST"),
+  cancelChallengeTemplate: (id, reason) => json(`/bonus-challenges/templates/${id}/cancel`, "POST", { reason }),
 };

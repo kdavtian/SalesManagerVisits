@@ -288,6 +288,29 @@ export function seesUnrecordedBadge(role) {
 // notifications").
 export const PAYMENT_NOTIFY_ROLES = ["accountant"];
 
+// --- Bonuses (docs/bonuses-design.md) -------------------------------------
+// Who can create/edit/publish/cancel challenge templates -- CEO/admin only.
+// Deliberately NOT accountant or sales_director: template design (targets,
+// audience, reward amounts) is a management call, not a finance-review one
+// (that's canApproveBonusRewards below, which mirrors canReviewPayments
+// exactly, per the design doc's confirmed role mapping).
+export function canManageBonusChallenges(role) {
+  return role === "admin" || role === "ceo";
+}
+
+// Reward approval -- confirmed with the user to mirror canReviewPayments
+// exactly (docs/bonuses-design.md: "Role mapping for money-adjacent
+// actions").
+export function canApproveBonusRewards(role) {
+  return canReviewPayments(role);
+}
+
+// Payout recording -- confirmed with the user to mirror canRecordOrders
+// exactly.
+export function canRecordBonusPayouts(role) {
+  return canRecordOrders(role);
+}
+
 // Who can download the generated report files (Sales Director workbook,
 // debt/receivables Excel, CEO management workbook) the CEO Telegram bot
 // pushes in as-is -- same audience as every other financial report/export

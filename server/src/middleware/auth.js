@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import { pool } from "../db/pool.js";
-import { canDeleteOrEditDirectly, canViewTeamLocations, canManageProducts } from "../roles.js";
+import { canDeleteOrEditDirectly, canViewTeamLocations, canManageProducts, canManageBonusChallenges } from "../roles.js";
 import { issueCsrfToken, clearCsrfToken } from "./csrf.js";
 
 const COOKIE_NAME = "session";
@@ -98,6 +98,15 @@ export function requireLocationViewer(req, res, next) {
 // in the accountant's hands day to day, not just admin's.
 export function requireProductManager(req, res, next) {
   if (!canManageProducts(req.user?.role)) {
+    return res.status(403).json({ error: "Not allowed" });
+  }
+  next();
+}
+
+// Bonus challenge template/round management -- admin/ceo (see
+// canManageBonusChallenges).
+export function requireBonusChallengeManager(req, res, next) {
+  if (!canManageBonusChallenges(req.user?.role)) {
     return res.status(403).json({ error: "Not allowed" });
   }
   next();
