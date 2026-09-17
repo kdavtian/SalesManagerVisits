@@ -42,7 +42,14 @@ const STATUS_COLUMNS = `
 `;
 
 customersRouter.get("/", async (req, res) => {
-  const { search, visited, region, subregion, assigned_manager_id, include_debt, min_lat, max_lat, min_lng, max_lng } = req.query;
+  const { search, visited, region, subregion, include_debt, min_lat, max_lat, min_lng, max_lng } = req.query;
+  // A sales_manager's own book only -- always, not just when the client
+  // happens to pass this filter. Every other route scoping a plain
+  // manager to their own data (orders.js's GET /, checkins.js, this same
+  // file's GET /:id/checkins) already does this the same way; this list
+  // endpoint was the one gap left wide open, returning every customer in
+  // the company to any authenticated role with no filter at all.
+  const assigned_manager_id = seesAllActivity(req.user.role) ? req.query.assigned_manager_id : req.user.id;
   const conditions = [];
   const params = [];
 

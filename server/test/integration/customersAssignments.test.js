@@ -195,6 +195,31 @@ test("PATCH /api/customers/:id: a nonexistent id is a 404", async () => {
   assert.equal(res.status, 404);
 });
 
+// --- List scoping ------------------------------------------------------------
+
+test("GET /api/customers: a sales_manager only ever sees their own assigned book, even asking for someone else's or none at all", async () => {
+  const own = await createCustomer({ created_by: users.sales_manager.id, assigned_manager_id: users.sales_manager.id });
+  const other = await createCustomer({ created_by: users.admin.id, assigned_manager_id: users.admin.id });
+
+  const noFilter = await apiRequest("/api/customers", { cookie: cookies.sales_manager });
+  assert.equal(noFilter.status, 200);
+  assert.ok(noFilter.data.some((c) => c.id === own.id));
+  assert.ok(!noFilter.data.some((c) => c.id === other.id));
+
+  // Explicitly asking for another manager's book is silently overridden
+  // to their own -- never honored, not even a 403 (the id in the URL is
+  // never trusted for this role, same as orders.js's GET / for user_id).
+  const askingForOther = await apiRequest(`/api/customers?assigned_manager_id=${users.admin.id}`, { cookie: cookies.sales_manager });
+  assert.equal(askingForOther.status, 200);
+  assert.ok(!askingForOther.data.some((c) => c.id === other.id));
+
+  // A role that does see all activity gets the real company-wide list,
+  // filterable by whichever assigned_manager_id it actually asks for.
+  const asAdmin = await apiRequest("/api/customers", { cookie: cookies.admin });
+  assert.ok(asAdmin.data.some((c) => c.id === own.id));
+  assert.ok(asAdmin.data.some((c) => c.id === other.id));
+});
+
 // --- Unauthenticated ------------------------------------------------------------
 
 test("GET and POST /api/customers reject an unauthenticated request with 401", async () => {

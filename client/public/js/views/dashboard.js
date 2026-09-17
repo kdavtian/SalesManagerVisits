@@ -141,7 +141,8 @@ export async function renderDashboard(root, navigate) {
       `dashboard-summary:${state.user.id}`,
       async () => {
         const isCeoOrAdmin = state.user.role === "admin" || state.user.role === "ceo";
-        const [summary, customers, trends, settings, planPreview] = await Promise.all([
+        const isSalesManager = state.user.role === "sales_manager";
+        const [summary, customers, trends, settings, planPreview, myPlan] = await Promise.all([
           api.dashboardSummary(),
           // The result here only ever feeds renderNextVisit below, and only
           // for the roles that card is actually rendered for (not admin/ceo --
@@ -161,8 +162,16 @@ export async function renderDashboard(root, navigate) {
           // failure here shouldn't break the rest of the home tab, so it
           // degrades to no preview card instead of a load error.
           isCeoOrAdmin ? api.getSalesPerformanceLeaderboard("mtd").catch(() => null) : Promise.resolve(null),
+          // Today's actual planned stops (route_plans.js's own "Plan Day"
+          // source of truth, GET /visit-plans/mine) -- distinct from the
+          // "next visit" card above, which only ever suggests one nearest/
+          // overdue customer out of the whole assigned book, not the set of
+          // customers actually scheduled for today. sales_manager only:
+          // visit plans are a field-rep concept, not one delivery_manager/
+          // sales_director/accountant currently have a UI for setting.
+          isSalesManager ? api.getMyVisitPlan().catch(() => null) : Promise.resolve(null),
         ]);
-        return { summary, customers, trends, settings, planPreview };
+        return { summary, customers, trends, settings, planPreview, myPlan };
       },
       (data) => paint(data)
     );
@@ -171,7 +180,7 @@ export async function renderDashboard(root, navigate) {
     return;
   }
 
-  function paint({ summary, customers, trends, settings, planPreview }) {
+  function paint({ summary, customers, trends, settings, planPreview, myPlan }) {
   const totals = summary.totals;
   const remaining = Math.max(0, totals.total_customers - totals.visited_today);
   // "Here's your field plan for today" only means something to someone who
@@ -197,6 +206,8 @@ export async function renderDashboard(root, navigate) {
       <div class="card next-visit-card next-visit-loading"><p class="loading-state" role="status">${t("loading")}</p></div>
     </div>`
     }
+
+    ${state.user.role === "sales_manager" ? `<div id="today-plan-slot"></div>` : ""}
 
     <div class="card progress-card" id="progress-card" ${
       // Only made tappable when there's actually a by-manager section to
@@ -424,7 +435,54 @@ export async function renderDashboard(root, navigate) {
 
   const nextVisitSlot = container.querySelector("#next-visit-slot");
   if (nextVisitSlot) renderNextVisit(nextVisitSlot, customers, navigate);
+
+  const todayPlanSlot = container.querySelector("#today-plan-slot");
+  if (todayPlanSlot) renderTodayPlan(todayPlanSlot, myPlan, customers, navigate);
   }
+}
+
+// Today's actual planned stops (see the myPlan fetch above), cross-
+// referenced against the already-fetched, already-scoped `customers` list
+// for name/visited/overdue -- no second network round trip just to get
+// display fields for ids the plan already gave us. `plan` is null both
+// when nothing was ever planned for today and when the fetch itself
+// failed (caught above), so both render the same empty state rather than
+// distinguishing "no plan" from "couldn't load the plan" -- neither is
+// actionable from this card.
+function renderTodayPlan(slot, plan, customers, navigate) {
+  const customerIds = plan?.customer_ids ?? [];
+  if (!customerIds.length) {
+    slot.innerHTML = "";
+    return;
+  }
+  const byId = new Map(customers.map((c) => [c.id, c]));
+  const stops = customerIds.map((id) => byId.get(id)).filter(Boolean);
+  const visitedCount = stops.filter((c) => c.visited_today).length;
+
+  slot.innerHTML = `
+    <div class="card today-plan-card">
+      <div class="today-plan-header">
+        <span>${t("today_plan")}</span>
+        <span class="muted">${visitedCount}/${stops.length}</span>
+      </div>
+      <div class="today-plan-list">
+        ${stops
+          .map(
+            (c) => `
+          <button type="button" class="today-plan-row" data-customer-id="${c.id}">
+            <span class="dot ${c.visited_today ? "dot-success" : c.overdue ? "dot-danger" : "dot-warning"}"></span>
+            <span class="today-plan-name">${escapeHtml(c.name)}</span>
+            ${c.visited_today ? `<span class="muted">${t("stat_visited_today")}</span>` : ""}
+          </button>
+        `
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
+  slot.querySelectorAll(".today-plan-row").forEach((row) => {
+    row.addEventListener("click", () => navigate(`#/customers/${row.dataset.customerId}`));
+  });
 }
 
 async function renderNextVisit(slot, customers, navigate) {
