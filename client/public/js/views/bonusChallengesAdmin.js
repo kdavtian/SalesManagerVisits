@@ -117,7 +117,7 @@ async function openNewChallengeWizard(onSaved) {
     <div class="sheet">
       <h2>New Challenge</h2>
       <p class="muted" id="challenge-wizard-step-label"></p>
-      <div id="challenge-wizard-step-body"></div>
+      <div id="challenge-wizard-step-body" class="wizard-form"></div>
       <p class="form-error" id="challenge-wizard-error" hidden></p>
       <div class="sheet-actions">
         <button type="button" class="btn" id="challenge-wizard-back">${t("cancel")}</button>
@@ -382,7 +382,7 @@ async function openNewChallengeWizard(onSaved) {
         pickerEl.innerHTML = `
           <div class="card-list" style="max-height:200px;overflow:auto;">
             ${ALL_ROLES.map(
-              (r) => `<label class="user-row" style="display:flex;align-items:center;gap:8px;">
+              (r) => `<label class="checkbox-row">
                 <input type="checkbox" class="w-audience-role" value="${r}" ${draft.audienceRoles.includes(r) ? "checked" : ""} />
                 <span>${ROLE_LABELS[r] ?? r}</span>
               </label>`
@@ -394,7 +394,7 @@ async function openNewChallengeWizard(onSaved) {
           <div class="card-list" style="max-height:200px;overflow:auto;">
             ${users
               .map(
-                (u) => `<label class="user-row" style="display:flex;align-items:center;gap:8px;">
+                (u) => `<label class="checkbox-row">
                 <input type="checkbox" class="w-audience-user" value="${u.id}" ${draft.audienceUserIds.includes(u.id) ? "checked" : ""} />
                 <span>${escapeHtml(u.name)} <span class="muted">(${escapeHtml(u.role)})</span></span>
               </label>`
