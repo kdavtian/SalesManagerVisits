@@ -65,8 +65,19 @@ export async function runChallengeEngineTick(now = new Date()) {
   const { rows: templates } = await pool.query("SELECT * FROM bonus_challenge_templates WHERE status = 'published'");
   let roundsCreated = 0;
   for (const template of templates) {
-    const { created } = template.recurrence === "once" ? await ensureOnceRound(template, now) : await ensureCurrentRound(template, now);
-    if (created) roundsCreated += 1;
+    // One template's round creation failing (e.g. a foreign-key violation
+    // if the template row was deleted between the SELECT above and this
+    // template's own turn in the loop -- only possible via a direct DB
+    // delete, since bonusChallengeTemplates.js never exposes one past
+    // draft, but real enough under concurrent test suites) must not abort
+    // the sweep for every other published template still waiting in this
+    // same tick.
+    try {
+      const { created } = template.recurrence === "once" ? await ensureOnceRound(template, now) : await ensureCurrentRound(template, now);
+      if (created) roundsCreated += 1;
+    } catch (err) {
+      console.error(`runChallengeEngineTick: failed to ensure a round for template ${template.id}:`, err.message);
+    }
   }
 
   const activeRounds = await listActiveRounds();
@@ -75,11 +86,18 @@ export async function runChallengeEngineTick(now = new Date()) {
   let roundsFinalized = 0;
   let claimsCreated = 0;
   for (const round of activeRounds) {
-    const result = await processRound(round, now);
-    roundsRecomputed += 1;
-    awardsIssued += result.awardsIssued;
-    if (result.finalized) roundsFinalized += 1;
-    claimsCreated += result.claimsCreated;
+    // Same reasoning as the round-creation loop above -- one round's
+    // processing failing must not stop every other active round from
+    // being recomputed/finalized in this tick.
+    try {
+      const result = await processRound(round, now);
+      roundsRecomputed += 1;
+      awardsIssued += result.awardsIssued;
+      if (result.finalized) roundsFinalized += 1;
+      claimsCreated += result.claimsCreated;
+    } catch (err) {
+      console.error(`runChallengeEngineTick: failed to process round ${round.id}:`, err.message);
+    }
   }
 
   const lastWeek = lastCompletedWeekBounds(now);
