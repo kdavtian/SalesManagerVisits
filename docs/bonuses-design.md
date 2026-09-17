@@ -8,8 +8,10 @@ decisions made while implementing it — read this before touching any
 resolve real ambiguity in the original brief against this app's actual
 code, not just restate the brief.
 
-**Status**: All 8 phases complete and merged to `main`. The module is
-fully built, end-to-end validated (Phase 8), and ready to turn on — see
+**Status**: All 8 phases complete and merged to `main`, plus a
+post-Phase-8 follow-up (the admin creation wizard, closing the Phase 4
+gaps noted below). The module is fully built, end-to-end validated
+(Phase 8), and ready to turn on — see
 ["Turning it on" below](#turning-it-on-phase-8-handoff) for the
 production runbook. It ships as a sequence of separately reviewed PRs, one
 per phase, each fully tested before the next started, per
@@ -286,6 +288,8 @@ the shape follows existing conventions directly:
   templates; `product_sales` (which needs a product-target picker this pass
   doesn't have) is reachable via the API but not yet from the UI. Both are
   fine to revisit in a later polish pass without changing the API shape.
+  (Revisited post-Phase-8 — see ["Admin creation wizard"](#admin-creation-wizard-post-phase-8-follow-up)
+  below: both gaps are now closed.)
 
 ## Decisions made during Phase 5
 
@@ -491,14 +495,50 @@ in production:
    where it left off (idempotent `operation_key`s mean nothing double-fires
    on the next tick after a pause).
 
-Known scope gaps carried forward, still open and each already called out
-in its own phase's "Decisions made" section above: Phase 4's admin UI has
-no creation wizard and no product-sales target UI (template JSON must be
-constructed correctly by hand via the API for `product_sales` challenges);
-Phase 6 deliberately left "Monthly Leaders" in place rather than replacing
-the Home presentation, so both exist side by side until someone makes an
-explicit call to retire the old one. Neither blocks turning the flag on —
-`single_metric` and `balanced_basket` challenges (the types with admin UI
-support) are enough for a first real rollout, and Monthly Leaders staying
-visible alongside the new Bonuses entry point is a presentation choice,
-not a data-integrity risk.
+One scope gap carried forward from Phase 6, still open: "Monthly Leaders"
+was deliberately left in place rather than replacing the Home
+presentation, so both exist side by side until someone makes an explicit
+call to retire the old one. It doesn't block turning the flag on — Monthly
+Leaders staying visible alongside the new Bonuses entry point is a
+presentation choice, not a data-integrity risk.
+
+## Admin creation wizard (post-Phase-8 follow-up)
+
+Phase 4's admin template dialog was originally a single long form with no
+way to create a `product_sales` challenge (its own comment said so
+explicitly — product targets needed the API directly). Replaced with a
+5-step guided wizard in `client/public/js/views/bonusChallengesAdmin.js`
+(`openNewChallengeWizard`), matching the wizard shape already used
+elsewhere (`routePlans.js`'s `openNewRoutePlanFlow`): one sheet body
+re-rendered per step, state accumulated in a single `draft` object rather
+than re-read from the DOM at submit time (later steps, like the product
+search results, aren't all present in the DOM at once).
+
+1. **Basics** — title, description, type (with a one-line hint per type).
+2. **Rules** — metric targets for `single_metric` (exactly one, no add/
+   remove) and `balanced_basket` (add/remove freely), or a debounced
+   product search (reusing `GET /api/products?q=`, the same endpoint the
+   Pricelist/Orders pickers already use) with an add/remove/quantity list
+   for `product_sales` — the gap this wizard exists to close.
+3. **Schedule & reward** — recurrence, validation grace period, cash
+   reward, watermelon points, and, only when recurrence is `once`, the
+   `first_round_policy` choice with its own conditional sub-fields
+   (a scheduled start date/time, or an explicit start/end date range).
+4. **Audience** — `selected_users` (the only mode the old form supported)
+   or `selected_roles` (new — a checkbox list of `roles.js`'s `ROLES`,
+   mirrored client-side as `ROLE_LABELS`).
+5. **Review** — a plain-language summary of every choice, then the same
+   `POST /api/bonus-challenges/templates` call the old form made; nothing
+   about the API payload shape changed, only how it's collected.
+
+Verified via a real browser (Playwright against the actual dev server, not
+just `node --test`): logged in as an admin, stepped through creating a
+`product_sales` challenge end to end (product search and pick, `once` /
+`historical_explicit` scheduling, `selected_roles` audience), confirmed
+the draft template and its `bonus_challenge_product_targets` row landed
+correctly in the database, and confirmed no uncaught JS exceptions during
+the flow. That verification script was a throwaway (not committed) since
+it duplicated the review-step assertions node:test integration coverage
+doesn't reach (real click-through, real network requests) without adding
+a second, slower e2e spec for a UI wizard whose payload the API layer
+already validates thoroughly.
