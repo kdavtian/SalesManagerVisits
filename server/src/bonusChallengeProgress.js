@@ -7,6 +7,7 @@
 // component is met, per the brief's "requires ALL configured components,
 // not an average or sum."
 import { pool } from "./db/pool.js";
+import { awardFirstBalancedBasketBadge } from "./bonusBadges.js";
 
 async function confirmedForMetric(userId, metric, startAt, endAt) {
   const column = metric === "points" ? "points_delta_scaled" : "collectible_delta_scaled";
@@ -68,6 +69,7 @@ export async function recomputeParticipantProgress(round, userId) {
      RETURNING *`,
     [round.id, userId, JSON.stringify(componentProgress), overallStatus, reachedAt]
   );
+  if (allReached && rules.type === "balanced_basket") await awardFirstBalancedBasketBadge(userId, round.id);
   return rows[0];
 }
 
