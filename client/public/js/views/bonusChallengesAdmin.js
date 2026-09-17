@@ -7,6 +7,7 @@
 import { api } from "../api.js";
 import { activateDialog, escapeHtml, formatDateTime } from "../util.js";
 import { t } from "../i18n.js";
+import { state } from "../state.js";
 
 const TYPE_LABELS = { single_metric: "Single metric", balanced_basket: "Balanced basket", product_sales: "Product sales" };
 const STATUS_BADGE = { draft: "badge-neutral", published: "badge-success", cancelled: "badge-danger" };
@@ -196,4 +197,102 @@ async function openTemplateSheet(onSaved) {
       errorEl.hidden = false;
     }
   });
+}
+
+// Reward claim review/payout (docs/bonuses-design.md, Phase 5). Server-side
+// role checks are the real authorization; the role checks here only decide
+// which action buttons this viewer even sees, matching roles.js's
+// canApproveBonusRewards (admin/ceo/accountant) and canRecordBonusPayouts
+// (admin/accountant) without duplicating those as importable client
+// predicates for just this one screen.
+const CLAIM_STATUS_BADGE = { awaiting_validation: "badge-neutral", approved: "badge-info", on_hold: "badge-neutral", rejected: "badge-danger", paid: "badge-success" };
+
+function canApproveBonusRewardsClient() {
+  return ["admin", "ceo", "accountant"].includes(state.user?.role);
+}
+function canRecordBonusPayoutsClient() {
+  return ["admin", "accountant"].includes(state.user?.role);
+}
+
+export async function renderBonusRewardClaimsSection(container) {
+  container.innerHTML = `<div id="reward-claims-list" class="card-list"><p class="loading-state" role="status">${t("loading")}</p></div>`;
+  const listEl = container.querySelector("#reward-claims-list");
+  const canApprove = canApproveBonusRewardsClient();
+  const canPay = canRecordBonusPayoutsClient();
+
+  async function loadClaims() {
+    const claims = await api.listBonusRewardClaims();
+    listEl.innerHTML = claims.length
+      ? claims
+          .map(
+            (c) => `
+        <div class="card user-row">
+          <div class="user-row-top">
+            <div>
+              <strong>${Number(c.amount_amd).toLocaleString()} AMD</strong>
+              <span class="muted">round #${c.round_id}${c.hold_reason ? ` · ${escapeHtml(c.hold_reason)}` : ""}${c.rejection_reason ? ` · ${escapeHtml(c.rejection_reason)}` : ""}</span>
+            </div>
+            <span class="badge ${CLAIM_STATUS_BADGE[c.status] ?? "badge-neutral"}">${escapeHtml(c.status)}</span>
+          </div>
+          <div class="user-row-meta">
+            <span class="muted">${formatDateTime(c.created_at)}${c.payment_reference ? ` · ref ${escapeHtml(c.payment_reference)}` : ""}</span>
+            <span class="user-row-actions">
+              ${canApprove && ["awaiting_validation", "on_hold"].includes(c.status) ? `<button class="btn-link" data-action="approve" data-id="${c.id}" data-version="${c.version}">Approve</button>` : ""}
+              ${canApprove && ["awaiting_validation", "on_hold"].includes(c.status) ? `<button class="btn-link btn-link-danger" data-action="reject" data-id="${c.id}" data-version="${c.version}">Reject</button>` : ""}
+              ${canApprove && c.status === "awaiting_validation" ? `<button class="btn-link" data-action="hold" data-id="${c.id}" data-version="${c.version}">Hold</button>` : ""}
+              ${canPay && c.status === "approved" ? `<button class="btn-link" data-action="pay" data-id="${c.id}" data-version="${c.version}">Record payout</button>` : ""}
+            </span>
+          </div>
+        </div>
+      `
+          )
+          .join("")
+      : `<p class="empty-state">No reward claims.</p>`;
+
+    listEl.querySelectorAll('[data-action="approve"]').forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          await api.approveBonusRewardClaim(btn.dataset.id, Number(btn.dataset.version));
+          loadClaims();
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+    });
+    listEl.querySelectorAll('[data-action="reject"]').forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const reason = prompt("Reason:") ?? "";
+        try {
+          await api.rejectBonusRewardClaim(btn.dataset.id, reason, Number(btn.dataset.version));
+          loadClaims();
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+    });
+    listEl.querySelectorAll('[data-action="hold"]').forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const reason = prompt("Reason:") ?? "";
+        try {
+          await api.holdBonusRewardClaim(btn.dataset.id, reason, Number(btn.dataset.version));
+          loadClaims();
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+    });
+    listEl.querySelectorAll('[data-action="pay"]').forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const paymentReference = prompt("Payment reference (optional):") ?? "";
+        try {
+          await api.payBonusRewardClaim(btn.dataset.id, paymentReference, Number(btn.dataset.version));
+          loadClaims();
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+    });
+  }
+
+  await loadClaims();
 }

@@ -8,16 +8,19 @@ decisions made while implementing it — read this before touching any
 resolve real ambiguity in the original brief against this app's actual
 code, not just restate the brief.
 
-**Status**: Phase 4 (challenge engine and administration) in progress;
-Phases 2-3 (schema, pure rule engine, source integration and ledger)
-shipped separately. See the phase list in
-[`release-process.md`](release-process.md) conventions — this module ships
-as a sequence of separately reviewed PRs, one per phase, each fully tested
-before the next starts. Still no employee-facing UI and no Home
-integration (Phase 6) — the only things wired into the running app are two
-in-process workers (`src/bonusReconciliation.js`, `src/bonusChallengeWorker.js`)
-plus one admin-only screen (Settings → Admin Workspace → Bonuses, gated to
-`canManageBonusChallenges`), all inert while `app_settings.bonuses_enabled`
+**Status**: Phase 5 (reward accounting and permissions) in progress;
+Phases 2-4 (schema, pure rule engine, source integration and ledger,
+challenge engine and administration) shipped separately. See the phase
+list in [`release-process.md`](release-process.md) conventions — this
+module ships as a sequence of separately reviewed PRs, one per phase, each
+fully tested before the next starts. Still no employee-facing UI and no
+Home integration (Phase 6) — the only things wired into the running app
+are two in-process workers (`src/bonusReconciliation.js`,
+`src/bonusChallengeWorker.js`) plus admin-only screens (Settings → Admin
+Workspace → Bonuses: template management gated to
+`canManageBonusChallenges`, reward-claim review gated to
+`canApproveBonusRewards`/`canRecordBonusPayouts`), all inert while
+`app_settings.bonuses_enabled`
 is `false` (the default in every environment, including production).
 
 ## Decisions resolved during Phase 1 discovery
@@ -282,12 +285,59 @@ the shape follows existing conventions directly:
   doesn't have) is reachable via the API but not yet from the UI. Both are
   fine to revisit in a later polish pass without changing the API shape.
 
+## Decisions made during Phase 5
+
+- **A claim is created exactly once, at round finalization, from whatever
+  `bonus_progress` says at that moment** — never earlier, even if a
+  participant's progress shows `target_reached` mid-round. The grace period
+  exists precisely so a late-arriving contribution isn't wrongly denied
+  credit; creating the claim before finalization would risk locking in a
+  premature (or a since-reversed) amount. `createClaimsForFinalizedRound`
+  is called from `bonusChallengeWorker.js`'s existing finalization step
+  (the same tick that flips a round to `ended`), not a separate pass.
+
+- **Approval, rejection, and hold share one role gate
+  (`canApproveBonusRewards`); payout recording is a separate one
+  (`canRecordBonusPayouts`)** — exactly the admin/ceo/accountant vs.
+  admin/accountant split confirmed with the user in Phase 1, mirroring
+  `canReviewPayments`/`canRecordOrders`. A claim must be `approved` before
+  it can be paid; there is no path from `awaiting_validation` straight to
+  `paid`.
+
+- **Self-approval and self-payment are blocked by identity, not role** — an
+  admin who happens to also be a challenge participant still cannot
+  approve or pay out their own claim, checked as `claim.user_id ===
+  actorId` after the role check (so the error message can distinguish
+  "you don't have this role" from "you can't act on your own claim" for
+  someone who does).
+
+- **Optimistic locking mirrors `perf_plans.lock_version` exactly**
+  (`teamPerformance.js`'s `SELECT ... FOR UPDATE` + `expected_lock_version`
+  pattern) — every mutation takes the caller's last-known `version`, locks
+  the row, compares, and only proceeds on a match; a mismatch is a
+  `ClaimConflictError` surfaced as HTTP 409, not a silent overwrite or a
+  generic 500.
+
+- **Amount adjustment only before a claim leaves review**
+  (`awaiting_validation`/`on_hold`) — an approved or paid claim's amount is
+  final; correcting a paid claim is a payout dispute outside this module's
+  scope, not a claim-accounting adjustment. Every mutation (including
+  adjustment) writes a `bonus_audit_log` row with the before/after state,
+  modeled on `perf_plan_audit`'s shape per the Phase 2 schema.
+
+- **No employee-facing "my rewards" UI yet** — the admin review/payout
+  screen (Settings → Admin Workspace → Bonuses → Reward claims, visible to
+  anyone who can approve or pay: admin/ceo/accountant) is this phase's
+  whole UI surface. An employee's own claim history is Phase 6's scope
+  (Home integration), where it belongs alongside the rest of the
+  employee-facing Bonuses experience rather than bolted onto Settings.
+
 ## Not yet built
 
-Everything else in the brief — reward accounting/approval (`bonus_reward_claims`,
-Phase 5), employee UI and Home integration (Phase 6), gamification polish
-(levels/badges/milestones/personal bests, Phase 7), and end-to-end
-validation (Phase 8) — each its own PR. The Phase 4 admin UI itself is also
-incomplete per the scope note above (no wizard, no product-sales form).
-See the brief itself for the full acceptance-test matrix each later phase
-is validated against.
+Everything else in the brief — employee UI and Home integration (Phase 6),
+gamification polish (levels/badges/milestones/personal bests, Phase 7), and
+end-to-end validation (Phase 8) — each its own PR. The Phase 4 admin UI's
+own gaps (no wizard, no product-sales form) and Phase 5's missing
+employee-facing claim history are both still open, per the scope notes
+above. See the brief itself for the full acceptance-test matrix each later
+phase is validated against.
