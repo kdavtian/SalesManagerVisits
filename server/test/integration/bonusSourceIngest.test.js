@@ -334,9 +334,26 @@ test("ingestOfficeAttendance: only the first qualifying arrival per day earns a 
   userIds.push(manager.id);
   const office = await getOfficeCustomer();
   await setBonusSettings({ officeErpCustomerId: "10000", officeCutoffTime: "23:59:59", officeEarliestTime: null, officeWorkdays: null });
+  // Anchored to today's own UTC calendar date but a fixed safe time of day
+  // (08:00 UTC = noon Yerevan, comfortably below the "23:59:59" cutoff
+  // above), not real wall-clock "now" -- "now" plus 15 minutes crosses
+  // into the next Yerevan calendar day whenever the suite happens to run
+  // between roughly 23:45 and 24:00 Yerevan time, which flips this test's
+  // "same day" assumption to "different day" for a reason that has
+  // nothing to do with the daily-qualification behavior actually under
+  // test (caught live in CI at 23:45 Yerevan time). Still "today," so
+  // getEarningRuleAt's effective_at <= timestamp check clears exactly the
+  // way a genuine `new Date()` would -- see this section's own header
+  // comment on why these tests can't just use a hardcoded past date.
   const now = new Date();
-  const first = await seedCheckin({ customerId: office.id, userId: manager.id, withinRange: true, timestamp: now });
-  const second = await seedCheckin({ customerId: office.id, userId: manager.id, withinRange: true, timestamp: new Date(now.getTime() + 15 * 60 * 1000) });
+  const safeBase = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 8, 0, 0));
+  const first = await seedCheckin({ customerId: office.id, userId: manager.id, withinRange: true, timestamp: safeBase });
+  const second = await seedCheckin({
+    customerId: office.id,
+    userId: manager.id,
+    withinRange: true,
+    timestamp: new Date(safeBase.getTime() + 15 * 60 * 1000),
+  });
 
   const firstResult = await ingestOfficeAttendance(first.id);
   assert.ok(firstResult.ledger);
