@@ -2,8 +2,9 @@ import { api } from "../api.js";
 import { t, getLang, setLang } from "../i18n.js";
 import { getTheme, setTheme } from "../theme.js";
 import { getPerfMode, setPerfMode } from "../perfMode.js";
-import { state, isAdmin, canPlanForOthers, seesFinancialExports, canManageProducts } from "../state.js";
+import { state, isAdmin, canPlanForOthers, seesFinancialExports, canManageProducts, isPerfCeo } from "../state.js";
 import { renderTeamSection, renderPlanApprovalsSection, renderEditRequestsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection, renderRouteDistributionSection, renderSalesChannelOwnersSection, renderQuickActionVisibilitySection, renderDataQualitySection, renderNotificationDeliveryLogSection, renderClientErrorLogSection } from "./admin.js";
+import { renderBonusChallengesSection } from "./bonusChallengesAdmin.js";
 import { escapeHtml, compressImage, activateDialog, attachSwipeToDismiss, formatPhoneDisplay, normalizePhone } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
@@ -79,7 +80,11 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
   // account. Kept separate from the strict admin-only section below.
   const canApprovePlans = canPlanForOthers();
   const canExportFinancials = seesFinancialExports();
-  const hasAdminWorkspace = admin || canApprovePlans || canExportFinancials;
+  // Mirrors server/src/roles.js's canManageBonusChallenges (admin/ceo) --
+  // broader than plain admin, so kept as its own flag rather than folded
+  // into the admin-gated block below.
+  const canManageChallenges = isPerfCeo();
+  const hasAdminWorkspace = admin || canApprovePlans || canExportFinancials || canManageChallenges;
 
   root.innerHTML = `
     <div class="settings-view">
@@ -185,6 +190,15 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         <div id="notification-defaults-section"></div>
         <h3 class="settings-subsection-title">${t("points_closeout_title")}</h3>
         <div id="points-closeout-section"></div>
+      `
+          : ""
+      }
+
+      ${
+        canManageChallenges
+          ? `
+        <h2 class="section-title">Bonuses</h2>
+        <div id="bonus-challenges-section"></div>
       `
           : ""
       }
@@ -665,6 +679,10 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     root.querySelector("#row-client-error-log").addEventListener("click", (e) => {
       openAdminSection(root, e.currentTarget, t("client_error_log_title"), renderClientErrorLogSection);
     });
+  }
+
+  if (canManageChallenges) {
+    renderBonusChallengesSection(root.querySelector("#bonus-challenges-section"));
   }
 
   if (canManageProducts()) {

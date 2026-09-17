@@ -8,15 +8,17 @@ decisions made while implementing it — read this before touching any
 resolve real ambiguity in the original brief against this app's actual
 code, not just restate the brief.
 
-**Status**: Phase 3 (source integration and ledger) in progress; Phase 2
-(schema + pure rule engine) shipped separately. See the phase list in
+**Status**: Phase 4 (challenge engine and administration) in progress;
+Phases 2-3 (schema, pure rule engine, source integration and ledger)
+shipped separately. See the phase list in
 [`release-process.md`](release-process.md) conventions — this module ships
 as a sequence of separately reviewed PRs, one per phase, each fully tested
-before the next starts. Nothing in this module is wired into any HTTP
-route, the Home screen, or the offline queue yet — the only thing live is
-an in-process reconciliation sweep (`src/bonusReconciliation.js`), and it
-no-ops entirely while `app_settings.bonuses_enabled` is `false` (the
-default in every environment, including production).
+before the next starts. Still no employee-facing UI and no Home
+integration (Phase 6) — the only things wired into the running app are two
+in-process workers (`src/bonusReconciliation.js`, `src/bonusChallengeWorker.js`)
+plus one admin-only screen (Settings → Admin Workspace → Bonuses, gated to
+`canManageBonusChallenges`), all inert while `app_settings.bonuses_enabled`
+is `false` (the default in every environment, including production).
 
 ## Decisions resolved during Phase 1 discovery
 
@@ -224,10 +226,68 @@ the shape follows existing conventions directly:
   award: a route hook and this sweep processing the same row is a no-op,
   not a duplicate.
 
+## Decisions made during Phase 4
+
+- **Progress is computed by summing `bonus_point_ledger` within the round's
+  window, never re-deriving rates.** A round's `snapshot_rules` freezes
+  *targets* (and, for product-sales, the exact SKU list) at round-creation
+  time, per the brief's "Published rounds are immutable." It does **not**
+  separately freeze the general earning rate: each ledger row already
+  carries the rate that was in force when it was posted
+  (`rule_version_id`), so summing `collectible_delta_scaled`/
+  `points_delta_scaled` over the round's `[start_at, end_at)` window is
+  already immutable per-entry — a mid-round rate change can never reach
+  back into an already-posted contribution. Simpler than re-snapshotting
+  rates, and correct for the same reason `bonusSourceIngest.js`'s ledger
+  entries are correct.
+
+- **A round stays `active` (never `ended`) through its grace period.**
+  `end_at` is when new activity stops counting toward it; a participant
+  still shows `in_progress` (recomputed every worker tick) until
+  `validation_deadline_at` — late-syncing evidence (an offline check-in, a
+  payment approved the next morning) can still land and be counted right up
+  to the deadline. Only past `validation_deadline_at` does the worker lock
+  in `not_achieved` for anyone who never reached target and flip the round
+  to `ended`, per the brief's grace-period requirement.
+
+- **Product-sales contributions are resynced from `order_items` every
+  worker tick, not tracked event-driven off order creation.** The brief
+  requires an edited/split order line's "current net contribution" to
+  always reflect its latest state, with audit history rather than a new
+  row per edit. Recomputing `net_pieces` from whatever `order_items` says
+  *right now* on every tick (upserted by the table's own
+  `UNIQUE(round_id, order_item_id)`) gets this for free — no separate
+  edit-tracking logic, and it self-heals if a tick was ever missed.
+
+- **Cherries/attendance never feed challenge progress via `bonus_earning_units`.**
+  A `points`-metric target sums `bonus_point_ledger.points_delta_scaled`
+  directly (any activity, including cherry/watermelon), so a challenge
+  built around total points still counts everything — it's only a
+  single-activity metric target (e.g. `strawberry`) that's scoped to one
+  `activity` column value.
+
+- **`canManageBonusChallenges` is admin/ceo, not `canReviewPayments`'s
+  admin/ceo/accountant.** Template design (targets, audience, reward
+  amounts) is a management call per the brief, distinct from
+  `canApproveBonusRewards`/`canRecordBonusPayouts` (added now, mirroring
+  `canReviewPayments`/`canRecordOrders` exactly as confirmed with the user
+  in Phase 1 — not yet wired to any route; that's Phase 5's reward-claim
+  approval flow).
+
+- **Admin UI scope for this phase: a single-form create dialog, not the
+  multi-step wizard pattern** used elsewhere (`routePlans.js`'s
+  `openNewRoutePlanFlow`) — a deliberate simplification to keep Phase 4
+  bounded. The form also only supports `single_metric`/`balanced_basket`
+  templates; `product_sales` (which needs a product-target picker this pass
+  doesn't have) is reachable via the API but not yet from the UI. Both are
+  fine to revisit in a later polish pass without changing the API shape.
+
 ## Not yet built
 
-Everything else in the brief — the challenge engine, reward accounting,
-employee/admin UI, gamification polish (levels/badges/milestones/personal
-bests), and end-to-end validation — is Phases 4 through 8, each its own
-PR. See the brief itself for the full acceptance-test matrix each later
-phase is validated against.
+Everything else in the brief — reward accounting/approval (`bonus_reward_claims`,
+Phase 5), employee UI and Home integration (Phase 6), gamification polish
+(levels/badges/milestones/personal bests, Phase 7), and end-to-end
+validation (Phase 8) — each its own PR. The Phase 4 admin UI itself is also
+incomplete per the scope note above (no wizard, no product-sales form).
+See the brief itself for the full acceptance-test matrix each later phase
+is validated against.

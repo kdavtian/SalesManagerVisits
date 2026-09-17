@@ -40,6 +40,9 @@ import {
   PAYMENT_NOTIFY_ROLES,
   seesGeneratedReports,
   seesCustomerErpData,
+  canManageBonusChallenges,
+  canApproveBonusRewards,
+  canRecordBonusPayouts,
 } from "../src/roles.js";
 
 const OTHER_ROLES = (role) => ROLES.filter((r) => r !== role);
@@ -252,4 +255,18 @@ test("seesCustomerErpData: every role sees it, except a sales_manager viewing a 
   }
   assert.equal(seesCustomerErpData("sales_manager", 1, 1), true, "own customer");
   assert.equal(seesCustomerErpData("sales_manager", 2, 1), false, "someone else's customer");
+});
+
+test("canManageBonusChallenges: admin/ceo only", () => {
+  assert.equal(canManageBonusChallenges("admin"), true);
+  assert.equal(canManageBonusChallenges("ceo"), true);
+  for (const role of OTHER_ROLES("admin").filter((r) => r !== "ceo")) assert.equal(canManageBonusChallenges(role), false, role);
+});
+
+test("canApproveBonusRewards: mirrors canReviewPayments", () => {
+  for (const role of ROLES) assert.equal(canApproveBonusRewards(role), canReviewPayments(role), role);
+});
+
+test("canRecordBonusPayouts: mirrors canRecordOrders", () => {
+  for (const role of ROLES) assert.equal(canRecordBonusPayouts(role), canRecordOrders(role), role);
 });
