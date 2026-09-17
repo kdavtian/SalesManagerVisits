@@ -435,4 +435,15 @@ export const api = {
   updateChallengeTemplate: (id, data) => json(`/bonus-challenges/templates/${id}`, "PATCH", data),
   publishChallengeTemplate: (id) => json(`/bonus-challenges/templates/${id}/publish`, "POST"),
   cancelChallengeTemplate: (id, reason) => json(`/bonus-challenges/templates/${id}/cancel`, "POST", { reason }),
+
+  // Reward claim review/payout (see server/src/routes/bonusRewardClaims.js)
+  // -- listing is role-scoped server-side already (a reviewer sees
+  // everything, a plain user sees only their own).
+  listBonusRewardClaims: (status) => request(`/bonus-reward-claims${status ? `?status=${status}` : ""}`),
+  approveBonusRewardClaim: (id, expectedVersion) => json(`/bonus-reward-claims/${id}/approve`, "POST", { expected_version: expectedVersion }),
+  rejectBonusRewardClaim: (id, reason, expectedVersion) =>
+    json(`/bonus-reward-claims/${id}/reject`, "POST", { reason, expected_version: expectedVersion }),
+  holdBonusRewardClaim: (id, reason, expectedVersion) => json(`/bonus-reward-claims/${id}/hold`, "POST", { reason, expected_version: expectedVersion }),
+  payBonusRewardClaim: (id, paymentReference, expectedVersion) =>
+    json(`/bonus-reward-claims/${id}/pay`, "POST", { payment_reference: paymentReference, expected_version: expectedVersion }),
 };

@@ -4,7 +4,7 @@ import { getTheme, setTheme } from "../theme.js";
 import { getPerfMode, setPerfMode } from "../perfMode.js";
 import { state, isAdmin, canPlanForOthers, seesFinancialExports, canManageProducts, isPerfCeo } from "../state.js";
 import { renderTeamSection, renderPlanApprovalsSection, renderEditRequestsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection, renderRouteDistributionSection, renderSalesChannelOwnersSection, renderQuickActionVisibilitySection, renderDataQualitySection, renderNotificationDeliveryLogSection, renderClientErrorLogSection } from "./admin.js";
-import { renderBonusChallengesSection } from "./bonusChallengesAdmin.js";
+import { renderBonusChallengesSection, renderBonusRewardClaimsSection } from "./bonusChallengesAdmin.js";
 import { escapeHtml, compressImage, activateDialog, attachSwipeToDismiss, formatPhoneDisplay, normalizePhone } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
@@ -84,7 +84,13 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
   // broader than plain admin, so kept as its own flag rather than folded
   // into the admin-gated block below.
   const canManageChallenges = isPerfCeo();
-  const hasAdminWorkspace = admin || canApprovePlans || canExportFinancials || canManageChallenges;
+  // Mirrors canApproveBonusRewards (admin/ceo/accountant) OR
+  // canRecordBonusPayouts (admin/accountant) -- the union of who needs to
+  // see the reward-claims review list at all, a strictly larger set than
+  // canManageChallenges (an accountant reviews/pays claims but never
+  // designs a challenge).
+  const canReviewBonusRewards = admin || canManageChallenges || state.user?.role === "accountant";
+  const hasAdminWorkspace = admin || canApprovePlans || canExportFinancials || canManageChallenges || canReviewBonusRewards;
 
   root.innerHTML = `
     <div class="settings-view">
@@ -195,10 +201,11 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       }
 
       ${
-        canManageChallenges
+        canManageChallenges || canReviewBonusRewards
           ? `
         <h2 class="section-title">Bonuses</h2>
-        <div id="bonus-challenges-section"></div>
+        ${canManageChallenges ? `<div id="bonus-challenges-section"></div>` : ""}
+        ${canReviewBonusRewards ? `<h3 class="settings-subsection-title">Reward claims</h3><div id="bonus-reward-claims-section"></div>` : ""}
       `
           : ""
       }
@@ -683,6 +690,9 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
 
   if (canManageChallenges) {
     renderBonusChallengesSection(root.querySelector("#bonus-challenges-section"));
+  }
+  if (canReviewBonusRewards) {
+    renderBonusRewardClaimsSection(root.querySelector("#bonus-reward-claims-section"));
   }
 
   if (canManageProducts()) {

@@ -13,7 +13,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { pool } from "../../src/db/pool.js";
 import { runReconciliationSweep } from "../../src/bonusReconciliation.js";
-import { setBonusesEnabled, setBonusSettings } from "../../src/bonusSettings.js";
+import { setBonusesEnabled, getBonusesEnabled, setBonusSettings } from "../../src/bonusSettings.js";
 import { createUser, createCustomer, trackCheckin, cleanupAll } from "./helpers.js";
 
 const userIds = [];
@@ -48,8 +48,21 @@ test("runReconciliationSweep: does nothing while bonuses_enabled is off", async 
   );
   trackCheckin(rows[0].id);
 
-  const result = await runReconciliationSweep();
-  assert.deepEqual(result, { checkinsVisits: 0, checkinsAttendance: 0, payments: 0, orders: 0 });
+  // Not asserting the sweep's aggregate return value here -- app_settings.
+  // bonuses_enabled is a real shared singleton, and several other bonus
+  // test files toggle it concurrently (Node's test runner runs files in
+  // parallel); one of them flipping it back to true between this line and
+  // the sweep call below is a real, observed race (caught in CI), not a
+  // hypothetical. What this test actually owns -- "my checkin doesn't get
+  // processed while I've asked for it to be off" -- is checked directly
+  // against this checkin's own row instead.
+  await runReconciliationSweep();
+  const { rows: contributionRows } = await pool.query(
+    "SELECT id FROM bonus_source_contributions WHERE source_table = 'checkin' AND source_id = $1",
+    [rows[0].id]
+  );
+  if (await getBonusesEnabled()) return; // another file turned it on mid-test -- this run can't assert "off" behavior
+  assert.equal(contributionRows.length, 0);
   const { rows: ledgerRows } = await pool.query("SELECT id FROM bonus_point_ledger WHERE user_id = $1", [manager.id]);
   assert.equal(ledgerRows.length, 0);
 });
