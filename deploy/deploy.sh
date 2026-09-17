@@ -110,16 +110,32 @@ docker compose run --rm app npm run migrate
 
 if [ "$RUN_FULL" = true ]; then
   echo "==> Running unit tests"
-  # Deliberately AFTER migrations, not before: the test suite exercises
-  # columns/tables this deploy's own migrations may just have added (e.g. the
-  # account-lockout columns), and `db` here is the *persistent* database
-  # service carried over from the previous deploy, not a fresh one -- running
-  # the tests first meant they ran against last deploy's schema instead of
-  # this one's, failing every login-dependent test with a missing-column
-  # error the moment a migration and the tests that depend on it shipped in
-  # the same deploy. Still strictly before `docker compose up -d app` below,
-  # so a real test failure still blocks the app from ever serving traffic.
-  docker compose run --rm app npm test
+  # Against a disposable `db-test` service (docker-compose.yml's own
+  # "test" profile), NEVER the persistent `db` service above -- running the
+  # integration suite directly against production once sent real push
+  # notifications to real subscribed devices from fixture orders/checkins/
+  # payments the tests created (see docs/incident-response.md's log for
+  # 2026-09-17). `db-test` gets its own fresh migration run below,
+  # independent of and after the real migration against `db` a few lines
+  # up -- so this deploy's schema changes (e.g. new columns/tables) are
+  # what the tests actually run against, without ever touching real data.
+  # Torn down via a trap so a mid-run failure (set -e, e.g. a real test
+  # failure) still removes the disposable container instead of leaking it.
+  cleanup_db_test() {
+    docker compose --profile test rm -sf db-test >/dev/null 2>&1 || true
+  }
+  trap cleanup_db_test EXIT
+
+  docker compose --profile test up -d db-test
+  until docker compose --profile test exec -T db-test pg_isready -U postgres >/dev/null 2>&1; do
+    sleep 1
+  done
+  TEST_DATABASE_URL="postgres://postgres:postgres@db-test:5432/fieldvisits_test"
+  docker compose run --rm -e DATABASE_URL="$TEST_DATABASE_URL" -e NODE_ENV=test app npm run migrate
+  docker compose run --rm -e DATABASE_URL="$TEST_DATABASE_URL" -e NODE_ENV=test app npm test
+
+  cleanup_db_test
+  trap - EXIT
 fi
 
 echo "==> Starting app"

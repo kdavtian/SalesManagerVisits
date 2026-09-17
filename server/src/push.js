@@ -10,15 +10,26 @@ const PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
 const PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
 const SUBJECT = process.env.VAPID_SUBJECT || "mailto:admin@example.com";
 
-export const enabled = Boolean(PUBLIC_KEY && PRIVATE_KEY);
+const configured = Boolean(PUBLIC_KEY && PRIVATE_KEY);
+// NODE_ENV !== "test" is a second, independent guard on top of the real
+// deploy isolation (deploy.sh now runs the test suite against a disposable
+// database, never production's) -- defense in depth after a real incident
+// where running the integration suite directly against production sent
+// real push notifications to real subscribed devices from fixture orders/
+// checkins/payments the tests created (docs/incident-response.md,
+// 2026-09-17). Never disabled for local dev (NODE_ENV there is unset or
+// "development"), only for an automated test run -- and kept separate from
+// `configured` below so a real misconfiguration and test-mode suppression
+// never look the same in the logs.
+export const enabled = configured && process.env.NODE_ENV !== "test";
 export const vapidPublicKey = PUBLIC_KEY || null;
 
-if (!enabled) {
+if (!configured) {
   console.warn(
     "VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY not set -- push notifications are disabled. " +
       "Generate a pair with `npx web-push generate-vapid-keys`."
   );
-} else {
+} else if (enabled) {
   webpush.setVapidDetails(SUBJECT, PUBLIC_KEY, PRIVATE_KEY);
 }
 

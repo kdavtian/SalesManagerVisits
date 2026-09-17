@@ -11,9 +11,20 @@ const CHAT_IDS = (process.env.TELEGRAM_NOTIFY_CHAT_IDS || "")
   .map((id) => id.trim())
   .filter(Boolean);
 
-const enabled = Boolean(BOT_TOKEN && CHAT_IDS.length);
+const configured = Boolean(BOT_TOKEN && CHAT_IDS.length);
+// NODE_ENV !== "test" is a second, independent guard on top of the real
+// deploy isolation (deploy.sh now runs the test suite against a disposable
+// database, never production's) -- defense in depth after a real incident
+// where running the integration suite directly against production sent
+// real push notifications (push.js, the same pattern) to real subscribed
+// devices from fixture rows the tests created (docs/incident-response.md,
+// 2026-09-17). Never disabled for local dev (NODE_ENV there is unset or
+// "development"), only for an automated test run -- and kept separate from
+// `configured` below so a real misconfiguration and test-mode suppression
+// never look the same in the logs.
+const enabled = configured && process.env.NODE_ENV !== "test";
 
-if (!enabled) {
+if (!configured) {
   console.warn(
     "TELEGRAM_BOT_TOKEN / TELEGRAM_NOTIFY_CHAT_IDS not set -- Telegram notifications are disabled."
   );

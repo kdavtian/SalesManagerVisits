@@ -16,6 +16,30 @@ services:
       timeout: 5s
       retries: 5
 
+  # Disposable database for deploy.sh's "--full" test run -- NEVER the
+  # persistent `db` service above. Running `npm test` against real
+  # production data was a real incident (see docs/incident-response.md's
+  # log): the integration suite creates/deletes fixture rows and exercises
+  # the same route handlers production traffic does, including real
+  # side effects like push notifications straight to real subscribed
+  # devices. `profiles: [test]` keeps this out of a normal `docker compose
+  # up`/`up -d db` -- it only starts when a command explicitly requests
+  # the "test" profile, i.e. deploy.sh's own test step. No named volume:
+  # each run starts from a completely empty database and its data is
+  # discarded with the container.
+  db-test:
+    image: postgres:16-alpine
+    profiles: ["test"]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: fieldvisits_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   # The Node app itself. Only used when running the full stack (e.g. in
   # production); for local dev it's usually simpler to run `npm run dev`
   # against `docker compose up -d db` instead.
