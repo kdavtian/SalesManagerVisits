@@ -131,13 +131,20 @@ test("ingestVisitContribution: a second visit to the same customer the same day 
   const manager = await createUser("sales_manager");
   userIds.push(manager.id);
   const customer = await createCustomer({ created_by: manager.id });
-  const now = new Date();
-  const first = await seedCheckin({ customerId: customer.id, userId: manager.id, withinRange: true, timestamp: now });
+  // A fixed mid-day timestamp, not real wall-clock "now" -- "now" plus an
+  // hour crosses into the next Yerevan calendar day whenever the suite
+  // happens to run between 23:00 and 24:00 Yerevan time, which flips
+  // "same day" to "different day" by the app's own yerevanDateOf logic
+  // and fails this test for a reason that has nothing to do with the
+  // daily-cap behavior actually under test (caught live: this test failed
+  // for exactly this reason at 23:38 Yerevan time).
+  const baseTime = new Date("2020-06-15T10:00:00Z");
+  const first = await seedCheckin({ customerId: customer.id, userId: manager.id, withinRange: true, timestamp: baseTime });
   const second = await seedCheckin({
     customerId: customer.id,
     userId: manager.id,
     withinRange: true,
-    timestamp: new Date(now.getTime() + 60 * 60 * 1000),
+    timestamp: new Date(baseTime.getTime() + 60 * 60 * 1000),
   });
 
   const firstResult = await ingestVisitContribution(first.id);

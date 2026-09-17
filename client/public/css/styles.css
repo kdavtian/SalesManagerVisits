@@ -1982,12 +1982,28 @@ input[type="search"]:focus-visible {
    display (same value, so a no-op) and never touched flex-direction --
    the inline style's higher specificity doesn't help for a property the
    inline style never sets, so the class's column direction always won,
-   stacking the checkbox above its label instead of beside it. */
-.checkbox-row {
+   stacking the checkbox above its label instead of beside it.
+   Selector is `label.checkbox-row`, not just `.checkbox-row`: this list
+   lives inside .wizard-form (the New Challenge wizard), and
+   `.wizard-form label` (class+type, same specificity as a bare class) sets
+   display: block -- a plain `.checkbox-row` class selector ties with it on
+   specificity and loses on source order, so this needs the matching
+   type+class specificity to actually win. */
+label.checkbox-row {
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* .wizard-form input's width: 100% (meant for text/number inputs) also
+   matches a checkbox by element type -- without this, the checkbox
+   stretches to fill the row and shoves its label text to the far edge
+   instead of sitting right next to it. Same explicit reset .qav-action
+   already uses for its own checkbox list, below. */
+label.checkbox-row input[type="checkbox"] {
+  width: 18px;
+  flex: 0 0 auto;
 }
 
 .user-row-top {
