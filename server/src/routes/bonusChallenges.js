@@ -8,7 +8,8 @@
 import { Router } from "express";
 import { requireAuth, requireBonusChallengeManager } from "../middleware/auth.js";
 import { createDraftTemplate, getTemplate, listTemplates, publishTemplate, cancelTemplate, updateDraftTemplate } from "../bonusChallengeTemplates.js";
-import { getRound, getRoundParticipants } from "../bonusChallengeRounds.js";
+import { getRound, getRoundParticipants, ensureCurrentRound, ensureOnceRound } from "../bonusChallengeRounds.js";
+import { getBonusesEnabled } from "../bonusSettings.js";
 import { getProgress } from "../bonusChallengeProgress.js";
 import { canManageBonusChallenges } from "../roles.js";
 import { pool } from "../db/pool.js";
@@ -48,6 +49,18 @@ bonusChallengesRouter.patch("/templates/:id", requireBonusChallengeManager, asyn
 bonusChallengesRouter.post("/templates/:id/publish", requireBonusChallengeManager, async (req, res) => {
   try {
     const template = await publishTemplate(Number(req.params.id), req.user.id);
+    // Otherwise the first round only appears once the hourly
+    // bonusChallengeWorker.js tick happens to run next (up to an hour after
+    // this request, and setInterval fires no earlier than one full interval
+    // after server boot -- see startBonusChallengeEngine), so an admin
+    // publishing a challenge would see nothing change and a sales rep would
+    // see no active challenge until then. ensureCurrentRound/ensureOnceRound
+    // are the same idempotent functions the worker itself calls, so this is
+    // safe to run inline here too.
+    if (await getBonusesEnabled()) {
+      if (template.recurrence === "once") await ensureOnceRound(template);
+      else await ensureCurrentRound(template);
+    }
     res.json(template);
   } catch (err) {
     res.status(400).json({ error: err.message });

@@ -459,30 +459,47 @@ function renderTodayPlan(slot, plan, customers, navigate) {
   const stops = customerIds.map((id) => byId.get(id)).filter(Boolean);
   const visitedCount = stops.filter((c) => c.visited_today).length;
 
-  slot.innerHTML = `
-    <div class="card today-plan-card">
-      <div class="today-plan-header">
-        <span>${t("today_plan")}</span>
-        <span class="muted">${visitedCount}/${stops.length}</span>
+  // Collapsed by default -- this sits right under the single-customer
+  // "next visit" card, so showing the whole list open by default would
+  // just duplicate that card's job and push everything else down the
+  // page. Tapping the header expands it into the full checklist below,
+  // with a tick for each stop already checked in today vs. not yet.
+  let expanded = false;
+
+  function paint() {
+    slot.innerHTML = `
+      <div class="card today-plan-card">
+        <button type="button" class="today-plan-header" aria-expanded="${expanded}" aria-controls="today-plan-list">
+          <span>${t("today_plan")}</span>
+          <span class="today-plan-header-right">
+            <span class="muted">${visitedCount}/${stops.length}</span>
+            ${expanded ? icons.chevronUp : icons.chevronDown}
+          </span>
+        </button>
+        <div class="today-plan-list" id="today-plan-list" ${expanded ? "" : "hidden"}>
+          ${stops
+            .map(
+              (c) => `
+            <button type="button" class="today-plan-row" data-customer-id="${c.id}">
+              <span class="today-plan-tick ${c.visited_today ? "today-plan-tick-done" : ""}" aria-hidden="true">${c.visited_today ? icons.checkCircle : ""}</span>
+              <span class="today-plan-name">${escapeHtml(c.name)}</span>
+              ${c.visited_today ? `<span class="muted">${t("stat_visited_today")}</span>` : c.overdue ? `<span class="dot dot-danger" aria-hidden="true"></span>` : ""}
+            </button>
+          `
+            )
+            .join("")}
+        </div>
       </div>
-      <div class="today-plan-list">
-        ${stops
-          .map(
-            (c) => `
-          <button type="button" class="today-plan-row" data-customer-id="${c.id}">
-            <span class="dot ${c.visited_today ? "dot-success" : c.overdue ? "dot-danger" : "dot-warning"}"></span>
-            <span class="today-plan-name">${escapeHtml(c.name)}</span>
-            ${c.visited_today ? `<span class="muted">${t("stat_visited_today")}</span>` : ""}
-          </button>
-        `
-          )
-          .join("")}
-      </div>
-    </div>
-  `;
-  slot.querySelectorAll(".today-plan-row").forEach((row) => {
-    row.addEventListener("click", () => navigate(`#/customers/${row.dataset.customerId}`));
-  });
+    `;
+    slot.querySelector(".today-plan-header").addEventListener("click", () => {
+      expanded = !expanded;
+      paint();
+    });
+    slot.querySelectorAll(".today-plan-row").forEach((row) => {
+      row.addEventListener("click", () => navigate(`#/customers/${row.dataset.customerId}`));
+    });
+  }
+  paint();
 }
 
 async function renderNextVisit(slot, customers, navigate) {

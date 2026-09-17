@@ -126,7 +126,7 @@ export async function renderCheckin(root, navigate, customerId) {
         </button>
         <label class="high-res-photo-toggle">
           <input type="checkbox" id="high-res-photo-toggle" />
-          ${t("high_res_photo")}
+          <span class="high-res-photo-label">${t("high_res_photo")}</span>
         </label>
       </div>
 
