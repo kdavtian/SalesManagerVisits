@@ -965,7 +965,15 @@ button:disabled,
 
 /* Forms */
 
-form label {
+/* .wizard-form shares these rules with a real <form> for a multi-step
+   wizard sheet (e.g. bonusChallengesAdmin.js's New Challenge flow) whose
+   step body is swapped via innerHTML on plain type="button" clicks, never
+   an actual <form> submit -- wrapping it in a real <form> risked an
+   Enter-key press in a text field triggering an unhandled implicit
+   submission (page reload) since there's no submit listener to prevent
+   it. Keep every rule below in sync between the two selectors. */
+form label,
+.wizard-form label {
   display: block;
   font-size: 0.82rem;
   color: var(--text-dim);
@@ -974,7 +982,10 @@ form label {
 
 form input,
 form textarea,
-form select {
+form select,
+.wizard-form input,
+.wizard-form textarea,
+.wizard-form select {
   display: block;
   width: 100%;
   margin-top: 6px;
@@ -988,7 +999,10 @@ form select {
 
 form input:focus,
 form textarea:focus,
-form select:focus {
+form select:focus,
+.wizard-form input:focus,
+.wizard-form textarea:focus,
+.wizard-form select:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
@@ -1957,6 +1971,22 @@ input[type="search"]:focus-visible {
   cursor: default;
   display: flex;
   flex-direction: column;
+  gap: 8px;
+}
+
+/* A single-line checkbox + its label text, side by side -- for a picker
+   list (e.g. bonusChallengesAdmin.js's audience step). Not .user-row:
+   that class's flex-direction: column is for a two-line card (title row,
+   meta row below), and previously got reused here via an inline
+   style="display:flex;align-items:center" that could only override
+   display (same value, so a no-op) and never touched flex-direction --
+   the inline style's higher specificity doesn't help for a property the
+   inline style never sets, so the class's column direction always won,
+   stacking the checkbox above its label instead of beside it. */
+.checkbox-row {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
   gap: 8px;
 }
 

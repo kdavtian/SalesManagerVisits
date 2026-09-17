@@ -1223,6 +1223,7 @@ const dict = {
 
     qa_bonuses: "Bonuses",
     bonuses_title: "Bonuses",
+    bonuses_admin_challenges: "Challenges",
     bonuses_points_label: "Points",
     bonuses_level_label: "Level",
     bonuses_next_level: "to next level",

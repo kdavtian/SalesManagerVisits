@@ -203,9 +203,11 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       ${
         canManageChallenges || canReviewBonusRewards
           ? `
-        <h2 class="section-title">Bonuses</h2>
-        ${canManageChallenges ? `<div id="bonus-challenges-section"></div>` : ""}
-        ${canReviewBonusRewards ? `<h3 class="settings-subsection-title">Reward claims</h3><div id="bonus-reward-claims-section"></div>` : ""}
+        <h2 class="section-title">${t("bonuses_title")}</h2>
+        <div class="card settings-list">
+          ${canManageChallenges ? settingsRow({ icon: ICON.bolt, label: t("bonuses_admin_challenges"), id: "row-bonus-challenges" }) : ""}
+          ${canReviewBonusRewards ? settingsRow({ icon: ICON.chart, label: t("bonuses_reward_claims"), id: "row-bonus-reward-claims" }) : ""}
+        </div>
       `
           : ""
       }
@@ -689,10 +691,14 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
   }
 
   if (canManageChallenges) {
-    renderBonusChallengesSection(root.querySelector("#bonus-challenges-section"));
+    root.querySelector("#row-bonus-challenges").addEventListener("click", (e) => {
+      openAdminSection(root, e.currentTarget, t("bonuses_admin_challenges"), renderBonusChallengesSection);
+    });
   }
   if (canReviewBonusRewards) {
-    renderBonusRewardClaimsSection(root.querySelector("#bonus-reward-claims-section"));
+    root.querySelector("#row-bonus-reward-claims").addEventListener("click", (e) => {
+      openAdminSection(root, e.currentTarget, t("bonuses_reward_claims"), renderBonusRewardClaimsSection);
+    });
   }
 
   if (canManageProducts()) {
