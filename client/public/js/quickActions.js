@@ -48,6 +48,10 @@ export const QUICK_ACTIONS = [
   // sales.js gates on too). A sales_manager already has their own
   // customers' order history via the customer detail page.
   { id: "qa_sales", defaultRoles: ["admin", "ceo", "sales_director", "accountant"] },
+  // Visible to every role by default -- further gated at render time on
+  // app_settings.bonuses_enabled (off by default), since the tile itself
+  // carries no role restriction of its own (see dashboard.js/app.js).
+  { id: "qa_bonuses", defaultRoles: ALL_ROLES },
 ];
 
 // Which route each tile jumps to -- shared between the Home screen's
@@ -68,6 +72,7 @@ export const QUICK_ACTION_ROUTE = {
   qa_debt_balances: "#/debt-balances",
   qa_company_dashboard: "#/company-dashboard",
   qa_sales: "#/sales",
+  qa_bonuses: "#/bonuses",
 };
 
 export const QUICK_ACTION_IDS = QUICK_ACTIONS.map((a) => a.id);

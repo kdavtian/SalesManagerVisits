@@ -70,4 +70,6 @@ export const icons = {
   // which reads as an import/sync action rather than a cost figure and
   // gave no visual hint of what the button actually shows.
   costLetter: uiSvg(`<circle cx="12" cy="12" r="9.25"/><path d="M15.6 8.7a4.6 4.6 0 1 0 0 6.6"/>`),
+  // A wrapped gift box -- the Bonuses quick action/entry point.
+  gift: uiSvg(`<rect width="18" height="4" x="3" y="8" rx="1"/><path d="M12 8v13M5 8v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8"/><path d="M12 8H7.5a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8Z"/><path d="M12 8h4.5a2.5 2.5 0 0 0 0-5C13 3 12 8 12 8Z"/>`),
 };

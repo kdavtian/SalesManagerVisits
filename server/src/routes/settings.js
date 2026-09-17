@@ -15,6 +15,7 @@ import {
   getCalculatorModeEnabled,
   setCalculatorModeEnabled,
 } from "../settings.js";
+import { getBonusesEnabled } from "../bonusSettings.js";
 import { ROLES } from "../roles.js";
 
 export const settingsRouter = Router();
@@ -29,6 +30,7 @@ settingsRouter.get("/", async (req, res) => {
     quickActionVisibility,
     calculatorPinHash,
     calculatorModeEnabled,
+    bonusesEnabled,
   ] = await Promise.all([
     getCheckinRadiusMeters(),
     getDefaultVisitFrequencyDays(),
@@ -36,6 +38,7 @@ settingsRouter.get("/", async (req, res) => {
     getQuickActionVisibility(),
     getCalculatorPinHash(),
     getCalculatorModeEnabled(),
+    getBonusesEnabled(),
   ]);
   res.json({
     checkin_radius_meters: checkinRadiusMeters,
@@ -50,6 +53,11 @@ settingsRouter.get("/", async (req, res) => {
     // code set" or "using the default code" next to the input.
     calculator_pin_is_custom: calculatorPinHash != null,
     calculator_mode_enabled: calculatorModeEnabled,
+    // Read-only here -- the flag is only ever written via the Bonuses
+    // admin work (a later step, not this settings PATCH). Every role
+    // reads it: the dashboard needs it to decide whether to show the
+    // Bonuses quick action/entry point at all (docs/bonuses-design.md).
+    bonuses_enabled: bonusesEnabled,
   });
 });
 

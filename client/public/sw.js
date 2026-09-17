@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v195";
+const CACHE_VERSION = "field-visits-v196";
 const TILE_CACHE = "field-visits-tiles-v4";
 // Anything fetched at runtime that wasn't already in APP_SHELL gets cached
 // here, kept separate from CACHE_VERSION on purpose -- see trimCache below,
@@ -76,6 +76,7 @@ const APP_SHELL = [
   "/js/views/login.js",
   "/js/views/map.js",
   "/js/views/settings.js",
+  "/js/views/bonuses.js",
   // The rest of app.js's routes -- all now loaded via dynamic import()
   // rather than a static import at boot (so only the screen actually
   // opened is fetched/parsed on startup), but still listed here so every
