@@ -8,23 +8,22 @@ decisions made while implementing it — read this before touching any
 resolve real ambiguity in the original brief against this app's actual
 code, not just restate the brief.
 
-**Status**: Phase 7 (gamification polish) in progress; Phases 2-6 (schema,
-pure rule engine, source integration and ledger, challenge engine and
-administration, reward accounting and permissions, employee UI and Home
-integration) shipped separately. See the phase list in
-[`release-process.md`](release-process.md) conventions — this module ships
-as a sequence of separately reviewed PRs, one per phase, each fully tested
-before the next starts. As of this phase there's a real (if minimal)
-employee-facing surface: a "Bonuses" Home Quick Action → `#/bonuses` screen
-showing points/level/active-challenge progress/reward claims/badges/
-personal bests, plus the admin-only screens from earlier phases (Settings
-→ Admin Workspace → Bonuses: template management gated to
+**Status**: All 8 phases complete and merged to `main`. The module is
+fully built, end-to-end validated (Phase 8), and ready to turn on — see
+["Turning it on" below](#turning-it-on-phase-8-handoff) for the
+production runbook. It ships as a sequence of separately reviewed PRs, one
+per phase, each fully tested before the next started, per
+[`release-process.md`](release-process.md)'s conventions. The full
+employee-facing surface is a "Bonuses" Home Quick Action → `#/bonuses`
+screen showing points/level/active-challenge progress/reward claims/
+badges/personal bests, plus the admin-only screens (Settings → Admin
+Workspace → Bonuses: template management gated to
 `canManageBonusChallenges`, reward-claim review gated to
 `canApproveBonusRewards`/`canRecordBonusPayouts`) and three in-process
-workers (`src/bonusReconciliation.js`, `src/bonusChallengeWorker.js`, the
-latter now also updating personal bests each tick). Everything stays
+workers (`src/bonusReconciliation.js`, `src/bonusChallengeWorker.js` —
+the latter also updating personal bests each tick). Everything stays
 invisible/inert while `app_settings.bonuses_enabled` is `false` (the
-default in every environment, including production).
+default in every environment, including production, right now).
 
 ## Decisions resolved during Phase 1 discovery
 
@@ -426,10 +425,80 @@ the shape follows existing conventions directly:
   `en`-only keys (see Phase 6's scope notes) — `hy` falls back to `en`
   for every `bonuses_*`/`bonus_*` key already, not just these new ones.
 
-## Not yet built
+## Phase 8: end-to-end validation
 
-End-to-end validation (Phase 8), its own PR. Also still open, per the
-scope notes above: Phase 4 admin UI's gaps (no wizard, no product-sales
-form) and Phase 6's deliberate non-removal of Monthly Leaders. See the
-brief itself for the full acceptance-test matrix each later phase is
-validated against.
+`server/test/integration/bonusEndToEnd.test.js` drives the whole module as
+one real user journey through the actual HTTP routes (not another unit
+test for a single function): starting from `bonuses_enabled=false`
+(confirmed 404 on the employee summary route), an admin creates and
+publishes a challenge template over `POST /api/bonus-challenges/templates`
+and its `/publish` route, the challenge engine's `ensureOnceRound` creates
+the round, a real payment approval flows through
+`ingestCollectionContribution` (Phase 3) and both earns a collectible and
+awards the "first accepted collection" badge (Phase 7) as a followup side
+effect, the worker's `processRound` (Phase 4) recomputes progress and
+finalizes the round into a reward claim, the employee's own
+`GET /api/bonus-summary` (Phase 6) reflects the collectible count, badge,
+personal best, and claim, an admin approves the claim over
+`POST /api/bonus-reward-claims/:id/approve` (awarding the "first approved
+reward" badge to the claimant, never the approving admin), a plain
+sales_manager is confirmed unable to record the payout while an accountant
+can (`canRecordBonusPayouts` vs `canApproveBonusRewards`, Phase 5), and
+finally `bonuses_enabled` is turned back off and the employee route goes
+back to 404 — proving the module returns cleanly to fully inert. A second
+test confirms `app_settings.bonuses_enabled`'s column default is `false`
+directly against the schema, independent of any test having touched the
+row. Together with the 353 tests across all 8 phases (`npm test`) and
+`npm run verify:ui`'s 27 checks, this is the acceptance validation the
+brief's Section 13 matrix asked for.
+
+Also confirmed during this phase: `npm run check:version` passes, the
+server boots cleanly and smoke-tests correctly with the flag both off and
+on, and a full local run of `npm test` was repeated twice with zero
+failures to rule out the cross-test-file `bonuses_enabled` race (documented
+in Phase 4/5's notes) recurring under the new, longer-running end-to-end
+test.
+
+## Turning it on (Phase 8 handoff)
+
+The module is entirely inert until someone flips
+`app_settings.bonuses_enabled` to `true` (currently only settable via the
+Bonuses admin surface — there's no separate ops toggle). Before doing that
+in production:
+
+1. **Design the real challenge templates first.** Nothing is pre-seeded
+   beyond the schema's own reference data (level thresholds, the 4 Release-1
+   badge definitions) — an admin with `canManageBonusChallenges` (admin/ceo)
+   needs to actually create and publish templates via Settings → Admin
+   Workspace → Bonuses before employees see anything beyond an empty
+   points/level view.
+2. **Turn the flag on.** This immediately makes `GET /api/bonus-summary`
+   live, exposes the "Bonuses" Home Quick Action, and lets the two
+   in-process workers (`bonusReconciliation.js`, `bonusChallengeWorker.js`)
+   start actually finding work to do on their existing hourly/periodic
+   ticks — they no-op harmlessly while the flag is off, so there's no
+   separate "start the worker" step.
+3. **Monitor the first few worker ticks** (`console.error` calls in both
+   workers' `setInterval` catch blocks are the only current failure
+   signal — see `docs/monitoring.md` for how server logs are watched) and
+   the reward-claims queue (Settings → Admin Workspace → Bonuses → Reward
+   claims) for the first batch of claims once a round's validation window
+   closes.
+4. **Rollback plan**: flip `bonuses_enabled` back to `false`. This is
+   instant and safe — no data is deleted, ledger/challenge/claim history
+   stays intact, the employee route goes back to 404, and every worker
+   goes back to a no-op on its next tick. Re-enabling later resumes exactly
+   where it left off (idempotent `operation_key`s mean nothing double-fires
+   on the next tick after a pause).
+
+Known scope gaps carried forward, still open and each already called out
+in its own phase's "Decisions made" section above: Phase 4's admin UI has
+no creation wizard and no product-sales target UI (template JSON must be
+constructed correctly by hand via the API for `product_sales` challenges);
+Phase 6 deliberately left "Monthly Leaders" in place rather than replacing
+the Home presentation, so both exist side by side until someone makes an
+explicit call to retire the old one. Neither blocks turning the flag on —
+`single_metric` and `balanced_basket` challenges (the types with admin UI
+support) are enough for a first real rollout, and Monthly Leaders staying
+visible alongside the new Bonuses entry point is a presentation choice,
+not a data-integrity risk.
