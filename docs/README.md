@@ -30,6 +30,7 @@ Don't duplicate between the two — if content already lives in
 |---|---|
 | [offline-sync.md](offline-sync.md) | The offline write queue: idempotency, retry/conflict behavior, what a rep sees. |
 | [erp-integration.md](erp-integration.md) | ERP sync ownership, frequency, retries, reconciliation — points to the full contract doc. |
+| [bonuses-design.md](bonuses-design.md) | The gamified Bonuses module: schema, rule engine, admin/employee surfaces, and the runbook for turning it on in production. |
 | [governance/architecture.md](governance/architecture.md) | System diagram, layers, integrations, deployment topology. |
 
 ## Operating it
