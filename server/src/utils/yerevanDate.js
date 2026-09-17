@@ -113,3 +113,21 @@ export function yerevanCustomRangeBounds(startDateStr, endDateStr) {
 export function yerevanDateOf(instant) {
   return yerevanToday(instant instanceof Date ? instant : new Date(instant));
 }
+
+// "HH:MM:SS" for the Yerevan-local time of day a UTC instant falls at --
+// lexicographically comparable to a Postgres TIME column value (node-pg
+// returns TIME as the same "HH:MM:SS" string), which is what the office
+// attendance cutoff/earliest-time comparisons in bonusSourceIngest.js need.
+export function yerevanTimeOfDay(instant) {
+  const shifted = yerevanNow(instant instanceof Date ? instant : new Date(instant));
+  return `${pad2(shifted.getUTCHours())}:${pad2(shifted.getUTCMinutes())}:${pad2(shifted.getUTCSeconds())}`;
+}
+
+// ISO day-of-week (1=Monday..7=Sunday) for the Yerevan calendar date a UTC
+// instant falls on -- what the office attendance "workdays" restriction
+// compares against.
+export function yerevanIsoDayOfWeek(instant) {
+  const shifted = yerevanNow(instant instanceof Date ? instant : new Date(instant));
+  const dow = shifted.getUTCDay();
+  return dow === 0 ? 7 : dow;
+}
