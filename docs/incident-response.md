@@ -98,3 +98,81 @@ incident:
    so the same class of failure is tracked, not just fixed once.
 3. If the incident revealed a gap in this doc or `monitoring.md`, fix the
    doc in the same PR as the follow-up work — don't let it go stale.
+
+## Postmortem log
+
+The format §7 above asks for, started with the first real incident it
+applied to.
+
+### 2026-09-17 — `deploy.sh --full` ran the integration test suite against production
+
+**What happened**: Deploying the Bonuses module's migrations required
+`--full` (auto-triggered by new files under `server/migrations/`), which
+ran `docker compose run --rm app npm test`. `docker-compose.yml` only
+defined one Postgres service (`db`, the real production database) — the
+`app` service's `DATABASE_URL` always pointed at it, and `docker compose
+run` inherits that. So the real integration suite (`test/integration/*`)
+ran directly against production. This happened 3 times across the
+session (deploy attempts ~30 minutes apart while working through
+unrelated `psql` role/auth issues), confirmed by timestamps on the
+leftover fixture rows below.
+
+**Impact**:
+- Real Web Push notifications (`push.js`) were sent to real subscribed
+  devices, for fake orders/checkins/payments the test suite created and
+  then deleted — visible in server logs as `Push delivered to
+  subscription <id> (user <id>): "<title>"` with real subscription and
+  user IDs, real Armenian notification text ("Նոր պատվեր" /
+  "Պատվերն առաքվեց" / etc.). Telegram (`telegram.js`, same code shape)
+  was not configured in this production `.env`, so it didn't also fire —
+  but would have under the same conditions.
+- 3 of `test/integration/bonusSourceIngest.test.js`'s office-attendance
+  tests failed with a unique-constraint violation on
+  `customers.erp_customer_id = 10000` — a real production customer's ERP
+  ID, which a hardcoded test fixture collided with. Confirmed the suite
+  was reading/writing real data, not an isolated copy.
+- Those 3 failures happened before their test file's own cleanup step, so
+  6 fixture `users` rows (from a separate, unrelated test file that did
+  complete) were left behind across the 3 runs — found via a targeted
+  query (fixture email/name patterns) and deleted manually. No customer,
+  order, payment, or checkin rows were left behind — every other test
+  file's own `test.after` cleanup ran successfully.
+
+**Detection**: Not caught by any automated signal — noticed by a human
+reading the deploy's own terminal output line by line while
+troubleshooting an unrelated `psql` connection issue, and recognizing the
+`Push delivered to subscription ...` lines as real, not test log noise.
+
+**Root cause**: `docker-compose.yml` had no isolated test-database
+service — unlike CI (`.github/workflows/ci.yml`), which spins up its own
+ephemeral `postgres` service container per run and never touches
+anything durable. `deploy.sh` was written assuming "the test suite is
+just redundant with CI, safe to occasionally re-run" without noticing it
+was re-running against a fundamentally different (real, persistent,
+externally-connected) database. Compounding factor: `push.js`/
+`telegram.js` had no test-mode guard at all — `enabled` was purely
+"are credentials configured," so a real, configured production
+environment always sends real notifications regardless of who's asking or
+why.
+
+**Fix** (see R-13 in the risk register):
+1. `docker-compose.yml` gained a `db-test` service, gated behind
+   `profiles: ["test"]` (invisible to a normal `up`/`up -d db`), with no
+   named volume so every run starts empty.
+2. `deploy.sh`'s full-test step now starts `db-test`, runs `npm run
+   migrate` and `npm test` against it via `docker compose run -e
+   DATABASE_URL=... -e NODE_ENV=test`, and tears it down in a trap (so a
+   real test failure, which is `set -e`'s whole point, still cleans up).
+3. `push.js`/`telegram.js` now also require `NODE_ENV !== "test"` to be
+   `enabled`, independent of whether real credentials are configured —
+   defense in depth so a future test run misconfigured some other way
+   still can't send a real notification.
+
+**What would have caught it sooner**: a staging environment (R-01,
+already tracked, unrelated root cause but would have made this
+unreachable from `--full` against anything resembling production) or,
+more directly, noticing during Phase 8's original production runbook
+write-up that `deploy.sh --full` and `npm test`'s DB target had never
+actually been audited together. Logged as its own root cause here rather
+than folded into R-01, since the fix didn't require standing up a second
+environment.
