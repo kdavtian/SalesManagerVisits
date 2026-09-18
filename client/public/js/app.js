@@ -25,6 +25,16 @@ const app = document.getElementById("app");
 const navBar = document.getElementById("nav-bar");
 const topBar = document.getElementById("top-bar");
 const sidebar = document.getElementById("sidebar");
+// The true baseline for #app/document.body's class lists, captured before
+// any view has ever mounted -- some views (map.js) add classes here as a
+// mount-time side effect (locking #app's own scroll, an opaque nav-bar
+// background) and remove them again in their cleanup function. The
+// back-cache below defers that cleanup for a stashed-but-not-yet-evicted
+// view, so it can no longer be trusted to run before the next route
+// mounts; render() resets to this baseline itself instead (see the
+// back-cache stash/restore logic).
+const baseAppClassName = app.className;
+const baseBodyClassName = document.body.className;
 
 // #app (not the document) is the app's real scroll container -- body stays
 // overflow:hidden so the fixed top/nav bars never drift with content (see
@@ -210,6 +220,25 @@ function preloadArmeniaTiles() {
 let currentCleanup = null;
 let currentPath = null;
 let fieldErrorId = 0;
+
+// Single-slot "back cache": the exact DOM nodes (not a re-render) of the
+// one screen most recently navigated away from, plus its scroll position
+// and cleanup function -- so returning to it (the browser/PWA's own back
+// button, an edge-swipe-back gesture, this app's own navigate.goBack, or
+// even just landing back on that exact hash some other way) restores
+// everything exactly as it was: scroll position, filter/sort selections,
+// search text, an expanded accordion, all of it, since it's literally the
+// same nodes with their listeners intact, not new markup with fresh JS
+// state. Deliberately only one slot, not a full per-route history: every
+// navigation (forward or back) evicts whatever didn't match and stashes
+// the screen being left instead, so the cache only ever holds the single
+// most recent hop -- which is exactly what makes "tap Orders from a
+// customer's detail page, then tap Customers again" correctly get a FRESH
+// list rather than the one left two hops ago: by the time that tap
+// happens, the cache slot has already been overwritten by the detail
+// page's own stash and no longer holds the old Customers state at all.
+let backCache = null; // { hash, nodes: DocumentFragment, cleanup, scrollTop }
+let lastRenderedHash = null;
 // Remembers the hash we were on right before navigating into Settings, so
 // tapping the top-bar menu button a second time can act as a "close" and
 // return there, instead of just re-navigating to #/settings every time.
@@ -523,12 +552,18 @@ async function render() {
   // floating on screen over whatever the new route rendered underneath,
   // instead of closing along with the page it belonged to.
   document.querySelectorAll(".sheet-overlay").forEach((el) => el.remove());
-  if (currentCleanup) {
-    currentCleanup();
-    currentCleanup = null;
-  }
 
   if (!state.user) {
+    if (currentCleanup) {
+      currentCleanup();
+      currentCleanup = null;
+    }
+    // A logged-out session's back-cache would otherwise hold onto this
+    // account's DOM (and whatever cleanup it owned) across a login screen
+    // that might belong to a different account entirely on a shared device.
+    backCache?.cleanup?.();
+    backCache = null;
+    lastRenderedHash = null;
     topBar.hidden = true;
     navBar.hidden = true;
     sidebar.hidden = true;
@@ -564,6 +599,80 @@ async function render() {
   preloadArmeniaTiles();
 
   const hash = location.hash || "#/dashboard";
+
+  // Restore from the back-cache -- only on a genuine back/forward
+  // navigation (see the popstate listener below), and only when it's the
+  // exact screen we most recently left. Reattaches the same DOM nodes (so
+  // every click listener, timer, and closure-held filter/sort/search state
+  // is still exactly as it was) instead of asking the route's view module
+  // to rebuild everything from scratch and lose all of it.
+  if (backCache && backCache.hash === hash) {
+    if (currentCleanup) {
+      currentCleanup();
+      currentCleanup = null;
+    }
+    const { nodes, cleanup, scrollTop, appClassName, bodyClassName } = backCache;
+    backCache = null;
+    app.replaceChildren(nodes);
+    // Reapply whatever #app/document.body class customization the
+    // restored view had made at mount time (e.g. map.js's scroll lock) --
+    // stripped below when it was stashed, since its own cleanup function
+    // (the only thing that normally removes them) is deferred, not run,
+    // while a view sits in the back-cache.
+    app.className = appClassName ?? baseAppClassName;
+    document.body.className = bodyClassName ?? baseBodyClassName;
+    currentCleanup = cleanup || null;
+    lastRenderedHash = hash;
+    requestAnimationFrame(() => {
+      app.scrollTop = scrollTop;
+    });
+    return;
+  }
+
+  // Not restoring: whatever is currently mounted is about to be replaced.
+  // Stash it into the single back-cache slot first (so a subsequent "back"
+  // to exactly this hash is instant) unless there's nothing to stash (first
+  // paint) or we're already on this exact hash (a re-render of the same
+  // route, e.g. after a settings change). A stale, unconsumed cache entry
+  // from an earlier hop is disposed here rather than silently dropped, so
+  // whatever cleanup it owned (a timer, a geolocation watch) still runs.
+  if (backCache && backCache.hash !== hash) {
+    backCache.cleanup?.();
+    backCache = null;
+  }
+  if (lastRenderedHash && lastRenderedHash !== hash && app.firstChild) {
+    // Captured BEFORE emptying #app below -- a scroll container with no
+    // children always reports scrollTop 0, so reading it after the move
+    // loop would silently throw away the real position every time.
+    const scrollTopSnapshot = app.scrollTop;
+    const appClassNameSnapshot = app.className;
+    const bodyClassNameSnapshot = document.body.className;
+    const fragment = document.createDocumentFragment();
+    while (app.firstChild) fragment.appendChild(app.firstChild);
+    backCache = {
+      hash: lastRenderedHash,
+      nodes: fragment,
+      cleanup: currentCleanup,
+      scrollTop: scrollTopSnapshot,
+      appClassName: appClassNameSnapshot,
+      bodyClassName: bodyClassNameSnapshot,
+    };
+    currentCleanup = null; // ownership transferred to backCache
+    // The outgoing view's cleanup function -- the only thing that would
+    // normally strip any #app/document.body classes it added at mount
+    // time -- isn't going to run until this cache entry is evicted, which
+    // may be much later or never. The next view must not inherit them
+    // (e.g. mounting a checkin page under map.js's scroll-locking class),
+    // so reset to the true baseline now; restoring this entry later
+    // (above) reapplies its own snapshot.
+    app.className = baseAppClassName;
+    document.body.className = baseBodyClassName;
+  } else if (currentCleanup) {
+    currentCleanup();
+    currentCleanup = null;
+  }
+  lastRenderedHash = hash;
+
   const [path, queryString] = hash.split("?");
   if (path !== currentPath) {
     currentPath = path;
