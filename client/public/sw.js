@@ -63,6 +63,7 @@ const APP_SHELL = [
   "/js/perfMode.js",
   "/js/perf-mode-init.js",
   "/js/quickActions.js",
+  "/js/regionTree.js",
   "/js/views/admin.js",
   "/js/views/bonusChallengesAdmin.js",
   "/js/views/activity.js",
