@@ -284,7 +284,7 @@ paymentsRouter.get("/pending-count", async (req, res) => {
 });
 
 paymentsRouter.get("/", async (req, res) => {
-  const { status, sales_channel, sales_manager_id, customer_id, month, from, to, q, sort, offset } = req.query;
+  const { status, sales_channel, sales_manager_id, customer_id, month, from, to, q, sort, order, offset } = req.query;
 
   const conditions = [];
   const params = [];
@@ -341,7 +341,12 @@ paymentsRouter.get("/", async (req, res) => {
   // Default: Sales Channel then newest-first within each channel (per spec).
   // A manager only ever sees their own single channel, so channel grouping
   // is a no-op for them -- date-only sort reads identically either way.
-  const orderBy = sort === "date" ? "p.payment_date DESC" : "p.sales_channel NULLS LAST, p.payment_date DESC";
+  // order=asc reverses the payment_date direction either way (oldest
+  // first), same "tap the active sort option again" convention as every
+  // other list's sort menu -- the channel grouping itself has no
+  // direction of its own to reverse, so it's untouched by this.
+  const dateDir = order === "asc" ? "ASC" : "DESC";
+  const orderBy = sort === "date" ? `p.payment_date ${dateDir}` : `p.sales_channel NULLS LAST, p.payment_date ${dateDir}`;
   const offsetNum = Math.max(0, Number(offset) || 0);
 
   params.push(PAGE_SIZE + 1, offsetNum);

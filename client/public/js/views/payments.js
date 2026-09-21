@@ -140,6 +140,11 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
   // this) -- see PERIOD_LABEL_KEY/periodFilterParams above.
   let periodFilter = Object.keys(PERIOD_LABEL_KEY).includes(initialQuery?.get("period")) ? initialQuery.get("period") : "";
   let sort = canSeeAll ? "" : "date";
+  // Tapping the already-active sort option again reverses the payment-date
+  // direction (oldest-first instead of newest-first) -- same convention as
+  // every other list's sort menu. The channel grouping itself has no
+  // direction to reverse, only the date ordering within/across it does.
+  let orderReversed = false;
   let payments = [];
   let hasMore = false;
   let loadingMore = false;
@@ -174,6 +179,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
   function buildParams(extra = {}) {
     const params = { ...extra };
     if (sort) params.sort = sort;
+    if (orderReversed) params.order = "asc";
     if (channelFilter) params.sales_channel = channelFilter;
     if (managerFilter) params.sales_manager_id = managerFilter;
     if (activeFilter === "pending" || activeFilter === "approved" || activeFilter === "rejected") {
@@ -272,8 +278,8 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
       ${
         canSeeAll
           ? `<hr />
-      <button role="menuitemradio" aria-checked="${sort === "date"}" data-sort="date">${t("sort_by_date")}</button>
-      <button role="menuitemradio" aria-checked="${sort === ""}" data-sort="">${t("sort_by_channel")}</button>`
+      <button class="sort-menu-item" role="menuitemradio" aria-checked="${sort === "date"}" data-sort="date"><span>${t("sort_by_date")}</span><span class="sort-menu-arrow" aria-hidden="true">${sort === "date" ? (orderReversed ? "▲" : "▼") : ""}</span></button>
+      <button class="sort-menu-item" role="menuitemradio" aria-checked="${sort === ""}" data-sort=""><span>${t("sort_by_channel")}</span><span class="sort-menu-arrow" aria-hidden="true">${sort === "" ? (orderReversed ? "▲" : "▼") : ""}</span></button>`
           : ""
       }
     `;
@@ -287,6 +293,8 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
     });
     filterMenu.querySelectorAll("[data-sort]").forEach((btn) => {
       btn.addEventListener("click", () => {
+        if (btn.dataset.sort === sort) orderReversed = !orderReversed;
+        else orderReversed = false;
         sort = btn.dataset.sort;
         filterMenu.hidden = true;
         filterBtn.setAttribute("aria-expanded", "false");

@@ -94,10 +94,10 @@ export function renderCustomers(root, navigate, initialFilter) {
         <input type="search" id="customer-search" placeholder="${t("search_customers")}" aria-label="${t("search_customers")}" />
         <button class="icon-btn" id="sort-btn" type="button" aria-label="${t("sort")}" aria-haspopup="menu" aria-expanded="false" aria-controls="sort-menu">${icons.sort}</button>
         <div id="sort-menu" class="dropdown-menu" role="menu" hidden>
-          <button role="menuitemradio" aria-checked="true" data-sort="name">${t("sort_name")}</button>
-          <button role="menuitemradio" aria-checked="false" data-sort="last_visit">${t("sort_last_visit")}</button>
-          <button role="menuitemradio" aria-checked="false" data-sort="last_added">${t("sort_last_added")}</button>
-          <button role="menuitemradio" aria-checked="false" data-sort="distance">${t("sort_distance")}</button>
+          <button class="sort-menu-item" role="menuitemradio" aria-checked="true" data-sort="name"><span>${t("sort_name")}</span><span class="sort-menu-arrow" aria-hidden="true"></span></button>
+          <button class="sort-menu-item" role="menuitemradio" aria-checked="false" data-sort="last_visit"><span>${t("sort_last_visit")}</span><span class="sort-menu-arrow" aria-hidden="true"></span></button>
+          <button class="sort-menu-item" role="menuitemradio" aria-checked="false" data-sort="last_added"><span>${t("sort_last_added")}</span><span class="sort-menu-arrow" aria-hidden="true"></span></button>
+          <button class="sort-menu-item" role="menuitemradio" aria-checked="false" data-sort="distance"><span>${t("sort_distance")}</span><span class="sort-menu-arrow" aria-hidden="true"></span></button>
         </div>
       </div>
       <div class="customer-filter-row" id="customer-filter-row"></div>
@@ -113,12 +113,13 @@ export function renderCustomers(root, navigate, initialFilter) {
 
   let filter = initialFilter || "";
   let sortKey = "name";
-  // "Last added" is the one sort with a direction toggle (per the task
-  // spec: newest-first on first tap, tapping the already-active option
-  // again flips to oldest-first) -- every other sort key has exactly one
-  // sensible direction (alphabetical, soonest-overdue, nearest), so this
-  // flag only ever applies while sortKey === "last_added".
-  let lastAddedDesc = true;
+  // Every sort option reverses on a second tap of the same (already
+  // active) menu item -- false is always each key's normal/default
+  // direction (A-Z, soonest last visit first, nearest first, most
+  // recently added first), reset back to false whenever a DIFFERENT key
+  // is picked so switching sorts never silently carries over a reversal
+  // from the previous one.
+  let sortReversed = false;
   let myLocation = null;
   let searchTimer;
   // A Set of "region::subregion" keys, per regionTree.js's own leaf-id
@@ -150,14 +151,21 @@ export function renderCustomers(root, navigate, initialFilter) {
     sortBtn.setAttribute("aria-expanded", String(!sortMenu.hidden));
     if (!sortMenu.hidden) sortMenu.querySelector("button")?.focus();
   });
+  function paintSortArrows() {
+    sortMenu.querySelectorAll("[data-sort]").forEach((item) => {
+      const arrow = item.querySelector(".sort-menu-arrow");
+      arrow.textContent = item.dataset.sort === sortKey ? (sortReversed ? "▲" : "▼") : "";
+    });
+  }
   sortMenu.querySelectorAll("[data-sort]").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      if (btn.dataset.sort === "last_added" && sortKey === "last_added") lastAddedDesc = !lastAddedDesc;
-      else if (btn.dataset.sort === "last_added") lastAddedDesc = true;
+      if (btn.dataset.sort === sortKey) sortReversed = !sortReversed;
+      else sortReversed = false;
       sortKey = btn.dataset.sort;
       sortMenu.hidden = true;
       sortBtn.setAttribute("aria-expanded", "false");
       sortMenu.querySelectorAll("button").forEach((item) => item.setAttribute("aria-checked", String(item === btn)));
+      paintSortArrows();
       if (sortKey === "distance" && !myLocation) {
         try {
           const pos = await getCurrentPosition();
@@ -169,6 +177,7 @@ export function renderCustomers(root, navigate, initialFilter) {
       render();
     });
   });
+  paintSortArrows();
   root.addEventListener("click", (e) => {
     if (!sortMenu.hidden && !sortMenu.contains(e.target) && e.target !== sortBtn && !sortBtn.contains(e.target)) {
       sortMenu.hidden = true;
@@ -453,20 +462,17 @@ export function renderCustomers(root, navigate, initialFilter) {
       });
       return sorted;
     }
+    const flip = sortReversed ? -1 : 1;
     if (sortKey === "name") {
-      sorted.sort((a, b) => a.name.localeCompare(b.name));
+      sorted.sort((a, b) => flip * a.name.localeCompare(b.name));
     } else if (sortKey === "last_visit") {
-      sorted.sort((a, b) => new Date(b.last_visit_at || 0) - new Date(a.last_visit_at || 0));
+      sorted.sort((a, b) => flip * (new Date(b.last_visit_at || 0) - new Date(a.last_visit_at || 0)));
     } else if (sortKey === "last_added") {
-      sorted.sort((a, b) => {
-        const diff = new Date(b.created_at || 0) - new Date(a.created_at || 0);
-        return lastAddedDesc ? diff : -diff;
-      });
+      sorted.sort((a, b) => flip * (new Date(b.created_at || 0) - new Date(a.created_at || 0)));
     } else if (sortKey === "distance" && myLocation) {
       sorted.sort(
         (a, b) =>
-          haversineMeters(myLocation.lat, myLocation.lng, a.lat, a.lng) -
-          haversineMeters(myLocation.lat, myLocation.lng, b.lat, b.lng)
+          flip * (haversineMeters(myLocation.lat, myLocation.lng, a.lat, a.lng) - haversineMeters(myLocation.lat, myLocation.lng, b.lat, b.lng))
       );
     }
     return sorted;

@@ -1530,6 +1530,22 @@ input[type="search"]:focus-visible {
   background: var(--bg-card-pressed);
 }
 
+/* A sort menu item shows its current direction (tapping the already-
+   active option again reverses it) as a small triangle at the trailing
+   edge, hidden on every other item. */
+.sort-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sort-menu-arrow {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: var(--accent);
+}
+
 .dropdown-menu hr {
   align-self: stretch;
   width: auto;
