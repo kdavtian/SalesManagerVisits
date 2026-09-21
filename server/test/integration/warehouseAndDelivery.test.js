@@ -19,7 +19,7 @@ test.before(async () => {
   await startTestServer();
   users = {};
   cookies = {};
-  for (const role of ["admin", "sales_manager", "delivery_manager"]) {
+  for (const role of ["admin", "sales_manager", "delivery_manager", "ceo"]) {
     users[role] = await createUser(role);
     cookies[role] = await loginAs(users[role].email);
   }
@@ -82,6 +82,17 @@ test("POST /api/warehouse/orders/:id/stock-issue: a missing note is a 400; a val
 test("Warehouse endpoints reject an unauthenticated request with 401", async () => {
   const res = await apiRequest("/api/warehouse/pick-list");
   assert.equal(res.status, 401);
+});
+
+// Regression: canManageWarehouse previously didn't include ceo at all, so
+// a CEO account got 403 from every warehouse endpoint despite already
+// being one of STOCK_ISSUE_NOTIFY_ROLES (notificationPreferences.js) --
+// notified about stock issues on a screen they couldn't open.
+test("GET /api/warehouse/pick-list and /inventory: a ceo can access warehouse screens like sales_director/admin", async () => {
+  const pickList = await apiRequest("/api/warehouse/pick-list", { cookie: cookies.ceo });
+  assert.equal(pickList.status, 200);
+  const inventory = await apiRequest("/api/warehouse/inventory", { cookie: cookies.ceo });
+  assert.equal(inventory.status, 200);
 });
 
 // --- Delivery: role gating + route planning (OSRM unreachable -> fallback) --------
