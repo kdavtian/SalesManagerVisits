@@ -2961,39 +2961,6 @@ label.checkbox-row input[type="checkbox"] {
   margin-bottom: -14px;
 }
 
-/* Direction/region/subregion narrowing above the Plan Day/Today checklist
-   (openPlanDaySheet's renderTodayMode in map.js) -- each dropdown only
-   appears once its own candidate set actually has more than one value, so
-   a manager who only ever works one direction never sees an empty-feeling
-   single-option dropdown. */
-.plan-day-filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin: 10px 0;
-}
-
-.plan-day-filter {
-  flex: 1;
-  min-width: 120px;
-  font-size: 0.78rem;
-  color: var(--text-dim);
-}
-
-.plan-day-filter select {
-  display: block;
-  width: 100%;
-  margin-top: 4px;
-  box-sizing: border-box;
-  min-height: 40px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: var(--radius);
-  padding: 0 8px;
-  font-size: 0.85rem;
-}
-
 .plan-day-list {
   max-height: 45vh;
   overflow-y: auto;
