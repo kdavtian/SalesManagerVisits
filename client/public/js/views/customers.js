@@ -4,6 +4,7 @@ import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state, seesAllActivity } from "../state.js";
 import { loadWithCache } from "../listCache.js";
+import { buildRegionSubregionTree, openTriStateTreeSheet, NO_GROUP_KEY } from "../regionTree.js";
 
 const FILTERS = [
   { key: "", labelKey: "filter_all" },
@@ -93,10 +94,10 @@ export function renderCustomers(root, navigate, initialFilter) {
         <input type="search" id="customer-search" placeholder="${t("search_customers")}" aria-label="${t("search_customers")}" />
         <button class="icon-btn" id="sort-btn" type="button" aria-label="${t("sort")}" aria-haspopup="menu" aria-expanded="false" aria-controls="sort-menu">${icons.sort}</button>
         <div id="sort-menu" class="dropdown-menu" role="menu" hidden>
-          <button role="menuitemradio" aria-checked="true" data-sort="name">${t("sort_name")}</button>
-          <button role="menuitemradio" aria-checked="false" data-sort="last_visit">${t("sort_last_visit")}</button>
-          <button role="menuitemradio" aria-checked="false" data-sort="last_added">${t("sort_last_added")}</button>
-          <button role="menuitemradio" aria-checked="false" data-sort="distance">${t("sort_distance")}</button>
+          <button class="sort-menu-item" role="menuitemradio" aria-checked="true" data-sort="name"><span>${t("sort_name")}</span><span class="sort-menu-arrow" aria-hidden="true"></span></button>
+          <button class="sort-menu-item" role="menuitemradio" aria-checked="false" data-sort="last_visit"><span>${t("sort_last_visit")}</span><span class="sort-menu-arrow" aria-hidden="true"></span></button>
+          <button class="sort-menu-item" role="menuitemradio" aria-checked="false" data-sort="last_added"><span>${t("sort_last_added")}</span><span class="sort-menu-arrow" aria-hidden="true"></span></button>
+          <button class="sort-menu-item" role="menuitemradio" aria-checked="false" data-sort="distance"><span>${t("sort_distance")}</span><span class="sort-menu-arrow" aria-hidden="true"></span></button>
         </div>
       </div>
       <div class="customer-filter-row" id="customer-filter-row"></div>
@@ -112,18 +113,19 @@ export function renderCustomers(root, navigate, initialFilter) {
 
   let filter = initialFilter || "";
   let sortKey = "name";
-  // "Last added" is the one sort with a direction toggle (per the task
-  // spec: newest-first on first tap, tapping the already-active option
-  // again flips to oldest-first) -- every other sort key has exactly one
-  // sensible direction (alphabetical, soonest-overdue, nearest), so this
-  // flag only ever applies while sortKey === "last_added".
-  let lastAddedDesc = true;
+  // Every sort option reverses on a second tap of the same (already
+  // active) menu item -- false is always each key's normal/default
+  // direction (A-Z, soonest last visit first, nearest first, most
+  // recently added first), reset back to false whenever a DIFFERENT key
+  // is picked so switching sorts never silently carries over a reversal
+  // from the previous one.
+  let sortReversed = false;
   let myLocation = null;
   let searchTimer;
-  // Keyed by region name -> "all" | Set of selected subregion names, per
-  // openRegionFilterSheet's own contract above. A region absent from this
-  // object is not filtered on at all.
-  let regionSelection = {};
+  // A Set of "region::subregion" keys, per regionTree.js's own leaf-id
+  // contract (buildRegionSubregionTree/renderTriStateTree) -- empty means
+  // no region filter is applied at all.
+  let regionSubregionKeys = new Set();
   let assignmentFilter = ""; // "", "mine", "others"
   // Sales channel is the one filter where "show me A OR B" is a real query
   // (e.g. comparing two distribution channels side by side), so it's a
@@ -149,14 +151,21 @@ export function renderCustomers(root, navigate, initialFilter) {
     sortBtn.setAttribute("aria-expanded", String(!sortMenu.hidden));
     if (!sortMenu.hidden) sortMenu.querySelector("button")?.focus();
   });
+  function paintSortArrows() {
+    sortMenu.querySelectorAll("[data-sort]").forEach((item) => {
+      const arrow = item.querySelector(".sort-menu-arrow");
+      arrow.textContent = item.dataset.sort === sortKey ? (sortReversed ? "▲" : "▼") : "";
+    });
+  }
   sortMenu.querySelectorAll("[data-sort]").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      if (btn.dataset.sort === "last_added" && sortKey === "last_added") lastAddedDesc = !lastAddedDesc;
-      else if (btn.dataset.sort === "last_added") lastAddedDesc = true;
+      if (btn.dataset.sort === sortKey) sortReversed = !sortReversed;
+      else sortReversed = false;
       sortKey = btn.dataset.sort;
       sortMenu.hidden = true;
       sortBtn.setAttribute("aria-expanded", "false");
       sortMenu.querySelectorAll("button").forEach((item) => item.setAttribute("aria-checked", String(item === btn)));
+      paintSortArrows();
       if (sortKey === "distance" && !myLocation) {
         try {
           const pos = await getCurrentPosition();
@@ -168,6 +177,7 @@ export function renderCustomers(root, navigate, initialFilter) {
       render();
     });
   });
+  paintSortArrows();
   root.addEventListener("click", (e) => {
     if (!sortMenu.hidden && !sortMenu.contains(e.target) && e.target !== sortBtn && !sortBtn.contains(e.target)) {
       sortMenu.hidden = true;
@@ -298,158 +308,8 @@ export function renderCustomers(root, navigate, initialFilter) {
     });
   }
 
-  // Region/subregion filter: pick whole regions, specific subregions within
-  // a region (tap the expand arrow to reveal them), or a mix across several
-  // regions at once (e.g. all of Yerevan plus just two subregions of
-  // Shirak). Selection state per region is one of:
-  //   - absent: region not selected at all
-  //   - "all": every customer in that region matches, including one with no
-  //     subregion set (a plain Set of subregion names couldn't represent
-  //     that -- there's no string to put in the Set for "no subregion")
-  //   - a Set of subregion names: only those subregions match
-  function openRegionFilterSheet(subregionsByRegion, currentSelection, onApply) {
-    // Deep-copy so Cancel (tapping the backdrop) discards in-progress
-    // taps, matching openMultiFilterSheet's same commit-on-Done contract.
-    const working = {};
-    for (const [region, value] of Object.entries(currentSelection)) {
-      working[region] = value === "all" ? "all" : new Set(value);
-    }
-    const expanded = new Set();
-
-    const overlay = document.createElement("div");
-    overlay.className = "sheet-overlay";
-    overlay.innerHTML = `
-      <div class="sheet filter-sheet region-filter-sheet">
-        <h2>${t("region")}</h2>
-        <div class="filter-sheet-options" id="region-filter-options"></div>
-        <div class="sheet-actions">
-          <button type="button" class="btn" id="region-filter-clear">${t("clear")}</button>
-          <button type="button" class="btn btn-primary" id="region-filter-done">${t("done")}</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    activateDialog(overlay);
-    const optionsEl = overlay.querySelector("#region-filter-options");
-
-    function subregionState(region, subregion) {
-      const sel = working[region];
-      if (sel === "all") return true;
-      return sel instanceof Set && sel.has(subregion);
-    }
-
-    function paint() {
-      optionsEl.innerHTML = Object.keys(subregionsByRegion)
-        .sort()
-        .map((region) => {
-          const subregions = subregionsByRegion[region];
-          const sel = working[region];
-          const isAll = sel === "all";
-          const isPartial = sel instanceof Set && sel.size > 0;
-          const isOpen = expanded.has(region);
-          return `
-            <div class="region-filter-group">
-              <div class="region-filter-row">
-                <button type="button" class="filter-sheet-option region-filter-option ${isAll || isPartial ? "filter-sheet-option-selected" : ""}" data-region="${escapeHtml(region)}">
-                  <span>${escapeHtml(region)}</span>
-                  <span class="filter-sheet-check" ${isAll ? "" : "hidden"}>${icons.checkCircle}</span>
-                  <span class="filter-sheet-check-partial" ${isPartial ? "" : "hidden"} aria-hidden="true"></span>
-                </button>
-                ${
-                  subregions.length
-                    ? `<button type="button" class="region-filter-expand" data-region-expand="${escapeHtml(region)}" aria-expanded="${isOpen}" aria-label="${escapeHtml(region)} ${t("subregion")}">${isOpen ? icons.chevronUp : icons.chevronDown}</button>`
-                    : ""
-                }
-              </div>
-              ${
-                subregions.length && isOpen
-                  ? `<div class="region-filter-subregions">
-                      ${subregions
-                        .map(
-                          (s) => `
-                        <button type="button" class="filter-sheet-option subregion-filter-option ${subregionState(region, s) ? "filter-sheet-option-selected" : ""}" data-region="${escapeHtml(region)}" data-subregion="${escapeHtml(s)}">
-                          <span>${escapeHtml(s)}</span>
-                          <span class="filter-sheet-check" ${subregionState(region, s) ? "" : "hidden"}>${icons.checkCircle}</span>
-                        </button>
-                      `
-                        )
-                        .join("")}
-                    </div>`
-                  : ""
-              }
-            </div>
-          `;
-        })
-        .join("");
-
-      optionsEl.querySelectorAll("[data-region-expand]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const region = btn.dataset.regionExpand;
-          if (expanded.has(region)) expanded.delete(region);
-          else expanded.add(region);
-          paint();
-        });
-      });
-      optionsEl.querySelectorAll(".region-filter-option").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const region = btn.dataset.region;
-          if (working[region] === "all") delete working[region];
-          else working[region] = "all";
-          paint();
-        });
-      });
-      optionsEl.querySelectorAll(".subregion-filter-option").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const region = btn.dataset.region;
-          const subregion = btn.dataset.subregion;
-          const all = subregionsByRegion[region];
-          const sel = working[region];
-          if (sel === "all") {
-            const others = new Set(all.filter((s) => s !== subregion));
-            if (others.size === 0) delete working[region];
-            else working[region] = others;
-          } else if (sel instanceof Set) {
-            const next = new Set(sel);
-            if (next.has(subregion)) next.delete(subregion);
-            else next.add(subregion);
-            if (next.size === 0) delete working[region];
-            else if (next.size === all.length) working[region] = "all";
-            else working[region] = next;
-          } else {
-            working[region] = new Set([subregion]);
-          }
-          paint();
-        });
-      });
-    }
-    paint();
-
-    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
-    overlay.querySelector("#region-filter-clear").addEventListener("click", () => {
-      overlay.remove();
-      onApply({});
-    });
-    overlay.querySelector("#region-filter-done").addEventListener("click", () => {
-      overlay.remove();
-      onApply(working);
-    });
-  }
-
   function renderFilterRow() {
-    // Every subregion actually in use, grouped by its region -- the shape
-    // openRegionFilterSheet needs to know what to offer under each region's
-    // expand arrow. Regions with no subregion data at all still get an
-    // entry (an empty array), so "select whole region" still works for them.
-    const subregionsByRegion = {};
-    for (const c of allCustomers) {
-      if (!c.region) continue;
-      if (!subregionsByRegion[c.region]) subregionsByRegion[c.region] = new Set();
-      if (c.subregion) subregionsByRegion[c.region].add(c.subregion);
-    }
-    for (const region of Object.keys(subregionsByRegion)) {
-      subregionsByRegion[region] = [...subregionsByRegion[region]].sort();
-    }
-    const regionCount = Object.keys(regionSelection).length;
+    const regionCount = new Set([...regionSubregionKeys].map((k) => k.split("::")[0])).size;
     const channels = seesAllActivity()
       ? [...new Set(allCustomers.map((c) => c.sales_channel).filter(Boolean))].sort()
       : [];
@@ -467,7 +327,7 @@ export function renderCustomers(root, navigate, initialFilter) {
             active: assignmentFilter !== "",
           })
         : "",
-      Object.keys(subregionsByRegion).length
+      allCustomers.some((c) => c.region)
         ? filterIconButton({
             key: "region",
             icon: icons.pin,
@@ -510,11 +370,16 @@ export function renderCustomers(root, navigate, initialFilter) {
     });
 
     filterRow.querySelector('[data-filter-btn="region"]')?.addEventListener("click", () => {
-      openRegionFilterSheet(subregionsByRegion, regionSelection, (selection) => {
-        regionSelection = selection;
-        renderFilterRow();
-        renderStatsBar();
-        renderList();
+      openTriStateTreeSheet(t("region"), {
+        tree: buildRegionSubregionTree(allCustomers.filter((c) => c.region)),
+        initialSelectedIds: regionSubregionKeys,
+        countUnitLabel: t("perf_dq_customers_unit"),
+        onApply: (selectedIds) => {
+          regionSubregionKeys = selectedIds;
+          renderFilterRow();
+          renderStatsBar();
+          renderList();
+        },
       });
     });
 
@@ -542,13 +407,8 @@ export function renderCustomers(root, navigate, initialFilter) {
     let list = customers;
     const query = searchInput.value.trim().toLowerCase();
     if (query) list = list.filter((c) => c.name.toLowerCase().includes(query));
-    if (Object.keys(regionSelection).length) {
-      list = list.filter((c) => {
-        const sel = regionSelection[c.region];
-        if (!sel) return false;
-        if (sel === "all") return true;
-        return sel.has(c.subregion);
-      });
+    if (regionSubregionKeys.size) {
+      list = list.filter((c) => c.region && regionSubregionKeys.has(`${c.region}::${c.subregion || NO_GROUP_KEY}`));
     }
     if (channelFilters.size) list = list.filter((c) => c.sales_channel && channelFilters.has(c.sales_channel));
     if (assignmentFilter === "mine") list = list.filter((c) => c.assigned_manager_id === state.user.id);
@@ -602,20 +462,17 @@ export function renderCustomers(root, navigate, initialFilter) {
       });
       return sorted;
     }
+    const flip = sortReversed ? -1 : 1;
     if (sortKey === "name") {
-      sorted.sort((a, b) => a.name.localeCompare(b.name));
+      sorted.sort((a, b) => flip * a.name.localeCompare(b.name));
     } else if (sortKey === "last_visit") {
-      sorted.sort((a, b) => new Date(b.last_visit_at || 0) - new Date(a.last_visit_at || 0));
+      sorted.sort((a, b) => flip * (new Date(b.last_visit_at || 0) - new Date(a.last_visit_at || 0)));
     } else if (sortKey === "last_added") {
-      sorted.sort((a, b) => {
-        const diff = new Date(b.created_at || 0) - new Date(a.created_at || 0);
-        return lastAddedDesc ? diff : -diff;
-      });
+      sorted.sort((a, b) => flip * (new Date(b.created_at || 0) - new Date(a.created_at || 0)));
     } else if (sortKey === "distance" && myLocation) {
       sorted.sort(
         (a, b) =>
-          haversineMeters(myLocation.lat, myLocation.lng, a.lat, a.lng) -
-          haversineMeters(myLocation.lat, myLocation.lng, b.lat, b.lng)
+          flip * (haversineMeters(myLocation.lat, myLocation.lng, a.lat, a.lng) - haversineMeters(myLocation.lat, myLocation.lng, b.lat, b.lng))
       );
     }
     return sorted;

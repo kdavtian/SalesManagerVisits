@@ -144,6 +144,32 @@ test("POST /api/payments rejects an unauthenticated request with 401", async () 
   assert.equal(res.status, 401);
 });
 
+// --- GET /api/payments: order=asc reverses the default newest-first sort ------------
+
+test("GET /api/payments: order=asc reverses payment_date direction (both sort=date and the default channel grouping)", async () => {
+  const { rows } = await pool.query(
+    `INSERT INTO payments (customer_id, customer_name_snapshot, amount_amd, payment_date, sales_manager_id, sales_manager_name_snapshot, status, created_by)
+     VALUES
+       ($1, $2, 1111, now() - interval '2 days', $3, 'Order Test Rep', 'pending', $3),
+       ($1, $2, 2222, now() - interval '1 day', $3, 'Order Test Rep', 'pending', $3)
+     RETURNING id, payment_date`,
+    [customer.id, customer.name, users.admin.id]
+  );
+  for (const r of rows) trackPayment(r.id);
+  const older = rows[0].id;
+  const newer = rows[1].id;
+
+  const defaultOrder = await apiRequest(`/api/payments?sort=date&customer_id=${customer.id}`, { cookie: cookies.admin });
+  assert.equal(defaultOrder.status, 200);
+  const defaultIds = defaultOrder.data.rows.map((p) => p.id).filter((id) => id === older || id === newer);
+  assert.deepEqual(defaultIds, [newer, older], "default is newest-first");
+
+  const reversed = await apiRequest(`/api/payments?sort=date&order=asc&customer_id=${customer.id}`, { cookie: cookies.admin });
+  assert.equal(reversed.status, 200);
+  const reversedIds = reversed.data.rows.map((p) => p.id).filter((id) => id === older || id === newer);
+  assert.deepEqual(reversedIds, [older, newer], "order=asc is oldest-first");
+});
+
 // --- Cash handoffs: valid submission + recipient-role boundary ----------------------
 
 test("POST /api/cash-handoffs: a sales_manager can hand their available cash to a sales_director", async () => {

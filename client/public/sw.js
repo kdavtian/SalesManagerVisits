@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v201";
+const CACHE_VERSION = "field-visits-v202";
 const TILE_CACHE = "field-visits-tiles-v4";
 // Anything fetched at runtime that wasn't already in APP_SHELL gets cached
 // here, kept separate from CACHE_VERSION on purpose -- see trimCache below,
@@ -63,6 +63,7 @@ const APP_SHELL = [
   "/js/perfMode.js",
   "/js/perf-mode-init.js",
   "/js/quickActions.js",
+  "/js/regionTree.js",
   "/js/views/admin.js",
   "/js/views/bonusChallengesAdmin.js",
   "/js/views/activity.js",

@@ -1530,6 +1530,22 @@ input[type="search"]:focus-visible {
   background: var(--bg-card-pressed);
 }
 
+/* A sort menu item shows its current direction (tapping the already-
+   active option again reverses it) as a small triangle at the trailing
+   edge, hidden on every other item. */
+.sort-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sort-menu-arrow {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: var(--accent);
+}
+
 .dropdown-menu hr {
   align-self: stretch;
   width: auto;
@@ -2959,39 +2975,6 @@ label.checkbox-row input[type="checkbox"] {
    a small margin) remains below it. */
 #order-detail-actions {
   margin-bottom: -14px;
-}
-
-/* Direction/region/subregion narrowing above the Plan Day/Today checklist
-   (openPlanDaySheet's renderTodayMode in map.js) -- each dropdown only
-   appears once its own candidate set actually has more than one value, so
-   a manager who only ever works one direction never sees an empty-feeling
-   single-option dropdown. */
-.plan-day-filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin: 10px 0;
-}
-
-.plan-day-filter {
-  flex: 1;
-  min-width: 120px;
-  font-size: 0.78rem;
-  color: var(--text-dim);
-}
-
-.plan-day-filter select {
-  display: block;
-  width: 100%;
-  margin-top: 4px;
-  box-sizing: border-box;
-  min-height: 40px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: var(--radius);
-  padding: 0 8px;
-  font-size: 0.85rem;
 }
 
 .plan-day-list {
@@ -6181,65 +6164,6 @@ label.checkbox-row input[type="checkbox"] {
 .filter-sheet-check svg {
   width: 18px;
   height: 18px;
-}
-
-/* Region filter sheet (customers.js's openRegionFilterSheet): each region
-   row pairs its own filter-sheet-option (tap = select the whole region)
-   with a separate expand button that reveals that region's subregions as
-   an indented list of their own filter-sheet-options underneath. */
-.region-filter-group {
-  border-bottom: 1px solid var(--border);
-}
-
-.region-filter-group:last-child {
-  border-bottom: none;
-}
-
-.region-filter-row {
-  display: flex;
-  align-items: stretch;
-}
-
-.region-filter-row .region-filter-option {
-  flex: 1;
-  border-bottom: none;
-}
-
-.region-filter-expand {
-  flex-shrink: 0;
-  width: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  cursor: pointer;
-}
-
-.region-filter-subregions {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-left: 20px;
-  padding-bottom: 4px;
-}
-
-.region-filter-subregions .subregion-filter-option {
-  border-bottom: none;
-  min-height: 40px;
-  font-size: 0.88rem;
-}
-
-/* Shown on a region row when only SOME of its subregions are selected --
-   a dot rather than the full check-circle used for "all", so the two
-   states (whole region vs. a subset of it) never read as identical. */
-.filter-sheet-check-partial {
-  flex-shrink: 0;
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: var(--accent);
 }
 
 .filter-dropdown-wrap {

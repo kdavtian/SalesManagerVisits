@@ -5,15 +5,17 @@ import { state, canManageProducts } from "../state.js";
 import { icons } from "../icons.js";
 import { compareProducts, sortedBrands } from "../productSort.js";
 
-function sortProducts(products, sortBy) {
+function sortProducts(products, sortBy, reversed = false) {
   const sorted = [...products];
-  if (sortBy === "standard_price") return sorted.sort((a, b) => a.effective_standard_amd - b.effective_standard_amd);
-  if (sortBy === "retail_price") return sorted.sort((a, b) => a.effective_retail_amd - b.effective_retail_amd);
-  if (sortBy === "name") return sorted.sort((a, b) => a.name.localeCompare(b.name));
+  const flip = reversed ? -1 : 1;
+  if (sortBy === "standard_price") sorted.sort((a, b) => flip * (a.effective_standard_amd - b.effective_standard_amd));
+  else if (sortBy === "retail_price") sorted.sort((a, b) => flip * (a.effective_retail_amd - b.effective_retail_amd));
+  else if (sortBy === "name") sorted.sort((a, b) => flip * a.name.localeCompare(b.name));
   // Default: the order a rep actually presents a pricelist to a
   // customer -- brand, then family, then viscosity grade, then size --
   // not alphabetical. See productSort.js for the full priority lists.
-  return sorted.sort(compareProducts);
+  else sorted.sort((a, b) => flip * compareProducts(a, b));
+  return sorted;
 }
 
 function debounce(fn, ms) {
@@ -67,6 +69,12 @@ export async function renderPricelist(root, navigate) {
   let priceMax = null;
   let specialOnly = false;
   let sortBy = "default";
+  // A native <select> has no "tap the active option again" gesture (its
+  // change event only fires when the value actually changes), so the
+  // reverse toggle is a separate small button next to it instead --
+  // same "flip whatever's currently sorted" behavior as every other
+  // list's sort menu, just a different control shape to fit a <select>.
+  let sortReversed = false;
   let selectMode = false;
   const selectedIds = new Set();
   const collapsedBrands = new Set();
@@ -138,6 +146,7 @@ export async function renderPricelist(root, navigate) {
           <option value="standard_price" ${sortBy === "standard_price" ? "selected" : ""}>${t("price_standard")}</option>
           <option value="retail_price" ${sortBy === "retail_price" ? "selected" : ""}>${t("price_retail")}</option>
         </select>
+        <button type="button" class="icon-btn" id="pricelist-sort-reverse" aria-label="${t("reverse_sort_order")}" aria-pressed="${sortReversed}">${sortReversed ? "▲" : "▼"}</button>
       </div>
       <div class="pricelist-price-range">
         <span class="muted">${t("price_range")}:</span>
@@ -183,6 +192,11 @@ export async function renderPricelist(root, navigate) {
     });
     filterRow.querySelector("#pricelist-sort").addEventListener("change", (e) => {
       sortBy = e.target.value;
+      paint();
+    });
+    filterRow.querySelector("#pricelist-sort-reverse").addEventListener("click", () => {
+      sortReversed = !sortReversed;
+      renderFilters();
       paint();
     });
   }
@@ -239,7 +253,7 @@ export async function renderPricelist(root, navigate) {
     // Desktop gets a dense table (item 35); mobile keeps the card list
     // (item 34) -- same data, laid out for the space actually available.
     if (isDesktop && !selectMode) {
-      catalogEl.innerHTML = renderDesktopTable(sortProducts(filtered, sortBy));
+      catalogEl.innerHTML = renderDesktopTable(sortProducts(filtered, sortBy, sortReversed));
       return;
     }
     const visibleBrands = sortedBrands(filtered);
@@ -248,7 +262,8 @@ export async function renderPricelist(root, navigate) {
           .map((brand) => {
             const brandProducts = sortProducts(
               filtered.filter((p) => p.brand === brand),
-              sortBy
+              sortBy,
+              sortReversed
             );
             const collapsed = collapsedBrands.has(brand);
             return `
