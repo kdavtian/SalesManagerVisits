@@ -57,7 +57,12 @@ export function buildCustomerTree(customers) {
     return {
       key,
       name: region.name,
+      // Customer ids double as leaf ids here (a leaf IS a customer), so
+      // allIds (used for tri-state selection matching) and customerCount
+      // (used for the "N customers" badge) happen to come from the same
+      // array -- unlike buildRegionSubregionTree below, where they don't.
       allIds: region.customers.map((c) => c.id),
+      customerCount: region.customers.length,
       leaves: hasRealSubregions ? null : [...region.customers].sort((a, b) => a.name.localeCompare(b.name)).map((c) => ({ id: c.id, name: c.name })),
       children: hasRealSubregions
         ? subOrder.map((sKey, j) => {
@@ -66,6 +71,7 @@ export function buildCustomerTree(customers) {
               key: `${key}-s${j}`,
               name: sub.name,
               allIds: sub.customers.map((c) => c.id),
+              customerCount: sub.customers.length,
               leaves: [...sub.customers].sort((a, b) => a.name.localeCompare(b.name)).map((c) => ({ id: c.id, name: c.name })),
               children: null,
             };
@@ -117,10 +123,16 @@ export function buildRegionSubregionTree(customers) {
     return {
       key,
       name: region.name,
-      allIds: region.customers.map((c) => c.id),
+      // Unlike buildCustomerTree, a leaf here is a whole SUBREGION, not a
+      // customer -- so allIds (for tri-state selection matching) must be
+      // the leaf ids ("region::subregion" keys), while customerCount (for
+      // the "N customers" badge) is a separate tally of the actual
+      // customers those subregions contain.
+      allIds: subOrder.map((sKey) => `${rKey}::${sKey}`),
+      customerCount: region.customers.length,
       leaves: subOrder.map((sKey) => {
         const sub = subMap.get(sKey);
-        return { id: `${rKey}::${sKey}`, name: sub.name, ids: sub.customers.map((c) => c.id) };
+        return { id: `${rKey}::${sKey}`, name: sub.name };
       }),
       children: null,
     };
@@ -144,7 +156,7 @@ function groupNodeHtml(node, countUnitLabel, nested) {
       <div class="route-plan-tree-row" data-toggle="${escapeHtml(node.key)}" role="button" tabindex="0" aria-expanded="false">
         <input type="checkbox" class="route-plan-tree-check" data-group-key="${escapeHtml(node.key)}" />
         <span class="route-plan-tree-name">${escapeHtml(node.name)}</span>
-        <span class="route-plan-tree-count">${node.allIds.length} ${countUnitLabel}</span>
+        <span class="route-plan-tree-count">${node.customerCount} ${countUnitLabel}</span>
         <span class="route-plan-tree-chevron" aria-hidden="true">${icons.chevronDown}</span>
       </div>
       <div class="route-plan-tree-children" data-children-for="${escapeHtml(node.key)}">
@@ -273,7 +285,7 @@ export function openTriStateTreeSheet(titleText, { tree, initialSelectedIds, cou
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
   overlay.innerHTML = `
-    <div class="sheet filter-sheet region-filter-sheet">
+    <div class="sheet filter-sheet">
       <h2>${escapeHtml(titleText)}</h2>
       <div id="tree-sheet-body"></div>
       <div class="sheet-actions">

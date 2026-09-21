@@ -6183,65 +6183,6 @@ label.checkbox-row input[type="checkbox"] {
   height: 18px;
 }
 
-/* Region filter sheet (customers.js's openRegionFilterSheet): each region
-   row pairs its own filter-sheet-option (tap = select the whole region)
-   with a separate expand button that reveals that region's subregions as
-   an indented list of their own filter-sheet-options underneath. */
-.region-filter-group {
-  border-bottom: 1px solid var(--border);
-}
-
-.region-filter-group:last-child {
-  border-bottom: none;
-}
-
-.region-filter-row {
-  display: flex;
-  align-items: stretch;
-}
-
-.region-filter-row .region-filter-option {
-  flex: 1;
-  border-bottom: none;
-}
-
-.region-filter-expand {
-  flex-shrink: 0;
-  width: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  cursor: pointer;
-}
-
-.region-filter-subregions {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-left: 20px;
-  padding-bottom: 4px;
-}
-
-.region-filter-subregions .subregion-filter-option {
-  border-bottom: none;
-  min-height: 40px;
-  font-size: 0.88rem;
-}
-
-/* Shown on a region row when only SOME of its subregions are selected --
-   a dot rather than the full check-circle used for "all", so the two
-   states (whole region vs. a subset of it) never read as identical. */
-.filter-sheet-check-partial {
-  flex-shrink: 0;
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: var(--accent);
-}
-
 .filter-dropdown-wrap {
   position: relative;
   flex: 1;

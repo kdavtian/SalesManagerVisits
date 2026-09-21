@@ -4,6 +4,7 @@ import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state, seesAllActivity } from "../state.js";
 import { loadWithCache } from "../listCache.js";
+import { buildRegionSubregionTree, openTriStateTreeSheet, NO_GROUP_KEY } from "../regionTree.js";
 
 const FILTERS = [
   { key: "", labelKey: "filter_all" },
@@ -120,10 +121,10 @@ export function renderCustomers(root, navigate, initialFilter) {
   let lastAddedDesc = true;
   let myLocation = null;
   let searchTimer;
-  // Keyed by region name -> "all" | Set of selected subregion names, per
-  // openRegionFilterSheet's own contract above. A region absent from this
-  // object is not filtered on at all.
-  let regionSelection = {};
+  // A Set of "region::subregion" keys, per regionTree.js's own leaf-id
+  // contract (buildRegionSubregionTree/renderTriStateTree) -- empty means
+  // no region filter is applied at all.
+  let regionSubregionKeys = new Set();
   let assignmentFilter = ""; // "", "mine", "others"
   // Sales channel is the one filter where "show me A OR B" is a real query
   // (e.g. comparing two distribution channels side by side), so it's a
@@ -298,158 +299,8 @@ export function renderCustomers(root, navigate, initialFilter) {
     });
   }
 
-  // Region/subregion filter: pick whole regions, specific subregions within
-  // a region (tap the expand arrow to reveal them), or a mix across several
-  // regions at once (e.g. all of Yerevan plus just two subregions of
-  // Shirak). Selection state per region is one of:
-  //   - absent: region not selected at all
-  //   - "all": every customer in that region matches, including one with no
-  //     subregion set (a plain Set of subregion names couldn't represent
-  //     that -- there's no string to put in the Set for "no subregion")
-  //   - a Set of subregion names: only those subregions match
-  function openRegionFilterSheet(subregionsByRegion, currentSelection, onApply) {
-    // Deep-copy so Cancel (tapping the backdrop) discards in-progress
-    // taps, matching openMultiFilterSheet's same commit-on-Done contract.
-    const working = {};
-    for (const [region, value] of Object.entries(currentSelection)) {
-      working[region] = value === "all" ? "all" : new Set(value);
-    }
-    const expanded = new Set();
-
-    const overlay = document.createElement("div");
-    overlay.className = "sheet-overlay";
-    overlay.innerHTML = `
-      <div class="sheet filter-sheet region-filter-sheet">
-        <h2>${t("region")}</h2>
-        <div class="filter-sheet-options" id="region-filter-options"></div>
-        <div class="sheet-actions">
-          <button type="button" class="btn" id="region-filter-clear">${t("clear")}</button>
-          <button type="button" class="btn btn-primary" id="region-filter-done">${t("done")}</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    activateDialog(overlay);
-    const optionsEl = overlay.querySelector("#region-filter-options");
-
-    function subregionState(region, subregion) {
-      const sel = working[region];
-      if (sel === "all") return true;
-      return sel instanceof Set && sel.has(subregion);
-    }
-
-    function paint() {
-      optionsEl.innerHTML = Object.keys(subregionsByRegion)
-        .sort()
-        .map((region) => {
-          const subregions = subregionsByRegion[region];
-          const sel = working[region];
-          const isAll = sel === "all";
-          const isPartial = sel instanceof Set && sel.size > 0;
-          const isOpen = expanded.has(region);
-          return `
-            <div class="region-filter-group">
-              <div class="region-filter-row">
-                <button type="button" class="filter-sheet-option region-filter-option ${isAll || isPartial ? "filter-sheet-option-selected" : ""}" data-region="${escapeHtml(region)}">
-                  <span>${escapeHtml(region)}</span>
-                  <span class="filter-sheet-check" ${isAll ? "" : "hidden"}>${icons.checkCircle}</span>
-                  <span class="filter-sheet-check-partial" ${isPartial ? "" : "hidden"} aria-hidden="true"></span>
-                </button>
-                ${
-                  subregions.length
-                    ? `<button type="button" class="region-filter-expand" data-region-expand="${escapeHtml(region)}" aria-expanded="${isOpen}" aria-label="${escapeHtml(region)} ${t("subregion")}">${isOpen ? icons.chevronUp : icons.chevronDown}</button>`
-                    : ""
-                }
-              </div>
-              ${
-                subregions.length && isOpen
-                  ? `<div class="region-filter-subregions">
-                      ${subregions
-                        .map(
-                          (s) => `
-                        <button type="button" class="filter-sheet-option subregion-filter-option ${subregionState(region, s) ? "filter-sheet-option-selected" : ""}" data-region="${escapeHtml(region)}" data-subregion="${escapeHtml(s)}">
-                          <span>${escapeHtml(s)}</span>
-                          <span class="filter-sheet-check" ${subregionState(region, s) ? "" : "hidden"}>${icons.checkCircle}</span>
-                        </button>
-                      `
-                        )
-                        .join("")}
-                    </div>`
-                  : ""
-              }
-            </div>
-          `;
-        })
-        .join("");
-
-      optionsEl.querySelectorAll("[data-region-expand]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const region = btn.dataset.regionExpand;
-          if (expanded.has(region)) expanded.delete(region);
-          else expanded.add(region);
-          paint();
-        });
-      });
-      optionsEl.querySelectorAll(".region-filter-option").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const region = btn.dataset.region;
-          if (working[region] === "all") delete working[region];
-          else working[region] = "all";
-          paint();
-        });
-      });
-      optionsEl.querySelectorAll(".subregion-filter-option").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const region = btn.dataset.region;
-          const subregion = btn.dataset.subregion;
-          const all = subregionsByRegion[region];
-          const sel = working[region];
-          if (sel === "all") {
-            const others = new Set(all.filter((s) => s !== subregion));
-            if (others.size === 0) delete working[region];
-            else working[region] = others;
-          } else if (sel instanceof Set) {
-            const next = new Set(sel);
-            if (next.has(subregion)) next.delete(subregion);
-            else next.add(subregion);
-            if (next.size === 0) delete working[region];
-            else if (next.size === all.length) working[region] = "all";
-            else working[region] = next;
-          } else {
-            working[region] = new Set([subregion]);
-          }
-          paint();
-        });
-      });
-    }
-    paint();
-
-    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
-    overlay.querySelector("#region-filter-clear").addEventListener("click", () => {
-      overlay.remove();
-      onApply({});
-    });
-    overlay.querySelector("#region-filter-done").addEventListener("click", () => {
-      overlay.remove();
-      onApply(working);
-    });
-  }
-
   function renderFilterRow() {
-    // Every subregion actually in use, grouped by its region -- the shape
-    // openRegionFilterSheet needs to know what to offer under each region's
-    // expand arrow. Regions with no subregion data at all still get an
-    // entry (an empty array), so "select whole region" still works for them.
-    const subregionsByRegion = {};
-    for (const c of allCustomers) {
-      if (!c.region) continue;
-      if (!subregionsByRegion[c.region]) subregionsByRegion[c.region] = new Set();
-      if (c.subregion) subregionsByRegion[c.region].add(c.subregion);
-    }
-    for (const region of Object.keys(subregionsByRegion)) {
-      subregionsByRegion[region] = [...subregionsByRegion[region]].sort();
-    }
-    const regionCount = Object.keys(regionSelection).length;
+    const regionCount = new Set([...regionSubregionKeys].map((k) => k.split("::")[0])).size;
     const channels = seesAllActivity()
       ? [...new Set(allCustomers.map((c) => c.sales_channel).filter(Boolean))].sort()
       : [];
@@ -467,7 +318,7 @@ export function renderCustomers(root, navigate, initialFilter) {
             active: assignmentFilter !== "",
           })
         : "",
-      Object.keys(subregionsByRegion).length
+      allCustomers.some((c) => c.region)
         ? filterIconButton({
             key: "region",
             icon: icons.pin,
@@ -510,11 +361,16 @@ export function renderCustomers(root, navigate, initialFilter) {
     });
 
     filterRow.querySelector('[data-filter-btn="region"]')?.addEventListener("click", () => {
-      openRegionFilterSheet(subregionsByRegion, regionSelection, (selection) => {
-        regionSelection = selection;
-        renderFilterRow();
-        renderStatsBar();
-        renderList();
+      openTriStateTreeSheet(t("region"), {
+        tree: buildRegionSubregionTree(allCustomers.filter((c) => c.region)),
+        initialSelectedIds: regionSubregionKeys,
+        countUnitLabel: t("perf_dq_customers_unit"),
+        onApply: (selectedIds) => {
+          regionSubregionKeys = selectedIds;
+          renderFilterRow();
+          renderStatsBar();
+          renderList();
+        },
       });
     });
 
@@ -542,13 +398,8 @@ export function renderCustomers(root, navigate, initialFilter) {
     let list = customers;
     const query = searchInput.value.trim().toLowerCase();
     if (query) list = list.filter((c) => c.name.toLowerCase().includes(query));
-    if (Object.keys(regionSelection).length) {
-      list = list.filter((c) => {
-        const sel = regionSelection[c.region];
-        if (!sel) return false;
-        if (sel === "all") return true;
-        return sel.has(c.subregion);
-      });
+    if (regionSubregionKeys.size) {
+      list = list.filter((c) => c.region && regionSubregionKeys.has(`${c.region}::${c.subregion || NO_GROUP_KEY}`));
     }
     if (channelFilters.size) list = list.filter((c) => c.sales_channel && channelFilters.has(c.sales_channel));
     if (assignmentFilter === "mine") list = list.filter((c) => c.assigned_manager_id === state.user.id);
