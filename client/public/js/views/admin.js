@@ -16,6 +16,15 @@ const ROLE_BADGE = {
   accountant: { key: "role_accountant", cls: "badge-info", tint: "info" },
 };
 
+// One shared option list for every role <select> in this file (new-user
+// creation, change-role) -- so adding a role (see ROLE_BADGE above) only
+// ever needs to happen in one place, not once per form.
+const ROLE_OPTIONS = ["sales_manager", "sales_director", "warehouse_manager", "delivery_manager", "accountant", "ceo", "operations_director", "admin"];
+
+function roleOptionsHtml(selected) {
+  return ROLE_OPTIONS.map((role) => `<option value="${role}" ${role === selected ? "selected" : ""}>${t(ROLE_BADGE[role].key)}</option>`).join("");
+}
+
 function userInitials(name) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   const initials = parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : parts[0]?.slice(0, 2) || "?";
@@ -210,10 +219,59 @@ export async function renderTeamSection(container) {
     });
   }
 
+  // A role change is deliberately a separate, dedicated sheet from the
+  // quick profile edit below -- see PATCH /:id/role's own comment in
+  // routes/users.js for why it isn't folded into the regular save button.
+  // Self-role-change is blocked server-side (and hidden here) so an admin
+  // can never lock themselves out.
+  function openChangeRoleSheet(u) {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>${t("change_role")}</h2>
+        <p class="muted">${escapeHtml(u.name)}</p>
+        <form id="change-role-form">
+          <label>${t("role")}
+            <select name="role">${roleOptionsHtml(u.role)}</select>
+          </label>
+          <p class="form-error" id="change-role-error" hidden></p>
+          <div class="sheet-actions">
+            <button type="button" class="btn" id="cancel-change-role">${t("cancel")}</button>
+            <button type="submit" class="btn btn-primary">${t("save")}</button>
+          </div>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.querySelector("#cancel-change-role").addEventListener("click", () => overlay.remove());
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+
+    const form = overlay.querySelector("#change-role-form");
+    const errorEl = overlay.querySelector("#change-role-error");
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const role = new FormData(form).get("role");
+      const submitBtn = form.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      try {
+        await api.updateUserRole(u.id, role);
+        overlay.remove();
+        loadUsers();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+        submitBtn.disabled = false;
+      }
+    });
+  }
+
   // Full profile edit for an existing staff member -- opened by tapping
   // their card. Role isn't editable here (see EDITABLE_PROFILE_FIELDS in
-  // routes/users.js for why); Reset password and Remove stay one tap away
-  // as secondary actions instead of cluttering the row itself.
+  // routes/users.js for why) -- Change role, Reset password and Remove
+  // stay one tap away as secondary actions instead of cluttering the row
+  // itself.
   function openEditTeamMemberSheet(u) {
     const overlay = document.createElement("div");
     overlay.className = "sheet-overlay";
@@ -244,6 +302,7 @@ export async function renderTeamSection(container) {
         </form>
         <div class="team-edit-secondary-actions">
           <button type="button" class="btn-link" id="edit-user-reset">${t("reset_password")}</button>
+          ${u.id !== state.user.id ? `<button type="button" class="btn-link" id="edit-user-change-role">${t("change_role")}</button>` : ""}
           ${u.id !== state.user.id ? `<button type="button" class="btn-link btn-link-danger" id="edit-user-delete">${t("delete_user")}</button>` : ""}
         </div>
       </div>
@@ -262,6 +321,10 @@ export async function renderTeamSection(container) {
     overlay.querySelector("#edit-user-reset").addEventListener("click", () => {
       close();
       openResetPasswordSheet(u.id, u.name);
+    });
+    overlay.querySelector("#edit-user-change-role")?.addEventListener("click", () => {
+      close();
+      openChangeRoleSheet(u);
     });
     async function attemptDelete() {
       try {
@@ -332,16 +395,7 @@ export async function renderTeamSection(container) {
           <label>${t("email")}<input name="email" type="email" required /></label>
           <label>${t("temp_password")}<input name="password" type="password" minlength="8" required /></label>
           <label>${t("role")}
-            <select name="role" id="new-user-role">
-              <option value="sales_manager">${t("role_sales_manager")}</option>
-              <option value="sales_director">${t("role_sales_director")}</option>
-              <option value="warehouse_manager">${t("role_warehouse_manager")}</option>
-              <option value="delivery_manager">${t("role_delivery_manager")}</option>
-              <option value="accountant">${t("role_accountant")}</option>
-              <option value="ceo">${t("role_ceo")}</option>
-              <option value="operations_director">${t("role_operations_director")}</option>
-              <option value="admin">${t("role_admin")}</option>
-            </select>
+            <select name="role" id="new-user-role">${roleOptionsHtml("sales_manager")}</select>
           </label>
           <label id="new-user-position-field">${t("sales_channel")}
             <select name="position">${salesChannelOptionsHtml("")}</select>
