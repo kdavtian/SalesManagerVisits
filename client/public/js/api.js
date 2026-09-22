@@ -132,6 +132,7 @@ export const api = {
   listAssignableManagers: () => request("/users/assignable-managers"),
   createUser: (data) => json("/users", "POST", data),
   updateUser: (id, data) => json(`/users/${id}`, "PATCH", data),
+  updateUserRole: (id, role) => json(`/users/${id}/role`, "PATCH", { role }),
   resetUserPassword: (id, password) => json(`/users/${id}/password`, "PATCH", { password }),
   deleteUser: (id) => request(`/users/${id}`, { method: "DELETE" }),
   getUserDeletionReport: (id) => request(`/users/${id}/deletion-report`),

@@ -135,6 +135,31 @@ usersRouter.post("/", async (req, res) => {
   }
 });
 
+// A role change is deliberately its own endpoint, not folded into the
+// quick profile-edit PATCH /:id above (see EDITABLE_PROFILE_FIELDS'
+// comment) -- broader implications (what that user is assigned/plans/
+// approves elsewhere) mean it should be a distinct, considered admin
+// action, not a side effect of fixing a typo in someone's phone number.
+usersRouter.patch("/:id/role", async (req, res) => {
+  const { role } = req.body ?? {};
+  if (!role || !ROLES.includes(role)) {
+    return res.status(400).json({ error: `role must be one of: ${ROLES.join(", ")}` });
+  }
+  // Same self-lockout guard as DELETE /:id below -- an admin demoting
+  // their own account out of admin would need another admin to undo it.
+  if (Number(req.params.id) === req.user.id) {
+    return res.status(400).json({ error: "You can't change your own role" });
+  }
+  const { rows } = await pool.query(
+    `UPDATE users SET role = $1 WHERE id = $2
+     RETURNING id, email, name, role, position, phone, created_at,
+               last_seen_at, last_seen_app_version, last_seen_user_agent`,
+    [role, req.params.id]
+  );
+  if (!rows[0]) return res.status(404).json({ error: "User not found" });
+  res.json(rows[0]);
+});
+
 usersRouter.patch("/:id/password", passwordChangeLimiter, async (req, res) => {
   const password = req.body?.password;
   if (!password || password.length < 8) {
