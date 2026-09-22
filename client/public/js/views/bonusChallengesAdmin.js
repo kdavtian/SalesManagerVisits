@@ -28,6 +28,7 @@ const FIRST_ROUND_POLICY_LABELS = {
 const ROLE_LABELS = {
   admin: "Admin",
   ceo: "CEO",
+  operations_director: "Operations director",
   sales_director: "Sales director",
   sales_manager: "Sales manager",
   warehouse_manager: "Warehouse manager",
@@ -569,7 +570,7 @@ async function openNewChallengeWizard(onSaved) {
 const CLAIM_STATUS_BADGE = { awaiting_validation: "badge-neutral", approved: "badge-info", on_hold: "badge-neutral", rejected: "badge-danger", paid: "badge-success" };
 
 function canApproveBonusRewardsClient() {
-  return ["admin", "ceo", "accountant"].includes(state.user?.role);
+  return ["admin", "ceo", "operations_director", "accountant"].includes(state.user?.role);
 }
 function canRecordBonusPayoutsClient() {
   return ["admin", "accountant"].includes(state.user?.role);

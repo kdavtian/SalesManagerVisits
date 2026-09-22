@@ -8,6 +8,7 @@ import { compareProducts } from "../productSort.js";
 const ROLE_BADGE = {
   admin: { key: "role_admin", cls: "badge-accent", tint: "warning" },
   ceo: { key: "role_ceo", cls: "badge-accent", tint: "warning" },
+  operations_director: { key: "role_operations_director", cls: "badge-accent", tint: "warning" },
   sales_manager: { key: "role_sales_manager", cls: "badge-neutral", tint: "neutral" },
   sales_director: { key: "role_sales_director", cls: "badge-info", tint: "info" },
   warehouse_manager: { key: "role_warehouse_manager", cls: "badge-info", tint: "info" },
@@ -338,6 +339,7 @@ export async function renderTeamSection(container) {
               <option value="delivery_manager">${t("role_delivery_manager")}</option>
               <option value="accountant">${t("role_accountant")}</option>
               <option value="ceo">${t("role_ceo")}</option>
+              <option value="operations_director">${t("role_operations_director")}</option>
               <option value="admin">${t("role_admin")}</option>
             </select>
           </label>

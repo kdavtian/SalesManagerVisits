@@ -34,17 +34,17 @@ const APPROVAL_META = {
 // views/deliveryRoute.js), which collect the required extra data (pick
 // confirmation, route stop, signature). This sheet only drives confirm and
 // director-reject.
-const DISCOUNT_APPROVER_ROLES = new Set(["admin", "sales_director", "ceo"]);
+const DISCOUNT_APPROVER_ROLES = new Set(["admin", "sales_director", "ceo", "operations_director"]);
 // Who reviews a freshly-submitted order -- mirrors canConfirmOrders in the
 // server's roles.js.
-const CONFIRM_ROLES = new Set(["admin", "sales_director", "ceo"]);
+const CONFIRM_ROLES = new Set(["admin", "sales_director", "ceo", "operations_director"]);
 // Who can move a packed order straight to delivered without a planned
 // route -- mirrors canMarkDeliveredWithoutRoute in the server's roles.js.
 // Exists because the driver (delivery_manager) role isn't currently using
 // the app to complete routes through the normal signature-capturing flow
 // (see views/deliveryRoute.js), which otherwise leaves a routed order with
 // no way back into view.
-const MARK_DELIVERED_ROLES = new Set(["delivery_manager", "sales_director", "accountant", "ceo", "admin"]);
+const MARK_DELIVERED_ROLES = new Set(["delivery_manager", "sales_director", "accountant", "ceo", "operations_director", "admin"]);
 
 // Full created -> submitted -> confirmed -> packed -> delivered timeline
 // (server/src/routes/orders.js's order_status_history, populated at every

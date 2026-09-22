@@ -14,6 +14,7 @@ export const ALL_ROLES = [
   "delivery_manager",
   "accountant",
   "ceo",
+  "operations_director",
   "admin",
 ];
 
@@ -36,19 +37,25 @@ export const QUICK_ACTIONS = [
   // director covers the same ground for now, and the CEO gets the same
   // broad operational visibility they already have everywhere else (see
   // canManageWarehouse in server/src/roles.js).
-  { id: "qa_warehouse", defaultRoles: ["warehouse_manager", "sales_director", "ceo", "admin"] },
+  { id: "qa_warehouse", defaultRoles: ["warehouse_manager", "sales_director", "ceo", "operations_director", "admin"] },
   { id: "qa_delivery", defaultRoles: ["delivery_manager", "admin"] },
-  { id: "qa_recorded", defaultRoles: ["admin", "ceo", "accountant"] },
-  { id: "qa_team_performance", defaultRoles: ["admin", "ceo", "sales_director", "accountant", "sales_manager"] },
+  { id: "qa_recorded", defaultRoles: ["admin", "ceo", "operations_director", "accountant"] },
+  {
+    id: "qa_team_performance",
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant", "sales_manager"],
+  },
   { id: "qa_reports", defaultRoles: ALL_ROLES },
-  { id: "qa_debt_balances", defaultRoles: ["admin", "ceo", "sales_director", "accountant", "sales_manager"] },
-  { id: "qa_company_dashboard", defaultRoles: ["admin", "ceo", "sales_director", "accountant"] },
+  {
+    id: "qa_debt_balances",
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant", "sales_manager"],
+  },
+  { id: "qa_company_dashboard", defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"] },
   // Same visibility as the financial exports/Company Dashboard -- raw
   // per-order ERP revenue is the same sensitivity class (see
   // seesFinancialExports in server/src/roles.js, which server/src/routes/
   // sales.js gates on too). A sales_manager already has their own
   // customers' order history via the customer detail page.
-  { id: "qa_sales", defaultRoles: ["admin", "ceo", "sales_director", "accountant"] },
+  { id: "qa_sales", defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"] },
   // Visible to every role by default -- further gated at render time on
   // app_settings.bonuses_enabled (off by default), since the tile itself
   // carries no role restriction of its own (see dashboard.js/app.js).

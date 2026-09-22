@@ -7,8 +7,8 @@ import { icons } from "../icons.js";
 // Mirrors server/src/roles.js -- kept local since the client has no shared
 // roles module (every other list/detail view in this app does the same,
 // see orders.js's FULFILLMENT_ROLES/CONFIRM_ROLES consts).
-const REVIEW_ROLES = new Set(["admin", "ceo", "accountant"]);
-const SUBMIT_FOR_OTHERS_ROLES = new Set(["admin", "ceo", "accountant", "sales_director"]);
+const REVIEW_ROLES = new Set(["admin", "ceo", "operations_director", "accountant"]);
+const SUBMIT_FOR_OTHERS_ROLES = new Set(["admin", "ceo", "operations_director", "accountant", "sales_director"]);
 function seesAllPayments(role) {
   return role !== "sales_manager";
 }

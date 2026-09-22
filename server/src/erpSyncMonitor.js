@@ -17,7 +17,7 @@ import { erpSyncFreshness, ERP_STALE_AFTER_HOURS } from "./erpSyncFreshness.js";
 
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // hourly -- no need to check more often than the staleness window itself
 
-const ALERT_ROLES = ["admin", "ceo"];
+const ALERT_ROLES = ["admin", "ceo", "operations_director"];
 
 // One check per POST /api/erp-sync endpoint (see docs/erp-sync-contract.md):
 // the main extract, the daily-report snapshot, and the generated-report

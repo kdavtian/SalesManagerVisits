@@ -915,6 +915,7 @@ async function loadNotificationPreferences(slot) {
 const NOTIFICATION_ROLES = [
   "admin",
   "ceo",
+  "operations_director",
   "sales_director",
   "sales_manager",
   "warehouse_manager",

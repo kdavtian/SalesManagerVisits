@@ -334,7 +334,7 @@ export function applyUnrecordedBadge() {
 }
 
 async function refreshUnrecordedBadge() {
-  if (!state.user || !["accountant", "ceo", "admin"].includes(state.user.role)) return;
+  if (!state.user || !["accountant", "ceo", "operations_director", "admin"].includes(state.user.role)) return;
   try {
     const { count } = await api.getUnrecordedCount();
     unrecordedBadgeCount = count;
