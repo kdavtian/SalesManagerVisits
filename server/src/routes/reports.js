@@ -169,7 +169,7 @@ reportsRouter.get("/checkins", requireReportAccess("checkins"), async (req, res)
      JOIN customers c ON c.id = ch.customer_id
      ${where}
      ORDER BY ch.timestamp DESC
-     LIMIT 500`,
+     LIMIT 10000`,
     params
   );
 

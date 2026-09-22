@@ -84,7 +84,7 @@ salesRouter.get("/", async (req, res) => {
      ${where}
      GROUP BY eol.order_id, eol.order_date, eol.erp_customer_id, c.id, c.name, ecd.assigned_sales_rep, c.sales_channel
      ORDER BY eol.order_date DESC, eol.order_id DESC
-     LIMIT 500`,
+     LIMIT 10000`,
     params
   );
   // erp_order_lines has no synced_at column of its own (it's TRUNCATEd

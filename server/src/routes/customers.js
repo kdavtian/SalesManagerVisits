@@ -682,7 +682,7 @@ customersRouter.get("/:id/erp-orders", async (req, res) => {
      WHERE erp_customer_id = $1 ${dateFilter}
      GROUP BY order_id, order_date
      ORDER BY order_date DESC, order_id DESC
-     LIMIT 200`,
+     LIMIT 10000`,
     [erpCustomerId]
   );
   res.json(rows);
