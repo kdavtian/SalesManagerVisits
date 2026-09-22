@@ -2607,13 +2607,13 @@ label.checkbox-row input[type="checkbox"] {
 }
 
 .map-legend-header .icon-btn {
-  width: 26px;
-  height: 26px;
+  width: 44px;
+  height: 44px;
 }
 
 .map-legend-header .icon-btn svg {
-  width: 15px;
-  height: 15px;
+  width: 20px;
+  height: 20px;
 }
 
 .map-legend-prefs {
@@ -5178,13 +5178,13 @@ label.checkbox-row input[type="checkbox"] {
 }
 
 .detail-facts-card-actions .icon-btn {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
 }
 
 .detail-facts-card-actions .icon-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
 }
 
 .detail-fact {
@@ -5677,8 +5677,8 @@ label.checkbox-row input[type="checkbox"] {
 }
 
 .stop-reorder .icon-btn {
-  width: 30px;
-  height: 30px;
+  width: 44px;
+  height: 44px;
 }
 
 .stop-reorder .icon-btn[disabled] {
@@ -5851,6 +5851,10 @@ label.checkbox-row input[type="checkbox"] {
     top: 0;
     right: auto;
     width: 88px;
+    /* dvh needs iOS 15.4+; the plain vh fallback above it is overridden
+       wherever dvh is actually supported (accounts for the on-screen
+       keyboard/browser chrome), and is otherwise the only height applied. */
+    height: 100vh;
     height: 100dvh;
     padding: max(8px, var(--safe-top)) 6px max(8px, var(--safe-bottom));
     flex-direction: column;
@@ -5908,6 +5912,7 @@ label.checkbox-row input[type="checkbox"] {
 
   .sheet {
     width: min(620px, 72vw);
+    max-height: 94vh;
     max-height: 94dvh;
     margin-left: auto;
     border-radius: var(--radius-lg) 0 0 var(--radius-lg);
@@ -7109,8 +7114,8 @@ button.list-row-icon {
 }
 
 .order-qty-stepper .icon-btn {
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   border: 1px solid var(--border);
   border-radius: 50%;
   display: flex;
