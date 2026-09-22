@@ -2646,6 +2646,14 @@ label.checkbox-row input[type="checkbox"] {
   transform: translateX(16px);
 }
 
+.map-legend-pref-hint {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--text-dim);
+  margin-top: 1px;
+}
+
 .map-legend-list {
   list-style: none;
   margin: 0;
@@ -6905,11 +6913,37 @@ button.list-row-icon {
   border-bottom: none;
 }
 
+/* iOS-Settings-style icon badge: a colored rounded square behind a white
+   glyph, not a plain colored icon -- the single most recognizable visual
+   trait of the iOS Settings row. Color is picked per row (see settings.js's
+   settingsRow/settingsToggleRow `color` param) from the fixed iOS system
+   palette below, reused across rows the same way iOS itself reuses a
+   handful of colors across many settings rather than assigning a unique
+   one to each. */
 .settings-row-icon {
   flex-shrink: 0;
-  color: var(--accent);
+  width: 29px;
+  height: 29px;
+  border-radius: 7px;
   display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
 }
+
+.settings-row-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.settings-row-icon-blue { background: #007aff; }
+.settings-row-icon-red { background: #ff3b30; }
+.settings-row-icon-orange { background: #ff9500; }
+.settings-row-icon-green { background: #34c759; }
+.settings-row-icon-teal { background: #30b0c7; }
+.settings-row-icon-purple { background: #af52de; }
+.settings-row-icon-indigo { background: #5856d6; }
+.settings-row-icon-gray { background: #8e8e93; }
 
 .settings-row-label {
   flex: 1;

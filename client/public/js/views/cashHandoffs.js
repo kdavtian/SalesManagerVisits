@@ -20,8 +20,9 @@ import { state } from "../state.js";
 // roles module; see payments.js's REVIEW_ROLES).
 const NEXT_HOP_ROLES = {
   sales_manager: ["sales_director"],
-  sales_director: ["ceo", "accountant"],
+  sales_director: ["ceo", "operations_director", "accountant"],
   ceo: ["accountant"],
+  operations_director: ["accountant"],
 };
 // The only on-behalf-of case in the chain is the FIRST hop: a sales
 // director declaring "I have received this rep's collections". The server

@@ -20,7 +20,7 @@ test.before(async () => {
   await startTestServer();
   admin = await createUser("admin");
   cookies = {};
-  for (const role of ["admin", "sales_manager", "sales_director", "warehouse_manager", "delivery_manager", "accountant", "ceo"]) {
+  for (const role of ["admin", "sales_manager", "sales_director", "warehouse_manager", "delivery_manager", "accountant", "ceo", "operations_director"]) {
     const user = role === "admin" ? admin : await createUser(role);
     cookies[role] = await loginAs(user.email);
   }
@@ -38,7 +38,7 @@ test("GET /api/users: admin sees the full user list; every other role gets 403",
   assert.ok(Array.isArray(adminList.data));
   assert.ok(adminList.data.some((u) => u.id === admin.id));
 
-  for (const role of ["sales_manager", "sales_director", "warehouse_manager", "delivery_manager", "accountant", "ceo"]) {
+  for (const role of ["sales_manager", "sales_director", "warehouse_manager", "delivery_manager", "accountant", "ceo", "operations_director"]) {
     const res = await apiRequest("/api/users", { cookie: cookies[role] });
     assert.equal(res.status, 403, role);
   }
@@ -108,11 +108,31 @@ test("DELETE /api/users/:id: an admin cannot delete their own account", async ()
   assert.equal(res.status, 400);
 });
 
+test("PATCH /api/users/:id/role: an admin can change another user's role; a sales_manager gets 403; an admin cannot change their own; an invalid role is a 400", async () => {
+  const target = await createUser("sales_manager");
+
+  const denied = await apiRequest(`/api/users/${target.id}/role`, { method: "PATCH", cookie: cookies.sales_manager, body: { role: "operations_director" } });
+  assert.equal(denied.status, 403);
+
+  const changed = await apiRequest(`/api/users/${target.id}/role`, { method: "PATCH", cookie: cookies.admin, body: { role: "operations_director" } });
+  assert.equal(changed.status, 200);
+  assert.equal(changed.data.role, "operations_director");
+
+  const self = await apiRequest(`/api/users/${admin.id}/role`, { method: "PATCH", cookie: cookies.admin, body: { role: "ceo" } });
+  assert.equal(self.status, 400);
+
+  const invalid = await apiRequest(`/api/users/${target.id}/role`, { method: "PATCH", cookie: cookies.admin, body: { role: "superuser" } });
+  assert.equal(invalid.status, 400);
+});
+
 test("PATCH, DELETE /api/users/:id: a nonexistent id is a 404, not a silent success", async () => {
   const missingId = 999999999;
 
   const patchRes = await apiRequest(`/api/users/${missingId}`, { method: "PATCH", cookie: cookies.admin, body: { name: "Ghost" } });
   assert.equal(patchRes.status, 404);
+
+  const roleRes = await apiRequest(`/api/users/${missingId}/role`, { method: "PATCH", cookie: cookies.admin, body: { role: "ceo" } });
+  assert.equal(roleRes.status, 404);
 
   const deleteRes = await apiRequest(`/api/users/${missingId}`, { method: "DELETE", cookie: cookies.admin });
   assert.equal(deleteRes.status, 404);

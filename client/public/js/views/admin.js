@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, parseUserAgent, SALES_CHANNELS, REGION_LIST, YEREVAN_DISTRICTS, parseDateOnly } from "../util.js";
+import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, parseUserAgent, SALES_CHANNELS, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, parseDateOnly } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 import { ALL_ROLES, QUICK_ACTIONS, defaultQuickActionIds } from "../quickActions.js";
@@ -8,12 +8,22 @@ import { compareProducts } from "../productSort.js";
 const ROLE_BADGE = {
   admin: { key: "role_admin", cls: "badge-accent", tint: "warning" },
   ceo: { key: "role_ceo", cls: "badge-accent", tint: "warning" },
+  operations_director: { key: "role_operations_director", cls: "badge-accent", tint: "warning" },
   sales_manager: { key: "role_sales_manager", cls: "badge-neutral", tint: "neutral" },
   sales_director: { key: "role_sales_director", cls: "badge-info", tint: "info" },
   warehouse_manager: { key: "role_warehouse_manager", cls: "badge-info", tint: "info" },
   delivery_manager: { key: "role_delivery_manager", cls: "badge-info", tint: "info" },
   accountant: { key: "role_accountant", cls: "badge-info", tint: "info" },
 };
+
+// One shared option list for every role <select> in this file (new-user
+// creation, change-role) -- so adding a role (see ROLE_BADGE above) only
+// ever needs to happen in one place, not once per form.
+const ROLE_OPTIONS = ["sales_manager", "sales_director", "warehouse_manager", "delivery_manager", "accountant", "ceo", "operations_director", "admin"];
+
+function roleOptionsHtml(selected) {
+  return ROLE_OPTIONS.map((role) => `<option value="${role}" ${role === selected ? "selected" : ""}>${t(ROLE_BADGE[role].key)}</option>`).join("");
+}
 
 function userInitials(name) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -209,10 +219,59 @@ export async function renderTeamSection(container) {
     });
   }
 
+  // A role change is deliberately a separate, dedicated sheet from the
+  // quick profile edit below -- see PATCH /:id/role's own comment in
+  // routes/users.js for why it isn't folded into the regular save button.
+  // Self-role-change is blocked server-side (and hidden here) so an admin
+  // can never lock themselves out.
+  function openChangeRoleSheet(u) {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>${t("change_role")}</h2>
+        <p class="muted">${escapeHtml(u.name)}</p>
+        <form id="change-role-form">
+          <label>${t("role")}
+            <select name="role">${roleOptionsHtml(u.role)}</select>
+          </label>
+          <p class="form-error" id="change-role-error" hidden></p>
+          <div class="sheet-actions">
+            <button type="button" class="btn" id="cancel-change-role">${t("cancel")}</button>
+            <button type="submit" class="btn btn-primary">${t("save")}</button>
+          </div>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.querySelector("#cancel-change-role").addEventListener("click", () => overlay.remove());
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+
+    const form = overlay.querySelector("#change-role-form");
+    const errorEl = overlay.querySelector("#change-role-error");
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const role = new FormData(form).get("role");
+      const submitBtn = form.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      try {
+        await api.updateUserRole(u.id, role);
+        overlay.remove();
+        loadUsers();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+        submitBtn.disabled = false;
+      }
+    });
+  }
+
   // Full profile edit for an existing staff member -- opened by tapping
   // their card. Role isn't editable here (see EDITABLE_PROFILE_FIELDS in
-  // routes/users.js for why); Reset password and Remove stay one tap away
-  // as secondary actions instead of cluttering the row itself.
+  // routes/users.js for why) -- Change role, Reset password and Remove
+  // stay one tap away as secondary actions instead of cluttering the row
+  // itself.
   function openEditTeamMemberSheet(u) {
     const overlay = document.createElement("div");
     overlay.className = "sheet-overlay";
@@ -243,6 +302,7 @@ export async function renderTeamSection(container) {
         </form>
         <div class="team-edit-secondary-actions">
           <button type="button" class="btn-link" id="edit-user-reset">${t("reset_password")}</button>
+          ${u.id !== state.user.id ? `<button type="button" class="btn-link" id="edit-user-change-role">${t("change_role")}</button>` : ""}
           ${u.id !== state.user.id ? `<button type="button" class="btn-link btn-link-danger" id="edit-user-delete">${t("delete_user")}</button>` : ""}
         </div>
       </div>
@@ -261,6 +321,10 @@ export async function renderTeamSection(container) {
     overlay.querySelector("#edit-user-reset").addEventListener("click", () => {
       close();
       openResetPasswordSheet(u.id, u.name);
+    });
+    overlay.querySelector("#edit-user-change-role")?.addEventListener("click", () => {
+      close();
+      openChangeRoleSheet(u);
     });
     async function attemptDelete() {
       try {
@@ -331,15 +395,7 @@ export async function renderTeamSection(container) {
           <label>${t("email")}<input name="email" type="email" required /></label>
           <label>${t("temp_password")}<input name="password" type="password" minlength="8" required /></label>
           <label>${t("role")}
-            <select name="role" id="new-user-role">
-              <option value="sales_manager">${t("role_sales_manager")}</option>
-              <option value="sales_director">${t("role_sales_director")}</option>
-              <option value="warehouse_manager">${t("role_warehouse_manager")}</option>
-              <option value="delivery_manager">${t("role_delivery_manager")}</option>
-              <option value="accountant">${t("role_accountant")}</option>
-              <option value="ceo">${t("role_ceo")}</option>
-              <option value="admin">${t("role_admin")}</option>
-            </select>
+            <select name="role" id="new-user-role">${roleOptionsHtml("sales_manager")}</select>
           </label>
           <label id="new-user-position-field">${t("sales_channel")}
             <select name="position">${salesChannelOptionsHtml("")}</select>
@@ -703,6 +759,7 @@ export async function renderProductsSection(container) {
           <label>${t("unit")}<input name="unit" value="${product?.unit ? escapeHtml(product.unit) : ""}" placeholder="e.g. box, L, pcs" /></label>
           <label>${t("price_standard")}<input name="unit_price_amd" type="number" min="0" step="1" value="${product ? Number(product.unit_price_amd) : ""}" required /></label>
           <label>${t("price_retail")}<input name="retail_price_amd" type="number" min="0" step="1" value="${product && product.retail_price_amd !== null ? Number(product.retail_price_amd) : ""}" placeholder="${t("price_retail_hint")}" /></label>
+          <label>${t("net_cost")}<input name="net_cost_amd" type="number" min="0" step="1" value="${product && product.net_cost_amd !== null && product.net_cost_amd !== undefined ? Number(product.net_cost_amd) : ""}" placeholder="${t("net_cost_hint")}" /></label>
           ${
             product
               ? `<label class="settings-toggle-row"><span>${t("active")}</span>
@@ -766,6 +823,7 @@ export async function renderProductsSection(container) {
       submitBtn.disabled = true;
       const standardPrice = Number(data.get("unit_price_amd"));
       const retailInput = data.get("retail_price_amd");
+      const netCostInput = data.get("net_cost_amd");
       const payload = {
         name: data.get("name"),
         brand: data.get("brand") || null,
@@ -777,6 +835,7 @@ export async function renderProductsSection(container) {
         unit_price_amd: standardPrice,
         bronze_price_amd: standardPrice,
         retail_price_amd: retailInput ? Number(retailInput) : standardPrice,
+        net_cost_amd: netCostInput ? Number(netCostInput) : null,
       };
       try {
         if (product) {
@@ -1156,7 +1215,7 @@ export async function renderRouteDistributionSection(container) {
     if (region === "Yerevan") {
       return `<select name="subregion" id="rd-subregion">
         <option value="">${t("route_distribution_whole_region")}</option>
-        ${YEREVAN_DISTRICTS.map((d) => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join("")}
+        ${YEREVAN_DISTRICTS.map((d) => `<option value="${escapeHtml(d)}">${escapeHtml(subregionLabelHy(d))}</option>`).join("")}
       </select>`;
     }
     return `<input name="subregion" id="rd-subregion" placeholder="${t("route_distribution_whole_region")}" />`;
@@ -1168,7 +1227,7 @@ export async function renderRouteDistributionSection(container) {
         <label>${t("region")}
           <select name="region" id="rd-region" required>
             <option value="">${t("select_placeholder")}</option>
-            ${REGION_LIST.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join("")}
+            ${REGION_LIST.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(regionLabelHy(r))}</option>`).join("")}
           </select>
         </label>
         <label id="rd-subregion-wrap">${t("subregion")}${subregionFieldHtml("")}</label>

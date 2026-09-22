@@ -1,11 +1,11 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, tierSelectorHtml, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, channelDisplayLabel, parseDateOnly } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, tierSelectorHtml, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, regionLabelHy, subregionLabelHy, channelDisplayLabel, parseDateOnly } from "../util.js";
 import { t } from "../i18n.js";
 import { buildCustomerTree, renderTriStateTree } from "../regionTree.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
 import { canViewTeamLocations, canEditDirectly, canPlanForOthers, canReassignCustomers, state } from "../state.js";
-import { getClusterPins, setClusterPins, getCompassMode, setCompassMode } from "../mapPrefs.js";
+import { getClusterPins, setClusterPins, getCompassMode, setCompassMode, isStrongDevice, getMapTileCacheEnabled, setMapTileCacheEnabled } from "../mapPrefs.js";
 import { getPerfMode } from "../perfMode.js";
 import { ensureLeaflet } from "../leafletLoader.js";
 import { loadWithCache } from "../listCache.js";
@@ -144,7 +144,6 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
               <div class="map-filter-row">
                 <button class="map-filter-chip chip-active" data-filter="" aria-pressed="true"><span class="map-filter-chip-icon">${icons.filter}</span>${t("filter_all")}</button>
                 <button class="map-filter-chip" data-filter="overdue" aria-pressed="false"><span class="map-filter-chip-icon">${icons.mapWarning}</span>${t("filter_overdue")}</button>
-                <button class="map-filter-chip" data-filter="visited" aria-pressed="false"><span class="map-filter-chip-icon">${icons.checkCircle}</span>${t("filter_visited")}</button>
                 <button class="map-filter-chip" data-filter="visited-today" aria-pressed="false"><span class="map-filter-chip-icon">${icons.checkCircle}</span>${t("filter_visited_today")}</button>
                 <button class="map-filter-chip" data-filter="visited-7days" aria-pressed="false"><span class="map-filter-chip-icon">${icons.clock}</span>${t("filter_visited_7days")}</button>
                 <button class="map-filter-chip" data-filter="planned" aria-pressed="false"><span class="map-filter-chip-icon">${icons.send}</span>${t("filter_planned")}</button>
@@ -236,6 +235,16 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
               <span class="toggle-thumb"></span>
             </button>
           </div>
+          ${
+            isStrongDevice()
+              ? `<div class="map-legend-pref-row">
+                  <span>${t("map_tile_cache")}<span class="map-legend-pref-hint">${t("map_tile_cache_hint")}</span></span>
+                  <button type="button" class="toggle-switch" id="map-legend-toggle-tile-cache" role="switch" aria-checked="${getMapTileCacheEnabled()}" aria-label="${t("map_tile_cache")}">
+                    <span class="toggle-thumb"></span>
+                  </button>
+                </div>`
+              : ""
+          }
         </div>
         <div class="map-legend-divider"></div>
         <p class="map-legend-note">${t("map_legend_shape_note")}</p>
@@ -461,6 +470,52 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
   let tileLayer = makeTileLayer(currentProvider()).addTo(map);
   startTileHealthCheck();
+
+  // ---- Proactive tile-cache warming (map_tile_cache pref, strong devices only) ----
+  // Leaflet only ever requests tiles for the area currently on screen, so
+  // panning to a not-yet-visited area always waits on the network first,
+  // even though the service worker (sw.js) caches every tile it ever sees.
+  // When the pref is on, this fetches a one-tile buffer ring around the
+  // current viewport after every pan/zoom -- the exact same URLs Leaflet
+  // itself would request, so the SW's existing basemaps.cartocdn.com
+  // handler caches them the same way, just before the rep pans there
+  // rather than after. Only warms the primary provider (no point caching
+  // a fallback CDN nobody's using) and skips entirely once offline.
+  const warmedTileKeys = new Set();
+  let warmTilesTimer = null;
+  function lngToTileX(lng, z) {
+    return Math.floor(((lng + 180) / 360) * 2 ** z);
+  }
+  function latToTileY(lat, z) {
+    const rad = (lat * Math.PI) / 180;
+    return Math.floor(((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * 2 ** z);
+  }
+  function warmTileCache() {
+    if (!getMapTileCacheEnabled() || providerIndex !== 0 || navigator.onLine === false) return;
+    const { url, subdomains } = currentProvider();
+    const zoom = Math.round(map.getZoom());
+    const bounds = map.getBounds();
+    const minX = lngToTileX(bounds.getWest(), zoom) - 1;
+    const maxX = lngToTileX(bounds.getEast(), zoom) + 1;
+    const minY = latToTileY(bounds.getNorth(), zoom) - 1;
+    const maxY = latToTileY(bounds.getSouth(), zoom) + 1;
+    let issued = 0;
+    for (let x = minX; x <= maxX && issued < 40; x++) {
+      for (let y = minY; y <= maxY && issued < 40; y++) {
+        const key = `${zoom}/${x}/${y}`;
+        if (warmedTileKeys.has(key)) continue;
+        warmedTileKeys.add(key);
+        issued += 1;
+        const s = subdomains[Math.floor(Math.random() * subdomains.length)] || "";
+        const tileUrl = url.replace("{s}", s).replace("{z}", zoom).replace("{x}", x).replace("{y}", y).replace("{r}", "");
+        fetch(tileUrl).catch(() => {});
+      }
+    }
+  }
+  map.on("moveend zoomend", () => {
+    clearTimeout(warmTilesTimer);
+    warmTilesTimer = setTimeout(warmTileCache, 600);
+  });
 
   root.querySelector("#map-error-retry").addEventListener("click", () => {
     hideMapError();
@@ -1126,20 +1181,22 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         // visited_today/visited_this_week booleans customerStatus() itself
         // derives status from -- visited_this_week is already a rolling
         // 7-day window server-side (see routes/customers.js), not a
-        // calendar week, despite the "week" status label. "visited" stays
-        // the existing combined today-or-last-7-days filter; the two new
-        // chips split it into its two more specific halves.
+        // calendar week, despite the "week" status label. There used to be
+        // a third "Visited" chip combining both, but it went through
+        // customerStatus()'s overdue-first priority instead of these raw
+        // booleans, so a customer visited within 7 days AND independently
+        // overdue by cadence fell out of it while still showing up under
+        // "Visited last 7 days" -- confusingly near-duplicate AND subtly
+        // inconsistent. Removed; these two are the whole, well-defined set.
         if (
           activeFilter &&
           !(activeFilter === "overdue"
             ? status === "overdue"
-            : activeFilter === "visited"
-              ? status === "today" || status === "week"
-              : activeFilter === "visited-today"
-                ? c.visited_today
-                : activeFilter === "visited-7days"
-                  ? c.visited_today || c.visited_this_week
-                  : true)
+            : activeFilter === "visited-today"
+              ? c.visited_today
+              : activeFilter === "visited-7days"
+                ? c.visited_today || c.visited_this_week
+                : true)
         ) {
           continue;
         }
@@ -2254,6 +2311,14 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     }
   });
 
+  const tileCacheToggle = root.querySelector("#map-legend-toggle-tile-cache");
+  tileCacheToggle?.addEventListener("click", () => {
+    const next = tileCacheToggle.getAttribute("aria-checked") !== "true";
+    tileCacheToggle.setAttribute("aria-checked", String(next));
+    setMapTileCacheEnabled(next);
+    if (next) warmTileCache();
+  });
+
   root.addEventListener("click", (event) => {
     if (!legendPanel.hidden && !legendPanel.contains(event.target) && event.target !== legendBtn && !legendBtn.contains(event.target)) {
       closeLegend();
@@ -2646,7 +2711,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
             <label>${t("region")}
               <select name="region" id="new-customer-region">
                 <option value="">${t("select_placeholder")}</option>
-                ${REGION_LIST.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join("")}
+                ${REGION_LIST.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(regionLabelHy(r))}</option>`).join("")}
               </select>
             </label>
             <label id="new-customer-subregion-wrap">${t("subregion")}<input name="subregion" id="new-customer-subregion" /></label>
@@ -2728,7 +2793,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           <select name="subregion" id="new-customer-subregion">
             <option value="">${t("select_placeholder")}</option>
             ${YEREVAN_DISTRICTS.map(
-              (d) => `<option value="${escapeHtml(d)}" ${d === guess ? "selected" : ""}>${escapeHtml(d)}</option>`
+              (d) => `<option value="${escapeHtml(d)}" ${d === guess ? "selected" : ""}>${escapeHtml(subregionLabelHy(d))}</option>`
             ).join("")}
           </select>`;
       } else {
@@ -2941,6 +3006,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     if (teamPollId) clearInterval(teamPollId);
     clearTimeout(teamEmptyHintTimer);
     clearTimeout(tileHealthTimer);
+    clearTimeout(warmTilesTimer);
     mapEl.removeEventListener("touchend", onMapTouchEnd);
     document.removeEventListener("visibilitychange", refreshTileStyle);
     appMain.classList.remove("app-main-locked");

@@ -47,6 +47,25 @@ test("POST /api/products: a product manager (admin) can create a product; a sale
   assert.equal(created.status, 201);
   trackProduct(created.data.id);
   assert.equal(Number(created.data.retail_price_amd), 500, "retail defaults to unit_price_amd when not given");
+  assert.equal(created.data.net_cost_amd, null, "net_cost_amd has no default -- unlike retail, there's no sane value to assume");
+});
+
+test("POST /api/products: net_cost_amd is optional (admin-entered, no ERP source), and rejects a negative value", async () => {
+  const withCost = await apiRequest("/api/products", {
+    method: "POST",
+    cookie: cookies.admin,
+    body: { name: `Itest NetCost ${Date.now()}`, unit_price_amd: 500, net_cost_amd: 300 },
+  });
+  assert.equal(withCost.status, 201);
+  trackProduct(withCost.data.id);
+  assert.equal(Number(withCost.data.net_cost_amd), 300);
+
+  const negative = await apiRequest("/api/products", {
+    method: "POST",
+    cookie: cookies.admin,
+    body: { name: "Itest NetCost Negative", unit_price_amd: 500, net_cost_amd: -1 },
+  });
+  assert.equal(negative.status, 400);
 });
 
 // --- Invalid / boundary input -----------------------------------------------------
@@ -73,6 +92,17 @@ test("PATCH /api/products/:id: a sales_manager gets 403; accountant (a product m
 
   const { rows } = await pool.query("SELECT * FROM product_price_history WHERE product_id = $1 AND price_type = 'standard'", [product.id]);
   assert.equal(rows.length, 1, "a bronze_price_amd change must be logged as a 'standard' price-history entry");
+});
+
+test("PATCH /api/products/:id: net_cost_amd round-trips and is not logged to product_price_history (it's a cost basis, not a price)", async () => {
+  const product = await createProduct({ unit_price_amd: 1000 });
+
+  const res = await apiRequest(`/api/products/${product.id}`, { method: "PATCH", cookie: cookies.admin, body: { net_cost_amd: 650 } });
+  assert.equal(res.status, 200);
+  assert.equal(Number(res.data.net_cost_amd), 650);
+
+  const { rows } = await pool.query("SELECT * FROM product_price_history WHERE product_id = $1", [product.id]);
+  assert.equal(rows.length, 0, "net_cost_amd is not one of the tracked price-history fields");
 });
 
 test("PATCH /api/products/:id: a nonexistent id is a 404", async () => {

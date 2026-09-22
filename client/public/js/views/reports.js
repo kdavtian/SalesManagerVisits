@@ -2,7 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { REGION_LIST, YEREVAN_DISTRICTS, CATEGORY_LIST, formatAmd, channelDisplayLabel, syncBadgeHtml, formatDateDMY } from "../util.js";
+import { REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, CATEGORY_LIST, formatAmd, channelDisplayLabel, syncBadgeHtml, formatDateDMY } from "../util.js";
 
 // "all" (not "") for the All-time option: every one of this array's three
 // callers builds its request params with
@@ -208,7 +208,7 @@ async function renderNewCustomersReport(root, navigate) {
           PERIOD_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) })),
           "month"
         )}
-        ${selectHtml("region", [{ value: "", label: t("all_regions") }, ...REGION_LIST.map((r) => ({ value: r, label: r }))], "")}
+        ${selectHtml("region", [{ value: "", label: t("all_regions") }, ...REGION_LIST.map((r) => ({ value: r, label: regionLabelHy(r) }))], "")}
         ${selectHtml(
           "customer_tier",
           [{ value: "", label: t("all_tiers") }, ...TIER_OPTIONS.map((v) => ({ value: v, label: t(`tier_${v}`) }))],
@@ -282,7 +282,7 @@ async function renderCheckinsReport(root, navigate) {
           PERIOD_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) })),
           "month"
         )}
-        ${selectHtml("region", [{ value: "", label: t("all_regions") }, ...REGION_LIST.map((r) => ({ value: r, label: r }))], "")}
+        ${selectHtml("region", [{ value: "", label: t("all_regions") }, ...REGION_LIST.map((r) => ({ value: r, label: regionLabelHy(r) }))], "")}
         ${selectHtml(
           "category",
           [{ value: "", label: t("all_categories") }, ...CATEGORY_LIST.map((c) => ({ value: c.value, label: c.value }))],
@@ -1192,7 +1192,7 @@ async function renderBrandAvailabilityReport(root, navigate) {
     <div class="detail-view">
       ${reportHeaderHtml("report_brand_availability_name")}
       <form id="report-filters" class="report-filter-form">
-        ${selectHtml("region", [{ value: "", label: t("all_regions") }, ...REGION_LIST.map((r) => ({ value: r, label: r }))], "")}
+        ${selectHtml("region", [{ value: "", label: t("all_regions") }, ...REGION_LIST.map((r) => ({ value: r, label: regionLabelHy(r) }))], "")}
       </form>
       <p class="muted" style="margin: 0 4px 8px;">${t("brand_availability_map_hint")}</p>
       <div id="report-body"><p class="loading-state" role="status">${t("loading")}</p></div>

@@ -11,13 +11,13 @@ export const REPORTS = [
     key: "new_customers",
     nameKey: "report_new_customers_name",
     descriptionKey: "report_new_customers_description",
-    defaultRoles: ["admin", "ceo", "sales_director"],
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director"],
   },
   {
     key: "checkins",
     nameKey: "report_checkins_name",
     descriptionKey: "report_checkins_description",
-    defaultRoles: ["admin", "ceo", "sales_director"],
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director"],
   },
   // The order fulfillment pipeline (draft -> submitted -> confirmed ->
   // packed_stock_out -> delivered, plus the discount-approval side branch)
@@ -27,13 +27,13 @@ export const REPORTS = [
     key: "orders_pipeline",
     nameKey: "report_orders_pipeline_name",
     descriptionKey: "report_orders_pipeline_description",
-    defaultRoles: ["admin", "ceo", "sales_director", "warehouse_manager", "delivery_manager"],
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "warehouse_manager", "delivery_manager"],
   },
   {
     key: "brand_availability",
     nameKey: "report_brand_availability_name",
     descriptionKey: "report_brand_availability_description",
-    defaultRoles: ["admin", "ceo", "sales_director"],
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director"],
   },
   {
     key: "payments",
@@ -42,7 +42,7 @@ export const REPORTS = [
     // Accountant is the one who actually reconciles these day to day --
     // included here even though they're outside the usual office-roles set
     // for other reports, same reasoning as canReviewPayments in roles.js.
-    defaultRoles: ["admin", "ceo", "sales_director", "accountant"],
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"],
   },
   // Real, physical cash sitting with a rep/driver/accountant before it's
   // reconciled -- had no report at all before this, despite payments.js
@@ -52,7 +52,7 @@ export const REPORTS = [
     key: "cash_custody",
     nameKey: "report_cash_custody_name",
     descriptionKey: "report_cash_custody_description",
-    defaultRoles: ["admin", "ceo", "sales_director", "accountant"],
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"],
   },
   // cash_custody above is a live snapshot of who holds what right now;
   // this is the historical, day-by-day counterpart -- what reps/drivers
@@ -63,7 +63,7 @@ export const REPORTS = [
     key: "cash_reconciliation",
     nameKey: "report_cash_reconciliation_name",
     descriptionKey: "report_cash_reconciliation_description",
-    defaultRoles: ["admin", "ceo", "accountant"],
+    defaultRoles: ["admin", "ceo", "operations_director", "accountant"],
   },
   // The next three surface the same Castrol ERP extract that already feeds
   // erp_customer_data/sales_performance/perf_actuals_brand_monthly (see
@@ -75,19 +75,19 @@ export const REPORTS = [
     nameKey: "report_customer_debt_name",
     descriptionKey: "report_customer_debt_description",
     // Accountant reconciles debt day to day, same reasoning as payments above.
-    defaultRoles: ["admin", "ceo", "sales_director", "accountant"],
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"],
   },
   {
     key: "sales_budget",
     nameKey: "report_sales_budget_name",
     descriptionKey: "report_sales_budget_description",
-    defaultRoles: ["admin", "ceo", "sales_director"],
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director"],
   },
   {
     key: "brand_volume",
     nameKey: "report_brand_volume_name",
     descriptionKey: "report_brand_volume_description",
-    defaultRoles: ["admin", "ceo", "sales_director"],
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director"],
   },
   // Fed by its own daily push (POST /api/erp-sync/daily-report), separate
   // from the extract above -- the CEO Telegram bot's own daily
@@ -97,7 +97,7 @@ export const REPORTS = [
     key: "daily_management",
     nameKey: "report_daily_management_name",
     descriptionKey: "report_daily_management_description",
-    defaultRoles: ["admin", "ceo", "sales_director", "accountant"],
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"],
   },
   // Downloadable generated files (Sales Director workbook, debt/receivables
   // Excel, CEO management workbook) pushed as-is by the bot -- see
@@ -108,7 +108,7 @@ export const REPORTS = [
     key: "documents",
     nameKey: "report_documents_name",
     descriptionKey: "report_documents_description",
-    defaultRoles: ["admin", "ceo", "sales_director", "accountant"],
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"],
   },
 ];
 

@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, channelDisplayLabel, parseDateOnly } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, SALES_CHANNELS, channelDisplayLabel, parseDateOnly } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { canEditDirectly, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, isAdmin, seesFinancialExports } from "../state.js";
@@ -131,7 +131,14 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       </div>
       ${
         customer.region || customer.address
-          ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.pin}</span><span>${[customer.region, customer.subregion, customer.address].filter(Boolean).map(escapeHtml).join(" &middot; ")}</span></div>`
+          ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.pin}</span><span>${[
+              customer.region ? regionLabelHy(customer.region) : null,
+              customer.subregion ? subregionLabelHy(customer.subregion) : null,
+              customer.address,
+            ]
+              .filter(Boolean)
+              .map(escapeHtml)
+              .join(" &middot; ")}</span></div>`
           : ""
       }
       ${customer.phone ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.phone}</span><a href="tel:${escapeHtml(customer.phone)}">${escapeHtml(formatPhoneDisplay(customer.phone))}</a></div>` : ""}
@@ -461,7 +468,7 @@ async function openAccountSettingsSheet(customer, onDone) {
                  <select name="region" id="reassign-region">
                    <option value="">${t("select_placeholder")}</option>
                    ${REGION_LIST.map(
-                     (r) => `<option value="${escapeHtml(r)}" ${r === customer.region ? "selected" : ""}>${escapeHtml(r)}</option>`
+                     (r) => `<option value="${escapeHtml(r)}" ${r === customer.region ? "selected" : ""}>${escapeHtml(regionLabelHy(r))}</option>`
                    ).join("")}
                  </select>
                </label>
@@ -543,7 +550,7 @@ async function openAccountSettingsSheet(customer, onDone) {
           <select name="subregion" id="reassign-subregion">
             <option value="">${t("select_placeholder")}</option>
             ${YEREVAN_DISTRICTS.map(
-              (d) => `<option value="${escapeHtml(d)}" ${d === value ? "selected" : ""}>${escapeHtml(d)}</option>`
+              (d) => `<option value="${escapeHtml(d)}" ${d === value ? "selected" : ""}>${escapeHtml(subregionLabelHy(d))}</option>`
             ).join("")}
           </select>`;
       } else {

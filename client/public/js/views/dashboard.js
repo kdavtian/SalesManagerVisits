@@ -140,7 +140,8 @@ export async function renderDashboard(root, navigate) {
     await loadWithCache(
       `dashboard-summary:${state.user.id}`,
       async () => {
-        const isCeoOrAdmin = state.user.role === "admin" || state.user.role === "ceo";
+        const isCeoOrAdmin =
+          state.user.role === "admin" || state.user.role === "ceo" || state.user.role === "operations_director";
         const isSalesManager = state.user.role === "sales_manager";
         const [summary, customers, trends, settings, planPreview, myPlan] = await Promise.all([
           api.dashboardSummary(),
@@ -200,7 +201,7 @@ export async function renderDashboard(root, navigate) {
     </div>
 
     ${
-      state.user.role === "admin" || state.user.role === "ceo"
+      state.user.role === "admin" || state.user.role === "ceo" || state.user.role === "operations_director"
         ? ""
         : `<div id="next-visit-slot" aria-live="polite">
       <div class="card next-visit-card next-visit-loading"><p class="loading-state" role="status">${t("loading")}</p></div>
@@ -335,7 +336,7 @@ export async function renderDashboard(root, navigate) {
       // duplicate of a screen they already have. Every other role keeps
       // it: for them it's a quick "did my last few check-ins register OK"
       // glance, not a shrunk copy of something else on their home tab.
-      ["ceo", "admin"].includes(state.user.role)
+      ["ceo", "operations_director", "admin"].includes(state.user.role)
         ? companyDashboardPreviewHtml(planPreview)
         : `<div>
           <div class="section-heading-row">

@@ -17,7 +17,7 @@ import { NOT_NO_VISIT_CHANNEL_SQL } from "./routes/customers.js";
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // hourly; only actually sends once the target hour has passed for the day
 const SUMMARY_HOUR_UTC = 6; // ~10am Yerevan (UTC+4) -- once the day's field work has started
 
-const SUMMARY_RECIPIENT_ROLES = ["admin", "ceo", "sales_director", "accountant"];
+const SUMMARY_RECIPIENT_ROLES = ["admin", "ceo", "operations_director", "sales_director", "accountant"];
 
 let lastSentDate = null; // "YYYY-MM-DD" the summary was last sent for
 
