@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, parseUserAgent, SALES_CHANNELS, REGION_LIST, YEREVAN_DISTRICTS, parseDateOnly } from "../util.js";
+import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, parseUserAgent, SALES_CHANNELS, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, parseDateOnly } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 import { ALL_ROLES, QUICK_ACTIONS, defaultQuickActionIds } from "../quickActions.js";
@@ -1158,7 +1158,7 @@ export async function renderRouteDistributionSection(container) {
     if (region === "Yerevan") {
       return `<select name="subregion" id="rd-subregion">
         <option value="">${t("route_distribution_whole_region")}</option>
-        ${YEREVAN_DISTRICTS.map((d) => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join("")}
+        ${YEREVAN_DISTRICTS.map((d) => `<option value="${escapeHtml(d)}">${escapeHtml(subregionLabelHy(d))}</option>`).join("")}
       </select>`;
     }
     return `<input name="subregion" id="rd-subregion" placeholder="${t("route_distribution_whole_region")}" />`;
@@ -1170,7 +1170,7 @@ export async function renderRouteDistributionSection(container) {
         <label>${t("region")}
           <select name="region" id="rd-region" required>
             <option value="">${t("select_placeholder")}</option>
-            ${REGION_LIST.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join("")}
+            ${REGION_LIST.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(regionLabelHy(r))}</option>`).join("")}
           </select>
         </label>
         <label id="rd-subregion-wrap">${t("subregion")}${subregionFieldHtml("")}</label>

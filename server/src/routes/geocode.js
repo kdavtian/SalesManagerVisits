@@ -24,10 +24,15 @@ geocodeRouter.get("/reverse", geocodeLimiter, async (req, res) => {
     return res.status(400).json({ error: "lat and lng are required" });
   }
 
-  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
+  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=hy`;
   let response;
   try {
     response = await fetch(url, {
+      // accept-language=hy above asks Nominatim for Armenian names; every
+      // customer is local, and the region/subregion match against the
+      // fixed Armenian-labeled lists in util.js works best against
+      // consistent Armenian-script input rather than whatever OSM's
+      // untagged default happens to return for a given area.
       headers: { "User-Agent": "KAD-Motors-FieldVisits/1.0 (internal field sales app)" },
       signal: AbortSignal.timeout(8000),
     });
@@ -63,7 +68,7 @@ geocodeRouter.get("/search", geocodeLimiter, async (req, res) => {
     return res.status(400).json({ error: "q must be at least 3 characters" });
   }
 
-  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}&countrycodes=am&addressdetails=1&limit=5`;
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}&countrycodes=am&addressdetails=1&limit=5&accept-language=hy`;
   let response;
   try {
     response = await fetch(url, {
