@@ -41,11 +41,15 @@ const ICON = {
 // etc. A copy-fix or color tweak doesn't need a re-export.
 const GUIDE_VERSION = "1.19.1";
 
-function settingsRow({ icon, label, value, id, interactive = true }) {
+// `color` picks a badge tint for the row's icon, iOS-Settings style (each
+// row's icon sits in a colored rounded-square, not just a plain glyph) --
+// one of the ICON_COLORS keys below. Reused across rows freely, same as
+// iOS itself reuses a handful of system colors across many settings.
+function settingsRow({ icon, label, value, id, interactive = true, color = "gray" }) {
   const tag = interactive ? "button" : "div";
   return `
     <${tag} ${interactive ? 'type="button"' : ""} class="settings-list-row" ${id ? `id="${id}"` : ""}>
-      <span class="settings-row-icon">${icon}</span>
+      <span class="settings-row-icon settings-row-icon-${color}">${icon}</span>
       <span class="settings-row-label">${label}</span>
       ${value !== undefined ? `<span class="settings-row-value muted">${value}</span>` : ""}
       ${interactive ? `<span class="settings-row-chevron">${ICON.chevron}</span>` : ""}
@@ -53,10 +57,10 @@ function settingsRow({ icon, label, value, id, interactive = true }) {
   `;
 }
 
-function settingsToggleRow({ icon, label, value, id, checked, resetId }) {
+function settingsToggleRow({ icon, label, value, id, checked, resetId, color = "gray" }) {
   return `
     <div class="settings-list-row settings-toggle-row">
-      <span class="settings-row-icon">${icon}</span>
+      <span class="settings-row-icon settings-row-icon-${color}">${icon}</span>
       <span class="settings-row-label">
         ${label}
         ${resetId ? `<button type="button" class="settings-reset-link" id="${resetId}">${t("reset_to_default")}</button>` : ""}
@@ -129,14 +133,14 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
 
       <h2 class="section-title">${t("contact_info")}</h2>
       <div class="card settings-list">
-        ${settingsRow({ icon: ICON.phone, label: t("phone"), value: state.user.phone ? escapeHtml(formatPhoneDisplay(state.user.phone)) : t("not_set"), id: "row-phone" })}
+        ${settingsRow({ icon: ICON.phone, label: t("phone"), value: state.user.phone ? escapeHtml(formatPhoneDisplay(state.user.phone)) : t("not_set"), id: "row-phone", color: "green" })}
       </div>
 
       <h2 class="section-title">${t("preferences")}</h2>
       <div class="card settings-list">
-        ${settingsToggleRow({ icon: ICON.appearance, label: t("appearance"), value: getTheme() === "dark" ? t("dark") : t("light"), id: "toggle-appearance", checked: getTheme() === "dark" })}
-        ${settingsToggleRow({ icon: ICON.language, label: t("language"), value: getLang() === "hy" ? t("armenian") : t("english"), id: "toggle-language", checked: getLang() === "hy" })}
-        ${settingsToggleRow({ icon: ICON.bolt, label: t("efficiency_mode"), value: getPerfMode() === "efficiency" ? t("toggle_on") : t("toggle_off"), id: "toggle-perf-mode", checked: getPerfMode() === "efficiency" })}
+        ${settingsToggleRow({ icon: ICON.appearance, label: t("appearance"), value: getTheme() === "dark" ? t("dark") : t("light"), id: "toggle-appearance", checked: getTheme() === "dark", color: "indigo" })}
+        ${settingsToggleRow({ icon: ICON.language, label: t("language"), value: getLang() === "hy" ? t("armenian") : t("english"), id: "toggle-language", checked: getLang() === "hy", color: "blue" })}
+        ${settingsToggleRow({ icon: ICON.bolt, label: t("efficiency_mode"), value: getPerfMode() === "efficiency" ? t("toggle_on") : t("toggle_off"), id: "toggle-perf-mode", checked: getPerfMode() === "efficiency", color: "orange" })}
       </div>
       <!-- .settings-hint is styled as a footnote directly under the card
            above it (see styles.css) -- efficiency mode is that card's last
@@ -145,7 +149,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
            the whole preferences section. -->
       <p class="muted settings-hint">${t("efficiency_mode_hint")}</p>
       <div class="card settings-list">
-        ${settingsToggleRow({ icon: ICON.bell, label: t("push_notifications"), value: "…", id: "toggle-push-notifications", checked: false })}
+        ${settingsToggleRow({ icon: ICON.bell, label: t("push_notifications"), value: "…", id: "toggle-push-notifications", checked: false, color: "red" })}
       </div>
 
       <h2 class="section-title">${t("notification_preferences_title")}</h2>
@@ -155,25 +159,25 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
 
       <h2 class="section-title">${t("data_sync")}</h2>
       <div class="card settings-list">
-        ${settingsRow({ icon: ICON.cloud, label: t("sync_status"), value: `<span id="sync-status-value"></span>`, interactive: false })}
-        ${settingsRow({ icon: ICON.clock, label: t("last_sync"), value: `<span id="last-sync-value"></span>`, interactive: false })}
-        ${settingsRow({ icon: ICON.refresh, label: t("refresh_data"), id: "row-refresh" })}
-        ${settingsRow({ icon: ICON.refresh, label: t("refresh_product_catalog"), id: "row-refresh-catalog" })}
-        ${settingsRow({ icon: ICON.database, label: t("offline_storage"), value: `<span id="storage-value">…</span>`, interactive: false })}
+        ${settingsRow({ icon: ICON.cloud, label: t("sync_status"), value: `<span id="sync-status-value"></span>`, interactive: false, color: "teal" })}
+        ${settingsRow({ icon: ICON.clock, label: t("last_sync"), value: `<span id="last-sync-value"></span>`, interactive: false, color: "gray" })}
+        ${settingsRow({ icon: ICON.refresh, label: t("refresh_data"), id: "row-refresh", color: "green" })}
+        ${settingsRow({ icon: ICON.refresh, label: t("refresh_product_catalog"), id: "row-refresh-catalog", color: "green" })}
+        ${settingsRow({ icon: ICON.database, label: t("offline_storage"), value: `<span id="storage-value">…</span>`, interactive: false, color: "purple" })}
       </div>
       <p class="settings-hint sync-needs-attention-hint" id="sync-needs-attention-hint" role="status" hidden></p>
 
       <h2 class="section-title">${t("security")}</h2>
       <div class="card settings-list">
-        ${settingsRow({ icon: ICON.lock, label: t("change_password"), id: "row-change-password" })}
-        ${settingsRow({ icon: ICON.shield, label: t("session_management"), id: "row-sessions" })}
+        ${settingsRow({ icon: ICON.lock, label: t("change_password"), id: "row-change-password", color: "gray" })}
+        ${settingsRow({ icon: ICON.shield, label: t("session_management"), id: "row-sessions", color: "green" })}
       </div>
 
       <h2 class="section-title">${t("about")}</h2>
       <div class="card settings-list">
-        ${settingsRow({ icon: ICON.info, label: t("about_app"), value: `${t("version")} ${APP_VERSION}`, interactive: false })}
-        ${settingsRow({ icon: ICON.book, label: t("user_guide"), value: "PDF", id: "row-user-guide" })}
-        ${settingsRow({ icon: ICON.refresh, label: t("check_for_updates"), value: `<span id="check-updates-value"></span>`, id: "row-check-updates" })}
+        ${settingsRow({ icon: ICON.info, label: t("about_app"), value: `${t("version")} ${APP_VERSION}`, interactive: false, color: "blue" })}
+        ${settingsRow({ icon: ICON.book, label: t("user_guide"), value: "PDF", id: "row-user-guide", color: "orange" })}
+        ${settingsRow({ icon: ICON.refresh, label: t("check_for_updates"), value: `<span id="check-updates-value"></span>`, id: "row-check-updates", color: "teal" })}
       </div>
       <p class="muted settings-hint">${t("user_guide_hint").replace("{v}", GUIDE_VERSION)}</p>
 
@@ -189,7 +193,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
           ? `
         <h2 class="section-title">${t("admin_group_team_roles")}</h2>
         <div class="card settings-list">
-          ${settingsRow({ icon: ICON.team, label: t("team_management"), id: "row-team-management" })}
+          ${settingsRow({ icon: ICON.team, label: t("team_management"), id: "row-team-management", color: "blue" })}
         </div>
         <h3 class="settings-subsection-title">${t("notification_defaults_title")}</h3>
         <p class="muted radius-help">${t("notification_defaults_help")}</p>
@@ -209,7 +213,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
             ? `
           <div class="card settings-list-group">
             <div class="settings-list-group-item">
-              ${settingsToggleRow({ icon: ICON.bolt, label: t("bonuses_enabled_label"), value: "", id: "toggle-bonuses-enabled", checked: false })}
+              ${settingsToggleRow({ icon: ICON.bolt, label: t("bonuses_enabled_label"), value: "", id: "toggle-bonuses-enabled", checked: false, color: "orange" })}
               <p class="muted radius-help" id="bonuses-enabled-help">${t("bonuses_enabled_help_off")}</p>
             </div>
           </div>
@@ -217,8 +221,8 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
             : ""
         }
         <div class="card settings-list">
-          ${canManageChallenges ? settingsRow({ icon: ICON.bolt, label: t("bonuses_admin_challenges"), id: "row-bonus-challenges" }) : ""}
-          ${canReviewBonusRewards ? settingsRow({ icon: ICON.chart, label: t("bonuses_reward_claims"), id: "row-bonus-reward-claims" }) : ""}
+          ${canManageChallenges ? settingsRow({ icon: ICON.bolt, label: t("bonuses_admin_challenges"), id: "row-bonus-challenges", color: "orange" }) : ""}
+          ${canReviewBonusRewards ? settingsRow({ icon: ICON.chart, label: t("bonuses_reward_claims"), id: "row-bonus-reward-claims", color: "green" }) : ""}
         </div>
       `
           : ""
@@ -266,7 +270,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
             <button type="submit" class="btn btn-primary">${t("save")}</button>
           </form>
           <div class="settings-list-group-item">
-            ${settingsToggleRow({ icon: ICON.lock, label: t("calculator_mode_label"), value: "", id: "toggle-calculator-mode", checked: false })}
+            ${settingsToggleRow({ icon: ICON.lock, label: t("calculator_mode_label"), value: "", id: "toggle-calculator-mode", checked: false, color: "gray" })}
             <p class="muted radius-help" id="calculator-mode-help">${t("calculator_mode_help_off")}</p>
           </div>
         </div>
@@ -290,21 +294,21 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         ${
           admin
             ? `<div class="card settings-list">
-          ${settingsRow({ icon: ICON.chart, label: t("reports_management"), id: "row-reports-management" })}
-          ${settingsRow({ icon: ICON.database, label: t("route_distribution_title"), id: "row-route-distribution" })}
-          ${settingsRow({ icon: ICON.database, label: t("sales_channel_owners_title"), id: "row-sales-channel-owners" })}
-          ${settingsRow({ icon: ICON.chart, label: t("quick_action_visibility_title"), id: "row-quick-actions" })}
-          ${settingsRow({ icon: ICON.chart, label: t("data_quality_title"), id: "row-data-quality" })}
-          ${settingsRow({ icon: ICON.database, label: t("notification_delivery_log_title"), id: "row-notification-delivery-log" })}
-          ${settingsRow({ icon: ICON.database, label: t("client_error_log_title"), id: "row-client-error-log" })}
+          ${settingsRow({ icon: ICON.chart, label: t("reports_management"), id: "row-reports-management", color: "green" })}
+          ${settingsRow({ icon: ICON.database, label: t("route_distribution_title"), id: "row-route-distribution", color: "purple" })}
+          ${settingsRow({ icon: ICON.database, label: t("sales_channel_owners_title"), id: "row-sales-channel-owners", color: "purple" })}
+          ${settingsRow({ icon: ICON.chart, label: t("quick_action_visibility_title"), id: "row-quick-actions", color: "indigo" })}
+          ${settingsRow({ icon: ICON.chart, label: t("data_quality_title"), id: "row-data-quality", color: "red" })}
+          ${settingsRow({ icon: ICON.database, label: t("notification_delivery_log_title"), id: "row-notification-delivery-log", color: "teal" })}
+          ${settingsRow({ icon: ICON.database, label: t("client_error_log_title"), id: "row-client-error-log", color: "gray" })}
         </div>`
             : ""
         }
         ${
           canManageProducts()
             ? `<div class="card settings-list">
-          ${settingsRow({ icon: ICON.database, label: t("product_catalog"), id: "row-product-catalog" })}
-          ${settingsRow({ icon: ICON.chart, label: t("company_profile"), id: "row-company-profile" })}
+          ${settingsRow({ icon: ICON.database, label: t("product_catalog"), id: "row-product-catalog", color: "purple" })}
+          ${settingsRow({ icon: ICON.chart, label: t("company_profile"), id: "row-company-profile", color: "teal" })}
         </div>`
             : ""
         }
@@ -877,6 +881,7 @@ async function loadNotificationPreferences(slot) {
       id: `notif-pref-${type}`,
       checked: p.enabled,
       resetId: p.is_override ? `notif-pref-reset-${type}` : null,
+      color: "red",
     });
   }).join("");
 
@@ -960,6 +965,7 @@ async function renderNotificationDefaultsSection(slot) {
         value: enabled ? t("toggle_on") : t("toggle_off"),
         id: `notif-default-${type}`,
         checked: enabled,
+        color: "red",
       });
     }).join("");
 
