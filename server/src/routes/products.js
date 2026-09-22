@@ -176,7 +176,7 @@ productsRouter.get("/all", async (req, res) => {
 });
 
 productsRouter.post("/", async (req, res) => {
-  const { name, sku, brand, unit, unit_price_amd, retail_price_amd } = req.body ?? {};
+  const { name, sku, brand, unit, unit_price_amd, retail_price_amd, net_cost_amd } = req.body ?? {};
   const price = Number(unit_price_amd);
   if (!name || !Number.isFinite(price) || price < 0) {
     return res.status(400).json({ error: "name and a non-negative unit_price_amd are required" });
@@ -185,10 +185,17 @@ productsRouter.post("/", async (req, res) => {
   if (!Number.isFinite(retail) || retail < 0) {
     return res.status(400).json({ error: "retail_price_amd must be a non-negative number" });
   }
+  let netCost = null;
+  if (net_cost_amd !== undefined && net_cost_amd !== null && net_cost_amd !== "") {
+    netCost = Number(net_cost_amd);
+    if (!Number.isFinite(netCost) || netCost < 0) {
+      return res.status(400).json({ error: "net_cost_amd must be a non-negative number" });
+    }
+  }
   const { rows } = await pool.query(
-    `INSERT INTO products (name, sku, brand, unit, unit_price_amd, bronze_price_amd, retail_price_amd)
-     VALUES ($1, $2, $3, $4, $5, $5, $6) RETURNING *`,
-    [name, sku || null, brand || null, unit || null, price, retail]
+    `INSERT INTO products (name, sku, brand, unit, unit_price_amd, bronze_price_amd, retail_price_amd, net_cost_amd)
+     VALUES ($1, $2, $3, $4, $5, $5, $6, $7) RETURNING *`,
+    [name, sku || null, brand || null, unit || null, price, retail, netCost]
   );
   res.status(201).json(rows[0]);
 });
@@ -205,6 +212,7 @@ const EDITABLE_FIELDS = [
   "silver_price_amd",
   "gold_price_amd",
   "retail_price_amd",
+  "net_cost_amd",
   "stock_qty",
 ];
 const NUMERIC_FIELDS = new Set([
@@ -213,6 +221,7 @@ const NUMERIC_FIELDS = new Set([
   "silver_price_amd",
   "gold_price_amd",
   "retail_price_amd",
+  "net_cost_amd",
   "stock_qty",
 ]);
 // Which editable fields count as a "price" for history-logging purposes --
