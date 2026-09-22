@@ -6,7 +6,7 @@
 // list's region filter (leaf = a whole subregion, no customer level).
 // Extracted from routePlans.js so all three stay visually and behaviorally
 // identical instead of drifting apart as three separate implementations.
-import { escapeHtml, activateDialog } from "./util.js";
+import { escapeHtml, activateDialog, regionLabelHy, subregionLabelHy } from "./util.js";
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 
@@ -23,7 +23,7 @@ export function buildCustomerTree(customers) {
   for (const c of customers) {
     const rKey = c.region || NO_GROUP_KEY;
     if (!regionMap.has(rKey)) {
-      regionMap.set(rKey, { name: c.region || t("no_region"), customers: [] });
+      regionMap.set(rKey, { name: c.region ? regionLabelHy(c.region) : t("no_region"), customers: [] });
       regionOrder.push(rKey);
     }
     regionMap.get(rKey).customers.push(c);
@@ -42,7 +42,7 @@ export function buildCustomerTree(customers) {
     for (const c of region.customers) {
       const sKey = c.subregion || NO_GROUP_KEY;
       if (!subMap.has(sKey)) {
-        subMap.set(sKey, { name: c.subregion || t("no_subregion"), customers: [] });
+        subMap.set(sKey, { name: c.subregion ? subregionLabelHy(c.subregion) : t("no_subregion"), customers: [] });
         subOrder.push(sKey);
       }
       subMap.get(sKey).customers.push(c);
@@ -94,7 +94,7 @@ export function buildRegionSubregionTree(customers) {
     if (!c.region) continue;
     const rKey = c.region;
     if (!regionMap.has(rKey)) {
-      regionMap.set(rKey, { name: c.region, customers: [] });
+      regionMap.set(rKey, { name: regionLabelHy(c.region), customers: [] });
       regionOrder.push(rKey);
     }
     regionMap.get(rKey).customers.push(c);
@@ -109,7 +109,7 @@ export function buildRegionSubregionTree(customers) {
     for (const c of region.customers) {
       const sKey = c.subregion || NO_GROUP_KEY;
       if (!subMap.has(sKey)) {
-        subMap.set(sKey, { name: c.subregion || t("no_subregion"), customers: [] });
+        subMap.set(sKey, { name: c.subregion ? subregionLabelHy(c.subregion) : t("no_subregion"), customers: [] });
         subOrder.push(sKey);
       }
       subMap.get(sKey).customers.push(c);

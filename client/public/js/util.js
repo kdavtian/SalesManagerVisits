@@ -196,35 +196,87 @@ export const YEREVAN_DISTRICTS = [
   "Shengavit",
 ];
 
+// Armenian display names for the canonical (English/transliterated) codes
+// above. The codes themselves stay the stored values -- every existing
+// customer row, the route_distribution table, and every filter already key
+// off them -- these maps only change what a rep sees in a dropdown/label
+// (see regionLabelHy/subregionLabelHy below), the same pattern as
+// channelDisplayLabel for SALES_CHANNELS.
+const REGION_LABELS_HY = {
+  Yerevan: "Երևան",
+  Aragatsotn: "Արագածոտն",
+  Ararat: "Արարատ",
+  Armavir: "Արմավիր",
+  Gegharkunik: "Գեղարքունիք",
+  Kotayk: "Կոտայք",
+  Lori: "Լոռի",
+  Shirak: "Շիրակ",
+  Syunik: "Սյունիք",
+  Tavush: "Տավուշ",
+  "Vayots Dzor": "Վայոց ձոր",
+};
+
+const YEREVAN_DISTRICT_LABELS_HY = {
+  Ajapnyak: "Աջափնյակ",
+  Arabkir: "Արաբկիր",
+  Avan: "Ավան",
+  Davtashen: "Դավթաշեն",
+  Erebuni: "Էրեբունի",
+  "Kanaker-Zeytun": "Քանաքեռ-Զեյթուն",
+  Kentron: "Կենտրոն",
+  "Malatia-Sebastia": "Մալաթիա-Սեբաստիա",
+  "Nor Nork": "Նոր Նորք",
+  "Nork-Marash": "Նորք-Մարաշ",
+  Nubarashen: "Նուբարաշեն",
+  Shengavit: "Շենգավիթ",
+};
+
+export function regionLabelHy(code) {
+  return REGION_LABELS_HY[code] || code;
+}
+
+export function subregionLabelHy(code) {
+  return YEREVAN_DISTRICT_LABELS_HY[code] || code;
+}
+
 // Best-effort match of a geocoder's free-text region/subregion guess
 // against the fixed lists above -- accent/case-insensitive substring match
 // in either direction, since OSM data can spell things a little differently
-// ("Kanaker-Zeytun" vs "Kanaker Zeytun"). Returns "" (unmatched, left for
-// the rep to pick) rather than guessing wrong.
-function fuzzyMatch(guess, list) {
+// ("Kanaker-Zeytun" vs "Kanaker Zeytun"), and checked against both the
+// English code and its Armenian label since Nominatim can return either
+// script depending on the area and the request's language preference.
+// Returns "" (unmatched, left for the rep to pick) rather than guessing
+// wrong. Armenian letters (U+0530-U+058F) are deliberately kept through
+// normalization -- an earlier version of this stripped everything outside
+// a-z0-9, which silently broke every match against Armenian-script input.
+function fuzzyMatch(guess, list, labels) {
   if (!guess) return "";
   const norm = (s) =>
     s
       .toLowerCase()
       .normalize("NFD")
       .replace(/[̀-ͯ]/g, "")
-      .replace(/[^a-z0-9]/g, "");
+      .replace(/[^a-z0-9԰-֏ա-և]/g, "");
   const g = norm(guess);
   if (!g) return "";
   return list.find((v) => {
-    const n = norm(v);
-    return n === g || n.includes(g) || g.includes(n);
+    const aliases = [v, labels?.[v]].filter(Boolean);
+    return aliases.some((alias) => {
+      const n = norm(alias);
+      return n === g || n.includes(g) || g.includes(n);
+    });
   }) ?? "";
 }
 
 export function matchRegion(guess) {
-  return fuzzyMatch(guess, REGION_LIST);
+  return fuzzyMatch(guess, REGION_LIST, REGION_LABELS_HY);
 }
 
 export function matchSubregion(guess, region) {
-  if (region === "Yerevan") return fuzzyMatch(guess, YEREVAN_DISTRICTS);
+  if (region === "Yerevan") return fuzzyMatch(guess, YEREVAN_DISTRICTS, YEREVAN_DISTRICT_LABELS_HY);
   // Outside Yerevan there's no fixed list -- just pass the geocoder's own
-  // guess through as the starting text (e.g. the city name), still editable.
+  // guess through as the starting text (e.g. the city name, already in
+  // Armenian per geocode.js's accept-language=hy request), still editable.
   return guess || "";
 }
 
