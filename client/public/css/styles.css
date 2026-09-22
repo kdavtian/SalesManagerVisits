@@ -2607,13 +2607,13 @@ label.checkbox-row input[type="checkbox"] {
 }
 
 .map-legend-header .icon-btn {
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
 }
 
 .map-legend-header .icon-btn svg {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
 }
 
 .map-legend-prefs {
@@ -5178,13 +5178,13 @@ label.checkbox-row input[type="checkbox"] {
 }
 
 .detail-facts-card-actions .icon-btn {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
 }
 
 .detail-facts-card-actions .icon-btn svg {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
 }
 
 .detail-fact {
@@ -5677,8 +5677,8 @@ label.checkbox-row input[type="checkbox"] {
 }
 
 .stop-reorder .icon-btn {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
 }
 
 .stop-reorder .icon-btn[disabled] {
@@ -7114,8 +7114,8 @@ button.list-row-icon {
 }
 
 .order-qty-stepper .icon-btn {
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   border: 1px solid var(--border);
   border-radius: 50%;
   display: flex;
