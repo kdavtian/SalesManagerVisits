@@ -1281,6 +1281,8 @@ const dict = {
     bonuses_next_action_no_challenges: "No active challenges right now -- check back soon for a new one.",
     bonuses_next_action_in_progress: "Keep going -- you're making progress on an active challenge.",
     bonuses_next_action_target_reached: "Target reached! Your reward will be confirmed once the challenge round ends.",
+    bonuses_almost_there: "Almost there!",
+    bonuses_leaderboard_title: "Bonus leaders",
     sales_source_hint: "ERP-invoiced revenue (Excel extract), not the app's own order pipeline -- see Reports for submitted/confirmed/delivered order totals.",
     sales_channel_filter: "Channel",
     sales_search_placeholder: "Search customer",

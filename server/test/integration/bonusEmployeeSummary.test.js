@@ -69,6 +69,15 @@ test("getBonusSummaryForUser: sums points/collectibles and picks the right level
   assert.equal(summary.collectibleCounts.carrot, 0);
   assert.equal(summary.level.number, 1); // below the 100-point level-2 threshold
   assert.equal(summary.level.pointsToNextLevel, 93); // 100 - 7
+
+  // The leaderboard is a company-wide ranking (other sales_manager fixtures
+  // from parallel tests may also be on it), so only assert this manager's
+  // own row -- it must agree with pointsTotal above, not drift into its own
+  // separately-computed number.
+  const ownRow = summary.pointsLeaderboard.find((p) => p.user_id === manager.id);
+  assert.ok(ownRow, "the manager must appear on their own leaderboard");
+  assert.equal(ownRow.total_points, 7);
+  assert.equal(ownRow.user_name, manager.name);
 });
 
 test("getBonusSummaryForUser: lists an active challenge's progress and past claims", async () => {

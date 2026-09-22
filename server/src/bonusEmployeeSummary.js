@@ -85,5 +85,29 @@ export async function getBonusSummaryForUser(userId) {
     personalBestsRaw.map((b) => [b.metric, { value: fromScaled(b.best_value_scaled), achievedWeekStart: b.achieved_week_start }])
   );
 
-  return { pointsTotal, collectibleCounts, level, activeChallenges, claims, badges, personalBests };
+  const pointsLeaderboard = await getBonusPointsLeaderboard();
+
+  return { pointsTotal, collectibleCounts, level, activeChallenges, claims, badges, personalBests, pointsLeaderboard };
+}
+
+// Standings for the Bonuses page's own leaderboard -- a separate ranking
+// from the Dashboard's legacy "Monthly Leaders" board (visit/photo/new-
+// customer activity points, server/src/routes/dashboard.js), which is a
+// different competition entirely. This one ranks by the same
+// bonus_point_ledger total the employee summary above computes for "my
+// points", so the two numbers a sales manager sees (their own total, and
+// where that total ranks) always agree. Same "sales managers only compete,
+// everyone else can watch" convention as the legacy board, and returns
+// every sales manager (not just a top slice) so the client can show a top-N
+// list plus the viewer's own row the same way dashboard.js already does.
+async function getBonusPointsLeaderboard() {
+  const { rows } = await pool.query(
+    `SELECT u.id AS user_id, u.name AS user_name, COALESCE(SUM(l.points_delta_scaled), 0) AS total_points_scaled
+     FROM users u
+     LEFT JOIN bonus_point_ledger l ON l.user_id = u.id
+     WHERE u.role = 'sales_manager'
+     GROUP BY u.id, u.name
+     ORDER BY total_points_scaled DESC, u.name ASC`
+  );
+  return rows.map((r) => ({ user_id: r.user_id, user_name: r.user_name, total_points: fromScaled(Math.max(0, Number(r.total_points_scaled))) }));
 }

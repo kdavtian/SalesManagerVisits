@@ -6,6 +6,7 @@
 import { api } from "../api.js";
 import { escapeHtml, formatDateTime, formatAmd } from "../util.js";
 import { t } from "../i18n.js";
+import { state } from "../state.js";
 
 const COLLECTIBLE_LABEL_KEY = {
   strawberry: "bonuses_strawberry",
@@ -14,6 +15,25 @@ const COLLECTIBLE_LABEL_KEY = {
   cherry: "bonuses_cherry",
   watermelon: "bonuses_watermelon",
 };
+
+// A collectible/badge is otherwise just a row of plain text -- these give
+// each one a distinct glyph to actually look like the thing it's named
+// after, the same low-cost emoji-as-icon approach the Dashboard's own
+// leaderboard already uses for its #1 rank (🏆, dashboard.js).
+const COLLECTIBLE_EMOJI = {
+  strawberry: "🍓",
+  carrot: "🥕",
+  apple: "🍎",
+  cherry: "🍒",
+  watermelon: "🍉",
+};
+const BADGE_EMOJI = "🏅";
+
+// A component the rep hasn't finished yet but is close on (defined as
+// "close" without also being done) gets a distinct highlight -- a near-miss
+// is one of the strongest nudges a progress screen can give, and today
+// there is zero signal between "in progress" and "done".
+const ALMOST_THERE_THRESHOLD_PCT = 75;
 
 const CLAIM_STATUS_KEY = {
   awaiting_validation: "bonuses_claim_status_awaiting_validation",
@@ -31,23 +51,30 @@ const CLAIM_STATUS_BADGE = { awaiting_validation: "badge-neutral", approved: "ba
 // component's target was defined in -- a plain percentage bar is enough
 // here since the two scales (scale-2 collectibles/points vs. whole
 // product-piece counts) aren't comparable numbers to show side by side.
+// Returns both the row markup and the highest not-yet-complete percentage
+// across this challenge's components, so the caller can decide whether to
+// show an "almost there" nudge without re-deriving the same percentages.
 function componentProgressHtml(componentProgress) {
-  return Object.entries(componentProgress || {})
+  let maxIncompletePct = 0;
+  const html = Object.entries(componentProgress || {})
     .map(([key, c]) => {
+      const emoji = COLLECTIBLE_EMOJI[key] ? `${COLLECTIBLE_EMOJI[key]} ` : "";
       const label = COLLECTIBLE_LABEL_KEY[key]
         ? t(COLLECTIBLE_LABEL_KEY[key])
         : key === "points"
           ? t("bonuses_points_label")
           : escapeHtml(c.label || key);
       const pct = c.target_scaled ? Math.min(100, Math.round((c.confirmed_scaled / c.target_scaled) * 100)) : 0;
+      if (pct < 100) maxIncompletePct = Math.max(maxIncompletePct, pct);
       return `
         <div class="bonuses-component-row">
-          <div class="bonuses-component-label">${label}</div>
+          <div class="bonuses-component-label">${emoji}${label}</div>
           <div class="progress-bar"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
         </div>
       `;
     })
     .join("");
+  return { html, maxIncompletePct };
 }
 
 export async function renderBonuses(root, navigate) {
@@ -78,7 +105,7 @@ export async function renderBonuses(root, navigate) {
     .map(
       ([activity, count]) => `
     <div class="stat-card">
-      <span class="stat-value">${count}</span>
+      <span class="stat-value">${COLLECTIBLE_EMOJI[activity] || ""} ${count}</span>
       <span class="stat-label">${t(COLLECTIBLE_LABEL_KEY[activity])}</span>
     </div>
   `
@@ -87,19 +114,21 @@ export async function renderBonuses(root, navigate) {
 
   const challengesHtml = summary.activeChallenges.length
     ? summary.activeChallenges
-        .map(
-          (c) => `
+        .map((c) => {
+          const { html: progressHtml, maxIncompletePct } = componentProgressHtml(c.component_progress);
+          const almostThere = c.overall_status !== "target_reached" && maxIncompletePct >= ALMOST_THERE_THRESHOLD_PCT;
+          return `
     <div class="card">
       <div class="user-row-top">
         <strong>${escapeHtml(c.title)}</strong>
-        <span class="badge ${c.overall_status === "target_reached" ? "badge-success" : "badge-neutral"}">${
-            c.overall_status === "target_reached" ? "✓" : t("bonuses_active_challenges")
+        <span class="badge ${c.overall_status === "target_reached" ? "badge-success" : almostThere ? "badge-warning" : "badge-neutral"}">${
+            c.overall_status === "target_reached" ? "✓" : almostThere ? `🔥 ${t("bonuses_almost_there")}` : t("bonuses_active_challenges")
           }</span>
       </div>
-      ${componentProgressHtml(c.component_progress)}
+      ${progressHtml}
     </div>
-  `
-        )
+  `;
+        })
         .join("")
     : `<p class="empty-state">${t("bonuses_no_active_challenges")}</p>`;
 
@@ -115,7 +144,7 @@ export async function renderBonuses(root, navigate) {
           (b) => `
     <div class="card">
       <div class="user-row-top">
-        <strong>${t(b.title_key)}</strong>
+        <strong>${BADGE_EMOJI} ${t(b.title_key)}</strong>
       </div>
       <div class="user-row-meta">
         <span class="muted">${escapeHtml(b.description_key ? t(b.description_key) : "")}</span>
@@ -173,6 +202,15 @@ export async function renderBonuses(root, navigate) {
         </div>
       </div>
 
+      ${
+        summary.pointsLeaderboard?.length
+          ? `<div>
+              <h2 class="section-title section-title-tight">${t("bonuses_leaderboard_title")}</h2>
+              <div class="card-list" id="bonuses-leaderboard"></div>
+            </div>`
+          : ""
+      }
+
       <div>
         <h2 class="section-title section-title-tight">${t("bonuses_title")}</h2>
         <div class="quick-actions-grid">${collectibleCards}</div>
@@ -200,4 +238,25 @@ export async function renderBonuses(root, navigate) {
       </div>
     </div>
   `;
+
+  // Same top-5-plus-your-own-row pattern as the Dashboard's legacy Monthly
+  // Leaders board (dashboard.js) -- seeing a leaderboard without knowing
+  // your own rank on it is just noise, not a motivator.
+  const leaderboardEl = contentEl.querySelector("#bonuses-leaderboard");
+  if (leaderboardEl && summary.pointsLeaderboard?.length) {
+    const board = summary.pointsLeaderboard;
+    const myIndex = board.findIndex((p) => p.user_id === state.user.id);
+    const top = board.slice(0, 5);
+    const mine = myIndex >= 5 ? board[myIndex] : null;
+    const rowHtml = (p, rank) => `
+        <div class="card leaderboard-row ${p.user_id === state.user.id ? "leaderboard-row-mine" : ""}">
+          <span class="leaderboard-rank">${rank === 0 ? "🏆" : `#${rank + 1}`}</span>
+          <span class="leaderboard-name">${escapeHtml(p.user_name)}</span>
+          <span class="leaderboard-points">${p.total_points} ${t("points_short")}</span>
+        </div>
+      `;
+    leaderboardEl.innerHTML =
+      top.map((p, i) => rowHtml(p, i)).join("") +
+      (mine ? `<div class="leaderboard-divider muted">${t("points_your_rank")}</div>${rowHtml(mine, myIndex)}` : "");
+  }
 }
