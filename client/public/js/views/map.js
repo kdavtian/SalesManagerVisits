@@ -5,7 +5,7 @@ import { buildCustomerTree, renderTriStateTree } from "../regionTree.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
 import { canViewTeamLocations, canEditDirectly, canPlanForOthers, canReassignCustomers, state } from "../state.js";
-import { getClusterPins, setClusterPins, getCompassMode, setCompassMode } from "../mapPrefs.js";
+import { getClusterPins, setClusterPins, getCompassMode, setCompassMode, isStrongDevice, getMapTileCacheEnabled, setMapTileCacheEnabled } from "../mapPrefs.js";
 import { getPerfMode } from "../perfMode.js";
 import { ensureLeaflet } from "../leafletLoader.js";
 import { loadWithCache } from "../listCache.js";
@@ -236,6 +236,16 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
               <span class="toggle-thumb"></span>
             </button>
           </div>
+          ${
+            isStrongDevice()
+              ? `<div class="map-legend-pref-row">
+                  <span>${t("map_tile_cache")}<span class="map-legend-pref-hint">${t("map_tile_cache_hint")}</span></span>
+                  <button type="button" class="toggle-switch" id="map-legend-toggle-tile-cache" role="switch" aria-checked="${getMapTileCacheEnabled()}" aria-label="${t("map_tile_cache")}">
+                    <span class="toggle-thumb"></span>
+                  </button>
+                </div>`
+              : ""
+          }
         </div>
         <div class="map-legend-divider"></div>
         <p class="map-legend-note">${t("map_legend_shape_note")}</p>
@@ -461,6 +471,52 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
   let tileLayer = makeTileLayer(currentProvider()).addTo(map);
   startTileHealthCheck();
+
+  // ---- Proactive tile-cache warming (map_tile_cache pref, strong devices only) ----
+  // Leaflet only ever requests tiles for the area currently on screen, so
+  // panning to a not-yet-visited area always waits on the network first,
+  // even though the service worker (sw.js) caches every tile it ever sees.
+  // When the pref is on, this fetches a one-tile buffer ring around the
+  // current viewport after every pan/zoom -- the exact same URLs Leaflet
+  // itself would request, so the SW's existing basemaps.cartocdn.com
+  // handler caches them the same way, just before the rep pans there
+  // rather than after. Only warms the primary provider (no point caching
+  // a fallback CDN nobody's using) and skips entirely once offline.
+  const warmedTileKeys = new Set();
+  let warmTilesTimer = null;
+  function lngToTileX(lng, z) {
+    return Math.floor(((lng + 180) / 360) * 2 ** z);
+  }
+  function latToTileY(lat, z) {
+    const rad = (lat * Math.PI) / 180;
+    return Math.floor(((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * 2 ** z);
+  }
+  function warmTileCache() {
+    if (!getMapTileCacheEnabled() || providerIndex !== 0 || navigator.onLine === false) return;
+    const { url, subdomains } = currentProvider();
+    const zoom = Math.round(map.getZoom());
+    const bounds = map.getBounds();
+    const minX = lngToTileX(bounds.getWest(), zoom) - 1;
+    const maxX = lngToTileX(bounds.getEast(), zoom) + 1;
+    const minY = latToTileY(bounds.getNorth(), zoom) - 1;
+    const maxY = latToTileY(bounds.getSouth(), zoom) + 1;
+    let issued = 0;
+    for (let x = minX; x <= maxX && issued < 40; x++) {
+      for (let y = minY; y <= maxY && issued < 40; y++) {
+        const key = `${zoom}/${x}/${y}`;
+        if (warmedTileKeys.has(key)) continue;
+        warmedTileKeys.add(key);
+        issued += 1;
+        const s = subdomains[Math.floor(Math.random() * subdomains.length)] || "";
+        const tileUrl = url.replace("{s}", s).replace("{z}", zoom).replace("{x}", x).replace("{y}", y).replace("{r}", "");
+        fetch(tileUrl).catch(() => {});
+      }
+    }
+  }
+  map.on("moveend zoomend", () => {
+    clearTimeout(warmTilesTimer);
+    warmTilesTimer = setTimeout(warmTileCache, 600);
+  });
 
   root.querySelector("#map-error-retry").addEventListener("click", () => {
     hideMapError();
@@ -2254,6 +2310,14 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     }
   });
 
+  const tileCacheToggle = root.querySelector("#map-legend-toggle-tile-cache");
+  tileCacheToggle?.addEventListener("click", () => {
+    const next = tileCacheToggle.getAttribute("aria-checked") !== "true";
+    tileCacheToggle.setAttribute("aria-checked", String(next));
+    setMapTileCacheEnabled(next);
+    if (next) warmTileCache();
+  });
+
   root.addEventListener("click", (event) => {
     if (!legendPanel.hidden && !legendPanel.contains(event.target) && event.target !== legendBtn && !legendBtn.contains(event.target)) {
       closeLegend();
@@ -2941,6 +3005,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     if (teamPollId) clearInterval(teamPollId);
     clearTimeout(teamEmptyHintTimer);
     clearTimeout(tileHealthTimer);
+    clearTimeout(warmTilesTimer);
     mapEl.removeEventListener("touchend", onMapTouchEnd);
     document.removeEventListener("visibilitychange", refreshTileStyle);
     appMain.classList.remove("app-main-locked");
