@@ -196,6 +196,7 @@ export const api = {
 
   listProducts: (q = "") => request(`/products${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   listAllProducts: () => request("/products/all"),
+  getProductSyncDiagnostics: () => request("/products/sync-diagnostics"),
   createProduct: (data) => json("/products", "POST", data),
   updateProduct: (id, data) => json(`/products/${id}`, "PATCH", data),
   deleteProduct: (id) => request(`/products/${id}`, { method: "DELETE" }),

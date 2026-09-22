@@ -175,6 +175,36 @@ productsRouter.get("/all", async (req, res) => {
   res.json(rows);
 });
 
+// Landing cost (migration 064) is entirely ERP-sync-fed -- the app itself
+// never writes it, only /api/erp-sync's products upsert does (see that
+// route's comment on why it's applied unconditionally, independent of
+// manually_edited_at). So "a synced product has no landing cost" can only
+// mean the sync payload itself never carried a value for it, not an
+// in-app bug -- this exists to make that visible without needing direct
+// DB access, since support requests for "landing cost isn't showing" have
+// no other way to distinguish "sync never sent it" from "app dropped it".
+// net_cost_amd is the opposite: purely hand-entered (migration 080, no
+// ERP source at all), so its count here is just "how many are filled in",
+// not a sync signal.
+productsRouter.get("/sync-diagnostics", async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT
+       count(*) FILTER (WHERE erp_product_id IS NOT NULL) AS synced_count,
+       count(*) FILTER (WHERE erp_product_id IS NOT NULL AND landing_cost_amd IS NULL) AS missing_landing_cost,
+       count(*) FILTER (WHERE net_cost_amd IS NULL) AS missing_net_cost,
+       max(synced_at) AS last_synced_at
+     FROM products
+     WHERE active`
+  );
+  const r = rows[0];
+  res.json({
+    synced_count: Number(r.synced_count),
+    missing_landing_cost: Number(r.missing_landing_cost),
+    missing_net_cost: Number(r.missing_net_cost),
+    last_synced_at: r.last_synced_at,
+  });
+});
+
 productsRouter.post("/", async (req, res) => {
   const { name, sku, brand, unit, unit_price_amd, retail_price_amd, net_cost_amd } = req.body ?? {};
   const price = Number(unit_price_amd);
