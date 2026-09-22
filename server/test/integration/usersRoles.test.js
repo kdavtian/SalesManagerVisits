@@ -20,7 +20,7 @@ test.before(async () => {
   await startTestServer();
   admin = await createUser("admin");
   cookies = {};
-  for (const role of ["admin", "sales_manager", "sales_director", "warehouse_manager", "delivery_manager", "accountant", "ceo"]) {
+  for (const role of ["admin", "sales_manager", "sales_director", "warehouse_manager", "delivery_manager", "accountant", "ceo", "operations_director"]) {
     const user = role === "admin" ? admin : await createUser(role);
     cookies[role] = await loginAs(user.email);
   }
@@ -38,7 +38,7 @@ test("GET /api/users: admin sees the full user list; every other role gets 403",
   assert.ok(Array.isArray(adminList.data));
   assert.ok(adminList.data.some((u) => u.id === admin.id));
 
-  for (const role of ["sales_manager", "sales_director", "warehouse_manager", "delivery_manager", "accountant", "ceo"]) {
+  for (const role of ["sales_manager", "sales_director", "warehouse_manager", "delivery_manager", "accountant", "ceo", "operations_director"]) {
     const res = await apiRequest("/api/users", { cookie: cookies[role] });
     assert.equal(res.status, 403, role);
   }

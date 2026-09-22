@@ -403,7 +403,7 @@ erpSyncRouter.post("/daily-report", syncKeyLimiter, requireSyncKey, async (req, 
   // after) the daily one and would just be a duplicate ping.
   if (period === "daily") {
     const { rows: recipients } = await pool.query(
-      "SELECT id FROM users WHERE role IN ('admin', 'ceo', 'sales_director', 'accountant')"
+      "SELECT id FROM users WHERE role IN ('admin', 'ceo', 'operations_director', 'sales_director', 'accountant')"
     );
     await Promise.all(
       recipients.map((u) =>
@@ -460,7 +460,7 @@ erpSyncRouter.post("/reports", syncKeyLimiter, requireSyncKey, reportFileUpload.
   );
 
   const { rows: recipients } = await pool.query(
-    "SELECT id FROM users WHERE role IN ('admin', 'ceo', 'sales_director', 'accountant')"
+    "SELECT id FROM users WHERE role IN ('admin', 'ceo', 'operations_director', 'sales_director', 'accountant')"
   );
   await Promise.all(
     recipients.map((u) =>

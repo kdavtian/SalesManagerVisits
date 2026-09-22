@@ -552,7 +552,10 @@ teamPerformanceRouter.post("/plans/:id/submit", async (req, res) => {
 
   (async () => {
     try {
-      const roles = req.user.role === "sales_director" ? ["admin", "ceo", "accountant"] : ["admin", "ceo"];
+      const roles =
+        req.user.role === "sales_director"
+          ? ["admin", "ceo", "operations_director", "accountant"]
+          : ["admin", "ceo", "operations_director"];
       const { rows: reviewers } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [roles]);
       for (const reviewer of reviewers) {
         notifyUser(reviewer.id, "perf_plan_submitted", {
@@ -696,7 +699,7 @@ teamPerformanceRouter.post("/plans/:id/revise", async (req, res) => {
 
     (async () => {
       try {
-        const notifyRoles = ["admin", "ceo", "sales_director", "accountant"];
+        const notifyRoles = ["admin", "ceo", "operations_director", "sales_director", "accountant"];
         const { rows: notifyRecipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [notifyRoles]);
         for (const recipient of notifyRecipients) {
           if (recipient.id === req.user.id) continue;
@@ -750,7 +753,9 @@ teamPerformanceRouter.post("/plans/:id/reopen-as-draft", async (req, res) => {
 
   (async () => {
     try {
-      const notifyRoles = PERF_APPROVER_ROLES.includes(req.user.role) ? ["admin", "ceo", "sales_director"] : ["admin", "ceo", "accountant"];
+      const notifyRoles = PERF_APPROVER_ROLES.includes(req.user.role)
+        ? ["admin", "ceo", "operations_director", "sales_director"]
+        : ["admin", "ceo", "operations_director", "accountant"];
       const { rows: recipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [notifyRoles]);
       for (const recipient of recipients) {
         if (recipient.id === req.user.id) continue;

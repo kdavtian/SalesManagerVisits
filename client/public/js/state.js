@@ -40,7 +40,7 @@ export function isAdmin() {
 // server independently re-checks on every product/pricing mutation.
 export function canManageProducts() {
   const role = state.user?.role;
-  return role === "admin" || role === "ceo" || role === "accountant";
+  return role === "admin" || role === "ceo" || role === "operations_director" || role === "accountant";
 }
 
 // Sales managers only see their own data; every other role sees
@@ -55,18 +55,22 @@ export function canEditDirectly() {
 
 export function canViewTeamLocations() {
   return (
-    state.user?.role === "admin" || state.user?.role === "sales_director" || state.user?.role === "ceo"
+    state.user?.role === "admin" ||
+    state.user?.role === "sales_director" ||
+    state.user?.role === "ceo" ||
+    state.user?.role === "operations_director"
   );
 }
 
 export function broadcastsLocation() {
-  return state.user?.role !== "admin" && state.user?.role !== "ceo";
+  return state.user?.role !== "admin" && state.user?.role !== "ceo" && state.user?.role !== "operations_director";
 }
 
 export function seesFinancialExports() {
   return (
     state.user?.role === "admin" ||
     state.user?.role === "ceo" ||
+    state.user?.role === "operations_director" ||
     state.user?.role === "sales_director" ||
     state.user?.role === "accountant"
   );
@@ -74,14 +78,20 @@ export function seesFinancialExports() {
 
 export function canPlanForOthers() {
   return (
-    state.user?.role === "admin" || state.user?.role === "sales_director" || state.user?.role === "ceo"
+    state.user?.role === "admin" ||
+    state.user?.role === "sales_director" ||
+    state.user?.role === "ceo" ||
+    state.user?.role === "operations_director"
   );
 }
 
 // Mirrors canReassignCustomers in the server's roles.js.
 export function canReassignCustomers() {
   return (
-    state.user?.role === "admin" || state.user?.role === "sales_director" || state.user?.role === "ceo"
+    state.user?.role === "admin" ||
+    state.user?.role === "sales_director" ||
+    state.user?.role === "ceo" ||
+    state.user?.role === "operations_director"
   );
 }
 
@@ -89,7 +99,7 @@ export function canReassignCustomers() {
 // the server independently re-checks ownership on every PATCH.
 export function canAssignErpCustomerId(customer) {
   const role = state.user?.role;
-  if (role === "admin" || role === "ceo" || role === "accountant") return true;
+  if (role === "admin" || role === "ceo" || role === "operations_director" || role === "accountant") return true;
   if (role === "sales_manager" || role === "sales_director") return customer.created_by === state.user.id;
   return false;
 }
@@ -106,13 +116,14 @@ export function canEditOwnSalesChannel(customer) {
 // screen renders in the first place, not a security boundary.
 
 export function isPerfCeo() {
-  return state.user?.role === "admin" || state.user?.role === "ceo";
+  return state.user?.role === "admin" || state.user?.role === "ceo" || state.user?.role === "operations_director";
 }
 
 export function seesAllPerformance() {
   return (
     state.user?.role === "admin" ||
     state.user?.role === "ceo" ||
+    state.user?.role === "operations_director" ||
     state.user?.role === "sales_director" ||
     state.user?.role === "accountant"
   );

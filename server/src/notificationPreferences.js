@@ -41,7 +41,7 @@ export const WAREHOUSE_NOTIFY_ROLES = ["warehouse_manager", "admin"];
 
 // A stock issue needs the Sales Director (and CEO/admin) to sort out --
 // same reviewers who confirmed the order in the first place.
-export const STOCK_ISSUE_NOTIFY_ROLES = ["sales_director", "ceo", "admin"];
+export const STOCK_ISSUE_NOTIFY_ROLES = ["sales_director", "ceo", "operations_director", "admin"];
 
 // A driver only needs to know once an order is packed and ready to route.
 export const DRIVER_NOTIFY_ROLES = ["delivery_manager", "admin"];
@@ -52,20 +52,20 @@ export const DELIVERY_OUTCOME_NOTIFY_ROLES = ["sales_director", "admin", "wareho
 
 // Roles that can review a route plan -- the only roles plan_submitted is
 // ever relevant to (see canPlanForOthers in roles.js).
-export const APPROVER_ROLES = ["admin", "sales_director", "ceo"];
+export const APPROVER_ROLES = ["admin", "sales_director", "ceo", "operations_director"];
 
 // Roles that can review a Team Performance plan -- CEO/admin review
 // everything, Accountant reviews Sales Director submissions only (see
 // canReviewPlan in roles.js). Kept separate from APPROVER_ROLES since these
 // are two unrelated approval workflows (route plans vs performance plans).
-export const PERF_APPROVER_ROLES = ["admin", "ceo", "accountant"];
+export const PERF_APPROVER_ROLES = ["admin", "ceo", "operations_director", "accountant"];
 
 // Roles that need to know a new order landed -- the director (or CEO) who
 // may need to review or approve a discount, and the accountant who
 // consolidates orders. Each recipient can still turn this off for
 // themselves in Settings (see isNotificationEnabled) -- being on this list
 // only sets the default to "on", not "forced".
-export const ORDER_NOTIFY_ROLES = ["sales_director", "accountant", "ceo"];
+export const ORDER_NOTIFY_ROLES = ["sales_director", "accountant", "ceo", "operations_director"];
 
 // Precedence rule, pulled out of the SQL's ORDER BY so it's testable
 // without a database: a user-scoped row always wins over a role-scoped row

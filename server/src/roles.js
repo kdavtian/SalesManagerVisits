@@ -1,6 +1,7 @@
 export const ROLES = [
   "admin",
   "ceo",
+  "operations_director",
   "sales_director",
   "sales_manager",
   "warehouse_manager",
@@ -18,7 +19,7 @@ export function seesAllActivity(role) {
 // narrower than seesAllActivity, which also includes warehouse/delivery
 // staff who have no reconciliation reason to need this data.
 export function seesFinancialExports(role) {
-  return role === "admin" || role === "ceo" || role === "sales_director" || role === "accountant";
+  return role === "admin" || role === "ceo" || role === "operations_director" || role === "sales_director" || role === "accountant";
 }
 
 export function canDeleteOrEditDirectly(role) {
@@ -29,7 +30,7 @@ export function canDeleteOrEditDirectly(role) {
 // without going through the edit-request approval flow -- a director is
 // senior enough to fix a mis-assigned customer on the spot.
 export function canReassignCustomers(role) {
-  return role === "admin" || role === "sales_director" || role === "ceo";
+  return role === "admin" || role === "sales_director" || role === "ceo" || role === "operations_director";
 }
 
 // Sales channel alone (not region/subregion/manager) is also carved out from
@@ -51,7 +52,7 @@ export function canEditOwnSalesChannel(role, customerCreatedBy, userId) {
 // day to day); a sales manager or director can only link customers they
 // personally created, so they can't relabel someone else's book.
 export function canAssignErpCustomerId(role, customerCreatedBy, userId) {
-  if (role === "admin" || role === "ceo" || role === "accountant") return true;
+  if (role === "admin" || role === "ceo" || role === "operations_director" || role === "accountant") return true;
   if (role === "sales_manager" || role === "sales_director") return customerCreatedBy === userId;
   return false;
 }
@@ -63,33 +64,33 @@ export function canAssignErpCustomerId(role, customerCreatedBy, userId) {
 // sales manager can browse the catalog and generate a pricelist, but not
 // touch master pricing.
 export function canManageProducts(role) {
-  return role === "admin" || role === "ceo" || role === "accountant";
+  return role === "admin" || role === "ceo" || role === "operations_director" || role === "accountant";
 }
 
 // Per spec: admin, sales director, and CEO see the live team-location map.
 export function canViewTeamLocations(role) {
-  return role === "admin" || role === "sales_director" || role === "ceo";
+  return role === "admin" || role === "sales_director" || role === "ceo" || role === "operations_director";
 }
 
 // Who can plan a *different* rep's route (day-of or recurring), not just
 // their own. A plain sales_manager can only ever plan for themselves.
 export function canPlanForOthers(role) {
-  return role === "admin" || role === "sales_director" || role === "ceo";
+  return role === "admin" || role === "sales_director" || role === "ceo" || role === "operations_director";
 }
 
 // Who reviews a freshly-submitted order -- confirms it, rejects it, or
 // edits its items/discount before it moves into fulfillment. Distinct from
 // FULFILLMENT_ROLES in routes/orders.js, which owns packed/delivered.
 export function canConfirmOrders(role) {
-  return role === "admin" || role === "sales_director" || role === "ceo";
+  return role === "admin" || role === "sales_director" || role === "ceo" || role === "operations_director";
 }
 
 // Every field-facing role broadcasts its own foreground location while the
-// app is open, so the office-based roles (admin, CEO) have something to
-// look at; those two don't visit customers themselves, so they don't
-// broadcast.
+// app is open, so the office-based roles (admin, CEO, Operations Director)
+// have something to look at; those don't visit customers themselves, so
+// they don't broadcast.
 export function broadcastsLocation(role) {
-  return role !== "admin" && role !== "ceo";
+  return role !== "admin" && role !== "ceo" && role !== "operations_director";
 }
 
 // --- Team Performance -------------------------------------------------
@@ -98,7 +99,7 @@ export function broadcastsLocation(role) {
 // unblock a stuck workflow.
 
 export function isPerfCeo(role) {
-  return role === "admin" || role === "ceo";
+  return role === "admin" || role === "ceo" || role === "operations_director";
 }
 
 // Who may create/edit a DRAFT plan for a channel owned by the given
@@ -144,7 +145,7 @@ export function canReopenPlanAsDraft(role) {
 // Who sees company-wide Team Performance data (management dashboard, all
 // channels) vs only their own channel's numbers.
 export function seesAllPerformance(role) {
-  return role === "admin" || role === "ceo" || role === "sales_director" || role === "accountant";
+  return role === "admin" || role === "ceo" || role === "operations_director" || role === "sales_director" || role === "accountant";
 }
 
 // Closing a month freezes its final numbers into an immutable snapshot --
@@ -160,7 +161,7 @@ export function canCloseMonth(role) {
 // as a backstop. A Sales Director does not review payments (they submit
 // like a manager if they log one themselves, same as canSubmitPayments).
 export function canReviewPayments(role) {
-  return role === "admin" || role === "ceo" || role === "accountant";
+  return role === "admin" || role === "ceo" || role === "operations_director" || role === "accountant";
 }
 
 // Who can submit a payment on someone else's behalf (picking a sales
@@ -168,7 +169,7 @@ export function canReviewPayments(role) {
 // self-submits under their own name/channel and can never impersonate
 // another manager.
 export function canSubmitPaymentsForOthers(role) {
-  return role === "admin" || role === "ceo" || role === "accountant" || role === "sales_director";
+  return role === "admin" || role === "ceo" || role === "operations_director" || role === "accountant" || role === "sales_director";
 }
 
 // Payment visibility mirrors seesAllActivity -- a Sales Manager sees only
@@ -191,8 +192,8 @@ export function seesAllPayments(role) {
 // accountant themselves) can never be the SENDER of a handoff.
 export function validHandoffRecipientRoles(fromRole) {
   if (fromRole === "sales_manager") return ["sales_director"];
-  if (fromRole === "sales_director") return ["ceo", "accountant"];
-  if (fromRole === "ceo") return ["accountant"];
+  if (fromRole === "sales_director") return ["ceo", "operations_director", "accountant"];
+  if (fromRole === "ceo" || fromRole === "operations_director") return ["accountant"];
   return [];
 }
 
@@ -223,7 +224,7 @@ export function canSubmitHandoffForOthers(role) {
 // access as every other company-wide screen (activity, financial exports,
 // team performance), not just the roles who actually staff the warehouse.
 export function canManageWarehouse(role) {
-  return role === "warehouse_manager" || role === "sales_director" || role === "ceo" || role === "admin";
+  return role === "warehouse_manager" || role === "sales_director" || role === "ceo" || role === "operations_director" || role === "admin";
 }
 
 // Who plans/edits a delivery route (distinct from canPlanForOthers, which
@@ -256,6 +257,7 @@ export function canMarkDeliveredWithoutRoute(role) {
     role === "sales_director" ||
     role === "accountant" ||
     role === "ceo" ||
+    role === "operations_director" ||
     role === "admin"
   );
 }
@@ -280,7 +282,7 @@ export function canRecordOrders(role) {
 // decision, not just seesFinancialExports -- sales_director does not see
 // this one).
 export function seesUnrecordedBadge(role) {
-  return role === "accountant" || role === "ceo" || role === "admin";
+  return role === "accountant" || role === "ceo" || role === "operations_director" || role === "admin";
 }
 
 // Payments push notifications go only to whoever actually reconciles them
@@ -297,7 +299,7 @@ export const PAYMENT_NOTIFY_ROLES = ["accountant"];
 // (that's canApproveBonusRewards below, which mirrors canReviewPayments
 // exactly, per the design doc's confirmed role mapping).
 export function canManageBonusChallenges(role) {
-  return role === "admin" || role === "ceo";
+  return role === "admin" || role === "ceo" || role === "operations_director";
 }
 
 // Reward approval -- confirmed with the user to mirror canReviewPayments
