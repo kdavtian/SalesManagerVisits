@@ -559,6 +559,7 @@ export async function renderEditRequestsSection(container) {
 
 export async function renderProductsSection(container) {
   container.innerHTML = `
+    <div id="product-sync-diagnostics"></div>
     <div id="product-list" class="card-list"><p class="loading-state" role="status">${t("loading")}</p></div>
     <div class="team-add-btn-wrap product-section-actions">
       <button type="button" class="btn" id="bulk-price-edit-btn">${t("bulk_price_edit")}</button>
@@ -570,6 +571,39 @@ export async function renderProductsSection(container) {
   const listEl = container.querySelector("#product-list");
   container.querySelector("#bulk-price-edit-btn").addEventListener("click", () => openBulkPriceEditSheet(loadProducts));
   container.querySelector("#import-excel-btn").addEventListener("click", () => openImportSheet(loadProducts));
+
+  // Landing cost is entirely ERP-sync-fed (never editable in-app -- see
+  // migration 064), so "it's not showing" has exactly two possible causes:
+  // the sync payload never carried a value for it, or the app dropped a
+  // value it did carry. This surfaces which one it is without needing
+  // direct DB access -- a plain count of synced products missing it, and
+  // when products last synced at all, right on the screen someone would
+  // already be looking at when they notice landing cost is blank.
+  (async () => {
+    let diag;
+    try {
+      diag = await api.getProductSyncDiagnostics();
+    } catch {
+      return; // Non-critical -- the catalog itself still loads/works without this.
+    }
+    const bannerEl = container.querySelector("#product-sync-diagnostics");
+    if (!diag.synced_count) {
+      bannerEl.innerHTML = `<p class="sync-diagnostic-banner">${t("landing_cost_diag_never_synced")}</p>`;
+      return;
+    }
+    if (diag.missing_landing_cost === 0) {
+      return; // Nothing to flag -- every synced product has a landing cost.
+    }
+    const lastSynced = diag.last_synced_at ? formatDateTime(diag.last_synced_at) : t("landing_cost_diag_unknown");
+    bannerEl.innerHTML = `
+      <p class="sync-diagnostic-banner sync-diagnostic-banner-warning">
+        ${t("landing_cost_diag_missing")
+          .replace("{missing}", diag.missing_landing_cost)
+          .replace("{total}", diag.synced_count)}
+        ${t("landing_cost_diag_last_synced")}: ${escapeHtml(lastSynced)}
+      </p>
+    `;
+  })();
 
   async function loadProducts() {
     const fetched = await api.listAllProducts();

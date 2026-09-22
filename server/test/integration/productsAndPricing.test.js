@@ -200,6 +200,36 @@ test("POST /api/products/bulk-price-update: an invalid price_field is a 400", as
   assert.equal(res.status, 400);
 });
 
+// --- Landing-cost sync diagnostics ------------------------------------------------
+
+test("GET /api/products/sync-diagnostics: counts synced products missing landing cost, by delta (shared table, other tests' fixtures may also count); denied to a sales_manager", async () => {
+  const denied = await apiRequest("/api/products/sync-diagnostics", { cookie: cookies.sales_manager });
+  assert.equal(denied.status, 403);
+
+  const before = await apiRequest("/api/products/sync-diagnostics", { cookie: cookies.admin });
+  assert.equal(before.status, 200);
+
+  const synced = await pool.query(
+    "INSERT INTO products (name, unit, unit_price_amd, erp_product_id, landing_cost_amd, synced_at, active) VALUES ($1, 'pcs', 1000, $2, 700, now(), true) RETURNING id",
+    [`Itest Diag Synced ${Date.now()}`, `itest-diag-${Date.now()}-a`]
+  );
+  trackProduct(synced.rows[0].id);
+  const missingLanding = await pool.query(
+    "INSERT INTO products (name, unit, unit_price_amd, erp_product_id, active) VALUES ($1, 'pcs', 1000, $2, true) RETURNING id",
+    [`Itest Diag Missing ${Date.now()}`, `itest-diag-${Date.now()}-b`]
+  );
+  trackProduct(missingLanding.rows[0].id);
+
+  const after = await apiRequest("/api/products/sync-diagnostics", { cookie: cookies.admin });
+  assert.equal(after.status, 200);
+  assert.equal(after.data.synced_count - before.data.synced_count, 2, "both new rows have an erp_product_id");
+  assert.equal(
+    after.data.missing_landing_cost - before.data.missing_landing_cost,
+    1,
+    "only the one with no landing_cost_amd should count"
+  );
+});
+
 // --- Unauthenticated ------------------------------------------------------------
 
 test("GET and POST /api/products reject an unauthenticated request with 401", async () => {
