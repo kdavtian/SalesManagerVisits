@@ -144,7 +144,6 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
               <div class="map-filter-row">
                 <button class="map-filter-chip chip-active" data-filter="" aria-pressed="true"><span class="map-filter-chip-icon">${icons.filter}</span>${t("filter_all")}</button>
                 <button class="map-filter-chip" data-filter="overdue" aria-pressed="false"><span class="map-filter-chip-icon">${icons.mapWarning}</span>${t("filter_overdue")}</button>
-                <button class="map-filter-chip" data-filter="visited" aria-pressed="false"><span class="map-filter-chip-icon">${icons.checkCircle}</span>${t("filter_visited")}</button>
                 <button class="map-filter-chip" data-filter="visited-today" aria-pressed="false"><span class="map-filter-chip-icon">${icons.checkCircle}</span>${t("filter_visited_today")}</button>
                 <button class="map-filter-chip" data-filter="visited-7days" aria-pressed="false"><span class="map-filter-chip-icon">${icons.clock}</span>${t("filter_visited_7days")}</button>
                 <button class="map-filter-chip" data-filter="planned" aria-pressed="false"><span class="map-filter-chip-icon">${icons.send}</span>${t("filter_planned")}</button>
@@ -1126,20 +1125,22 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         // visited_today/visited_this_week booleans customerStatus() itself
         // derives status from -- visited_this_week is already a rolling
         // 7-day window server-side (see routes/customers.js), not a
-        // calendar week, despite the "week" status label. "visited" stays
-        // the existing combined today-or-last-7-days filter; the two new
-        // chips split it into its two more specific halves.
+        // calendar week, despite the "week" status label. There used to be
+        // a third "Visited" chip combining both, but it went through
+        // customerStatus()'s overdue-first priority instead of these raw
+        // booleans, so a customer visited within 7 days AND independently
+        // overdue by cadence fell out of it while still showing up under
+        // "Visited last 7 days" -- confusingly near-duplicate AND subtly
+        // inconsistent. Removed; these two are the whole, well-defined set.
         if (
           activeFilter &&
           !(activeFilter === "overdue"
             ? status === "overdue"
-            : activeFilter === "visited"
-              ? status === "today" || status === "week"
-              : activeFilter === "visited-today"
-                ? c.visited_today
-                : activeFilter === "visited-7days"
-                  ? c.visited_today || c.visited_this_week
-                  : true)
+            : activeFilter === "visited-today"
+              ? c.visited_today
+              : activeFilter === "visited-7days"
+                ? c.visited_today || c.visited_this_week
+                : true)
         ) {
           continue;
         }
