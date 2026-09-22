@@ -705,6 +705,7 @@ export async function renderProductsSection(container) {
           <label>${t("unit")}<input name="unit" value="${product?.unit ? escapeHtml(product.unit) : ""}" placeholder="e.g. box, L, pcs" /></label>
           <label>${t("price_standard")}<input name="unit_price_amd" type="number" min="0" step="1" value="${product ? Number(product.unit_price_amd) : ""}" required /></label>
           <label>${t("price_retail")}<input name="retail_price_amd" type="number" min="0" step="1" value="${product && product.retail_price_amd !== null ? Number(product.retail_price_amd) : ""}" placeholder="${t("price_retail_hint")}" /></label>
+          <label>${t("net_cost")}<input name="net_cost_amd" type="number" min="0" step="1" value="${product && product.net_cost_amd !== null && product.net_cost_amd !== undefined ? Number(product.net_cost_amd) : ""}" placeholder="${t("net_cost_hint")}" /></label>
           ${
             product
               ? `<label class="settings-toggle-row"><span>${t("active")}</span>
@@ -768,6 +769,7 @@ export async function renderProductsSection(container) {
       submitBtn.disabled = true;
       const standardPrice = Number(data.get("unit_price_amd"));
       const retailInput = data.get("retail_price_amd");
+      const netCostInput = data.get("net_cost_amd");
       const payload = {
         name: data.get("name"),
         brand: data.get("brand") || null,
@@ -779,6 +781,7 @@ export async function renderProductsSection(container) {
         unit_price_amd: standardPrice,
         bronze_price_amd: standardPrice,
         retail_price_amd: retailInput ? Number(retailInput) : standardPrice,
+        net_cost_amd: netCostInput ? Number(netCostInput) : null,
       };
       try {
         if (product) {
