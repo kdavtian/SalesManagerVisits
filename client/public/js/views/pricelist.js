@@ -135,9 +135,11 @@ export async function renderPricelist(root, navigate) {
       <div class="detail-header-title">
         <h1>${t("pricelist_title")}</h1>
       </div>
-      <button type="button" class="icon-btn" id="select-mode-btn" aria-label="${t("select_products")}">${icons.checkCircle}</button>
-      ${canManageProducts() ? `<button type="button" class="icon-btn" id="manage-btn" aria-label="${t("manage_prices")}">${icons.tag}</button>` : ""}
-      <button type="button" class="icon-btn" id="export-btn" aria-label="${t("export")}">${icons.send}</button>
+      <div class="detail-header-actions">
+        <button type="button" class="icon-btn" id="select-mode-btn" aria-label="${t("select_products")}">${icons.checkCircle}</button>
+        ${canManageProducts() ? `<button type="button" class="icon-btn" id="manage-btn" aria-label="${t("manage_prices")}">${icons.tag}</button>` : ""}
+        <button type="button" class="icon-btn" id="export-btn" aria-label="${t("export")}">${icons.send}</button>
+      </div>
     </div>
 
     <div id="expiring-soon-banner" class="pricelist-no-print"></div>

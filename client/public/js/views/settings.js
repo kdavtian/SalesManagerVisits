@@ -11,6 +11,7 @@ import { getPushSubscriptionState, enablePushNotifications, disablePushNotificat
 import { checkForUpdateManually } from "../updateBanner.js";
 import { APP_VERSION } from "../version.js";
 import { refreshProductCatalog } from "../productCatalog.js";
+import { isStrongDevice, getMapTileCacheEnabled, setMapTileCacheEnabled } from "../mapPrefs.js";
 
 const ICON = {
   camera: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg>`,
@@ -142,19 +143,29 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         ${settingsToggleRow({ icon: ICON.language, label: t("language"), value: getLang() === "hy" ? t("armenian") : t("english"), id: "toggle-language", checked: getLang() === "hy", color: "blue" })}
         ${settingsToggleRow({ icon: ICON.bolt, label: t("efficiency_mode"), value: getPerfMode() === "efficiency" ? t("toggle_on") : t("toggle_off"), id: "toggle-perf-mode", checked: getPerfMode() === "efficiency", color: "orange" })}
       </div>
-      <!-- .settings-hint is styled as a footnote directly under the card
-           above it (see styles.css) -- efficiency mode is that card's last
-           row, so the hint explaining it needs to end the card, not sit
-           after push notifications too where it reads as a disclaimer for
-           the whole preferences section. -->
-      <p class="muted settings-hint">${t("efficiency_mode_hint")}</p>
-      <div class="card settings-list">
-        ${settingsToggleRow({ icon: ICON.bell, label: t("push_notifications"), value: "…", id: "toggle-push-notifications", checked: false, color: "red" })}
+      <!-- .settings-hint-row collapses the explanatory footnote behind a
+           tappable "!" icon instead of always showing it inline (see
+           styles.css) -- efficiency mode is that card's last row, so the
+           hint explaining it needs to end the card, not sit after push
+           notifications too where it reads as a disclaimer for the whole
+           preferences section. -->
+      <div class="settings-hint-row">
+        <button type="button" class="settings-hint-icon" id="efficiency-mode-hint-btn" aria-expanded="false" aria-controls="efficiency-mode-hint-text" aria-label="${t("more_info")}">!</button>
+        <p class="muted settings-hint" id="efficiency-mode-hint-text" hidden>${t("efficiency_mode_hint")}</p>
       </div>
-
-      <h2 class="section-title">${t("notification_preferences_title")}</h2>
-      <div class="card settings-list" id="notification-prefs-list">
-        <p class="loading-state" role="status">${t("loading")}</p>
+      <div class="card settings-list">
+        <div class="settings-list-row settings-toggle-row settings-expandable-row" id="push-notifications-row">
+          <span class="settings-row-icon settings-row-icon-red">${ICON.bell}</span>
+          <span class="settings-row-label">${t("push_notifications")}</span>
+          <span class="settings-row-value muted">…</span>
+          <button type="button" class="toggle-switch" id="toggle-push-notifications" role="switch" aria-checked="false" aria-label="${t("push_notifications")}">
+            <span class="toggle-thumb"></span>
+          </button>
+          <button type="button" class="settings-row-chevron settings-expand-btn" id="notification-prefs-expand-btn" aria-expanded="false" aria-controls="notification-prefs-list" aria-label="${t("notification_preferences_title")}">${ICON.chevron}</button>
+        </div>
+        <div class="settings-list settings-expandable-content" id="notification-prefs-list" hidden>
+          <p class="loading-state" role="status">${t("loading")}</p>
+        </div>
       </div>
 
       <h2 class="section-title">${t("data_sync")}</h2>
@@ -164,7 +175,13 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         ${settingsRow({ icon: ICON.refresh, label: t("refresh_data"), id: "row-refresh", color: "green" })}
         ${settingsRow({ icon: ICON.refresh, label: t("refresh_product_catalog"), id: "row-refresh-catalog", color: "green" })}
         ${settingsRow({ icon: ICON.database, label: t("offline_storage"), value: `<span id="storage-value">…</span>`, interactive: false, color: "purple" })}
+        ${
+          isStrongDevice()
+            ? settingsToggleRow({ icon: ICON.database, label: t("map_tile_cache"), value: getMapTileCacheEnabled() ? t("toggle_on") : t("toggle_off"), id: "toggle-map-tile-cache", checked: getMapTileCacheEnabled(), color: "purple" })
+            : ""
+        }
       </div>
+      ${isStrongDevice() ? `<p class="muted settings-hint">${t("map_tile_cache_hint")}</p>` : ""}
       <p class="settings-hint sync-needs-attention-hint" id="sync-needs-attention-hint" role="status" hidden></p>
 
       <h2 class="section-title">${t("security")}</h2>
@@ -179,7 +196,10 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         ${settingsRow({ icon: ICON.book, label: t("user_guide"), value: "PDF", id: "row-user-guide", color: "orange" })}
         ${settingsRow({ icon: ICON.refresh, label: t("check_for_updates"), value: `<span id="check-updates-value"></span>`, id: "row-check-updates", color: "teal" })}
       </div>
-      <p class="muted settings-hint">${t("user_guide_hint").replace("{v}", GUIDE_VERSION)}</p>
+      <div class="settings-hint-row">
+        <button type="button" class="settings-hint-icon" id="user-guide-hint-btn" aria-expanded="false" aria-controls="user-guide-hint-text" aria-label="${t("more_info")}">!</button>
+        <p class="muted settings-hint" id="user-guide-hint-text" hidden>${t("user_guide_hint").replace("{v}", GUIDE_VERSION)}</p>
+      </div>
 
       <button class="btn btn-block btn-danger settings-logout" id="settings-logout">${t("log_out")}</button>
       </section>
@@ -194,12 +214,8 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         <h2 class="section-title">${t("admin_group_team_roles")}</h2>
         <div class="card settings-list">
           ${settingsRow({ icon: ICON.team, label: t("team_management"), id: "row-team-management", color: "blue" })}
+          ${settingsRow({ icon: ICON.bell, label: t("notification_defaults_title"), id: "row-notification-defaults", color: "red" })}
         </div>
-        <h3 class="settings-subsection-title">${t("notification_defaults_title")}</h3>
-        <p class="muted radius-help">${t("notification_defaults_help")}</p>
-        <div id="notification-defaults-section"></div>
-        <h3 class="settings-subsection-title">${t("points_closeout_title")}</h3>
-        <div id="points-closeout-section"></div>
       `
           : ""
       }
@@ -214,8 +230,16 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
           <div class="card settings-list-group">
             <div class="settings-list-group-item">
               ${settingsToggleRow({ icon: ICON.bolt, label: t("bonuses_enabled_label"), value: "", id: "toggle-bonuses-enabled", checked: false, color: "orange" })}
-              <p class="muted radius-help" id="bonuses-enabled-help">${t("bonuses_enabled_help_off")}</p>
             </div>
+            <form id="incentive-message-form" class="settings-list-group-item">
+              <label>
+                <span class="settings-form-label">${ICON.gps}${t("incentive_message_label")}</span>
+                <input type="text" name="message" maxlength="200" placeholder="${t("points_leaderboard_prize_hint")}" />
+              </label>
+              <p class="muted radius-help">${t("incentive_message_help")}</p>
+              <p class="form-success" id="incentive-message-success" role="status" hidden>${t("saved")}</p>
+              <button type="submit" class="btn btn-primary">${t("save")}</button>
+            </form>
           </div>
         `
             : ""
@@ -223,6 +247,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         <div class="card settings-list">
           ${canManageChallenges ? settingsRow({ icon: ICON.bolt, label: t("bonuses_admin_challenges"), id: "row-bonus-challenges", color: "orange" }) : ""}
           ${canReviewBonusRewards ? settingsRow({ icon: ICON.chart, label: t("bonuses_reward_claims"), id: "row-bonus-reward-claims", color: "green" }) : ""}
+          ${admin ? settingsRow({ icon: ICON.chart, label: t("points_closeout_title"), id: "row-points-closeout", color: "teal" }) : ""}
         </div>
       `
           : ""
@@ -251,15 +276,10 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
             <p class="form-success" id="visit-frequency-success" role="status" hidden>${t("saved")}</p>
             <button type="submit" class="btn btn-primary">${t("save")}</button>
           </form>
-          <form id="incentive-message-form" class="settings-list-group-item">
-            <label>
-              <span class="settings-form-label">${ICON.gps}${t("incentive_message_label")}</span>
-              <input type="text" name="message" maxlength="200" placeholder="${t("points_leaderboard_prize_hint")}" />
-            </label>
-            <p class="muted radius-help">${t("incentive_message_help")}</p>
-            <p class="form-success" id="incentive-message-success" role="status" hidden>${t("saved")}</p>
-            <button type="submit" class="btn btn-primary">${t("save")}</button>
-          </form>
+        </div>
+
+        <h2 class="section-title">${t("security")}</h2>
+        <div class="card settings-list-group">
           <form id="calculator-pin-form" class="settings-list-group-item">
             <label>
               <span class="settings-form-label">${ICON.lock}${t("calculator_pin_label")}</span>
@@ -273,15 +293,14 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
             ${settingsToggleRow({ icon: ICON.lock, label: t("calculator_mode_label"), value: "", id: "toggle-calculator-mode", checked: false, color: "gray" })}
             <p class="muted radius-help" id="calculator-mode-help">${t("calculator_mode_help_off")}</p>
           </div>
-        </div>
-
-        <h2 class="section-title">${t("emergency_disconnect_title")}</h2>
-        <div class="card settings-list-group">
           <div class="settings-list-group-item">
             <p class="muted radius-help">${t("emergency_disconnect_help")}</p>
             <p class="form-success" id="emergency-disconnect-success" role="status" hidden>${t("emergency_disconnect_lifted")}</p>
             <button type="button" class="btn btn-danger" id="emergency-disconnect-btn">${t("emergency_disconnect_button")}</button>
           </div>
+        </div>
+        <div class="card settings-list">
+          ${settingsRow({ icon: ICON.shield, label: t("session_management"), id: "row-admin-sessions", color: "green" })}
         </div>
       `
           : ""
@@ -438,6 +457,20 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     renderSettings(root, onLogout, onLanguageChange);
   });
 
+  // Hint text collapsed behind a tappable "!" icon (see styles.css's
+  // .settings-hint-row) -- toggles the paired paragraph's hidden state.
+  function wireHintToggle(btnId, textId) {
+    const btn = root.querySelector(`#${btnId}`);
+    const textEl = root.querySelector(`#${textId}`);
+    btn.addEventListener("click", () => {
+      const expanded = btn.getAttribute("aria-expanded") === "true";
+      btn.setAttribute("aria-expanded", String(!expanded));
+      textEl.hidden = expanded;
+    });
+  }
+  wireHintToggle("efficiency-mode-hint-btn", "efficiency-mode-hint-text");
+  wireHintToggle("user-guide-hint-btn", "user-guide-hint-text");
+
   // --- Push notifications ---
   const pushToggle = root.querySelector("#toggle-push-notifications");
   const pushToggleRow = pushToggle.closest(".settings-list-row");
@@ -472,6 +505,17 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     } finally {
       pushToggle.disabled = false;
     }
+  });
+
+  // Notification preferences now nest inside the Push notifications row
+  // itself (a chevron expand toggle), instead of a separate section
+  // further down the page.
+  const notifPrefsExpandBtn = root.querySelector("#notification-prefs-expand-btn");
+  const notifPrefsList = root.querySelector("#notification-prefs-list");
+  notifPrefsExpandBtn.addEventListener("click", () => {
+    const expanded = notifPrefsExpandBtn.getAttribute("aria-expanded") === "true";
+    notifPrefsExpandBtn.setAttribute("aria-expanded", String(!expanded));
+    notifPrefsList.hidden = expanded;
   });
 
   // --- Data & Sync ---
@@ -551,6 +595,17 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     storageValue.textContent = "—";
   }
 
+  // Map tile pre-caching -- just flips the stored preference; map.js's own
+  // warmTileCache() already reads it fresh on every pan/zoom, so no need to
+  // reach into the Map view (which may not even be mounted) from here.
+  const tileCacheToggle = root.querySelector("#toggle-map-tile-cache");
+  tileCacheToggle?.addEventListener("click", () => {
+    const next = tileCacheToggle.getAttribute("aria-checked") !== "true";
+    tileCacheToggle.setAttribute("aria-checked", String(next));
+    tileCacheToggle.closest(".settings-list-row").querySelector(".settings-row-value").textContent = next ? t("toggle_on") : t("toggle_off");
+    setMapTileCacheEnabled(next);
+  });
+
   // --- Admin ---
   if (admin) {
     const radiusForm = root.querySelector("#radius-form");
@@ -571,7 +626,6 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     const calcModeHelp = root.querySelector("#calculator-mode-help");
     const bonusesToggle = root.querySelector("#toggle-bonuses-enabled");
     const bonusesToggleValue = bonusesToggle?.closest(".settings-toggle-row").querySelector(".settings-row-value");
-    const bonusesHelp = root.querySelector("#bonuses-enabled-help");
     const disconnectBtn = root.querySelector("#emergency-disconnect-btn");
     const disconnectSuccess = root.querySelector("#emergency-disconnect-success");
 
@@ -609,7 +663,6 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     function paintBonusesToggle(enabled) {
       bonusesToggle.setAttribute("aria-checked", String(enabled));
       bonusesToggleValue.textContent = enabled ? t("toggle_on") : t("toggle_off");
-      bonusesHelp.textContent = enabled ? t("bonuses_enabled_help_on") : t("bonuses_enabled_help_off");
     }
 
     if (bonusesToggle) {
@@ -702,11 +755,19 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       }
     });
 
-    renderPointsCloseoutSection(root.querySelector("#points-closeout-section"));
-    renderNotificationDefaultsSection(root.querySelector("#notification-defaults-section"));
-
     root.querySelector("#row-team-management").addEventListener("click", (e) => {
       openAdminSection(root, e.currentTarget, t("team_management"), renderTeamSection);
+    });
+    root.querySelector("#row-notification-defaults").addEventListener("click", (e) => {
+      openAdminSection(root, e.currentTarget, t("notification_defaults_title"), renderNotificationDefaultsSection);
+    });
+    root.querySelector("#row-points-closeout").addEventListener("click", (e) => {
+      openAdminSection(root, e.currentTarget, t("points_closeout_title"), renderPointsCloseoutSection);
+    });
+    root.querySelector("#row-admin-sessions").addEventListener("click", async () => {
+      if (!confirm(t("confirm_log_out_other_sessions"))) return;
+      await api.logoutOtherSessions();
+      alert(t("other_sessions_logged_out"));
     });
     root.querySelector("#row-reports-management").addEventListener("click", (e) => {
       openAdminSection(root, e.currentTarget, t("reports_management"), renderReportsManagementSection);
@@ -944,6 +1005,7 @@ async function renderNotificationDefaultsSection(slot) {
   let selectedRole = NOTIFICATION_ROLES[0];
 
   slot.innerHTML = `
+    <p class="muted radius-help">${t("notification_defaults_help")}</p>
     <div class="card" style="margin-bottom:10px;">
       <label>${t("role")}
         <select id="notif-default-role-select">

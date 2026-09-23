@@ -198,7 +198,12 @@
    on top of that padding and making the bar noticeably narrower than every
    other screen's. .detail-view supplies the inset here instead, same as
    Orders' own list-view already does for it (see orders-search-filters.css). */
-.payments-search-combined {
+.payments-search-combined,
+/* Pricelist, same as Payments above, renders inside .detail-view's own
+   16px side padding -- without this the base .activity-search-combined
+   rule's own 16px side margin stacks on top of it, leaving the search
+   bar noticeably narrower than every other screen's. */
+.pricelist-search-combined {
   margin-left: 0;
   margin-right: 0;
 }

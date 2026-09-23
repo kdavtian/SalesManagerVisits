@@ -6869,6 +6869,61 @@ button.list-row-icon {
   line-height: 1.4;
 }
 
+/* A hint that's collapsed behind a tappable "!" icon instead of always
+   showing inline -- same footnote text as .settings-hint above, just
+   hidden until the icon is tapped. */
+.settings-hint-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 6px 4px 0;
+}
+.settings-hint-row .settings-hint {
+  margin: 1px 0 0;
+}
+.settings-hint-icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-dim);
+  background: none;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.settings-hint-icon[aria-expanded="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Push notifications' own row, expandable in place to reveal the
+   per-type notification-preferences list nested inside the same card
+   instead of as a separate section further down the page. */
+.settings-expandable-row {
+  padding-right: 8px;
+}
+.settings-expand-btn {
+  background: none;
+  border: none;
+  padding: 6px;
+  margin: 0;
+  cursor: pointer;
+  transition: transform 150ms ease;
+}
+.settings-expand-btn[aria-expanded="true"] {
+  transform: rotate(90deg);
+}
+.settings-expandable-content {
+  border-top: 1px solid var(--border);
+}
+
 /* A single grouped card holding several related forms (iOS-Settings-style
    "section" containing multiple rows), separated by hairlines instead of
    each form getting its own floating card. */
@@ -6954,10 +7009,20 @@ button.list-row-icon {
   min-width: 0;
 }
 
+/* flex-shrink: 1 + min-width: 0 (rather than the old flex-shrink: 0) so a
+   long dynamic value (a push-subscription status string, a long
+   notification-defaults label, ...) truncates with an ellipsis instead of
+   forcing the row wider than the phone screen and causing horizontal
+   scroll. */
 .settings-row-value {
   font-weight: 500;
   font-size: 0.85rem;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-row-chevron {
@@ -7926,9 +7991,14 @@ form select,
   display: flex;
   color: var(--text-dim);
 }
+/* No justify-content: space-between here on purpose -- with 3 flex
+   children (thumb, main, prices) that would center the middle one
+   (product name/details) in the leftover space instead of keeping it
+   flush against the thumb. .pricelist-row-main's own flex: 1 below does
+   the "push prices to the far right" job instead, while keeping the name
+   left-aligned right after the thumb. */
 .pricelist-row {
   display: flex;
-  justify-content: space-between;
   align-items: flex-start;
   gap: 10px;
 }
@@ -7954,6 +8024,7 @@ form select,
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  flex: 1;
 }
 .pricelist-row-prices {
   display: flex;
