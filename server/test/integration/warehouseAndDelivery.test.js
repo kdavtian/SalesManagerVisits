@@ -95,6 +95,20 @@ test("GET /api/warehouse/pick-list and /inventory: a ceo can access warehouse sc
   assert.equal(inventory.status, 200);
 });
 
+// Regression: the Inventory screen's landing/net cost toggle cycles a
+// single button through both figures (see views/warehouse.js), but the
+// endpoint only ever returned landing_cost_amd -- net_cost_amd was
+// missing from the SELECT entirely, so the "net" state had no data to show.
+test("GET /api/warehouse/inventory: includes net_cost_amd alongside landing_cost_amd", async () => {
+  await pool.query("UPDATE products SET landing_cost_amd = 700, net_cost_amd = 900 WHERE id = $1", [product.id]);
+  const res = await apiRequest("/api/warehouse/inventory", { cookie: cookies.ceo });
+  assert.equal(res.status, 200);
+  const row = res.data.find((p) => p.id === product.id);
+  assert.ok(row, "the test fixture product must appear in the inventory list");
+  assert.equal(Number(row.landing_cost_amd), 700);
+  assert.equal(Number(row.net_cost_amd), 900);
+});
+
 // --- Delivery: role gating + route planning (OSRM unreachable -> fallback) --------
 
 test("POST /api/delivery/routes/plan: a sales_manager gets 403; a delivery_manager can plan a route, falling back gracefully with OSRM unreachable", async () => {
