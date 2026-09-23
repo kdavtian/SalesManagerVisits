@@ -110,7 +110,7 @@ warehouseRouter.get("/inventory", async (req, res) => {
   // (e.g. "pc", "set") that doesn't end in a number+"L" -- avoided by
   // just ordering on the raw text.
   const { rows } = await pool.query(
-    `SELECT id, name, brand, family, unit, stock_qty, bronze_price_amd, landing_cost_amd
+    `SELECT id, name, brand, family, unit, stock_qty, bronze_price_amd, landing_cost_amd, net_cost_amd
      FROM products
      ${where}
      ORDER BY brand NULLS LAST, family NULLS LAST, name

@@ -210,6 +210,7 @@ export async function renderWarehouse(root, navigate) {
         <input type="search" id="inventory-search" placeholder="${t("search")}" />
         <button type="button" class="filter-icon-btn" id="inventory-landing-btn" aria-label="${t("warehouse_show_landing_cost")}" title="${t("warehouse_show_landing_cost")}" aria-pressed="false">
           ${icons.costLetter}
+          <span class="filter-icon-count" id="inventory-landing-btn-badge" aria-hidden="true" hidden></span>
         </button>
         <button type="button" class="filter-icon-btn" id="inventory-wholesale-btn" aria-label="${t("warehouse_show_wholesale_price")}" title="${t("warehouse_show_wholesale_price")}" aria-pressed="false">
           ${icons.wallet}
@@ -224,10 +225,15 @@ export async function renderWarehouse(root, navigate) {
     const searchInput = contentEl.querySelector("#inventory-search");
     const brandBtn = contentEl.querySelector("#inventory-brand-btn");
     const landingBtn = contentEl.querySelector("#inventory-landing-btn");
+    const landingBtnBadge = contentEl.querySelector("#inventory-landing-btn-badge");
     const wholesaleBtn = contentEl.querySelector("#inventory-wholesale-btn");
     let brandFilter = "";
     let brandOptions = null;
-    let showLanding = false;
+    // One button, three states -- landing cost and net cost are both
+    // "internal cost basis" figures a WM might want, and neither is common
+    // enough to deserve its own permanent icon slot next to the always-on
+    // wholesale-price toggle. Cycles off -> landing -> net -> off.
+    let costMode = "off"; // "off" | "landing" | "net"
     let showWholesale = false;
     let lastRows = [];
     // Collapsed by default -- a WM scanning the shelf list gets brand/family
@@ -249,13 +255,17 @@ export async function renderWarehouse(root, navigate) {
         </div>`;
     }
 
-    // Second row: whichever of landing cost / wholesale price is currently
-    // toggled on, in that order (matching the two buttons left-to-right),
-    // joined by " | " -- omitted entirely if neither is on, or if this
-    // product has no value for what's toggled on (a still-unsynced row).
+    // Second row: whichever of landing/net cost and wholesale price are
+    // currently toggled on, joined by " | " -- omitted entirely if nothing
+    // is on, or if this product has no value for what's toggled on (a
+    // still-unsynced row, or net cost simply never entered for it). Landing
+    // and net cost share one button/slot (see costMode above), so each is
+    // labelled -- unlike wholesale, which stays the sole thing in its own
+    // slot and needs no label to stay unambiguous.
     function pricesRowHtml(p) {
       const parts = [];
-      if (showLanding && p.landing_cost_amd != null) parts.push(formatAmd(Number(p.landing_cost_amd)));
+      if (costMode === "landing" && p.landing_cost_amd != null) parts.push(`${t("landing_cost")}: ${formatAmd(Number(p.landing_cost_amd))}`);
+      if (costMode === "net" && p.net_cost_amd != null) parts.push(`${t("net_cost")}: ${formatAmd(Number(p.net_cost_amd))}`);
       if (showWholesale && p.bronze_price_amd != null) parts.push(formatAmd(Number(p.bronze_price_amd)));
       if (!parts.length) return "";
       return `<div class="inventory-row-prices">${parts.join(" | ")}</div>`;
@@ -313,7 +323,7 @@ export async function renderWarehouse(root, navigate) {
       // default) pressing "show landing cost" would otherwise reveal
       // nothing at all. Doesn't touch the remembered manual state, so
       // clearing the search/toggle goes back to whatever the WM had open.
-      const forceExpand = Boolean(searchInput.value.trim()) || Boolean(brandFilter) || showLanding || showWholesale;
+      const forceExpand = Boolean(searchInput.value.trim()) || Boolean(brandFilter) || costMode !== "off" || showWholesale;
       const { brandTotals, familyTotals } = computeTotals(lastRows);
 
       // Bucket the already-sorted rows into brand -> family -> [products];
@@ -398,10 +408,15 @@ export async function renderWarehouse(root, navigate) {
       debounceTimer = setTimeout(() => paint(searchInput.value.trim()), 250);
     });
 
+    const COST_MODE_LABEL = { off: t("warehouse_show_landing_cost"), landing: t("landing_cost"), net: t("net_cost") };
     landingBtn.addEventListener("click", () => {
-      showLanding = !showLanding;
-      landingBtn.classList.toggle("filter-icon-btn-active", showLanding);
-      landingBtn.setAttribute("aria-pressed", String(showLanding));
+      costMode = costMode === "off" ? "landing" : costMode === "landing" ? "net" : "off";
+      landingBtn.classList.toggle("filter-icon-btn-active", costMode !== "off");
+      landingBtn.setAttribute("aria-pressed", String(costMode !== "off"));
+      landingBtn.setAttribute("aria-label", COST_MODE_LABEL[costMode]);
+      landingBtn.title = COST_MODE_LABEL[costMode];
+      landingBtnBadge.hidden = costMode !== "net";
+      landingBtnBadge.textContent = costMode === "net" ? "N" : "";
       render();
     });
     wholesaleBtn.addEventListener("click", () => {
