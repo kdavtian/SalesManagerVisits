@@ -98,9 +98,12 @@ duplicates.
 `"weekly"`, `"monthly"`, `"quarterly"`, or `"annual"` to push that period's
 own snapshot instead (e.g. `build_ceo_report.py`'s `operational_reports`
 already computes all five; loop over them and call this endpoint once per
-period). Only a `period: "daily"` push triggers the `daily_report_ready`
-push notification -- the other periods land at the same time and would
-just be a duplicate ping.
+period). Only a `period: "daily"` push queues a `sync_reports_ready` push
+notification -- the other periods land at the same time and would just be
+a duplicate ping. That notification is debounced (see `erpSync.js`'s
+`queueSyncNotification`): it's held for a short quiet period and combined
+with whatever else this sync run also triggers (e.g. `POST /reports`
+calls below), so a full sync run lands as one push, not one per call.
 
 **If this endpoint is never called at all, the "Daily management report"
 page has nothing to show -- it isn't derived from the other synced tables,
@@ -173,8 +176,10 @@ other endpoint on this router):
 | `file` | yes | the workbook itself, as a file part |
 
 Upserted by `(report_type, report_date)`: a same-day re-push replaces, never
-duplicates. Triggers a `generated_report_ready` push notification to every
-admin/ceo/sales_director/accountant user.
+duplicates. Queues a `sync_reports_ready` push notification to every
+admin/ceo/sales_director/accountant user -- debounced the same way as
+`POST /daily-report` above, so calling this 3 times in a row (one per
+report type) for the same sync run still lands as one combined push.
 
 Response: `{ synced: true, report_type, report_date }`.
 

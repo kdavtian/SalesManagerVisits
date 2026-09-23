@@ -684,7 +684,7 @@ export async function renderProductsSection(container) {
         <p class="muted">${escapeHtml(product.name)}</p>
         <div id="promo-list" class="card-list"><p class="loading-state" role="status">${t("loading")}</p></div>
         <form id="promo-form">
-          <label>${t("promo_price_amd")}<input name="promo_price_amd" type="number" min="0" step="1" required /></label>
+          <label>${t("promo_price_amd")}<input name="promo_price_amd" type="number" min="0" step="any" required /></label>
           <label>${t("promo_starts_on")}<input name="starts_on" type="date" required /></label>
           <label>${t("promo_ends_on")}<input name="ends_on" type="date" required /></label>
           <label>${t("promo_note")}<input name="note" type="text" maxlength="200" /></label>
@@ -751,7 +751,12 @@ export async function renderProductsSection(container) {
       submitBtn.disabled = true;
       try {
         await api.createProductPromo(product.id, {
-          promo_price_amd: Number(data.get("promo_price_amd")),
+          // AMD has no subunit in this app -- rounded here (not just
+          // step="1" on the input) so a decimal value doesn't silently
+          // block the browser's own native form submission with no
+          // visible error at all (reported as "net cost not showing" --
+          // the same class of input elsewhere in this form).
+          promo_price_amd: Math.round(Number(data.get("promo_price_amd"))),
           starts_on: data.get("starts_on"),
           ends_on: data.get("ends_on"),
           note: data.get("note") || null,
@@ -791,9 +796,9 @@ export async function renderProductsSection(container) {
           <label>${t("product_name")}<input name="name" value="${product ? escapeHtml(product.name) : ""}" required /></label>
           <label>${t("brand")}<input name="brand" value="${product?.brand ? escapeHtml(product.brand) : ""}" /></label>
           <label>${t("unit")}<input name="unit" value="${product?.unit ? escapeHtml(product.unit) : ""}" placeholder="e.g. box, L, pcs" /></label>
-          <label>${t("price_standard")}<input name="unit_price_amd" type="number" min="0" step="1" value="${product ? Number(product.unit_price_amd) : ""}" required /></label>
-          <label>${t("price_retail")}<input name="retail_price_amd" type="number" min="0" step="1" value="${product && product.retail_price_amd !== null ? Number(product.retail_price_amd) : ""}" placeholder="${t("price_retail_hint")}" /></label>
-          <label>${t("net_cost")}<input name="net_cost_amd" type="number" min="0" step="1" value="${product && product.net_cost_amd !== null && product.net_cost_amd !== undefined ? Number(product.net_cost_amd) : ""}" placeholder="${t("net_cost_hint")}" /></label>
+          <label>${t("price_standard")}<input name="unit_price_amd" type="number" min="0" step="any" value="${product ? Number(product.unit_price_amd) : ""}" required /></label>
+          <label>${t("price_retail")}<input name="retail_price_amd" type="number" min="0" step="any" value="${product && product.retail_price_amd !== null ? Number(product.retail_price_amd) : ""}" placeholder="${t("price_retail_hint")}" /></label>
+          <label>${t("net_cost")}<input name="net_cost_amd" type="number" min="0" step="any" value="${product && product.net_cost_amd !== null && product.net_cost_amd !== undefined ? Number(product.net_cost_amd) : ""}" placeholder="${t("net_cost_hint")}" /></label>
           ${
             product
               ? `<label class="settings-toggle-row"><span>${t("active")}</span>
@@ -855,7 +860,14 @@ export async function renderProductsSection(container) {
       const data = new FormData(form);
       const submitBtn = form.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
-      const standardPrice = Number(data.get("unit_price_amd"));
+      // AMD has no subunit in this app (see formatAmd) -- rounded here
+      // (the inputs themselves use step="any", not step="1") so typing a
+      // decimal (e.g. pasted straight from a spreadsheet's own formula
+      // output) never silently blocks the browser's native form
+      // submission with no visible error, which is what step="1" used to
+      // do: reported as "net cost not showing" -- the save request never
+      // even fired, and nothing on screen said why.
+      const standardPrice = Math.round(Number(data.get("unit_price_amd")));
       const retailInput = data.get("retail_price_amd");
       const netCostInput = data.get("net_cost_amd");
       const payload = {
@@ -868,8 +880,8 @@ export async function renderProductsSection(container) {
         // manual edit doesn't silently desync the two.
         unit_price_amd: standardPrice,
         bronze_price_amd: standardPrice,
-        retail_price_amd: retailInput ? Number(retailInput) : standardPrice,
-        net_cost_amd: netCostInput ? Number(netCostInput) : null,
+        retail_price_amd: retailInput ? Math.round(Number(retailInput)) : standardPrice,
+        net_cost_amd: netCostInput ? Math.round(Number(netCostInput)) : null,
       };
       try {
         if (product) {

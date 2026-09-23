@@ -22,6 +22,54 @@ const reportFileUpload = multer({
   limits: { fileSize: 15 * 1024 * 1024 },
 });
 
+// A single bot run hits this router up to 4 times in quick succession --
+// POST /daily-report once (the daily period), then POST /reports once per
+// generated workbook (sales_director/debt_receivables/ceo_management) --
+// and each used to fire its own notifyUser() call, so every sync landed as
+// up to 4 separate pushes/inbox rows for the same recipients within a few
+// seconds of each other (reported as "I receive 4 notifications, I want
+// only 1"). Coalesced here into one combined notification per sync run:
+// a short quiet-period debounce rather than any explicit "this is the
+// last call" signal from the bot script, so it stays correct regardless
+// of that script's own call order or timing, with no coordinated change
+// needed on that side. Module-level state is fine -- this process only
+// ever serves one sync run at a time in practice (the bot's own runs are
+// sequential, not concurrent).
+// Short in tests (same NODE_ENV-gated pattern push.js/telegram.js already
+// use) -- an integration test posting twice in a row shouldn't have to
+// really wait out a 10s debounce to assert the combined result.
+const SYNC_NOTIFICATION_DEBOUNCE_MS = process.env.NODE_ENV === "test" ? 50 : 10_000;
+let pendingSyncNotificationLabels = [];
+let pendingSyncNotificationTimer = null;
+
+function queueSyncNotification(label) {
+  pendingSyncNotificationLabels.push(label);
+  clearTimeout(pendingSyncNotificationTimer);
+  pendingSyncNotificationTimer = setTimeout(() => {
+    flushSyncNotification().catch((err) => console.error("Failed to send combined sync notification:", err));
+  }, SYNC_NOTIFICATION_DEBOUNCE_MS);
+}
+
+async function flushSyncNotification() {
+  const labels = pendingSyncNotificationLabels;
+  pendingSyncNotificationLabels = [];
+  if (!labels.length) return;
+
+  const { rows: recipients } = await pool.query(
+    "SELECT id FROM users WHERE role IN ('admin', 'ceo', 'operations_director', 'sales_director', 'accountant')"
+  );
+  const body = labels.length === 1 ? `${labels[0]}-ը այժմ հասանելի է։` : `${labels.join(", ")}-ը այժմ հասանելի են։`;
+  await Promise.all(
+    recipients.map((u) =>
+      notifyUser(u.id, "sync_reports_ready", {
+        title: "Նոր տվյալներ են հասանելի",
+        body,
+        url: "/#/reports",
+      })
+    )
+  );
+}
+
 const syncKeyLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 20,
@@ -402,18 +450,7 @@ erpSyncRouter.post("/daily-report", syncKeyLimiter, requireSyncKey, async (req, 
   // monthly/quarterly/annual snapshots land at the same time as (or well
   // after) the daily one and would just be a duplicate ping.
   if (period === "daily") {
-    const { rows: recipients } = await pool.query(
-      "SELECT id FROM users WHERE role IN ('admin', 'ceo', 'operations_director', 'sales_director', 'accountant')"
-    );
-    await Promise.all(
-      recipients.map((u) =>
-        notifyUser(u.id, "daily_report_ready", {
-          title: "Օրական հաշվետվությունը պատրաստ է",
-          body: `${report_date}-ի վաճառքի, վճարումների և մնացորդի տվյալներն այժմ հասանելի են։`,
-          url: "/#/reports?r=daily_management",
-        })
-      )
-    );
+    queueSyncNotification("Օրական հաշվետվություն");
   }
 
   res.json({ synced: true, report_date, period });
@@ -459,18 +496,7 @@ erpSyncRouter.post("/reports", syncKeyLimiter, requireSyncKey, reportFileUpload.
     [report_type, report_date, req.file.originalname || `${report_type}_${report_date}.xlsx`, req.file.mimetype, req.file.buffer]
   );
 
-  const { rows: recipients } = await pool.query(
-    "SELECT id FROM users WHERE role IN ('admin', 'ceo', 'operations_director', 'sales_director', 'accountant')"
-  );
-  await Promise.all(
-    recipients.map((u) =>
-      notifyUser(u.id, "generated_report_ready", {
-        title: "Նոր հաշվետվություն է հասանելի",
-        body: `${GENERATED_REPORT_TYPE_LABELS_HY[report_type] ?? report_type}-ը ${report_date}-ի համար պատրաստ է ներբեռնման։`,
-        url: "/#/reports?r=documents",
-      })
-    )
-  );
+  queueSyncNotification(GENERATED_REPORT_TYPE_LABELS_HY[report_type] ?? report_type);
 
   res.json({ synced: true, report_type, report_date });
 });

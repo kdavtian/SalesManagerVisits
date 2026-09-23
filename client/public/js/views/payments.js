@@ -621,7 +621,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
             </label>`
           }
           <label for="payment-amount-input">${t("payment_amount_amd")}
-            <input type="number" id="payment-amount-input" min="1" step="1" inputmode="numeric" />
+            <input type="number" id="payment-amount-input" min="1" step="any" inputmode="numeric" />
           </label>
           <label for="payment-date-input">${t("payment_date_label")}
             <input type="date" id="payment-date-input" value="${formatDateInput(new Date())}" />
@@ -734,7 +734,10 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
         errorEl.hidden = false;
         return;
       }
-      const amount = Number(overlay.querySelector("#payment-amount-input").value);
+      // Rounded here, not just step="1" on the input -- a decimal amount
+      // used to silently block the browser's own native form submission
+      // with no visible error at all.
+      const amount = Math.round(Number(overlay.querySelector("#payment-amount-input").value));
       if (!Number.isFinite(amount) || amount <= 0) {
         errorEl.textContent = t("payment_amount_required");
         errorEl.hidden = false;

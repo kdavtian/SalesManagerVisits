@@ -244,6 +244,24 @@ let lastRenderedHash = null;
 // return there, instead of just re-navigating to #/settings every time.
 let preSettingsHash = "#/dashboard";
 
+// Every screen reachable from the Home tab's own quick-action grid --
+// tapping the bottom-nav Home icon while on one of these (or Dashboard
+// itself) means "I'm already in the Home tab, take me to its actual
+// start", but tapping it from anywhere else (Customers, Map, Activity,
+// Orders, Settings, a detail page) should return to whichever of these
+// was open last, not always reset to Dashboard (reported as "opens home
+// tab from 0"). #/map is deliberately excluded even though two quick
+// actions route there -- it's already its own separate bottom-nav tab,
+// not part of the Home tree.
+const HOME_TREE_ROUTES = new Set(["#/dashboard", ...Object.values(QUICK_ACTION_ROUTE).map((h) => h.split("?")[0])]);
+HOME_TREE_ROUTES.delete("#/map");
+let lastHomeHash = "#/dashboard";
+
+function homeNavTarget() {
+  const currentPath = (location.hash || "#/dashboard").split("?")[0];
+  return HOME_TREE_ROUTES.has(currentPath) ? "#/dashboard" : lastHomeHash;
+}
+
 // How many orders are sitting in "submitted" waiting on a director's
 // confirm/reject/edit -- shown as a badge on the Orders nav icon. The
 // server returns 0 for anyone who isn't a director/admin, so this is safe
@@ -599,6 +617,7 @@ async function render() {
   preloadArmeniaTiles();
 
   const hash = location.hash || "#/dashboard";
+  if (HOME_TREE_ROUTES.has(hash.split("?")[0])) lastHomeHash = hash;
 
   // Restore from the back-cache -- only on a genuine back/forward
   // navigation (see the popstate listener below), and only when it's the
@@ -865,7 +884,7 @@ function rebuildSidebarMarkup(hash) {
     </nav>
   `;
   sidebar.querySelectorAll("[data-hash]").forEach((el) => {
-    el.addEventListener("click", () => navigate(el.dataset.hash));
+    el.addEventListener("click", () => navigate(el.dataset.hash === "#/dashboard" ? homeNavTarget() : el.dataset.hash));
   });
 }
 
@@ -902,7 +921,7 @@ function rebuildNavMarkup(hash) {
     .join("");
 
   navBar.querySelectorAll("[data-hash]").forEach((el) => {
-    el.addEventListener("click", () => navigate(el.dataset.hash));
+    el.addEventListener("click", () => navigate(el.dataset.hash === "#/dashboard" ? homeNavTarget() : el.dataset.hash));
   });
 
   topBar.innerHTML = `

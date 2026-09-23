@@ -129,7 +129,7 @@ function openExpenseSheet(expense, onDone) {
     <div class="sheet">
       <h2>${expense ? t("edit_expense") : t("add_expense")}</h2>
       <form id="expense-form">
-        <label>${t("amount_amd")}<input name="amount_amd" type="number" min="1" step="1" inputmode="numeric" value="${expense ? Number(expense.amount_amd) : ""}" required /></label>
+        <label>${t("amount_amd")}<input name="amount_amd" type="number" min="1" step="any" inputmode="numeric" value="${expense ? Number(expense.amount_amd) : ""}" required /></label>
         <label>${t("purpose")}<input name="purpose" type="text" value="${expense ? escapeHtml(expense.purpose) : ""}" required /></label>
         <p class="form-error" id="expense-form-error" hidden></p>
         <div class="sheet-actions">
@@ -157,7 +157,10 @@ function openExpenseSheet(expense, onDone) {
     const submitBtn = form.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
     submitBtn.textContent = t("saving");
-    const payload = { amount_amd: Number(data.get("amount_amd")), purpose: data.get("purpose") };
+    // Rounded here, not just step="1" on the input -- a decimal amount
+    // (unlikely but possible via paste/desktop) used to silently block the
+    // browser's own native form submission with no visible error at all.
+    const payload = { amount_amd: Math.round(Number(data.get("amount_amd"))), purpose: data.get("purpose") };
     try {
       if (expense) await api.updateCashExpense(expense.id, payload);
       else await api.createCashExpense(payload);

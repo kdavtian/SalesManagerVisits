@@ -24,12 +24,16 @@ export const NOTIFICATION_TYPES = [
   "cash_handoff_submitted",
   "cash_handoff_reviewed",
   // Pushed by the CEO Telegram bot's sync (server/src/routes/erpSync.js),
-  // not by anything happening inside this app.
-  "daily_report_ready",
-  "generated_report_ready",
-  // The inverse of the two above: the bot's sync did NOT land within the
-  // expected window (see erpSyncMonitor.js) -- this app noticing its own
-  // absence, not something the bot pushed.
+  // not by anything happening inside this app -- one combined notification
+  // per sync run (see queueSyncNotification there) covering whichever of
+  // the daily report and the 3 generated workbooks landed together,
+  // instead of a separate daily_report_ready/generated_report_ready per
+  // call (up to 4 pushes for one sync, reported as "I receive 4
+  // notifications, I want only 1").
+  "sync_reports_ready",
+  // The bot's sync did NOT land within the expected window (see
+  // erpSyncMonitor.js) -- this app noticing its own absence, not something
+  // the bot pushed.
   "erp_sync_stale",
   // Once-a-day digest of unresolved orders/payments/overdue visits (see
   // dailySummary.js) -- distinct from any single event above.
