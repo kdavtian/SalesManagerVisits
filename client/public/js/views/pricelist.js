@@ -4,6 +4,56 @@ import { t } from "../i18n.js";
 import { state, canManageProducts } from "../state.js";
 import { icons } from "../icons.js";
 import { compareProducts, sortedBrands } from "../productSort.js";
+import { NO_GROUP_KEY, openTriStateTreeSheet } from "../regionTree.js";
+
+// Brand -> Category (family) -> Product, for the pricelist's own filter
+// sheet (Brand>Category>product per the tree-picker's generic {key, name,
+// allIds, customerCount, leaves, children} shape from regionTree.js).
+// Brand order follows the same priority list every other product screen
+// uses (productSort.js); a product missing a brand/category falls into a
+// trailing "unbranded"/"uncategorized" bucket rather than being dropped.
+function buildProductTree(products) {
+  const brandKeys = [...sortedBrands(products), ...(products.some((p) => !p.brand) ? [NO_GROUP_KEY] : [])];
+
+  return brandKeys.map((brandKey, i) => {
+    const brandProducts = products.filter((p) => (p.brand || NO_GROUP_KEY) === brandKey);
+    const key = `b${i}`;
+    const categoryMap = new Map();
+    const categoryOrder = [];
+    for (const p of brandProducts) {
+      const cKey = p.family || NO_GROUP_KEY;
+      if (!categoryMap.has(cKey)) {
+        categoryMap.set(cKey, []);
+        categoryOrder.push(cKey);
+      }
+      categoryMap.get(cKey).push(p);
+    }
+    categoryOrder.sort((a, b) => {
+      if (a === NO_GROUP_KEY) return 1;
+      if (b === NO_GROUP_KEY) return -1;
+      return a.localeCompare(b);
+    });
+
+    return {
+      key,
+      name: brandKey === NO_GROUP_KEY ? t("pricelist_no_brand") : brandKey,
+      allIds: brandProducts.map((p) => p.id),
+      customerCount: brandProducts.length,
+      leaves: null,
+      children: categoryOrder.map((cKey, j) => {
+        const categoryProducts = [...categoryMap.get(cKey)].sort((a, b) => a.name.localeCompare(b.name));
+        return {
+          key: `${key}-c${j}`,
+          name: cKey === NO_GROUP_KEY ? t("pricelist_no_category") : cKey,
+          allIds: categoryProducts.map((p) => p.id),
+          customerCount: categoryProducts.length,
+          leaves: categoryProducts.map((p) => ({ id: p.id, name: p.name })),
+          children: null,
+        };
+      }),
+    };
+  });
+}
 
 function sortProducts(products, sortBy, reversed = false) {
   const sorted = [...products];
@@ -56,24 +106,22 @@ export async function renderPricelist(root, navigate) {
     return;
   }
 
-  const brands = sortedBrands(products);
-  const categories = [...new Set(products.map((p) => p.family).filter(Boolean))];
   const packages = [...new Set(products.map((p) => p.unit).filter(Boolean))].sort();
   const isDesktop = window.matchMedia("(min-width: 900px)").matches;
 
   let searchQuery = "";
-  let brandFilter = "";
-  let categoryFilter = "";
+  // Ids of the specific products picked in the Brand>Category>Product tree
+  // sheet -- empty means no filter applied (same convention as
+  // customers.js's regionSubregionKeys), rather than an explicit "all
+  // brands"/"all categories" state to track separately.
+  const selectedProductIds = new Set();
   let packageFilter = "";
-  let priceMin = null;
-  let priceMax = null;
   let specialOnly = false;
   let sortBy = "default";
-  // A native <select> has no "tap the active option again" gesture (its
-  // change event only fires when the value actually changes), so the
-  // reverse toggle is a separate small button next to it instead --
-  // same "flip whatever's currently sorted" behavior as every other
-  // list's sort menu, just a different control shape to fit a <select>.
+  // A native <select> has no "tap the active option again" gesture, so
+  // every other list's sort menu instead uses a dropdown where clicking the
+  // already-active option flips the direction -- see customers.js's
+  // #sort-btn/#sort-menu, replicated here.
   let sortReversed = false;
   let selectMode = false;
   const selectedIds = new Set();
@@ -86,7 +134,6 @@ export async function renderPricelist(root, navigate) {
       </button>
       <div class="detail-header-title">
         <h1>${t("pricelist_title")}</h1>
-        <span class="muted">${t("pricelist_subtitle")}</span>
       </div>
       <button type="button" class="icon-btn" id="select-mode-btn" aria-label="${t("select_products")}">${icons.checkCircle}</button>
       ${canManageProducts() ? `<button type="button" class="icon-btn" id="manage-btn" aria-label="${t("manage_prices")}">${icons.tag}</button>` : ""}
@@ -95,8 +142,16 @@ export async function renderPricelist(root, navigate) {
 
     <div id="expiring-soon-banner" class="pricelist-no-print"></div>
 
-    <div class="order-search-row pricelist-no-print">
+    <div class="list-toolbar pricelist-no-print">
+      <label class="visually-hidden" for="pricelist-search">${t("search_products_placeholder")}</label>
       <input type="search" id="pricelist-search" placeholder="${t("search_products_placeholder")}" aria-label="${t("search_products_placeholder")}" />
+      <button class="icon-btn" id="pricelist-sort-btn" type="button" aria-label="${t("sort")}" aria-haspopup="menu" aria-expanded="false" aria-controls="pricelist-sort-menu">${icons.sort}</button>
+      <div id="pricelist-sort-menu" class="dropdown-menu" role="menu" hidden>
+        <button class="sort-menu-item" role="menuitemradio" aria-checked="true" data-sort="default"><span>${t("sort_default")}</span><span class="sort-menu-arrow" aria-hidden="true"></span></button>
+        <button class="sort-menu-item" role="menuitemradio" aria-checked="false" data-sort="name"><span>${t("product_name")}</span><span class="sort-menu-arrow" aria-hidden="true"></span></button>
+        <button class="sort-menu-item" role="menuitemradio" aria-checked="false" data-sort="standard_price"><span>${t("price_standard")}</span><span class="sort-menu-arrow" aria-hidden="true"></span></button>
+        <button class="sort-menu-item" role="menuitemradio" aria-checked="false" data-sort="retail_price"><span>${t("price_retail")}</span><span class="sort-menu-arrow" aria-hidden="true"></span></button>
+      </div>
     </div>
     <div class="pricelist-filter-row pricelist-no-print" id="pricelist-filter-row"></div>
     <div id="pricelist-select-bar" class="pricelist-select-bar pricelist-no-print" hidden></div>
@@ -107,6 +162,52 @@ export async function renderPricelist(root, navigate) {
   container.querySelector("#back-btn").addEventListener("click", () => navigate("#/dashboard"));
   container.querySelector("#manage-btn")?.addEventListener("click", () => navigate("#/settings"));
   container.querySelector("#export-btn").addEventListener("click", () => openExportSheet());
+
+  const sortBtn = container.querySelector("#pricelist-sort-btn");
+  const sortMenu = container.querySelector("#pricelist-sort-menu");
+  sortBtn.addEventListener("click", () => {
+    sortMenu.hidden = !sortMenu.hidden;
+    sortBtn.setAttribute("aria-expanded", String(!sortMenu.hidden));
+    if (!sortMenu.hidden) sortMenu.querySelector("button")?.focus();
+  });
+  function paintSortArrows() {
+    sortMenu.querySelectorAll("[data-sort]").forEach((item) => {
+      const arrow = item.querySelector(".sort-menu-arrow");
+      arrow.textContent = item.dataset.sort === sortBy ? (sortReversed ? "▲" : "▼") : "";
+    });
+  }
+  sortMenu.querySelectorAll("[data-sort]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (btn.dataset.sort === sortBy) sortReversed = !sortReversed;
+      else sortReversed = false;
+      sortBy = btn.dataset.sort;
+      sortMenu.hidden = true;
+      sortBtn.setAttribute("aria-expanded", "false");
+      sortMenu.querySelectorAll("button").forEach((item) => item.setAttribute("aria-checked", String(item === btn)));
+      paintSortArrows();
+      paint();
+    });
+  });
+  paintSortArrows();
+  container.addEventListener("click", (e) => {
+    if (!sortMenu.hidden && !sortMenu.contains(e.target) && e.target !== sortBtn && !sortBtn.contains(e.target)) {
+      sortMenu.hidden = true;
+      sortBtn.setAttribute("aria-expanded", "false");
+    }
+  });
+  sortMenu.addEventListener("keydown", (e) => {
+    const items = [...sortMenu.querySelectorAll("button")];
+    const index = items.indexOf(document.activeElement);
+    if (e.key === "Escape") {
+      sortMenu.hidden = true;
+      sortBtn.setAttribute("aria-expanded", "false");
+      sortBtn.focus();
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const delta = e.key === "ArrowDown" ? 1 : -1;
+      items[(index + delta + items.length) % items.length]?.focus();
+    }
+  });
 
   // --- Expiring-soon banner (item 39) -- surfaces specials ending within
   // 3 days so a manager can decide whether to renew before they lapse.
@@ -123,79 +224,109 @@ export async function renderPricelist(root, navigate) {
   }
 
   // --- Filters ---
-  const filterRow = container.querySelector("#pricelist-filter-row");
-  function renderFilters() {
-    filterRow.innerHTML = `
-      <div class="segmented pricelist-brand-chips">
-        <button type="button" class="chip ${!brandFilter ? "chip-active" : ""}" data-brand="">${t("all_brands")}</button>
-        ${brands.map((b) => `<button type="button" class="chip ${brandFilter === b ? "chip-active" : ""}" data-brand="${escapeHtml(b)}">${escapeHtml(b)}</button>`).join("")}
-      </div>
-      <div class="segmented pricelist-brand-chips">
-        <button type="button" class="chip ${!categoryFilter ? "chip-active" : ""}" data-category="">${t("category_all")}</button>
-        ${categories.map((c) => `<button type="button" class="chip ${categoryFilter === c ? "chip-active" : ""}" data-category="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join("")}
-      </div>
-      <div class="segmented pricelist-brand-chips">
-        <button type="button" class="chip ${!packageFilter ? "chip-active" : ""}" data-package="">${t("all_packages")}</button>
-        ${packages.map((p) => `<button type="button" class="chip ${packageFilter === p ? "chip-active" : ""}" data-package="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join("")}
-      </div>
-      <div class="pricelist-filter-controls">
-        <button type="button" class="chip ${specialOnly ? "chip-active" : ""}" id="special-only-toggle">${t("has_special_price")}</button>
-        <select id="pricelist-sort" aria-label="${t("sort")}">
-          <option value="default" ${sortBy === "default" ? "selected" : ""}>${t("sort_default")}</option>
-          <option value="name" ${sortBy === "name" ? "selected" : ""}>${t("product_name")}</option>
-          <option value="standard_price" ${sortBy === "standard_price" ? "selected" : ""}>${t("price_standard")}</option>
-          <option value="retail_price" ${sortBy === "retail_price" ? "selected" : ""}>${t("price_retail")}</option>
-        </select>
-        <button type="button" class="icon-btn" id="pricelist-sort-reverse" aria-label="${t("reverse_sort_order")}" aria-pressed="${sortReversed}">${sortReversed ? "▲" : "▼"}</button>
-      </div>
-      <div class="pricelist-price-range">
-        <span class="muted">${t("price_range")}:</span>
-        <input type="number" min="0" id="price-min" placeholder="${t("min")}" value="${priceMin ?? ""}" aria-label="${t("min")}" />
-        <span class="muted">&ndash;</span>
-        <input type="number" min="0" id="price-max" placeholder="${t("max")}" value="${priceMax ?? ""}" aria-label="${t("max")}" />
+  // A compact 44px icon button that opens a bottom sheet -- same shape as
+  // customers.js's own filterIconButton, kept local here since nothing
+  // outside this view needs it (see customers.js for the original).
+  function filterIconButton({ key, icon, label, active, count }) {
+    const a11yLabel = count > 1 ? `${label} (${count})` : label;
+    return `<button type="button" class="filter-icon-btn ${active ? "filter-icon-btn-active" : ""}" data-filter-btn="${key}" data-filter-count="${count || 0}" aria-label="${escapeHtml(a11yLabel)}" title="${escapeHtml(a11yLabel)}">
+      ${icon}
+      ${count > 1 ? `<span class="filter-icon-count" aria-hidden="true">${count}</span>` : active ? `<span class="filter-icon-dot" aria-hidden="true"></span>` : ""}
+    </button>`;
+  }
+
+  // Single-select bottom sheet, e.g. for the package/unit filter -- same
+  // shape as customers.js's own openFilterSheet.
+  function openFilterSheet(titleText, options, currentValue, onSelect) {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet filter-sheet">
+        <h2>${escapeHtml(titleText)}</h2>
+        <div class="filter-sheet-options">
+          ${options
+            .map(
+              (o) => `
+            <button type="button" class="filter-sheet-option ${o.value === currentValue ? "filter-sheet-option-selected" : ""}" data-value="${escapeHtml(o.value)}">
+              <span>${escapeHtml(o.label)}</span>
+              ${o.value === currentValue ? `<span class="filter-sheet-check">${icons.checkCircle}</span>` : ""}
+            </button>
+          `
+            )
+            .join("")}
+        </div>
       </div>
     `;
-    filterRow.querySelectorAll("[data-brand]").forEach((btn) => {
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+    overlay.querySelectorAll(".filter-sheet-option").forEach((btn) => {
       btn.addEventListener("click", () => {
-        brandFilter = btn.dataset.brand;
-        renderFilters();
-        paint();
+        onSelect(btn.dataset.value);
+        overlay.remove();
       });
     });
-    filterRow.querySelectorAll("[data-category]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        categoryFilter = btn.dataset.category;
-        renderFilters();
-        paint();
+  }
+
+  const filterRow = container.querySelector("#pricelist-filter-row");
+  function renderFilters() {
+    filterRow.innerHTML = [
+      filterIconButton({
+        key: "tree",
+        icon: icons.filter,
+        label: t("pricelist_filter_title"),
+        active: selectedProductIds.size > 0,
+        count: selectedProductIds.size,
+      }),
+      packages.length
+        ? filterIconButton({
+            key: "package",
+            icon: icons.box,
+            label: t("unit"),
+            active: Boolean(packageFilter),
+          })
+        : "",
+      filterIconButton({
+        key: "special",
+        icon: icons.tag,
+        label: t("has_special_price"),
+        active: specialOnly,
+      }),
+    ]
+      .filter(Boolean)
+      .join("");
+
+    filterRow.querySelector('[data-filter-btn="tree"]')?.addEventListener("click", () => {
+      openTriStateTreeSheet(t("pricelist_filter_title"), {
+        tree: buildProductTree(products),
+        initialSelectedIds: selectedProductIds,
+        countUnitLabel: t("products_unit"),
+        totalLabel: (n) => t("products_selected_count").replace("{n}", n),
+        searchPlaceholder: t("pricelist_search_brands_categories"),
+        onApply: (ids) => {
+          selectedProductIds.clear();
+          for (const id of ids) selectedProductIds.add(id);
+          renderFilters();
+          paint();
+        },
       });
     });
-    filterRow.querySelectorAll("[data-package]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        packageFilter = btn.dataset.package;
-        renderFilters();
-        paint();
-      });
+
+    filterRow.querySelector('[data-filter-btn="package"]')?.addEventListener("click", () => {
+      openFilterSheet(
+        t("unit"),
+        [{ value: "", label: t("all_packages") }, ...packages.map((p) => ({ value: p, label: p }))],
+        packageFilter,
+        (value) => {
+          packageFilter = value;
+          renderFilters();
+          paint();
+        }
+      );
     });
-    const priceMinInput = filterRow.querySelector("#price-min");
-    const priceMaxInput = filterRow.querySelector("#price-max");
-    const applyPriceRange = debounce(() => {
-      priceMin = priceMinInput.value ? Number(priceMinInput.value) : null;
-      priceMax = priceMaxInput.value ? Number(priceMaxInput.value) : null;
-      paint();
-    }, 300);
-    priceMinInput.addEventListener("input", applyPriceRange);
-    priceMaxInput.addEventListener("input", applyPriceRange);
-    filterRow.querySelector("#special-only-toggle").addEventListener("click", () => {
+
+    filterRow.querySelector('[data-filter-btn="special"]')?.addEventListener("click", () => {
       specialOnly = !specialOnly;
-      renderFilters();
-      paint();
-    });
-    filterRow.querySelector("#pricelist-sort").addEventListener("change", (e) => {
-      sortBy = e.target.value;
-      paint();
-    });
-    filterRow.querySelector("#pricelist-sort-reverse").addEventListener("click", () => {
-      sortReversed = !sortReversed;
       renderFilters();
       paint();
     });
@@ -214,12 +345,9 @@ export async function renderPricelist(root, navigate) {
   function currentlyFiltered() {
     const q = searchQuery.trim().toLowerCase();
     return products.filter((p) => {
-      if (brandFilter && p.brand !== brandFilter) return false;
-      if (categoryFilter && p.family !== categoryFilter) return false;
+      if (selectedProductIds.size && !selectedProductIds.has(String(p.id))) return false;
       if (packageFilter && p.unit !== packageFilter) return false;
       if (specialOnly && p.effective_special_amd === null) return false;
-      if (priceMin !== null && p.effective_standard_amd < priceMin) return false;
-      if (priceMax !== null && p.effective_standard_amd > priceMax) return false;
       if (q && !`${p.name} ${p.sku ?? ""} ${p.brand ?? ""}`.toLowerCase().includes(q)) return false;
       return true;
     });
@@ -441,18 +569,11 @@ export async function renderPricelist(root, navigate) {
       if (content === "selected") {
         params.ids = [...selectedIds].join(",");
       } else if (content === "filtered") {
-        // The server's brand/family shorthand only covers those two
-        // filters -- if anything else on screen is narrowing the list
-        // (package, price range, search, special-only), fall back to an
-        // explicit id list so the export can't include more than what's
-        // actually visible.
-        const onlyBrandOrFamily = !packageFilter && priceMin === null && priceMax === null && !specialOnly && !searchQuery.trim();
-        if (onlyBrandOrFamily && (brandFilter || categoryFilter)) {
-          if (brandFilter) params.brand = brandFilter;
-          if (categoryFilter) params.family = categoryFilter;
-        } else {
-          params.ids = currentlyFiltered().map((p) => p.id).join(",");
-        }
+        // The brand/category tree filter can span multiple brands/categories
+        // at once, so there's no single brand/family shorthand left to fall
+        // back to -- always send an explicit id list of whatever's actually
+        // visible on screen right now.
+        params.ids = currentlyFiltered().map((p) => p.id).join(",");
       }
       window.location.href = api.productsExportXlsxUrl(params);
       overlay.remove();
