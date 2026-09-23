@@ -344,7 +344,9 @@ export async function renderDelivery(root, navigate) {
 
     const amountInput = overlay.querySelector("#amount-collected-input");
     amountInput.addEventListener("input", () => {
-      amountCollected = Number(amountInput.value) || 0;
+      // AMD has no subunit in this app (see formatAmd) -- rounded on input
+      // rather than left as whatever decimal was typed/pasted.
+      amountCollected = Math.round(Number(amountInput.value) || 0);
       overlay.querySelector("#new-balance-display").innerHTML = newBalanceHtml();
     });
 

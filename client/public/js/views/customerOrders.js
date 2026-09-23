@@ -1,11 +1,6 @@
 import { api } from "../api.js";
-import { escapeHtml, formatDateDMY } from "../util.js";
+import { escapeHtml, formatDateDMY, formatAmd } from "../util.js";
 import { t } from "../i18n.js";
-
-function formatAmd(value) {
-  if (value == null) return "";
-  return `${Number(value).toLocaleString()} ${t("amd")}`;
-}
 
 export async function renderCustomerOrders(root, navigate, customerId) {
   root.innerHTML = `<div class="detail-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;

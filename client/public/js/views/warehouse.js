@@ -243,6 +243,19 @@ export async function renderWarehouse(root, navigate) {
     // this screen visit, only resetting on tab switch/reload.
     const expandedBrands = new Set();
     const expandedFamilies = new Set();
+    // While forceExpand is on (a search/filter/cost-toggle in effect), every
+    // group starts open regardless of expandedBrands/Families above -- but
+    // a group the WM explicitly collapses in that state needs to actually
+    // stay collapsed, not spring back open on the next render (reported as
+    // "tap landing cost and you can't collapse the list back"). These hold
+    // that per-key override for as long as forceExpand stays on; cleared
+    // the moment it goes off, so a later forced session starts fresh (matching
+    // "auto-expand everything") and normal mode is governed purely by
+    // expandedBrands/Families again, untouched by whatever was collapsed
+    // under force.
+    const forceCollapsedBrands = new Set();
+    const forceCollapsedFamilies = new Set();
+    let wasForceExpand = false;
 
     function productRowHtml(p) {
       return `
@@ -324,6 +337,14 @@ export async function renderWarehouse(root, navigate) {
       // nothing at all. Doesn't touch the remembered manual state, so
       // clearing the search/toggle goes back to whatever the WM had open.
       const forceExpand = Boolean(searchInput.value.trim()) || Boolean(brandFilter) || costMode !== "off" || showWholesale;
+      if (!forceExpand && wasForceExpand) {
+        // Leaving forced mode -- these overrides only ever meant anything
+        // relative to forceExpand being on, so drop them rather than carry
+        // stale entries into a later forced session.
+        forceCollapsedBrands.clear();
+        forceCollapsedFamilies.clear();
+      }
+      wasForceExpand = forceExpand;
       const { brandTotals, familyTotals } = computeTotals(lastRows);
 
       // Bucket the already-sorted rows into brand -> family -> [products];
@@ -354,7 +375,7 @@ export async function renderWarehouse(root, navigate) {
 
       let html = "";
       for (const brand of brands) {
-        const brandExpanded = forceExpand || expandedBrands.has(brand.key);
+        const brandExpanded = forceExpand ? !forceCollapsedBrands.has(brand.key) : expandedBrands.has(brand.key);
         html += groupHeaderHtml({
           label: brand.label,
           toggleAttr: "data-brand-toggle",
@@ -366,7 +387,7 @@ export async function renderWarehouse(root, navigate) {
         for (const fKey of brand.familyOrder) {
           const family = brand.families.get(fKey);
           const familyKey = `${brand.key}||${fKey}`;
-          const familyExpanded = forceExpand || expandedFamilies.has(familyKey);
+          const familyExpanded = forceExpand ? !forceCollapsedFamilies.has(familyKey) : expandedFamilies.has(familyKey);
           html += groupHeaderHtml({
             label: family.label,
             toggleAttr: "data-family-toggle",
@@ -383,16 +404,28 @@ export async function renderWarehouse(root, navigate) {
       listEl.querySelectorAll("[data-brand-toggle]").forEach((btn) => {
         btn.addEventListener("click", () => {
           const key = btn.dataset.brandToggle;
-          if (expandedBrands.has(key)) expandedBrands.delete(key);
-          else expandedBrands.add(key);
+          if (forceExpand) {
+            if (forceCollapsedBrands.has(key)) forceCollapsedBrands.delete(key);
+            else forceCollapsedBrands.add(key);
+          } else if (expandedBrands.has(key)) {
+            expandedBrands.delete(key);
+          } else {
+            expandedBrands.add(key);
+          }
           render();
         });
       });
       listEl.querySelectorAll("[data-family-toggle]").forEach((btn) => {
         btn.addEventListener("click", () => {
           const key = btn.dataset.familyToggle;
-          if (expandedFamilies.has(key)) expandedFamilies.delete(key);
-          else expandedFamilies.add(key);
+          if (forceExpand) {
+            if (forceCollapsedFamilies.has(key)) forceCollapsedFamilies.delete(key);
+            else forceCollapsedFamilies.add(key);
+          } else if (expandedFamilies.has(key)) {
+            expandedFamilies.delete(key);
+          } else {
+            expandedFamilies.add(key);
+          }
           render();
         });
       });

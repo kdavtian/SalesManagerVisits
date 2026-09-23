@@ -89,7 +89,7 @@ export async function renderCheckin(root, navigate, customerId) {
 
       <label id="amount-collected-field" hidden>
         ${t("amount_collected_amd")}
-        <input type="number" name="amount_collected_amd" id="amount-collected-input" min="1" step="1" inputmode="numeric" placeholder="${t("amount_collected_placeholder")}" />
+        <input type="number" name="amount_collected_amd" id="amount-collected-input" min="1" step="any" inputmode="numeric" placeholder="${t("amount_collected_placeholder")}" />
         <p class="form-error" id="amount-collected-error" hidden>${t("amount_collected_required")}</p>
       </label>
 
@@ -424,7 +424,10 @@ export async function renderCheckin(root, navigate, customerId) {
       return;
     }
 
-    const amountCollected = outcomes.includes("payment_collected") ? Number(data.get("amount_collected_amd")) : null;
+    // Rounded here, not just step="1" on the input -- a decimal amount used
+    // to silently block the browser's own native form submission with no
+    // visible error at all.
+    const amountCollected = outcomes.includes("payment_collected") ? Math.round(Number(data.get("amount_collected_amd"))) : null;
     if (outcomes.includes("payment_collected") && (!Number.isFinite(amountCollected) || amountCollected <= 0)) {
       amountError.hidden = false;
       amountError.scrollIntoView({ behavior: "smooth", block: "center" });

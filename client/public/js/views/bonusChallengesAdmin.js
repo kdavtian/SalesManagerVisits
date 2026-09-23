@@ -6,7 +6,7 @@
 // picker (the one type this dialog couldn't create before) is worth
 // building. The API payload shape is unchanged from Phase 4.
 import { api } from "../api.js";
-import { activateDialog, escapeHtml, formatDateTime } from "../util.js";
+import { activateDialog, escapeHtml, formatDateTime, formatAmd } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 import { ALL_ROLES } from "../quickActions.js";
@@ -62,7 +62,7 @@ export async function renderBonusChallengesSection(container) {
           </div>
           <div class="user-row-meta">
             <span class="muted">
-              ${tpl.reward_amd ? `${Number(tpl.reward_amd).toLocaleString()} AMD` : "No cash reward"}
+              ${tpl.reward_amd ? formatAmd(tpl.reward_amd) : "No cash reward"}
               ${tpl.watermelon_point_value ? ` · ${tpl.watermelon_point_value} watermelon points` : ""}
               · created ${formatDateTime(tpl.created_at)}
             </span>
@@ -423,7 +423,7 @@ async function openNewChallengeWizard(onSaved) {
         <div class="card"><strong>${escapeHtml(draft.title)}</strong><div class="muted">${TYPE_LABELS[draft.type]} · ${RECURRENCE_LABELS[draft.recurrence]}</div></div>
         <div class="card"><div class="muted">Targets</div>${escapeHtml(targetsSummary)}</div>
         <div class="card"><div class="muted">Audience</div>${escapeHtml(audienceSummary)}</div>
-        <div class="card"><div class="muted">Reward</div>${draft.rewardAmd ? `${Number(draft.rewardAmd).toLocaleString()} AMD` : "No cash reward"}${draft.watermelonPointValue ? ` · ${draft.watermelonPointValue} watermelon points` : ""}</div>
+        <div class="card"><div class="muted">Reward</div>${draft.rewardAmd ? formatAmd(draft.rewardAmd) : "No cash reward"}${draft.watermelonPointValue ? ` · ${draft.watermelonPointValue} watermelon points` : ""}</div>
       </div>
       <p class="muted">This creates a draft -- publish it from the list once you're ready for it to start generating rounds.</p>
     `;
@@ -591,7 +591,7 @@ export async function renderBonusRewardClaimsSection(container) {
         <div class="card user-row">
           <div class="user-row-top">
             <div>
-              <strong>${Number(c.amount_amd).toLocaleString()} AMD</strong>
+              <strong>${formatAmd(c.amount_amd)}</strong>
               <span class="muted">round #${c.round_id}${c.hold_reason ? ` · ${escapeHtml(c.hold_reason)}` : ""}${c.rejection_reason ? ` · ${escapeHtml(c.rejection_reason)}` : ""}</span>
             </div>
             <span class="badge ${CLAIM_STATUS_BADGE[c.status] ?? "badge-neutral"}">${escapeHtml(c.status)}</span>

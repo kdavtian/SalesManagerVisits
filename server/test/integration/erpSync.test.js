@@ -14,7 +14,7 @@ process.env.ERP_SYNC_KEY = "itest-sync-key";
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startTestServer, stopTestServer, cleanupAll, createCustomer, createUser, apiRequest } from "./helpers.js";
+import { startTestServer, stopTestServer, cleanupAll, createCustomer, createUser, apiRequest, apiFormRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
 
 // POST /api/erp-sync unconditionally TRUNCATEs erp_customer_data on every
@@ -143,4 +143,36 @@ test("POST /api/erp-sync: TRUNCATE-and-replace -- a customer absent from the new
 
   const { rows: afterRows } = await pool.query("SELECT erp_customer_id FROM erp_customer_data WHERE erp_customer_id = $1", [staleId]);
   assert.equal(afterRows.length, 0, "a customer dropped from the extract must not survive the sync");
+});
+
+// --- Combined sync notification (item 4: "I receive 4 notifications, want 1") ----
+
+test("POST /api/erp-sync/daily-report and /reports: two calls in quick succession land as ONE combined notification, not two", async () => {
+  const admin = await createUser("admin");
+  const cookie = await loginAs(admin.email);
+
+  const dailyReport = await apiRequest("/api/erp-sync/daily-report", {
+    method: "POST",
+    body: { report_date: "2026-09-23", sales: {}, payments: {}, balance: {} },
+    headers: { "X-Sync-Key": SYNC_KEY },
+  });
+  assert.equal(dailyReport.status, 200);
+
+  const form = new FormData();
+  form.append("report_type", "sales_director");
+  form.append("report_date", "2026-09-23");
+  form.append("file", new Blob([Buffer.from("PK\x03\x04")], { type: "application/octet-stream" }), "report.xlsx");
+  const reportUpload = await apiFormRequest("/api/erp-sync/reports", { form, headers: { "X-Sync-Key": SYNC_KEY } });
+  assert.equal(reportUpload.status, 200);
+
+  // The debounce window is shortened to 50ms in tests (NODE_ENV === "test",
+  // see erpSync.js) -- wait past it before checking what actually got sent.
+  await new Promise((resolve) => setTimeout(resolve, 250));
+
+  const notifications = await apiRequest("/api/notifications", { cookie });
+  assert.equal(notifications.status, 200);
+  const combined = notifications.data.filter((n) => n.type === "sync_reports_ready");
+  assert.equal(combined.length, 1, "two erp-sync calls close together must produce exactly one notification, not one per call");
+  assert.match(combined[0].body, /Օրական հաշվետվություն/);
+  assert.match(combined[0].body, /Sales Director/);
 });

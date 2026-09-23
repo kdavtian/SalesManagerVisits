@@ -454,9 +454,13 @@ export function setTierSelectorValue(container, tier) {
   if (hiddenInput) hiddenInput.value = tier;
 }
 
+// AMD has no subunit in everyday use -- always rendered as a whole number
+// (rounded, not truncated), never with decimals, regardless of what
+// precision the underlying value carries (e.g. a computed landing/net
+// cost synced from the source spreadsheet's own formulas).
 export function formatAmd(value) {
   if (value == null) return "";
-  return `${Number(value).toLocaleString()} ${t("amd")}`;
+  return `${Math.round(Number(value)).toLocaleString()} ${t("amd")}`;
 }
 
 export function formatDistance(meters) {
