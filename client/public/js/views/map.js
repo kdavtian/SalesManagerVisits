@@ -5,7 +5,7 @@ import { buildCustomerTree, renderTriStateTree } from "../regionTree.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
 import { canViewTeamLocations, canEditDirectly, canPlanForOthers, canReassignCustomers, state } from "../state.js";
-import { getClusterPins, setClusterPins, getCompassMode, setCompassMode, isStrongDevice, getMapTileCacheEnabled, setMapTileCacheEnabled } from "../mapPrefs.js";
+import { getClusterPins, setClusterPins, getCompassMode, setCompassMode, getMapTileCacheEnabled } from "../mapPrefs.js";
 import { getPerfMode } from "../perfMode.js";
 import { ensureLeaflet } from "../leafletLoader.js";
 import { loadWithCache } from "../listCache.js";
@@ -235,16 +235,6 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
               <span class="toggle-thumb"></span>
             </button>
           </div>
-          ${
-            isStrongDevice()
-              ? `<div class="map-legend-pref-row">
-                  <span>${t("map_tile_cache")}<span class="map-legend-pref-hint">${t("map_tile_cache_hint")}</span></span>
-                  <button type="button" class="toggle-switch" id="map-legend-toggle-tile-cache" role="switch" aria-checked="${getMapTileCacheEnabled()}" aria-label="${t("map_tile_cache")}">
-                    <span class="toggle-thumb"></span>
-                  </button>
-                </div>`
-              : ""
-          }
         </div>
         <div class="map-legend-divider"></div>
         <p class="map-legend-note">${t("map_legend_shape_note")}</p>
@@ -2309,14 +2299,6 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       updateLocateButtonState();
       stopHeading();
     }
-  });
-
-  const tileCacheToggle = root.querySelector("#map-legend-toggle-tile-cache");
-  tileCacheToggle?.addEventListener("click", () => {
-    const next = tileCacheToggle.getAttribute("aria-checked") !== "true";
-    tileCacheToggle.setAttribute("aria-checked", String(next));
-    setMapTileCacheEnabled(next);
-    if (next) warmTileCache();
   });
 
   root.addEventListener("click", (event) => {

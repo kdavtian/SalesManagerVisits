@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v211";
+const CACHE_VERSION = "field-visits-v212";
 const TILE_CACHE = "field-visits-tiles-v4";
 // Anything fetched at runtime that wasn't already in APP_SHELL gets cached
 // here, kept separate from CACHE_VERSION on purpose -- see trimCache below,
@@ -202,7 +202,17 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.pathname.startsWith("/api/")) return;
 
-  if (url.hostname.endsWith("basemaps.cartocdn.com")) {
+  // The primary CARTO tile provider (below) is what map.js reaches for
+  // first, but it can fall back to these two (see map.js's own
+  // FALLBACK_TILE_URLS) when CARTO is blocked or unreachable -- exactly
+  // the "poor/blocked connection" scenario this caching exists for, so a
+  // device that's fallen back to them needs the same cache-first coverage,
+  // not just the primary provider.
+  if (
+    url.hostname.endsWith("basemaps.cartocdn.com") ||
+    url.hostname.endsWith("tile.openstreetmap.org") ||
+    url.hostname === "maps.wikimedia.org"
+  ) {
     event.respondWith(caches.open(TILE_CACHE).then(async (cache) => {
       const cached = await cache.match(request);
       const network = fetch(request).then((res) => {
@@ -215,17 +225,50 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (url.origin !== self.location.origin) return;
+
+  // Cache-first, then revalidate in the background -- same shape as the
+  // CARTO tile handler above. An already-cached same-origin file (the
+  // whole precached APP_SHELL, plus anything RUNTIME_CACHE has since
+  // picked up) is now served INSTANTLY regardless of how slow or flaky the
+  // network currently is. The old network-first version waited on fetch()
+  // to actually reject before ever trying the cache -- fine on a fast
+  // connection, but on a poor one (not fully offline, just slow) fetch()
+  // typically doesn't reject quickly, it just hangs, so the "instant load
+  // from cache" the precache exists for never actually happened until
+  // that hang gave up or timed out. A fetch still runs every time in the
+  // background to keep the cache fresh for next time (and to serve a
+  // first-ever, not-yet-cached request); the existing "Check for updates"
+  // banner (updateBanner.js) is what surfaces a genuinely new deployed
+  // version to the user, not this background fetch.
   if (request.mode === "navigate") {
-    event.respondWith(fetch(request).catch(() => caches.match("/index.html")));
+    event.respondWith(
+      caches.match("/index.html").then((cached) => {
+        const network = fetch(request)
+          .then((res) => {
+            if (res.ok) caches.open(CACHE_VERSION).then((cache) => cache.put("/index.html", res.clone()));
+            return res;
+          })
+          .catch(() => cached);
+        return cached || network;
+      })
+    );
     return;
   }
-  event.respondWith(fetch(request).then((res) => {
-    if (res.ok) {
-      caches.open(RUNTIME_CACHE).then(async (cache) => {
-        await cache.put(request, res.clone());
-        trimCache(cache, RUNTIME_CACHE_MAX_ENTRIES);
-      });
-    }
-    return res;
-  }).catch(() => caches.match(request)));
+
+  event.respondWith(
+    caches.match(request).then((cached) => {
+      const network = fetch(request)
+        .then((res) => {
+          if (res.ok) {
+            caches.open(RUNTIME_CACHE).then(async (cache) => {
+              await cache.put(request, res.clone());
+              trimCache(cache, RUNTIME_CACHE_MAX_ENTRIES);
+            });
+          }
+          return res;
+        })
+        .catch(() => cached);
+      return cached || network;
+    })
+  );
 });
