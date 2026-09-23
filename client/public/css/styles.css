@@ -3025,6 +3025,10 @@ label.checkbox-row input[type="checkbox"] {
    land on the checkbox so the two don't fight. Same grid-template-rows
    0fr->1fr reveal trick as .by-manager-collapse, reused instead of
    reinventing an animation. */
+.route-plan-tree-search {
+  margin-bottom: 10px;
+}
+
 .route-plan-tree-total {
   margin: 0 4px 8px;
   font-size: 0.85rem;
@@ -7880,30 +7884,16 @@ form select,
 }
 
 /* Pricelist browse view -- filters, collapsible brand groups, price
-   hierarchy row styling. */
+   hierarchy row styling. Same fixed-size icon-button row as
+   .customer-filter-row above -- kept a fixed 44px square regardless of
+   label length, immune to unifiedSearchEnhancements.js reparenting it
+   into the combined search bar's own actions row. */
 .pricelist-filter-row {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 0 16px 8px;
-}
-.pricelist-brand-chips {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-}
-.pricelist-filter-controls {
-  display: flex;
-  align-items: center;
   gap: 8px;
 }
-.pricelist-filter-controls select {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 6px 8px;
-  background: var(--bg-card);
-  color: var(--text);
-  font-size: 0.85rem;
+.pricelist-filter-row:not(:empty) {
+  padding: 0 16px 10px;
 }
 .pricelist-expiring-banner {
   display: flex;
@@ -8052,21 +8042,6 @@ form select,
   align-items: flex-start;
 }
 
-.pricelist-price-range {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.85rem;
-}
-.pricelist-price-range input {
-  width: 80px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 6px 8px;
-  background: var(--bg-card);
-  color: var(--text);
-  font-size: 0.85rem;
-}
 .pricelist-select-bar {
   display: flex;
   align-items: center;

@@ -277,16 +277,56 @@ export function renderTriStateTree(listEl, { tree, initialSelectedIds, countUnit
   return selectedIds;
 }
 
+// Hides/shows leaf rows and their ancestor group nodes to match a search
+// query -- a leaf matches on its own name; a group matches if its own name
+// matches OR any descendant leaf/group does, and auto-expands to reveal
+// whichever child actually matched. Processes .route-plan-tree-node
+// elements in reverse document order (innermost/deepest first) so a
+// parent's "does any child still match" check always sees its children's
+// already-resolved hidden state.
+function applyTreeSearch(bodyEl, query) {
+  const q = query.trim().toLowerCase();
+  bodyEl.querySelectorAll(".route-plan-tree-row-leaf").forEach((row) => {
+    const name = row.querySelector(".route-plan-tree-name")?.textContent.toLowerCase() || "";
+    row.hidden = q.length > 0 && !name.includes(q);
+  });
+  [...bodyEl.querySelectorAll(".route-plan-tree-node")].reverse().forEach((nodeEl) => {
+    if (!q) {
+      nodeEl.hidden = false;
+      return;
+    }
+    const headerRow = nodeEl.querySelector(":scope > .route-plan-tree-row");
+    const ownName = headerRow?.querySelector(".route-plan-tree-name")?.textContent.toLowerCase() || "";
+    const hasVisibleChild = Boolean(
+      nodeEl.querySelector(".route-plan-tree-row-leaf:not([hidden]), .route-plan-tree-node:not([hidden])")
+    );
+    nodeEl.hidden = !ownName.includes(q) && !hasVisibleChild;
+    if (!nodeEl.hidden && hasVisibleChild) {
+      headerRow?.setAttribute("aria-expanded", "true");
+      nodeEl.querySelector(":scope > .route-plan-tree-children")?.classList.add("expanded");
+    }
+  });
+}
+
 // A compact 44px icon button that opens this tree as a full-height bottom
 // sheet -- for the Customers list's region filter, where there's no
 // existing host sheet to render into (unlike Route Plans/Plan Day, which
-// already have one with a Save/Done button of their own).
-export function openTriStateTreeSheet(titleText, { tree, initialSelectedIds, countUnitLabel, totalLabel, onApply }) {
+// already have one with a Save/Done button of their own). searchPlaceholder
+// is optional -- pass it to add a search box above the tree that filters
+// leaves/groups by name as the caller types (Pricelist's Brand > Category >
+// Product picker; every other caller so far has a short enough tree that a
+// search box would just be another tap for nothing).
+export function openTriStateTreeSheet(titleText, { tree, initialSelectedIds, countUnitLabel, totalLabel, onApply, searchPlaceholder }) {
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
   overlay.innerHTML = `
     <div class="sheet filter-sheet">
       <h2>${escapeHtml(titleText)}</h2>
+      ${
+        searchPlaceholder
+          ? `<input type="search" class="route-plan-tree-search" id="tree-sheet-search" placeholder="${escapeHtml(searchPlaceholder)}" aria-label="${escapeHtml(searchPlaceholder)}" />`
+          : ""
+      }
       <div id="tree-sheet-body"></div>
       <div class="sheet-actions">
         <button type="button" class="btn" id="tree-sheet-clear">${t("clear")}</button>
@@ -299,9 +339,13 @@ export function openTriStateTreeSheet(titleText, { tree, initialSelectedIds, cou
   const bodyEl = overlay.querySelector("#tree-sheet-body");
   let selectedIds = renderTriStateTree(bodyEl, { tree, initialSelectedIds, countUnitLabel, totalLabel });
 
+  const searchInput = overlay.querySelector("#tree-sheet-search");
+  searchInput?.addEventListener("input", () => applyTreeSearch(bodyEl, searchInput.value));
+
   overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
   overlay.querySelector("#tree-sheet-clear").addEventListener("click", () => {
     selectedIds = renderTriStateTree(bodyEl, { tree, initialSelectedIds: [], countUnitLabel, totalLabel });
+    if (searchInput?.value) applyTreeSearch(bodyEl, searchInput.value);
   });
   overlay.querySelector("#tree-sheet-done").addEventListener("click", () => {
     overlay.remove();

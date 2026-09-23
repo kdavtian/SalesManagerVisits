@@ -94,7 +94,8 @@ function installInlineClearButton(input) {
 // document.body, not inside #app -- covered by widening boot()'s observer
 // to body below rather than listed as a separate concern here.
 const INLINE_CLEAR_SELECTORS = [
-  "#pricelist-search",
+  // #pricelist-search moved to the full combined-search treatment --
+  // see enhancePricelist() below -- which installs its own clear button.
   "#product-search",
   "#inventory-search",
   // #payment-search moved to the full combined-search treatment --
@@ -307,6 +308,88 @@ function enhanceCustomers() {
   syncCustomerFilterButtons(view.querySelector("#customer-filter-row"));
 }
 
+function pricelistIconFor(key) {
+  if (key === "tree") return icons.filter;
+  if (key === "package") return icons.box;
+  if (key === "special") return icons.tag;
+  return icons.filter;
+}
+
+function syncPricelistFilterButtons(filterRow) {
+  filterRow?.querySelectorAll("[data-filter-btn]").forEach((button) => {
+    const active = button.classList.contains("filter-icon-btn-active") || button.classList.contains("activity-search-filter-btn-active");
+    const count = Number(button.dataset.filterCount || 0);
+    button.classList.remove("filter-icon-btn", "filter-icon-btn-active");
+    button.classList.add("activity-search-filter-btn", "unified-pricelist-filter-btn");
+    button.classList.toggle("activity-search-filter-btn-active", active);
+    const badge =
+      count > 1
+        ? `<span class="activity-search-filter-count" aria-hidden="true">${count}</span>`
+        : active
+          ? '<span class="activity-search-filter-dot" aria-hidden="true"></span>'
+          : "";
+    const wanted = `${pricelistIconFor(button.dataset.filterBtn)}${badge}`;
+    if (button.innerHTML !== wanted) button.innerHTML = wanted;
+  });
+}
+
+// Pricelist's Brand>Category>Product tree filter, package filter and
+// special-only toggle, plus its sort dropdown, folded into the same
+// combined-search pill Customers/Activity/Payments already use -- same
+// reparent-in-place approach as enhanceCustomers/enhancePayments above.
+function enhancePricelist() {
+  const input = document.querySelector("#pricelist-search");
+  const toolbar = input?.closest(".list-toolbar");
+  const view = input?.closest(".detail-view");
+  if (!input || !toolbar || !view) return;
+
+  let actions = toolbar.querySelector(":scope > .activity-search-actions");
+  if (!toolbar.dataset.unifiedPricelistSearch) {
+    toolbar.dataset.unifiedPricelistSearch = "true";
+    toolbar.classList.add("activity-search-combined", "pricelist-search-combined");
+    actions = document.createElement("div");
+    actions.className = "activity-search-actions pricelist-search-actions";
+    toolbar.appendChild(actions);
+
+    const sortBtn = view.querySelector("#pricelist-sort-btn");
+    const sortMenu = view.querySelector("#pricelist-sort-menu");
+    if (sortBtn && sortMenu) {
+      const wrap = document.createElement("div");
+      wrap.className = "activity-icon-dropdown pricelist-sort-wrap";
+      actions.appendChild(wrap);
+      wrap.append(sortBtn, sortMenu);
+      sortBtn.classList.remove("icon-btn");
+      sortBtn.classList.add("activity-search-filter-btn");
+      sortBtn.innerHTML = SEARCH_ICONS.sort;
+      sortMenu.classList.remove("dropdown-menu");
+      sortMenu.classList.add("activity-search-menu", "pricelist-search-menu");
+
+      const syncSort = () => {
+        const selected = sortMenu.querySelector('[data-sort][aria-checked="true"]')?.dataset.sort || "default";
+        ensureSelectedCheck(sortMenu, "[data-sort]");
+        syncDropdownButton(sortBtn, sortMenu, selected !== "default");
+      };
+      sortBtn.addEventListener("click", () => requestAnimationFrame(syncSort));
+      sortMenu.addEventListener("click", () => requestAnimationFrame(syncSort));
+      new MutationObserver(syncSort).observe(sortMenu, { subtree: true, attributes: true, attributeFilter: ["aria-checked", "hidden"] });
+      syncSort();
+    }
+
+    const filterRow = view.querySelector("#pricelist-filter-row");
+    if (filterRow) {
+      filterRow.classList.add("customer-filter-inline");
+      actions.insertBefore(filterRow, actions.querySelector(".pricelist-sort-wrap"));
+      const observer = new MutationObserver(() => syncPricelistFilterButtons(filterRow));
+      observer.observe(filterRow, { childList: true });
+      syncPricelistFilterButtons(filterRow);
+    }
+  }
+
+  actions = toolbar.querySelector(":scope > .activity-search-actions");
+  installClearButton(input, toolbar, actions);
+  syncPricelistFilterButtons(view.querySelector("#pricelist-filter-row"));
+}
+
 function mapFilterIcon(value) {
   if (value === "overdue") return icons.mapWarning;
   if (value === "visited") return SEARCH_ICONS.status;
@@ -423,6 +506,7 @@ function enhanceAll() {
   enhanceOrders();
   enhanceCustomers();
   enhancePayments();
+  enhancePricelist();
   enhanceMap();
   enhanceInlineClearButtons();
 }
