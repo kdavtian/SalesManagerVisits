@@ -6872,15 +6872,8 @@ button.list-row-icon {
 /* A hint that's collapsed behind a tappable "!" icon instead of always
    showing inline -- same footnote text as .settings-hint above, just
    hidden until the icon is tapped. */
-.settings-hint-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin: 6px 4px 0;
-}
-.settings-hint-row .settings-hint {
-  margin: 1px 0 0;
-}
+/* A standalone "!" toggle, e.g. sitting right on a page's own <h1> heading
+   (see views/sales.js) to collapse an explanatory note behind it. */
 .settings-hint-icon {
   flex-shrink: 0;
   width: 18px;
@@ -6899,6 +6892,33 @@ button.list-row-icon {
   padding: 0;
 }
 .settings-hint-icon[aria-expanded="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* A small "!" sitting inline right next to a settings row's own label
+   (settingsRow/settingsToggleRow's hintBtnId), instead of a hint icon
+   floating disconnected below the whole card -- the revealed text (the
+   paired hidden <p class="settings-hint">) still lands wherever the
+   caller places it, usually right under that card. */
+.settings-inline-hint-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 4px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-dim);
+  color: var(--text-dim);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.settings-inline-hint-icon[aria-expanded="true"] {
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -8469,19 +8489,31 @@ form select,
   margin-left: auto;
 }
 
-/* Sales screen's header info row -- the sync-freshness badge plus a small
-   toggle for the longer "what this data is" explanation (.sales-source-
-   hint, hidden by default), so the header stays one line instead of two
-   stacked paragraphs. */
+/* The "!" icon sits right on the "Sales" heading itself, collapsing the
+   sync-freshness note ("Castrol data as of ...", #sales-sync-hint-text)
+   behind it instead of always showing it under the title. */
+.sales-heading-with-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#sales-sync-hint-text {
+  margin: 2px 16px 4px;
+}
+
+#sales-sync-hint-text .sync-badge {
+  margin: 0;
+}
+
+/* Sales screen's header info row -- a small toggle for the longer "what
+   this data is" explanation (.sales-source-hint, hidden by default), so
+   the header stays one line instead of two stacked paragraphs. */
 .sales-info-row {
   display: flex;
   align-items: center;
   gap: 4px;
   margin: 0 12px;
-}
-
-.sales-info-row .sync-badge {
-  margin: 0;
 }
 
 .sales-info-toggle {

@@ -46,24 +46,32 @@ const GUIDE_VERSION = "1.19.1";
 // row's icon sits in a colored rounded-square, not just a plain glyph) --
 // one of the ICON_COLORS keys below. Reused across rows freely, same as
 // iOS itself reuses a handful of system colors across many settings.
-function settingsRow({ icon, label, value, id, interactive = true, color = "gray" }) {
+// hintBtnId: renders a small inline "!" button right next to the label
+// (instead of a separate detached hint icon floating below the whole
+// card) -- pairs with a hidden <p> the caller places wherever makes sense
+// and toggles via wireHintToggle(hintBtnId, hintTextId).
+function settingsRow({ icon, label, value, id, interactive = true, color = "gray", hintBtnId, hintTextId }) {
   const tag = interactive ? "button" : "div";
   return `
     <${tag} ${interactive ? 'type="button"' : ""} class="settings-list-row" ${id ? `id="${id}"` : ""}>
       <span class="settings-row-icon settings-row-icon-${color}">${icon}</span>
-      <span class="settings-row-label">${label}</span>
+      <span class="settings-row-label">
+        ${label}
+        ${hintBtnId ? `<span role="button" tabindex="0" class="settings-inline-hint-icon" id="${hintBtnId}" aria-expanded="false" aria-controls="${hintTextId}" aria-label="${t("more_info")}">!</span>` : ""}
+      </span>
       ${value !== undefined ? `<span class="settings-row-value muted">${value}</span>` : ""}
       ${interactive ? `<span class="settings-row-chevron">${ICON.chevron}</span>` : ""}
     </${tag}>
   `;
 }
 
-function settingsToggleRow({ icon, label, value, id, checked, resetId, color = "gray" }) {
+function settingsToggleRow({ icon, label, value, id, checked, resetId, color = "gray", hintBtnId, hintTextId }) {
   return `
     <div class="settings-list-row settings-toggle-row">
       <span class="settings-row-icon settings-row-icon-${color}">${icon}</span>
       <span class="settings-row-label">
         ${label}
+        ${hintBtnId ? `<span role="button" tabindex="0" class="settings-inline-hint-icon" id="${hintBtnId}" aria-expanded="false" aria-controls="${hintTextId}" aria-label="${t("more_info")}">!</span>` : ""}
         ${resetId ? `<button type="button" class="settings-reset-link" id="${resetId}">${t("reset_to_default")}</button>` : ""}
       </span>
       <span class="settings-row-value muted">${value}</span>
@@ -141,18 +149,13 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       <div class="card settings-list">
         ${settingsToggleRow({ icon: ICON.appearance, label: t("appearance"), value: getTheme() === "dark" ? t("dark") : t("light"), id: "toggle-appearance", checked: getTheme() === "dark", color: "indigo" })}
         ${settingsToggleRow({ icon: ICON.language, label: t("language"), value: getLang() === "hy" ? t("armenian") : t("english"), id: "toggle-language", checked: getLang() === "hy", color: "blue" })}
-        ${settingsToggleRow({ icon: ICON.bolt, label: t("efficiency_mode"), value: getPerfMode() === "efficiency" ? t("toggle_on") : t("toggle_off"), id: "toggle-perf-mode", checked: getPerfMode() === "efficiency", color: "orange" })}
+        ${settingsToggleRow({ icon: ICON.bolt, label: t("efficiency_mode"), value: getPerfMode() === "efficiency" ? t("toggle_on") : t("toggle_off"), id: "toggle-perf-mode", checked: getPerfMode() === "efficiency", color: "orange", hintBtnId: "efficiency-mode-hint-btn", hintTextId: "efficiency-mode-hint-text" })}
       </div>
-      <!-- .settings-hint-row collapses the explanatory footnote behind a
-           tappable "!" icon instead of always showing it inline (see
-           styles.css) -- efficiency mode is that card's last row, so the
-           hint explaining it needs to end the card, not sit after push
-           notifications too where it reads as a disclaimer for the whole
-           preferences section. -->
-      <div class="settings-hint-row">
-        <button type="button" class="settings-hint-icon" id="efficiency-mode-hint-btn" aria-expanded="false" aria-controls="efficiency-mode-hint-text" aria-label="${t("more_info")}">!</button>
-        <p class="muted settings-hint" id="efficiency-mode-hint-text" hidden>${t("efficiency_mode_hint")}</p>
-      </div>
+      <!-- The "!" icon sits right on the Efficiency mode row itself (see
+           settingsToggleRow's hintBtnId) instead of floating disconnected
+           below the whole card -- this paragraph is just where the
+           revealed text lands once tapped. -->
+      <p class="muted settings-hint" id="efficiency-mode-hint-text" hidden>${t("efficiency_mode_hint")}</p>
       <div class="card settings-list">
         <div class="settings-list-row settings-toggle-row settings-expandable-row" id="push-notifications-row">
           <span class="settings-row-icon settings-row-icon-red">${ICON.bell}</span>
@@ -193,13 +196,14 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       <h2 class="section-title">${t("about")}</h2>
       <div class="card settings-list">
         ${settingsRow({ icon: ICON.info, label: t("about_app"), value: `${t("version")} ${APP_VERSION}`, interactive: false, color: "blue" })}
-        ${settingsRow({ icon: ICON.book, label: t("user_guide"), value: "PDF", id: "row-user-guide", color: "orange" })}
+        ${settingsRow({ icon: ICON.book, label: t("user_guide"), value: "PDF", id: "row-user-guide", color: "orange", hintBtnId: "user-guide-hint-btn", hintTextId: "user-guide-hint-text" })}
         ${settingsRow({ icon: ICON.refresh, label: t("check_for_updates"), value: `<span id="check-updates-value"></span>`, id: "row-check-updates", color: "teal" })}
       </div>
-      <div class="settings-hint-row">
-        <button type="button" class="settings-hint-icon" id="user-guide-hint-btn" aria-expanded="false" aria-controls="user-guide-hint-text" aria-label="${t("more_info")}">!</button>
-        <p class="muted settings-hint" id="user-guide-hint-text" hidden>${t("user_guide_hint").replace("{v}", GUIDE_VERSION)}</p>
-      </div>
+      <!-- The "!" icon sits right on the User guide row itself (see
+           settingsRow's hintBtnId) instead of floating disconnected below
+           the whole card -- this paragraph is just where the revealed text
+           lands once tapped. -->
+      <p class="muted settings-hint" id="user-guide-hint-text" hidden>${t("user_guide_hint").replace("{v}", GUIDE_VERSION)}</p>
 
       <button class="btn btn-block btn-danger settings-logout" id="settings-logout">${t("log_out")}</button>
       </section>
@@ -457,15 +461,28 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     renderSettings(root, onLogout, onLanguageChange);
   });
 
-  // Hint text collapsed behind a tappable "!" icon (see styles.css's
-  // .settings-hint-row) -- toggles the paired paragraph's hidden state.
+  // Hint text collapsed behind a tappable inline "!" icon next to its row's
+  // own label (see styles.css's .settings-inline-hint-icon) -- toggles the
+  // paired paragraph's hidden state. A <span role="button"> rather than a
+  // real <button>, since the "User guide" row it sits inside is itself an
+  // interactive <button> and a nested button is invalid HTML -- so this
+  // wires both click and Enter/Space, and always stops the event from also
+  // triggering the row's own click handler (e.g. opening the guide PDF).
   function wireHintToggle(btnId, textId) {
     const btn = root.querySelector(`#${btnId}`);
     const textEl = root.querySelector(`#${textId}`);
-    btn.addEventListener("click", () => {
+    function toggle(event) {
+      event.stopPropagation();
       const expanded = btn.getAttribute("aria-expanded") === "true";
       btn.setAttribute("aria-expanded", String(!expanded));
       textEl.hidden = expanded;
+    }
+    btn.addEventListener("click", toggle);
+    btn.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        toggle(event);
+      }
     });
   }
   wireHintToggle("efficiency-mode-hint-btn", "efficiency-mode-hint-text");
