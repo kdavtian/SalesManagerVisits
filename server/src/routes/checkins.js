@@ -256,7 +256,7 @@ function isValidDateString(value) {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
-const CHECKINS_PAGE_SIZE = 200;
+const CHECKINS_PAGE_SIZE = 1000;
 
 checkinsRouter.get("/", async (req, res) => {
   const { range, customer_id, from, to, payments_only, offset } = req.query;

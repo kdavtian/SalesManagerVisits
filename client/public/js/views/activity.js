@@ -192,7 +192,7 @@ export async function renderActivity(root, navigate) {
         ${pills
           .map((p) => {
             // The server only tells us the *whole active range's* query hit
-            // the 200-row cap (checkinsCapped), not each manager's true
+            // the 1000-row cap (checkinsCapped), not each manager's true
             // total -- allCheckins itself is already truncated at that
             // point, so a manager's own count here can only be trusted as
             // "hit the cap" when it accounts for every row in the capped
