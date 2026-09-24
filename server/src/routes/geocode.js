@@ -17,6 +17,30 @@ const geocodeLimiter = rateLimit({
   message: { error: "Too many location lookups. Try again in a moment." },
 });
 
+// Nominatim's address breakdown -- state is Armenia's marz (e.g. "Shirak"),
+// suburb/city_district is a Yerevan district (e.g. "Ajapnyak"), city/town is
+// a marz's city for anywhere else. The client maps these onto the fixed
+// region/subregion lists rather than trusting arbitrary OSM naming, since
+// Nominatim's exact field per area varies.
+//
+// Yerevan itself is the one region that never lands in `state` -- OSM tags
+// it place=city as well as admin_level=4 (same level as a marz), and
+// Nominatim's addressdetails puts an area that's tagged as a city under
+// `city`, not `state`, even at that admin level. Every Yerevan address
+// therefore came back with a null region (and so no auto-fill at all --
+// matchRegion(null) short-circuits before ever looking at the fixed region
+// list), regardless of how confidently `suburb`/`city_district` identified
+// the actual district. Detected here by name instead, in either script
+// Nominatim might use per accept-language.
+function regionAndSubregionFrom(address) {
+  const cityOrTown = address?.city || address?.town || null;
+  const isYerevan = typeof cityOrTown === "string" && /^(yerevan|երևան)$/i.test(cityOrTown.trim());
+  return {
+    region: address?.state || (isYerevan ? cityOrTown : null),
+    subregion: address?.suburb || address?.city_district || (isYerevan ? null : cityOrTown) || address?.town || null,
+  };
+}
+
 geocodeRouter.get("/reverse", geocodeLimiter, async (req, res) => {
   const lat = Number(req.query.lat);
   const lng = Number(req.query.lng);
@@ -44,16 +68,9 @@ geocodeRouter.get("/reverse", geocodeLimiter, async (req, res) => {
   }
 
   const data = await response.json();
-  // Nominatim's address breakdown -- state is Armenia's marz (e.g.
-  // "Yerevan", "Shirak"), suburb/city_district is a Yerevan district
-  // (e.g. "Ajapnyak"), city/town is a marz's city for anywhere else. The
-  // client maps these onto the fixed region/subregion lists rather than
-  // trusting arbitrary OSM naming, since Nominatim's exact field per area
-  // varies.
   res.json({
     address: data.display_name || null,
-    region: data.address?.state || null,
-    subregion: data.address?.suburb || data.address?.city_district || data.address?.city || data.address?.town || null,
+    ...regionAndSubregionFrom(data.address),
   });
 });
 
@@ -88,8 +105,7 @@ geocodeRouter.get("/search", geocodeLimiter, async (req, res) => {
       address: item.display_name,
       lat: Number(item.lat),
       lng: Number(item.lon),
-      region: item.address?.state || null,
-      subregion: item.address?.suburb || item.address?.city_district || item.address?.city || item.address?.town || null,
+      ...regionAndSubregionFrom(item.address),
     }))
   );
 });
