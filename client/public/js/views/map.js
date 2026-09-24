@@ -44,23 +44,26 @@ const BRAND_FILTER_OPTIONS = [
   })),
 ];
 
+// CARTO's rastertiles (the previous primary provider here) now returns an
+// "API key required" placeholder for every request, confirmed live against
+// the exact URL this app calls -- not a flaky/blocked-by-some-networks
+// problem, a permanent one, so it's no longer in rotation at all rather
+// than wasting a health-check cycle on a provider guaranteed to fail.
+// OpenStreetMap's own tile server needs no account/key and is the primary
+// for both themes; CARTO had a dedicated dark style but OSM only ships one
+// visual style, so dark mode is approximated with a CSS filter on the tile
+// pane instead (see .leaflet-tile-pane in map-safe-enhancements.css).
 const TILE_URLS = {
-  dark: "https://{s}.basemaps.cartocdn.com/rastertiles/dark_matter/{z}/{x}/{y}{r}.png",
-  light: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+  dark: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  light: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
 };
 // Some networks (certain mobile carriers in particular) block or can't
-// resolve the CARTO CDN outright, not just intermittently -- reported live
-// from a real device, not a hypothetical. Two independent OSM-tile mirrors
-// on different infrastructure (OSMF's own servers, then Wikimedia's) back
-// it up -- diversifying against one CDN having a bad day, not just one
-// provider. Neither has dark styling of its own, so both are used for
-// either theme -- a working light map beats no map.
-const FALLBACK_TILE_URLS = [
-  { url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", subdomains: "abc" },
-  { url: "https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png", subdomains: "" },
-];
-const TILE_ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+// resolve a given tile host outright, not just intermittently -- reported
+// live from a real device, not a hypothetical. Wikimedia's own OSM-data
+// mirror, on independent infrastructure, backs up the primary -- diversifying
+// against one host having a bad day, not just one provider.
+const FALLBACK_TILE_URLS = [{ url: "https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png", subdomains: "" }];
+const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 // Leaflet itself is loaded on demand (see leafletLoader.js) rather than
 // unconditionally at page load -- app.js idle-preloads it right after
@@ -360,28 +363,28 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     zoomAnimation: !perfEfficiency,
     fadeAnimation: !perfEfficiency,
     markerZoomAnimation: !perfEfficiency,
-    // Attribution to OpenStreetMap/CARTO is a required condition of using
-    // their free tiles (ODbL/CARTO terms) -- it can't be removed outright,
-    // but the default control (with Leaflet's own "Leaflet |" branding
-    // prefix) is oversized for this app. Re-added below as a minimal,
-    // unobtrusive control instead.
+    // Attribution to OpenStreetMap is a required condition of using their
+    // free tiles (ODbL terms) -- it can't be removed outright, but the
+    // default control (with Leaflet's own "Leaflet |" branding prefix) is
+    // oversized for this app. Re-added below as a minimal, unobtrusive
+    // control instead.
     attributionControl: false,
   }).setView([20, 0], 2);
   L.control.attribution({ prefix: false, position: "bottomright" }).addTo(map);
 
-  // Root cause of "the map doesn't show anything": the tile provider
-  // (CARTO, a third-party CDN) can be unreachable -- blocked by a
-  // network/firewall, an ad/tracker blocker, or just down -- and until now
-  // nothing detected that. Leaflet just sits there with an empty gray
-  // .map-view forever, which reads exactly as "the map isn't showing" with
-  // no way for the user to tell what's wrong or do anything about it. Track
-  // whether any tile has actually loaded, and surface a real error with a
-  // retry instead of failing silently.
+  // Root cause of "the map doesn't show anything": the tile provider (a
+  // third-party CDN) can be unreachable -- blocked by a network/firewall,
+  // an ad/tracker blocker, no longer offering free access, or just down --
+  // and until now nothing detected that. Leaflet just sits there with an
+  // empty gray .map-view forever, which reads exactly as "the map isn't
+  // showing" with no way for the user to tell what's wrong or do anything
+  // about it. Track whether any tile has actually loaded, and surface a
+  // real error with a retry instead of failing silently.
   const mapErrorOverlay = root.querySelector("#map-error-overlay");
   const mapRetryHint = root.querySelector("#map-retry-hint");
   let tileEverLoaded = false;
   let tileHealthTimer = null;
-  // 0 = primary (CARTO); 1..FALLBACK_TILE_URLS.length = that fallback's index+1.
+  // 0 = primary (OSM); 1..FALLBACK_TILE_URLS.length = that fallback's index+1.
   let providerIndex = 0;
 
   function hideMapError() {
@@ -395,7 +398,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   }
 
   function currentProvider() {
-    if (providerIndex === 0) return { url: primaryTileUrl(), subdomains: "abcd" };
+    if (providerIndex === 0) return { url: primaryTileUrl(), subdomains: "abc" };
     return FALLBACK_TILE_URLS[providerIndex - 1];
   }
 
@@ -447,9 +450,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // gives a slow-but-working connection real room, while still failing fast
   // enough that a truly unreachable provider doesn't leave the map looking
   // frozen for too long. Each provider gets its own attempt in sequence
-  // (CARTO -> OSM -> Wikimedia) before showing a real error -- three
-  // independent hosts/CDNs failing in a row is a strong signal the device
-  // has no route to any map tiles at all, not a problem with one of them.
+  // (OSM -> Wikimedia) before showing a real error -- both independent
+  // hosts failing in a row is a strong signal the device has no route to
+  // any map tiles at all, not a problem with one of them.
   // A provider returning real HTTP errors (see tileerror above) doesn't
   // have to wait out this whole window -- this is the backstop for a
   // provider that simply never responds at all.
@@ -471,7 +474,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // even though the service worker (sw.js) caches every tile it ever sees.
   // When the pref is on, this fetches a one-tile buffer ring around the
   // current viewport after every pan/zoom -- the exact same URLs Leaflet
-  // itself would request, so the SW's existing basemaps.cartocdn.com
+  // itself would request, so the SW's existing tile.openstreetmap.org
   // handler caches them the same way, just before the rep pans there
   // rather than after. Only warms the primary provider (no point caching
   // a fallback CDN nobody's using) and skips entirely once offline.

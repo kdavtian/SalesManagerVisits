@@ -38,16 +38,19 @@
     }
   }
 
-  // The original light map used standard OpenStreetMap raster tiles. Keep the
-  // app's dark CARTO style intact, but route the LIGHT Voyager request back to
-  // standard OSM. The important quality fix is to NOT use Leaflet detectRetina
-  // or over-zoom raster tiles: on 3x iPhones that combination enlarged labels
-  // and interpolated tiles, producing the visibly soft/blocky result reported
-  // on device. Native OSM zoom is capped at 19 and rendered 1:1 by Leaflet.
+  // Both themes request standard OpenStreetMap raster tiles now (CARTO, used
+  // for both the light Voyager and dark Matter styles previously, now
+  // requires a paid API key for every request -- see views/map.js's own
+  // TILE_URLS comment). The important quality fix below is unchanged from
+  // when it only applied to the light style: do NOT use Leaflet detectRetina
+  // or over-zoom raster tiles -- on 3x iPhones that combination enlarged
+  // labels and interpolated tiles, producing the visibly soft/blocky result
+  // reported on device. Native OSM zoom is capped at 19 and rendered 1:1 by
+  // Leaflet.
   const nativeTileLayer = window.L.tileLayer.bind(window.L);
   window.L.tileLayer = function kadTileLayer(url, options = {}) {
-    const isLightCarto = typeof url === "string" && url.includes("basemaps.cartocdn.com") && url.includes("voyager");
-    if (!isLightCarto) return nativeTileLayer(url, options);
+    const isOsm = typeof url === "string" && url.includes("tile.openstreetmap.org");
+    if (!isOsm) return nativeTileLayer(url, options);
 
     return nativeTileLayer(OSM_URL, {
       ...options,

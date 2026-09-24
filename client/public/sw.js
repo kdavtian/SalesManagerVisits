@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v213";
+const CACHE_VERSION = "field-visits-v214";
 const TILE_CACHE = "field-visits-tiles-v4";
 // Anything fetched at runtime that wasn't already in APP_SHELL gets cached
 // here, kept separate from CACHE_VERSION on purpose -- see trimCache below,
@@ -202,17 +202,13 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.pathname.startsWith("/api/")) return;
 
-  // The primary CARTO tile provider (below) is what map.js reaches for
-  // first, but it can fall back to these two (see map.js's own
-  // FALLBACK_TILE_URLS) when CARTO is blocked or unreachable -- exactly
-  // the "poor/blocked connection" scenario this caching exists for, so a
-  // device that's fallen back to them needs the same cache-first coverage,
-  // not just the primary provider.
-  if (
-    url.hostname.endsWith("basemaps.cartocdn.com") ||
-    url.hostname.endsWith("tile.openstreetmap.org") ||
-    url.hostname === "maps.wikimedia.org"
-  ) {
+  // OpenStreetMap's own tile server (below) is what map.js reaches for
+  // first, falling back to Wikimedia's OSM-data mirror (see map.js's own
+  // FALLBACK_TILE_URLS) when the primary is blocked or unreachable -- a
+  // device that's fallen back needs the same cache-first coverage, not
+  // just the primary provider. (CARTO used to be the primary here; it now
+  // requires a paid API key for every request and is no longer used.)
+  if (url.hostname.endsWith("tile.openstreetmap.org") || url.hostname === "maps.wikimedia.org") {
     event.respondWith(caches.open(TILE_CACHE).then(async (cache) => {
       const cached = await cache.match(request);
       const network = fetch(request).then((res) => {

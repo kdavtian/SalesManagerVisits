@@ -35,6 +35,16 @@
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
 }
+
+/* OpenStreetMap's tile server only has one visual style (no dedicated dark
+   variant like CARTO's now-defunct dark_matter used to provide) -- this
+   inverts and re-hues the raster tiles to approximate a dark basemap
+   instead, a common technique for exactly this situation. Scoped to the
+   tile pane only, not the whole map, so markers/pins/controls keep their
+   own normal (non-inverted) colors. */
+html[data-theme="dark"] #leaflet-map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9) saturate(0.85);
+}
 #leaflet-map .leaflet-tile {
   image-rendering: auto;
   -webkit-user-drag: none;
