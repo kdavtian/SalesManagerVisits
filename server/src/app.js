@@ -97,8 +97,16 @@ app.use(
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:", "blob:", "https://*.basemaps.cartocdn.com", "https://*.tile.openstreetmap.org", "https://maps.wikimedia.org"],
-        connectSrc: ["'self'", "https://*.basemaps.cartocdn.com"],
+        // CARTO (previously the primary map tile provider, referenced here
+        // historically) now requires a paid API key for every tile request
+        // and is no longer used anywhere in the client -- see
+        // client/public/js/views/map.js's own TILE_URLS comment. OSM is the
+        // primary now, Wikimedia the fallback; both need connect-src too,
+        // not just img-src, since map.js/app.js prefetch tiles with a plain
+        // fetch() (for the opt-in tile-cache-warming feature and idle
+        // Armenia-region prewarming) in addition to Leaflet's own <img> tags.
+        imgSrc: ["'self'", "data:", "blob:", "https://*.tile.openstreetmap.org", "https://maps.wikimedia.org"],
+        connectSrc: ["'self'", "https://*.tile.openstreetmap.org", "https://maps.wikimedia.org"],
         fontSrc: ["'self'"],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],

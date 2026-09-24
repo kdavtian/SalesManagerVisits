@@ -17,7 +17,6 @@ import { mountInstallPrompt } from "./install.js";
 import { mountUpdateBanner, initServiceWorkerUpdates } from "./updateBanner.js";
 import { startLocationBroadcast, stopLocationBroadcast } from "./locationBroadcast.js";
 import { escapeHtml } from "./util.js";
-import { getTheme } from "./theme.js";
 import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds } from "./quickActions.js";
 import { startErrorMonitoring } from "./errorMonitoring.js";
 
@@ -134,19 +133,19 @@ function preloadCoreViews() {
 }
 
 // Same "loads too slow" complaint, for the map's basemap tiles specifically
-// -- CARTO/OSM tile requests from a device in Armenia can genuinely take
-// several seconds each (see the tile-health-check comment in map.js), so by
-// the time a rep opens the Map tab it's too late to start fetching. Warms
-// the whole-country view (zoom 6-9: country-to-city, not the zoom-15
+// -- OSM tile requests from a device in Armenia can genuinely take several
+// seconds each (see the tile-health-check comment in map.js), so by the
+// time a rep opens the Map tab it's too late to start fetching. Warms the
+// whole-country view (zoom 6-9: country-to-city, not the zoom-15
 // per-customer grid, which would be tens of thousands of tiles over an area
 // that isn't even known yet) into the service worker's tile cache during
 // idle time, so those tiles are usually already local by the time Map is
-// opened. sw.js's fetch handler already caches any basemaps.cartocdn.com
+// opened. sw.js's fetch handler already caches any tile.openstreetmap.org
 // request regardless of who made it, so a plain fetch() here is enough --
 // no message-passing to the service worker needed.
 const ARMENIA_TILE_BOUNDS = { west: 43.4, east: 46.7, south: 38.8, north: 41.35 };
 const ARMENIA_TILE_ZOOMS = [6, 7, 8, 9];
-const TILE_SUBDOMAINS = "abcd";
+const TILE_SUBDOMAINS = "abc";
 
 function lonToTileX(lon, z) {
   return Math.floor(((lon + 180) / 360) * 2 ** z);
@@ -176,8 +175,6 @@ function preloadArmeniaTiles() {
   }
   if (Date.now() - lastRun < TILE_PREWARM_INTERVAL_MS) return;
   runWhenIdle(async () => {
-    const theme = getTheme();
-    const style = theme === "dark" ? "dark_matter" : "voyager";
     const tiles = [];
     for (const z of ARMENIA_TILE_ZOOMS) {
       const xMin = lonToTileX(ARMENIA_TILE_BOUNDS.west, z);
@@ -198,7 +195,7 @@ function preloadArmeniaTiles() {
       while (next < tiles.length) {
         const { x, y, z } = tiles[next++];
         const s = TILE_SUBDOMAINS[(x + y) % TILE_SUBDOMAINS.length];
-        const url = `https://${s}.basemaps.cartocdn.com/rastertiles/${style}/${z}/${x}/${y}.png`;
+        const url = `https://${s}.tile.openstreetmap.org/${z}/${x}/${y}.png`;
         try {
           await fetch(url);
         } catch {

@@ -23,7 +23,10 @@ async function paintRouteMap(el, stops) {
   await ensureLeaflet();
   el.innerHTML = "";
   const map = L.map(el, { zoomControl: true, attributionControl: false }).setView([stops[0].lat, stops[0].lng], 12);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", { maxZoom: 19 }).addTo(map);
+  // CARTO's rastertiles (used here previously) now requires a paid API key
+  // for every request -- see views/map.js's own TILE_URLS comment. OSM
+  // needs no key/account.
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, subdomains: "abc" }).addTo(map);
   const latlngs = [];
   stops.forEach((s, i) => {
     if (s.lat == null || s.lng == null) return;

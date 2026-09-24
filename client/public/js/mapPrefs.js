@@ -46,7 +46,7 @@ export function isStrongDevice() {
 // isStrongDevice) -- default OFF, since it trades extra data/battery use
 // for the map being ready before a rep even pans there. When on, map.js
 // prefetches a buffer ring of tiles around the current viewport on every
-// pan/zoom; the service worker's existing basemaps.cartocdn.com handler
+// pan/zoom; the service worker's existing tile.openstreetmap.org handler
 // (sw.js) caches every one of those fetches the same way it already
 // caches tiles from normal panning, so this needs no service-worker
 // changes of its own -- it's just requesting tiles before they're seen.
