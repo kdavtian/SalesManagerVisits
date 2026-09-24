@@ -2788,8 +2788,21 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     // against the fixed lists (see matchRegion/matchSubregion in util.js),
     // never silently trusted as exact.
     const addressInput = overlay.querySelector("#new-customer-address");
+    const nameInput = overlay.querySelector('input[name="name"]');
     const regionSelect = overlay.querySelector("#new-customer-region");
     const subregionWrap = overlay.querySelector("#new-customer-subregion-wrap");
+
+    // Suggest a default name of "{subregion} / Yuxman ket" once a subregion
+    // is known -- only when the rep hasn't already typed their own name, so
+    // this never clobbers manual entry (same "fill, don't lock" pattern as
+    // address/region/subregion/channel/manager below).
+    function refreshNameSuggestion() {
+      if (nameInput.value) return;
+      const subregionField = overlay.querySelector("#new-customer-subregion");
+      const subregion = subregionField?.value || "";
+      if (!subregion) return;
+      nameInput.value = `${subregion} / Yuxman ket`;
+    }
 
     function renderSubregionField(region, guess) {
       if (region === "Yerevan") {
@@ -2821,6 +2834,11 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     // it only fills in values, the rep can still change either dropdown
     // before saving. Re-runs whenever region/subregion changes so picking a
     // different area updates the suggestion instead of leaving a stale one.
+    // CVO/PCO/OEM channels are deliberately excluded -- those customer types
+    // don't follow the geographic route-distribution mapping, so the rep
+    // picks the channel (and therefore manager) themselves instead of
+    // getting an auto-filled guess.
+    const NO_AUTOFILL_CHANNELS = new Set(["CVO", "PCO", "OEM"]);
     function refreshRouteSuggestion() {
       const region = regionSelect.value;
       if (!region) return;
@@ -2830,6 +2848,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         .lookupRouteDistribution(region, subregion)
         .then((match) => {
           if (!match) return;
+          if (match.sales_channel && NO_AUTOFILL_CHANNELS.has(match.sales_channel)) return;
           if (match.sales_channel && !channelSelect.value) channelSelect.value = match.sales_channel;
           if (match.assigned_manager_id && !managerSelect.value) {
             managerSelect.innerHTML = managerOptionsHtml;
@@ -2841,9 +2860,13 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     regionSelect.addEventListener("change", () => {
       renderSubregionField(regionSelect.value, "");
       refreshRouteSuggestion();
+      refreshNameSuggestion();
     });
     overlay.addEventListener("change", (e) => {
-      if (e.target.id === "new-customer-subregion") refreshRouteSuggestion();
+      if (e.target.id === "new-customer-subregion") {
+        refreshRouteSuggestion();
+        refreshNameSuggestion();
+      }
     });
 
     api
@@ -2855,6 +2878,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           regionSelect.value = guessedRegion;
           renderSubregionField(guessedRegion, matchSubregion(result?.subregion, guessedRegion));
           refreshRouteSuggestion();
+          refreshNameSuggestion();
         }
       })
       .catch(() => {});
