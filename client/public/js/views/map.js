@@ -265,6 +265,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
             </div>`
       }
       <div class="map-hint" id="map-hint" role="status" ${startInAddMode ? "" : "hidden"}>${t("tap_map_hint")}</div>
+      <div class="map-hint" id="map-retry-hint" role="status" hidden>${t("loading")}</div>
       <div class="map-error-overlay" id="map-error-overlay" role="alert" hidden>
         <div class="map-error-card">
           <p>${t("map_load_failed")}</p>
@@ -377,6 +378,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // whether any tile has actually loaded, and surface a real error with a
   // retry instead of failing silently.
   const mapErrorOverlay = root.querySelector("#map-error-overlay");
+  const mapRetryHint = root.querySelector("#map-retry-hint");
   let tileEverLoaded = false;
   let tileHealthTimer = null;
   // 0 = primary (CARTO); 1..FALLBACK_TILE_URLS.length = that fallback's index+1.
@@ -384,10 +386,12 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
   function hideMapError() {
     mapErrorOverlay.hidden = true;
+    mapRetryHint.hidden = true;
   }
 
   function showMapError() {
     mapErrorOverlay.hidden = false;
+    mapRetryHint.hidden = true;
   }
 
   function currentProvider() {
@@ -507,13 +511,28 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     warmTilesTimer = setTimeout(warmTileCache, 600);
   });
 
-  root.querySelector("#map-error-retry").addEventListener("click", () => {
+  function retryTiles() {
     hideMapError();
+    // Cycling all 3 providers again can take up to ~45s (see
+    // startTileHealthCheck's 15s-per-provider window) with the map canvas
+    // otherwise looking completely blank the whole time -- this visible
+    // "retrying" hint is what tells a rep the tap actually did something,
+    // instead of it reading as a dead button until either a tile shows up
+    // or the full error card reappears.
+    mapRetryHint.hidden = false;
     providerIndex = 0;
     map.removeLayer(tileLayer);
     tileLayer = makeTileLayer(currentProvider()).addTo(map);
     startTileHealthCheck();
-  });
+  }
+  root.querySelector("#map-error-retry").addEventListener("click", retryTiles);
+  // All three tile providers can fail together on a connection that's
+  // still technically "online" per the OS (e.g. a mobile carrier that
+  // blocks/can't resolve these specific tile CDNs) as much as on a true
+  // offline/airplane-mode drop -- retrying automatically the moment the
+  // browser's own connectivity signal flips back on covers the "signal
+  // came back" case without the rep having to remember to tap Retry.
+  window.addEventListener("online", retryTiles);
 
   // Re-apply the matching tile style if the user flips light/dark while the
   // map is mounted (Settings lives on a different tab, so this covers the
@@ -2991,6 +3010,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     clearTimeout(warmTilesTimer);
     mapEl.removeEventListener("touchend", onMapTouchEnd);
     document.removeEventListener("visibilitychange", refreshTileStyle);
+    window.removeEventListener("online", retryTiles);
     appMain.classList.remove("app-main-locked");
     document.body.classList.remove("map-active");
     map.remove();
