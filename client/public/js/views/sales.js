@@ -113,10 +113,15 @@ export async function renderSales(root, navigate) {
         <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
-        <div class="detail-header-title"><h1>${t("sales_title")}</h1></div>
+        <div class="detail-header-title">
+          <h1 class="sales-heading-with-hint">
+            <span>${t("sales_title")}</span>
+            <button type="button" class="settings-hint-icon" id="sales-sync-hint-btn" aria-expanded="false" aria-controls="sales-sync-hint-text" aria-label="${t("more_info")}">!</button>
+          </h1>
+        </div>
       </div>
+      <div id="sales-sync-hint-text" hidden></div>
       <div class="sales-info-row">
-        <div id="sales-sync-badge"></div>
         <button type="button" class="sales-info-toggle" id="sales-info-toggle" aria-expanded="false" aria-label="${escapeHtml(t("sales_source_hint"))}">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><circle cx="12" cy="7.75" r="0.15" fill="currentColor" stroke="currentColor" stroke-width="2.4"/></svg>
         </button>
@@ -142,19 +147,27 @@ export async function renderSales(root, navigate) {
   const listEl = container.querySelector("#sales-list");
   const errorEl = container.querySelector("#sales-error");
   const subtotalEl = container.querySelector("#sales-subtotal");
-  const syncBadgeEl = container.querySelector("#sales-sync-badge");
+  const syncBadgeEl = container.querySelector("#sales-sync-hint-text");
   const fromInput = container.querySelector("#sales-from");
   const toInput = container.querySelector("#sales-to");
   const channelBarEl = container.querySelector("#sales-channel-bar");
   const searchInput = container.querySelector("#sales-search");
   const infoToggleBtn = container.querySelector("#sales-info-toggle");
   const sourceHintEl = container.querySelector("#sales-source-hint");
+  const syncHintBtn = container.querySelector("#sales-sync-hint-btn");
   let channelPills = [{ value: "", label: t("all_statuses"), count: 0 }];
 
-  // Both header texts (the sync-freshness note and the longer "what this
-  // data is" explanation) used to sit stacked under the title by default --
-  // collapsed here into the one sync badge plus a small (i) toggle, so the
-  // header stays one line unless a rep actually wants the explanation.
+  // The sync-freshness note ("Castrol data as of ...") is collapsed behind
+  // the "!" icon on the heading itself, hidden until tapped -- and the
+  // longer "what this data is" explanation stays its own separate (i)
+  // toggle below, so the header stays one line unless a rep actually wants
+  // either explanation.
+  syncHintBtn.addEventListener("click", () => {
+    const expanded = syncHintBtn.getAttribute("aria-expanded") === "true";
+    syncHintBtn.setAttribute("aria-expanded", String(!expanded));
+    syncBadgeEl.hidden = expanded;
+  });
+
   infoToggleBtn.addEventListener("click", () => {
     const expanded = infoToggleBtn.getAttribute("aria-expanded") === "true";
     infoToggleBtn.setAttribute("aria-expanded", String(!expanded));
