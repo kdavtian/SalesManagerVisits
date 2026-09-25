@@ -203,9 +203,19 @@ export async function renderBonuses(root, navigate) {
         .join("")
     : `<p class="empty-state">${t("bonuses_no_claims")}</p>`;
 
+  // Only a sales_manager can ever earn a point (see getBonusPointsLeaderboard's
+  // WHERE u.role = 'sales_manager' in bonusEmployeeSummary.js) -- every other
+  // role still gets the full "everyone can watch" leaderboard below, by
+  // design, but showing them their OWN points/level card (permanently 0,
+  // implying a progression that structurally can never happen for their
+  // account) is just confusing, not informative.
+  const showOwnProgress = state.user?.role === "sales_manager";
+
   contentEl.innerHTML = `
     <div class="dashboard-grid">
-      <div class="card progress-card">
+      ${
+        showOwnProgress
+          ? `<div class="card progress-card">
         <span class="progress-label">${t("bonuses_points_label")}</span>
         <div class="progress-main">
           <span class="progress-fraction">${summary.pointsTotal}</span>
@@ -216,7 +226,9 @@ export async function renderBonuses(root, navigate) {
             </div>
           </div>
         </div>
-      </div>
+      </div>`
+          : ""
+      }
 
       ${
         summary.pointsLeaderboard?.length

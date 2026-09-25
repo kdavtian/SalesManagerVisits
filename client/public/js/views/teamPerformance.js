@@ -119,12 +119,38 @@ function mergedBarHtml(row) {
 
 const REC_ICON = { high: "⛔", medium: "⚠️", info: "ℹ️" };
 
+const REC_KPI_LABEL_KEY = { sales: "perf_sales", collections: "perf_collections" };
+
+// Renders a {severity, kpi, kind, value} recommendation (see
+// perfRecommendations.js on the server) into display text through the same
+// t()/formatAmd() layer every other number on this page already goes
+// through -- the server intentionally sends a kind tag plus one raw number,
+// never a formatted sentence, so this is the one place that decides how it
+// reads in whichever language is active.
+function recommendationText(rec) {
+  const label = t(REC_KPI_LABEL_KEY[rec.kpi] ?? rec.kpi);
+  switch (rec.kind) {
+    case "pace_behind":
+      return t(rec.severity === "high" ? "perf_rec_pace_at_risk" : "perf_rec_pace_slightly_behind")
+        .replace("{label}", label)
+        .replace("{rate}", formatAmd(Math.round(rec.value)));
+    case "target_reached":
+      return t("perf_rec_target_reached").replace("{label}", label);
+    case "forecast_miss":
+      return t("perf_rec_forecast_miss").replace("{label}", label).replace("{shortfall}", formatAmd(Math.round(rec.value)));
+    case "collections_pending":
+      return t("perf_rec_collections_pending").replace("{amount}", formatAmd(Math.round(rec.value)));
+    default:
+      return "";
+  }
+}
+
 function recommendationsHtml(row) {
   if (!row.recommendations?.length) return "";
   return `
     <div class="perf-recommendations">
       ${row.recommendations
-        .map((r) => `<p class="perf-recommendation perf-recommendation-${r.severity}">${REC_ICON[r.severity] ?? ""} ${escapeHtml(r.message)}</p>`)
+        .map((r) => `<p class="perf-recommendation perf-recommendation-${r.severity}">${REC_ICON[r.severity] ?? ""} ${escapeHtml(recommendationText(r))}</p>`)
         .join("")}
     </div>
   `;
@@ -148,7 +174,7 @@ function needsAttentionHtml(items) {
           ${items
             .map(
               (i) =>
-                `<p class="perf-recommendation perf-recommendation-${i.severity}">${REC_ICON[i.severity] ?? ""} <strong>${escapeHtml(i.channel_name)}</strong> — ${escapeHtml(i.message)}</p>`
+                `<p class="perf-recommendation perf-recommendation-${i.severity}">${REC_ICON[i.severity] ?? ""} <strong>${escapeHtml(i.channel_name)}</strong> — ${escapeHtml(recommendationText(i))}</p>`
             )
             .join("")}
         </div>

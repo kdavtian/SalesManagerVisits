@@ -10,57 +10,40 @@ import { STATUS } from "./perfCalc.js";
 // medium before info, so the worst channel-KPI combinations surface first.
 const SEVERITY_RANK = { high: 0, medium: 1, info: 2 };
 
-const KPI_LABELS = {
-  sales: "Sales",
-};
-
 function statusSeverity(status) {
   if (status === STATUS.AT_RISK) return "high";
   if (status === STATUS.SLIGHTLY_BEHIND) return "medium";
   return null;
 }
 
-function formatAmd(n) {
-  return `${Math.round(n).toLocaleString("en-US")} AMD`;
-}
-
-// Rounds for display, but never collapses a real positive requirement down
-// to "0" -- e.g. 0.25 new customers/working day is a genuine (if awkward)
-// number and must not be shown as "needs 0/working day to hit target",
-// which reads as nonsensical. Anything under 1 keeps one decimal place.
-function formatNumber(n, unit) {
-  const rounded = n > 0 && n < 1 ? Math.round(n * 10) / 10 : Math.round(n);
-  return unit ? `${rounded.toLocaleString("en-US")} ${unit}` : rounded.toLocaleString("en-US");
-}
-
 // One KPI's recommendations: a pace warning when behind, plus a
 // forecast-miss warning when the run-rate projection won't reach target
 // even though current pace status hasn't crossed into "at risk" yet (an
 // early signal, not a duplicate of the pace rule).
-function recommendationsForKpi(kpiKey, kpi, { isAmd, unit } = {}) {
+//
+// Each entry is {severity, kpi, kind, value} -- a kind tag plus the one raw
+// number (or null) the client needs, never a formatted sentence. This used
+// to build the final English sentence here, server-side, with a plain JS
+// template string -- which meant there was no way for anyone viewing the
+// (otherwise fully Armenian) Team Performance page in Armenian to ever see
+// these messages translated, since the server has no notion of the
+// requesting user's language. Rendering now happens client-side through
+// the same t()/formatAmd() layer every other number on this page already
+// goes through (see teamPerformance.js's recommendationText).
+function recommendationsForKpi(kpiKey, kpi) {
   const out = [];
-  const format = (n) => (isAmd ? formatAmd(n) : formatNumber(n, unit));
-  const label = KPI_LABELS[kpiKey] ?? kpiKey;
 
   const severity = statusSeverity(kpi.status);
   if (severity && kpi.required_daily_rate !== null) {
-    out.push({
-      severity,
-      kpi: kpiKey,
-      message:
-        kpi.required_daily_rate > 0
-          ? `${label} is ${kpi.status === STATUS.AT_RISK ? "at risk" : "slightly behind"} pace -- needs ${format(kpi.required_daily_rate)}/working day to hit target.`
-          : `${label} target has already been reached.`,
-    });
+    if (kpi.required_daily_rate > 0) {
+      out.push({ severity, kpi: kpiKey, kind: "pace_behind", value: kpi.required_daily_rate });
+    } else {
+      out.push({ severity, kpi: kpiKey, kind: "target_reached", value: null });
+    }
   }
 
   if (kpi.forecast !== null && kpi.target && kpi.forecast < kpi.target && severity !== "high") {
-    const shortfall = kpi.target - kpi.forecast;
-    out.push({
-      severity: "medium",
-      kpi: kpiKey,
-      message: `${label} is projected to miss target by ${format(shortfall)} at the current run rate.`,
-    });
+    out.push({ severity: "medium", kpi: kpiKey, kind: "forecast_miss", value: kpi.target - kpi.forecast });
   }
 
   return out;
@@ -73,7 +56,7 @@ function recommendationsForKpi(kpiKey, kpi, { isAmd, unit } = {}) {
 // the only thing worth flagging about it is a pending balance not yet
 // confirmed in Excel.
 export function buildRecommendations(row) {
-  const out = [...recommendationsForKpi("sales", row.sales, { isAmd: true })];
+  const out = [...recommendationsForKpi("sales", row.sales)];
 
   // A large pending balance not yet confirmed in Excel is worth flagging on
   // its own, independent of Sales pace -- it tells the reviewer "the
@@ -81,11 +64,7 @@ export function buildRecommendations(row) {
   // of attention than a pace warning. Flat AMD threshold rather than a
   // ratio against a target, since Collections no longer has one.
   if (row.collections.pending_amd >= 50000) {
-    out.push({
-      severity: "info",
-      kpi: "collections",
-      message: `${formatAmd(row.collections.pending_amd)} logged in-app but not yet confirmed in Excel.`,
-    });
+    out.push({ severity: "info", kpi: "collections", kind: "collections_pending", value: row.collections.pending_amd });
   }
 
   return out.sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]);

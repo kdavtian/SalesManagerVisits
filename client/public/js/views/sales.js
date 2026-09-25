@@ -7,6 +7,7 @@
 import { api } from "../api.js";
 import { escapeHtml, formatAmd, formatLiters, channelDisplayLabel, activateDialog, syncBadgeHtml, parseDateOnly, customerNameLinkHtml, activateCustomerNameLinks } from "../util.js";
 import { t, getLang } from "../i18n.js";
+import { seesFinancialExports } from "../state.js";
 
 // Local calendar-date components, not toISOString() -- that converts to
 // UTC first, so a local midnight east of UTC (Yerevan is UTC+4) lands on
@@ -99,6 +100,32 @@ async function openSalesOrderSheet(erpCustomerId, orderId, navigate) {
 }
 
 export async function renderSales(root, navigate) {
+  // The Sales tile is already excluded from a sales_manager's own quick
+  // actions (see quickActions.js's qa_sales -- they have their own Orders/
+  // Activity view of the same data) and the server rejects this role with a
+  // plain 403 too. This hash is only ever reached by an atypical path (a
+  // stale bookmark, a shared link, a role change without a fresh login), but
+  // when it is, checking here first -- instead of rendering the full page
+  // shell and then having the fetch below fail into a raw, unstyled
+  // "Not allowed" string under a fully-functional-looking header -- matches
+  // the same client-side permission check deliveryRoute.js's driver view
+  // already uses for the same situation.
+  if (!seesFinancialExports()) {
+    root.innerHTML = `
+      <div class="detail-view">
+        <div class="detail-header">
+          <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <div class="detail-header-title"><h1>${t("sales_title")}</h1></div>
+        </div>
+        <p class="empty-state">${t("not_allowed")}</p>
+      </div>
+    `;
+    root.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
+    return;
+  }
+
   const today = new Date();
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   let from = formatDateInput(monthStart);
