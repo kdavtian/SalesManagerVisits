@@ -30,13 +30,14 @@ test("buildRecommendations: an at-risk KPI produces a high-severity pace warning
   const salesRec = recs.find((r) => r.kpi === "sales");
   assert.ok(salesRec, "expected a sales recommendation");
   assert.equal(salesRec.severity, "high");
-  assert.match(salesRec.message, /at risk/i);
+  assert.equal(salesRec.kind, "pace_behind");
+  assert.ok(salesRec.value > 0, "expected a positive required daily rate");
 });
 
 test("buildRecommendations: an on-pace KPI produces no pace warning", () => {
   const row = makeRow({ salesActual: 5000, salesTarget: 10000 });
   const recs = buildRecommendations(row);
-  assert.equal(recs.find((r) => r.kpi === "sales" && r.message.match(/pace/i)), undefined);
+  assert.equal(recs.find((r) => r.kpi === "sales" && r.kind === "pace_behind"), undefined);
 });
 
 test("buildRecommendations: pending collections at/above the flat 50,000 AMD threshold gets an info-level note", () => {
@@ -44,7 +45,8 @@ test("buildRecommendations: pending collections at/above the flat 50,000 AMD thr
   const recs = buildRecommendations(row);
   const pendingRec = recs.find((r) => r.kpi === "collections" && r.severity === "info");
   assert.ok(pendingRec, "expected an info-level pending-collections note");
-  assert.match(pendingRec.message, /not yet confirmed/i);
+  assert.equal(pendingRec.kind, "collections_pending");
+  assert.equal(pendingRec.value, 50000);
 });
 
 test("buildRecommendations: pending collections below the flat 50,000 AMD threshold produce no note", () => {
@@ -92,8 +94,8 @@ test("buildRecommendations: a slightly-behind (not at-risk) KPI whose run-rate f
   // not at_risk -- so the forecast-miss rule (severity !== "high") also fires.
   const row = makeRow({ salesActual: 450, salesTarget: 1000 });
   const recs = buildRecommendations(row);
-  const paceRec = recs.find((r) => r.message.match(/slightly behind/i));
-  const forecastRec = recs.find((r) => r.message.match(/projected to miss target/i));
+  const paceRec = recs.find((r) => r.kind === "pace_behind");
+  const forecastRec = recs.find((r) => r.kind === "forecast_miss");
   assert.ok(paceRec, "expected the slightly-behind pace warning");
   assert.equal(paceRec.severity, "medium");
   assert.ok(forecastRec, "expected a separate forecast-miss warning");
