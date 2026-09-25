@@ -257,7 +257,7 @@ export async function renderDashboard(root, navigate) {
                    <details class="manager-drill-row">
                      <summary>
                        <span class="manager-drill-name">${escapeHtml(m.user_name)}</span>
-                       <span class="muted">${m.checkins_this_week} ${t("qa_check_in")} · ${m.customers_visited_this_week} ${t("stat_visited_today")}</span>
+                       <span class="muted">${m.checkins_this_week} ${t("qa_check_in")} · ${m.customers_visited_this_week} ${t("stat_visited_week")}</span>
                      </summary>
                      <div class="manager-drill-detail">
                        <div class="progress-side-row"><span class="dot dot-success"></span>${m.visited_today} ${t("stat_visited_today")}</div>

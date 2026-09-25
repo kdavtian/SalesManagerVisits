@@ -8498,6 +8498,10 @@ form select,
   gap: 8px;
 }
 
+/* Both the sync-freshness badge and the longer "what this data is"
+   explanation (.sales-source-hint) live together here, behind the single
+   "!" icon on the heading -- these used to be two separate toggles with
+   their own icons; now there's just the one. */
 #sales-sync-hint-text {
   margin: 2px 16px 4px;
 }
@@ -8506,31 +8510,8 @@ form select,
   margin: 0;
 }
 
-/* Sales screen's header info row -- a small toggle for the longer "what
-   this data is" explanation (.sales-source-hint, hidden by default), so
-   the header stays one line instead of two stacked paragraphs. */
-.sales-info-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin: 0 12px;
-}
-
-.sales-info-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--text-dim);
-  flex-shrink: 0;
-}
-
 .sales-source-hint {
-  margin: 4px 16px 12px;
+  margin: 6px 0 0;
 }
 
 /* Sales screen's channel filter -- same tappable-pill pattern as

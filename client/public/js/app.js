@@ -254,6 +254,19 @@ const HOME_TREE_ROUTES = new Set(["#/dashboard", ...Object.values(QUICK_ACTION_R
 HOME_TREE_ROUTES.delete("#/map");
 let lastHomeHash = "#/dashboard";
 
+// The bottom-nav bar's own 5 tab roots (see renderNav's NAV_ITEMS) -- a tap
+// on one of these is always a lateral "switch tab" action, never a "drill
+// deeper" one, so navigate() below replaces the current history entry
+// instead of pushing a new one for these specifically. Without this, every
+// tab switch grew the single shared browser history stack right alongside
+// genuine drill-downs (a customer detail page, a sheet's own hash, ...), so
+// the PWA/browser's edge-swipe-back gesture -- which just calls
+// history.back() once -- would as often land on whatever OTHER tab was open
+// before the switch as it would step back within the tab the user is
+// actually on (reported as "swipe back switches tabs instead of going to
+// the previous page on the same tab").
+const NAV_TAB_ROOT_HASHES = new Set(["#/dashboard", "#/activity", "#/map", "#/customers", "#/orders"]);
+
 function homeNavTarget() {
   const currentPath = (location.hash || "#/dashboard").split("?")[0];
   return HOME_TREE_ROUTES.has(currentPath) ? "#/dashboard" : lastHomeHash;
@@ -526,6 +539,18 @@ function navigate(hash) {
     return;
   }
   hasNavigatedInApp = true;
+  if (NAV_TAB_ROOT_HASHES.has(hash.split("?")[0])) {
+    // See NAV_TAB_ROOT_HASHES above -- replace rather than push, so hopping
+    // between bottom-nav tabs never grows the shared browser history stack.
+    // replaceState doesn't fire hashchange on its own, so it's dispatched
+    // manually -- render() below is one listener, but mapSafeUi.js,
+    // customerSocialProfiles.js and ordersRegionStatusEnhancements.js each
+    // register their own route-driven hashchange listener too, and all of
+    // them need to run exactly as they would for a normal push navigation.
+    history.replaceState(null, "", hash);
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    return;
+  }
   location.hash = hash;
 }
 

@@ -7,6 +7,7 @@ import { PERF_APPROVER_ROLES } from "../notificationPreferences.js";
 import { workingDaysForMonth } from "../workingDays.js";
 import { kpiProgress } from "../perfCalc.js";
 import { buildRecommendations, buildNeedsAttention } from "../perfRecommendations.js";
+import { channelFromPosition } from "../salesChannelAutofill.js";
 
 export const teamPerformanceRouter = Router();
 
@@ -180,18 +181,31 @@ teamPerformanceRouter.patch("/channels/:id", requireAdmin, async (req, res) => {
   res.json(rows[0]);
 });
 
-// A Sales Manager's channel is their `position` field (same convention
-// salesPerformance.js already uses); a Sales Director has no single
+// A Sales Manager can own more than one channel -- sales_channels.
+// manager_user_id (see migration 055) is the canonical channel<->manager
+// mapping and is not one-channel-per-manager (e.g. Artak owns both
+// "SM Davtashen" and "SM B2B"), so this resolves every channel a manager
+// owns there, not just one. Falls back to the legacy `position` free-text
+// heuristic (same one salesChannelAutofill.js uses) only for a manager not
+// yet wired up in sales_channels, so someone mid-migration still sees
+// their one inferred channel instead of nothing. A Sales Director has no
 // channel of their own here -- they see every channel they own via the
 // full plan endpoints above, gated by canEditChannelPlan.
-function channelCodeForUser(user) {
-  return user.role === "sales_manager" && user.position ? user.position : null;
+async function channelCodesForUser(user) {
+  if (user.role !== "sales_manager") return [];
+  const { rows } = await pool.query(
+    "SELECT code FROM sales_channels WHERE manager_user_id = $1 AND active = true ORDER BY display_order",
+    [user.id]
+  );
+  if (rows.length) return rows.map((r) => r.code);
+  const fallback = channelFromPosition(user.position);
+  return fallback ? [fallback] : [];
 }
 
-// The one channel's approved plan for a month, combined with its actuals
-// and pacing -- a Sales Manager's own "My Performance" view. Never exposes
-// any other channel's numbers (see seesAllPerformance for who gets the
-// full cross-channel picture instead).
+// Every channel a Sales Manager owns, each with its own approved plan for
+// the month combined with its actuals and pacing -- a Sales Manager's own
+// "My Performance" view. Never exposes any other manager's channel (see
+// seesAllPerformance for who gets the full cross-channel picture instead).
 teamPerformanceRouter.get("/my-performance", async (req, res) => {
   const { month } = req.query;
   if (!isValidMonth(month)) return res.status(400).json({ error: "month must be YYYY-MM-01" });
@@ -199,26 +213,31 @@ teamPerformanceRouter.get("/my-performance", async (req, res) => {
   if (seesAllPerformance(req.user.role)) {
     return res.status(400).json({ error: "Use /plans/:id/dashboard for a full cross-channel view" });
   }
-  const channelCode = channelCodeForUser(req.user);
-  if (!channelCode) {
+  const channelCodes = await channelCodesForUser(req.user);
+  if (!channelCodes.length) {
     return res.status(403).json({ error: "Team Performance is only available to Sales Managers with an assigned channel" });
   }
 
-  const { rows } = await pool.query(
-    `SELECT t.channel_id, p.id AS plan_id, c.code AS channel_code, c.name AS channel_name,
-       t.sales_target_amd
-     FROM perf_plan_targets t
-     JOIN perf_plans p ON p.id = t.plan_id
-     JOIN sales_channels c ON c.id = t.channel_id
-     WHERE c.code = $1 AND p.month = $2 AND p.status = 'approved'`,
-    [channelCode, month]
-  );
-  const target = rows[0];
-  if (!target) return res.json(null);
-
   const monthDate = new Date(`${month}T00:00:00Z`);
-  const [actuals, wd] = await Promise.all([loadChannelActuals(channelCode, month), workingDaysForMonth(monthDate)]);
-  res.json(buildChannelDashboardRow(target, actuals, wd));
+  const wd = await workingDaysForMonth(monthDate);
+  const rows = await Promise.all(
+    channelCodes.map(async (channelCode) => {
+      const { rows: targetRows } = await pool.query(
+        `SELECT t.channel_id, p.id AS plan_id, c.code AS channel_code, c.name AS channel_name,
+           t.sales_target_amd
+         FROM perf_plan_targets t
+         JOIN perf_plans p ON p.id = t.plan_id
+         JOIN sales_channels c ON c.id = t.channel_id
+         WHERE c.code = $1 AND p.month = $2 AND p.status = 'approved'`,
+        [channelCode, month]
+      );
+      const target = targetRows[0];
+      if (!target) return null;
+      const actuals = await loadChannelActuals(channelCode, month);
+      return buildChannelDashboardRow(target, actuals, wd);
+    })
+  );
+  res.json(rows.filter(Boolean));
 });
 
 // The full cross-channel dashboard for one plan -- Management/Sales
