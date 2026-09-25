@@ -307,9 +307,13 @@ async function renderMyPerformanceView(root, navigate) {
   async function load() {
     const bodyEl = root.querySelector("#perf-body");
     try {
-      const row = await api.getMyPerformance(month);
-      bodyEl.innerHTML = row
-        ? `<p class="muted" style="margin:0 4px 10px;">${t("perf_working_day_progress").replace("{elapsed}", row.working_days.elapsed).replace("{total}", row.working_days.total)}</p>${channelCardHtml(row)}`
+      // A manager can own more than one channel (see channelCodesForUser
+      // server-side, e.g. Artak owns both SM Davtashen and SM B2B) -- one
+      // card per channel that has an approved plan for the month, not just
+      // the first/only one.
+      const rows = await api.getMyPerformance(month);
+      bodyEl.innerHTML = rows.length
+        ? `<p class="muted" style="margin:0 4px 10px;">${t("perf_working_day_progress").replace("{elapsed}", rows[0].working_days.elapsed).replace("{total}", rows[0].working_days.total)}</p>${rows.map(channelCardHtml).join("")}`
         : `<p class="empty-state">${t("perf_no_plan_yet")}</p>`;
       wireDrilldowns(bodyEl);
     } catch (err) {

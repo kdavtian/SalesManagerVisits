@@ -35,6 +35,21 @@ const BADGE_EMOJI = "🏅";
 // there is zero signal between "in progress" and "done".
 const ALMOST_THERE_THRESHOLD_PCT = 75;
 
+// A recurring (daily/weekly/...) template can have several rounds "active"
+// at once -- e.g. a still-open yesterday's daily round alongside today's --
+// and every round of the same template shares its title, so without a
+// period label they render as unlabeled duplicate cards a rep can't tell
+// apart (which one is which day, which one is about to close). Same-day
+// start/end collapses to one date instead of repeating it.
+function formatChallengePeriod(startAt, endAt) {
+  const start = new Date(startAt);
+  const end = new Date(endAt);
+  const opts = { month: "short", day: "numeric" };
+  const startLabel = start.toLocaleDateString(undefined, opts);
+  const endLabel = end.toLocaleDateString(undefined, opts);
+  return startLabel === endLabel ? startLabel : `${startLabel} – ${endLabel}`;
+}
+
 const CLAIM_STATUS_KEY = {
   awaiting_validation: "bonuses_claim_status_awaiting_validation",
   approved: "bonuses_claim_status_approved",
@@ -125,6 +140,7 @@ export async function renderBonuses(root, navigate) {
             c.overall_status === "target_reached" ? "✓" : almostThere ? `🔥 ${t("bonuses_almost_there")}` : t("bonuses_active_challenges")
           }</span>
       </div>
+      <div class="user-row-meta"><span class="muted">${escapeHtml(formatChallengePeriod(c.start_at, c.end_at))}</span></div>
       ${progressHtml}
     </div>
   `;
