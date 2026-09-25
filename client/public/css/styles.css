@@ -7281,18 +7281,42 @@ button.list-row-icon {
   color: var(--danger);
 }
 
+/* A real bottom sheet -- fixed to the viewport edge (above the nav bar),
+   not a sticky element sitting in the product list's own scroll flow. The
+   old `position: sticky` version was still just another child of the
+   scrolling list: it only "stuck" once the list had scrolled past it, so
+   while expanded (payment method + discount rows showing) it could end up
+   visually parked over whatever product rows happened to be underneath it
+   at that scroll position -- reported as the summary/submit area "mixing
+   with lists". Fixed positioning removes it from that flow entirely, the
+   same technique .nav-bar itself uses (see its own comment) for the same
+   reason: centered via left:50%+translate to stay within the app's own
+   max-width column instead of the full physical viewport. */
 .order-cart-bar {
-  position: sticky;
-  bottom: calc(var(--nav-height, 64px) + 12px);
+  position: fixed;
+  left: 50%;
+  bottom: calc(48px + var(--nav-safe-bottom));
+  width: 100%;
+  max-width: var(--app-max-width);
+  transform: translate3d(-50%, 0, 0);
+  z-index: 1100;
   display: flex;
   flex-direction: column;
   gap: 10px;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px 16px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  margin-top: 16px;
+  border-bottom: none;
+  border-radius: 18px 18px 0 0;
+  padding: 14px 16px calc(14px + var(--nav-safe-bottom, 0px));
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.16);
+}
+
+/* The list needs enough reserved space at its end for the fixed sheet
+   above not to cover its last rows -- applied only while the sheet is
+   showing (see updateCartBar in orderCreate.js), since with an empty cart
+   there's nothing to clear. */
+.order-product-list-with-cart-bar {
+  padding-bottom: 260px;
 }
 
 .order-cart-bar-row {

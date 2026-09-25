@@ -213,6 +213,12 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
 
   function updateCartBar() {
     const count = [...cart.values()].reduce((sum, l) => sum + l.quantity, 0);
+    // The cart bar is a fixed bottom sheet now (see .order-cart-bar), not
+    // part of the list's own scroll flow -- the list needs reserved bottom
+    // padding while it's showing so the sheet doesn't cover the last rows,
+    // toggled together with the sheet itself so an empty cart doesn't
+    // leave dead space at the end of the list.
+    listEl.classList.toggle("order-product-list-with-cart-bar", count > 0);
     if (!count) {
       cartBar.hidden = true;
       return;
