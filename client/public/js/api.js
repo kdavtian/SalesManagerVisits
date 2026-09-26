@@ -188,6 +188,7 @@ export const api = {
   saveVisitPlan: (date, customerIds, userId) =>
     json("/visit-plans", "POST", { date, customer_ids: customerIds, user_id: userId }),
   getPendingVisitPlans: () => request("/visit-plans/pending"),
+  getTeamTodayVisitPlans: () => request("/visit-plans/team-today"),
   reviewVisitPlan: (id, action) => json(`/visit-plans/${id}`, "PATCH", { action }),
   getVisitPlanRules: (userId) => request(`/visit-plans/rules${userId ? `?user_id=${userId}` : ""}`),
   saveVisitPlanRule: (dayOfWeek, areas, userId, customerIds) =>
@@ -197,6 +198,7 @@ export const api = {
   listProducts: (q = "") => request(`/products${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   listAllProducts: () => request("/products/all"),
   getProductSyncDiagnostics: () => request("/products/sync-diagnostics"),
+  getProductDuplicates: () => request("/products/duplicates"),
   createProduct: (data) => json("/products", "POST", data),
   updateProduct: (id, data) => json(`/products/${id}`, "PATCH", data),
   deleteProduct: (id) => request(`/products/${id}`, { method: "DELETE" }),

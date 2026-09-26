@@ -560,6 +560,7 @@ export async function renderEditRequestsSection(container) {
 export async function renderProductsSection(container) {
   container.innerHTML = `
     <div id="product-sync-diagnostics"></div>
+    <div id="product-duplicates"></div>
     <div id="product-list" class="card-list"><p class="loading-state" role="status">${t("loading")}</p></div>
     <div class="team-add-btn-wrap product-section-actions">
       <button type="button" class="btn" id="bulk-price-edit-btn">${t("bulk_price_edit")}</button>
@@ -944,7 +945,69 @@ export async function renderProductsSection(container) {
 
   container.querySelector("#add-product-btn").addEventListener("click", () => openProductSheet(null));
 
+  // Surfaces existing name+brand+unit duplicates (see GET
+  // /products/duplicates) so an admin can find and resolve the ones
+  // already in the catalog from before the import/sync matching fixes
+  // above -- nothing here merges them automatically, it just puts both
+  // rows side by side with a straight path into the same edit sheet used
+  // everywhere else in this screen to flip the stale one's Active toggle
+  // off.
+  const duplicatesEl = container.querySelector("#product-duplicates");
+  async function loadDuplicates() {
+    let groups;
+    try {
+      groups = await api.getProductDuplicates();
+    } catch {
+      return; // Non-critical -- the catalog itself still loads/works without this.
+    }
+    if (!groups.length) {
+      duplicatesEl.innerHTML = "";
+      return;
+    }
+    duplicatesEl.innerHTML = `
+      <div class="sync-diagnostic-banner sync-diagnostic-banner-warning">
+        <strong>${t("product_duplicates_heading")}</strong>
+        <p class="muted">${t("product_duplicates_hint")}</p>
+        <div class="card-list">
+          ${groups
+            .map(
+              (group) => `
+            <div class="card user-row product-duplicate-group">
+              ${group
+                .map(
+                  (p) => `
+                <div class="user-row-top">
+                  <div>
+                    <strong>${escapeHtml(p.name)}</strong>
+                    <span class="muted">${[p.brand, p.unit].filter(Boolean).map(escapeHtml).join(" · ")}</span>
+                  </div>
+                  <span class="badge badge-neutral">${p.stock_qty ?? "—"} ${t("warehouse_pcs_suffix")}</span>
+                </div>
+                <div class="user-row-meta">
+                  <span class="muted">
+                    ${p.sku ? `${t("product_code_label")}: ${escapeHtml(p.sku)} · ` : ""}
+                    ${p.erp_product_id ? t("catalog_synced") : t("catalog_manual")}
+                  </span>
+                  <button class="btn-link" data-dup-edit="${p.id}">${t("edit")}</button>
+                </div>
+              `
+                )
+                .join("<hr class=\"product-duplicate-divider\" />")}
+            </div>
+          `
+            )
+            .join("")}
+        </div>
+      </div>
+    `;
+    duplicatesEl.querySelectorAll("[data-dup-edit]").forEach((btn) => {
+      const product = groups.flat().find((p) => p.id === Number(btn.dataset.dupEdit));
+      btn.addEventListener("click", () => openProductSheet(product));
+    });
+  }
+
   loadProducts();
+  loadDuplicates();
 }
 
 // Percent/fixed/exact price changes across a brand, family, or the current
@@ -1153,7 +1216,21 @@ function openImportSheet(onDone) {
                 <div class="card user-row">
                   <div class="user-row-top"><strong>${escapeHtml(c.name)}</strong></div>
                   <div class="user-row-meta">
-                    <span>${t("price_standard")}: ${formatAmd(c.oldStandard ?? 0)} &rarr; ${formatAmd(c.newStandard ?? 0)}</span>
+                    ${
+                      c.oldStandard !== c.newStandard
+                        ? `<span>${t("price_standard")}: ${formatAmd(c.oldStandard ?? 0)} &rarr; ${formatAmd(c.newStandard ?? 0)}</span>`
+                        : ""
+                    }
+                    ${
+                      c.oldRetail !== c.newRetail
+                        ? `<span>${t("price_retail")}: ${formatAmd(c.oldRetail ?? 0)} &rarr; ${formatAmd(c.newRetail ?? 0)}</span>`
+                        : ""
+                    }
+                    ${
+                      c.oldNetCost !== c.newNetCost
+                        ? `<span>${t("net_cost")}: ${c.oldNetCost != null ? formatAmd(c.oldNetCost) : "—"} &rarr; ${c.newNetCost != null ? formatAmd(c.newNetCost) : "—"}</span>`
+                        : ""
+                    }
                   </div>
                 </div>
               `

@@ -247,6 +247,33 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     // row an admin has touched since its last sync is skipped, not
     // overwritten out from under them.
     if (prodErpIds.length) {
+      // A product can already exist here with erp_product_id still NULL --
+      // created by hand in the admin Product edit sheet, or by the Excel
+      // pricelist import (see productImport.js), both of which predate
+      // this product ever appearing in the ERP feed. Without this claim
+      // step, the INSERT below has no way to recognize that row (its own
+      // ON CONFLICT only matches on erp_product_id, which that row has
+      // never had), so the very first sync of a product created some other
+      // way always created a second row for the same physical item instead
+      // of linking to the existing one -- reported live as the same
+      // product listed twice with two different stock counts. Only ever
+      // claims a row that has NEVER been erp-linked (erp_product_id IS
+      // NULL): a product whose own erp_product_id simply changed upstream
+      // (a genuine re-code, not "never synced") is left alone rather than
+      // silently reassigned, since that's much harder to distinguish from
+      // an actual new product and belongs in front of an admin, not
+      // auto-merged.
+      await client.query(
+        `UPDATE products AS p
+         SET erp_product_id = t.erp_product_id, synced_at = now()
+         FROM unnest($1::text[], $2::text[], $3::text[], $4::text[]) AS t(erp_product_id, name, brand, unit)
+         WHERE p.active
+           AND p.erp_product_id IS NULL
+           AND lower(p.name) = lower(t.name)
+           AND lower(coalesce(p.brand, '')) = lower(coalesce(t.brand, ''))
+           AND lower(coalesce(p.unit, '')) = lower(coalesce(t.unit, ''))`,
+        [prodErpIds, prodNames, prodBrands, prodUnits]
+      );
       await client.query(
         `INSERT INTO products (erp_product_id, name, brand, unit, unit_price_amd, family, bronze_price_amd, silver_price_amd, gold_price_amd, stock_qty, landing_cost_amd, synced_at)
          SELECT erp_product_id, name, brand, unit, unit_price_amd, family, bronze_price_amd, silver_price_amd, gold_price_amd, stock_qty, landing_cost_amd, now()
