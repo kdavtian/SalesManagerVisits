@@ -272,6 +272,52 @@ function homeNavTarget() {
   return HOME_TREE_ROUTES.has(currentPath) ? "#/dashboard" : lastHomeHash;
 }
 
+// Every badge count below starts back at 0 on every single page load --
+// nothing persists them, unlike the cached-user optimistic render right
+// above (see state.js's loadCachedUser/setUser). That's invisible on its
+// own, but combined with the cold-boot optimistic render (and, on the
+// dashboard specifically, its own stale-then-live re-paint), it means the
+// Home tab's quick-action badges (Payments/Warehouse/Delivery/Recorded)
+// reliably render hidden on the first paint or two and then pop in once
+// each badge's own network call resolves -- reported as "home tab opens
+// without badge numbers and reopens again with them, like refreshing".
+// Persisting the last known counts (mirroring loadCachedUser's own
+// localStorage round trip) lets the very first paint already show
+// whatever was last known instead of a guaranteed-wrong "nothing pending"
+// -- refreshAllBadges below still corrects it quietly the moment the real
+// counts land, exactly as it already did.
+const BADGE_CACHE_KEY = "fieldvisits_cached_badge_counts";
+
+function loadCachedBadgeCounts() {
+  try {
+    const raw = localStorage.getItem(BADGE_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistBadgeCounts() {
+  try {
+    localStorage.setItem(
+      BADGE_CACHE_KEY,
+      JSON.stringify({
+        orders: orderBadgeCount,
+        payments: paymentBadgeCount,
+        unrecorded: unrecordedBadgeCount,
+        warehouse: warehouseBadgeCount,
+        delivery: deliveryBadgeCount,
+        notifications: unreadNotificationCount,
+        planApprovals: planApprovalBadgeCount,
+        editRequests: editRequestBadgeCount,
+      })
+    );
+  } catch {
+    // Best-effort; losing this just means the next cold boot starts at 0
+    // again, same as before this cache existed.
+  }
+}
+
 // How many orders are sitting in "submitted" waiting on a director's
 // confirm/reject/edit -- shown as a badge on the Orders nav icon. The
 // server returns 0 for anyone who isn't a director/admin, so this is safe
@@ -308,6 +354,7 @@ async function refreshOrderBadge() {
     return;
   }
   applyOrderBadge();
+  persistBadgeCounts();
 }
 
 window.addEventListener("orders-changed", refreshOrderBadge);
@@ -340,6 +387,7 @@ async function refreshPaymentBadge() {
     return;
   }
   applyPaymentBadge();
+  persistBadgeCounts();
 }
 
 window.addEventListener("payments-changed", refreshPaymentBadge);
@@ -370,6 +418,7 @@ async function refreshUnrecordedBadge() {
     return;
   }
   applyUnrecordedBadge();
+  persistBadgeCounts();
 }
 
 window.addEventListener("recorded-changed", refreshUnrecordedBadge);
@@ -402,6 +451,7 @@ async function refreshWarehouseBadge() {
     return;
   }
   applyWarehouseBadge();
+  persistBadgeCounts();
 }
 
 window.addEventListener("warehouse-changed", refreshWarehouseBadge);
@@ -434,6 +484,7 @@ async function refreshDeliveryBadge() {
     return;
   }
   applyDeliveryBadge();
+  persistBadgeCounts();
 }
 
 window.addEventListener("delivery-changed", refreshDeliveryBadge);
@@ -463,6 +514,7 @@ async function refreshNotificationBadge() {
     return;
   }
   applyNotificationBadge();
+  persistBadgeCounts();
 }
 
 // Same pattern again, on the hamburger/settings button -- a plan stuck in
@@ -505,6 +557,7 @@ async function refreshPlanApprovalBadge() {
     return;
   }
   applyPlanApprovalBadge();
+  persistBadgeCounts();
 }
 
 async function refreshEditRequestBadge() {
@@ -516,6 +569,7 @@ async function refreshEditRequestBadge() {
     return;
   }
   applyPlanApprovalBadge();
+  persistBadgeCounts();
 }
 
 window.addEventListener("plans-changed", refreshPlanApprovalBadge);
@@ -1096,6 +1150,22 @@ async function init() {
   const cachedUser = loadCachedUser();
   if (cachedUser) {
     state.user = cachedUser;
+    // Same optimistic-paint reasoning as cachedUser above, applied to the
+    // quick-action tile badges specifically -- without this, every one of
+    // them starts this render at 0/hidden (see the module-level `let
+    // ...BadgeCount = 0` declarations below) regardless of what was last
+    // known, since none of that is cached anywhere else.
+    const cachedBadgeCounts = loadCachedBadgeCounts();
+    if (cachedBadgeCounts) {
+      orderBadgeCount = cachedBadgeCounts.orders ?? 0;
+      paymentBadgeCount = cachedBadgeCounts.payments ?? 0;
+      unrecordedBadgeCount = cachedBadgeCounts.unrecorded ?? 0;
+      warehouseBadgeCount = cachedBadgeCounts.warehouse ?? 0;
+      deliveryBadgeCount = cachedBadgeCounts.delivery ?? 0;
+      unreadNotificationCount = cachedBadgeCounts.notifications ?? 0;
+      planApprovalBadgeCount = cachedBadgeCounts.planApprovals ?? 0;
+      editRequestBadgeCount = cachedBadgeCounts.editRequests ?? 0;
+    }
     render();
   }
 
@@ -1178,6 +1248,7 @@ async function refreshAllBadgesFromServer() {
   applyDeliveryBadge();
   applyNotificationBadge();
   applyPlanApprovalBadge();
+  persistBadgeCounts();
 }
 
 initServiceWorkerUpdates();

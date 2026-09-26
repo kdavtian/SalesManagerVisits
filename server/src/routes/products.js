@@ -205,6 +205,46 @@ productsRouter.get("/sync-diagnostics", async (req, res) => {
   });
 });
 
+// Surfaces active products that share the same name+brand+unit identity --
+// the same signal classifyImportRows (productImport.js) and the ERP-sync
+// claim step (erpSync.js) both now use to match a row against the
+// catalog, so this is "which existing rows would that matching logic
+// itself treat as the same product" rather than a separate heuristic.
+// Both of those write paths now guard against creating this going
+// forward (an Excel-imported row falls back to identity match when its
+// SKU doesn't hit, and a newly-synced erp_product_id claims a
+// never-synced row with the same identity instead of inserting a second
+// one) -- this exists for whatever pairs already exist from before that
+// fix, which nothing auto-merges: two rows sharing a name can still
+// legitimately be different SKUs/counts in the real world, so resolving
+// one (typically deactivating the stale row via the existing product
+// edit sheet's Active toggle) is left to a person who can look at both.
+productsRouter.get("/duplicates", async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT p.*
+     FROM products p
+     JOIN (
+       SELECT lower(name) AS ident_name, lower(coalesce(brand, '')) AS ident_brand, lower(coalesce(unit, '')) AS ident_unit
+       FROM products
+       WHERE active
+       GROUP BY 1, 2, 3
+       HAVING count(*) > 1
+     ) dup
+       ON lower(p.name) = dup.ident_name
+       AND lower(coalesce(p.brand, '')) = dup.ident_brand
+       AND lower(coalesce(p.unit, '')) = dup.ident_unit
+     WHERE p.active
+     ORDER BY dup.ident_brand, dup.ident_name, dup.ident_unit, p.id`
+  );
+  const groups = new Map();
+  for (const p of rows) {
+    const key = `${(p.brand || "").toLowerCase()}|${p.name.toLowerCase()}|${(p.unit || "").toLowerCase()}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(p);
+  }
+  res.json([...groups.values()]);
+});
+
 productsRouter.post("/", async (req, res) => {
   const { name, sku, brand, unit, unit_price_amd, retail_price_amd, net_cost_amd } = req.body ?? {};
   const price = Number(unit_price_amd);

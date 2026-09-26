@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
-import { canPlanForOthers } from "../roles.js";
+import { canPlanForOthers, canViewTeamLocations } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { notifyUser } from "../notifications.js";
 import { APPROVER_ROLES } from "../notificationPreferences.js";
@@ -121,6 +121,82 @@ visitPlansRouter.get("/mine", async (req, res) => {
     source: "rule",
     rule_id: rule.id,
   });
+});
+
+// Today's plan for every sales_manager at once, grouped by manager --
+// management's own "who's going where today" view (Home tab's Team Today
+// section, under the Monthly Leaders points board). Same per-user
+// resolution as GET /mine above (an explicit visit_plans row wins,
+// otherwise the day's active recurring rule expanded live), just batched
+// across the whole team in a handful of queries instead of one /mine call
+// per rep. Read-only and admin/director/ceo-gated the same way the Map's
+// team-locations view already is -- this is the same "where is the team
+// right now" concern, just plan-of-record instead of live GPS.
+visitPlansRouter.get("/team-today", async (req, res) => {
+  if (!canViewTeamLocations(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const date = todayDate();
+
+  const { rows: managers } = await pool.query(
+    "SELECT id, name FROM users WHERE role = 'sales_manager' ORDER BY name"
+  );
+  if (!managers.length) return res.json([]);
+  const managerIds = managers.map((m) => m.id);
+
+  const { rows: planRows } = await pool.query(
+    "SELECT * FROM visit_plans WHERE user_id = ANY($1) AND plan_date = $2",
+    [managerIds, date]
+  );
+  const planByUser = new Map(planRows.map((p) => [p.user_id, p]));
+
+  const missingIds = managerIds.filter((id) => !planByUser.has(id));
+  let ruleRows = [];
+  if (missingIds.length) {
+    const dayOfWeek = new Date(`${date}T00:00:00Z`).getUTCDay();
+    ({ rows: ruleRows } = await pool.query(
+      "SELECT * FROM visit_plan_rules WHERE user_id = ANY($1) AND day_of_week = $2 AND active",
+      [missingIds, dayOfWeek]
+    ));
+  }
+  const ruleByUser = new Map(ruleRows.map((r) => [r.user_id, r]));
+  const expandedByRule = await batchExpandAreas(ruleRows);
+
+  const customerIdsByManager = new Map();
+  const allCustomerIds = new Set();
+  for (const m of managers) {
+    const plan = planByUser.get(m.id);
+    const rule = ruleByUser.get(m.id);
+    const ids = plan
+      ? (plan.customer_ids ?? [])
+      : rule
+        ? [...new Set([...(expandedByRule.get(rule.id) ?? []), ...(rule.customer_ids ?? [])])]
+        : [];
+    customerIdsByManager.set(m.id, ids);
+    ids.forEach((id) => allCustomerIds.add(id));
+  }
+
+  // Same "checked in today" definition GET /customers already uses --
+  // kept as its own query (rather than joining through customers.js) so
+  // this endpoint stays a single self-contained read.
+  const { rows: customerRows } = allCustomerIds.size
+    ? await pool.query(
+        `SELECT id, name,
+           EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= date_trunc('day', now())) AS visited_today
+         FROM customers c WHERE id = ANY($1)`,
+        [[...allCustomerIds]]
+      )
+    : { rows: [] };
+  const customerById = new Map(customerRows.map((c) => [c.id, c]));
+
+  res.json(
+    managers.map((m) => ({
+      user_id: m.id,
+      user_name: m.name,
+      customers: (customerIdsByManager.get(m.id) ?? [])
+        .map((id) => customerById.get(id))
+        .filter(Boolean)
+        .map((c) => ({ id: c.id, name: c.name, visited_today: c.visited_today })),
+    }))
+  );
 });
 
 // Create or replace a plan for a date, for self or (canPlanForOthers) for

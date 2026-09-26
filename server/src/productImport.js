@@ -19,6 +19,16 @@ const COLUMN_ALIASES = {
   specialFrom: ["special from", "special valid from"],
   specialTo: ["special to", "special valid to"],
   retail: ["retail price amd", "retail price"],
+  // net_cost_amd (migration 080) is otherwise purely hand-entered, one
+  // product at a time, in the admin Product edit sheet -- there is no ERP
+  // source for it at all. A warehouse manager's own cost-tracking sheet
+  // (a different workbook than the customer-facing pricelist GET
+  // /products/export/xlsx produces, which deliberately never includes
+  // internal cost columns -- see net_cost_hint, "not shown to reps") is
+  // the realistic way this ever gets populated in bulk, so without this
+  // alias its "Net Cost" column was silently dropped on import: reported
+  // as "net costs are not showing" on the Warehouse inventory screen.
+  netCost: ["net cost amd", "net cost", "cost price", "purchase cost", "purchase cost amd"],
 };
 
 function normalizeHeader(text) {
@@ -84,6 +94,7 @@ export async function parseImportFile(buffer) {
       specialFrom: dateOrNull(get("specialFrom")),
       specialTo: dateOrNull(get("specialTo")),
       retail: numOrNull(get("retail")),
+      netCost: numOrNull(get("netCost")),
     };
     // A fully blank row (Excel often pads a few) isn't a data row at all --
     // skip it silently rather than flagging it invalid.
@@ -97,7 +108,7 @@ export async function parseImportFile(buffer) {
 // used by both the preview endpoint and, as the first step, by apply.
 export async function classifyImportRows(rows) {
   const { rows: existing } = await pool.query(
-    "SELECT id, sku, brand, name, unit, bronze_price_amd, retail_price_amd FROM products WHERE active"
+    "SELECT id, sku, brand, name, unit, bronze_price_amd, retail_price_amd, net_cost_amd FROM products WHERE active"
   );
   const bySku = new Map(existing.filter((p) => p.sku).map((p) => [p.sku.toLowerCase(), p]));
   const byIdentity = new Map(
@@ -117,7 +128,7 @@ export async function classifyImportRows(rows) {
       invalidRows.push({ rowNumber: row.rowNumber, reason: "Missing product name" });
       continue;
     }
-    if (row.standard === undefined || row.special === undefined || row.retail === undefined) {
+    if (row.standard === undefined || row.special === undefined || row.retail === undefined || row.netCost === undefined) {
       invalidRows.push({ rowNumber: row.rowNumber, reason: "A price column has a non-numeric value" });
       continue;
     }
@@ -133,7 +144,19 @@ export async function classifyImportRows(rows) {
     }
     seenKeys.add(key);
 
-    const match = row.sku ? bySku.get(row.sku.toLowerCase()) : byIdentity.get(`${(row.brand || "").toLowerCase()}|${row.name.toLowerCase()}|${(row.unit || "").toLowerCase()}`);
+    const identityKey = `${(row.brand || "").toLowerCase()}|${row.name.toLowerCase()}|${(row.unit || "").toLowerCase()}`;
+    // SKU match first, but always fall back to the brand+name+unit identity
+    // match rather than only trying it when the row has no SKU at all.
+    // ERP-synced products (see erpSync.js's products upsert) never get a
+    // sku written -- it's a column that only ever comes from this manual
+    // import path or the admin's own product form -- so a row that
+    // legitimately matches an existing ERP-synced product by name/brand/
+    // unit, but happens to also carry a Product Code the ERP feed never
+    // set, used to fail the SKU lookup and fall through to "new product",
+    // creating a second row for the same physical item (reported live as
+    // duplicate catalog entries, e.g. the same product appearing twice
+    // with two different stock counts).
+    const match = (row.sku && bySku.get(row.sku.toLowerCase())) || byIdentity.get(identityKey);
 
     if (!match) {
       if (row.standard === null) {
@@ -151,6 +174,7 @@ export async function classifyImportRows(rows) {
         special: row.special,
         specialFrom: row.specialFrom,
         specialTo: row.specialTo,
+        netCost: row.netCost,
       });
       continue;
     }
@@ -158,9 +182,11 @@ export async function classifyImportRows(rows) {
     referencedIds.add(match.id);
     const oldStandard = match.bronze_price_amd === null ? null : Number(match.bronze_price_amd);
     const oldRetail = match.retail_price_amd === null ? null : Number(match.retail_price_amd);
+    const oldNetCost = match.net_cost_amd === null ? null : Number(match.net_cost_amd);
     const newStandard = row.standard ?? oldStandard;
     const newRetail = row.retail ?? oldRetail;
-    const priceChanged = newStandard !== oldStandard || newRetail !== oldRetail;
+    const newNetCost = row.netCost ?? oldNetCost;
+    const priceChanged = newStandard !== oldStandard || newRetail !== oldRetail || newNetCost !== oldNetCost;
     const hasSpecial = row.special !== null && row.specialFrom && row.specialTo;
 
     if (priceChanged || hasSpecial) {
@@ -172,6 +198,8 @@ export async function classifyImportRows(rows) {
         newStandard,
         oldRetail,
         newRetail,
+        oldNetCost,
+        newNetCost,
         special: hasSpecial ? row.special : null,
         specialFrom: hasSpecial ? row.specialFrom : null,
         specialTo: hasSpecial ? row.specialTo : null,
@@ -201,9 +229,9 @@ export async function applyImportRows(classified, userId) {
 
     for (const p of classified.newProducts) {
       const { rows } = await client.query(
-        `INSERT INTO products (name, sku, brand, unit, unit_price_amd, bronze_price_amd, retail_price_amd)
-         VALUES ($1, $2, $3, $4, $5, $5, $6) RETURNING id`,
-        [p.name, p.sku || null, p.brand || null, p.unit || null, p.standard, p.retail]
+        `INSERT INTO products (name, sku, brand, unit, unit_price_amd, bronze_price_amd, retail_price_amd, net_cost_amd)
+         VALUES ($1, $2, $3, $4, $5, $5, $6, $7) RETURNING id`,
+        [p.name, p.sku || null, p.brand || null, p.unit || null, p.standard, p.retail, p.netCost ?? null]
       );
       created++;
       if (p.special !== null && p.specialFrom && p.specialTo) {
@@ -217,10 +245,10 @@ export async function applyImportRows(classified, userId) {
     }
 
     for (const c of classified.changedPrices) {
-      if (c.newStandard !== c.oldStandard || c.newRetail !== c.oldRetail) {
+      if (c.newStandard !== c.oldStandard || c.newRetail !== c.oldRetail || c.newNetCost !== c.oldNetCost) {
         await client.query(
-          "UPDATE products SET unit_price_amd = $1, bronze_price_amd = $1, retail_price_amd = $2, updated_at = now(), manually_edited_at = now() WHERE id = $3",
-          [c.newStandard, c.newRetail, c.productId]
+          "UPDATE products SET unit_price_amd = $1, bronze_price_amd = $1, retail_price_amd = $2, net_cost_amd = $3, updated_at = now(), manually_edited_at = now() WHERE id = $4",
+          [c.newStandard, c.newRetail, c.newNetCost, c.productId]
         );
         if (c.newStandard !== c.oldStandard) {
           await client.query(

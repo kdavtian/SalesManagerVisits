@@ -7622,6 +7622,20 @@ form select,
   color: var(--warning);
 }
 
+/* Product Catalog's duplicate-product finder (admin.js renderProductsSection,
+   GET /products/duplicates) -- each group is one card holding every row
+   that shares a name+brand+unit identity, so they sit side by side for a
+   quick compare instead of scattered through the full catalog list below. */
+.product-duplicate-group {
+  color: var(--text);
+}
+
+.product-duplicate-divider {
+  border: none;
+  border-top: 0.5px solid var(--border);
+  margin: 8px 0;
+}
+
 .route-plan-rep-card {
   margin-bottom: 10px;
 }

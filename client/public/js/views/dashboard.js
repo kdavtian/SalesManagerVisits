@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { escapeHtml, formatDistance, formatRelative, formatAmd, getCurrentPosition, haversineMeters, categoryLabel } from "../util.js";
-import { state } from "../state.js";
+import { state, canViewTeamLocations } from "../state.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { applyPaymentBadge, applyUnrecordedBadge, applyWarehouseBadge, applyDeliveryBadge } from "../app.js";
@@ -143,7 +143,7 @@ export async function renderDashboard(root, navigate) {
         const isCeoOrAdmin =
           state.user.role === "admin" || state.user.role === "ceo" || state.user.role === "operations_director";
         const isSalesManager = state.user.role === "sales_manager";
-        const [summary, customers, trends, settings, planPreview, myPlan] = await Promise.all([
+        const [summary, customers, trends, settings, planPreview, myPlan, teamTodayPlans] = await Promise.all([
           api.dashboardSummary(),
           // The result here only ever feeds renderNextVisit below, and only
           // for the roles that card is actually rendered for (not admin/ceo --
@@ -171,8 +171,16 @@ export async function renderDashboard(root, navigate) {
           // visit plans are a field-rep concept, not one delivery_manager/
           // sales_director/accountant currently have a UI for setting.
           isSalesManager ? api.getMyVisitPlan().catch(() => null) : Promise.resolve(null),
+          // Today's plan for every sales_manager at once (GET
+          // /visit-plans/team-today) -- management's own view of who's
+          // going where today, by manager and customer, right under the
+          // Monthly Leaders points board. Same canViewTeamLocations gate
+          // as the Map's team-locations view; a failure here shouldn't
+          // break the rest of the home tab any more than the Company
+          // Dashboard preview card above does.
+          canViewTeamLocations() ? api.getTeamTodayVisitPlans().catch(() => null) : Promise.resolve(null),
         ]);
-        return { summary, customers, trends, settings, planPreview, myPlan };
+        return { summary, customers, trends, settings, planPreview, myPlan, teamTodayPlans };
       },
       (data) => paint(data)
     );
@@ -181,7 +189,7 @@ export async function renderDashboard(root, navigate) {
     return;
   }
 
-  function paint({ summary, customers, trends, settings, planPreview, myPlan }) {
+  function paint({ summary, customers, trends, settings, planPreview, myPlan, teamTodayPlans }) {
   const totals = summary.totals;
   const remaining = Math.max(0, totals.total_customers - totals.visited_today);
   // "Here's your field plan for today" only means something to someone who
@@ -315,6 +323,49 @@ export async function renderDashboard(root, navigate) {
         : ""
     }
 
+    ${
+      // Management's own "who's going where today" glance, right under the
+      // Monthly Leaders board -- canViewTeamLocations-gated (admin/ceo/
+      // sales_director/operations_director, same as the Map's own
+      // team-locations view), so teamTodayPlans is always null for every
+      // other role and this whole block is skipped for them.
+      teamTodayPlans?.length
+        ? `<div>
+           <h2 class="section-title section-title-tight">${t("team_today_plans_title")}</h2>
+           <div class="card-list" id="team-today-plans">
+             ${teamTodayPlans
+               .map((m) => {
+                 const visitedCount = m.customers.filter((c) => c.visited_today).length;
+                 return `
+               <details class="manager-drill-row">
+                 <summary>
+                   <span class="manager-drill-name">${escapeHtml(m.user_name)}</span>
+                   <span class="muted">${m.customers.length ? `${visitedCount}/${m.customers.length} ${t("stat_visited_today")}` : t("team_today_plans_none")}</span>
+                 </summary>
+                 ${
+                   m.customers.length
+                     ? `<div class="manager-drill-detail today-plan-list">
+                         ${m.customers
+                           .map(
+                             (c) => `
+                           <button type="button" class="today-plan-row" data-customer-id="${c.id}">
+                             <span class="today-plan-tick ${c.visited_today ? "today-plan-tick-done" : ""}" aria-hidden="true">${c.visited_today ? icons.checkCircle : ""}</span>
+                             <span class="today-plan-name">${escapeHtml(c.name)}</span>
+                           </button>
+                         `
+                           )
+                           .join("")}
+                       </div>`
+                     : ""
+                 }
+               </details>`;
+               })
+               .join("")}
+           </div>
+           </div>`
+        : ""
+    }
+
     <details class="dashboard-insights">
       <summary>${t("performance_insights")}</summary>
 
@@ -380,6 +431,9 @@ export async function renderDashboard(root, navigate) {
   }
   container.querySelectorAll("[data-view-manager]").forEach((btn) => {
     btn.addEventListener("click", () => navigate(`#/team-performance?manager=${encodeURIComponent(btn.dataset.viewManager)}`));
+  });
+  container.querySelectorAll("#team-today-plans .today-plan-row").forEach((row) => {
+    row.addEventListener("click", () => navigate(`#/customers/${row.dataset.customerId}`));
   });
 
   const leaderboardEl = container.querySelector("#points-leaderboard");
