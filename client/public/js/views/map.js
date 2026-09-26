@@ -1699,10 +1699,10 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     // Item 7 -- customer detail's Navigate button offers "Show on map" as an
     // in-app alternative to leaving for an external navigation app; this is
     // the mechanism it (and any future "open map centered on customer X"
-    // caller) relies on. Runs once, right after markers first load -- a
-    // customer not in the (filtered) list just silently has nothing to
-    // focus, same as the relocate flow above handling a missing id.
-    if (focusCustomerId != null && !initialViewApplied) {
+    // caller) relies on. A customer not in the (filtered) list just silently
+    // has nothing to focus, same as the relocate flow above handling a
+    // missing id.
+    if (focusCustomerId != null) {
       // Counts as the map's "first settle" too (see the geolocation-based
       // centering this guards against in applyFilter above) -- otherwise
       // that block keeps re-running on every later filter change (nothing
@@ -1710,6 +1710,15 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       // set) and yanks the map back to the user's own location the next
       // time they tap a filter chip.
       initialViewApplied = true;
+      // Deliberately re-run on every paintCustomers() call (not just the
+      // first), unlike the geolocation block above -- loadCustomersCached()
+      // can paint twice (a cached list, then the live fetch), and each pass
+      // clearLayers()s and rebuilds every marker from scratch. Skipping the
+      // second call here would leave the popup open on a marker that pass
+      // just destroyed, i.e. no popup at all once the live data lands
+      // (reported as "Show on map" doing nothing after the Map tab had
+      // already been visited once this session, since only then is there a
+      // cached list to paint first).
       focusOnCustomerMarker(focusCustomerId);
     }
 
