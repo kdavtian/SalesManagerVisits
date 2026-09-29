@@ -778,7 +778,7 @@ async function renderCustomerDebtReport(root, navigate) {
         ${syncBadgeHtml(sync)}
         <div class="stat-grid">
           <div class="stat-card">
-            <span class="stat-value">${formatAmd(Number(totals.total_debt_amd))}</span>
+            <span class="stat-value report-debt-total-value">${formatAmd(Number(totals.total_debt_amd))}</span>
             <span class="stat-label">${t("report_customer_debt_total_debt")}</span>
           </div>
           <div class="stat-card">
