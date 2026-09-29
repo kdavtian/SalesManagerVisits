@@ -1964,6 +1964,22 @@ input[type="search"]:focus-visible {
   font-size: 0.8rem;
 }
 
+/* Customer Debt report's own "Total debt" figure (reports.js) -- the base
+   .stat-value size/color work fine for every other stat-card (a percentage,
+   a count, a comparison delta), but a full AMD total across the whole
+   customer base can run to 9+ digits, which at 1.7rem wrapped onto two
+   lines inside the card instead of reading as one clean number (reported
+   as "doesn't fit the button"). Scoped to this one figure rather than the
+   shared .stat-value class, which every other report/dashboard stat-card
+   still uses unchanged. Graphite instead of the bright accent blue those
+   other stat-cards use, matching the same near-black --text tone every
+   other primary figure in the app (customer detail's own stat tiles, debt
+   balance amounts) already reads in. */
+.report-debt-total-value {
+  font-size: 1.3rem;
+  color: var(--text);
+}
+
 .stat-sublabel {
   font-size: 0.75rem;
   font-weight: 600;
