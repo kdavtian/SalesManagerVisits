@@ -68,6 +68,7 @@ export function transformErpOrderLines(orderLines) {
   const lineQtys = [];
   const lineUnitPrices = [];
   const lineRevenues = [];
+  const lineDiscounts = [];
 
   for (const line of isPlainArray(orderLines)) {
     if (!isPlainObject(line) || !line.erp_customer_id || !line.order_id || !line.date) continue;
@@ -81,9 +82,25 @@ export function transformErpOrderLines(orderLines) {
     lineQtys.push(Number.isFinite(line.qty) ? line.qty : null);
     lineUnitPrices.push(Number.isFinite(line.unit_price_amd) ? line.unit_price_amd : null);
     lineRevenues.push(Number.isFinite(line.revenue_amd) ? line.revenue_amd : null);
+    // Optional -- the ERP Orders sheet's own per-product "Discount" column
+    // (see docs/erp-sync-contract.md), omitted/null for a line with no
+    // discount or price adjustment recorded against it.
+    lineDiscounts.push(Number.isFinite(line.discount_amd) ? line.discount_amd : null);
   }
 
-  return { lineErpIds, lineOrderIds, lineDates, lineProductIds, lineBrands, lineProductNames, lineSizes, lineQtys, lineUnitPrices, lineRevenues };
+  return {
+    lineErpIds,
+    lineOrderIds,
+    lineDates,
+    lineProductIds,
+    lineBrands,
+    lineProductNames,
+    lineSizes,
+    lineQtys,
+    lineUnitPrices,
+    lineRevenues,
+    lineDiscounts,
+  };
 }
 
 // rep_name (matching sales_channels.code) and a monthly array are required;

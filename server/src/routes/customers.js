@@ -701,7 +701,7 @@ customersRouter.get("/:id/erp-orders/:orderId", async (req, res) => {
   }
 
   const { rows } = await pool.query(
-    `SELECT order_id, order_date, product_id, brand, product_name, size_l, qty, unit_price_amd, revenue_amd
+    `SELECT order_id, order_date, product_id, brand, product_name, size_l, qty, unit_price_amd, revenue_amd, discount_amd
      FROM erp_order_lines
      WHERE erp_customer_id = $1 AND order_id = $2
      ORDER BY brand, product_name`,

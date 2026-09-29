@@ -104,7 +104,7 @@ salesRouter.get("/order", async (req, res) => {
 
   const { rows } = await pool.query(
     `SELECT eol.order_id, eol.order_date, eol.erp_customer_id, eol.product_id, eol.brand, eol.product_name,
-            eol.size_l, eol.qty, eol.unit_price_amd, eol.revenue_amd,
+            eol.size_l, eol.qty, eol.unit_price_amd, eol.revenue_amd, eol.discount_amd,
             c.id AS internal_customer_id, COALESCE(c.name, eol.erp_customer_id) AS customer_name,
             COALESCE(ecd.assigned_sales_rep, c.sales_channel) AS channel
      FROM erp_order_lines eol

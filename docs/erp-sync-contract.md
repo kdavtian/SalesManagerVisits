@@ -40,7 +40,8 @@ which is upsert-only and never truncated).
     {
       "erp_customer_id": "12345", "order_id": "ORD-1", "date": "2026-09-01", // all three required
       "product_id": "P1", "brand": "Castrol", "product": "...", "size_l": "4",
-      "qty": 4, "unit_price_amd": 12000, "revenue_amd": 48000
+      "qty": 4, "unit_price_amd": 12000, "revenue_amd": 48000,
+      "discount_amd": 2000 // from the Orders sheet's own per-product "Discount" column; omit/null if none. Stored and shown as-is, not netted into revenue_amd.
     }
   ],
 
