@@ -45,6 +45,19 @@ which is upsert-only and never truncated).
     }
   ],
 
+  // Full all-time "Oil order" Cashflow history per customer, signed
+  // (positive = payment received, negative = refund paid back out --
+  // NOT filtered to amount > 0). Pairs with order_lines so this app can
+  // compute a customer's debt as of any past date D itself, as a running
+  // balance: SUM(order_lines.revenue_amd WHERE date <= D) -
+  // SUM(cashflow_lines.amount_amd WHERE date <= D).
+  "cashflow_lines": [
+    {
+      "erp_customer_id": "12345", "date": "2026-09-01", // both required
+      "amount_amd": 48000
+    }
+  ],
+
   "sales_performance": [
     {
       "rep_name": "SM YVN",              // required -- matches sales_channels.code
@@ -80,7 +93,7 @@ which is upsert-only and never truncated).
 }
 ```
 
-Response: `{ synced, order_lines_synced, sales_performance_synced, products_synced, brand_volume_synced }`
+Response: `{ synced, order_lines_synced, cashflow_lines_synced, sales_performance_synced, products_synced, brand_volume_synced }`
 -- each `*_synced` count is `undefined` (not `0`) when that key was omitted
 from the request, so the pipeline can tell "I sent an empty batch" apart
 from "I didn't send this at all". **If `brand_volume_synced` keeps coming

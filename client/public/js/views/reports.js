@@ -1,8 +1,8 @@
 import { api } from "../api.js";
 import { escapeHtml } from "../util.js";
-import { t } from "../i18n.js";
+import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
-import { REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, CATEGORY_LIST, formatAmd, channelDisplayLabel, syncBadgeHtml, formatDateDMY } from "../util.js";
+import { REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, CATEGORY_LIST, formatAmd, channelDisplayLabel, syncBadgeHtml, formatDateDMY, parseDateOnly } from "../util.js";
 
 // "all" (not "") for the All-time option: every one of this array's three
 // callers builds its request params with
@@ -729,6 +729,25 @@ function currentYearMonth() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
+// Local calendar-date components, not toISOString() -- see sales.js's own
+// formatDateInput for why (UTC-conversion day-shift east of UTC). Used as
+// the customer-debt as-of-date picker's `max`, so a user can't pick a
+// future date the server has no order/cashflow history for yet.
+function currentYearMonthDay() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+// "15 Sep 2026" style, same short-date convention as sales.js's own
+// formatSalesDateCaption -- parseDateOnly rather than `new Date(value)`
+// since this is a date-only string.
+function formatReportAsOfCaption(dateOnly) {
+  const d = parseDateOnly(dateOnly);
+  if (!d) return String(dateOnly ?? "");
+  const month = d.toLocaleDateString(getLang() === "hy" ? "hy" : "en", { month: "short" });
+  return `${d.getDate()} ${month} ${d.getFullYear()}`;
+}
+
 let cachedChannelOptions = null;
 async function channelOptions() {
   if (cachedChannelOptions) return cachedChannelOptions;
@@ -742,6 +761,16 @@ async function renderCustomerDebtReport(root, navigate) {
     <div class="detail-view">
       ${reportHeaderHtml("report_customer_debt_name")}
       <form id="report-filters" class="report-filter-form">
+        <div class="pill-date-filter-row">
+          <div class="pill-date-filter-wrap">
+            <button type="button" class="pill-date-filter-btn" tabindex="-1" aria-hidden="true">
+              <span class="pill-date-filter-caption">${t("debt_balances_as_of_date")}</span>
+              <span class="pill-date-filter-value" id="report-debt-as-of-value">${t("debt_balances_as_of_live")}</span>
+            </button>
+            <input type="date" class="pill-date-picker-input" id="report-debt-as-of-input" name="date" value="" max="${currentYearMonthDay()}" aria-label="${t("debt_balances_as_of_date")}" />
+          </div>
+          <button type="button" class="chip" id="report-debt-as-of-clear" hidden>${t("debt_balances_as_of_clear")}</button>
+        </div>
         <select name="sales_channel"><option value="">${t("all_channels")}</option></select>
         ${selectHtml(
           "debt_only",
@@ -759,6 +788,26 @@ async function renderCustomerDebtReport(root, navigate) {
   container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
   const form = container.querySelector("#report-filters");
   const body = container.querySelector("#report-body");
+  const asOfInput = container.querySelector("#report-debt-as-of-input");
+  const asOfValueEl = container.querySelector("#report-debt-as-of-value");
+  const asOfClearBtn = container.querySelector("#report-debt-as-of-clear");
+
+  // Just paints the pill's own caption -- reloading is already handled by
+  // the form-level "change" listener below (this input lives inside
+  // #report-filters, so its native change event bubbles there too).
+  asOfInput.addEventListener("change", () => {
+    asOfValueEl.textContent = asOfInput.value ? formatReportAsOfCaption(asOfInput.value) : t("debt_balances_as_of_live");
+    asOfClearBtn.hidden = !asOfInput.value;
+  });
+  // The clear button sets the input's value programmatically, which does
+  // NOT fire a native "change" event on its own -- so this one does need
+  // to trigger the reload itself, unlike the listener above.
+  asOfClearBtn.addEventListener("click", () => {
+    asOfInput.value = "";
+    asOfValueEl.textContent = t("debt_balances_as_of_live");
+    asOfClearBtn.hidden = true;
+    load();
+  });
 
   try {
     const options = await channelOptions();
@@ -787,7 +836,12 @@ async function renderCustomerDebtReport(root, navigate) {
           </div>
         </div>
         ${
-          Number(totals.total_debt_amd_erp) !== Number(totals.total_debt_amd)
+          // Only meaningful in live mode -- totals.total_debt_amd_erp is
+          // always the raw live erp.debt_amd sum, which as-of-date mode
+          // has no reason to match (it's comparing two different things,
+          // not "collections since sync"), so this note would be
+          // misleading rather than explanatory there.
+          !asOfInput.value && Number(totals.total_debt_amd_erp) !== Number(totals.total_debt_amd)
             ? `<p class="muted" style="margin: 0 4px 12px;">${t("report_customer_debt_adjusted_note")
                 .replace("{erp}", formatAmd(Number(totals.total_debt_amd_erp)))
                 .replace("{adjusted}", formatAmd(Number(totals.total_debt_amd)))}</p>`

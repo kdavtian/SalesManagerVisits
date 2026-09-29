@@ -1249,6 +1249,9 @@ const dict = {
     debt_balances_last_payment: "Last payment",
     debt_balances_empty: "No outstanding balances",
     debt_balances_subtotal: "Total",
+    debt_balances_as_of_date: "As of",
+    debt_balances_as_of_live: "Today (live)",
+    debt_balances_as_of_clear: "Back to live",
 
     qa_sales: "Sales",
     sales_title: "Sales",
@@ -2620,6 +2623,9 @@ const dict = {
     debt_balances_last_payment: "Վերջին վճարումը",
     debt_balances_empty: "Չկան չմարված մնացորդներ",
     debt_balances_subtotal: "Ընդամենը",
+    debt_balances_as_of_date: "Ըստ ամսաթվի",
+    debt_balances_as_of_live: "Այսօր (կենդանի)",
+    debt_balances_as_of_clear: "Վերադարձ կենդանի տվյալներին",
 
     qa_sales: "Վաճառք",
     sales_title: "Վաճառք",

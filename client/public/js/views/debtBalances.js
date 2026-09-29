@@ -5,9 +5,9 @@
 // accountant additionally get a Flat/By-manager toggle and a manager
 // filter, grouping the same payload client-side.
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, syncBadgeHtml } from "../util.js";
+import { escapeHtml, formatAmd, syncBadgeHtml, parseDateOnly } from "../util.js";
 import { state } from "../state.js";
-import { t } from "../i18n.js";
+import { t, getLang } from "../i18n.js";
 import { loadWithCache } from "../listCache.js";
 
 // For last_visit_at, a real timestamp (checkins.timestamp) -- correctly
@@ -39,10 +39,36 @@ function formatDateOnly(value) {
   });
 }
 
+// Local calendar-date components, not toISOString() -- see sales.js's own
+// formatDateInput for why (UTC-conversion day-shift east of UTC).
+function formatDateInput(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+// "15 Sep 2026" style, same short-date convention as sales.js's own
+// formatSalesDateCaption -- parseDateOnly rather than `new Date(value)`
+// since this is a date-only string.
+function formatAsOfCaption(dateOnly) {
+  const d = parseDateOnly(dateOnly);
+  if (!d) return String(dateOnly ?? "");
+  const month = d.toLocaleDateString(getLang() === "hy" ? "hy" : "en", { month: "short" });
+  return `${d.getDate()} ${month} ${d.getFullYear()}`;
+}
+
 export async function renderDebtBalances(root, navigate) {
   const canGroup = state.user.role !== "sales_manager";
   let mode = "flat";
   let managerFilter = "";
+  // Empty string = live erp_customer_data.debt_amd snapshot (the default,
+  // and the only mode before this feature). A chosen date instead computes
+  // a running balance from full order/cashflow history as of that date
+  // (see server/src/routes/debtBalances.js) -- never assumed to equal the
+  // live figure even for today, since the ERP sync can lag behind the
+  // in-app collections the live snapshot already adjusts for.
+  let asOfDate = "";
 
   root.innerHTML = `
     <div class="detail-view">
@@ -54,6 +80,16 @@ export async function renderDebtBalances(root, navigate) {
         <div class="debt-balances-subtotal" id="debt-subtotal"></div>
       </div>
       <div id="debt-sync-badge"></div>
+      <div class="pill-date-filter-row">
+        <div class="pill-date-filter-wrap">
+          <button type="button" class="pill-date-filter-btn" tabindex="-1" aria-hidden="true">
+            <span class="pill-date-filter-caption">${t("debt_balances_as_of_date")}</span>
+            <span class="pill-date-filter-value" id="debt-as-of-value">${t("debt_balances_as_of_live")}</span>
+          </button>
+          <input type="date" class="pill-date-picker-input" id="debt-as-of-input" value="" max="${formatDateInput(new Date())}" aria-label="${t("debt_balances_as_of_date")}" />
+        </div>
+        <button type="button" class="chip" id="debt-as-of-clear" hidden>${t("debt_balances_as_of_clear")}</button>
+      </div>
       ${
         canGroup
           ? `<div class="segmented" id="debt-mode-tabs">
@@ -78,6 +114,23 @@ export async function renderDebtBalances(root, navigate) {
   const errorEl = container.querySelector("#debt-error");
   const subtotalEl = container.querySelector("#debt-subtotal");
   const syncBadgeEl = container.querySelector("#debt-sync-badge");
+  const asOfInput = container.querySelector("#debt-as-of-input");
+  const asOfValueEl = container.querySelector("#debt-as-of-value");
+  const asOfClearBtn = container.querySelector("#debt-as-of-clear");
+
+  asOfInput.addEventListener("change", () => {
+    asOfDate = asOfInput.value || "";
+    asOfValueEl.textContent = asOfDate ? formatAsOfCaption(asOfDate) : t("debt_balances_as_of_live");
+    asOfClearBtn.hidden = !asOfDate;
+    load();
+  });
+  asOfClearBtn.addEventListener("click", () => {
+    asOfDate = "";
+    asOfInput.value = "";
+    asOfValueEl.textContent = t("debt_balances_as_of_live");
+    asOfClearBtn.hidden = true;
+    load();
+  });
 
   if (canGroup) {
     const tabsEl = container.querySelector("#debt-mode-tabs");
@@ -190,8 +243,12 @@ export async function renderDebtBalances(root, navigate) {
     let paintedOnce = false;
     try {
       await loadWithCache(
-        "debt-balances",
-        () => api.getDebtBalances(),
+        // Scoped per as-of date, not one shared "debt-balances" key --
+        // otherwise switching between live and a past date would show the
+        // other mode's stale cached rows for an instant before the real
+        // fetch landed.
+        asOfDate ? `debt-balances:${asOfDate}` : "debt-balances",
+        () => api.getDebtBalances(asOfDate ? { date: asOfDate } : {}),
         (data) => {
           paintData(data);
           paintedOnce = true;

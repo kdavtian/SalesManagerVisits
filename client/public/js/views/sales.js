@@ -35,7 +35,7 @@ function formatSalesDateHeading(dateOnly) {
 }
 
 // Same short style as formatSalesDateHeading, plus the year -- the From/To
-// filter's own pill buttons (see the sales-date-filter-* markup below) can
+// filter's own pill buttons (see the pill-date-filter-* markup below) can
 // span a range crossing calendar years, unlike a single day-group heading.
 function formatSalesDateCaption(dateOnly) {
   const d = parseDateOnly(dateOnly);
@@ -162,20 +162,20 @@ export async function renderSales(root, navigate) {
         <div id="sales-sync-badge"></div>
         <p class="muted sales-source-hint">${t("sales_source_hint")}</p>
       </div>
-      <div class="sales-date-filter-row">
-        <div class="sales-date-filter-wrap">
-          <button type="button" class="sales-date-filter-btn" tabindex="-1" aria-hidden="true">
-            <span class="sales-date-filter-caption">${t("date_from")}</span>
-            <span class="sales-date-filter-value" id="sales-from-value">${formatSalesDateCaption(from)}</span>
+      <div class="pill-date-filter-row">
+        <div class="pill-date-filter-wrap">
+          <button type="button" class="pill-date-filter-btn" tabindex="-1" aria-hidden="true">
+            <span class="pill-date-filter-caption">${t("date_from")}</span>
+            <span class="pill-date-filter-value" id="sales-from-value">${formatSalesDateCaption(from)}</span>
           </button>
-          <input type="date" class="sales-date-picker-input" id="sales-from" value="${from}" aria-label="${t("date_from")}" />
+          <input type="date" class="pill-date-picker-input" id="sales-from" value="${from}" aria-label="${t("date_from")}" />
         </div>
-        <div class="sales-date-filter-wrap">
-          <button type="button" class="sales-date-filter-btn" tabindex="-1" aria-hidden="true">
-            <span class="sales-date-filter-caption">${t("date_to")}</span>
-            <span class="sales-date-filter-value" id="sales-to-value">${formatSalesDateCaption(to)}</span>
+        <div class="pill-date-filter-wrap">
+          <button type="button" class="pill-date-filter-btn" tabindex="-1" aria-hidden="true">
+            <span class="pill-date-filter-caption">${t("date_to")}</span>
+            <span class="pill-date-filter-value" id="sales-to-value">${formatSalesDateCaption(to)}</span>
           </button>
-          <input type="date" class="sales-date-picker-input" id="sales-to" value="${to}" aria-label="${t("date_to")}" />
+          <input type="date" class="pill-date-picker-input" id="sales-to" value="${to}" aria-label="${t("date_to")}" />
         </div>
       </div>
       <div class="customer-stats-bar sales-channel-bar" id="sales-channel-bar" aria-label="${escapeHtml(t("sales_channel_filter"))}"></div>

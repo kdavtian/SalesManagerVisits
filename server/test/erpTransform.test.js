@@ -9,6 +9,7 @@ import {
   isPlainArray,
   transformErpCustomers,
   transformErpOrderLines,
+  transformErpCashflowLines,
   transformErpSalesPerformance,
   transformErpProducts,
   transformErpBrandVolume,
@@ -133,6 +134,37 @@ test("transformErpOrderLines: discount_amd is optional -- a finite value (either
     { erp_customer_id: "1", order_id: "ORD-3", date: "2026-09-01" },
   ]);
   assert.deepEqual(result.lineDiscounts, [2000, -1500, null]);
+});
+
+// --- transformErpCashflowLines ------------------------------------------------
+
+test("transformErpCashflowLines: a well-formed entry maps every field, sign preserved", () => {
+  const result = transformErpCashflowLines([
+    { erp_customer_id: "1", date: "2026-09-01", amount_amd: 48000 },
+    { erp_customer_id: "1", date: "2026-09-05", amount_amd: -1500 },
+  ]);
+  assert.deepEqual(result.cashErpIds, ["1", "1"]);
+  assert.deepEqual(result.cashDates, ["2026-09-01", "2026-09-05"]);
+  assert.deepEqual(result.cashAmounts, [48000, -1500], "a negative (refund) amount passes through unchanged, not filtered out");
+});
+
+test("transformErpCashflowLines: missing erp_customer_id or date drops the line", () => {
+  const result = transformErpCashflowLines([
+    { date: "2026-09-01", amount_amd: 100 },
+    { erp_customer_id: "1", amount_amd: 100 },
+    { erp_customer_id: "1", date: "2026-09-01", amount_amd: 100 },
+  ]);
+  assert.equal(result.cashErpIds.length, 1);
+});
+
+test("transformErpCashflowLines: a non-finite amount_amd becomes null", () => {
+  const result = transformErpCashflowLines([{ erp_customer_id: "1", date: "2026-09-01" }]);
+  assert.equal(result.cashAmounts[0], null);
+});
+
+test("transformErpCashflowLines: a non-array input produces empty output rather than throwing", () => {
+  const result = transformErpCashflowLines(undefined);
+  assert.deepEqual(result.cashErpIds, []);
 });
 
 // --- transformErpSalesPerformance --------------------------------------------

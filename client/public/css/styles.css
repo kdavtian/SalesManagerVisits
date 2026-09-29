@@ -6004,19 +6004,27 @@ label.checkbox-row input[type="checkbox"] {
    trigger the exact same OS-native picker either way -- an <input
    type="date"> gets it for free -- this only changes what the tap target
    itself looks like before that picker opens. */
-.sales-date-filter-row {
+/* Generic native pill-style date filter -- an invisible native <input
+   type="date"/"month"> overlaid on a styled, non-interactive button, so
+   the tap target looks like the rest of the app's pills but still opens
+   the OS's own native picker (same haptics/behavior as a raw input, only
+   the visual differs). Originally sales-date-filter-* (Sales page only);
+   generalized so every screen with a date filter (Debt Balances, Activity,
+   Payments, Cash Expenses, the two admin screens) can share one CSS block
+   instead of each carrying its own near-identical copy. */
+.pill-date-filter-row {
   display: flex;
   gap: 10px;
   padding: 10px 16px 0;
 }
 
-.sales-date-filter-wrap {
+.pill-date-filter-wrap {
   position: relative;
   flex: 1;
   min-width: 0;
 }
 
-.sales-date-filter-btn {
+.pill-date-filter-btn {
   box-sizing: border-box;
   width: 100%;
   min-height: 46px;
@@ -6031,22 +6039,22 @@ label.checkbox-row input[type="checkbox"] {
   border-radius: var(--radius);
   color: var(--text);
   pointer-events: none; /* the real <input type="date"> laid on top (see
-                            .sales-date-picker-input) is what actually
+                            .pill-date-picker-input) is what actually
                             receives the tap. */
 }
 
-.sales-date-filter-caption {
+.pill-date-filter-caption {
   font-size: 0.7rem;
   color: var(--text-dim);
 }
 
-.sales-date-filter-value {
+.pill-date-filter-value {
   font-size: 0.85rem;
   font-weight: 700;
   white-space: nowrap;
 }
 
-.sales-date-picker-input {
+.pill-date-picker-input {
   position: absolute;
   inset: 0;
   width: 100%;
