@@ -126,6 +126,15 @@ test("transformErpOrderLines: missing erp_customer_id, order_id, or date each dr
   assert.equal(result.lineErpIds.length, 1, "only the fully-populated line survives");
 });
 
+test("transformErpOrderLines: discount_amd is optional -- a finite value (either sign) passes through, an omitted one is null", () => {
+  const result = transformErpOrderLines([
+    { erp_customer_id: "1", order_id: "ORD-1", date: "2026-09-01", discount_amd: 2000 },
+    { erp_customer_id: "1", order_id: "ORD-2", date: "2026-09-01", discount_amd: -1500 },
+    { erp_customer_id: "1", order_id: "ORD-3", date: "2026-09-01" },
+  ]);
+  assert.deepEqual(result.lineDiscounts, [2000, -1500, null]);
+});
+
 // --- transformErpSalesPerformance --------------------------------------------
 
 test("transformErpSalesPerformance: flattens each rep's monthly array into parallel rows", () => {

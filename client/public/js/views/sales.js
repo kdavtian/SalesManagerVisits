@@ -5,7 +5,7 @@
 // sales.js: no write-back, ERP/Excel stays the source of truth, same
 // contract as Debt Balances.
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, formatLiters, channelDisplayLabel, activateDialog, syncBadgeHtml, parseDateOnly, customerNameLinkHtml, activateCustomerNameLinks } from "../util.js";
+import { escapeHtml, formatAmd, formatLiters, channelDisplayLabel, activateDialog, syncBadgeHtml, parseDateOnly, customerNameLinkHtml, activateCustomerNameLinks, erpLineDiscountRowHtml } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { seesFinancialExports } from "../state.js";
 
@@ -32,6 +32,16 @@ function formatSalesDateHeading(dateOnly) {
   if (!d) return String(dateOnly ?? "");
   const month = d.toLocaleDateString(getLang() === "hy" ? "hy" : "en", { month: "short" });
   return `${d.getDate()} ${month}`;
+}
+
+// Same short style as formatSalesDateHeading, plus the year -- the From/To
+// filter's own pill buttons (see the sales-date-filter-* markup below) can
+// span a range crossing calendar years, unlike a single day-group heading.
+function formatSalesDateCaption(dateOnly) {
+  const d = parseDateOnly(dateOnly);
+  if (!d) return String(dateOnly ?? "");
+  const month = d.toLocaleDateString(getLang() === "hy" ? "hy" : "en", { month: "short" });
+  return `${d.getDate()} ${month} ${d.getFullYear()}`;
 }
 
 function groupLinesByBrand(lines) {
@@ -72,7 +82,8 @@ async function openSalesOrderSheet(erpCustomerId, orderId, navigate) {
           <span>${escapeHtml(l.product_name || "")}${l.size_l ? ` ${escapeHtml(String(l.size_l))}L` : ""}</span>
           <span class="muted">${escapeHtml(String(l.qty ?? ""))}pcs</span>
           <span>${formatAmd(l.unit_price_amd)}</span>
-        </div>`
+        </div>
+        ${erpLineDiscountRowHtml(l)}`
         )
         .join("")}`
     )
@@ -151,9 +162,21 @@ export async function renderSales(root, navigate) {
         <div id="sales-sync-badge"></div>
         <p class="muted sales-source-hint">${t("sales_source_hint")}</p>
       </div>
-      <div class="activity-custom-range">
-        <label>${t("date_from")}<input type="date" id="sales-from" value="${from}" /></label>
-        <label>${t("date_to")}<input type="date" id="sales-to" value="${to}" /></label>
+      <div class="sales-date-filter-row">
+        <div class="sales-date-filter-wrap">
+          <button type="button" class="sales-date-filter-btn" tabindex="-1" aria-hidden="true">
+            <span class="sales-date-filter-caption">${t("date_from")}</span>
+            <span class="sales-date-filter-value" id="sales-from-value">${formatSalesDateCaption(from)}</span>
+          </button>
+          <input type="date" class="sales-date-picker-input" id="sales-from" value="${from}" aria-label="${t("date_from")}" />
+        </div>
+        <div class="sales-date-filter-wrap">
+          <button type="button" class="sales-date-filter-btn" tabindex="-1" aria-hidden="true">
+            <span class="sales-date-filter-caption">${t("date_to")}</span>
+            <span class="sales-date-filter-value" id="sales-to-value">${formatSalesDateCaption(to)}</span>
+          </button>
+          <input type="date" class="sales-date-picker-input" id="sales-to" value="${to}" aria-label="${t("date_to")}" />
+        </div>
       </div>
       <div class="customer-stats-bar sales-channel-bar" id="sales-channel-bar" aria-label="${escapeHtml(t("sales_channel_filter"))}"></div>
       <div class="list-toolbar">
@@ -314,12 +337,16 @@ export async function renderSales(root, navigate) {
     }
   }
 
+  const fromValueEl = container.querySelector("#sales-from-value");
+  const toValueEl = container.querySelector("#sales-to-value");
   fromInput.addEventListener("change", () => {
     from = fromInput.value || from;
+    fromValueEl.textContent = formatSalesDateCaption(from);
     load();
   });
   toInput.addEventListener("change", () => {
     to = toInput.value || to;
+    toValueEl.textContent = formatSalesDateCaption(to);
     load();
   });
   searchInput.addEventListener("input", () => {

@@ -463,6 +463,28 @@ export function formatAmd(value) {
   return `${Math.round(Number(value)).toLocaleString()} ${t("amd")}`;
 }
 
+// A second row under an ERP order line item (sales.js's own order-detail
+// sheet, and customerDetail.js's per-customer equivalent) showing that
+// line's discount_amd (the source Excel Orders sheet's own per-product
+// "Discount" column, synced via erp_order_lines -- see
+// docs/erp-sync-contract.md), when it has one. Was captured by the sync
+// pipeline all along but never surfaced in the app -- reported as
+// "discounts recorded in the source file aren't visible on order cards".
+// Signed as the ERP sends it (formatAmd's own toLocaleString() keeps a
+// negative sign), so a price add shows the same way a discount does,
+// without the app asserting a direction of its own. Returns "" (no row)
+// for a line with no discount recorded, including exactly 0.
+export function erpLineDiscountRowHtml(line) {
+  const discount = line.discount_amd;
+  if (discount == null || Number(discount) === 0) return "";
+  return `
+    <div class="erp-line-row erp-line-discount-row">
+      <span class="muted">${t("erp_line_discount_label")}</span>
+      <span></span>
+      <span>${formatAmd(discount)}</span>
+    </div>`;
+}
+
 export function formatDistance(meters) {
   if (meters == null) return "";
   const isHy = getLang() === "hy";
