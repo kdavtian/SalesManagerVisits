@@ -4811,6 +4811,7 @@ label.checkbox-row input[type="checkbox"] {
 
 .expenses-filters {
   display: flex;
+  align-items: center;
   gap: 8px;
   margin-top: 12px;
 }
@@ -4820,9 +4821,12 @@ label.checkbox-row input[type="checkbox"] {
   min-width: 0;
 }
 
-.expenses-filters input[type="date"] {
-  flex-shrink: 0;
-  width: 42%;
+/* The date filter itself is now the shared .pill-date-filter-wrap (see
+   styles.css's "Generic native pill-style date filter" block) -- sized
+   here rather than flex: 1 like its sibling search input, since a date
+   pill only needs to fit its own caption/value text. */
+.expenses-filters .pill-date-filter-wrap {
+  flex: 0 0 42%;
 }
 
 .notification-card {
@@ -5995,23 +5999,18 @@ label.checkbox-row input[type="checkbox"] {
   padding: 10px 16px 0;
 }
 
-/* Sales page's From/To range -- same "native input invisibly overlaid on
-   a styled button" trick as Team Performance's own month filter (see
-   .perf-month-filter-btn/.perf-month-picker-input above), applied here
-   to a plain two-box <input type="date"> pair that used to look like a
-   bare web form next to Team Performance's single polished pill (reported
-   as "the date filter looks more native on Team Performance"). Both
-   trigger the exact same OS-native picker either way -- an <input
-   type="date"> gets it for free -- this only changes what the tap target
-   itself looks like before that picker opens. */
 /* Generic native pill-style date filter -- an invisible native <input
    type="date"/"month"> overlaid on a styled, non-interactive button, so
    the tap target looks like the rest of the app's pills but still opens
    the OS's own native picker (same haptics/behavior as a raw input, only
    the visual differs). Originally sales-date-filter-* (Sales page only);
-   generalized so every screen with a date filter (Debt Balances, Activity,
-   Payments, Cash Expenses, the two admin screens) can share one CSS block
-   instead of each carrying its own near-identical copy. */
+   generalized so every screen with a plain native date filter can share
+   one CSS block instead of each carrying its own near-identical copy.
+   NOT used by Activity's own custom range -- that one already has a
+   richer, non-native wheel-picker treatment (see
+   activity-date-picker.css / activityDatePicker.js), deliberately built
+   because Safari's native date input can't be given a "Today" action or
+   have its Reset/Done toolbar localized to the app's own language. */
 .pill-date-filter-row {
   display: flex;
   gap: 10px;

@@ -1,10 +1,20 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, activateDialog } from "../util.js";
-import { t } from "../i18n.js";
+import { escapeHtml, formatAmd, activateDialog, parseDateOnly } from "../util.js";
+import { t, getLang } from "../i18n.js";
 import { state, seesFinancialExports } from "../state.js";
 
 function formatDateTime(value) {
   return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+// "15 Sep 2026" style, same short-date convention as sales.js's own
+// formatSalesDateCaption -- parseDateOnly rather than `new Date(value)`
+// since this is a date-only string.
+function formatFilterDateCaption(dateOnly) {
+  const d = parseDateOnly(dateOnly);
+  if (!d) return String(dateOnly ?? "");
+  const month = d.toLocaleDateString(getLang() === "hy" ? "hy" : "en", { month: "short" });
+  return `${d.getDate()} ${month} ${d.getFullYear()}`;
 }
 
 export async function renderCashExpenses(root, navigate) {
@@ -21,7 +31,14 @@ export async function renderCashExpenses(root, navigate) {
       <button type="button" class="btn btn-primary btn-block" id="add-expense-btn">+ ${t("add_expense")}</button>
       <div class="expenses-filters">
         <input type="search" id="expenses-search" placeholder="${t("search_expenses")}" />
-        <input type="date" id="expenses-date" />
+        <div class="pill-date-filter-wrap">
+          <button type="button" class="pill-date-filter-btn" tabindex="-1" aria-hidden="true">
+            <span class="pill-date-filter-caption">${t("date_filter_label")}</span>
+            <span class="pill-date-filter-value" id="expenses-date-value">${t("date_filter_all")}</span>
+          </button>
+          <input type="date" class="pill-date-picker-input" id="expenses-date" aria-label="${t("date_filter_label")}" />
+        </div>
+        <button type="button" class="chip" id="expenses-date-clear" hidden>${t("date_filter_clear")}</button>
       </div>
       <p class="form-error" id="expenses-error" hidden></p>
       <div id="expenses-list" class="card-list" style="margin-top:12px;"></div>
@@ -34,6 +51,19 @@ export async function renderCashExpenses(root, navigate) {
   const errorEl = container.querySelector("#expenses-error");
   const searchInput = container.querySelector("#expenses-search");
   const dateInput = container.querySelector("#expenses-date");
+  const dateValueEl = container.querySelector("#expenses-date-value");
+  const dateClearBtn = container.querySelector("#expenses-date-clear");
+
+  dateInput.addEventListener("change", () => {
+    dateValueEl.textContent = dateInput.value ? formatFilterDateCaption(dateInput.value) : t("date_filter_all");
+    dateClearBtn.hidden = !dateInput.value;
+  });
+  dateClearBtn.addEventListener("click", () => {
+    dateInput.value = "";
+    dateValueEl.textContent = t("date_filter_all");
+    dateClearBtn.hidden = true;
+    paintFiltered();
+  });
 
   let allExpenses = [];
   let hasMore = false;

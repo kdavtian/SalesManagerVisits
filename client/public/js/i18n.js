@@ -991,6 +991,9 @@ const dict = {
     no_activity_found: "No activity found.",
     date_from: "From",
     date_to: "To",
+    date_filter_label: "Date",
+    date_filter_all: "All dates",
+    date_filter_clear: "Clear",
     yesterday: "Yesterday",
 
     plan_coming_soon_title: "Visit plans",
@@ -2323,6 +2326,9 @@ const dict = {
     no_activity_found: "Ակտիվություն չի գտնվել։",
     date_from: "Սկսած",
     date_to: "Մինչև",
+    date_filter_label: "Ամսաթիվ",
+    date_filter_all: "Բոլոր ամսաթվերը",
+    date_filter_clear: "Մաքրել",
     yesterday: "Երեկ",
 
     plan_coming_soon_title: "Այցելությունների պլան",
