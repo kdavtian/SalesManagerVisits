@@ -51,6 +51,27 @@
     <div id="install-root"></div>
     <div id="update-root"></div>
 
+    <!-- Pure CSS, no JS: field reps use this one-handed, walking a customer's
+         floor -- an accidental landscape flip (phone in a pocket, set down on
+         a counter) shouldn't ever land them in a reflowed layout mid-task.
+         Blocks phones only (see styles.css's phone-rotate-lock media query,
+         keyed off landscape *height* -- a phone's short axis in landscape is
+         well under a tablet's, so a tablet turned sideways is untouched and
+         keeps its full landscape layout). Both languages are always in the
+         markup rather than picked by JS/i18n.js, since this has to render
+         correctly even during the Calculator Mode lock screen, before any
+         app module (including i18n.js) has loaded. -->
+    <div class="phone-rotate-lock-overlay" role="alert" aria-live="assertive">
+      <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="7" y="2" width="10" height="20" rx="2.2" transform="rotate(90 12 12)"/>
+        <path d="M12 6.2v1.6M9.5 20.5h5" transform="rotate(90 12 12)"/>
+        <path d="M4 4.5a9 9 0 0 1 15 4M20 19.5a9 9 0 0 1-15-4" stroke-width="1.8"/>
+        <path d="M18.5 4.5H21v2.5M5.5 19.5H3V17" stroke-width="1.8"/>
+      </svg>
+      <p class="phone-rotate-lock-text" lang="hy">Խնդրում ենք հեռախոսը շրջել ուղղահայաց դիրքի։</p>
+      <p class="phone-rotate-lock-text" lang="en">Please rotate your phone back to portrait.</p>
+    </div>
+
     <!-- bootGate.js is the only script loaded unconditionally: it decides
          whether to show the calculator lock screen or boot the real app
          (dynamically importing everything below), so none of the real

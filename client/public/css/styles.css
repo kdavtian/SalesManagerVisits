@@ -5864,99 +5864,53 @@ label.checkbox-row input[type="checkbox"] {
   padding: 0 4px;
 }
 
-/* In a short landscape viewport the tab bar becomes a side rail, preserving
-   vertical space for the field workflow instead of blocking rotation. */
-@media (orientation: landscape) and (max-height: 540px) and (min-width: 568px) {
-  .top-bar,
-  .sync-banner {
-    margin-left: 88px;
+/* Phone rotation lock. Field reps use this one-handed while walking a
+   customer's floor -- an accidental landscape flip (phone in a pocket, set
+   down on a counter) shouldn't reflow the layout mid-task, so landscape is
+   blocked outright on phones rather than adapted to (a prior version of
+   this rule turned the tab bar into a side rail instead; reps found the
+   accidental-rotation mid-task worse than the rail was helpful).
+   Tablets are untouched: max-height:540px is keyed off landscape *height*
+   -- a phone's short axis in landscape (its portrait width) tops out
+   around 430px on today's largest phones, while the smallest common
+   tablet (iPad mini, portrait width 768px) lands well above 540px, so a
+   tablet turned sideways never matches this query and keeps full
+   landscape support. See index.html for the overlay markup this reveals. */
+.phone-rotate-lock-overlay {
+  display: none;
+}
+
+@media (orientation: landscape) and (max-height: 540px) {
+  #sync-banner,
+  #sidebar,
+  #top-bar,
+  #app,
+  #nav-bar,
+  #install-root,
+  #update-root {
+    display: none !important;
   }
 
-  .top-bar {
-    padding-top: calc(var(--safe-top) + 7px);
-    padding-bottom: 7px;
-  }
-
-  .app-main {
-    margin-left: 88px;
-    padding-bottom: 0;
-  }
-
-  .nav-bar {
-    top: 0;
-    right: auto;
-    width: 88px;
-    /* dvh needs iOS 15.4+; the plain vh fallback above it is overridden
-       wherever dvh is actually supported (accounts for the on-screen
-       keyboard/browser chrome), and is otherwise the only height applied. */
-    height: 100vh;
-    height: 100dvh;
-    padding: max(8px, var(--safe-top)) 6px max(8px, var(--safe-bottom));
+  .phone-rotate-lock-overlay {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
     flex-direction: column;
+    align-items: center;
     justify-content: center;
-    align-items: stretch;
-    gap: 2px;
-    border-top: 0;
-    border-right: 0.5px solid var(--border);
+    gap: 10px;
+    padding: 24px;
+    text-align: center;
+    background: var(--bg);
+    color: var(--text);
   }
 
-  .nav-item,
-  .nav-item-center-wrap {
-    flex: 0 1 64px;
-    width: 100%;
-    height: 64px;
-  }
-
-  .nav-item {
-    border-radius: 12px;
-    font-size: 0.68rem;
-  }
-
-  .nav-item-active {
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
-  }
-
-  .nav-item-center-wrap {
-    justify-content: center;
-  }
-
-  .nav-item-center {
-    width: 40px;
-    height: 40px;
-    margin-top: 0;
-    border-width: 0;
-    box-shadow: none;
-  }
-
-  .nav-item-center-label {
-    margin-top: 2px;
-    font-size: 0.68rem;
-  }
-
-  .dashboard-view,
-  .detail-view,
-  .checkin-view,
-  .settings-view {
-    max-width: 960px;
-    margin-inline: auto;
-  }
-
-  .stat-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  .sheet {
-    width: min(620px, 72vw);
-    max-height: 94vh;
-    max-height: 94dvh;
-    margin-left: auto;
-    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-    padding-bottom: 20px;
-  }
-
-  .install-banner {
-    left: 88px;
-    bottom: 8px;
+  .phone-rotate-lock-text {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    max-width: 320px;
   }
 }
 

@@ -31,12 +31,17 @@ const checks = [
   ["main content can receive routed focus", "index.html", /<main[^>]+tabindex="-1"/],
   ["primary navigation has an accessible name", "index.html", /<nav[^>]+aria-label="Primary navigation"/],
   ["page-level pinch/double-tap zoom is disabled outside the map", "index.html", /<meta name="viewport"[^>]*maximum-scale=1[^>]*>/],
-  ["landscape is allowed by the PWA (normal branding)", "manifest.app.json", /"orientation"\s*:\s*"any"/],
-  ["landscape is allowed by the PWA (calculator disguise)", "manifest.calculator.json", /"orientation"\s*:\s*"any"/],
+  // The manifest itself still declares "any" -- it can't be conditioned on
+  // device size, and this is what lets a TABLET keep full landscape
+  // support in standalone/installed mode. The actual phone-only lock is
+  // enforced in CSS (see the two checks below), not here.
+  ["PWA manifest doesn't hardcode an orientation lock (normal branding)", "manifest.app.json", /"orientation"\s*:\s*"any"/],
+  ["PWA manifest doesn't hardcode an orientation lock (calculator disguise)", "manifest.calculator.json", /"orientation"\s*:\s*"any"/],
   ["application content creates an isolated stacking context", "css/styles.css", /\.app-main\s*\{[^}]*isolation:\s*isolate/s],
   ["navigation stays above map controls", "css/styles.css", /\.nav-bar\s*\{[^}]*z-index:\s*1200/s],
   ["map route keeps navigation opaque", "css/styles.css", /\.map-active\s+\.nav-bar\s*\{/],
-  ["compact landscape layout exists", "css/styles.css", /@media\s*\(orientation:\s*landscape\)[^{]*\{/],
+  ["phone rotate-lock overlay markup exists", "index.html", /class="phone-rotate-lock-overlay"/],
+  ["phone rotate-lock CSS targets phone landscape height only, not tablets", "css/styles.css", /@media\s*\(orientation:\s*landscape\)\s*and\s*\(max-height:\s*540px\)/],
   ["reduced-motion preference is respected", "css/styles.css", /@media\s*\(prefers-reduced-motion:\s*reduce\)/],
   ["active navigation exposes aria-current", "js/app.js", /aria-current="page"/],
   ["dialogs use the shared accessible controller", "js/util.js", /export function activateDialog/],
@@ -63,8 +68,6 @@ for (const [label, file, pattern] of checks) {
 }
 
 const forbidden = [
-  ["legacy landscape blocker is absent", "index.html", /rotate-overlay|rotate-device/i],
-  ["legacy landscape blocker styles are absent", "css/styles.css", /rotate-overlay|rotate-device/i],
   ["retired hamburger drawer markup is absent", "index.html", /id="side-drawer"|id="drawer-backdrop"/],
   ["retired map tools flyout markup is absent", "js/views/map.js", /id="map-tools-panel"/],
 ];
