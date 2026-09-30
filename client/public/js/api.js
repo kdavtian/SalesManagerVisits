@@ -194,6 +194,7 @@ export const api = {
   saveVisitPlanRule: (dayOfWeek, areas, userId, customerIds) =>
     json(`/visit-plans/rules/${dayOfWeek}`, "PUT", { areas, user_id: userId, customer_ids: customerIds }),
   getRoutePlansOverview: () => request("/visit-plans/rules/overview"),
+  getRoutePlanCustomers: (userId) => request(`/visit-plans/rules/customers${userId ? `?user_id=${userId}` : ""}`),
 
   listProducts: (q = "") => request(`/products${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   listAllProducts: () => request("/products/all"),
