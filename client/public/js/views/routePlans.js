@@ -3,6 +3,7 @@ import { escapeHtml, activateDialog } from "../util.js";
 import { t } from "../i18n.js";
 import { state, canPlanForOthers } from "../state.js";
 import { buildCustomerTree, renderTriStateTree } from "../regionTree.js";
+import { icons } from "../icons.js";
 
 const WEEKDAY_KEYS = ["weekday_sun", "weekday_mon", "weekday_tue", "weekday_wed", "weekday_thu", "weekday_fri", "weekday_sat"];
 // Display order only -- day_of_week values stay 0=Sun..6=Sat (JS Date#getDay()),
@@ -75,6 +76,7 @@ export async function renderRoutePlans(root, navigate) {
             </button>`;
           }).join("")}
         </div>
+        <button type="button" class="btn route-plan-view-customers-btn" data-user-id="${rep.user_id}" data-user-name="${escapeHtml(rep.user_name)}">${t("view_customers")}</button>
       </div>`;
       })
       .join("");
@@ -82,6 +84,11 @@ export async function renderRoutePlans(root, navigate) {
     bodyEl.querySelectorAll(".route-plan-day-chip").forEach((btn) => {
       btn.addEventListener("click", () => {
         openEditSheet(Number(btn.dataset.userId), btn.dataset.userName, Number(btn.dataset.day), load);
+      });
+    });
+    bodyEl.querySelectorAll(".route-plan-view-customers-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        openCustomersByDaySheet(Number(btn.dataset.userId), btn.dataset.userName);
       });
     });
   }
@@ -101,11 +108,15 @@ export async function renderRoutePlans(root, navigate) {
           </button>`;
         }).join("")}
       </div>
+      <button type="button" class="btn route-plan-view-customers-btn" id="own-view-customers-btn">${t("view_customers")}</button>
     `;
     bodyEl.querySelectorAll(".route-plan-day-chip").forEach((btn) => {
       btn.addEventListener("click", () => {
         openEditSheet(state.user.id, state.user.name, Number(btn.dataset.day), load);
       });
+    });
+    bodyEl.querySelector("#own-view-customers-btn").addEventListener("click", () => {
+      openCustomersByDaySheet(state.user.id, state.user.name);
     });
   }
 
@@ -202,6 +213,128 @@ async function openEditSheet(userId, userName, dayOfWeek, onSaved) {
     existingCustomerIds = [];
   }
   await openCustomerPickSheet({ userId, userName, days: [dayOfWeek], existingCustomerIds, onSaved });
+}
+
+// Read-only Region -> Subregion -> Customer accordion for the "View
+// customers" sheet -- same shape as regionTree.js's tri-state tree, but
+// each leaf row shows day badges instead of a checkbox, so it can't just
+// reuse renderTriStateTree. Kept local to this file rather than added to
+// the shared component, since nothing else needs a read-only badge variant.
+function sortLeavesUnplannedFirst(nodes, daysById) {
+  for (const node of nodes) {
+    if (node.leaves) {
+      node.leaves.sort((a, b) => {
+        const aPlanned = (daysById.get(a.id) || []).length > 0;
+        const bPlanned = (daysById.get(b.id) || []).length > 0;
+        if (aPlanned !== bPlanned) return aPlanned ? 1 : -1;
+        return a.name.localeCompare(b.name);
+      });
+    }
+    if (node.children) sortLeavesUnplannedFirst(node.children, daysById);
+  }
+}
+
+function customerRowHtml(leaf, daysById) {
+  const days = daysById.get(leaf.id) || [];
+  const badges = days.length
+    ? [...days]
+        .sort((a, b) => WEEKDAY_ORDER.indexOf(a) - WEEKDAY_ORDER.indexOf(b))
+        .map((d) => `<span class="route-plan-day-badge">${t(WEEKDAY_KEYS[d])}</span>`)
+        .join("")
+    : `<span class="route-plan-day-badge route-plan-day-badge-unplanned">${t("route_plan_unplanned")}</span>`;
+  return `
+    <div class="route-plan-customer-row">
+      <span class="route-plan-customer-name">${escapeHtml(leaf.name)}</span>
+      <span class="route-plan-customer-badges">${badges}</span>
+    </div>`;
+}
+
+function customerGroupNodeHtml(node, daysById, nested) {
+  const childrenHtml = node.children
+    ? node.children.map((c) => customerGroupNodeHtml(c, daysById, true)).join("")
+    : node.leaves.map((leaf) => customerRowHtml(leaf, daysById)).join("");
+  return `
+    <div class="route-plan-tree-node ${nested ? "route-plan-tree-node-nested" : ""}">
+      <div class="route-plan-tree-row" data-toggle="${escapeHtml(node.key)}" role="button" tabindex="0" aria-expanded="false">
+        <span class="route-plan-tree-name">${escapeHtml(node.name)}</span>
+        <span class="route-plan-tree-count">${node.customerCount} ${t("perf_dq_customers_unit")}</span>
+        <span class="route-plan-tree-chevron" aria-hidden="true">${icons.chevronDown}</span>
+      </div>
+      <div class="route-plan-tree-children" data-children-for="${escapeHtml(node.key)}">
+        <div class="route-plan-tree-children-inner">${childrenHtml}</div>
+      </div>
+    </div>`;
+}
+
+function renderCustomersByDayTree(listEl, tree, daysById) {
+  listEl.innerHTML = `<div class="route-plan-tree">${tree.map((n) => customerGroupNodeHtml(n, daysById, false)).join("")}</div>`;
+  function toggleExpand(row) {
+    const key = row.dataset.toggle;
+    const childrenEl = listEl.querySelector(`.route-plan-tree-children[data-children-for="${key}"]`);
+    const expanded = row.getAttribute("aria-expanded") === "true";
+    row.setAttribute("aria-expanded", String(!expanded));
+    childrenEl?.classList.toggle("expanded", !expanded);
+  }
+  listEl.querySelectorAll(".route-plan-tree-row[data-toggle]").forEach((row) => {
+    row.addEventListener("click", () => toggleExpand(row));
+    row.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggleExpand(row);
+      }
+    });
+  });
+}
+
+// One rep's full assigned-customer list, grouped by region/subregion, each
+// row tagged with the weekday(s) an active rule covers it on -- or a red
+// "Unplanned" badge if it's on none, sorted first within its group so the
+// gaps in the week are the first thing a manager sees, not something they
+// have to hunt for by checking each day's chip one at a time.
+async function openCustomersByDaySheet(userId, userName) {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay sheet-overlay-light";
+  overlay.innerHTML = `
+    <div class="sheet">
+      <h2>${escapeHtml(userName)}</h2>
+      <p class="route-plan-tree-total" id="route-plan-customers-summary"></p>
+      <div id="route-plan-customers-tree"><p class="loading-state" role="status">${t("loading")}</p></div>
+      <p class="form-error" id="route-plan-customers-error" hidden></p>
+      <div class="sheet-actions">
+        <button type="button" class="btn btn-primary" id="close-route-plan-customers">${t("done")}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  activateDialog(overlay);
+
+  function close() {
+    overlay.remove();
+  }
+  overlay.querySelector("#close-route-plan-customers").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => e.target === overlay && close());
+
+  const treeEl = overlay.querySelector("#route-plan-customers-tree");
+  const summaryEl = overlay.querySelector("#route-plan-customers-summary");
+  const errorEl = overlay.querySelector("#route-plan-customers-error");
+
+  try {
+    const { customers } = await api.getRoutePlanCustomers(userId);
+    if (!customers.length) {
+      treeEl.innerHTML = `<p class="empty-state">${t("no_assigned_customers")}</p>`;
+      return;
+    }
+    const daysById = new Map(customers.map((c) => [c.id, c.days]));
+    const unplannedCount = customers.filter((c) => !c.days.length).length;
+    summaryEl.textContent = unplannedCount ? t("route_plan_unplanned_count").replace("{n}", unplannedCount) : "";
+
+    const tree = buildCustomerTree(customers);
+    sortLeavesUnplannedFirst(tree, daysById);
+    renderCustomersByDayTree(treeEl, tree, daysById);
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.hidden = false;
+  }
 }
 
 // The guided "New route plan" creation flow: pick the sales rep, then pick

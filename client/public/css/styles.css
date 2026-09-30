@@ -7744,6 +7744,55 @@ form select,
   font-weight: 700;
 }
 
+.route-plan-view-customers-btn {
+  margin-top: 6px;
+}
+
+/* "View customers" sheet: same Region -> Subregion -> Customer accordion
+   shape as .route-plan-tree-* (customer-pick sheet), but read-only -- each
+   leaf row shows day-of-week badges instead of a selection checkbox, so a
+   manager can see at a glance who's assigned to which weekday(s) and who
+   isn't assigned to any (route-plan-day-badge-unplanned, sorted first
+   within each group). */
+.route-plan-customer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.route-plan-customer-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-plan-customer-badges {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.route-plan-day-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.route-plan-day-badge-unplanned {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+
 .plan-day-row-radio input {
   border-radius: 50%;
 }

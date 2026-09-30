@@ -381,6 +381,44 @@ visitPlansRouter.get("/rules/overview", requireCanPlanForOthers, async (req, res
   );
 });
 
+// Every customer assigned to one rep, each annotated with which weekday(s)
+// (if any) an active rule currently covers them on -- what the Route Plans
+// page's "View customers" sheet needs to answer "which customer is on which
+// day, and which of my customers aren't on any day at all" in one read,
+// rather than the caller cross-referencing per-day customer_ids itself.
+// Unlike GET /rules (raw rows), this expands areas the same way
+// /rules/overview does, so a customer covered only by a region/subregion
+// rule (the Map page's quick-planner path) still shows up correctly instead
+// of looking unplanned.
+visitPlansRouter.get("/rules/customers", async (req, res) => {
+  const targetId = resolveTargetUserId(req, res, req.query.user_id);
+  if (targetId === null) return;
+
+  const { rows: customers } = await pool.query(
+    "SELECT id, name, region, subregion FROM customers WHERE assigned_manager_id = $1 ORDER BY name",
+    [targetId]
+  );
+
+  const { rows: rules } = await pool.query(
+    "SELECT * FROM visit_plan_rules WHERE user_id = $1 AND active",
+    [targetId]
+  );
+  const areaIdsByRule = await batchExpandAreas(rules);
+
+  const daysByCustomerId = new Map();
+  for (const rule of rules) {
+    const ids = new Set([...(areaIdsByRule.get(rule.id) ?? []), ...(rule.customer_ids ?? [])]);
+    for (const id of ids) {
+      if (!daysByCustomerId.has(id)) daysByCustomerId.set(id, []);
+      daysByCustomerId.get(id).push(rule.day_of_week);
+    }
+  }
+
+  res.json({
+    customers: customers.map((c) => ({ ...c, days: (daysByCustomerId.get(c.id) ?? []).sort() })),
+  });
+});
+
 // Review queue -- any role that can plan for others (admin, sales_director,
 // ceo), not just admin: a director needs to be able to approve their own
 // reps' self-authored plans without waiting on a superadmin account.
