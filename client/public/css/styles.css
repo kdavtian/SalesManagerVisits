@@ -2990,6 +2990,27 @@ label.checkbox-row input[type="checkbox"] {
   flex: 1;
 }
 
+/* Edit Customer's Cancel/Save row: sticky to the bottom of .sheet's own
+   scroll area (that element has overflow-y: auto, not the page), so the
+   buttons stay reachable without scrolling through the whole field list --
+   a long form (tier, category, every contact field, social links) used to
+   bury Save well below the fold. Sticky (not fixed, unlike .order-cart-bar)
+   is correct here since this bar is the LAST element in the sheet, with
+   nothing after it that scroll could hide underneath -- the danger-zone
+   links were moved above it for exactly that reason. Negative margins bleed
+   it out to .sheet's own edges (cancelling that element's side/bottom
+   padding) so it reads as a real edge-to-edge footer bar, not a row of
+   buttons floating with padding still visible around it. */
+.sheet-actions-floating {
+  position: sticky;
+  bottom: calc(-20px - var(--safe-bottom));
+  margin: 14px -16px calc(-20px - var(--safe-bottom));
+  padding: 12px 16px calc(12px + var(--safe-bottom));
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -6px 16px rgba(0, 0, 0, 0.12);
+}
+
 /* Order detail's action row can wrap to two lines (confirm/reject/edit +
    a standalone delete button on its own line for an admin) -- .sheet's
    flat 20px-plus-safe-area bottom padding, tuned for a single row of

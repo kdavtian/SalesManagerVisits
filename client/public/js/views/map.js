@@ -2804,13 +2804,24 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     // Suggest a default name of "{subregion} / Yuxman ket" once a subregion
     // is known -- only when the rep hasn't already typed their own name, so
     // this never clobbers manual entry (same "fill, don't lock" pattern as
-    // address/region/subregion/channel/manager below).
+    // address/region/subregion/channel/manager below). Customer names are
+    // always Latin script: inside Yerevan, subregionField.value is already
+    // English (matched against the fixed YEREVAN_DISTRICTS list -- see
+    // matchSubregion in util.js). Outside Yerevan there's no fixed list, so
+    // that same field starts pre-filled with the geocoder's own raw guess,
+    // which is in Armenian (accept-language=hy) -- using it here would leak
+    // Armenian text into the name. The selected region code itself is
+    // always English (REGION_LIST), and for a non-Yerevan customer the
+    // "subregion" is usually just that region's own city anyway (per
+    // matchSubregion's comment), so it stands in as the English default.
     function refreshNameSuggestion() {
       if (nameInput.value) return;
-      const subregionField = overlay.querySelector("#new-customer-subregion");
-      const subregion = subregionField?.value || "";
-      if (!subregion) return;
-      nameInput.value = `${subregion} / Yuxman ket`;
+      const region = regionSelect.value;
+      if (!region) return;
+      const location =
+        region === "Yerevan" ? overlay.querySelector("#new-customer-subregion")?.value || "" : region;
+      if (!location) return;
+      nameInput.value = `${location} / Yuxman ket`;
     }
 
     function renderSubregionField(region, guess) {
