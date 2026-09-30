@@ -8467,9 +8467,28 @@ form select,
   white-space: nowrap;
   min-width: 0;
 }
-.inventory-row-size {
-  color: var(--text-dim);
-  font-weight: 400;
+/* Wraps name + size chip so the chip sits outside the name's own
+   ellipsis span (flex:none below) -- previously the size lived inside
+   that same truncating span and could get clipped off entirely on a
+   long product name, leaving same-name size variants looking identical. */
+.inventory-row-name-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.inventory-row-name-wrap .inventory-row-name {
+  flex: 1 1 auto;
+}
+.inventory-row-size-chip {
+  flex: none;
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  font-weight: 700;
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 999px;
 }
 .inventory-row-qty {
   flex: none;
@@ -8489,6 +8508,47 @@ form select,
   margin-top: 2px;
   text-align: right;
   font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+/* A product stocked in more than one size (productGroupHtml): name prints
+   once, each stocked size gets its own pill here instead of a whole
+   separate near-identical card per size. */
+.inventory-variant-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.inventory-variant-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 10px;
+}
+.inventory-variant-pill-top {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+.inventory-variant-pill-size {
+  font-weight: 700;
+  font-size: 0.78rem;
+}
+.inventory-variant-pill-qty {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.inventory-variant-pill-qty-zero {
+  color: var(--warning);
+}
+.inventory-variant-pill-price {
+  font-size: 0.68rem;
   color: var(--text-dim);
 }
 .plan-order-row {
