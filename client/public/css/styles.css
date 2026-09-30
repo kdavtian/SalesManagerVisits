@@ -2990,6 +2990,27 @@ label.checkbox-row input[type="checkbox"] {
   flex: 1;
 }
 
+/* Edit Customer's Cancel/Save row: sticky to the bottom of .sheet's own
+   scroll area (that element has overflow-y: auto, not the page), so the
+   buttons stay reachable without scrolling through the whole field list --
+   a long form (tier, category, every contact field, social links) used to
+   bury Save well below the fold. Sticky (not fixed, unlike .order-cart-bar)
+   is correct here since this bar is the LAST element in the sheet, with
+   nothing after it that scroll could hide underneath -- the danger-zone
+   links were moved above it for exactly that reason. Negative margins bleed
+   it out to .sheet's own edges (cancelling that element's side/bottom
+   padding) so it reads as a real edge-to-edge footer bar, not a row of
+   buttons floating with padding still visible around it. */
+.sheet-actions-floating {
+  position: sticky;
+  bottom: calc(-20px - var(--safe-bottom));
+  margin: 14px -16px calc(-20px - var(--safe-bottom));
+  padding: 12px 16px calc(12px + var(--safe-bottom));
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -6px 16px rgba(0, 0, 0, 0.12);
+}
+
 /* Order detail's action row can wrap to two lines (confirm/reject/edit +
    a standalone delete button on its own line for an admin) -- .sheet's
    flat 20px-plus-safe-area bottom padding, tuned for a single row of
@@ -7791,6 +7812,47 @@ form select,
 .route-plan-day-badge-unplanned {
   background: color-mix(in srgb, var(--danger) 14%, transparent);
   color: var(--danger);
+}
+
+/* Region/subregion group headers get the same day badges, summarizing
+   every day covered by ANY customer inside that group (union, not a
+   per-customer breakdown -- expanding the group already shows that).
+   A sibling of .route-plan-tree-row rather than nested inside it, so this
+   never touches that row's own flex layout -- .route-plan-tree-row is
+   shared with the checkbox-driven customer-PICK tree (regionTree.js),
+   which must keep its single-line name/count/chevron shape untouched. */
+.route-plan-tree-group-badges {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 0 8px 8px;
+  margin-top: -4px;
+}
+
+.route-plan-tree-node-nested > .route-plan-tree-group-badges {
+  padding-left: 0;
+}
+
+/* Smaller than the leaf-row badge (.route-plan-day-badge) -- a group
+   header already carries the region/subregion name plus a customer
+   count, so its own badge row stays compact rather than competing for
+   the same visual weight. */
+.route-plan-day-badge-sm {
+  font-size: 0.62rem;
+  padding: 1px 6px;
+}
+
+/* Capped at 3 real day badges (MAX_GROUP_DAY_BADGES in routePlans.js) --
+   a region open every day of the week would otherwise print 6-7 pills
+   across the header and defeat the point of a quick summary. The "+N"
+   overflow badge carries the rest as a native title tooltip (a same
+   best-effort as the desktop hover it actually works on -- the group is
+   one tap away from expanding into the full per-customer breakdown
+   either way, so this never gates real information, just how it's first
+   glanced at) and is neutral-toned so it doesn't read as its own weekday. */
+.route-plan-day-badge-overflow {
+  background: var(--bg);
+  color: var(--text-dim);
 }
 
 .plan-day-row-radio input {

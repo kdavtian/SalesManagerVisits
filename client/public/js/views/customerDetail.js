@@ -796,10 +796,6 @@ async function openEditSheet(customer, navigate, onDone) {
         }).join("")}
         <div id="edit-social-section"></div>
         <p class="form-error" id="edit-customer-error" hidden></p>
-        <div class="sheet-actions">
-          <button type="button" class="btn" id="cancel-edit-customer">${t("cancel")}</button>
-          <button type="submit" class="btn btn-primary">${canEditDirectly() ? t("save") : t("submit_request")}</button>
-        </div>
       </form>
       <div class="edit-sheet-danger-zone">
         <button type="button" class="btn-link" id="change-location-btn">${icons.pin}${t("change_location")}</button>
@@ -808,6 +804,10 @@ async function openEditSheet(customer, navigate, onDone) {
             ? `<button type="button" class="btn-link btn-link-danger" id="delete-customer-btn">${icons.warning}${t("delete_customer")}</button>`
             : ""
         }
+      </div>
+      <div class="sheet-actions sheet-actions-floating">
+        <button type="button" class="btn" id="cancel-edit-customer">${t("cancel")}</button>
+        <button type="submit" form="edit-customer-form" id="submit-edit-customer" class="btn btn-primary">${canEditDirectly() ? t("save") : t("submit_request")}</button>
       </div>
     </div>
   `;
@@ -866,7 +866,12 @@ async function openEditSheet(customer, navigate, onDone) {
       }
     }
 
-    const submitBtn = form.querySelector('button[type="submit"]');
+    // Save now lives outside <form> (see .sheet-actions-floating -- it's a
+    // sticky footer with the delete/change-location links above it, so the
+    // form itself is only the scrollable field content) and is linked back
+    // by form="edit-customer-form" alone, so form.querySelector() can't
+    // find it -- it's associated with the form, not a descendant of it.
+    const submitBtn = overlay.querySelector("#submit-edit-customer");
     submitBtn.disabled = true;
     try {
       const calls = [canEditDirectly() ? api.updateCustomer(customer.id, changes) : api.createEditRequest(customer.id, changes)];
