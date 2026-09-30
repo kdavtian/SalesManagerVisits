@@ -7814,6 +7814,47 @@ form select,
   color: var(--danger);
 }
 
+/* Region/subregion group headers get the same day badges, summarizing
+   every day covered by ANY customer inside that group (union, not a
+   per-customer breakdown -- expanding the group already shows that).
+   A sibling of .route-plan-tree-row rather than nested inside it, so this
+   never touches that row's own flex layout -- .route-plan-tree-row is
+   shared with the checkbox-driven customer-PICK tree (regionTree.js),
+   which must keep its single-line name/count/chevron shape untouched. */
+.route-plan-tree-group-badges {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 0 8px 8px;
+  margin-top: -4px;
+}
+
+.route-plan-tree-node-nested > .route-plan-tree-group-badges {
+  padding-left: 0;
+}
+
+/* Smaller than the leaf-row badge (.route-plan-day-badge) -- a group
+   header already carries the region/subregion name plus a customer
+   count, so its own badge row stays compact rather than competing for
+   the same visual weight. */
+.route-plan-day-badge-sm {
+  font-size: 0.62rem;
+  padding: 1px 6px;
+}
+
+/* Capped at 3 real day badges (MAX_GROUP_DAY_BADGES in routePlans.js) --
+   a region open every day of the week would otherwise print 6-7 pills
+   across the header and defeat the point of a quick summary. The "+N"
+   overflow badge carries the rest as a native title tooltip (a same
+   best-effort as the desktop hover it actually works on -- the group is
+   one tap away from expanding into the full per-customer breakdown
+   either way, so this never gates real information, just how it's first
+   glanced at) and is neutral-toned so it doesn't read as its own weekday. */
+.route-plan-day-badge-overflow {
+  background: var(--bg);
+  color: var(--text-dim);
+}
+
 .plan-day-row-radio input {
   border-radius: 50%;
 }

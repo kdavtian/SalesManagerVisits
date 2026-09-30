@@ -9,6 +9,11 @@ const WEEKDAY_KEYS = ["weekday_sun", "weekday_mon", "weekday_tue", "weekday_wed"
 // Display order only -- day_of_week values stay 0=Sun..6=Sat (JS Date#getDay()),
 // but the week is shown Monday-first everywhere in the UI.
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+// A region/subregion group header shows at most this many real day badges
+// before collapsing the rest into a "+N" overflow badge -- past 3, a
+// region covered every day of the week would otherwise print 6-7 pills
+// across the header and defeat the point of a quick glance.
+const MAX_GROUP_DAY_BADGES = 3;
 
 // Route Plans is the recurring weekday cycle -- "every Monday, Rita visits
 // these 6 customers". It's the same visit_plan_rules data the Map page's
@@ -249,10 +254,32 @@ function customerRowHtml(leaf, daysById) {
     </div>`;
 }
 
+// Union of every day covered by any customer under this group (region-level
+// node.allIds spans all its subregions, subregion-level is just its own --
+// see regionTree.js), capped at MAX_GROUP_DAY_BADGES real badges plus a
+// "+N" overflow badge (its title lists the rest) so a region covering every
+// day of the week doesn't print 6-7 pills across the header.
+function groupDayBadgesHtml(node, daysById) {
+  const daySet = new Set();
+  for (const id of node.allIds) {
+    for (const d of daysById.get(id) || []) daySet.add(d);
+  }
+  if (!daySet.size) return "";
+  const sortedDays = [...daySet].sort((a, b) => WEEKDAY_ORDER.indexOf(a) - WEEKDAY_ORDER.indexOf(b));
+  const shown = sortedDays.slice(0, MAX_GROUP_DAY_BADGES);
+  const overflowDays = sortedDays.slice(MAX_GROUP_DAY_BADGES);
+  const badges = shown.map((d) => `<span class="route-plan-day-badge route-plan-day-badge-sm">${t(WEEKDAY_KEYS[d])}</span>`).join("");
+  const overflowBadge = overflowDays.length
+    ? `<span class="route-plan-day-badge route-plan-day-badge-sm route-plan-day-badge-overflow" title="${escapeHtml(overflowDays.map((d) => t(WEEKDAY_KEYS[d])).join(", "))}">+${overflowDays.length}</span>`
+    : "";
+  return badges + overflowBadge;
+}
+
 function customerGroupNodeHtml(node, daysById, nested) {
   const childrenHtml = node.children
     ? node.children.map((c) => customerGroupNodeHtml(c, daysById, true)).join("")
     : node.leaves.map((leaf) => customerRowHtml(leaf, daysById)).join("");
+  const groupBadges = groupDayBadgesHtml(node, daysById);
   return `
     <div class="route-plan-tree-node ${nested ? "route-plan-tree-node-nested" : ""}">
       <div class="route-plan-tree-row" data-toggle="${escapeHtml(node.key)}" role="button" tabindex="0" aria-expanded="false">
@@ -260,6 +287,7 @@ function customerGroupNodeHtml(node, daysById, nested) {
         <span class="route-plan-tree-count">${node.customerCount} ${t("perf_dq_customers_unit")}</span>
         <span class="route-plan-tree-chevron" aria-hidden="true">${icons.chevronDown}</span>
       </div>
+      ${groupBadges ? `<div class="route-plan-tree-group-badges">${groupBadges}</div>` : ""}
       <div class="route-plan-tree-children" data-children-for="${escapeHtml(node.key)}">
         <div class="route-plan-tree-children-inner">${childrenHtml}</div>
       </div>
