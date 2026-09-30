@@ -103,6 +103,27 @@ export function transformErpOrderLines(orderLines) {
   };
 }
 
+// erp_customer_id and date are required -- an entry missing either is
+// dropped (see docs/erp-sync-contract.md). amount_amd keeps whatever sign
+// the ERP sends (positive = payment received, negative = refund paid back
+// out): a debt-as-of-date calculation needs the signed total, not just
+// real payments, so a refund correctly adds back into the running balance
+// instead of disappearing from it.
+export function transformErpCashflowLines(cashflowLines) {
+  const cashErpIds = [];
+  const cashDates = [];
+  const cashAmounts = [];
+
+  for (const line of isPlainArray(cashflowLines)) {
+    if (!isPlainObject(line) || !line.erp_customer_id || !line.date) continue;
+    cashErpIds.push(String(line.erp_customer_id));
+    cashDates.push(line.date);
+    cashAmounts.push(Number.isFinite(line.amount_amd) ? line.amount_amd : null);
+  }
+
+  return { cashErpIds, cashDates, cashAmounts };
+}
+
 // rep_name (matching sales_channels.code) and a monthly array are required;
 // each monthly entry needs its own `month`, or it's skipped individually
 // without dropping the rest of that rep's months.

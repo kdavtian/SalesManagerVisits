@@ -8,6 +8,7 @@ import { notifyUser } from "../notifications.js";
 import {
   transformErpCustomers,
   transformErpOrderLines,
+  transformErpCashflowLines,
   transformErpSalesPerformance,
   transformErpProducts,
   transformErpBrandVolume,
@@ -111,12 +112,15 @@ function isPlainObject(value) {
 // merged row by row) so a customer that drops out of the extract -- debt
 // fully paid, no recent orders -- doesn't keep showing stale data forever.
 erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
-  const { customers, order_lines, sales_performance, products, brand_volume } = req.body ?? {};
+  const { customers, order_lines, cashflow_lines, sales_performance, products, brand_volume } = req.body ?? {};
   if (!Array.isArray(customers)) {
     return res.status(400).json({ error: "customers must be an array" });
   }
   if (order_lines !== undefined && !Array.isArray(order_lines)) {
     return res.status(400).json({ error: "order_lines must be an array" });
+  }
+  if (cashflow_lines !== undefined && !Array.isArray(cashflow_lines)) {
+    return res.status(400).json({ error: "cashflow_lines must be an array" });
   }
   if (sales_performance !== undefined && !Array.isArray(sales_performance)) {
     return res.status(400).json({ error: "sales_performance must be an array" });
@@ -144,6 +148,8 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     lineRevenues,
     lineDiscounts,
   } = transformErpOrderLines(order_lines);
+
+  const { cashErpIds, cashDates, cashAmounts } = transformErpCashflowLines(cashflow_lines);
 
   const { perfRepNames, perfMonths, perfSales, perfCollected, perfBudget } = transformErpSalesPerformance(sales_performance);
 
@@ -242,6 +248,19 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
         );
       }
     }
+
+    if (cashflow_lines !== undefined) {
+      await client.query("TRUNCATE erp_cashflow_lines");
+      if (cashErpIds.length) {
+        await client.query(
+          `INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd)
+           SELECT erp_customer_id, cashflow_date, amount_amd
+           FROM unnest($1::text[], $2::date[], $3::numeric[])
+             AS t(erp_customer_id, cashflow_date, amount_amd)`,
+          [cashErpIds, cashDates, cashAmounts]
+        );
+      }
+    }
     // Upsert-only, never TRUNCATE: unlike the other tables above, products
     // can also be created directly in the app (no erp_product_id), and a
     // manual price/name correction here must survive later syncs -- so a
@@ -333,6 +352,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
   res.json({
     synced: erpIds.length,
     order_lines_synced: order_lines !== undefined ? lineErpIds.length : undefined,
+    cashflow_lines_synced: cashflow_lines !== undefined ? cashErpIds.length : undefined,
     sales_performance_synced: sales_performance !== undefined ? perfRepNames.length : undefined,
     products_synced: products !== undefined ? prodErpIds.length : undefined,
     brand_volume_synced: brand_volume !== undefined ? volChannelCodes.length : undefined,

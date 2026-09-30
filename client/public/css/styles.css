@@ -4811,6 +4811,7 @@ label.checkbox-row input[type="checkbox"] {
 
 .expenses-filters {
   display: flex;
+  align-items: center;
   gap: 8px;
   margin-top: 12px;
 }
@@ -4820,9 +4821,12 @@ label.checkbox-row input[type="checkbox"] {
   min-width: 0;
 }
 
-.expenses-filters input[type="date"] {
-  flex-shrink: 0;
-  width: 42%;
+/* The date filter itself is now the shared .pill-date-filter-wrap (see
+   styles.css's "Generic native pill-style date filter" block) -- sized
+   here rather than flex: 1 like its sibling search input, since a date
+   pill only needs to fit its own caption/value text. */
+.expenses-filters .pill-date-filter-wrap {
+  flex: 0 0 42%;
 }
 
 .notification-card {
@@ -5860,99 +5864,53 @@ label.checkbox-row input[type="checkbox"] {
   padding: 0 4px;
 }
 
-/* In a short landscape viewport the tab bar becomes a side rail, preserving
-   vertical space for the field workflow instead of blocking rotation. */
-@media (orientation: landscape) and (max-height: 540px) and (min-width: 568px) {
-  .top-bar,
-  .sync-banner {
-    margin-left: 88px;
+/* Phone rotation lock. Field reps use this one-handed while walking a
+   customer's floor -- an accidental landscape flip (phone in a pocket, set
+   down on a counter) shouldn't reflow the layout mid-task, so landscape is
+   blocked outright on phones rather than adapted to (a prior version of
+   this rule turned the tab bar into a side rail instead; reps found the
+   accidental-rotation mid-task worse than the rail was helpful).
+   Tablets are untouched: max-height:540px is keyed off landscape *height*
+   -- a phone's short axis in landscape (its portrait width) tops out
+   around 430px on today's largest phones, while the smallest common
+   tablet (iPad mini, portrait width 768px) lands well above 540px, so a
+   tablet turned sideways never matches this query and keeps full
+   landscape support. See index.html for the overlay markup this reveals. */
+.phone-rotate-lock-overlay {
+  display: none;
+}
+
+@media (orientation: landscape) and (max-height: 540px) {
+  #sync-banner,
+  #sidebar,
+  #top-bar,
+  #app,
+  #nav-bar,
+  #install-root,
+  #update-root {
+    display: none !important;
   }
 
-  .top-bar {
-    padding-top: calc(var(--safe-top) + 7px);
-    padding-bottom: 7px;
-  }
-
-  .app-main {
-    margin-left: 88px;
-    padding-bottom: 0;
-  }
-
-  .nav-bar {
-    top: 0;
-    right: auto;
-    width: 88px;
-    /* dvh needs iOS 15.4+; the plain vh fallback above it is overridden
-       wherever dvh is actually supported (accounts for the on-screen
-       keyboard/browser chrome), and is otherwise the only height applied. */
-    height: 100vh;
-    height: 100dvh;
-    padding: max(8px, var(--safe-top)) 6px max(8px, var(--safe-bottom));
+  .phone-rotate-lock-overlay {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
     flex-direction: column;
+    align-items: center;
     justify-content: center;
-    align-items: stretch;
-    gap: 2px;
-    border-top: 0;
-    border-right: 0.5px solid var(--border);
+    gap: 10px;
+    padding: 24px;
+    text-align: center;
+    background: var(--bg);
+    color: var(--text);
   }
 
-  .nav-item,
-  .nav-item-center-wrap {
-    flex: 0 1 64px;
-    width: 100%;
-    height: 64px;
-  }
-
-  .nav-item {
-    border-radius: 12px;
-    font-size: 0.68rem;
-  }
-
-  .nav-item-active {
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
-  }
-
-  .nav-item-center-wrap {
-    justify-content: center;
-  }
-
-  .nav-item-center {
-    width: 40px;
-    height: 40px;
-    margin-top: 0;
-    border-width: 0;
-    box-shadow: none;
-  }
-
-  .nav-item-center-label {
-    margin-top: 2px;
-    font-size: 0.68rem;
-  }
-
-  .dashboard-view,
-  .detail-view,
-  .checkin-view,
-  .settings-view {
-    max-width: 960px;
-    margin-inline: auto;
-  }
-
-  .stat-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  .sheet {
-    width: min(620px, 72vw);
-    max-height: 94vh;
-    max-height: 94dvh;
-    margin-left: auto;
-    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-    padding-bottom: 20px;
-  }
-
-  .install-banner {
-    left: 88px;
-    bottom: 8px;
+  .phone-rotate-lock-text {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    max-width: 320px;
   }
 }
 
@@ -5995,28 +5953,31 @@ label.checkbox-row input[type="checkbox"] {
   padding: 10px 16px 0;
 }
 
-/* Sales page's From/To range -- same "native input invisibly overlaid on
-   a styled button" trick as Team Performance's own month filter (see
-   .perf-month-filter-btn/.perf-month-picker-input above), applied here
-   to a plain two-box <input type="date"> pair that used to look like a
-   bare web form next to Team Performance's single polished pill (reported
-   as "the date filter looks more native on Team Performance"). Both
-   trigger the exact same OS-native picker either way -- an <input
-   type="date"> gets it for free -- this only changes what the tap target
-   itself looks like before that picker opens. */
-.sales-date-filter-row {
+/* Generic native pill-style date filter -- an invisible native <input
+   type="date"/"month"> overlaid on a styled, non-interactive button, so
+   the tap target looks like the rest of the app's pills but still opens
+   the OS's own native picker (same haptics/behavior as a raw input, only
+   the visual differs). Originally sales-date-filter-* (Sales page only);
+   generalized so every screen with a plain native date filter can share
+   one CSS block instead of each carrying its own near-identical copy.
+   NOT used by Activity's own custom range -- that one already has a
+   richer, non-native wheel-picker treatment (see
+   activity-date-picker.css / activityDatePicker.js), deliberately built
+   because Safari's native date input can't be given a "Today" action or
+   have its Reset/Done toolbar localized to the app's own language. */
+.pill-date-filter-row {
   display: flex;
   gap: 10px;
   padding: 10px 16px 0;
 }
 
-.sales-date-filter-wrap {
+.pill-date-filter-wrap {
   position: relative;
   flex: 1;
   min-width: 0;
 }
 
-.sales-date-filter-btn {
+.pill-date-filter-btn {
   box-sizing: border-box;
   width: 100%;
   min-height: 46px;
@@ -6031,22 +5992,22 @@ label.checkbox-row input[type="checkbox"] {
   border-radius: var(--radius);
   color: var(--text);
   pointer-events: none; /* the real <input type="date"> laid on top (see
-                            .sales-date-picker-input) is what actually
+                            .pill-date-picker-input) is what actually
                             receives the tap. */
 }
 
-.sales-date-filter-caption {
+.pill-date-filter-caption {
   font-size: 0.7rem;
   color: var(--text-dim);
 }
 
-.sales-date-filter-value {
+.pill-date-filter-value {
   font-size: 0.85rem;
   font-weight: 700;
   white-space: nowrap;
 }
 
-.sales-date-picker-input {
+.pill-date-picker-input {
   position: absolute;
   inset: 0;
   width: 100%;

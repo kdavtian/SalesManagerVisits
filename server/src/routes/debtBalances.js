@@ -41,18 +41,50 @@ const LAST_APP_PAYMENT_SUBQUERY = `(
   WHERE p.customer_id = c.id AND p.status = 'approved'
 )`;
 
+// Debt as of a past date D, computed from full order/cashflow history
+// instead of the live ecd.debt_amd snapshot -- see
+// docs/erp-sync-contract.md's cashflow_lines entry. Same running-balance
+// math as reports.js's /customer-debt route: SUM(orders up to D) -
+// SUM(cashflow up to D), not floored at zero (a customer who paid ahead
+// can genuinely show a negative/credit balance as of a given date).
+const asOfBalanceJoin = `
+  LEFT JOIN LATERAL (
+    SELECT SUM(ol.revenue_amd) AS amount
+    FROM erp_order_lines ol
+    WHERE ol.erp_customer_id = ecd.erp_customer_id AND ol.order_date <= $__AS_OF_DATE__
+  ) orders_asof ON true
+  LEFT JOIN LATERAL (
+    SELECT SUM(cf.amount_amd) AS amount
+    FROM erp_cashflow_lines cf
+    WHERE cf.erp_customer_id = ecd.erp_customer_id AND cf.cashflow_date <= $__AS_OF_DATE__
+  ) cashflow_asof ON true`;
+const asOfBalanceExpr = "(COALESCE(orders_asof.amount, 0) - COALESCE(cashflow_asof.amount, 0))";
+
 debtBalancesRouter.get("/", async (req, res) => {
+  const { date } = req.query;
+  const asOfDate = typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+
   const params = [];
-  let where = "WHERE ecd.debt_amd IS NOT NULL AND ecd.debt_amd <> 0";
+  let where = asOfDate ? "WHERE true" : "WHERE ecd.debt_amd IS NOT NULL AND ecd.debt_amd <> 0";
   if (req.user.role === "sales_manager") {
     params.push(req.user.id);
     where += ` AND c.assigned_manager_id = $${params.length}`;
   }
+
+  let balanceJoin = "";
+  let balanceExpr = "ecd.debt_amd";
+  if (asOfDate) {
+    params.push(asOfDate);
+    balanceJoin = asOfBalanceJoin.replaceAll("$__AS_OF_DATE__", `$${params.length}`);
+    balanceExpr = asOfBalanceExpr;
+    where += ` AND ${balanceExpr} <> 0`;
+  }
+
   const { rows } = await pool.query(
     `SELECT c.id AS internal_customer_id,
             c.erp_customer_id AS customer_id,
             c.name AS customer_name,
-            ecd.debt_amd AS remaining_balance,
+            ${balanceExpr} AS remaining_balance,
             GREATEST(ecd.last_payment_date, ${LAST_APP_PAYMENT_SUBQUERY}) AS last_payment_date,
             ${LAST_VISIT_SUBQUERY} AS last_visit_at,
             c.assigned_manager_id,
@@ -60,9 +92,10 @@ debtBalancesRouter.get("/", async (req, res) => {
      FROM erp_customer_data ecd
      JOIN customers c ON c.erp_customer_id = ecd.erp_customer_id
      LEFT JOIN users am ON am.id = c.assigned_manager_id
+     ${balanceJoin}
      ${where}
-     ORDER BY ecd.debt_amd DESC`,
+     ORDER BY remaining_balance DESC`,
     params
   );
-  res.json({ rows, sync: await erpSyncFreshness("erp_customer_data") });
+  res.json({ rows, as_of_date: asOfDate, sync: await erpSyncFreshness("erp_customer_data") });
 });

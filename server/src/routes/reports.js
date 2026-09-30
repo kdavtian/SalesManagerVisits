@@ -520,26 +520,55 @@ const estimatedDebtJoin = `
   ) collected ON true`;
 const estimatedDebtExpr = "GREATEST(erp.debt_amd - COALESCE(collected.amount, 0), 0)";
 
+// Debt as of a past date D, computed from full order/cashflow history
+// instead of the live ERP snapshot -- see docs/erp-sync-contract.md's
+// cashflow_lines entry. Not floored at zero like estimatedDebtExpr above:
+// a customer who has paid ahead can genuinely show a negative (credit)
+// balance as of a given date, and that's real information, not noise.
+const asOfDebtJoin = `
+  LEFT JOIN LATERAL (
+    SELECT SUM(ol.revenue_amd) AS amount
+    FROM erp_order_lines ol
+    WHERE ol.erp_customer_id = erp.erp_customer_id AND ol.order_date <= $__AS_OF_DATE__
+  ) orders_asof ON true
+  LEFT JOIN LATERAL (
+    SELECT SUM(cf.amount_amd) AS amount
+    FROM erp_cashflow_lines cf
+    WHERE cf.erp_customer_id = erp.erp_customer_id AND cf.cashflow_date <= $__AS_OF_DATE__
+  ) cashflow_asof ON true`;
+const asOfDebtExpr = "(COALESCE(orders_asof.amount, 0) - COALESCE(cashflow_asof.amount, 0))";
+
 reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async (req, res) => {
-  const { sales_channel, debt_only } = req.query;
+  const { sales_channel, debt_only, date } = req.query;
+  const asOfDate = typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+
   const conditions = [];
   const params = [];
   if (sales_channel) {
     params.push(sales_channel);
     conditions.push(`erp.assigned_sales_rep = $${params.length}`);
   }
+
+  let debtExpr = estimatedDebtExpr;
+  let debtJoin = estimatedDebtJoin;
+  if (asOfDate) {
+    params.push(asOfDate);
+    debtJoin = asOfDebtJoin.replaceAll("$__AS_OF_DATE__", `$${params.length}`);
+    debtExpr = asOfDebtExpr;
+  }
+
   if (debt_only === "1") {
-    conditions.push(`${estimatedDebtExpr} > 0`);
+    conditions.push(`${debtExpr} > 0`);
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
   const { rows: customerRows } = await pool.query(
     `SELECT erp.erp_customer_id, erp.customer_name, erp.assigned_sales_rep, erp.debt_amd,
             erp.last_payment_date, erp.days_since_payment, erp.aging_bucket,
-            COALESCE(collected.amount, 0) AS collected_since_sync_amd,
-            ${estimatedDebtExpr} AS estimated_debt_amd
+            ${asOfDate ? "0" : "COALESCE(collected.amount, 0)"} AS collected_since_sync_amd,
+            ${debtExpr} AS estimated_debt_amd
      FROM erp_customer_data erp
-     ${estimatedDebtJoin}
+     ${debtJoin}
      ${where}
      ORDER BY estimated_debt_amd DESC NULLS LAST`,
     params
@@ -547,9 +576,9 @@ reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async 
 
   const { rows: byBucket } = await pool.query(
     `SELECT COALESCE(erp.aging_bucket, '—') AS aging_bucket, count(*)::int AS customer_count,
-            COALESCE(sum(${estimatedDebtExpr}), 0) AS total_debt_amd
+            COALESCE(sum(${debtExpr}), 0) AS total_debt_amd
      FROM erp_customer_data erp
-     ${estimatedDebtJoin}
+     ${debtJoin}
      ${where}
      GROUP BY erp.aging_bucket
      ORDER BY total_debt_amd DESC`,
@@ -557,11 +586,11 @@ reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async 
   );
 
   const { rows: totalsRows } = await pool.query(
-    `SELECT COALESCE(sum(${estimatedDebtExpr}), 0) AS total_debt_amd,
+    `SELECT COALESCE(sum(${debtExpr}), 0) AS total_debt_amd,
             COALESCE(sum(erp.debt_amd), 0) AS total_debt_amd_erp,
-            count(*) FILTER (WHERE ${estimatedDebtExpr} > 0)::int AS customers_with_debt
+            count(*) FILTER (WHERE ${debtExpr} > 0)::int AS customers_with_debt
      FROM erp_customer_data erp
-     ${estimatedDebtJoin}
+     ${debtJoin}
      ${where}`,
     params
   );
@@ -570,6 +599,7 @@ reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async 
     customers: customerRows,
     by_bucket: byBucket,
     totals: totalsRows[0],
+    as_of_date: asOfDate,
     sync: await erpSyncFreshness("erp_customer_data"),
   });
 });

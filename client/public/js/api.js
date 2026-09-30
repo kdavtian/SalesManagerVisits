@@ -411,7 +411,10 @@ export const api = {
 
   // Debt balances (see server/src/routes/debtBalances.js) -- read-only,
   // role-scoped server-side already.
-  getDebtBalances: () => request("/debt-balances"),
+  getDebtBalances: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/debt-balances${qs ? `?${qs}` : ""}`);
+  },
 
   // Admin data-quality dashboard (see server/src/routes/dataQuality.js) --
   // admin-only server-side already.
