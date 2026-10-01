@@ -8551,6 +8551,40 @@ form select,
   font-size: 0.68rem;
   color: var(--text-dim);
 }
+
+/* Days-of-stock-left badge (toggled by #inventory-days-btn) -- a single
+   row above the price lines on a single-size card, or its own stacked
+   line inside a variant pill. Semantic color by stock_status, same four
+   colors verify-ui's "filled accents use a dedicated contrast token"
+   check already requires elsewhere, so no new tokens needed. */
+.inventory-row-days {
+  margin-top: 2px;
+  text-align: right;
+}
+.inventory-days-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+.inventory-days-badge-critical {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+.inventory-days-badge-low {
+  background: color-mix(in srgb, var(--warning) 20%, transparent);
+  color: var(--warning);
+}
+.inventory-days-badge-ok {
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+  color: var(--success);
+}
+.inventory-days-badge-dead,
+.inventory-days-badge-new {
+  background: var(--bg);
+  color: var(--text-dim);
+}
 .plan-order-row {
   display: flex;
   align-items: center;
@@ -8610,7 +8644,8 @@ form select,
 .filter-icon-btn,
 .activity-search-filter-btn,
 .filter-dropdown-btn,
-.map-filter-chip {
+.map-filter-chip,
+.inventory-search-filter-btn {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
@@ -8641,16 +8676,68 @@ form select,
   text-overflow: ellipsis;
 }
 
-/* Warehouse inventory tab: search + brand-filter icon button row, same
-   shape as other search bars in the app. */
+/* Warehouse inventory tab: search (with the combined filter button
+   embedded in its right edge) + days-left/landing-cost/wholesale icon
+   buttons, same shape as other search bars in the app. */
 .inventory-search-row {
   display: flex;
   gap: 8px;
   margin-bottom: 8px;
 }
-.inventory-search-row input[type="search"] {
+.inventory-search-wrap {
+  position: relative;
   flex: 1;
   min-width: 0;
+}
+.inventory-search-wrap input[type="search"] {
+  width: 100%;
+  box-sizing: border-box;
+  padding-right: 38px;
+}
+/* Overrides .icon-btn's own 44x44 box (this one sits inside the input, not
+   beside it) down to a compact 28x28 hit area positioned at the input's
+   right edge -- same technique as .map-search-input-wrap's left-side icon
+   button, mirrored to the right since the brand/size/stock filter button
+   moved inside the search field here instead of its own slot in the row. */
+.inventory-search-filter-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: none;
+  border: none;
+  box-shadow: none;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.inventory-search-filter-btn svg {
+  width: 18px;
+  height: 18px;
+}
+.inventory-search-filter-btn-active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-card));
+}
+
+/* Combined brand/size/stock-status filter sheet: three independent
+   single-select sections in one sheet instead of three separate button
+   taps -- see filterSectionHtml in views/warehouse.js. */
+.filter-sheet-section + .filter-sheet-section {
+  margin-top: 18px;
+}
+.filter-sheet-section-title {
+  margin: 0 0 4px;
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-eyebrow);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-eyebrow);
 }
 
 /* Admin > Quick actions per role: one collapsible card per role, a checkbox

@@ -253,14 +253,17 @@ export const api = {
   getWarehousePendingCount: () => request("/warehouse/pending-count"),
   getPickList: () => request("/warehouse/pick-list"),
   getStagingList: () => request("/warehouse/staging-list"),
-  getInventory: (q = "", brand = "") => {
+  getInventory: (q = "", { brand = "", size = "", stock = "" } = {}) => {
     const qs = new URLSearchParams();
     if (q) qs.set("q", q);
     if (brand) qs.set("brand", brand);
+    if (size) qs.set("size", size);
+    if (stock) qs.set("stock", stock);
     const s = qs.toString();
     return request(`/warehouse/inventory${s ? `?${s}` : ""}`);
   },
   getInventoryBrands: () => request("/warehouse/inventory/brands"),
+  getInventorySizes: () => request("/warehouse/inventory/sizes"),
   markOrderPacked: (id) => request(`/warehouse/orders/${id}/packed`, { method: "POST" }),
   bulkMarkOrdersPacked: (orderIds) => json("/warehouse/orders/bulk-packed", "POST", { order_ids: orderIds }),
   flagOrderStockIssue: (id, note) => json(`/warehouse/orders/${id}/stock-issue`, "POST", { note }),
