@@ -2,7 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { compareProducts, parseLiters } from "../productSort.js";
+import { compareProducts, parseLiters, normalizeUnitLabel } from "../productSort.js";
 
 // "624" -> "624L", "4.5" -> "4.5L" -- compact, no space, matching how a WM
 // reads a shelf tag (as opposed to util.js's own formatLiters-style helpers
@@ -96,7 +96,7 @@ export async function renderWarehouse(root, navigate) {
         <button type="button" class="card pick-item">
           <span class="pick-item-check">${icons.checkCircle}</span>
           <div class="order-product-info">
-            <strong>${escapeHtml(r.product_name)}${r.size ? ` · ${escapeHtml(r.size)}` : ""}</strong>
+            <strong>${escapeHtml(r.product_name)}${r.size ? ` · ${escapeHtml(normalizeUnitLabel(r.size))}` : ""}</strong>
             <span class="muted">${r.order_count} ${t("warehouse_orders_count_suffix")}</span>
           </div>
           <div class="pick-list-qty">
@@ -194,7 +194,7 @@ export async function renderWarehouse(root, navigate) {
         <strong>${customerNameLinkHtml(o.customer_name, o.customer_id)}</strong>
         <p class="muted">${escapeHtml(o.address || "")}</p>
         <div class="card-list" style="margin:8px 0;">
-          ${o.items.map((i) => `<div class="order-product-row"><span>${i.brand ? `${escapeHtml(i.brand)} · ` : ""}${escapeHtml(i.product_name)}${i.size ? ` · ${escapeHtml(i.size)}` : ""} × ${i.quantity}</span></div>`).join("")}
+          ${o.items.map((i) => `<div class="order-product-row"><span>${i.brand ? `${escapeHtml(i.brand)} · ` : ""}${escapeHtml(i.product_name)}${i.size ? ` · ${escapeHtml(normalizeUnitLabel(i.size))}` : ""} × ${i.quantity}</span></div>`).join("")}
         </div>
         <p>${t("total")}: <span class="text-amount">${formatAmd(Number(o.total_amd))}</span></p>
         <div class="sheet-actions">
@@ -257,29 +257,78 @@ export async function renderWarehouse(root, navigate) {
     const forceCollapsedFamilies = new Set();
     let wasForceExpand = false;
 
+    // A product with only one stocked size -- most non-oil items (filters,
+    // pads), plus any oil not yet sold in multiple pack sizes. Single row,
+    // size as its own flex:none chip so a long name's ellipsis can never
+    // swallow it (see productGroupHtml below for the multi-size case).
     function productRowHtml(p) {
+      const sizeLabel = p.unit ? normalizeUnitLabel(p.unit) : "";
       return `
         <div class="card inventory-row-card">
           <div class="inventory-row">
-            <span class="inventory-row-name">${escapeHtml(p.name)}${p.unit ? ` <span class="inventory-row-size">${escapeHtml(p.unit)}</span>` : ""}</span>
+            <span class="inventory-row-name-wrap">
+              <span class="inventory-row-name">${escapeHtml(p.name)}</span>
+              ${sizeLabel ? `<span class="inventory-row-size-chip">${escapeHtml(sizeLabel)}</span>` : ""}
+            </span>
             <span class="inventory-row-qty ${p.stock_qty == null ? "inventory-row-qty-unknown" : p.stock_qty > 0 ? "inventory-row-qty-ok" : "inventory-row-qty-zero"}">${inventoryQtyLabel(p)}</span>
           </div>
           ${pricesRowHtml(p)}
         </div>`;
     }
 
-    // Second row: whichever of landing/net cost and wholesale price are
-    // currently toggled on, joined by " | " -- omitted entirely if nothing
-    // is on, or if this product has no value for what's toggled on (a
-    // still-unsynced row, or net cost simply never entered for it). Landing
-    // and net cost share one button/slot (see costMode above), so each is
-    // labelled -- unlike wholesale, which stays the sole thing in its own
-    // slot and needs no label to stay unambiguous.
-    function pricesRowHtml(p) {
+    // Second row's price parts for a single product -- shared by both the
+    // single-size row above and each variant pill below.
+    function priceParts(p) {
       const parts = [];
       if (costMode === "landing" && p.landing_cost_amd != null) parts.push(`${t("landing_cost")}: ${formatAmd(Number(p.landing_cost_amd))}`);
       if (costMode === "net" && p.net_cost_amd != null) parts.push(`${t("net_cost")}: ${formatAmd(Number(p.net_cost_amd))}`);
       if (showWholesale && p.bronze_price_amd != null) parts.push(formatAmd(Number(p.bronze_price_amd)));
+      return parts;
+    }
+
+    // One pill per stocked size within productGroupHtml -- size label (bold)
+    // and quantity side by side, price parts (if toggled on) stacked below
+    // since they differ per size just like the qty does.
+    function variantPillHtml(p) {
+      const qtyKnown = p.stock_qty != null;
+      const zero = qtyKnown && p.stock_qty === 0;
+      const parts = priceParts(p);
+      return `
+        <span class="inventory-variant-pill">
+          <span class="inventory-variant-pill-top">
+            ${p.unit ? `<span class="inventory-variant-pill-size">${escapeHtml(normalizeUnitLabel(p.unit))}</span>` : ""}
+            <span class="inventory-variant-pill-qty ${zero ? "inventory-variant-pill-qty-zero" : ""}">${qtyKnown ? p.stock_qty : t("warehouse_stock_unknown")}</span>
+          </span>
+          ${parts.length ? `<span class="inventory-variant-pill-price">${parts.join(" | ")}</span>` : ""}
+        </span>`;
+    }
+
+    // A product stocked in more than one size: name prints once, every
+    // stocked size becomes its own pill underneath instead of a whole
+    // separate near-identical card per size -- this is the thing that was
+    // making 1L/4L/drum variants of the same oil hard to tell apart. Falls
+    // back to the plain single row above when there's only one size, so a
+    // filter or brake pad doesn't get a pointless one-pill row.
+    function productGroupHtml(group) {
+      if (group.products.length === 1) return productRowHtml(group.products[0]);
+      const totalPcs = group.products.reduce((sum, p) => sum + (p.stock_qty ?? 0), 0);
+      return `
+        <div class="card inventory-row-card">
+          <div class="inventory-row">
+            <span class="inventory-row-name">${escapeHtml(group.name)}</span>
+            <span class="inventory-row-qty">${totalPcs}${t("warehouse_pcs_suffix")}</span>
+          </div>
+          <div class="inventory-variant-pills">${group.products.map(variantPillHtml).join("")}</div>
+        </div>`;
+    }
+
+    // Second row on a single-size product's card: whichever of landing/net
+    // cost and wholesale price are currently toggled on (see priceParts
+    // above), omitted entirely if nothing is on or this product has no
+    // value for what's toggled (a still-unsynced row, or net cost simply
+    // never entered for it).
+    function pricesRowHtml(p) {
+      const parts = priceParts(p);
       if (!parts.length) return "";
       return `<div class="inventory-row-prices">${parts.join(" | ")}</div>`;
     }
@@ -347,9 +396,11 @@ export async function renderWarehouse(root, navigate) {
       wasForceExpand = forceExpand;
       const { brandTotals, familyTotals } = computeTotals(lastRows);
 
-      // Bucket the already-sorted rows into brand -> family -> [products];
-      // sort order is preserved since compareProducts already groups same
-      // brand/family runs together.
+      // Bucket the already-sorted rows into brand -> family -> [product
+      // groups], each group being every stocked size of the same product
+      // name (case-insensitive) -- sort order is preserved throughout since
+      // compareProducts already groups same brand/family/name runs
+      // together, sizes ascending.
       const brands = [];
       const brandByKey = new Map();
       for (const p of lastRows) {
@@ -366,11 +417,18 @@ export async function renderWarehouse(root, navigate) {
           // Family-less products (no oil family, or a non-oil item like a
           // filter) get their own collapsible "Other" group instead of
           // rendering flat under the brand with no header at all.
-          family = { key: fKey, label: p.family || t("warehouse_other_family"), products: [] };
+          family = { key: fKey, label: p.family || t("warehouse_other_family"), groups: new Map(), groupOrder: [] };
           brand.families.set(fKey, family);
           brand.familyOrder.push(fKey);
         }
-        family.products.push(p);
+        const nameKey = (p.name || "").trim().toLowerCase();
+        let group = family.groups.get(nameKey);
+        if (!group) {
+          group = { name: p.name, products: [] };
+          family.groups.set(nameKey, group);
+          family.groupOrder.push(nameKey);
+        }
+        group.products.push(p);
       }
 
       let html = "";
@@ -396,7 +454,7 @@ export async function renderWarehouse(root, navigate) {
             totals: familyTotals.get(familyKey) || { pcs: 0, liters: 0 },
             extraClass: "list-group-heading-family",
           });
-          if (familyExpanded) html += family.products.map(productRowHtml).join("");
+          if (familyExpanded) html += family.groupOrder.map((k) => productGroupHtml(family.groups.get(k))).join("");
         }
       }
       listEl.innerHTML = html;
