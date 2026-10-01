@@ -9,6 +9,7 @@ import { escapeHtml, formatAmd, syncBadgeHtml, parseDateOnly } from "../util.js"
 import { state } from "../state.js";
 import { t, getLang } from "../i18n.js";
 import { loadWithCache } from "../listCache.js";
+import { icons } from "../icons.js";
 
 // For last_visit_at, a real timestamp (checkins.timestamp) -- correctly
 // converted to the viewer's local calendar date, since it names an
@@ -77,30 +78,34 @@ export async function renderDebtBalances(root, navigate) {
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
         <div class="detail-header-title"><h1>${t("debt_balances_title")}</h1></div>
-        <div class="debt-balances-subtotal" id="debt-subtotal"></div>
+        <div class="debt-as-of-filter-wrap" id="debt-as-of-filter-wrap">
+          <button type="button" class="debt-as-of-filter-btn" tabindex="-1" aria-hidden="true">
+            <span class="debt-as-of-filter-value" id="debt-as-of-value">${t("debt_balances_as_of_live")}</span>
+          </button>
+          <input type="date" class="debt-as-of-picker-input" id="debt-as-of-input" value="" max="${formatDateInput(new Date())}" aria-label="${t("debt_balances_as_of_date")}" />
+          <button type="button" class="debt-as-of-clear-btn" id="debt-as-of-clear" hidden aria-label="${t("debt_balances_as_of_clear")}">${icons.close}</button>
+        </div>
       </div>
       <div id="debt-sync-badge"></div>
-      <div class="pill-date-filter-row">
-        <div class="pill-date-filter-wrap">
-          <button type="button" class="pill-date-filter-btn" tabindex="-1" aria-hidden="true">
-            <span class="pill-date-filter-caption">${t("debt_balances_as_of_date")}</span>
-            <span class="pill-date-filter-value" id="debt-as-of-value">${t("debt_balances_as_of_live")}</span>
-          </button>
-          <input type="date" class="pill-date-picker-input" id="debt-as-of-input" value="" max="${formatDateInput(new Date())}" aria-label="${t("debt_balances_as_of_date")}" />
-        </div>
-        <button type="button" class="chip" id="debt-as-of-clear" hidden>${t("debt_balances_as_of_clear")}</button>
+      <div class="debt-total-card" id="debt-total-card" hidden>
+        <span class="debt-total-label">${t("debt_balances_subtotal")}</span>
+        <span class="debt-total-amount" id="debt-total-amount"></span>
       </div>
       ${
         canGroup
-          ? `<div class="segmented" id="debt-mode-tabs">
-               <button type="button" class="chip chip-active" data-mode="flat">${t("debt_balances_flat")}</button>
-               <button type="button" class="chip" data-mode="by-manager">${t("debt_balances_by_manager")}</button>
-             </div>
-             <label class="debt-manager-filter-wrap" id="debt-manager-filter-wrap" hidden>${t("debt_balances_manager_filter")}
-               <select id="debt-manager-filter">
-                 <option value="">${t("all_statuses")}</option>
-               </select>
-             </label>`
+          ? `<div class="debt-filter-row">
+               <div class="segmented" id="debt-mode-tabs">
+                 <button type="button" class="chip chip-active" data-mode="flat">${t("debt_balances_flat")}</button>
+                 <button type="button" class="chip" data-mode="by-manager">${t("debt_balances_by_manager")}</button>
+               </div>
+               <div class="filter-dropdown-wrap debt-manager-filter-wrap" id="debt-manager-filter-wrap" hidden>
+                 <button type="button" class="filter-dropdown-btn" id="debt-manager-filter-btn" aria-haspopup="menu" aria-expanded="false">
+                   <span id="debt-manager-filter-label">${t("all_managers")}</span>
+                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+                 </button>
+                 <div class="filter-dropdown-menu" id="debt-manager-filter-menu" role="menu" hidden></div>
+               </div>
+             </div>`
           : ""
       }
       <p class="form-error" id="debt-error" hidden></p>
@@ -112,7 +117,8 @@ export async function renderDebtBalances(root, navigate) {
   container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
   const listEl = container.querySelector("#debt-list");
   const errorEl = container.querySelector("#debt-error");
-  const subtotalEl = container.querySelector("#debt-subtotal");
+  const totalCardEl = container.querySelector("#debt-total-card");
+  const totalAmountEl = container.querySelector("#debt-total-amount");
   const syncBadgeEl = container.querySelector("#debt-sync-badge");
   const asOfInput = container.querySelector("#debt-as-of-input");
   const asOfValueEl = container.querySelector("#debt-as-of-value");
@@ -124,13 +130,41 @@ export async function renderDebtBalances(root, navigate) {
     asOfClearBtn.hidden = !asOfDate;
     load();
   });
-  asOfClearBtn.addEventListener("click", () => {
+  asOfClearBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
     asOfDate = "";
     asOfInput.value = "";
     asOfValueEl.textContent = t("debt_balances_as_of_live");
     asOfClearBtn.hidden = true;
     load();
   });
+
+  let managerOptions = [];
+
+  function renderManagerMenu() {
+    const menu = container.querySelector("#debt-manager-filter-menu");
+    if (!menu) return;
+    menu.innerHTML = `
+      <button type="button" role="menuitemradio" aria-checked="${!managerFilter}" class="${!managerFilter ? "filter-dropdown-selected" : ""}" data-value="">${t("all_managers")}</button>
+      ${managerOptions
+        .map(
+          ([id, name]) =>
+            `<button type="button" role="menuitemradio" aria-checked="${managerFilter === id}" class="${managerFilter === id ? "filter-dropdown-selected" : ""}" data-value="${id}">${escapeHtml(name || "")}</button>`
+        )
+        .join("")}
+    `;
+    menu.querySelectorAll("button").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        managerFilter = btn.dataset.value;
+        const label = container.querySelector("#debt-manager-filter-label");
+        if (label) label.textContent = btn.textContent;
+        menu.hidden = true;
+        container.querySelector("#debt-manager-filter-btn")?.setAttribute("aria-expanded", "false");
+        render();
+      });
+    });
+  }
 
   if (canGroup) {
     const tabsEl = container.querySelector("#debt-mode-tabs");
@@ -143,9 +177,18 @@ export async function renderDebtBalances(root, navigate) {
         render();
       });
     });
-    container.querySelector("#debt-manager-filter").addEventListener("change", (e) => {
-      managerFilter = e.target.value;
-      render();
+    const managerBtn = container.querySelector("#debt-manager-filter-btn");
+    const managerMenu = container.querySelector("#debt-manager-filter-menu");
+    managerBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      managerMenu.hidden = !managerMenu.hidden;
+      managerBtn.setAttribute("aria-expanded", String(!managerMenu.hidden));
+    });
+    container.addEventListener("click", () => {
+      if (!managerMenu.hidden) {
+        managerMenu.hidden = true;
+        managerBtn.setAttribute("aria-expanded", "false");
+      }
     });
   }
 
@@ -184,7 +227,8 @@ export async function renderDebtBalances(root, navigate) {
     // mode) narrows this the same way it narrows the list below, so the
     // headline total always matches what's actually visible.
     const subtotal = visible.reduce((sum, r) => sum + Number(r.remaining_balance || 0), 0);
-    subtotalEl.textContent = visible.length ? `${t("debt_balances_subtotal")}: ${formatAmd(subtotal)}` : "";
+    totalCardEl.hidden = !visible.length;
+    totalAmountEl.textContent = formatAmd(subtotal);
 
     if (!visible.length) {
       listEl.innerHTML = `<p class="empty-state">${t("debt_balances_empty")}</p>`;
@@ -218,23 +262,21 @@ export async function renderDebtBalances(root, navigate) {
     rows = data.rows;
     syncBadgeEl.innerHTML = syncBadgeHtml(data.sync);
     if (canGroup) {
-      const managerFilterEl = container.querySelector("#debt-manager-filter");
       // Preserve whatever the user already has selected -- loadWithCache
-      // can repaint this select a second time (stale cache, then the real
-      // fetch landing), and resetting it back to "" mid-session would
-      // silently drop their filter choice out from under them.
-      const previousSelection = managerFilterEl.value;
-      // String-keyed to match both <select> option values (always strings)
-      // and previousSelection (read from .value, also always a string) --
-      // assigned_manager_id itself comes back as a number from the API.
+      // can repaint this a second time (stale cache, then the real fetch
+      // landing), and resetting it back to "" mid-session would silently
+      // drop their filter choice out from under them. String-keyed since
+      // managerFilter is always a string (read off a DOM dataset) while
+      // assigned_manager_id comes back as a number from the API.
       const managers = new Map();
       for (const r of rows) {
         if (r.assigned_manager_id) managers.set(String(r.assigned_manager_id), r.assigned_manager_name);
       }
-      managerFilterEl.innerHTML =
-        `<option value="">${t("all_statuses")}</option>` +
-        [...managers.entries()].map(([id, name]) => `<option value="${id}">${escapeHtml(name || "")}</option>`).join("");
-      if (previousSelection && managers.has(previousSelection)) managerFilterEl.value = previousSelection;
+      if (managerFilter && !managers.has(managerFilter)) managerFilter = "";
+      managerOptions = [...managers.entries()];
+      renderManagerMenu();
+      const label = container.querySelector("#debt-manager-filter-label");
+      if (label) label.textContent = managerFilter ? managers.get(managerFilter) || "" : t("all_managers");
     }
     render();
   }
