@@ -4900,6 +4900,15 @@ label.checkbox-row input[type="checkbox"] {
      link) squeezes the title down to a couple of characters instead of
      dropping to its own line below. */
   flex-wrap: wrap;
+  /* Whatever comes right after this header (tabs, a search row, a filter
+     row...) had zero guaranteed gap below it -- some pages' own first
+     content block happened to carry its own margin-top and looked fine by
+     accident, but plenty (e.g. Warehouse's segmented Pick list/Staging/
+     Inventory tabs) sat flush against the back button's own bottom edge,
+     reported as the back button "touching" the row below it. Guaranteeing
+     the gap here, on the shared header itself, fixes every page at once
+     instead of patching each one's next-sibling margin individually. */
+  margin-bottom: 14px;
 }
 
 .detail-header-icon {
