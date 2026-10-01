@@ -73,7 +73,8 @@ which is upsert-only and never truncated).
       "brand": "Castrol", "unit": "L", "family": "...",
       "bronze_price_amd": 12000, "silver_price_amd": 11500, "gold_price_amd": 11000,
       "stock_qty": 240,
-      "landing_cost_amd": 9500 // from the Pricelist sheet's own "Landing Cost" column; omit/null if not sent
+      "landing_cost_amd": 9500, // from the Pricelist sheet's own "Landing Cost" column; omit/null if not sent
+      "net_cost_amd": 8700 // optional, no current source sheet column -- omit/null if not sent. Admin-editable in the app (unlike landing_cost_amd), so a sent value only ever overwrites a product nothing has manually corrected since its last sync, and a product that already has one set keeps it until a real value arrives (a sync that omits this field never clears an existing net cost)
     }
   ],
 

@@ -165,6 +165,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     prodGoldPrices,
     prodStockQtys,
     prodLandingCosts,
+    prodNetCosts,
   } = transformErpProducts(products);
 
   const { volChannelCodes, volMonths, volBrands, volLiters } = transformErpBrandVolume(brand_volume);
@@ -283,30 +284,50 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
       // silently reassigned, since that's much harder to distinguish from
       // an actual new product and belongs in front of an admin, not
       // auto-merged.
+      // Matched case/whitespace-insensitively on both sides: the incoming
+      // name/brand/unit are already whitespace-normalized by
+      // transformErpProducts, but a pre-existing row (created by hand, by
+      // productImport.js, or synced before that normalization existed) can
+      // still have its own stray/doubled spacing stored -- lower() alone
+      // missed that, which is what let a whitespace-only difference slip
+      // past this claim step and insert a duplicate row below instead of
+      // linking to the one that's already there. name/brand collapse
+      // whitespace runs to one space (meaningful word-boundary spacing in
+      // prose); unit strips whitespace entirely, since a size token like
+      // "4.5L"/"4.5 L"/"4.5  L" is the same size regardless of whether
+      // there's a space before the L at all -- not just how many.
       await client.query(
         `UPDATE products AS p
          SET erp_product_id = t.erp_product_id, synced_at = now()
          FROM unnest($1::text[], $2::text[], $3::text[], $4::text[]) AS t(erp_product_id, name, brand, unit)
          WHERE p.active
            AND p.erp_product_id IS NULL
-           AND lower(p.name) = lower(t.name)
-           AND lower(coalesce(p.brand, '')) = lower(coalesce(t.brand, ''))
-           AND lower(coalesce(p.unit, '')) = lower(coalesce(t.unit, ''))`,
+           AND lower(regexp_replace(trim(p.name), '\\s+', ' ', 'g')) = lower(t.name)
+           AND lower(regexp_replace(trim(coalesce(p.brand, '')), '\\s+', ' ', 'g')) = lower(coalesce(t.brand, ''))
+           AND lower(regexp_replace(trim(coalesce(p.unit, '')), '\\s+', '', 'g')) = lower(regexp_replace(trim(coalesce(t.unit, '')), '\\s+', '', 'g'))`,
         [prodErpIds, prodNames, prodBrands, prodUnits]
       );
+      // net_cost_amd rides along in this same gated upsert (unlike
+      // landing_cost_amd below, which is never exposed on any edit form and
+      // so is always applied) -- it IS admin-editable (migration 080), so a
+      // sync-supplied value must respect manually_edited_at the same way
+      // name/brand/price/family already do, never silently overwriting a
+      // correction an admin made by hand. No extract currently sends this
+      // field, so this is a no-op (prodNetCosts is all null) until one does.
       await client.query(
-        `INSERT INTO products (erp_product_id, name, brand, unit, unit_price_amd, family, bronze_price_amd, silver_price_amd, gold_price_amd, stock_qty, landing_cost_amd, synced_at)
-         SELECT erp_product_id, name, brand, unit, unit_price_amd, family, bronze_price_amd, silver_price_amd, gold_price_amd, stock_qty, landing_cost_amd, now()
-         FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::numeric[], $6::text[], $7::numeric[], $8::numeric[], $9::numeric[], $10::int[], $11::numeric[])
-           AS t(erp_product_id, name, brand, unit, unit_price_amd, family, bronze_price_amd, silver_price_amd, gold_price_amd, stock_qty, landing_cost_amd)
+        `INSERT INTO products (erp_product_id, name, brand, unit, unit_price_amd, family, bronze_price_amd, silver_price_amd, gold_price_amd, stock_qty, landing_cost_amd, net_cost_amd, synced_at)
+         SELECT erp_product_id, name, brand, unit, unit_price_amd, family, bronze_price_amd, silver_price_amd, gold_price_amd, stock_qty, landing_cost_amd, net_cost_amd, now()
+         FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::numeric[], $6::text[], $7::numeric[], $8::numeric[], $9::numeric[], $10::int[], $11::numeric[], $12::numeric[])
+           AS t(erp_product_id, name, brand, unit, unit_price_amd, family, bronze_price_amd, silver_price_amd, gold_price_amd, stock_qty, landing_cost_amd, net_cost_amd)
          ON CONFLICT (erp_product_id) DO UPDATE SET
            name = EXCLUDED.name, brand = EXCLUDED.brand, unit = EXCLUDED.unit,
            unit_price_amd = EXCLUDED.unit_price_amd, family = EXCLUDED.family,
            bronze_price_amd = EXCLUDED.bronze_price_amd, silver_price_amd = EXCLUDED.silver_price_amd,
            gold_price_amd = EXCLUDED.gold_price_amd, stock_qty = EXCLUDED.stock_qty,
+           net_cost_amd = COALESCE(EXCLUDED.net_cost_amd, products.net_cost_amd),
            synced_at = now(), updated_at = now()
          WHERE products.manually_edited_at IS NULL`,
-        [prodErpIds, prodNames, prodBrands, prodUnits, prodPrices, prodFamilies, prodBronzePrices, prodSilverPrices, prodGoldPrices, prodStockQtys, prodLandingCosts]
+        [prodErpIds, prodNames, prodBrands, prodUnits, prodPrices, prodFamilies, prodBronzePrices, prodSilverPrices, prodGoldPrices, prodStockQtys, prodLandingCosts, prodNetCosts]
       );
       // landing_cost_amd specifically is never exposed on any product edit
       // form (see migration 064 -- "read-only in the app: ... only ever

@@ -17,6 +17,34 @@ export function isPlainArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+// Trims and collapses internal whitespace runs ("Orlen  5w40" / a trailing
+// or leading space / a tab) down to a single space. The ERP extract's own
+// product name/brand/unit text has real spacing drift from one sync to the
+// next for what's the same physical product -- routes/erpSync.js's
+// claim-by-name step only ever lowercased before matching, so a
+// whitespace-only difference silently failed to match an existing
+// never-synced row and inserted a second one instead, reported live as
+// e.g. "Orlen 5w40 4.5L" listed twice with two different stock counts.
+// Applied before matching AND before storage, so the canonical text this
+// app stores for a given erp_product_id stays stable sync to sync too.
+export function normalizeErpText(value) {
+  if (value == null) return value;
+  return String(value).trim().replace(/\s+/g, " ");
+}
+
+// For comparing a *size/unit* token specifically ("4.5L", "4.5 L", "4.5  L"
+// are the exact same size), not for prose: a unit string has no meaningful
+// word-boundary space the way a product name does, so this strips
+// whitespace entirely rather than collapsing it to one space -- the same
+// distinction client/public/js/views/warehouse.js's size filter already
+// makes (see its own `size` query param matching in routes/warehouse.js).
+// Only ever used to build/compare an identity key; never applied to the
+// text actually stored, which keeps whatever spacing the source used.
+export function normalizeErpUnitKey(value) {
+  if (value == null) return "";
+  return String(value).trim().replace(/\s+/g, "").toLowerCase();
+}
+
 // customers is the only required top-level field (see the contract) --
 // an entry is skipped entirely without erp_customer_id, since that's the
 // join key everything else in the app keys off. region/subregion are only
@@ -151,8 +179,15 @@ export function transformErpSalesPerformance(salesPerformance) {
 
 // erp_product_id, name, and a finite unit_price_amd are required. bronze
 // defaults to unit_price_amd (same source, "Price T1") when omitted, so
-// the extract doesn't have to send it twice; silver/gold/landing_cost have
-// no such fallback.
+// the extract doesn't have to send it twice; silver/gold/landing_cost/
+// net_cost have no such fallback. net_cost_amd is optional and, unlike
+// landing_cost_amd, admin-editable in the app (see migration 080) -- the
+// sync only ever offers a value if the extract actually sends one
+// (nothing currently does; the field exists so a future Excel/Sheet column
+// can start populating it with no further app change), and
+// routes/erpSync.js applies it the same gated way as every other editable
+// field: skipped on a row an admin has corrected by hand since its last
+// sync.
 export function transformErpProducts(products) {
   const prodErpIds = [];
   const prodNames = [];
@@ -165,23 +200,38 @@ export function transformErpProducts(products) {
   const prodGoldPrices = [];
   const prodStockQtys = [];
   const prodLandingCosts = [];
+  const prodNetCosts = [];
 
   for (const p of isPlainArray(products)) {
     if (!isPlainObject(p) || !p.erp_product_id || !p.name || !Number.isFinite(p.unit_price_amd)) continue;
     prodErpIds.push(String(p.erp_product_id));
-    prodNames.push(String(p.name));
-    prodBrands.push(p.brand != null ? String(p.brand) : null);
-    prodUnits.push(p.unit != null ? String(p.unit) : null);
+    prodNames.push(normalizeErpText(p.name));
+    prodBrands.push(p.brand != null ? normalizeErpText(p.brand) : null);
+    prodUnits.push(p.unit != null ? normalizeErpText(p.unit) : null);
     prodPrices.push(p.unit_price_amd);
-    prodFamilies.push(p.family != null ? String(p.family) : null);
+    prodFamilies.push(p.family != null ? normalizeErpText(p.family) : null);
     prodBronzePrices.push(Number.isFinite(p.bronze_price_amd) ? p.bronze_price_amd : p.unit_price_amd);
     prodSilverPrices.push(Number.isFinite(p.silver_price_amd) ? p.silver_price_amd : null);
     prodGoldPrices.push(Number.isFinite(p.gold_price_amd) ? p.gold_price_amd : null);
     prodStockQtys.push(Number.isFinite(p.stock_qty) ? Math.trunc(p.stock_qty) : null);
     prodLandingCosts.push(Number.isFinite(p.landing_cost_amd) ? p.landing_cost_amd : null);
+    prodNetCosts.push(Number.isFinite(p.net_cost_amd) ? p.net_cost_amd : null);
   }
 
-  return { prodErpIds, prodNames, prodBrands, prodUnits, prodPrices, prodFamilies, prodBronzePrices, prodSilverPrices, prodGoldPrices, prodStockQtys, prodLandingCosts };
+  return {
+    prodErpIds,
+    prodNames,
+    prodBrands,
+    prodUnits,
+    prodPrices,
+    prodFamilies,
+    prodBronzePrices,
+    prodSilverPrices,
+    prodGoldPrices,
+    prodStockQtys,
+    prodLandingCosts,
+    prodNetCosts,
+  };
 }
 
 // channel_code, month, and brand are all required.

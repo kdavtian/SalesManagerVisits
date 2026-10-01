@@ -6688,6 +6688,20 @@ button.list-row-icon {
   padding-left: 14px;
 }
 
+/* Stock value line(s) under a brand/family header -- only present once a
+   price mode (wholesale/LC/NC) is toggled on, see groupAmountLines in
+   views/warehouse.js. Sits below the toggle button itself since that
+   button is a single flex row with no room for a second line. */
+.list-group-heading-amount {
+  text-align: right;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+.list-group-heading-family + .list-group-heading-amount {
+  padding-right: 14px;
+}
+
 .activity-status-icon {
   flex-shrink: 0;
   width: 32px;
@@ -8445,6 +8459,42 @@ form select,
   color: var(--text-dim);
 }
 
+/* Grand total across the whole currently-loaded list (every search/filter
+   result, not just what's expanded) -- a filled card so it reads as the
+   headline summary, distinct from the plain-text brand/family subtotals
+   underneath it. */
+.inventory-grand-total {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-subtle);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.inventory-grand-total-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.inventory-grand-total-label {
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-eyebrow);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-eyebrow);
+}
+.inventory-grand-total-qty {
+  font-weight: 700;
+  font-size: 1rem;
+}
+.inventory-grand-total-amount {
+  text-align: right;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
 /* Inventory: one compact row per product -- name + size on the left,
    pcs / total-liters right-aligned, in place of the old two-line card with
    a separate stock-count pill. Read-only reference (see /inventory route),
@@ -8738,6 +8788,35 @@ form select,
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: var(--ls-eyebrow);
+}
+
+/* Compact wrapping pill grid -- Size and Stock status (see
+   filterChipSectionHtml in views/warehouse.js). Replaces what used to be
+   one full-width row per size: a catalog with many sizes turned that into
+   a long scroll of near-identical rows, the specific thing reported as
+   "messy" about this sheet. A wrapping grid of short pills fits many more
+   options in the same space and reads as one glanceable set. */
+.filter-sheet-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.filter-sheet-chip {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.filter-sheet-chip-selected {
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-card));
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 /* Admin > Quick actions per role: one collapsible card per role, a checkbox

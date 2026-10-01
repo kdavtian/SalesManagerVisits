@@ -1148,6 +1148,7 @@ async function init() {
   // corrects whatever this optimistic one showed if it disagrees (role
   // changed, session gone).
   const cachedUser = loadCachedUser();
+  let optimisticRenderDone = false;
   if (cachedUser) {
     state.user = cachedUser;
     // Same optimistic-paint reasoning as cachedUser above, applied to the
@@ -1167,6 +1168,7 @@ async function init() {
       editRequestBadgeCount = cachedBadgeCounts.editRequests ?? 0;
     }
     render();
+    optimisticRenderDone = true;
   }
 
   try {
@@ -1182,14 +1184,28 @@ async function init() {
     // even complete.
   }
 
+  // Whether the confirmed /api/me response below changes anything the
+  // optimistic render above already painted correctly -- if it's the same
+  // account and the same role, the mounted view, nav, and badges are
+  // already right, and a redundant render() here would discard that
+  // already-correct paint and rebuild from scratch for nothing. Most
+  // routed views (renderDashboard included) wipe their container to a
+  // bare loading placeholder before repainting, so that redundant render
+  // was exactly what made a cold open look like "opens correctly, then
+  // flashes to a loading state, then redraws" -- the optimistic paint
+  // disappearing and reappearing read as a refresh.
+  let skipRedundantRender = false;
   try {
     const user = await api.me();
+    skipRedundantRender = optimisticRenderDone && cachedUser && cachedUser.id === user.id && cachedUser.role === user.role;
     setUser(user);
     // Catches a role change (e.g. sales_manager -> sales_director) an admin
     // made while this device stayed signed in -- server-side auth is always
     // correct regardless (requireAuth re-fetches role every request), this
     // is just to stop a stale cached list screen from flashing data scoped
-    // to the OLD role's visibility for a moment on next open.
+    // to the OLD role's visibility for a moment on next open. A no-op here
+    // whenever skipRedundantRender is true, since that already means the
+    // role didn't change.
     await clearCacheIfRoleChanged(user);
     startLocationBroadcast();
     startErrorMonitoring();
@@ -1198,7 +1214,7 @@ async function init() {
   }
   renderSyncBanner();
   flushQueue();
-  render();
+  if (!skipRedundantRender) render();
   if (state.user) {
     api
       .getSettings()

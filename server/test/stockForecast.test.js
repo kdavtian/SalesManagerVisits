@@ -49,19 +49,19 @@ test("computeStockForecast: sold within 180 days but nothing in the last 90 -> '
 });
 
 test("computeStockForecast: steady demand lands in the right threshold band (critical/low/ok)", () => {
-  // 1 unit/day blended (30d and 90d windows agree -- no trend): stock of 5
-  // is under CRITICAL_DAYS_THRESHOLD, 15 is under LOW but not critical, 30
+  // 1 unit/day blended (30d and 90d windows agree -- no trend): stock of 30
+  // is under CRITICAL_DAYS_THRESHOLD, 60 is under LOW but not critical, 100
   // is 'ok'.
   const base = { qty30d: 30, qty90d: 90, lastSaleDate: daysAgo(1), createdAt: daysAgo(900), today: TODAY };
-  const critical = computeStockForecast({ ...base, stockQty: 5 });
+  const critical = computeStockForecast({ ...base, stockQty: 30 });
   assert.equal(critical.status, "critical");
   assert.ok(critical.daysOfStock < CRITICAL_DAYS_THRESHOLD);
 
-  const low = computeStockForecast({ ...base, stockQty: 15 });
+  const low = computeStockForecast({ ...base, stockQty: 60 });
   assert.equal(low.status, "low");
   assert.ok(low.daysOfStock >= CRITICAL_DAYS_THRESHOLD && low.daysOfStock < LOW_DAYS_THRESHOLD);
 
-  const ok = computeStockForecast({ ...base, stockQty: 30 });
+  const ok = computeStockForecast({ ...base, stockQty: 100 });
   assert.equal(ok.status, "ok");
   assert.ok(ok.daysOfStock >= LOW_DAYS_THRESHOLD);
   assert.equal(ok.trend, "flat");

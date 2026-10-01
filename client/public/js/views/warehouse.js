@@ -2,7 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks, activateDialog } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { compareProducts, parseLiters, normalizeUnitLabel } from "../productSort.js";
+import { compareProducts, parseLiters, normalizeUnitLabel, normalizeProductKey } from "../productSort.js";
 
 // "624" -> "624L", "4.5" -> "4.5L" -- compact, no space, matching how a WM
 // reads a shelf tag (as opposed to util.js's own formatLiters-style helpers
@@ -25,7 +25,10 @@ function inventoryQtyLabel(p) {
 }
 
 export async function renderWarehouse(root, navigate) {
-  let activeTab = "pick-list";
+  // Inventory is the screen a WM actually lands on most -- "what's on the
+  // shelf right now" is the default question, Pick List/Staging are for
+  // the moment there's something queued to pack.
+  let activeTab = "inventory";
 
   root.innerHTML = `
     <div class="detail-view">
@@ -36,9 +39,9 @@ export async function renderWarehouse(root, navigate) {
         <div class="detail-header-title"><h1>${t("qa_warehouse")}</h1></div>
       </div>
       <div class="segmented" id="warehouse-tabs">
-        <button type="button" class="chip chip-active" data-tab="pick-list">${t("warehouse_tab_pick_list")}</button>
+        <button type="button" class="chip" data-tab="pick-list">${t("warehouse_tab_pick_list")}</button>
         <button type="button" class="chip" data-tab="staging">${t("warehouse_tab_staging")}</button>
-        <button type="button" class="chip" data-tab="inventory">${t("warehouse_tab_inventory")}</button>
+        <button type="button" class="chip chip-active" data-tab="inventory">${t("warehouse_tab_inventory")}</button>
       </div>
       <p class="form-error" id="warehouse-error" hidden></p>
       <div id="warehouse-content" style="margin-top:12px;"></div>
@@ -370,24 +373,24 @@ export async function renderWarehouse(root, navigate) {
     // making 1L/4L/drum variants of the same oil hard to tell apart. Falls
     // back to the plain single row above when there's only one size, so a
     // filter or brake pad doesn't get a pointless one-pill row. The header
-    // totals reuse groupQtyLabel (defined below) -- same "118pcs | 222L"
-    // shape as the brand/family headers, just summed across this one
-    // product's own sizes instead.
+    // totals reuse groupQtyLabel/groupAmountLines (defined below) -- same
+    // "118pcs | 222L" shape (plus a value line when a price mode is on) as
+    // the brand/family headers, just summed across this one product's own
+    // sizes instead.
     function productGroupHtml(group) {
       if (group.products.length === 1) return productRowHtml(group.products[0]);
-      const totals = { pcs: 0, liters: 0 };
-      for (const p of group.products) {
-        const pcs = p.stock_qty ?? 0;
-        totals.pcs += pcs;
-        const perUnitLiters = parseLiters(p.unit);
-        if (perUnitLiters != null) totals.liters += perUnitLiters * pcs;
-      }
+      const totals = emptyTotals();
+      for (const p of group.products) sumRowIntoTotals(totals, p);
+      const amountLines = groupAmountLines(totals)
+        .map((line) => `<div class="inventory-row-prices">${line}</div>`)
+        .join("");
       return `
         <div class="card inventory-row-card">
           <div class="inventory-row">
             <span class="inventory-row-name">${escapeHtml(group.name)}</span>
             <span class="inventory-row-qty">${groupQtyLabel(totals)}</span>
           </div>
+          ${amountLines}
           <div class="inventory-variant-pills">${group.products.map(variantPillHtml).join("")}</div>
         </div>`;
     }
@@ -412,34 +415,61 @@ export async function renderWarehouse(root, navigate) {
       return totals.liters > 0 ? `${pcsLabel} | ${formatLitersCompact(totals.liters)}` : pcsLabel;
     }
 
+    // Stock *value* for a group of rows, at whichever price basis is
+    // currently toggled on (same toggles the per-row price lines already
+    // read -- wholesale, or LC/NC depending on costMode) -- omitted
+    // entirely when that toggle is off, or when none of the rows in this
+    // group have a value for it at all.
+    function groupAmountLines(totals) {
+      const lines = [];
+      if (showWholesale && totals.wholesaleAmd > 0) lines.push(formatAmd(totals.wholesaleAmd));
+      if (costMode === "landing" && totals.lcAmd > 0) lines.push(`${t("lc_short")} ${formatAmd(totals.lcAmd)}`);
+      if (costMode === "net" && totals.ncAmd > 0) lines.push(`${t("nc_short")} ${formatAmd(totals.ncAmd)}`);
+      return lines;
+    }
+
     function groupHeaderHtml({ label, toggleAttr, key, expanded, totals, extraClass = "" }) {
+      const amountLines = groupAmountLines(totals)
+        .map((line) => `<div class="list-group-heading-amount">${line}</div>`)
+        .join("");
       return `
         <button type="button" class="list-group-heading list-group-heading-toggle ${extraClass}" ${toggleAttr}="${escapeHtml(key)}" aria-expanded="${expanded}">
           <span class="list-group-heading-label">${icons.chevronDown}${escapeHtml(label)}</span>
           <span class="list-group-heading-qty">${groupQtyLabel(totals)}</span>
-        </button>`;
+        </button>
+        ${amountLines}`;
     }
 
-    // Sums stock/liters per brand and per brand+family, for the collapsible
-    // headers' own totals -- independent of which rows are actually
-    // expanded/visible right now.
+    function emptyTotals() {
+      return { pcs: 0, liters: 0, wholesaleAmd: 0, lcAmd: 0, ncAmd: 0 };
+    }
+    // Folds one product row's stock into a running totals object -- shared
+    // by computeTotals (brand/family), productGroupHtml (one product's own
+    // sizes) and the grand-total row (every currently loaded row), so all
+    // four levels of subtotal are computed the exact same way.
+    function sumRowIntoTotals(totals, p) {
+      const pcs = p.stock_qty ?? 0;
+      totals.pcs += pcs;
+      const perUnitLiters = parseLiters(p.unit);
+      if (perUnitLiters != null) totals.liters += perUnitLiters * pcs;
+      if (p.bronze_price_amd != null) totals.wholesaleAmd += Number(p.bronze_price_amd) * pcs;
+      if (p.landing_cost_amd != null) totals.lcAmd += Number(p.landing_cost_amd) * pcs;
+      if (p.net_cost_amd != null) totals.ncAmd += Number(p.net_cost_amd) * pcs;
+    }
+
+    // Sums stock/liters/value per brand and per brand+family, for the
+    // collapsible headers' own totals -- independent of which rows are
+    // actually expanded/visible right now.
     function computeTotals(rows) {
       const brandTotals = new Map();
       const familyTotals = new Map();
       for (const p of rows) {
-        const pcs = p.stock_qty ?? 0;
-        const perUnitLiters = parseLiters(p.unit);
-        const liters = perUnitLiters != null ? perUnitLiters * (p.stock_qty ?? 0) : 0;
         const bKey = p.brand || "";
-        const bTotal = brandTotals.get(bKey) || { pcs: 0, liters: 0 };
-        bTotal.pcs += pcs;
-        bTotal.liters += liters;
-        brandTotals.set(bKey, bTotal);
+        if (!brandTotals.has(bKey)) brandTotals.set(bKey, emptyTotals());
+        sumRowIntoTotals(brandTotals.get(bKey), p);
         const fKey = `${bKey}||${p.family || ""}`;
-        const fTotal = familyTotals.get(fKey) || { pcs: 0, liters: 0 };
-        fTotal.pcs += pcs;
-        fTotal.liters += liters;
-        familyTotals.set(fKey, fTotal);
+        if (!familyTotals.has(fKey)) familyTotals.set(fKey, emptyTotals());
+        sumRowIntoTotals(familyTotals.get(fKey), p);
       }
       return { brandTotals, familyTotals };
     }
@@ -492,7 +522,7 @@ export async function renderWarehouse(root, navigate) {
           brand.families.set(fKey, family);
           brand.familyOrder.push(fKey);
         }
-        const nameKey = (p.name || "").trim().toLowerCase();
+        const nameKey = normalizeProductKey(p.name);
         let group = family.groups.get(nameKey);
         if (!group) {
           group = { name: p.name, products: [] };
@@ -502,7 +532,23 @@ export async function renderWarehouse(root, navigate) {
         group.products.push(p);
       }
 
-      let html = "";
+      // Grand total across every row currently loaded (the full
+      // search/filter result, not just what's expanded on screen) --
+      // qty/liters always, stock value on top of that once a price mode is
+      // toggled on, same shape as every other subtotal level below it.
+      const grandTotals = emptyTotals();
+      for (const p of lastRows) sumRowIntoTotals(grandTotals, p);
+      const grandAmountLines = groupAmountLines(grandTotals)
+        .map((line) => `<div class="inventory-grand-total-amount">${line}</div>`)
+        .join("");
+      let html = `
+        <div class="inventory-grand-total">
+          <div class="inventory-grand-total-row">
+            <span class="inventory-grand-total-label">${t("warehouse_total_label")}</span>
+            <span class="inventory-grand-total-qty">${groupQtyLabel(grandTotals)}</span>
+          </div>
+          ${grandAmountLines}
+        </div>`;
       for (const brand of brands) {
         const brandExpanded = forceExpand ? !forceCollapsedBrands.has(brand.key) : expandedBrands.has(brand.key);
         html += groupHeaderHtml({
@@ -510,7 +556,7 @@ export async function renderWarehouse(root, navigate) {
           toggleAttr: "data-brand-toggle",
           key: brand.key,
           expanded: brandExpanded,
-          totals: brandTotals.get(brand.key) || { pcs: 0, liters: 0 },
+          totals: brandTotals.get(brand.key) || emptyTotals(),
         });
         if (!brandExpanded) continue;
         for (const fKey of brand.familyOrder) {
@@ -522,7 +568,7 @@ export async function renderWarehouse(root, navigate) {
             toggleAttr: "data-family-toggle",
             key: familyKey,
             expanded: familyExpanded,
-            totals: familyTotals.get(familyKey) || { pcs: 0, liters: 0 },
+            totals: familyTotals.get(familyKey) || emptyTotals(),
             extraClass: "list-group-heading-family",
           });
           if (familyExpanded) html += family.groupOrder.map((k) => productGroupHtml(family.groups.get(k))).join("");
@@ -599,6 +645,9 @@ export async function renderWarehouse(root, navigate) {
       { value: "low_stock", label: t("warehouse_stock_low") },
       { value: "out_of_stock", label: t("warehouse_stock_out") },
     ];
+    // Full-width list, one option per row with a checkmark -- used for
+    // Brand, where names vary a lot in length and there's usually a
+    // handful of them, so a scannable list reads better than a chip grid.
     function filterSectionHtml(title, options, currentValue, dataAttr) {
       return `
         <div class="filter-sheet-section">
@@ -610,6 +659,29 @@ export async function renderWarehouse(root, navigate) {
               <button type="button" class="filter-sheet-option ${o.value === currentValue ? "filter-sheet-option-selected" : ""}" data-${dataAttr}="${escapeHtml(o.value)}">
                 <span>${escapeHtml(o.label)}</span>
                 ${o.value === currentValue ? `<span class="filter-sheet-check">${icons.checkCircle}</span>` : ""}
+              </button>`
+              )
+              .join("")}
+          </div>
+        </div>`;
+    }
+
+    // Compact wrapping pill grid -- used for Size and Stock status, where
+    // every label is short (a size, or one of three fixed words). The old
+    // one-row-per-size vertical list was the "messy" part of this sheet:
+    // a catalog with many sizes turned into a long scroll of near-identical
+    // rows. A wrapping chip grid fits far more options in the same space
+    // and reads as a single glanceable set instead of a list to scroll.
+    function filterChipSectionHtml(title, options, currentValue, dataAttr) {
+      return `
+        <div class="filter-sheet-section">
+          <h3 class="filter-sheet-section-title">${escapeHtml(title)}</h3>
+          <div class="filter-sheet-chips">
+            ${options
+              .map(
+                (o) => `
+              <button type="button" class="filter-sheet-chip ${o.value === currentValue ? "filter-sheet-chip-selected" : ""}" data-${dataAttr}="${escapeHtml(o.value)}">
+                ${escapeHtml(o.label)}
               </button>`
               )
               .join("")}
@@ -654,13 +726,13 @@ export async function renderWarehouse(root, navigate) {
         <div class="sheet filter-sheet">
           <h2>${t("warehouse_filters_title")}</h2>
           ${filterSectionHtml(t("filter_brand"), [{ value: "", label: t("all_brands") }, ...brandOptions.map((b) => ({ value: b, label: b }))], workingBrand, "brand-value")}
-          ${filterSectionHtml(
+          ${filterChipSectionHtml(
             t("warehouse_filter_size"),
             [{ value: "", label: t("warehouse_all_sizes") }, ...sizeOptions.map((s) => ({ value: s, label: normalizeUnitLabel(s) }))],
             workingSize,
             "size-value"
           )}
-          ${filterSectionHtml(t("warehouse_filter_stock"), [{ value: "", label: t("all_statuses") }, ...STOCK_FILTER_OPTIONS], workingStock, "stock-value")}
+          ${filterChipSectionHtml(t("warehouse_filter_stock"), [{ value: "", label: t("all_statuses") }, ...STOCK_FILTER_OPTIONS], workingStock, "stock-value")}
           <div class="sheet-actions">
             <button type="button" class="btn" id="inventory-filter-clear">${t("clear")}</button>
             <button type="button" class="btn btn-primary" id="inventory-filter-done">${t("done")}</button>
@@ -671,7 +743,10 @@ export async function renderWarehouse(root, navigate) {
       activateDialog(overlay);
       overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
 
-      function reselect(groupSelector, attr, value) {
+      // Brand uses the full-row list (with its own checkmark element);
+      // size/stock use the compact chip grid (selected state is just its
+      // own background/border, no separate checkmark node to manage).
+      function reselectList(groupSelector, attr, value) {
         overlay.querySelectorAll(groupSelector).forEach((btn) => {
           const selected = btn.dataset[attr] === value;
           btn.classList.toggle("filter-sheet-option-selected", selected);
@@ -680,22 +755,27 @@ export async function renderWarehouse(root, navigate) {
           else if (!selected && check) check.remove();
         });
       }
+      function reselectChips(groupSelector, attr, value) {
+        overlay.querySelectorAll(groupSelector).forEach((btn) => {
+          btn.classList.toggle("filter-sheet-chip-selected", btn.dataset[attr] === value);
+        });
+      }
       overlay.querySelectorAll("[data-brand-value]").forEach((btn) => {
         btn.addEventListener("click", () => {
           workingBrand = btn.dataset.brandValue;
-          reselect("[data-brand-value]", "brandValue", workingBrand);
+          reselectList("[data-brand-value]", "brandValue", workingBrand);
         });
       });
       overlay.querySelectorAll("[data-size-value]").forEach((btn) => {
         btn.addEventListener("click", () => {
           workingSize = btn.dataset.sizeValue;
-          reselect("[data-size-value]", "sizeValue", workingSize);
+          reselectChips("[data-size-value]", "sizeValue", workingSize);
         });
       });
       overlay.querySelectorAll("[data-stock-value]").forEach((btn) => {
         btn.addEventListener("click", () => {
           workingStock = btn.dataset.stockValue;
-          reselect("[data-stock-value]", "stockValue", workingStock);
+          reselectChips("[data-stock-value]", "stockValue", workingStock);
         });
       });
 

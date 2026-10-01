@@ -9,6 +9,7 @@ import { getEffectiveProductPricing } from "../pricingService.js";
 import { photoUpload, uploadDirPath } from "../upload.js";
 import { matchesDeclaredImageType } from "../utils/imageSniff.js";
 import { parseImportFile, classifyImportRows, applyImportRows } from "../productImport.js";
+import { normalizeErpText, normalizeErpUnitKey } from "../erpTransform.js";
 
 // In-memory (not disk) -- an import workbook is parsed and discarded, never
 // served back, so there's no reason to write it to disk first.
@@ -219,26 +220,35 @@ productsRouter.get("/sync-diagnostics", async (req, res) => {
 // legitimately be different SKUs/counts in the real world, so resolving
 // one (typically deactivating the stale row via the existing product
 // edit sheet's Active toggle) is left to a person who can look at both.
+// Identity collapses whitespace (not just case) before comparing, same as
+// erpSync.js's claim step and productImport.js's identity match -- a pair
+// that only differs by a stray double space or trailing tab in one row's
+// name/brand/unit used to never show up here at all, which is exactly the
+// kind of pair those two matchers also used to miss (reported live as the
+// same product listed twice with two different stock counts, e.g. "Orlen
+// 5w40 4.5L" at both 32 and 33 units).
 productsRouter.get("/duplicates", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT p.*
      FROM products p
      JOIN (
-       SELECT lower(name) AS ident_name, lower(coalesce(brand, '')) AS ident_brand, lower(coalesce(unit, '')) AS ident_unit
+       SELECT lower(regexp_replace(trim(name), '\\s+', ' ', 'g')) AS ident_name,
+              lower(regexp_replace(trim(coalesce(brand, '')), '\\s+', ' ', 'g')) AS ident_brand,
+              lower(regexp_replace(trim(coalesce(unit, '')), '\\s+', '', 'g')) AS ident_unit
        FROM products
        WHERE active
        GROUP BY 1, 2, 3
        HAVING count(*) > 1
      ) dup
-       ON lower(p.name) = dup.ident_name
-       AND lower(coalesce(p.brand, '')) = dup.ident_brand
-       AND lower(coalesce(p.unit, '')) = dup.ident_unit
+       ON lower(regexp_replace(trim(p.name), '\\s+', ' ', 'g')) = dup.ident_name
+       AND lower(regexp_replace(trim(coalesce(p.brand, '')), '\\s+', ' ', 'g')) = dup.ident_brand
+       AND lower(regexp_replace(trim(coalesce(p.unit, '')), '\\s+', '', 'g')) = dup.ident_unit
      WHERE p.active
      ORDER BY dup.ident_brand, dup.ident_name, dup.ident_unit, p.id`
   );
   const groups = new Map();
   for (const p of rows) {
-    const key = `${(p.brand || "").toLowerCase()}|${p.name.toLowerCase()}|${(p.unit || "").toLowerCase()}`;
+    const key = `${(normalizeErpText(p.brand) || "").toLowerCase()}|${(normalizeErpText(p.name) || "").toLowerCase()}|${normalizeErpUnitKey(p.unit)}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(p);
   }
