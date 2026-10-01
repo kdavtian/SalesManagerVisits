@@ -7,6 +7,7 @@
 // enough to one of the aliases below.
 import ExcelJS from "exceljs";
 import { pool } from "./db/pool.js";
+import { normalizeErpText, normalizeErpUnitKey } from "./erpTransform.js";
 
 const COLUMN_ALIASES = {
   brand: ["brand"],
@@ -82,13 +83,20 @@ export async function parseImportFile(buffer) {
   sheet.eachRow((row, rowNumber) => {
     if (rowNumber === 1) return;
     const get = (field) => (columns[field] ? row.getCell(columns[field]).value : null);
+    // brand/category/name/unit go through normalizeErpText (trim + collapse
+    // internal whitespace runs), same cleanup the automatic ERP sync applies
+    // (see erpTransform.js) -- otherwise a stray double space or trailing
+    // tab in the workbook defeats the identity match below and creates a
+    // second row for a product that's already in the catalog. sku is left
+    // as a plain trim: it's a code, not prose, so collapsing its internal
+    // spacing isn't safe to assume.
     const raw = {
       rowNumber,
-      brand: get("brand")?.toString().trim() || null,
-      category: get("category")?.toString().trim() || null,
+      brand: normalizeErpText(get("brand")?.toString()) || null,
+      category: normalizeErpText(get("category")?.toString()) || null,
       sku: get("sku")?.toString().trim() || null,
-      name: get("name")?.toString().trim() || null,
-      unit: get("unit")?.toString().trim() || null,
+      name: normalizeErpText(get("name")?.toString()) || null,
+      unit: normalizeErpText(get("unit")?.toString()) || null,
       standard: numOrNull(get("standard")),
       special: numOrNull(get("special")),
       specialFrom: dateOrNull(get("specialFrom")),
@@ -111,9 +119,21 @@ export async function classifyImportRows(rows) {
     "SELECT id, sku, brand, name, unit, bronze_price_amd, retail_price_amd, net_cost_amd FROM products WHERE active"
   );
   const bySku = new Map(existing.filter((p) => p.sku).map((p) => [p.sku.toLowerCase(), p]));
-  const byIdentity = new Map(
-    existing.map((p) => [`${(p.brand || "").toLowerCase()}|${p.name.toLowerCase()}|${(p.unit || "").toLowerCase()}`, p])
-  );
+  // Existing rows go through the same normalizeErpText cleanup the
+  // workbook rows already got when parsed (see parseImportFile) before
+  // this identity key is built -- a pre-existing row's own stored
+  // brand/name/unit can still carry stray whitespace from before this
+  // normalization existed (or from the automatic ERP sync, which only
+  // started collapsing it with this same fix), and comparing that
+  // unnormalized text against the now-normalized workbook text would
+  // silently miss the match and create a duplicate row again.
+  // unit strips whitespace entirely rather than just collapsing it --
+  // "4.5L" and "4.5 L" are the same size regardless of whether there's a
+  // space before the L at all, unlike brand/name where a word-boundary
+  // space is meaningful (see erpTransform.js's normalizeErpUnitKey).
+  const identityKeyOf = (brand, name, unit) =>
+    `${(normalizeErpText(brand) || "").toLowerCase()}|${(normalizeErpText(name) || "").toLowerCase()}|${normalizeErpUnitKey(unit)}`;
+  const byIdentity = new Map(existing.map((p) => [identityKeyOf(p.brand, p.name, p.unit), p]));
 
   const seenKeys = new Set();
   const newProducts = [];
@@ -137,14 +157,14 @@ export async function classifyImportRows(rows) {
       continue;
     }
 
-    const key = row.sku ? `sku:${row.sku.toLowerCase()}` : `id:${(row.brand || "").toLowerCase()}|${row.name.toLowerCase()}|${(row.unit || "").toLowerCase()}`;
+    const key = row.sku ? `sku:${row.sku.toLowerCase()}` : `id:${identityKeyOf(row.brand, row.name, row.unit)}`;
     if (seenKeys.has(key)) {
       duplicates.push({ rowNumber: row.rowNumber, name: row.name, reason: "Same product appears more than once in this file" });
       continue;
     }
     seenKeys.add(key);
 
-    const identityKey = `${(row.brand || "").toLowerCase()}|${row.name.toLowerCase()}|${(row.unit || "").toLowerCase()}`;
+    const identityKey = identityKeyOf(row.brand, row.name, row.unit);
     // SKU match first, but always fall back to the brand+name+unit identity
     // match rather than only trying it when the row has no SKU at all.
     // ERP-synced products (see erpSync.js's products upsert) never get a

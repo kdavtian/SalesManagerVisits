@@ -14,6 +14,21 @@
 // filters, etc.) sort as one alphabetical block after every oil, since
 // brand/family/viscosity/spec priority doesn't apply to them.
 
+// Trims and collapses internal whitespace runs ("Orlen  5w40" / a trailing
+// or leading space / a tab) to a single space, then lowercases -- for
+// grouping/matching text, never for display (normalizeUnitLabel below is
+// the display-facing cleanup). The ERP extract's own name/brand/unit text
+// has real spacing drift sync to sync for what's the same physical
+// product; the server now normalizes this at the source (see
+// server/src/erpTransform.js's normalizeErpText), but a row synced before
+// that fix existed can still have it stored, so Warehouse Inventory's own
+// grouping key also normalizes defensively -- otherwise a whitespace-only
+// difference reads as two separate products with two different stock
+// counts instead of one product with two rows.
+export function normalizeProductKey(value) {
+  return (value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 export const BRAND_PRIORITY = ["Castrol", "Lotos", "Orlen", "Royal"];
 
 export const FAMILY_PRIORITY = ["Edge", "Magnatec", "GTX", "CRB", "Vecton"];

@@ -7,6 +7,8 @@ import {
   isPlainObject,
   isFiniteOrNull,
   isPlainArray,
+  normalizeErpText,
+  normalizeErpUnitKey,
   transformErpCustomers,
   transformErpOrderLines,
   transformErpCashflowLines,
@@ -201,7 +203,58 @@ test("transformErpSalesPerformance: missing numeric fields default to 0, not nul
   assert.deepEqual([result.perfSales[0], result.perfCollected[0], result.perfBudget[0]], [0, 0, 0]);
 });
 
+// --- normalizeErpText ----------------------------------------------------------
+
+test("normalizeErpText: trims and collapses internal whitespace runs to a single space", () => {
+  assert.equal(normalizeErpText("  Orlen   5w40  "), "Orlen 5w40");
+  assert.equal(normalizeErpText("4.5L"), "4.5L");
+  assert.equal(normalizeErpText("4.5\tL"), "4.5 L");
+});
+
+test("normalizeErpText: null/undefined pass through unchanged", () => {
+  assert.equal(normalizeErpText(null), null);
+  assert.equal(normalizeErpText(undefined), undefined);
+});
+
+// --- normalizeErpUnitKey -------------------------------------------------------
+
+test("normalizeErpUnitKey: strips whitespace entirely (not just collapses it), so '4.5L' and '4.5 L' match", () => {
+  assert.equal(normalizeErpUnitKey("4.5L"), normalizeErpUnitKey("4.5 L"));
+  assert.equal(normalizeErpUnitKey("4.5L"), normalizeErpUnitKey("4.5  L"));
+  assert.equal(normalizeErpUnitKey("4.5 L"), "4.5l");
+});
+
+test("normalizeErpUnitKey: null/undefined/empty normalize to an empty string, not null", () => {
+  assert.equal(normalizeErpUnitKey(null), "");
+  assert.equal(normalizeErpUnitKey(undefined), "");
+  assert.equal(normalizeErpUnitKey(""), "");
+});
+
 // --- transformErpProducts -----------------------------------------------------
+
+// Regression: two ERP rows for the same physical product ("Orlen 5w40
+// 4.5L") whose name/unit text differed only by spacing used to produce two
+// distinct, never-merged entries in the parallel arrays this feeds into
+// routes/erpSync.js's upsert -- reported live as the same product listed
+// twice with two different stock counts.
+test("transformErpProducts: name/brand/unit/family are whitespace-normalized, so spacing drift can't desync an otherwise-identical row", () => {
+  const result = transformErpProducts([
+    { erp_product_id: "P1", name: "  Orlen   5w40  ", brand: "Orlen ", unit: "4.5\tL", family: "  GTX ", unit_price_amd: 10000 },
+  ]);
+  assert.equal(result.prodNames[0], "Orlen 5w40");
+  assert.equal(result.prodBrands[0], "Orlen");
+  assert.equal(result.prodUnits[0], "4.5 L");
+  assert.equal(result.prodFamilies[0], "GTX");
+});
+
+test("transformErpProducts: net_cost_amd is optional, carried through when present, null when not", () => {
+  const result = transformErpProducts([
+    { erp_product_id: "P1", name: "A", unit_price_amd: 100, net_cost_amd: 8700 },
+    { erp_product_id: "P2", name: "B", unit_price_amd: 100 },
+  ]);
+  assert.equal(result.prodNetCosts[0], 8700);
+  assert.equal(result.prodNetCosts[1], null);
+});
 
 test("transformErpProducts: bronze defaults to unit_price_amd when omitted", () => {
   const result = transformErpProducts([{ erp_product_id: "P1", name: "Edge 5W30", unit_price_amd: 12000 }]);

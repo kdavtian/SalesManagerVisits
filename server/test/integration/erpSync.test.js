@@ -111,6 +111,65 @@ test("POST /api/erp-sync: a valid payload syncs customers and reports counts", a
   assert.equal(Number(rows[0].debt_amd), 15000);
 });
 
+// Regression: a pre-existing, never-synced product whose stored
+// name/brand/unit had drifted whitespace ("Orlen   5w40", a double space)
+// used to fail the claim-by-identity match against an incoming sync row
+// with normal spacing, inserting a brand-new row instead of linking to the
+// one that's already there -- reported live as the same product listed
+// twice with two different stock counts (e.g. "Orlen 5w40 4.5L" at both
+// 32 and 33 units).
+test("POST /api/erp-sync: a pre-existing product with whitespace-drifted name is claimed, not duplicated", async () => {
+  const erpId = `ITEST-CLAIM-${Date.now()}`;
+  const { rows: created } = await pool.query(
+    "INSERT INTO products (name, brand, unit, unit_price_amd, active) VALUES ($1, $2, $3, 1000, true) RETURNING id",
+    ["Orlen   5w40", "Orlen", "4.5L"]
+  );
+  const productId = created[0].id;
+  try {
+    const res = await syncRequest(
+      { customers: [], products: [{ erp_product_id: erpId, name: "Orlen 5w40", brand: "Orlen", unit: "4.5 L", unit_price_amd: 25000, stock_qty: 33 }] },
+      { "X-Sync-Key": SYNC_KEY }
+    );
+    assert.equal(res.status, 200);
+
+    const { rows: matches } = await pool.query("SELECT id, stock_qty FROM products WHERE erp_product_id = $1", [erpId]);
+    assert.equal(matches.length, 1, "exactly one product should carry this erp_product_id -- no duplicate inserted");
+    assert.equal(matches[0].id, productId, "the pre-existing row must have been claimed, not left orphaned with a new row inserted alongside it");
+    assert.equal(Number(matches[0].stock_qty), 33);
+  } finally {
+    await pool.query("DELETE FROM products WHERE id = $1 OR erp_product_id = $2", [productId, erpId]);
+  }
+});
+
+// net_cost_amd has no current source column in the extract (see
+// docs/erp-sync-contract.md), but the sync accepts it when sent, the same
+// gated way as every other admin-editable field -- and critically must
+// never clobber an existing value to null just because a later sync omits
+// the field, unlike name/brand/price which the extract always sends.
+test("POST /api/erp-sync: net_cost_amd syncs when sent, and is never cleared by a later sync that omits it", async () => {
+  const erpId = `ITEST-NETCOST-${Date.now()}`;
+  try {
+    let res = await syncRequest(
+      { customers: [], products: [{ erp_product_id: erpId, name: "Net Cost Test Oil", unit_price_amd: 10000, net_cost_amd: 7700 }] },
+      { "X-Sync-Key": SYNC_KEY }
+    );
+    assert.equal(res.status, 200);
+    let row = (await pool.query("SELECT net_cost_amd FROM products WHERE erp_product_id = $1", [erpId])).rows[0];
+    assert.equal(Number(row.net_cost_amd), 7700);
+
+    res = await syncRequest(
+      { customers: [], products: [{ erp_product_id: erpId, name: "Net Cost Test Oil", unit_price_amd: 10500 }] },
+      { "X-Sync-Key": SYNC_KEY }
+    );
+    assert.equal(res.status, 200);
+    row = (await pool.query("SELECT net_cost_amd, unit_price_amd FROM products WHERE erp_product_id = $1", [erpId])).rows[0];
+    assert.equal(Number(row.net_cost_amd), 7700, "omitting net_cost_amd on a later sync must not clear the existing value");
+    assert.equal(Number(row.unit_price_amd), 10500, "other fields still update normally");
+  } finally {
+    await pool.query("DELETE FROM products WHERE erp_product_id = $1", [erpId]);
+  }
+});
+
 test("POST /api/erp-sync: TRUNCATE-and-replace -- a customer absent from the new payload no longer appears", async () => {
   const manager = await createUser("sales_manager");
   const staleId = `ITEST-STALE-${Date.now()}`;
