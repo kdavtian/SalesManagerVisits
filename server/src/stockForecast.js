@@ -35,15 +35,12 @@ const TREND_RATIO_DOWN = 0.85;
 export const DEAD_STOCK_DAYS = 180;
 const NEW_PRODUCT_GRACE_DAYS = 60;
 
-// Reorder-urgency thresholds. A WM needs the shelf to last through however
-// long a reorder actually takes to land -- order lead time plus a safety
-// margin for the unexpected. Without a per-product lead time on record,
-// 21 days (3 weeks: a typical 1-2 week supplier lead time plus a buffer)
-// is the "start paying attention" line, and under a week left is
-// "critical" regardless of lead time, since almost nothing reorders that
-// fast.
-export const CRITICAL_DAYS_THRESHOLD = 7;
-export const LOW_DAYS_THRESHOLD = 21;
+// Reorder-urgency thresholds, aligned to how long a reorder actually takes
+// to land: under 45 days left is "critical" (inside the order lead time --
+// this run of stock won't make it to the next one without acting now),
+// 45-90 days is "low" (worth watching), and 90+ days is "ok".
+export const CRITICAL_DAYS_THRESHOLD = 45;
+export const LOW_DAYS_THRESHOLD = 90;
 
 // Date.UTC takes a zero-indexed month (0 = January), but a "YYYY-MM-DD"
 // string's own MM is one-indexed -- parsed straight through, this quietly
