@@ -61,30 +61,43 @@ const LAST_ERP_PAYMENT_ASOF_SUBQUERY = `(
   WHERE cf.erp_customer_id = c.erp_customer_id AND cf.amount_amd > 0 AND cf.cashflow_date <= $__AS_OF_DATE__
 )`;
 
-// Debt as of a past date D, computed from full order/cashflow history
-// instead of the live ecd.debt_amd snapshot -- see
-// docs/erp-sync-contract.md's cashflow_lines entry. Same running-balance
-// math as reports.js's /customer-debt route: SUM(orders up to D) -
-// SUM(cashflow up to D), not floored at zero (a customer who paid ahead
-// can genuinely show a negative/credit balance as of a given date).
+// Debt as of a past date D. Originally computed as an absolute running
+// balance from full order/cashflow history (SUM(orders up to D) -
+// SUM(cashflow up to D), see docs/erp-sync-contract.md's cashflow_lines
+// entry) -- but that assumes erp_order_lines and erp_cashflow_lines both
+// carry COMPLETE all-time history from the same starting point. Reported
+// live: picking today as the as-of date (which should equal "live") came
+// back many times larger than the live ecd.debt_amd figure for the same
+// customer. Root cause: the real sync's erp_cashflow_lines history is far
+// thinner than its erp_order_lines history (confirmed with the reporting
+// user), so an absolute from-scratch sum counts ~all orders ever but only
+// a fraction of the payments against them, inflating every as-of balance,
+// worse the further back the order history goes.
 //
-// Keyed on c.erp_customer_id, not ecd.erp_customer_id -- this join is only
-// ever spliced into the as-of branch below, where the FROM clause is
-// swapped to drive from `customers` with erp_customer_data as an optional
-// left join (see the FROM-clause comment in the handler), so ecd can be
-// null for a row this still needs to match.
+// Anchored on the trusted live figure instead: as_of_D = live_debt -
+// (orders strictly after D) + (cashflow strictly after D). Algebraically
+// identical to the absolute sum IF both tables had complete history (undo
+// everything that happened after D from today's live total), but only
+// ever depends on the *recent* order/cashflow window between D and today
+// -- not the full all-time history back to the start of the relationship
+// -- so it's far more robust to older cashflow rows the sync never sent.
+// It also guarantees as_of(today) == live by construction (nothing is
+// "after today"), closing the exact discrepancy reported live. A
+// customer absent from the live snapshot (ecd is null -- fully paid off,
+// see the FROM-clause comment below) anchors on a live debt of 0, which
+// is correct: their debt today genuinely is zero.
 const asOfBalanceJoin = `
   LEFT JOIN LATERAL (
     SELECT SUM(ol.revenue_amd) AS amount
     FROM erp_order_lines ol
-    WHERE ol.erp_customer_id = c.erp_customer_id AND ol.order_date <= $__AS_OF_DATE__
-  ) orders_asof ON true
+    WHERE ol.erp_customer_id = c.erp_customer_id AND ol.order_date > $__AS_OF_DATE__
+  ) orders_since ON true
   LEFT JOIN LATERAL (
     SELECT SUM(cf.amount_amd) AS amount
     FROM erp_cashflow_lines cf
-    WHERE cf.erp_customer_id = c.erp_customer_id AND cf.cashflow_date <= $__AS_OF_DATE__
-  ) cashflow_asof ON true`;
-const asOfBalanceExpr = "(COALESCE(orders_asof.amount, 0) - COALESCE(cashflow_asof.amount, 0))";
+    WHERE cf.erp_customer_id = c.erp_customer_id AND cf.cashflow_date > $__AS_OF_DATE__
+  ) cashflow_since ON true`;
+const asOfBalanceExpr = "(COALESCE(ecd.debt_amd, 0) - COALESCE(orders_since.amount, 0) + COALESCE(cashflow_since.amount, 0))";
 
 debtBalancesRouter.get("/", async (req, res) => {
   const { date } = req.query;
