@@ -109,6 +109,79 @@ test("GET /api/warehouse/inventory: includes net_cost_amd alongside landing_cost
   assert.equal(Number(row.net_cost_amd), 900);
 });
 
+// The "days of stock left" estimate (stockForecast.js) is unit-tested on
+// its own against fixed inputs; this covers the wiring -- that the
+// endpoint actually pulls real sales history from erp_order_lines (joined
+// on erp_product_id, not the in-app product_id) and attaches a sane
+// forecast to the row, and that the `stock`/`size` filters work end to end.
+test("GET /api/warehouse/inventory: attaches a stock forecast from erp_order_lines sales history, and the stock/size filters work", async () => {
+  const forecastProduct = await createProduct({ name: "Forecast Test Oil", unit: "1L" });
+  const erpId = `FCTEST-${forecastProduct.id}`;
+  await pool.query("UPDATE products SET erp_product_id = $1, stock_qty = 5 WHERE id = $2", [erpId, forecastProduct.id]);
+  // 1 unit/day over the last 30 days (30 units) and the same steady rate
+  // over 90 (90 units) -- no trend, blended demand should land at 1/day,
+  // so 5 units on hand is well inside the "critical" band (<7 days).
+  const rows = [];
+  for (let i = 0; i < 90; i++) {
+    rows.push(`('${erpId}', 'ORD-${forecastProduct.id}-${i}', CURRENT_DATE - ${i}, '${erpId}', 1)`);
+  }
+  await pool.query(`INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, product_id, qty) VALUES ${rows.join(",")}`);
+
+  try {
+    const res = await apiRequest("/api/warehouse/inventory", { cookie: cookies.ceo });
+    assert.equal(res.status, 200);
+    const row = res.data.find((p) => p.id === forecastProduct.id);
+    assert.ok(row, "the forecast test product must appear in the inventory list");
+    assert.equal(row.stock_status, "critical");
+    assert.ok(Number(row.daily_demand) > 0.9 && Number(row.daily_demand) < 1.1);
+    assert.ok(Number(row.days_of_stock) < 7);
+
+    const lowStockRes = await apiRequest("/api/warehouse/inventory?stock=low_stock", { cookie: cookies.ceo });
+    assert.ok(lowStockRes.data.some((p) => p.id === forecastProduct.id), "low_stock filter must include a critical-status row");
+    assert.ok(
+      lowStockRes.data.every((p) => p.stock_status === "critical" || p.stock_status === "low"),
+      "low_stock filter must only return critical/low rows"
+    );
+
+    // Matched case/whitespace-insensitively (e.g. "1l" and "1 L" are the
+    // same size), not by exact string -- see the `size` filter's own
+    // comment in routes/warehouse.js.
+    const normalize = (u) => String(u).trim().replace(/\s+/g, "").toLowerCase();
+    const sizeRes = await apiRequest("/api/warehouse/inventory?size=1L", { cookie: cookies.ceo });
+    assert.ok(sizeRes.data.every((p) => normalize(p.unit) === "1l"), "size filter must only return matching-unit rows");
+    assert.ok(sizeRes.data.some((p) => p.id === forecastProduct.id));
+  } finally {
+    await pool.query("DELETE FROM erp_order_lines WHERE erp_customer_id = $1", [erpId]);
+  }
+});
+
+// Regression: the ERP-sourced unit column has real spelling drift ("1l"
+// vs "1L" vs "1 L" for what's the same physical size), which initially
+// meant /inventory/sizes listed near-duplicate options that all display
+// as the same normalized label, and the `size` filter missed products
+// spelled differently than whichever option the WM happened to tap.
+test("GET /api/warehouse/inventory and /inventory/sizes: size matching is case/whitespace-insensitive", async () => {
+  const lower = await createProduct({ name: "Spelling Drift Oil A", unit: "2l" });
+  const upper = await createProduct({ name: "Spelling Drift Oil B", unit: "2L" });
+  const spaced = await createProduct({ name: "Spelling Drift Oil C", unit: "2 L" });
+
+  const sizesRes = await apiRequest("/api/warehouse/inventory/sizes", { cookie: cookies.ceo });
+  const normalize = (u) => String(u).trim().replace(/\s+/g, "").toLowerCase();
+  const twoLiterOptions = sizesRes.data.filter((u) => normalize(u) === "2l");
+  assert.equal(twoLiterOptions.length, 1, "the three spellings of 2L must collapse into one filter option");
+
+  const filteredRes = await apiRequest(`/api/warehouse/inventory?size=${encodeURIComponent(twoLiterOptions[0])}`, { cookie: cookies.ceo });
+  const ids = filteredRes.data.map((p) => p.id);
+  assert.ok(ids.includes(lower.id) && ids.includes(upper.id) && ids.includes(spaced.id), "all three spellings must match the one filter option");
+});
+
+test("GET /api/warehouse/inventory/sizes: returns distinct active product units", async () => {
+  const res = await apiRequest("/api/warehouse/inventory/sizes", { cookie: cookies.ceo });
+  assert.equal(res.status, 200);
+  assert.ok(Array.isArray(res.data));
+  assert.ok(res.data.includes(product.unit));
+});
+
 // --- Delivery: role gating + route planning (OSRM unreachable -> fallback) --------
 
 test("POST /api/delivery/routes/plan: a sales_manager gets 403; a delivery_manager can plan a route, falling back gracefully with OSRM unreachable", async () => {

@@ -114,24 +114,16 @@ export function compareProducts(a, b) {
   return (a.name || "").localeCompare(b.name || "");
 }
 
-// Container size past this many liters reads as a drum in this catalog's
-// own lineup (208L is the standard Castrol drum) rather than a jerry can or
-// pail, which top out well under that -- used only to decide whether
-// normalizeUnitLabel appends "· Drum".
-const DRUM_MIN_LITERS = 60;
-
 // Cleans up the ERP-sourced unit string for display: consistent "<n> L"
 // spacing/casing for any parseable liter size ("1l", "4 L", "208L" all
-// become "1 L", "4 L", "208 L"), with "· Drum" appended past
-// DRUM_MIN_LITERS so a bare number reads as a container type, not just a
-// big liter count. A unit that isn't a plain liter size (pieces, a raw ERP
-// string for a non-oil item) passes through unchanged but trimmed.
+// become "1 L", "4 L", "208 L"). A unit that isn't a plain liter size
+// (pieces, a raw ERP string for a non-oil item) passes through unchanged
+// but trimmed.
 export function normalizeUnitLabel(unit) {
   if (!unit) return "";
   const liters = parseLiters(unit);
   if (liters == null) return String(unit).trim();
-  const label = `${liters} L`;
-  return liters >= DRUM_MIN_LITERS ? `${label} · Drum` : label;
+  return `${liters} L`;
 }
 
 export function sortedBrands(products) {

@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks } from "../util.js";
+import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks, activateDialog } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { compareProducts, parseLiters, normalizeUnitLabel } from "../productSort.js";
@@ -207,7 +207,15 @@ export async function renderWarehouse(root, navigate) {
   async function loadInventory() {
     contentEl.innerHTML = `
       <div class="inventory-search-row">
-        <input type="search" id="inventory-search" placeholder="${t("search")}" />
+        <div class="inventory-search-wrap">
+          <input type="search" id="inventory-search" placeholder="${t("search")}" />
+          <button type="button" class="inventory-search-filter-btn" id="inventory-filter-btn" aria-label="${t("warehouse_filters_title")}" title="${t("warehouse_filters_title")}">
+            ${icons.tag}
+          </button>
+        </div>
+        <button type="button" class="filter-icon-btn" id="inventory-days-btn" aria-label="${t("warehouse_show_days_left")}" title="${t("warehouse_show_days_left")}" aria-pressed="false">
+          ${icons.clock}
+        </button>
         <button type="button" class="filter-icon-btn" id="inventory-landing-btn" aria-label="${t("warehouse_show_landing_cost")}" title="${t("warehouse_show_landing_cost")}" aria-pressed="false">
           ${icons.costLetter}
           <span class="filter-icon-count" id="inventory-landing-btn-badge" aria-hidden="true" hidden></span>
@@ -215,26 +223,30 @@ export async function renderWarehouse(root, navigate) {
         <button type="button" class="filter-icon-btn" id="inventory-wholesale-btn" aria-label="${t("warehouse_show_wholesale_price")}" title="${t("warehouse_show_wholesale_price")}" aria-pressed="false">
           ${icons.wallet}
         </button>
-        <button type="button" class="filter-icon-btn" id="inventory-brand-btn" aria-label="${t("filter_brand")}" title="${t("filter_brand")}">
-          ${icons.tag}
-        </button>
       </div>
       <div id="inventory-list" class="card-list"></div>
     `;
     const listEl = contentEl.querySelector("#inventory-list");
     const searchInput = contentEl.querySelector("#inventory-search");
-    const brandBtn = contentEl.querySelector("#inventory-brand-btn");
+    const filterBtn = contentEl.querySelector("#inventory-filter-btn");
+    const daysBtn = contentEl.querySelector("#inventory-days-btn");
     const landingBtn = contentEl.querySelector("#inventory-landing-btn");
     const landingBtnBadge = contentEl.querySelector("#inventory-landing-btn-badge");
     const wholesaleBtn = contentEl.querySelector("#inventory-wholesale-btn");
     let brandFilter = "";
+    let sizeFilter = "";
+    let stockFilter = "";
     let brandOptions = null;
+    let sizeOptions = null;
     // One button, three states -- landing cost and net cost are both
     // "internal cost basis" figures a WM might want, and neither is common
     // enough to deserve its own permanent icon slot next to the always-on
     // wholesale-price toggle. Cycles off -> landing -> net -> off.
     let costMode = "off"; // "off" | "landing" | "net"
     let showWholesale = false;
+    // Off by default -- the forecast is opt-in extra detail on an already
+    // dense card, not something every WM wants to see on every visit.
+    let showDaysLeft = false;
     let lastRows = [];
     // Collapsed by default -- a WM scanning the shelf list gets brand/family
     // totals up front and drills into only what they need. Keyed by brand
@@ -272,34 +284,83 @@ export async function renderWarehouse(root, navigate) {
             </span>
             <span class="inventory-row-qty ${p.stock_qty == null ? "inventory-row-qty-unknown" : p.stock_qty > 0 ? "inventory-row-qty-ok" : "inventory-row-qty-zero"}">${inventoryQtyLabel(p)}</span>
           </div>
+          ${daysLeftRowHtml(p)}
           ${pricesRowHtml(p)}
         </div>`;
     }
 
-    // Second row's price parts for a single product -- shared by both the
-    // single-size row above and each variant pill below.
-    function priceParts(p) {
-      const parts = [];
-      if (costMode === "landing" && p.landing_cost_amd != null) parts.push(`${t("landing_cost")}: ${formatAmd(Number(p.landing_cost_amd))}`);
-      if (costMode === "net" && p.net_cost_amd != null) parts.push(`${t("net_cost")}: ${formatAmd(Number(p.net_cost_amd))}`);
-      if (showWholesale && p.bronze_price_amd != null) parts.push(formatAmd(Number(p.bronze_price_amd)));
-      return parts;
+    // Wholesale price and cost-basis (landing/net) price lines, kept
+    // separate rather than joined on one line (see costLine below) -- cost
+    // basis is internal information a WM wants to see distinctly from the
+    // customer-facing wholesale price, not folded into the same string.
+    function wholesaleLine(p) {
+      return showWholesale && p.bronze_price_amd != null ? formatAmd(Number(p.bronze_price_amd)) : "";
+    }
+    function costLine(p) {
+      if (costMode === "landing" && p.landing_cost_amd != null) return `${t("lc_short")} ${formatAmd(Number(p.landing_cost_amd))}`;
+      if (costMode === "net" && p.net_cost_amd != null) return `${t("nc_short")} ${formatAmd(Number(p.net_cost_amd))}`;
+      return "";
+    }
+    // Shared by both the single-size row above and each variant pill below
+    // -- wholesale price first (the customer-facing figure), cost basis on
+    // its own line under it.
+    function priceLines(p) {
+      return [wholesaleLine(p), costLine(p)].filter(Boolean);
+    }
+
+    const DAYS_BADGE_CLASS = {
+      critical: "inventory-days-badge-critical",
+      low: "inventory-days-badge-low",
+      ok: "inventory-days-badge-ok",
+      dead: "inventory-days-badge-dead",
+      slow: "inventory-days-badge-dead",
+      new: "inventory-days-badge-new",
+    };
+    const TREND_ARROW = { up: " ↑", down: " ↓" };
+    // Days-of-stock-left badge for one product row/variant (see
+    // ../../../server/src/stockForecast.js for the model behind
+    // stock_status/days_of_stock/demand_trend). Nothing to show for 'out'
+    // (the zero-qty styling already says that) or 'unknown' (no stock_qty
+    // on record to estimate from at all).
+    function daysLeftBadgeHtml(p) {
+      if (!showDaysLeft) return "";
+      const status = p.stock_status;
+      if (!status || status === "out" || status === "unknown") return "";
+      let label;
+      if (status === "dead") label = t("warehouse_stock_status_dead");
+      else if (status === "new") label = t("warehouse_stock_status_new");
+      else if (status === "slow") label = t("warehouse_stock_status_slow");
+      else if (p.days_of_stock != null) {
+        label = `${Math.round(p.days_of_stock)}${t("warehouse_days_left_suffix")}${TREND_ARROW[p.demand_trend] || ""}`;
+      } else {
+        return "";
+      }
+      return `<span class="inventory-days-badge ${DAYS_BADGE_CLASS[status] || ""}">${escapeHtml(label)}</span>`;
+    }
+    function daysLeftRowHtml(p) {
+      const badge = daysLeftBadgeHtml(p);
+      return badge ? `<div class="inventory-row-days">${badge}</div>` : "";
     }
 
     // One pill per stocked size within productGroupHtml -- size label (bold)
-    // and quantity side by side, price parts (if toggled on) stacked below
-    // since they differ per size just like the qty does.
+    // and quantity side by side, days-left badge and price lines (each
+    // toggled on independently) stacked below since they differ per size
+    // just like the qty does.
     function variantPillHtml(p) {
       const qtyKnown = p.stock_qty != null;
       const zero = qtyKnown && p.stock_qty === 0;
-      const parts = priceParts(p);
+      const days = daysLeftBadgeHtml(p);
+      const priceLineHtml = priceLines(p)
+        .map((line) => `<span class="inventory-variant-pill-price">${line}</span>`)
+        .join("");
       return `
         <span class="inventory-variant-pill">
           <span class="inventory-variant-pill-top">
             ${p.unit ? `<span class="inventory-variant-pill-size">${escapeHtml(normalizeUnitLabel(p.unit))}</span>` : ""}
-            <span class="inventory-variant-pill-qty ${zero ? "inventory-variant-pill-qty-zero" : ""}">${qtyKnown ? p.stock_qty : t("warehouse_stock_unknown")}</span>
+            <span class="inventory-variant-pill-qty ${zero ? "inventory-variant-pill-qty-zero" : ""}">${qtyKnown ? `${p.stock_qty}${t("warehouse_pcs_suffix")}` : t("warehouse_stock_unknown")}</span>
           </span>
-          ${parts.length ? `<span class="inventory-variant-pill-price">${parts.join(" | ")}</span>` : ""}
+          ${days}
+          ${priceLineHtml}
         </span>`;
     }
 
@@ -308,29 +369,38 @@ export async function renderWarehouse(root, navigate) {
     // separate near-identical card per size -- this is the thing that was
     // making 1L/4L/drum variants of the same oil hard to tell apart. Falls
     // back to the plain single row above when there's only one size, so a
-    // filter or brake pad doesn't get a pointless one-pill row.
+    // filter or brake pad doesn't get a pointless one-pill row. The header
+    // totals reuse groupQtyLabel (defined below) -- same "118pcs | 222L"
+    // shape as the brand/family headers, just summed across this one
+    // product's own sizes instead.
     function productGroupHtml(group) {
       if (group.products.length === 1) return productRowHtml(group.products[0]);
-      const totalPcs = group.products.reduce((sum, p) => sum + (p.stock_qty ?? 0), 0);
+      const totals = { pcs: 0, liters: 0 };
+      for (const p of group.products) {
+        const pcs = p.stock_qty ?? 0;
+        totals.pcs += pcs;
+        const perUnitLiters = parseLiters(p.unit);
+        if (perUnitLiters != null) totals.liters += perUnitLiters * pcs;
+      }
       return `
         <div class="card inventory-row-card">
           <div class="inventory-row">
             <span class="inventory-row-name">${escapeHtml(group.name)}</span>
-            <span class="inventory-row-qty">${totalPcs}${t("warehouse_pcs_suffix")}</span>
+            <span class="inventory-row-qty">${groupQtyLabel(totals)}</span>
           </div>
           <div class="inventory-variant-pills">${group.products.map(variantPillHtml).join("")}</div>
         </div>`;
     }
 
-    // Second row on a single-size product's card: whichever of landing/net
-    // cost and wholesale price are currently toggled on (see priceParts
-    // above), omitted entirely if nothing is on or this product has no
-    // value for what's toggled (a still-unsynced row, or net cost simply
-    // never entered for it).
+    // Price lines on a single-size product's card: wholesale first, cost
+    // basis (LC/NC) under it (see priceLines above), omitted entirely if
+    // nothing is toggled on or this product has no value for what's
+    // toggled (a still-unsynced row, or net cost simply never entered for
+    // it).
     function pricesRowHtml(p) {
-      const parts = priceParts(p);
-      if (!parts.length) return "";
-      return `<div class="inventory-row-prices">${parts.join(" | ")}</div>`;
+      return priceLines(p)
+        .map((line) => `<div class="inventory-row-prices">${line}</div>`)
+        .join("");
     }
 
     // "570pcs | 7,090L" -- a group's own stock summed across every product
@@ -385,7 +455,8 @@ export async function renderWarehouse(root, navigate) {
       // default) pressing "show landing cost" would otherwise reveal
       // nothing at all. Doesn't touch the remembered manual state, so
       // clearing the search/toggle goes back to whatever the WM had open.
-      const forceExpand = Boolean(searchInput.value.trim()) || Boolean(brandFilter) || costMode !== "off" || showWholesale;
+      const forceExpand =
+        Boolean(searchInput.value.trim()) || Boolean(brandFilter) || Boolean(sizeFilter) || Boolean(stockFilter) || costMode !== "off" || showWholesale;
       if (!forceExpand && wasForceExpand) {
         // Leaving forced mode -- these overrides only ever meant anything
         // relative to forceExpand being on, so drop them rather than carry
@@ -490,7 +561,7 @@ export async function renderWarehouse(root, navigate) {
     }
 
     async function paint(q) {
-      lastRows = (await api.getInventory(q, brandFilter)).sort(compareProducts);
+      lastRows = (await api.getInventory(q, { brand: brandFilter, size: sizeFilter, stock: stockFilter })).sort(compareProducts);
       render();
     }
     let debounceTimer;
@@ -499,7 +570,7 @@ export async function renderWarehouse(root, navigate) {
       debounceTimer = setTimeout(() => paint(searchInput.value.trim()), 250);
     });
 
-    const COST_MODE_LABEL = { off: t("warehouse_show_landing_cost"), landing: t("landing_cost"), net: t("net_cost") };
+    const COST_MODE_LABEL = { off: t("warehouse_show_landing_cost"), landing: t("lc_short"), net: t("nc_short") };
     landingBtn.addEventListener("click", () => {
       costMode = costMode === "off" ? "landing" : costMode === "landing" ? "net" : "off";
       landingBtn.classList.toggle("filter-icon-btn-active", costMode !== "off");
@@ -516,8 +587,42 @@ export async function renderWarehouse(root, navigate) {
       wholesaleBtn.setAttribute("aria-pressed", String(showWholesale));
       render();
     });
+    daysBtn.addEventListener("click", () => {
+      showDaysLeft = !showDaysLeft;
+      daysBtn.classList.toggle("filter-icon-btn-active", showDaysLeft);
+      daysBtn.setAttribute("aria-pressed", String(showDaysLeft));
+      render();
+    });
 
-    brandBtn.addEventListener("click", async () => {
+    const STOCK_FILTER_OPTIONS = [
+      { value: "on_stock", label: t("warehouse_in_stock") },
+      { value: "low_stock", label: t("warehouse_stock_low") },
+      { value: "out_of_stock", label: t("warehouse_stock_out") },
+    ];
+    function filterSectionHtml(title, options, currentValue, dataAttr) {
+      return `
+        <div class="filter-sheet-section">
+          <h3 class="filter-sheet-section-title">${escapeHtml(title)}</h3>
+          <div class="filter-sheet-options">
+            ${options
+              .map(
+                (o) => `
+              <button type="button" class="filter-sheet-option ${o.value === currentValue ? "filter-sheet-option-selected" : ""}" data-${dataAttr}="${escapeHtml(o.value)}">
+                <span>${escapeHtml(o.label)}</span>
+                ${o.value === currentValue ? `<span class="filter-sheet-check">${icons.checkCircle}</span>` : ""}
+              </button>`
+              )
+              .join("")}
+          </div>
+        </div>`;
+    }
+
+    // One sheet, three independent single-select sections (brand/size/stock
+    // status) -- each tap just re-highlights within its own section rather
+    // than closing the sheet, since picking e.g. a brand AND a stock status
+    // in the same visit is the whole point of combining them. Clear resets
+    // all three; Done commits whichever combination is currently selected.
+    filterBtn.addEventListener("click", async () => {
       if (!brandOptions) {
         try {
           brandOptions = await api.getInventoryBrands();
@@ -525,36 +630,85 @@ export async function renderWarehouse(root, navigate) {
           brandOptions = [];
         }
       }
+      if (!sizeOptions) {
+        try {
+          sizeOptions = (await api.getInventorySizes()).sort((a, b) => {
+            const la = parseLiters(a);
+            const lb = parseLiters(b);
+            if (la != null && lb != null) return la - lb;
+            if (la != null) return -1;
+            if (lb != null) return 1;
+            return a.localeCompare(b);
+          });
+        } catch {
+          sizeOptions = [];
+        }
+      }
+      let workingBrand = brandFilter;
+      let workingSize = sizeFilter;
+      let workingStock = stockFilter;
+
       const overlay = document.createElement("div");
       overlay.className = "sheet-overlay";
       overlay.innerHTML = `
         <div class="sheet filter-sheet">
-          <h2>${t("filter_brand")}</h2>
-          <div class="filter-sheet-options">
-            <button type="button" class="filter-sheet-option ${brandFilter === "" ? "filter-sheet-option-selected" : ""}" data-value="">
-              <span>${t("all_brands")}</span>
-            </button>
-            ${brandOptions
-              .map(
-                (b) => `
-              <button type="button" class="filter-sheet-option ${b === brandFilter ? "filter-sheet-option-selected" : ""}" data-value="${escapeHtml(b)}">
-                <span>${escapeHtml(b)}</span>
-              </button>`
-              )
-              .join("")}
+          <h2>${t("warehouse_filters_title")}</h2>
+          ${filterSectionHtml(t("filter_brand"), [{ value: "", label: t("all_brands") }, ...brandOptions.map((b) => ({ value: b, label: b }))], workingBrand, "brand-value")}
+          ${filterSectionHtml(
+            t("warehouse_filter_size"),
+            [{ value: "", label: t("warehouse_all_sizes") }, ...sizeOptions.map((s) => ({ value: s, label: normalizeUnitLabel(s) }))],
+            workingSize,
+            "size-value"
+          )}
+          ${filterSectionHtml(t("warehouse_filter_stock"), [{ value: "", label: t("all_statuses") }, ...STOCK_FILTER_OPTIONS], workingStock, "stock-value")}
+          <div class="sheet-actions">
+            <button type="button" class="btn" id="inventory-filter-clear">${t("clear")}</button>
+            <button type="button" class="btn btn-primary" id="inventory-filter-done">${t("done")}</button>
           </div>
         </div>
       `;
       document.body.appendChild(overlay);
+      activateDialog(overlay);
       overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
-      overlay.querySelectorAll(".filter-sheet-option").forEach((optBtn) => {
-        optBtn.addEventListener("click", () => {
-          brandFilter = optBtn.dataset.value;
-          brandBtn.classList.toggle("filter-icon-btn-active", Boolean(brandFilter));
-          overlay.remove();
-          paint(searchInput.value.trim());
+
+      function reselect(groupSelector, attr, value) {
+        overlay.querySelectorAll(groupSelector).forEach((btn) => {
+          const selected = btn.dataset[attr] === value;
+          btn.classList.toggle("filter-sheet-option-selected", selected);
+          const check = btn.querySelector(".filter-sheet-check");
+          if (selected && !check) btn.insertAdjacentHTML("beforeend", `<span class="filter-sheet-check">${icons.checkCircle}</span>`);
+          else if (!selected && check) check.remove();
+        });
+      }
+      overlay.querySelectorAll("[data-brand-value]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          workingBrand = btn.dataset.brandValue;
+          reselect("[data-brand-value]", "brandValue", workingBrand);
         });
       });
+      overlay.querySelectorAll("[data-size-value]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          workingSize = btn.dataset.sizeValue;
+          reselect("[data-size-value]", "sizeValue", workingSize);
+        });
+      });
+      overlay.querySelectorAll("[data-stock-value]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          workingStock = btn.dataset.stockValue;
+          reselect("[data-stock-value]", "stockValue", workingStock);
+        });
+      });
+
+      function commit(brand, size, stock) {
+        brandFilter = brand;
+        sizeFilter = size;
+        stockFilter = stock;
+        filterBtn.classList.toggle("inventory-search-filter-btn-active", Boolean(brandFilter || sizeFilter || stockFilter));
+        overlay.remove();
+        paint(searchInput.value.trim());
+      }
+      overlay.querySelector("#inventory-filter-clear").addEventListener("click", () => commit("", "", ""));
+      overlay.querySelector("#inventory-filter-done").addEventListener("click", () => commit(workingBrand, workingSize, workingStock));
     });
 
     await paint("");

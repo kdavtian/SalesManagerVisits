@@ -11,6 +11,8 @@ import { requireAuth } from "../middleware/auth.js";
 import { canManageWarehouse } from "../roles.js";
 import { notifyUser } from "../notifications.js";
 import { STOCK_ISSUE_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES } from "../notificationPreferences.js";
+import { computeStockForecast } from "../stockForecast.js";
+import { yerevanToday } from "../utils/yerevanDate.js";
 
 export const warehouseRouter = Router();
 warehouseRouter.use(requireAuth);
@@ -83,25 +85,46 @@ warehouseRouter.get("/staging-list", async (req, res) => {
 // Read-only live-inventory reference -- out of scope to decrement stock in
 // real time (per spec), this is just "what does the catalog currently say
 // we have" so a WM can sanity-check before flagging a stock issue.
+//
+// Each row is also annotated with a "days of stock left" estimate (see
+// ../stockForecast.js for the model) built from the product's real ERP
+// sales history in erp_order_lines -- the actual invoiced sales record,
+// not just in-app draft orders, which only cover a slice of real demand.
+// stock_status buckets that into 'out' | 'dead' | 'new' | 'slow' |
+// 'critical' | 'low' | 'ok' | 'unknown'; the `stock` filter below maps
+// those down to the three buckets a WM actually filters by.
 warehouseRouter.get("/inventory", async (req, res) => {
-  const { q, brand } = req.query;
+  const { q, brand, size, stock } = req.query;
   // `active` matters here the same way it does for the main product
   // catalog (GET /products -- "WHERE p.active"): a product an admin has
   // deactivated (superseded by a re-import, a corrected duplicate, a
   // discontinued SKU) must not still show up on the warehouse floor --
   // this was missing entirely, which is exactly what made a stale/
   // deactivated row look like a duplicate of its live replacement.
-  const conditions = ["active"];
+  const conditions = ["p.active"];
   const params = [];
   if (q) {
     params.push(`%${q}%`);
-    conditions.push(`(name ILIKE $${params.length} OR brand ILIKE $${params.length})`);
+    conditions.push(`(p.name ILIKE $${params.length} OR p.brand ILIKE $${params.length})`);
   }
   if (brand) {
     params.push(brand);
-    conditions.push(`brand = $${params.length}`);
+    conditions.push(`p.brand = $${params.length}`);
+  }
+  if (size) {
+    // Matched case/whitespace-insensitively, not by exact string: the
+    // ERP-sourced unit column has the same "1l" / "1L" / "1 L" spelling
+    // drift normalizeUnitLabel's display cleanup exists for (see
+    // productSort.js) -- an exact match would otherwise split one real
+    // size into several filter options that all show the same normalized
+    // label, with no way to tell them apart in the sheet.
+    params.push(size);
+    conditions.push(`lower(regexp_replace(trim(p.unit), '\\s+', '', 'g')) = lower(regexp_replace(trim($${params.length}), '\\s+', '', 'g'))`);
   }
   const where = `WHERE ${conditions.join(" AND ")}`;
+  const today = yerevanToday();
+  params.push(today);
+  const todayParamIndex = params.length;
   // This is just a stable pre-sort -- the client applies the real
   // brand/family/viscosity/size order (client/public/js/productSort.js,
   // shared with Pricelist, Order creation, and the Product Catalog admin
@@ -110,24 +133,88 @@ warehouseRouter.get("/inventory", async (req, res) => {
   // (e.g. "pc", "set") that doesn't end in a number+"L" -- avoided by
   // just ordering on the raw text.
   const { rows } = await pool.query(
-    `SELECT id, name, brand, family, unit, stock_qty, bronze_price_amd, landing_cost_amd, net_cost_amd
-     FROM products
+    `WITH demand AS (
+       SELECT product_id,
+              SUM(qty) FILTER (WHERE order_date >= $${todayParamIndex}::date - 30) AS qty_30d,
+              SUM(qty) FILTER (WHERE order_date >= $${todayParamIndex}::date - 90) AS qty_90d,
+              MAX(order_date) AS last_sale_date
+       FROM erp_order_lines
+       WHERE product_id IS NOT NULL
+       GROUP BY product_id
+     )
+     SELECT p.id, p.name, p.brand, p.family, p.unit, p.stock_qty, p.bronze_price_amd,
+            p.landing_cost_amd, p.net_cost_amd, p.created_at,
+            d.qty_30d, d.qty_90d, d.last_sale_date
+     FROM products p
+     LEFT JOIN demand d ON d.product_id = p.erp_product_id
      ${where}
-     ORDER BY brand NULLS LAST, family NULLS LAST, name
-     LIMIT 300`,
+     ORDER BY p.brand NULLS LAST, p.family NULLS LAST, p.name`,
     params
   );
-  res.json(rows);
+
+  // stock_status filter runs after the forecast is computed (it depends on
+  // the same model the badge shows, not a cheap SQL predicate) -- the WM's
+  // 3-way choice collapses the model's finer 'critical'/'low' split into
+  // one "low stock" bucket, and everything else that isn't out-of-stock
+  // into "on stock" (a dead/new/slow/unknown row still physically has
+  // stock sitting on the shelf, just nothing to size a days-left number on).
+  const STOCK_FILTER_BUCKETS = {
+    out_of_stock: (status) => status === "out",
+    low_stock: (status) => status === "critical" || status === "low",
+    on_stock: (status) => status !== "out" && status !== "critical" && status !== "low",
+  };
+  const bucketMatches = STOCK_FILTER_BUCKETS[stock];
+
+  const annotated = [];
+  for (const row of rows) {
+    const forecast = computeStockForecast({
+      stockQty: row.stock_qty,
+      qty30d: row.qty_30d,
+      qty90d: row.qty_90d,
+      lastSaleDate: row.last_sale_date,
+      createdAt: row.created_at,
+      today,
+    });
+    if (bucketMatches && !bucketMatches(forecast.status)) continue;
+    const { qty_30d, qty_90d, last_sale_date, ...rest } = row;
+    annotated.push({
+      ...rest,
+      stock_status: forecast.status,
+      daily_demand: forecast.dailyDemand,
+      days_of_stock: forecast.daysOfStock,
+      demand_trend: forecast.trend,
+    });
+  }
+  // Capped after filtering, not before -- filtering by stock status on a
+  // SQL-side LIMIT would silently drop rows a WM is specifically asking to
+  // see. The catalog here is in the hundreds of SKUs, not tens of
+  // thousands, so computing the forecast for every active row first is
+  // cheap; 500 is just a sane upper bound on response size.
+  res.json(annotated.slice(0, 500));
 });
 
-// Distinct brand list for the inventory screen's brand filter -- kept
+// Distinct brand/size lists for the inventory screen's filter sheet -- kept
 // separate from the paginated/searched inventory rows themselves so the
-// filter's own option list doesn't shrink as a search narrows the results.
+// filter's own option lists don't shrink as a search narrows the results.
 warehouseRouter.get("/inventory/brands", async (req, res) => {
   const { rows } = await pool.query(
     "SELECT DISTINCT brand FROM products WHERE active AND brand IS NOT NULL ORDER BY brand"
   );
   res.json(rows.map((r) => r.brand));
+});
+
+warehouseRouter.get("/inventory/sizes", async (req, res) => {
+  // One representative raw spelling per normalized size (see the `size`
+  // filter above) -- otherwise "1l" and "1L" on different products would
+  // list as two options that both display as "1 L" in the sheet, with no
+  // way to tell them apart.
+  const { rows } = await pool.query(
+    `SELECT (array_agg(unit ORDER BY unit))[1] AS unit
+     FROM products
+     WHERE active AND unit IS NOT NULL
+     GROUP BY lower(regexp_replace(trim(unit), '\\s+', '', 'g'))`
+  );
+  res.json(rows.map((r) => r.unit));
 });
 
 async function markPacked(orderId, changedBy) {
