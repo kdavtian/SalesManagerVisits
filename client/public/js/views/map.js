@@ -19,7 +19,17 @@ const NEARBY_RADIUS_METERS = 5000;
 // reps' own channels, then the non-field channels. Anything not listed
 // here (shouldn't happen, but a new channel could exist before this list
 // is updated) sorts alphabetically after these.
-const MAP_CHANNEL_ORDER = ["POTENTIAL", "SM YVN", "SM Davtashen", "SM Shirak", "SM B2B", "PCO", "CVO", "OEM", "KF", "CAS"];
+const MAP_CHANNEL_ORDER = ["POTENTIAL", "SM YVN", "SM Davtashen", "SM Shirak", "SM CAS", "SM B2B", "PCO", "CVO", "OEM", "KF", "CAS"];
+
+// The channel filter's own default (per explicit request): a field sales
+// manager's own assigned book -- every "SM ..." channel -- plus Potential
+// (not yet ERP-linked, so not yet assigned to any channel at all). The
+// non-field/office channels (SM B2B, PCO, CVO, OEM, KF, bare CAS) are
+// real customers too, just not what a rep walking the map is usually
+// looking for, so they start hidden -- still just a normal filter value,
+// not a hard restriction: opening the channel filter sheet and selecting
+// any of them (or Clear, for "show everything") works exactly as before.
+const MAP_DEFAULT_CHANNEL_FILTERS = ["POTENTIAL", "SM YVN", "SM Davtashen", "SM Shirak", "SM CAS"];
 function sortMapChannels(channels) {
   return [...channels].sort((a, b) => {
     const ia = MAP_CHANNEL_ORDER.indexOf(a);
@@ -808,7 +818,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // filter -- comparing two channels or categories side by side on the map
   // is a real, common query, and a single-value filter forced picking one
   // at a time to do it.
-  let channelFilters = new Set();
+  let channelFilters = new Set(MAP_DEFAULT_CHANNEL_FILTERS);
   let categoryFilters = new Set();
   let brandStatusByCustomer = null;
 
@@ -869,7 +879,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
             )
             .join("")}
         </div>
-        <div class="sheet-actions">
+        <div class="sheet-actions sheet-actions-floating">
           <button type="button" class="btn" id="map-multi-filter-clear">${t("clear")}</button>
           <button type="button" class="btn btn-primary" id="map-multi-filter-done">${t("done")}</button>
         </div>
@@ -1172,7 +1182,14 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       const status = customerStatus(c);
       if (c.customer_tier === "competitor" && !showCompetitors) continue;
       if (managerFilter && String(c.assigned_manager_id) !== managerFilter) continue;
-      if (channelFilters.size && !channelFilters.has(c.sales_channel)) continue;
+      // A customer with no sales_channel at all (normally normalized to
+      // "POTENTIAL" by customerPortfolioUi.js, but not for the edge case
+      // of an ERP-linked customer whose channel just hasn't been assigned
+      // yet -- see that module's own comment) is never hidden by this
+      // filter, default-on or user-selected -- an ambiguous/unassigned
+      // customer should stay visible, not silently disappear because it
+      // doesn't match whatever channels happen to be selected.
+      if (channelFilters.size && c.sales_channel && !channelFilters.has(c.sales_channel)) continue;
       if (categoryFilters.size && !categoryFilters.has(c.category)) continue;
       if (plannedTodayOnly && !plannedTodayIdSet?.has(c.id)) continue;
       if (searchQuery) {
