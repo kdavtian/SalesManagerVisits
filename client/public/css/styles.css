@@ -1583,26 +1583,12 @@ input[type="search"]:focus-visible {
   color: #ffffff;
 }
 
-/* Standalone filter label+select outside a <form> (e.g. Debt Balances'
-   manager filter) -- same visual language as form labels above, without
-   depending on a form ancestor for its input styling. */
+/* Debt Balances' manager filter -- sized to fit beside the Flat/By-manager
+   segmented control in .debt-filter-row rather than stretching full-width
+   like .filter-dropdown-wrap's own flex:1 default. */
 .debt-manager-filter-wrap {
-  display: block;
-  font-size: 0.82rem;
-  color: var(--text-dim);
-  margin: 12px 0 0;
-}
-
-.debt-manager-filter-wrap select {
-  display: block;
-  width: 100%;
-  margin-top: 6px;
-  padding: 11px 12px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text);
-  font-size: 0.95rem;
+  flex: 1;
+  min-width: 0;
 }
 
 /* Detail view */
@@ -4914,6 +4900,15 @@ label.checkbox-row input[type="checkbox"] {
      link) squeezes the title down to a couple of characters instead of
      dropping to its own line below. */
   flex-wrap: wrap;
+  /* Whatever comes right after this header (tabs, a search row, a filter
+     row...) had zero guaranteed gap below it -- some pages' own first
+     content block happened to carry its own margin-top and looked fine by
+     accident, but plenty (e.g. Warehouse's segmented Pick list/Staging/
+     Inventory tabs) sat flush against the back button's own bottom edge,
+     reported as the back button "touching" the row below it. Guaranteeing
+     the gap here, on the shared header itself, fixes every page at once
+     instead of patching each one's next-sibling margin individually. */
+  margin-bottom: 14px;
 }
 
 .detail-header-icon {
@@ -4970,16 +4965,129 @@ label.checkbox-row input[type="checkbox"] {
   white-space: nowrap;
 }
 
-/* Debt Balances headline total -- pushed to the right edge of the
-   .detail-header row the same way .detail-header-actions is, just text
-   instead of icon buttons. Empty (no rows to sum) collapses to nothing
-   rather than showing "Total: 0 AMD" as if there really were a balance. */
-.debt-balances-subtotal {
+/* Debt Balances' as-of-date filter: a compact pill in the header, pushed
+   to the right edge the same way .perf-month-filter-wrap is on Team
+   Performance -- same "invisible native <input> laid over a styled
+   button" technique (see .debt-as-of-picker-input below), so a tap opens
+   each browser/OS's own native date picker (the iOS wheel scroller)
+   directly instead of a custom calendar UI. */
+.debt-as-of-filter-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 0;
   margin-left: auto;
-  flex-shrink: 0;
-  font-weight: 600;
-  text-align: right;
+}
+
+.debt-as-of-filter-btn {
+  box-sizing: border-box;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  padding: 0 24px 0 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none; /* the real <input type="date"> laid on top (see
+                            .debt-as-of-picker-input) is what actually
+                            receives the tap. */
+}
+
+.debt-as-of-picker-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 34px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  opacity: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* The small "back to live" clear -- sits on top of the invisible date
+   input (not behind it) with pointer-events re-enabled, so tapping it
+   clears the filter instead of reopening the date picker. */
+.debt-as-of-clear-btn {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.debt-as-of-clear-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* Debt Balances headline total: a filled card, same visual language as
+   Warehouse Inventory's own .inventory-grand-total so every "total across
+   what's currently on screen" summary in the app reads the same way.
+   Empty (no rows to sum) hides entirely rather than showing "Total: 0
+   AMD" as if there really were a balance. */
+.debt-total-card {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-subtle);
+  padding: 12px 14px;
+  margin: 10px 16px 0;
+}
+
+.debt-total-label {
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-eyebrow);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-eyebrow);
+}
+
+.debt-total-amount {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+/* Mode tabs (Flat/By-manager) and the manager filter dropdown side by side
+   in one row instead of the manager filter dropping to its own full-width
+   line below -- the two are never both the full row's concern at once
+   (the manager filter only matters, and only shows, in by-manager mode),
+   so they read as one filter control, not two stacked ones. */
+.debt-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px 0;
+}
+
+.debt-filter-row .segmented {
+  flex: 0 0 auto;
 }
 
 /* ===== Customer detail header: three stacked rows =====
