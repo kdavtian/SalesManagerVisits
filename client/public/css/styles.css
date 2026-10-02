@@ -5615,27 +5615,57 @@ label.checkbox-row input[type="checkbox"] {
   box-shadow: var(--shadow-elevated);
 }
 
-/* Overrides .icon-btn's own 44x44 box (sized to sit beside the input, not
-   inside it) down to a plain, unboxed 24x24 hit area so the glyph clears
-   the input's own left padding above instead of visually colliding with
-   the placeholder text. */
-.map-search-input-wrap .map-address-search-btn {
+/* Purely decorative now -- the field always searches both customers and
+   addresses at once (see map.js), so there's no separate action to tap
+   here any more; this is a plain, unboxed 24x24 icon clearing the input's
+   own left padding above instead of visually colliding with the
+   placeholder text. */
+.map-search-input-wrap .map-search-input-icon {
   position: absolute;
   left: 8px;
   top: 50%;
   transform: translateY(-50%);
   width: 24px;
   height: 24px;
-  background: none;
-  border: none;
-  box-shadow: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-dim);
   z-index: 1;
+  pointer-events: none;
 }
 
-.map-search-input-wrap .map-address-search-btn .map-action-svg {
+.map-search-input-wrap .map-search-input-icon svg {
   width: 18px;
   height: 18px;
+}
+
+/* Address-match dropdown for the merged search field -- floats below the
+   input, above the map canvas, same shape as the old address-search
+   sheet's result list (.address-search-result below) but anchored to the
+   field instead of a separate full-screen sheet. */
+.map-address-results {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 500;
+  max-height: 50vh;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-elevated);
+}
+
+.map-address-results-label {
+  margin: 0;
+  padding: 8px 12px 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
 }
 
 /* The manager filter reuses the plain filter-dropdown-btn/menu look from
