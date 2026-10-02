@@ -2851,6 +2851,31 @@ label.checkbox-row input[type="checkbox"] {
      phone widths where the sheet's width:100% already fills the overlay. */
   justify-content: center;
   z-index: 2000;
+  /* Fades in alongside the sheet's own slide-up (see .sheet's animation)
+     so the backdrop darkening and the sheet's entrance read as one
+     coordinated motion instead of the backdrop snapping to full opacity
+     a frame before the sheet itself appears. Animates opacity, not
+     background-color -- a color keyframe would fight .sheet-overlay-light's
+     own lighter background override (animations win the cascade over a
+     plain class rule for the life of the animation), flashing the wrong
+     shade for every sheet using that variant. Opacity composes cleanly
+     with whatever background color is actually set. */
+  animation: sheet-overlay-fade-in 0.22s ease-out;
+}
+
+@keyframes sheet-overlay-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-overlay {
+    animation: none;
+  }
 }
 
 /* Used for the "new customer" sheet, opened right after dropping a pin —
@@ -2958,6 +2983,32 @@ label.checkbox-row input[type="checkbox"] {
   max-height: 85vh;
   overflow-y: auto;
   box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.5);
+  /* Every sheet used to just pop into existence the instant its overlay
+     was inserted -- no transition at all -- which on a bottom sheet
+     specifically (full content height, appended with a loading state then
+     immediately repainted once the real content lands) reads as the UI
+     stalling for a frame rather than opening, reported live as the Orders
+     detail sheet "opening with freezing". A real slide-up/fade-in (same
+     easing as the install banner's own .slide-up below) makes the open
+     itself read as a deliberate, smooth motion instead of an abrupt snap. */
+  animation: sheet-slide-up 0.22s ease-out;
+}
+
+@keyframes sheet-slide-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet {
+    animation: none;
+  }
 }
 
 .sheet h2 {
