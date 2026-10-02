@@ -74,6 +74,10 @@ const TILE_URLS = {
 // against one host having a bad day, not just one provider.
 const FALLBACK_TILE_URLS = [{ url: "https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png", subdomains: "" }];
 const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+// How many of a provider's own early tile loads get the soft-block byte-size
+// check below -- bounded so a healthy provider only pays this extra fetch
+// cost briefly at startup/provider-switch, not for the rest of the session.
+const SOFT_BLOCK_SAMPLE_SIZE = 6;
 
 // Leaflet itself is loaded on demand (see leafletLoader.js) rather than
 // unconditionally at page load -- app.js idle-preloads it right after
@@ -137,8 +141,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           : `<div class="map-top-controls">
               <div class="map-search-row">
                 <div class="map-search-input-wrap">
-                  <button type="button" class="icon-btn map-address-search-btn" id="map-address-search-btn" aria-label="${t("search_address_title")}" title="${t("search_address_title")}">${icons.search}</button>
+                  <span class="map-search-input-icon" aria-hidden="true">${icons.search}</span>
                   <input type="search" id="map-customer-search" placeholder="${t("map_search_placeholder")}" aria-label="${t("map_search_placeholder")}" />
+                  <div class="map-address-results" id="map-address-results" hidden></div>
                 </div>
                 ${
                   canViewTeamLocations()
@@ -414,10 +419,47 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
   function makeTileLayer({ url, subdomains }) {
     const layer = L.tileLayer(url, { maxZoom: 19, attribution: TILE_ATTRIBUTION, subdomains });
-    layer.on("tileload", () => {
+    // OSM's usage-policy "heavy use" notice comes back as an ordinary 200 OK
+    // image, not an HTTP error -- a desktop's wider viewport requests enough
+    // more tiles per pan/zoom than a phone's to cross that informal
+    // threshold, and once it does, every tile in view is silently replaced
+    // by the same static gray/placeholder notice image forever, with
+    // tileload still firing normally (the "blocked map" users have reported
+    // on Windows desktops). tileerror/the 15s timeout below can never catch
+    // this, since nothing about the request actually fails. Detected
+    // instead by re-fetching a handful of early, different-coordinate tiles
+    // and checking for an identical byte size across several of them --
+    // real map tiles at different coordinates are essentially never
+    // byte-for-byte the same size, while the static notice image always is.
+    let softBlockChecks = 0;
+    const softBlockSizes = [];
+    layer.on("tileload", (e) => {
       tileEverLoaded = true;
       clearTimeout(tileHealthTimer);
       hideMapError();
+      if (softBlockChecks >= SOFT_BLOCK_SAMPLE_SIZE) return;
+      softBlockChecks += 1;
+      const tileUrl = typeof layer.getTileUrl === "function" ? layer.getTileUrl(e.coords) : null;
+      if (!tileUrl) return;
+      fetch(tileUrl)
+        .then((res) => res.blob())
+        .then((blob) => {
+          // Ignore a check that resolves after this layer has already been
+          // swapped out (e.g. a provider switch already in flight) --
+          // acting on it here would double-advance past the real current
+          // provider.
+          if (tileLayer !== layer) return;
+          softBlockSizes.push(blob.size);
+          const counts = new Map();
+          for (const size of softBlockSizes) counts.set(size, (counts.get(size) || 0) + 1);
+          if ([...counts.values()].some((count) => count >= 3)) advanceProvider();
+        })
+        .catch(() => {
+          // CORS/network hiccup on this side-channel verification fetch --
+          // the tile itself already rendered fine via the <img> tag Leaflet
+          // used, so just skip this one check rather than treat it as a
+          // signal either way.
+        });
     });
     // A provider actively rejecting us (403, or any other real HTTP error
     // response) fires this almost immediately per tile, unlike a genuinely
@@ -430,7 +472,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     // whole provider is down.
     let errorCount = 0;
     layer.on("tileerror", () => {
-      if (tileEverLoaded) return;
+      if (tileEverLoaded || tileLayer !== layer) return;
       errorCount += 1;
       if (errorCount >= 3) advanceProvider();
     });
@@ -1526,37 +1568,90 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
   const mapSearchInput = root.querySelector("#map-customer-search");
   const searchNoResults = root.querySelector("#map-search-no-results");
-  // Debounced like the Customers list search (300ms) -- applyFilter()
-  // clears and rebuilds every marker on the map, which on a full customer
-  // book is expensive enough that running it on every single keystroke
-  // visibly stutters typing, especially on low-RAM devices.
+  const addressResultsEl = root.querySelector("#map-address-results");
+  // This field used to be two separate searches -- an instant customer
+  // filter plus a magnifying-glass icon that opened a whole separate sheet
+  // for geocoded addresses -- which meant deciding up front which kind of
+  // thing you were looking for before you could even start typing. Now a
+  // single field always runs both at once: the customer-book filter below
+  // (debounced like the Customers list search, 300ms -- applyFilter()
+  // clears and rebuilds every marker on the map, expensive enough on a
+  // full customer book to visibly stutter typing on low-RAM devices if run
+  // on every keystroke) and a background address lookup (see
+  // runAddressSearch below), surfacing both kinds of matches together.
+  let addressSearchMarker = null;
+  let addressSearchDebounceTimer;
+  let addressSearchToken = 0;
+
+  function hideAddressResults() {
+    addressResultsEl.hidden = true;
+    addressResultsEl.innerHTML = "";
+  }
+
+  function selectAddressResult(result) {
+    hideAddressResults();
+    const latlng = L.latLng(result.lat, result.lng);
+    map.setView(latlng, 16);
+    if (addressSearchMarker) map.removeLayer(addressSearchMarker);
+    addressSearchMarker = L.marker(latlng, {
+      icon: L.divIcon({ className: "", html: SEARCH_PIN_HTML, iconSize: [26, 26], iconAnchor: [13, 26] }),
+    }).addTo(map);
+    addressSearchMarker.bindPopup(escapeHtml(result.address)).openPopup();
+  }
+
+  // Real external geocoding, unlike the instant client-side customer
+  // filter above -- only worth firing past a few characters (shorter is
+  // mostly noise and burns API calls for nothing) and on its own, longer
+  // debounce (400ms, matching the old address-search sheet) since it's a
+  // network round trip rather than a local array scan.
+  async function runAddressSearch(query) {
+    if (query.length < 3) {
+      hideAddressResults();
+      return;
+    }
+    const myToken = ++addressSearchToken;
+    let results;
+    try {
+      results = await api.searchAddress(query);
+    } catch {
+      if (myToken !== addressSearchToken) return;
+      hideAddressResults();
+      return;
+    }
+    if (myToken !== addressSearchToken) return; // a newer query already superseded this one
+    if (!results.length) {
+      hideAddressResults();
+      return;
+    }
+    addressResultsEl.innerHTML = `
+      <p class="map-address-results-label">${t("map_search_address_matches")}</p>
+      ${results.map((r, i) => `<button type="button" class="address-search-result" data-index="${i}">${escapeHtml(r.address)}</button>`).join("")}
+    `;
+    addressResultsEl.hidden = false;
+    addressResultsEl.querySelectorAll("[data-index]").forEach((btn) => {
+      btn.addEventListener("click", () => selectAddressResult(results[Number(btn.dataset.index)]));
+    });
+  }
+
   mapSearchInput?.addEventListener("input", () => {
+    const raw = mapSearchInput.value.trim();
     clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(() => {
-      searchQuery = mapSearchInput.value.trim().toLowerCase();
+      searchQuery = raw.toLowerCase();
       applyFilter();
     }, 300);
+    clearTimeout(addressSearchDebounceTimer);
+    addressSearchDebounceTimer = setTimeout(() => runAddressSearch(raw), 400);
+    if (!raw) hideAddressResults();
   });
 
-  // The customer search above only matches this rep's own customer book --
-  // an actual street address (a new lead, somewhere to meet a customer)
-  // needs real geocoding instead. Reuses the same address-search sheet the
-  // add-customer/relocate flow already has (openAddressSearchSheet,
-  // defined below), but here it's just "look at this place on the map",
-  // not a step toward saving anything -- so the result is a plain,
-  // non-interactive marker rather than the draggable "confirm to save" pin.
-  let addressSearchMarker = null;
-  root.querySelector("#map-address-search-btn")?.addEventListener("click", () => {
-    openAddressSearchSheet((result) => {
-      const latlng = L.latLng(result.lat, result.lng);
-      map.setView(latlng, 16);
-      if (addressSearchMarker) map.removeLayer(addressSearchMarker);
-      addressSearchMarker = L.marker(latlng, {
-        icon: L.divIcon({ className: "", html: SEARCH_PIN_HTML, iconSize: [26, 26], iconAnchor: [13, 26] }),
-      }).addTo(map);
-      addressSearchMarker.bindPopup(escapeHtml(result.address)).openPopup();
-    });
-  });
+  // Dismiss the address-match dropdown on an outside tap, same as any other
+  // lightweight popover in this app -- it isn't a modal sheet, so nothing
+  // else should block interacting with the rest of the map while it's open.
+  function dismissAddressResultsOutside(e) {
+    if (addressResultsEl && !addressResultsEl.hidden && !e.target.closest(".map-search-input-wrap")) hideAddressResults();
+  }
+  document.addEventListener("click", dismissAddressResultsOutside);
 
   // The competitor visibility toggle is mounted separately (see
   // mapSafeUi.js) and is deliberately CSS-only/DOM-only with no direct call
@@ -3074,6 +3169,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     clearTimeout(warmTilesTimer);
     mapEl.removeEventListener("touchend", onMapTouchEnd);
     document.removeEventListener("visibilitychange", refreshTileStyle);
+    document.removeEventListener("click", dismissAddressResultsOutside);
     window.removeEventListener("online", retryTiles);
     appMain.classList.remove("app-main-locked");
     document.body.classList.remove("map-active");
