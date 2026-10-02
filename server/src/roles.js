@@ -220,11 +220,21 @@ export function canSubmitHandoffForOthers(role) {
 // Warehouse Manager/admin -- the warehouse manager role isn't currently
 // using the app day to day, so the sales director covers the same ground
 // for now (see canMarkDeliveredWithoutRoute below for the equivalent gap on
-// the delivery side). CEO also included -- same broad operational-oversight
-// access as every other company-wide screen (activity, financial exports,
-// team performance), not just the roles who actually staff the warehouse.
+// the delivery side). CEO/Operations Director also included -- same broad
+// operational-oversight access as every other company-wide screen
+// (activity, financial exports, team performance), not just the roles who
+// actually staff the warehouse. Accountant included too -- inventory
+// (stock value, landing/net cost) is financial data, the same access line
+// seesFinancialExports already draws for every other financial screen.
 export function canManageWarehouse(role) {
-  return role === "warehouse_manager" || role === "sales_director" || role === "ceo" || role === "operations_director" || role === "admin";
+  return (
+    role === "warehouse_manager" ||
+    role === "sales_director" ||
+    role === "ceo" ||
+    role === "operations_director" ||
+    role === "accountant" ||
+    role === "admin"
+  );
 }
 
 // Who plans/edits a delivery route (distinct from canPlanForOthers, which

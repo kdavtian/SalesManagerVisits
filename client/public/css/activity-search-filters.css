@@ -17,7 +17,16 @@
   box-shadow: var(--shadow-subtle);
 }
 
-.activity-search-combined:focus-within {
+/* :has(), not :focus-within -- the filter/action icon buttons (map's
+   channel filter, Activity/Orders/Payments' own filter buttons) live
+   inside this same row (see .activity-search-actions below), and
+   :focus-within fires for ANY focused descendant, not just the search
+   input itself. That outlined the whole bar merely from tapping a filter
+   button, reported live on the Map page's channel filter -- the search
+   field wasn't being typed into at all. :has() with an explicit :focus on
+   the input scopes the highlight to when the input itself is actually
+   focused. */
+.activity-search-combined:has(input[type="search"]:focus) {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
 }

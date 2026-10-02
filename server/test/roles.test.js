@@ -204,8 +204,8 @@ test("canSubmitHandoffForOthers: mirrors canSubmitPaymentsForOthers", () => {
   assert.equal(canSubmitHandoffForOthers("sales_manager"), false);
 });
 
-test("canManageWarehouse: warehouse_manager/sales_director/ceo/operations_director/admin only", () => {
-  for (const role of ["warehouse_manager", "sales_director", "ceo", "operations_director", "admin"]) assert.equal(canManageWarehouse(role), true, role);
+test("canManageWarehouse: warehouse_manager/sales_director/ceo/operations_director/accountant/admin only", () => {
+  for (const role of ["warehouse_manager", "sales_director", "ceo", "operations_director", "accountant", "admin"]) assert.equal(canManageWarehouse(role), true, role);
   assert.equal(canManageWarehouse("delivery_manager"), false);
 });
 
@@ -229,8 +229,8 @@ test("canMarkDeliveredWithoutRoute: delivery_manager plus the office-side overri
 });
 
 test("isFulfillmentRole: union of canManageWarehouse and canDeliverOrders", () => {
-  for (const role of ["warehouse_manager", "sales_director", "ceo", "operations_director", "admin", "delivery_manager"]) assert.equal(isFulfillmentRole(role), true, role);
-  for (const role of ["sales_manager", "accountant"]) assert.equal(isFulfillmentRole(role), false, role);
+  for (const role of ["warehouse_manager", "sales_director", "ceo", "operations_director", "accountant", "admin", "delivery_manager"]) assert.equal(isFulfillmentRole(role), true, role);
+  assert.equal(isFulfillmentRole("sales_manager"), false);
 });
 
 test("canRecordOrders: accountant/admin only", () => {
