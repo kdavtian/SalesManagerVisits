@@ -217,3 +217,19 @@ test("GET /api/debt-balances?date=: last_payment_date is bounded to payments on 
   assert.ok(row);
   assert.equal(String(row.last_payment_date).slice(0, 10), "2026-01-15");
 });
+
+// Regression: reported live as "last payment date isn't showing" -- the
+// live (no ?date=) branch only looked at erp_customer_data.last_payment_date
+// (routinely blank from the external Excel pipeline) and in-app payments,
+// never erp_cashflow_lines, even though that's the same sync's own full
+// cashflow history and the as-of branch already trusted it. Itest Debt
+// Customer (from test.before) has no erp_customer_data.last_payment_date
+// and no in-app payment, only the 2026-01-15 cashflow payment -- live mode
+// must surface it from cashflow instead of showing nothing.
+test("GET /api/debt-balances (live): last_payment_date falls back to erp_cashflow_lines when the ERP sync's own column is blank", async () => {
+  const res = await apiRequest("/api/debt-balances", { cookie: adminCookie });
+  assert.equal(res.status, 200);
+  const row = res.data.rows.find((r) => r.customer_id === ERP_CUSTOMER_ID);
+  assert.ok(row);
+  assert.equal(String(row.last_payment_date).slice(0, 10), "2026-01-15");
+});
