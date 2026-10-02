@@ -41,6 +41,24 @@ const LAST_APP_PAYMENT_SUBQUERY = `(
   WHERE p.customer_id = c.id AND p.status = 'approved'
 )`;
 
+// The ERP sync's customers[].last_payment_date field (-> ecd.last_payment_date
+// above) comes from whatever single column the external Excel pipeline
+// happens to compute it from -- reported live as routinely blank even for
+// a customer with a real, recent payment on record. erp_cashflow_lines is
+// that same pipeline's full all-time cashflow history per customer (see
+// docs/erp-sync-contract.md), independent of that one column, so it's
+// used here as a second, more complete ERP-side source rather than trusting
+// the single field alone -- the as-of branch below already had to do this
+// (LAST_ERP_PAYMENT_ASOF_SUBQUERY) to compute a historical balance at all;
+// this is the same thing, unbounded, for live mode. A positive cashflow
+// line is a payment (a negative one is a refund paid back out, not a
+// "payment" for this purpose).
+const LAST_ERP_PAYMENT_SUBQUERY = `(
+  SELECT max(cf.cashflow_date)
+  FROM erp_cashflow_lines cf
+  WHERE cf.erp_customer_id = c.erp_customer_id AND cf.amount_amd > 0
+)`;
+
 // Same as LAST_APP_PAYMENT_SUBQUERY, bounded to payments on or before the
 // as-of date -- used only in the as-of branch below, where showing a
 // payment that happened *after* the date being viewed would misrepresent
@@ -134,7 +152,7 @@ debtBalancesRouter.get("/", async (req, res) => {
 
   let balanceJoin = "";
   let balanceExpr = "ecd.debt_amd";
-  let lastPaymentExpr = `GREATEST(ecd.last_payment_date, ${LAST_APP_PAYMENT_SUBQUERY})`;
+  let lastPaymentExpr = `GREATEST(ecd.last_payment_date, ${LAST_APP_PAYMENT_SUBQUERY}, ${LAST_ERP_PAYMENT_SUBQUERY})`;
   if (asOfDate) {
     params.push(asOfDate);
     const dateParam = `$${params.length}`;
