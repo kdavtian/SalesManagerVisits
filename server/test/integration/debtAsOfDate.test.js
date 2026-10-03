@@ -1,12 +1,14 @@
 // Debt-as-of-date: GET /api/reports/customer-debt and GET /api/debt-balances
-// with a ?date= param. reports.js's /customer-debt still computes an
-// absolute running balance from full order/cashflow history (see its own
-// tests below); debtBalances.js's /debt-balances instead anchors on the
-// live erp_customer_data.debt_amd snapshot and only looks at what's
-// changed *since* the as-of date (see server/src/routes/debtBalances.js's
-// own comment on asOfBalanceJoin for why -- an absolute sum over possibly-
-// incomplete all-time cashflow history was reported live as wildly
-// overstating historical debt).
+// with a ?date= param. Both now compute the same absolute running balance:
+// balance0_amd (the Castrol Excel Debits sheet's own opening-balance
+// column, see migration 083) + SUM(order_lines.revenue_amd <= D) -
+// SUM(cashflow_lines.amount_amd <= D). An earlier version of this formula
+// omitted balance0_amd (not yet synced) and was reported live as wildly
+// overstating historical debt whenever a customer's erp_cashflow_lines
+// history was much thinner than their erp_order_lines history -- balance0
+// is the true opening balance carried forward from before that thin
+// cashflow history began, so including it is what makes the absolute sum
+// correct instead of just an approximation anchored on "today".
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs } from "./helpers.js";
@@ -17,6 +19,13 @@ const ERP_CUSTOMER_ID = `itest-debt-asof-${Date.now()}`;
 let adminCookie;
 let customer;
 
+// balance0_amd (35000) + all-time orders (50000+30000=80000) - net all-time
+// cashflow (20000-5000=15000) = 100000, matching the live debt_amd fixture
+// below by design -- the property that makes "as of today" agree with
+// "live" (see the "matches live" test further down) depends on balance0
+// actually being the customer's real opening balance, not an arbitrary
+// number, so the fixture is deliberately self-consistent rather than
+// picking balance0 and debt_amd independently.
 test.before(async () => {
   await startTestServer();
   const admin = await createUser("admin");
@@ -24,8 +33,8 @@ test.before(async () => {
   customer = await createCustomer({ created_by: admin.id, erp_customer_id: ERP_CUSTOMER_ID });
 
   await pool.query(
-    `INSERT INTO erp_customer_data (erp_customer_id, customer_name, debt_amd, synced_at)
-     VALUES ($1, 'Itest Debt Customer', 100000, now())`,
+    `INSERT INTO erp_customer_data (erp_customer_id, customer_name, debt_amd, balance0_amd, synced_at)
+     VALUES ($1, 'Itest Debt Customer', 100000, 35000, now())`,
     [ERP_CUSTOMER_ID]
   );
 
@@ -58,28 +67,29 @@ test("GET /api/reports/customer-debt: without ?date= uses the live erp_customer_
   assert.equal(res.data.as_of_date, null);
 });
 
-test("GET /api/reports/customer-debt?date=: computes a running balance from order/cashflow history, ignoring later entries", async () => {
-  // As of 2026-01-20: 50000 order (Jan 10) - 20000 payment (Jan 15) = 30000.
-  // The Feb order and Feb refund are both after this date and excluded.
+test("GET /api/reports/customer-debt?date=: computes balance0 plus a running balance from order/cashflow history, ignoring later entries", async () => {
+  // As of 2026-01-20: 35000 balance0 + 50000 order (Jan 10) - 20000 payment
+  // (Jan 15) = 65000. The Feb order and Feb refund are both after this
+  // date and excluded.
   const res = await apiRequest("/api/reports/customer-debt?date=2026-01-20", { cookie: adminCookie });
   assert.equal(res.status, 200);
   assert.equal(res.data.as_of_date, "2026-01-20");
   const row = res.data.customers.find((c) => c.erp_customer_id === ERP_CUSTOMER_ID);
-  assert.equal(Number(row.estimated_debt_amd), 30000);
-});
-
-test("GET /api/reports/customer-debt?date=: a refund after the debt-clearing point nets back into the balance", async () => {
-  // As of 2026-02-28 (everything included): (50000+30000) - (20000-5000) = 65000.
-  const res = await apiRequest("/api/reports/customer-debt?date=2026-02-28", { cookie: adminCookie });
-  assert.equal(res.status, 200);
-  const row = res.data.customers.find((c) => c.erp_customer_id === ERP_CUSTOMER_ID);
   assert.equal(Number(row.estimated_debt_amd), 65000);
 });
 
-test("GET /api/debt-balances?date=: anchors on the live debt and backs out what happened after the as-of date", async () => {
-  // live debt_amd = 100000. After 2026-01-20: the 30000 order (Feb 10) and
-  // the -5000 refund (Feb 20) both happened later, so back them out of
-  // today's live figure: 100000 - 30000 - (-5000) = 65000.
+test("GET /api/reports/customer-debt?date=: a refund after the debt-clearing point nets back into the balance", async () => {
+  // As of 2026-02-28 (everything included): 35000 + (50000+30000) - (20000-5000) = 100000.
+  const res = await apiRequest("/api/reports/customer-debt?date=2026-02-28", { cookie: adminCookie });
+  assert.equal(res.status, 200);
+  const row = res.data.customers.find((c) => c.erp_customer_id === ERP_CUSTOMER_ID);
+  assert.equal(Number(row.estimated_debt_amd), 100000);
+});
+
+test("GET /api/debt-balances?date=: computes balance0 plus a running balance from order/cashflow history, ignoring later entries", async () => {
+  // As of 2026-01-20: 35000 balance0 + 50000 order (Jan 10) - 20000 payment
+  // (Jan 15) = 65000. The Feb order and Feb refund are both after this
+  // date and excluded.
   const res = await apiRequest("/api/debt-balances?date=2026-01-20", { cookie: adminCookie });
   assert.equal(res.status, 200);
   assert.equal(res.data.as_of_date, "2026-01-20");
@@ -87,11 +97,13 @@ test("GET /api/debt-balances?date=: anchors on the live debt and backs out what 
   assert.equal(Number(row.remaining_balance), 65000);
 });
 
-test("GET /api/debt-balances?date=: a date with nothing after it returns exactly the live figure", async () => {
+test("GET /api/debt-balances?date=: a date covering the customer's full history matches the live figure", async () => {
   // Nothing in this customer's history falls after 2026-03-01 (last entry
-  // is the Feb 20 refund), so the as-of balance must equal live debt_amd
-  // exactly -- this is the property that closes the originally-reported
-  // bug: picking today as the as-of date must never diverge from "Live".
+  // is the Feb 20 refund), so the as-of balance (35000 + 80000 - 15000 =
+  // 100000) must equal live debt_amd exactly -- the fixture's balance0_amd
+  // is deliberately set so this holds (see test.before's own comment);
+  // this is the property that closes the originally-reported bug, now via
+  // a correct absolute formula rather than an anchor-on-live workaround.
   const res = await apiRequest("/api/debt-balances?date=2026-03-01", { cookie: adminCookie });
   assert.equal(res.status, 200);
   const row = res.data.rows.find((r) => r.customer_id === ERP_CUSTOMER_ID);
@@ -107,22 +119,25 @@ test("GET /api/debt-balances: without ?date= still uses the live snapshot", asyn
 
 // Regression: reported live as "By date balances are wrong, Live is
 // correct" -- for a customer with a large all-time order history but much
-// thinner cashflow history (confirmed by the reporting user: picking
-// today as the as-of date came back many times larger than Live for the
-// same customer), the old absolute SUM(orders)-SUM(cashflow) formula
-// summed ~all 10,000,000 AMD of orders ever placed against only the
-// 100,000 AMD of cashflow the sync happened to carry, wildly overstating
-// debt. The anchored formula must ignore that incomplete ancient history
-// entirely once nothing falls after the as-of date, and return exactly
-// the trusted live figure.
+// thinner cashflow history, the absolute SUM(orders)-SUM(cashflow) formula
+// (with no balance0_amd yet) summed ~all 10,000,000 AMD of orders ever
+// placed against only the 100,000 AMD of cashflow the sync happened to
+// carry, wildly overstating debt. balance0_amd -- the true opening balance
+// carried forward from before the thin cashflow history began -- is what
+// actually closes that gap: with it set correctly, the same formula lands
+// exactly on the live figure instead of needing a live-anchored workaround.
 const THIN_CASHFLOW_ERP_ID = `itest-debt-asof-thincashflow-${Date.now()}`;
 
-test("GET /api/debt-balances?date=: a customer with thin cashflow history relative to orders is not inflated -- matches live when nothing falls after the as-of date", async () => {
+test("GET /api/debt-balances?date=: balance0_amd closes the gap for a customer with thin cashflow history relative to orders", async () => {
   const admin = await createUser("admin");
   await createCustomer({ created_by: admin.id, erp_customer_id: THIN_CASHFLOW_ERP_ID });
+  // balance0 (-9850000) + all-time orders (10000000) - all-time cashflow
+  // (100000) = 50000, matching live debt_amd -- a large negative balance0
+  // is exactly what it looks like to carry forward a customer whose real
+  // payment history mostly predates what erp_cashflow_lines has on file.
   await pool.query(
-    `INSERT INTO erp_customer_data (erp_customer_id, customer_name, debt_amd, synced_at)
-     VALUES ($1, 'Itest Thin Cashflow Customer', 50000, now())`,
+    `INSERT INTO erp_customer_data (erp_customer_id, customer_name, debt_amd, balance0_amd, synced_at)
+     VALUES ($1, 'Itest Thin Cashflow Customer', 50000, -9850000, now())`,
     [THIN_CASHFLOW_ERP_ID]
   );
   try {
@@ -136,9 +151,9 @@ test("GET /api/debt-balances?date=: a customer with thin cashflow history relati
       [THIN_CASHFLOW_ERP_ID]
     );
 
-    // As of a date after all of the above (nothing to back out): the old
-    // formula would have returned 10,000,000 - 100,000 = 9,900,000. The
-    // anchored formula must return exactly the live 50,000.
+    // As of a date after all of the above: -9850000 + 10000000 - 100000 =
+    // 50000, exactly the live figure -- without balance0_amd this would
+    // have come back as 9900000.
     const res = await apiRequest("/api/debt-balances?date=2026-09-01", { cookie: adminCookie });
     assert.equal(res.status, 200);
     const row = res.data.rows.find((r) => r.customer_id === THIN_CASHFLOW_ERP_ID);

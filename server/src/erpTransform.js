@@ -55,6 +55,7 @@ export function transformErpCustomers(customers) {
   const names = [];
   const reps = [];
   const debts = [];
+  const balance0s = [];
   const lastPayments = [];
   const daysSince = [];
   const agingBuckets = [];
@@ -69,6 +70,7 @@ export function transformErpCustomers(customers) {
     names.push(entry.customer_name != null ? String(entry.customer_name) : null);
     reps.push(entry.assigned_sales_rep != null ? String(entry.assigned_sales_rep) : null);
     debts.push(Number.isFinite(entry.debt_amd) ? entry.debt_amd : null);
+    balance0s.push(Number.isFinite(entry.balance0_amd) ? entry.balance0_amd : null);
     lastPayments.push(entry.last_payment_date || null);
     daysSince.push(Number.isFinite(entry.days_since_payment) ? entry.days_since_payment : null);
     agingBuckets.push(entry.aging_bucket || null);
@@ -80,7 +82,7 @@ export function transformErpCustomers(customers) {
     }
   }
 
-  return { erpIds, names, reps, debts, lastPayments, daysSince, agingBuckets, recentOrders, regionErpIds, regions, subregions };
+  return { erpIds, names, reps, debts, balance0s, lastPayments, daysSince, agingBuckets, recentOrders, regionErpIds, regions, subregions };
 }
 
 // erp_customer_id, order_id, and date are all required -- an entry missing

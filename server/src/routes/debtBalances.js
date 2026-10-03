@@ -82,40 +82,42 @@ const LAST_ERP_PAYMENT_ASOF_SUBQUERY = `(
 // Debt as of a past date D. Originally computed as an absolute running
 // balance from full order/cashflow history (SUM(orders up to D) -
 // SUM(cashflow up to D), see docs/erp-sync-contract.md's cashflow_lines
-// entry) -- but that assumes erp_order_lines and erp_cashflow_lines both
-// carry COMPLETE all-time history from the same starting point. Reported
+// entry) -- but that assumed erp_order_lines and erp_cashflow_lines both
+// carried COMPLETE all-time history from the same starting point. Reported
 // live: picking today as the as-of date (which should equal "live") came
 // back many times larger than the live ecd.debt_amd figure for the same
 // customer. Root cause: the real sync's erp_cashflow_lines history is far
-// thinner than its erp_order_lines history (confirmed with the reporting
-// user), so an absolute from-scratch sum counts ~all orders ever but only
-// a fraction of the payments against them, inflating every as-of balance,
-// worse the further back the order history goes.
+// thinner than its erp_order_lines history, so an absolute from-scratch sum
+// counted ~all orders ever but only a fraction of the payments against
+// them, inflating every as-of balance, worse the further back the order
+// history went. Worked around for a while by anchoring on the trusted live
+// debt_amd and undoing whatever happened after D instead -- correct, but
+// only because it sidestepped the real gap rather than closing it.
 //
-// Anchored on the trusted live figure instead: as_of_D = live_debt -
-// (orders strictly after D) + (cashflow strictly after D). Algebraically
-// identical to the absolute sum IF both tables had complete history (undo
-// everything that happened after D from today's live total), but only
-// ever depends on the *recent* order/cashflow window between D and today
-// -- not the full all-time history back to the start of the relationship
-// -- so it's far more robust to older cashflow rows the sync never sent.
-// It also guarantees as_of(today) == live by construction (nothing is
-// "after today"), closing the exact discrepancy reported live. A
-// customer absent from the live snapshot (ecd is null -- fully paid off,
-// see the FROM-clause comment below) anchors on a live debt of 0, which
-// is correct: their debt today genuinely is zero.
+// The real fix: balance0_amd (erp_customer_data, from the Castrol Excel
+// Debits sheet's own "Balance0" column -- see migration 083) is the true
+// opening balance carried forward from before that thin cashflow history
+// began. With it, the originally-intended absolute formula is simply
+// correct: balance(D) = balance0_amd + SUM(orders <= D) - SUM(cashflow <=
+// D). No anchoring on live needed -- this now also holds AT D = today,
+// since balance0_amd plus every order/cashflow row IS what live debt_amd
+// itself was derived from on the Excel side. A customer absent from the
+// live snapshot (ecd is null -- fully paid off, see the FROM-clause
+// comment below) contributes a balance0_amd of 0, which is fine: whatever
+// they owed as of D is still fully captured by their own order/cashflow
+// history up to D.
 const asOfBalanceJoin = `
   LEFT JOIN LATERAL (
     SELECT SUM(ol.revenue_amd) AS amount
     FROM erp_order_lines ol
-    WHERE ol.erp_customer_id = c.erp_customer_id AND ol.order_date > $__AS_OF_DATE__
-  ) orders_since ON true
+    WHERE ol.erp_customer_id = c.erp_customer_id AND ol.order_date <= $__AS_OF_DATE__
+  ) orders_asof ON true
   LEFT JOIN LATERAL (
     SELECT SUM(cf.amount_amd) AS amount
     FROM erp_cashflow_lines cf
-    WHERE cf.erp_customer_id = c.erp_customer_id AND cf.cashflow_date > $__AS_OF_DATE__
-  ) cashflow_since ON true`;
-const asOfBalanceExpr = "(COALESCE(ecd.debt_amd, 0) - COALESCE(orders_since.amount, 0) + COALESCE(cashflow_since.amount, 0))";
+    WHERE cf.erp_customer_id = c.erp_customer_id AND cf.cashflow_date <= $__AS_OF_DATE__
+  ) cashflow_asof ON true`;
+const asOfBalanceExpr = "(COALESCE(ecd.balance0_amd, 0) + COALESCE(orders_asof.amount, 0) - COALESCE(cashflow_asof.amount, 0))";
 
 debtBalancesRouter.get("/", async (req, res) => {
   const { date } = req.query;

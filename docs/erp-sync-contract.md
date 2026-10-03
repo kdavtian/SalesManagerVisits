@@ -27,6 +27,7 @@ which is upsert-only and never truncated).
       "customer_name": "...",
       "assigned_sales_rep": "SM YVN",    // free-text rep/channel name
       "debt_amd": 150000,
+      "balance0_amd": 90000, // from the Debits sheet's own "Balance0" column -- the customer's opening balance, carried forward from before erp_cashflow_lines' own history began. Needed so debt-as-of-a-past-date can be computed as balance0_amd + SUM(order_lines.revenue_amd <= D) - SUM(cashflow_lines.amount_amd <= D); omit/null if not sent (treated as 0)
       "last_payment_date": "2026-08-20", // YYYY-MM-DD
       "days_since_payment": 12,
       "aging_bucket": "0-30",
@@ -47,9 +48,10 @@ which is upsert-only and never truncated).
 
   // Full all-time "Oil order" Cashflow history per customer, signed
   // (positive = payment received, negative = refund paid back out --
-  // NOT filtered to amount > 0). Pairs with order_lines so this app can
-  // compute a customer's debt as of any past date D itself, as a running
-  // balance: SUM(order_lines.revenue_amd WHERE date <= D) -
+  // NOT filtered to amount > 0). Pairs with order_lines and each
+  // customer's own balance0_amd (above) so this app can compute a
+  // customer's debt as of any past date D itself, as a running balance:
+  // balance0_amd + SUM(order_lines.revenue_amd WHERE date <= D) -
   // SUM(cashflow_lines.amount_amd WHERE date <= D).
   "cashflow_lines": [
     {
