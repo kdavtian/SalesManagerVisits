@@ -32,6 +32,17 @@ function safeAmd(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
+// What fraction of actual sales has actually been collected in cash --
+// distinct from the sales-vs-plan percentage already shown on the
+// comparison bar above (actual/target), which says nothing about how
+// much of that sales figure was ever paid for. Omitted (not "(0%)")
+// when there's no sales to divide by, same as the sales-vs-plan
+// percentage already does.
+function collectedPctSuffix(collected, sales) {
+  if (!(sales > 0)) return "";
+  return ` (${Math.round((collected / sales) * 100)}%)`;
+}
+
 // collected is optional -- when given (and there's a target to place it
 // against), a "|" tick mark is overlaid on the bar at the collected
 // amount's own percent-of-target position, so actual sales and actual
@@ -160,7 +171,7 @@ function renderPlanSalesSection(leaderboard) {
     ${comparisonBarHtml(t("company_dashboard_sales_label"), totals.sales_amd, totals.plan_amd, totals.collected_amd)}
     <div class="stat-grid">
       <div class="stat-card">
-        <span class="stat-value">${formatAmd(Math.round(totals.collected_amd))}</span>
+        <span class="stat-value">${formatAmd(Math.round(totals.collected_amd))}${collectedPctSuffix(totals.collected_amd, totals.sales_amd)}</span>
         <span class="stat-label">${t("company_dashboard_collected_label")}</span>
       </div>
       <div class="stat-card">
@@ -176,7 +187,7 @@ function renderPlanSalesSection(leaderboard) {
         <div class="card">
           <strong>${escapeHtml(r.rep_name)}</strong>
           ${comparisonBarHtml(t("company_dashboard_sales_label"), safeAmd(r.sales_amd), safeAmd(r.plan_amd), safeAmd(r.collected_amd))}
-          <div class="muted">${t("company_dashboard_collected_label")}: ${formatAmd(Math.round(safeAmd(r.collected_amd)))}</div>
+          <div class="muted">${t("company_dashboard_collected_label")}: ${formatAmd(Math.round(safeAmd(r.collected_amd)))}${collectedPctSuffix(safeAmd(r.collected_amd), safeAmd(r.sales_amd))}</div>
         </div>
       `
         )
@@ -216,7 +227,7 @@ function renderByChannelNumbers(salesByChannel, paymentsByChannel) {
         <div class="card">
           <strong>${escapeHtml(code)}</strong>
           <div class="muted">${t("company_dashboard_sales_label")}: ${formatAmd(Math.round(salesMap.get(code) || 0))}</div>
-          <div class="muted">${t("company_dashboard_collected_label")}: ${formatAmd(Math.round(paymentsMap.get(code) || 0))}</div>
+          <div class="muted">${t("company_dashboard_collected_label")}: ${formatAmd(Math.round(paymentsMap.get(code) || 0))}${collectedPctSuffix(paymentsMap.get(code) || 0, salesMap.get(code) || 0)}</div>
         </div>
       `
         )
@@ -245,7 +256,7 @@ function renderActualsOnlySalesSection(report, period) {
         <span class="stat-label">${t("company_dashboard_sales_label")}</span>
       </div>
       <div class="stat-card">
-        <span class="stat-value">${formatAmd(Math.round(Number(collectedAmd) || 0))}</span>
+        <span class="stat-value">${formatAmd(Math.round(Number(collectedAmd) || 0))}${collectedPctSuffix(Number(collectedAmd) || 0, Number(salesAmd) || 0)}</span>
         <span class="stat-label">${t("company_dashboard_collected_label")}</span>
       </div>
     </div>
