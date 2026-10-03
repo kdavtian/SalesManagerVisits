@@ -520,11 +520,12 @@ const estimatedDebtJoin = `
   ) collected ON true`;
 const estimatedDebtExpr = "GREATEST(erp.debt_amd - COALESCE(collected.amount, 0), 0)";
 
-// Debt as of a past date D, computed from full order/cashflow history
-// instead of the live ERP snapshot -- see docs/erp-sync-contract.md's
-// cashflow_lines entry. Not floored at zero like estimatedDebtExpr above:
-// a customer who has paid ahead can genuinely show a negative (credit)
-// balance as of a given date, and that's real information, not noise.
+// Debt as of a past date D, computed from the customer's opening balance
+// plus full order/cashflow history -- see docs/erp-sync-contract.md's
+// cashflow_lines entry and migration 083's balance0_amd. Not floored at
+// zero like estimatedDebtExpr above: a customer who has paid ahead can
+// genuinely show a negative (credit) balance as of a given date, and
+// that's real information, not noise.
 const asOfDebtJoin = `
   LEFT JOIN LATERAL (
     SELECT SUM(ol.revenue_amd) AS amount
@@ -536,7 +537,7 @@ const asOfDebtJoin = `
     FROM erp_cashflow_lines cf
     WHERE cf.erp_customer_id = erp.erp_customer_id AND cf.cashflow_date <= $__AS_OF_DATE__
   ) cashflow_asof ON true`;
-const asOfDebtExpr = "(COALESCE(orders_asof.amount, 0) - COALESCE(cashflow_asof.amount, 0))";
+const asOfDebtExpr = "(COALESCE(erp.balance0_amd, 0) + COALESCE(orders_asof.amount, 0) - COALESCE(cashflow_asof.amount, 0))";
 
 reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async (req, res) => {
   const { sales_channel, debt_only, date } = req.query;

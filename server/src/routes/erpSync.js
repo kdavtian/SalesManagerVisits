@@ -132,7 +132,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     return res.status(400).json({ error: "brand_volume must be an array" });
   }
 
-  const { erpIds, names, reps, debts, lastPayments, daysSince, agingBuckets, recentOrders, regionErpIds, regions, subregions } =
+  const { erpIds, names, reps, debts, balance0s, lastPayments, daysSince, agingBuckets, recentOrders, regionErpIds, regions, subregions } =
     transformErpCustomers(customers);
 
   const {
@@ -198,11 +198,11 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     if (erpIds.length) {
       await client.query(
         `INSERT INTO erp_customer_data
-           (erp_customer_id, customer_name, assigned_sales_rep, debt_amd, last_payment_date, days_since_payment, aging_bucket, recent_orders, synced_at)
-         SELECT erp_customer_id, customer_name, assigned_sales_rep, debt_amd, last_payment_date, days_since_payment, aging_bucket, recent_orders, now()
-         FROM unnest($1::text[], $2::text[], $3::text[], $4::numeric[], $5::date[], $6::int[], $7::text[], $8::jsonb[])
-           AS t(erp_customer_id, customer_name, assigned_sales_rep, debt_amd, last_payment_date, days_since_payment, aging_bucket, recent_orders)`,
-        [erpIds, names, reps, debts, lastPayments, daysSince, agingBuckets, recentOrders]
+           (erp_customer_id, customer_name, assigned_sales_rep, debt_amd, balance0_amd, last_payment_date, days_since_payment, aging_bucket, recent_orders, synced_at)
+         SELECT erp_customer_id, customer_name, assigned_sales_rep, debt_amd, balance0_amd, last_payment_date, days_since_payment, aging_bucket, recent_orders, now()
+         FROM unnest($1::text[], $2::text[], $3::text[], $4::numeric[], $5::numeric[], $6::date[], $7::int[], $8::text[], $9::jsonb[])
+           AS t(erp_customer_id, customer_name, assigned_sales_rep, debt_amd, balance0_amd, last_payment_date, days_since_payment, aging_bucket, recent_orders)`,
+        [erpIds, names, reps, debts, balance0s, lastPayments, daysSince, agingBuckets, recentOrders]
       );
     }
 

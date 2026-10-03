@@ -1,0 +1,13 @@
+-- The Castrol Excel Debits sheet's own "Balance0" column -- a fixed
+-- opening-balance figure per customer, read alongside "Debit" (-> debt_amd)
+-- but never forwarded to this app until now. Needed to correctly compute
+-- debt as of a past date: the as-of calculation used to anchor on today's
+-- live debt_amd and subtract what happened after the as-of date, because a
+-- pure SUM(orders) - SUM(cashflow) from scratch was reported live as wildly
+-- overstating historical debt -- root-caused to erp_cashflow_lines' history
+-- being much thinner than erp_order_lines' (see debtBalances.js's own
+-- history). Balance0 is exactly the missing piece: the true debt carried
+-- forward from before that thin cashflow history began, so
+-- balance0_amd + SUM(orders <= D) - SUM(cashflow <= D) is now the correct,
+-- complete running balance instead of a workaround anchored on "today".
+ALTER TABLE erp_customer_data ADD COLUMN balance0_amd NUMERIC;

@@ -721,6 +721,13 @@ async function render() {
     requestAnimationFrame(() => {
       app.scrollTop = scrollTop;
     });
+    // A restored view's DOM/closures are exactly as they were when the
+    // user left -- including whatever data they rendered with, which may
+    // no longer be current (e.g. map.js's markers after an edit made on a
+    // customer detail page visited in between). A view that cares opts in
+    // by attaching an onRestore() hook to its cleanup function; one that
+    // doesn't need this is unaffected.
+    currentCleanup?.onRestore?.();
     return;
   }
 

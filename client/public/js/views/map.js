@@ -108,10 +108,16 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
         cleanup = renderMap(root, navigate, relocateCustomerId, startInAddMode, startInPlanMode, focusCustomerId);
       });
     });
-  return () => {
+  const outerCleanup = () => {
     cancelled = true;
     cleanup();
   };
+  // Forwards to whatever renderMapInner's own cleanup currently is (see its
+  // own comment on onRestore) -- read live rather than captured once, since
+  // `cleanup` is only reassigned asynchronously once ensureLeaflet()
+  // resolves above.
+  outerCleanup.onRestore = () => cleanup.onRestore?.();
+  return outerCleanup;
 }
 
 function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = false, startInPlanMode = false, focusCustomerId = null) {
@@ -3160,7 +3166,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
   map.whenReady(loadCustomersCached);
 
-  return () => {
+  const cleanupMapInner = () => {
     if (watchId != null) navigator.geolocation.clearWatch(watchId);
     if (headingEventName) window.removeEventListener(headingEventName, onHeading);
     if (teamPollId) clearInterval(teamPollId);
@@ -3175,4 +3181,24 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     document.body.classList.remove("map-active");
     map.remove();
   };
+  // app.js's back-cache reattaches this exact same DOM/Leaflet instance on
+  // a "back" to #/map instead of calling this module again from scratch
+  // (see its own comment on backCache -- keeps the user's pan/zoom and any
+  // open popup exactly as they left them, far cheaper than rebuilding the
+  // whole map). That's the right call for a plain hop away and back, but
+  // it means nothing here ever re-fetches: editing a customer's name,
+  // location, or category on their detail page and tapping back to Map
+  // left the old values on screen until a full app reload (reported
+  // live). app.js calls this hook (if present) right after reattaching,
+  // so the marker set -- not the map's own pan/zoom, which Leaflet itself
+  // never lost -- gets refreshed with whatever changed while the rep was
+  // away. A popup that was open before leaving closes in the repaint
+  // rather than being reopened with stale content; reasonably rare (it
+  // only matters if the rep left it open, which the "Details" tap that
+  // sent them to the one screen that could invalidate it already implies
+  // they were done with for now) and far better than silently stale data.
+  cleanupMapInner.onRestore = () => {
+    loadCustomers();
+  };
+  return cleanupMapInner;
 }

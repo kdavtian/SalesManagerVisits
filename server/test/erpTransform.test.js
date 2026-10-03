@@ -52,6 +52,7 @@ test("transformErpCustomers: a well-formed entry maps every field", () => {
       customer_name: "Acme Garage",
       assigned_sales_rep: "SM YVN",
       debt_amd: 150000,
+      balance0_amd: 90000,
       last_payment_date: "2026-08-20",
       days_since_payment: 12,
       aging_bucket: "0-30",
@@ -62,6 +63,7 @@ test("transformErpCustomers: a well-formed entry maps every field", () => {
   assert.deepEqual(result.names, ["Acme Garage"]);
   assert.deepEqual(result.reps, ["SM YVN"]);
   assert.deepEqual(result.debts, [150000]);
+  assert.deepEqual(result.balance0s, [90000]);
   assert.deepEqual(result.lastPayments, ["2026-08-20"]);
   assert.deepEqual(result.daysSince, [12]);
   assert.deepEqual(result.agingBuckets, ["0-30"]);
@@ -96,6 +98,7 @@ test("transformErpCustomers: missing optional fields become null, not undefined/
   assert.equal(result.names[0], null);
   assert.equal(result.reps[0], null);
   assert.equal(result.debts[0], null);
+  assert.equal(result.balance0s[0], null);
   assert.equal(result.lastPayments[0], null);
   assert.equal(result.daysSince[0], null);
   assert.equal(result.agingBuckets[0], null);
