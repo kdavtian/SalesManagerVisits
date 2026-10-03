@@ -143,6 +143,22 @@
   background: color-mix(in srgb, var(--accent) 9%, transparent);
 }
 
+/* The multi-select Clear/Done footer (.sheet-actions-floating) bleeds out
+   to its container's own edges via negative margins sized for a full
+   bottom sheet's 20px/16px-plus-safe-area padding -- unscaled here, those
+   same offsets wildly overshot this popover's much smaller 7px padding,
+   so the footer rendered detached from the list above it and broke out
+   past the popover's own rounded corners instead of reading as its fixed
+   bottom edge (reported live as the whole filter looking like it "isn't
+   fixed"). Re-scaled to this popover's actual padding; no safe-area term
+   since this box floats near the tapped button, not against the device's
+   physical bottom edge. */
+.map-dimension-popover .sheet-actions-floating {
+  bottom: -7px;
+  margin: 8px -7px -7px;
+  padding: 8px 7px 7px;
+}
+
 @media (max-width: 390px) {
   .map-search-combined .activity-search-filter-btn,
   .orders-search-combined .activity-search-filter-btn {
