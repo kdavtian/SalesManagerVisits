@@ -1938,6 +1938,27 @@ input[type="search"]:focus-visible {
   padding-bottom: 15px;
 }
 
+/* The Home tab's Company Dashboard preview card already has its own
+   chevron (see dashboard.js) signalling it's tappable -- the shared
+   .report-drill-card accent underline on top of that read as an
+   unwanted "blue outline" around this specific card, reported live. Its
+   heading also sits inside .section-heading-row, whose .section-title-
+   inline child carries a 26px top margin meant for a standalone section
+   divider between unrelated blocks -- here it's the first thing inside
+   an already-padded card, so that margin was just empty space above the
+   heading, also reported live ("unnecessary free space on top of
+   card"). Scoped to this one card: the shared class is still used
+   as-is everywhere else (Reports' own drill-cards, none of which nest a
+   section heading inside them). */
+#company-dashboard-preview-card {
+  border-bottom: none;
+  padding-bottom: 16px;
+}
+
+#company-dashboard-preview-card .section-title-inline {
+  margin-top: 0;
+}
+
 .stat-value {
   font-size: 1.7rem;
   font-weight: 800;
@@ -3437,6 +3458,69 @@ label.checkbox-row input[type="checkbox"] {
 
 .leaderboard-prize-hint {
   font-size: 0.78rem;
+  text-align: right;
+  flex-shrink: 0;
+  max-width: 52%;
+}
+
+/* The heading and the prize-hint text used to vertically center-align
+   against each other (.section-heading-row's own align-items: center) --
+   fine when both sides are single lines, but the hint wraps to two short
+   lines at phone width, and centering its taller two-line block against
+   the heading's one line pushed its first line noticeably above the
+   heading text instead of lining up with it (reported live). Baseline
+   aligns the heading's text and the hint's first line on the same row
+   regardless of how many lines the hint wraps to. */
+.leaderboard-heading-row {
+  align-items: baseline;
+}
+
+/* Whole-row tap target to reveal the leaderboard below, same pattern as
+   .progress-card's own by-manager reveal (see dashboard.js) -- collapsed
+   by default so the board doesn't push every other Home tab card down
+   for someone who just wants today's own numbers first. */
+.leaderboard-toggle {
+  position: relative;
+  cursor: pointer;
+  padding-right: 28px;
+}
+
+.leaderboard-toggle-chevron {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  color: var(--text-dim);
+  display: flex;
+}
+
+.leaderboard-toggle-chevron svg {
+  transition: transform 0.2s ease;
+}
+
+.leaderboard-toggle[aria-expanded="true"] .leaderboard-toggle-chevron svg {
+  transform: rotate(180deg);
+}
+
+.leaderboard-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s ease;
+}
+
+.leaderboard-collapse.expanded {
+  grid-template-rows: 1fr;
+}
+
+.leaderboard-collapse-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .leaderboard-collapse,
+  .leaderboard-toggle-chevron svg {
+    transition: none;
+  }
 }
 
 .perf-row {

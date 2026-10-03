@@ -104,6 +104,11 @@ function companyDashboardPreviewHtml(planPreview) {
     { sales: 0, plan: 0, collected: 0 }
   );
   const pct = totals.plan > 0 ? Math.min(100, Math.round((totals.sales / totals.plan) * 100)) : 0;
+  // What fraction of actual sales has actually been collected in cash --
+  // distinct from pct above (sales/plan), which says nothing about how
+  // much of that sales figure was ever paid for. Omitted when there's no
+  // sales to divide by.
+  const collectedPct = totals.sales > 0 ? Math.round((totals.collected / totals.sales) * 100) : null;
   return `
     <button type="button" class="card report-drill-card" id="company-dashboard-preview-card">
       <div class="section-heading-row">
@@ -115,7 +120,7 @@ function companyDashboardPreviewHtml(planPreview) {
         <span class="muted"> / ${formatAmd(Math.round(totals.plan))}${totals.plan ? ` (${pct}%)` : ""}</span>
       </div>
       <div class="progress-bar"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
-      <p class="muted" style="margin:8px 0 0;">${t("company_dashboard_collected_label")}: ${formatAmd(Math.round(totals.collected))}</p>
+      <p class="muted" style="margin:8px 0 0;">${t("company_dashboard_collected_label")}: ${formatAmd(Math.round(totals.collected))}${collectedPct !== null ? ` (${collectedPct}%)` : ""}</p>
     </button>
   `;
 }
@@ -313,12 +318,17 @@ export async function renderDashboard(root, navigate) {
 
     ${
       summary.points_leaderboard?.length
-        ? `<div>
-           <div class="section-heading-row">
+        ? `<div class="leaderboard-toggle" id="leaderboard-toggle" role="button" tabindex="0" aria-expanded="false" aria-controls="leaderboard-section" aria-label="${t("toggle_leaderboard_aria")}">
+           <div class="section-heading-row leaderboard-heading-row">
              <h2 class="section-title section-title-inline">${t("points_leaderboard")}</h2>
              <span class="muted leaderboard-prize-hint">${escapeHtml(settings.incentive_message || t("points_leaderboard_prize_hint"))}</span>
            </div>
-           <div class="card-list" id="points-leaderboard"></div>
+           <span class="leaderboard-toggle-chevron" aria-hidden="true">${icons.chevronDown}</span>
+           </div>
+           <div class="leaderboard-collapse" id="leaderboard-section">
+             <div class="leaderboard-collapse-inner">
+               <div class="card-list" id="points-leaderboard"></div>
+             </div>
            </div>`
         : ""
     }
@@ -426,6 +436,23 @@ export async function renderDashboard(root, navigate) {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
         toggleByManager();
+      }
+    });
+  }
+
+  const leaderboardToggle = container.querySelector("#leaderboard-toggle");
+  const leaderboardSection = container.querySelector("#leaderboard-section");
+  if (leaderboardToggle && leaderboardSection) {
+    const toggleLeaderboard = () => {
+      const expanded = leaderboardToggle.getAttribute("aria-expanded") === "true";
+      leaderboardToggle.setAttribute("aria-expanded", String(!expanded));
+      leaderboardSection.classList.toggle("expanded", !expanded);
+    };
+    leaderboardToggle.addEventListener("click", toggleLeaderboard);
+    leaderboardToggle.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggleLeaderboard();
       }
     });
   }
