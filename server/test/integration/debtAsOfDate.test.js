@@ -227,6 +227,30 @@ test("GET /api/debt-balances?date=: last_payment_date is bounded to payments on 
 // and no in-app payment, only the 2026-01-15 cashflow payment -- live mode
 // must surface it from cashflow instead of showing nothing.
 test("GET /api/debt-balances (live): last_payment_date falls back to erp_cashflow_lines when the ERP sync's own column is blank", async () => {
+  // Unlike the as-of branch (which drives from `customers` and tolerates a
+  // missing erp_customer_data row), the live branch requires one to exist
+  // with a non-zero debt_amd -- and erp_customer_data/erp_cashflow_lines
+  // are both TRUNCATE-and-replaced wholesale by POST /api/erp-sync (see
+  // that route), which other integration test files call while this one
+  // runs concurrently (node --test runs files in parallel). Re-asserting
+  // this fixture's rows immediately before the request, rather than
+  // trusting test.before()'s one-time insert to still be there, closes
+  // that race instead of leaving this test flaky under the full suite.
+  await pool.query(
+    `INSERT INTO erp_customer_data (erp_customer_id, customer_name, debt_amd, synced_at)
+     VALUES ($1, 'Itest Debt Customer', 100000, now())
+     ON CONFLICT (erp_customer_id) DO UPDATE SET debt_amd = EXCLUDED.debt_amd, synced_at = now()`,
+    [ERP_CUSTOMER_ID]
+  );
+  await pool.query(
+    `INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd)
+     SELECT $1, '2026-01-15', 20000
+     WHERE NOT EXISTS (
+       SELECT 1 FROM erp_cashflow_lines WHERE erp_customer_id = $1 AND cashflow_date = '2026-01-15'
+     )`,
+    [ERP_CUSTOMER_ID]
+  );
+
   const res = await apiRequest("/api/debt-balances", { cookie: adminCookie });
   assert.equal(res.status, 200);
   const row = res.data.rows.find((r) => r.customer_id === ERP_CUSTOMER_ID);
