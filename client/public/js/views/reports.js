@@ -621,11 +621,11 @@ async function renderCashCustodyReport(root, navigate) {
     body.innerHTML = `
       <div class="stat-grid">
         <div class="stat-card">
-          <span class="stat-value">${formatAmd(Number(totals.total_unreconciled_amd))}</span>
+          <span class="stat-value stat-value-amd">${amdWithUnitHtml(Number(totals.total_unreconciled_amd))}</span>
           <span class="stat-label">${t("report_cash_custody_total_unreconciled")}</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${formatAmd(Number(totals.in_transit_amd))}</span>
+          <span class="stat-value stat-value-amd">${amdWithUnitHtml(Number(totals.in_transit_amd))}</span>
           <span class="stat-label">${t("report_cash_custody_in_transit")}</span>
         </div>
       </div>
@@ -930,11 +930,11 @@ async function renderSalesBudgetReport(root, navigate) {
         ${syncBadgeHtml(sync)}
         <div class="stat-grid">
           <div class="stat-card">
-            <span class="stat-value">${formatAmd(totals.sales_amd)}</span>
+            <span class="stat-value stat-value-amd">${amdWithUnitHtml(totals.sales_amd)}</span>
             <span class="stat-label">${t("report_sales_budget_sales")}</span>
           </div>
           <div class="stat-card">
-            <span class="stat-value">${formatAmd(totals.budget_amd)}</span>
+            <span class="stat-value stat-value-amd">${amdWithUnitHtml(totals.budget_amd)}</span>
             <span class="stat-label">${t("report_sales_budget_budget")}</span>
           </div>
           <div class="stat-card">
@@ -942,7 +942,7 @@ async function renderSalesBudgetReport(root, navigate) {
             <span class="stat-label">${t("report_sales_budget_achieved")}</span>
           </div>
           <div class="stat-card">
-            <span class="stat-value">${formatAmd(totals.collected_amd)}</span>
+            <span class="stat-value stat-value-amd">${amdWithUnitHtml(totals.collected_amd)}</span>
             <span class="stat-label">${t("report_sales_budget_collected")}</span>
           </div>
         </div>
@@ -1120,7 +1120,7 @@ async function renderDailyManagementReport(root, navigate) {
             .map(
               ([label, amd, liters, orders]) => `
             <div class="stat-card">
-              <span class="stat-value">${formatAmd(amd)}</span>
+              <span class="stat-value stat-value-amd">${amdWithUnitHtml(amd)}</span>
               <span class="stat-label">${label}</span>
               <span class="muted">${liters != null ? `${Number(liters).toLocaleString()} L` : "—"} · ${orders != null ? orders : "—"}</span>
             </div>`
@@ -1153,7 +1153,7 @@ async function renderDailyManagementReport(root, navigate) {
             .map(
               ([label, amd, customers]) => `
             <div class="stat-card">
-              <span class="stat-value">${formatAmd(amd)}</span>
+              <span class="stat-value stat-value-amd">${amdWithUnitHtml(amd)}</span>
               <span class="stat-label">${label}</span>
               <span class="muted">${customers != null ? customers : "—"}</span>
             </div>`

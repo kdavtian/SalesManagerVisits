@@ -238,14 +238,20 @@ export async function renderDashboard(root, navigate) {
              through Friday (see computeWeekProgress in dashboard.js on the
              server). planned_to_date only counts approved plans, so it can
              legitimately be 0 (nobody's planned this week yet). -->
-        <span class="progress-fraction">${totals.visited_to_date}<span class="progress-fraction-total">/${totals.planned_to_date}</span></span>
+        <span class="progress-fraction">${totals.visited_to_date}${totals.planned_to_date ? `<span class="progress-fraction-total">/${totals.planned_to_date}</span>` : ""}</span>
         <div class="progress-side">
           <div class="progress-side-row"><span class="dot dot-success"></span>${totals.visited_today} ${t("stat_visited_today")}</div>
           <div class="progress-side-row"><span class="dot dot-warning"></span>${remaining} ${t("stat_remaining")}</div>
           <div class="progress-side-row"><span class="dot dot-danger"></span>${totals.overdue} ${t("stat_overdue")}</div>
         </div>
       </div>
-      <div class="progress-bar"><div class="progress-bar-fill" style="width:${totals.planned_to_date ? Math.round((totals.visited_to_date / totals.planned_to_date) * 100) : 0}%"></div></div>
+      ${
+        // Nothing planned yet this week: "5/0" and an empty bar read as a
+        // broken ratio. Say what is true instead.
+        totals.planned_to_date
+          ? `<div class="progress-bar"><div class="progress-bar-fill" style="width:${Math.round((totals.visited_to_date / totals.planned_to_date) * 100)}%"></div></div>`
+          : `<p class="muted progress-no-plan">${t("progress_no_plan")}</p>`
+      }
       ${summary.by_manager?.length ? `<span class="progress-card-chevron" aria-hidden="true">${icons.chevronDown}</span>` : ""}
     </div>
 

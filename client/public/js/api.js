@@ -1,4 +1,5 @@
 import { APP_VERSION } from "./version.js";
+import { t } from "./i18n.js";
 
 // The bottom-nav tabs (Dashboard/Activity/Customers/Orders) each re-fetch
 // their list/summary data from scratch on every visit, showing a "Loading"
@@ -72,7 +73,13 @@ async function doRequest(path, options) {
       // itself is idempotent about being shown twice.
       import("./lockdownScreen.js").then((m) => m.showLockdownOverlay());
     }
-    const err = new Error(body?.message || body?.error || `Request failed (${res.status})`);
+    // 45 server routes answer a role check with the bare English "Not
+    // allowed", which then showed as a red error line on whatever screen the
+    // request came from (Warehouse, Reports, Recorded... reached by link or
+    // bookmark). Say what it means, in the user's language. Specific 403
+    // messages ("Only the recipient can confirm this handoff") are left alone.
+    const message = res.status === 403 && (body?.message || body?.error) === "Not allowed" ? t("not_available_for_role") : body?.message || body?.error;
+    const err = new Error(message || `Request failed (${res.status})`);
     err.status = res.status;
     err.body = body;
     throw err;

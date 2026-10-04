@@ -467,10 +467,13 @@ export function formatAmd(value) {
 // Same amount as formatAmd, but with the currency unit in its own smaller,
 // dimmer span so a large total in a half-width stat card reads as a number
 // first and a unit second -- and the number+unit pair stays on one line
-// instead of "AMD" dropping onto a second row of the card.
+// instead of "AMD" dropping onto a second row of the card. The number is a
+// no-break span; the plain space before the unit is the only break point, so
+// on a very narrow card just the unit can drop under the number and the
+// number itself is never split or clipped.
 export function amdWithUnitHtml(value) {
   if (value == null) return "";
-  return `${Math.round(Number(value)).toLocaleString()}<span class="stat-unit">${escapeHtml(t("amd"))}</span>`;
+  return `<span class="stat-num">${Math.round(Number(value)).toLocaleString()}</span> <span class="stat-unit">${escapeHtml(t("amd"))}</span>`;
 }
 
 // The Castrol sync's own aging_bucket strings, translated for display. A
