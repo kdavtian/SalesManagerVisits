@@ -906,6 +906,7 @@ const dict = {
     aging_30_plus: "30+ days",
     aging_no_payment: "No payment found",
     aging_data_error: "Data error - review",
+    aging_unspecified: "Not specified",
     location_verified: "Location verified",
     location_mismatch_away: "Mismatch",
     away: "away",
@@ -2259,6 +2260,7 @@ const dict = {
     aging_30_plus: "30+ օր",
     aging_no_payment: "Վճարում չի հայտնաբերվել",
     aging_data_error: "Տվյալների սխալ - ստուգել",
+    aging_unspecified: "Նշված չէ",
 
     location_verified: "Տեղադրությունը հաստատված է",
     location_mismatch_away: "Անհամապատասխանություն",

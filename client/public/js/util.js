@@ -463,6 +463,33 @@ export function formatAmd(value) {
   return `${Math.round(Number(value)).toLocaleString()} ${t("amd")}`;
 }
 
+// Same amount as formatAmd, but with the currency unit in its own smaller,
+// dimmer span so a large total in a half-width stat card reads as a number
+// first and a unit second -- and the number+unit pair stays on one line
+// instead of "AMD" dropping onto a second row of the card.
+export function amdWithUnitHtml(value) {
+  if (value == null) return "";
+  return `${Math.round(Number(value)).toLocaleString()}<span class="stat-unit">${escapeHtml(t("amd"))}</span>`;
+}
+
+// The Castrol sync's own aging_bucket strings, translated for display. A
+// null/blank bucket (a customer with no aging data at all) arrives from the
+// debt reports as "—" or "" -- shown as a real label rather than a bare dash.
+const AGING_BUCKET_KEYS = {
+  "0-7 days": "aging_0_7",
+  "8-14 days": "aging_8_14",
+  "15-30 days": "aging_15_30",
+  "30+ days": "aging_30_plus",
+  "No payment found": "aging_no_payment",
+  "Data error - review": "aging_data_error",
+};
+export function agingBucketLabel(bucket) {
+  const key = AGING_BUCKET_KEYS[bucket];
+  if (key) return t(key);
+  if (bucket == null || bucket === "" || bucket === "—") return t("aging_unspecified");
+  return String(bucket);
+}
+
 // A second row under an ERP order line item (sales.js's own order-detail
 // sheet, and customerDetail.js's per-customer equivalent) showing that
 // line's discount_amd (the source Excel Orders sheet's own per-product

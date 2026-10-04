@@ -2,7 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
-import { REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, CATEGORY_LIST, formatAmd, channelDisplayLabel, syncBadgeHtml, formatDateDMY, parseDateOnly } from "../util.js";
+import { REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, CATEGORY_LIST, formatAmd, amdWithUnitHtml, agingBucketLabel, channelDisplayLabel, syncBadgeHtml, formatDateDMY, parseDateOnly } from "../util.js";
 
 // "all" (not "") for the All-time option: every one of this array's three
 // callers builds its request params with
@@ -760,7 +760,7 @@ async function renderCustomerDebtReport(root, navigate) {
   root.innerHTML = `
     <div class="detail-view">
       ${reportHeaderHtml("report_customer_debt_name")}
-      <form id="report-filters" class="report-filter-form">
+      <form id="report-filters" class="report-filter-form report-debt-filters">
         <div class="pill-date-filter-row">
           <div class="pill-date-filter-wrap">
             <button type="button" class="pill-date-filter-btn" tabindex="-1" aria-hidden="true">
@@ -769,7 +769,7 @@ async function renderCustomerDebtReport(root, navigate) {
             </button>
             <input type="date" class="pill-date-picker-input" id="report-debt-as-of-input" name="date" value="" max="${currentYearMonthDay()}" aria-label="${t("debt_balances_as_of_date")}" />
           </div>
-          <button type="button" class="chip" id="report-debt-as-of-clear" hidden>${t("debt_balances_as_of_clear")}</button>
+          <button type="button" class="pill-date-clear-btn" id="report-debt-as-of-clear" hidden aria-label="${t("debt_balances_as_of_clear")}" title="${t("debt_balances_as_of_clear")}">${icons.close}</button>
         </div>
         <select name="sales_channel"><option value="">${t("all_channels")}</option></select>
         ${selectHtml(
@@ -827,11 +827,11 @@ async function renderCustomerDebtReport(root, navigate) {
         ${syncBadgeHtml(sync)}
         <div class="stat-grid">
           <div class="stat-card">
-            <span class="stat-value report-debt-total-value">${formatAmd(Number(totals.total_debt_amd))}</span>
+            <span class="stat-value report-debt-total-value">${amdWithUnitHtml(Number(totals.total_debt_amd))}</span>
             <span class="stat-label">${t("report_customer_debt_total_debt")}</span>
           </div>
           <div class="stat-card">
-            <span class="stat-value">${totals.customers_with_debt}</span>
+            <span class="stat-value report-debt-total-value">${totals.customers_with_debt}</span>
             <span class="stat-label">${t("report_customer_debt_customers_with_debt")}</span>
           </div>
         </div>
@@ -856,8 +856,8 @@ async function renderCustomerDebtReport(root, navigate) {
                   .map(
                     (b) => `
               <div class="card report-row">
-                <span>${escapeHtml(b.aging_bucket)}</span>
-                <strong>${formatAmd(Number(b.total_debt_amd))} (${b.customer_count})</strong>
+                <span>${escapeHtml(agingBucketLabel(b.aging_bucket))}</span>
+                <strong class="report-row-amount">${formatAmd(Number(b.total_debt_amd))} <span class="muted">(${b.customer_count})</span></strong>
               </div>`
                   )
                   .join("")
@@ -874,13 +874,16 @@ async function renderCustomerDebtReport(root, navigate) {
                     const collected = Number(c.collected_since_sync_amd);
                     return `
               <div class="card report-row-multiline">
-                <strong>${escapeHtml(c.customer_name)}</strong>
-                <span class="muted">${escapeHtml(channelDisplayLabel(c.assigned_sales_rep))} · ${c.aging_bucket ? escapeHtml(c.aging_bucket) : "—"}${c.days_since_payment != null ? ` · ${c.days_since_payment}d` : ""}</span>
-                <span class="muted">${formatAmd(Number(c.estimated_debt_amd))}${
+                <div class="report-debt-customer-top">
+                  <strong class="report-debt-customer-name">${escapeHtml(c.customer_name)}</strong>
+                  <strong class="report-row-amount">${formatAmd(Number(c.estimated_debt_amd))}</strong>
+                </div>
+                <span class="muted">${escapeHtml(channelDisplayLabel(c.assigned_sales_rep))} · ${escapeHtml(agingBucketLabel(c.aging_bucket))}${c.days_since_payment != null ? ` · ${c.days_since_payment}d` : ""}</span>${
                       collected > 0
-                        ? ` <span class="sync-adjusted-note">(${formatAmd(Number(c.debt_amd))} ${t("report_customer_debt_per_sync")} − ${formatAmd(collected)} ${t("report_customer_debt_collected_since")})</span>`
+                        ? `
+                <span class="muted sync-adjusted-note">${formatAmd(Number(c.debt_amd))} ${t("report_customer_debt_per_sync")} − ${formatAmd(collected)} ${t("report_customer_debt_collected_since")}</span>`
                         : ""
-                    }</span>
+                    }
               </div>`;
                   })
                   .join("")

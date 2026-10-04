@@ -1984,7 +1984,25 @@ input[type="search"]:focus-visible {
    balance amounts) already reads in. */
 .report-debt-total-value {
   font-size: 1.3rem;
+  /* Scales down a little on narrow phones so a 9-10 digit total plus its
+     unit still fits the half-width card on one line. Both stat cards on
+     this page share this class so the figure and the customer count read
+     as the same kind of number (they used to differ in size and colour). */
+  font-size: clamp(1.05rem, 5.4vw, 1.4rem);
   color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Currency unit next to a big figure (util.js amdWithUnitHtml): smaller and
+   dimmer than the number so the number carries the card. */
+.stat-unit {
+  margin-left: 0.25em;
+  font-size: 0.6em;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--text-dim);
 }
 
 .stat-sublabel {
@@ -5091,8 +5109,34 @@ label.checkbox-row input[type="checkbox"] {
   white-space: nowrap;
 }
 
+/* The Sales/Collected/Plan cards used to sit two-up in a grid whose columns
+   (1fr = minmax(auto, 1fr)) could not shrink below their nowrap amount, so a
+   figure like "2,659,000 AMD (65%)" pushed the grid wider than the screen --
+   #app (overflow-x: auto) then became draggable sideways and the whole page
+   shifted, with the Plan card cut off at the right edge. One card per row on
+   phones (each amount fits comfortably), two-up again on wider screens, and
+   minmax(0, ...) so a column can never again be forced wider than its share. */
+.company-dashboard-view .stat-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 520px) {
+  .company-dashboard-view .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Safety net: whatever a future figure does, this page clips rather than
+   becoming horizontally scrollable. */
+.company-dashboard-view {
+  overflow-x: clip;
+}
+
+/* Wraps between the actual and the target (each stays unbroken, below)
+   instead of overflowing when both are very large. */
 .company-dashboard-view .perf-kpi-main {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  row-gap: 2px;
 }
 
 .company-dashboard-view .perf-kpi-actual,
@@ -7926,6 +7970,7 @@ form select,
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   /* The Documents report renders these as <a href> download links (a plain
      <div> can't trigger a browser download) -- override the default
      anchor underline/color so it still reads as a card row, not a link. */
@@ -7939,6 +7984,75 @@ form select,
   gap: 2px;
   align-items: flex-start;
   text-align: left;
+}
+
+.report-row-amount {
+  white-space: nowrap;
+  text-align: right;
+}
+
+/* Customer debt list card: name on the left, the debt figure (the point of
+   the row) bold on the right, channel/aging underneath. */
+.report-debt-customer-top {
+  align-self: stretch;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.report-debt-customer-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Customer debt filters: As-of pill, channel and debt-only selects stacked
+   as three equal full-width controls. Before, the channel select shared a
+   line with the date pill and was stretched to the pill's height while the
+   other select (on its own line) kept its natural one; the pill row's own
+   16px side padding also pushed the pill off the selects' left edge. */
+.report-debt-filters {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+}
+
+.report-debt-filters .pill-date-filter-row {
+  padding: 0;
+  align-items: stretch;
+}
+
+.report-debt-filters .pill-date-filter-btn {
+  min-height: 46px;
+}
+
+.report-debt-filters select {
+  flex: none;
+  width: 100%;
+  min-height: 46px;
+}
+
+.pill-date-clear-btn {
+  flex: 0 0 46px;
+  width: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.pill-date-clear-btn[hidden] {
+  display: none;
+}
+
+.pill-date-clear-btn svg {
+  width: 18px;
+  height: 18px;
 }
 
 /* A day whose cash-reconciliation difference exceeds the server's alert
