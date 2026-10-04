@@ -172,7 +172,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       <button type="button" class="action-btn" id="navigate-btn">
         <span>${icons.compass}</span>${t("navigate")}
       </button>
-      ${customer.erp_synced_at ? `<button class="action-btn" id="order-history-btn"><span>${icons.box}</span>${t("order_history_short")}</button>` : ""}
+      ${hasErpOrderHistory(customer) ? `<button class="action-btn" id="order-history-btn"><span>${icons.box}</span>${t("order_history_short")}</button>` : ""}
       <button type="button" class="action-btn" id="new-order-btn">
         <span>${icons.cart}</span>${t("new_order")}
       </button>
@@ -258,8 +258,17 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   }
 }
 
+// A customer can have full ERP order history (erp_order_lines) without a
+// debt-summary row (erp_customer_data) -- the sync's customers[] list is
+// narrowed to current debt or orders in the last 180 days, so a paid-off
+// customer whose last order is older than that has history but no summary
+// row. Gating everything on erp_synced_at hid that customer's orders entirely.
+function hasErpOrderHistory(customer) {
+  return Boolean(customer.erp_synced_at || (customer.erp_customer_id && customer.erp_last_order_date));
+}
+
 function renderErpCard(customer, erpOrders) {
-  if (!customer.erp_synced_at) return "";
+  if (!customer.erp_synced_at) return customer.erp_customer_id && customer.erp_last_order_date ? renderErpOrdersOnlyCard(customer, erpOrders) : "";
 
   const debt = Number(customer.erp_debt_amd) || 0;
   const collectedSinceSync = Number(customer.collected_since_sync_amd) || 0;
@@ -318,6 +327,35 @@ function renderErpCard(customer, erpOrders) {
         <span class="detail-stat-icon">${icons.clock}</span>
         <span class="detail-stat-value">${customer.last_visit_at ? new Date(customer.last_visit_at).toLocaleDateString() : "—"}</span>
         <span class="detail-stat-label">${t("last_visit")}</span>
+      </div>
+    </div>
+  `;
+}
+
+// Same two order tiles as the full card, without the debt/aging tiles: with
+// no debt-summary row there is no debt figure to show, and "0 AMD owed"
+// would be a guess.
+function renderErpOrdersOnlyCard(customer, erpOrders) {
+  const orders = Array.isArray(erpOrders) ? erpOrders : [];
+  const now = new Date();
+  const salesThisMonth = orders
+    .filter((o) => {
+      const d = parseDateOnly(o.order_date);
+      return d && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    })
+    .reduce((sum, o) => sum + Number(o.total_amd), 0);
+  const lastOrderDate = parseDateOnly(customer.erp_last_order_date)?.toLocaleDateString();
+  return `
+    <div class="detail-stat-grid">
+      <div class="detail-stat-tile">
+        <span class="detail-stat-icon">${icons.cart}</span>
+        <span class="detail-stat-value">${formatAmd(salesThisMonth)}</span>
+        <span class="detail-stat-label">${t("sales_this_month")}</span>
+      </div>
+      <div class="detail-stat-tile">
+        <span class="detail-stat-icon">${icons.box}</span>
+        <span class="detail-stat-value">${lastOrderDate ? escapeHtml(lastOrderDate) : "—"}</span>
+        <span class="detail-stat-label">${t("last_order")}</span>
       </div>
     </div>
   `;
