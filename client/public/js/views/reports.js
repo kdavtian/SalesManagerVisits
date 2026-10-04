@@ -773,6 +773,25 @@ async function channelOptions() {
   return cachedChannelOptions;
 }
 
+// Shrinks the "AMD" unit first (down to 40%), then the whole figure, until a
+// no-wrap amount fits its card -- so a very large total never gets clipped to "…".
+function fitReportStatValue(el) {
+  if (!el) return;
+  const unit = el.querySelector(".stat-unit");
+  el.style.fontSize = "";
+  if (unit) unit.style.fontSize = "";
+  const overflows = () => el.scrollWidth > el.clientWidth + 1;
+  if (!overflows()) return;
+  if (unit) {
+    for (let pct = 55; pct >= 40 && overflows(); pct -= 5) unit.style.fontSize = `${pct}%`;
+  }
+  let size = parseFloat(getComputedStyle(el).fontSize);
+  while (overflows() && size > 11) {
+    size -= 1;
+    el.style.fontSize = `${size}px`;
+  }
+}
+
 async function renderCustomerDebtReport(root, navigate) {
   root.innerHTML = `
     <div class="detail-view">
@@ -844,7 +863,7 @@ async function renderCustomerDebtReport(root, navigate) {
         ${syncBadgeHtml(sync)}
         <div class="stat-grid">
           <div class="stat-card">
-            <span class="stat-value report-debt-total-value">${amdWithUnitHtml(Number(totals.total_debt_amd))}</span>
+            <span class="stat-value report-debt-total-value" id="report-debt-total-value">${amdWithUnitHtml(Number(totals.total_debt_amd))}</span>
             <span class="stat-label">${t("report_customer_debt_total_debt")}</span>
           </div>
           <div class="stat-card">
@@ -895,7 +914,8 @@ async function renderCustomerDebtReport(root, navigate) {
                   <strong class="report-debt-customer-name">${escapeHtml(c.customer_name)}</strong>
                   <strong class="report-row-amount">${formatAmd(Number(c.estimated_debt_amd))}</strong>
                 </div>
-                <span class="muted">${escapeHtml(channelDisplayLabel(c.assigned_sales_rep))} · ${escapeHtml(agingBucketLabel(c.aging_bucket))}${c.days_since_payment != null ? ` · ${c.days_since_payment}d` : ""}</span>${
+                <span class="muted">${t("customer_id_label")}: ${escapeHtml(c.erp_customer_id || "—")} · ${escapeHtml(channelDisplayLabel(c.assigned_sales_rep))}</span>
+                <span class="muted">${t("debt_balances_last_payment")}: ${c.last_payment_date ? escapeHtml(formatDateDMY(c.last_payment_date)) : t("report_customer_debt_no_payment")}</span>${
                       collected > 0
                         ? `
                 <span class="muted sync-adjusted-note">${formatAmd(Number(c.debt_amd))} ${t("report_customer_debt_per_sync")} − ${formatAmd(collected)} ${t("report_customer_debt_collected_since")}</span>`
@@ -908,6 +928,7 @@ async function renderCustomerDebtReport(root, navigate) {
           }
         </div>
       `;
+      fitReportStatValue(body.querySelector("#report-debt-total-value"));
     } catch (err) {
       body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     }

@@ -1945,12 +1945,10 @@ input[type="search"]:focus-visible {
   cursor: pointer;
   font: inherit;
   color: inherit;
-  /* A drill-down card sharing the base .stat-card look needs some cue that
-     it's interactive, and unlike the Customers stat pills these sit in a
-     grid of otherwise-static report cards, so the accent underline is what
-     separates the tappable ones from their read-only neighbours. */
-  border-bottom: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
-  padding-bottom: 15px;
+  /* No accent underline/outline: it read as an unwanted blue outline on the
+     Payments/Reports cards. Tappability is signalled by the pointer cursor
+     and the card's own press state. */
+  padding-bottom: 16px;
 }
 
 /* The Home tab's Company Dashboard preview card already has its own
@@ -2023,8 +2021,9 @@ input[type="search"]:focus-visible {
   font-size: clamp(1.05rem, 5.4vw, 1.4rem);
   color: var(--text);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* No ellipsis: a clipped "…" hides the amount. fitReportStatValue() in
+     reports.js shrinks the AMD unit first, then the figure, until it fits. */
+  overflow: visible;
 }
 
 /* Currency unit next to a big figure (util.js amdWithUnitHtml): smaller and
@@ -3839,7 +3838,7 @@ label.checkbox-row input[type="checkbox"] {
 /* One channel's own accent color pulled through so its aggregate/individual
    bars visually match the rest of the app's progress bars. */
 .perf-aggregate-card {
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border: 1px solid var(--border);
 }
 
 .perf-bar-main {
@@ -8073,9 +8072,16 @@ form select,
    other select (on its own line) kept its natural one; the pill row's own
    16px side padding also pushed the pill off the selects' left edge. */
 .report-debt-filters {
-  flex-direction: column;
-  flex-wrap: nowrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
   align-items: stretch;
+}
+
+/* The as-of pill spans the full width; channel and debt-only share the
+   next row, two equal columns. */
+.report-debt-filters .pill-date-filter-row {
+  grid-column: 1 / -1;
 }
 
 .report-debt-filters .pill-date-filter-row {
@@ -8090,7 +8096,9 @@ form select,
 .report-debt-filters select {
   flex: none;
   width: 100%;
+  min-width: 0;
   min-height: 46px;
+  text-overflow: ellipsis;
 }
 
 .pill-date-clear-btn {
@@ -9931,17 +9939,23 @@ form select,
 /* F12: with no social links the toolbar row was an empty 44px band holding
    two right-aligned buttons. Pull the buttons up beside the first facts
    instead (those facts reserve room on the right). */
-.detail-facts-card-actions:has(.detail-facts-card-actions-social:empty) {
+.detail-facts-card-actions {
+  /* Stacks above the facts below it: in the compact layout those overlap
+     the buttons, and a later sibling would otherwise swallow the tap. */
+  position: relative;
+  z-index: 2;
+}
+.detail-facts-card-actions.is-compact {
   margin-bottom: -44px;
   justify-content: flex-end;
   flex-wrap: nowrap;
   pointer-events: none;
 }
-.detail-facts-card-actions:has(.detail-facts-card-actions-social:empty) .detail-facts-card-actions-primary {
+.detail-facts-card-actions.is-compact .detail-facts-card-actions-primary {
   pointer-events: auto;
 }
-.detail-facts-card-actions:has(.detail-facts-card-actions-social:empty) + .detail-fact,
-.detail-facts-card-actions:has(.detail-facts-card-actions-social:empty) + .detail-fact + .detail-fact {
+.detail-facts-card-actions.is-compact + .detail-fact,
+.detail-facts-card-actions.is-compact + .detail-fact + .detail-fact {
   padding-right: 100px;
   min-height: 22px;
 }

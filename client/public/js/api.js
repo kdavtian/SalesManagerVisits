@@ -1,5 +1,6 @@
 import { APP_VERSION } from "./version.js";
 import { t } from "./i18n.js";
+import { patchCachedCustomer, removeCachedCustomer, dropCachedCustomerLists } from "./listCache.js";
 
 // The bottom-nav tabs (Dashboard/Activity/Customers/Orders) each re-fetch
 // their list/summary data from scratch on every visit, showing a "Loading"
@@ -112,10 +113,24 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/customers${qs ? `?${qs}` : ""}`);
   },
-  createCustomer: (data) => json("/customers", "POST", data),
+  createCustomer: async (data) => {
+    const created = await json("/customers", "POST", data);
+    await dropCachedCustomerLists();
+    return created;
+  },
   getCustomer: (id) => request(`/customers/${id}`),
-  updateCustomer: (id, data) => json(`/customers/${id}`, "PATCH", data),
-  deleteCustomer: (id) => request(`/customers/${id}`, { method: "DELETE" }),
+  updateCustomer: async (id, data) => {
+    const updated = await json(`/customers/${id}`, "PATCH", data);
+    // Patch with what the server returned (falling back to what we sent) so
+    // the Customers list is already right when the rep navigates back.
+    await patchCachedCustomer(id, updated && typeof updated === "object" && !Array.isArray(updated) ? updated : data);
+    return updated;
+  },
+  deleteCustomer: async (id) => {
+    const result = await request(`/customers/${id}`, { method: "DELETE" });
+    await removeCachedCustomer(id);
+    return result;
+  },
   customerCheckins: (id) => request(`/customers/${id}/checkins`),
   customerPlannedVisits: (id) => request(`/customers/${id}/planned-visits`),
   customerOrderedProducts: (id) => request(`/customers/${id}/ordered-products`),

@@ -118,7 +118,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
            fills it in -- left empty (zero width, so space-between still pins
            the right group to the edge) for any customer with no profiles
            linked yet. -->
-      <div class="detail-facts-card-actions">
+      <div class="detail-facts-card-actions is-compact">
         <span class="detail-facts-card-actions-social customer-social-section"></span>
         <div class="detail-facts-card-actions-primary">
           ${
@@ -332,9 +332,9 @@ function renderErpCard(customer, erpOrders) {
   `;
 }
 
-// Same two order tiles as the full card, without the debt/aging tiles: with
-// no debt-summary row there is no debt figure to show, and "0 AMD owed"
-// would be a guess.
+// Same four tiles as the full card. With no debt-summary row the ERP sync
+// found no current debt for this customer (its customers[] list always
+// includes anyone who owes), so the debt tile reads 0.
 function renderErpOrdersOnlyCard(customer, erpOrders) {
   const orders = Array.isArray(erpOrders) ? erpOrders : [];
   const now = new Date();
@@ -353,9 +353,19 @@ function renderErpOrdersOnlyCard(customer, erpOrders) {
         <span class="detail-stat-label">${t("sales_this_month")}</span>
       </div>
       <div class="detail-stat-tile">
+        <span class="detail-stat-icon">${icons.payment}</span>
+        <span class="detail-stat-value">${formatAmd(0)}</span>
+        <span class="detail-stat-label">${t("outstanding_debt")}</span>
+      </div>
+      <div class="detail-stat-tile">
         <span class="detail-stat-icon">${icons.box}</span>
         <span class="detail-stat-value">${lastOrderDate ? escapeHtml(lastOrderDate) : "—"}</span>
         <span class="detail-stat-label">${t("last_order")}</span>
+      </div>
+      <div class="detail-stat-tile">
+        <span class="detail-stat-icon">${icons.clock}</span>
+        <span class="detail-stat-value">${customer.last_visit_at ? new Date(customer.last_visit_at).toLocaleDateString() : "—"}</span>
+        <span class="detail-stat-label">${t("last_visit")}</span>
       </div>
     </div>
   `;

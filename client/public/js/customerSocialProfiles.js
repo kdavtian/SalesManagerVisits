@@ -1,4 +1,5 @@
 import { getLang, t } from "./i18n.js";
+import { patchCachedCustomer } from "./listCache.js";
 
 const INSTAGRAM_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.4" cy="6.7" r="1" fill="currentColor" stroke="none"/></svg>`;
 const FACEBOOK_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M13.8 21v-8h2.7l.4-3h-3.1V8.1c0-.9.25-1.5 1.55-1.5H17V3.9c-.3-.04-1.3-.12-2.5-.12-2.48 0-4.18 1.5-4.18 4.3V10H7.5v3h2.82v8z" fill="currentColor" stroke="none"/></svg>`;
@@ -141,7 +142,9 @@ export async function fetchCustomerSocial(customerId) {
 }
 
 export async function saveCustomerSocial(customerId, payload) {
-  return apiRequest(`/api/customer-social/${customerId}`, { method: "PATCH", body: JSON.stringify(payload) });
+  const saved = await apiRequest(`/api/customer-social/${customerId}`, { method: "PATCH", body: JSON.stringify(payload) });
+  await patchCachedCustomer(customerId, saved && typeof saved === "object" ? saved : payload);
+  return saved;
 }
 
 export function socialFieldsHtml(data) {
@@ -200,6 +203,9 @@ async function decorateCustomerDetail() {
   ].filter(Boolean).join("");
 
   actions.innerHTML = links;
+  // With links, the row goes back to its own line above the facts so the
+  // icons never sit on top of the address.
+  if (links) actions.closest(".detail-facts-card-actions")?.classList.remove("is-compact");
   actions.querySelectorAll("[data-social-kind]").forEach((button) => {
     button.addEventListener("click", () => openPlatformProfile(button.dataset.socialKind, button.dataset.socialValue));
   });

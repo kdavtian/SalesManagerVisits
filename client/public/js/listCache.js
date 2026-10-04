@@ -140,3 +140,48 @@ export async function loadWithCache(key, fetcher, onData) {
     if (cached === undefined) throw err;
   }
 }
+
+// Customer edits must show on the Customers list the moment the rep goes
+// back to it -- not after the stale cached copy has been painted first and
+// the network refetch finally lands. These patch the cached lists in place
+// (or drop them when the change can't be applied locally, e.g. a new
+// customer), so the instant-open copy is already correct.
+const CUSTOMER_LIST_KEYS = ["customers-list:plain", "customers-list:with-debt"];
+
+async function mutateCachedCustomerLists(mutate) {
+  try {
+    const db = await openDb();
+    for (const key of CUSTOMER_LIST_KEYS) {
+      const full = scopedKey(key);
+      const current = await new Promise((resolve, reject) => {
+        const req = db.transaction(STORE, "readonly").objectStore(STORE).get(full);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      if (!Array.isArray(current)) continue;
+      const next = mutate(current);
+      await new Promise((resolve, reject) => {
+        const store = db.transaction(STORE, "readwrite").objectStore(STORE);
+        const req = next === null ? store.delete(full) : store.put(next, full);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    }
+  } catch {
+    // Best-effort: worst case the list shows the old copy until its refetch lands.
+  }
+}
+
+export function patchCachedCustomer(id, fields) {
+  return mutateCachedCustomerLists((list) =>
+    list.map((c) => (String(c.id) === String(id) ? { ...c, ...fields } : c))
+  );
+}
+
+export function removeCachedCustomer(id) {
+  return mutateCachedCustomerLists((list) => list.filter((c) => String(c.id) !== String(id)));
+}
+
+export function dropCachedCustomerLists() {
+  return mutateCachedCustomerLists(() => null);
+}

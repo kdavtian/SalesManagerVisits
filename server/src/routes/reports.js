@@ -563,9 +563,22 @@ reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async 
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
+  // Most recent payment from any source -- the sync's own (often blank)
+  // last_payment_date, the full ERP cashflow history, and approved in-app
+  // payments -- the same three sources Debt Balances uses, so both screens
+  // show the same date. In as-of mode only payments up to that date count.
+  const asOfParam = asOfDate ? `$${params.length}::date` : null;
+  const cashflowBound = asOfParam ? ` AND cf.cashflow_date <= ${asOfParam}` : "";
+  const appPaymentBound = asOfParam ? ` AND (p.payment_date AT TIME ZONE 'Asia/Yerevan')::date <= ${asOfParam}` : "";
+  const lastPaymentExpr = `GREATEST(
+      ${asOfParam ? `CASE WHEN erp.last_payment_date <= ${asOfParam} THEN erp.last_payment_date END` : "erp.last_payment_date"},
+      (SELECT max(cf.cashflow_date) FROM erp_cashflow_lines cf WHERE cf.erp_customer_id = erp.erp_customer_id AND cf.amount_amd > 0${cashflowBound}),
+      (SELECT max((p.payment_date AT TIME ZONE 'Asia/Yerevan')::date) FROM payments p JOIN customers pc ON pc.id = p.customer_id WHERE pc.erp_customer_id = erp.erp_customer_id AND p.status = 'approved'${appPaymentBound})
+    )`;
+
   const { rows: customerRows } = await pool.query(
     `SELECT erp.erp_customer_id, erp.customer_name, erp.assigned_sales_rep, erp.debt_amd,
-            erp.last_payment_date, erp.days_since_payment, erp.aging_bucket,
+            ${lastPaymentExpr} AS last_payment_date, erp.days_since_payment, erp.aging_bucket,
             ${asOfDate ? "0" : "COALESCE(collected.amount, 0)"} AS collected_since_sync_amd,
             ${debtExpr} AS estimated_debt_amd
      FROM erp_customer_data erp

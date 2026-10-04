@@ -68,8 +68,22 @@ customersRouter.get("/", async (req, res) => {
     conditions.push(`c.lng BETWEEN $${params.length - 1} AND $${params.length}`);
   }
   if (search) {
-    params.push(`%${search}%`);
-    conditions.push(`c.name ILIKE $${params.length}`);
+    // Every word must match name, ERP id, TIN, address, region/district,
+    // social profiles, email or website; phone matches on digits only so
+    // "091 101370" finds "+37491101370".
+    for (const word of String(search).trim().split(/\s+/).filter(Boolean).slice(0, 8)) {
+      params.push(`%${word.replace(/^@/, "")}%`);
+      const likeIdx = params.length;
+      const digits = word.replace(/\D/g, "").replace(/^374/, "").replace(/^0+/, "");
+      let phoneClause = "";
+      if (digits.length >= 3) {
+        params.push(`%${digits}%`);
+        phoneClause = ` OR regexp_replace(c.phone, '\\D', '', 'g') LIKE $${params.length}`;
+      }
+      conditions.push(
+        `(c.name ILIKE $${likeIdx} OR c.erp_customer_id ILIKE $${likeIdx} OR c.tin ILIKE $${likeIdx} OR c.address ILIKE $${likeIdx} OR c.region ILIKE $${likeIdx} OR c.subregion ILIKE $${likeIdx} OR c.instagram_username ILIKE $${likeIdx} OR c.facebook_url ILIKE $${likeIdx} OR c.email ILIKE $${likeIdx} OR c.website ILIKE $${likeIdx}${phoneClause})`
+      );
+    }
   }
   if (region) {
     params.push(region);
@@ -105,8 +119,9 @@ customersRouter.get("/", async (req, res) => {
   const debtJoin = include_debt ? "LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id" : "";
   const debtColumn = include_debt ? "erp.debt_amd AS debt_amd," : "";
   const { rows } = await pool.query(
-    `SELECT c.*, ${debtColumn} ${STATUS_COLUMNS}
+    `SELECT c.*, ${debtColumn} am.name AS assigned_manager_name, ${STATUS_COLUMNS}
      FROM customers c
+     LEFT JOIN users am ON am.id = c.assigned_manager_id
      ${debtJoin}
      ${where}
      ORDER BY c.name`,
