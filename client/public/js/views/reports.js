@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml } from "../util.js";
+import { escapeHtml, firstUseHintHtml, activateFirstUseHints } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
 import { REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, CATEGORY_LIST, formatAmd, amdWithUnitHtml, agingBucketLabel, channelDisplayLabel, syncBadgeHtml, formatDateDMY, parseDateOnly } from "../util.js";
@@ -141,11 +141,13 @@ async function renderReportsList(root, navigate) {
         </button>
         <div class="detail-header-title"><h1>${t("reports")}</h1></div>
       </div>
+      ${firstUseHintHtml("reports_index", t("hint_reports_index"))}
       <div id="reports-list" class="card-list"><p class="loading-state" role="status">${t("loading")}</p></div>
     </div>
   `;
   const container = root.querySelector(".detail-view");
   container.querySelector("#back-btn").addEventListener("click", () => navigate("#/dashboard"));
+  activateFirstUseHints(container);
   const listEl = container.querySelector("#reports-list");
 
   try {
@@ -158,7 +160,7 @@ async function renderReportsList(root, navigate) {
       .map(
         (r) => `
       <button type="button" class="card report-list-card" data-key="${r.key}">
-        <span class="report-list-icon">${icons.chart}</span>
+        <span class="report-list-icon">${REPORT_ICONS[r.key] || icons.chart}</span>
         <div class="report-list-text">
           <strong>${t(r.nameKey)}</strong>
           <span class="muted">${t(r.descriptionKey)}</span>
@@ -173,6 +175,21 @@ async function renderReportsList(root, navigate) {
     listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
   }
 }
+
+const REPORT_ICONS = {
+  new_customers: icons.mapPinPlus,
+  checkins: icons.mapPinCheck,
+  orders_pipeline: icons.cart,
+  brand_availability: icons.store,
+  payments: icons.payment,
+  cash_custody: icons.wallet,
+  cash_reconciliation: icons.clipboardCheck,
+  customer_debt: icons.warning,
+  sales_budget: icons.target,
+  brand_volume: icons.box,
+  daily_management: icons.dashboard,
+  documents: icons.note,
+};
 
 function reportHeaderHtml(titleKey) {
   return `

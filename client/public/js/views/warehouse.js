@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks, activateDialog } from "../util.js";
+import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks, activateDialog, firstUseHintHtml, activateFirstUseHints } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { compareProducts, parseLiters, normalizeUnitLabel, normalizeProductKey } from "../productSort.js";
@@ -227,8 +227,10 @@ export async function renderWarehouse(root, navigate) {
           ${icons.wallet}
         </button>
       </div>
+      ${firstUseHintHtml("warehouse_icons", t("hint_warehouse_icons"))}
       <div id="inventory-list" class="card-list"></div>
     `;
+    activateFirstUseHints(contentEl);
     const listEl = contentEl.querySelector("#inventory-list");
     const searchInput = contentEl.querySelector("#inventory-search");
     const filterBtn = contentEl.querySelector("#inventory-filter-btn");
