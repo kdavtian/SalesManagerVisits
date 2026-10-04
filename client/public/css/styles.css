@@ -13,12 +13,14 @@
   --accent-fill: #0969da;
   /* Castrol brand green, sampled from the logo -- used only for the
      dedicated "Check In" buttons (not the app-wide accent color). */
-  --checkin-green: #41904f;
+  /* Darkened from #41904f so white button text reaches 4.5:1 (was 3.9:1). */
+  --checkin-green: #3a8148;
   --checkin-green-dark: #337140;
   --control-border: #8c959f;
   --success: #087a48;
   --warning: #9a6700;
-  --danger: #cf222e;
+  /* Darkened from #cf222e: red text on the pale red badge fill was 4.1-4.4:1. */
+  --danger: #b3151f;
   --inactive: #adb3bc;
   --radius: 14px;
   --radius-lg: 20px;
@@ -64,6 +66,13 @@
   --tier-bronze: #cd7f32;
   --tier-silver: #9a9aa5;
   --tier-gold: #d4a017;
+  /* Text-only versions of the tier metals for badges and the tier selector:
+     the metal colours themselves are 2.1-2.6:1 on their own pale fill, far
+     under the 4.5:1 text needs. Pins and borders keep the real metal. Dark
+     theme points these back at the metals (see the dark block). */
+  --tier-bronze-text: #8f4f12;
+  --tier-silver-text: #5c5c68;
+  --tier-gold-text: #775900;
   /* This app was built and is mostly used at phone width. On a desktop
      browser window (e.g. a MacBook Pro at 1440-1512px) nothing had ever
      capped the content column, so buttons (many are .btn-block/width:100%),
@@ -93,6 +102,9 @@
   --success: #30d158;
   --warning: #ff9f0a;
   --danger: #ff453a;
+  --tier-bronze-text: var(--tier-bronze);
+  --tier-silver-text: var(--tier-silver);
+  --tier-gold-text: var(--tier-gold);
   --inactive: #636366;
   --pin-border: #000000;
   --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.3);
@@ -1210,17 +1222,17 @@ form [aria-invalid="true"] {
 
 .tier-bronze {
   background: rgba(205, 127, 50, 0.18);
-  color: var(--tier-bronze);
+  color: var(--tier-bronze-text);
 }
 
 .tier-silver {
   background: rgba(192, 192, 200, 0.2);
-  color: var(--tier-silver);
+  color: var(--tier-silver-text);
 }
 
 .tier-gold {
   background: rgba(255, 200, 40, 0.18);
-  color: var(--tier-gold);
+  color: var(--tier-gold-text);
 }
 
 .tier-competitor {
@@ -1290,19 +1302,19 @@ form [aria-invalid="true"] {
 .tier-btn.tier-bronze.tier-btn-active {
   background: rgba(205, 127, 50, 0.18);
   border-color: var(--tier-bronze);
-  color: var(--tier-bronze);
+  color: var(--tier-bronze-text);
 }
 
 .tier-btn.tier-silver.tier-btn-active {
   background: rgba(192, 192, 200, 0.22);
   border-color: var(--tier-silver);
-  color: var(--tier-silver);
+  color: var(--tier-silver-text);
 }
 
 .tier-btn.tier-gold.tier-btn-active {
   background: rgba(255, 200, 40, 0.2);
   border-color: var(--tier-gold);
-  color: var(--tier-gold);
+  color: var(--tier-gold-text);
 }
 
 .tier-btn.tier-competitor.tier-btn-active {
@@ -9847,4 +9859,63 @@ form select,
   .dashboard-grid > .greeting-row {
     column-span: all;
   }
+}
+
+/* ===== Touch targets (UI audit F7) =====
+   Controls that measured 17-34px tall. The tiny ones keep their look and gain
+   an invisible hit area (a ::after that extends the tappable box), so nothing
+   shifts on screen; segmented tabs and date pills, which are bigger visible
+   controls, get a real minimum height instead. */
+.profile-avatar-badge::after,
+.settings-hint-icon::after {
+  content: "";
+  position: absolute;
+  inset: -10px;
+}
+
+.settings-hint-icon {
+  position: relative;
+}
+
+.settings-hint-icon::after {
+  inset: -13px;
+}
+
+.detail-fact a[href^="tel:"],
+.activity-customer-name-btn,
+.customer-name-link {
+  position: relative;
+}
+
+.detail-fact a[href^="tel:"]::after,
+.activity-customer-name-btn::after,
+.customer-name-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -12px;
+  bottom: -12px;
+}
+
+.pricelist-brand-toggle {
+  min-height: 44px;
+}
+
+.segmented .chip {
+  min-height: 40px;
+}
+
+.perf-month-filter-btn,
+.debt-as-of-filter-btn {
+  min-height: 40px;
+}
+
+/* The Sales heading clips its overflow (for the title's ellipsis), which also
+   clipped the info icon's extended hit area to the heading's own 23px height.
+   Padding with an equal negative margin gives the hit area room to exist
+   without moving anything. */
+.sales-heading-with-hint {
+  padding-block: 11px;
+  margin-block: -11px;
 }
