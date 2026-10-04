@@ -119,9 +119,10 @@ export const TIER_OPTIONS = [
 // Armenian labels stored on the customer record -- used directly as both
 // the stored value and the display text, matching how this field always
 // worked (no separate translation layer for these fixed business terms).
-// The map's own tiered marker set (icons/markers/<tier>-<slug>.png, pin
-// shape and tier color baked into the image) still uses the same four
-// slugs below and is unaffected by this. The old flat "blue set" raster
+// The map's own marker set (icons/markers/<kind>-<slug>.png -- kind is
+// customer (green pin), potential or competitor; shape and color are baked
+// into the image) still uses the same four slugs below and is unaffected
+// by this. The old flat "blue set" raster
 // icons used everywhere else were replaced with inline stroke SVGs
 // (currentColor-based, like every other icon in this app) so a customer's
 // tier color can actually show through the glyph itself -- a fixed-color

@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v243";
+const CACHE_VERSION = "field-visits-v244";
 const TILE_CACHE = "field-visits-tiles-v4";
 // Anything fetched at runtime that wasn't already in APP_SHELL gets cached
 // here, kept separate from CACHE_VERSION on purpose -- see trimCache below,
@@ -102,18 +102,10 @@ const APP_SHELL = [
   "/js/views/sales.js",
   // Pre-approved marker/category artwork -- the map pins and the blue
   // category glyphs every other screen uses (see util.js).
-  "/icons/markers/bronze-drop.png",
-  "/icons/markers/bronze-shop.png",
-  "/icons/markers/bronze-workshop.png",
-  "/icons/markers/bronze-other.png",
-  "/icons/markers/silver-drop.png",
-  "/icons/markers/silver-shop.png",
-  "/icons/markers/silver-workshop.png",
-  "/icons/markers/silver-other.png",
-  "/icons/markers/gold-drop.png",
-  "/icons/markers/gold-shop.png",
-  "/icons/markers/gold-workshop.png",
-  "/icons/markers/gold-other.png",
+  "/icons/markers/customer-drop.png",
+  "/icons/markers/customer-shop.png",
+  "/icons/markers/customer-workshop.png",
+  "/icons/markers/customer-other.png",
   "/icons/markers/potential-drop.png",
   "/icons/markers/potential-shop.png",
   "/icons/markers/potential-workshop.png",

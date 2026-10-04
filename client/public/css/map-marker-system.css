@@ -2,15 +2,16 @@
 :root {
   --map-marker-blue: #1677f2;
   --map-marker-dark: #27364a;
-  /* Tier colors live in the marker artwork itself (icons/markers/*.png),
-     not in CSS -- there are deliberately no --map-tier-* tokens here, so
-     nothing can drift away from the approved files. */
+  /* Marker colors (green customer / red potential / dark competitor) live in
+     the marker artwork itself (icons/markers/*.png), not in CSS -- there are
+     deliberately no marker-color tokens here, so nothing can drift away from
+     the approved files. */
   --map-visited: #22a45d;
   --map-overdue: #e33b43;
 }
 
 /* Customer markers are pre-approved raster artwork (icons/markers/*.png):
-   the pin/circle/crosshair shape, its tier color and the category glyph are
+   the pin/circle/crosshair shape, its color and the category glyph are
    all baked into the image, so the wrapper contributes no shape of its own.
    It keeps the .pin / .pin-tier-* classes purely as hooks for selection,
    the competitor toggle and the status badges below. Selector is
