@@ -263,9 +263,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         <div class="map-legend-divider"></div>
         <p class="map-legend-note">${t("map_legend_shape_note")}</p>
         <ul class="map-legend-list">
-          <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/bronze-other.png" alt="" width="20" height="20" />${t("map_legend_bronze")}</li>
-          <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/silver-other.png" alt="" width="20" height="20" />${t("map_legend_silver")}</li>
-          <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/gold-other.png" alt="" width="20" height="20" />${t("map_legend_gold")}</li>
+          <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/customer-other.png" alt="" width="20" height="20" />${t("map_legend_customer")}</li>
           <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/potential-other.png" alt="" width="20" height="20" />${t("map_legend_potential")}</li>
           <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/competitor-other.png" alt="" width="20" height="20" />${t("map_legend_competitor")}</li>
         </ul>
@@ -809,15 +807,22 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     };
   }
 
-  const TIERS_ON_PINS = new Set(["bronze", "silver", "gold", "competitor"]);
+  // The map doesn't show a customer's tier: every active customer (bronze,
+  // silver or gold) is the same green pin, potential customers stay the red
+  // crosshair, competitors the dark circle. The tier still lives on the
+  // customer record and in the customer screens -- it just isn't a map
+  // concept. "customer" is the marker kind for the green pin set.
+  function markerKind(tier) {
+    if (tier === "bronze" || tier === "silver" || tier === "gold") return "customer";
+    if (tier === "competitor") return "competitor";
+    return "potential";
+  }
 
-  // bronze/silver/gold are teardrop *pins* whose point sits ~5% above the
-  // bottom edge of their (square) source canvas; potential/competitor are
+  // The green customer pin is a teardrop whose point sits ~5% above the
+  // bottom edge of its (square) source canvas; potential/competitor are
   // crosshair/circle marks with no point, so they read as centered on the
-  // coordinate. Hence two anchors, but ONE size/anchor formula shared by all
-  // three tiered pins -- their artwork is geometrically identical, and the
-  // code must not undermine that.
-  const PIN_SHAPED_TIERS = new Set(["bronze", "silver", "gold"]);
+  // coordinate. Hence two anchors, but one size/anchor formula for the pin.
+  const PIN_SHAPED_KINDS = new Set(["customer"]);
   // Bumped 32 -> 38: the raster artwork's own detail (category glyph inside
   // the pin) was reading small on a phone. Both anchors below are computed
   // from this constant rather than stored as pixel literals, so the tip/
@@ -825,18 +830,17 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   const MARKER_SIZE = 38;
   const PIN_TIP_RATIO = 0.95;
 
-  // Marker shape+color encode the customer's *tier* and the glyph inside
-  // encodes their *category* -- so glancing at the map answers "where are my
-  // gold oil-change customers" or "where are potential workshops" in one
-  // look. Both facts come from one pre-approved raster per (tier, category)
+  // Marker shape+color say what kind of site this is (our customer /
+  // potential customer / competitor) and the glyph inside encodes the
+  // *category*. Both come from one pre-approved raster per (kind, category)
   // in icons/markers/ -- the artwork is the source of truth and is never
   // reconstructed from CSS shapes or inline SVG. Visit status (today's
   // check, overdue) stays a small badge layered over that image.
   function customerIcon(c, status) {
-    const tier = TIERS_ON_PINS.has(c.customer_tier) ? c.customer_tier : "potential";
+    const tier = markerKind(c.customer_tier);
     const check = status === "today" ? '<span class="pin-check">&#10003;</span>' : "";
     const overdueClass = status === "overdue" ? "pin-status-overdue" : "";
-    const isPinShaped = PIN_SHAPED_TIERS.has(tier);
+    const isPinShaped = PIN_SHAPED_KINDS.has(tier);
     const anchorY = isPinShaped ? Math.round(MARKER_SIZE * PIN_TIP_RATIO) : MARKER_SIZE / 2;
     // Shape family also decides where the status badge hangs, since the two
     // families fill their square canvas differently (see the CSS).
