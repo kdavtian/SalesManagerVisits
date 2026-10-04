@@ -112,7 +112,10 @@ export async function renderBonuses(root, navigate) {
   try {
     summary = await api.getBonusSummary();
   } catch (err) {
-    contentEl.innerHTML = `<p class="empty-state">${escapeHtml(err.message)}</p>`;
+    // The server answers 404 "Bonuses is not enabled" while the module is
+    // off -- an English sentence, and ungrammatical. Show our own,
+    // translated one for that case; any other error keeps its own message.
+    contentEl.innerHTML = `<p class="empty-state">${escapeHtml(err.status === 404 ? t("bonuses_not_enabled") : err.message)}</p>`;
     return;
   }
 

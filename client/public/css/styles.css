@@ -1909,7 +1909,10 @@ input[type="search"]:focus-visible {
 
 .stat-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* minmax(0, 1fr), not 1fr: a column must never be forced wider than its
+     share by a no-wrap amount inside it (that is what pushed Sales vs.
+     budget past the screen edge on a narrow phone). */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin: 14px 0 6px;
 }
@@ -1982,6 +1985,23 @@ input[type="search"]:focus-visible {
    other stat-cards use, matching the same near-black --text tone every
    other primary figure in the app (customer detail's own stat tiles, debt
    balance amounts) already reads in. */
+/* Any stat card whose figure is an AMD amount (reports, via util.js
+   amdWithUnitHtml): number plus a small unit, shrinking a little on narrow
+   phones so a 9-10 digit total and its unit stay on one line inside a
+   half-width card instead of "AMD" dropping to a second line or the grid
+   running wider than the screen. Size and wrapping only -- each card keeps
+   its own colour. */
+.stat-value-amd {
+  font-size: 1.2rem;
+  font-size: clamp(1rem, 4.7vw, 1.3rem);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.stat-num {
+  white-space: nowrap;
+}
+
 .report-debt-total-value {
   font-size: 1.3rem;
   /* Scales down a little on narrow phones so a 9-10 digit total plus its
@@ -1998,7 +2018,6 @@ input[type="search"]:focus-visible {
 /* Currency unit next to a big figure (util.js amdWithUnitHtml): smaller and
    dimmer than the number so the number carries the card. */
 .stat-unit {
-  margin-left: 0.25em;
   font-size: 0.6em;
   font-weight: 700;
   letter-spacing: 0;
@@ -4437,6 +4456,24 @@ label.checkbox-row input[type="checkbox"] {
   padding-right: 0;
 }
 
+/* More blocks that bring their own 16px side padding/margin for full-bleed
+   screens: inside .detail-view (which already pads 16px) they sat 16px too
+   far in -- Debt Balances' Total card and Flat/By manager control, Sales'
+   From/To pills, channel pills and search. Same fix as the stat-grid and
+   card-list rule above. */
+.detail-view .debt-total-card {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.detail-view .debt-filter-row,
+.detail-view .pill-date-filter-row,
+.detail-view .customer-stats-bar,
+.detail-view .list-toolbar {
+  padding-left: 0;
+  padding-right: 0;
+}
+
 .stat-grid-4 {
   margin-bottom: 6px;
 }
@@ -4785,7 +4822,7 @@ label.checkbox-row input[type="checkbox"] {
   /* Tightened from 10px 12px -- the stacked number+label was taking more
      vertical space than either needed, on every screen using this filter
      row (Customers, Activity). */
-  padding: 6px 12px;
+  padding: 6px 8px;
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -4805,6 +4842,12 @@ label.checkbox-row input[type="checkbox"] {
   font-size: var(--fs-stat-label);
   font-weight: var(--fw-stat-label);
   color: var(--text-dim);
+  /* One line for every pill's label ("Not visited" used to wrap to two while
+     its three neighbours stayed on one); ellipsis only if a language's label
+     is longer than the pill. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Admin data-quality dashboard (renderDataQualitySection, admin.js) */
