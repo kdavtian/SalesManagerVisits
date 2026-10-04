@@ -6748,11 +6748,17 @@ label.checkbox-row input[type="checkbox"] {
      its own content width in this flex row (flex's default min-width:auto)
      and pushes the trailing amount straight off the edge of the card
      instead of wrapping or truncating -- reported as amounts overlapping/
-     getting cut off next to long order titles. Ellipsize instead. */
+     getting cut off next to long order titles. Wrap instead, up to two
+     lines (a customer name cut to "QACRAWL Tech ..." while its amount kept
+     full width hid exactly the part that tells customers apart), with an
+     ellipsis only beyond that. */
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
 }
 
 .list-row-meta {
@@ -8191,8 +8197,10 @@ form select,
 }
 
 .route-plan-day-chip {
-  flex: 1 0 auto;
-  min-width: 44px;
+  /* Seven chips share the row width instead of each demanding 44px (7 x 44 +
+     gaps = 344px, wider than the card), which cut "Sun" off at the edge. */
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -9918,4 +9926,55 @@ form select,
 .sales-heading-with-hint {
   padding-block: 11px;
   margin-block: -11px;
+}
+
+/* F12: with no social links the toolbar row was an empty 44px band holding
+   two right-aligned buttons. Pull the buttons up beside the first facts
+   instead (those facts reserve room on the right). */
+.detail-facts-card-actions:has(.detail-facts-card-actions-social:empty) {
+  margin-bottom: -44px;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  pointer-events: none;
+}
+.detail-facts-card-actions:has(.detail-facts-card-actions-social:empty) .detail-facts-card-actions-primary {
+  pointer-events: auto;
+}
+.detail-facts-card-actions:has(.detail-facts-card-actions-social:empty) + .detail-fact,
+.detail-facts-card-actions:has(.detail-facts-card-actions-social:empty) + .detail-fact + .detail-fact {
+  padding-right: 100px;
+  min-height: 22px;
+}
+
+/* F14: Settings push row -- let the label shrink and keep the status short
+   so the toggle and chevron don't crowd it. */
+#push-notifications-row .settings-row-label {
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+}
+#push-notifications-row .settings-row-value {
+  max-width: 22%;
+}
+
+.first-use-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 8px 8px 8px 12px;
+  border-radius: 10px;
+  background: var(--surface-2, rgba(0, 0, 0, 0.05));
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+.first-use-hint span { flex: 1; min-width: 0; }
+.first-use-hint-close {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: none;
+  font-size: 1.3rem;
+  color: var(--text-dim);
+  cursor: pointer;
 }

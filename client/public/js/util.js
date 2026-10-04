@@ -232,12 +232,13 @@ const YEREVAN_DISTRICT_LABELS_HY = {
   Shengavit: "Շենգավիթ",
 };
 
+// Armenian names only when the UI is in Armenian; English shows the code.
 export function regionLabelHy(code) {
-  return REGION_LABELS_HY[code] || code;
+  return getLang() === "hy" ? REGION_LABELS_HY[code] || code : code;
 }
 
 export function subregionLabelHy(code) {
-  return YEREVAN_DISTRICT_LABELS_HY[code] || code;
+  return getLang() === "hy" ? YEREVAN_DISTRICT_LABELS_HY[code] || code : code;
 }
 
 // Best-effort match of a geocoder's free-text region/subregion guess
@@ -944,5 +945,29 @@ export function compressImage(file, { maxDimension = 1600, quality = 0.75 } = {}
       reject(new Error("Could not read photo"));
     };
     img.src = url;
+  });
+}
+
+// One-time dismissible hint. Remembered per key in localStorage (best
+// effort -- if storage is unavailable the hint just shows each visit).
+export function firstUseHintHtml(key, text) {
+  try {
+    if (localStorage.getItem(`hint_seen_${key}`)) return "";
+  } catch {
+    /* storage blocked */
+  }
+  return `<div class="first-use-hint" data-hint-key="${escapeHtml(key)}" role="note"><span>${escapeHtml(text)}</span><button type="button" class="first-use-hint-close" aria-label="${escapeHtml(t("dismiss"))}">&times;</button></div>`;
+}
+
+export function activateFirstUseHints(root) {
+  root.querySelectorAll(".first-use-hint").forEach((el) => {
+    el.querySelector(".first-use-hint-close")?.addEventListener("click", () => {
+      try {
+        localStorage.setItem(`hint_seen_${el.dataset.hintKey}`, "1");
+      } catch {
+        /* storage blocked */
+      }
+      el.remove();
+    });
   });
 }
