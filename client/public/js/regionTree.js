@@ -139,6 +139,53 @@ export function buildRegionSubregionTree(customers) {
   });
 }
 
+// Sales direction (sales_channel) -> assigned sales manager, each MANAGER a
+// selectable leaf (id = "channel::managerId") -- the Customers list's
+// assignment filter for roles that see everyone's customers. Needs the
+// list rows' assigned_manager_name (GET /customers joins it in).
+export function buildDirectionManagerTree(customers, { channelLabel, noDirectionLabel, unassignedLabel }) {
+  const channelMap = new Map();
+  const channelOrder = [];
+  for (const c of customers) {
+    const dKey = c.sales_channel || NO_GROUP_KEY;
+    if (!channelMap.has(dKey)) {
+      channelMap.set(dKey, { name: c.sales_channel ? channelLabel(c.sales_channel) : noDirectionLabel, customers: [] });
+      channelOrder.push(dKey);
+    }
+    channelMap.get(dKey).customers.push(c);
+  }
+  channelOrder.sort((a, b) => {
+    if (a === NO_GROUP_KEY) return 1;
+    if (b === NO_GROUP_KEY) return -1;
+    return channelMap.get(a).name.localeCompare(channelMap.get(b).name);
+  });
+
+  return channelOrder.map((dKey, i) => {
+    const channel = channelMap.get(dKey);
+    const mgrMap = new Map();
+    for (const c of channel.customers) {
+      const mKey = c.assigned_manager_id ?? NO_GROUP_KEY;
+      if (!mgrMap.has(mKey)) {
+        mgrMap.set(mKey, { name: c.assigned_manager_id != null ? c.assigned_manager_name || `#${c.assigned_manager_id}` : unassignedLabel, count: 0 });
+      }
+      mgrMap.get(mKey).count += 1;
+    }
+    const managers = [...mgrMap.entries()].sort(([a, x], [b, y]) => {
+      if (a === NO_GROUP_KEY) return 1;
+      if (b === NO_GROUP_KEY) return -1;
+      return x.name.localeCompare(y.name);
+    });
+    return {
+      key: `d${i}`,
+      name: channel.name,
+      allIds: managers.map(([mKey]) => `${dKey}::${mKey}`),
+      customerCount: channel.customers.length,
+      leaves: managers.map(([mKey, m]) => ({ id: `${dKey}::${mKey}`, name: `${m.name} (${m.count})` })),
+      children: null,
+    };
+  });
+}
+
 function leafRowHtml(leaf) {
   return `
     <label class="route-plan-tree-row route-plan-tree-row-leaf">

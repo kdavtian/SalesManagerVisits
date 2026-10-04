@@ -1,10 +1,10 @@
 import { api } from "../api.js";
-import { escapeHtml, formatDateTime, formatAmd, haversineMeters, getCurrentPosition, customerListIconHtml, categoryLabel, activateDialog, channelDisplayLabel } from "../util.js";
+import { customerMatchesSearch, escapeHtml, formatDateTime, formatAmd, haversineMeters, getCurrentPosition, customerListIconHtml, categoryLabel, activateDialog, channelDisplayLabel } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state, seesAllActivity } from "../state.js";
 import { loadWithCache } from "../listCache.js";
-import { buildRegionSubregionTree, openTriStateTreeSheet, NO_GROUP_KEY } from "../regionTree.js";
+import { buildRegionSubregionTree, buildDirectionManagerTree, openTriStateTreeSheet, NO_GROUP_KEY } from "../regionTree.js";
 
 const FILTERS = [
   { key: "", labelKey: "filter_all" },
@@ -126,7 +126,8 @@ export function renderCustomers(root, navigate, initialFilter) {
   // contract (buildRegionSubregionTree/renderTriStateTree) -- empty means
   // no region filter is applied at all.
   let regionSubregionKeys = new Set();
-  let assignmentFilter = ""; // "", "mine", "others"
+  // Set of "channel::managerId" keys (buildDirectionManagerTree leaf ids); empty = no filter.
+  let assignmentKeys = new Set();
   // Sales channel is the one filter where "show me A OR B" is a real query
   // (e.g. comparing two distribution channels side by side), so it's a
   // multi-select Set rather than the single-value strings above.
@@ -323,8 +324,9 @@ export function renderCustomers(root, navigate, initialFilter) {
         ? filterIconButton({
             key: "assignment",
             icon: icons.person,
-            label: t("filter_assignment_title"),
-            active: assignmentFilter !== "",
+            label: t("filter_direction_manager_title"),
+            active: assignmentKeys.size > 0,
+            count: assignmentKeys.size,
           })
         : "",
       allCustomers.some((c) => c.region)
@@ -352,21 +354,21 @@ export function renderCustomers(root, navigate, initialFilter) {
     filterRow.innerHTML = buttons;
 
     filterRow.querySelector('[data-filter-btn="assignment"]')?.addEventListener("click", () => {
-      openFilterSheet(
-        t("filter_assignment_title"),
-        [
-          { value: "", label: t("all_customers") },
-          { value: "mine", label: t("assigned_to_me") },
-          { value: "others", label: t("assigned_to_others") },
-        ],
-        assignmentFilter,
-        (value) => {
-          assignmentFilter = value;
+      openTriStateTreeSheet(t("filter_direction_manager_title"), {
+        tree: buildDirectionManagerTree(allCustomers, {
+          channelLabel: channelDisplayLabel,
+          noDirectionLabel: t("no_direction"),
+          unassignedLabel: t("unassigned"),
+        }),
+        initialSelectedIds: assignmentKeys,
+        countUnitLabel: t("perf_dq_customers_unit"),
+        onApply: (selectedIds) => {
+          assignmentKeys = selectedIds;
           renderFilterRow();
           renderStatsBar();
           renderList();
-        }
-      );
+        },
+      });
     });
 
     filterRow.querySelector('[data-filter-btn="region"]')?.addEventListener("click", () => {
@@ -406,13 +408,14 @@ export function renderCustomers(root, navigate, initialFilter) {
   function applyNonStatusFilters(customers) {
     let list = customers;
     const query = searchInput.value.trim().toLowerCase();
-    if (query) list = list.filter((c) => c.name.toLowerCase().includes(query));
+    if (query) list = list.filter((c) => customerMatchesSearch(c, query));
     if (regionSubregionKeys.size) {
       list = list.filter((c) => c.region && regionSubregionKeys.has(`${c.region}::${c.subregion || NO_GROUP_KEY}`));
     }
     if (channelFilters.size) list = list.filter((c) => c.sales_channel && channelFilters.has(c.sales_channel));
-    if (assignmentFilter === "mine") list = list.filter((c) => c.assigned_manager_id === state.user.id);
-    else if (assignmentFilter === "others") list = list.filter((c) => c.assigned_manager_id !== state.user.id);
+    if (assignmentKeys.size) {
+      list = list.filter((c) => assignmentKeys.has(`${c.sales_channel || NO_GROUP_KEY}::${c.assigned_manager_id ?? NO_GROUP_KEY}`));
+    }
     return list;
   }
 

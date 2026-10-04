@@ -971,3 +971,61 @@ export function activateFirstUseHints(root) {
     });
   });
 }
+
+// Customer search shared by list screens: every whitespace-separated word of
+// the query must appear somewhere in the customer's searchable text (name,
+// ERP id, TIN, phone, address, region/district in both languages, social
+// profiles, email, website). Phone digits match regardless of formatting or
+// the +374 / leading-0 prefix, so "091 101370", "+374 91 101370" and
+// "91101370" all find the same customer.
+function searchFold(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+}
+
+function phoneTail(value) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  return digits.replace(/^(374)/, "").replace(/^0+/, "");
+}
+
+const customerSearchCache = new WeakMap();
+function customerSearchText(c) {
+  const cached = customerSearchCache.get(c);
+  if (cached) return cached;
+  const text = searchFold(
+    [
+      c.name,
+      c.erp_customer_id,
+      c.tin,
+      c.phone,
+      c.address,
+      c.region,
+      c.region ? REGION_LABELS_HY[c.region] : "",
+      c.subregion,
+      c.subregion ? YEREVAN_DISTRICT_LABELS_HY[c.subregion] : "",
+      c.instagram_username,
+      c.facebook_url,
+      c.email,
+      c.website,
+    ]
+      .filter(Boolean)
+      .join(" ")
+  );
+  customerSearchCache.set(c, text);
+  return text;
+}
+
+export function customerMatchesSearch(c, query) {
+  const words = searchFold(query).split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const text = customerSearchText(c);
+  const phone = phoneTail(c.phone);
+  return words.every((w) => {
+    const cleaned = w.replace(/^@/, "");
+    if (text.includes(cleaned)) return true;
+    const digits = phoneTail(w);
+    return digits.length >= 3 && phone.includes(digits);
+  });
+}
