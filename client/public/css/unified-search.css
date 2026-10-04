@@ -151,6 +151,25 @@
   -webkit-backdrop-filter: blur(12px);
 }
 
+/* The bar (.map-search-combined) is already the field -- card background,
+   border, radius and shadow. The input inside it used to carry its own
+   white fill, border, 14px radius and an 8px/24px shadow too, which read as
+   a second search box nested inside the first. Flat inside the bar now;
+   the leading icon and the action buttons sit on the bar itself. Three
+   class selectors plus the element beat both styles.css's
+   ".map-top-controls .map-search-input-wrap input[type=search]" and the
+   shared .activity-search-combined input rule regardless of load order. */
+.map-top-controls .map-search-combined .map-search-input-wrap input[type="search"] {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding-left: 34px;
+  padding-right: 4px;
+  font-size: 0.85rem;
+  text-overflow: ellipsis;
+}
+
 .map-search-actions {
   gap: 1px;
 }
