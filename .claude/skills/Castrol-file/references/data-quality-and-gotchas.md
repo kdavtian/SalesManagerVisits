@@ -46,4 +46,4 @@ Found by profiling `Castrol_2.0.7.xlsx` (values as of 2026-10-03). Use `scripts/
 
 ## Version 2.0.8 notes
 - Products sheet: `Product Family` now complete (12 values) and `SKU Status` = Active for 172 products. Match both headers case/spacing-insensitively. A status column with no `Active` row must never deactivate the catalogue.
-- Order form categories derive from the family: Transmission, Hydraulic, Antifreeze, Grease, Other are their own categories; every other family is engine oil. The meaning of family `ON` (3 Castrol products) is unconfirmed - currently treated as engine oil.
+- Order form categories derive from the family: Transmission, Hydraulic, Antifreeze, Grease, Other are their own categories; every other family is engine oil. Family `ON` (3 Castrol products) = Castrol ON EV fluids (owner-confirmed) and has its own category.

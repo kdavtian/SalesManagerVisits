@@ -28,18 +28,21 @@ function filterCatalog(list, query) {
 // Category filter groups, from the Product Family recorded in the workbook:
 // the non-engine families are categories of their own, every other family
 // (Edge, Magnatec, GTX, CRB, Vecton, ON, Engine Oil, ...) is engine oil.
-const NON_ENGINE_CATEGORIES = ["Transmission", "Hydraulic", "Antifreeze", "Grease", "Other"];
+const NON_ENGINE_CATEGORIES = ["Transmission", "Hydraulic", "Antifreeze", "Grease", "EV fluids", "Other"];
+// Workbook family -> category where the names differ (Castrol ON = EV fluids).
+const FAMILY_TO_CATEGORY = { on: "EV fluids" };
 const CATEGORY_LABEL_KEY = {
   "Engine oil": "category_engine_oil",
   Transmission: "category_transmission",
   Hydraulic: "category_hydraulic",
   Antifreeze: "category_antifreeze",
   Grease: "category_grease",
+  "EV fluids": "category_ev_fluids",
   Other: "category_other",
 };
 function productCategory(product) {
   const family = (product.family || "").trim();
-  const match = NON_ENGINE_CATEGORIES.find((c) => c.toLowerCase() === family.toLowerCase());
+  const match = FAMILY_TO_CATEGORY[family.toLowerCase()] || NON_ENGINE_CATEGORIES.find((c) => c.toLowerCase() === family.toLowerCase());
   return match || (family.toLowerCase() === "transmission oils" ? "Transmission" : "Engine oil");
 }
 
