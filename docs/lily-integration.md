@@ -96,7 +96,10 @@ releases the claim, and the message is shown on the order.
 
 ## Product mapping (`hc_code`)
 
-`hc_code` is stored on each KAD product, so every order line already carries it. Management sets it
+`hc_code` is stored on each KAD product, so every order line already carries it. It is filled
+automatically by the ERP sync from the **HC_ID** column of the workbook's **Products** sheet
+(matched on ProductID, kept as text with leading zeros; a blank cell never wipes a code already
+in KAD, and a value in the sheet overrides the one in KAD). It can also be set by hand: management sets it
 with `PATCH /api/products/:id {"hc_code":"000010"}` or in bulk with
 `POST /api/products/hc-codes {"mappings":[{"sku":"...","hc_code":"..."}]}` (unknown SKUs are
 returned, not created). Seed it from Lily's list of ~120 HC codes.
