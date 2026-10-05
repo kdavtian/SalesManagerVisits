@@ -266,6 +266,7 @@ export const api = {
   updateOrderItems: (id, items) => json(`/orders/${id}`, "PATCH", { items }),
   updateOrderStatus: (id, status) => json(`/orders/${id}`, "PATCH", { status }),
   updateOrder: (id, data) => json(`/orders/${id}`, "PATCH", data),
+  requestAccountingDocument: (id, paymentMethod) => json(`/orders/${id}/accounting-request`, "POST", { payment_method: paymentMethod }),
   approveOrderDiscount: (id) => request(`/orders/${id}/approve-discount`, { method: "POST" }),
   deleteOrder: (id) => request(`/orders/${id}`, { method: "DELETE" }),
   rejectOrderDiscount: (id) => request(`/orders/${id}/reject-discount`, { method: "POST" }),

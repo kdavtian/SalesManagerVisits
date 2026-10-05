@@ -9,6 +9,7 @@ import { escapeHtml, formatAmd, activateDialog, formatDateTime, customerNameLink
 import { t } from "./i18n.js";
 import { state } from "./state.js";
 import { getProductCatalog } from "./productCatalog.js";
+import { openAccountingDocSheet, accountingDocLabel, ACCOUNTING_STATUS_BADGE } from "./accountingDocSheet.js";
 
 // v3 5-state machine (see migrations/051_warehouse_delivery_v3.sql):
 // draft -> submitted -> confirmed -> packed_stock_out -> delivered, every
@@ -52,6 +53,22 @@ const MARK_DELIVERED_ROLES = new Set(["delivery_manager", "sales_director", "acc
 // stock-issue/delivery-failure) shows up here too since it's a real status
 // change, not something to hide -- it's exactly the kind of thing this was
 // asked to make visible.
+const ACCOUNTING_ELIGIBLE = new Set(["confirmed", "packed_stock_out", "delivered"]);
+
+// Where the order stands with accounting (Lily): which document, its
+// status, the created document numbers, or what went wrong.
+function accountingSectionHtml(order) {
+  if (!order.accounting_status) return "";
+  const docs = Array.isArray(order.accounting_documents) ? order.accounting_documents : [];
+  const err = order.accounting_error;
+  return `
+    <h3 class="list-group-heading">${t("acc_section_title")}</h3>
+    <p><span class="badge badge-neutral">${accountingDocLabel(order.accounting_doc_type === "waybill" ? "cash" : "invoice")}</span>
+      <span class="badge ${ACCOUNTING_STATUS_BADGE[order.accounting_status] ?? "badge-neutral"}">${t(`acc_status_${order.accounting_status}`)}</span></p>
+    ${docs.map((d) => `<p class="muted">${escapeHtml(d.number)}${d.brand ? ` · ${escapeHtml(d.brand)}` : ""} · ${escapeHtml(d.date)}</p>`).join("")}
+    ${err ? `<p class="form-error">${escapeHtml(err.message || err.code)}</p>` : ""}`;
+}
+
 function orderTimelineHtml(history) {
   if (!history?.length) return "";
   return `
@@ -162,6 +179,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       }
       <p>${t("total")}: <span class="text-amount">${formatAmd(Number(order.total_amd))}</span></p>
       ${order.note ? `<p class="muted">${escapeHtml(order.note)}</p>` : ""}
+      ${accountingSectionHtml(order)}
       ${orderTimelineHtml(order.history)}
       <p class="form-error" id="order-detail-error" hidden></p>
       <div class="sheet-actions" id="order-detail-actions" style="flex-wrap:wrap;"></div>
@@ -190,6 +208,13 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     if (canReviewSubmitted) {
       buttons.push({ label: t("confirm_order"), status: "confirmed", cls: "btn btn-primary" });
       buttons.push({ label: t("reject_order"), action: "reject-order", cls: "btn btn-danger" });
+    }
+    if (CONFIRM_ROLES.has(state.user.role) && ACCOUNTING_ELIGIBLE.has(order.status) && ["pending", "needs_attention", null].includes(order.accounting_status ?? null)) {
+      buttons.push({
+        label: order.accounting_status === "needs_attention" ? t("acc_send_again") : order.accounting_status === "pending" ? t("acc_change_document") : t("acc_send_to_accounting"),
+        action: "accounting-document",
+        cls: "btn",
+      });
     }
     if (order.status === "confirmed") {
       buttons.push({ label: t("confirmed_awaiting_warehouse"), action: "noop", cls: "btn", disabledDisplay: true });
@@ -226,9 +251,14 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       btn.addEventListener("click", async () => {
         actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
         try {
-          await api.updateOrderStatus(orderId, btn.dataset.status);
+          const updatedOrder = await api.updateOrderStatus(orderId, btn.dataset.status);
           if (btn.dataset.status === "confirmed") window.dispatchEvent(new Event("warehouse-changed"));
           overlay.remove();
+          // Confirmed: offer the waybill / invoice right away, on top of
+          // the screen the director is already looking at.
+          if (btn.dataset.status === "confirmed") {
+            await openAccountingDocSheet({ id: orderId, payment_method: updatedOrder?.payment_method ?? order.payment_method });
+          }
           notifyOrdersChanged();
           onChanged?.();
         } catch (err) {
@@ -242,6 +272,13 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       btn.addEventListener("click", async () => {
         if (btn.dataset.action === "edit-order") {
           renderEditMode(order);
+          return;
+        }
+        if (btn.dataset.action === "accounting-document") {
+          overlay.remove();
+          await openAccountingDocSheet(order);
+          notifyOrdersChanged();
+          onChanged?.();
           return;
         }
         if (btn.dataset.action === "delete-order" && !confirm(t("confirm_delete_order"))) return;

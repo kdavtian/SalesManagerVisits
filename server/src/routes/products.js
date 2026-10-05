@@ -294,6 +294,9 @@ const EDITABLE_FIELDS = [
   "retail_price_amd",
   "net_cost_amd",
   "stock_qty",
+  // ՀԾ-Հաշվապահ product code (Lily integration); editing it alone must not
+  // lock the product against catalog price sync -- see the PATCH below.
+  "hc_code",
 ];
 const NUMERIC_FIELDS = new Set([
   "unit_price_amd",
@@ -321,7 +324,7 @@ productsRouter.patch("/:id", async (req, res) => {
   values.push(req.params.id);
 
   const { rows } = await pool.query(
-    `UPDATE products SET ${setClauses.join(", ")}, updated_at = now(), manually_edited_at = now() WHERE id = $${values.length} RETURNING *`,
+    `UPDATE products SET ${setClauses.join(", ")}, updated_at = now()${updates.every(([key]) => key === "hc_code") ? "" : ", manually_edited_at = now()"} WHERE id = $${values.length} RETURNING *`,
     values
   );
   const after = rows[0];
@@ -329,6 +332,22 @@ productsRouter.patch("/:id", async (req, res) => {
   await logPriceChanges(before, after, req.user.id);
 
   res.json(after);
+});
+
+// Bulk KAD sku -> HC code mapping: [{ sku, hc_code }]. Unknown skus are
+// reported back, not created.
+productsRouter.post("/hc-codes", async (req, res) => {
+  const mappings = req.body?.mappings;
+  if (!Array.isArray(mappings) || !mappings.length) return res.status(400).json({ error: "mappings must be a non-empty array" });
+  let updated = 0;
+  const unknown = [];
+  for (const m of mappings) {
+    if (!m?.sku) continue;
+    const { rowCount } = await pool.query("UPDATE products SET hc_code = $2, updated_at = now() WHERE sku = $1", [String(m.sku), m.hc_code ? String(m.hc_code) : null]);
+    if (rowCount) updated += rowCount;
+    else unknown.push(m.sku);
+  }
+  res.json({ updated, unknown_skus: unknown });
 });
 
 // Shared by the single-product PATCH above and the bulk price-update

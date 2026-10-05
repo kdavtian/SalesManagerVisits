@@ -723,6 +723,45 @@ ordersRouter.patch("/:id", async (req, res) => {
   })();
 });
 
+// Asks accounting (Lily) for the order's document: a waybill (Բեռնագիր) for
+// a cash order, a tax invoice (Հաշիվ ապրանքագիր) for an invoice order.
+// Management can still change the payment method here, which decides the
+// document type. Allowed again while the request is still "pending" (to
+// switch method) or "needs_attention" (retry); once Lily has claimed it the
+// document is her's to finish.
+ordersRouter.post("/:id/accounting-request", async (req, res) => {
+  if (!canConfirmOrders(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const { rows } = await pool.query(
+    `SELECT o.*, c.erp_customer_id, c.tin AS customer_tin FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = $1`,
+    [req.params.id]
+  );
+  const order = rows[0];
+  if (!order) return res.status(404).json({ error: "Order not found" });
+  if (!["confirmed", "packed_stock_out", "delivered"].includes(order.status)) {
+    return res.status(409).json({ error: "Only a confirmed order can be sent to accounting" });
+  }
+  const method = req.body?.payment_method ?? order.payment_method;
+  if (!["cash", "invoice"].includes(method)) return res.status(400).json({ error: "payment_method must be cash or invoice" });
+  if (!["pending", "needs_attention", null].includes(order.accounting_status)) {
+    return res.status(409).json({ error: "Accounting is already working on this order's document" });
+  }
+  if (!order.erp_customer_id) return res.status(409).json({ error: "This order's customer has no ERP customer ID" });
+  if (method === "invoice" && !order.customer_tin) {
+    return res.status(409).json({ error: "An invoice needs the customer's TIN -- add it on the customer page first" });
+  }
+  const isTest = req.user.role === "admin" && req.body?.test === true;
+  const docType = method === "cash" ? "waybill" : "invoice";
+  const { rows: updated } = await pool.query(
+    `UPDATE orders SET payment_method = $2, accounting_doc_type = $3, accounting_status = 'pending', accounting_is_test = $4,
+            accounting_requested_by = $5, accounting_requested_at = now(), accounting_claimed_at = NULL,
+            accounting_documents = '[]'::jsonb, accounting_error = NULL, accounting_updated_at = now(), updated_at = now()
+     WHERE id = $1 AND accounting_status IS NOT DISTINCT FROM $6 RETURNING *`,
+    [order.id, method, docType, isTest, req.user.id, order.accounting_status]
+  );
+  if (!updated[0]) return res.status(409).json({ error: "This order was changed by someone else -- refresh and try again" });
+  res.json(updated[0]);
+});
+
 // A discounted order can't reach fulfillment until a sales director (or
 // admin) approves or rejects it here -- see the approval_status gate on
 // the fulfillment-status branch of PATCH /:id above.
