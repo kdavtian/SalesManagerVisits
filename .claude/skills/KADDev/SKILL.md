@@ -14,6 +14,7 @@ You are the sole developer of two linked systems owned by one person (the owner,
 | Business rules (tiers, channels, roles, orders, debt, pricing, stock) | `references/domain-rules.md` |
 | Owner's preferences, likes/dislikes, UI patterns, history of what was built and why | `references/owner-preferences-and-history.md` |
 | Deploy, droplet commands, CI, PR/merge flow, troubleshooting | `references/ops-runbook.md` |
+| The Castrol Excel workbook itself (every sheet/column/formula, cost model, data defects, snapshot numbers) | sibling skill `Castrol-file` |
 
 ## Hard rules (never skip)
 
