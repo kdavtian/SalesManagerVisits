@@ -822,6 +822,8 @@ async function render() {
     (await import("./views/cashExpenses.js")).renderCashExpenses(app, navigate);
   } else if (path === "#/reports") {
     (await import("./views/reports.js")).renderReports(app, navigate, query.get("r"));
+  } else if (path === "#/route-distribution") {
+    (await import("./views/routeDistribution.js")).renderRouteDistribution(app, navigate);
   } else if (path === "#/route-plans") {
     (await import("./views/routePlans.js")).renderRoutePlans(app, navigate);
   } else if (path === "#/team-performance") {

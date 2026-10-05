@@ -63,6 +63,8 @@ export function transformErpCustomers(customers) {
   const regionErpIds = [];
   const regions = [];
   const subregions = [];
+  const tierErpIds = [];
+  const tiers = [];
 
   for (const entry of isPlainArray(customers)) {
     if (!isPlainObject(entry) || !entry.erp_customer_id) continue;
@@ -75,6 +77,13 @@ export function transformErpCustomers(customers) {
     daysSince.push(Number.isFinite(entry.days_since_payment) ? entry.days_since_payment : null);
     agingBuckets.push(entry.aging_bucket || null);
     recentOrders.push(JSON.stringify(Array.isArray(entry.recent_orders) ? entry.recent_orders.slice(0, 10) : []));
+    // The workbook's Customers-sheet Tier is the source of truth for an
+    // ERP-linked customer's tier; anything else (blank, junk) is ignored.
+    const erpTier = typeof entry.erp_tier === "string" ? entry.erp_tier.trim().toLowerCase() : null;
+    if (erpTier === "bronze" || erpTier === "silver" || erpTier === "gold") {
+      tierErpIds.push(String(entry.erp_customer_id));
+      tiers.push(erpTier);
+    }
     if (entry.region || entry.subregion) {
       regionErpIds.push(String(entry.erp_customer_id));
       regions.push(entry.region != null ? String(entry.region) : null);
@@ -82,7 +91,7 @@ export function transformErpCustomers(customers) {
     }
   }
 
-  return { erpIds, names, reps, debts, balance0s, lastPayments, daysSince, agingBuckets, recentOrders, regionErpIds, regions, subregions };
+  return { erpIds, names, reps, debts, balance0s, lastPayments, daysSince, agingBuckets, recentOrders, regionErpIds, regions, subregions, tierErpIds, tiers };
 }
 
 // erp_customer_id, order_id, and date are all required -- an entry missing

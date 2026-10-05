@@ -252,6 +252,7 @@ export const api = {
     const qs = new URLSearchParams({ region, ...(subregion ? { subregion } : {}) }).toString();
     return request(`/route-distribution/lookup?${qs}`);
   },
+  bulkRouteDistribution: (items) => json("/route-distribution/bulk", "PUT", { items }),
   createRouteDistribution: (data) => json("/route-distribution", "POST", data),
   updateRouteDistribution: (id, data) => json(`/route-distribution/${id}`, "PATCH", data),
   deleteRouteDistribution: (id) => request(`/route-distribution/${id}`, { method: "DELETE" }),

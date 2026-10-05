@@ -336,7 +336,7 @@ export function renderCustomers(root, navigate, initialFilter) {
       allCustomers.length
         ? filterIconButton({
             key: "channel",
-            icon: icons.route,
+            icon: icons.tag,
             label: t("filter_type_tier_title"),
             active: typeTierKeys.size > 0,
             count: typeTierKeys.size,
@@ -389,6 +389,7 @@ export function renderCustomers(root, navigate, initialFilter) {
         }),
         initialSelectedIds: typeTierKeys,
         countUnitLabel: t("perf_dq_customers_unit"),
+        searchPlaceholder: t("search"),
         onApply: (selectedIds) => {
           typeTierKeys = selectedIds;
           renderFilterRow();

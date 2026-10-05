@@ -132,7 +132,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     return res.status(400).json({ error: "brand_volume must be an array" });
   }
 
-  const { erpIds, names, reps, debts, balance0s, lastPayments, daysSince, agingBuckets, recentOrders, regionErpIds, regions, subregions } =
+  const { erpIds, names, reps, debts, balance0s, lastPayments, daysSince, agingBuckets, recentOrders, regionErpIds, regions, subregions, tierErpIds, tiers } =
     transformErpCustomers(customers);
 
   const {
@@ -218,6 +218,25 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
          FROM unnest($1::text[], $2::text[], $3::text[]) AS t(erp_customer_id, region, subregion)
          WHERE c.erp_customer_id = t.erp_customer_id`,
         [regionErpIds, regions, subregions]
+      );
+    }
+
+    // Customer tier follows the workbook's Tier column for ERP-linked
+    // customers (competitors are never touched). Every actual change is
+    // logged to customer_level_audit like the other system-driven changes.
+    if (tierErpIds.length) {
+      await client.query(
+        `WITH changes AS (
+           SELECT c.id, c.customer_tier AS old_tier, t.tier AS new_tier
+           FROM customers c
+           JOIN unnest($1::text[], $2::text[]) AS t(erp_customer_id, tier) ON t.erp_customer_id = c.erp_customer_id
+           WHERE c.customer_tier IS DISTINCT FROM t.tier AND c.customer_tier IS DISTINCT FROM 'competitor'
+         ), upd AS (
+           UPDATE customers c SET customer_tier = ch.new_tier FROM changes ch WHERE c.id = ch.id RETURNING c.id
+         )
+         INSERT INTO customer_level_audit (customer_id, old_tier, new_tier, reason, changed_by)
+         SELECT id, old_tier, new_tier, 'Tier from ERP workbook', NULL FROM changes`,
+        [tierErpIds, tiers]
       );
     }
 
@@ -344,6 +363,24 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
          FROM unnest($1::text[], $2::numeric[]) AS t(erp_product_id, landing_cost_amd)
          WHERE products.erp_product_id = t.erp_product_id`,
         [prodErpIds, prodLandingCosts]
+      );
+      // Tier prices and net cost come straight from the workbook (the trusted
+      // source), so they refresh on every sync even for a product an admin
+      // touched by hand -- otherwise one unrelated manual edit freezes its
+      // prices forever (reported: prices/LC/NC not updating). Name, brand,
+      // family and stock stay gated by manually_edited_at above. A blank
+      // sheet value never wipes an existing price.
+      await client.query(
+        `UPDATE products p SET
+           unit_price_amd = COALESCE(t.unit_price_amd, p.unit_price_amd),
+           bronze_price_amd = COALESCE(t.bronze_price_amd, p.bronze_price_amd),
+           silver_price_amd = COALESCE(t.silver_price_amd, p.silver_price_amd),
+           gold_price_amd = COALESCE(t.gold_price_amd, p.gold_price_amd),
+           net_cost_amd = COALESCE(t.net_cost_amd, p.net_cost_amd)
+         FROM unnest($1::text[], $2::numeric[], $3::numeric[], $4::numeric[], $5::numeric[], $6::numeric[])
+           AS t(erp_product_id, unit_price_amd, bronze_price_amd, silver_price_amd, gold_price_amd, net_cost_amd)
+         WHERE p.erp_product_id = t.erp_product_id AND p.manually_edited_at IS NOT NULL`,
+        [prodErpIds, prodPrices, prodBronzePrices, prodSilverPrices, prodGoldPrices, prodNetCosts]
       );
       // HC code from the workbook's Products sheet: like landing cost it is
       // applied regardless of manually_edited_at (editing a price must not

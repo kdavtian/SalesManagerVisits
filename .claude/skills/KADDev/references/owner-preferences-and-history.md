@@ -44,7 +44,9 @@
 - Maps/customers: tri-state filters, plan-day filters, region/subregion autofill, sales channel assignment from route distribution, social profiles, ERP-id/phone/social search.
 - Recent batch (#224-#230): customer UI fixes, debt/last visit for ERP customers, Team Performance for sales managers (bot fix: fall back to ORDERS when Sales Team cell errors), Orders search padding, Lily accountant integration (token API, waybill/invoice doc rule, HC codes from workbook, confirm sheet), workbook 2.0.7 support in the bot, tier pricing + gold individual prices + type/tier customer filter (v1.244.0, PR #230).
 
+- v1.245.0: Routes Distribution moved to Route Plans as a multi-select accordion tree with channel buttons; customer tier follows Excel Tier; silver wholesale price + net cost refreshed from workbook on warehouse/products.
+
 ## Open threads at the time this skill was written
 - PR #230 (tier pricing, gold prices, customer type/tier filter) waiting on CI/merge; migration 087 must be run on the droplet.
 - Bot PR #28 (workbook 2.0.7, silver fallback) needs merge + bot restart + re-send workbook.
-- Possible: sync `erp_tier` -> customers.customer_tier (needs owner decision); UI for managing gold individual prices outside the order form; Lily real-token flow live; HC code coverage check.
+- Possible: UI for managing gold individual prices outside the order form; Lily real-token flow live; HC code coverage check.

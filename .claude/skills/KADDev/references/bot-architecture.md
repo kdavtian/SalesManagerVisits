@@ -19,7 +19,7 @@ Python bot that turns the Castrol Excel workbook into reports and syncs data to 
 ## Payload contract (see app `docs/erp-sync-contract.md`; code wins)
 `POST /api/erp-sync` with `X-Sync-Key`: `customers[]` (required: erp_customer_id, customer_name, assigned_sales_rep, debt_amd, balance0_amd, last_payment_date, days_since_payment, aging_bucket, recent_orders, region, subregion, erp_tier), optional `order_lines[]`, `cashflow_lines[]`, `sales_performance[]`, `products[]` (upsert; gated by `manually_edited_at`, but landing cost and `hc_code` always apply), `brand_volume[]`. Omitted key = table untouched; empty array = table wiped (TRUNCATE-and-replace, except products).
 
-## Pricing in the sync
+## Pricing in the sync (also sends `net_cost_amd` from PriceList `Net Cost`, fallback Products `Net Cost AMD`)
 bronze = `Price T1 Bronze` (fallback `Price T1`); if empty -> use silver (`Price T2 Silver`); skip product only if no price at all. silver = T2 (falls back to bronze), gold = T3 (None if empty; the app falls back gold -> silver -> bronze). `unit_price_amd` mirrors bronze. 
 
 ## Debt-as-of-date logic (owner-specified)

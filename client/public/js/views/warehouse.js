@@ -299,7 +299,8 @@ export async function renderWarehouse(root, navigate) {
     // basis is internal information a WM wants to see distinctly from the
     // customer-facing wholesale price, not folded into the same string.
     function wholesaleLine(p) {
-      return showWholesale && p.bronze_price_amd != null ? formatAmd(Number(p.bronze_price_amd)) : "";
+      // Wholesale = the silver price by default (bronze only when silver is empty).
+      return showWholesale && p.wholesale_price_amd != null ? formatAmd(Number(p.wholesale_price_amd)) : "";
     }
     function costLine(p) {
       if (costMode === "landing" && p.landing_cost_amd != null) return `${t("lc_short")} ${formatAmd(Number(p.landing_cost_amd))}`;
@@ -454,7 +455,7 @@ export async function renderWarehouse(root, navigate) {
       totals.pcs += pcs;
       const perUnitLiters = parseLiters(p.unit);
       if (perUnitLiters != null) totals.liters += perUnitLiters * pcs;
-      if (p.bronze_price_amd != null) totals.wholesaleAmd += Number(p.bronze_price_amd) * pcs;
+      if (p.wholesale_price_amd != null) totals.wholesaleAmd += Number(p.wholesale_price_amd) * pcs;
       if (p.landing_cost_amd != null) totals.lcAmd += Number(p.landing_cost_amd) * pcs;
       if (p.net_cost_amd != null) totals.ncAmd += Number(p.net_cost_amd) * pcs;
     }

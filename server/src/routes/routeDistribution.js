@@ -1,16 +1,24 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
-import { requireAuth, requireAdmin } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
+import { canReassignCustomers } from "../roles.js";
 
 export const routeDistributionRouter = Router();
 
 routeDistributionRouter.use(requireAuth);
 
+// Management (the roles that can reassign customers) maintain the mapping
+// from the Route Plans page; it used to be admin-only in Settings.
+function requireManagement(req, res, next) {
+  if (!canReassignCustomers(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  next();
+}
+
 // Admin-only management list, newest first. Manager comes from
 // sales_channels.manager_user_id (via the mapped sales_channel), not from
 // this table's own assigned_manager_id column -- that column is now dead,
 // see the /lookup comment below.
-routeDistributionRouter.get("/", requireAdmin, async (req, res) => {
+routeDistributionRouter.get("/", requireManagement, async (req, res) => {
   const { rows } = await pool.query(
     `SELECT rd.*, sc.manager_user_id AS channel_manager_id, u.name AS channel_manager_name
        FROM route_distribution rd
@@ -61,7 +69,55 @@ routeDistributionRouter.get("/lookup", async (req, res) => {
   res.json(rows[0] || null);
 });
 
-routeDistributionRouter.post("/", requireAdmin, async (req, res) => {
+// Bulk set / clear for the multi-select tree picker: every item names a
+// region (+ optional subregion) and a sales_channel; a null/empty channel
+// removes that mapping. One transaction so a partial failure never leaves
+// half of a multi-select applied.
+routeDistributionRouter.put("/bulk", requireManagement, async (req, res) => {
+  const items = req.body?.items;
+  if (!Array.isArray(items) || !items.length || items.length > 500) {
+    return res.status(400).json({ error: "items must be a non-empty array (max 500)" });
+  }
+  for (const it of items) {
+    if (!it || typeof it.region !== "string" || !it.region) {
+      return res.status(400).json({ error: "Every item needs a region" });
+    }
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const it of items) {
+      const subregion = it.subregion || null;
+      if (!it.sales_channel) {
+        await client.query("DELETE FROM route_distribution WHERE region = $1 AND COALESCE(subregion, '') = COALESCE($2, '')", [it.region, subregion]);
+        continue;
+      }
+      const updated = await client.query(
+        "UPDATE route_distribution SET sales_channel = $3, updated_at = now() WHERE region = $1 AND COALESCE(subregion, '') = COALESCE($2, '')",
+        [it.region, subregion, it.sales_channel]
+      );
+      if (!updated.rowCount) {
+        await client.query("INSERT INTO route_distribution (region, subregion, sales_channel) VALUES ($1, $2, $3)", [it.region, subregion, it.sales_channel]);
+      }
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+  const { rows } = await pool.query(
+    `SELECT rd.*, sc.manager_user_id AS channel_manager_id, u.name AS channel_manager_name
+       FROM route_distribution rd
+       LEFT JOIN sales_channels sc ON sc.code = rd.sales_channel
+       LEFT JOIN users u ON u.id = sc.manager_user_id
+      ORDER BY rd.region, rd.subregion NULLS FIRST`
+  );
+  res.json(rows);
+});
+
+routeDistributionRouter.post("/", requireManagement, async (req, res) => {
   const { region, subregion, sales_channel } = req.body ?? {};
   if (!region || !sales_channel) {
     return res.status(400).json({ error: "region and sales_channel are required" });
@@ -81,7 +137,7 @@ routeDistributionRouter.post("/", requireAdmin, async (req, res) => {
   }
 });
 
-routeDistributionRouter.patch("/:id", requireAdmin, async (req, res) => {
+routeDistributionRouter.patch("/:id", requireManagement, async (req, res) => {
   // assigned_manager_id is intentionally excluded: the manager is now always
   // derived from sales_channels.manager_user_id via sales_channel, so this
   // table no longer accepts its own manager override.
@@ -108,7 +164,7 @@ routeDistributionRouter.patch("/:id", requireAdmin, async (req, res) => {
   }
 });
 
-routeDistributionRouter.delete("/:id", requireAdmin, async (req, res) => {
+routeDistributionRouter.delete("/:id", requireManagement, async (req, res) => {
   await pool.query("DELETE FROM route_distribution WHERE id = $1", [req.params.id]);
   res.status(204).end();
 });
