@@ -94,6 +94,14 @@ app.use(compression());
 
 app.use(
   helmet({
+    // helmet's default is "no-referrer", which strips the Referer from the
+    // OpenStreetMap / Wikimedia tile requests. Their tile usage policies
+    // require a valid Referer and they refuse (or replace with a placeholder
+    // image) requests without one, which showed up as "The map couldn't load"
+    // on desktop browsers. strict-origin-when-cross-origin is the browser
+    // default: same-origin requests keep the full URL, cross-origin ones
+    // (the tile hosts) get only this site's origin.
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
