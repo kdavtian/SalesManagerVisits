@@ -1,10 +1,10 @@
 import { api } from "../api.js";
-import { customerMatchesSearch, escapeHtml, formatDateTime, formatAmd, haversineMeters, getCurrentPosition, customerListIconHtml, categoryLabel, activateDialog, channelDisplayLabel } from "../util.js";
+import { customerMatchesSearch, escapeHtml, formatDateTime, formatAmd, haversineMeters, getCurrentPosition, customerListIconHtml, categoryLabel, activateDialog, channelDisplayLabel, TIER_OPTIONS } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state, seesAllActivity } from "../state.js";
 import { loadWithCache } from "../listCache.js";
-import { buildRegionSubregionTree, buildDirectionManagerTree, openTriStateTreeSheet, NO_GROUP_KEY } from "../regionTree.js";
+import { buildRegionSubregionTree, buildDirectionManagerTree, buildCategoryTierTree, openTriStateTreeSheet, NO_GROUP_KEY } from "../regionTree.js";
 
 const FILTERS = [
   { key: "", labelKey: "filter_all" },
@@ -128,10 +128,8 @@ export function renderCustomers(root, navigate, initialFilter) {
   let regionSubregionKeys = new Set();
   // Set of "channel::managerId" keys (buildDirectionManagerTree leaf ids); empty = no filter.
   let assignmentKeys = new Set();
-  // Sales channel is the one filter where "show me A OR B" is a real query
-  // (e.g. comparing two distribution channels side by side), so it's a
-  // multi-select Set rather than the single-value strings above.
-  let channelFilters = new Set();
+  // Set of "category::tier" keys (buildCategoryTierTree leaf ids); empty = no filter.
+  let typeTierKeys = new Set();
   // Off by default (per task spec: "to make app run faster") -- the debt
   // lookup is a real join server-side, not free, so it's opt-in per
   // session rather than always fetched with the rest of the list.
@@ -311,9 +309,6 @@ export function renderCustomers(root, navigate, initialFilter) {
 
   function renderFilterRow() {
     const regionCount = new Set([...regionSubregionKeys].map((k) => k.split("::")[0])).size;
-    const channels = seesAllActivity()
-      ? [...new Set(allCustomers.map((c) => c.sales_channel).filter(Boolean))].sort()
-      : [];
 
     const buttons = [
       // A sales_manager is now always scoped server-side to their own
@@ -338,13 +333,13 @@ export function renderCustomers(root, navigate, initialFilter) {
             count: regionCount,
           })
         : "",
-      channels.length
+      allCustomers.length
         ? filterIconButton({
             key: "channel",
-            icon: icons.route,
-            label: t("filter_direction_title"),
-            active: channelFilters.size > 0,
-            count: channelFilters.size,
+            icon: icons.tag,
+            label: t("filter_type_tier_title"),
+            active: typeTierKeys.size > 0,
+            count: typeTierKeys.size,
           })
         : "",
     ]
@@ -386,17 +381,22 @@ export function renderCustomers(root, navigate, initialFilter) {
     });
 
     filterRow.querySelector('[data-filter-btn="channel"]')?.addEventListener("click", () => {
-      openMultiFilterSheet(
-        t("filter_direction_title"),
-        channels.map((c) => ({ value: c, label: channelDisplayLabel(c) })),
-        channelFilters,
-        (selected) => {
-          channelFilters = selected;
+      openTriStateTreeSheet(t("filter_type_tier_title"), {
+        tree: buildCategoryTierTree(allCustomers, {
+          categoryLabel,
+          tiers: TIER_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) })),
+          noCategoryLabel: t("no_customer_type"),
+        }),
+        initialSelectedIds: typeTierKeys,
+        countUnitLabel: t("perf_dq_customers_unit"),
+        searchPlaceholder: t("search"),
+        onApply: (selectedIds) => {
+          typeTierKeys = selectedIds;
           renderFilterRow();
           renderStatsBar();
           renderList();
-        }
-      );
+        },
+      });
     });
   }
 
@@ -412,7 +412,9 @@ export function renderCustomers(root, navigate, initialFilter) {
     if (regionSubregionKeys.size) {
       list = list.filter((c) => c.region && regionSubregionKeys.has(`${c.region}::${c.subregion || NO_GROUP_KEY}`));
     }
-    if (channelFilters.size) list = list.filter((c) => c.sales_channel && channelFilters.has(c.sales_channel));
+    if (typeTierKeys.size) {
+      list = list.filter((c) => typeTierKeys.has(`${c.category || NO_GROUP_KEY}::${c.customer_tier || "potential"}`));
+    }
     if (assignmentKeys.size) {
       list = list.filter((c) => assignmentKeys.has(`${c.sales_channel || NO_GROUP_KEY}::${c.assigned_manager_id ?? NO_GROUP_KEY}`));
     }

@@ -625,7 +625,7 @@ export async function renderProductsSection(container) {
               <strong>${escapeHtml(p.name)}</strong>
               <span class="muted">${[p.brand, p.unit].filter(Boolean).map(escapeHtml).join(" · ")}</span>
             </div>
-            <span class="badge ${p.active ? "badge-success" : "badge-neutral"}">${formatAmd(Number(p.unit_price_amd))}</span>
+            <span class="badge ${p.active ? "badge-success" : "badge-neutral"}">${formatAmd(Number(p.silver_price_amd > 0 ? p.silver_price_amd : p.unit_price_amd))}</span>
           </div>
           <div class="user-row-meta">
             <span class="muted">
@@ -1312,117 +1312,6 @@ export async function renderCompanyProfileSection(container) {
         address: data.get("address") || null,
       });
       successEl.hidden = false;
-    } catch (err) {
-      errorEl.textContent = err.message;
-      errorEl.hidden = false;
-    } finally {
-      submitBtn.disabled = false;
-    }
-  });
-}
-
-// Region/Subregion -> Sales Channel + Sales Manager mapping table. The
-// new-customer form (map.js) reads this via the /route-distribution/lookup
-// endpoint to suggest a channel and manager once a location's region has
-// been detected -- always just a suggestion the rep can override, never a
-// lock, so this admin screen only needs to manage the mapping itself.
-export async function renderRouteDistributionSection(container) {
-  container.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
-  const [mappings, channels] = await Promise.all([api.listRouteDistribution(), api.getPerfChannels()]);
-  // Manager comes from sales_channels.manager_user_id via the mapped
-  // channel code -- see "Sales Channel Owners" section below, the one place
-  // that association is actually set.
-  const channelManagerByCode = new Map(channels.filter((c) => c.manager_user_id).map((c) => [c.code, c.manager_name]));
-
-  function subregionFieldHtml(region) {
-    if (region === "Yerevan") {
-      return `<select name="subregion" id="rd-subregion">
-        <option value="">${t("route_distribution_whole_region")}</option>
-        ${YEREVAN_DISTRICTS.map((d) => `<option value="${escapeHtml(d)}">${escapeHtml(subregionLabelHy(d))}</option>`).join("")}
-      </select>`;
-    }
-    return `<input name="subregion" id="rd-subregion" placeholder="${t("route_distribution_whole_region")}" />`;
-  }
-
-  container.innerHTML = `
-    <div class="card">
-      <form id="rd-add-form">
-        <label>${t("region")}
-          <select name="region" id="rd-region" required>
-            <option value="">${t("select_placeholder")}</option>
-            ${REGION_LIST.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(regionLabelHy(r))}</option>`).join("")}
-          </select>
-        </label>
-        <label id="rd-subregion-wrap">${t("subregion")}${subregionFieldHtml("")}</label>
-        <label>${t("sales_channel")}
-          <select name="sales_channel" id="rd-channel" required>
-            <option value="">${t("select_placeholder")}</option>
-            ${SALES_CHANNELS.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")}
-          </select>
-        </label>
-        <p class="muted radius-help">${t("route_distribution_manager_hint")}</p>
-        <p class="form-error" id="rd-error" hidden></p>
-        <button type="submit" class="btn btn-primary">${t("route_distribution_add")}</button>
-      </form>
-    </div>
-    <div id="rd-list" class="card-list"></div>
-  `;
-
-  const regionSelect = container.querySelector("#rd-region");
-  const subregionWrap = container.querySelector("#rd-subregion-wrap");
-  regionSelect.addEventListener("change", () => {
-    subregionWrap.innerHTML = `${t("subregion")}${subregionFieldHtml(regionSelect.value)}`;
-  });
-
-  const listEl = container.querySelector("#rd-list");
-  function renderList() {
-    if (!mappings.length) {
-      listEl.innerHTML = `<p class="empty-state">${t("route_distribution_empty")}</p>`;
-      return;
-    }
-    listEl.innerHTML = mappings
-      .map(
-        (m) => `
-      <div class="card user-row">
-        <div class="user-row-top">
-          <div>
-            <strong>${escapeHtml(m.region)}${m.subregion ? ` · ${escapeHtml(m.subregion)}` : ""}</strong>
-            <span class="muted">${escapeHtml(m.sales_channel)}${m.channel_manager_name ? ` · ${t("route_distribution_manager_from_channel")}: ${escapeHtml(m.channel_manager_name)}` : ""}</span>
-          </div>
-          <button type="button" class="btn-link btn-link-danger" data-delete-id="${m.id}">${t("delete")}</button>
-        </div>
-      </div>`
-      )
-      .join("");
-    listEl.querySelectorAll("[data-delete-id]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        await api.deleteRouteDistribution(btn.dataset.deleteId);
-        mappings.splice(mappings.findIndex((m) => String(m.id) === btn.dataset.deleteId), 1);
-        renderList();
-      });
-    });
-  }
-  renderList();
-
-  const form = container.querySelector("#rd-add-form");
-  const errorEl = container.querySelector("#rd-error");
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    errorEl.hidden = true;
-    const data = new FormData(form);
-    const submitBtn = form.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-    try {
-      const created = await api.createRouteDistribution({
-        region: data.get("region"),
-        subregion: data.get("subregion") || null,
-        sales_channel: data.get("sales_channel"),
-      });
-      created.channel_manager_name = channelManagerByCode.get(created.sales_channel) || null;
-      mappings.push(created);
-      renderList();
-      form.reset();
-      subregionWrap.innerHTML = `${t("subregion")}${subregionFieldHtml("")}`;
     } catch (err) {
       errorEl.textContent = err.message;
       errorEl.hidden = false;

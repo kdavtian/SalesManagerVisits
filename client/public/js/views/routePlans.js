@@ -33,6 +33,7 @@ export async function renderRoutePlans(root, navigate) {
         <div class="detail-header-title"><h1>${t("route_plans")}</h1></div>
       </div>
       ${canManage ? `<button type="button" class="btn btn-primary btn-block" id="new-route-plan-btn">+ ${t("new_route_plan")}</button>` : ""}
+      ${canManage ? `<button type="button" class="btn btn-block" id="route-distribution-btn" style="margin-top:8px;">${t("route_distribution_title")}</button>` : ""}
       <p class="form-error" id="route-plans-error" hidden></p>
       <div id="route-plans-body" style="margin-top:12px;"><p class="loading-state" role="status">${t("loading")}</p></div>
     </div>
@@ -125,6 +126,7 @@ export async function renderRoutePlans(root, navigate) {
     });
   }
 
+  container.querySelector("#route-distribution-btn")?.addEventListener("click", () => navigate("#/route-distribution"));
   container.querySelector("#new-route-plan-btn")?.addEventListener("click", () => {
     openNewRoutePlanFlow(load);
   });

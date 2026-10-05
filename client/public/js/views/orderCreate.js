@@ -2,7 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml, formatAmd, tierBadgeHtml, activateDialog, activateCombobox } from "../util.js";
 import { t } from "../i18n.js";
 import { enqueueOrder } from "../offlineQueue.js";
-import { canAssignErpCustomerId } from "../state.js";
+import { canAssignErpCustomerId, state } from "../state.js";
 import { compareProducts, sortedBrands } from "../productSort.js";
 import { getProductCatalog } from "../productCatalog.js";
 
@@ -67,9 +67,13 @@ function numOrNull(value) {
 // price -- a potential or competitor account isn't a Silver/Gold
 // relationship yet, so it never gets a discounted or special price.
 function tierPrice(product, tier) {
-  const bronze = numOrNull(product.bronze_price_amd) ?? Number(product.unit_price_amd);
-  if (tier === "silver") return numOrNull(product.silver_price_amd) ?? bronze;
-  if (tier === "gold") return numOrNull(product.gold_price_amd) ?? bronze;
+  // Mirrors tierListPrice on the server: an empty bronze falls back to
+  // silver, gold falls back to silver then bronze.
+  const pos = (v) => (numOrNull(v) > 0 ? numOrNull(v) : null);
+  const silverRaw = pos(product.silver_price_amd);
+  const bronze = pos(product.bronze_price_amd) ?? pos(product.unit_price_amd) ?? silverRaw ?? 0;
+  if (tier === "silver") return silverRaw ?? bronze;
+  if (tier === "gold") return pos(product.gold_price_amd) ?? silverRaw ?? bronze;
   return bronze;
 }
 
@@ -96,6 +100,19 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
   }
 
   const tier = customer.customer_tier || "potential";
+  // Gold customers can have individually negotiated prices; reviewer roles
+  // (director and above) can set them from this form. The server applies
+  // saved ones itself -- these are only for display and the edit input.
+  const canSetPrices = tier === "gold" && ["admin", "sales_director", "ceo", "operations_director"].includes(state.user?.role);
+  const individualPrices = new Map();
+  if (tier === "gold") {
+    try {
+      for (const r of await api.getCustomerProductPrices(customerId)) individualPrices.set(r.product_id, Number(r.price_amd));
+    } catch {
+      /* offline -- list price shown; server still applies the saved one */
+    }
+  }
+  const basePrice = (product) => (individualPrices.has(product.id) ? individualPrices.get(product.id) : tierPrice(product, tier));
 
   // Keyed by product id. No product can be sold out of catalog (decision
   // C6), so every line is a real catalog product -- persists across
@@ -307,7 +324,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
   function renderProductRow(product) {
     const line = cart.get(product.id);
     const qty = line?.quantity ?? 0;
-    const price = tierPrice(product, tier);
+    const price = line?.unit_price_amd ?? basePrice(product);
     const warning = stockWarning(product, qty || defaultQtyForUnit(product.unit));
     const outOfStock = product.stock_qty !== null && product.stock_qty !== undefined && product.stock_qty <= 0;
     return `
@@ -315,6 +332,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
         <div class="order-product-info">
           <strong>${escapeHtml(product.name)}</strong>
           <span class="muted">${[product.brand, product.unit].filter(Boolean).map(escapeHtml).join(" · ")} ${formatAmd(price)}</span>
+          ${qty > 0 && canSetPrices ? `<label class="muted">${t("custom_price")} <input type="number" min="0" step="1" inputmode="numeric" class="order-price-input" data-price-input value="${price}" style="width:6rem"></label>` : ""}
           ${warning ? `<span class="order-stock-warning${warning.level === "danger" ? " order-stock-danger" : ""}">${warning.text}</span>` : ""}
         </div>
         ${
@@ -333,12 +351,21 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
   }
 
   function wireRow(row, product) {
+    const priceInput = row.querySelector("[data-price-input]");
+    priceInput?.addEventListener("change", () => {
+      const line = cart.get(product.id);
+      const n = Number(priceInput.value);
+      if (!line || !Number.isFinite(n) || n < 0) return;
+      line.unit_price_amd = n;
+      line.price_override = n !== basePrice(product);
+      updateCartBar();
+    });
     row.querySelectorAll("[data-action]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const line = cart.get(product.id) ?? {
           product_id: product.id,
           product_name: product.name,
-          unit_price_amd: tierPrice(product, tier),
+          unit_price_amd: basePrice(product),
           quantity: 0,
         };
         if (btn.dataset.action === "add") line.quantity += defaultQtyForUnit(product.unit);
@@ -406,6 +433,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
       product_name: l.product_name,
       unit_price_amd: l.unit_price_amd,
       quantity: l.quantity,
+      ...(l.price_override ? { price_override: true } : {}),
     }));
     const value = discountValue();
     const discountPctToSend = discountType === "pct" ? value : 0;

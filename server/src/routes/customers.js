@@ -736,6 +736,18 @@ customersRouter.get("/:id/erp-orders/:orderId", async (req, res) => {
 // (erp_order_lines) -- for the "product availability check" picker at
 // check-in, so a rep only has to tick which of what this shop actually
 // carries is currently in stock, not browse the whole catalog.
+// Individually negotiated prices (Gold customers only) -- the order form
+// shows these instead of the tier list price.
+customersRouter.get("/:id/product-prices", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: "Invalid customer id" });
+  const { rows } = await pool.query(
+    "SELECT product_id, price_amd FROM customer_product_prices WHERE customer_id = $1",
+    [id]
+  );
+  res.json(rows.map((r) => ({ product_id: r.product_id, price_amd: Number(r.price_amd) })));
+});
+
 customersRouter.get("/:id/ordered-products", async (req, res) => {
   const { rows: customerRows } = await pool.query("SELECT erp_customer_id FROM customers WHERE id = $1", [
     req.params.id,

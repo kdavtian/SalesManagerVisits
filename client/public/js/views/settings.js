@@ -3,7 +3,7 @@ import { t, getLang, setLang } from "../i18n.js";
 import { getTheme, setTheme } from "../theme.js";
 import { getPerfMode, setPerfMode } from "../perfMode.js";
 import { state, isAdmin, canPlanForOthers, seesFinancialExports, canManageProducts, isPerfCeo } from "../state.js";
-import { renderTeamSection, renderPlanApprovalsSection, renderEditRequestsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection, renderRouteDistributionSection, renderSalesChannelOwnersSection, renderQuickActionVisibilitySection, renderDataQualitySection, renderNotificationDeliveryLogSection, renderClientErrorLogSection } from "./admin.js";
+import { renderTeamSection, renderPlanApprovalsSection, renderEditRequestsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection, renderSalesChannelOwnersSection, renderQuickActionVisibilitySection, renderDataQualitySection, renderNotificationDeliveryLogSection, renderClientErrorLogSection } from "./admin.js";
 import { renderBonusChallengesSection, renderBonusRewardClaimsSection } from "./bonusChallengesAdmin.js";
 import { escapeHtml, compressImage, activateDialog, attachSwipeToDismiss, formatPhoneDisplay, normalizePhone } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
@@ -318,7 +318,6 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
           admin
             ? `<div class="card settings-list">
           ${settingsRow({ icon: ICON.chart, label: t("reports_management"), id: "row-reports-management", color: "green" })}
-          ${settingsRow({ icon: ICON.database, label: t("route_distribution_title"), id: "row-route-distribution", color: "purple" })}
           ${settingsRow({ icon: ICON.database, label: t("sales_channel_owners_title"), id: "row-sales-channel-owners", color: "purple" })}
           ${settingsRow({ icon: ICON.chart, label: t("quick_action_visibility_title"), id: "row-quick-actions", color: "indigo" })}
           ${settingsRow({ icon: ICON.chart, label: t("data_quality_title"), id: "row-data-quality", color: "red" })}
@@ -788,9 +787,6 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     });
     root.querySelector("#row-reports-management").addEventListener("click", (e) => {
       openAdminSection(root, e.currentTarget, t("reports_management"), renderReportsManagementSection);
-    });
-    root.querySelector("#row-route-distribution").addEventListener("click", (e) => {
-      openAdminSection(root, e.currentTarget, t("route_distribution_title"), renderRouteDistributionSection);
     });
     root.querySelector("#row-quick-actions").addEventListener("click", (e) => {
       openAdminSection(root, e.currentTarget, t("quick_action_visibility_title"), renderQuickActionVisibilitySection);

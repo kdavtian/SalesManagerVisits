@@ -186,6 +186,41 @@ export function buildDirectionManagerTree(customers, { channelLabel, noDirection
   });
 }
 
+// Customer type (category) -> tier. Leaf ids are "category::tier"; a missing
+// category is NO_GROUP_KEY. tiers is the ordered [{value,label}] list.
+export function buildCategoryTierTree(customers, { categoryLabel, tiers, noCategoryLabel }) {
+  const catMap = new Map();
+  for (const c of customers) {
+    const key = c.category || NO_GROUP_KEY;
+    if (!catMap.has(key)) catMap.set(key, []);
+    catMap.get(key).push(c);
+  }
+  const keys = [...catMap.keys()].sort((a, b) => {
+    if (a === NO_GROUP_KEY) return 1;
+    if (b === NO_GROUP_KEY) return -1;
+    return categoryLabel(a).localeCompare(categoryLabel(b));
+  });
+  return keys.map((key, i) => {
+    const list = catMap.get(key);
+    const leaves = tiers
+      .map((tier) => ({
+        id: `${key}::${tier.value}`,
+        name: `${tier.label} (${list.filter((c) => (c.customer_tier || "potential") === tier.value).length})`,
+        n: list.filter((c) => (c.customer_tier || "potential") === tier.value).length,
+      }))
+      .filter((l) => l.n > 0)
+      .map(({ id, name }) => ({ id, name }));
+    return {
+      key: `t${i}`,
+      name: key === NO_GROUP_KEY ? noCategoryLabel : categoryLabel(key),
+      allIds: leaves.map((l) => l.id),
+      customerCount: list.length,
+      leaves,
+      children: null,
+    };
+  });
+}
+
 function leafRowHtml(leaf) {
   return `
     <label class="route-plan-tree-row route-plan-tree-row-leaf">

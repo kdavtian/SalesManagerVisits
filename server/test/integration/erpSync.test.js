@@ -111,6 +111,34 @@ test("POST /api/erp-sync: a valid payload syncs customers and reports counts", a
   assert.equal(Number(rows[0].debt_amd), 15000);
 });
 
+test("POST /api/erp-sync: customer tier follows the workbook Tier column (competitors untouched, blanks ignored)", async () => {
+  const manager = await createUser("sales_manager");
+  const stamp = Date.now();
+  const a = await createCustomer({ created_by: manager.id, erp_customer_id: `ITEST-TIER-A-${stamp}` });
+  const b = await createCustomer({ created_by: manager.id, erp_customer_id: `ITEST-TIER-B-${stamp}` });
+  const c = await createCustomer({ created_by: manager.id, erp_customer_id: `ITEST-TIER-C-${stamp}` });
+  await pool.query("UPDATE customers SET customer_tier = 'bronze' WHERE id = $1", [a.id]);
+  await pool.query("UPDATE customers SET customer_tier = 'competitor' WHERE id = $1", [b.id]);
+  await pool.query("UPDATE customers SET customer_tier = 'silver' WHERE id = $1", [c.id]);
+  const res = await syncRequest(
+    {
+      customers: [
+        { erp_customer_id: a.erp_customer_id, customer_name: a.name, erp_tier: "Gold" },
+        { erp_customer_id: b.erp_customer_id, customer_name: b.name, erp_tier: "gold" },
+        { erp_customer_id: c.erp_customer_id, customer_name: c.name, erp_tier: "" },
+      ],
+    },
+    { "X-Sync-Key": SYNC_KEY }
+  );
+  assert.equal(res.status, 200);
+  const tierOf = async (id) => (await pool.query("SELECT customer_tier FROM customers WHERE id = $1", [id])).rows[0].customer_tier;
+  assert.equal(await tierOf(a.id), "gold");
+  assert.equal(await tierOf(b.id), "competitor");
+  assert.equal(await tierOf(c.id), "silver");
+  const audit = await pool.query("SELECT old_tier, new_tier FROM customer_level_audit WHERE customer_id = $1", [a.id]);
+  assert.deepEqual(audit.rows, [{ old_tier: "bronze", new_tier: "gold" }]);
+});
+
 // Regression: a pre-existing, never-synced product whose stored
 // name/brand/unit had drifted whitespace ("Orlen   5w40", a double space)
 // used to fail the claim-by-identity match against an incoming sync row
@@ -173,6 +201,24 @@ test("POST /api/erp-sync: net_cost_amd syncs when sent, and is never cleared by 
 // HC (ՀԾ-Հաշվապահ) product code from the workbook's Products sheet: applied
 // when present (even on a manually edited product), kept as text with its
 // leading zeros, and never wiped by a later sync where the sheet cell is blank.
+test("POST /api/erp-sync: tier prices and net cost refresh even for a manually edited product", async () => {
+  const erpId = `ITEST-PRICES-${Date.now()}`;
+  try {
+    await syncRequest({ customers: [], products: [{ erp_product_id: erpId, name: "Manual Price Oil", unit_price_amd: 9000, bronze_price_amd: 9000, silver_price_amd: 8000 }] }, { "X-Sync-Key": SYNC_KEY });
+    await pool.query("UPDATE products SET manually_edited_at = now(), name = 'Renamed By Hand' WHERE erp_product_id = $1", [erpId]);
+    const res = await syncRequest(
+      { customers: [], products: [{ erp_product_id: erpId, name: "Manual Price Oil", unit_price_amd: 9700, bronze_price_amd: 9700, silver_price_amd: 8700, gold_price_amd: 6000, net_cost_amd: 5315 }] },
+      { "X-Sync-Key": SYNC_KEY }
+    );
+    assert.equal(res.status, 200);
+    const row = (await pool.query("SELECT name, bronze_price_amd, silver_price_amd, gold_price_amd, net_cost_amd FROM products WHERE erp_product_id = $1", [erpId])).rows[0];
+    assert.equal(row.name, "Renamed By Hand", "name stays gated by manually_edited_at");
+    assert.deepEqual([row.bronze_price_amd, row.silver_price_amd, row.gold_price_amd, row.net_cost_amd].map(Number), [9700, 8700, 6000, 5315]);
+  } finally {
+    await pool.query("DELETE FROM products WHERE erp_product_id = $1", [erpId]);
+  }
+});
+
 test("POST /api/erp-sync: hc_code syncs as text, applies to manually edited products, and a blank later value keeps it", async () => {
   const erpId = `ITEST-HC-${Date.now()}`;
   try {

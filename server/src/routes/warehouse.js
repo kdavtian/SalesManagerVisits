@@ -142,7 +142,8 @@ warehouseRouter.get("/inventory", async (req, res) => {
        WHERE product_id IS NOT NULL
        GROUP BY product_id
      )
-     SELECT p.id, p.name, p.brand, p.family, p.unit, p.stock_qty, p.bronze_price_amd,
+     SELECT p.id, p.name, p.brand, p.family, p.unit, p.stock_qty, p.bronze_price_amd, p.silver_price_amd,
+            COALESCE(NULLIF(p.silver_price_amd, 0), NULLIF(p.bronze_price_amd, 0)) AS wholesale_price_amd,
             p.landing_cost_amd, p.net_cost_amd, p.created_at,
             d.qty_30d, d.qty_90d, d.last_sale_date
      FROM products p
