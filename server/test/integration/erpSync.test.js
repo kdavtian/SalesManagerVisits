@@ -219,6 +219,38 @@ test("POST /api/erp-sync: tier prices and net cost refresh even for a manually e
   }
 });
 
+test("POST /api/erp-sync: SKU status decides what is active, family follows the workbook, inactive products are not created", async () => {
+  const stamp = Date.now();
+  const keep = `ITEST-ACT-KEEP-${stamp}`;
+  const drop = `ITEST-ACT-DROP-${stamp}`;
+  const never = `ITEST-ACT-NEVER-${stamp}`;
+  const ids = [keep, drop, never];
+  try {
+    await syncRequest({ customers: [], products: [
+      { erp_product_id: keep, name: "Active Oil", unit_price_amd: 9000, family: "Old Family" },
+      { erp_product_id: drop, name: "Soon Inactive Oil", unit_price_amd: 9000 },
+    ] }, { "X-Sync-Key": SYNC_KEY });
+    await pool.query("UPDATE products SET manually_edited_at = now() WHERE erp_product_id = $1", [keep]);
+    const res = await syncRequest({ customers: [], products: [
+      { erp_product_id: keep, name: "Active Oil", unit_price_amd: 9100, family: "Edge", active: true },
+      { erp_product_id: drop, name: "Soon Inactive Oil", unit_price_amd: 9000, active: false },
+      { erp_product_id: never, name: "Never Active Oil", unit_price_amd: 0, active: false },
+    ] }, { "X-Sync-Key": SYNC_KEY });
+    assert.equal(res.status, 200);
+    const rows = Object.fromEntries((await pool.query("SELECT erp_product_id, active, family, unit_price_amd FROM products WHERE erp_product_id = ANY($1)", [ids])).rows.map((r) => [r.erp_product_id, r]));
+    assert.equal(rows[keep].active, true);
+    assert.equal(rows[keep].family, "Edge", "family from the workbook applies even to a manually edited product");
+    assert.equal(Number(rows[keep].unit_price_amd), 9100);
+    assert.equal(rows[drop].active, false);
+    assert.equal(rows[never], undefined, "an inactive product the app never had is not created");
+    // No status sent (older workbook) leaves active untouched.
+    await syncRequest({ customers: [], products: [{ erp_product_id: drop, name: "Soon Inactive Oil", unit_price_amd: 9000 }] }, { "X-Sync-Key": SYNC_KEY });
+    assert.equal((await pool.query("SELECT active FROM products WHERE erp_product_id = $1", [drop])).rows[0].active, false);
+  } finally {
+    await pool.query("DELETE FROM products WHERE erp_product_id = ANY($1)", [ids]);
+  }
+});
+
 test("POST /api/erp-sync: hc_code syncs as text, applies to manually edited products, and a blank later value keeps it", async () => {
   const erpId = `ITEST-HC-${Date.now()}`;
   try {
