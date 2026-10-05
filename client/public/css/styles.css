@@ -9992,3 +9992,12 @@ form select,
   color: var(--text-dim);
   cursor: pointer;
 }
+
+.dropdown-menu-heading {
+  padding: 8px 12px 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-top: 1px solid var(--border);
+}
