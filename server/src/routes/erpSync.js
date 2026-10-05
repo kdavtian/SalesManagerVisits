@@ -166,6 +166,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     prodStockQtys,
     prodLandingCosts,
     prodNetCosts,
+    prodHcCodes,
   } = transformErpProducts(products);
 
   const { volChannelCodes, volMonths, volBrands, volLiters } = transformErpBrandVolume(brand_volume);
@@ -343,6 +344,16 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
          FROM unnest($1::text[], $2::numeric[]) AS t(erp_product_id, landing_cost_amd)
          WHERE products.erp_product_id = t.erp_product_id`,
         [prodErpIds, prodLandingCosts]
+      );
+      // HC code from the workbook's Products sheet: like landing cost it is
+      // applied regardless of manually_edited_at (editing a price must not
+      // freeze it), and only when the sheet actually has a value -- a blank
+      // sheet cell never wipes a code an admin set in the app.
+      await client.query(
+        `UPDATE products SET hc_code = t.hc_code
+         FROM unnest($1::text[], $2::text[]) AS t(erp_product_id, hc_code)
+         WHERE products.erp_product_id = t.erp_product_id AND t.hc_code IS NOT NULL AND products.hc_code IS DISTINCT FROM t.hc_code`,
+        [prodErpIds, prodHcCodes]
       );
     }
 

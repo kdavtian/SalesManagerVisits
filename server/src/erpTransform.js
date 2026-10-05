@@ -203,6 +203,7 @@ export function transformErpProducts(products) {
   const prodStockQtys = [];
   const prodLandingCosts = [];
   const prodNetCosts = [];
+  const prodHcCodes = [];
 
   for (const p of isPlainArray(products)) {
     if (!isPlainObject(p) || !p.erp_product_id || !p.name || !Number.isFinite(p.unit_price_amd)) continue;
@@ -218,6 +219,9 @@ export function transformErpProducts(products) {
     prodStockQtys.push(Number.isFinite(p.stock_qty) ? Math.trunc(p.stock_qty) : null);
     prodLandingCosts.push(Number.isFinite(p.landing_cost_amd) ? p.landing_cost_amd : null);
     prodNetCosts.push(Number.isFinite(p.net_cost_amd) ? p.net_cost_amd : null);
+    // HC (ՀԾ-Հաշվապահ) product code, text so "000010" keeps its zeros.
+    const hc = p.hc_code != null ? String(p.hc_code).trim() : "";
+    prodHcCodes.push(hc || null);
   }
 
   return {
@@ -233,6 +237,7 @@ export function transformErpProducts(products) {
     prodStockQtys,
     prodLandingCosts,
     prodNetCosts,
+    prodHcCodes,
   };
 }
 

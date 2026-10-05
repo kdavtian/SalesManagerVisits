@@ -170,6 +170,30 @@ test("POST /api/erp-sync: net_cost_amd syncs when sent, and is never cleared by 
   }
 });
 
+// HC (ՀԾ-Հաշվապահ) product code from the workbook's Products sheet: applied
+// when present (even on a manually edited product), kept as text with its
+// leading zeros, and never wiped by a later sync where the sheet cell is blank.
+test("POST /api/erp-sync: hc_code syncs as text, applies to manually edited products, and a blank later value keeps it", async () => {
+  const erpId = `ITEST-HC-${Date.now()}`;
+  try {
+    let res = await syncRequest({ customers: [], products: [{ erp_product_id: erpId, name: "HC Test Oil", unit_price_amd: 10000, hc_code: " 000010 " }] }, { "X-Sync-Key": SYNC_KEY });
+    assert.equal(res.status, 200);
+    let row = (await pool.query("SELECT hc_code FROM products WHERE erp_product_id = $1", [erpId])).rows[0];
+    assert.equal(row.hc_code, "000010");
+
+    await pool.query("UPDATE products SET manually_edited_at = now() WHERE erp_product_id = $1", [erpId]);
+    res = await syncRequest({ customers: [], products: [{ erp_product_id: erpId, name: "HC Test Oil", unit_price_amd: 10000, hc_code: "00686-14" }] }, { "X-Sync-Key": SYNC_KEY });
+    row = (await pool.query("SELECT hc_code FROM products WHERE erp_product_id = $1", [erpId])).rows[0];
+    assert.equal(row.hc_code, "00686-14", "a manually edited product still gets its HC code from the sheet");
+
+    res = await syncRequest({ customers: [], products: [{ erp_product_id: erpId, name: "HC Test Oil", unit_price_amd: 10000, hc_code: "" }] }, { "X-Sync-Key": SYNC_KEY });
+    row = (await pool.query("SELECT hc_code FROM products WHERE erp_product_id = $1", [erpId])).rows[0];
+    assert.equal(row.hc_code, "00686-14", "a blank sheet cell must not wipe the stored code");
+  } finally {
+    await pool.query("DELETE FROM products WHERE erp_product_id = $1", [erpId]);
+  }
+});
+
 test("POST /api/erp-sync: TRUNCATE-and-replace -- a customer absent from the new payload no longer appears", async () => {
   const manager = await createUser("sales_manager");
   const staleId = `ITEST-STALE-${Date.now()}`;
