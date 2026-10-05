@@ -5,6 +5,13 @@ import { icons } from "../icons.js";
 import { ORDER_STATUS_ICONS } from "../ordersSearchEnhancements.js";
 import { loadWithCache } from "../listCache.js";
 import { STATUS_META, openOrderDetailSheet } from "../orderDetailSheet.js";
+import { ACCOUNTING_STATUS_BADGE } from "../accountingDocSheet.js";
+import { state } from "../state.js";
+
+// Who sees (and can filter by) the accounting-document status -- mirrors
+// canConfirmOrders in the server's roles.js.
+const ACCOUNTING_ROLES = new Set(["admin", "sales_director", "ceo", "operations_director", "accountant"]);
+const ACCOUNTING_FILTERS = ["pending", "in_progress", "waybill_created", "partially_created", "exported_unsigned", "signed", "needs_attention"];
 
 const STATUS_FILTERS = ["", "draft", "submitted", "confirmed", "packed_stock_out", "delivered"];
 
@@ -64,6 +71,7 @@ export async function renderOrders(root, navigate) {
 
   let activeStatus = DEFAULT_STATUS_FILTER;
   let channelFilter = "";
+  let accountingFilter = "";
   let orders = [];
   let hasMore = false;
   let loadingMore = false;
@@ -76,7 +84,23 @@ export async function renderOrders(root, navigate) {
       ${channels
         .map((c) => `<button role="menuitemradio" aria-checked="${c === channelFilter}" data-channel="${escapeHtml(c)}">${escapeHtml(channelDisplayLabel(c))}</button>`)
         .join("")}
+      ${
+        ACCOUNTING_ROLES.has(state.user.role)
+          ? `<div class="dropdown-menu-heading muted" role="presentation">${t("acc_section_title")}</div>
+      <button role="menuitemradio" aria-checked="${accountingFilter === ""}" data-accounting="">${t("acc_filter_any")}</button>
+      <button role="menuitemradio" aria-checked="${accountingFilter === "none"}" data-accounting="none">${t("acc_filter_none")}</button>
+      ${ACCOUNTING_FILTERS.map((f) => `<button role="menuitemradio" aria-checked="${accountingFilter === f}" data-accounting="${f}">${t(`acc_status_${f}`)}</button>`).join("")}`
+          : ""
+      }
     `;
+    filterMenu.querySelectorAll("[data-accounting]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        accountingFilter = btn.dataset.accounting;
+        filterMenu.hidden = true;
+        filterBtn.setAttribute("aria-expanded", "false");
+        paint();
+      });
+    });
     filterMenu.querySelectorAll("[data-channel]").forEach((btn) => {
       btn.addEventListener("click", () => {
         channelFilter = btn.dataset.channel;
@@ -144,6 +168,7 @@ export async function renderOrders(root, navigate) {
     const search = searchInput.value.trim().toLowerCase();
     let filtered = orders;
     if (channelFilter) filtered = filtered.filter((o) => o.sales_channel === channelFilter);
+    if (accountingFilter) filtered = filtered.filter((o) => (accountingFilter === "none" ? !o.accounting_status : o.accounting_status === accountingFilter));
     if (search) {
       filtered = filtered.filter((o) => {
         const haystack = [o.customer_name, o.order_code, o.user_name, o.sales_channel, formatDate(o.created_at)]
@@ -204,6 +229,7 @@ export async function renderOrders(root, navigate) {
             <div class="list-row-bottom">
               <span class="badge ${meta.cls}">${t(meta.key)}</span>
               ${o.payment_method ? `<span class="badge badge-neutral">${t(o.payment_method === "cash" ? "payment_method_cash" : "payment_method_invoice")}</span>` : ""}
+              ${o.accounting_status && ACCOUNTING_ROLES.has(state.user.role) ? `<span class="badge ${ACCOUNTING_STATUS_BADGE[o.accounting_status] ?? "badge-neutral"}">${t(`acc_status_${o.accounting_status}`)}</span>` : ""}
             </div>
           </div>
           <span class="chevron">&#8250;</span>
@@ -216,7 +242,7 @@ export async function renderOrders(root, navigate) {
     // once a client-side search or channel filter narrows what's shown,
     // there's no "next page" of that search to fetch, only of the whole
     // list.
-    if (hasMore && !search && !channelFilter) {
+    if (hasMore && !search && !channelFilter && !accountingFilter) {
       listEl.insertAdjacentHTML("beforeend", `<button type="button" class="btn btn-block" id="orders-load-more">${t("load_more")}</button>`);
       listEl.querySelector("#orders-load-more").addEventListener("click", loadMore);
     }

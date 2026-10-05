@@ -1,3 +1,4 @@
+import { nextStatusFromDocuments } from "../accountingStatus.js";
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
@@ -759,6 +760,29 @@ ordersRouter.post("/:id/accounting-request", async (req, res) => {
     [order.id, method, docType, isTest, req.user.id, order.accounting_status]
   );
   if (!updated[0]) return res.status(409).json({ error: "This order was changed by someone else -- refresh and try again" });
+  res.json(updated[0]);
+});
+
+// A human confirms the SRC signature in KAD (Lily never signs and may not be
+// able to see it): marks one waybill (by HC document number) or all of them
+// as signed.
+ordersRouter.post("/:id/accounting-signed", async (req, res) => {
+  if (!canConfirmOrders(req.user.role) && req.user.role !== "accountant") return res.status(403).json({ error: "Not allowed" });
+  const { rows } = await pool.query("SELECT id, accounting_status, accounting_documents FROM orders WHERE id = $1", [req.params.id]);
+  const order = rows[0];
+  if (!order) return res.status(404).json({ error: "Order not found" });
+  if (!["waybill_created", "partially_created", "exported_unsigned"].includes(order.accounting_status)) {
+    return res.status(409).json({ error: "Nothing to sign yet" });
+  }
+  const number = req.body?.number;
+  const docs = order.accounting_documents.map((d) =>
+    !number || d.hc_doc_number === String(number) ? { ...d, einvoicing: { status: "signed", exported_at: d.einvoicing?.exported_at ?? null, signed_by: req.user.id } } : d
+  );
+  const next = nextStatusFromDocuments(order.accounting_status, docs);
+  const { rows: updated } = await pool.query(
+    "UPDATE orders SET accounting_documents = $2::jsonb, accounting_status = $3, accounting_updated_at = now() WHERE id = $1 RETURNING *",
+    [order.id, JSON.stringify(docs), next]
+  );
   res.json(updated[0]);
 });
 

@@ -65,7 +65,14 @@ function accountingSectionHtml(order) {
     <h3 class="list-group-heading">${t("acc_section_title")}</h3>
     <p><span class="badge badge-neutral">${accountingDocLabel(order.accounting_doc_type === "waybill" ? "cash" : "invoice")}</span>
       <span class="badge ${ACCOUNTING_STATUS_BADGE[order.accounting_status] ?? "badge-neutral"}">${t(`acc_status_${order.accounting_status}`)}</span></p>
-    ${docs.map((d) => `<p class="muted">${escapeHtml(d.number)}${d.brand ? ` · ${escapeHtml(d.brand)}` : ""} · ${escapeHtml(d.date)}</p>`).join("")}
+    ${docs
+      .map(
+        (d) =>
+          `<p class="muted">№ ${escapeHtml(d.hc_doc_number)}${d.brand ? ` · ${escapeHtml(d.brand)}` : ""} · ${escapeHtml(d.date)}${
+            d.einvoicing?.status ? ` · ${t(`acc_einv_${d.einvoicing.status}`)}` : ""
+          }</p>`
+      )
+      .join("")}
     ${err ? `<p class="form-error">${escapeHtml(err.message || err.code)}</p>` : ""}`;
 }
 
@@ -216,6 +223,9 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
         cls: "btn",
       });
     }
+    if (CONFIRM_ROLES.has(state.user.role) && ["waybill_created", "partially_created", "exported_unsigned"].includes(order.accounting_status)) {
+      buttons.push({ label: t("acc_mark_signed"), action: "accounting-signed", cls: "btn" });
+    }
     if (order.status === "confirmed") {
       buttons.push({ label: t("confirmed_awaiting_warehouse"), action: "noop", cls: "btn", disabledDisplay: true });
     }
@@ -272,6 +282,19 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       btn.addEventListener("click", async () => {
         if (btn.dataset.action === "edit-order") {
           renderEditMode(order);
+          return;
+        }
+        if (btn.dataset.action === "accounting-signed") {
+          if (!confirm(t("acc_confirm_signed"))) return;
+          try {
+            await api.markAccountingSigned(orderId);
+            renderView(await api.getOrder(orderId));
+            notifyOrdersChanged();
+            onChanged?.();
+          } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+          }
           return;
         }
         if (btn.dataset.action === "accounting-document") {

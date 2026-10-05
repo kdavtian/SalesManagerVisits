@@ -13,7 +13,8 @@ export function accountingDocLabel(method) {
 export const ACCOUNTING_STATUS_BADGE = {
   pending: "badge-neutral",
   in_progress: "badge-info",
-  document_created: "badge-info",
+  waybill_created: "badge-info",
+  partially_created: "badge-warning",
   exported_unsigned: "badge-warning",
   signed: "badge-success",
   needs_attention: "badge-danger",

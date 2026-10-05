@@ -5,10 +5,14 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { hashToken } from "../integrationTokens.js";
+import { nextStatusFromDocuments } from "../accountingStatus.js";
 
 export const integrationRouter = Router();
 
-const ACCOUNTING_STATUSES = ["pending", "in_progress", "document_created", "exported_unsigned", "signed", "needs_attention"];
+const ACCOUNTING_STATUSES = ["pending", "in_progress", "waybill_created", "partially_created", "exported_unsigned", "signed", "needs_attention"];
+const ISSUE_CODES = ["insufficient_stock", "unknown_product", "hc_unavailable", "mixed_destination", "other"];
+// A claim that is never reported on is released after this long.
+const CLAIM_TTL_MINUTES = 30;
 
 function fail(res, status, code, message) {
   return res.status(status).json({ error: { code, message } });
@@ -85,6 +89,22 @@ function parseOrderRef(ref) {
   return match ? Number(match[1]) : null;
 }
 
+// Timestamps go out as ISO 8601 with the Yerevan offset (UTC+4, no DST).
+function iso(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  return new Date(d.getTime() + 4 * 3600 * 1000).toISOString().slice(0, 19) + "+04:00";
+}
+
+// A claim nobody reported on within 30 minutes goes back to pending.
+async function expireStaleClaims() {
+  await pool.query(
+    `UPDATE orders SET accounting_status = 'pending', accounting_claimed_at = NULL, accounting_updated_at = now()
+     WHERE accounting_status = 'in_progress' AND accounting_claimed_at < now() - ($1 || ' minutes')::interval`,
+    [String(CLAIM_TTL_MINUTES)]
+  );
+}
+
 const ORDER_SELECT = `
   SELECT o.id, o.order_code, o.created_at, o.note, o.payment_method, o.discount_pct, o.discount_amd, o.total_amd,
          o.status AS kad_status, o.accounting_doc_type, o.accounting_status, o.accounting_is_test,
@@ -124,23 +144,23 @@ function serializeOrder(o, items) {
   return {
     id: orderRef(o.id),
     number: o.order_code || `KAD-${o.id}`,
-    created_at: o.created_at,
+    created_at: iso(o.created_at),
     // KAD has no requested ship date or destination warehouse; Lily applies
-    // her own defaults (today / warehouse 04) when these are null.
+    // her defaults (today / warehouse 04) when these are null.
     ship_date: null,
     destination_warehouse: null,
-    customer: { name: o.customer_name, erp_customer_id: o.erp_customer_id, tax_id: o.customer_tin },
+    customer: { name: o.customer_name, tax_id: o.customer_tin, erp_customer_id: o.erp_customer_id },
     note: o.note,
+    waybill_status: o.accounting_status,
     doc_type: o.accounting_doc_type,
     payment_method: o.payment_method,
-    waybill_status: o.accounting_status,
     kad_order_status: o.kad_status,
     is_test: o.accounting_is_test,
     discount_pct: Number(o.discount_pct),
     discount_amd: Number(o.discount_amd),
     total_amd: Number(o.total_amd),
-    documents: o.accounting_documents,
-    error: o.accounting_error,
+    waybills: o.accounting_documents,
+    issue: o.accounting_error,
     items,
   };
 }
@@ -159,6 +179,7 @@ async function loadOrder(req, res) {
     return null;
   }
   req.auditOrderId = id;
+  await expireStaleClaims();
   const { rows } = await pool.query(`${ORDER_SELECT} WHERE o.id = $1 ${testScope(req)}`, [id]);
   if (!rows[0] || !rows[0].accounting_status) {
     fail(res, 404, "not_found", "Order not found");
@@ -167,17 +188,24 @@ async function loadOrder(req, res) {
   return rows[0];
 }
 
+async function respondWithOrder(res, id) {
+  const { rows } = await pool.query(`${ORDER_SELECT} WHERE o.id = $1`, [id]);
+  const items = await loadItems([id]);
+  res.json(serializeOrder(rows[0], items.get(id) ?? []));
+}
+
 // --- endpoints --------------------------------------------------------------
 
 integrationRouter.get("/ping", (req, res) => {
   res.json({ ok: true, token: req.integration.name, test_mode: req.integration.test_mode });
 });
 
-// "Ready" = management confirmed the order in KAD and asked accounting for a
-// document, which sets waybill_status to "pending".
+// 3.1  "Ready" = management confirmed the order in KAD and asked accounting
+// for the document, which sets waybill_status to "pending".
 integrationRouter.get("/orders", async (req, res) => {
   const status = req.query.waybill_status ?? "pending";
   if (!ACCOUNTING_STATUSES.includes(status)) return fail(res, 400, "invalid_status", `waybill_status must be one of ${ACCOUNTING_STATUSES.join(", ")}`);
+  await expireStaleClaims();
   const params = [status];
   let docFilter = "";
   if (req.query.doc_type !== undefined) {
@@ -197,6 +225,7 @@ integrationRouter.get("/orders", async (req, res) => {
   res.json({ orders: rows.map((r) => serializeOrder(r, items.get(r.id) ?? [])) });
 });
 
+// 3.2
 integrationRouter.get("/orders/:id", async (req, res) => {
   const order = await loadOrder(req, res);
   if (!order) return;
@@ -204,7 +233,7 @@ integrationRouter.get("/orders/:id", async (req, res) => {
   res.json(serializeOrder(order, items.get(order.id) ?? []));
 });
 
-// Atomic pending -> in_progress: two workers can't both win.
+// 3.3  Atomic pending -> in_progress: two workers can't both win.
 integrationRouter.post("/orders/:id/claim", async (req, res) => {
   const order = await loadOrder(req, res);
   if (!order) return;
@@ -214,98 +243,121 @@ integrationRouter.post("/orders/:id/claim", async (req, res) => {
     [order.id]
   );
   if (!rows[0]) return fail(res, 409, "not_pending", `Order is "${order.accounting_status}", only a pending order can be claimed`);
-  const { rows: fresh } = await pool.query(`${ORDER_SELECT} WHERE o.id = $1`, [order.id]);
-  const items = await loadItems([order.id]);
-  res.json(serializeOrder(fresh[0], items.get(order.id) ?? []));
+  await respondWithOrder(res, order.id);
 });
 
-// Reports the created document(s): one waybill per brand, or one invoice.
-integrationRouter.post("/orders/:id/documents", reportDocuments);
-integrationRouter.post("/orders/:id/waybills", reportDocuments);
-
-async function reportDocuments(req, res) {
+// 3.4  One waybill per brand: report one or several. Quantities per line are
+// summed across waybills; when every line is covered the order is
+// waybill_created, otherwise partially_created.
+integrationRouter.post("/orders/:id/waybills", async (req, res) => {
   const order = await loadOrder(req, res);
   if (!order) return;
-  if (!["in_progress", "document_created"].includes(order.accounting_status)) {
+  if (!["in_progress", "partially_created", "waybill_created"].includes(order.accounting_status)) {
     return fail(res, 409, "invalid_state", `Order is "${order.accounting_status}"; claim it first`);
   }
-  const body = req.body ?? {};
-  const list = body.documents ?? body.waybills;
-  if (!Array.isArray(list) || !list.length) return fail(res, 400, "invalid_body", "documents (or waybills) must be a non-empty array");
-  const docs = [];
-  for (const d of list) {
-    if (!d || !d.number || !/^\d{4}-\d{2}-\d{2}$/.test(String(d.date ?? ""))) {
-      return fail(res, 400, "invalid_document", "Each document needs a number and a YYYY-MM-DD date");
+  const list = req.body?.waybills;
+  if (!Array.isArray(list) || !list.length) return fail(res, 400, "invalid_body", "waybills must be a non-empty array");
+  const incoming = [];
+  for (const w of list) {
+    if (!w || !w.hc_doc_number || !/^\d{4}-\d{2}-\d{2}$/.test(String(w.date ?? ""))) {
+      return fail(res, 400, "invalid_waybill", "Each waybill needs hc_doc_number and a YYYY-MM-DD date");
     }
-    docs.push({
-      type: d.type === "invoice" || order.accounting_doc_type === "invoice" ? "invoice" : "waybill",
-      number: String(d.number),
-      hc_id: d.hc_id ?? null,
-      date: d.date,
-      brand: d.brand ?? null,
-      source_warehouse: d.source_warehouse ?? null,
-      destination_warehouse: d.destination_warehouse ?? null,
-      lines: Array.isArray(d.lines ?? d.items) ? (d.lines ?? d.items).map((l) => ({ line_id: l.line_id, quantity: Number(l.quantity) })) : [],
-      export_status: null,
-      reported_at: new Date().toISOString(),
+    const lines = Array.isArray(w.items) ? w.items : [];
+    if (lines.some((l) => !l || !l.line_id || !Number.isFinite(Number(l.quantity)))) {
+      return fail(res, 400, "invalid_waybill", "Each waybill item needs line_id and a numeric quantity");
+    }
+    incoming.push({
+      hc_doc_number: String(w.hc_doc_number),
+      hc_isn: w.hc_isn ?? null,
+      date: w.date,
+      warehouse_from: w.warehouse_from ?? null,
+      warehouse_to: w.warehouse_to ?? null,
+      brand: w.brand ?? null,
+      items: lines.map((l) => ({ line_id: l.line_id, hc_code: l.hc_code ?? null, quantity: Number(l.quantity) })),
+      created_at: w.created_at ?? null,
+      reported_at: iso(new Date()),
+      einvoicing: null,
     });
   }
-  const merged = [...order.accounting_documents.filter((x) => !docs.some((d) => d.number === x.number)), ...docs];
-  await pool.query(
-    `UPDATE orders SET accounting_documents = $2::jsonb, accounting_status = 'document_created', accounting_error = NULL, accounting_updated_at = now() WHERE id = $1`,
-    [order.id, JSON.stringify(merged)]
-  );
-  res.json({ id: orderRef(order.id), waybill_status: "document_created", documents: merged });
-}
+  // Re-sending a document number replaces it but keeps any e-invoicing result.
+  const existing = order.accounting_documents;
+  const merged = [
+    ...existing.filter((x) => !incoming.some((d) => d.hc_doc_number === x.hc_doc_number)),
+    ...incoming.map((d) => ({ ...d, einvoicing: existing.find((x) => x.hc_doc_number === d.hc_doc_number)?.einvoicing ?? null })),
+  ];
 
-// SRC e-invoicing export result, for one document (by number) or all of them.
-integrationRouter.post("/orders/:id/export", async (req, res) => {
+  const orderedItems = (await loadItems([order.id])).get(order.id) ?? [];
+  const covered = new Map();
+  for (const w of merged) for (const l of w.items) covered.set(l.line_id, (covered.get(l.line_id) ?? 0) + l.quantity);
+  const unknown = [...covered.keys()].filter((id) => !orderedItems.some((i) => i.line_id === id));
+  if (unknown.length) return fail(res, 400, "unknown_line", `Unknown line_id: ${unknown.join(", ")}`);
+  const complete = orderedItems.every((i) => (covered.get(i.line_id) ?? 0) >= i.quantity);
+  const next = !complete ? "partially_created" : "waybill_created";
+
+  await pool.query(
+    "UPDATE orders SET accounting_documents = $2::jsonb, accounting_status = $3, accounting_error = NULL, accounting_updated_at = now() WHERE id = $1",
+    [order.id, JSON.stringify(merged), next]
+  );
+  res.json({ id: orderRef(order.id), waybill_status: next, waybills: merged });
+});
+
+// 3.5  SRC e-invoicing result for one waybill. The order is
+// exported_unsigned once every waybill is exported, signed once all are signed.
+integrationRouter.post("/orders/:id/waybills/:number/einvoicing", async (req, res) => {
   const order = await loadOrder(req, res);
   if (!order) return;
-  if (!["document_created", "exported_unsigned", "signed"].includes(order.accounting_status)) {
-    return fail(res, 409, "invalid_state", `Order is "${order.accounting_status}"; report the document first`);
-  }
-  const { number, status, exported_at: exportedAt } = req.body ?? {};
+  const { exported_at: exportedAt, status } = req.body ?? {};
   if (!["exported_unsigned", "signed"].includes(status)) return fail(res, 400, "invalid_status", "status must be exported_unsigned or signed");
-  let touched = 0;
-  const docs = order.accounting_documents.map((d) => {
-    if (number && d.number !== String(number)) return d;
-    touched += 1;
-    return { ...d, export_status: status, exported_at: exportedAt ?? new Date().toISOString() };
-  });
-  if (!touched) return fail(res, 404, "document_not_found", "No document with that number on this order");
-  const allSigned = docs.every((d) => d.export_status === "signed");
-  const allExported = docs.every((d) => d.export_status);
-  const next = allSigned ? "signed" : allExported ? "exported_unsigned" : "document_created";
+  const docs = order.accounting_documents;
+  const doc = docs.find((d) => d.hc_doc_number === req.params.number);
+  if (!doc) return fail(res, 404, "waybill_not_found", "No waybill with that number on this order");
+  doc.einvoicing = { status, exported_at: exportedAt ?? iso(new Date()) };
+  const next = nextStatusFromDocuments(order.accounting_status, docs);
   await pool.query(
     "UPDATE orders SET accounting_documents = $2::jsonb, accounting_status = $3, accounting_error = NULL, accounting_updated_at = now() WHERE id = $1",
     [order.id, JSON.stringify(docs), next]
   );
-  res.json({ id: orderRef(order.id), waybill_status: next, documents: docs });
+  res.json({ id: orderRef(order.id), waybill_status: next, waybills: docs });
 });
 
-// "Not enough stock" and similar: Lily stops and reports instead of guessing.
-integrationRouter.post("/orders/:id/problem", async (req, res) => {
+// 3.6  KAD product -> HC code. Read-only for Lily; management maintains it in KAD.
+integrationRouter.get("/products", productMapping);
+integrationRouter.get("/product-mapping", productMapping);
+
+async function productMapping(req, res) {
+  const params = [];
+  const conditions = [];
+  if (req.query.updated_since) {
+    if (!/^\d{4}-\d{2}-\d{2}/.test(String(req.query.updated_since))) return fail(res, 400, "invalid_date", "updated_since must be YYYY-MM-DD");
+    params.push(req.query.updated_since);
+    conditions.push(`updated_at >= $${params.length}::date`);
+  }
+  if (req.query.unmapped === "1" || req.query.unmapped === "true") conditions.push("hc_code IS NULL");
+  const { rows } = await pool.query(
+    `SELECT id, sku, name, brand, unit, hc_code, active FROM products ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""} ORDER BY id`,
+    params
+  );
+  res.json({
+    products: rows.map((p) => ({ kad_sku: p.sku, hc_code: p.hc_code, brand: p.brand, name: p.name, unit: p.unit || "pcs", active: p.active, kad_product_id: p.id })),
+  });
+}
+
+// 3.7  "Not enough stock" and similar: Lily stops and reports instead of
+// guessing; the claim is released (the order waits for a human).
+integrationRouter.post("/orders/:id/issue", reportIssue);
+integrationRouter.post("/orders/:id/problem", reportIssue);
+
+async function reportIssue(req, res) {
   const order = await loadOrder(req, res);
   if (!order) return;
   if (order.accounting_status === "signed") return fail(res, 409, "invalid_state", "A signed order cannot be flagged");
-  const { code, message, details } = req.body ?? {};
+  const { code, message, lines } = req.body ?? {};
   if (!code || !message) return fail(res, 400, "invalid_body", "code and message are required");
-  const error = { code: String(code), message: String(message), details: details ?? null, reported_at: new Date().toISOString() };
+  if (!ISSUE_CODES.includes(code)) return fail(res, 400, "invalid_code", `code must be one of ${ISSUE_CODES.join(", ")}`);
+  const issue = { code, message: String(message), lines: Array.isArray(lines) ? lines : [], reported_at: iso(new Date()) };
   await pool.query(
-    "UPDATE orders SET accounting_status = 'needs_attention', accounting_error = $2::jsonb, accounting_updated_at = now() WHERE id = $1",
-    [order.id, JSON.stringify(error)]
+    "UPDATE orders SET accounting_status = 'needs_attention', accounting_error = $2::jsonb, accounting_claimed_at = NULL, accounting_updated_at = now() WHERE id = $1",
+    [order.id, JSON.stringify(issue)]
   );
-  res.json({ id: orderRef(order.id), waybill_status: "needs_attention", error });
-});
-
-// KAD product -> HC code. Read-only for Lily; management maintains it in KAD.
-integrationRouter.get("/product-mapping", async (req, res) => {
-  const unmappedOnly = req.query.unmapped === "1" || req.query.unmapped === "true";
-  const { rows } = await pool.query(
-    `SELECT id, sku, name, brand, unit, hc_code FROM products WHERE active = true ${unmappedOnly ? "AND hc_code IS NULL" : ""} ORDER BY id`
-  );
-  res.json({
-    products: rows.map((p) => ({ kad_product_id: p.id, kad_sku: p.sku, name: p.name, brand: p.brand, unit: p.unit, hc_code: p.hc_code })),
-  });
-});
+  res.json({ id: orderRef(order.id), waybill_status: "needs_attention", issue });
+}
