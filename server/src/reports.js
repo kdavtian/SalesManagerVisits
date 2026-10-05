@@ -11,13 +11,13 @@ export const REPORTS = [
     key: "new_customers",
     nameKey: "report_new_customers_name",
     descriptionKey: "report_new_customers_description",
-    defaultRoles: ["admin", "ceo", "operations_director", "sales_director"],
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "sales_manager"],
   },
   {
     key: "checkins",
     nameKey: "report_checkins_name",
     descriptionKey: "report_checkins_description",
-    defaultRoles: ["admin", "ceo", "operations_director", "sales_director"],
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "sales_manager"],
   },
   // The order fulfillment pipeline (draft -> submitted -> confirmed ->
   // packed_stock_out -> delivered, plus the discount-approval side branch)
@@ -75,7 +75,7 @@ export const REPORTS = [
     nameKey: "report_customer_debt_name",
     descriptionKey: "report_customer_debt_description",
     // Accountant reconciles debt day to day, same reasoning as payments above.
-    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"],
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant", "sales_manager"],
   },
   {
     key: "sales_budget",

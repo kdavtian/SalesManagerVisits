@@ -67,6 +67,20 @@ test("GET /api/reports/checkins: gated by canAccessReport, same as the list endp
   assert.equal(asDirector.status, directorAllowed ? 200 : 403);
 });
 
+test("GET /api/reports/new-customers: a sales manager only sees customers they created, even with another manager_id", async () => {
+  if (!(await canAccessReport("sales_manager", "new_customers"))) return;
+  const other = await createUser("sales_manager");
+  const mine = await createCustomer({ created_by: users.sales_manager.id });
+  const theirs = await createCustomer({ created_by: other.id });
+
+  const res = await apiRequest(`/api/reports/new-customers?period=year&manager_id=${other.id}`, { cookie: cookies.sales_manager });
+  assert.equal(res.status, 200);
+  const ids = res.data.customers.map((c) => c.id);
+  assert.ok(ids.includes(mine.id));
+  assert.ok(!ids.includes(theirs.id));
+  assert.deepEqual(res.data.by_manager.map((m) => m.user_id), [users.sales_manager.id]);
+});
+
 test("GET /api/reports/* rejects an unauthenticated request with 401", async () => {
   const res = await apiRequest("/api/reports/checkins");
   assert.equal(res.status, 401);
