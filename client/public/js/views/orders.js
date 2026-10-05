@@ -13,7 +13,8 @@ import { state } from "../state.js";
 const ACCOUNTING_ROLES = new Set(["admin", "sales_director", "ceo", "operations_director", "accountant"]);
 const ACCOUNTING_FILTERS = ["pending", "in_progress", "waybill_created", "partially_created", "exported_unsigned", "signed", "needs_attention"];
 
-const STATUS_FILTERS = ["", "draft", "submitted", "confirmed", "packed_stock_out", "delivered"];
+// Draft is last: it is not yet part of the live pipeline.
+const STATUS_FILTERS = ["", "submitted", "confirmed", "packed_stock_out", "delivered", "draft"];
 
 function formatDate(value) {
   return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });

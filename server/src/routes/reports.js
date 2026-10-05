@@ -80,7 +80,10 @@ function periodBounds(period) {
 // office answer "who is actively finding new opportunities" directly,
 // rather than inferring it from visit activity.
 reportsRouter.get("/new-customers", requireReportAccess("new_customers"), async (req, res) => {
-  const { region, subregion, manager_id, period, customer_tier } = req.query;
+  const { region, subregion, period, customer_tier } = req.query;
+  // A sales manager only ever sees their own new customers.
+  const mineOnly = req.user.role === "sales_manager";
+  const manager_id = mineOnly ? req.user.id : req.query.manager_id;
   const conditions = [`c.created_at >= ${periodBounds(period)}`];
   const params = [];
   if (region) {
@@ -114,10 +117,10 @@ reportsRouter.get("/new-customers", requireReportAccess("new_customers"), async 
     `SELECT u.id AS user_id, u.name AS user_name, count(c.id)::int AS new_customers
      FROM users u
      LEFT JOIN customers c ON c.created_by = u.id AND ${conditions.join(" AND ")}
-     WHERE u.role = 'sales_manager'
+     WHERE u.role = 'sales_manager'${mineOnly ? ` AND u.id = $${params.length + 1}` : ""}
      GROUP BY u.id, u.name
      ORDER BY new_customers DESC, u.name`,
-    params
+    mineOnly ? [...params, req.user.id] : params
   );
 
   res.json({ customers: rows, by_manager: byManager });
@@ -128,7 +131,9 @@ reportsRouter.get("/new-customers", requireReportAccess("new_customers"), async 
 // matched against the `outcomes` array since a single visit can log more
 // than one.
 reportsRouter.get("/checkins", requireReportAccess("checkins"), async (req, res) => {
-  const { region, subregion, manager_id, period, category, customer_tier, outcome } = req.query;
+  const { region, subregion, period, category, customer_tier, outcome } = req.query;
+  // A sales manager only ever sees their own visits.
+  const manager_id = req.user.role === "sales_manager" ? req.user.id : req.query.manager_id;
   const conditions = [];
   const params = [];
   if (period) {
@@ -548,6 +553,14 @@ reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async 
   if (sales_channel) {
     params.push(sales_channel);
     conditions.push(`erp.assigned_sales_rep = $${params.length}`);
+  }
+  // A sales manager only sees the ERP customers assigned to them (same rule
+  // as seesCustomerErpData in roles.js).
+  if (req.user.role === "sales_manager") {
+    params.push(req.user.id);
+    conditions.push(
+      `erp.erp_customer_id IN (SELECT erp_customer_id FROM customers WHERE assigned_manager_id = $${params.length} AND erp_customer_id IS NOT NULL)`
+    );
   }
 
   let debtExpr = estimatedDebtExpr;
