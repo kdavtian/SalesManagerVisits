@@ -4480,7 +4480,7 @@ label.checkbox-row input[type="checkbox"] {
 .detail-view .debt-filter-row,
 .detail-view .pill-date-filter-row,
 .detail-view .customer-stats-bar,
-.detail-view .list-toolbar {
+.detail-view .list-toolbar:not(.activity-search-combined) {
   padding-left: 0;
   padding-right: 0;
 }
