@@ -77,6 +77,12 @@ const syncKeyLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many sync attempts. Try again later." },
+  // Same test-only bypass as the login limiter (routes/auth.js): a no-op unless
+  // E2E_RATE_LIMIT_BYPASS_TOKEN is set AND the request carries it, so the
+  // integration suite can make more than 20 sync calls in one file.
+  skip: (req) =>
+    Boolean(process.env.E2E_RATE_LIMIT_BYPASS_TOKEN) &&
+    req.get("x-e2e-rate-limit-bypass") === process.env.E2E_RATE_LIMIT_BYPASS_TOKEN,
 });
 
 export function timingSafeEqual(a, b) {
@@ -167,6 +173,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     prodLandingCosts,
     prodNetCosts,
     prodHcCodes,
+    prodActives,
   } = transformErpProducts(products);
 
   const { volChannelCodes, volMonths, volBrands, volLiters } = transformErpBrandVolume(brand_volume);
@@ -339,6 +346,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
          SELECT erp_product_id, name, brand, unit, unit_price_amd, family, bronze_price_amd, silver_price_amd, gold_price_amd, stock_qty, landing_cost_amd, net_cost_amd, now()
          FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::numeric[], $6::text[], $7::numeric[], $8::numeric[], $9::numeric[], $10::int[], $11::numeric[], $12::numeric[])
            AS t(erp_product_id, name, brand, unit, unit_price_amd, family, bronze_price_amd, silver_price_amd, gold_price_amd, stock_qty, landing_cost_amd, net_cost_amd)
+         WHERE NOT (erp_product_id = ANY($13::text[]))
          ON CONFLICT (erp_product_id) DO UPDATE SET
            name = EXCLUDED.name, brand = EXCLUDED.brand, unit = EXCLUDED.unit,
            unit_price_amd = EXCLUDED.unit_price_amd, family = EXCLUDED.family,
@@ -347,7 +355,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
            net_cost_amd = COALESCE(EXCLUDED.net_cost_amd, products.net_cost_amd),
            synced_at = now(), updated_at = now()
          WHERE products.manually_edited_at IS NULL`,
-        [prodErpIds, prodNames, prodBrands, prodUnits, prodPrices, prodFamilies, prodBronzePrices, prodSilverPrices, prodGoldPrices, prodStockQtys, prodLandingCosts, prodNetCosts]
+        [prodErpIds, prodNames, prodBrands, prodUnits, prodPrices, prodFamilies, prodBronzePrices, prodSilverPrices, prodGoldPrices, prodStockQtys, prodLandingCosts, prodNetCosts, prodErpIds.filter((_, i) => prodActives[i] === false)]
       );
       // landing_cost_amd specifically is never exposed on any product edit
       // form (see migration 064 -- "read-only in the app: ... only ever
@@ -376,11 +384,23 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
            bronze_price_amd = COALESCE(t.bronze_price_amd, p.bronze_price_amd),
            silver_price_amd = COALESCE(t.silver_price_amd, p.silver_price_amd),
            gold_price_amd = COALESCE(t.gold_price_amd, p.gold_price_amd),
-           net_cost_amd = COALESCE(t.net_cost_amd, p.net_cost_amd)
-         FROM unnest($1::text[], $2::numeric[], $3::numeric[], $4::numeric[], $5::numeric[], $6::numeric[])
-           AS t(erp_product_id, unit_price_amd, bronze_price_amd, silver_price_amd, gold_price_amd, net_cost_amd)
-         WHERE p.erp_product_id = t.erp_product_id AND p.manually_edited_at IS NOT NULL`,
-        [prodErpIds, prodPrices, prodBronzePrices, prodSilverPrices, prodGoldPrices, prodNetCosts]
+           net_cost_amd = COALESCE(t.net_cost_amd, p.net_cost_amd),
+           family = COALESCE(t.family, p.family)
+         FROM unnest($1::text[], $2::numeric[], $3::numeric[], $4::numeric[], $5::numeric[], $6::numeric[], $7::text[])
+           AS t(erp_product_id, unit_price_amd, bronze_price_amd, silver_price_amd, gold_price_amd, net_cost_amd, family)
+         WHERE p.erp_product_id = t.erp_product_id AND p.manually_edited_at IS NOT NULL AND t.unit_price_amd > 0`,
+        [prodErpIds, prodPrices, prodBronzePrices, prodSilverPrices, prodGoldPrices, prodNetCosts, prodFamilies]
+      );
+      // SKU Status from the workbook decides what is sold: ACTIVE products are
+      // active in the app, everything else is hidden from inventory, new orders
+      // and the catalogue. Applied regardless of manual edits (the workbook is
+      // the source of truth); a workbook without a status column sends null and
+      // changes nothing.
+      await client.query(
+        `UPDATE products p SET active = t.active, updated_at = now()
+         FROM unnest($1::text[], $2::boolean[]) AS t(erp_product_id, active)
+         WHERE p.erp_product_id = t.erp_product_id AND t.active IS NOT NULL AND p.active IS DISTINCT FROM t.active`,
+        [prodErpIds, prodActives]
       );
       // HC code from the workbook's Products sheet: like landing cost it is
       // applied regardless of manually_edited_at (editing a price must not

@@ -11,6 +11,9 @@
 // -- see app.js's own startup check) -- set here, first, in this file's
 // own process.
 process.env.ERP_SYNC_KEY = "itest-sync-key";
+// Lets this file make more than the sync limiter's 20 calls (see syncKeyLimiter's skip).
+process.env.E2E_RATE_LIMIT_BYPASS_TOKEN = "itest-bypass";
+const BYPASS = { "x-e2e-rate-limit-bypass": "itest-bypass" };
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -81,12 +84,12 @@ test("POST /api/erp-sync: a wrong X-Sync-Key is a 401", async () => {
 // --- Malformed payload ---------------------------------------------------------------
 
 test("POST /api/erp-sync: customers must be an array", async () => {
-  const res = await syncRequest({ customers: "not-an-array" }, { "X-Sync-Key": SYNC_KEY });
+  const res = await syncRequest({ customers: "not-an-array" }, { "X-Sync-Key": SYNC_KEY, ...BYPASS });
   assert.equal(res.status, 400);
 });
 
 test("POST /api/erp-sync: order_lines, if present, must be an array", async () => {
-  const res = await syncRequest({ customers: [], order_lines: "nope" }, { "X-Sync-Key": SYNC_KEY });
+  const res = await syncRequest({ customers: [], order_lines: "nope" }, { "X-Sync-Key": SYNC_KEY, ...BYPASS });
   assert.equal(res.status, 400);
 });
 
@@ -102,7 +105,7 @@ test("POST /api/erp-sync: a valid payload syncs customers and reports counts", a
         { erp_customer_id: customer.erp_customer_id, customer_name: customer.name, debt_amd: 15000, assigned_sales_rep: "Some Rep" },
       ],
     },
-    { "X-Sync-Key": SYNC_KEY }
+    { "X-Sync-Key": SYNC_KEY, ...BYPASS }
   );
   assert.equal(res.status, 200);
   assert.equal(res.data.synced, 1);
@@ -128,7 +131,7 @@ test("POST /api/erp-sync: customer tier follows the workbook Tier column (compet
         { erp_customer_id: c.erp_customer_id, customer_name: c.name, erp_tier: "" },
       ],
     },
-    { "X-Sync-Key": SYNC_KEY }
+    { "X-Sync-Key": SYNC_KEY, ...BYPASS }
   );
   assert.equal(res.status, 200);
   const tierOf = async (id) => (await pool.query("SELECT customer_tier FROM customers WHERE id = $1", [id])).rows[0].customer_tier;
@@ -156,7 +159,7 @@ test("POST /api/erp-sync: a pre-existing product with whitespace-drifted name is
   try {
     const res = await syncRequest(
       { customers: [], products: [{ erp_product_id: erpId, name: "Orlen 5w40", brand: "Orlen", unit: "4.5 L", unit_price_amd: 25000, stock_qty: 33 }] },
-      { "X-Sync-Key": SYNC_KEY }
+      { "X-Sync-Key": SYNC_KEY, ...BYPASS }
     );
     assert.equal(res.status, 200);
 
@@ -179,7 +182,7 @@ test("POST /api/erp-sync: net_cost_amd syncs when sent, and is never cleared by 
   try {
     let res = await syncRequest(
       { customers: [], products: [{ erp_product_id: erpId, name: "Net Cost Test Oil", unit_price_amd: 10000, net_cost_amd: 7700 }] },
-      { "X-Sync-Key": SYNC_KEY }
+      { "X-Sync-Key": SYNC_KEY, ...BYPASS }
     );
     assert.equal(res.status, 200);
     let row = (await pool.query("SELECT net_cost_amd FROM products WHERE erp_product_id = $1", [erpId])).rows[0];
@@ -187,7 +190,7 @@ test("POST /api/erp-sync: net_cost_amd syncs when sent, and is never cleared by 
 
     res = await syncRequest(
       { customers: [], products: [{ erp_product_id: erpId, name: "Net Cost Test Oil", unit_price_amd: 10500 }] },
-      { "X-Sync-Key": SYNC_KEY }
+      { "X-Sync-Key": SYNC_KEY, ...BYPASS }
     );
     assert.equal(res.status, 200);
     row = (await pool.query("SELECT net_cost_amd, unit_price_amd FROM products WHERE erp_product_id = $1", [erpId])).rows[0];
@@ -204,11 +207,11 @@ test("POST /api/erp-sync: net_cost_amd syncs when sent, and is never cleared by 
 test("POST /api/erp-sync: tier prices and net cost refresh even for a manually edited product", async () => {
   const erpId = `ITEST-PRICES-${Date.now()}`;
   try {
-    await syncRequest({ customers: [], products: [{ erp_product_id: erpId, name: "Manual Price Oil", unit_price_amd: 9000, bronze_price_amd: 9000, silver_price_amd: 8000 }] }, { "X-Sync-Key": SYNC_KEY });
+    await syncRequest({ customers: [], products: [{ erp_product_id: erpId, name: "Manual Price Oil", unit_price_amd: 9000, bronze_price_amd: 9000, silver_price_amd: 8000 }] }, { "X-Sync-Key": SYNC_KEY, ...BYPASS });
     await pool.query("UPDATE products SET manually_edited_at = now(), name = 'Renamed By Hand' WHERE erp_product_id = $1", [erpId]);
     const res = await syncRequest(
       { customers: [], products: [{ erp_product_id: erpId, name: "Manual Price Oil", unit_price_amd: 9700, bronze_price_amd: 9700, silver_price_amd: 8700, gold_price_amd: 6000, net_cost_amd: 5315 }] },
-      { "X-Sync-Key": SYNC_KEY }
+      { "X-Sync-Key": SYNC_KEY, ...BYPASS }
     );
     assert.equal(res.status, 200);
     const row = (await pool.query("SELECT name, bronze_price_amd, silver_price_amd, gold_price_amd, net_cost_amd FROM products WHERE erp_product_id = $1", [erpId])).rows[0];
@@ -219,20 +222,52 @@ test("POST /api/erp-sync: tier prices and net cost refresh even for a manually e
   }
 });
 
+test("POST /api/erp-sync: SKU status decides what is active, family follows the workbook, inactive products are not created", async () => {
+  const stamp = Date.now();
+  const keep = `ITEST-ACT-KEEP-${stamp}`;
+  const drop = `ITEST-ACT-DROP-${stamp}`;
+  const never = `ITEST-ACT-NEVER-${stamp}`;
+  const ids = [keep, drop, never];
+  try {
+    await syncRequest({ customers: [], products: [
+      { erp_product_id: keep, name: "Active Oil", unit_price_amd: 9000, family: "Old Family" },
+      { erp_product_id: drop, name: "Soon Inactive Oil", unit_price_amd: 9000 },
+    ] }, { "X-Sync-Key": SYNC_KEY, ...BYPASS });
+    await pool.query("UPDATE products SET manually_edited_at = now() WHERE erp_product_id = $1", [keep]);
+    const res = await syncRequest({ customers: [], products: [
+      { erp_product_id: keep, name: "Active Oil", unit_price_amd: 9100, family: "Edge", active: true },
+      { erp_product_id: drop, name: "Soon Inactive Oil", unit_price_amd: 9000, active: false },
+      { erp_product_id: never, name: "Never Active Oil", unit_price_amd: 0, active: false },
+    ] }, { "X-Sync-Key": SYNC_KEY, ...BYPASS });
+    assert.equal(res.status, 200);
+    const rows = Object.fromEntries((await pool.query("SELECT erp_product_id, active, family, unit_price_amd FROM products WHERE erp_product_id = ANY($1)", [ids])).rows.map((r) => [r.erp_product_id, r]));
+    assert.equal(rows[keep].active, true);
+    assert.equal(rows[keep].family, "Edge", "family from the workbook applies even to a manually edited product");
+    assert.equal(Number(rows[keep].unit_price_amd), 9100);
+    assert.equal(rows[drop].active, false);
+    assert.equal(rows[never], undefined, "an inactive product the app never had is not created");
+    // No status sent (older workbook) leaves active untouched.
+    await syncRequest({ customers: [], products: [{ erp_product_id: drop, name: "Soon Inactive Oil", unit_price_amd: 9000 }] }, { "X-Sync-Key": SYNC_KEY, ...BYPASS });
+    assert.equal((await pool.query("SELECT active FROM products WHERE erp_product_id = $1", [drop])).rows[0].active, false);
+  } finally {
+    await pool.query("DELETE FROM products WHERE erp_product_id = ANY($1)", [ids]);
+  }
+});
+
 test("POST /api/erp-sync: hc_code syncs as text, applies to manually edited products, and a blank later value keeps it", async () => {
   const erpId = `ITEST-HC-${Date.now()}`;
   try {
-    let res = await syncRequest({ customers: [], products: [{ erp_product_id: erpId, name: "HC Test Oil", unit_price_amd: 10000, hc_code: " 000010 " }] }, { "X-Sync-Key": SYNC_KEY });
+    let res = await syncRequest({ customers: [], products: [{ erp_product_id: erpId, name: "HC Test Oil", unit_price_amd: 10000, hc_code: " 000010 " }] }, { "X-Sync-Key": SYNC_KEY, ...BYPASS });
     assert.equal(res.status, 200);
     let row = (await pool.query("SELECT hc_code FROM products WHERE erp_product_id = $1", [erpId])).rows[0];
     assert.equal(row.hc_code, "000010");
 
     await pool.query("UPDATE products SET manually_edited_at = now() WHERE erp_product_id = $1", [erpId]);
-    res = await syncRequest({ customers: [], products: [{ erp_product_id: erpId, name: "HC Test Oil", unit_price_amd: 10000, hc_code: "00686-14" }] }, { "X-Sync-Key": SYNC_KEY });
+    res = await syncRequest({ customers: [], products: [{ erp_product_id: erpId, name: "HC Test Oil", unit_price_amd: 10000, hc_code: "00686-14" }] }, { "X-Sync-Key": SYNC_KEY, ...BYPASS });
     row = (await pool.query("SELECT hc_code FROM products WHERE erp_product_id = $1", [erpId])).rows[0];
     assert.equal(row.hc_code, "00686-14", "a manually edited product still gets its HC code from the sheet");
 
-    res = await syncRequest({ customers: [], products: [{ erp_product_id: erpId, name: "HC Test Oil", unit_price_amd: 10000, hc_code: "" }] }, { "X-Sync-Key": SYNC_KEY });
+    res = await syncRequest({ customers: [], products: [{ erp_product_id: erpId, name: "HC Test Oil", unit_price_amd: 10000, hc_code: "" }] }, { "X-Sync-Key": SYNC_KEY, ...BYPASS });
     row = (await pool.query("SELECT hc_code FROM products WHERE erp_product_id = $1", [erpId])).rows[0];
     assert.equal(row.hc_code, "00686-14", "a blank sheet cell must not wipe the stored code");
   } finally {
@@ -253,7 +288,7 @@ test("POST /api/erp-sync: TRUNCATE-and-replace -- a customer absent from the new
         { erp_customer_id: keptCustomer.erp_customer_id, customer_name: keptCustomer.name, debt_amd: 2000 },
       ],
     },
-    { "X-Sync-Key": SYNC_KEY }
+    { "X-Sync-Key": SYNC_KEY, ...BYPASS }
   );
   assert.equal(first.status, 200);
   assert.equal(first.data.synced, 2);
@@ -265,7 +300,7 @@ test("POST /api/erp-sync: TRUNCATE-and-replace -- a customer absent from the new
   // of the extract) -- the whole-table TRUNCATE must remove it, not merge.
   const second = await syncRequest(
     { customers: [{ erp_customer_id: keptCustomer.erp_customer_id, customer_name: keptCustomer.name, debt_amd: 2500 }] },
-    { "X-Sync-Key": SYNC_KEY }
+    { "X-Sync-Key": SYNC_KEY, ...BYPASS }
   );
   assert.equal(second.status, 200);
   assert.equal(second.data.synced, 1);
@@ -283,7 +318,7 @@ test("POST /api/erp-sync/daily-report and /reports: two calls in quick successio
   const dailyReport = await apiRequest("/api/erp-sync/daily-report", {
     method: "POST",
     body: { report_date: "2026-09-23", sales: {}, payments: {}, balance: {} },
-    headers: { "X-Sync-Key": SYNC_KEY },
+    headers: { "X-Sync-Key": SYNC_KEY, ...BYPASS },
   });
   assert.equal(dailyReport.status, 200);
 
@@ -291,7 +326,7 @@ test("POST /api/erp-sync/daily-report and /reports: two calls in quick successio
   form.append("report_type", "sales_director");
   form.append("report_date", "2026-09-23");
   form.append("file", new Blob([Buffer.from("PK\x03\x04")], { type: "application/octet-stream" }), "report.xlsx");
-  const reportUpload = await apiFormRequest("/api/erp-sync/reports", { form, headers: { "X-Sync-Key": SYNC_KEY } });
+  const reportUpload = await apiFormRequest("/api/erp-sync/reports", { form, headers: { "X-Sync-Key": SYNC_KEY, ...BYPASS } });
   assert.equal(reportUpload.status, 200);
 
   // The debounce window is shortened to 50ms in tests (NODE_ENV === "test",

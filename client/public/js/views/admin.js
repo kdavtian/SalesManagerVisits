@@ -608,13 +608,10 @@ export async function renderProductsSection(container) {
 
   async function loadProducts() {
     const fetched = await api.listAllProducts();
-    // Active products first (as before), brand/family/viscosity/size
-    // order within each group -- see productSort.js, shared with
-    // Pricelist, Order creation and Warehouse Inventory.
-    const products = [
-      ...fetched.filter((p) => p.active).sort(compareProducts),
-      ...fetched.filter((p) => !p.active).sort(compareProducts),
-    ];
+    // Only active products are listed (the workbook's SKU Status decides what
+    // is sold) in brand/family/viscosity/size order -- see productSort.js,
+    // shared with Pricelist, Order creation and Warehouse Inventory.
+    const products = fetched.filter((p) => p.active).sort(compareProducts);
     listEl.innerHTML = products.length
       ? products
           .map(

@@ -213,6 +213,7 @@ export function transformErpProducts(products) {
   const prodLandingCosts = [];
   const prodNetCosts = [];
   const prodHcCodes = [];
+  const prodActives = [];
 
   for (const p of isPlainArray(products)) {
     if (!isPlainObject(p) || !p.erp_product_id || !p.name || !Number.isFinite(p.unit_price_amd)) continue;
@@ -231,6 +232,8 @@ export function transformErpProducts(products) {
     // HC (ՀԾ-Հաշվապահ) product code, text so "000010" keeps its zeros.
     const hc = p.hc_code != null ? String(p.hc_code).trim() : "";
     prodHcCodes.push(hc || null);
+    // Workbook SKU Status: true = ACTIVE, false = not sold any more, null = not reported.
+    prodActives.push(typeof p.active === "boolean" ? p.active : null);
   }
 
   return {
@@ -247,6 +250,7 @@ export function transformErpProducts(products) {
     prodLandingCosts,
     prodNetCosts,
     prodHcCodes,
+    prodActives,
   };
 }
 
