@@ -1,5 +1,7 @@
-const CACHE_VERSION = "field-visits-v257";
-const TILE_CACHE = "field-visits-tiles-v4";
+const CACHE_VERSION = "field-visits-v258";
+// v5: drops tiles cached while requests went out without a Referer (OSM may have
+// answered those with placeholder images) -- see Referrer-Policy in server/src/app.js.
+const TILE_CACHE = "field-visits-tiles-v5";
 // Anything fetched at runtime that wasn't already in APP_SHELL gets cached
 // here, kept separate from CACHE_VERSION on purpose -- see trimCache below,
 // this is the one that gets capped/evicted, and it must never be able to
