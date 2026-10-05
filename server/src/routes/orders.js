@@ -2,6 +2,7 @@ import { nextStatusFromDocuments } from "../accountingStatus.js";
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
+import { tierListPrice } from "../tierPricing.js";
 import { seesAllActivity, canConfirmOrders, canAssignErpCustomerId, canRecordOrders, seesUnrecordedBadge, canMarkDeliveredWithoutRoute } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { notifyUser } from "../notifications.js";
@@ -36,15 +37,30 @@ const GENERIC_PATCH_TARGETS = new Set(["confirmed"]);
 
 // Snapshots each line's product name/price at build time -- shared by
 // create and edit so an edited order prices its new lines exactly the same
-// way a fresh order would.
-async function buildOrderLines(items) {
+// way a fresh order would. The price is resolved here from the customer's
+// tier (never trusted from the client), except that a Gold customer can
+// have individual prices: saved ones apply automatically, and a reviewer
+// role (canSetPrices) can set a new one by sending unit_price_amd with
+// price_override: true on the line, which is remembered for that customer.
+async function buildOrderLines(items, { customerId, tier, canSetPrices = false, userId = null } = {}) {
   const productIds = items.map((i) => Number(i.product_id)).filter(Number.isInteger);
   const { rows: products } = productIds.length
     ? await pool.query("SELECT * FROM products WHERE id = ANY($1)", [productIds])
     : { rows: [] };
   const productById = new Map(products.map((p) => [p.id, p]));
 
+  const isGold = tier === "gold" && customerId;
+  const individual = new Map();
+  if (isGold && productIds.length) {
+    const { rows } = await pool.query(
+      "SELECT product_id, price_amd FROM customer_product_prices WHERE customer_id = $1 AND product_id = ANY($2)",
+      [customerId, productIds]
+    );
+    for (const r of rows) individual.set(r.product_id, Number(r.price_amd));
+  }
+
   const lines = [];
+  const newIndividual = [];
   for (const item of items) {
     const quantity = Number(item.quantity);
     if (!Number.isFinite(quantity) || quantity <= 0) {
@@ -58,14 +74,33 @@ async function buildOrderLines(items) {
     if (!product) {
       throw new OrderValidationError("Every item must be a product from the catalog");
     }
+    let price = individual.has(product.id) ? individual.get(product.id) : tierListPrice(product, tier);
+    if (isGold && canSetPrices && item.price_override === true && item.unit_price_amd !== undefined && item.unit_price_amd !== null) {
+      const requested = Number(item.unit_price_amd);
+      if (!Number.isFinite(requested) || requested < 0) {
+        throw new OrderValidationError("unit_price_amd must be a non-negative number");
+      }
+      if (requested !== price) {
+        price = requested;
+        newIndividual.push([product.id, requested]);
+      }
+    }
     lines.push({
       product_id: product.id,
       product_name: product.name,
       brand: product.brand ?? null,
-      unit_price_amd: Number(product.unit_price_amd),
+      unit_price_amd: price,
       quantity,
-      line_total_amd: Number(product.unit_price_amd) * quantity,
+      line_total_amd: price * quantity,
     });
+  }
+  for (const [productId, price] of newIndividual) {
+    await pool.query(
+      `INSERT INTO customer_product_prices (customer_id, product_id, price_amd, set_by, updated_at)
+       VALUES ($1, $2, $3, $4, now())
+       ON CONFLICT (customer_id, product_id) DO UPDATE SET price_amd = EXCLUDED.price_amd, set_by = EXCLUDED.set_by, updated_at = now()`,
+      [customerId, productId, price, userId]
+    );
   }
   return lines;
 }
@@ -162,7 +197,7 @@ ordersRouter.post("/", async (req, res) => {
   // priority if a caller somehow sent both.
   if (discountAmd > 0) discountPct = 0;
 
-  const { rows: customerRows } = await pool.query("SELECT id, name, erp_customer_id FROM customers WHERE id = $1", [customerId]);
+  const { rows: customerRows } = await pool.query("SELECT id, name, erp_customer_id, customer_tier FROM customers WHERE id = $1", [customerId]);
   const customer = customerRows[0];
   if (!customer) return res.status(404).json({ error: "Customer not found" });
 
@@ -190,7 +225,7 @@ ordersRouter.post("/", async (req, res) => {
 
   let lines;
   try {
-    lines = await buildOrderLines(items);
+    lines = await buildOrderLines(items, { customerId: customer.id, tier: customer.customer_tier, canSetPrices: canConfirmOrders(req.user.role), userId: req.user.id });
   } catch (err) {
     if (err instanceof OrderValidationError) return res.status(400).json({ error: err.message });
     throw err;
@@ -571,7 +606,8 @@ ordersRouter.patch("/:id", async (req, res) => {
       return res.status(400).json({ error: "At least one item is required" });
     }
     try {
-      nextLines = await buildOrderLines(items);
+      const { rows: tierRows } = await pool.query("SELECT customer_tier FROM customers WHERE id = $1", [order.customer_id]);
+      nextLines = await buildOrderLines(items, { customerId: order.customer_id, tier: tierRows[0]?.customer_tier, canSetPrices: canConfirmOrders(req.user.role), userId: req.user.id });
     } catch (err) {
       if (err instanceof OrderValidationError) return res.status(400).json({ error: err.message });
       throw err;
