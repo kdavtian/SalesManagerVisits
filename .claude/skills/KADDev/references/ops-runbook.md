@@ -42,3 +42,10 @@ cd /opt/castrol-ceo-bot && sudo -u castrolbot git pull origin main && sudo syste
 - `pg_ctlcluster 16 main start`; `DATABASE_URL=postgres://postgres:postgres@localhost:5432/fieldvisits_test`; `JWT_SECRET` >= 16 chars (e.g. 24 x's) or every login 500s ("JWT_SECRET is missing or too short").
 - Browser driving: Playwright with `/opt/pw-browsers/chromium`; start the server on port 3001 with `E2E_RATE_LIMIT_BYPASS_TOKEN=qa`; do not `pkill -f` on command text (kills the harness).
 - Slow commands (`npm test`) run in background; read output file after the completion notification.
+
+## Lessons added 2026-10-05
+- **"dubious ownership" on the bot**: `git pull` as `castrolbot` fails after any root-run git touched the repo. Fix: `chown -R castrolbot:castrolbot /opt/castrol-ceo-bot` then `sudo -u castrolbot git pull origin main && systemctl restart castrol-ceo-bot`. The repo is private, so git asks for GitHub username + token (password auth is gone); caching a token (`git config credential.helper store`) avoids retyping - never ask the owner to paste it in chat.
+- **A bot code change only matters after BOTH steps**: pull + restart, then re-send the workbook in Telegram (the old process may have handled the previous file). Verify with `products.synced_at` / `net_cost_amd` and the journal line `Field Visits sync: pushed ...`.
+- **Deploy speed**: `./deploy/deploy.sh` auto-escalates to the full 5-minute test run when a PR adds `server/migrations/*`; CI already ran them, so tell the owner to use `./deploy/deploy.sh --fast`.
+- **Desktop map "The map couldn't load"** (1.246.0): helmet's default `Referrer-Policy: no-referrer` removed the Referer that OpenStreetMap/Wikimedia tile servers require. Header is now `strict-origin-when-cross-origin`; tile cache bumped to `field-visits-tiles-v5`. If tiles fail again, ask for the status of a `tile.openstreetmap.org` request in the Network tab.
+- **Excel structure change broke `Debits[Assigned To]`** (returned Tier): see skill `Castrol-file`. When the owner inserts columns, re-check every VLOOKUP column index.
