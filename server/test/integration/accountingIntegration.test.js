@@ -250,3 +250,12 @@ test("two brands -> two waybills: partially_created until every line is covered"
   const e2 = await apiRequest(`/api/integration/v1/orders/${ref}/waybills/301/einvoicing`, { method: "POST", headers: h, body: { status: "exported_unsigned" } });
   assert.equal(e2.data.waybill_status, "exported_unsigned");
 });
+
+test("a waybill can only belong to a cash order and an invoice to an invoice order (database rule)", async () => {
+  const { orderId } = await confirmedOrder({ payment_method: "invoice" });
+  await assert.rejects(
+    pool.query("UPDATE orders SET accounting_doc_type = 'waybill', accounting_status = 'pending' WHERE id = $1", [orderId]),
+    /orders_accounting_doc_matches_payment/
+  );
+  await pool.query("UPDATE orders SET accounting_doc_type = 'invoice', accounting_status = 'pending' WHERE id = $1", [orderId]);
+});

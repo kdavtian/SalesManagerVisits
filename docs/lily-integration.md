@@ -10,7 +10,8 @@ reports back. She never signs and never edits orders.
 An order is `pending` when **management confirmed it in KAD** (order status
 `confirmed` or later) **and then sent it to accounting** from the confirm sheet
 (or later from the order sheet). Cash order -> waybill (Բեռնագիր); invoice order ->
-Հաշիվ ապրանքագիր (`doc_type: "invoice"`, same endpoints). Management can change the
+Հաշիվ ապրանքագիր (`doc_type: "invoice"`, same endpoints). This is a hard rule (also enforced by the
+database): `doc_type` is `waybill` only when `payment_method` is `cash`, and `invoice` only when it is `invoice`. Management can change the
 payment method on that sheet while the request is `pending`.
 
 Statuses: `pending -> in_progress -> waybill_created | partially_created -> exported_unsigned -> signed`,
@@ -68,8 +69,10 @@ ISO 8601 with `+04:00`. Every call with a token is stored in `integration_audit_
 
 - `ship_date` and `destination_warehouse` are **always `null`**: KAD does not hold them, so
   Lily's defaults apply (today / warehouse 04).
-- `hc_code` is `null` for a product that has not been mapped yet; report `unknown_product`
-  via `/issue` for such lines.
+- `hc_code` is `null` for a product that has not been mapped yet. Lily may match the product in HC
+  by brand / name / size and use that code in the waybill `items[].hc_code`; she reports it back
+  there (and may ask management to confirm). If she cannot find a match she reports `unknown_product`
+  via `/issue`.
 - `total_amd` already includes the order-level discount in `discount_*`; line prices are before it.
 
 ### 3.4 Report waybills
