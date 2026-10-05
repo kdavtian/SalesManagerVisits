@@ -77,6 +77,12 @@ const syncKeyLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many sync attempts. Try again later." },
+  // Same test-only bypass as the login limiter (routes/auth.js): a no-op unless
+  // E2E_RATE_LIMIT_BYPASS_TOKEN is set AND the request carries it, so the
+  // integration suite can make more than 20 sync calls in one file.
+  skip: (req) =>
+    Boolean(process.env.E2E_RATE_LIMIT_BYPASS_TOKEN) &&
+    req.get("x-e2e-rate-limit-bypass") === process.env.E2E_RATE_LIMIT_BYPASS_TOKEN,
 });
 
 export function timingSafeEqual(a, b) {

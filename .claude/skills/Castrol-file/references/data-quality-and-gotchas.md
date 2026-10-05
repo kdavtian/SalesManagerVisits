@@ -43,3 +43,7 @@ Found by profiling `Castrol_2.0.7.xlsx` (values as of 2026-10-03). Use `scripts/
 - Should import VAT be inside Landing/Net cost? Should Net Cost use the price tier actually sold rather than bronze, and what Net Cost for products without bronze?
 - Gold prices below landing cost (12 products) - intentional?
 - How should Balance0-only customers with big debt and no orders (e.g. >10M) be followed up?
+
+## Version 2.0.8 notes
+- Products sheet: `Product Family` now complete (12 values) and `SKU Status` = Active for 172 products. Match both headers case/spacing-insensitively. A status column with no `Active` row must never deactivate the catalogue.
+- Order form categories derive from the family: Transmission, Hydraulic, Antifreeze, Grease, Other are their own categories; every other family is engine oil. The meaning of family `ON` (3 Castrol products) is unconfirmed - currently treated as engine oil.

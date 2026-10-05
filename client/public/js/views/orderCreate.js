@@ -25,11 +25,22 @@ function filterCatalog(list, query) {
   return list.filter((p) => [p.name, p.sku, p.brand, p.family].some((v) => v && v.toLowerCase().includes(q)));
 }
 
-// A broader grouping than family, for the category filter -- everything
-// is "Engine oil" except the recognized transmission family, per the
-// simple split requested until a real category taxonomy exists.
+// Category filter groups, from the Product Family recorded in the workbook:
+// the non-engine families are categories of their own, every other family
+// (Edge, Magnatec, GTX, CRB, Vecton, ON, Engine Oil, ...) is engine oil.
+const NON_ENGINE_CATEGORIES = ["Transmission", "Hydraulic", "Antifreeze", "Grease", "Other"];
+const CATEGORY_LABEL_KEY = {
+  "Engine oil": "category_engine_oil",
+  Transmission: "category_transmission",
+  Hydraulic: "category_hydraulic",
+  Antifreeze: "category_antifreeze",
+  Grease: "category_grease",
+  Other: "category_other",
+};
 function productCategory(product) {
-  return product.family === "Transmission oils" ? "Transmission" : "Engine oil";
+  const family = (product.family || "").trim();
+  const match = NON_ENGINE_CATEGORIES.find((c) => c.toLowerCase() === family.toLowerCase());
+  return match || (family.toLowerCase() === "transmission oils" ? "Transmission" : "Engine oil");
 }
 
 // Brand -> family -> viscosity grade -> size, the order a rep actually
@@ -275,10 +286,13 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
     filterRow.hidden = !nav.brand && !searchQuery;
     if (filterRow.hidden) return;
 
+    // Only categories that actually have products are offered.
+    const present = new Set(products.map(productCategory));
     const categories = [
       { value: null, label: t("category_all") },
-      { value: "Engine oil", label: t("category_engine_oil") },
-      { value: "Transmission", label: t("category_transmission") },
+      ...["Engine oil", ...NON_ENGINE_CATEGORIES]
+        .filter((c) => present.has(c))
+        .map((c) => ({ value: c, label: t(CATEGORY_LABEL_KEY[c]) })),
     ];
     filterRow.innerHTML = `
       <div class="segmented order-category-chips">

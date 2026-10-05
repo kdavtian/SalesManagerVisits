@@ -31,7 +31,8 @@ export function normalizeProductKey(value) {
 
 export const BRAND_PRIORITY = ["Castrol", "Lotos", "Orlen", "Royal"];
 
-export const FAMILY_PRIORITY = ["Edge", "Magnatec", "GTX", "CRB", "Vecton"];
+// Product lines first, then the broader workbook categories (Product Family).
+export const FAMILY_PRIORITY = ["Edge", "Magnatec", "GTX", "CRB", "Vecton", "ON", "Engine Oil", "Transmission", "Hydraulic", "Antifreeze", "Grease", "Other"];
 
 // 10W-60 is priced and presented like the 0W-* grades, not where a
 // numeric-then-alpha viscosity sort would otherwise place it -- hence
