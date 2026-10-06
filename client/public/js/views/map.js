@@ -2645,7 +2645,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     const lowAccuracy = accuracy != null && accuracy > 50;
     renderLocationPanelShell(`
       <h2>${title}</h2>
-      <p class="location-picker-address" id="location-panel-address">${escapeHtml(t("loading"))}</p>
+      <p class="location-picker-address" id="location-panel-address"><span class="skeleton-bar" role="status" aria-label="${escapeHtml(t("loading"))}"></span></p>
       ${
         accuracy != null
           ? `<p class="location-picker-accuracy ${lowAccuracy ? "location-picker-accuracy-low" : ""}">${icons.locate}${
