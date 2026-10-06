@@ -35,12 +35,12 @@ const ICON = {
   bolt: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 5 13.5h5.5L11 21l8-10.5h-5.5z"/></svg>`,
 };
 
-// User guide PDF: update GUIDE_VERSION (and re-export docs/kad-motors-guide-hy.pdf
-// via the tutorial-generation flow used to build it) whenever a UI change is
+// User guide PDFs (client/public/docs/kad-motors-guide-{hy,en}.pdf): update GUIDE_VERSION
+// (and rebuild them with docs/user-guide/build.py + render.mjs) whenever a UI change is
 // significant enough that the screenshots/steps in the guide would mislead a
 // rep -- a new nav pattern, a changed order-creation flow, moved buttons,
 // etc. A copy-fix or color tweak doesn't need a re-export.
-const GUIDE_VERSION = "1.19.1";
+const GUIDE_VERSION = "1.249.0";
 
 // `color` picks a badge tint for the row's icon, iOS-Settings style (each
 // row's icon sits in a colored rounded-square, not just a plain glyph) --
@@ -1153,7 +1153,7 @@ async function renderReportsManagementSection(slot) {
 // (save to Files, send in a chat, print, etc.), Open falls back to letting
 // the browser/OS handle the PDF URL directly.
 function openGuideOverlay() {
-  const pdfUrl = "/docs/kad-motors-guide-hy.pdf";
+  const pdfUrl = `/docs/kad-motors-guide-${getLang() === "en" ? "en" : "hy"}.pdf`;
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay guide-overlay";
   overlay.innerHTML = `
