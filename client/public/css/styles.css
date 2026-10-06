@@ -11,6 +11,7 @@
   --accent: #0969da;
   --accent-dark: #0550ae;
   --accent-fill: #0969da;
+  --on-accent: #ffffff; /* text/icons on accent, success, warning or danger fills */
   /* Castrol brand green, sampled from the logo -- used only for the
      dedicated "Check In" buttons (not the app-wide accent color). */
   /* Darkened from #41904f so white button text reaches 4.5:1 (was 3.9:1). */
@@ -22,6 +23,16 @@
   /* Darkened from #cf222e: red text on the pale red badge fill was 4.1-4.4:1. */
   --danger: #b3151f;
   --inactive: #adb3bc;
+  /* Categorical (non-status) hues: settings icons, map team dots, category chips.
+     Status meaning always uses --success / --warning / --danger, action uses --accent. */
+  --cat-red: #ff3b30;
+  --cat-orange: #e8823c;
+  --cat-green: #34c759;
+  --cat-teal: #30b0c7;
+  --cat-purple: #af52de;
+  --cat-indigo: #5856d6;
+  --cat-slate: #607d8b;
+  --cat-gray: #8e8e93;
   --radius: 14px;
   --radius-lg: 20px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -748,7 +759,7 @@ a {
 
 .sync-banner[role="button"] {
   cursor: pointer;
-  background: var(--danger, #d33);
+  background: var(--danger);
 }
 
 /* Install banner */
@@ -1235,8 +1246,8 @@ form [aria-invalid="true"] {
 }
 
 .badge-info {
-  background: rgba(10, 132, 255, 0.15);
-  color: #0a84ff;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
 }
 
 .badge-warning {
@@ -1401,21 +1412,21 @@ form [aria-invalid="true"] {
 }
 
 .category-btn.category-oil-point.category-btn-active {
-  background: rgba(232, 130, 60, 0.18);
-  border-color: #e8823c;
-  color: #e8823c;
+  background: color-mix(in srgb, var(--cat-orange) 18%, transparent);
+  border-color: var(--cat-orange);
+  color: var(--cat-orange);
 }
 
 .category-btn.category-shop.category-btn-active {
-  background: rgba(9, 105, 218, 0.14);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
   border-color: var(--accent);
   color: var(--accent);
 }
 
 .category-btn.category-workshop.category-btn-active {
-  background: rgba(96, 125, 139, 0.2);
-  border-color: #607d8b;
-  color: #607d8b;
+  background: color-mix(in srgb, var(--cat-slate) 20%, transparent);
+  border-color: var(--cat-slate);
+  color: var(--cat-slate);
 }
 
 .category-btn.category-other.category-btn-active {
@@ -2006,7 +2017,7 @@ input[type="search"]:focus-visible {
 .stat-value {
   font-size: 1.7rem;
   font-weight: 800;
-  color: var(--accent);
+  color: var(--text);
   letter-spacing: -0.02em;
 }
 
@@ -2521,7 +2532,7 @@ label.checkbox-row input[type="checkbox"] {
 .pin-new {
   width: 26px;
   height: 26px;
-  background: #0a84ff;
+  background: var(--accent-fill);
   border-width: 3px;
   animation: pin-drop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -2531,7 +2542,7 @@ label.checkbox-row input[type="checkbox"] {
 .pin-search-result {
   width: 26px;
   height: 26px;
-  background: #34c759;
+  background: var(--success);
   border-width: 3px;
   animation: pin-drop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -2580,8 +2591,8 @@ label.checkbox-row input[type="checkbox"] {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #af52de;
-  border: 2px solid #ffffff;
+  background: var(--cat-purple);
+  border: 2px solid var(--pin-border);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
@@ -2590,9 +2601,9 @@ label.checkbox-row input[type="checkbox"] {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #0a84ff;
-  border: 3px solid #ffffff;
-  box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.35), 0 1px 4px rgba(0, 0, 0, 0.4);
+  background: var(--accent-fill);
+  border: 3px solid var(--pin-border);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-fill) 35%, transparent), 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
 /* Heading cone shown only in Track mode -- see meIcon()'s comment in map.js
@@ -2680,7 +2691,7 @@ label.checkbox-row input[type="checkbox"] {
 }
 
 .map-control-active {
-  color: #0a84ff;
+  color: var(--accent);
 }
 
 /* Discoverable pin-state key -- toggled by the "?" control, anchored to the
@@ -2824,7 +2835,7 @@ label.checkbox-row input[type="checkbox"] {
 }
 
 .map-legend-swatch-overdue {
-  background: var(--map-overdue, #e33b43);
+  background: var(--map-overdue, var(--danger));
 }
 
 .map-legend-swatch-selected {
@@ -3488,7 +3499,7 @@ label.checkbox-row input[type="checkbox"] {
 .points-value {
   font-size: 1.6rem;
   font-weight: 800;
-  color: var(--accent);
+  color: var(--text);
 }
 
 .points-breakdown {
@@ -3516,7 +3527,7 @@ label.checkbox-row input[type="checkbox"] {
 }
 
 .leaderboard-points {
-  color: var(--accent);
+  color: var(--text);
   font-weight: 700;
   font-size: 0.85rem;
 }
@@ -3650,7 +3661,7 @@ label.checkbox-row input[type="checkbox"] {
 .progress-fraction {
   font-size: var(--fs-stat-lg);
   font-weight: var(--fw-stat-lg);
-  color: var(--accent);
+  color: var(--text);
   letter-spacing: -0.02em;
   line-height: 1;
 }
@@ -4428,8 +4439,8 @@ label.checkbox-row input[type="checkbox"] {
 }
 
 .today-plan-tick-done {
-  border-color: var(--success, #2e7d32);
-  color: var(--success, #2e7d32);
+  border-color: var(--success);
+  color: var(--success);
 }
 
 .today-plan-tick svg {
@@ -4877,7 +4888,7 @@ label.checkbox-row input[type="checkbox"] {
 .stat-pill strong {
   font-size: var(--fs-stat-lg);
   font-weight: var(--fw-stat-lg);
-  color: var(--accent);
+  color: var(--text);
 }
 
 .stat-pill span {
@@ -4915,7 +4926,7 @@ label.checkbox-row input[type="checkbox"] {
 .dq-count-chip strong {
   font-size: var(--fs-stat-lg);
   font-weight: var(--fw-stat-lg);
-  color: var(--accent);
+  color: var(--text);
 }
 
 .dq-count-chip span {
@@ -6901,13 +6912,13 @@ button.list-row-icon {
 }
 
 .list-row-icon-success {
-  background: color-mix(in srgb, var(--success, #34c759) 16%, var(--bg-card));
-  color: var(--success, #34c759);
+  background: color-mix(in srgb, var(--success) 16%, var(--bg-card));
+  color: var(--success);
 }
 
 .list-row-icon-warning {
-  background: color-mix(in srgb, var(--warning, #ff9500) 16%, var(--bg-card));
-  color: var(--warning, #ff9500);
+  background: color-mix(in srgb, var(--warning) 16%, var(--bg-card));
+  color: var(--warning);
 }
 
 .list-row-icon-danger {
@@ -7133,11 +7144,11 @@ button.list-row-icon {
 }
 
 .status-verified {
-  background: var(--success, #34c759);
+  background: var(--success);
 }
 
 .status-pending {
-  background: var(--warning, #ff9500);
+  background: var(--warning);
 }
 
 /* No circular background here (unlike verified/pending) -- the octagon
@@ -7176,11 +7187,13 @@ button.list-row-icon {
 }
 
 /* A customer name made tappable inside a detail sheet (see util.js's
-   customerNameLinkHtml) -- accent-colored so it still reads as a link even
-   sitting inline inside a plain heading like <h2>. */
+   customerNameLinkHtml). Blue is reserved for actions, so a name is dark text
+   with a dotted underline that marks it as tappable. */
 .customer-name-link {
   cursor: pointer;
-  color: var(--accent);
+  color: var(--text);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
 }
 .customer-name-link:active {
   opacity: 0.7;
@@ -7515,13 +7528,13 @@ button.list-row-icon {
 }
 
 .settings-row-icon-blue { background: #007aff; }
-.settings-row-icon-red { background: #ff3b30; }
-.settings-row-icon-orange { background: #ff9500; }
-.settings-row-icon-green { background: #34c759; }
-.settings-row-icon-teal { background: #30b0c7; }
-.settings-row-icon-purple { background: #af52de; }
-.settings-row-icon-indigo { background: #5856d6; }
-.settings-row-icon-gray { background: #8e8e93; }
+.settings-row-icon-red { background: var(--cat-red); }
+.settings-row-icon-orange { background: var(--cat-orange); }
+.settings-row-icon-green { background: var(--cat-green); }
+.settings-row-icon-teal { background: var(--cat-teal); }
+.settings-row-icon-purple { background: var(--cat-purple); }
+.settings-row-icon-indigo { background: var(--cat-indigo); }
+.settings-row-icon-gray { background: var(--cat-gray); }
 
 .settings-row-label {
   flex: 1;
@@ -8628,7 +8641,7 @@ form select,
 .pricelist-brand-heading {
   margin: 20px 0 8px;
   font-size: 1.05rem;
-  color: var(--accent);
+  color: var(--text);
 }
 .pricelist-table-wrap {
   overflow-x: auto;
@@ -9147,8 +9160,8 @@ form select,
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: #2563eb;
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
   font-size: 13px;
   font-weight: 600;
   border: 2px solid #fff;
@@ -9164,7 +9177,7 @@ form select,
   opacity: 0.5;
 }
 .route-stop-handle {
-  color: var(--muted-color, #888);
+  color: var(--text-dim);
   font-size: 14px;
   flex: none;
 }
@@ -10307,9 +10320,9 @@ form select,
   color: var(--warning);
 }
 .acc-method-invoice[aria-pressed="true"] {
-  background: rgba(10, 132, 255, 0.14);
-  border-color: #0a84ff;
-  color: #0a84ff;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .acc-actions .btn {
   min-height: 48px;
@@ -10321,10 +10334,10 @@ form select,
   color: #fff;
 }
 .acc-create-cash {
-  background: #d98a00;
+  background: var(--warning);
 }
 .acc-create-invoice {
-  background: #0a84ff;
+  background: var(--accent-fill);
 }
 .acc-create:disabled {
   opacity: 0.6;
@@ -10365,7 +10378,7 @@ form select,
 .unit-toggle {
   display: inline-flex;
   flex: none;
-  border: 1.5px solid #0a84ff;
+  border: 1.5px solid var(--accent);
   border-radius: 12px;
   overflow: hidden;
 }
@@ -10374,16 +10387,16 @@ form select,
   padding: 0 14px;
   border: 0;
   background: var(--bg-card);
-  color: #0a84ff;
+  color: var(--accent);
   font-weight: 700;
   font-size: 0.95rem;
 }
 .unit-toggle button + button {
-  border-left: 1.5px solid #0a84ff;
+  border-left: 1.5px solid var(--accent);
 }
 .unit-toggle button[aria-pressed="true"] {
-  background: #0a84ff;
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
 }
 .edit-add-results {
   padding: 0;
@@ -10428,9 +10441,6 @@ form select,
 .sheet-close-x svg { width: 18px; height: 18px; }
 .sheet-close-x::after { content: ""; position: absolute; inset: -4px; }
 
-/* Customer name in the order sheet heading reads as dark text, not a blue
-   link; the tap target is unchanged. */
-.order-detail-customer .customer-name-link { color: var(--text); }
 
 /* "What happens next" note under the current timeline step. */
 .order-step-hint {

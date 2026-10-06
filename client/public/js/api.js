@@ -22,11 +22,35 @@ const GET_CACHE_TTL_MS = 20000;
 const CACHEABLE_BASE_PATHS = new Set(["/dashboard/summary", "/dashboard/trends", "/settings", "/customers", "/checkins", "/orders", "/products"]);
 const getCache = new Map();
 
+// Touch-down prefetch (see prefetch.js): the detail GET a tap is about to
+// need is started when the finger lands, and the real request a moment later
+// takes over that same in-flight promise. Single use and short-lived (a tap
+// follows within a second or not at all), so nothing here can show stale
+// data the way a general response cache could.
+const PREFETCH_TTL_MS = 8000;
+const prefetched = new Map();
+
+export function prefetchGet(path) {
+  const hit = prefetched.get(path);
+  if (hit && hit.expires > Date.now()) return;
+  const promise = doRequest(path, {});
+  promise.catch(() => prefetched.delete(path));
+  prefetched.set(path, { expires: Date.now() + PREFETCH_TTL_MS, promise });
+}
+
 async function request(path, options = {}) {
   const method = (options.method || "GET").toUpperCase();
   if (method !== "GET") {
     getCache.clear();
-  } else if (CACHEABLE_BASE_PATHS.has(path.split("?")[0])) {
+    prefetched.clear();
+    return doRequest(path, options);
+  }
+  const hit = prefetched.get(path);
+  if (hit) {
+    prefetched.delete(path);
+    if (hit.expires > Date.now()) return hit.promise;
+  }
+  if (CACHEABLE_BASE_PATHS.has(path.split("?")[0])) {
     const cached = getCache.get(path);
     if (cached && cached.expires > Date.now()) return cached.promise;
     const promise = doRequest(path, options);

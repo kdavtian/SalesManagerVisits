@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, tierSelectorHtml, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, regionLabelHy, subregionLabelHy, channelDisplayLabel, parseDateOnly } from "../util.js";
+import { cssColor, activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, tierSelectorHtml, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, regionLabelHy, subregionLabelHy, channelDisplayLabel, parseDateOnly } from "../util.js";
 import { t } from "../i18n.js";
 import { buildCustomerTree, renderTriStateTree } from "../regionTree.js";
 import { getTheme } from "../theme.js";
@@ -2043,9 +2043,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           meMarker = L.marker(latlng, { icon: meIcon(null), zIndexOffset: 1000 }).addTo(map);
           meAccuracyCircle = L.circle(latlng, {
             radius: accuracy,
-            color: "#0a84ff",
+            color: cssColor("--accent", "#0969da"),
             weight: 1,
-            fillColor: "#0a84ff",
+            fillColor: cssColor("--accent", "#0969da"),
             fillOpacity: 0.12,
           }).addTo(map);
           map.setView(latlng, Math.max(map.getZoom(), 15));

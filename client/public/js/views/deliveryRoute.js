@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, formatDateDMY, getCurrentPosition, customerNameLinkHtml, activateCustomerNameLinks } from "../util.js";
+import { cssColor, escapeHtml, formatAmd, formatDateDMY, getCurrentPosition, customerNameLinkHtml, activateCustomerNameLinks } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 import { ensureLeaflet } from "../leafletLoader.js";
@@ -34,7 +34,7 @@ async function paintRouteMap(el, stops) {
     latlngs.push([s.lat, s.lng]);
   });
   if (latlngs.length > 1) {
-    L.polyline(latlngs, { color: "#2563eb", weight: 3, opacity: 0.7 }).addTo(map);
+    L.polyline(latlngs, { color: cssColor("--accent", "#0969da"), weight: 3, opacity: 0.7 }).addTo(map);
     map.fitBounds(latlngs, { padding: [24, 24] });
   }
   setTimeout(() => map.invalidateSize(), 50);

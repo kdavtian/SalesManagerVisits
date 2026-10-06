@@ -70,6 +70,8 @@ for (const [label, file, pattern] of checks) {
 const forbidden = [
   ["retired hamburger drawer markup is absent", "index.html", /id="side-drawer"|id="drawer-backdrop"/],
   ["retired map tools flyout markup is absent", "js/views/map.js", /id="map-tools-panel"/],
+  // Colour policy: blue is the action colour and lives in --accent / --accent-fill only.
+  ["no hard-coded action blue in the stylesheet (use var(--accent))", "css/styles.css", /#0a84ff|#2563eb/i],
 ];
 
 for (const [label, file, pattern] of forbidden) {

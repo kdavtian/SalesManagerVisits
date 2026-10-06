@@ -19,6 +19,7 @@ import { startLocationBroadcast, stopLocationBroadcast } from "./locationBroadca
 import { escapeHtml } from "./util.js";
 import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds } from "./quickActions.js";
 import { startErrorMonitoring } from "./errorMonitoring.js";
+import { installTouchPrefetch } from "./prefetch.js";
 
 const app = document.getElementById("app");
 const navBar = document.getElementById("nav-bar");
@@ -1171,6 +1172,7 @@ document.addEventListener("input", (event) => {
 });
 
 async function init() {
+  installTouchPrefetch();
   // Optimistic paint from whatever /api/me last returned successfully, so a
   // slow/high-latency network doesn't leave the screen blank through the
   // two sequential round trips below (lockdown status, then the real
