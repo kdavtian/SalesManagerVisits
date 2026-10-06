@@ -1,5 +1,11 @@
 import { getLang, t } from "./i18n.js";
 
+// Current value of a theme colour token for places that cannot use var()
+// (Leaflet draws SVG strokes via setAttribute).
+export function cssColor(name, fallback) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+}
+
 export function escapeHtml(str) {
   return String(str ?? "").replace(
     /[&<>"']/g,
