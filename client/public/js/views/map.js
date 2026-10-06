@@ -163,6 +163,33 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     const dx = Math.max(0, mapRect.left + 8 - popupRect.left) - Math.max(0, popupRect.right - (mapRect.right - 8));
     if (overflow > 0 || dx !== 0) map.panBy([-dx, -overflow]);
   };
+  // Silent warm-up: once the map settles, fetch the popup facts of the pins
+  // on screen (nearest the centre first, at most WARM_MAX) in ONE batched
+  // request, so tapping a pin opens its popup already filled in. Skipped on
+  // data-saver / efficiency mode, and a pin whose facts are fresh is not
+  // re-requested. A failure is ignored -- the tap path still fetches by itself.
+  const WARM_MAX = 40;
+  let warmTimer = null;
+  const warmVisiblePopups = () => {
+    clearTimeout(warmTimer);
+    warmTimer = setTimeout(async () => {
+      if (navigator.connection?.saveData || document.hidden) return;
+      const bounds = map.getBounds();
+      const center = map.getCenter();
+      const ids = lastCustomers
+        .filter(({ c, marker }) => marker && bounds.contains([c.lat, c.lng]) && !(factsCache.get(c.id) && Date.now() - factsCache.get(c.id).at < 60000))
+        .sort((a, b) => center.distanceTo([a.c.lat, a.c.lng]) - center.distanceTo([b.c.lat, b.c.lng]))
+        .slice(0, WARM_MAX)
+        .map(({ c }) => c.id);
+      if (!ids.length) return;
+      try {
+        const facts = await api.getMapFactsBatch(ids);
+        for (const [id, data] of Object.entries(facts)) factsCache.set(Number(id), { at: Date.now(), data });
+      } catch {
+        // best effort
+      }
+    }, 600);
+  };
   const popupFactsHtml = (data) => {
     if (!data) {
       // Same three-row height as the real facts, so nothing jumps on arrival.
@@ -448,6 +475,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // Remember the view as it changes (not only on teardown: the back-cache can
   // keep this instance alive and evict it later, or the app can be closed).
   if (plainBrowse) map.on("moveend", () => saveMapView(map));
+  map.on("moveend", () => warmVisiblePopups());
 
   // Root cause of "the map doesn't show anything": the tile provider (a
   // third-party CDN) can be unreachable -- blocked by a network/firewall,
@@ -1853,7 +1881,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
               <button data-action="details" data-id="${c.id}"><span class="popup-action-label">${t("more")}</span></button>
             </div>
           </div>
-        `);
+        `, { maxWidth: 340 });
         marker.on("popupopen", async (e) => {
           const popupEl = e.popup.getElement();
           popupEl.querySelector('[data-action="details"]').addEventListener("click", () => {
@@ -1893,6 +1921,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     renderIconFilterRow();
     applyFilter();
     refreshNearestCustomerBar();
+    warmVisiblePopups();
 
     // Item 7 -- customer detail's Navigate button offers "Show on map" as an
     // in-app alternative to leaving for an external navigation app; this is

@@ -5,7 +5,7 @@
 // tab's "Order placed" outcome row, for one -- can open the exact same
 // sheet without re-implementing it.
 import { api } from "./api.js";
-import { escapeHtml, formatAmd, activateDialog, formatDateTime, customerNameLinkHtml, activateCustomerNameLinks } from "./util.js";
+import { escapeHtml, formatAmd, activateDialog, formatDateTime, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo } from "./util.js";
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { state } from "./state.js";
@@ -185,7 +185,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     const canApproveDiscount = DISCOUNT_APPROVER_ROLES.has(state.user.role) && order.approval_status === "pending";
 
     overlay.querySelector(".sheet").innerHTML = `
-      <button type="button" class="sheet-close-x" data-action="close-sheet" aria-label="${t("close")}">${icons.close}</button>
+      <button type="button" class="icon-btn sheet-close-x" data-action="close-sheet" aria-label="${t("close")}">${icons.close}</button>
       <div class="order-detail-ids">
         <span>${t("customer_id_label")}: ${escapeHtml(order.erp_customer_id || String(order.customer_id))}</span>
         ${order.order_code ? `<span>${t("order_id_label")}: ${escapeHtml(order.order_code)}</span>` : ""}
@@ -216,9 +216,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     const errorEl = overlay.querySelector("#order-detail-error");
 
     activateCustomerNameLinks(overlay, (hash) => {
-      overlay.remove();
-      if (navigate) navigate(hash);
-      else location.hash = hash;
+      leaveSheetTo(overlay, navigate || ((h) => (location.hash = h)), hash);
     });
 
     const buttons = [];
@@ -407,8 +405,8 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     // while the add-product list is open.
     overlay.querySelector(".sheet").innerHTML = `
      <div class="edit-sheet" id="edit-sheet">
+      <h2 class="edit-sheet-header">${t("edit_order")}</h2>
       <div class="edit-sheet-scroll">
-      <h2>${t("edit_order")}</h2>
       <div class="card-list" id="edit-order-lines" style="margin:12px 0;"></div>
       <button type="button" class="btn btn-block" id="edit-add-product-btn" aria-expanded="false">${t("add_product_to_order")}</button>
       <div id="edit-add-product-panel" hidden>
@@ -460,7 +458,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       linesEl.innerHTML = lines
         .map(
           (l, i) => `
-        <div class="order-product-row order-edit-row" data-line-index="${i}">
+        <div class="order-product-row order-edit-row ${`${l.product_name}${l.size ?? ""}`.length > 34 ? "order-edit-row-long" : ""}" data-line-index="${i}">
           <div class="order-product-info">
             <strong>${escapeHtml(l.product_name)}${l.size ? ` · ${escapeHtml(l.size)}` : ""}</strong>
             <span class="muted">${[l.brand, formatAmd(Number(l.unit_price_amd))].filter(Boolean).map(escapeHtml).join(" · ")}</span>

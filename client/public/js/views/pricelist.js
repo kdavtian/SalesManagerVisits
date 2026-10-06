@@ -1,7 +1,7 @@
 import { api } from "../api.js";
 import { escapeHtml, formatAmd, activateDialog } from "../util.js";
 import { t } from "../i18n.js";
-import { state, canManageProducts, seesProductCosts } from "../state.js";
+import { state, canManageProducts, seesProductCosts, canPrintCostColumns } from "../state.js";
 import { icons } from "../icons.js";
 import { compareProducts, sortedBrands } from "../productSort.js";
 import { NO_GROUP_KEY, openTriStateTreeSheet } from "../regionTree.js";
@@ -150,7 +150,7 @@ export async function renderPricelist(root, navigate) {
   // customers.js's regionSubregionKeys), rather than an explicit "all
   // brands"/"all categories" state to track separately.
   const selectedProductIds = new Set();
-  let packageFilter = "";
+  const packageFilters = new Set();
   let specialOnly = false;
   let sortBy = "default";
   let visibleColumns = loadVisibleColumns();
@@ -173,7 +173,6 @@ export async function renderPricelist(root, navigate) {
       </div>
       <div class="detail-header-actions">
         <button type="button" class="icon-btn" id="select-mode-btn" aria-label="${t("select_products")}">${icons.checkCircle}</button>
-        ${canManageProducts() ? `<button type="button" class="icon-btn" id="manage-btn" aria-label="${t("manage_prices")}">${icons.tag}</button>` : ""}
         <button type="button" class="icon-btn" id="export-btn" aria-label="${t("export")}">${icons.send}</button>
       </div>
     </div>
@@ -198,7 +197,6 @@ export async function renderPricelist(root, navigate) {
   `;
 
   container.querySelector("#back-btn").addEventListener("click", () => navigate("#/dashboard"));
-  container.querySelector("#manage-btn")?.addEventListener("click", () => navigate("#/settings"));
   container.querySelector("#export-btn").addEventListener("click", () => openExportSheet());
 
   const sortBtn = container.querySelector("#pricelist-sort-btn");
@@ -273,36 +271,52 @@ export async function renderPricelist(root, navigate) {
     </button>`;
   }
 
-  // Single-select bottom sheet, e.g. for the package/unit filter -- same
-  // shape as customers.js's own openFilterSheet.
-  function openFilterSheet(titleText, options, currentValue, onSelect) {
+  // Pack sizes as tappable chips (multi-select) with Clear / Show pinned at the
+  // bottom of the sheet -- same pattern as the other filter sheets.
+  function openSizeChipsSheet() {
+    const picked = new Set(packageFilters);
     const overlay = document.createElement("div");
     overlay.className = "sheet-overlay";
     overlay.innerHTML = `
-      <div class="sheet filter-sheet">
-        <h2>${escapeHtml(titleText)}</h2>
-        <div class="filter-sheet-options">
-          ${options
-            .map(
-              (o) => `
-            <button type="button" class="filter-sheet-option ${o.value === currentValue ? "filter-sheet-option-selected" : ""}" data-value="${escapeHtml(o.value)}">
-              <span>${escapeHtml(o.label)}</span>
-              ${o.value === currentValue ? `<span class="filter-sheet-check">${icons.checkCircle}</span>` : ""}
-            </button>
-          `
-            )
-            .join("")}
+      <div class="sheet pd-edit-sheet">
+        <h2>${t("unit")}</h2>
+        <div class="pd-edit-scroll">
+          <div class="filter-sheet-chips" id="size-chips">
+            ${packages
+              .map((p) => `<button type="button" class="filter-sheet-chip ${picked.has(p) ? "filter-sheet-chip-selected" : ""}" data-size="${escapeHtml(p)}" aria-pressed="${picked.has(p)}">${escapeHtml(p)}</button>`)
+              .join("")}
+          </div>
         </div>
-      </div>
-    `;
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="size-clear">${t("clear")}</button>
+          <button type="button" class="btn btn-primary" id="size-show">${t("show_results")}</button>
+        </div>
+      </div>`;
     document.body.appendChild(overlay);
     activateDialog(overlay);
     overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
-    overlay.querySelectorAll(".filter-sheet-option").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        onSelect(btn.dataset.value);
-        overlay.remove();
+    overlay.querySelector("#size-chips").addEventListener("click", (e) => {
+      const chip = e.target.closest("[data-size]");
+      if (!chip) return;
+      const size = chip.dataset.size;
+      if (picked.has(size)) picked.delete(size);
+      else picked.add(size);
+      chip.classList.toggle("filter-sheet-chip-selected", picked.has(size));
+      chip.setAttribute("aria-pressed", String(picked.has(size)));
+    });
+    overlay.querySelector("#size-clear").addEventListener("click", () => {
+      picked.clear();
+      overlay.querySelectorAll("[data-size]").forEach((c) => {
+        c.classList.remove("filter-sheet-chip-selected");
+        c.setAttribute("aria-pressed", "false");
       });
+    });
+    overlay.querySelector("#size-show").addEventListener("click", () => {
+      packageFilters.clear();
+      for (const s of picked) packageFilters.add(s);
+      overlay.remove();
+      renderFilters();
+      paint();
     });
   }
 
@@ -357,7 +371,8 @@ export async function renderPricelist(root, navigate) {
             key: "package",
             icon: icons.box,
             label: t("unit"),
-            active: Boolean(packageFilter),
+            active: packageFilters.size > 0,
+            count: packageFilters.size,
           })
         : "",
       filterIconButton({
@@ -392,18 +407,7 @@ export async function renderPricelist(root, navigate) {
       });
     });
 
-    filterRow.querySelector('[data-filter-btn="package"]')?.addEventListener("click", () => {
-      openFilterSheet(
-        t("unit"),
-        [{ value: "", label: t("all_packages") }, ...packages.map((p) => ({ value: p, label: p }))],
-        packageFilter,
-        (value) => {
-          packageFilter = value;
-          renderFilters();
-          paint();
-        }
-      );
-    });
+    filterRow.querySelector('[data-filter-btn="package"]')?.addEventListener("click", () => openSizeChipsSheet());
 
     filterRow.querySelector('[data-filter-btn="columns"]')?.addEventListener("click", () => openColumnsSheet());
 
@@ -428,7 +432,7 @@ export async function renderPricelist(root, navigate) {
     const base = searchQuery.trim() ? searchProducts(products, searchQuery) : products;
     return base.filter((p) => {
       if (selectedProductIds.size && !selectedProductIds.has(String(p.id))) return false;
-      if (packageFilter && p.unit !== packageFilter) return false;
+      if (packageFilters.size && !packageFilters.has(p.unit)) return false;
       if (specialOnly && p.effective_special_amd === null) return false;
       return true;
     });
@@ -520,17 +524,18 @@ export async function renderPricelist(root, navigate) {
     // chosen price column is the bold one and the rest sit under it, small.
     const hasSpecial = p.effective_special_amd !== null;
     const selected = selectedIds.has(p.id);
+    // Every price is one line "Silver: 8,500 AMD" (label and amount together);
+    // the first chosen column is the bold one. An active special replaces the
+    // first line's amount and keeps the regular one struck through under it.
     const priceLines = visibleColumns
       .map((key, i) => {
         const value = colValue(p, key);
         if (value == null) return "";
         const label = PRICE_COLUMNS.find((c) => c.key === key).label();
-        if (i === 0) {
-          return hasSpecial
-            ? `<span class="pricelist-price-special">${formatAmd(p.effective_special_amd)}</span><span class="pricelist-price-standard-struck">${formatAmd(value)}</span>`
-            : `<span class="pricelist-price-standard">${formatAmd(value)}</span>${visibleColumns.length > 2 ? `<span class="pricelist-price-label">${escapeHtml(label)}</span>` : ""}`;
+        if (i === 0 && hasSpecial) {
+          return `<span class="pl-price-line pl-price-primary"><span class="pl-price-label">${escapeHtml(label)}:</span> <strong class="pricelist-price-special">${formatAmd(p.effective_special_amd)}</strong></span><span class="pricelist-price-standard-struck">${formatAmd(value)}</span>`;
         }
-        return `<span class="pricelist-price-retail">${escapeHtml(label)}: ${formatAmd(value)}</span>`;
+        return `<span class="pl-price-line ${i === 0 ? "pl-price-primary" : ""}"><span class="pl-price-label">${escapeHtml(label)}:</span> <strong>${formatAmd(value)}</strong></span>`;
       })
       .join("");
     return `
@@ -649,7 +654,12 @@ export async function renderPricelist(root, navigate) {
   // block for sales managers, office details for management.
   function openPdfBuilder() {
     const costs = seesProductCosts();
-    const tierOptions = PRICE_COLUMNS.filter((c) => ["bronze", "silver", "gold", "retail"].includes(c.key) && (!c.costOnly || costs));
+    // Bronze/Silver/Retail for everyone, Gold for management; landing / net cost
+    // (an internal sheet) only for admin, CEO and operations director.
+    const tierOptions = PRICE_COLUMNS.filter((c) => {
+      if (c.key === "landing" || c.key === "net") return canPrintCostColumns();
+      return !c.costOnly || costs;
+    });
     const brands = sortedBrands(products);
     const nextMonthEnd = new Date();
     nextMonthEnd.setMonth(nextMonthEnd.getMonth() + 1, 0);

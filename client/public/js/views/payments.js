@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, formatDateTime, activateDialog, channelDisplayLabel, customerNameLinkHtml, activateCustomerNameLinks } from "../util.js";
+import { escapeHtml, formatAmd, formatDateTime, activateDialog, channelDisplayLabel, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 import { icons } from "../icons.js";
@@ -513,10 +513,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
       const actionsEl = overlay.querySelector("#payment-detail-actions");
       const errorEl = overlay.querySelector("#payment-detail-error");
 
-      activateCustomerNameLinks(overlay, (hash) => {
-        overlay.remove();
-        navigate(hash);
-      });
+      activateCustomerNameLinks(overlay, (hash) => leaveSheetTo(overlay, navigate, hash));
 
       const buttons = [];
       if (p.status === "pending" && canReview) {

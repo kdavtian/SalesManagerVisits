@@ -10,7 +10,7 @@
 //                   broken down by sales channel so they can count the
 //                   physical notes channel by channel before confirming.
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, formatDateTime, activateDialog, channelDisplayLabel, customerNameLinkHtml, activateCustomerNameLinks } from "../util.js";
+import { escapeHtml, formatAmd, formatDateTime, activateDialog, channelDisplayLabel, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 
@@ -434,10 +434,7 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId) {
 
     const errorEl = overlay.querySelector("#handoff-detail-error");
     overlay.querySelector("#handoff-close-btn").addEventListener("click", () => overlay.remove());
-    activateCustomerNameLinks(overlay, (hash) => {
-      overlay.remove();
-      navigate(hash);
-    });
+    activateCustomerNameLinks(overlay, (hash) => leaveSheetTo(overlay, navigate, hash));
 
     async function act(fn) {
       overlay.querySelectorAll("button").forEach((b) => (b.disabled = true));

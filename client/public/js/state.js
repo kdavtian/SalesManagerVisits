@@ -50,6 +50,13 @@ export function seesProductCosts() {
   return role === "admin" || role === "ceo" || role === "operations_director" || role === "sales_director" || role === "accountant";
 }
 
+// Mirrors canPrintCostColumns in the server's roles.js: landing / net cost can
+// be printed into a pricelist PDF only by admin, CEO and operations director.
+export function canPrintCostColumns() {
+  const role = state.user?.role;
+  return role === "admin" || role === "ceo" || role === "operations_director";
+}
+
 // Sales managers only see their own data; every other role sees
 // everyone's — mirrors server/src/roles.js.
 export function seesAllActivity() {

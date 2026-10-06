@@ -732,6 +732,29 @@ export function getCurrentPosition(options = {}) {
 
 // Applies consistent dialog semantics and keyboard behavior to dynamically
 // created bottom sheets, including focus restoration when a sheet closes.
+// "Back returns to the sheet you left": a detail sheet whose link opens
+// another screen (e.g. order sheet -> customer card) is not destroyed but
+// parked here. When the user comes back to the exact screen it was opened on
+// and app.js restores that screen from its back-cache, the very same sheet
+// (state, scroll, listeners intact) is put back on top. Anything else the
+// user does in between (another forward navigation) drops it. One slot, same
+// as the back-cache it depends on.
+let parkedSheet = null;
+export function leaveSheetTo(overlay, navigate, hash) {
+  parkedSheet = { overlay, fromHash: location.hash || "#/dashboard" };
+  overlay.remove();
+  navigate(hash);
+}
+export function takeParkedSheet(hash) {
+  if (!parkedSheet || parkedSheet.fromHash !== hash) return null;
+  const { overlay } = parkedSheet;
+  parkedSheet = null;
+  return overlay;
+}
+export function pruneParkedSheet(keepHash) {
+  if (parkedSheet && parkedSheet.fromHash !== keepHash) parkedSheet = null;
+}
+
 export function activateDialog(overlay) {
   const dialog = overlay.querySelector(".sheet") || overlay;
   const previousFocus = document.activeElement;

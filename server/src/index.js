@@ -5,6 +5,7 @@ import { startErpSyncMonitor } from "./erpSyncMonitor.js";
 import { startDailySummary } from "./dailySummary.js";
 import { startBonusReconciliation } from "./bonusReconciliation.js";
 import { startBonusChallengeEngine } from "./bonusChallengeWorker.js";
+import { runPricelistSeedOnce } from "./pricelistSeed.js";
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
@@ -15,4 +16,5 @@ app.listen(port, () => {
   startDailySummary();
   startBonusReconciliation();
   startBonusChallengeEngine();
+  runPricelistSeedOnce().catch((err) => console.error("Pricelist seed failed:", err.message));
 });

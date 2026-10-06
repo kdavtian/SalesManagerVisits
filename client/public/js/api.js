@@ -161,6 +161,7 @@ export const api = {
   customerPlannedVisits: (id) => request(`/customers/${id}/planned-visits`),
   getVisitSchedule: (id) => request(`/customers/${id}/visit-schedule`),
   getMapFacts: (id) => request(`/customers/${id}/map-facts`),
+  getMapFactsBatch: (ids) => request(`/customers/map-facts?ids=${ids.join(",")}`),
   customerOrderedProducts: (id) => request(`/customers/${id}/ordered-products`),
 
   createCheckin: (formData) =>

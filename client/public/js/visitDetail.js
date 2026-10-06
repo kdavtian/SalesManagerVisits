@@ -4,7 +4,7 @@
 // check-in. Kept as its own module (not exported from customerDetail.js)
 // so neither view has to import the other's file to reuse it.
 import { api } from "./api.js";
-import { activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, categoryIcon, customerNameLinkHtml, activateCustomerNameLinks } from "./util.js";
+import { activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, categoryIcon, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo } from "./util.js";
 import { t } from "./i18n.js";
 import { isAdmin } from "./state.js";
 import { icons } from "./icons.js";
@@ -336,10 +336,7 @@ export function openVisitDetailSheet(ch, onPhotoDeleted, navigate) {
   // sitting open (as dead DOM behind the new route) once the customer card
   // renders underneath it.
   if (navigate) {
-    activateCustomerNameLinks(overlay, (hash) => {
-      close();
-      navigate(hash);
-    });
+    activateCustomerNameLinks(overlay, (hash) => leaveSheetTo(overlay, navigate, hash));
   }
 
   overlay.querySelectorAll("[data-order-id]").forEach((btn) => {

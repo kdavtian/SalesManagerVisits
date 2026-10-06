@@ -50,3 +50,14 @@
 - PR #230 (tier pricing, gold prices, customer type/tier filter) waiting on CI/merge; migration 087 must be run on the droplet.
 - Bot PR #28 (workbook 2.0.7, silver fallback) needs merge + bot restart + re-send workbook.
 - Possible: UI for managing gold individual prices outside the order form; Lily real-token flow live; HC code coverage check.
+
+
+## UI/UX vocabulary the owner asked to be taught and to use (2026-10-07)
+Use these names in answers and in code comments; suggest the better pattern when one exists.
+- **Sticky header / pinned header** -- a title bar that stays at the top while the content scrolls (e.g. "Edit order"). **Sticky footer / bottom action bar** -- Cancel/Save (or Clear/Show) pinned to the bottom of a sheet. Owner wants both on every long sheet.
+- **Bottom sheet (modal sheet)** with **scrim/backdrop** behind it; **sheet grabber/handle**; **full-height sheet** for long flows.
+- **Top app bar** (Back + title + actions) and **bottom tab bar** (navigation).
+- **Chips** (filter chips = toggle, input chips = removable), **segmented control** (the % / AMD switch), **toggle/switch**, **stepper** (+/- quantity), **FAB** (floating action button).
+- **Skeleton screen / placeholder** (grey blocks that keep the layout while loading), **empty state**, **toast/snackbar**, **popover/popup** (map pin), **accordion/tree picker**, **pull-to-refresh**, **infinite scroll / lazy rendering**, **prefetch**, **optimistic UI**, **deep link**, **back stack / back navigation**.
+- Bottom-sheet button position is standardized (`--sheet-pad-bottom`); never add per-sheet bottom padding.
+- Back from a screen opened by a sheet's link returns to that sheet (`leaveSheetTo` in util.js parks it; app.js restores it with the back-cache).

@@ -164,7 +164,7 @@ export async function renderProductDetail(root, navigate, productId) {
   function openLightbox(url) {
     const overlay = document.createElement("div");
     overlay.className = "sheet-overlay pd-lightbox";
-    overlay.innerHTML = `<button type="button" class="sheet-close-x pd-lightbox-close" aria-label="${t("close")}">${icons.close}</button><img src="${url}" alt="" />`;
+    overlay.innerHTML = `<button type="button" class="icon-btn sheet-close-x pd-lightbox-close" aria-label="${t("close")}">${icons.close}</button><img src="${url}" alt="" />`;
     document.body.appendChild(overlay);
     activateDialog(overlay);
     overlay.addEventListener("click", () => overlay.remove());

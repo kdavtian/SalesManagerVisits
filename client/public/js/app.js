@@ -16,7 +16,7 @@ import { clearListCache, clearCacheIfRoleChanged } from "./listCache.js";
 import { mountInstallPrompt } from "./install.js";
 import { mountUpdateBanner, initServiceWorkerUpdates } from "./updateBanner.js";
 import { startLocationBroadcast, stopLocationBroadcast } from "./locationBroadcast.js";
-import { escapeHtml } from "./util.js";
+import { escapeHtml, takeParkedSheet, pruneParkedSheet } from "./util.js";
 import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds } from "./quickActions.js";
 import { startErrorMonitoring } from "./errorMonitoring.js";
 import { installTouchPrefetch } from "./prefetch.js";
@@ -754,6 +754,9 @@ async function render() {
     // by attaching an onRestore() hook to its cleanup function; one that
     // doesn't need this is unaffected.
     currentCleanup?.onRestore?.();
+    // Back from a screen that a sheet's link opened: put that sheet back.
+    const parked = takeParkedSheet(hash);
+    if (parked) document.body.appendChild(parked);
     return;
   }
 
@@ -799,6 +802,9 @@ async function render() {
     currentCleanup();
     currentCleanup = null;
   }
+  // A parked sheet only survives while the screen it was opened on is the one
+  // sitting in the back-cache.
+  pruneParkedSheet(backCache?.hash ?? null);
   lastRenderedHash = hash;
 
   const [path, queryString] = hash.split("?");
