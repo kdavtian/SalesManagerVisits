@@ -4,7 +4,7 @@ import { t } from "../i18n.js";
 import { buildCustomerTree, renderTriStateTree } from "../regionTree.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
-import { nextVisitRowHtml } from "../visitSchedule.js";
+import { nextVisitRowHtml, formatLastVisit } from "../visitSchedule.js";
 import { canViewTeamLocations, canEditDirectly, canPlanForOthers, canReassignCustomers, state } from "../state.js";
 import { getClusterPins, setClusterPins, getCompassMode, setCompassMode, getMapTileCacheEnabled } from "../mapPrefs.js";
 import { getPerfMode } from "../perfMode.js";
@@ -145,6 +145,37 @@ function saveMapView(map) {
 function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = false, startInPlanMode = false, focusCustomerId = null) {
   const plainBrowse = !relocateCustomerId && !startInAddMode && !startInPlanMode && focusCustomerId == null;
   const restoredView = plainBrowse ? loadMapView() : null;
+  // Pin-popup facts (last visit / debt / planned date), cached per customer
+  // for the session so a re-tap is instant; prefetched on touch-down.
+  const factsCache = new Map();
+  const fetchFacts = async (id) => {
+    const data = await api.getMapFacts(id);
+    factsCache.set(id, { at: Date.now(), data });
+    return data;
+  };
+  // Leaflet's auto-pan measured the popup before its content settled, so
+  // nudge the map until the popup is fully inside (clear of the search bar).
+  // (Not popup.update(): that re-renders the original content.)
+  const nudgePopupIntoView = (popupEl) => {
+    const mapRect = map.getContainer().getBoundingClientRect();
+    const popupRect = popupEl.getBoundingClientRect();
+    const overflow = Math.max(0, mapRect.top + 76 - popupRect.top);
+    const dx = Math.max(0, mapRect.left + 8 - popupRect.left) - Math.max(0, popupRect.right - (mapRect.right - 8));
+    if (overflow > 0 || dx !== 0) map.panBy([-dx, -overflow]);
+  };
+  const popupFactsHtml = (data) => {
+    if (!data) {
+      // Same three-row height as the real facts, so nothing jumps on arrival.
+      return [0, 1, 2].map(() => '<div class="popup-fact popup-fact-skeleton"><span class="skeleton-bar"></span></div>').join("");
+    }
+    const debtLabel = data.erp_debt_amd != null ? formatAmd(data.erp_debt_amd) : "—";
+    const lastVisitLabel = data.last_visit_at ? formatLastVisit(data.last_visit_at) : t("never_visited");
+    return `
+      <div class="popup-fact"><span class="muted">${t("outstanding_debt")}</span><strong>${escapeHtml(debtLabel)}</strong></div>
+      <div class="popup-fact"><span class="muted">${t("last_visit")}</span><strong>${escapeHtml(lastVisitLabel)}</strong></div>
+      ${nextVisitRowHtml(data)}
+    `;
+  };
   root.innerHTML = `
     <div class="map-view">
       ${
@@ -1094,17 +1125,24 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   let initialViewApplied = Boolean(restoredView);
   // While true, applyFilter leaves the restored pan/zoom alone; any tap or
   // keystroke in the toolbar/filters (outside the map canvas) lets it re-fit.
-  let keepRestoredView = Boolean(restoredView);
-  if (restoredView) {
-    const release = (e) => {
+  let lastPopupCustomerId = null; // pin whose More/Check in was tapped
+  let reopenCustomerId = null; // set on back-restore, consumed by the next paint
+  let keepRestoredView = false;
+  let releaseHold = null;
+  const holdView = () => {
+    keepRestoredView = true;
+    if (releaseHold) return;
+    releaseHold = (e) => {
       if (e.target.closest?.(".leaflet-container")) return;
       keepRestoredView = false;
-      root.removeEventListener("click", release, true);
-      root.removeEventListener("input", release, true);
+      root.removeEventListener("click", releaseHold, true);
+      root.removeEventListener("input", releaseHold, true);
+      releaseHold = null;
     };
-    root.addEventListener("click", release, true);
-    root.addEventListener("input", release, true);
-  }
+    root.addEventListener("click", releaseHold, true);
+    root.addEventListener("input", releaseHold, true);
+  };
+  if (restoredView) holdView();
   let plannedCustomerIds = null;
   let routeLine = null;
   const stopMarkers = [];
@@ -1809,7 +1847,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           <div class="map-popup">
             <strong>${escapeHtml(c.name)}</strong>
             ${c.sales_channel ? `<div class="popup-category">${escapeHtml(channelDisplayLabel(c.sales_channel))}</div>` : ""}
-            <div class="popup-facts" id="popup-facts-${c.id}"><p class="popup-loading">${t("loading")}</p></div>
+            <div class="popup-facts" id="popup-facts-${c.id}">${popupFactsHtml(factsCache.get(c.id)?.data)}</div>
             <div class="popup-actions">
               <button data-action="checkin" data-id="${c.id}" class="btn-accent"><span>${icons.mapPinCheck}</span><span class="popup-action-label">${t("check_in")}</span></button>
               <button data-action="details" data-id="${c.id}"><span class="popup-action-label">${t("more")}</span></button>
@@ -1819,37 +1857,32 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         marker.on("popupopen", async (e) => {
           const popupEl = e.popup.getElement();
           popupEl.querySelector('[data-action="details"]').addEventListener("click", () => {
+            lastPopupCustomerId = c.id;
             navigate(`#/customers/${c.id}`);
           });
           popupEl.querySelector('[data-action="checkin"]').addEventListener("click", () => {
+            lastPopupCustomerId = c.id;
             navigate(`#/checkin/${c.id}`);
           });
 
           const factsEl = popupEl.querySelector(`#popup-facts-${c.id}`);
+          // Facts come from one small request, shown instantly from the
+          // session cache when we have it (refreshed in the background) and
+          // as a same-height skeleton otherwise, so the popup never jumps.
+          const render = (data) => {
+            factsEl.innerHTML = popupFactsHtml(data);
+            nudgePopupIntoView(popupEl);
+          };
           try {
-            const [detail, schedule] = await Promise.all([api.getCustomer(c.id), api.getVisitSchedule(c.id)]);
-            const lastVisitLabel = detail.last_visit_at ? formatDateTime(detail.last_visit_at) : t("never_visited");
-            const debtLabel = detail.erp_debt_amd != null ? formatAmd(detail.erp_debt_amd) : "—";
-            // One planned date (plan-aware, see visitSchedule.js): "Planned
-            // Fri, 2 Oct", "Planned today", or a red overdue chip.
-            factsEl.innerHTML = `
-              <div class="popup-fact"><span class="muted">${t("outstanding_debt")}</span><strong>${escapeHtml(debtLabel)}</strong></div>
-              <div class="popup-fact"><span class="muted">${t("last_visit")}</span><strong>${escapeHtml(lastVisitLabel)}</strong></div>
-              ${nextVisitRowHtml(schedule)}
-            `;
-            // The facts arrive after the popup opened, so Leaflet's own
-            // auto-pan measured the short "loading" popup. Nudge the map so
-            // the now-taller popup is not clipped under the search bar.
-            // (Not popup.update(): that re-renders the original content and
-            // would wipe these facts.)
-            const overflow = map.getContainer().getBoundingClientRect().top + 76 - popupEl.getBoundingClientRect().top;
-            const mapRect = map.getContainer().getBoundingClientRect();
-            const popupRect = popupEl.getBoundingClientRect();
-            const dx = Math.max(0, mapRect.left + 8 - popupRect.left) - Math.max(0, popupRect.right - (mapRect.right - 8));
-            if (overflow > 0 || dx !== 0) map.panBy([-dx, -Math.max(0, overflow)]);
+            const cached = factsCache.get(c.id);
+            if (cached) render(cached.data);
+            if (!cached || Date.now() - cached.at > 20000) render(await fetchFacts(c.id));
           } catch {
-            factsEl.innerHTML = "";
+            if (!factsCache.get(c.id)) factsEl.innerHTML = "";
           }
+        });
+        marker.on("mousedown touchstart", () => {
+          if (!factsCache.has(c.id)) fetchFacts(c.id).catch(() => {});
         });
         lastCustomers.push({ c, marker });
         bounds.push([c.lat, c.lng]);
@@ -1886,6 +1919,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       // cached list to paint first).
       focusOnCustomerMarker(focusCustomerId);
     }
+    if (reopenCustomerId != null && focusOnCustomerMarker(reopenCustomerId)) reopenCustomerId = null;
 
     // Skipped alongside the marker loop above -- startAddCustomerFlow()
     // already runs its own getCurrentPosition() to center the map, so this
@@ -3246,6 +3280,11 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // sent them to the one screen that could invalidate it already implies
   // they were done with for now) and far better than silently stale data.
   cleanupMapInner.onRestore = () => {
+    // Back from a customer card: keep the exact pan/zoom (refreshing the
+    // markers must not re-fit to every customer) and reopen the pin the
+    // user tapped More on.
+    holdView();
+    reopenCustomerId = lastPopupCustomerId;
     loadCustomers();
   };
   return cleanupMapInner;

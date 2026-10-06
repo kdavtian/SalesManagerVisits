@@ -59,9 +59,21 @@ export function nextVisitRowHtml(schedule) {
     return `<div class="popup-fact"><span class="muted">${t("visit_planned_label")}</span><strong>${escapeHtml(formatScheduleDate(firstPlanned))}</strong></div>`;
   }
   if (c.overdue) {
-    const label = t(c.overdue_days === 1 ? "visit_overdue_day" : "visit_overdue_days").replace("{n}", c.overdue_days);
-    return `<div class="popup-fact popup-fact-overdue"><span class="badge badge-danger">${escapeHtml(label)}</span><strong>${escapeHtml(formatScheduleDate(date))}</strong></div>`;
+    // Only the day count is the red chip; the label and date read like the
+    // other rows ("Visit overdue [5 days]   Sat, Sep 12").
+    const chip = t(c.overdue_days === 1 ? "visit_overdue_day" : "visit_overdue_days").replace("{n}", c.overdue_days);
+    return `<div class="popup-fact"><span class="muted">${t("visit_overdue")} <span class="badge badge-danger">${escapeHtml(chip)}</span></span><strong>${escapeHtml(formatScheduleDate(date))}</strong></div>`;
   }
   if (!date) return "";
   return `<div class="popup-fact"><span class="muted">${t("visit_planned_label")}</span><strong>${escapeHtml(formatScheduleDate(date))}</strong></div>`;
+}
+
+// "Sun, 27 Sep at 10:07" -- weekday + date + time of a check-in.
+export function formatLastVisit(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const locale = getLang() === "hy" ? "hy" : "en-GB";
+  const date = d.toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" });
+  const time = d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", hour12: false });
+  return `${date} ${t("visit_at")} ${time}`;
 }

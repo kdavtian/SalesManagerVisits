@@ -807,6 +807,7 @@ async function render() {
   }
   const query = new URLSearchParams(queryString || "");
   const customerMatch = path.match(/^#\/customers\/(\d+)$/);
+  const productMatch = path.match(/^#\/product\/(\d+)$/);
   const customerOrdersMatch = path.match(/^#\/customers\/(\d+)\/orders$/);
   const checkinMatch = path.match(/^#\/checkin\/(\d+)$/);
   const orderCreateMatch = path.match(/^#\/orders\/new\/(\d+)$/);
@@ -857,6 +858,8 @@ async function render() {
     (await import("./views/dashboardOverview.js")).renderDashboardOverview(app, navigate);
   } else if (path === "#/pricelist") {
     (await import("./views/pricelist.js")).renderPricelist(app, navigate);
+  } else if (productMatch) {
+    (await import("./views/productDetail.js")).renderProductDetail(app, navigate, productMatch[1]);
   } else if (path === "#/warehouse") {
     (await import("./views/warehouse.js")).renderWarehouse(app, navigate);
   } else if (path === "#/delivery") {

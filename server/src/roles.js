@@ -67,6 +67,13 @@ export function canManageProducts(role) {
   return role === "admin" || role === "ceo" || role === "operations_director" || role === "accountant";
 }
 
+// Who sees the management-only product fields (gold price, landing cost, net
+// cost) -- the same circle as the financial exports. A sales manager gets
+// bronze / silver / retail only; the API strips the rest.
+export function seesProductCosts(role) {
+  return seesFinancialExports(role);
+}
+
 // Per spec: admin, sales director, and CEO see the live team-location map.
 export function canViewTeamLocations(role) {
   return role === "admin" || role === "sales_director" || role === "ceo" || role === "operations_director";

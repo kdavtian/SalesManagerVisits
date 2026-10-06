@@ -136,6 +136,7 @@ export const api = {
   customerCheckins: (id) => request(`/customers/${id}/checkins`),
   customerPlannedVisits: (id) => request(`/customers/${id}/planned-visits`),
   getVisitSchedule: (id) => request(`/customers/${id}/visit-schedule`),
+  getMapFacts: (id) => request(`/customers/${id}/map-facts`),
   customerOrderedProducts: (id) => request(`/customers/${id}/ordered-products`),
 
   createCheckin: (formData) =>
@@ -233,6 +234,25 @@ export const api = {
   createProductPromo: (id, data) => json(`/products/${id}/promos`, "POST", data),
   deleteProductPromo: (id, promoId) => request(`/products/${id}/promos/${promoId}`, { method: "DELETE" }),
   getProductPriceHistory: (id) => request(`/products/${id}/price-history`),
+  getProduct: (id) => request(`/products/${id}`),
+  uploadProductPhoto: (id, formData) => request(`/products/${id}/images`, { method: "POST", body: formData }),
+  updateProductPhoto: (id, imageId, data) => json(`/products/${id}/images/${imageId}`, "PATCH", data),
+  deleteProductPhoto: (id, imageId) => request(`/products/${id}/images/${imageId}`, { method: "DELETE" }),
+  importPricelistWorkbook: (formData) => request("/products/import-pricelist", { method: "POST", body: formData }),
+  // The pricelist PDF is binary, so it bypasses request()'s JSON handling.
+  buildPricelistPdf: async (options) => {
+    const res = await fetch("/api/products/pricelist.pdf", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", "X-App-Version": APP_VERSION, ...(getCsrfToken() ? { "X-CSRF-Token": getCsrfToken() } : {}) },
+      body: JSON.stringify(options),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.error || t("pdf_failed"));
+    }
+    return res.blob();
+  },
   productImageUrl: (id) => `/api/products/${id}/image`,
   uploadProductImage: (id, formData) => request(`/products/${id}/image`, { method: "POST", body: formData }),
   deleteProductImage: (id) => request(`/products/${id}/image`, { method: "DELETE" }),

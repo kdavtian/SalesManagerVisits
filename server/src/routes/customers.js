@@ -880,9 +880,7 @@ customersRouter.get("/:id/planned-visits", async (req, res) => {
 // A sales manager only sees their own plans/rules.
 const SCHEDULE_HORIZON_DAYS = 28;
 const SCHEDULE_MAX_ENTRIES = 6;
-customersRouter.get("/:id/visit-schedule", async (req, res) => {
-  const customerId = Number(req.params.id);
-  if (!Number.isInteger(customerId)) return res.status(400).json({ error: "Invalid customer id" });
+async function buildVisitSchedule(req, customerId) {
   const { rows: custRows } = await pool.query(
     `SELECT c.id, c.region, c.subregion, c.visit_frequency_days,
             (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id) AS last_visit_at
@@ -890,7 +888,7 @@ customersRouter.get("/:id/visit-schedule", async (req, res) => {
     [customerId]
   );
   const customer = custRows[0];
-  if (!customer) return res.status(404).json({ error: "Customer not found" });
+  if (!customer) return null;
 
   const today = yerevanToday();
   const ownOnly = req.user.role === "sales_manager";
@@ -946,7 +944,7 @@ customersRouter.get("/:id/visit-schedule", async (req, res) => {
     ruleWeekdays: ruleWeekdaysFor(customer, allRules),
     today,
   });
-  res.json({
+  return {
     today,
     planned: plannedList,
     planned_today: plannedList.some((p) => p.date === today),
@@ -959,7 +957,34 @@ customersRouter.get("/:id/visit-schedule", async (req, res) => {
       overdue_days: due.overdue_days,
       never_visited: due.never_visited,
     },
-  });
+  };
+}
+
+customersRouter.get("/:id/visit-schedule", async (req, res) => {
+  const customerId = Number(req.params.id);
+  if (!Number.isInteger(customerId)) return res.status(400).json({ error: "Invalid customer id" });
+  const schedule = await buildVisitSchedule(req, customerId);
+  if (!schedule) return res.status(404).json({ error: "Customer not found" });
+  res.json(schedule);
+});
+
+// Everything the Map pin popup shows beyond the name, in ONE small request
+// (the full GET /:id drags ERP order history along): last visit, debt, plan.
+customersRouter.get("/:id/map-facts", async (req, res) => {
+  const customerId = Number(req.params.id);
+  if (!Number.isInteger(customerId)) return res.status(400).json({ error: "Invalid customer id" });
+  const [schedule, { rows }] = await Promise.all([
+    buildVisitSchedule(req, customerId),
+    pool.query(
+      `SELECT c.assigned_manager_id, erp.debt_amd
+       FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
+       WHERE c.id = $1`,
+      [customerId]
+    ),
+  ]);
+  if (!schedule || !rows[0]) return res.status(404).json({ error: "Customer not found" });
+  const sees = seesCustomerErpData(req.user.role, rows[0].assigned_manager_id, req.user.id);
+  res.json({ ...schedule, last_visit_at: schedule.cadence.last_visit_at, erp_debt_amd: sees ? rows[0].debt_amd : null });
 });
 
 customersRouter.get("/:id/checkins", async (req, res) => {
