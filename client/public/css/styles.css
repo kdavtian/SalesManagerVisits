@@ -10237,3 +10237,139 @@ form select,
 .next-visit-planned .visit-planned-line {
   white-space: normal;
 }
+
+
+/* ---- Send to accounting sheet: clean 2-column layout; cash = yellow,
+   invoice = blue (same colours as the order chips). */
+.acc-sheet h2 {
+  margin-bottom: 8px;
+}
+.acc-body {
+  margin: 0 0 14px;
+  line-height: 1.45;
+}
+.acc-method-label {
+  margin: 0 0 6px;
+  font-size: 0.82rem;
+}
+.acc-method,
+.acc-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.acc-method {
+  margin-bottom: 16px;
+}
+.acc-method-btn {
+  min-height: 48px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-dim);
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.acc-method-cash[aria-pressed="true"] {
+  background: rgba(245, 158, 11, 0.16);
+  border-color: var(--warning);
+  color: var(--warning);
+}
+.acc-method-invoice[aria-pressed="true"] {
+  background: rgba(10, 132, 255, 0.14);
+  border-color: #0a84ff;
+  color: #0a84ff;
+}
+.acc-actions .btn {
+  min-height: 48px;
+  border-radius: 12px;
+  font-weight: 700;
+}
+.acc-create {
+  border: 0;
+  color: #fff;
+}
+.acc-create-cash {
+  background: #d98a00;
+}
+.acc-create-invoice {
+  background: #0a84ff;
+}
+.acc-create:disabled {
+  opacity: 0.6;
+}
+
+/* Orders: the day heading (date + totals) sits right above its own list --
+   the .card-list gap (10px) already separates it, so pull the heading's own
+   bottom margin negative to land at ~4px under the row. */
+.order-date-heading {
+  margin-bottom: -6px;
+}
+
+/* ---- Edit order: price change (clear % / AMD choice) and add-product list. */
+.edit-price-change {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 14px 0 6px;
+}
+.edit-price-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.edit-price-controls {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+.edit-price-controls input[type="number"] {
+  flex: 1;
+  min-width: 0;
+  height: 48px;
+  margin: 0;
+  font-size: 1.05rem;
+  text-align: center;
+}
+/* Segmented %/AMD switch: both options always visible, the selected one filled. */
+.unit-toggle {
+  display: inline-flex;
+  flex: none;
+  border: 1.5px solid #0a84ff;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.unit-toggle button {
+  min-width: 64px;
+  padding: 0 14px;
+  border: 0;
+  background: var(--bg-card);
+  color: #0a84ff;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.unit-toggle button + button {
+  border-left: 1.5px solid #0a84ff;
+}
+.unit-toggle button[aria-pressed="true"] {
+  background: #0a84ff;
+  color: #fff;
+}
+.edit-add-results {
+  padding: 0;
+  gap: 8px;
+  max-height: 46vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 10px;
+}
+.order-add-row {
+  gap: 8px;
+}
+.order-add-row .badge {
+  flex: none;
+}
+
+/* Map popup: the overdue chip + missed date stay on one line, wrapping the
+   whole date below the chip rather than breaking mid-date. */
+.popup-fact-overdue { flex-wrap: wrap; row-gap: 4px; }
+.popup-fact-overdue strong { white-space: nowrap; margin-left: auto; }

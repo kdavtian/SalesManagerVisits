@@ -37,3 +37,31 @@ export function cadenceLineHtml(schedule) {
   if (c.overdue) return `<span class="badge badge-danger">${t("filter_overdue")}: ${escapeHtml(formatScheduleDate(c.due_by))}</span>${escapeHtml(every)}`;
   return `<span>${escapeHtml(formatScheduleDate(c.due_by))}</span>${escapeHtml(every)}`;
 }
+
+// The single "when is the next visit" row (map popup + customer card):
+//   planned today (a Plan Day plan includes today) -> "Planned: today"
+//   overdue                                        -> red "Visit overdue N days" chip + the missed date
+//   otherwise                                      -> "Planned: Fri, 2 Oct"
+// The date is the plan-aware one from the server (cadence + route weekday,
+// see server/src/utils/visitDue.js), so it already skips a route day that
+// falls inside the visit cadence.
+export function nextVisitRowHtml(schedule) {
+  const c = schedule?.cadence;
+  if (!schedule || !c) return "";
+  if (schedule.planned_today) {
+    return `<div class="popup-fact"><span class="muted">${t("visit_planned_label")}</span><strong>${t("visit_planned_today")}</strong></div>`;
+  }
+  const firstPlanned = schedule.planned?.[0]?.date;
+  const date = c.planned_date ?? firstPlanned;
+  if (c.never_visited) {
+    // "Last visit: Not visited yet" already says it; only add a planned date.
+    if (!firstPlanned) return "";
+    return `<div class="popup-fact"><span class="muted">${t("visit_planned_label")}</span><strong>${escapeHtml(formatScheduleDate(firstPlanned))}</strong></div>`;
+  }
+  if (c.overdue) {
+    const label = t(c.overdue_days === 1 ? "visit_overdue_day" : "visit_overdue_days").replace("{n}", c.overdue_days);
+    return `<div class="popup-fact popup-fact-overdue"><span class="badge badge-danger">${escapeHtml(label)}</span><strong>${escapeHtml(formatScheduleDate(date))}</strong></div>`;
+  }
+  if (!date) return "";
+  return `<div class="popup-fact"><span class="muted">${t("visit_planned_label")}</span><strong>${escapeHtml(formatScheduleDate(date))}</strong></div>`;
+}

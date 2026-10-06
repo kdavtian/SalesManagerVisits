@@ -10,6 +10,8 @@ import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { state } from "./state.js";
 import { getProductCatalog } from "./productCatalog.js";
+import { searchProducts, debounce } from "./productSearch.js";
+import { compareProducts } from "./productSort.js";
 import { openAccountingDocSheet, accountingDocLabel, ACCOUNTING_STATUS_BADGE } from "./accountingDocSheet.js";
 
 // v3 5-state machine (see migrations/051_warehouse_delivery_v3.sql):
@@ -20,10 +22,17 @@ import { openAccountingDocSheet, accountingDocLabel, ACCOUNTING_STATUS_BADGE } f
 export const STATUS_META = {
   draft: { key: "order_status_draft", cls: "badge-warning", iconTint: "warning" },
   submitted: { key: "order_status_submitted", cls: "badge-neutral", iconTint: "neutral" },
-  confirmed: { key: "order_status_confirmed", cls: "badge-info", iconTint: "info" },
+  confirmed: { key: "order_status_confirmed", cls: "badge-success", iconTint: "success" },
   packed_stock_out: { key: "order_status_packed_stock_out", cls: "badge-info", iconTint: "info" },
   delivered: { key: "order_status_delivered", cls: "badge-success", iconTint: "success" },
 };
+
+// Payment-method chip: cash = yellow, invoice = blue (same everywhere).
+export function paymentMethodBadgeHtml(method) {
+  if (!method) return "";
+  const cash = method === "cash";
+  return `<span class="badge ${cash ? "badge-warning" : "badge-info"}">${t(cash ? "payment_method_cash" : "payment_method_invoice")}</span>`;
+}
 
 const APPROVAL_META = {
   pending: { key: "approval_status_pending", cls: "badge-warning" },
@@ -36,6 +45,8 @@ const APPROVAL_META = {
 // views/deliveryRoute.js), which collect the required extra data (pick
 // confirmation, route stop, signature). This sheet only drives confirm and
 // director-reject.
+const SELF_APPROVING_ROLES = new Set(["ceo", "operations_director", "admin"]);
+const sortProducts = (list) => [...list].sort(compareProducts);
 const DISCOUNT_APPROVER_ROLES = new Set(["admin", "sales_director", "ceo", "operations_director"]);
 // Who reviews a freshly-submitted order -- mirrors canConfirmOrders in the
 // server's roles.js.
@@ -173,7 +184,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       </div>
       <h2>${customerNameLinkHtml(order.customer_name, order.customer_id)}</h2>
       <p><span class="badge ${meta.cls}">${t(meta.key)}</span>${
-      order.payment_method ? ` <span class="badge badge-neutral">${t(order.payment_method === "cash" ? "payment_method_cash" : "payment_method_invoice")}</span>` : ""
+      order.payment_method ? ` ${paymentMethodBadgeHtml(order.payment_method)}` : ""
     }${
       hasDiscount && approvalMeta ? ` <span class="badge ${approvalMeta.cls}">${t(approvalMeta.key)}</span>` : ""
     }</p>
@@ -361,53 +372,71 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
   }
 
   // A lightweight in-place editor for a still-"submitted" order: adjust
-  // each line's quantity, drop a line entirely, and switch the discount
-  // between percent and a flat AMD amount -- not a full re-browse of the
-  // catalog (that's what creating a fresh order is for), just fixing a
-  // mistake or a customer's last-minute change before it moves on.
+  // each line's quantity, drop a line entirely, add a product, and switch the
+  // price change between percent and a flat AMD amount.
+  //
+  // The sheet is built ONCE and then updated in place: the lines list, the
+  // total and the product results are re-rendered individually. (It used to
+  // rebuild the whole sheet on every tap and every search keystroke, which
+  // was slow, dropped the keyboard focus and reset the scroll position.)
   function renderEditMode(order) {
     const lines = order.items.map((i) => ({ ...i }));
     let discountType = Number(order.discount_amd) > 0 ? "amd" : "pct";
     let discountValue = discountType === "amd" ? Number(order.discount_amd) : Number(order.discount_pct);
-    // Lets whoever is allowed into edit mode (the rep, or a director/ceo/
-    // admin reviewing it) drop in a product that wasn't originally
-    // ordered -- fetched lazily since most edits never touch it.
-    let showAddProduct = false;
+    // ceo/operations director/admin approve price changes themselves, so
+    // the "request ... needs director approval" wording only applies to
+    // everyone else.
+    const selfApproves = SELF_APPROVING_ROLES.has(state.user.role);
     let productCatalog = null;
+    let catalogLoading = false;
     let addProductQuery = "";
 
-    function subtotal() {
-      return lines.reduce((sum, l) => sum + Number(l.unit_price_amd) * Number(l.quantity), 0);
-    }
-    function total() {
+    const subtotal = () => lines.reduce((sum, l) => sum + Number(l.unit_price_amd) * Number(l.quantity), 0);
+    const total = () => {
       const sub = subtotal();
       return discountType === "amd" ? Math.max(0, sub - discountValue) : sub * (1 - discountValue / 100);
-    }
+    };
 
-    function paint() {
-      overlay.querySelector(".sheet").innerHTML = `
-        <h2>${t("edit_order")}</h2>
-        <div class="card-list" id="edit-order-lines" style="margin:12px 0;"></div>
-        <button type="button" class="btn btn-block" id="edit-add-product-btn">${t("add_product_to_order")}</button>
-        <div id="edit-add-product-panel" ${showAddProduct ? "" : "hidden"}></div>
-        <div class="order-discount-row">
-          <label for="edit-discount-input">${t("request_price_change")}</label>
-          <input type="number" id="edit-discount-input" min="0" step="1" value="${discountValue || 0}" inputmode="numeric" />
-          <div class="segmented" id="edit-discount-type">
-            <button type="button" class="chip ${discountType === "pct" ? "chip-active" : ""}" data-type="pct">${t("discount_type_pct")}</button>
-            <button type="button" class="chip ${discountType === "amd" ? "chip-active" : ""}" data-type="amd">${t("discount_type_amd")}</button>
+    overlay.querySelector(".sheet").innerHTML = `
+      <h2>${t("edit_order")}</h2>
+      <div class="card-list" id="edit-order-lines" style="margin:12px 0;"></div>
+      <button type="button" class="btn btn-block" id="edit-add-product-btn" aria-expanded="false">${t("add_product_to_order")}</button>
+      <div id="edit-add-product-panel" hidden>
+        <input type="search" id="edit-add-product-search" placeholder="${t("add_product_search_placeholder")}" aria-label="${t("add_product_search_placeholder")}" autocomplete="off" style="margin:8px 0;" />
+        <div class="card-list edit-add-results" id="edit-add-product-results"></div>
+      </div>
+      <div class="edit-price-change">
+        <span class="edit-price-label">${t(selfApproves ? "discount_pct_label" : "request_price_change")}</span>
+        <div class="edit-price-controls">
+          <input type="number" id="edit-discount-input" min="0" step="1" value="${discountValue || 0}" inputmode="numeric" aria-label="${t(selfApproves ? "discount_pct_label" : "request_price_change")}" />
+          <div class="unit-toggle" id="edit-discount-type" role="group" aria-label="${t("discount_pct_label")}">
+            <button type="button" data-type="pct" aria-pressed="${discountType === "pct"}">${t("discount_type_pct")}</button>
+            <button type="button" data-type="amd" aria-pressed="${discountType === "amd"}">${t("discount_type_amd")}</button>
           </div>
         </div>
-        <p class="muted price-change-hint">${t("price_change_hint")}</p>
-        <p>${t("total")}: <span id="edit-order-total" class="text-amount">${formatAmd(total())}</span></p>
-        <p class="form-error" id="order-detail-error" hidden></p>
-        <div class="sheet-actions">
-          <button type="button" class="btn" id="edit-order-cancel">${t("cancel_edit")}</button>
-          <button type="button" class="btn btn-primary" id="edit-order-save">${t("save_changes")}</button>
-        </div>
-      `;
+      </div>
+      ${selfApproves ? "" : `<p class="muted price-change-hint">${t("price_change_hint")}</p>`}
+      <p>${t("total")}: <span id="edit-order-total" class="text-amount"></span></p>
+      <p class="form-error" id="order-detail-error" hidden></p>
+      <div class="sheet-actions">
+        <button type="button" class="btn" id="edit-order-cancel">${t("cancel_edit")}</button>
+        <button type="button" class="btn btn-primary" id="edit-order-save">${t("save_changes")}</button>
+      </div>
+    `;
 
-      const linesEl = overlay.querySelector("#edit-order-lines");
+    const linesEl = overlay.querySelector("#edit-order-lines");
+    const totalEl = overlay.querySelector("#edit-order-total");
+    const panelEl = overlay.querySelector("#edit-add-product-panel");
+    const searchEl = overlay.querySelector("#edit-add-product-search");
+    const resultsEl = overlay.querySelector("#edit-add-product-results");
+    const addBtn = overlay.querySelector("#edit-add-product-btn");
+    const errorEl = overlay.querySelector("#order-detail-error");
+
+    const updateTotal = () => {
+      totalEl.textContent = formatAmd(total());
+    };
+
+    function renderLines() {
       linesEl.innerHTML = lines
         .map(
           (l, i) => `
@@ -427,131 +456,145 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
         </div>`
         )
         .join("");
-
-      linesEl.querySelectorAll("[data-line-index]").forEach((row) => {
-        const i = Number(row.dataset.lineIndex);
-        row.querySelector('[data-action="inc"]').addEventListener("click", () => {
-          lines[i].quantity += 1;
-          paint();
-        });
-        row.querySelector('[data-action="dec"]').addEventListener("click", () => {
-          if (lines[i].quantity > 1) lines[i].quantity -= 1;
-          paint();
-        });
-        row.querySelector('[data-action="remove"]').addEventListener("click", () => {
-          lines.splice(i, 1);
-          paint();
-        });
-      });
-
-      overlay.querySelector("#edit-add-product-btn").addEventListener("click", async () => {
-        showAddProduct = !showAddProduct;
-        if (showAddProduct && !productCatalog) {
-          try {
-            productCatalog = await getProductCatalog();
-          } catch {
-            productCatalog = [];
-          }
-        }
-        paint();
-      });
-
-      const addPanel = overlay.querySelector("#edit-add-product-panel");
-      if (showAddProduct) {
-        const matches = (productCatalog || []).filter((p) => {
-          const q = addProductQuery.trim().toLowerCase();
-          if (!q) return true;
-          return [p.name, p.brand, p.family].some((v) => v && v.toLowerCase().includes(q));
-        });
-        addPanel.innerHTML = `
-          <input type="search" id="edit-add-product-search" placeholder="${t("add_product_search_placeholder")}" value="${escapeHtml(addProductQuery)}" style="margin-bottom:8px;" />
-          <div class="card-list">
-            ${matches
-              .slice(0, 30)
-              .map(
-                (p) => `
-              <div class="order-product-row" data-add-product-id="${p.id}">
-                <div class="order-product-info">
-                  <strong>${escapeHtml(p.name)}</strong>
-                  <span class="muted">${[p.brand, p.unit].filter(Boolean).map(escapeHtml).join(" · ")} ${formatAmd(Number(p.unit_price_amd))}</span>
-                </div>
-                <button type="button" class="btn btn-sm" data-action="add-product">${t("add")}</button>
-              </div>`
-              )
-              .join("") || `<p class="empty-state">${t("no_products_found")}</p>`}
-          </div>
-        `;
-        const searchInput = addPanel.querySelector("#edit-add-product-search");
-        searchInput.addEventListener("input", () => {
-          addProductQuery = searchInput.value;
-          paint();
-          overlay.querySelector("#edit-add-product-search")?.focus();
-        });
-        addPanel.querySelectorAll("[data-add-product-id]").forEach((row) => {
-          const product = matches.find((p) => p.id === Number(row.dataset.addProductId));
-          row.querySelector('[data-action="add-product"]').addEventListener("click", () => {
-            const existing = lines.find((l) => l.product_id === product.id);
-            if (existing) existing.quantity += 1;
-            else
-              lines.push({
-                product_id: product.id,
-                product_name: product.name,
-                brand: product.brand || null,
-                unit_price_amd: Number(product.unit_price_amd),
-                quantity: 1,
-              });
-            paint();
-          });
-        });
-      }
-
-      overlay.querySelector("#edit-discount-input").addEventListener("input", (e) => {
-        const n = Number(e.target.value);
-        discountValue = Number.isFinite(n) && n > 0 ? n : 0;
-        overlay.querySelector("#edit-order-total").textContent = formatAmd(total());
-      });
-      overlay.querySelectorAll("#edit-discount-type [data-type]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          discountType = btn.dataset.type;
-          paint();
-        });
-      });
-
-      overlay.querySelector("#edit-order-cancel").addEventListener("click", () => renderView(order));
-      overlay.querySelector("#edit-order-save").addEventListener("click", async () => {
-        const errorEl = overlay.querySelector("#order-detail-error");
-        if (!lines.length) {
-          errorEl.textContent = t("no_products_found");
-          errorEl.hidden = false;
-          return;
-        }
-        const saveBtn = overlay.querySelector("#edit-order-save");
-        saveBtn.disabled = true;
-        saveBtn.textContent = t("saving");
-        try {
-          const updated = await api.updateOrder(orderId, {
-            items: lines.map((l) => ({
-              product_id: l.product_id,
-              product_name: l.product_name,
-              brand: l.brand,
-              unit_price_amd: l.unit_price_amd,
-              quantity: l.quantity,
-            })),
-            discount_pct: discountType === "pct" ? discountValue : 0,
-            discount_amd: discountType === "amd" ? discountValue : 0,
-          });
-          notifyOrdersChanged();
-          renderView(updated);
-          onChanged?.();
-        } catch (err) {
-          errorEl.textContent = err.message;
-          errorEl.hidden = false;
-          saveBtn.disabled = false;
-          saveBtn.textContent = t("save_changes");
-        }
-      });
+      updateTotal();
     }
 
-    paint();
+    // One delegated listener for every line control (no per-row listeners to
+    // rebuild on each change).
+    linesEl.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-action]");
+      const row = btn?.closest("[data-line-index]");
+      if (!btn || !row) return;
+      const i = Number(row.dataset.lineIndex);
+      if (btn.dataset.action === "inc") lines[i].quantity += 1;
+      else if (btn.dataset.action === "dec") {
+        if (lines[i].quantity > 1) lines[i].quantity -= 1;
+      } else if (btn.dataset.action === "remove") lines.splice(i, 1);
+      renderLines();
+      if (!panelEl.hidden) renderResults();
+    });
+
+    // --- add-product panel ---------------------------------------------
+    function renderResults() {
+      if (catalogLoading) {
+        resultsEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+        return;
+      }
+      const matches = sortProducts(searchProducts(productCatalog || [], addProductQuery)).slice(0, 30);
+      const qtyInOrder = new Map(lines.map((l) => [l.product_id, l.quantity]));
+      resultsEl.innerHTML =
+        matches
+          .map((p) => {
+            const inOrder = qtyInOrder.get(p.id);
+            return `
+          <div class="order-product-row order-add-row" data-add-product-id="${p.id}">
+            <div class="order-product-info">
+              <strong>${escapeHtml(p.name)}</strong>
+              <span class="muted">${[p.brand, p.unit].filter(Boolean).map(escapeHtml).join(" · ")} ${formatAmd(Number(p.unit_price_amd))}</span>
+            </div>
+            ${inOrder ? `<span class="badge badge-success">×${inOrder}</span>` : ""}
+            <button type="button" class="btn btn-sm" data-action="add-product">${t("add")}</button>
+          </div>`;
+          })
+          .join("") || `<p class="empty-state">${t("no_products_found")}</p>`;
+    }
+
+    resultsEl.addEventListener("click", (e) => {
+      const btn = e.target.closest('[data-action="add-product"]');
+      const row = btn?.closest("[data-add-product-id]");
+      if (!btn || !row) return;
+      const product = (productCatalog || []).find((p) => p.id === Number(row.dataset.addProductId));
+      if (!product) return;
+      const existing = lines.find((l) => l.product_id === product.id);
+      if (existing) existing.quantity += 1;
+      else
+        lines.push({
+          product_id: product.id,
+          product_name: product.name,
+          brand: product.brand || null,
+          unit_price_amd: Number(product.unit_price_amd),
+          quantity: 1,
+        });
+      renderLines();
+      renderResults();
+    });
+
+    // Typing only re-renders the (at most 30) results -- never the sheet --
+    // and waits for a short pause so a fast typist does not trigger a
+    // re-filter per letter.
+    searchEl.addEventListener(
+      "input",
+      debounce(() => {
+        addProductQuery = searchEl.value;
+        renderResults();
+      }, 150)
+    );
+
+    addBtn.addEventListener("click", async () => {
+      panelEl.hidden = !panelEl.hidden;
+      addBtn.setAttribute("aria-expanded", String(!panelEl.hidden));
+      if (panelEl.hidden) return;
+      if (!productCatalog) {
+        catalogLoading = true;
+        renderResults();
+        try {
+          productCatalog = await getProductCatalog();
+        } catch {
+          productCatalog = [];
+        }
+        catalogLoading = false;
+      }
+      renderResults();
+      searchEl.focus();
+    });
+
+    // --- price change ----------------------------------------------------
+    overlay.querySelector("#edit-discount-input").addEventListener("input", (e) => {
+      const n = Number(e.target.value);
+      discountValue = Number.isFinite(n) && n > 0 ? n : 0;
+      updateTotal();
+    });
+    overlay.querySelectorAll("#edit-discount-type [data-type]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        discountType = btn.dataset.type;
+        overlay.querySelectorAll("#edit-discount-type [data-type]").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+        updateTotal();
+      });
+    });
+
+    overlay.querySelector("#edit-order-cancel").addEventListener("click", () => renderView(order));
+    overlay.querySelector("#edit-order-save").addEventListener("click", async () => {
+      if (!lines.length) {
+        errorEl.textContent = t("no_products_found");
+        errorEl.hidden = false;
+        return;
+      }
+      const saveBtn = overlay.querySelector("#edit-order-save");
+      saveBtn.disabled = true;
+      saveBtn.textContent = t("saving");
+      try {
+        const updated = await api.updateOrder(orderId, {
+          items: lines.map((l) => ({
+            product_id: l.product_id,
+            product_name: l.product_name,
+            brand: l.brand,
+            unit_price_amd: l.unit_price_amd,
+            quantity: l.quantity,
+          })),
+          discount_pct: discountType === "pct" ? discountValue : 0,
+          discount_amd: discountType === "amd" ? discountValue : 0,
+        });
+        notifyOrdersChanged();
+        renderView(updated);
+        onChanged?.();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+        saveBtn.disabled = false;
+        saveBtn.textContent = t("save_changes");
+      }
+    });
+
+    renderLines();
   }
 }

@@ -5,6 +5,7 @@ import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData } from "../roles.js";
 import { getDefaultVisitFrequencyDays } from "../settings.js";
 import { haversineMeters } from "../utils/geo.js";
+import { computeVisitDue, ruleWeekdaysFor } from "../utils/visitDue.js";
 
 export const customersRouter = Router();
 
@@ -41,6 +42,23 @@ const STATUS_COLUMNS = `
   -- for channels that are never supposed to carry them.
   ${NOT_NO_VISIT_CHANNEL_SQL} AS requires_visit
 `;
+
+// Plan-aware "overdue" (see utils/visitDue.js): replaces the plain
+// last-visit + N days SQL approximation once the active Route Plans rules
+// are known. No-visit channels and customers visited today are never overdue.
+async function applyPlannedOverdue(rows) {
+  const { rows: rules } = await pool.query(`SELECT day_of_week, customer_ids, areas FROM visit_plan_rules WHERE active`);
+  const today = yerevanToday();
+  for (const row of rows) {
+    const due = computeVisitDue({
+      lastVisitAt: row.last_visit_at,
+      frequencyDays: row.visit_frequency_days,
+      ruleWeekdays: ruleWeekdaysFor(row, rules),
+      today,
+    });
+    row.overdue = Boolean(row.requires_visit) && !row.visited_today && due.overdue;
+  }
+}
 
 customersRouter.get("/", async (req, res) => {
   const { search, visited, region, subregion, include_debt, min_lat, max_lat, min_lng, max_lng } = req.query;
@@ -136,6 +154,7 @@ customersRouter.get("/", async (req, res) => {
       if (!seesCustomerErpData(req.user.role, row.assigned_manager_id, req.user.id)) row.debt_amd = null;
     }
   }
+  await applyPlannedOverdue(rows);
   res.json(rows);
 });
 
@@ -471,6 +490,7 @@ customersRouter.get("/:id", async (req, res) => {
     customer.estimated_debt_amd = null;
   }
 
+  await applyPlannedOverdue([customer]);
   res.json(customer);
 });
 
@@ -919,22 +939,25 @@ customersRouter.get("/:id/visit-schedule", async (req, res) => {
   }
   const plannedList = [...planned.values()].sort((a, b) => a.date.localeCompare(b.date) || a.user_name.localeCompare(b.user_name)).slice(0, SCHEDULE_MAX_ENTRIES);
 
-  const freq = Number(customer.visit_frequency_days) || null;
-  let dueBy = null;
-  if (customer.last_visit_at && freq) {
-    const due = new Date(new Date(customer.last_visit_at).getTime() + 4 * 60 * 60 * 1000);
-    due.setUTCDate(due.getUTCDate() + freq);
-    dueBy = due.toISOString().slice(0, 10);
-  }
+  const allRules = ownOnly ? (await pool.query(`SELECT day_of_week, customer_ids, areas FROM visit_plan_rules WHERE active`)).rows : ruleRows;
+  const due = computeVisitDue({
+    lastVisitAt: customer.last_visit_at,
+    frequencyDays: customer.visit_frequency_days,
+    ruleWeekdays: ruleWeekdaysFor(customer, allRules),
+    today,
+  });
   res.json({
     today,
     planned: plannedList,
+    planned_today: plannedList.some((p) => p.date === today),
     cadence: {
-      frequency_days: freq,
+      frequency_days: Number(customer.visit_frequency_days) || null,
       last_visit_at: customer.last_visit_at,
-      due_by: dueBy,
-      overdue: dueBy ? dueBy < today : false,
-      never_visited: !customer.last_visit_at,
+      due_by: due.planned_date,
+      planned_date: due.planned_date,
+      overdue: due.overdue && !due.never_visited,
+      overdue_days: due.overdue_days,
+      never_visited: due.never_visited,
     },
   });
 });

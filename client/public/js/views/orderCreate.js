@@ -5,6 +5,7 @@ import { enqueueOrder } from "../offlineQueue.js";
 import { canAssignErpCustomerId, state } from "../state.js";
 import { compareProducts, sortedBrands } from "../productSort.js";
 import { getProductCatalog } from "../productCatalog.js";
+import { searchProducts, debounce } from "../productSearch.js";
 
 // Reps often open "Create order" several times a visit (once per checkin);
 // the catalog rarely changes minute to minute, so this reads from the
@@ -20,9 +21,7 @@ async function getCatalog() {
 }
 
 function filterCatalog(list, query) {
-  const q = query.trim().toLowerCase();
-  if (!q) return list;
-  return list.filter((p) => [p.name, p.sku, p.brand, p.family].some((v) => v && v.toLowerCase().includes(q)));
+  return searchProducts(list, query);
 }
 
 // Category filter groups, from the Product Family recorded in the workbook:
@@ -433,10 +432,13 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
 
   render();
 
-  searchInput.addEventListener("input", () => {
-    searchQuery = searchInput.value;
-    render();
-  });
+  searchInput.addEventListener(
+    "input",
+    debounce(() => {
+      searchQuery = searchInput.value;
+      render();
+    }, 150)
+  );
 
   const paymentMethodInput = container.querySelector("#order-payment-method-input");
 
