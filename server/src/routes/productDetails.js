@@ -4,17 +4,17 @@
 // otherwise swallow these); numeric-id guards let anything else fall through.
 import fs from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
 import { Router } from "express";
 import multer from "multer";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireProductManager } from "../middleware/auth.js";
-import { seesProductCosts, canManageProducts } from "../roles.js";
+import { seesProductCosts, canManageProducts, canPrintCostColumns } from "../roles.js";
 import { photoUpload, uploadDirPath } from "../upload.js";
 import { matchesDeclaredImageType } from "../utils/imageSniff.js";
 import { fetchPricedProducts } from "./products.js";
-import { buildPricelistPdf, PDF_COLUMN_ORDER, OFFICE_PHONE } from "../pricelistPdf.js";
-import { parsePricelistWorkbook, matchGroupsToProducts, parseTechText } from "../pricelistImport.js";
+import { buildPricelistPdf, PDF_COLUMN_ORDER, PDF_INTERNAL_COLUMNS, OFFICE_PHONE } from "../pricelistPdf.js";
+import { parsePricelistWorkbook, matchGroupsToProducts } from "../pricelistImport.js";
+import { applyMatchedGroups } from "../pricelistApply.js";
 
 export const productDetailsRouter = Router();
 productDetailsRouter.use(requireAuth);
@@ -171,9 +171,14 @@ productDetailsRouter.delete("/:id/images/:imageId", requireProductManager, async
 
 // ---- pricelist PDF ---------------------------------------------------------
 
-// Management may print gold; nobody gets cost columns in a PDF.
+// Management may print gold; landing / net cost only admin, CEO and operations
+// director (an internal sheet, marked as such in the PDF).
 function allowedPdfColumns(role) {
-  return seesProductCosts(role) ? PDF_COLUMN_ORDER : PDF_COLUMN_ORDER.filter((c) => c !== "gold");
+  return PDF_COLUMN_ORDER.filter((c) => {
+    if (PDF_INTERNAL_COLUMNS.includes(c)) return canPrintCostColumns(role);
+    if (c === "gold") return seesProductCosts(role);
+    return true;
+  });
 }
 
 productDetailsRouter.post("/pricelist.pdf", async (req, res) => {
@@ -192,7 +197,12 @@ productDetailsRouter.post("/pricelist.pdf", async (req, res) => {
   }
   const products = (await fetchPricedProducts(where, params, req.user.role)).filter((p) =>
     // A product with none of the chosen price tiers set has nothing to print.
-    columns.some((c) => (c === "retail" ? p.effective_retail_amd : p[`${c}_price_amd`]))
+    columns.some((c) => {
+      if (c === "retail") return p.effective_retail_amd;
+      if (c === "landing") return p.landing_cost_amd;
+      if (c === "net") return p.net_cost_amd;
+      return p[`${c}_price_amd`];
+    })
   );
 
   const isRep = req.user.role === "sales_manager" || req.user.role === "sales_director";
@@ -249,46 +259,7 @@ productDetailsRouter.post(
       applied: { photos: 0, commercial: 0 },
     };
 
-    if (apply) {
-      for (const [group, list] of matches) {
-        const tech = group.commercial ? parseTechText(group.tech) : null;
-        for (const p of list) {
-          if (group.image && (!p.image_path || overwrite)) {
-            const ext = /^(jpe?g|png)$/i.test(group.image.ext) ? group.image.ext.toLowerCase().replace("jpeg", "jpg") : "png";
-            const filename = `${crypto.randomUUID()}.${ext}`;
-            fs.writeFileSync(path.join(uploadDirPath, filename), group.image.buffer);
-            const client = await pool.connect();
-            try {
-              await client.query("BEGIN");
-              const { rows: old } = await client.query("DELETE FROM product_images WHERE product_id = $1 AND is_main RETURNING path", [p.id]);
-              await client.query("INSERT INTO product_images (product_id, path, kind, is_main, sort_order, created_by) VALUES ($1, $2, 'front', true, 0, $3)", [p.id, filename, req.user.id]);
-              await syncMainImagePath(client, p.id);
-              await client.query("COMMIT");
-              for (const o of old) fs.unlink(path.join(uploadDirPath, o.path), () => {});
-              report.applied.photos++;
-            } catch (err) {
-              await client.query("ROLLBACK");
-              fs.unlink(path.join(uploadDirPath, filename), () => {});
-              throw err;
-            } finally {
-              client.release();
-            }
-          }
-          if (group.commercial) {
-            await pool.query(
-              `UPDATE products SET is_commercial = true,
-                 description = CASE WHEN $2 OR description IS NULL OR description = '' THEN $3 ELSE description END,
-                 approvals = CASE WHEN $2 OR cardinality(approvals) = 0 THEN $4::text[] ELSE approvals END,
-                 specs = CASE WHEN $2 OR specs = '[]'::jsonb THEN $5::jsonb ELSE specs END,
-                 updated_at = now()
-               WHERE id = $1`,
-              [p.id, overwrite, tech.description, tech.approvals, JSON.stringify(tech.specs)]
-            );
-            report.applied.commercial++;
-          }
-        }
-      }
-    }
+    if (apply) report.applied = await applyMatchedGroups(matches, { overwrite, userId: req.user.id });
     res.json(report);
   }
 );

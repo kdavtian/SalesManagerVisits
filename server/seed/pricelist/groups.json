@@ -1,0 +1,2194 @@
+[
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Edge Professional EC 0w20",
+  "sizes": [
+   1,
+   4,
+   208
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "9d6a2ddef349897b.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Edge 0w20 LL",
+  "sizes": [
+   4
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "9d6a2ddef349897b.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Edge 0w20 C5",
+  "sizes": [
+   1,
+   4
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "9d6a2ddef349897b.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Edge 0w30",
+  "sizes": [
+   1,
+   4,
+   208
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "1ba98b3c41a1d2d2.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Edge 0w40",
+  "sizes": [
+   1,
+   4
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "9880bec082c42ef9.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Edge 5w30 LL",
+  "sizes": [
+   1,
+   4
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "1e0e3c52c7a5234a.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Edge 5w30 M",
+  "sizes": [
+   1,
+   4
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "1e0e3c52c7a5234a.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Edge 5w30 C3",
+  "sizes": [
+   1,
+   4
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "1e0e3c52c7a5234a.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Edge 5w40",
+  "sizes": [
+   1,
+   4
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "cb18be37c206bcb7.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Edge 10w60",
+  "sizes": [
+   1,
+   4
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "2382d5635d109535.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Magnatec 0w16",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "4b313c072e6f757e.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Magnatec 0w20",
+  "sizes": [
+   1,
+   4
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "54f49c78b2abf9a4.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Magnatec 5w20",
+  "sizes": [
+   1,
+   4
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "b91301d7050aac80.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Magnatec 5w30 AP",
+  "sizes": [
+   1,
+   4
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "5900129071ba7e04.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Magnatec 5w30 C3",
+  "sizes": [
+   1,
+   4,
+   60,
+   208
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "ebe6c2511877794b.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Magnatec 5w40 A3/B4",
+  "sizes": [
+   1,
+   4,
+   60
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "7e2d7ae8cdfe9a5c.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Magnatec 5w40 C3",
+  "sizes": [
+   208
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "7e2d7ae8cdfe9a5c.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Magnatec 10w40",
+  "sizes": [
+   1,
+   4,
+   60,
+   208
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "eed76782cbc1c999.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "GTX 5w30",
+  "sizes": [
+   1,
+   4,
+   208
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "49d986fa2a468da6.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "GTX 5w40",
+  "sizes": [
+   1,
+   4,
+   208
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "45e9de15f936b07e.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "GTX 10w40",
+  "sizes": [
+   1,
+   4,
+   208
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "2ab3282b49a936ac.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "ON EV Fluid D1",
+  "sizes": [
+   5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "b2b581d03de5d8bc.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "ON EV Fluid D2",
+  "sizes": [
+   5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "95244bcaed4d20cb.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "ON EV Fluid W5",
+  "sizes": [
+   5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "5a184bf323f091ec.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Transmax Dexron VI",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "ffc0364fa51d3c33.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Transmax ATF MV",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "ffc0364fa51d3c33.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Transmax CVT",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "a1b363449f9a2cf1.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Manual 90",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "a8c35325b1e54f6c.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Manual 140",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "53b2ff86f3a21b41.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Transmax 75w90",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "c0e0b3e01226012e.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Transmax E",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": null
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Transmax LS LL 75w140",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "adbabde0634c71b3.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Transmax Z",
+  "sizes": [
+   0.5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "f3082cfb25e33a9e.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "DOT4",
+  "sizes": [
+   0.5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "940e427f039960b2.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Power1 4T 10w40",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "bf0e82ce526323be.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Power1 Racing 2T",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "5550a2e12441affc.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Super Outboard Plus 2T",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "344afbb4cb99cbd3.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Antifreeze SF",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "48ae6dc4818308b1.png"
+ },
+ {
+  "sheet": "Castrol",
+  "brand": "Castrol",
+  "name": "Sommer",
+  "sizes": [
+   0.25
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "5e70ffe345612713.png"
+ },
+ {
+  "sheet": "Lotos & Orlen",
+  "brand": "Lotos",
+  "name": "0w20",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "6c7f955d71c70c66.png"
+ },
+ {
+  "sheet": "Lotos & Orlen",
+  "brand": "Lotos",
+  "name": "5w30",
+  "sizes": [
+   1,
+   5,
+   205
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "e40d83985e4b23e1.png"
+ },
+ {
+  "sheet": "Lotos & Orlen",
+  "brand": "Lotos",
+  "name": "5w40",
+  "sizes": [
+   1,
+   5,
+   205
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "3e119ae076a7fbfa.png"
+ },
+ {
+  "sheet": "Lotos & Orlen",
+  "brand": "Lotos",
+  "name": "10w40",
+  "sizes": [
+   1,
+   5,
+   60,
+   205
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "62ea30a6d8b563ef.png"
+ },
+ {
+  "sheet": "Lotos & Orlen",
+  "brand": "Lotos",
+  "name": "ATF 3G",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "a28304ab7c64481e.png"
+ },
+ {
+  "sheet": "Lotos & Orlen",
+  "brand": "Lotos",
+  "name": "CAR RADIATOR COOLANT CONCENTRATE",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "91bbb2a546d4acbd.png"
+ },
+ {
+  "sheet": "Lotos & Orlen",
+  "brand": "Orlen",
+  "name": "5w20",
+  "sizes": [
+   4
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "d029b066b47552e9.png"
+ },
+ {
+  "sheet": "Lotos & Orlen",
+  "brand": "Orlen",
+  "name": "5w30",
+  "sizes": [
+   4
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "b49414019d1702ed.png"
+ },
+ {
+  "sheet": "Lotos & Orlen",
+  "brand": "Orlen",
+  "name": "5w40",
+  "sizes": [
+   4.5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "65287824cac18e85.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "0W8 SP",
+  "sizes": [
+   1,
+   5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": null
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "0W16 SP",
+  "sizes": [
+   1,
+   5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "a44b854c74cf2d78.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "0W20 SP",
+  "sizes": [
+   1,
+   5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "b54f9ad6b32044ec.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "0W30 SP",
+  "sizes": [
+   1,
+   5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "67c356ccb3e9ca78.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "0W40 SP",
+  "sizes": [
+   1,
+   5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "b5de4840fa17f22a.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "5W20 SN",
+  "sizes": [
+   1,
+   5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "cc773f99d5d291cc.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "5W30 SN",
+  "sizes": [
+   1,
+   5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "4e012c3a73a302b6.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "5W40 SN",
+  "sizes": [
+   1,
+   5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "e8420a5fcad61ec3.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "10W30 SL",
+  "sizes": [
+   1,
+   5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "9406c7a4bd992a61.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "10W40 SL",
+  "sizes": [
+   1,
+   5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "a852b13fe6642dbf.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "15W40 SL/CF",
+  "sizes": [
+   1,
+   5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "fd6d2de89f926970.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "75w80 GL5",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "8e4898248d504344.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "75w90 GL5",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "59a532d491601454.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "80w90 GL5",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "27fb68b48d97bdc2.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "85w90 GL5",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "ea90d3ca88370fe2.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "85w140 GL5",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "5e07d0fb2101df55.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "ATF Trans Fluid 3",
+  "sizes": [
+   5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "fac96f8dbb6564e3.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "CV Trans Fluid",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "f3e9fd6ba3d0694f.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "GL5 90",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "d2b3971c8b15e787.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "GL5 140",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "c35da641e5db5f2b.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "Super ATF6",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "8ccd5416580375cb.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "Antifreeze Coolant Blue",
+  "sizes": [
+   1,
+   5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "8cca33a0ce4e6672.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "Antifreeze Coolant Green",
+  "sizes": [
+   1,
+   5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "bb1b7e00e7f6ec21.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "Antifreeze Coolant Red",
+  "sizes": [
+   1,
+   5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "123006164f87ac29.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "Summer Coolant Blue",
+  "sizes": [
+   1,
+   5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "8cca33a0ce4e6672.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "Summer Coolant Green",
+  "sizes": [
+   1,
+   5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "bb1b7e00e7f6ec21.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "Summer Coolant Red",
+  "sizes": [
+   1,
+   5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "123006164f87ac29.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "Dot4",
+  "sizes": [
+   0.25,
+   0.5
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "0748fed46c013df0.png"
+ },
+ {
+  "sheet": "Royal",
+  "brand": "Royal",
+  "name": "Super Motor 2T",
+  "sizes": [
+   1
+  ],
+  "commercial": false,
+  "tech": null,
+  "image": "614de944fb1bfbd3.png"
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Castrol",
+  "name": "CRB Tmax 10w40 CI4/SL/E7",
+  "sizes": [
+   20
+  ],
+  "commercial": true,
+  "tech": {
+   "description": "Heavy duty դիզելային շարժիչի յուղ՝ արագընթաց 4-տակտ դիզելային շարժիչների համար, համատեղելի է EGR համակարգերի հետ",
+   "specs": [
+    {
+     "label": "SAE",
+     "value": "10W-40"
+    },
+    {
+     "label": "ACEA",
+     "value": "E7"
+    },
+    {
+     "label": "API",
+     "value": "CI-4/SL"
+    },
+    {
+     "label": "CAT",
+     "value": "ECF-2"
+    },
+    {
+     "label": "KV 40/100°C",
+     "value": "102/14.5 մմ²/վ"
+    },
+    {
+     "label": "VI",
+     "value": "147"
+    },
+    {
+     "label": "TBN",
+     "value": "10.7"
+    },
+    {
+     "label": "Pour",
+     "value": "−39°C"
+    },
+    {
+     "label": "Flash",
+     "value": "212°C"
+    },
+    {
+     "label": "Խտություն",
+     "value": "0.866 գ/մլ"
+    }
+   ],
+   "approvals": [
+    "Cummins CES 20077, 20078",
+    "DDC Powerguard 93K215",
+    "Deutz DQC III-18, DTFR 15B110",
+    "Mack EO-M Plus, EO-N",
+    "MTU Cat. 2",
+    "RVI RLD-2",
+    "Volvo VDS-3",
+    "MAN M 3275-1 (meets)"
+   ]
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Castrol",
+  "name": "CRB Tmax 10w40 CK4/E11",
+  "sizes": [
+   208
+  ],
+  "commercial": true,
+  "tech": {
+   "description": "Heavy duty դիզելային շարժիչի յուղ՝ սինթետիկ տեխնոլոգիայով, արագընթաց 4-տակտ դիզելային շարժիչների համար (համատեղելի է EGR-ի հետ)",
+   "specs": [
+    {
+     "label": "SAE",
+     "value": "10W-40"
+    },
+    {
+     "label": "ACEA",
+     "value": "E11, E9"
+    },
+    {
+     "label": "API",
+     "value": "CK-4"
+    },
+    {
+     "label": "JASO",
+     "value": "DH-2"
+    },
+    {
+     "label": "CAT",
+     "value": "ECF-3"
+    },
+    {
+     "label": "KV 40/100°C",
+     "value": "101/14.5 մմ²/վ"
+    },
+    {
+     "label": "VI",
+     "value": "150"
+    },
+    {
+     "label": "TBN",
+     "value": "9.7"
+    },
+    {
+     "label": "Pour",
+     "value": "−42°C"
+    },
+    {
+     "label": "Flash",
+     "value": "200°C"
+    },
+    {
+     "label": "Խտություն",
+     "value": "0.867 գ/մլ"
+    }
+   ],
+   "approvals": [
+    "Cummins CES 20086",
+    "DDC DFS 93K222",
+    "Deutz DQC III-18 LA, DTFR 15C100",
+    "Mack EOS-4.5",
+    "MAN M 3775",
+    "MTU Cat. 2.1",
+    "Renault Truck RLD-3",
+    "Volvo VDS-4.5",
+    "MAN M 3575 (warranted)"
+   ]
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Castrol",
+  "name": "CRB Tmax 15w40 CI4/SL/E7",
+  "sizes": [
+   7,
+   208
+  ],
+  "commercial": true,
+  "tech": {
+   "description": "Heavy duty դիզելային շարժիչի յուղ՝ արագընթաց 4-տակտ դիզելային շարժիչների համար, համատեղելի է EGR համակարգերի հետ",
+   "specs": [
+    {
+     "label": "SAE",
+     "value": "15W-40"
+    },
+    {
+     "label": "ACEA",
+     "value": "E7"
+    },
+    {
+     "label": "API",
+     "value": "CI-4/SL"
+    },
+    {
+     "label": "CAT",
+     "value": "ECF-2"
+    },
+    {
+     "label": "KV 40/100°C",
+     "value": "108/14.4 մմ²/վ"
+    },
+    {
+     "label": "VI",
+     "value": "136"
+    },
+    {
+     "label": "TBN",
+     "value": "11.4"
+    },
+    {
+     "label": "Pour",
+     "value": "−39°C"
+    },
+    {
+     "label": "Flash",
+     "value": "208°C"
+    },
+    {
+     "label": "Խտություն",
+     "value": "0.878 գ/մլ"
+    }
+   ],
+   "approvals": [
+    "Cummins CES 20077, 20078",
+    "DDC Powerguard 93K215",
+    "Deutz DQC III-18, DTFR 15B110",
+    "Mack EO-M Plus, EO-N",
+    "MTU Cat. 2",
+    "RVI RLD-2",
+    "Volvo VDS-3",
+    "MAN M 3275-1 (meets)"
+   ]
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Castrol",
+  "name": "CRB 20w50",
+  "sizes": [
+   7
+  ],
+  "commercial": true,
+  "tech": {
+   "description": "Բազմանպատակ heavy duty դիզելային շարժիչի յուղ՝ բնական ներծծմամբ, տուրբո- կամ մեխանիկական լիցքավորմամբ դիզելային շարժիչների համար",
+   "specs": [
+    {
+     "label": "SAE",
+     "value": "20W-50"
+    },
+    {
+     "label": "API",
+     "value": "CF-4"
+    },
+    {
+     "label": "KV 40/100°C",
+     "value": "165/18.5 մմ²/վ"
+    },
+    {
+     "label": "VI",
+     "value": "126"
+    },
+    {
+     "label": "TBN",
+     "value": "7.5"
+    },
+    {
+     "label": "Pour",
+     "value": "−33°C"
+    },
+    {
+     "label": "Flash",
+     "value": "205°C"
+    },
+    {
+     "label": "Խտություն",
+     "value": "0.88 գ/մլ"
+    }
+   ],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Castrol",
+  "name": "Vecton LD 10w30 E8/E11",
+  "sizes": [
+   208
+  ],
+  "commercial": true,
+  "tech": {
+   "description": "Heavy duty դիզելային շարժիչի յուղ՝ սինթետիկ տեխնոլոգիայով, երկար յուղափոխման ինտերվալով (Euro I–VI, մասնիկային ֆիլտրով և առանց)",
+   "specs": [
+    {
+     "label": "SAE",
+     "value": "10W-30"
+    },
+    {
+     "label": "ACEA",
+     "value": "E6, E7, E8, E9, E11"
+    },
+    {
+     "label": "API",
+     "value": "CK-4"
+    },
+    {
+     "label": "JASO",
+     "value": "DH-2"
+    },
+    {
+     "label": "CAT",
+     "value": "ECF-3"
+    },
+    {
+     "label": "KV 40/100°C",
+     "value": "81/11.9 մմ²/վ"
+    },
+    {
+     "label": "VI",
+     "value": "140"
+    },
+    {
+     "label": "TBN",
+     "value": "8.3"
+    },
+    {
+     "label": "Pour",
+     "value": "−36°C"
+    },
+    {
+     "label": "Flash",
+     "value": "200°C"
+    },
+    {
+     "label": "Խտություն",
+     "value": "0.867 գ/մլ"
+    }
+   ],
+   "approvals": [
+    "Cummins CES 20086",
+    "DAF PSQL 2.4",
+    "DDC DFS 93K222",
+    "Deutz DQC IV-18 LA, DTFR 15C100/110/120",
+    "Mack EOS-4.5",
+    "MAN M 3775",
+    "MTU Cat. 3.1",
+    "RVI RLD-3",
+    "Volvo CNG, VDS-4.5",
+    "MAN M 3271-1, M 3477 (warranted)",
+    "DAF PX Euro VI (meets)"
+   ]
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Castrol",
+  "name": "Vecton 10w40 E4/E7",
+  "sizes": [
+   208
+  ],
+  "commercial": true,
+  "tech": {
+   "description": "Heavy duty դիզելային շարժիչի յուղ՝ սինթետիկ տեխնոլոգիայով, երկարացված աշխատանքային ժամկետով (Euro I–V, առանց մասնիկային ֆիլտրի)",
+   "specs": [
+    {
+     "label": "SAE",
+     "value": "10W-40"
+    },
+    {
+     "label": "ACEA",
+     "value": "E4, E7"
+    },
+    {
+     "label": "API",
+     "value": "CI-4"
+    },
+    {
+     "label": "JASO",
+     "value": "DH-1"
+    },
+    {
+     "label": "KV 40/100°C",
+     "value": "99/14.9 մմ²/վ"
+    },
+    {
+     "label": "TBN",
+     "value": "13.0"
+    },
+    {
+     "label": "Pour",
+     "value": "−42°C"
+    },
+    {
+     "label": "Flash",
+     "value": "210°C"
+    },
+    {
+     "label": "Խտություն",
+     "value": "0.868 գ/մլ"
+    }
+   ],
+   "approvals": [
+    "Cummins CES 20077, 20078",
+    "DDC Powerguard 93K215",
+    "Deutz DQC III-18, DTFR 15B120",
+    "Mack EO-N",
+    "MAN M 3277",
+    "MTU Cat. 3",
+    "RVI RLD-2",
+    "Volvo VDS-3",
+    "Ford WSS-M2C944-A (meets)"
+   ]
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Castrol",
+  "name": "Vecton LD 10w40 E8/E11",
+  "sizes": [
+   20,
+   208
+  ],
+  "commercial": true,
+  "tech": {
+   "description": "Heavy duty դիզելային շարժիչի յուղ՝ սինթետիկ տեխնոլոգիայով, երկար յուղափոխման ինտերվալով (Euro I–VI, մասնիկային ֆիլտրով և առանց)",
+   "specs": [
+    {
+     "label": "SAE",
+     "value": "10W-40"
+    },
+    {
+     "label": "ACEA",
+     "value": "E6, E7, E8, E9, E11"
+    },
+    {
+     "label": "API",
+     "value": "CK-4"
+    },
+    {
+     "label": "JASO",
+     "value": "DH-2"
+    },
+    {
+     "label": "CAT",
+     "value": "ECF-3"
+    },
+    {
+     "label": "KV 40/100°C",
+     "value": "100/14.5 մմ²/վ"
+    },
+    {
+     "label": "VI",
+     "value": "148"
+    },
+    {
+     "label": "TBN",
+     "value": "8.3"
+    },
+    {
+     "label": "Pour",
+     "value": "−36°C"
+    },
+    {
+     "label": "Flash",
+     "value": "202°C"
+    },
+    {
+     "label": "Խտություն",
+     "value": "0.867 գ/մլ"
+    }
+   ],
+   "approvals": [
+    "Cummins CES 20086",
+    "DDC DFS 93K222",
+    "Deutz DQC IV-18 LA, DTFR 15C100/110/120",
+    "Mack EOS-4.5",
+    "MAN M 3775",
+    "MTU Cat. 3.1",
+    "RVI RLD-3",
+    "Volvo CNG, VDS-4.5",
+    "MAN M 3271-1, M 3477 (warranted)",
+    "IVECO (E6/E7/E9), DAF Euro VI"
+   ]
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Castrol",
+  "name": "Vecton 15w40 CI4/E7",
+  "sizes": [
+   20,
+   208
+  ],
+  "commercial": true,
+  "tech": {
+   "description": "Heavy duty հանքային դիզելային շարժիչի յուղ՝ երկարացված աշխատանքային ժամկետով, արագընթաց 4-տակտ շարժիչների համար (համատեղելի է EGR-ի հետ)",
+   "specs": [
+    {
+     "label": "SAE",
+     "value": "15W-40"
+    },
+    {
+     "label": "ACEA",
+     "value": "E7"
+    },
+    {
+     "label": "API",
+     "value": "CI-4/SL"
+    },
+    {
+     "label": "CAT",
+     "value": "ECF-2"
+    },
+    {
+     "label": "KV 40/100°C",
+     "value": "110/14.8 մմ²/վ"
+    },
+    {
+     "label": "VI",
+     "value": "139"
+    },
+    {
+     "label": "TBN",
+     "value": "11.7"
+    },
+    {
+     "label": "Pour",
+     "value": "−42°C"
+    },
+    {
+     "label": "Flash",
+     "value": "205°C"
+    },
+    {
+     "label": "Խտություն",
+     "value": "0.878 գ/մլ"
+    }
+   ],
+   "approvals": [
+    "Cummins CES 20077, 20078",
+    "DDC Powerguard 93K215",
+    "Deutz DQC III-18",
+    "Mack EO-M Plus, EO-N",
+    "MB 228.3",
+    "MTU Cat. 2",
+    "RVI RLD-2",
+    "Volvo VDS-3",
+    "MAN M 3275-1 (meets)"
+   ]
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Castrol",
+  "name": "Hyspin AWS 46",
+  "sizes": [
+   17,
+   208
+  ],
+  "commercial": true,
+  "tech": {
+   "description": null,
+   "specs": [],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Castrol",
+  "name": "Hyspin AWS 68",
+  "sizes": [
+   18,
+   208
+  ],
+  "commercial": true,
+  "tech": {
+   "description": null,
+   "specs": [],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Castrol",
+  "name": "Spheerol EP2",
+  "sizes": [
+   15
+  ],
+  "commercial": true,
+  "tech": {
+   "description": "Լիթիումային քսայուղ EP հավելումներով՝ հանքային բազային յուղով, ընդհանուր նշանակության առանցքակալների համար",
+   "specs": [
+    {
+     "label": "NLGI",
+     "value": "2"
+    },
+    {
+     "label": "Լիթիումային",
+     "value": "խտացուցիչ"
+    },
+    {
+     "label": "Հանքային",
+     "value": "բազային յուղ"
+    },
+    {
+     "label": "Worked penetration (25°C)",
+     "value": "265–295 (0.1 մմ)"
+    },
+    {
+     "label": "Dropping",
+     "value": "point 190°C"
+    },
+    {
+     "label": "Base oil KV 40°C",
+     "value": "150–200 մմ²/վ"
+    },
+    {
+     "label": "Water",
+     "value": "wash-out ≤10%"
+    },
+    {
+     "label": "Four-ball",
+     "value": "weld ≥250 kgf"
+    }
+   ],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Castrol",
+  "name": "Spheerol EP3",
+  "sizes": [
+   15
+  ],
+  "commercial": true,
+  "tech": {
+   "description": "Լիթիումային քսայուղ EP հավելումներով՝ հանքային բազային յուղով, ընդհանուր նշանակության առանցքակալների համար",
+   "specs": [
+    {
+     "label": "NLGI",
+     "value": "3"
+    },
+    {
+     "label": "Լիթիումային",
+     "value": "խտացուցիչ"
+    },
+    {
+     "label": "Հանքային",
+     "value": "բազային յուղ"
+    },
+    {
+     "label": "Worked penetration (25°C)",
+     "value": "220–250 (0.1 մմ)"
+    },
+    {
+     "label": "Dropping",
+     "value": "point 190°C"
+    },
+    {
+     "label": "Base oil KV 40°C",
+     "value": "150–200 մմ²/վ"
+    },
+    {
+     "label": "Water",
+     "value": "wash-out ≤10%"
+    },
+    {
+     "label": "Four-ball",
+     "value": "weld ≥250 kgf"
+    }
+   ],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Castrol",
+  "name": "Transmax Axle EPX 80w90",
+  "sizes": [
+   16
+  ],
+  "commercial": true,
+  "tech": {
+   "description": null,
+   "specs": [],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Castrol",
+  "name": "Transmax Axle EPX 85w140",
+  "sizes": [
+   16
+  ],
+  "commercial": true,
+  "tech": {
+   "description": "Բազմանպատակ առանցքի յուղ (դիֆերենցիալներ, վերջնական փոխանցումներ)՝ մարդատար և կոմերցիոն մեքենաների համար, որտեղ պահանջվում է API GL-5",
+   "specs": [
+    {
+     "label": "SAE",
+     "value": "85W-140"
+    },
+    {
+     "label": "API",
+     "value": "GL-5"
+    },
+    {
+     "label": "ZF",
+     "value": "TE-ML 05A, 12E, 16D, 21A"
+    },
+    {
+     "label": "KV 40/100°C",
+     "value": "355/26 մմ²/վ"
+    },
+    {
+     "label": "VI",
+     "value": "97"
+    },
+    {
+     "label": "Pour",
+     "value": "−25°C"
+    },
+    {
+     "label": "Flash",
+     "value": "(COC) 232°C"
+    },
+    {
+     "label": "Խտություն",
+     "value": "0.907 գ/մլ"
+    }
+   ],
+   "approvals": [
+    "ZF (ZF002148, ZF002173, ZF002177) — off-road և գյուղատնտեսական առանցքներ"
+   ]
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Castrol",
+  "name": "Transmax Offroad 30",
+  "sizes": [
+   18
+  ],
+  "commercial": true,
+  "tech": {
+   "description": null,
+   "specs": [],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Castrol",
+  "name": "Tection Monograde 10",
+  "sizes": [
+   208
+  ],
+  "commercial": true,
+  "tech": {
+   "description": null,
+   "specs": [],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Lotos",
+  "name": "Parus GL4 80w90",
+  "sizes": [
+   205
+  ],
+  "commercial": true,
+  "tech": {
+   "description": "Անքլոր հիպոիդային փոխանցման յուղ՝ մարդատար և բեռնատար մեքենաների, ավտոբուսների միջին բեռնվածքով աշխատանքի համար",
+   "specs": [
+    {
+     "label": "SAE",
+     "value": "80W/90"
+    },
+    {
+     "label": "API",
+     "value": "GL-4"
+    },
+    {
+     "label": "VI",
+     "value": "105"
+    },
+    {
+     "label": "Pour",
+     "value": "−33°C"
+    },
+    {
+     "label": "Flash",
+     "value": "225°C"
+    },
+    {
+     "label": "Brookfield (−26°C)",
+     "value": "150000"
+    }
+   ],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Lotos",
+  "name": "Diesel Fleet 10w40",
+  "sizes": [
+   60,
+   205
+  ],
+  "commercial": true,
+  "tech": {
+   "description": null,
+   "specs": [],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Lotos",
+  "name": "15w40",
+  "sizes": [
+   205
+  ],
+  "commercial": true,
+  "tech": {
+   "description": null,
+   "specs": [],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Lotos",
+  "name": "Turdus Powertec 1000 15w40",
+  "sizes": [
+   205
+  ],
+  "commercial": true,
+  "tech": {
+   "description": null,
+   "specs": [],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Lotos",
+  "name": "LITHIUM GREASE LT43",
+  "sizes": [
+   205
+  ],
+  "commercial": true,
+  "tech": {
+   "description": "Լիթիումային քսայուղ LOTOS AGROL ŁT 43 (LT-43)՝ աշխատանքային ջերմաստիճան −30…120°C",
+   "specs": [
+    {
+     "label": "Penetration (25°C)",
+     "value": "215–255"
+    },
+    {
+     "label": "Dropping",
+     "value": "point 185°C"
+    },
+    {
+     "label": "Base oil KV 40°C",
+     "value": "min 80 մմ²/վ"
+    },
+    {
+     "label": "Oil",
+     "value": "separation (24 h) max 4"
+    },
+    {
+     "label": "Պղնձի կոռոզիա 100°C/3 ժ",
+     "value": "withstanding"
+    }
+   ],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Lotos",
+  "name": "MS 20",
+  "sizes": [
+   205
+  ],
+  "commercial": true,
+  "tech": {
+   "description": "Շարժիչի յուղ (LOTOS MS-20)",
+   "specs": [
+    {
+     "label": "Մածուցիկության",
+     "value": "դաս՝ SAE 30 (ըստ lotos.pl)"
+    },
+    {
+     "label": "KV 100°C",
+     "value": "22 մմ²/վ"
+    },
+    {
+     "label": "VI",
+     "value": "93"
+    },
+    {
+     "label": "Pour",
+     "value": "≤ −21°C"
+    },
+    {
+     "label": "Flash",
+     "value": "(COC) ≥ 280°C"
+    },
+    {
+     "label": "Թթվային",
+     "value": "թիվ 0.04 մգ KOH/գ"
+    }
+   ],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Lotos",
+  "name": "OIL GERAX TKD 10W",
+  "sizes": [
+   205
+  ],
+  "commercial": true,
+  "tech": {
+   "description": "LOTOS GERAX TKD (grade 10W)",
+   "specs": [
+    {
+     "label": "Allison",
+     "value": "C-4 (No 22022495)"
+    },
+    {
+     "label": "Caterpillar",
+     "value": "TO-4"
+    },
+    {
+     "label": "Komatsu",
+     "value": "Dresser REA H-4542"
+    },
+    {
+     "label": "Komatsu",
+     "value": "Dresser HMS-B21-0006"
+    },
+    {
+     "label": "KV 40°C",
+     "value": "46 մմ²/վ"
+    },
+    {
+     "label": "VI",
+     "value": "≥ 90"
+    },
+    {
+     "label": "Pour",
+     "value": "≤ −30°C"
+    },
+    {
+     "label": "Flash",
+     "value": "≥ 205°C"
+    },
+    {
+     "label": "Ջուր",
+     "value": "0.03"
+    }
+   ],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Royal",
+  "name": "0W20 SP",
+  "sizes": [
+   60
+  ],
+  "commercial": true,
+  "tech": {
+   "description": "Լիովին սինթետիկ շարժիչի յուղ (Royal Super Full Synthetic) բենզինային շարժիչների համար",
+   "specs": [
+    {
+     "label": "SAE",
+     "value": "0W-20"
+    },
+    {
+     "label": "API",
+     "value": "SP"
+    },
+    {
+     "label": "Meets",
+     "value": "or exceeds՝ API SP, SN PLUS, SN, SM, SL, SJ"
+    },
+    {
+     "label": "API",
+     "value": "SN Resource Conserving"
+    },
+    {
+     "label": "ILSAC",
+     "value": "GF-6A, GF-5"
+    },
+    {
+     "label": "GM",
+     "value": "dexos1 Gen3"
+    },
+    {
+     "label": "Ford",
+     "value": "WSS-M2C947"
+    }
+   ],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Royal",
+  "name": "5W20 SN",
+  "sizes": [
+   60
+  ],
+  "commercial": true,
+  "tech": {
+   "description": "Լիովին սինթետիկ շարժիչի յուղ (Royal Super Full Synthetic)",
+   "specs": [
+    {
+     "label": "SAE",
+     "value": "5W-20"
+    },
+    {
+     "label": "API",
+     "value": "SN/CF"
+    },
+    {
+     "label": "Meets",
+     "value": "or exceeds՝ API SN, SM, SL, SJ"
+    },
+    {
+     "label": "ILSAC",
+     "value": "GF-5"
+    },
+    {
+     "label": "Ford",
+     "value": "WSS-M2C947-A"
+    },
+    {
+     "label": "GM",
+     "value": "dexos1"
+    }
+   ],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Royal",
+  "name": "5W30 SN",
+  "sizes": [
+   60,
+   208
+  ],
+  "commercial": true,
+  "tech": {
+   "description": "Լիովին սինթետիկ շարժիչի յուղ (Royal Super Full Synthetic)",
+   "specs": [
+    {
+     "label": "SAE",
+     "value": "5W-30"
+    },
+    {
+     "label": "API",
+     "value": "SN/CF (ACEA C3)"
+    },
+    {
+     "label": "Meets",
+     "value": "or exceeds՝ API SN, SM, SL, SJ"
+    },
+    {
+     "label": "ILSAC",
+     "value": "GF-5"
+    },
+    {
+     "label": "Ford",
+     "value": "WSS-M2C947-A"
+    },
+    {
+     "label": "GM",
+     "value": "dexos1"
+    }
+   ],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Royal",
+  "name": "5W40 SN",
+  "sizes": [
+   60,
+   208
+  ],
+  "commercial": true,
+  "tech": {
+   "description": "Լիովին սինթետիկ շարժիչի յուղ (Royal Super Full Synthetic)",
+   "specs": [
+    {
+     "label": "SAE",
+     "value": "5W-40"
+    },
+    {
+     "label": "API",
+     "value": "SN/CF"
+    },
+    {
+     "label": "Meets",
+     "value": "or exceeds՝ API SN, SM, SL, SJ, CF"
+    },
+    {
+     "label": "ACEA",
+     "value": "A3/B3, A3/B4"
+    },
+    {
+     "label": "BMW",
+     "value": "LL-01"
+    },
+    {
+     "label": "Renault",
+     "value": "RN 0700/0710"
+    },
+    {
+     "label": "VW",
+     "value": "502 00/505 00"
+    },
+    {
+     "label": "MB",
+     "value": "229.3/229.1"
+    },
+    {
+     "label": "Porsche",
+     "value": "A40"
+    }
+   ],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Royal",
+  "name": "Diesel 10w40",
+  "sizes": [
+   20,
+   208
+  ],
+  "commercial": true,
+  "tech": {
+   "description": null,
+   "specs": [],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Royal",
+  "name": "10W40 SL",
+  "sizes": [
+   208
+  ],
+  "commercial": true,
+  "tech": {
+   "description": "High Performance Technology շարժիչի յուղ (Royal Super)",
+   "specs": [
+    {
+     "label": "SAE",
+     "value": "10W-40"
+    },
+    {
+     "label": "API",
+     "value": "SL/CF"
+    },
+    {
+     "label": "Meets",
+     "value": "or exceeds՝ API SL, SJ, CF"
+    },
+    {
+     "label": "ACEA",
+     "value": "A3/B3"
+    },
+    {
+     "label": "MB",
+     "value": "229.1"
+    },
+    {
+     "label": "VW",
+     "value": "505 00"
+    },
+    {
+     "label": "KV 40/100°C",
+     "value": "105.95/15.5 մմ²/վ"
+    },
+    {
+     "label": "VI",
+     "value": "155"
+    },
+    {
+     "label": "TBN",
+     "value": "7.2"
+    },
+    {
+     "label": "Pour",
+     "value": "−33°C"
+    },
+    {
+     "label": "Flash",
+     "value": "232°C"
+    },
+    {
+     "label": "0.86",
+     "value": "գ/սմ³ (29.5°C)"
+    }
+   ],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Royal",
+  "name": "Diesel 15w40",
+  "sizes": [
+   20,
+   208
+  ],
+  "commercial": true,
+  "tech": {
+   "description": null,
+   "specs": [],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Royal",
+  "name": "Diesel SAE HD 50",
+  "sizes": [
+   208
+  ],
+  "commercial": true,
+  "tech": {
+   "description": "Super Premium շարժիչի յուղ դիզելային շարժիչների համար (բեռնատարներ, շինտեխնիկա, ձկնորսական նավեր, լոկոմոտիվներ, ստացիոնար շարժիչներ)",
+   "specs": [
+    {
+     "label": "SAE",
+     "value": "50 (HD 50)"
+    },
+    {
+     "label": "API",
+     "value": "CF/SF"
+    },
+    {
+     "label": "Meets",
+     "value": "or exceeds՝ API CF, CD, SF"
+    },
+    {
+     "label": "ACEA",
+     "value": "E2"
+    },
+    {
+     "label": "MB",
+     "value": "228.0"
+    },
+    {
+     "label": "MTU",
+     "value": "Type-1"
+    },
+    {
+     "label": "Caterpillar",
+     "value": "TO-2"
+    }
+   ],
+   "approvals": []
+  },
+  "image": null
+ },
+ {
+  "sheet": "Կոմերցիոն յուղեր",
+  "brand": "Royal",
+  "name": "Grease Lithium EP2",
+  "sizes": [
+   15
+  ],
+  "commercial": true,
+  "tech": {
+   "description": null,
+   "specs": [],
+   "approvals": []
+  },
+  "image": null
+ }
+]

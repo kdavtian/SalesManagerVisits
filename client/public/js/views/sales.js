@@ -5,7 +5,7 @@
 // sales.js: no write-back, ERP/Excel stays the source of truth, same
 // contract as Debt Balances.
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, formatLiters, channelDisplayLabel, activateDialog, syncBadgeHtml, parseDateOnly, customerNameLinkHtml, activateCustomerNameLinks, erpLineDiscountRowHtml } from "../util.js";
+import { escapeHtml, formatAmd, formatLiters, channelDisplayLabel, activateDialog, syncBadgeHtml, parseDateOnly, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, erpLineDiscountRowHtml } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { seesFinancialExports } from "../state.js";
 
@@ -104,10 +104,7 @@ async function openSalesOrderSheet(erpCustomerId, orderId, navigate) {
     ${brandSections}
   `;
   overlay.querySelector("#close-order-detail").addEventListener("click", () => overlay.remove());
-  activateCustomerNameLinks(overlay, (hash) => {
-    overlay.remove();
-    navigate(hash);
-  });
+  activateCustomerNameLinks(overlay, (hash) => leaveSheetTo(overlay, navigate, hash));
 }
 
 export async function renderSales(root, navigate) {

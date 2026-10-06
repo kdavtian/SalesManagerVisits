@@ -89,6 +89,12 @@ test("pricelist PDF: sales manager gets a PDF without gold; validation errors ar
   assert.equal(onlyGold.status, 400);
   const noDate = await apiRequest("/api/products/pricelist.pdf", { method: "POST", cookie: cookies.ceo, body: { columns: ["gold"] } });
   assert.equal(noDate.status, 400);
+  // Landing / net cost columns: sales manager and plain management are refused, CEO may print them.
+  const smCost = await apiRequest("/api/products/pricelist.pdf", { method: "POST", cookie: cookies.sales_manager, body: { columns: ["landing", "net"], valid_until: "2026-10-30" } });
+  assert.equal(smCost.status, 400);
+  const ceoCost = await apiRequest("/api/products/pricelist.pdf", { method: "POST", cookie: cookies.ceo, body: { columns: ["silver", "landing", "net"], valid_until: "2026-10-30" } });
+  assert.equal(ceoCost.status, 200);
+  assert.ok(String(ceoCost.data).startsWith("%PDF"));
   const mgmt = await apiRequest("/api/products/pricelist.pdf", { method: "POST", cookie: cookies.ceo, body: { columns: ["bronze", "silver", "gold", "retail"], valid_until: "2026-10-30" } });
   assert.equal(mgmt.status, 200);
 });

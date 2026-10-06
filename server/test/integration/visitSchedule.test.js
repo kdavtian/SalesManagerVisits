@@ -85,3 +85,14 @@ test("a sales manager never sees another manager's plans; admin sees everyone's"
   const asOther = await apiRequest(`/api/customers/${cust.id}/visit-schedule`, { cookie: otherCookie });
   assert.ok(asOther.data.planned.every((p) => p.user_id === other.id));
 });
+
+test("GET /customers/map-facts: batch of popup facts, same shape as the single endpoint", async () => {
+  const batch = await apiRequest(`/api/customers/map-facts?ids=${cust.id},999999999`, { cookie: mgrCookie });
+  assert.equal(batch.status, 200);
+  assert.deepEqual(Object.keys(batch.data), [String(cust.id)]);
+  const single = await apiRequest(`/api/customers/${cust.id}/map-facts`, { cookie: mgrCookie });
+  assert.equal(batch.data[cust.id].cadence.due_by, single.data.cadence.due_by);
+  assert.equal(batch.data[cust.id].planned_today, single.data.planned_today);
+  const empty = await apiRequest("/api/customers/map-facts", { cookie: mgrCookie });
+  assert.deepEqual(empty.data, {});
+});

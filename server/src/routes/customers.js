@@ -435,6 +435,33 @@ customersRouter.get("/brand-summary", async (req, res) => {
   res.json([...byCustomer.values()]);
 });
 
+// Map pins: the popup facts (last visit, debt, planned date) for many
+// customers in ONE request so the Map can warm the popups of the pins on
+// screen. Same shape per customer as GET /:id/map-facts; unknown ids are
+// simply absent from the result.
+const MAP_FACTS_BATCH_MAX = 60;
+customersRouter.get("/map-facts", async (req, res) => {
+  const ids = [...new Set(String(req.query.ids ?? "").split(",").map(Number).filter(Number.isInteger))].slice(0, MAP_FACTS_BATCH_MAX);
+  if (!ids.length) return res.json({});
+  const [ctx, { rows }] = await Promise.all([
+    loadScheduleContext(req),
+    pool.query(
+      `SELECT c.id, c.region, c.subregion, c.visit_frequency_days, c.assigned_manager_id, erp.debt_amd,
+              (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id) AS last_visit_at
+       FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
+       WHERE c.id = ANY($1)`,
+      [ids]
+    ),
+  ]);
+  const out = {};
+  for (const row of rows) {
+    const schedule = scheduleForCustomer(row, ctx);
+    const sees = seesCustomerErpData(req.user.role, row.assigned_manager_id, req.user.id);
+    out[row.id] = { ...schedule, last_visit_at: schedule.cadence.last_visit_at, erp_debt_amd: sees ? row.debt_amd : null };
+  }
+  res.json(out);
+});
+
 customersRouter.get("/:id", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT c.*, ${STATUS_COLUMNS},
@@ -880,31 +907,17 @@ customersRouter.get("/:id/planned-visits", async (req, res) => {
 // A sales manager only sees their own plans/rules.
 const SCHEDULE_HORIZON_DAYS = 28;
 const SCHEDULE_MAX_ENTRIES = 6;
-async function buildVisitSchedule(req, customerId) {
-  const { rows: custRows } = await pool.query(
-    `SELECT c.id, c.region, c.subregion, c.visit_frequency_days,
-            (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id) AS last_visit_at
-     FROM customers c WHERE c.id = $1`,
-    [customerId]
-  );
-  const customer = custRows[0];
-  if (!customer) return null;
-
+// Everything about the plans that does not depend on one customer, loaded
+// once per request so the single-customer and the batch (map pins) paths
+// share it.
+async function loadScheduleContext(req) {
   const today = yerevanToday();
   const ownOnly = req.user.role === "sales_manager";
-
   const { rows: ruleRows } = await pool.query(
     `SELECT r.*, u.name AS user_name FROM visit_plan_rules r JOIN users u ON u.id = r.user_id
      WHERE r.active ${ownOnly ? "AND r.user_id = $1" : ""}`,
     ownOnly ? [req.user.id] : []
   );
-  const matchingRules = ruleRows.filter(
-    (r) =>
-      (r.customer_ids ?? []).includes(customerId) ||
-      (Array.isArray(r.areas) &&
-        r.areas.some((a) => a?.region && a.region === customer.region && (!a.subregion || a.subregion === customer.subregion)))
-  );
-
   const endDate = new Date(`${today}T00:00:00Z`);
   endDate.setUTCDate(endDate.getUTCDate() + SCHEDULE_HORIZON_DAYS);
   const end = endDate.toISOString().slice(0, 10);
@@ -914,8 +927,22 @@ async function buildVisitSchedule(req, customerId) {
      WHERE p.plan_date BETWEEN $1 AND $2 ${ownOnly ? "AND p.user_id = $3" : ""}`,
     ownOnly ? [today, end, req.user.id] : [today, end]
   );
-  const planByUserDate = new Map(planRows.map((p) => [`${p.user_id}:${p.plan_date}`, p]));
+  // The due date is the same for everyone, so a plain manager's own-only rule
+  // list is widened to every active rule for that part.
+  const allRules = ownOnly ? (await pool.query(`SELECT day_of_week, customer_ids, areas FROM visit_plan_rules WHERE active`)).rows : ruleRows;
+  return { today, ruleRows, planRows, allRules, planByUserDate: new Map(planRows.map((p) => [`${p.user_id}:${p.plan_date}`, p])) };
+}
 
+// customer: { id, region, subregion, visit_frequency_days, last_visit_at }
+function scheduleForCustomer(customer, ctx) {
+  const { today, ruleRows, planRows, allRules, planByUserDate } = ctx;
+  const customerId = customer.id;
+  const matchingRules = ruleRows.filter(
+    (r) =>
+      (r.customer_ids ?? []).includes(customerId) ||
+      (Array.isArray(r.areas) &&
+        r.areas.some((a) => a?.region && a.region === customer.region && (!a.subregion || a.subregion === customer.subregion)))
+  );
   const planned = new Map(); // `${date}:${user_id}` -> entry
   // Explicit approved plans that include this customer.
   for (const p of planRows) {
@@ -924,20 +951,20 @@ async function buildVisitSchedule(req, customerId) {
     }
   }
   // Recurring rules, expanded day by day (an explicit row for that rep+date wins).
-  for (let i = 0; i < SCHEDULE_HORIZON_DAYS; i++) {
-    const d = new Date(`${today}T00:00:00Z`);
-    d.setUTCDate(d.getUTCDate() + i);
-    const date = d.toISOString().slice(0, 10);
-    const dow = d.getUTCDay();
-    for (const r of matchingRules) {
-      if (r.day_of_week !== dow) continue;
-      if (planByUserDate.has(`${r.user_id}:${date}`)) continue;
-      planned.set(`${date}:${r.user_id}`, { date, user_id: r.user_id, user_name: r.user_name, source: "rule" });
+  if (matchingRules.length) {
+    for (let i = 0; i < SCHEDULE_HORIZON_DAYS; i++) {
+      const d = new Date(`${today}T00:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + i);
+      const date = d.toISOString().slice(0, 10);
+      const dow = d.getUTCDay();
+      for (const r of matchingRules) {
+        if (r.day_of_week !== dow) continue;
+        if (planByUserDate.has(`${r.user_id}:${date}`)) continue;
+        planned.set(`${date}:${r.user_id}`, { date, user_id: r.user_id, user_name: r.user_name, source: "rule" });
+      }
     }
   }
   const plannedList = [...planned.values()].sort((a, b) => a.date.localeCompare(b.date) || a.user_name.localeCompare(b.user_name)).slice(0, SCHEDULE_MAX_ENTRIES);
-
-  const allRules = ownOnly ? (await pool.query(`SELECT day_of_week, customer_ids, areas FROM visit_plan_rules WHERE active`)).rows : ruleRows;
   const due = computeVisitDue({
     lastVisitAt: customer.last_visit_at,
     frequencyDays: customer.visit_frequency_days,
@@ -958,6 +985,17 @@ async function buildVisitSchedule(req, customerId) {
       never_visited: due.never_visited,
     },
   };
+}
+
+async function buildVisitSchedule(req, customerId) {
+  const { rows: custRows } = await pool.query(
+    `SELECT c.id, c.region, c.subregion, c.visit_frequency_days,
+            (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id) AS last_visit_at
+     FROM customers c WHERE c.id = $1`,
+    [customerId]
+  );
+  if (!custRows[0]) return null;
+  return scheduleForCustomer(custRows[0], await loadScheduleContext(req));
 }
 
 customersRouter.get("/:id/visit-schedule", async (req, res) => {

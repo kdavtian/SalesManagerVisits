@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { cssColor, escapeHtml, formatAmd, formatDateDMY, getCurrentPosition, customerNameLinkHtml, activateCustomerNameLinks } from "../util.js";
+import { cssColor, escapeHtml, formatAmd, formatDateDMY, getCurrentPosition, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 import { ensureLeaflet } from "../leafletLoader.js";
@@ -234,10 +234,7 @@ export async function renderDelivery(root, navigate) {
     document.body.appendChild(overlay);
     overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
     overlay.querySelector("#active-stop-close").addEventListener("click", () => overlay.remove());
-    activateCustomerNameLinks(overlay, (hash) => {
-      overlay.remove();
-      navigate(hash);
-    });
+    activateCustomerNameLinks(overlay, (hash) => leaveSheetTo(overlay, navigate, hash));
     overlay.querySelector("#active-stop-remove").addEventListener("click", async (e) => {
       if (!confirm(t("delivery_remove_from_route_confirm"))) return;
       const btn = e.currentTarget;

@@ -182,11 +182,17 @@ export function matchGroupsToProducts(groups, products) {
     for (const cand of prepared) {
       if (cand.g.brand && p.brand && cand.g.brand.toLowerCase() !== String(p.brand).toLowerCase()) continue;
       if (!cand.tokens.every((t) => pTokens.has(t))) continue;
-      if (cand.g.commercial && liters != null && cand.g.sizes.length && !cand.g.sizes.includes(liters)) continue;
+      const sizeOk = !cand.g.sizes.length || liters == null || cand.g.sizes.includes(liters);
+      // A commercial row is one specific pack size; a passenger model's photo
+      // is shared by every size, the size only breaks ties.
+      if (cand.g.commercial && !sizeOk) continue;
       const extras = pTokens.size - cand.tokens.length;
-      if (!best || cand.tokens.length > best.n || (cand.tokens.length === best.n && extras < best.extras)) {
-        best = { cand, n: cand.tokens.length, extras };
-      }
+      const better =
+        !best ||
+        cand.tokens.length > best.n ||
+        (cand.tokens.length === best.n && sizeOk && !best.sizeOk) ||
+        (cand.tokens.length === best.n && sizeOk === best.sizeOk && extras < best.extras);
+      if (better) best = { cand, n: cand.tokens.length, extras, sizeOk };
     }
     if (best) {
       if (!matches.has(best.cand.g)) matches.set(best.cand.g, []);

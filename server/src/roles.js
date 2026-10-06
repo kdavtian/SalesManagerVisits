@@ -74,6 +74,12 @@ export function seesProductCosts(role) {
   return seesFinancialExports(role);
 }
 
+// Landing / net cost may be PRINTED into a pricelist PDF (an internal sheet)
+// only by admin, CEO and operations director.
+export function canPrintCostColumns(role) {
+  return role === "admin" || role === "ceo" || role === "operations_director";
+}
+
 // Per spec: admin, sales director, and CEO see the live team-location map.
 export function canViewTeamLocations(role) {
   return role === "admin" || role === "sales_director" || role === "ceo" || role === "operations_director";
