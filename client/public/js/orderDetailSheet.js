@@ -88,14 +88,20 @@ function accountingSectionHtml(order) {
     ${err ? `<p class="form-error">${escapeHtml(err.message || err.code)}</p>` : ""}`;
 }
 
-function orderTimelineHtml(history) {
+// Plain-language "what happens next" for statuses that wait on someone else.
+// Shown with the matching timeline step instead of as a huge disabled button.
+const WAITING_HINT = { confirmed: "confirmed_awaiting_warehouse", packed_stock_out: "packed_awaiting_route" };
+
+function orderTimelineHtml(history, currentStatus) {
   if (!history?.length) return "";
+  const lastIdx = history.map((h) => h.new_status).lastIndexOf(currentStatus);
   return `
     <h3 class="list-group-heading">${t("order_timeline_title")}</h3>
     <div class="order-timeline">
       ${history
-        .map((h) => {
+        .map((h, idx) => {
           const meta = STATUS_META[h.new_status];
+          const hint = idx === lastIdx && WAITING_HINT[currentStatus] ? `<span class="order-step-hint">${t(WAITING_HINT[currentStatus])}</span>` : "";
           const label = meta ? t(meta.key) : escapeHtml(h.new_status);
           return `
         <div class="order-timeline-step">
@@ -103,6 +109,7 @@ function orderTimelineHtml(history) {
           <div class="order-timeline-body">
             <strong>${label}</strong>
             <span class="order-line-meta">${formatDateTime(h.changed_at)}${h.changed_by_name ? ` · ${escapeHtml(h.changed_by_name)}` : ""}${h.reason ? ` · ${escapeHtml(h.reason)}` : ""}</span>
+            ${hint}
           </div>
         </div>`;
         })
@@ -178,11 +185,12 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     const canApproveDiscount = DISCOUNT_APPROVER_ROLES.has(state.user.role) && order.approval_status === "pending";
 
     overlay.querySelector(".sheet").innerHTML = `
+      <button type="button" class="sheet-close-x" data-action="close-sheet" aria-label="${t("close")}">${icons.close}</button>
       <div class="order-detail-ids">
         <span>${t("customer_id_label")}: ${escapeHtml(order.erp_customer_id || String(order.customer_id))}</span>
         ${order.order_code ? `<span>${t("order_id_label")}: ${escapeHtml(order.order_code)}</span>` : ""}
       </div>
-      <h2>${customerNameLinkHtml(order.customer_name, order.customer_id)}</h2>
+      <h2 class="order-detail-customer">${customerNameLinkHtml(order.customer_name, order.customer_id)}</h2>
       <p><span class="badge ${meta.cls}">${t(meta.key)}</span>${
       order.payment_method ? ` ${paymentMethodBadgeHtml(order.payment_method)}` : ""
     }${
@@ -199,7 +207,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       <p>${t("total")}: <span class="text-amount">${formatAmd(Number(order.total_amd))}</span></p>
       ${order.note ? `<p class="muted">${escapeHtml(order.note)}</p>` : ""}
       ${accountingSectionHtml(order)}
-      ${orderTimelineHtml(order.history)}
+      ${orderTimelineHtml(order.history, order.status)}
       <p class="form-error" id="order-detail-error" hidden></p>
       <div class="sheet-actions" id="order-detail-actions" style="flex-wrap:wrap;"></div>
     `;
@@ -238,11 +246,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     if (CONFIRM_ROLES.has(state.user.role) && ["waybill_created", "partially_created", "exported_unsigned"].includes(order.accounting_status)) {
       buttons.push({ label: t("acc_mark_signed"), action: "accounting-signed", cls: "btn" });
     }
-    if (order.status === "confirmed") {
-      buttons.push({ label: t("confirmed_awaiting_warehouse"), action: "noop", cls: "btn", disabledDisplay: true });
-    }
     if (order.status === "packed_stock_out") {
-      buttons.push({ label: t("packed_awaiting_route"), action: "noop", cls: "btn", disabledDisplay: true });
       // No route/signature required here -- see canMarkDeliveredWithoutRoute
       // in server/src/roles.js for why this manual override exists.
       if (MARK_DELIVERED_ROLES.has(state.user.role)) {
@@ -269,6 +273,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       .join("") || `<button type="button" class="btn" id="order-detail-close">${t("done")}</button>`;
 
     actionsEl.querySelector("#order-detail-close")?.addEventListener("click", () => overlay.remove());
+    overlay.querySelector('[data-action="close-sheet"]')?.addEventListener("click", () => overlay.remove());
     actionsEl.querySelectorAll("[data-status]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
@@ -397,14 +402,24 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       return discountType === "amd" ? Math.max(0, sub - discountValue) : sub * (1 - discountValue / 100);
     };
 
+    // Two zones: a scrolling body (lines + add-product list) and a footer
+    // (price change, total, buttons) that stays pinned to the bottom, also
+    // while the add-product list is open.
     overlay.querySelector(".sheet").innerHTML = `
+     <div class="edit-sheet" id="edit-sheet">
+      <div class="edit-sheet-scroll">
       <h2>${t("edit_order")}</h2>
       <div class="card-list" id="edit-order-lines" style="margin:12px 0;"></div>
       <button type="button" class="btn btn-block" id="edit-add-product-btn" aria-expanded="false">${t("add_product_to_order")}</button>
       <div id="edit-add-product-panel" hidden>
-        <input type="search" id="edit-add-product-search" placeholder="${t("add_product_search_placeholder")}" aria-label="${t("add_product_search_placeholder")}" autocomplete="off" style="margin:8px 0;" />
+        <div class="edit-add-toolbar">
+          <input type="search" id="edit-add-product-search" placeholder="${t("add_product_search_placeholder")}" aria-label="${t("add_product_search_placeholder")}" autocomplete="off" />
+          <div class="edit-brand-chips" id="edit-brand-chips" role="group"></div>
+        </div>
         <div class="card-list edit-add-results" id="edit-add-product-results"></div>
       </div>
+      </div>
+      <div class="edit-sheet-footer">
       <div class="edit-price-change">
         <span class="edit-price-label">${t(selfApproves ? "discount_pct_label" : "request_price_change")}</span>
         <div class="edit-price-controls">
@@ -422,12 +437,17 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
         <button type="button" class="btn" id="edit-order-cancel">${t("cancel_edit")}</button>
         <button type="button" class="btn btn-primary" id="edit-order-save">${t("save_changes")}</button>
       </div>
+      </div>
+     </div>
     `;
 
     const linesEl = overlay.querySelector("#edit-order-lines");
     const totalEl = overlay.querySelector("#edit-order-total");
     const panelEl = overlay.querySelector("#edit-add-product-panel");
     const searchEl = overlay.querySelector("#edit-add-product-search");
+    const sheetEl = overlay.querySelector("#edit-sheet");
+    const brandChipsEl = overlay.querySelector("#edit-brand-chips");
+    let activeBrand = null; // null = all brands
     const resultsEl = overlay.querySelector("#edit-add-product-results");
     const addBtn = overlay.querySelector("#edit-add-product-btn");
     const errorEl = overlay.querySelector("#order-detail-error");
@@ -480,7 +500,10 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
         resultsEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
         return;
       }
-      const matches = sortProducts(searchProducts(productCatalog || [], addProductQuery)).slice(0, 30);
+      // Every product of the chosen brand (or all), not a truncated top-30;
+      // rows use content-visibility so a long list still scrolls smoothly.
+      const pool = activeBrand ? (productCatalog || []).filter((p) => (p.brand || "") === activeBrand) : productCatalog || [];
+      const matches = sortProducts(searchProducts(pool, addProductQuery));
       const qtyInOrder = new Map(lines.map((l) => [l.product_id, l.quantity]));
       resultsEl.innerHTML =
         matches
@@ -498,6 +521,20 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
           })
           .join("") || `<p class="empty-state">${t("no_products_found")}</p>`;
     }
+
+    function renderBrandChips() {
+      const brands = [...new Set((productCatalog || []).map((p) => p.brand || "").filter(Boolean))];
+      brandChipsEl.innerHTML = [null, ...brands]
+        .map((b) => `<button type="button" class="edit-brand-chip" data-brand="${b == null ? "" : escapeHtml(b)}" aria-pressed="${b === activeBrand}">${b == null ? t("all_brands") : escapeHtml(b)}</button>`)
+        .join("");
+    }
+    brandChipsEl.addEventListener("click", (e) => {
+      const chip = e.target.closest("[data-brand]");
+      if (!chip) return;
+      activeBrand = chip.dataset.brand || null;
+      brandChipsEl.querySelectorAll("[data-brand]").forEach((c) => c.setAttribute("aria-pressed", String((c.dataset.brand || null) === activeBrand)));
+      renderResults();
+    });
 
     resultsEl.addEventListener("click", (e) => {
       const btn = e.target.closest('[data-action="add-product"]');
@@ -532,6 +569,10 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
 
     addBtn.addEventListener("click", async () => {
       panelEl.hidden = !panelEl.hidden;
+      sheetEl.classList.toggle("adding", !panelEl.hidden);
+      // While picking products the order lines fold away (the list gets the
+      // room); the button turns into "Done" to bring them back.
+      addBtn.textContent = panelEl.hidden ? t("add_product_to_order") : t("done");
       addBtn.setAttribute("aria-expanded", String(!panelEl.hidden));
       if (panelEl.hidden) return;
       if (!productCatalog) {
@@ -543,9 +584,10 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
           productCatalog = [];
         }
         catalogLoading = false;
+        renderBrandChips();
       }
       renderResults();
-      searchEl.focus();
+      searchEl.focus({ preventScroll: true });
     });
 
     // --- price change ----------------------------------------------------
