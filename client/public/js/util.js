@@ -1017,10 +1017,12 @@ function customerSearchText(c) {
   return text;
 }
 
-export function customerMatchesSearch(c, query) {
+export function customerMatchesSearch(c, query, extraText = "") {
   const words = searchFold(query).split(/\s+/).filter(Boolean);
   if (!words.length) return true;
-  const text = customerSearchText(c);
+  // extraText: already-folded searchable text from outside the customer row
+  // (e.g. the brands check-ins recorded -- see brandChips.js).
+  const text = extraText ? `${customerSearchText(c)} ${extraText}` : customerSearchText(c);
   const phone = phoneTail(c.phone);
   return words.every((w) => {
     const cleaned = w.replace(/^@/, "");

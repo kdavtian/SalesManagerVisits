@@ -10118,3 +10118,33 @@ form select,
 .quick-actions-grid > .empty-state {
   grid-column: 1 / -1;
 }
+
+/* Customer card: product chips (what visits recorded) + the "why it matched"
+   line under a Customers-list product search/filter. */
+.product-chips-card {
+  margin-bottom: 4px;
+  cursor: default;
+}
+.product-chips-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.product-chips-hint {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+}
+.product-chips-list + .product-chips-hint {
+  margin-top: 10px;
+}
+.product-chip {
+  font-size: 0.8rem;
+}
+.product-match-row {
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.product-chips-title {
+  margin-top: 14px;
+}

@@ -4,6 +4,7 @@ import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state, seesAllActivity } from "../state.js";
 import { loadWithCache } from "../listCache.js";
+import { indexBrandSummary, brandSearchText, matchedEverEntries, matchesSelectedChips, buildBrandChipTree, chipHtml, shortDate } from "../brandChips.js";
 import { buildRegionSubregionTree, buildDirectionManagerTree, buildCategoryTierTree, openTriStateTreeSheet, NO_GROUP_KEY } from "../regionTree.js";
 
 const FILTERS = [
@@ -130,6 +131,12 @@ export function renderCustomers(root, navigate, initialFilter) {
   let assignmentKeys = new Set();
   // Set of "category::tier" keys (buildCategoryTierTree leaf ids); empty = no filter.
   let typeTierKeys = new Set();
+  // Set of "group:value" chip ids (brandChips.js); empty = no filter. A shop
+  // passes when ANY visit ever recorded ANY selected product.
+  let brandChipIds = new Set();
+  // customer id -> { current, ever } from GET /customers/brand-summary;
+  // loaded after the list paints, so search/filter just ignore it until then.
+  let brandSummary = new Map();
   // Off by default (per task spec: "to make app run faster") -- the debt
   // lookup is a real join server-side, not free, so it's opt-in per
   // session rather than always fetched with the rest of the list.
@@ -333,6 +340,15 @@ export function renderCustomers(root, navigate, initialFilter) {
             count: regionCount,
           })
         : "",
+      brandSummary.size
+        ? filterIconButton({
+            key: "brands",
+            icon: icons.box,
+            label: t("filter_brands_title"),
+            active: brandChipIds.size > 0,
+            count: brandChipIds.size,
+          })
+        : "",
       allCustomers.length
         ? filterIconButton({
             key: "channel",
@@ -380,6 +396,21 @@ export function renderCustomers(root, navigate, initialFilter) {
       });
     });
 
+    filterRow.querySelector('[data-filter-btn="brands"]')?.addEventListener("click", () => {
+      openTriStateTreeSheet(t("filter_brands_title"), {
+        tree: buildBrandChipTree(brandSummary, allCustomers.map((c) => c.id)),
+        initialSelectedIds: brandChipIds,
+        countUnitLabel: t("perf_dq_customers_unit"),
+        searchPlaceholder: t("search"),
+        onApply: (selectedIds) => {
+          brandChipIds = selectedIds;
+          renderFilterRow();
+          renderStatsBar();
+          renderList();
+        },
+      });
+    });
+
     filterRow.querySelector('[data-filter-btn="channel"]')?.addEventListener("click", () => {
       openTriStateTreeSheet(t("filter_type_tier_title"), {
         tree: buildCategoryTierTree(allCustomers, {
@@ -408,7 +439,8 @@ export function renderCustomers(root, navigate, initialFilter) {
   function applyNonStatusFilters(customers) {
     let list = customers;
     const query = searchInput.value.trim().toLowerCase();
-    if (query) list = list.filter((c) => customerMatchesSearch(c, query));
+    if (query) list = list.filter((c) => customerMatchesSearch(c, query, brandSearchText(brandSummary.get(c.id))));
+    if (brandChipIds.size) list = list.filter((c) => matchesSelectedChips(brandSummary.get(c.id), brandChipIds));
     if (regionSubregionKeys.size) {
       list = list.filter((c) => c.region && regionSubregionKeys.has(`${c.region}::${c.subregion || NO_GROUP_KEY}`));
     }
@@ -531,6 +563,13 @@ export function renderCustomers(root, navigate, initialFilter) {
             </div>`
             : "";
 
+        // Why this customer matched a product search/filter, e.g.
+        // "Fake Castrol · 3 Oct" (the latest visit that recorded it).
+        const matchedBrands = matchedEverEntries(brandSummary.get(c.id), { selectedIds: brandChipIds, query: searchInput.value });
+        const brandRow = matchedBrands.length
+          ? `<div class="list-row-bottom product-match-row">${matchedBrands.map((m) => chipHtml(m.def, shortDate(m.last_at))).join("")}</div>`
+          : "";
+
         return `
         <button class="card list-row ${isOthers ? "customer-card-unassigned" : ""}" data-id="${c.id}">
           ${customerListIconHtml(c)}
@@ -540,6 +579,7 @@ export function renderCustomers(root, navigate, initialFilter) {
             </div>
             ${idAndType ? `<div class="muted list-row-meta">${idAndType}</div>` : ""}
             ${bottomRow}
+            ${brandRow}
           </div>
           <span class="chevron">&#8250;</span>
         </button>
@@ -585,6 +625,19 @@ export function renderCustomers(root, navigate, initialFilter) {
     }
   }
 
+  // Products recorded at visits (for product search/filter). Best-effort:
+  // a failure just leaves the product search/filter off.
+  async function loadBrandSummary() {
+    try {
+      await loadWithCache("customers-brand-summary", () => api.getBrandSummary(), (rows) => {
+        brandSummary = indexBrandSummary(rows);
+        render();
+      });
+    } catch {
+      /* optional feature */
+    }
+  }
+
   searchInput.addEventListener("input", () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => {
@@ -594,4 +647,5 @@ export function renderCustomers(root, navigate, initialFilter) {
   });
 
   load();
+  loadBrandSummary();
 }

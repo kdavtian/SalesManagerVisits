@@ -7,7 +7,7 @@
 # Block kinds: ("p", text) ("ul", [items]) ("ol", [steps]) ("tip", text)
 # ("note", text) ("table", [[cell, ...], ...] first row = header).
 
-VERSION = "1.249.0"
+VERSION = "1.251.0"
 
 UI = {
     "hy": {
@@ -112,7 +112,7 @@ SECTIONS["hy"] = [
         img="customers",
         cap="Հաճախորդների ցանկ",
         blocks=[
-            ("p", "Վերևի չորս քարտերը ֆիլտրում են ցանկը՝ Բոլորը, Այցելած, Բաց թողած (ժամկետանց), Չայցելած։ Որոնման դաշտը գտնում է անունով, ERP համարով, հեռախոսով, հասցեով և սոցիալական հղումներով։"),
+            ("p", "Վերևի չորս քարտերը ֆիլտրում են ցանկը՝ Բոլորը, Այցելած, Բաց թողած (ժամկետանց), Չայցելած։ Որոնման դաշտը գտնում է անունով, ERP համարով, հեռախոսով, հասցեով, սոցիալական հղումներով, ինչպես նաև ըստ այցերում գրանցված ապրանքների՝ օր.՝ «կեղծ castrol», «usa castrol», «mobil»։ Արդյունքի տակ երևում է, թե ինչու է կետը համընկել (օր.՝ «Կեղծ Castrol · Oct 6»)։"),
             ("ul", [
                 "Քարտի պատկերակը ցույց է տալիս հաճախորդի տեսակը, իսկ գույնը՝ մակարդակը (ոսկե, արծաթե, բրոնզե)։",
                 "«Այցելված է այսօր» / «Վերջին այց» տողը ցույց է տալիս վերջին այցի ժամանակը։",
@@ -122,6 +122,7 @@ SECTIONS["hy"] = [
             ("ul", [
                 "Մարզ → ենթամարզ. բացվող ծառ՝ եռաստիճան նշումներով (ամբողջ մարզ, մասամբ կամ ոչինչ)։",
                 "Հաճախորդի տեսակ և մակարդակ. նույն տիպի ծառ՝ ըստ տեսակի (Ավտոսերվիս, Խանութ, Յուղման կետ) և մակարդակի (Ոսկե, Արծաթե, Բրոնզե, Հավանական)։",
+                "Ապրանքներ դարակում. նույն տիպի ծառ՝ ըստ ապրանքանիշի և գրանցված վիճակի (կեղծ, ԱՄՆ/Դուբայի/ՌԴ Castrol, Lotos, Royal, մրցակիցներ). ցույց է տալիս այն կետերը, որտեղ որևէ այց գրանցել է ընտրվածը։",
                 "Դասավորություն՝ անունով, վերջին այցով, վերջին ավելացվածով, հեռավորությամբ. նույն կետին կրկին հպելը շրջում է կարգը։",
             ]),
         ],
@@ -134,7 +135,7 @@ SECTIONS["hy"] = [
         blocks=[
             ("p", "Քարտը ցույց է տալիս վայրը, հեռախոսը, ուղղությունը և Ձեզ նշանակված մենեջերին, այցի հաճախականությունը, վճարման պայմանները, ամսվա վաճառքը, չվճարված պարտքը (ERP-ով կապված հաճախորդների համար), վերջին պատվերն ու այցը։"),
             ("ul", [
-                "Ներքևի կոճակները՝ Չեք-ին, Նավարկել (Yandex Navi / Google Maps), Պատվերներ, Նոր պատվեր, Նկարներ։",
+                "Կոճակների շարքը (Չեք-ին, Նավարկել, Պատվերներ, Նոր պատվեր, Նկարներ) գտնվում է «Հաջորդ այցելություն» քարտից վերև։ «Ապրանքներ կետում» բաժնում երևում են պիտակներ՝ ինչ է գրանցվել այցերում (կեղծ Castrol, ԱՄՆ Castrol, Lotos, Royal, մրցակիցներ). պիտակը փոխվում է միայն երբ նոր այցը կրկին գրանցում է այդ ապրանքանիշը, այլապես մնում է նույնը։",
                 "Այցելությունների պատմությունը ցույց է տալիս նախկին այցերն ու նրանց արդյունքը։",
                 "Փոխելու համար սեղմեք մատիտի պատկերակը։ Մենեջերի փոփոխությունները ուղարկվում են ադմինիստրատորին հաստատման («Փոփոխությունները ուղարկվեցին»)։",
                 "Մակարդակը (Բրոնզե/Արծաթե/Ոսկե) հաճախորդի ERP տվյալներից է և ավտոմատ թարմացվում է Excel ֆայլով. ձեռքով չի փոխվում։",
@@ -414,7 +415,7 @@ SECTIONS["en"] = [
         img="customers",
         cap="Customer list",
         blocks=[
-            ("p", "The four cards at the top filter the list: All, Visited, Overdue, Not visited. The search box matches name, ERP ID, phone, address and social links."),
+            ("p", "The four cards at the top filter the list: All, Visited, Overdue, Not visited. The search box matches name, ERP ID, phone, address, social links and the products recorded at visits, e.g. 'fake castrol', 'usa castrol', 'mobil'. The card shows why it matched (e.g. 'Fake Castrol · Oct 6')."),
             ("ul", [
                 "A card's icon shows the customer type; its colour shows the tier (gold, silver, bronze).",
                 "The “Visited today” / “Last visit” line shows when you were last there.",
@@ -424,6 +425,7 @@ SECTIONS["en"] = [
             ("ul", [
                 "Region → subregion: an expandable tree with tri-state checkboxes (whole region, partly, none).",
                 "Customer type and tier: the same kind of tree, by type (Workshop, Shop, Oil change point) and tier (Gold, Silver, Bronze, Potential).",
+                "Products on the shelf: the same kind of tree, by brand and recorded status (fake, USA/Dubai/Russian Castrol, Lotos, Royal, competitors); shows shops where any visit recorded the selected products.",
                 "Sort by name, last visit, last added or distance; tap the same option again to reverse the order.",
             ]),
         ],
@@ -436,7 +438,7 @@ SECTIONS["en"] = [
         blocks=[
             ("p", "The card shows the location, phone, channel and assigned manager, visit frequency, payment terms, this month's sales, unpaid debt (for ERP-linked customers), and the last order and visit."),
             ("ul", [
-                "Buttons below: Check in, Navigate (Yandex Navi / Google Maps), Orders, New order, Photos.",
+                "The button row (Check in, Navigate, Orders, New order, Photos) sits above the 'Next visit' card. 'Products at this shop' shows chips of what visits recorded (fake Castrol, USA Castrol, Lotos, Royal, competitors); a chip changes only when a new visit records that brand again, otherwise it stays.",
                 "The visit history lists previous visits and their outcomes.",
                 "To change details tap the pencil. A manager's changes go to an administrator for approval (“Your changes were sent…”).",
                 "The tier (Bronze/Silver/Gold) comes from the company's ERP data and is refreshed automatically from the Excel file; it is not edited by hand.",
