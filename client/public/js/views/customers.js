@@ -287,7 +287,7 @@ export function renderCustomers(root, navigate, initialFilter) {
         </div>
         <div class="sheet-actions sheet-actions-floating">
           <button type="button" class="btn" id="multi-filter-clear">${t("clear")}</button>
-          <button type="button" class="btn btn-primary" id="multi-filter-done">${t("done")}</button>
+          <button type="button" class="btn btn-primary" id="multi-filter-done">${t("show_results")}</button>
         </div>
       </div>
     `;

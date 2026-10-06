@@ -7,6 +7,7 @@
 import { api } from "./api.js";
 import { escapeHtml, formatAmd, activateDialog, formatDateTime, customerNameLinkHtml, activateCustomerNameLinks } from "./util.js";
 import { t } from "./i18n.js";
+import { icons } from "./icons.js";
 import { state } from "./state.js";
 import { getProductCatalog } from "./productCatalog.js";
 import { openAccountingDocSheet, accountingDocLabel, ACCOUNTING_STATUS_BADGE } from "./accountingDocSheet.js";
@@ -410,17 +411,19 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       linesEl.innerHTML = lines
         .map(
           (l, i) => `
-        <div class="order-product-row" data-line-index="${i}">
+        <div class="order-product-row order-edit-row" data-line-index="${i}">
           <div class="order-product-info">
             <strong>${escapeHtml(l.product_name)}${l.size ? ` · ${escapeHtml(l.size)}` : ""}</strong>
             <span class="muted">${[l.brand, formatAmd(Number(l.unit_price_amd))].filter(Boolean).map(escapeHtml).join(" · ")}</span>
           </div>
-          <div class="order-qty-stepper">
-            <button type="button" class="icon-btn" data-action="dec" aria-label="${t("decrease")}">&minus;</button>
-            <span>${l.quantity}</span>
-            <button type="button" class="icon-btn" data-action="inc" aria-label="${t("increase")}">&plus;</button>
+          <div class="order-edit-controls">
+            <div class="order-qty-stepper">
+              <button type="button" class="icon-btn" data-action="dec" aria-label="${t("decrease")}">&minus;</button>
+              <span>${l.quantity}</span>
+              <button type="button" class="icon-btn" data-action="inc" aria-label="${t("increase")}">&plus;</button>
+            </div>
+            <button type="button" class="icon-btn icon-btn-danger order-remove-btn" data-action="remove" aria-label="${t("remove_item")}" title="${t("remove_item")}">${icons.trash}</button>
           </div>
-          <button type="button" class="btn-link btn-link-danger" data-action="remove">${t("remove_item")}</button>
         </div>`
         )
         .join("");

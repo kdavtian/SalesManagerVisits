@@ -135,6 +135,7 @@ export const api = {
   },
   customerCheckins: (id) => request(`/customers/${id}/checkins`),
   customerPlannedVisits: (id) => request(`/customers/${id}/planned-visits`),
+  getVisitSchedule: (id) => request(`/customers/${id}/visit-schedule`),
   customerOrderedProducts: (id) => request(`/customers/${id}/ordered-products`),
 
   createCheckin: (formData) =>

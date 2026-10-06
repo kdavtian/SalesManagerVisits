@@ -738,7 +738,7 @@ export async function renderWarehouse(root, navigate) {
           ${filterChipSectionHtml(t("warehouse_filter_stock"), [{ value: "", label: t("all_statuses") }, ...STOCK_FILTER_OPTIONS], workingStock, "stock-value")}
           <div class="sheet-actions">
             <button type="button" class="btn" id="inventory-filter-clear">${t("clear")}</button>
-            <button type="button" class="btn btn-primary" id="inventory-filter-done">${t("done")}</button>
+            <button type="button" class="btn btn-primary" id="inventory-filter-done">${t("show_results")}</button>
           </div>
         </div>
       `;
