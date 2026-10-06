@@ -40,7 +40,7 @@ const ICON = {
 // significant enough that the screenshots/steps in the guide would mislead a
 // rep -- a new nav pattern, a changed order-creation flow, moved buttons,
 // etc. A copy-fix or color tweak doesn't need a re-export.
-const GUIDE_VERSION = "1.249.0";
+const GUIDE_VERSION = "1.251.0";
 
 // `color` picks a badge tint for the row's icon, iOS-Settings style (each
 // row's icon sits in a colored rounded-square, not just a plain glyph) --

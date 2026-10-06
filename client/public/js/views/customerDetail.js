@@ -1,5 +1,6 @@
 import { api } from "../api.js";
 import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, SALES_CHANNELS, channelDisplayLabel, parseDateOnly, erpLineDiscountRowHtml } from "../util.js";
+import { currentChips, chipHtml } from "../brandChips.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { canEditDirectly, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, isAdmin, seesFinancialExports } from "../state.js";
@@ -39,13 +40,15 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   root.innerHTML = `<div class="detail-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".detail-view");
 
-  let customer, checkins, pendingRequests, erpOrders;
+  let customer, checkins, pendingRequests, erpOrders, brandSummaryRows;
   try {
-    [customer, checkins, pendingRequests, erpOrders] = await Promise.all([
+    [customer, checkins, pendingRequests, erpOrders, brandSummaryRows] = await Promise.all([
       api.getCustomer(customerId),
       api.customerCheckins(customerId),
       api.listEditRequests({ customer_id: customerId, status: "pending" }),
       api.getErpOrders(customerId, "recent"),
+      // Optional extra: a failure here must not break the customer page.
+      api.getBrandSummary({ customer_id: customerId }).catch(() => []),
     ]);
   } catch (err) {
     container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
@@ -57,6 +60,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   // version (it had no "exempt" or "on-track" concept at all, so a
   // never-visited customer on an exempt channel was still labelled).
   const statusBadge = visitStatusBadge(customer);
+  const brandChipList = currentChips(brandSummaryRows?.[0]?.current);
 
   let nextVisitHtml = "";
   if (customer.overdue) {
@@ -157,11 +161,6 @@ export async function renderCustomerDetail(root, navigate, customerId) {
 
     ${renderErpCard(customer, erpOrders)}
 
-    <div class="card next-visit-card">
-      <div class="next-visit-header"><span>${t("next_visit")}</span></div>
-      <div class="next-visit-due">${nextVisitHtml}</div>
-    </div>
-
     <div class="detail-actions-grid">
       <button class="action-btn action-btn-primary" id="checkin-btn">
         <span>${icons.mapPinCheck}</span>${t("check_in")}
@@ -179,6 +178,21 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       <button type="button" class="action-btn" id="customer-photos-btn">
         <span><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5.5-5.5a1.5 1.5 0 0 0-2.1 0L5 19"/></svg></span>${t("customer_photos")}
       </button>
+    </div>
+
+    <div class="card next-visit-card">
+      <div class="next-visit-header"><span>${t("next_visit")}</span></div>
+      <div class="next-visit-due">${nextVisitHtml}</div>
+    </div>
+
+    <h2 class="section-title section-title-tight product-chips-title">${t("brand_chips_title")}</h2>
+    <div class="card product-chips-card" id="product-chips-card">
+      ${
+        brandChipList.length
+          ? `<div class="product-chips-list">${brandChipList.map((d) => chipHtml(d)).join("")}</div>
+             <p class="muted product-chips-hint">${t("brand_chips_hint")}</p>`
+          : `<p class="muted product-chips-hint">${t("brand_chips_empty")}</p>`
+      }
     </div>
 
     <h2 class="section-title" id="visit-history-anchor">${t("visit_history")}</h2>

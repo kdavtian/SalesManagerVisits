@@ -358,6 +358,63 @@ customersRouter.get("/brand-status", async (req, res) => {
   res.json(rows);
 });
 
+// Products-at-the-shop summary, built from what check-ins recorded in
+// brand_status ({castrol|lotos|royal|competitors: [values]}). Two views per
+// customer:
+//   current -- for each brand group, the values from the MOST RECENT visit
+//              that recorded that group. A visit that skips a group leaves
+//              that group's earlier answer in place (chips only change when a
+//              new visit records the group again).
+//   ever    -- every value any visit ever recorded, with the latest date it
+//              was recorded (powers the Customers search/filter: "which shops
+//              ever had fake Castrol").
+// A sales manager only gets their own assigned customers.
+const BRAND_GROUPS = ["castrol", "lotos", "royal", "competitors"];
+customersRouter.get("/brand-summary", async (req, res) => {
+  const params = [BRAND_GROUPS];
+  let join = "";
+  let where = "";
+  if (req.user.role === "sales_manager") {
+    params.push(req.user.id);
+    join = `JOIN customers c ON c.id = ch.customer_id AND c.assigned_manager_id = $${params.length}`;
+  }
+  const customerId = Number(req.query.customer_id);
+  if (Number.isInteger(customerId) && customerId > 0) {
+    params.push(customerId);
+    where = `AND ch.customer_id = $${params.length}`;
+  }
+  const base = `
+    FROM checkins ch
+    ${join}
+    CROSS JOIN unnest($1::text[]) AS g(grp)
+    WHERE ch.brand_status IS NOT NULL
+      AND jsonb_typeof(ch.brand_status -> g.grp) = 'array'
+      AND jsonb_array_length(ch.brand_status -> g.grp) > 0
+      ${where}`;
+  const [{ rows: currentRows }, { rows: everRows }] = await Promise.all([
+    pool.query(
+      `SELECT DISTINCT ON (ch.customer_id, g.grp) ch.customer_id, g.grp AS grp, ch.brand_status -> g.grp AS vals, ch.timestamp AS as_of
+       ${base}
+       ORDER BY ch.customer_id, g.grp, ch.timestamp DESC`,
+      params
+    ),
+    pool.query(
+      `SELECT ch.customer_id, g.grp AS grp, v.value AS value, max(ch.timestamp) AS last_at
+       ${base.replace("CROSS JOIN unnest($1::text[]) AS g(grp)", "CROSS JOIN unnest($1::text[]) AS g(grp) CROSS JOIN LATERAL jsonb_array_elements_text(CASE WHEN jsonb_typeof(ch.brand_status -> g.grp) = 'array' THEN ch.brand_status -> g.grp ELSE '[]'::jsonb END) AS v(value)")}
+       GROUP BY ch.customer_id, g.grp, v.value`,
+      params
+    ),
+  ]);
+  const byCustomer = new Map();
+  const entry = (id) => {
+    if (!byCustomer.has(id)) byCustomer.set(id, { customer_id: id, current: {}, ever: [] });
+    return byCustomer.get(id);
+  };
+  for (const r of currentRows) entry(r.customer_id).current[r.grp] = { values: r.vals, as_of: r.as_of };
+  for (const r of everRows) entry(r.customer_id).ever.push({ group: r.grp, value: r.value, last_at: r.last_at });
+  res.json([...byCustomer.values()]);
+});
+
 customersRouter.get("/:id", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT c.*, ${STATUS_COLUMNS},
