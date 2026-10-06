@@ -4,7 +4,7 @@ import { t } from "../i18n.js";
 import { buildCustomerTree, renderTriStateTree } from "../regionTree.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
-import { plannedLinesHtml, cadenceLineHtml } from "../visitSchedule.js";
+import { nextVisitRowHtml } from "../visitSchedule.js";
 import { canViewTeamLocations, canEditDirectly, canPlanForOthers, canReassignCustomers, state } from "../state.js";
 import { getClusterPins, setClusterPins, getCompassMode, setCompassMode, getMapTileCacheEnabled } from "../mapPrefs.js";
 import { getPerfMode } from "../perfMode.js";
@@ -121,7 +121,30 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
   return outerCleanup;
 }
 
+// Last pan/zoom of a plain browsing session, so leaving the Map tab and
+// coming back (bottom-nav remounts the view) lands where the user was.
+const MAP_VIEW_KEY = "fv_map_view";
+function loadMapView() {
+  try {
+    const v = JSON.parse(sessionStorage.getItem(MAP_VIEW_KEY) || "null");
+    if (v && Array.isArray(v.center) && v.center.every(Number.isFinite) && Number.isFinite(v.zoom)) return v;
+  } catch {
+    // storage unavailable -- start fresh
+  }
+  return null;
+}
+function saveMapView(map) {
+  try {
+    const c = map.getCenter();
+    sessionStorage.setItem(MAP_VIEW_KEY, JSON.stringify({ center: [c.lat, c.lng], zoom: map.getZoom() }));
+  } catch {
+    // ignore
+  }
+}
+
 function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = false, startInPlanMode = false, focusCustomerId = null) {
+  const plainBrowse = !relocateCustomerId && !startInAddMode && !startInPlanMode && focusCustomerId == null;
+  const restoredView = plainBrowse ? loadMapView() : null;
   root.innerHTML = `
     <div class="map-view">
       ${
@@ -389,8 +412,11 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     // oversized for this app. Re-added below as a minimal, unobtrusive
     // control instead.
     attributionControl: false,
-  }).setView([20, 0], 2);
+  }).setView(restoredView ? restoredView.center : [20, 0], restoredView ? restoredView.zoom : 2);
   L.control.attribution({ prefix: false, position: "bottomright" }).addTo(map);
+  // Remember the view as it changes (not only on teardown: the back-cache can
+  // keep this instance alive and evict it later, or the app can be closed).
+  if (plainBrowse) map.on("moveend", () => saveMapView(map));
 
   // Root cause of "the map doesn't show anything": the tile provider (a
   // third-party CDN) can be unreachable -- blocked by a network/firewall,
@@ -1065,7 +1091,20 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // already visible) over the default "fit every customer" behavior, which
   // zooms out to the whole territory and makes people zoom back in
   // manually just to see what's around them.
-  let initialViewApplied = false;
+  let initialViewApplied = Boolean(restoredView);
+  // While true, applyFilter leaves the restored pan/zoom alone; any tap or
+  // keystroke in the toolbar/filters (outside the map canvas) lets it re-fit.
+  let keepRestoredView = Boolean(restoredView);
+  if (restoredView) {
+    const release = (e) => {
+      if (e.target.closest?.(".leaflet-container")) return;
+      keepRestoredView = false;
+      root.removeEventListener("click", release, true);
+      root.removeEventListener("input", release, true);
+    };
+    root.addEventListener("click", release, true);
+    root.addEventListener("input", release, true);
+  }
   let plannedCustomerIds = null;
   let routeLine = null;
   const stopMarkers = [];
@@ -1306,7 +1345,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       plannedStopsPanel.hidden = true;
       plannedEmptyHint.hidden = true;
     }
-    if (bounds.length) {
+    if (bounds.length && !keepRestoredView) {
       // The very first time the map settles (plain browsing, not while
       // relocating/adding a customer or opening straight into Plan Day),
       // prefer centering on the user's own position at a close zoom over
@@ -1791,15 +1830,12 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
             const [detail, schedule] = await Promise.all([api.getCustomer(c.id), api.getVisitSchedule(c.id)]);
             const lastVisitLabel = detail.last_visit_at ? formatDateTime(detail.last_visit_at) : t("never_visited");
             const debtLabel = detail.erp_debt_amd != null ? formatAmd(detail.erp_debt_amd) : "—";
-            // Planned = one-off day plans + recurring Route Plans weekdays;
-            // Due by = last visit + the customer's own cadence (see
-            // visitSchedule.js / GET /customers/:id/visit-schedule).
-            const showManager = canViewTeamLocations();
+            // One planned date (plan-aware, see visitSchedule.js): "Planned
+            // Fri, 2 Oct", "Planned today", or a red overdue chip.
             factsEl.innerHTML = `
               <div class="popup-fact"><span class="muted">${t("outstanding_debt")}</span><strong>${escapeHtml(debtLabel)}</strong></div>
               <div class="popup-fact"><span class="muted">${t("last_visit")}</span><strong>${escapeHtml(lastVisitLabel)}</strong></div>
-              <div class="popup-fact popup-fact-stacked"><span class="muted">${t("visit_planned_label")}</span><strong>${plannedLinesHtml(schedule, { showManager, compact: true, max: 3 })}</strong></div>
-              <div class="popup-fact popup-fact-stacked"><span class="muted">${t("visit_due_by")}</span><strong>${cadenceLineHtml(schedule)}</strong></div>
+              ${nextVisitRowHtml(schedule)}
             `;
             // The facts arrive after the popup opened, so Leaflet's own
             // auto-pan measured the short "loading" popup. Nudge the map so
@@ -1807,7 +1843,10 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
             // (Not popup.update(): that re-renders the original content and
             // would wipe these facts.)
             const overflow = map.getContainer().getBoundingClientRect().top + 76 - popupEl.getBoundingClientRect().top;
-            if (overflow > 0) map.panBy([0, -overflow]);
+            const mapRect = map.getContainer().getBoundingClientRect();
+            const popupRect = popupEl.getBoundingClientRect();
+            const dx = Math.max(0, mapRect.left + 8 - popupRect.left) - Math.max(0, popupRect.right - (mapRect.right - 8));
+            if (overflow > 0 || dx !== 0) map.panBy([-dx, -Math.max(0, overflow)]);
           } catch {
             factsEl.innerHTML = "";
           }
@@ -3187,6 +3226,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     window.removeEventListener("online", retryTiles);
     appMain.classList.remove("app-main-locked");
     document.body.classList.remove("map-active");
+    if (plainBrowse) saveMapView(map);
     map.remove();
   };
   // app.js's back-cache reattaches this exact same DOM/Leaflet instance on

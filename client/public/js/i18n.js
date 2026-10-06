@@ -843,6 +843,9 @@ const dict = {
     visit_due_by: "Due by",
     visit_every_n_days: "every {n} days",
     visit_planned_label: "Planned",
+    visit_planned_today: "Planned today",
+    visit_overdue_days: "Visit overdue {n} days",
+    visit_overdue_day: "Visit overdue {n} day",
     check_in: "Check In",
 
     check_in_here: "Check In Here",
@@ -2277,6 +2280,9 @@ const dict = {
     visit_due_by: "Այցի վերջնաժամկետ",
     visit_every_n_days: "ամեն {n} օրը մեկ",
     visit_planned_label: "Պլանավորված",
+    visit_planned_today: "Պլանավորված է այսօր",
+    visit_overdue_days: "Այցը ուշացած է {n} օր",
+    visit_overdue_day: "Այցը ուշացած է {n} օր",
     check_in: "Չեք-ին",
 
     check_in_here: "Չեք-ին այստեղ",

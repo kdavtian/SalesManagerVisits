@@ -43,9 +43,14 @@ const baseBodyClassName = document.body.className;
 // bar from a web page at all. Tapping the top bar itself -- the strip
 // immediately below the real status bar -- is the standard PWA stand-in for
 // that gesture, so wire it here once for every page rather than per view.
+// Jumps straight to the top (no smooth animation: on a long list the
+// animation itself takes seconds, which read as "slow"). The bar's own
+// top padding (the safe-area strip next to the camera / Dynamic Island) is
+// part of this element, so a tap there counts too whenever iOS delivers it
+// to the page.
 topBar.addEventListener("click", (e) => {
   if (e.target.closest("button, a")) return;
-  app.scrollTo({ top: 0, behavior: "smooth" });
+  app.scrollTo({ top: 0, behavior: "instant" });
 });
 // Sheets/overlays close on a click whose target is the backdrop itself. A
 // mouse selection that STARTS inside a sheet's input (drag-selecting text,

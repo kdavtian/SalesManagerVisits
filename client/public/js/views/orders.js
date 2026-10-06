@@ -4,7 +4,7 @@ import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
 import { ORDER_STATUS_ICONS } from "../ordersSearchEnhancements.js";
 import { loadWithCache } from "../listCache.js";
-import { STATUS_META, openOrderDetailSheet } from "../orderDetailSheet.js";
+import { STATUS_META, openOrderDetailSheet, paymentMethodBadgeHtml } from "../orderDetailSheet.js";
 import { ACCOUNTING_STATUS_BADGE } from "../accountingDocSheet.js";
 import { state } from "../state.js";
 
@@ -229,7 +229,7 @@ export async function renderOrders(root, navigate) {
             <div class="muted list-row-meta">${o.order_code ? `${escapeHtml(o.order_code)} · ` : ""}${escapeHtml(o.user_name)} · ${formatDate(o.created_at)}</div>
             <div class="list-row-bottom">
               <span class="badge ${meta.cls}">${t(meta.key)}</span>
-              ${o.payment_method ? `<span class="badge badge-neutral">${t(o.payment_method === "cash" ? "payment_method_cash" : "payment_method_invoice")}</span>` : ""}
+              ${paymentMethodBadgeHtml(o.payment_method)}
               ${o.accounting_status && ACCOUNTING_ROLES.has(state.user.role) ? `<span class="badge ${ACCOUNTING_STATUS_BADGE[o.accounting_status] ?? "badge-neutral"}">${t(`acc_status_${o.accounting_status}`)}</span>` : ""}
             </div>
           </div>

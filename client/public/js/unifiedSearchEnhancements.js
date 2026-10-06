@@ -172,7 +172,7 @@ function enhanceOrders() {
   const filterBtn = document.querySelector("#order-filter-btn");
   if (filterBtn && !filterBtn.dataset.unifiedIcon) {
     filterBtn.dataset.unifiedIcon = "true";
-    filterBtn.innerHTML = SEARCH_ICONS.channel;
+    filterBtn.innerHTML = SEARCH_ICONS.manager;
   }
 
   const add = document.querySelector("#orders-new-btn");
@@ -212,7 +212,7 @@ function enhancePayments() {
       wrap.append(filterBtn, filterMenu);
       filterBtn.classList.remove("icon-btn");
       filterBtn.classList.add("activity-search-filter-btn");
-      filterBtn.innerHTML = SEARCH_ICONS.channel;
+      filterBtn.innerHTML = SEARCH_ICONS.manager;
       filterMenu.classList.remove("dropdown-menu");
       filterMenu.classList.add("activity-search-menu", "payments-search-menu");
     }

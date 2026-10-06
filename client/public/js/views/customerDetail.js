@@ -1,7 +1,7 @@
 import { api } from "../api.js";
 import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, SALES_CHANNELS, channelDisplayLabel, parseDateOnly, erpLineDiscountRowHtml } from "../util.js";
 import { currentChips, chipHtml } from "../brandChips.js";
-import { plannedLinesHtml } from "../visitSchedule.js";
+import { nextVisitRowHtml } from "../visitSchedule.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { canEditDirectly, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, isAdmin, seesFinancialExports, seesAllActivity } from "../state.js";
@@ -185,8 +185,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     <div class="card next-visit-card">
       <div class="next-visit-header"><span>${t("next_visit")}</span></div>
       <div class="next-visit-due">
-        ${visitSchedule ? `<div class="next-visit-planned"><span class="muted">${t("visit_planned_label")}</span><strong>${plannedLinesHtml(visitSchedule, { showManager: seesAllActivity() })}</strong></div>` : ""}
-        <div>${nextVisitHtml}</div>
+        ${visitSchedule ? nextVisitRowHtml(visitSchedule) : `<div>${nextVisitHtml}</div>`}
       </div>
     </div>
 

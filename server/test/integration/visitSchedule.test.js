@@ -61,10 +61,10 @@ test("an explicit plan row for that day overrides the rule (here: plan without t
   assert.ok(!res.data.planned.some((p) => p.date === first));
 });
 
-test("cadence: last visit + frequency = due_by; overdue when past", async () => {
+test("cadence: planned date = last visit + frequency (or next route day); overdue when past", async () => {
   const { rows } = await pool.query(
     `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, outcomes, timestamp)
-     VALUES ($1, $2, 40.18, 44.51, 5, true, ARRAY['no_order'], now() - interval '10 days') RETURNING id`,
+     VALUES ($1, $2, 40.18, 44.51, 5, true, ARRAY['no_order'], now() - interval '40 days') RETURNING id`,
     [cust.id, mgr.id]
   );
   trackCheckin(rows[0].id);
@@ -72,6 +72,7 @@ test("cadence: last visit + frequency = due_by; overdue when past", async () => 
   assert.equal(res.data.cadence.never_visited, false);
   assert.equal(res.data.cadence.overdue, true);
   assert.ok(res.data.cadence.due_by < res.data.today);
+  assert.ok(res.data.cadence.overdue_days > 0);
 });
 
 test("a sales manager never sees another manager's plans; admin sees everyone's", async () => {
