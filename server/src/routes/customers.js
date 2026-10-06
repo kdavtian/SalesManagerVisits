@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
+import { yerevanToday } from "../utils/yerevanDate.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData } from "../roles.js";
 import { getDefaultVisitFrequencyDays } from "../settings.js";
@@ -846,6 +847,96 @@ customersRouter.get("/:id/planned-visits", async (req, res) => {
     [req.params.id]
   );
   res.json(rows);
+});
+
+// When is this customer actually due a visit? Joins the three things that
+// decide it, which used to live apart (the Map pin only knew the first):
+//   1. approved one-off day plans (visit_plans) that include the customer,
+//   2. recurring weekday rules (visit_plan_rules, set on Route Plans -- by
+//      picked customers or by region/subregion) expanded to their next
+//      dates; an explicit plan row for that rep+date overrides the rule,
+//   3. the customer's own visit cadence (visit_frequency_days) from their
+//      last check-in: the date by which they are due even if nobody planned.
+// A sales manager only sees their own plans/rules.
+const SCHEDULE_HORIZON_DAYS = 28;
+const SCHEDULE_MAX_ENTRIES = 6;
+customersRouter.get("/:id/visit-schedule", async (req, res) => {
+  const customerId = Number(req.params.id);
+  if (!Number.isInteger(customerId)) return res.status(400).json({ error: "Invalid customer id" });
+  const { rows: custRows } = await pool.query(
+    `SELECT c.id, c.region, c.subregion, c.visit_frequency_days,
+            (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id) AS last_visit_at
+     FROM customers c WHERE c.id = $1`,
+    [customerId]
+  );
+  const customer = custRows[0];
+  if (!customer) return res.status(404).json({ error: "Customer not found" });
+
+  const today = yerevanToday();
+  const ownOnly = req.user.role === "sales_manager";
+
+  const { rows: ruleRows } = await pool.query(
+    `SELECT r.*, u.name AS user_name FROM visit_plan_rules r JOIN users u ON u.id = r.user_id
+     WHERE r.active ${ownOnly ? "AND r.user_id = $1" : ""}`,
+    ownOnly ? [req.user.id] : []
+  );
+  const matchingRules = ruleRows.filter(
+    (r) =>
+      (r.customer_ids ?? []).includes(customerId) ||
+      (Array.isArray(r.areas) &&
+        r.areas.some((a) => a?.region && a.region === customer.region && (!a.subregion || a.subregion === customer.subregion)))
+  );
+
+  const endDate = new Date(`${today}T00:00:00Z`);
+  endDate.setUTCDate(endDate.getUTCDate() + SCHEDULE_HORIZON_DAYS);
+  const end = endDate.toISOString().slice(0, 10);
+  const { rows: planRows } = await pool.query(
+    `SELECT p.user_id, p.plan_date::text AS plan_date, p.status, p.customer_ids, u.name AS user_name
+     FROM visit_plans p JOIN users u ON u.id = p.user_id
+     WHERE p.plan_date BETWEEN $1 AND $2 ${ownOnly ? "AND p.user_id = $3" : ""}`,
+    ownOnly ? [today, end, req.user.id] : [today, end]
+  );
+  const planByUserDate = new Map(planRows.map((p) => [`${p.user_id}:${p.plan_date}`, p]));
+
+  const planned = new Map(); // `${date}:${user_id}` -> entry
+  // Explicit approved plans that include this customer.
+  for (const p of planRows) {
+    if (p.status === "approved" && (p.customer_ids ?? []).includes(customerId)) {
+      planned.set(`${p.plan_date}:${p.user_id}`, { date: p.plan_date, user_id: p.user_id, user_name: p.user_name, source: "plan" });
+    }
+  }
+  // Recurring rules, expanded day by day (an explicit row for that rep+date wins).
+  for (let i = 0; i < SCHEDULE_HORIZON_DAYS; i++) {
+    const d = new Date(`${today}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + i);
+    const date = d.toISOString().slice(0, 10);
+    const dow = d.getUTCDay();
+    for (const r of matchingRules) {
+      if (r.day_of_week !== dow) continue;
+      if (planByUserDate.has(`${r.user_id}:${date}`)) continue;
+      planned.set(`${date}:${r.user_id}`, { date, user_id: r.user_id, user_name: r.user_name, source: "rule" });
+    }
+  }
+  const plannedList = [...planned.values()].sort((a, b) => a.date.localeCompare(b.date) || a.user_name.localeCompare(b.user_name)).slice(0, SCHEDULE_MAX_ENTRIES);
+
+  const freq = Number(customer.visit_frequency_days) || null;
+  let dueBy = null;
+  if (customer.last_visit_at && freq) {
+    const due = new Date(new Date(customer.last_visit_at).getTime() + 4 * 60 * 60 * 1000);
+    due.setUTCDate(due.getUTCDate() + freq);
+    dueBy = due.toISOString().slice(0, 10);
+  }
+  res.json({
+    today,
+    planned: plannedList,
+    cadence: {
+      frequency_days: freq,
+      last_visit_at: customer.last_visit_at,
+      due_by: dueBy,
+      overdue: dueBy ? dueBy < today : false,
+      never_visited: !customer.last_visit_at,
+    },
+  });
 });
 
 customersRouter.get("/:id/checkins", async (req, res) => {

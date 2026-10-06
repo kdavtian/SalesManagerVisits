@@ -10148,3 +10148,92 @@ form select,
 .product-chips-title {
   margin-top: 14px;
 }
+
+
+/* ---- Edit order sheet: long product names wrap in full; the quantity
+   stepper and the remove (bin) button ride the right edge of their own line;
+   the list uses the sheet's full width instead of the .card-list gutters. */
+#edit-order-lines.card-list {
+  padding: 0;
+  gap: 8px;
+}
+.order-edit-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 6px;
+  padding: 10px 10px 10px 12px;
+}
+.order-edit-row .order-product-info {
+  grid-column: 1 / -1;
+}
+.order-edit-row .order-product-info strong {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+.order-edit-controls {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.order-remove-btn {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+}
+.order-remove-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Press feedback must never move a control the user is pressing: a card (or
+   any .card-styled container) that CONTAINS a button used to shrink to 97% on
+   mousedown, which slid the button out from under the pointer, so a click on
+   its upper/outer part never completed (reported on desktop for the customer
+   page's Edit / Account settings icons). The card keeps its press effect only
+   when the press is on the card itself. */
+.card:has(:is(button, a, input, select, textarea, label, summary, [role="button"]):active) {
+  transform: none;
+  opacity: 1;
+}
+/* A non-clickable info card has nothing to "press". */
+.detail-facts-card:active {
+  transform: none;
+  opacity: 1;
+}
+
+/* Planned / due-by lines (Map pin popup + customer card Next visit). */
+.visit-planned-line {
+  display: block;
+  white-space: nowrap;
+}
+.popup-fact-stacked {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.popup-fact-stacked strong {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  gap: 1px;
+}
+.next-visit-planned {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+.next-visit-planned strong {
+  text-align: left;
+}
+.next-visit-planned .visit-planned-line {
+  white-space: normal;
+}

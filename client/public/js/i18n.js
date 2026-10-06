@@ -838,6 +838,11 @@ const dict = {
     more: "More",
     no_planned_visits: "No planned visits",
     planned_visit_dates: "Planned visits",
+    visit_not_planned: "Not planned",
+    visit_plan_weekly: "weekly",
+    visit_due_by: "Due by",
+    visit_every_n_days: "every {n} days",
+    visit_planned_label: "Planned",
     check_in: "Check In",
 
     check_in_here: "Check In Here",
@@ -1022,6 +1027,7 @@ const dict = {
     submit_checkin: "Submit check-in",
     submitting: "Submitting…",
     done: "Done",
+    show_results: "Show",
     youre_offline: "You're offline",
     offline_queued_message:
       "Your check-in was saved on this device and will upload automatically once you're back online.",
@@ -2266,6 +2272,11 @@ const dict = {
     more: "Ավելին",
     no_planned_visits: "Պլանավորված այցեր չկան",
     planned_visit_dates: "Պլանավորված այցեր",
+    visit_not_planned: "Պլանավորված չէ",
+    visit_plan_weekly: "շաբաթական",
+    visit_due_by: "Այցի վերջնաժամկետ",
+    visit_every_n_days: "ամեն {n} օրը մեկ",
+    visit_planned_label: "Պլանավորված",
     check_in: "Չեք-ին",
 
     check_in_here: "Չեք-ին այստեղ",
@@ -2424,7 +2435,7 @@ const dict = {
     brand_chips_title: "Ապրանքներ կետում",
     brand_chips_hint: "Այցերից. պիտակը փոխվում է միայն երբ նոր այցը կրկին գրանցում է այդ ապրանքանիշը։",
     brand_chips_empty: "Ապրանքների մասին տվյալ դեռ չկա։ Այցի ժամանակ նշեք ապրանքանիշերը՝ դրանք կերևան այստեղ։",
-    filter_brands_title: "Ապրանքներ դարակում",
+    filter_brands_title: "Ապրանքներ դարակաշարին",
     filter_brands_hint: "Կետեր, որտեղ որևէ այց գրանցել է ընտրված ապրանքները",
     brand_group_castrol: "Castrol",
     brand_group_lotos: "Lotos",
@@ -2451,6 +2462,7 @@ const dict = {
     submit_checkin: "Ուղարկել չեք-ինը",
     submitting: "Ուղարկվում է…",
     done: "Պատրաստ է",
+    show_results: "Տեսնել",
     youre_offline: "Դուք անցանց եք",
     offline_queued_message:
       "Ձեր չեք-ինը պահպանվել է սարքում և ավտոմատ կուղարկվի, երբ կրկին կապակցվեք ինտերնետին։",

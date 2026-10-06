@@ -47,6 +47,26 @@ topBar.addEventListener("click", (e) => {
   if (e.target.closest("button, a")) return;
   app.scrollTo({ top: 0, behavior: "smooth" });
 });
+// Sheets/overlays close on a click whose target is the backdrop itself. A
+// mouse selection that STARTS inside a sheet's input (drag-selecting text,
+// or a slightly sloppy click) and is RELEASED over the backdrop produces a
+// click whose target is their common ancestor -- the backdrop -- so the
+// sheet used to close mid-edit (reported on desktop for Edit customer).
+// Swallow a backdrop click unless the press began on the backdrop too.
+// Capture phase, so it runs before every overlay's own click listener.
+let lastPressTarget = null;
+document.addEventListener("pointerdown", (e) => (lastPressTarget = e.target), true);
+document.addEventListener(
+  "click",
+  (e) => {
+    const el = e.target;
+    if (el instanceof Element && /overlay/.test(el.className?.toString?.() ?? "") && lastPressTarget && lastPressTarget !== el) {
+      e.stopPropagation();
+    }
+  },
+  true
+);
+
 const syncBanner = document.getElementById("sync-banner");
 const installRoot = document.getElementById("install-root");
 const updateRoot = document.getElementById("update-root");

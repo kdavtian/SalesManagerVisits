@@ -4,6 +4,7 @@ import { t } from "../i18n.js";
 import { buildCustomerTree, renderTriStateTree } from "../regionTree.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
+import { plannedLinesHtml, cadenceLineHtml } from "../visitSchedule.js";
 import { canViewTeamLocations, canEditDirectly, canPlanForOthers, canReassignCustomers, state } from "../state.js";
 import { getClusterPins, setClusterPins, getCompassMode, setCompassMode, getMapTileCacheEnabled } from "../mapPrefs.js";
 import { getPerfMode } from "../perfMode.js";
@@ -933,7 +934,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         </div>
         <div class="sheet-actions sheet-actions-floating">
           <button type="button" class="btn" id="map-multi-filter-clear">${t("clear")}</button>
-          <button type="button" class="btn btn-primary" id="map-multi-filter-done">${t("done")}</button>
+          <button type="button" class="btn btn-primary" id="map-multi-filter-done">${t("show_results")}</button>
         </div>
       </div>
     `;
@@ -1787,23 +1788,26 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
           const factsEl = popupEl.querySelector(`#popup-facts-${c.id}`);
           try {
-            const [detail, plannedVisits] = await Promise.all([
-              api.getCustomer(c.id),
-              api.customerPlannedVisits(c.id),
-            ]);
+            const [detail, schedule] = await Promise.all([api.getCustomer(c.id), api.getVisitSchedule(c.id)]);
             const lastVisitLabel = detail.last_visit_at ? formatDateTime(detail.last_visit_at) : t("never_visited");
             const debtLabel = detail.erp_debt_amd != null ? formatAmd(detail.erp_debt_amd) : "—";
-            // plan_date is a plain calendar date (no time) -- parseDateOnly
-            // avoids the UTC-midnight-parsing bug that showed the previous
-            // day's date for a viewer in a timezone behind UTC.
-            const plannedLabel = plannedVisits.length
-              ? plannedVisits.map((p) => parseDateOnly(p.plan_date)?.toLocaleDateString(undefined, { month: "short", day: "numeric" })).join(", ")
-              : t("no_planned_visits");
+            // Planned = one-off day plans + recurring Route Plans weekdays;
+            // Due by = last visit + the customer's own cadence (see
+            // visitSchedule.js / GET /customers/:id/visit-schedule).
+            const showManager = canViewTeamLocations();
             factsEl.innerHTML = `
               <div class="popup-fact"><span class="muted">${t("outstanding_debt")}</span><strong>${escapeHtml(debtLabel)}</strong></div>
               <div class="popup-fact"><span class="muted">${t("last_visit")}</span><strong>${escapeHtml(lastVisitLabel)}</strong></div>
-              <div class="popup-fact"><span class="muted">${t("planned_visit_dates")}</span><strong>${escapeHtml(plannedLabel)}</strong></div>
+              <div class="popup-fact popup-fact-stacked"><span class="muted">${t("visit_planned_label")}</span><strong>${plannedLinesHtml(schedule, { showManager, compact: true, max: 3 })}</strong></div>
+              <div class="popup-fact popup-fact-stacked"><span class="muted">${t("visit_due_by")}</span><strong>${cadenceLineHtml(schedule)}</strong></div>
             `;
+            // The facts arrive after the popup opened, so Leaflet's own
+            // auto-pan measured the short "loading" popup. Nudge the map so
+            // the now-taller popup is not clipped under the search bar.
+            // (Not popup.update(): that re-renders the original content and
+            // would wipe these facts.)
+            const overflow = map.getContainer().getBoundingClientRect().top + 76 - popupEl.getBoundingClientRect().top;
+            if (overflow > 0) map.panBy([0, -overflow]);
           } catch {
             factsEl.innerHTML = "";
           }

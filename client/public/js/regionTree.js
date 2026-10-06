@@ -412,7 +412,7 @@ export function openTriStateTreeSheet(titleText, { tree, initialSelectedIds, cou
       <div id="tree-sheet-body"></div>
       <div class="sheet-actions">
         <button type="button" class="btn" id="tree-sheet-clear">${t("clear")}</button>
-        <button type="button" class="btn btn-primary" id="tree-sheet-done">${t("done")}</button>
+        <button type="button" class="btn btn-primary" id="tree-sheet-done">${t("show_results")}</button>
       </div>
     </div>
   `;

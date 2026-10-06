@@ -1,9 +1,10 @@
 import { api } from "../api.js";
 import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, SALES_CHANNELS, channelDisplayLabel, parseDateOnly, erpLineDiscountRowHtml } from "../util.js";
 import { currentChips, chipHtml } from "../brandChips.js";
+import { plannedLinesHtml } from "../visitSchedule.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { canEditDirectly, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, isAdmin, seesFinancialExports } from "../state.js";
+import { canEditDirectly, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, isAdmin, seesFinancialExports, seesAllActivity } from "../state.js";
 import { openVisitDetailSheet, openPhotoLightbox } from "../visitDetail.js";
 import { visitStatusBadge } from "./customers.js";
 import { fetchCustomerSocial, saveCustomerSocial, socialFieldsHtml, collectSocialPayload } from "../customerSocialProfiles.js";
@@ -40,15 +41,16 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   root.innerHTML = `<div class="detail-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".detail-view");
 
-  let customer, checkins, pendingRequests, erpOrders, brandSummaryRows;
+  let customer, checkins, pendingRequests, erpOrders, brandSummaryRows, visitSchedule;
   try {
-    [customer, checkins, pendingRequests, erpOrders, brandSummaryRows] = await Promise.all([
+    [customer, checkins, pendingRequests, erpOrders, brandSummaryRows, visitSchedule] = await Promise.all([
       api.getCustomer(customerId),
       api.customerCheckins(customerId),
       api.listEditRequests({ customer_id: customerId, status: "pending" }),
       api.getErpOrders(customerId, "recent"),
       // Optional extra: a failure here must not break the customer page.
       api.getBrandSummary({ customer_id: customerId }).catch(() => []),
+      api.getVisitSchedule(customerId).catch(() => null),
     ]);
   } catch (err) {
     container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
@@ -182,7 +184,10 @@ export async function renderCustomerDetail(root, navigate, customerId) {
 
     <div class="card next-visit-card">
       <div class="next-visit-header"><span>${t("next_visit")}</span></div>
-      <div class="next-visit-due">${nextVisitHtml}</div>
+      <div class="next-visit-due">
+        ${visitSchedule ? `<div class="next-visit-planned"><span class="muted">${t("visit_planned_label")}</span><strong>${plannedLinesHtml(visitSchedule, { showManager: seesAllActivity() })}</strong></div>` : ""}
+        <div>${nextVisitHtml}</div>
+      </div>
     </div>
 
     <h2 class="section-title section-title-tight product-chips-title">${t("brand_chips_title")}</h2>
