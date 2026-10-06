@@ -122,7 +122,7 @@ export async function setCalculatorModeEnabled(enabled) {
 
 export async function getDefaultVisitFrequencyDays() {
   const { rows } = await pool.query("SELECT default_visit_frequency_days FROM app_settings WHERE id = 1");
-  return rows[0]?.default_visit_frequency_days ?? 14;
+  return rows[0]?.default_visit_frequency_days ?? 7;
 }
 
 export async function setDefaultVisitFrequencyDays(days) {
