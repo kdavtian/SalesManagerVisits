@@ -29,6 +29,16 @@ const COLLECTIBLE_EMOJI = {
 };
 const BADGE_EMOJI = "🏅";
 
+// What earns each fruit -- shown under its count so the numbers are not a
+// riddle (docs/bonuses-design.md section 3).
+const COLLECTIBLE_HINT_KEY = {
+  strawberry: "bonuses_hint_strawberry",
+  carrot: "bonuses_hint_carrot",
+  apple: "bonuses_hint_apple",
+  cherry: "bonuses_hint_cherry",
+  watermelon: "bonuses_hint_watermelon",
+};
+
 // A component the rep hasn't finished yet but is close on (defined as
 // "close" without also being done) gets a distinct highlight -- a near-miss
 // is one of the strongest nudges a progress screen can give, and today
@@ -125,6 +135,7 @@ export async function renderBonuses(root, navigate) {
     <div class="stat-card">
       <span class="stat-value">${COLLECTIBLE_EMOJI[activity] || ""} ${count}</span>
       <span class="stat-label">${t(COLLECTIBLE_LABEL_KEY[activity])}</span>
+      <span class="stat-label bonuses-fruit-hint">${t(COLLECTIBLE_HINT_KEY[activity])}</span>
     </div>
   `
     )
@@ -149,7 +160,7 @@ export async function renderBonuses(root, navigate) {
   `;
         })
         .join("")
-    : `<p class="empty-state">${t("bonuses_no_active_challenges")}</p>`;
+    : "";
 
   const nextActionKey = summary.activeChallenges.length
     ? summary.activeChallenges.some((c) => c.overall_status === "target_reached")
@@ -213,6 +224,10 @@ export async function renderBonuses(root, navigate) {
   // implying a progression that structurally can never happen for their
   // account) is just confusing, not informative.
   const showOwnProgress = state.user?.role === "sales_manager";
+  // Everyone else (admin, directors, ...) only watches: fruits, badges and
+  // personal bests are structurally empty/meaningless for them, so those
+  // sections are left out (their challenges and claims still show if any
+  // exist -- a challenge audience can include other roles).
 
   contentEl.innerHTML = `
     <div class="dashboard-grid">
@@ -237,23 +252,35 @@ export async function renderBonuses(root, navigate) {
         summary.pointsLeaderboard?.length
           ? `<div>
               <h2 class="section-title section-title-tight">${t("bonuses_leaderboard_title")}</h2>
+              <p class="muted bonuses-section-hint">${t("bonuses_leaderboard_hint")}</p>
               <div class="card-list" id="bonuses-leaderboard"></div>
             </div>`
           : ""
       }
 
-      <div>
-        <h2 class="section-title section-title-tight">${t("bonuses_title")}</h2>
+      ${
+        showOwnProgress
+          ? `<div>
+        <h2 class="section-title section-title-tight">${t("bonuses_collected_title")}</h2>
+        <p class="muted bonuses-section-hint">${t("bonuses_collected_hint")}</p>
         <div class="quick-actions-grid">${collectibleCards}</div>
-      </div>
+      </div>`
+          : `<p class="muted bonuses-section-hint">${t("bonuses_viewer_note")}</p>`
+      }
 
-      <div>
+      ${
+        showOwnProgress || summary.activeChallenges.length
+          ? `<div>
         <h2 class="section-title section-title-tight">${t("bonuses_active_challenges")}</h2>
-        <p class="muted">${t(nextActionKey)}</p>
-        <div class="card-list">${challengesHtml}</div>
-      </div>
+        <p class="muted bonuses-section-hint">${t(nextActionKey)}</p>
+        ${challengesHtml ? `<div class="card-list">${challengesHtml}</div>` : ""}
+      </div>`
+          : ""
+      }
 
-      <div>
+      ${
+        showOwnProgress
+          ? `<div>
         <h2 class="section-title section-title-tight">${t("bonuses_badges_title")}</h2>
         <div class="card-list">${badgesHtml}</div>
       </div>
@@ -261,12 +288,18 @@ export async function renderBonuses(root, navigate) {
       <div>
         <h2 class="section-title section-title-tight">${t("bonuses_personal_bests_title")}</h2>
         <div class="quick-actions-grid">${personalBestsHtml}</div>
-      </div>
+      </div>`
+          : ""
+      }
 
-      <div>
+      ${
+        showOwnProgress || summary.claims.length
+          ? `<div>
         <h2 class="section-title section-title-tight">${t("bonuses_reward_claims")}</h2>
         <div class="card-list">${claimsHtml}</div>
-      </div>
+      </div>`
+          : ""
+      }
     </div>
   `;
 

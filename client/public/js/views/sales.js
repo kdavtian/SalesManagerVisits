@@ -183,6 +183,7 @@ export async function renderSales(root, navigate) {
         <label class="visually-hidden" for="sales-search">${t("sales_search_placeholder")}</label>
         <input type="search" id="sales-search" placeholder="${t("sales_search_placeholder")}" aria-label="${t("sales_search_placeholder")}" />
       </div>
+      <p class="muted sales-search-note" id="sales-search-note" hidden>${t("sales_search_all_dates")}</p>
       <p class="form-error" id="sales-error" hidden></p>
       <p class="sales-subtotal-bar" id="sales-subtotal"></p>
       <div id="sales-list" class="card-list"></div>
@@ -200,6 +201,8 @@ export async function renderSales(root, navigate) {
   const toInput = container.querySelector("#sales-to");
   const channelBarEl = container.querySelector("#sales-channel-bar");
   const searchInput = container.querySelector("#sales-search");
+  const searchNoteEl = container.querySelector("#sales-search-note");
+  const dateRowEl = container.querySelector(".pill-date-filter-row");
   const syncHintBtn = container.querySelector("#sales-sync-hint-btn");
   let channelPills = [{ value: "", label: t("all_statuses"), count: 0 }];
 
@@ -235,7 +238,8 @@ export async function renderSales(root, navigate) {
     });
   }
 
-  // Row 1: order id · sales channel -------- amount. Row 2: customer name
+  // Row 1: order id · ERP customer id · sales channel -------- amount (bold,
+  // right-aligned). Row 2: customer name
   // (bold). The date itself lives on the group heading above, not the row
   // -- order_date is a date-only server field, so it's identical across
   // every card in one group and would just repeat.
@@ -243,7 +247,7 @@ export async function renderSales(root, navigate) {
     return `
       <button type="button" class="card sales-order-card" data-erp-customer-id="${escapeHtml(o.erp_customer_id)}" data-order-id="${escapeHtml(o.order_id)}">
         <div class="sales-order-row">
-          <span class="muted">${escapeHtml(o.order_id)}${o.channel ? ` · ${escapeHtml(channelDisplayLabel(o.channel))}` : ""}</span>
+          <span class="muted">${[o.order_id, o.erp_customer_id, o.channel ? channelDisplayLabel(o.channel) : ""].filter(Boolean).map(escapeHtml).join(" · ")}</span>
           <span class="text-amount sales-order-amount">${formatAmd(Number(o.total_amd))}</span>
         </div>
         <strong>${escapeHtml(o.customer_name || "")}</strong>
@@ -262,7 +266,8 @@ export async function renderSales(root, navigate) {
       return;
     }
     const subtotal = rows.reduce((sum, o) => sum + Number(o.total_amd || 0), 0);
-    subtotalEl.textContent = `${t("sales_subtotal")}: ${formatAmd(subtotal)} (${rows.length} ${t("sales_order_count")})`;
+    const subtotalLiters = rows.reduce((sum, o) => sum + Number(o.total_liters || 0), 0);
+    subtotalEl.textContent = `${t("sales_subtotal")}: ${formatAmd(subtotal)} (${formatLiters(subtotalLiters)} | ${rows.length} ${t("sales_order_count")})`;
 
     const dayTotals = new Map();
     for (const o of rows) {
@@ -305,6 +310,10 @@ export async function renderSales(root, navigate) {
       if (channel) params.channel = channel;
       if (q) params.q = q;
       const { rows, sync } = await api.getSales(params);
+      // A search ignores the date range server-side (it looks through the
+      // whole order history), so the From/To pills are hidden meanwhile.
+      dateRowEl.hidden = Boolean(q);
+      searchNoteEl.hidden = !q;
       syncBadgeEl.innerHTML = syncBadgeHtml(sync);
 
       // Pill counts are only ever refreshed from an unfiltered-by-channel
