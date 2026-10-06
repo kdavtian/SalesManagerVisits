@@ -1,10 +1,11 @@
 import { api } from "../api.js";
 import { escapeHtml, formatAmd, activateDialog } from "../util.js";
 import { t } from "../i18n.js";
-import { state, canManageProducts } from "../state.js";
+import { state, canManageProducts, seesProductCosts } from "../state.js";
 import { icons } from "../icons.js";
 import { compareProducts, sortedBrands } from "../productSort.js";
 import { NO_GROUP_KEY, openTriStateTreeSheet } from "../regionTree.js";
+import { searchProducts } from "../productSearch.js";
 
 // Brand -> Category (family) -> Product, for the pricelist's own filter
 // sheet (Brand>Category>product per the tree-picker's generic {key, name,
@@ -55,11 +56,45 @@ function buildProductTree(products) {
   });
 }
 
-function sortProducts(products, sortBy, reversed = false) {
+// Price columns a user can show. Gold, landing cost and net cost are
+// management-only (the API does not even send them to anyone else).
+const PRICE_COLUMNS = [
+  { key: "bronze", label: () => t("col_bronze"), get: (p) => p.bronze_price_amd ?? p.unit_price_amd },
+  { key: "silver", label: () => t("col_silver"), get: (p) => p.silver_price_amd },
+  { key: "gold", label: () => t("col_gold"), get: (p) => p.gold_price_amd, costOnly: true },
+  { key: "retail", label: () => t("price_retail"), get: (p) => p.effective_retail_amd },
+  { key: "landing", label: () => t("landing_cost"), get: (p) => p.landing_cost_amd, costOnly: true },
+  { key: "net", label: () => t("net_cost"), get: (p) => p.net_cost_amd, costOnly: true },
+];
+const COLUMNS_STORAGE_KEY = "fv_products_cols";
+const DEFAULT_COLUMNS = ["silver", "retail"];
+
+function allowedColumns() {
+  return PRICE_COLUMNS.filter((c) => !c.costOnly || seesProductCosts());
+}
+
+function loadVisibleColumns() {
+  const allowed = new Set(allowedColumns().map((c) => c.key));
+  try {
+    const saved = JSON.parse(localStorage.getItem(COLUMNS_STORAGE_KEY) || "null");
+    const valid = Array.isArray(saved) ? saved.filter((k) => allowed.has(k)) : [];
+    if (valid.length) return valid;
+  } catch {
+    // storage unavailable -- defaults
+  }
+  return DEFAULT_COLUMNS;
+}
+
+function colValue(p, key) {
+  const n = PRICE_COLUMNS.find((c) => c.key === key)?.get(p);
+  return n == null || n === "" || Number(n) <= 0 ? null : Number(n);
+}
+
+function sortProducts(products, sortBy, reversed = false, primaryColumn = "silver") {
   const sorted = [...products];
   const flip = reversed ? -1 : 1;
-  if (sortBy === "standard_price") sorted.sort((a, b) => flip * (a.effective_standard_amd - b.effective_standard_amd));
-  else if (sortBy === "retail_price") sorted.sort((a, b) => flip * (a.effective_retail_amd - b.effective_retail_amd));
+  if (sortBy === "price") sorted.sort((a, b) => flip * ((colValue(a, primaryColumn) ?? 0) - (colValue(b, primaryColumn) ?? 0)));
+  else if (sortBy === "retail_price") sorted.sort((a, b) => flip * ((colValue(a, "retail") ?? 0) - (colValue(b, "retail") ?? 0)));
   else if (sortBy === "name") sorted.sort((a, b) => flip * a.name.localeCompare(b.name));
   // Default: the order a rep actually presents a pricelist to a
   // customer -- brand, then family, then viscosity grade, then size --
@@ -98,9 +133,9 @@ export async function renderPricelist(root, navigate) {
   root.innerHTML = `<div class="detail-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".detail-view");
 
-  let products, companyProfile;
+  let products;
   try {
-    [products, companyProfile] = await Promise.all([api.listProducts(), api.getCompanyProfile()]);
+    products = await api.listProducts();
   } catch (err) {
     container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     return;
@@ -118,6 +153,7 @@ export async function renderPricelist(root, navigate) {
   let packageFilter = "";
   let specialOnly = false;
   let sortBy = "default";
+  let visibleColumns = loadVisibleColumns();
   // A native <select> has no "tap the active option again" gesture, so
   // every other list's sort menu instead uses a dropdown where clicking the
   // already-active option flips the direction -- see customers.js's
@@ -133,7 +169,7 @@ export async function renderPricelist(root, navigate) {
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
       <div class="detail-header-title">
-        <h1>${t("pricelist_title")}</h1>
+        <h1>${t("products_page_title")}</h1>
       </div>
       <div class="detail-header-actions">
         <button type="button" class="icon-btn" id="select-mode-btn" aria-label="${t("select_products")}">${icons.checkCircle}</button>
@@ -151,7 +187,7 @@ export async function renderPricelist(root, navigate) {
       <div id="pricelist-sort-menu" class="dropdown-menu" role="menu" hidden>
         <button class="sort-menu-item" role="menuitemradio" aria-checked="true" data-sort="default"><span>${t("sort_default")}</span><span class="sort-menu-arrow" aria-hidden="true"></span></button>
         <button class="sort-menu-item" role="menuitemradio" aria-checked="false" data-sort="name"><span>${t("product_name")}</span><span class="sort-menu-arrow" aria-hidden="true"></span></button>
-        <button class="sort-menu-item" role="menuitemradio" aria-checked="false" data-sort="standard_price"><span>${t("price_standard")}</span><span class="sort-menu-arrow" aria-hidden="true"></span></button>
+        <button class="sort-menu-item" role="menuitemradio" aria-checked="false" data-sort="price"><span>${t("sort_price")}</span><span class="sort-menu-arrow" aria-hidden="true"></span></button>
         <button class="sort-menu-item" role="menuitemradio" aria-checked="false" data-sort="retail_price"><span>${t("price_retail")}</span><span class="sort-menu-arrow" aria-hidden="true"></span></button>
       </div>
     </div>
@@ -270,6 +306,42 @@ export async function renderPricelist(root, navigate) {
     });
   }
 
+  // Which price columns the list shows (saved per device).
+  function openColumnsSheet() {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet filter-sheet">
+        <h2>${t("price_columns")}</h2>
+        <div class="filter-sheet-options">
+          ${allowedColumns()
+            .map(
+              (c) => `<label class="filter-sheet-option pl-col-option">
+                <span>${escapeHtml(c.label())}</span>
+                <input type="checkbox" data-col="${c.key}" ${visibleColumns.includes(c.key) ? "checked" : ""} />
+              </label>`
+            )
+            .join("")}
+        </div>
+        <div class="sheet-actions"><button type="button" class="btn btn-primary" id="cols-apply">${t("show_results")}</button></div>
+      </div>`;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+    overlay.querySelector("#cols-apply").addEventListener("click", () => {
+      const picked = [...overlay.querySelectorAll("[data-col]:checked")].map((i) => i.dataset.col);
+      visibleColumns = picked.length ? picked : DEFAULT_COLUMNS;
+      try {
+        localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(visibleColumns));
+      } catch {
+        // storage unavailable -- applies for this visit only
+      }
+      overlay.remove();
+      renderFilters();
+      paint();
+    });
+  }
+
   const filterRow = container.querySelector("#pricelist-filter-row");
   function renderFilters() {
     filterRow.innerHTML = [
@@ -288,6 +360,12 @@ export async function renderPricelist(root, navigate) {
             active: Boolean(packageFilter),
           })
         : "",
+      filterIconButton({
+        key: "columns",
+        icon: icons.filter,
+        label: t("price_columns"),
+        active: visibleColumns.join() !== DEFAULT_COLUMNS.join(),
+      }),
       filterIconButton({
         key: "special",
         icon: icons.tag,
@@ -327,6 +405,8 @@ export async function renderPricelist(root, navigate) {
       );
     });
 
+    filterRow.querySelector('[data-filter-btn="columns"]')?.addEventListener("click", () => openColumnsSheet());
+
     filterRow.querySelector('[data-filter-btn="special"]')?.addEventListener("click", () => {
       specialOnly = !specialOnly;
       renderFilters();
@@ -345,12 +425,11 @@ export async function renderPricelist(root, navigate) {
   );
 
   function currentlyFiltered() {
-    const q = searchQuery.trim().toLowerCase();
-    return products.filter((p) => {
+    const base = searchQuery.trim() ? searchProducts(products, searchQuery) : products;
+    return base.filter((p) => {
       if (selectedProductIds.size && !selectedProductIds.has(String(p.id))) return false;
       if (packageFilter && p.unit !== packageFilter) return false;
       if (specialOnly && p.effective_special_amd === null) return false;
-      if (q && !`${p.name} ${p.sku ?? ""} ${p.brand ?? ""}`.toLowerCase().includes(q)) return false;
       return true;
     });
   }
@@ -383,7 +462,7 @@ export async function renderPricelist(root, navigate) {
     // Desktop gets a dense table (item 35); mobile keeps the card list
     // (item 34) -- same data, laid out for the space actually available.
     if (isDesktop && !selectMode) {
-      catalogEl.innerHTML = renderDesktopTable(sortProducts(filtered, sortBy, sortReversed));
+      catalogEl.innerHTML = renderDesktopTable(sortProducts(filtered, sortBy, sortReversed, visibleColumns[0]));
       return;
     }
     const visibleBrands = sortedBrands(filtered);
@@ -393,7 +472,8 @@ export async function renderPricelist(root, navigate) {
             const brandProducts = sortProducts(
               filtered.filter((p) => p.brand === brand),
               sortBy,
-              sortReversed
+              sortReversed,
+              visibleColumns[0]
             );
             const collapsed = collapsedBrands.has(brand);
             return `
@@ -429,41 +509,47 @@ export async function renderPricelist(root, navigate) {
     });
   }
 
+  function thumbHtml(p) {
+    return p.image_path
+      ? `<img class="pricelist-row-thumb" src="${api.productImageUrl(p.id)}" alt="" loading="lazy" />`
+      : `<span class="pricelist-row-thumb pricelist-row-thumb-placeholder">${icons.box}</span>`;
+  }
+
   function productRowHtml(p) {
-    // Price hierarchy (item 37): an active special is the loudest number
-    // on the row; standard becomes secondary/muted; retail always shows,
-    // clearly labeled, since it's the number a customer would recognize.
+    // An active special is the loudest number on the row; otherwise the first
+    // chosen price column is the bold one and the rest sit under it, small.
     const hasSpecial = p.effective_special_amd !== null;
     const selected = selectedIds.has(p.id);
-    return `
-      <div class="card pricelist-row ${selectMode ? "pricelist-row-selectable" : ""}" ${selectMode ? `data-select-id="${p.id}"` : ""}>
-        ${selectMode ? `<span class="pricelist-select-check ${selected ? "pricelist-select-check-on" : ""}">${selected ? icons.checkCircle : ""}</span>` : ""}
-        ${
-          p.image_path
-            ? `<img class="pricelist-row-thumb" src="${api.productImageUrl(p.id)}" alt="" loading="lazy" />`
-            : `<span class="pricelist-row-thumb pricelist-row-thumb-placeholder">${icons.box}</span>`
+    const priceLines = visibleColumns
+      .map((key, i) => {
+        const value = colValue(p, key);
+        if (value == null) return "";
+        const label = PRICE_COLUMNS.find((c) => c.key === key).label();
+        if (i === 0) {
+          return hasSpecial
+            ? `<span class="pricelist-price-special">${formatAmd(p.effective_special_amd)}</span><span class="pricelist-price-standard-struck">${formatAmd(value)}</span>`
+            : `<span class="pricelist-price-standard">${formatAmd(value)}</span>${visibleColumns.length > 2 ? `<span class="pricelist-price-label">${escapeHtml(label)}</span>` : ""}`;
         }
+        return `<span class="pricelist-price-retail">${escapeHtml(label)}: ${formatAmd(value)}</span>`;
+      })
+      .join("");
+    return `
+      <div class="card pricelist-row pricelist-row-open ${selectMode ? "pricelist-row-selectable" : ""}" ${selectMode ? `data-select-id="${p.id}"` : `data-open-id="${p.id}"`} role="button" tabindex="0">
+        ${selectMode ? `<span class="pricelist-select-check ${selected ? "pricelist-select-check-on" : ""}">${selected ? icons.checkCircle : ""}</span>` : ""}
+        ${thumbHtml(p)}
         <div class="pricelist-row-main">
           <strong>${escapeHtml(p.name)}</strong>
-          <span class="muted">${[p.brand, p.family, p.unit].filter(Boolean).map(escapeHtml).join(" · ")}${p.sku ? ` · ${escapeHtml(p.sku)}` : ""}</span>
+          <span class="muted pricelist-row-meta">${[p.brand, p.family, p.unit].filter(Boolean).map(escapeHtml).join(" · ")}</span>
         </div>
         <div class="pricelist-row-prices">
-          ${
-            hasSpecial
-              ? `<span class="pricelist-price-special">${formatAmd(p.effective_special_amd)}</span>
-                 <span class="pricelist-price-standard-struck">${formatAmd(p.effective_standard_amd)}</span>`
-              : `<span class="pricelist-price-standard">${formatAmd(p.effective_standard_amd)}</span>`
-          }
-          <span class="pricelist-price-retail">${t("price_retail")}: ${formatAmd(p.effective_retail_amd)}</span>
+          ${priceLines}
           ${hasSpecial ? `<span class="muted pricelist-special-valid">${t("valid_through")} ${escapeHtml(p.special_valid_to)}</span>` : ""}
         </div>
       </div>
     `;
   }
 
-  // Dense table for wide viewports (item 35) -- same canonical fields as
-  // the mobile card, just laid out as real table rows/columns instead of
-  // squeezing a desktop table into phone width.
+  // Dense table for wide viewports -- amounts and sizes right-aligned.
   function renderDesktopTable(list) {
     if (!list.length) return `<p class="empty-state">${t("no_products_found")}</p>`;
     return `
@@ -471,25 +557,25 @@ export async function renderPricelist(root, navigate) {
         <table class="pricelist-table pricelist-desktop-table">
           <thead>
             <tr>
+              <th class="pl-th-photo"></th>
               <th>${t("brand")}</th>
               <th>${t("product_name")}</th>
-              <th>${t("unit")}</th>
-              <th>${t("price_standard")}</th>
-              <th>${t("price_special_period")}</th>
-              <th>${t("price_retail")}</th>
+              <th class="num">${t("size_label")}</th>
+              ${visibleColumns.map((key) => `<th class="num">${escapeHtml(PRICE_COLUMNS.find((c) => c.key === key).label())}</th>`).join("")}
+              <th class="num">${t("price_special_period")}</th>
             </tr>
           </thead>
           <tbody>
             ${list
               .map(
                 (p) => `
-              <tr>
+              <tr class="pricelist-table-row" data-open-id="${p.id}" tabindex="0">
+                <td class="pl-td-photo">${thumbHtml(p)}</td>
                 <td>${escapeHtml(p.brand ?? "")}</td>
                 <td>${escapeHtml(p.name)}</td>
-                <td>${escapeHtml(p.unit ?? "")}</td>
-                <td>${formatAmd(p.effective_standard_amd)}</td>
-                <td>${p.effective_special_amd !== null ? `<strong class="pricelist-promo">${formatAmd(p.effective_special_amd)}</strong>` : "&mdash;"}</td>
-                <td>${formatAmd(p.effective_retail_amd)}</td>
+                <td class="num">${escapeHtml(p.unit ?? "")}</td>
+                ${visibleColumns.map((key) => `<td class="num">${colValue(p, key) != null ? formatAmd(colValue(p, key)) : "&mdash;"}</td>`).join("")}
+                <td class="num">${p.effective_special_amd !== null ? `<strong class="pricelist-promo">${formatAmd(p.effective_special_amd)}</strong>` : "&mdash;"}</td>
               </tr>
             `
               )
@@ -500,44 +586,38 @@ export async function renderPricelist(root, navigate) {
     `;
   }
 
+  // One delegated listener: tapping a card/row opens that product's detail card.
+  catalogEl.addEventListener("click", (e) => {
+    const open = e.target.closest("[data-open-id]");
+    if (open) navigate(`#/product/${open.dataset.openId}`);
+  });
+  catalogEl.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    const open = e.target.closest("[data-open-id]");
+    if (open) navigate(`#/product/${open.dataset.openId}`);
+  });
+
   paint();
 
-  // --- Export sheet (items 15-21) ---
+  // --- Export sheet: PDF pricelist builder, Excel, workbook import -----------
   function openExportSheet() {
     const overlay = document.createElement("div");
     overlay.className = "sheet-overlay";
     overlay.innerHTML = `
       <div class="sheet">
         <h2>${t("export")}</h2>
-        <form id="export-form">
-          <fieldset>
-            <legend>${t("export_content")}</legend>
-            <label class="radio-row"><input type="radio" name="content" value="all" checked /> ${t("export_content_all")}</label>
-            <label class="radio-row"><input type="radio" name="content" value="filtered" /> ${t("export_content_filtered")}</label>
-            ${
-              selectedIds.size
-                ? `<label class="radio-row"><input type="radio" name="content" value="selected" /> ${t("export_content_selected")} (${selectedIds.size})</label>`
-                : ""
-            }
-          </fieldset>
-          <fieldset>
-            <legend>${t("export_columns")}</legend>
-            <label class="radio-row"><input type="checkbox" name="col_standard" checked /> ${t("price_standard")}</label>
-            <label class="radio-row"><input type="checkbox" name="col_special" checked /> ${t("price_special_period")}</label>
-            <label class="radio-row"><input type="checkbox" name="col_retail" checked /> ${t("price_retail")}</label>
-          </fieldset>
-          <fieldset>
-            <legend>${t("prepared_by")}</legend>
-            <p class="muted">${escapeHtml(state.user.name)}${state.user.position ? ` · ${escapeHtml(state.user.position)}` : ""}</p>
-          </fieldset>
-          <div class="sheet-actions" style="flex-wrap:wrap;">
-            <button type="button" class="btn" id="export-print-btn">${t("print_pdf")}</button>
-            <button type="button" class="btn btn-primary" id="export-excel-btn">${t("download_excel")}</button>
-          </div>
-          <div class="sheet-actions">
-            <button type="button" class="btn btn-block" id="cancel-export">${t("cancel")}</button>
-          </div>
-        </form>
+        <div class="export-choices">
+          <button type="button" class="btn btn-primary btn-block" id="export-pdf-btn">${t("pdf_builder_title")}</button>
+          <button type="button" class="btn btn-block" id="export-excel-btn">${t("download_excel")}</button>
+          ${canManageProducts() ? `<button type="button" class="btn btn-block" id="import-btn">${t("import_pricelist")}</button>` : ""}
+        </div>
+        <fieldset>
+          <legend>${t("export_content")}</legend>
+          <label class="radio-row"><input type="radio" name="content" value="all" checked /> ${t("export_content_all")}</label>
+          <label class="radio-row"><input type="radio" name="content" value="filtered" /> ${t("export_content_filtered")}</label>
+          ${selectedIds.size ? `<label class="radio-row"><input type="radio" name="content" value="selected" /> ${t("export_content_selected")} (${selectedIds.size})</label>` : ""}
+        </fieldset>
+        <div class="sheet-actions"><button type="button" class="btn btn-block" id="cancel-export">${t("cancel")}</button></div>
       </div>
     `;
     document.body.appendChild(overlay);
@@ -545,128 +625,170 @@ export async function renderPricelist(root, navigate) {
     overlay.querySelector("#cancel-export").addEventListener("click", () => overlay.remove());
     overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
 
-    function readOptions() {
-      const data = new FormData(overlay.querySelector("#export-form"));
-      const content = data.get("content");
-      const cols = ["standard", "special", "retail"].filter((c) => data.get(`col_${c}`));
-      return { content, cols };
-    }
-
-    function docProductsFor(content) {
-      if (content === "selected") return products.filter((p) => selectedIds.has(p.id));
-      if (content === "filtered") return currentlyFiltered();
-      return products;
-    }
-
-    overlay.querySelector("#export-print-btn").addEventListener("click", () => {
-      const { content, cols } = readOptions();
-      const docProducts = docProductsFor(content);
+    overlay.querySelector("#export-pdf-btn").addEventListener("click", () => {
       overlay.remove();
-      openPrintView(docProducts, cols);
+      openPdfBuilder();
     });
-
+    overlay.querySelector("#import-btn")?.addEventListener("click", () => {
+      overlay.remove();
+      openImportSheet();
+    });
     overlay.querySelector("#export-excel-btn").addEventListener("click", () => {
-      const { content, cols } = readOptions();
-      const params = { cols: cols.join(",") };
-      if (content === "selected") {
-        params.ids = [...selectedIds].join(",");
-      } else if (content === "filtered") {
-        // The brand/category tree filter can span multiple brands/categories
-        // at once, so there's no single brand/family shorthand left to fall
-        // back to -- always send an explicit id list of whatever's actually
-        // visible on screen right now.
-        params.ids = currentlyFiltered().map((p) => p.id).join(",");
-      }
+      const content = overlay.querySelector('input[name="content"]:checked').value;
+      const params = { cols: "standard,special,retail" };
+      if (content === "selected") params.ids = [...selectedIds].join(",");
+      // The brand/category tree filter can span several brands at once, so
+      // "filtered" always sends the explicit ids that are on screen now.
+      else if (content === "filtered") params.ids = currentlyFiltered().map((p) => p.id).join(",");
       window.location.href = api.productsExportXlsxUrl(params);
       overlay.remove();
     });
   }
 
-  // Full-page printable document -- reuses the browser's native print-to-
-  // PDF flow (see @media print in styles.css) instead of a server-side PDF
-  // renderer. Swaps the whole view rather than opening a new window so it
-  // still has the app's cookies/session for nothing extra to fetch.
-  function openPrintView(docProducts, cols) {
-    const today = new Date().toLocaleDateString();
-    const docBrands = sortedBrands(docProducts);
-    root.innerHTML = `
-      <div class="detail-header pricelist-no-print">
-        <button class="icon-btn" id="exit-print-btn" aria-label="${t("cancel")}">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-        </button>
-        <div class="detail-header-title"><h1>${t("pricelist_title")}</h1></div>
-        <button type="button" class="icon-btn" id="do-print-btn" aria-label="${t("print")}">${icons.print ?? "🖨️"}</button>
-      </div>
-      <div class="pricelist-doc">
-        <div class="pricelist-doc-header">
-          <div>
-            ${companyProfile.logo_path ? `<img src="${escapeHtml(companyProfile.logo_path)}" class="pricelist-doc-logo" alt="" />` : ""}
-            <h1>${escapeHtml(companyProfile.name || "KAD Motors")}</h1>
-            <p class="muted">
-              ${[companyProfile.phone, companyProfile.email, companyProfile.website].filter(Boolean).map(escapeHtml).join(" · ")}
-            </p>
-            ${companyProfile.address ? `<p class="muted">${escapeHtml(companyProfile.address)}</p>` : ""}
-            <p class="muted">${t("generated_on")} ${escapeHtml(today)}</p>
-          </div>
-          <div class="pricelist-rep-card">
-            <span class="muted">${t("prepared_by")}</span>
-            <strong>${escapeHtml(state.user.name)}</strong>
-            ${state.user.position ? `<span>${escapeHtml(state.user.position)}</span>` : ""}
-            ${state.user.phone ? `<span>${escapeHtml(state.user.phone)}</span>` : ""}
-            <span>${escapeHtml(state.user.email)}</span>
-          </div>
+  // Per-user pricelist PDF (server-side, Armenian): the user's own contact
+  // block for sales managers, office details for management.
+  function openPdfBuilder() {
+    const costs = seesProductCosts();
+    const tierOptions = PRICE_COLUMNS.filter((c) => ["bronze", "silver", "gold", "retail"].includes(c.key) && (!c.costOnly || costs));
+    const brands = sortedBrands(products);
+    const nextMonthEnd = new Date();
+    nextMonthEnd.setMonth(nextMonthEnd.getMonth() + 1, 0);
+    const defaultValid = `${nextMonthEnd.getFullYear()}-${String(nextMonthEnd.getMonth() + 1).padStart(2, "0")}-${String(nextMonthEnd.getDate()).padStart(2, "0")}`;
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet pd-edit-sheet">
+        <div class="pd-edit-scroll">
+          <h2>${t("pdf_builder_title")}</h2>
+          <fieldset>
+            <legend>${t("price_columns")}</legend>
+            ${tierOptions
+              .map((c) => `<label class="radio-row"><input type="checkbox" name="col" value="${c.key}" ${["silver", "retail"].includes(c.key) || (c.key === "bronze" && !costs) ? "checked" : ""} /> ${escapeHtml(c.label())}</label>`)
+              .join("")}
+          </fieldset>
+          <fieldset>
+            <legend>${t("pdf_brands")}</legend>
+            ${brands.map((b) => `<label class="radio-row"><input type="checkbox" name="brand" value="${escapeHtml(b)}" checked /> ${escapeHtml(b)}</label>`).join("")}
+          </fieldset>
+          <label class="radio-row"><input type="checkbox" id="pdf-photos" checked /> ${t("pdf_include_photos")}</label>
+          <label class="radio-row"><input type="checkbox" id="pdf-commercial" checked /> ${t("pdf_include_commercial")}</label>
+          <label class="field-label" for="pdf-valid">${t("pdf_valid_until")}</label>
+          <input type="date" id="pdf-valid" value="${defaultValid}" />
+          <p class="muted">${t(costs && state.user.role !== "sales_director" ? "pdf_contact_note_mgmt" : "pdf_contact_note")}</p>
+          <p class="form-error" id="pdf-error" hidden></p>
         </div>
-        ${
-          cols.includes("special")
-            ? `<p class="pricelist-legend"><span>${t("special_price_validity_note")}</span></p>`
-            : ""
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="pdf-cancel">${t("cancel")}</button>
+          <button type="button" class="btn btn-primary" id="pdf-build">${t("pdf_build")}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+    overlay.querySelector("#pdf-cancel").addEventListener("click", () => overlay.remove());
+    const buildBtn = overlay.querySelector("#pdf-build");
+    const errorEl = overlay.querySelector("#pdf-error");
+    buildBtn.addEventListener("click", async () => {
+      const columns = [...overlay.querySelectorAll('[name="col"]:checked')].map((i) => i.value);
+      const picked = [...overlay.querySelectorAll('[name="brand"]:checked')].map((i) => i.value);
+      errorEl.hidden = true;
+      if (!columns.length) {
+        errorEl.textContent = t("pdf_pick_column");
+        errorEl.hidden = false;
+        return;
+      }
+      buildBtn.disabled = true;
+      buildBtn.textContent = t("pdf_building");
+      try {
+        const blob = await api.buildPricelistPdf({
+          columns,
+          brands: picked.length === brands.length ? null : picked,
+          valid_until: overlay.querySelector("#pdf-valid").value,
+          include_photos: overlay.querySelector("#pdf-photos").checked,
+          include_commercial: overlay.querySelector("#pdf-commercial").checked,
+        });
+        const file = new File([blob], `kad-pricelist-${new Date().toISOString().slice(0, 10)}.pdf`, { type: "application/pdf" });
+        // Phones: the native share sheet (WhatsApp, Telegram, mail...); desktop: a normal download.
+        if (navigator.canShare?.({ files: [file] })) {
+          try {
+            await navigator.share({ files: [file] });
+          } catch {
+            // user dismissed the share sheet
+          }
+        } else {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = file.name;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 10000);
         }
-        ${docBrands
-          .map((brand) => {
-            const brandProducts = sortProducts(
-              docProducts.filter((p) => p.brand === brand),
-              "default"
-            );
-            return `
-            <h2 class="pricelist-brand-heading">${escapeHtml(brand)}</h2>
-            <div class="pricelist-table-wrap">
-            <table class="pricelist-table">
-              <thead>
-                <tr>
-                  <th>${t("product_name")}</th>
-                  <th>${t("unit")}</th>
-                  ${cols.includes("standard") ? `<th>${t("price_standard")}</th>` : ""}
-                  ${cols.includes("special") ? `<th>${t("price_special_period")}</th>` : ""}
-                  ${cols.includes("retail") ? `<th>${t("price_retail")}</th>` : ""}
-                </tr>
-              </thead>
-              <tbody>
-                ${brandProducts
-                  .map(
-                    (p) => `
-                  <tr>
-                    <td>${escapeHtml(p.name)}</td>
-                    <td>${escapeHtml(p.unit ?? "")}</td>
-                    ${cols.includes("standard") ? `<td>${formatAmd(p.effective_standard_amd)}</td>` : ""}
-                    ${
-                      cols.includes("special")
-                        ? `<td>${p.effective_special_amd !== null ? `<strong class="pricelist-promo">${formatAmd(p.effective_special_amd)}</strong> <span class="muted">(${escapeHtml(p.special_valid_from)} – ${escapeHtml(p.special_valid_to)})</span>` : "&mdash;"}</td>`
-                        : ""
-                    }
-                    ${cols.includes("retail") ? `<td>${formatAmd(p.effective_retail_amd)}</td>` : ""}
-                  </tr>
-                `
-                  )
-                  .join("")}
-              </tbody>
-            </table>
-            </div>
-          `;
-          })
-          .join("")}
-      </div>
-    `;
-    root.querySelector("#exit-print-btn").addEventListener("click", () => renderPricelist(root, navigate));
-    root.querySelector("#do-print-btn").addEventListener("click", () => window.print());
+        overlay.remove();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+        buildBtn.disabled = false;
+        buildBtn.textContent = t("pdf_build");
+      }
+    });
+  }
+
+  // Management: pull product photos and commercial specs out of the
+  // company's pricelist workbook (preview first, then apply).
+  function openImportSheet() {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet pd-edit-sheet">
+        <div class="pd-edit-scroll">
+          <h2>${t("import_pricelist")}</h2>
+          <input type="file" id="import-file" accept=".xlsx" />
+          <label class="radio-row"><input type="checkbox" id="import-overwrite" /> ${t("import_overwrite")}</label>
+          <div id="import-report" class="muted"></div>
+          <p class="form-error" id="import-error" hidden></p>
+        </div>
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="import-cancel">${t("cancel")}</button>
+          <button type="button" class="btn" id="import-preview">${t("import_preview")}</button>
+          <button type="button" class="btn btn-primary" id="import-apply" disabled>${t("import_apply")}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+    overlay.querySelector("#import-cancel").addEventListener("click", () => overlay.remove());
+    const reportEl = overlay.querySelector("#import-report");
+    const errorEl = overlay.querySelector("#import-error");
+    const applyBtn = overlay.querySelector("#import-apply");
+
+    async function run(apply) {
+      const file = overlay.querySelector("#import-file").files[0];
+      errorEl.hidden = true;
+      if (!file) {
+        errorEl.textContent = t("import_choose_file");
+        errorEl.hidden = false;
+        return;
+      }
+      const form = new FormData();
+      form.append("file", file);
+      form.append("apply", apply ? "1" : "0");
+      form.append("overwrite", overlay.querySelector("#import-overwrite").checked ? "1" : "0");
+      try {
+        const r = await api.importPricelistWorkbook(form);
+        const unmatched = r.unmatched_groups.slice(0, 12).map(escapeHtml).join("<br>");
+        reportEl.innerHTML = `
+          <p>${t("import_result").replace("{matched}", r.matched_groups).replace("{groups}", r.groups).replace("{products}", r.matched_products).replace("{photos}", r.groups_with_photo)}</p>
+          ${apply ? `<p><strong>${t("import_applied").replace("{photos}", r.applied.photos).replace("{commercial}", r.applied.commercial)}</strong></p>` : ""}
+          ${unmatched ? `<p><strong>${t("import_unmatched")}</strong><br>${unmatched}${r.unmatched_groups.length > 12 ? "<br>…" : ""}</p>` : ""}`;
+        applyBtn.disabled = apply || r.matched_groups === 0;
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+      }
+    }
+    overlay.querySelector("#import-preview").addEventListener("click", () => run(false));
+    applyBtn.addEventListener("click", () => run(true));
   }
 }

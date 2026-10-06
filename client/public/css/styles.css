@@ -10472,3 +10472,74 @@ form select,
 }
 .edit-sheet.adding #edit-order-lines { display: none; }
 .edit-sheet.adding .edit-sheet-scroll > h2 { display: none; }
+
+/* ---- Products page / product detail -------------------------------------- */
+/* Amounts and sizes are right-aligned (tabular) wherever they appear. */
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.pricelist-row-open { cursor: pointer; align-items: center; }
+.pricelist-row-open:active { background: var(--bg-card-pressed); }
+.pricelist-row-main strong { overflow-wrap: anywhere; }
+.pricelist-row-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pricelist-price-label { font-size: 0.7rem; color: var(--text-dim); }
+.pricelist-row-thumb { object-fit: contain; background: #fff; border: 1px solid var(--border); }
+.pricelist-desktop-table .pricelist-row-thumb { width: 36px; height: 36px; }
+.pricelist-desktop-table th.pl-th-photo { width: 48px; }
+.pricelist-desktop-table td.pl-td-photo { padding-top: 4px; padding-bottom: 4px; }
+.pricelist-table-row { cursor: pointer; }
+.pricelist-table-row:hover { background: var(--bg-card-pressed); }
+.pl-col-option { display: flex; justify-content: space-between; align-items: center; }
+.pl-col-option input { width: 22px; height: 22px; }
+.export-choices { display: grid; gap: 8px; margin: 12px 0 16px; }
+
+.pd-gallery { margin: 8px 0 12px; }
+.pd-main-image {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; aspect-ratio: 4 / 3; max-height: 340px; padding: 8px;
+  border: 1px solid var(--border); border-radius: var(--radius); background: #fff; overflow: hidden;
+}
+.pd-main-image img { width: 100%; height: 100%; object-fit: contain; }
+.pd-no-photo { color: var(--text-dim); }
+.pd-no-photo svg { width: 56px; height: 56px; }
+.pd-thumbs { display: flex; gap: 8px; margin-top: 8px; overflow-x: auto; padding-bottom: 2px; }
+.pd-thumb {
+  position: relative; flex: none; width: 64px; height: 64px; padding: 2px;
+  border: 1.5px solid var(--border); border-radius: 10px; background: #fff; overflow: hidden;
+}
+.pd-thumb img { width: 100%; height: 100%; object-fit: contain; }
+.pd-thumb-active { border-color: var(--text); }
+.pd-thumb-add { display: flex; align-items: center; justify-content: center; color: var(--text-dim); background: var(--bg-card); }
+.pd-thumb-badge {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 1px 0; font-size: 0.6rem; text-align: center;
+  background: rgba(17, 19, 24, 0.7); color: #fff;
+}
+.pd-photo-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.pd-title-block h2 { margin: 4px 0 2px; overflow-wrap: anywhere; }
+.pd-title-block .badge { margin-right: 6px; }
+.pd-card { margin: 12px 0; }
+.pd-card-title { margin: 14px 0 6px; font-size: var(--fs-eyebrow); letter-spacing: var(--ls-eyebrow); text-transform: uppercase; color: var(--text-dim); }
+.pd-card-title:first-child { margin-top: 0; }
+.pd-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.pd-row:last-child { border-bottom: 0; }
+.pd-amount { font-variant-numeric: tabular-nums; text-align: right; }
+.pd-amount-strong { font-weight: 700; font-size: 1.05rem; }
+.pd-spec-value { text-align: right; overflow-wrap: anywhere; }
+.pd-text { white-space: pre-line; margin: 0; }
+.pd-note { margin: 0 0 4px; font-size: 0.8rem; }
+.pd-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pd-chip-x { border: 0; background: none; color: inherit; font-size: 1rem; line-height: 1; padding: 0 0 0 4px; }
+.pd-empty { margin: 12px 0; }
+.pd-inline-add { display: flex; gap: 8px; margin-top: 8px; }
+.pd-inline-add input { flex: 1; }
+.pd-spec-edit { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; margin-bottom: 6px; align-items: center; }
+.pd-edit-sheet { display: flex; flex-direction: column; overflow: hidden; }
+.pd-edit-scroll { overflow-y: auto; min-height: 0; flex: 1; -webkit-overflow-scrolling: touch; }
+.pd-lightbox { display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.9); }
+.pd-lightbox img { max-width: 96vw; max-height: 90vh; object-fit: contain; }
+.pd-lightbox-close { position: absolute; top: calc(12px + var(--safe-top)); right: 12px; float: none; }
+@media (min-width: 900px) {
+  .product-detail-wide { max-width: 760px; }
+}
+.pd-main-image-empty { aspect-ratio: 16 / 6; }
+.sheet .field-label { display: block; margin: 12px 0 4px; font-weight: 600; }
+.pd-spec-edit input, .pd-inline-add input { min-width: 0; width: 100%; }
+.pd-edit-sheet textarea { width: 100%; }

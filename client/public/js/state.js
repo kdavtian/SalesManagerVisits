@@ -43,6 +43,13 @@ export function canManageProducts() {
   return role === "admin" || role === "ceo" || role === "operations_director" || role === "accountant";
 }
 
+// Mirrors seesProductCosts in the server's roles.js: gold price, landing and
+// net cost are management-only (the API strips them for everyone else).
+export function seesProductCosts() {
+  const role = state.user?.role;
+  return role === "admin" || role === "ceo" || role === "operations_director" || role === "sales_director" || role === "accountant";
+}
+
 // Sales managers only see their own data; every other role sees
 // everyone's — mirrors server/src/roles.js.
 export function seesAllActivity() {

@@ -5,6 +5,7 @@ import ExcelJS from "exceljs";
 import multer from "multer";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireProductManager } from "../middleware/auth.js";
+import { seesProductCosts } from "../roles.js";
 import { getEffectiveProductPricing } from "../pricingService.js";
 import { photoUpload, uploadDirPath } from "../upload.js";
 import { matchesDeclaredImageType } from "../utils/imageSniff.js";
@@ -22,11 +23,22 @@ export const productsRouter = Router();
 
 productsRouter.use(requireAuth);
 
+// Gold price, landing cost and net cost are management-only: a sales manager's
+// API response simply does not carry them (not merely hidden in the UI).
+function redactProduct(row, role) {
+  if (!seesProductCosts(role)) {
+    delete row.gold_price_amd;
+    delete row.landing_cost_amd;
+    delete row.net_cost_amd;
+  }
+  return row;
+}
+
 // Shared by GET / (the catalog/order-entry list) and the Excel export --
 // one query, one pricing computation, so both surfaces show identical
 // numbers. `where`/`params` let each caller filter differently (active
 // only vs. explicit ids, a name search, etc).
-async function fetchPricedProducts(where, params) {
+export async function fetchPricedProducts(where, params, role) {
   // The one promo (if any) covering today, per product -- ORDER BY +
   // LIMIT 1 picks the most recently created if two promo windows somehow
   // overlap, rather than erroring or picking arbitrarily.
@@ -45,6 +57,7 @@ async function fetchPricedProducts(where, params) {
   // Every surface (this list, the pricelist page, PDF/print, Excel) reads
   // its prices through the same canonical function -- see pricingService.js.
   return rows.map((row) => {
+    redactProduct(row, role);
     const pricing = getEffectiveProductPricing(
       row,
       row.promo_id ? { promo_price_amd: row.promo_price_amd, starts_on: row.promo_starts_on, ends_on: row.promo_ends_on } : null
@@ -70,7 +83,7 @@ productsRouter.get("/", async (req, res) => {
     params.push(`%${q}%`);
     where += ` AND (p.name ILIKE $${params.length} OR p.sku ILIKE $${params.length} OR p.brand ILIKE $${params.length})`;
   }
-  res.json(await fetchPricedProducts(where, params));
+  res.json(await fetchPricedProducts(where, params, req.user.role));
 });
 
 // Real .xlsx (not HTML dressed up as one) for the Products & Pricelist
@@ -101,7 +114,7 @@ productsRouter.get("/export/xlsx", async (req, res) => {
     }
   }
 
-  const products = await fetchPricedProducts(where, params);
+  const products = await fetchPricedProducts(where, params, req.user.role);
   const columns = new Set(cols ? String(cols).split(",") : ["standard", "special", "retail"]);
 
   const workbook = new ExcelJS.Workbook();
@@ -297,7 +310,14 @@ const EDITABLE_FIELDS = [
   // ՀԾ-Հաշվապահ product code (Lily integration); editing it alone must not
   // lock the product against catalog price sync -- see the PATCH below.
   "hc_code",
+  // Detail card content (see migration 089) -- like hc_code, editing these
+  // must not lock the product against catalog price sync.
+  "description",
+  "approvals",
+  "specs",
+  "is_commercial",
 ];
+const DETAIL_FIELDS = new Set(["hc_code", "description", "approvals", "specs", "is_commercial"]);
 const NUMERIC_FIELDS = new Set([
   "unit_price_amd",
   "bronze_price_amd",
@@ -320,11 +340,28 @@ productsRouter.patch("/:id", async (req, res) => {
   if (!before) return res.status(404).json({ error: "Product not found" });
 
   const setClauses = updates.map(([key], i) => `${key} = $${i + 1}`);
-  const values = updates.map(([key, value]) => (NUMERIC_FIELDS.has(key) && value !== null ? Number(value) : value));
+  // approvals: short list of strings; specs: [{label, value}] -- both capped
+  // and trimmed so a malformed client cannot store junk.
+  for (const [key, value] of updates) {
+    if (key === "approvals" && !(Array.isArray(value) && value.length <= 40 && value.every((a) => typeof a === "string" && a.length <= 120))) {
+      return res.status(400).json({ error: "approvals must be a list of short strings" });
+    }
+    if (key === "specs" && !(Array.isArray(value) && value.length <= 40 && value.every((s) => s && typeof s.label === "string" && typeof s.value === "string" && s.label.length <= 60 && s.value.length <= 160))) {
+      return res.status(400).json({ error: "specs must be a list of {label, value}" });
+    }
+    if (key === "description" && value !== null && (typeof value !== "string" || value.length > 4000)) {
+      return res.status(400).json({ error: "description must be text up to 4000 characters" });
+    }
+  }
+  const values = updates.map(([key, value]) => {
+    if (key === "specs") return JSON.stringify(value.map((s) => ({ label: s.label.trim(), value: s.value.trim() })).filter((s) => s.label));
+    if (key === "approvals") return value.map((a) => a.trim()).filter(Boolean);
+    return NUMERIC_FIELDS.has(key) && value !== null ? Number(value) : value;
+  });
   values.push(req.params.id);
 
   const { rows } = await pool.query(
-    `UPDATE products SET ${setClauses.join(", ")}, updated_at = now()${updates.every(([key]) => key === "hc_code") ? "" : ", manually_edited_at = now()"} WHERE id = $${values.length} RETURNING *`,
+    `UPDATE products SET ${setClauses.join(", ")}, updated_at = now()${updates.every(([key]) => DETAIL_FIELDS.has(key)) ? "" : ", manually_edited_at = now()"} WHERE id = $${values.length} RETURNING *`,
     values
   );
   const after = rows[0];
@@ -427,26 +464,43 @@ productsRouter.post(
       return res.status(400).json({ error: "The uploaded file is not a valid image" });
     }
 
-    const { rows } = await pool.query("SELECT image_path FROM products WHERE id = $1", [req.params.id]);
+    // Legacy single-photo endpoint (Product Catalog admin screen): replaces the
+    // product's MAIN photo; the gallery lives in product_images.
+    const { rows } = await pool.query("SELECT id FROM products WHERE id = $1", [req.params.id]);
     if (!rows[0]) {
       fs.unlink(path.join(uploadDirPath, req.file.filename), () => {});
       return res.status(404).json({ error: "Product not found" });
     }
-    const previousPath = rows[0].image_path;
-
-    await pool.query("UPDATE products SET image_path = $1 WHERE id = $2", [req.file.filename, req.params.id]);
-    if (previousPath) fs.unlink(path.join(uploadDirPath, previousPath), () => {});
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows: old } = await client.query("DELETE FROM product_images WHERE product_id = $1 AND is_main RETURNING path", [req.params.id]);
+      await client.query("INSERT INTO product_images (product_id, path, kind, is_main, sort_order, created_by) VALUES ($1, $2, 'front', true, 0, $3)", [req.params.id, req.file.filename, req.user.id]);
+      await client.query("UPDATE products SET image_path = $1 WHERE id = $2", [req.file.filename, req.params.id]);
+      await client.query("COMMIT");
+      for (const o of old) fs.unlink(path.join(uploadDirPath, o.path), () => {});
+    } catch (err) {
+      await client.query("ROLLBACK");
+      fs.unlink(path.join(uploadDirPath, req.file.filename), () => {});
+      throw err;
+    } finally {
+      client.release();
+    }
     res.status(201).json({ ok: true });
   }
 );
 
 productsRouter.delete("/:id/image", async (req, res) => {
-  const { rows } = await pool.query("SELECT image_path FROM products WHERE id = $1", [req.params.id]);
-  const imagePath = rows[0]?.image_path;
-  if (!imagePath) return res.status(404).json({ error: "No image set" });
-
-  fs.unlink(path.join(uploadDirPath, imagePath), () => {});
-  await pool.query("UPDATE products SET image_path = NULL WHERE id = $1", [req.params.id]);
+  const { rows } = await pool.query("DELETE FROM product_images WHERE product_id = $1 AND is_main RETURNING path", [req.params.id]);
+  if (!rows[0]) return res.status(404).json({ error: "No image set" });
+  fs.unlink(path.join(uploadDirPath, rows[0].path), () => {});
+  // Promote the next photo (if any) so the product keeps a main image.
+  await pool.query(
+    `UPDATE product_images SET is_main = true
+     WHERE id = (SELECT id FROM product_images WHERE product_id = $1 ORDER BY (kind = 'front') DESC, sort_order, id LIMIT 1)`,
+    [req.params.id]
+  );
+  await pool.query("UPDATE products SET image_path = (SELECT path FROM product_images WHERE product_id = $1 AND is_main) WHERE id = $1", [req.params.id]);
   res.status(204).end();
 });
 
