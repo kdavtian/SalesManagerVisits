@@ -244,23 +244,47 @@ let currentCleanup = null;
 let currentPath = null;
 let fieldErrorId = 0;
 
-// Single-slot "back cache": the exact DOM nodes (not a re-render) of the
-// one screen most recently navigated away from, plus its scroll position
-// and cleanup function -- so returning to it (the browser/PWA's own back
-// button, an edge-swipe-back gesture, this app's own navigate.goBack, or
-// even just landing back on that exact hash some other way) restores
-// everything exactly as it was: scroll position, filter/sort selections,
-// search text, an expanded accordion, all of it, since it's literally the
-// same nodes with their listeners intact, not new markup with fresh JS
-// state. Deliberately only one slot, not a full per-route history: every
-// navigation (forward or back) evicts whatever didn't match and stashes
-// the screen being left instead, so the cache only ever holds the single
-// most recent hop -- which is exactly what makes "tap Orders from a
-// customer's detail page, then tap Customers again" correctly get a FRESH
-// list rather than the one left two hops ago: by the time that tap
-// happens, the cache slot has already been overwritten by the detail
-// page's own stash and no longer holds the old Customers state at all.
-let backCache = null; // { hash, nodes: DocumentFragment, cleanup, scrollTop }
+// Back stack: the exact DOM nodes (not a re-render) of the screens most
+// recently navigated away from -- up to BACK_STACK_MAX, newest last -- each
+// with its scroll position and cleanup function, so returning to one with the
+// browser/PWA back button, an edge-swipe, navigate.goBack, or a deep
+// multi-step back restores everything exactly as it was: scroll position,
+// filter/sort selections, search text, an expanded accordion, all of it,
+// since it is literally the same nodes with their listeners intact.
+//
+// Rules that keep it from ever showing stale or surprising screens:
+//   * A drill-down (customer card, order sheet link, ...) pushes the screen
+//     being left; Back pops the newest entry (one step, then the next, ...).
+//   * Tapping a bottom-nav TAB is a lateral move, not a drill-down: it starts
+//     a fresh trail (older entries are disposed), so "customer card -> Orders
+//     tab -> Customers tab" still gives a FRESH Customers list instead of one
+//     left several hops ago.
+//   * An entry that is not the newest is only restored by a genuine history
+//     traversal (Back / long-press Back), never by tapping a link or tab.
+//   * Only the newest Map entry is kept (Leaflet + GPS watchers are heavy).
+const BACK_STACK_MAX = 5;
+let backStack = []; // [{ hash, nodes: DocumentFragment, cleanup, scrollTop, appClassName, bodyClassName }]
+function disposeBackEntry(entry) {
+  try {
+    entry.cleanup?.();
+  } catch {
+    // a failing cleanup must not break navigation
+  }
+}
+function trimBackStack() {
+  let sawMap = false;
+  for (let i = backStack.length - 1; i >= 0; i--) {
+    if (!backStack[i].hash.startsWith("#/map")) continue;
+    if (sawMap) {
+      disposeBackEntry(backStack[i]);
+      backStack.splice(i, 1);
+    } else sawMap = true;
+  }
+  while (backStack.length > BACK_STACK_MAX) disposeBackEntry(backStack.shift());
+}
+// True for a hash change this app made itself (navigate()); anything else
+// (browser Back/Forward, edge swipe) is a history traversal.
+let programmaticNav = false;
 let lastRenderedHash = null;
 // Remembers the hash we were on right before navigating into Settings, so
 // tapping the top-bar menu button a second time can act as a "close" and
@@ -619,6 +643,8 @@ function navigate(hash) {
     return;
   }
   hasNavigatedInApp = true;
+  programmaticNav = true;
+  setTimeout(() => (programmaticNav = false), 800);
   if (NAV_TAB_ROOT_HASHES.has(hash.split("?")[0])) {
     // See NAV_TAB_ROOT_HASHES above -- replace rather than push, so hopping
     // between bottom-nav tabs never grows the shared browser history stack.
@@ -681,8 +707,8 @@ async function render() {
     // A logged-out session's back-cache would otherwise hold onto this
     // account's DOM (and whatever cleanup it owned) across a login screen
     // that might belong to a different account entirely on a shared device.
-    backCache?.cleanup?.();
-    backCache = null;
+    backStack.forEach(disposeBackEntry);
+    backStack = [];
     lastRenderedHash = null;
     topBar.hidden = true;
     navBar.hidden = true;
@@ -727,13 +753,23 @@ async function render() {
   // every click listener, timer, and closure-held filter/sort/search state
   // is still exactly as it was) instead of asking the route's view module
   // to rebuild everything from scratch and lose all of it.
-  if (backCache && backCache.hash === hash) {
+  const isHistory = !programmaticNav;
+  programmaticNav = false;
+  let matchIdx = -1;
+  for (let i = backStack.length - 1; i >= 0; i--) {
+    if (backStack[i].hash === hash) {
+      matchIdx = i;
+      break;
+    }
+  }
+  if (matchIdx >= 0 && (matchIdx === backStack.length - 1 || isHistory)) {
     if (currentCleanup) {
       currentCleanup();
       currentCleanup = null;
     }
-    const { nodes, cleanup, scrollTop, appClassName, bodyClassName } = backCache;
-    backCache = null;
+    // Screens opened after the one we are returning to are being unwound.
+    backStack.splice(matchIdx + 1).forEach(disposeBackEntry);
+    const { nodes, cleanup, scrollTop, appClassName, bodyClassName } = backStack.pop();
     app.replaceChildren(nodes);
     // Reapply whatever #app/document.body class customization the
     // restored view had made at mount time (e.g. map.js's scroll lock) --
@@ -767,11 +803,26 @@ async function render() {
   // route, e.g. after a settings change). A stale, unconsumed cache entry
   // from an earlier hop is disposed here rather than silently dropped, so
   // whatever cleanup it owned (a timer, a geolocation watch) still runs.
-  if (backCache && backCache.hash !== hash) {
-    backCache.cleanup?.();
-    backCache = null;
+  // A tab switch is a lateral move: start a fresh trail (see the back-stack
+  // comment above). A cached copy of the screen we are about to render fresh
+  // would only be stale, so it is disposed too.
+  if (NAV_TAB_ROOT_HASHES.has(hash.split("?")[0]) && !isHistory) {
+    backStack.forEach(disposeBackEntry);
+    backStack = [];
   }
-  if (lastRenderedHash && lastRenderedHash !== hash && app.firstChild) {
+  backStack = backStack.filter((entry) => {
+    if (entry.hash !== hash) return true;
+    disposeBackEntry(entry);
+    return false;
+  });
+  if (isHistory && lastRenderedHash && lastRenderedHash !== hash && app.firstChild && matchIdx < 0 && backStack.length === 0) {
+    // History traversal to a screen we hold no copy of, with nothing cached:
+    // keep the trail as it is rather than caching the screen we leave.
+    if (currentCleanup) {
+      currentCleanup();
+      currentCleanup = null;
+    }
+  } else if (lastRenderedHash && lastRenderedHash !== hash && app.firstChild) {
     // Captured BEFORE emptying #app below -- a scroll container with no
     // children always reports scrollTop 0, so reading it after the move
     // loop would silently throw away the real position every time.
@@ -780,22 +831,23 @@ async function render() {
     const bodyClassNameSnapshot = document.body.className;
     const fragment = document.createDocumentFragment();
     while (app.firstChild) fragment.appendChild(app.firstChild);
-    backCache = {
+    backStack.push({
       hash: lastRenderedHash,
       nodes: fragment,
       cleanup: currentCleanup,
       scrollTop: scrollTopSnapshot,
       appClassName: appClassNameSnapshot,
       bodyClassName: bodyClassNameSnapshot,
-    };
-    currentCleanup = null; // ownership transferred to backCache
+    });
+    currentCleanup = null; // ownership transferred to the back stack
+    trimBackStack();
     // The outgoing view's cleanup function -- the only thing that would
     // normally strip any #app/document.body classes it added at mount
-    // time -- isn't going to run until this cache entry is evicted, which
-    // may be much later or never. The next view must not inherit them
-    // (e.g. mounting a checkin page under map.js's scroll-locking class),
-    // so reset to the true baseline now; restoring this entry later
-    // (above) reapplies its own snapshot.
+    // time -- isn't going to run until its entry is evicted, which may be
+    // much later or never. The next view must not inherit them (e.g.
+    // mounting a checkin page under map.js's scroll-locking class), so
+    // reset to the true baseline now; restoring that entry later reapplies
+    // its own snapshot.
     app.className = baseAppClassName;
     document.body.className = baseBodyClassName;
   } else if (currentCleanup) {
@@ -804,7 +856,7 @@ async function render() {
   }
   // A parked sheet only survives while the screen it was opened on is the one
   // sitting in the back-cache.
-  pruneParkedSheet(backCache?.hash ?? null);
+  pruneParkedSheet(backStack.map((entry) => entry.hash));
   lastRenderedHash = hash;
 
   const [path, queryString] = hash.split("?");

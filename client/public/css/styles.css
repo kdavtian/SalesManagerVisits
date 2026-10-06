@@ -4731,6 +4731,9 @@ label.checkbox-row input[type="checkbox"] {
 
 .dashboard-insights > summary::after {
   content: "";
+  /* Same x position as the 24px chevron icon of Monthly leaders / Team today
+     (icon sits 2px from the edge, so its centre is 14px in). */
+  margin-right: 9px;
   width: 8px;
   height: 8px;
   border-right: 2px solid var(--text-dim);
@@ -10614,3 +10617,9 @@ form select,
 .pl-price-label { color: var(--text-dim); font-weight: 500; }
 .pl-price-line .pricelist-price-special { font-weight: 800; color: var(--danger); }
 .pd-edit-scroll { padding-bottom: 14px; }
+
+/* Reports: creation date right-aligned; aging rows are tappable filters. */
+.report-created-date { flex: none; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+.report-bucket-btn { width: 100%; text-align: left; cursor: pointer; font: inherit; color: inherit; border: 1px solid var(--border); }
+.report-bucket-btn.report-bucket-active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-card)); }
+.report-channel-btn { align-self: flex-start; }

@@ -6,6 +6,44 @@ export function cssColor(name, fallback) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
 }
 
+// Saves a generated file WITHOUT navigating the app to it (an installed PWA
+// has no browser chrome, so opening a file URL in the window leaves no way
+// back): phones get the native share sheet (Files, WhatsApp, Mail...), desktop
+// gets a normal download.
+export async function saveBlob(blob, filename) {
+  const file = new File([blob], filename, { type: blob.type || "application/octet-stream" });
+  const touch = navigator.maxTouchPoints > 0 && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (touch && navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file] });
+      return;
+    } catch (err) {
+      if (err?.name === "AbortError") return; // user dismissed the sheet
+      // share unsupported for this file: fall through to a download
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+// GET a file (CSV/Excel export) with the session cookie and save it as above.
+export async function downloadFromUrl(url, fallbackName) {
+  const res = await fetch(url, { credentials: "include" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error || `HTTP ${res.status}`);
+  }
+  const disposition = res.headers.get("content-disposition") || "";
+  const name = /filename="?([^";]+)"?/i.exec(disposition)?.[1] || fallbackName;
+  await saveBlob(await res.blob(), name);
+}
+
 export function escapeHtml(str) {
   return String(str ?? "").replace(
     /[&<>"']/g,
@@ -751,8 +789,8 @@ export function takeParkedSheet(hash) {
   parkedSheet = null;
   return overlay;
 }
-export function pruneParkedSheet(keepHash) {
-  if (parkedSheet && parkedSheet.fromHash !== keepHash) parkedSheet = null;
+export function pruneParkedSheet(keepHashes) {
+  if (parkedSheet && !keepHashes.includes(parkedSheet.fromHash)) parkedSheet = null;
 }
 
 export function activateDialog(overlay) {

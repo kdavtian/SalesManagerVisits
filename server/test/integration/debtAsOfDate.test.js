@@ -272,3 +272,10 @@ test("GET /api/debt-balances (live): last_payment_date falls back to erp_cashflo
   assert.ok(row);
   assert.equal(String(row.last_payment_date).slice(0, 10), "2026-01-15");
 });
+
+test("GET /api/reports/customer-debt: multi-select sales_channel and aging params filter without errors", async () => {
+  const res = await apiRequest("/api/reports/customer-debt?sales_channel=retail,wholesale&aging=15-30,30-60", { cookie: adminCookie });
+  assert.equal(res.status, 200);
+  assert.ok(Array.isArray(res.data.customers));
+  assert.ok(Array.isArray(res.data.by_bucket));
+});

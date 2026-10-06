@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, firstUseHintHtml, activateFirstUseHints } from "../util.js";
+import { escapeHtml, firstUseHintHtml, activateFirstUseHints, activateDialog, downloadFromUrl } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
 import { REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, CATEGORY_LIST, formatAmd, amdWithUnitHtml, agingBucketLabel, channelDisplayLabel, syncBadgeHtml, formatDateDMY, parseDateOnly } from "../util.js";
@@ -121,12 +121,24 @@ async function renderDocumentsReport(root, navigate) {
         lastDate = d.report_date;
         return `
       ${dateHeading}
-      <a class="card report-row" href="/api/reports/documents/${d.id}/download">
+      <a class="card report-row" href="/api/reports/documents/${d.id}/download" data-download="report-${d.id}">
         <strong>${t(GENERATED_REPORT_TYPE_LABEL_KEY[d.report_type] || d.report_type)}</strong>
         <span>${icons.download}</span>
       </a>`;
       })
       .join("");
+    // Saved in place (share sheet / download), never by navigating the app
+    // window to the file -- an installed PWA would have no way back.
+    listEl.addEventListener("click", async (e) => {
+      const link = e.target.closest("a[data-download]");
+      if (!link) return;
+      e.preventDefault();
+      try {
+        await downloadFromUrl(link.getAttribute("href"), link.dataset.download);
+      } catch (err) {
+        alert(err.message);
+      }
+    });
   } catch (err) {
     listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
   }
@@ -271,8 +283,11 @@ async function renderNewCustomersReport(root, navigate) {
                   .map(
                     (c) => `
               <div class="card report-row-multiline">
-                <strong>${escapeHtml(c.name)}</strong>
-                <span class="muted">${escapeHtml(c.region || "")}${c.subregion ? `, ${escapeHtml(c.subregion)}` : ""} · ${escapeHtml(c.created_by_name)} · ${formatDate(c.created_at)}</span>
+                <div class="report-debt-customer-top">
+                  <strong class="report-debt-customer-name">${escapeHtml(c.name)}</strong>
+                  <span class="muted report-created-date">${formatDate(c.created_at)}</span>
+                </div>
+                <span class="muted">${escapeHtml(c.region || "")}${c.subregion ? `, ${escapeHtml(c.subregion)}` : ""} · ${escapeHtml(c.created_by_name)}</span>
               </div>`
                   )
                   .join("")
@@ -807,7 +822,7 @@ async function renderCustomerDebtReport(root, navigate) {
           </div>
           <button type="button" class="pill-date-clear-btn" id="report-debt-as-of-clear" hidden aria-label="${t("debt_balances_as_of_clear")}" title="${t("debt_balances_as_of_clear")}">${icons.close}</button>
         </div>
-        <select name="sales_channel"><option value="">${t("all_channels")}</option></select>
+        <button type="button" class="map-filter-chip report-channel-btn" id="report-debt-channels-btn" aria-haspopup="dialog">${t("all_channels")}</button>
         ${selectHtml(
           "debt_only",
           [
@@ -845,18 +860,74 @@ async function renderCustomerDebtReport(root, navigate) {
     load();
   });
 
+  // Channel filter: multi-select (sheet of checkboxes). Empty set = all channels.
+  const selectedChannels = new Set();
+  const selectedBuckets = new Set();
+  let channelList = [];
+  const channelBtn = container.querySelector("#report-debt-channels-btn");
+  function paintChannelBtn() {
+    if (!selectedChannels.size) channelBtn.textContent = t("all_channels");
+    else if (selectedChannels.size === 1) channelBtn.textContent = channelList.find((c) => c.value === [...selectedChannels][0])?.label ?? [...selectedChannels][0];
+    else channelBtn.textContent = `${selectedChannels.size} ${t("channels_selected")}`;
+    channelBtn.classList.toggle("chip-active", selectedChannels.size > 0);
+  }
   try {
-    const options = await channelOptions();
-    form.querySelector('select[name="sales_channel"]').outerHTML = selectHtml("sales_channel", options, "");
+    channelList = (await channelOptions()).filter((o) => o.value);
   } catch {
     // Channel list is a filter convenience only -- if it fails to load, the
     // report itself (unfiltered) still works fine below.
   }
+  channelBtn.addEventListener("click", () => {
+    const picked = new Set(selectedChannels);
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet pd-edit-sheet">
+        <h2>${t("all_channels")}</h2>
+        <div class="pd-edit-scroll">
+          <div class="filter-sheet-chips">
+            ${channelList.map((c) => `<button type="button" class="filter-sheet-chip ${picked.has(c.value) ? "filter-sheet-chip-selected" : ""}" data-value="${escapeHtml(c.value)}" aria-pressed="${picked.has(c.value)}">${escapeHtml(c.label)}</button>`).join("")}
+          </div>
+        </div>
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="ch-clear">${t("clear")}</button>
+          <button type="button" class="btn btn-primary" id="ch-show">${t("show_results")}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+    const sync = (chip) => {
+      chip.classList.toggle("filter-sheet-chip-selected", picked.has(chip.dataset.value));
+      chip.setAttribute("aria-pressed", String(picked.has(chip.dataset.value)));
+    };
+    overlay.querySelector(".filter-sheet-chips").addEventListener("click", (e) => {
+      const chip = e.target.closest("[data-value]");
+      if (!chip) return;
+      if (picked.has(chip.dataset.value)) picked.delete(chip.dataset.value);
+      else picked.add(chip.dataset.value);
+      sync(chip);
+    });
+    overlay.querySelector("#ch-clear").addEventListener("click", () => {
+      picked.clear();
+      overlay.querySelectorAll("[data-value]").forEach(sync);
+    });
+    overlay.querySelector("#ch-show").addEventListener("click", () => {
+      selectedChannels.clear();
+      for (const v of picked) selectedChannels.add(v);
+      selectedBuckets.clear(); // a different channel set has different buckets
+      overlay.remove();
+      paintChannelBtn();
+      load();
+    });
+  });
 
   async function load() {
     body.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     const data = new FormData(form);
     const params = Object.fromEntries([...data.entries()].filter(([, v]) => v));
+    if (selectedChannels.size) params.sales_channel = [...selectedChannels].join(",");
+    if (selectedBuckets.size) params.aging = [...selectedBuckets].join(",");
     try {
       const { customers, by_bucket, totals, sync } = await api.getCustomerDebtReport(params);
       body.innerHTML = `
@@ -891,10 +962,10 @@ async function renderCustomerDebtReport(root, navigate) {
               ? by_bucket
                   .map(
                     (b) => `
-              <div class="card report-row">
+              <button type="button" class="card report-row report-bucket-btn ${selectedBuckets.has(b.aging_bucket) ? "report-bucket-active" : ""}" data-bucket="${escapeHtml(b.aging_bucket)}" aria-pressed="${selectedBuckets.has(b.aging_bucket)}">
                 <span>${escapeHtml(agingBucketLabel(b.aging_bucket))}</span>
                 <strong class="report-row-amount">${formatAmd(Number(b.total_debt_amd))} <span class="muted">(${b.customer_count})</span></strong>
-              </div>`
+              </button>`
                   )
                   .join("")
               : `<p class="empty-state">${t("no_data")}</p>`
@@ -929,6 +1000,16 @@ async function renderCustomerDebtReport(root, navigate) {
         </div>
       `;
       fitReportStatValue(body.querySelector("#report-debt-total-value"));
+      // Tapping an aging row filters the customer list (and totals) to that
+      // bucket; tap again to clear. Several buckets can be combined.
+      body.querySelectorAll(".report-bucket-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const bucket = btn.dataset.bucket;
+          if (selectedBuckets.has(bucket)) selectedBuckets.delete(bucket);
+          else selectedBuckets.add(bucket);
+          load();
+        });
+      });
     } catch (err) {
       body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     }

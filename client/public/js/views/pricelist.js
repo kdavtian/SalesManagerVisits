@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, activateDialog } from "../util.js";
+import { escapeHtml, formatAmd, activateDialog, saveBlob, downloadFromUrl } from "../util.js";
 import { t } from "../i18n.js";
 import { state, canManageProducts, seesProductCosts, canPrintCostColumns } from "../state.js";
 import { icons } from "../icons.js";
@@ -638,15 +638,23 @@ export async function renderPricelist(root, navigate) {
       overlay.remove();
       openImportSheet();
     });
-    overlay.querySelector("#export-excel-btn").addEventListener("click", () => {
+    overlay.querySelector("#export-excel-btn").addEventListener("click", async (e) => {
       const content = overlay.querySelector('input[name="content"]:checked').value;
       const params = { cols: "standard,special,retail" };
       if (content === "selected") params.ids = [...selectedIds].join(",");
       // The brand/category tree filter can span several brands at once, so
       // "filtered" always sends the explicit ids that are on screen now.
       else if (content === "filtered") params.ids = currentlyFiltered().map((p) => p.id).join(",");
-      window.location.href = api.productsExportXlsxUrl(params);
-      overlay.remove();
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try {
+        // Downloaded in place (not by navigating to the file) so the app stays on this page.
+        await downloadFromUrl(api.productsExportXlsxUrl(params), `kad-pricelist-${new Date().toISOString().slice(0, 10)}.xlsx`);
+        overlay.remove();
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = err.message;
+      }
     });
   }
 
@@ -717,24 +725,7 @@ export async function renderPricelist(root, navigate) {
           include_photos: overlay.querySelector("#pdf-photos").checked,
           include_commercial: overlay.querySelector("#pdf-commercial").checked,
         });
-        const file = new File([blob], `kad-pricelist-${new Date().toISOString().slice(0, 10)}.pdf`, { type: "application/pdf" });
-        // Phones: the native share sheet (WhatsApp, Telegram, mail...); desktop: a normal download.
-        if (navigator.canShare?.({ files: [file] })) {
-          try {
-            await navigator.share({ files: [file] });
-          } catch {
-            // user dismissed the share sheet
-          }
-        } else {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = file.name;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          setTimeout(() => URL.revokeObjectURL(url), 10000);
-        }
+        await saveBlob(blob, `kad-pricelist-${new Date().toISOString().slice(0, 10)}.pdf`);
         overlay.remove();
       } catch (err) {
         errorEl.textContent = err.message;
