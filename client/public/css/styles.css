@@ -10059,3 +10059,62 @@ form select,
   margin-right: auto;
   font-weight: 600;
 }
+
+/* ---- Amount alignment + compact Sales day blocks -----------------------
+   iOS Safari's UA stylesheet gives <button> `align-items: flex-start`, so a
+   card that is a flex-column <button> shrink-wraps each child row instead of
+   stretching it -- the amount then sits right after the text instead of at
+   the card's right edge. Every card-button list that carries a trailing
+   amount stretches its rows explicitly and pins the amount right. */
+.sales-order-card,
+.debt-balance-card {
+  align-items: stretch;
+  width: 100%;
+}
+.sales-order-row,
+.debt-balance-row,
+.list-row-top {
+  width: 100%;
+}
+.sales-order-amount,
+.debt-balance-amount,
+.list-row-top .text-amount {
+  margin-left: auto;
+  text-align: right;
+}
+/* Payments: the amount rides the right edge of the bottom line (the
+   Approve button, when shown, follows it). */
+.payment-row-bottom-line .text-amount {
+  margin-left: auto;
+  text-align: right;
+}
+.payment-row-bottom-line .payment-approve-btn {
+  margin-left: 0;
+}
+/* Sales: tighter spacing between the daily blocks. */
+#sales-list.card-list {
+  gap: 6px;
+}
+#sales-list .order-date-heading {
+  margin: 8px 0 0;
+}
+#sales-list .order-date-heading:first-child {
+  margin-top: 0;
+}
+.sales-search-note {
+  margin: 0 16px 6px;
+  font-size: 0.8rem;
+}
+
+/* Bonuses: short explanatory lines under section titles / fruit counts. */
+.bonuses-section-hint {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+}
+.bonuses-fruit-hint {
+  font-size: 0.7rem;
+  opacity: 0.85;
+}
+.quick-actions-grid > .empty-state {
+  grid-column: 1 / -1;
+}

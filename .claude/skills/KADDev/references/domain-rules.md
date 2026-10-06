@@ -33,12 +33,15 @@ Days of stock left from sales demand (recency-weighted velocity, `stockForecast.
 ## Money reports
 - Excel is the trusted source; a 3-day lag of Excel data is preferred over live app numbers for debt/sales. Show data-freshness timestamps ("Castrol data as of ..." hidden behind the "!" icon).
 - Debt balances page: live (Debits snapshot) and "as of date" (Balance0 + orders to D - cashflow payments to D, by customer id). Last payment = latest of app payments and Cashflow. Amounts right-aligned; sub-total in the headline row; as-of date uses the iOS-native wheel date picker (same as Team Performance).
+- Sales page search (v1.250.0): terms must all match one order; plain terms match order id / ERP id / customer name / any line (brand+product+size, dash/space tolerant: `edge 0w20 c5 4l`); amount terms `>50000 >=  <  <=  =` compare the order total; while searching the date range is ignored (server `searching:true`, max 1000 rows). Card row 1 = `OrderID · ERP id · channel` + bold right-aligned amount; total row shows `AMD (liters | orders)`. iOS Safari gives `<button>` `align-items:flex-start`, so card-buttons with trailing amounts need explicit `align-items:stretch` + `margin-left:auto` on the amount.
 - Sales page: ERP orders grouped by date with subtotals (AMD, liters, order count); month-to-date default starting from the 1st; card row 1 = OrderID . channel . amount (right), row 2 = customer name bold; wheel date pickers with "From"/"To" inside the buttons.
 - Company dashboard: period filter (today/WTD/MTD/YTD, default MTD) styled like Activity chips; sales vs PLAN (never "budget"); a "|" marker for collected amount on the bar; per-rep bars for today/week/month; collected % of sales next to collected.
 - Team performance: only Sales + Collections (merged bar), plan only for sales; management sees aggregated total; managers see their own result (and channel results for channels assigned to them, e.g. B2B).
 - Home dashboard progress for sales managers is cumulative week progress ("this week's progress", visited this week); managers see today's visit plan; management home shows Company Dashboard preview instead of recent activity.
 
 ## Bonuses module
+Bonuses page: only sales managers earn/see own points, fruits (strawberry=visit, carrot=collected payment, apple=delivered order, cherry=attendance, watermelon=challenge reward), badges, bests; every other role sees just the leaderboard (+ any challenges/claims they actually have) with an explanatory note.
+Home (admin): no greeting; Team today is collapsible with `visited/planned` sum; Performance and insights is the last block for everyone.
 Feature flag; challenges (daily/weekly/monthly, product-sales type, audiences by role/user), ledger, badges, personal bests, reward claims/payouts with GPS-evidence rules; hide daily challenges the user has not progressed on; "Monthly leaders" collapsible; Armenian wording: "Օպերացիոն տնօրեն", "Թիմի կատարողական".
 
 ## Languages

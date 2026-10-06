@@ -40,21 +40,74 @@ function resolveDateRange(query) {
 // pair. erp_customer_id doesn't always have a matching app customer (an
 // ERP account not yet added here), so the name/channel columns fall back
 // to the raw erp_customer_id and NULL rather than dropping the row.
+// Search syntax (the `q` box): whitespace-separated terms, ALL of which must
+// match the same order. A term is either an amount comparison on the order
+// total (">50000", ">=50000", "<20000", "<=20000", "=49000") or plain text
+// matched (case-insensitive substring) against the order id, the ERP customer
+// id, the customer name, or any line of the order (brand + product + size,
+// so "edge 0w20 c5 4l" finds the order with that product). While a search is
+// active the date range is ignored and the whole order history is searched.
+const AMOUNT_TERM_RE = /^(>=|<=|>|<|=)\s*([0-9][0-9,]*(?:\.[0-9]+)?)$/;
+const MAX_SEARCH_TERMS = 8;
+const SEARCH_ROW_LIMIT = 1000;
+
+export function parseSalesSearch(q) {
+  const amountFilters = [];
+  const textTerms = [];
+  for (const raw of String(q || "").trim().split(/\s+/).filter(Boolean).slice(0, MAX_SEARCH_TERMS)) {
+    const m = raw.match(AMOUNT_TERM_RE);
+    if (m) amountFilters.push({ op: m[1], value: Number(m[2].replace(/,/g, "")) });
+    else textTerms.push(raw);
+  }
+  return { amountFilters, textTerms };
+}
+
 salesRouter.get("/", async (req, res) => {
-  const { from, to } = resolveDateRange(req.query);
-  const params = [from, to];
-  let where = "WHERE eol.order_date BETWEEN $1 AND $2";
+  const q = (req.query.q || "").trim();
+  const { amountFilters, textTerms } = parseSalesSearch(q);
+  const searching = amountFilters.length > 0 || textTerms.length > 0;
+
+  const params = [];
+  let where = "";
+  let from = null;
+  let to = null;
+  if (!searching) {
+    ({ from, to } = resolveDateRange(req.query));
+    params.push(from, to);
+    where = "WHERE eol.order_date BETWEEN $1 AND $2";
+  }
 
   const channel = (req.query.channel || "").trim();
   if (channel) {
     params.push(channel);
-    where += ` AND COALESCE(ecd.assigned_sales_rep, c.sales_channel) = $${params.length}`;
+    where += `${where ? " AND" : "WHERE"} COALESCE(ecd.assigned_sales_rep, c.sales_channel) = $${params.length}`;
   }
-  const q = (req.query.q || "").trim();
-  if (q) {
-    params.push(`%${q}%`);
-    where += ` AND (c.name ILIKE $${params.length} OR eol.erp_customer_id ILIKE $${params.length})`;
+
+  // Order-level conditions go in HAVING: the line text is aggregated per
+  // order (bool_or over its lines), the amount is the order's own sum.
+  const having = [];
+  for (const term of textTerms) {
+    params.push(`%${term.replace(/[\\%_]/g, "\\$&")}%`);
+    const p = `$${params.length}`;
+    // Product text is also compared with every non-alphanumeric stripped on
+    // both sides, so "0w20" finds a product spelled "0W-20" and "5w30c3"
+    // style runs still match across spaces/dashes.
+    const squashed = term.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+    let squashedSql = "";
+    if (squashed) {
+      params.push(`%${squashed}%`);
+      squashedSql = ` OR bool_or(regexp_replace(lower(concat_ws(' ', eol.brand, eol.product_name, trim(eol.size_l) || 'L')), '[^[:alnum:]]', '', 'g') LIKE $${params.length})`;
+    }
+    having.push(
+      `(eol.order_id ILIKE ${p} OR eol.erp_customer_id ILIKE ${p} OR COALESCE(c.name, '') ILIKE ${p}
+        OR bool_or(concat_ws(' ', eol.brand, eol.product_name, trim(eol.size_l) || 'L') ILIKE ${p})${squashedSql})`
+    );
   }
+  for (const f of amountFilters) {
+    params.push(f.value);
+    having.push(`sum(eol.revenue_amd) ${f.op} $${params.length}`);
+  }
+  const havingSql = having.length ? `HAVING ${having.join(" AND ")}` : "";
 
   const { rows } = await pool.query(
     `SELECT eol.order_id, eol.order_date, eol.erp_customer_id,
@@ -83,15 +136,16 @@ salesRouter.get("/", async (req, res) => {
      LEFT JOIN erp_customer_data ecd ON ecd.erp_customer_id = eol.erp_customer_id
      ${where}
      GROUP BY eol.order_id, eol.order_date, eol.erp_customer_id, c.id, c.name, ecd.assigned_sales_rep, c.sales_channel
+     ${havingSql}
      ORDER BY eol.order_date DESC, eol.order_id DESC
-     LIMIT 10000`,
+     LIMIT ${searching ? SEARCH_ROW_LIMIT : 10000}`,
     params
   );
   // erp_order_lines has no synced_at column of its own (it's TRUNCATEd
   // and re-inserted in the same transaction as erp_customer_data on every
   // sync -- see routes/erpSync.js), so erp_customer_data's own synced_at
   // is an accurate proxy for "when was this order data last refreshed".
-  res.json({ from, to, rows, sync: await erpSyncFreshness("erp_customer_data") });
+  res.json({ from, to, searching, rows, sync: await erpSyncFreshness("erp_customer_data") });
 });
 
 // Line-item detail for one order -- erp_customer_id + order_id together,

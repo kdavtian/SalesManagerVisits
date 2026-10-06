@@ -206,12 +206,18 @@ export async function renderDashboard(root, navigate) {
 
   container.innerHTML = `
     <div class="dashboard-grid">
-    <div class="greeting-row">
+    ${
+      // The admin's own home is a control panel, not a daily plan -- the
+      // "Good morning, <name>" greeting only takes space there.
+      state.user.role === "admin"
+        ? ""
+        : `<div class="greeting-row">
       <div>
         <h1>${greeting()}, ${escapeHtml(state.user.name.split(" ")[0])}</h1>
         ${isManagementRole ? "" : `<p class="muted">${t("dashboard_subtitle")}</p>`}
       </div>
-    </div>
+    </div>`
+    }
 
     ${
       state.user.role === "admin" || state.user.role === "ceo" || state.user.role === "operations_director"
@@ -346,9 +352,11 @@ export async function renderDashboard(root, navigate) {
       // team-locations view), so teamTodayPlans is always null for every
       // other role and this whole block is skipped for them.
       teamTodayPlans?.length
-        ? `<div>
-           <h2 class="section-title section-title-tight">${t("team_today_plans_title")}</h2>
-           <div class="card-list" id="team-today-plans">
+        ? (() => {
+            const isAdmin = state.user.role === "admin";
+            const totalVisited = teamTodayPlans.reduce((n, m) => n + m.customers.filter((c) => c.visited_today).length, 0);
+            const totalPlanned = teamTodayPlans.reduce((n, m) => n + m.customers.length, 0);
+            const list = `<div class="card-list" id="team-today-plans">
              ${teamTodayPlans
                .map((m) => {
                  const visitedCount = m.customers.filter((c) => c.visited_today).length;
@@ -377,23 +385,29 @@ export async function renderDashboard(root, navigate) {
                </details>`;
                })
                .join("")}
-           </div>
-           </div>`
+           </div>`;
+            // Admin: hidable like Monthly Leaders, with the whole team's
+            // visited/planned count on the heading row. Other management
+            // roles keep the always-open list.
+            return isAdmin
+              ? `<div class="leaderboard-toggle" id="team-today-toggle" role="button" tabindex="0" aria-expanded="false" aria-controls="team-today-section">
+                   <div class="section-heading-row leaderboard-heading-row">
+                     <h2 class="section-title section-title-inline">${t("team_today_plans_title")}</h2>
+                     <span class="muted leaderboard-prize-hint">${totalVisited}/${totalPlanned} ${t("stat_visited_today")}</span>
+                   </div>
+                   <span class="leaderboard-toggle-chevron" aria-hidden="true">${icons.chevronDown}</span>
+                 </div>
+                 <div class="leaderboard-collapse" id="team-today-section">
+                   <div class="leaderboard-collapse-inner">${list}</div>
+                 </div>`
+              : `<div>
+                   <h2 class="section-title section-title-tight">${t("team_today_plans_title")}</h2>
+                   ${list}
+                 </div>`;
+          })()
         : ""
     }
 
-    <details class="dashboard-insights">
-      <summary>${t("performance_insights")}</summary>
-
-    <h2 class="section-title">${t("visit_trends")}</h2>
-    <div class="card trend-chart-card">
-      ${trendChartHtml(trends.daily)}
-    </div>
-    <div class="stat-grid">
-      ${comparisonCardHtml(t("this_week"), trends.comparison.this_week, trends.comparison.last_week, t("vs_last_week"))}
-      ${comparisonCardHtml(t("this_month"), trends.comparison.this_month, trends.comparison.last_month, t("vs_last_month"))}
-    </div>
-    </details>
 
     ${
       // CEO/admin already have the full company-wide feed one tap away
@@ -413,6 +427,19 @@ export async function renderDashboard(root, navigate) {
           <div class="card-list" id="recent-activity"></div>
           </div>`
     }
+
+    <details class="dashboard-insights">
+      <summary>${t("performance_insights")}</summary>
+
+    <h2 class="section-title">${t("visit_trends")}</h2>
+    <div class="card trend-chart-card">
+      ${trendChartHtml(trends.daily)}
+    </div>
+    <div class="stat-grid">
+      ${comparisonCardHtml(t("this_week"), trends.comparison.this_week, trends.comparison.last_week, t("vs_last_week"))}
+      ${comparisonCardHtml(t("this_month"), trends.comparison.this_month, trends.comparison.last_month, t("vs_last_month"))}
+    </div>
+    </details>
     </div>
   `;
 
@@ -459,6 +486,22 @@ export async function renderDashboard(root, navigate) {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
         toggleLeaderboard();
+      }
+    });
+  }
+  const teamTodayToggle = container.querySelector("#team-today-toggle");
+  const teamTodaySection = container.querySelector("#team-today-section");
+  if (teamTodayToggle && teamTodaySection) {
+    const toggleTeamToday = () => {
+      const expanded = teamTodayToggle.getAttribute("aria-expanded") === "true";
+      teamTodayToggle.setAttribute("aria-expanded", String(!expanded));
+      teamTodaySection.classList.toggle("expanded", !expanded);
+    };
+    teamTodayToggle.addEventListener("click", toggleTeamToday);
+    teamTodayToggle.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggleTeamToday();
       }
     });
   }
