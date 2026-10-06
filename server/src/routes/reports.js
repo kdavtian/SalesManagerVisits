@@ -545,14 +545,16 @@ const asOfDebtJoin = `
 const asOfDebtExpr = "(COALESCE(erp.balance0_amd, 0) + COALESCE(orders_asof.amount, 0) - COALESCE(cashflow_asof.amount, 0))";
 
 reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async (req, res) => {
-  const { sales_channel, debt_only, date } = req.query;
+  const { sales_channel, debt_only, date, aging } = req.query;
   const asOfDate = typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
 
   const conditions = [];
   const params = [];
-  if (sales_channel) {
-    params.push(sales_channel);
-    conditions.push(`erp.assigned_sales_rep = $${params.length}`);
+  // sales_channel may be a comma-separated list (multi-select filter).
+  const channels = String(sales_channel ?? "").split(",").map((c) => c.trim()).filter(Boolean);
+  if (channels.length) {
+    params.push(channels);
+    conditions.push(`erp.assigned_sales_rep = ANY($${params.length})`);
   }
   // A sales manager only sees the ERP customers assigned to them (same rule
   // as seesCustomerErpData in roles.js).
@@ -575,6 +577,18 @@ reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async 
     conditions.push(`${debtExpr} > 0`);
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  // Aging filter (comma-separated bucket labels; "—" = no bucket): narrows the
+  // customer list and the totals, while the by-bucket summary keeps showing
+  // every bucket so the filter chips stay available.
+  const agingList = String(aging ?? "").split(",").map((a) => a.trim()).filter(Boolean);
+  let whereWithAging = where;
+  let paramsWithAging = params;
+  if (agingList.length) {
+    paramsWithAging = [...params, agingList.filter((a) => a !== "—")];
+    const idx = paramsWithAging.length;
+    const clause = `(erp.aging_bucket = ANY($${idx})${agingList.includes("—") ? " OR erp.aging_bucket IS NULL" : ""})`;
+    whereWithAging = where ? `${where} AND ${clause}` : `WHERE ${clause}`;
+  }
 
   // Most recent payment from any source -- the sync's own (often blank)
   // last_payment_date, the full ERP cashflow history, and approved in-app
@@ -596,9 +610,9 @@ reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async 
             ${debtExpr} AS estimated_debt_amd
      FROM erp_customer_data erp
      ${debtJoin}
-     ${where}
+     ${whereWithAging}
      ORDER BY estimated_debt_amd DESC NULLS LAST`,
-    params
+    paramsWithAging
   );
 
   const { rows: byBucket } = await pool.query(
@@ -618,8 +632,8 @@ reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async 
             count(*) FILTER (WHERE ${debtExpr} > 0)::int AS customers_with_debt
      FROM erp_customer_data erp
      ${debtJoin}
-     ${where}`,
-    params
+     ${whereWithAging}`,
+    paramsWithAging
   );
 
   res.json({

@@ -112,6 +112,29 @@ export const REPORTS = [
   },
 ];
 
+// Display order on the Reports page: the daily-use reports first, finance and
+// cash controls after, the document archive last. (The array above stays in
+// the order reports were added; this is the order users see.)
+const REPORT_DISPLAY_ORDER = [
+  "daily_management",
+  "customer_debt",
+  "payments",
+  "orders_pipeline",
+  "sales_budget",
+  "checkins",
+  "new_customers",
+  "brand_volume",
+  "brand_availability",
+  "cash_custody",
+  "cash_reconciliation",
+  "documents",
+];
+REPORTS.sort((a, b) => {
+  const ia = REPORT_DISPLAY_ORDER.indexOf(a.key);
+  const ib = REPORT_DISPLAY_ORDER.indexOf(b.key);
+  return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+});
+
 export function findReport(key) {
   return REPORTS.find((r) => r.key === key);
 }

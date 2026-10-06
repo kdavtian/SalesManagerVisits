@@ -357,17 +357,24 @@ visitPlansRouter.get("/rules/overview", requireCanPlanForOthers, async (req, res
   );
 
   const areaIdsByRule = await batchExpandAreas(rules);
+  // The grid badge counts only customers that are CURRENTLY assigned to that
+  // rep: a rule can still list a customer who was reassigned to someone else
+  // (or an area covering other reps' customers), and counting those left a
+  // rep with a "1" on a weekday although no customer of his is on it.
+  const { rows: assignedRows } = await pool.query("SELECT id, assigned_manager_id FROM customers WHERE assigned_manager_id IS NOT NULL");
+  const managerByCustomer = new Map(assignedRows.map((r) => [r.id, r.assigned_manager_id]));
 
   const rulesByUser = new Map();
   for (const rule of rules) {
     if (!rulesByUser.has(rule.user_id)) rulesByUser.set(rule.user_id, []);
     const areaIds = areaIdsByRule.get(rule.id);
     const customerIds = new Set([...areaIds, ...(rule.customer_ids ?? [])]);
+    const ownCount = [...customerIds].filter((id) => managerByCustomer.get(id) === rule.user_id).length;
     rulesByUser.get(rule.user_id).push({
       day_of_week: rule.day_of_week,
       customer_ids: rule.customer_ids ?? [],
       areas: rule.areas ?? [],
-      customer_count: customerIds.size,
+      customer_count: ownCount,
     });
   }
 

@@ -5,7 +5,7 @@ import { getPerfMode, setPerfMode } from "../perfMode.js";
 import { state, isAdmin, canPlanForOthers, seesFinancialExports, canManageProducts, isPerfCeo } from "../state.js";
 import { renderTeamSection, renderPlanApprovalsSection, renderEditRequestsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection, renderSalesChannelOwnersSection, renderQuickActionVisibilitySection, renderDataQualitySection, renderNotificationDeliveryLogSection, renderClientErrorLogSection } from "./admin.js";
 import { renderBonusChallengesSection, renderBonusRewardClaimsSection } from "./bonusChallengesAdmin.js";
-import { escapeHtml, compressImage, activateDialog, attachSwipeToDismiss, formatPhoneDisplay, normalizePhone } from "../util.js";
+import { escapeHtml, compressImage, activateDialog, attachSwipeToDismiss, formatPhoneDisplay, normalizePhone, downloadFromUrl } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
 import { checkForUpdateManually } from "../updateBanner.js";
@@ -87,6 +87,22 @@ function formatStorageMb(bytes) {
 }
 
 export async function renderSettings(root, onLogout, onLanguageChange) {
+  // CSV exports are saved in place (see util.js downloadFromUrl), never by
+  // navigating the app window to the file -- an installed PWA has no way back.
+  root.addEventListener("click", async (e) => {
+    const link = e.target.closest("a[data-download]");
+    if (!link) return;
+    e.preventDefault();
+    if (link.getAttribute("aria-busy") === "true") return;
+    link.setAttribute("aria-busy", "true");
+    try {
+      await downloadFromUrl(link.getAttribute("href"), link.dataset.download);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      link.removeAttribute("aria-busy");
+    }
+  });
   const admin = isAdmin();
   // A director/CEO can plan for their reps, so they also need to be able to
   // approve those reps' self-authored plans -- not just a superadmin
@@ -350,13 +366,13 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
           canExportFinancials
             ? `<h3 class="settings-subsection-title">${t("financial_exports")}</h3>
           <div class="card settings-list">
-          <a class="settings-list-row" href="/api/exports/payments.csv">
+          <a class="settings-list-row" href="/api/exports/payments.csv" data-download="payments.csv">
             <span class="settings-row-label">${t("export_payments")}</span>
           </a>
-          <a class="settings-list-row" href="/api/exports/debt.csv">
+          <a class="settings-list-row" href="/api/exports/debt.csv" data-download="debt.csv">
             <span class="settings-row-label">${t("export_debt")}</span>
           </a>
-          <a class="settings-list-row" href="/api/exports/orders.csv">
+          <a class="settings-list-row" href="/api/exports/orders.csv" data-download="orders.csv">
             <span class="settings-row-label">${t("export_orders")}</span>
           </a>
         </div>`
