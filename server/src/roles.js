@@ -91,6 +91,13 @@ export function canPlanForOthers(role) {
   return role === "admin" || role === "sales_director" || role === "ceo" || role === "operations_director";
 }
 
+// Who can LOOK at every rep's route plans (the overview grid and each rep's
+// customers per weekday). The accountant gets this read-only view; creating
+// or editing someone else's plan stays with canPlanForOthers.
+export function canViewAllRoutePlans(role) {
+  return canPlanForOthers(role) || role === "accountant";
+}
+
 // Who reviews a freshly-submitted order -- confirms it, rejects it, or
 // edits its items/discount before it moves into fulfillment. Distinct from
 // FULFILLMENT_ROLES in routes/orders.js, which owns packed/delivered.
@@ -197,14 +204,15 @@ export function seesAllPayments(role) {
 // Physical cash moves hand to hand before anyone reconciles it, and each
 // hop is declared by the sender and confirmed by the receiver (see
 // migrations/059_cash_handoffs.sql). The chain is:
-//   sales_manager -> sales_director -> (ceo OR accountant) -> accountant
+//   sales_manager -> (sales_director OR accountant) -> ... -> accountant
+//   (a rep may hand cash straight to the accountant, skipping the director)
 // The director gets a real choice of who they hand the accumulated cash to;
 // a CEO who takes it is only an intermediate custodian and has no choice
 // but to pass it on to an accountant, because the accountant -- the person
 // who actually books it -- is always the last stage. Everyone else (and the
 // accountant themselves) can never be the SENDER of a handoff.
 export function validHandoffRecipientRoles(fromRole) {
-  if (fromRole === "sales_manager") return ["sales_director"];
+  if (fromRole === "sales_manager") return ["sales_director", "accountant"];
   if (fromRole === "sales_director") return ["ceo", "operations_director", "accountant"];
   if (fromRole === "ceo" || fromRole === "operations_director") return ["accountant"];
   return [];

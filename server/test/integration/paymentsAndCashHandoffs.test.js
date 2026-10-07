@@ -186,7 +186,44 @@ test("POST /api/cash-handoffs: a sales_manager can hand their available cash to 
   assert.equal(res.data.item_count, 1);
 });
 
-test("POST /api/cash-handoffs: a sales_manager can only hand off to a sales_director -- sending to ceo directly is a 400", async () => {
+test("POST /api/cash-handoffs: a sales_manager can hand cash straight to the accountant, who confirms it and the payment becomes approved", async () => {
+  const paymentId = await seedAvailablePayment(users.sales_manager.id);
+  const res = await apiRequest("/api/cash-handoffs", {
+    method: "POST",
+    cookie: cookies.sales_manager,
+    body: { to_user_id: users.accountant.id, payment_ids: [paymentId] },
+  });
+  assert.equal(res.status, 201);
+  trackHandoff(res.data.id);
+  const confirm = await apiRequest(`/api/cash-handoffs/${res.data.id}/confirm`, { method: "POST", cookie: cookies.accountant, body: {} });
+  assert.equal(confirm.status, 200);
+  const { rows } = await pool.query("SELECT status FROM payments WHERE id = $1", [paymentId]);
+  assert.equal(rows[0].status, "approved");
+});
+
+test("POST /api/payments/:id/approve: the accountant can accept a pending payment without the cash passing through the sales director", async () => {
+  const paymentId = await seedAvailablePayment(users.sales_manager.id);
+  const res = await apiRequest(`/api/payments/${paymentId}/approve`, { method: "POST", cookie: cookies.accountant, body: {} });
+  assert.equal(res.status, 200);
+  assert.equal(res.data.status, "approved");
+  // The CEO still needs the cash to have reached an accountant first.
+  const second = await seedAvailablePayment(users.sales_manager.id);
+  const blocked = await apiRequest(`/api/payments/${second}/approve`, { method: "POST", cookie: cookies.ceo, body: {} });
+  assert.equal(blocked.status, 409);
+});
+
+test("GET /api/visit-plans/rules/overview: the accountant can view every rep's route plans; a sales_manager cannot", async () => {
+  const ok = await apiRequest("/api/visit-plans/rules/overview", { cookie: cookies.accountant });
+  assert.equal(ok.status, 200);
+  assert.ok(Array.isArray(ok.data));
+  const denied = await apiRequest("/api/visit-plans/rules/overview", { cookie: cookies.sales_manager });
+  assert.equal(denied.status, 403);
+  // View-only: the accountant still cannot write another rep's rules.
+  const write = await apiRequest("/api/visit-plans/rules/1", { method: "PUT", cookie: cookies.accountant, body: { user_id: users.sales_manager.id, customer_ids: [] } });
+  assert.equal(write.status, 403);
+});
+
+test("POST /api/cash-handoffs: a sales_manager can only hand off to a sales_director or accountant -- sending to ceo directly is a 400", async () => {
   const paymentId = await seedAvailablePayment(users.sales_manager.id);
   const res = await apiRequest("/api/cash-handoffs", {
     method: "POST",

@@ -99,6 +99,12 @@ export function canPlanForOthers() {
   );
 }
 
+// Mirrors canViewAllRoutePlans in the server's roles.js: everyone who can plan
+// for others, plus the accountant (read-only).
+export function canViewAllRoutePlans() {
+  return canPlanForOthers() || state.user?.role === "accountant";
+}
+
 // Mirrors canReassignCustomers in the server's roles.js.
 export function canReassignCustomers() {
   return (

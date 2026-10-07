@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
-import { canPlanForOthers, canViewTeamLocations } from "../roles.js";
+import { canPlanForOthers, canViewAllRoutePlans, canViewTeamLocations } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { notifyUser } from "../notifications.js";
 import { APPROVER_ROLES } from "../notificationPreferences.js";
@@ -33,13 +33,13 @@ function isValidDate(value) {
 
 // Resolves which user_id a plan/rule request targets, enforcing that only
 // canPlanForOthers roles may target someone other than themselves.
-function resolveTargetUserId(req, res, rawUserId) {
+function resolveTargetUserId(req, res, rawUserId, { readOnly = false } = {}) {
   const targetId = rawUserId ? Number(rawUserId) : req.user.id;
   if (!Number.isInteger(targetId)) {
     res.status(400).json({ error: "user_id must be an integer" });
     return null;
   }
-  if (targetId !== req.user.id && !canPlanForOthers(req.user.role)) {
+  if (targetId !== req.user.id && !(readOnly ? canViewAllRoutePlans(req.user.role) : canPlanForOthers(req.user.role))) {
     res.status(403).json({ error: "Not allowed to plan for this user" });
     return null;
   }
@@ -298,7 +298,7 @@ visitPlansRouter.post("/", async (req, res) => {
 
 // A rep's own rules, or (canPlanForOthers) someone else's.
 visitPlansRouter.get("/rules", async (req, res) => {
-  const targetId = resolveTargetUserId(req, res, req.query.user_id);
+  const targetId = resolveTargetUserId(req, res, req.query.user_id, { readOnly: true });
   if (targetId === null) return;
   const { rows } = await pool.query(
     "SELECT * FROM visit_plan_rules WHERE user_id = $1 AND active ORDER BY day_of_week",
@@ -348,7 +348,7 @@ visitPlansRouter.put("/rules/:dayOfWeek", async (req, res) => {
 // route-planned targets (matches /users/plannable); customer_count is
 // precomputed here so the overview grid doesn't need to expand areas for
 // every cell just to show a number.
-visitPlansRouter.get("/rules/overview", requireCanPlanForOthers, async (req, res) => {
+visitPlansRouter.get("/rules/overview", requireCanViewAllRoutePlans, async (req, res) => {
   const { rows: reps } = await pool.query(
     "SELECT id, name, position FROM users WHERE role = 'sales_manager' ORDER BY name"
   );
@@ -398,7 +398,7 @@ visitPlansRouter.get("/rules/overview", requireCanPlanForOthers, async (req, res
 // rule (the Map page's quick-planner path) still shows up correctly instead
 // of looking unplanned.
 visitPlansRouter.get("/rules/customers", async (req, res) => {
-  const targetId = resolveTargetUserId(req, res, req.query.user_id);
+  const targetId = resolveTargetUserId(req, res, req.query.user_id, { readOnly: true });
   if (targetId === null) return;
 
   const { rows: customers } = await pool.query(
@@ -431,6 +431,11 @@ visitPlansRouter.get("/rules/customers", async (req, res) => {
 // reps' self-authored plans without waiting on a superadmin account.
 function requireCanPlanForOthers(req, res, next) {
   if (!canPlanForOthers(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  next();
+}
+
+function requireCanViewAllRoutePlans(req, res, next) {
+  if (!canViewAllRoutePlans(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   next();
 }
 

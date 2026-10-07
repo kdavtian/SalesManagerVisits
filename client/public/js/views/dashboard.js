@@ -147,6 +147,9 @@ export async function renderDashboard(root, navigate) {
       async () => {
         const isCeoOrAdmin =
           state.user.role === "admin" || state.user.role === "ceo" || state.user.role === "operations_director";
+        // The accountant has no field book: no "next visit" (so no customer
+        // list fetch) -- the Company Dashboard glance sits there instead.
+        const showsSnapshotInstead = isCeoOrAdmin || state.user.role === "accountant";
         const isSalesManager = state.user.role === "sales_manager";
         const [summary, customers, trends, settings, planPreview, myPlan, teamTodayPlans] = await Promise.all([
           api.dashboardSummary(),
@@ -159,7 +162,7 @@ export async function renderDashboard(root, navigate) {
           // (for a sales_manager, this app's most common daily user) scoped
           // down to what "next visit" actually means for that role -- their
           // own assigned book, not the whole company's.
-          isCeoOrAdmin ? Promise.resolve([]) : api.listCustomers(state.user.role === "sales_manager" ? { assigned_manager_id: state.user.id } : {}),
+          showsSnapshotInstead ? Promise.resolve([]) : api.listCustomers(state.user.role === "sales_manager" ? { assigned_manager_id: state.user.id } : {}),
           api.dashboardTrends(),
           api.getSettings(),
           // Company Dashboard preview card (ceo/admin only, see paint()
@@ -167,7 +170,7 @@ export async function renderDashboard(root, navigate) {
           // reads (now plan_amd, not the old unreliable budget_amd). A
           // failure here shouldn't break the rest of the home tab, so it
           // degrades to no preview card instead of a load error.
-          isCeoOrAdmin ? api.getSalesPerformanceLeaderboard("mtd").catch(() => null) : Promise.resolve(null),
+          showsSnapshotInstead ? api.getSalesPerformanceLeaderboard("mtd").catch(() => null) : Promise.resolve(null),
           // Today's actual planned stops (route_plans.js's own "Plan Day"
           // source of truth, GET /visit-plans/mine) -- distinct from the
           // "next visit" card above, which only ever suggests one nearest/
@@ -222,7 +225,9 @@ export async function renderDashboard(root, navigate) {
     ${
       state.user.role === "admin" || state.user.role === "ceo" || state.user.role === "operations_director"
         ? ""
-        : `<div id="next-visit-slot" aria-live="polite">
+        : state.user.role === "accountant"
+          ? companyDashboardPreviewHtml(planPreview)
+          : `<div id="next-visit-slot" aria-live="polite">
       <div class="card next-visit-card next-visit-loading"><p class="loading-state" role="status">${t("loading")}</p></div>
     </div>`
     }
