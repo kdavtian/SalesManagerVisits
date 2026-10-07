@@ -66,6 +66,10 @@ const MARK_DELIVERED_ROLES = new Set(["delivery_manager", "sales_director", "acc
 // change, not something to hide -- it's exactly the kind of thing this was
 // asked to make visible.
 const ACCOUNTING_ELIGIBLE = new Set(["confirmed", "packed_stock_out", "delivered"]);
+// Who may change a request's condition by hand -- mirrors the server's
+// POST /orders/:id/accounting-status (canConfirmOrders + accountant).
+const CAN_SET_ACCOUNTING_STATUS = new Set(["admin", "sales_director", "ceo", "operations_director", "accountant"]);
+const ACCOUNTING_STATUS_OPTIONS = ["pending", "in_progress", "waybill_created", "partially_created", "exported_unsigned", "signed", "needs_attention", "cancelled"];
 
 // Where the order stands with accounting (Lily): which document, its
 // status, the created document numbers, or what went wrong.
@@ -85,7 +89,22 @@ function accountingSectionHtml(order) {
           }</p>`
       )
       .join("")}
-    ${err ? `<p class="form-error">${escapeHtml(err.message || err.code)}</p>` : ""}`;
+    ${err ? `<p class="form-error">${escapeHtml(err.message || err.code)}</p>` : ""}
+    ${
+      // Management and the accountant can move the request to another
+      // condition by hand (pending = back in the queue, cancelled, created...).
+      CAN_SET_ACCOUNTING_STATUS.has(state.user.role)
+        ? `<div class="acc-status-control">
+             <label for="acc-status-select">${t("acc_request_status")}</label>
+             <div class="acc-status-control-row">
+               <select id="acc-status-select">
+                 ${ACCOUNTING_STATUS_OPTIONS.map((s) => `<option value="${s}" ${s === order.accounting_status ? "selected" : ""}>${t(`acc_status_${s}`)}</option>`).join("")}
+               </select>
+               <button type="button" class="btn btn-sm" data-action="accounting-set-status">${t("acc_save_status")}</button>
+             </div>
+           </div>`
+        : ""
+    }`;
 }
 
 // Plain-language "what happens next" for statuses that wait on someone else.
@@ -184,8 +203,10 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     // don't offer a forward-status button that would just 409.
     const canApproveDiscount = DISCOUNT_APPROVER_ROLES.has(state.user.role) && order.approval_status === "pending";
 
+    overlay.querySelector(".sheet").classList.add("order-detail-sheet");
     overlay.querySelector(".sheet").innerHTML = `
       <button type="button" class="icon-btn sheet-close-x" data-action="close-sheet" aria-label="${t("close")}">${icons.close}</button>
+      <div class="order-detail-head">
       <div class="order-detail-ids">
         <span>${t("customer_id_label")}: ${escapeHtml(order.erp_customer_id || String(order.customer_id))}</span>
         ${order.order_code ? `<span>${t("order_id_label")}: ${escapeHtml(order.order_code)}</span>` : ""}
@@ -196,18 +217,23 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     }${
       hasDiscount && approvalMeta ? ` <span class="badge ${approvalMeta.cls}">${t(approvalMeta.key)}</span>` : ""
     }</p>
-      <div class="card-list" style="margin:12px 0;">
+      </div>
+      <div class="order-detail-body">
+      <div class="order-detail-main card-list" style="margin:12px 0;">
         ${order.items.map((i) => orderLineHtml(i)).join("")}
       </div>
+      <div class="order-detail-side">
       ${
         hasDiscount
           ? `<p class="muted">${t("price_change_label")}: ${discountAmd > 0 ? formatAmd(discountAmd) : `${discountPct}%`}</p>`
           : ""
       }
-      <p>${t("total")}: <span class="text-amount">${formatAmd(Number(order.total_amd))}</span></p>
+      <p class="order-detail-total"><span>${t("total")}:</span> <span class="text-amount">${formatAmd(Number(order.total_amd))}</span></p>
       ${order.note ? `<p class="muted">${escapeHtml(order.note)}</p>` : ""}
       ${accountingSectionHtml(order)}
       ${orderTimelineHtml(order.history, order.status)}
+      </div>
+      </div>
       <p class="form-error" id="order-detail-error" hidden></p>
       <div class="sheet-actions" id="order-detail-actions" style="flex-wrap:wrap;"></div>
     `;
@@ -234,9 +260,9 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       buttons.push({ label: t("confirm_order"), status: "confirmed", cls: "btn btn-primary" });
       buttons.push({ label: t("reject_order"), action: "reject-order", cls: "btn btn-danger" });
     }
-    if (CONFIRM_ROLES.has(state.user.role) && ACCOUNTING_ELIGIBLE.has(order.status) && ["pending", "needs_attention", null].includes(order.accounting_status ?? null)) {
+    if (CONFIRM_ROLES.has(state.user.role) && ACCOUNTING_ELIGIBLE.has(order.status) && ["pending", "needs_attention", "cancelled", null].includes(order.accounting_status ?? null)) {
       buttons.push({
-        label: order.accounting_status === "needs_attention" ? t("acc_send_again") : order.accounting_status === "pending" ? t("acc_change_document") : t("acc_send_to_accounting"),
+        label: order.accounting_status === "needs_attention" || order.accounting_status === "cancelled" ? t("acc_send_again") : order.accounting_status === "pending" ? t("acc_change_document") : t("acc_send_to_accounting"),
         action: "accounting-document",
         cls: "btn",
       });
@@ -292,6 +318,22 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
           actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = false));
         }
       });
+    });
+    overlay.querySelector('[data-action="accounting-set-status"]')?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      const status = overlay.querySelector("#acc-status-select").value;
+      if (status === order.accounting_status) return;
+      btn.disabled = true;
+      try {
+        await api.setAccountingStatus(orderId, status);
+        renderView(await api.getOrder(orderId));
+        notifyOrdersChanged();
+        onChanged?.();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+        btn.disabled = false;
+      }
     });
     actionsEl.querySelectorAll("[data-action]").forEach((btn) => {
       btn.addEventListener("click", async () => {

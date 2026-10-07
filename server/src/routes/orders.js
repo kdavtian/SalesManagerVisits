@@ -1,4 +1,4 @@
-import { nextStatusFromDocuments } from "../accountingStatus.js";
+import { nextStatusFromDocuments, ACCOUNTING_STATUSES } from "../accountingStatus.js";
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
@@ -322,7 +322,7 @@ ordersRouter.post("/", async (req, res) => {
 const PAGE_SIZE = 100;
 
 ordersRouter.get("/", async (req, res) => {
-  let { customer_id, user_id, status, offset } = req.query;
+  let { customer_id, user_id, status, offset, accounting } = req.query;
   if (!seesAllActivity(req.user.role)) {
     user_id = req.user.id;
   }
@@ -340,6 +340,17 @@ ordersRouter.get("/", async (req, res) => {
   if (status) {
     params.push(status);
     conditions.push(`o.status = $${params.length}`);
+  }
+  // "Accounting requests" group: every order that was sent to accounting
+  // (accounting=any), or only those in one request status. Only the roles that
+  // can see requests get this filter.
+  if (accounting && (canConfirmOrders(req.user.role) || req.user.role === "accountant")) {
+    if (accounting === "any") {
+      conditions.push("o.accounting_status IS NOT NULL");
+    } else if (ACCOUNTING_STATUSES.includes(accounting)) {
+      params.push(accounting);
+      conditions.push(`o.accounting_status = $${params.length}`);
+    }
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const offsetNum = Math.max(0, Number(offset) || 0);
@@ -779,7 +790,7 @@ ordersRouter.post("/:id/accounting-request", async (req, res) => {
   }
   const method = req.body?.payment_method ?? order.payment_method;
   if (!["cash", "invoice"].includes(method)) return res.status(400).json({ error: "payment_method must be cash or invoice" });
-  if (!["pending", "needs_attention", null].includes(order.accounting_status)) {
+  if (!["pending", "needs_attention", "cancelled", null].includes(order.accounting_status)) {
     return res.status(409).json({ error: "Accounting is already working on this order's document" });
   }
   if (!order.erp_customer_id) return res.status(409).json({ error: "This order's customer has no ERP customer ID" });
@@ -796,6 +807,34 @@ ordersRouter.post("/:id/accounting-request", async (req, res) => {
     [order.id, method, docType, isTest, req.user.id, order.accounting_status]
   );
   if (!updated[0]) return res.status(409).json({ error: "This order was changed by someone else -- refresh and try again" });
+  res.json(updated[0]);
+});
+
+// Moves a request to another condition by hand (pending = back in the queue
+// for Lily, cancelled = withdrawn, created / signed / needs attention =
+// recorded by a person). Management and the accountant can do it.
+ordersRouter.post("/:id/accounting-status", async (req, res) => {
+  if (!canConfirmOrders(req.user.role) && req.user.role !== "accountant") return res.status(403).json({ error: "Not allowed" });
+  const next = req.body?.status;
+  if (!ACCOUNTING_STATUSES.includes(next)) return res.status(400).json({ error: "Unknown request status" });
+  const { rows } = await pool.query("SELECT id, accounting_status FROM orders WHERE id = $1", [req.params.id]);
+  const order = rows[0];
+  if (!order) return res.status(404).json({ error: "Order not found" });
+  if (!order.accounting_status) return res.status(409).json({ error: "This order was never sent to accounting" });
+  if (order.accounting_status === next) return res.json((await pool.query("SELECT * FROM orders WHERE id = $1", [order.id])).rows[0]);
+  const error =
+    next === "needs_attention"
+      ? JSON.stringify({ code: "manual", message: `Marked by ${req.user.name}` })
+      : null;
+  const { rows: updated } = await pool.query(
+    `UPDATE orders SET accounting_status = $2, accounting_error = $3::jsonb,
+            accounting_claimed_at = CASE WHEN $2 = 'in_progress' THEN now() ELSE NULL END,
+            accounting_requested_at = CASE WHEN $2 = 'pending' THEN now() ELSE accounting_requested_at END,
+            accounting_updated_at = now(), updated_at = now()
+     WHERE id = $1 AND accounting_status = $4 RETURNING *`,
+    [order.id, next, error, order.accounting_status]
+  );
+  if (!updated[0]) return res.status(409).json({ error: "This request was changed by someone else -- refresh and try again" });
   res.json(updated[0]);
 });
 

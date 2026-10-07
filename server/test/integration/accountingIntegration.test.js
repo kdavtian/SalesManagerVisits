@@ -259,3 +259,44 @@ test("a waybill can only belong to a cash order and an invoice to an invoice ord
   );
   await pool.query("UPDATE orders SET accounting_doc_type = 'invoice', accounting_status = 'pending' WHERE id = $1", [orderId]);
 });
+
+test("accounting requests group: list filter, manual request status (incl. cancelled) and re-sending", async () => {
+  const { cookie, orderId } = await confirmedOrder({ payment_method: "cash" });
+  const accountant = await createUser("accountant");
+  const accCookie = await loginAs(accountant.email);
+  const manager = await createUser("sales_manager");
+  const managerCookie = await loginAs(manager.email);
+
+  // Not sent yet -> not in the Accounting group.
+  const before = await apiRequest("/api/orders?accounting=any", { cookie });
+  assert.ok(!before.data.rows.some((o) => o.id === orderId));
+
+  const sent = await apiRequest(`/api/orders/${orderId}/accounting-request`, { method: "POST", cookie, body: {} });
+  assert.equal(sent.status, 200);
+  const any = await apiRequest("/api/orders?accounting=any", { cookie });
+  assert.ok(any.data.rows.some((o) => o.id === orderId));
+  const pending = await apiRequest("/api/orders?accounting=pending", { cookie });
+  assert.ok(pending.data.rows.some((o) => o.id === orderId));
+  // A sales manager has no Accounting group (the param is ignored for them).
+  const mgrView = await apiRequest("/api/orders?accounting=pending", { cookie: managerCookie });
+  assert.ok(!mgrView.data.rows.some((o) => o.id === orderId));
+
+  // Change the request's condition by hand: management and the accountant can; a rep cannot.
+  assert.equal((await apiRequest(`/api/orders/${orderId}/accounting-status`, { method: "POST", cookie: managerCookie, body: { status: "cancelled" } })).status, 403);
+  assert.equal((await apiRequest(`/api/orders/${orderId}/accounting-status`, { method: "POST", cookie, body: { status: "bogus" } })).status, 400);
+  const cancelled = await apiRequest(`/api/orders/${orderId}/accounting-status`, { method: "POST", cookie: accCookie, body: { status: "cancelled" } });
+  assert.equal(cancelled.status, 200);
+  assert.equal(cancelled.data.accounting_status, "cancelled");
+  const inCancelled = await apiRequest("/api/orders?accounting=cancelled", { cookie });
+  assert.ok(inCancelled.data.rows.some((o) => o.id === orderId));
+
+  // A cancelled request can be sent again, and can be set back to pending.
+  const again = await apiRequest(`/api/orders/${orderId}/accounting-request`, { method: "POST", cookie, body: {} });
+  assert.equal(again.status, 200);
+  assert.equal(again.data.accounting_status, "pending");
+  const created = await apiRequest(`/api/orders/${orderId}/accounting-status`, { method: "POST", cookie, body: { status: "waybill_created" } });
+  assert.equal(created.data.accounting_status, "waybill_created");
+  const back = await apiRequest(`/api/orders/${orderId}/accounting-status`, { method: "POST", cookie, body: { status: "pending" } });
+  assert.equal(back.data.accounting_status, "pending");
+  assert.equal(back.data.accounting_claimed_at, null);
+});
