@@ -67,7 +67,10 @@ export async function renderCheckin(root, navigate, customerId) {
   const radiusMeters = settings.checkin_radius_meters;
 
   container.innerHTML = `
-    <h1>${escapeHtml(customer.name)}</h1>
+    <div class="checkin-head">
+      <h1>${escapeHtml(customer.name)}</h1>
+      <button type="button" class="icon-btn" id="checkin-close-btn" aria-label="${t("close")}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
     <div id="checkin-tasks"></div>
     <div class="gps-status" id="gps-status">${t("getting_location")}</div>
     <div class="verify-banner" id="verify-banner" hidden></div>
@@ -139,6 +142,7 @@ export async function renderCheckin(root, navigate, customerId) {
     </form>
     <div id="checkin-result" hidden></div>
   `;
+  container.querySelector("#checkin-close-btn").addEventListener("click", () => navigate.goBack(`#/customers/${customerId}`));
 
   // What management asked for at this customer (open tasks): shown above the
   // form so the visit covers them; tap one to tick its checklist off.

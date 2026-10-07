@@ -3,7 +3,7 @@
 // From/To pills, channel pills with counts, one search box, day groups with
 // totals -- plus a Region filter and the Excel export (via the page header).
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, channelDisplayLabel, syncBadgeHtml, parseDateOnly, regionLabelHy } from "../util.js";
+import { escapeHtml, openInfoPopup, formatAmd, channelDisplayLabel, syncBadgeHtml, parseDateOnly, regionLabelHy } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { openTriStateTreeSheet, buildRegionSubregionTree } from "../regionTree.js";
 
@@ -63,8 +63,8 @@ export async function renderPaymentsTab(root, navigate) {
     </div>
     <p class="form-error" id="pay-error" hidden></p>
     <div class="sales-subtotal-row">
+      <button type="button" class="settings-hint-icon" id="pay-sync-hint-btn" aria-label="${t("more_info")}">!</button>
       <p class="sales-subtotal-bar" id="pay-subtotal"></p>
-      <button type="button" class="settings-hint-icon" id="pay-sync-hint-btn" aria-expanded="false" aria-controls="pay-sync-hint-text" aria-label="${t("more_info")}">!</button>
     </div>
     <div id="pay-list" class="card-list"></div>
   `;
@@ -206,10 +206,7 @@ export async function renderPaymentsTab(root, navigate) {
   load();
 
   const hintBtn = $("#pay-sync-hint-btn");
-  hintBtn.addEventListener("click", () => {
-    hintEl.hidden = !hintEl.hidden;
-    hintBtn.setAttribute("aria-expanded", String(!hintEl.hidden));
-  });
+  hintBtn.addEventListener("click", () => openInfoPopup(hintEl.innerHTML));
 
   return {
     getExport: () => ({

@@ -437,7 +437,7 @@ export async function renderDashboard(root, navigate) {
     }
 
     <details class="dashboard-insights">
-      <summary>${t("performance_insights")}</summary>
+      <summary><span>${t("performance_insights")}</span><span class="dashboard-insights-chevron" aria-hidden="true">${icons.chevronDown}</span></summary>
 
     <h2 class="section-title">${t("visit_trends")}</h2>
     <div class="card trend-chart-card">
