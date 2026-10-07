@@ -35,6 +35,15 @@ export const REPORTS = [
     descriptionKey: "report_brand_availability_description",
     defaultRoles: ["admin", "ceo", "operations_director", "sales_director"],
   },
+  // Customer payments straight from the Excel Cashflow sheet ("Oil order"
+  // rows only -- the trusted books), as opposed to `payments` below, which
+  // is the app's own submission/approval workflow.
+  {
+    key: "erp_payments",
+    nameKey: "report_erp_payments_name",
+    descriptionKey: "report_erp_payments_description",
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"],
+  },
   {
     key: "payments",
     nameKey: "report_payments_name",
@@ -119,6 +128,7 @@ const REPORT_DISPLAY_ORDER = [
   "daily_management",
   "customer_debt",
   "payments",
+  "erp_payments",
   "orders_pipeline",
   "sales_budget",
   "checkins",

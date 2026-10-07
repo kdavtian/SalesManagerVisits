@@ -440,6 +440,10 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/reports/payments${qs ? `?${qs}` : ""}`);
   },
+  getErpPaymentsReport: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/reports/erp-payments${qs ? `?${qs}` : ""}`);
+  },
   getCashCustodyReport: () => request(`/reports/cash-custody`),
   getCashReconciliationReport: () => request(`/reports/cash-reconciliation`),
   getCustomerDebtReport: (params = {}) => {

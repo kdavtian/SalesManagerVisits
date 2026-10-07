@@ -388,6 +388,110 @@ reportsRouter.get("/payments", requireReportAccess("payments"), async (req, res)
   });
 });
 
+// Customer payments from the Excel Cashflow sheet ("Oil order" rows -- the
+// sync already filters the ledger to just those, see erp_cashflow_lines), one
+// row per payment: date, amount, customer id/name, sales channel, region.
+// Filters: period or from/to, customer (name or ERP id), sales channels
+// (comma list), region::subregion keys (comma list). Capped at 2000 rows;
+// totals always cover the whole filtered set.
+const ERP_PAYMENTS_LIMIT = 2000;
+const ERP_PERIOD_SQL = {
+  today: "cf.cashflow_date = (now() AT TIME ZONE 'Asia/Yerevan')::date",
+  week: "cf.cashflow_date >= date_trunc('week', now() AT TIME ZONE 'Asia/Yerevan')::date",
+  month: "cf.cashflow_date >= date_trunc('month', now() AT TIME ZONE 'Asia/Yerevan')::date",
+  year: "cf.cashflow_date >= date_trunc('year', now() AT TIME ZONE 'Asia/Yerevan')::date",
+};
+const ERP_PAYMENTS_FROM = `
+  FROM erp_cashflow_lines cf
+  LEFT JOIN customers c ON c.erp_customer_id = cf.erp_customer_id
+  LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = cf.erp_customer_id`;
+
+reportsRouter.get("/erp-payments", requireReportAccess("erp_payments"), async (req, res) => {
+  const { period, from, to, q, sales_channel, region_sub } = req.query;
+  const isDate = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const scope = [];
+  const scopeParams = [];
+  // A sales manager only sees payments of customers assigned to them.
+  if (req.user.role === "sales_manager") {
+    scopeParams.push(req.user.id);
+    scope.push(`c.assigned_manager_id = $${scopeParams.length}`);
+  }
+
+  const conditions = [...scope];
+  const params = [...scopeParams];
+  if (isDate(from) || isDate(to)) {
+    if (isDate(from)) {
+      params.push(from);
+      conditions.push(`cf.cashflow_date >= $${params.length}`);
+    }
+    if (isDate(to)) {
+      params.push(to);
+      conditions.push(`cf.cashflow_date <= $${params.length}`);
+    }
+  } else if (ERP_PERIOD_SQL[period]) {
+    conditions.push(ERP_PERIOD_SQL[period]);
+  }
+  const text = String(q ?? "").trim();
+  if (text) {
+    params.push(`%${text.replace(/[\\%_]/g, "\\$&")}%`);
+    conditions.push(`(COALESCE(c.name, erp.customer_name, '') ILIKE $${params.length} OR cf.erp_customer_id ILIKE $${params.length})`);
+  }
+  const channels = String(sales_channel ?? "").split(",").map((v) => v.trim()).filter(Boolean);
+  if (channels.length) {
+    params.push(channels);
+    conditions.push(`COALESCE(erp.assigned_sales_rep, c.sales_channel) = ANY($${params.length})`);
+  }
+  // "region::subregion" keys, as the shared region tree picker produces them
+  // (a missing subregion is "__none__").
+  const regionKeys = String(region_sub ?? "").split(",").map((v) => v.trim()).filter(Boolean);
+  if (regionKeys.length) {
+    const parts = regionKeys.map((key) => {
+      const [region, sub] = key.split("::");
+      params.push(region);
+      const r = `c.region = $${params.length}`;
+      if (!sub || sub === "__none__") return `(${r} AND COALESCE(c.subregion, '') = '')`;
+      params.push(sub);
+      return `(${r} AND c.subregion = $${params.length})`;
+    });
+    conditions.push(`(${parts.join(" OR ")})`);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const { rows } = await pool.query(
+    `SELECT to_char(cf.cashflow_date, 'YYYY-MM-DD') AS date, cf.amount_amd, cf.erp_customer_id,
+            COALESCE(c.name, erp.customer_name, cf.erp_customer_id) AS customer_name,
+            COALESCE(erp.assigned_sales_rep, c.sales_channel) AS sales_channel,
+            c.region, c.subregion
+     ${ERP_PAYMENTS_FROM}
+     ${where}
+     ORDER BY cf.cashflow_date DESC, cf.id DESC
+     LIMIT ${ERP_PAYMENTS_LIMIT}`,
+    params
+  );
+  const { rows: totalRows } = await pool.query(
+    `SELECT count(*)::int AS payment_count, COALESCE(sum(cf.amount_amd), 0) AS total_amd ${ERP_PAYMENTS_FROM} ${where}`,
+    params
+  );
+  // Filter options (the sales channels and regions that actually occur), within
+  // the viewer's own scope only.
+  const scopeWhere = scope.length ? `WHERE ${scope.join(" AND ")}` : "";
+  const { rows: facetRows } = await pool.query(
+    `SELECT DISTINCT COALESCE(erp.assigned_sales_rep, c.sales_channel) AS sales_channel, c.region, c.subregion
+     ${ERP_PAYMENTS_FROM} ${scopeWhere}`,
+    scopeParams
+  );
+  res.json({
+    rows,
+    truncated: totalRows[0].payment_count > rows.length,
+    totals: totalRows[0],
+    facets: {
+      sales_channels: [...new Set(facetRows.map((r) => r.sales_channel).filter(Boolean))].sort(),
+      regions: [...new Map(facetRows.filter((r) => r.region).map((r) => [`${r.region}::${r.subregion ?? ""}`, { region: r.region, subregion: r.subregion }])).values()],
+    },
+    sync: await erpSyncFreshness("erp_customer_data"),
+  });
+});
+
 // Real, physical cash the app already tracks custody of (see
 // payments.js/cashHandoffs.js: current_holder_id + pending_handoff_id) but
 // never rolled up into one view. Only 'pending' payments are unreconciled

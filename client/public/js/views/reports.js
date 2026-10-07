@@ -1,5 +1,6 @@
 import { api } from "../api.js";
-import { escapeHtml, firstUseHintHtml, activateFirstUseHints, activateDialog, downloadFromUrl } from "../util.js";
+import { escapeHtml, firstUseHintHtml, activateFirstUseHints, activateDialog, downloadFromUrl, saveBlob } from "../util.js";
+import { buildRegionSubregionTree, openTriStateTreeSheet, NO_GROUP_KEY } from "../regionTree.js";
 import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
 import { REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, CATEGORY_LIST, formatAmd, amdWithUnitHtml, agingBucketLabel, channelDisplayLabel, syncBadgeHtml, formatDateDMY, parseDateOnly } from "../util.js";
@@ -76,6 +77,7 @@ export async function renderReports(root, navigate, reportKey) {
   if (reportKey === "orders_pipeline") return renderOrdersPipelineReport(root, navigate);
   if (reportKey === "brand_availability") return renderBrandAvailabilityReport(root, navigate);
   if (reportKey === "payments") return renderPaymentsReport(root, navigate);
+  if (reportKey === "erp_payments") return renderErpPaymentsReport(root, navigate);
   if (reportKey === "cash_custody") return renderCashCustodyReport(root, navigate);
   if (reportKey === "cash_reconciliation") return renderCashReconciliationReport(root, navigate);
   if (reportKey === "customer_debt") return renderCustomerDebtReport(root, navigate);
@@ -194,6 +196,7 @@ const REPORT_ICONS = {
   orders_pipeline: icons.cart,
   brand_availability: icons.store,
   payments: icons.payment,
+  erp_payments: icons.wallet,
   cash_custody: icons.wallet,
   cash_reconciliation: icons.clipboardCheck,
   customer_debt: icons.warning,
@@ -495,6 +498,187 @@ function formatAvgInterval(pgInterval) {
   // turnaround (hours is the practical unit here, not days/weeks).
   const totalHours = (pgInterval.days || 0) * 24 + (pgInterval.hours || 0) + (pgInterval.minutes || 0) / 60;
   return `${totalHours.toFixed(1)}h`;
+}
+
+// Customer payments from the Excel Cashflow sheet: filters for period (or a
+// custom date range), customer, sales channels and region/subregion.
+async function renderErpPaymentsReport(root, navigate) {
+  const periods = PERIOD_OPTIONS;
+  let period = "month";
+  let from = "";
+  let to = "";
+  let query = "";
+  let channels = new Set();
+  let regionKeys = new Set();
+  let facets = { sales_channels: [], regions: [] };
+  let lastRows = [];
+  let searchTimer;
+
+  root.innerHTML = `
+    <div class="detail-view">
+      ${reportHeaderHtml("report_erp_payments_name")}
+      <div class="order-status-filter-row" id="erp-pay-periods">
+        ${periods.map((o) => `<button type="button" class="map-filter-chip ${o.value === period ? "chip-active" : ""}" data-period="${o.value}" aria-pressed="${o.value === period}">${t(o.labelKey)}</button>`).join("")}
+      </div>
+      <div class="pill-date-filter-row">
+        <div class="pill-date-filter-wrap">
+          <button type="button" class="pill-date-filter-btn" tabindex="-1" aria-hidden="true">
+            <span class="pill-date-filter-caption">${t("date_from")}</span>
+            <span class="pill-date-filter-value" id="erp-pay-from-value">—</span>
+          </button>
+          <input type="date" class="pill-date-picker-input" id="erp-pay-from" aria-label="${t("date_from")}" />
+        </div>
+        <div class="pill-date-filter-wrap">
+          <button type="button" class="pill-date-filter-btn" tabindex="-1" aria-hidden="true">
+            <span class="pill-date-filter-caption">${t("date_to")}</span>
+            <span class="pill-date-filter-value" id="erp-pay-to-value">—</span>
+          </button>
+          <input type="date" class="pill-date-picker-input" id="erp-pay-to" aria-label="${t("date_to")}" />
+        </div>
+      </div>
+      <div class="list-toolbar">
+        <input type="search" id="erp-pay-search" placeholder="${t("report_erp_payments_search")}" aria-label="${t("report_erp_payments_search")}" />
+      </div>
+      <div class="order-status-filter-row">
+        <button type="button" class="map-filter-chip" id="erp-pay-channels-btn">${t("all_channels")}</button>
+        <button type="button" class="map-filter-chip" id="erp-pay-regions-btn">${t("report_erp_payments_regions")}</button>
+        <button type="button" class="map-filter-chip" id="erp-pay-export-btn">${t("export_csv")}</button>
+      </div>
+      <div id="report-body"><p class="loading-state" role="status">${t("loading")}</p></div>
+    </div>
+  `;
+  const container = root.querySelector(".detail-view");
+  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  const body = container.querySelector("#report-body");
+  const channelsBtn = container.querySelector("#erp-pay-channels-btn");
+  const regionsBtn = container.querySelector("#erp-pay-regions-btn");
+
+  function paintFilterButtons() {
+    channelsBtn.textContent = channels.size ? `${t("channels_selected")} (${channels.size})` : t("all_channels");
+    channelsBtn.classList.toggle("chip-active", channels.size > 0);
+    regionsBtn.textContent = regionKeys.size ? `${t("report_erp_payments_regions")} (${regionKeys.size})` : t("report_erp_payments_regions");
+    regionsBtn.classList.toggle("chip-active", regionKeys.size > 0);
+  }
+
+  function params() {
+    const p = {};
+    if (from || to) {
+      if (from) p.from = from;
+      if (to) p.to = to;
+    } else p.period = period;
+    if (query) p.q = query;
+    if (channels.size) p.sales_channel = [...channels].join(",");
+    if (regionKeys.size) p.region_sub = [...regionKeys].join(",");
+    return p;
+  }
+
+  async function load() {
+    body.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+    try {
+      const data = await api.getErpPaymentsReport(params());
+      facets = data.facets;
+      lastRows = data.rows;
+      body.innerHTML = `
+        <div class="card report-kpi-card">
+          <span class="progress-label">${t("report_erp_payments_total")}</span>
+          <strong class="text-amount erp-pay-total">${formatAmd(Number(data.totals.total_amd))}</strong>
+          <span class="muted">${data.totals.payment_count} ${t("report_erp_payments_count")}</span>
+          ${data.sync ? `<div>${syncBadgeHtml(data.sync)}</div>` : ""}
+        </div>
+        ${data.truncated ? `<p class="muted">${t("report_erp_payments_truncated").replace("{n}", data.rows.length)}</p>` : ""}
+        <div class="card-list">
+          ${
+            data.rows.length
+              ? data.rows
+                  .map(
+                    (r) => `
+            <div class="card report-row-multiline erp-pay-row">
+              <div class="erp-pay-top">
+                <strong>${escapeHtml(r.customer_name)}</strong>
+                <strong class="text-amount">${formatAmd(Number(r.amount_amd))}</strong>
+              </div>
+              <span class="muted">${escapeHtml(formatDateDMY(r.date))} · ID ${escapeHtml(r.erp_customer_id)}${r.sales_channel ? ` · ${escapeHtml(channelDisplayLabel(r.sales_channel))}` : ""}</span>
+              ${r.region ? `<span class="muted">${escapeHtml(regionLabelHy(r.region))}${r.subregion ? `, ${escapeHtml(r.subregion)}` : ""}</span>` : ""}
+            </div>`
+                  )
+                  .join("")
+              : `<p class="empty-state">${t("no_data")}</p>`
+          }
+        </div>`;
+    } catch (err) {
+      body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  container.querySelectorAll("[data-period]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      period = btn.dataset.period;
+      from = "";
+      to = "";
+      container.querySelector("#erp-pay-from").value = "";
+      container.querySelector("#erp-pay-to").value = "";
+      container.querySelector("#erp-pay-from-value").textContent = "—";
+      container.querySelector("#erp-pay-to-value").textContent = "—";
+      container.querySelectorAll("[data-period]").forEach((b) => {
+        b.classList.toggle("chip-active", b === btn);
+        b.setAttribute("aria-pressed", String(b === btn));
+      });
+      load();
+    });
+  });
+  for (const [id, setter] of [["#erp-pay-from", (v) => (from = v)], ["#erp-pay-to", (v) => (to = v)]]) {
+    container.querySelector(id).addEventListener("change", (e) => {
+      setter(e.target.value);
+      container.querySelector(`${id}-value`).textContent = e.target.value ? formatDateDMY(e.target.value) : "—";
+      // A custom range replaces the period chips.
+      container.querySelectorAll("[data-period]").forEach((b) => {
+        b.classList.remove("chip-active");
+        b.setAttribute("aria-pressed", "false");
+      });
+      load();
+    });
+  }
+  container.querySelector("#erp-pay-search").addEventListener("input", (e) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      query = e.target.value.trim();
+      load();
+    }, 300);
+  });
+  channelsBtn.addEventListener("click", () => {
+    const leaves = facets.sales_channels.map((c) => ({ id: c, name: channelDisplayLabel(c) }));
+    openTriStateTreeSheet(t("all_channels"), {
+      tree: [{ key: "ch", name: t("filter_direction_title"), allIds: leaves.map((l) => l.id), customerCount: leaves.length, leaves, children: null }],
+      initialSelectedIds: channels,
+      countUnitLabel: "",
+      onApply: (selected) => {
+        channels = new Set([...selected].map(String));
+        paintFilterButtons();
+        load();
+      },
+    });
+  });
+  regionsBtn.addEventListener("click", () => {
+    openTriStateTreeSheet(t("report_erp_payments_regions"), {
+      tree: buildRegionSubregionTree(facets.regions),
+      initialSelectedIds: regionKeys,
+      countUnitLabel: t("perf_dq_customers_unit"),
+      onApply: (selected) => {
+        regionKeys = new Set([...selected].map(String));
+        paintFilterButtons();
+        load();
+      },
+    });
+  });
+  container.querySelector("#erp-pay-export-btn").addEventListener("click", async () => {
+    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const lines = [["date", "amount_amd", "customer_id", "customer_name", "sales_channel", "region", "subregion"].join(",")];
+    for (const r of lastRows) lines.push([r.date, r.amount_amd, r.erp_customer_id, r.customer_name, r.sales_channel, r.region, r.subregion].map(esc).join(","));
+    await saveBlob(new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8" }), `payments-${new Date().toISOString().slice(0, 10)}.csv`);
+  });
+
+  paintFilterButtons();
+  await load();
 }
 
 async function renderPaymentsReport(root, navigate) {

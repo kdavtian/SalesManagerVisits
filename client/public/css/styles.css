@@ -10757,3 +10757,9 @@ form select,
   .quick-action { font-size: 0.7rem; }
   .action-btn { font-size: 0.68rem; }
 }
+
+/* Payments (Excel) report rows */
+.erp-pay-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.erp-pay-total { font-size: 1.5rem; display: block; margin: 4px 0; }
+.erp-pay-top { width: 100%; }
+.detail-view > #report-body { margin-top: 12px; }

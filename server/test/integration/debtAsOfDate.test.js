@@ -306,3 +306,30 @@ test("GET /api/customers/:id/payments-received: Excel cashflow rows plus app pay
     await pool.query("DELETE FROM payments WHERE customer_id = $1", [customer.id]);
   }
 });
+
+test("GET /api/reports/erp-payments: Excel cashflow rows with date/customer/channel filters and facets", async () => {
+  const mine = (res) => res.data.rows.filter((r) => r.erp_customer_id === ERP_CUSTOMER_ID);
+  const all = await apiRequest("/api/reports/erp-payments?period=all", { cookie: adminCookie });
+  assert.equal(all.status, 200);
+  assert.deepEqual(mine(all).map((r) => [r.date, Number(r.amount_amd)]), [["2026-02-20", -5000], ["2026-01-15", 20000]]);
+  assert.equal(mine(all)[0].customer_name, customer.name);
+
+  const ranged = await apiRequest("/api/reports/erp-payments?from=2026-01-01&to=2026-01-31", { cookie: adminCookie });
+  assert.deepEqual(mine(ranged).map((r) => r.date), ["2026-01-15"]);
+
+  const byId = await apiRequest(`/api/reports/erp-payments?period=all&q=${encodeURIComponent(ERP_CUSTOMER_ID)}`, { cookie: adminCookie });
+  assert.equal(mine(byId).length, 2);
+  assert.equal(byId.data.totals.payment_count, 2);
+  assert.equal(Number(byId.data.totals.total_amd), 15000);
+
+  const wrongChannel = await apiRequest("/api/reports/erp-payments?period=all&sales_channel=NoSuchChannel", { cookie: adminCookie });
+  assert.equal(mine(wrongChannel).length, 0);
+  const wrongRegion = await apiRequest("/api/reports/erp-payments?period=all&region_sub=Nowhere::__none__", { cookie: adminCookie });
+  assert.equal(mine(wrongRegion).length, 0);
+  assert.ok(Array.isArray(all.data.facets.sales_channels));
+
+  // Sales managers have no access to this report by default.
+  const manager = await createUser("sales_manager");
+  const denied = await apiRequest("/api/reports/erp-payments", { cookie: await loginAs(manager.email) });
+  assert.equal(denied.status, 403);
+});
