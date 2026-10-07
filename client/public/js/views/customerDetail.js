@@ -35,6 +35,8 @@ const EDIT_FIELDS = [
   { name: "visit_frequency_days", labelKey: "visit_frequency", type: "number" },
   { name: "notes", labelKey: "notes", type: "textarea" },
   { name: "tin", labelKey: "tin", type: "text" },
+  { name: "legal_name", labelKey: "legal_name", type: "text" },
+  { name: "legal_address", labelKey: "legal_address", type: "text" },
 ];
 
 export async function renderCustomerDetail(root, navigate, customerId) {
@@ -860,6 +862,7 @@ async function openEditSheet(customer, navigate, onDone) {
           }
           return `<label>${t(f.labelKey)}<input type="${f.type}" name="${f.name}" value="${value}" /></label>`;
         }).join("")}
+        <p class="muted tin-lookup-status" id="tin-lookup-status" role="status" hidden></p>
         <div id="edit-social-section"></div>
         <p class="form-error" id="edit-customer-error" hidden></p>
       </form>
@@ -914,6 +917,44 @@ async function openEditSheet(customer, navigate, onDone) {
 
   const form = overlay.querySelector("#edit-customer-form");
   const errorEl = overlay.querySelector("#edit-customer-error");
+
+  // Legal name / address come from the state register, found by TIN: filled
+  // automatically once an 8-digit TIN is entered (never over something the rep
+  // already typed), with the fields staying editable if the lookup fails.
+  const tinInput = form.querySelector('[name="tin"]');
+  const legalNameInput = form.querySelector('[name="legal_name"]');
+  const legalAddressInput = form.querySelector('[name="legal_address"]');
+  const tinStatus = overlay.querySelector("#tin-lookup-status");
+  let lastLookedUp = (customer.tin || "").trim();
+  async function lookupLegalInfo() {
+    const tin = tinInput.value.trim();
+    if (!/^\d{8}$/.test(tin) || tin === lastLookedUp) return;
+    lastLookedUp = tin;
+    tinStatus.hidden = false;
+    tinStatus.textContent = t("tin_lookup_loading");
+    try {
+      const result = await api.lookupTin(tin);
+      if (!overlay.isConnected || tinInput.value.trim() !== tin) return;
+      if (result.found) {
+        if (result.legal_name && !legalNameInput.value.trim()) legalNameInput.value = result.legal_name;
+        if (result.legal_address && !legalAddressInput.value.trim()) legalAddressInput.value = result.legal_address;
+        tinStatus.textContent = t("tin_lookup_filled");
+      } else {
+        tinStatus.textContent = t("tin_lookup_failed");
+      }
+    } catch {
+      tinStatus.textContent = t("tin_lookup_failed");
+    }
+  }
+  tinInput.addEventListener("change", lookupLegalInfo);
+  tinInput.addEventListener("input", () => {
+    if (/^\d{8}$/.test(tinInput.value.trim())) lookupLegalInfo();
+  });
+  // A TIN that is already saved but has no legal info yet: look it up on open.
+  if (/^\d{8}$/.test(lastLookedUp) && !customer.legal_name && !customer.legal_address) {
+    lastLookedUp = "";
+    lookupLegalInfo();
+  }
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();

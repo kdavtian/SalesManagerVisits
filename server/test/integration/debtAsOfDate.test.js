@@ -279,3 +279,9 @@ test("GET /api/reports/customer-debt: multi-select sales_channel and aging param
   assert.ok(Array.isArray(res.data.customers));
   assert.ok(Array.isArray(res.data.by_bucket));
 });
+
+test("GET /api/customers/tin-lookup: a malformed TIN answers found:false without calling the registry", async () => {
+  const res = await apiRequest("/api/customers/tin-lookup?tin=123", { cookie: adminCookie });
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.data, { found: false, reason: "invalid_tin" });
+});
