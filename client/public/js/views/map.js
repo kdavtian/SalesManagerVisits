@@ -663,8 +663,12 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     const minY = latToTileY(bounds.getNorth(), zoom) - 1;
     const maxY = latToTileY(bounds.getSouth(), zoom) + 1;
     let issued = 0;
-    for (let x = minX; x <= maxX && issued < 40; x++) {
-      for (let y = minY; y <= maxY && issued < 40; y++) {
+    // Bounded: a long map session used to keep a huge key set and fire up to 40
+    // background tile fetches after EVERY pan/zoom, which piles up memory and
+    // network on low-RAM phones.
+    if (warmedTileKeys.size > 400) warmedTileKeys.clear();
+    for (let x = minX; x <= maxX && issued < 12; x++) {
+      for (let y = minY; y <= maxY && issued < 12; y++) {
         const key = `${zoom}/${x}/${y}`;
         if (warmedTileKeys.has(key)) continue;
         warmedTileKeys.add(key);
@@ -717,6 +721,19 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     }
   }
   document.addEventListener("visibilitychange", refreshTileStyle);
+  // iOS/Android can drop the map's GPU layers while the app sits in the
+  // background; on return, re-measure and redraw instead of showing a blank map.
+  const redrawOnResume = () => {
+    if (document.visibilityState !== "visible") return;
+    try {
+      map.invalidateSize();
+      tileLayer?.redraw?.();
+    } catch {
+      // map already torn down
+    }
+  };
+  document.addEventListener("visibilitychange", redrawOnResume);
+  window.addEventListener("pageshow", redrawOnResume);
 
   // Wait for Leaflet's own internal setup (panes, position tracking) to
   // finish before touching layout — calling invalidateSize/fitBounds too
@@ -3371,8 +3388,13 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     clearTimeout(teamEmptyHintTimer);
     clearTimeout(tileHealthTimer);
     clearTimeout(warmTilesTimer);
+    clearTimeout(warmTimer);
     mapEl.removeEventListener("touchend", onMapTouchEnd);
     document.removeEventListener("visibilitychange", refreshTileStyle);
+    document.removeEventListener("visibilitychange", redrawOnResume);
+    window.removeEventListener("pageshow", redrawOnResume);
+    lastCustomers = [];
+    factsCache.clear();
     document.removeEventListener("click", dismissAddressResultsOutside);
     window.removeEventListener("online", retryTiles);
     appMain.classList.remove("app-main-locked");

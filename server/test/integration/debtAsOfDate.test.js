@@ -285,3 +285,24 @@ test("GET /api/customers/tin-lookup: a malformed TIN answers found:false without
   assert.equal(res.status, 200);
   assert.deepEqual(res.data, { found: false, reason: "invalid_tin" });
 });
+
+test("GET /api/customers/:id/payments-received: Excel cashflow rows plus app payments; an app payment already in Excel is not listed twice", async () => {
+  // App payments: one that matches the Excel 20000 row (same amount, 2 days apart) and one that doesn't.
+  await pool.query(
+    `INSERT INTO payments (customer_id, customer_name_snapshot, amount_amd, payment_date, sales_manager_id, sales_manager_name_snapshot, status, created_by)
+     SELECT $1, 'x', a.amount, a.d::timestamptz, u.id, 'x', 'approved', u.id
+     FROM (VALUES (20000, '2026-01-17'), (7777, '2026-03-05')) AS a(amount, d), (SELECT id FROM users LIMIT 1) u`,
+    [customer.id]
+  );
+  try {
+    const res = await apiRequest(`/api/customers/${customer.id}/payments-received`, { cookie: adminCookie });
+    assert.equal(res.status, 200);
+    const bySource = (s) => res.data.rows.filter((r) => r.source === s);
+    assert.equal(bySource("excel").length, 2);
+    assert.deepEqual(bySource("app").map((r) => r.amount_amd), [7777], "the 20000 app payment duplicates the Excel row");
+    assert.equal(res.data.rows[0].date, "2026-03-05", "newest first");
+    assert.equal(res.data.total_amd, 20000 - 5000 + 7777);
+  } finally {
+    await pool.query("DELETE FROM payments WHERE customer_id = $1", [customer.id]);
+  }
+});

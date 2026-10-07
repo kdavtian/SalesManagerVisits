@@ -263,6 +263,7 @@ let fieldErrorId = 0;
 //     traversal (Back / long-press Back), never by tapping a link or tab.
 //   * Only the newest Map entry is kept (Leaflet + GPS watchers are heavy).
 const BACK_STACK_MAX = 5;
+let renderSeq = 0; // see render()'s safety net
 let backStack = []; // [{ hash, nodes: DocumentFragment, cleanup, scrollTop, appClassName, bodyClassName }]
 function disposeBackEntry(entry) {
   try {
@@ -688,7 +689,76 @@ async function doLogout() {
   render();
 }
 
+// ---- Render safety net --------------------------------------------------
+// A view that throws while mounting (or a lazily imported view module that
+// fails to load -- stale service-worker cache after a deploy, a dropped
+// connection, a killed tab process) used to leave #app EMPTY: a white screen
+// with no way out except force-quitting the app. Now render() catches that,
+// shows a "Reload" card instead, reloads once by itself when it was a module
+// load failure, and a watchdog catches a screen that stays empty without any
+// error at all.
+function appIsBlank() {
+  return !app.querySelector("*");
+}
+function showRenderFailure(err) {
+  console.error("Screen failed to render:", err);
+  if (!appIsBlank()) return;
+  const message = String(err?.message || err || "");
+  const moduleLoadFailure = /dynamically imported module|Importing a module script failed|Failed to fetch|Load failed/i.test(message);
+  try {
+    const last = Number(sessionStorage.getItem("fv_render_reload") || 0);
+    if (moduleLoadFailure && Date.now() - last > 60000) {
+      sessionStorage.setItem("fv_render_reload", String(Date.now()));
+      location.reload();
+      return;
+    }
+  } catch {
+    // sessionStorage unavailable -- fall through to the card
+  }
+  app.innerHTML = `
+    <div class="detail-view render-failed">
+      <div class="card">
+        <h2>${t("render_failed_title")}</h2>
+        <p class="muted">${t("render_failed_body")}</p>
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="render-failed-home">${t("nav_dashboard")}</button>
+          <button type="button" class="btn btn-primary" id="render-failed-reload">${t("reload_app")}</button>
+        </div>
+      </div>
+    </div>`;
+  app.querySelector("#render-failed-reload").addEventListener("click", () => location.reload());
+  app.querySelector("#render-failed-home").addEventListener("click", () => {
+    location.hash = "#/dashboard";
+    location.reload();
+  });
+}
 async function render() {
+  const seq = ++renderSeq;
+  try {
+    await renderRoute();
+  } catch (err) {
+    showRenderFailure(err);
+  }
+  // Watchdog: a view that neither threw nor painted anything.
+  setTimeout(() => {
+    if (seq === renderSeq && appIsBlank()) showRenderFailure(new Error("Screen stayed empty"));
+  }, 8000);
+}
+window.addEventListener("unhandledrejection", (e) => {
+  if (appIsBlank()) showRenderFailure(e.reason);
+});
+window.addEventListener("error", (e) => {
+  if (appIsBlank()) showRenderFailure(e.error || e.message);
+});
+// Coming back from the background (or the back/forward cache) to an empty
+// page: re-mount the current screen instead of showing white.
+function recoverBlankScreen() {
+  if (document.visibilityState === "visible" && state.user && appIsBlank()) render();
+}
+document.addEventListener("visibilitychange", recoverBlankScreen);
+window.addEventListener("pageshow", recoverBlankScreen);
+
+async function renderRoute() {
   document.documentElement.lang = getLang();
   // Any open sheet/dialog overlay is appended straight to document.body,
   // outside the routed view container render() replaces below -- so

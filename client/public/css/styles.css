@@ -10719,3 +10719,41 @@ form select,
   color: var(--text);
   font: inherit;
 }
+
+/* Customer card: stat tiles are buttons (orders / payments / last order / last visit). */
+.detail-stat-tile-btn {
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+  cursor: pointer;
+}
+.detail-stat-tile-btn:disabled { cursor: default; opacity: 1; }
+.detail-stat-tile-btn:not(:disabled):active { background: var(--bg); }
+.payments-received-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--border);
+}
+.payments-received-row:last-child { border-bottom: none; }
+.payments-received-total { font-weight: 800; }
+.payments-received-list { max-height: 55vh; overflow-y: auto; }
+
+/* Customer action buttons: 3 per row on phones so long Armenian labels
+   ("Պատվերներ") fit on one line instead of breaking mid-word. */
+@media (max-width: 520px) {
+  .detail-actions-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.action-btn { min-width: 0; text-align: center; hyphens: none; overflow-wrap: normal; word-break: keep-all; line-height: 1.2; }
+
+/* Long Armenian words (e.g. "Հաշվետվություն", "Պատվերներ") must never touch a
+   tile's edge or be cut by it: tighter side padding, a slightly smaller type
+   on narrow phones, and a safe wrap point instead of overlapping neighbours. */
+.quick-action { padding-left: 3px; padding-right: 3px; overflow-wrap: break-word; hyphens: manual; }
+@media (max-width: 380px) {
+  .quick-action { font-size: 0.7rem; }
+  .action-btn { font-size: 0.68rem; }
+}
