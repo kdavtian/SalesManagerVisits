@@ -67,6 +67,7 @@ const QUICK_ACTION_ICON = {
   qa_debt_balances: () => `<span class="quick-action-icon quick-action-icon-debt">${icons.wallet}</span>`,
   qa_company_dashboard: () => `<span class="quick-action-icon quick-action-icon-company">${icons.dashboard}</span>`,
   qa_sales: () => `<span class="quick-action-icon quick-action-icon-sales">${icons.trendUp}</span>`,
+  qa_tasks: () => `<span class="quick-action-icon quick-action-icon-tasks">${icons.tasks}<span class="nav-badge count-badge" id="qa-tasks-badge" hidden></span></span>`,
   qa_bonuses: () => `<span class="quick-action-icon quick-action-icon-bonuses">${icons.gift}</span>`,
 };
 
@@ -221,6 +222,8 @@ export async function renderDashboard(root, navigate) {
       </div>
     </div>`
     }
+
+    <div id="tasks-home-slot"></div>
 
     ${
       state.user.role === "admin" || state.user.role === "ceo" || state.user.role === "operations_director"
@@ -569,6 +572,8 @@ export async function renderDashboard(root, navigate) {
     }
   }
 
+  // Tasks given to me: today's by default, toggle to all open (loaded lazily, never blocks Home).
+  import("./tasks.js").then((m) => m.renderHomeTasks(container.querySelector("#tasks-home-slot"), navigate)).catch(() => {});
   const nextVisitSlot = container.querySelector("#next-visit-slot");
   if (nextVisitSlot) renderNextVisit(nextVisitSlot, customers, navigate);
 

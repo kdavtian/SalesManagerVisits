@@ -10763,3 +10763,56 @@ form select,
 .erp-pay-total { font-size: 1.5rem; display: block; margin: 4px 0; }
 .erp-pay-top { width: 100%; }
 .detail-view > #report-body { margin-top: 12px; }
+
+.quick-action-icon-tasks {
+  background: color-mix(in srgb, var(--warning) 70%, var(--danger) 30%);
+  color: #ffffff;
+}
+
+/* ---- Tasks ---- */
+.task-card-closed { opacity: 0.7; }
+.task-sheet-title { margin-right: 44px; }
+.task-sheet-facts { margin: 8px 0; }
+.task-checklist { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 10px; }
+.task-check-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 6px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--border);
+}
+.task-check-row input[type="checkbox"] { width: 22px; height: 22px; flex: none; margin: 0; }
+.task-check-done span { text-decoration: line-through; color: var(--text-dim); }
+.task-editor { max-height: 92vh; max-height: 92dvh; }
+.task-field { margin: 14px 0; }
+.task-field .field-label { display: block; margin-bottom: 6px; font-weight: 600; }
+.task-item-edit { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.task-item-edit input { flex: 1; min-width: 0; }
+.task-customer-chip { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.task-customer-results { margin-top: 6px; }
+/* Home / customer card task lists */
+.tasks-home-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.tasks-home-head .segmented { margin: 0; }
+.tasks-block { margin-bottom: 18px; }
+.tasks-block .card-list { gap: 8px; }
+/* Map: task marker on the left of a customer pin (yellow = not due, red = due today or overdue). */
+.pin-task {
+  position: absolute;
+  left: -13px;
+  top: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--bg-card);
+  border: 1.5px solid currentColor;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+.pin-task svg { width: 14px; height: 14px; }
+/* yellow = a task whose deadline is still ahead, red = due today or overdue */
+.pin-task-soon { background: #f5c518; color: #3d3000; border-color: #ffffff; }
+.pin-task-due { background: var(--danger); color: #ffffff; border-color: #ffffff; }

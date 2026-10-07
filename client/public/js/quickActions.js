@@ -61,6 +61,8 @@ export const QUICK_ACTIONS = [
   // seesFinancialExports in server/src/roles.js, which server/src/routes/
   // sales.js gates on too). A sales_manager already has their own
   // customers' order history via the customer detail page.
+  // Task management: everyone receives tasks; management creates them.
+  { id: "qa_tasks", defaultRoles: ALL_ROLES },
   { id: "qa_sales", defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"] },
   // Visible to every role by default -- further gated at render time on
   // app_settings.bonuses_enabled (off by default), since the tile itself
@@ -86,6 +88,7 @@ export const QUICK_ACTION_ROUTE = {
   qa_debt_balances: "#/debt-balances",
   qa_company_dashboard: "#/company-dashboard",
   qa_sales: "#/sales",
+  qa_tasks: "#/tasks",
   qa_bonuses: "#/bonuses",
 };
 
