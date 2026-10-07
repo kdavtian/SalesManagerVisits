@@ -184,6 +184,8 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       </button>
     </div>
 
+    <div id="customer-tasks-slot"></div>
+
     <div class="card next-visit-card">
       <div class="next-visit-header"><span>${t("next_visit")}</span></div>
       <div class="next-visit-due">
@@ -258,6 +260,34 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   container.querySelector("#order-history-btn")?.addEventListener("click", () => {
     navigate(`#/customers/${customerId}/orders`);
   });
+
+  // Open tasks attached to this customer (above Next visit), plus "Add task" for management.
+  loadCustomerTaskBlock();
+  async function loadCustomerTaskBlock() {
+    const slot = container.querySelector("#customer-tasks-slot");
+    if (!slot) return;
+    const tasksModule = await import("./tasks.js");
+    const canAdd = tasksModule.canCreateTasks();
+    const { rows, today } = await tasksModule.loadCustomerTasks(customerId);
+    if (!rows.length && !canAdd) {
+      slot.innerHTML = "";
+      return;
+    }
+    slot.innerHTML = `
+      <div class="tasks-block">
+        <div class="tasks-home-head">
+          <h2 class="section-title section-title-inline">${t("tasks_customer_title")}</h2>
+          ${canAdd ? `<button type="button" class="btn btn-sm" id="customer-add-task">+ ${t("task_new")}</button>` : ""}
+        </div>
+        ${rows.length ? `<div class="card-list">${rows.map((r) => tasksModule.taskCardHtml(r, today, { showCustomer: false })).join("")}</div>` : ""}
+      </div>`;
+    slot.querySelectorAll("[data-task-id]").forEach((el) =>
+      el.addEventListener("click", () => tasksModule.openTaskSheet(Number(el.dataset.taskId), { onChanged: loadCustomerTaskBlock, navigate }))
+    );
+    slot.querySelector("#customer-add-task")?.addEventListener("click", () =>
+      tasksModule.openTaskEditor({ customer: { id: Number(customerId), name: customer.name, assigned_manager_id: customer.assigned_manager_id, locked: true }, onSaved: loadCustomerTaskBlock })
+    );
+  }
 
   renderPendingRequest(container.querySelector("#pending-request-slot"), pendingRequests[0], () =>
     renderCustomerDetail(root, navigate, customerId)

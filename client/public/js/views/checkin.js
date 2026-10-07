@@ -3,6 +3,7 @@ import { escapeHtml, getCurrentPosition, locationErrorHint, compressImage, forma
 import { enqueueCheckin } from "../offlineQueue.js";
 import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
+import { state } from "../state.js";
 
 const OUTCOME_OPTIONS = [
   { value: "order_placed", labelKey: "outcome_order_placed", icon: icons.cart },
@@ -67,6 +68,7 @@ export async function renderCheckin(root, navigate, customerId) {
 
   container.innerHTML = `
     <h1>${escapeHtml(customer.name)}</h1>
+    <div id="checkin-tasks"></div>
     <div class="gps-status" id="gps-status">${t("getting_location")}</div>
     <div class="verify-banner" id="verify-banner" hidden></div>
 
@@ -137,6 +139,29 @@ export async function renderCheckin(root, navigate, customerId) {
     </form>
     <div id="checkin-result" hidden></div>
   `;
+
+  // What management asked for at this customer (open tasks): shown above the
+  // form so the visit covers them; tap one to tick its checklist off.
+  (async function showCustomerTasks() {
+    const slot = container.querySelector("#checkin-tasks");
+    if (!slot) return;
+    try {
+      const tasksModule = await import("./tasks.js");
+      const load = async () => {
+        const { rows, today } = await tasksModule.loadCustomerTasks(customerId);
+        const mine = rows.filter((r) => r.assignee_id === state.user.id || r.creator_id === state.user.id);
+        slot.innerHTML = mine.length
+          ? `<h2 class="section-title section-title-tight">${t("tasks_customer_title")}</h2><div class="card-list">${mine.map((r) => tasksModule.taskCardHtml(r, today, { showCustomer: false })).join("")}</div>`
+          : "";
+        slot.querySelectorAll("[data-task-id]").forEach((el) =>
+          el.addEventListener("click", () => tasksModule.openTaskSheet(Number(el.dataset.taskId), { onChanged: load, navigate }))
+        );
+      };
+      await load();
+    } catch {
+      /* optional card */
+    }
+  })();
 
   const gpsStatus = container.querySelector("#gps-status");
   const verifyBanner = container.querySelector("#verify-banner");

@@ -1007,6 +1007,8 @@ async function renderRoute() {
     (await import("./views/settings.js")).renderSettings(app, doLogout, render);
   } else if (path === "#/notifications") {
     (await import("./views/notifications.js")).renderNotifications(app, navigate, refreshNotificationBadge);
+  } else if (path === "#/tasks") {
+    (await import("./views/tasks.js")).renderTasks(app, navigate, query.get("open"));
   } else if (path === "#/bonuses") {
     (await import("./views/bonuses.js")).renderBonuses(app, navigate);
   } else {
@@ -1065,6 +1067,7 @@ const SIDEBAR_ITEM_ICON = {
   qa_debt_balances: { icon: icons.wallet, colorClass: "quick-action-icon-debt" },
   qa_company_dashboard: { icon: icons.dashboard, colorClass: "quick-action-icon-company" },
   qa_sales: { icon: icons.trendUp, colorClass: "quick-action-icon-sales" },
+  qa_tasks: { icon: icons.tasks, colorClass: "quick-action-icon-tasks" },
   qa_bonuses: { icon: icons.gift, colorClass: "quick-action-icon-bonuses" },
 };
 

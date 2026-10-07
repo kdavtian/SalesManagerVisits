@@ -306,6 +306,15 @@ export const api = {
   updateRouteDistribution: (id, data) => json(`/route-distribution/${id}`, "PATCH", data),
   deleteRouteDistribution: (id) => request(`/route-distribution/${id}`, { method: "DELETE" }),
 
+  listTaskAssignees: () => request("/tasks/assignees"),
+  listTasks: (params = {}) => request(`/tasks?${new URLSearchParams(params).toString()}`),
+  getTask: (id) => request(`/tasks/${id}`),
+  createTask: (data) => json("/tasks", "POST", data),
+  updateTask: (id, data) => json(`/tasks/${id}`, "PATCH", data),
+  completeTask: (id, note) => json(`/tasks/${id}/complete`, "POST", note ? { note } : {}),
+  reopenTask: (id) => json(`/tasks/${id}/reopen`, "POST", {}),
+  setTaskItemDone: (id, itemId, done) => json(`/tasks/${id}/items/${itemId}`, "POST", { done }),
+  getTaskCustomerFlags: () => request("/tasks/customer-flags"),
   createOrder: (data) => json("/orders", "POST", data),
   submitOrder: (id, erpCustomerId) => json(`/orders/${id}/submit`, "POST", erpCustomerId ? { erp_customer_id: erpCustomerId } : {}),
   listOrders: (params = {}) => {

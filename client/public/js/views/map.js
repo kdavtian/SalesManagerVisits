@@ -963,6 +963,24 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // in icons/markers/ -- the artwork is the source of truth and is never
   // reconstructed from CSS shapes or inline SVG. Visit status (today's
   // check, overdue) stays a small badge layered over that image.
+  // Customers with an open task: a checklist marker on the LEFT of the pin --
+  // yellow while the deadline is ahead, red when due today or overdue.
+  let taskFlags = new Map(); // customer id -> due (boolean)
+  const TASK_PIN_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10a1.5 1.5 0 0 1 1.5 1.5v14A1.5 1.5 0 0 1 17 21H7a1.5 1.5 0 0 1-1.5-1.5v-14A1.5 1.5 0 0 1 7 4Z"/><path d="m8.6 10 1.2 1.2 2-2.2M8.6 15.4l1.2 1.2 2-2.2M14 10.5h2.4M14 15.9h2.4"/></svg>';
+  function taskMarkerHtml(c) {
+    if (!taskFlags.has(c.id)) return "";
+    return `<span class="pin-task ${taskFlags.get(c.id) ? "pin-task-due" : "pin-task-soon"}" aria-hidden="true">${TASK_PIN_SVG}</span>`;
+  }
+  async function loadTaskFlags() {
+    try {
+      const rows = await api.getTaskCustomerFlags();
+      taskFlags = new Map(rows.map((r) => [r.customer_id, Boolean(r.due)]));
+      if (taskFlags.size) applyFilter();
+    } catch {
+      /* optional overlay */
+    }
+  }
+
   function customerIcon(c, status) {
     const tier = markerKind(c.customer_tier);
     const check = status === "today" ? '<span class="pin-check">&#10003;</span>' : "";
@@ -977,7 +995,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       // .pin stays on the wrapper: marker selection (mapMarkerEnhancements)
       // and the competitor-visibility toggle (map-safe-enhancements) both
       // key off .pin / .pin-tier-* selectors.
-      html: `<div class="pin pin-img ${shapeClass} pin-tier-${tier} ${overdueClass}"><img class="pin-img-asset" src="/icons/markers/${tier}-${categoryIconSlug(c.category)}.png" alt="" width="${MARKER_SIZE}" height="${MARKER_SIZE}" draggable="false" />${check}</div>`,
+      html: `<div class="pin pin-img ${shapeClass} pin-tier-${tier} ${overdueClass}"><img class="pin-img-asset" src="/icons/markers/${tier}-${categoryIconSlug(c.category)}.png" alt="" width="${MARKER_SIZE}" height="${MARKER_SIZE}" draggable="false" />${check}${taskMarkerHtml(c)}</div>`,
       iconSize: [MARKER_SIZE, MARKER_SIZE],
       iconAnchor: [MARKER_SIZE / 2, anchorY],
       popupAnchor: [0, -anchorY],
@@ -2062,6 +2080,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   async function loadCustomersCached() {
     await loadWithCache("map-customers", () => api.listCustomers(), paintCustomers);
     loadBrandSummary();
+    loadTaskFlags();
   }
 
   // "My location" — blue dot + accuracy circle, kept live with watchPosition.

@@ -363,3 +363,23 @@ export function seesCustomerErpData(role, assignedManagerId, userId) {
   if (role !== "sales_manager") return true;
   return assignedManagerId === userId;
 }
+
+// --- Tasks ---------------------------------------------------------------
+// Management gives tasks: CEO / operations director / admin to ANY staff
+// member, a sales director to sales managers only. Everyone else only
+// receives and completes tasks.
+export function canCreateTasks(role) {
+  return role === "admin" || role === "ceo" || role === "operations_director" || role === "sales_director";
+}
+
+// Who sees every task in the company (not just their own / created ones).
+export function seesAllTasks(role) {
+  return role === "admin" || role === "ceo" || role === "operations_director";
+}
+
+// The roles a creator may assign a task to; null = any role.
+export function taskAssigneeRoles(role) {
+  if (role === "sales_director") return ["sales_manager"];
+  if (seesAllTasks(role)) return null;
+  return [];
+}

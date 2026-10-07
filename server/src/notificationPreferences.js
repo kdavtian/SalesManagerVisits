@@ -38,6 +38,11 @@ export const NOTIFICATION_TYPES = [
   // Once-a-day digest of unresolved orders/payments/overdue visits (see
   // dailySummary.js) -- distinct from any single event above.
   "daily_summary",
+  // Tasks (migrations/093): a task was given to you, its deadline day
+  // reminder (09:30), and the creator learning it was completed.
+  "task_assigned",
+  "task_deadline",
+  "task_completed",
 ];
 
 // Warehouse Manager: an order just entered their queue.
