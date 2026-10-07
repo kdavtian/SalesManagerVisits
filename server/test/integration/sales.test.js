@@ -52,31 +52,36 @@ test("GET /api/sales/order: returns each line's discount_amd, null for a line wi
   assert.equal(Number(res.data.total_amd), 58000);
 });
 
-test("GET /api/sales: default range hides an old order; a search ignores the date range and finds it", async () => {
+test("GET /api/sales: a search keeps the date range; widening the range finds the old order", async () => {
   const plain = await apiRequest("/api/sales", { cookie: adminCookie });
   assert.ok(!plain.data.rows.some((r) => r.order_id === OLD_ORDER_ID));
 
-  const byOrderId = await apiRequest(`/api/sales?q=${OLD_ORDER_ID}`, { cookie: adminCookie });
-  assert.equal(byOrderId.status, 200);
-  assert.equal(byOrderId.data.searching, true);
+  // Default (this month) range: the old order stays out even when searched.
+  const narrow = await apiRequest(`/api/sales?q=${OLD_ORDER_ID}`, { cookie: adminCookie });
+  assert.equal(narrow.status, 200);
+  assert.equal(narrow.data.searching, true);
+  assert.deepEqual(narrow.data.rows, []);
+
+  const wide = "from=2019-01-01&to=2030-01-01";
+  const byOrderId = await apiRequest(`/api/sales?q=${OLD_ORDER_ID}&${wide}`, { cookie: adminCookie });
   assert.deepEqual(byOrderId.data.rows.map((r) => r.order_id), [OLD_ORDER_ID]);
 
-  const byErpId = await apiRequest(`/api/sales?q=${ERP_CUSTOMER_ID}`, { cookie: adminCookie });
+  const byErpId = await apiRequest(`/api/sales?q=${ERP_CUSTOMER_ID}&${wide}`, { cookie: adminCookie });
   assert.deepEqual(byErpId.data.rows.map((r) => r.order_id).sort(), [OLD_ORDER_ID, ORDER_ID].sort());
 });
 
 test("GET /api/sales: product text search is order-level and tolerant of dashes/spacing", async () => {
-  const res = await apiRequest(`/api/sales?q=${encodeURIComponent("edge 0w20 c5 4l")}`, { cookie: adminCookie });
+  const res = await apiRequest(`/api/sales?from=2019-01-01&to=2030-01-01&q=${encodeURIComponent("edge 0w20 c5 4l")}`, { cookie: adminCookie });
   assert.equal(res.status, 200);
   assert.deepEqual(res.data.rows.filter((r) => r.erp_customer_id === ERP_CUSTOMER_ID).map((r) => r.order_id), [OLD_ORDER_ID]);
 
-  const miss = await apiRequest(`/api/sales?q=${encodeURIComponent(`${ERP_CUSTOMER_ID} 5w30`)}`, { cookie: adminCookie });
+  const miss = await apiRequest(`/api/sales?from=2019-01-01&to=2030-01-01&q=${encodeURIComponent(`${ERP_CUSTOMER_ID} 5w30`)}`, { cookie: adminCookie });
   assert.equal(miss.data.rows.length, 0);
 });
 
 test("GET /api/sales: amount terms compare against the order total", async () => {
-  const big = await apiRequest(`/api/sales?q=${encodeURIComponent(`${ERP_CUSTOMER_ID} >60000`)}`, { cookie: adminCookie });
+  const big = await apiRequest(`/api/sales?from=2019-01-01&to=2030-01-01&q=${encodeURIComponent(`${ERP_CUSTOMER_ID} >60000`)}`, { cookie: adminCookie });
   assert.deepEqual(big.data.rows.map((r) => r.order_id), [OLD_ORDER_ID]);
-  const small = await apiRequest(`/api/sales?q=${encodeURIComponent(`${ERP_CUSTOMER_ID} <=60000`)}`, { cookie: adminCookie });
+  const small = await apiRequest(`/api/sales?from=2019-01-01&to=2030-01-01&q=${encodeURIComponent(`${ERP_CUSTOMER_ID} <=60000`)}`, { cookie: adminCookie });
   assert.deepEqual(small.data.rows.map((r) => r.order_id), [ORDER_ID]);
 });

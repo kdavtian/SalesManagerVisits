@@ -180,7 +180,6 @@ export async function renderSales(root, navigate) {
         <label class="visually-hidden" for="sales-search">${t("sales_search_placeholder")}</label>
         <input type="search" id="sales-search" placeholder="${t("sales_search_placeholder")}" aria-label="${t("sales_search_placeholder")}" />
       </div>
-      <p class="muted sales-search-note" id="sales-search-note" hidden>${t("sales_search_all_dates")}</p>
       <p class="form-error" id="sales-error" hidden></p>
       <p class="sales-subtotal-bar" id="sales-subtotal"></p>
       <div id="sales-list" class="card-list"></div>
@@ -198,8 +197,6 @@ export async function renderSales(root, navigate) {
   const toInput = container.querySelector("#sales-to");
   const channelBarEl = container.querySelector("#sales-channel-bar");
   const searchInput = container.querySelector("#sales-search");
-  const searchNoteEl = container.querySelector("#sales-search-note");
-  const dateRowEl = container.querySelector(".pill-date-filter-row");
   const syncHintBtn = container.querySelector("#sales-sync-hint-btn");
   let channelPills = [{ value: "", label: t("all_statuses"), count: 0 }];
 
@@ -307,10 +304,6 @@ export async function renderSales(root, navigate) {
       if (channel) params.channel = channel;
       if (q) params.q = q;
       const { rows, sync } = await api.getSales(params);
-      // A search ignores the date range server-side (it looks through the
-      // whole order history), so the From/To pills are hidden meanwhile.
-      dateRowEl.hidden = Boolean(q);
-      searchNoteEl.hidden = !q;
       syncBadgeEl.innerHTML = syncBadgeHtml(sync);
 
       // Pill counts are only ever refreshed from an unfiltered-by-channel
