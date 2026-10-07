@@ -10623,3 +10623,14 @@ form select,
 .report-bucket-btn { width: 100%; text-align: left; cursor: pointer; font: inherit; color: inherit; border: 1px solid var(--border); }
 .report-bucket-btn.report-bucket-active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-card)); }
 .report-channel-btn { align-self: flex-start; }
+
+/* Brand chips (what check-ins recorded about the shelf) in a map pin popup */
+.popup-brand-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0 2px;
+}
+.popup-brand-chips:empty {
+  display: none;
+}

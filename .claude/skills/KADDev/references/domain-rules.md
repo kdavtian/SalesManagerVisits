@@ -80,3 +80,6 @@ Armenian default; English available. Examples of wording the owner corrected: Կ
 ## Map loading (v1.260.0)
 - `ensureLeaflet()` must never treat `window.L` as "loaded": leaflet.js sets it before rotate/markercluster/mapSafeRuntime finish, so a Map tap during the idle preload (or after one plugin failed) built the map without plugins and stayed broken until app restart. It now tracks a `fullyLoaded` flag, resumes retries from the failed step, has a 20 s timeout per asset, and `renderMap` unlocks `app-main-locked`/`map-active` if building the map throws.
 - Check-in brand status `imported_other` is labelled "No QR/Excise" / "Առանց QR/ակցիզ" (key unchanged).
+
+## Map brand-chip filter (v1.261.0)
+- Map uses the same "Products at the shop" chips as Customers (brandChips.js, `GET /customers/brand-summary`, shared `customers-brand-summary` cache): a tag icon in the map's icon-filter row (appears once the summary loads) opens the tri-state tree sheet; selected chips AND with the other map filters; map search also matches chip text; pin popup + desktop side list show the current chips (popup adds matched older chips with last-seen date while the filter is on). Older single-brand "Brands" availability chip (green/red/grey pins) is unchanged.
