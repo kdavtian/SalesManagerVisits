@@ -45,8 +45,9 @@ function resolveDateRange(query) {
 // total (">50000", ">=50000", "<20000", "<=20000", "=49000") or plain text
 // matched (case-insensitive substring) against the order id, the ERP customer
 // id, the customer name, or any line of the order (brand + product + size,
-// so "edge 0w20 c5 4l" finds the order with that product). While a search is
-// active the date range is ignored and the whole order history is searched.
+// so "edge 0w20 c5 4l" finds the order with that product). A search narrows
+// the selected date range (it no longer ignores it); widen the From/To dates
+// to look further back.
 const AMOUNT_TERM_RE = /^(>=|<=|>|<|=)\s*([0-9][0-9,]*(?:\.[0-9]+)?)$/;
 const MAX_SEARCH_TERMS = 8;
 const SEARCH_ROW_LIMIT = 1000;
@@ -67,20 +68,14 @@ salesRouter.get("/", async (req, res) => {
   const { amountFilters, textTerms } = parseSalesSearch(q);
   const searching = amountFilters.length > 0 || textTerms.length > 0;
 
-  const params = [];
-  let where = "";
-  let from = null;
-  let to = null;
-  if (!searching) {
-    ({ from, to } = resolveDateRange(req.query));
-    params.push(from, to);
-    where = "WHERE eol.order_date BETWEEN $1 AND $2";
-  }
+  const { from, to } = resolveDateRange(req.query);
+  const params = [from, to];
+  let where = "WHERE eol.order_date BETWEEN $1 AND $2";
 
   const channel = (req.query.channel || "").trim();
   if (channel) {
     params.push(channel);
-    where += `${where ? " AND" : "WHERE"} COALESCE(ecd.assigned_sales_rep, c.sales_channel) = $${params.length}`;
+    where += ` AND COALESCE(ecd.assigned_sales_rep, c.sales_channel) = $${params.length}`;
   }
 
   // Order-level conditions go in HAVING: the line text is aggregated per

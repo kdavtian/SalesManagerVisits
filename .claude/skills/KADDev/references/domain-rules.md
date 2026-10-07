@@ -83,3 +83,6 @@ Armenian default; English available. Examples of wording the owner corrected: Կ
 
 ## Map brand-chip filter (v1.261.0)
 - Map uses the same "Products at the shop" chips as Customers (brandChips.js, `GET /customers/brand-summary`, shared `customers-brand-summary` cache): a tag icon in the map's icon-filter row (appears once the summary loads) opens the tri-state tree sheet; selected chips AND with the other map filters; map search also matches chip text; pin popup + desktop side list show the current chips (popup adds matched older chips with last-seen date while the filter is on). Older single-brand "Brands" availability chip (green/red/grey pins) is unchanged.
+
+## Sales search keeps the period (v1.262.0)
+- `GET /api/sales?q=` now ALWAYS applies the From/To range (default: this month); search narrows it instead of ignoring it. The From/To pills stay visible while searching.
