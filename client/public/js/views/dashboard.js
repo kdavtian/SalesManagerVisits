@@ -645,7 +645,7 @@ async function renderNextVisit(slot, customers, navigate) {
   let distanceText = "";
 
   try {
-    const pos = await getCurrentPosition({ timeout: 4000 });
+    const pos = await getCurrentPosition({ timeout: 6000, goodAccuracy: 150, refineMs: 1500 });
     let nearest = null;
     let nearestDist = Infinity;
     for (const c of candidates) {

@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, getCurrentPosition, compressImage, formatDistance, haversineMeters, activateDialog } from "../util.js";
+import { escapeHtml, getCurrentPosition, locationErrorHint, compressImage, formatDistance, haversineMeters, activateDialog } from "../util.js";
 import { enqueueCheckin } from "../offlineQueue.js";
 import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
@@ -377,7 +377,7 @@ export async function renderCheckin(root, navigate, customerId) {
     gpsStatus.textContent = t("getting_location");
     gpsStatus.setAttribute("aria-busy", "true");
     try {
-      position = await getCurrentPosition();
+      position = await getCurrentPosition({ timeout: 25000, goodAccuracy: 30, refineMs: 10000 });
       const accuracy = Math.round(position.coords.accuracy);
       const unit = getLang() === "hy" ? "մ" : "m";
       gpsStatus.textContent = `${t("location_captured")} (±${accuracy}${unit} ${t("accuracy")})`;
@@ -397,7 +397,7 @@ export async function renderCheckin(root, navigate, customerId) {
         </div>
       `;
     } catch (err) {
-      gpsStatus.textContent = `${t("location_error")}: ${err.message}. `;
+      gpsStatus.textContent = `${t("location_error")}. ${locationErrorHint(err)} `;
       gpsStatus.classList.add("gps-error");
       const retryBtn = document.createElement("button");
       retryBtn.type = "button";

@@ -1,5 +1,6 @@
 import { api } from "./api.js";
 import { broadcastsLocation } from "./state.js";
+import { rememberPosition } from "./util.js";
 
 const INTERVAL_MS = 60000;
 let timerId = null;
@@ -8,6 +9,7 @@ function ping() {
   if (document.hidden || !navigator.geolocation) return;
   navigator.geolocation.getCurrentPosition(
     (pos) => {
+      rememberPosition(pos);
       api.postLocation(pos.coords.latitude, pos.coords.longitude).catch(() => {});
     },
     () => {},
