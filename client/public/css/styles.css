@@ -4729,21 +4729,20 @@ label.checkbox-row input[type="checkbox"] {
   display: none;
 }
 
-.dashboard-insights > summary::after {
-  content: "";
-  /* Same x position as the 24px chevron icon of Monthly leaders / Team today
-     (icon sits 2px from the edge, so its centre is 14px in). */
-  margin-right: 9px;
-  width: 8px;
-  height: 8px;
-  border-right: 2px solid var(--text-dim);
-  border-bottom: 2px solid var(--text-dim);
-  transform: rotate(45deg) translateY(-2px);
-  transition: transform 0.15s ease;
+/* The same chevron icon as Monthly leaders / Team today (see
+   .leaderboard-toggle-chevron), so the three line up exactly. */
+.dashboard-insights-chevron {
+  display: flex;
+  color: var(--text-dim);
+  margin-right: 2px;
 }
 
-.dashboard-insights[open] > summary::after {
-  transform: rotate(225deg) translate(-2px, -2px);
+.dashboard-insights-chevron svg {
+  transition: transform 0.2s ease;
+}
+
+.dashboard-insights[open] .dashboard-insights-chevron svg {
+  transform: rotate(180deg);
 }
 
 .next-visit-loading {
@@ -10878,10 +10877,33 @@ form select,
   align-items: center;
   gap: 8px;
 }
+.sales-subtotal-row {
+  margin: 0 0 4px;
+  padding: 0 4px;
+}
 .sales-subtotal-row .sales-subtotal-bar {
   flex: 1 1 auto;
   min-width: 0;
+  margin: 0;
+}
+.info-popup-body .muted {
+  margin: 0 0 8px;
 }
 .sales-subtotal-row .settings-hint-icon {
+  flex: 0 0 auto;
+}
+
+/* Check-in: customer name with a close (X) button on the right. */
+.checkin-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.checkin-head h1 {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.checkin-head .icon-btn {
   flex: 0 0 auto;
 }

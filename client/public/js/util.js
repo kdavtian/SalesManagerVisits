@@ -19,9 +19,19 @@ export async function saveBlob(blob, filename) {
       return;
     } catch (err) {
       if (err?.name === "AbortError") return; // user dismissed the sheet
-      // share unsupported for this file: fall through to a download
+      // iOS refuses navigator.share() once the tap that started the export is
+      // "used up" by the await on the file (NotAllowedError). Falling back to
+      // a plain download would open the file full-screen inside the installed
+      // app with no way back, so ask for one more tap in an in-app sheet
+      // (a fresh gesture, which share() accepts) that can always be closed.
+      await offerFileShare(file, blob, filename);
+      return;
     }
   }
+  triggerDownload(blob, filename);
+}
+
+function triggerDownload(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -30,6 +40,39 @@ export async function saveBlob(blob, filename) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+function offerFileShare(file, blob, filename) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet info-popup">
+        <button type="button" class="icon-btn sheet-close-x" data-action="close" aria-label="${t("close")}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        <h2>${t("file_ready")}</h2>
+        <p class="muted">${escapeHtml(filename)}</p>
+        <div class="sheet-actions">
+          <button type="button" class="btn" data-action="close">${t("close")}</button>
+          <button type="button" class="btn btn-primary" data-action="share">${t("file_share")}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    const done = () => {
+      overlay.remove();
+      resolve();
+    };
+    overlay.addEventListener("click", (e) => e.target === overlay && done());
+    overlay.querySelectorAll('[data-action="close"]').forEach((b) => b.addEventListener("click", done));
+    overlay.querySelector('[data-action="share"]').addEventListener("click", async () => {
+      try {
+        await navigator.share({ files: [file] });
+      } catch (err) {
+        if (err?.name !== "AbortError") triggerDownload(blob, filename);
+      }
+      done();
+    });
+  });
 }
 
 // GET a file (CSV/Excel export) with the session cookie and save it as above.
@@ -864,6 +907,22 @@ export function takeParkedSheet(hash) {
 }
 export function pruneParkedSheet(keepHashes) {
   if (parkedSheet && !keepHashes.includes(parkedSheet.fromHash)) parkedSheet = null;
+}
+
+// Small info popup (the "!" icons): a sheet with some HTML and a close button.
+export function openInfoPopup(html) {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.innerHTML = `
+    <div class="sheet info-popup">
+      <button type="button" class="icon-btn sheet-close-x" data-action="close" aria-label="${t("close")}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      <div class="info-popup-body">${html}</div>
+    </div>`;
+  document.body.appendChild(overlay);
+  activateDialog(overlay);
+  overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+  overlay.querySelector('[data-action="close"]').addEventListener("click", () => overlay.remove());
+  return overlay;
 }
 
 export function activateDialog(overlay) {

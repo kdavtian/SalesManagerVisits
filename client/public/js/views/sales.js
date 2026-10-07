@@ -5,7 +5,7 @@
 // sales.js: no write-back, ERP/Excel stays the source of truth, same
 // contract as Debt Balances.
 import { api } from "../api.js";
-import { escapeHtml, saveBlob, formatAmd, formatLiters, channelDisplayLabel, activateDialog, syncBadgeHtml, parseDateOnly, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, erpLineDiscountRowHtml } from "../util.js";
+import { escapeHtml, saveBlob, openInfoPopup, formatAmd, formatLiters, channelDisplayLabel, activateDialog, syncBadgeHtml, parseDateOnly, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, erpLineDiscountRowHtml } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { seesFinancialExports } from "../state.js";
 import { icons } from "../icons.js";
@@ -148,8 +148,8 @@ async function renderSalesTab(root, navigate) {
       </div>
       <p class="form-error" id="sales-error" hidden></p>
       <div class="sales-subtotal-row">
+        <button type="button" class="settings-hint-icon" id="sales-sync-hint-btn" aria-label="${t("more_info")}">!</button>
         <p class="sales-subtotal-bar" id="sales-subtotal"></p>
-        <button type="button" class="settings-hint-icon" id="sales-sync-hint-btn" aria-expanded="false" aria-controls="sales-sync-hint-text" aria-label="${t("more_info")}">!</button>
       </div>
       <div id="sales-list" class="card-list"></div>
     </div>
@@ -169,12 +169,9 @@ async function renderSalesTab(root, navigate) {
   let channelPills = [{ value: "", label: t("all_statuses"), count: 0 }];
 
   // The sync-freshness note and the "what this data is" explanation sit
-  // behind the single "!" icon next to the subtotal.
+  // behind the single "!" icon left of the subtotal (opens a popup).
   const syncHintBtn = container.querySelector("#sales-sync-hint-btn");
-  syncHintBtn.addEventListener("click", () => {
-    syncHintTextEl.hidden = !syncHintTextEl.hidden;
-    syncHintBtn.setAttribute("aria-expanded", String(!syncHintTextEl.hidden));
-  });
+  syncHintBtn.addEventListener("click", () => openInfoPopup(syncHintTextEl.innerHTML));
 
   // Same tappable-pill filter as Activity's "by sales manager" bar (see
   // views/activity.js's renderManagerPills) -- tapping the pill that's
