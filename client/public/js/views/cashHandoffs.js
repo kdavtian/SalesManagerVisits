@@ -19,7 +19,7 @@ import { state } from "../state.js";
 // view in this app duplicates its role rules (there is no shared client
 // roles module; see payments.js's REVIEW_ROLES).
 const NEXT_HOP_ROLES = {
-  sales_manager: ["sales_director"],
+  sales_manager: ["sales_director", "accountant"],
   sales_director: ["ceo", "operations_director", "accountant"],
   ceo: ["accountant"],
   operations_director: ["accountant"],
@@ -30,7 +30,7 @@ const NEXT_HOP_ROLES = {
 // rep's only legal receiver is a director), so a CEO or accountant would
 // only ever get an error out of that picker -- don't offer it to them.
 // Admin keeps it as the usual backstop.
-const SUBMIT_FOR_OTHERS_ROLES = new Set(["admin", "sales_director"]);
+const SUBMIT_FOR_OTHERS_ROLES = new Set(["admin", "sales_director", "accountant"]);
 
 const HANDOFF_STATUS_META = {
   pending: { key: "handoff_status_pending", cls: "badge-warning" },
@@ -227,6 +227,10 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId) {
     // "I have received this rep's collections". Everything past that is
     // strictly first-person, so the picker is hidden for those hops.
     const showSenderPicker = canActForOthers;
+    // Declaring a rep's cash on their behalf is only legal into the actor's
+    // OWN custody (server checkOnBehalf; admin may pick anyone), so don't
+    // offer the other receivers -- they would only produce an error.
+    if (actingFor && role !== "admin") data.recipients = data.recipients.filter((r) => r.id === state.user.id);
     const canSubmit = data.recipients.length > 0 && data.count > 0;
 
     // Wrapped in a <form> purely so the app's `form label`/`form select`

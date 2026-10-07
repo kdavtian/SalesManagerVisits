@@ -1,7 +1,7 @@
 import { api } from "../api.js";
 import { escapeHtml, activateDialog } from "../util.js";
 import { t } from "../i18n.js";
-import { state, canPlanForOthers } from "../state.js";
+import { state, canPlanForOthers, canViewAllRoutePlans } from "../state.js";
 import { buildCustomerTree, renderTriStateTree } from "../regionTree.js";
 import { icons } from "../icons.js";
 
@@ -23,6 +23,8 @@ const MAX_GROUP_DAY_BADGES = 3;
 // director/ceo/admin planning on someone else's behalf.
 export async function renderRoutePlans(root, navigate) {
   const canManage = canPlanForOthers();
+  // The accountant sees every rep's plan but cannot change it.
+  const canViewAll = canViewAllRoutePlans();
 
   root.innerHTML = `
     <div class="detail-view">
@@ -46,7 +48,7 @@ export async function renderRoutePlans(root, navigate) {
   async function load() {
     bodyEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     try {
-      if (canManage) {
+      if (canViewAll) {
         const overview = await api.getRoutePlansOverview();
         paintOverview(overview);
       } else {
@@ -89,6 +91,10 @@ export async function renderRoutePlans(root, navigate) {
 
     bodyEl.querySelectorAll(".route-plan-day-chip").forEach((btn) => {
       btn.addEventListener("click", () => {
+        if (!canManage) {
+          openCustomersByDaySheet(Number(btn.dataset.userId), btn.dataset.userName);
+          return;
+        }
         openEditSheet(Number(btn.dataset.userId), btn.dataset.userName, Number(btn.dataset.day), load);
       });
     });

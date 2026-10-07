@@ -186,7 +186,7 @@ test("seesAllPayments: mirrors seesAllActivity", () => {
 });
 
 test("validHandoffRecipientRoles: the exact custody chain", () => {
-  assert.deepEqual(validHandoffRecipientRoles("sales_manager"), ["sales_director"]);
+  assert.deepEqual(validHandoffRecipientRoles("sales_manager"), ["sales_director", "accountant"]);
   assert.deepEqual(validHandoffRecipientRoles("sales_director"), ["ceo", "operations_director", "accountant"]);
   assert.deepEqual(validHandoffRecipientRoles("ceo"), ["accountant"]);
   assert.deepEqual(validHandoffRecipientRoles("operations_director"), ["accountant"]);

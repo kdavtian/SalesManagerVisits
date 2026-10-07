@@ -406,7 +406,10 @@ async function custodyBlocksReview(payment, user) {
   if (payment.pending_handoff_id) {
     return "This payment is part of a cash handoff awaiting confirmation -- resolve that handoff first";
   }
-  if (user.role === "admin") return null;
+  // The accountant is the person who actually books the money, so they can
+  // accept any pending payment directly, without the cash first passing
+  // through the sales director's confirmation. admin keeps the same override.
+  if (user.role === "admin" || user.role === "accountant") return null;
   if (!payment.current_holder_id) return "This payment has no recorded cash holder";
   const { rows } = await pool.query("SELECT role FROM users WHERE id = $1", [payment.current_holder_id]);
   if (rows[0]?.role !== "accountant") {
