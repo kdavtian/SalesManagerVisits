@@ -10634,3 +10634,88 @@ form select,
 .popup-brand-chips:empty {
   display: none;
 }
+
+/* Request-status control (change a waybill / invoice request by hand). */
+.acc-status-control { margin: 10px 0 4px; }
+.acc-status-control label { display: block; font-size: var(--fs-row-meta); color: var(--text-dim); margin-bottom: 4px; }
+.acc-status-control-row { display: flex; gap: 8px; align-items: center; }
+.acc-status-control-row select { flex: 1; min-width: 0; }
+.order-acc-status-row { margin-top: -4px; }
+
+/* Order details on a PC: a wide, centred two-column dialog (items table on the
+   left, summary / accounting / timeline on the right) instead of a narrow
+   phone-style bottom sheet. Phones keep the single stacked column. */
+@media (min-width: 900px) {
+  .sheet-overlay:has(> .order-detail-sheet) { align-items: center; padding: 24px; }
+  .order-detail-sheet:not(:has(> .edit-sheet)) {
+    width: min(960px, 94vw);
+    max-width: 960px;
+    max-height: 90vh;
+    border-radius: var(--radius-lg);
+    padding: 26px 32px 24px;
+  }
+  .order-detail-head { padding-right: 52px; }
+  .order-detail-head .order-detail-customer { font-size: 1.6rem; margin: 6px 0 10px; }
+  .order-detail-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr);
+    gap: 28px;
+    align-items: start;
+    margin-top: 8px;
+  }
+  .order-detail-main { margin: 0 !important; }
+  .order-detail-sheet .order-line-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas: "brand meta total" "name meta total";
+    column-gap: 20px;
+    align-items: center;
+    padding: 12px 4px;
+  }
+  .order-detail-sheet .order-line-top { display: contents; }
+  .order-detail-sheet .order-line-brand { grid-area: brand; }
+  .order-detail-sheet .order-line-name { grid-area: name; font-size: 1.02rem; }
+  .order-detail-sheet .order-line-meta {
+    grid-area: meta;
+    font-size: 0.9rem;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .order-detail-sheet .order-line-top .text-amount {
+    grid-area: total;
+    min-width: 120px;
+    text-align: right;
+    font-size: 1.05rem;
+    white-space: nowrap;
+  }
+  .order-detail-side {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 16px 18px;
+    position: sticky;
+    top: 0;
+  }
+  .order-detail-side > :first-child { margin-top: 0; }
+  .order-detail-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin: 4px 0 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .order-detail-sheet .sheet-actions { margin-top: 20px; justify-content: flex-end; }
+  .order-detail-sheet .sheet-actions .btn { flex: 0 0 auto; min-width: 150px; }
+}
+.acc-status-control-row select {
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 10px);
+  background: var(--bg-card);
+  color: var(--text);
+  font: inherit;
+}

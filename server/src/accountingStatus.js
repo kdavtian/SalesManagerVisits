@@ -1,3 +1,14 @@
+export const ACCOUNTING_STATUSES = [
+  "pending",
+  "in_progress",
+  "waybill_created",
+  "partially_created",
+  "exported_unsigned",
+  "signed",
+  "needs_attention",
+  "cancelled",
+];
+
 // Order-level accounting status derived from its waybills' e-invoicing
 // results. An order that still has lines without a waybill stays
 // partially_created whatever the exported ones are doing.

@@ -5,13 +5,16 @@ import { icons } from "../icons.js";
 import { ORDER_STATUS_ICONS } from "../ordersSearchEnhancements.js";
 import { loadWithCache } from "../listCache.js";
 import { STATUS_META, openOrderDetailSheet, paymentMethodBadgeHtml } from "../orderDetailSheet.js";
-import { ACCOUNTING_STATUS_BADGE } from "../accountingDocSheet.js";
+import { ACCOUNTING_STATUS_BADGE, accountingDocLabel } from "../accountingDocSheet.js";
 import { state } from "../state.js";
 
 // Who sees (and can filter by) the accounting-document status -- mirrors
 // canConfirmOrders in the server's roles.js.
 const ACCOUNTING_ROLES = new Set(["admin", "sales_director", "ceo", "operations_director", "accountant"]);
-const ACCOUNTING_FILTERS = ["pending", "in_progress", "waybill_created", "partially_created", "exported_unsigned", "signed", "needs_attention"];
+const ACCOUNTING_FILTERS = ["pending", "in_progress", "waybill_created", "partially_created", "exported_unsigned", "signed", "needs_attention", "cancelled"];
+// The "Accounting" group next to Draft: every order that was sent to accounting
+// (a waybill or invoice request), with its own row of request-status chips.
+const ACCOUNTING_TAB = "accounting";
 
 // Draft is last: it is not yet part of the live pipeline.
 const STATUS_FILTERS = ["", "submitted", "confirmed", "packed_stock_out", "delivered", "draft"];
@@ -44,6 +47,7 @@ export async function renderOrders(root, navigate) {
         </button>
       </div>
       <div class="order-status-filter-row" id="order-status-filters"></div>
+      <div class="order-status-filter-row order-acc-status-row" id="order-acc-status-filters" hidden></div>
       <div class="list-toolbar">
         <input type="search" id="order-search" placeholder="${t("search")}" aria-label="${t("search")}" />
         <button type="button" class="icon-btn" id="order-filter-btn" aria-label="${t("filter")}" aria-haspopup="menu" aria-expanded="false" aria-controls="order-filter-menu">${icons.filter}</button>
@@ -61,9 +65,40 @@ export async function renderOrders(root, navigate) {
   const DEFAULT_STATUS_FILTER = "submitted";
 
   const filterRow = root.querySelector("#order-status-filters");
-  filterRow.innerHTML = STATUS_FILTERS.map(
-    (s) => `<button class="map-filter-chip ${s === DEFAULT_STATUS_FILTER ? "chip-active" : ""}" data-status="${s}" aria-pressed="${s === DEFAULT_STATUS_FILTER ? "true" : "false"}">${s ? t(STATUS_META[s].key) : t("all_statuses")}</button>`
-  ).join("");
+  const canSeeAccounting = ACCOUNTING_ROLES.has(state.user.role);
+  const tabs = canSeeAccounting ? [...STATUS_FILTERS, ACCOUNTING_TAB] : STATUS_FILTERS;
+  filterRow.innerHTML = tabs
+    .map(
+      (s) =>
+        `<button class="map-filter-chip ${s === DEFAULT_STATUS_FILTER ? "chip-active" : ""}" data-status="${s}" aria-pressed="${s === DEFAULT_STATUS_FILTER ? "true" : "false"}">${
+          s === ACCOUNTING_TAB ? t("acc_tab") : s ? t(STATUS_META[s].key) : t("all_statuses")
+        }</button>`
+    )
+    .join("");
+  const accRow = root.querySelector("#order-acc-status-filters");
+  // The request-status chip selected inside the Accounting group ("" = all).
+  let accSub = "";
+  accRow.innerHTML = ["", ...ACCOUNTING_FILTERS]
+    .map((s) => `<button class="map-filter-chip ${s === "" ? "chip-active" : ""}" data-acc-sub="${s}" aria-pressed="${s === "" ? "true" : "false"}">${s ? t(`acc_status_${s}`) : t("acc_all_requests")}</button>`)
+    .join("");
+  accRow.querySelectorAll("[data-acc-sub]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      accRow.querySelectorAll("[data-acc-sub]").forEach((b) => {
+        b.setAttribute("aria-pressed", "false");
+        b.classList.remove("chip-active");
+      });
+      btn.setAttribute("aria-pressed", "true");
+      btn.classList.add("chip-active");
+      accSub = btn.dataset.accSub;
+      load();
+    });
+  });
+  // Server query for the current tab (the Accounting group asks for orders
+  // that have an accounting request instead of a fulfilment status).
+  function listParams() {
+    if (activeStatus === ACCOUNTING_TAB) return { accounting: accSub || "any" };
+    return activeStatus ? { status: activeStatus } : {};
+  }
 
   const listEl = root.querySelector("#orders-list");
   const searchInput = root.querySelector("#order-search");
@@ -132,9 +167,9 @@ export async function renderOrders(root, navigate) {
     listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     let paintedOnce = false;
     try {
-      const params = activeStatus ? { status: activeStatus } : {};
+      const params = listParams();
       await loadWithCache(
-        `orders-list:${activeStatus || "all"}`,
+        `orders-list:${activeStatus || "all"}${activeStatus === ACCOUNTING_TAB ? `:${accSub || "any"}` : ""}`,
         () => api.listOrders(params),
         (result) => {
           orders = result.rows;
@@ -154,7 +189,7 @@ export async function renderOrders(root, navigate) {
     const btn = listEl.querySelector("#orders-load-more");
     if (btn) btn.disabled = true;
     try {
-      const params = activeStatus ? { status: activeStatus } : {};
+      const params = listParams();
       params.offset = orders.length;
       const result = await api.listOrders(params);
       orders = orders.concat(result.rows);
@@ -181,7 +216,7 @@ export async function renderOrders(root, navigate) {
     }
 
     if (!filtered.length) {
-      listEl.innerHTML = `<p class="empty-state">${t("no_orders_found")}</p>`;
+      listEl.innerHTML = `<p class="empty-state">${activeStatus === ACCOUNTING_TAB && !search ? t("acc_no_requests") : t("no_orders_found")}</p>`;
       return;
     }
 
@@ -230,8 +265,10 @@ export async function renderOrders(root, navigate) {
             <div class="list-row-bottom">
               <span class="badge ${meta.cls}">${t(meta.key)}</span>
               ${paymentMethodBadgeHtml(o.payment_method)}
+              ${activeStatus === ACCOUNTING_TAB && o.accounting_doc_type ? `<span class="badge badge-neutral">${accountingDocLabel(o.accounting_doc_type === "waybill" ? "cash" : "invoice")}</span>` : ""}
               ${o.accounting_status && ACCOUNTING_ROLES.has(state.user.role) ? `<span class="badge ${ACCOUNTING_STATUS_BADGE[o.accounting_status] ?? "badge-neutral"}">${t(`acc_status_${o.accounting_status}`)}</span>` : ""}
             </div>
+            ${activeStatus === ACCOUNTING_TAB && o.accounting_requested_at ? `<div class="muted list-row-meta">${t("acc_requested_label")}: ${formatDate(o.accounting_requested_at)}</div>` : ""}
           </div>
           <span class="chevron">&#8250;</span>
         </button>
@@ -262,6 +299,7 @@ export async function renderOrders(root, navigate) {
       btn.setAttribute("aria-pressed", "true");
       btn.classList.add("chip-active");
       activeStatus = btn.dataset.status;
+      accRow.hidden = activeStatus !== ACCOUNTING_TAB;
       load();
     });
   });

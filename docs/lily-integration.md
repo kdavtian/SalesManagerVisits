@@ -15,7 +15,8 @@ database): `doc_type` is `waybill` only when `payment_method` is `cash`, and `in
 payment method on that sheet while the request is `pending`.
 
 Statuses: `pending -> in_progress -> waybill_created | partially_created -> exported_unsigned -> signed`,
-and `needs_attention`. `needs_attention -> pending` when management taps "Send to
+`needs_attention` and `cancelled` (a request withdrawn in KAD; Lily never sees it as ready). Management and the
+accountant can also move a request to any status by hand from the order sheet (`pending` puts it back in the queue). `needs_attention -> pending` when management taps "Send to
 accounting again" in the app. A claim that is not reported on within **30 minutes**
 goes back to `pending`.
 

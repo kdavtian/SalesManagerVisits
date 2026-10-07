@@ -18,6 +18,7 @@ export const ACCOUNTING_STATUS_BADGE = {
   exported_unsigned: "badge-warning",
   signed: "badge-success",
   needs_attention: "badge-danger",
+  cancelled: "badge-neutral",
 };
 
 // Resolves true if a request was sent, false if dismissed.
