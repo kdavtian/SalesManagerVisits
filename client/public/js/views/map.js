@@ -10,6 +10,8 @@ import { getClusterPins, setClusterPins, getCompassMode, setCompassMode, getMapT
 import { getPerfMode } from "../perfMode.js";
 import { ensureLeaflet } from "../leafletLoader.js";
 import { loadWithCache } from "../listCache.js";
+import { openTriStateTreeSheet } from "../regionTree.js";
+import { indexBrandSummary, brandSearchText, currentChips, matchedEverEntries, matchesSelectedChips, buildBrandChipTree, chipHtml, shortDate } from "../brandChips.js";
 
 const NEARBY_RADIUS_METERS = 5000;
 
@@ -194,6 +196,19 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         // best effort
       }
     }, 600);
+  };
+  // What check-ins recorded about the brands on this shop's shelf: the
+  // current chips, plus (while a chip filter is on) the matched older ones
+  // with the date they were last seen -- same wording as the Customers tab.
+  const popupBrandChipsHtml = (id) => {
+    const summary = brandSummary.get(id);
+    if (!summary) return "";
+    const current = currentChips(summary.current);
+    const currentIds = new Set(current.map((d) => `${d.group}:${d.value}`));
+    const older = matchedEverEntries(summary, { selectedIds: brandChipIds, query: "" }).filter(
+      (m) => !currentIds.has(`${m.def.group}:${m.def.value}`)
+    );
+    return current.map((d) => chipHtml(d)).join("") + older.map((m) => chipHtml(m.def, shortDate(m.last_at))).join("");
   };
   const popupFactsHtml = (data) => {
     if (!data) {
@@ -418,6 +433,10 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
             <strong>${escapeHtml(c.name)}</strong>
             ${c.category ? `<span class="muted">${escapeHtml(categoryLabel(c.category))}</span>` : ""}
             ${c.address ? `<span class="muted">${escapeHtml(c.address)}</span>` : ""}
+            ${(() => {
+              const chips = currentChips(brandSummary.get(c.id)?.current);
+              return chips.length ? `<span class="list-row-bottom product-match-row">${chips.map((d) => chipHtml(d)).join("")}</span>` : "";
+            })()}
           </div>
           <span class="card-trailing">
             <span class="badge ${badge.cls}">${badge.text}</span>
@@ -962,6 +981,13 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // is a real, common query, and a single-value filter forced picking one
   // at a time to do it.
   let channelFilters = new Set(MAP_DEFAULT_CHANNEL_FILTERS);
+  // "Products at the shop" chips recorded at check-ins (fake Castrol, no
+  // Castrol, Lotos available, ...) -- the same data and the same picker as
+  // the Customers tab (brandChips.js). brandChipIds are "group:value" ids;
+  // empty = no filter. brandSummary is customer id -> { current, ever },
+  // loaded once in the background; the filter button appears when it lands.
+  let brandChipIds = new Set();
+  let brandSummary = new Map();
   let categoryFilters = new Set();
   let brandStatusByCustomer = null;
 
@@ -1065,6 +1091,19 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
   const iconFilterRow = root.querySelector("#map-icon-filter-row");
 
+  // Best-effort: without the chips the map simply has no chip filter.
+  async function loadBrandSummary() {
+    try {
+      await loadWithCache("customers-brand-summary", () => api.getBrandSummary(), (rows) => {
+        brandSummary = indexBrandSummary(rows);
+        renderIconFilterRow();
+        if (brandChipIds.size || searchQuery) applyFilter();
+      });
+    } catch {
+      /* optional feature */
+    }
+  }
+
   function renderIconFilterRow() {
     if (!iconFilterRow) return;
     const channels = sortMapChannels([...new Set(lastCustomers.map(({ c }) => c.sales_channel).filter(Boolean))]);
@@ -1073,6 +1112,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     iconFilterRow.innerHTML = [
       channels.length
         ? mapFilterIconButton({ key: "channel", icon: icons.route, label: t("filter_direction_title"), active: channelFilters.size > 0, count: channelFilters.size })
+        : "",
+      brandSummary.size
+        ? mapFilterIconButton({ key: "brandchips", icon: icons.tag, label: t("filter_brands_title"), active: brandChipIds.size > 0, count: brandChipIds.size })
         : "",
       categories.length
         ? mapFilterIconButton({ key: "category", icon: icons.store, label: t("category"), active: categoryFilters.size > 0, count: categoryFilters.size })
@@ -1092,6 +1134,20 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           applyFilter();
         }
       );
+    });
+
+    iconFilterRow.querySelector('[data-map-filter-btn="brandchips"]')?.addEventListener("click", () => {
+      openTriStateTreeSheet(t("filter_brands_title"), {
+        tree: buildBrandChipTree(brandSummary, lastCustomers.map(({ c }) => c.id)),
+        initialSelectedIds: brandChipIds,
+        countUnitLabel: t("perf_dq_customers_unit"),
+        searchPlaceholder: t("search"),
+        onApply: (selectedIds) => {
+          brandChipIds = selectedIds;
+          renderIconFilterRow();
+          applyFilter();
+        },
+      });
     });
 
     iconFilterRow.querySelector('[data-map-filter-btn="category"]')?.addEventListener("click", () => {
@@ -1355,8 +1411,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       if (channelFilters.size && c.sales_channel && !channelFilters.has(c.sales_channel)) continue;
       if (categoryFilters.size && !categoryFilters.has(c.category)) continue;
       if (plannedTodayOnly && !plannedTodayIdSet?.has(c.id)) continue;
+      if (brandChipIds.size && !matchesSelectedChips(brandSummary.get(c.id), brandChipIds)) continue;
       if (searchQuery) {
-        const haystack = `${c.name} ${c.address ?? ""} ${c.category ?? ""} ${c.erp_customer_id ?? ""}`.toLowerCase();
+        const haystack = `${c.name} ${c.address ?? ""} ${c.category ?? ""} ${c.erp_customer_id ?? ""} ${brandSearchText(brandSummary.get(c.id))}`.toLowerCase();
         if (!haystack.includes(searchQuery)) continue;
       }
       searchMatchCount += 1;
@@ -1880,6 +1937,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           <div class="map-popup">
             <strong>${escapeHtml(c.name)}</strong>
             ${c.sales_channel ? `<div class="popup-category">${escapeHtml(channelDisplayLabel(c.sales_channel))}</div>` : ""}
+            <div class="popup-brand-chips" id="popup-brands-${c.id}">${popupBrandChipsHtml(c.id)}</div>
             <div class="popup-facts" id="popup-facts-${c.id}">${popupFactsHtml(factsCache.get(c.id)?.data)}</div>
             <div class="popup-actions">
               <button data-action="checkin" data-id="${c.id}" class="btn-accent"><span>${icons.mapPinCheck}</span><span class="popup-action-label">${t("check_in")}</span></button>
@@ -1898,6 +1956,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
             navigate(`#/checkin/${c.id}`);
           });
 
+          // The chips may have arrived after this popup's HTML was built.
+          const brandsEl = popupEl.querySelector(`#popup-brands-${c.id}`);
+          if (brandsEl) brandsEl.innerHTML = popupBrandChipsHtml(c.id);
           const factsEl = popupEl.querySelector(`#popup-facts-${c.id}`);
           // Facts come from one small request, shown instantly from the
           // session cache when we have it (refreshed in the background) and
@@ -1984,6 +2045,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // not possibly flash the old (cached, pre-add) list first.
   async function loadCustomersCached() {
     await loadWithCache("map-customers", () => api.listCustomers(), paintCustomers);
+    loadBrandSummary();
   }
 
   // "My location" — blue dot + accuracy circle, kept live with watchPosition.
