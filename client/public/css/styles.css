@@ -10816,3 +10816,72 @@ form select,
 /* yellow = a task whose deadline is still ahead, red = due today or overdue */
 .pin-task-soon { background: #f5c518; color: #3d3000; border-color: #ffffff; }
 .pin-task-due { background: var(--danger); color: #ffffff; border-color: #ffffff; }
+
+/* Sales | Payments switch in the Sales page header (replaces the plain title). */
+.sales-tab-switch {
+  display: inline-flex;
+  gap: 2px;
+  margin: 0;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--bg-card-pressed);
+  font-size: 0.8rem;
+  max-width: 100%;
+}
+.sales-tab-btn {
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-weight: 600;
+  padding: 6px 8px;
+  border-radius: 999px;
+  min-height: 32px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.sales-tab-btn.sales-tab-active {
+  background: var(--bg-card);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+/* Keep back | Sales-Payments switch | ! | export on one row (the shared header
+   wraps by default; here the switch itself shrinks instead). */
+.sales-tab-header {
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+.sales-tab-header .detail-header-title {
+  flex: 1 1 auto;
+}
+.sales-tab-header .sales-tab-switch {
+  display: flex;
+  cursor: default;
+}
+.sales-tab-header .sales-tab-btn {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sales-tab-header .detail-header-actions {
+  align-items: center;
+  gap: 4px;
+}
+
+.sales-subtotal-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sales-subtotal-row .sales-subtotal-bar {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.sales-subtotal-row .settings-hint-icon {
+  flex: 0 0 auto;
+}

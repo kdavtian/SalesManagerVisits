@@ -280,6 +280,20 @@ export const api = {
     }
     return res.blob();
   },
+  // Excel file of a table the client already holds (Sales / Payments export).
+  buildXlsx: async (payload) => {
+    const res = await fetch("/api/table-export/xlsx", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", "X-App-Version": APP_VERSION, ...(getCsrfToken() ? { "X-CSRF-Token": getCsrfToken() } : {}) },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.error || `HTTP ${res.status}`);
+    }
+    return res.blob();
+  },
   productImageUrl: (id) => `/api/products/${id}/image`,
   uploadProductImage: (id, formData) => request(`/products/${id}/image`, { method: "POST", body: formData }),
   deleteProductImage: (id) => request(`/products/${id}/image`, { method: "DELETE" }),

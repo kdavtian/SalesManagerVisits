@@ -5,9 +5,10 @@
 // sales.js: no write-back, ERP/Excel stays the source of truth, same
 // contract as Debt Balances.
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, formatLiters, channelDisplayLabel, activateDialog, syncBadgeHtml, parseDateOnly, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, erpLineDiscountRowHtml } from "../util.js";
+import { escapeHtml, saveBlob, formatAmd, formatLiters, channelDisplayLabel, activateDialog, syncBadgeHtml, parseDateOnly, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, erpLineDiscountRowHtml } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { seesFinancialExports } from "../state.js";
+import { icons } from "../icons.js";
 
 // Local calendar-date components, not toISOString() -- that converts to
 // UTC first, so a local midnight east of UTC (Yerevan is UTC+4) lands on
@@ -107,33 +108,9 @@ async function openSalesOrderSheet(erpCustomerId, orderId, navigate) {
   activateCustomerNameLinks(overlay, (hash) => leaveSheetTo(overlay, navigate, hash));
 }
 
-export async function renderSales(root, navigate) {
-  // The Sales tile is already excluded from a sales_manager's own quick
-  // actions (see quickActions.js's qa_sales -- they have their own Orders/
-  // Activity view of the same data) and the server rejects this role with a
-  // plain 403 too. This hash is only ever reached by an atypical path (a
-  // stale bookmark, a shared link, a role change without a fresh login), but
-  // when it is, checking here first -- instead of rendering the full page
-  // shell and then having the fetch below fail into a raw, unstyled
-  // "Not allowed" string under a fully-functional-looking header -- matches
-  // the same client-side permission check deliveryRoute.js's driver view
-  // already uses for the same situation.
-  if (!seesFinancialExports()) {
-    root.innerHTML = `
-      <div class="detail-view">
-        <div class="detail-header">
-          <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-          </button>
-          <div class="detail-header-title"><h1>${t("sales_title")}</h1></div>
-        </div>
-        <p class="empty-state">${t("not_allowed")}</p>
-      </div>
-    `;
-    root.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
-    return;
-  }
-
+// The Sales tab: renders into `root` (the page body under the Sales | Payments
+// switch). Returns what the shell needs: the Excel rows.
+async function renderSalesTab(root, navigate) {
   const today = new Date();
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   let from = formatDateInput(monthStart);
@@ -143,18 +120,7 @@ export async function renderSales(root, navigate) {
   let searchTimer = null;
 
   root.innerHTML = `
-    <div class="detail-view">
-      <div class="detail-header">
-        <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-        </button>
-        <div class="detail-header-title">
-          <h1 class="sales-heading-with-hint">
-            <span>${t("sales_title")}</span>
-            <button type="button" class="settings-hint-icon" id="sales-sync-hint-btn" aria-expanded="false" aria-controls="sales-sync-hint-text" aria-label="${t("more_info")}">!</button>
-          </h1>
-        </div>
-      </div>
+    <div class="sales-tab-content">
       <div id="sales-sync-hint-text" hidden>
         <div id="sales-sync-badge"></div>
         <p class="muted sales-source-hint">${t("sales_source_hint")}</p>
@@ -181,13 +147,15 @@ export async function renderSales(root, navigate) {
         <input type="search" id="sales-search" placeholder="${t("sales_search_placeholder")}" aria-label="${t("sales_search_placeholder")}" />
       </div>
       <p class="form-error" id="sales-error" hidden></p>
-      <p class="sales-subtotal-bar" id="sales-subtotal"></p>
+      <div class="sales-subtotal-row">
+        <p class="sales-subtotal-bar" id="sales-subtotal"></p>
+        <button type="button" class="settings-hint-icon" id="sales-sync-hint-btn" aria-expanded="false" aria-controls="sales-sync-hint-text" aria-label="${t("more_info")}">!</button>
+      </div>
       <div id="sales-list" class="card-list"></div>
     </div>
   `;
 
-  const container = root.querySelector(".detail-view");
-  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
+  const container = root.querySelector(".sales-tab-content");
   const listEl = container.querySelector("#sales-list");
   const errorEl = container.querySelector("#sales-error");
   const subtotalEl = container.querySelector("#sales-subtotal");
@@ -197,18 +165,15 @@ export async function renderSales(root, navigate) {
   const toInput = container.querySelector("#sales-to");
   const channelBarEl = container.querySelector("#sales-channel-bar");
   const searchInput = container.querySelector("#sales-search");
-  const syncHintBtn = container.querySelector("#sales-sync-hint-btn");
+  let lastRows = [];
   let channelPills = [{ value: "", label: t("all_statuses"), count: 0 }];
 
-  // Both the sync-freshness note ("Castrol data as of ...") and the "what
-  // this data is" explanation are collapsed behind the single "!" icon on
-  // the heading -- these used to be two separate toggles (this one plus a
-  // standalone (i) button below it), which read as two "!" icons stacked
-  // right under each other for no clear reason. One toggle, one icon.
+  // The sync-freshness note and the "what this data is" explanation sit
+  // behind the single "!" icon next to the subtotal.
+  const syncHintBtn = container.querySelector("#sales-sync-hint-btn");
   syncHintBtn.addEventListener("click", () => {
-    const expanded = syncHintBtn.getAttribute("aria-expanded") === "true";
-    syncHintBtn.setAttribute("aria-expanded", String(!expanded));
-    syncHintTextEl.hidden = expanded;
+    syncHintTextEl.hidden = !syncHintTextEl.hidden;
+    syncHintBtn.setAttribute("aria-expanded", String(!syncHintTextEl.hidden));
   });
 
   // Same tappable-pill filter as Activity's "by sales manager" bar (see
@@ -327,6 +292,7 @@ export async function renderSales(root, navigate) {
       }
       renderChannelBar();
 
+      lastRows = rows;
       render(rows);
     } catch (err) {
       errorEl.textContent = err.message;
@@ -357,4 +323,113 @@ export async function renderSales(root, navigate) {
   });
 
   load();
+
+  return {
+    getExport: () => ({
+      filename: `sales-${from}_${to}`,
+      sheet: t("sales_title"),
+      columns: [
+        { header: t("xl_date"), width: 12 },
+        { header: t("xl_order_id"), width: 16 },
+        { header: t("xl_customer_id"), width: 14 },
+        { header: t("xl_customer_name"), width: 34 },
+        { header: t("xl_channel"), width: 18 },
+        { header: t("xl_amount"), type: "number", width: 14 },
+        { header: t("xl_liters"), type: "number", width: 10 },
+        { header: t("xl_qty"), type: "number", width: 8 },
+      ],
+      rows: lastRows.map((o) => [String(o.order_date).slice(0, 10), o.order_id, o.erp_customer_id, o.customer_name, o.channel ? channelDisplayLabel(o.channel) : "", o.total_amd, o.total_liters, o.total_qty]),
+    }),
+  };
+}
+
+// Sales | Payments: one page, two tabs. Sales (ERP order history) is the
+// default; Payments (customer payments from the Excel Cashflow sheet) is the
+// former Reports > Payments (Excel) report. The paper-plane icon exports the
+// table currently shown to Excel.
+export async function renderSales(root, navigate) {
+  // Only office roles with financial access see this page; the server rejects
+  // others with a plain 403, so check first instead of rendering a
+  // working-looking shell over a raw "Not allowed".
+  if (!seesFinancialExports()) {
+    root.innerHTML = `
+      <div class="detail-view">
+        <div class="detail-header">
+          <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <div class="detail-header-title"><h1>${t("sales_title")}</h1></div>
+        </div>
+        <p class="empty-state">${t("not_allowed")}</p>
+      </div>
+    `;
+    root.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
+    return;
+  }
+
+  let tab = /[?&]tab=payments/.test(location.hash) ? "payments" : "sales";
+  let current = null;
+  let paintSeq = 0;
+
+  root.innerHTML = `
+    <div class="detail-view">
+      <div class="detail-header sales-tab-header">
+        <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div class="detail-header-title">
+          <h1 class="sales-tab-switch" role="tablist">
+            <button type="button" role="tab" class="sales-tab-btn" data-tab="sales">${t("sales_title")}</button>
+            <button type="button" role="tab" class="sales-tab-btn" data-tab="payments">${t("payments_title")}</button>
+          </h1>
+        </div>
+        <div class="detail-header-actions">
+          <button type="button" class="icon-btn" id="sales-export-btn" aria-label="${t("export_excel")}">${icons.send}</button>
+        </div>
+      </div>
+      <div id="sales-tab-body"></div>
+    </div>
+  `;
+  const container = root.querySelector(".detail-view");
+  const bodyEl = container.querySelector("#sales-tab-body");
+  const exportBtn = container.querySelector("#sales-export-btn");
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
+
+  async function showTab() {
+    const mine = ++paintSeq;
+    container.querySelectorAll(".sales-tab-btn").forEach((b) => {
+      const active = b.dataset.tab === tab;
+      b.classList.toggle("sales-tab-active", active);
+      b.setAttribute("aria-selected", String(active));
+    });
+    bodyEl.innerHTML = "";
+    current = null;
+    const mod = tab === "payments" ? (await import("./salesPayments.js")).renderPaymentsTab : renderSalesTab;
+    if (mine !== paintSeq) return;
+    current = await mod(bodyEl, navigate);
+  }
+  container.querySelectorAll(".sales-tab-btn").forEach((b) =>
+    b.addEventListener("click", () => {
+      if (b.dataset.tab === tab) return;
+      tab = b.dataset.tab;
+      showTab();
+    })
+  );
+  exportBtn.addEventListener("click", async () => {
+    const spec = current?.getExport();
+    if (!spec || !spec.rows.length) {
+      alert(t("export_nothing"));
+      return;
+    }
+    exportBtn.disabled = true;
+    try {
+      const blob = await api.buildXlsx({ filename: spec.filename, sheet: spec.sheet, columns: spec.columns, rows: spec.rows });
+      await saveBlob(blob, `${spec.filename}.xlsx`);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      exportBtn.disabled = false;
+    }
+  });
+  showTab();
 }
