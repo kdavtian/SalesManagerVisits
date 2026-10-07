@@ -65,15 +65,15 @@ export async function renderTasks(root, navigate, openId) {
       ${
         creator || sawAll
           ? `<div class="order-status-filter-row" id="task-scope-row">
-              <button class="map-filter-chip chip-active" data-scope="mine" aria-pressed="true">${t("tasks_scope_mine")}</button>
+              <button class="map-filter-chip" data-scope="mine" aria-pressed="false">${t("tasks_scope_mine")}</button>
               <button class="map-filter-chip" data-scope="created" aria-pressed="false">${t("tasks_scope_created")}</button>
-              <button class="map-filter-chip" data-scope="all" aria-pressed="false">${t("tasks_scope_all")}</button>
+              <button class="map-filter-chip chip-active" data-scope="all" aria-pressed="true">${t("tasks_scope_all")}</button>
             </div>`
           : ""
       }
       <div class="order-status-filter-row" id="task-status-row">
-        <button class="map-filter-chip chip-active" data-status="today" aria-pressed="true">${t("tasks_filter_today")}</button>
-        <button class="map-filter-chip" data-status="open" aria-pressed="false">${t("tasks_filter_open")}</button>
+        <button class="map-filter-chip" data-status="today" aria-pressed="false">${t("tasks_filter_today")}</button>
+        <button class="map-filter-chip chip-active" data-status="open" aria-pressed="true">${t("tasks_filter_open")}</button>
         <button class="map-filter-chip" data-status="done" aria-pressed="false">${t("task_status_done")}</button>
         <button class="map-filter-chip" data-status="cancelled" aria-pressed="false">${t("task_status_cancelled")}</button>
       </div>
@@ -82,8 +82,10 @@ export async function renderTasks(root, navigate, openId) {
     </div>`;
   const container = root.querySelector(".detail-view");
   const listEl = container.querySelector("#task-list");
-  let scope = "mine";
-  let status = "today";
+  // Managers see everything they gave or received (a task they just created for
+  // someone else must show up); open tasks of any date by default.
+  let scope = creator || sawAll ? "all" : "mine";
+  let status = "open";
   let rows = [];
   let today = "";
 

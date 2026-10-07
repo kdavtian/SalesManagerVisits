@@ -62,6 +62,7 @@ import { bonusChallengesRouter } from "./routes/bonusChallenges.js";
 import { bonusRewardClaimsRouter } from "./routes/bonusRewardClaims.js";
 import { bonusSummaryRouter } from "./routes/bonusSummary.js";
 import { tasksRouter } from "./routes/tasks.js";
+import { tableExportRouter } from "./routes/tableExport.js";
 import { getCalculatorModeEnabled } from "./settings.js";
 import { requireAuth } from "./middleware/auth.js";
 import { autoAssignSalesChannel } from "./salesChannelAutofill.js";
@@ -204,6 +205,7 @@ app.use("/api/bonus-challenges", express.json(), bonusChallengesRouter);
 app.use("/api/bonus-reward-claims", express.json(), bonusRewardClaimsRouter);
 app.use("/api/bonus-summary", bonusSummaryRouter);
 app.use("/api/tasks", express.json(), tasksRouter);
+app.use("/api/table-export", express.json({ limit: "8mb" }), tableExportRouter);
 
 // The stylesheets are hand-edited source (comments, full indentation) --
 // minifying here at request time, rather than as a separate build step,
