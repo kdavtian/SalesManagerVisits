@@ -76,3 +76,7 @@ Armenian default; English available. Examples of wording the owner corrected: Կ
 - Never navigate the window to a file URL (installed PWA has no way back). Downloads go through `downloadFromUrl(url, name)` / `saveBlob(blob, name)` in util.js (fetch -> blob -> share sheet / anchor download). Links use `data-download="<filename>"` + a delegated click handler.
 - Customer debt report: `sales_channel` and `aging` are comma lists (multi-select); `aging` narrows customers + totals, `by_bucket` always shows all buckets so chips stay available ("—" = no bucket).
 - Reports are ordered by `REPORT_DISPLAY_ORDER` in server/src/reports.js (most used first). Route-plan overview badge counts only customers currently assigned to that rep.
+
+## Map loading (v1.260.0)
+- `ensureLeaflet()` must never treat `window.L` as "loaded": leaflet.js sets it before rotate/markercluster/mapSafeRuntime finish, so a Map tap during the idle preload (or after one plugin failed) built the map without plugins and stayed broken until app restart. It now tracks a `fullyLoaded` flag, resumes retries from the failed step, has a 20 s timeout per asset, and `renderMap` unlocks `app-main-locked`/`map-active` if building the map throws.
+- Check-in brand status `imported_other` is labelled "No QR/Excise" / "Առանց QR/ակցիզ" (key unchanged).

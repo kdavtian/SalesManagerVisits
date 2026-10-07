@@ -98,6 +98,11 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       cleanup = renderMapInner(root, navigate, relocateCustomerId, startInAddMode, startInPlanMode, focusCustomerId);
     })
     .catch((err) => {
+      // renderMapInner locks the app shell's scroll before it builds the
+      // map; if it threw part-way nothing ever unlocks it, which left every
+      // other screen unscrollable too. Always undo that on failure.
+      document.getElementById("app")?.classList.remove("app-main-locked");
+      document.body.classList.remove("map-active");
       if (cancelled) return;
       root.innerHTML = `
         <div class="map-view map-view-loading">
