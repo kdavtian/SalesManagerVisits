@@ -134,6 +134,7 @@ export const api = {
   getCustomerRegions: () => request("/customers/regions"),
   getBrandStatusByCustomer: () => request("/customers/brand-status"),
   getBrandSummary: (params = {}) => request(`/customers/brand-summary${params.customer_id ? `?customer_id=${encodeURIComponent(params.customer_id)}` : ""}`),
+  lookupTin: (tin) => request(`/customers/tin-lookup?tin=${encodeURIComponent(tin)}`),
   listCustomers: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/customers${qs ? `?${qs}` : ""}`);

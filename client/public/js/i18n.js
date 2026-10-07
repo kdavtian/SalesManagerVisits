@@ -1012,6 +1012,11 @@ const dict = {
     syncing_checkins: "Syncing {n} pending check-in{s}…",
     offline_checkins_waiting: "Offline — {n} check-in{s} waiting to sync",
 
+    legal_name: "Company legal name",
+    legal_address: "Legal address",
+    tin_lookup_loading: "Looking up the company in the state register…",
+    tin_lookup_filled: "Filled from the state register — please check",
+    tin_lookup_failed: "Could not find it in the state register — enter manually",
     getting_location: "Getting your location…",
     location_denied_hint: "Location access is blocked. Allow location for this app in your phone settings (Settings → Safari/Chrome → Location), then tap Retry.",
     location_unavailable_hint: "No GPS signal yet. Step outside or near a window, make sure Location is on, then tap Retry.",
@@ -2503,6 +2508,11 @@ const dict = {
     syncing_checkins: "Համաժամացվում է {n} սպասող այցելություն{s}…",
     offline_checkins_waiting: "Օֆլայն — {n} այցելություն{s} սպասում է համաժամացման",
 
+    legal_name: "Կազմակերպության անվանում",
+    legal_address: "Իրավաբանական հասցե",
+    tin_lookup_loading: "Որոնվում է կազմակերպությունը պետական ռեգիստրում…",
+    tin_lookup_filled: "Լրացվել է պետական ռեգիստրից՝ խնդրում ենք ստուգել",
+    tin_lookup_failed: "Պետական ռեգիստրում չգտնվեց՝ լրացրեք ձեռքով",
     getting_location: "Որոշվում է ձեր տեղադրությունը…",
     location_denied_hint: "Տեղադրության հասանելիությունը արգելափակված է։ Թույլատրեք տեղադրությունը հեռախոսի կարգավորումներում (Settings → Safari/Chrome → Location) և սեղմեք «Կրկնել»։",
     location_unavailable_hint: "GPS ազդանշան դեռ չկա։ Դուրս եկեք բացօթյա կամ մոտեցեք պատուհանին, համոզվեք, որ Location-ը միացված է, և սեղմեք «Կրկնել»։",

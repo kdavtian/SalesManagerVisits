@@ -5,6 +5,7 @@ import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData } from "../roles.js";
 import { getDefaultVisitFrequencyDays } from "../settings.js";
 import { haversineMeters } from "../utils/geo.js";
+import { lookupCompanyByTin, isValidTin } from "../registryLookup.js";
 import { computeVisitDue, ruleWeekdaysFor } from "../utils/visitDue.js";
 
 export const customersRouter = Router();
@@ -100,7 +101,7 @@ customersRouter.get("/", async (req, res) => {
         phoneClause = ` OR regexp_replace(c.phone, '\\D', '', 'g') LIKE $${params.length}`;
       }
       conditions.push(
-        `(c.name ILIKE $${likeIdx} OR c.erp_customer_id ILIKE $${likeIdx} OR c.tin ILIKE $${likeIdx} OR c.address ILIKE $${likeIdx} OR c.region ILIKE $${likeIdx} OR c.subregion ILIKE $${likeIdx} OR c.instagram_username ILIKE $${likeIdx} OR c.facebook_url ILIKE $${likeIdx} OR c.email ILIKE $${likeIdx} OR c.website ILIKE $${likeIdx}${phoneClause})`
+        `(c.name ILIKE $${likeIdx} OR c.erp_customer_id ILIKE $${likeIdx} OR c.tin ILIKE $${likeIdx} OR c.legal_name ILIKE $${likeIdx} OR c.address ILIKE $${likeIdx} OR c.region ILIKE $${likeIdx} OR c.subregion ILIKE $${likeIdx} OR c.instagram_username ILIKE $${likeIdx} OR c.facebook_url ILIKE $${likeIdx} OR c.email ILIKE $${likeIdx} OR c.website ILIKE $${likeIdx}${phoneClause})`
       );
     }
   }
@@ -462,6 +463,20 @@ customersRouter.get("/map-facts", async (req, res) => {
   res.json(out);
 });
 
+// Legal name + legal address from the state register, by TIN. Best-effort:
+// { found: false, reason } means "enter it manually" (never an HTTP error).
+// Registered before "/:id" so "tin-lookup" isn't read as a customer id.
+const tinLookupCache = new Map();
+customersRouter.get("/tin-lookup", async (req, res) => {
+  const tin = String(req.query.tin ?? "").trim();
+  if (!isValidTin(tin)) return res.json({ found: false, reason: "invalid_tin" });
+  const hit = tinLookupCache.get(tin);
+  if (hit && Date.now() - hit.at < 6 * 3600 * 1000) return res.json(hit.data);
+  const data = await lookupCompanyByTin(tin);
+  if (data.found) tinLookupCache.set(tin, { at: Date.now(), data });
+  res.json(data);
+});
+
 customersRouter.get("/:id", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT c.*, ${STATUS_COLUMNS},
@@ -532,6 +547,8 @@ export const EDITABLE_FIELDS = [
   "visit_frequency_days",
   "erp_customer_id",
   "tin",
+  "legal_name",
+  "legal_address",
   "region",
   "subregion",
   "customer_tier",

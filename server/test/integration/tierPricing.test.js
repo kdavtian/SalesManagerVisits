@@ -55,3 +55,18 @@ test("tier prices, silver fallback and individual gold prices", async () => {
   // Non-gold customers ignore overrides.
   assert.equal(price(await order(dCookie, (await mk("silver")).id, product.id, { unit_price_amd: 1, price_override: true })), 900);
 });
+
+test("only Gold customers take per-product price overrides; Bronze/Silver always use the tier list price", async () => {
+  const director = await createUser("sales_director");
+  const dCookie = await loginAs(director.email);
+  const product = await createProduct({ unit_price_amd: 1000 });
+  await pool.query("UPDATE products SET bronze_price_amd = 1000, silver_price_amd = 900, gold_price_amd = 800 WHERE id = $1", [product.id]);
+  for (const [tier, expected] of [["bronze", 1000], ["silver", 900]]) {
+    const c = await createCustomer({ created_by: director.id });
+    await pool.query("UPDATE customers SET customer_tier = $2 WHERE id = $1", [c.id, tier]);
+    const o = await order(dCookie, c.id, product.id, { unit_price_amd: 1, price_override: true });
+    assert.equal(Number(o.items?.[0]?.unit_price_amd ?? o.lines?.[0]?.unit_price_amd), expected, tier);
+    const saved = await apiRequest(`/api/customers/${c.id}/product-prices`, { cookie: dCookie });
+    assert.equal(Object.keys(saved.data ?? {}).length === 0 || (Array.isArray(saved.data) && saved.data.length === 0), true, `${tier} keeps no individual prices`);
+  }
+});
