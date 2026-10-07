@@ -753,19 +753,92 @@ export function openNavigation(lat, lng, { onShowOnMap } = {}) {
   });
 }
 
+// ---- Location -------------------------------------------------------------
+// Why this is not a single getCurrentPosition({ enableHighAccuracy, maximumAge: 0 }):
+// that forces a COLD satellite fix every time. Indoors, in a courtyard or
+// between buildings that takes 20-60 s (or never arrives), so reps saw "can't
+// detect my location" or a long wait, even though the phone already knew
+// where it was from Wi-Fi / cell towers / its last fix. Now:
+//   1. a recent fix anyone in the app already got (map watch, 60 s location
+//      broadcast, earlier screen) is reused instantly;
+//   2. a coarse network fix (fast) and a high-accuracy watch run in PARALLEL;
+//   3. we resolve as soon as a fix is accurate enough (default <= 50 m), or
+//      after a short refinement window with the best fix seen so far, and only
+//      fail at the overall timeout when nothing at all arrived.
+// Permission-denied still fails immediately (no point waiting).
+let lastFix = null;
+export function rememberPosition(pos) {
+  if (pos?.coords && Number.isFinite(pos.coords.latitude)) lastFix = pos;
+}
+export function getLastKnownPosition(maxAgeMs = 60000) {
+  return lastFix && Date.now() - lastFix.timestamp <= maxAgeMs ? lastFix : null;
+}
+
 export function getCurrentPosition(options = {}) {
+  const { timeout = 20000, goodAccuracy = 50, refineMs = 6000, maxCacheAge = 15000 } = options;
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
       reject(new Error("Geolocation is not supported on this device"));
       return;
     }
-    navigator.geolocation.getCurrentPosition(resolve, reject, {
+    const cached = getLastKnownPosition(maxCacheAge);
+    if (cached && cached.coords.accuracy <= Math.max(goodAccuracy, 100)) {
+      resolve(cached);
+      return;
+    }
+    let best = cached && cached.coords.accuracy < 5000 ? cached : null;
+    let lastError = null;
+    let watchId = null;
+    let refineTimer = null;
+    let done = false;
+    const finish = (pos, err) => {
+      if (done) return;
+      done = true;
+      clearTimeout(refineTimer);
+      clearTimeout(overallTimer);
+      if (watchId != null) navigator.geolocation.clearWatch(watchId);
+      if (pos) {
+        rememberPosition(pos);
+        resolve(pos);
+      } else {
+        reject(err || lastError || new Error("Could not get your location"));
+      }
+    };
+    const onFix = (pos) => {
+      if (!best || pos.coords.accuracy < best.coords.accuracy) best = pos;
+      if (best.coords.accuracy <= goodAccuracy) {
+        finish(best);
+        return;
+      }
+      // Something usable is in hand: give the GPS a short window to sharpen
+      // it instead of waiting out the whole timeout.
+      if (!refineTimer) refineTimer = setTimeout(() => finish(best), refineMs);
+    };
+    const onError = (err) => {
+      lastError = err;
+      if (err && err.code === 1) finish(null, err); // permission denied
+    };
+    const overallTimer = setTimeout(() => finish(best), timeout);
+    // Fast, coarse (Wi-Fi/cell/cached) fix ...
+    navigator.geolocation.getCurrentPosition(onFix, onError, {
+      enableHighAccuracy: false,
+      maximumAge: 60000,
+      timeout: Math.min(timeout, 10000),
+    });
+    // ... while the satellite fix sharpens in parallel.
+    watchId = navigator.geolocation.watchPosition(onFix, onError, {
       enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 0,
-      ...options,
+      maximumAge: 5000,
+      timeout: timeout,
     });
   });
+}
+
+// A short, human reason for a failed fix (permission vs. no signal), so the
+// rep knows what to do instead of just seeing "could not get location".
+export function locationErrorHint(err) {
+  if (err && err.code === 1) return t("location_denied_hint");
+  return t("location_unavailable_hint");
 }
 
 // Applies consistent dialog semantics and keyboard behavior to dynamically

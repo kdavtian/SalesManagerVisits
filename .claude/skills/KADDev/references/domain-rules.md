@@ -86,3 +86,6 @@ Armenian default; English available. Examples of wording the owner corrected: Կ
 
 ## Sales search keeps the period (v1.262.0)
 - `GET /api/sales?q=` now ALWAYS applies the From/To range (default: this month); search narrows it instead of ignoring it. The From/To pills stay visible while searching.
+
+## Location detection (v1.263.0)
+- `getCurrentPosition` (util.js) is NOT a single high-accuracy/maximumAge:0 call (cold GPS fix = 20-60 s indoors, often fails). It reuses a fix <=15 s old (`rememberPosition`: map watch, 60 s broadcast, earlier screens), runs a fast coarse network fix AND a high-accuracy watch in parallel, resolves as soon as accuracy <= `goodAccuracy` (default 50 m) or after `refineMs` with the best fix, fails only at `timeout` with nothing (permission-denied fails at once). Errors show `locationErrorHint` (denied vs no signal). Map "my location" watch no longer switches itself off on TIMEOUT/UNAVAILABLE (only on permission denied) and pre-shows the last known fix. Check-in uses goodAccuracy 30 m / 25 s.

@@ -1013,6 +1013,8 @@ const dict = {
     offline_checkins_waiting: "Offline — {n} check-in{s} waiting to sync",
 
     getting_location: "Getting your location…",
+    location_denied_hint: "Location access is blocked. Allow location for this app in your phone settings (Settings → Safari/Chrome → Location), then tap Retry.",
+    location_unavailable_hint: "No GPS signal yet. Step outside or near a window, make sure Location is on, then tap Retry.",
     location_captured: "Location captured",
     accuracy: "accuracy",
     location_error: "Could not get your location",
@@ -2502,6 +2504,8 @@ const dict = {
     offline_checkins_waiting: "Օֆլայն — {n} այցելություն{s} սպասում է համաժամացման",
 
     getting_location: "Որոշվում է ձեր տեղադրությունը…",
+    location_denied_hint: "Տեղադրության հասանելիությունը արգելափակված է։ Թույլատրեք տեղադրությունը հեռախոսի կարգավորումներում (Settings → Safari/Chrome → Location) և սեղմեք «Կրկնել»։",
+    location_unavailable_hint: "GPS ազդանշան դեռ չկա։ Դուրս եկեք բացօթյա կամ մոտեցեք պատուհանին, համոզվեք, որ Location-ը միացված է, և սեղմեք «Կրկնել»։",
     location_captured: "Տեղադրությունը որոշված է",
     accuracy: "ճշգրտություն",
     location_error: "Չհաջողվեց որոշել ձեր տեղադրությունը",

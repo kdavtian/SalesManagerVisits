@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { cssColor, activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, tierSelectorHtml, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, regionLabelHy, subregionLabelHy, channelDisplayLabel, parseDateOnly } from "../util.js";
+import { cssColor, activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, rememberPosition, getLastKnownPosition, tierSelectorHtml, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, regionLabelHy, subregionLabelHy, channelDisplayLabel, parseDateOnly } from "../util.js";
 import { t } from "../i18n.js";
 import { buildCustomerTree, renderTriStateTree } from "../regionTree.js";
 import { getTheme } from "../theme.js";
@@ -1482,7 +1482,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       // map wants to see first (what's near them right now).
       if (!initialViewApplied && !relocateCustomerId && !startInAddMode && !startInPlanMode && focusCustomerId == null) {
         initialViewApplied = true;
-        getCurrentPosition({ timeout: 4000 })
+        getCurrentPosition({ timeout: 6000, goodAccuracy: 150, refineMs: 1500 })
           .then((pos) => {
             myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
             map.setView([myLocation.lat, myLocation.lng], 15);
@@ -2022,10 +2022,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     // one-time-guarded (see emptyBoundsRecenterAttempted above).
     if (!skipMarkers && !bounds.length && navigator.geolocation && !emptyBoundsRecenterAttempted) {
       emptyBoundsRecenterAttempted = true;
-      navigator.geolocation.getCurrentPosition(
-        (pos) => map.setView([pos.coords.latitude, pos.coords.longitude], 13),
-        () => {}
-      );
+      getCurrentPosition({ timeout: 10000, goodAccuracy: 500 })
+        .then((pos) => map.setView([pos.coords.latitude, pos.coords.longitude], 13))
+        .catch(() => {});
     }
   }
 
@@ -2132,6 +2131,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     if (watchId != null) return;
     watchId = navigator.geolocation.watchPosition(
       (pos) => {
+        rememberPosition(pos);
         const { latitude, longitude, accuracy } = pos.coords;
         const latlng = [latitude, longitude];
         myLocation = { lat: latitude, lng: longitude };
@@ -2152,14 +2152,35 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         }
         refreshNearestCustomerBar();
       },
-      () => {
+      (err) => {
+        // Only a denied permission ends tracking. A TIMEOUT / POSITION_UNAVAILABLE
+        // is normal while the GPS warms up or the rep walks past a building;
+        // the watch keeps running and the next fix lands by itself (it used to
+        // switch the button off on the first timeout, which looked like "the
+        // app can't find me").
+        if (err && err.code !== 1) return;
         locationMode = "off";
         updateLocateButtonState();
         stopWatch();
         stopHeading();
       },
-      { enableHighAccuracy: true }
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 }
     );
+    // Show the last known position straight away while the fresh fix arrives.
+    const known = getLastKnownPosition(120000);
+    if (known && !meMarker) {
+      const { latitude, longitude, accuracy } = known.coords;
+      myLocation = { lat: latitude, lng: longitude };
+      meMarker = L.marker([latitude, longitude], { icon: meIcon(null), zIndexOffset: 1000 }).addTo(map);
+      meAccuracyCircle = L.circle([latitude, longitude], {
+        radius: accuracy,
+        color: cssColor("--accent", "#0969da"),
+        weight: 1,
+        fillColor: cssColor("--accent", "#0969da"),
+        fillOpacity: 0.12,
+      }).addTo(map);
+      map.setView([latitude, longitude], Math.max(map.getZoom(), 15));
+    }
   }
 
   locateBtn.addEventListener("click", async () => {
