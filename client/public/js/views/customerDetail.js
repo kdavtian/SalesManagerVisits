@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, SALES_CHANNELS, channelDisplayLabel, parseDateOnly, erpLineDiscountRowHtml } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, SALES_CHANNELS, channelDisplayLabel, parseDateOnly, formatDateDMY, erpLineDiscountRowHtml } from "../util.js";
 import { currentChips, chipHtml } from "../brandChips.js";
 import { nextVisitRowHtml } from "../visitSchedule.js";
 import { t } from "../i18n.js";
@@ -156,7 +156,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
           : ""
       }
       <div class="detail-fact"><span class="detail-fact-icon">${icons.repeat}</span><span>${t("visit_every_prefix")}${customer.visit_frequency_days}${t("visit_every_suffix")}</span></div>
-      <div class="detail-fact"><span class="detail-fact-icon">${icons.wallet}</span><span>${t(customer.payment_method === "cash" ? "payment_method_cash" : "payment_method_invoice")} &middot; ${t("credit_term_days_label")}: ${customer.credit_term_days}</span></div>
+      <div class="detail-fact"><span class="detail-fact-icon">${icons.wallet}</span><span>${t(customer.payment_method === "cash" ? "payment_method_cash" : "payment_method_invoice")} &middot; ${t("credit_term_fact").replace("{n}", customer.credit_term_days)}</span></div>
       ${customer.last_visit_at ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.clock}</span><span>${t("last_visit")}: ${formatDateTime(customer.last_visit_at)}</span></div>` : ""}
       ${customer.notes ? `<div class="detail-fact muted"><span class="detail-fact-icon">${icons.note}</span><span>${escapeHtml(customer.notes)}</span></div>` : ""}
     </div>
@@ -230,6 +230,31 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     openAccountSettingsSheet(customer, () => renderCustomerDetail(root, navigate, customerId));
   });
   container.querySelector("#customer-photos-btn").addEventListener("click", () => openCustomerPhotoGallery(customerId));
+  // Stat tiles: Sales -> orders, Outstanding debt -> payments received,
+  // Last order -> its details, Last visit -> its details.
+  container.querySelectorAll("[data-stat]").forEach((tile) => {
+    tile.addEventListener("click", async () => {
+      const stat = tile.dataset.stat;
+      if (stat === "sales") {
+        navigate(`#/customers/${customerId}/orders`);
+      } else if (stat === "debt") {
+        openPaymentsReceivedSheet(customer);
+      } else if (stat === "last-visit" && checkins[0]) {
+        openVisitDetailSheet(checkins[0], () => renderCustomerDetail(root, navigate, customerId), navigate);
+      } else if (stat === "last-order") {
+        tile.disabled = true;
+        try {
+          // The inline list only covers the last 3 months; the last order can be older.
+          const list = erpOrders?.length ? erpOrders : await api.getErpOrders(customerId, "all");
+          if (list[0]) openOrderDetailSheet(customerId, list[0].order_id);
+        } catch (err) {
+          alert(err.message);
+        } finally {
+          tile.disabled = false;
+        }
+      }
+    });
+  });
   container.querySelector("#order-history-btn")?.addEventListener("click", () => {
     navigate(`#/customers/${customerId}/orders`);
   });
@@ -321,33 +346,37 @@ function renderErpCard(customer, erpOrders) {
       ? parseDateOnly(orders[0].order_date)?.toLocaleDateString()
       : null;
 
+  return statTilesHtml({
+    customer,
+    salesThisMonth,
+    debtText: isDataError ? t("erp_debt_unknown") : formatAmd(debt),
+    // Red only while there actually is a debt that is overdue (a 0 balance
+    // is fine) or the data is broken.
+    debtDanger: isDataError || (debt > 0 && agingClass === "badge-danger"),
+    debtSub:
+      !isDataError && collectedSinceSync > 0 ? `${t("estimated_remaining")}: ${formatAmd(estimatedDebt)}` : "",
+    lastOrderDate,
+  });
+}
+
+// The four stat tiles under the customer's facts. Each is a button: Sales ->
+// the customer's orders, Outstanding debt -> payments received, Last order ->
+// that order's details, Last visit -> that visit's details (handlers are
+// attached in renderCustomerDetail through data-stat).
+function statTilesHtml({ customer, salesThisMonth, debtText, debtDanger, debtSub = "", lastOrderDate }) {
+  const tile = (stat, icon, value, label, { danger = false, sub = "", disabled = false } = {}) => `
+      <button type="button" class="detail-stat-tile detail-stat-tile-btn ${danger ? "detail-stat-danger" : ""}" data-stat="${stat}" ${disabled ? "disabled" : ""}>
+        <span class="detail-stat-icon">${icon}</span>
+        <span class="detail-stat-value">${value}</span>
+        <span class="detail-stat-label">${label}</span>
+        ${sub ? `<span class="detail-stat-sublabel">${sub}</span>` : ""}
+      </button>`;
   return `
     <div class="detail-stat-grid">
-      <div class="detail-stat-tile">
-        <span class="detail-stat-icon">${icons.cart}</span>
-        <span class="detail-stat-value">${formatAmd(salesThisMonth)}</span>
-        <span class="detail-stat-label">${t("sales_this_month")}</span>
-      </div>
-      <div class="detail-stat-tile ${isDataError ? "detail-stat-danger" : agingClass === "badge-danger" ? "detail-stat-danger" : ""}">
-        <span class="detail-stat-icon">${icons.payment}</span>
-        <span class="detail-stat-value">${isDataError ? t("erp_debt_unknown") : formatAmd(debt)}</span>
-        <span class="detail-stat-label">${t("outstanding_debt")}</span>
-        ${
-          !isDataError && collectedSinceSync > 0
-            ? `<span class="detail-stat-sublabel">${t("estimated_remaining")}: ${formatAmd(estimatedDebt)}</span>`
-            : ""
-        }
-      </div>
-      <div class="detail-stat-tile">
-        <span class="detail-stat-icon">${icons.box}</span>
-        <span class="detail-stat-value">${lastOrderDate ? escapeHtml(lastOrderDate) : "—"}</span>
-        <span class="detail-stat-label">${t("last_order")}</span>
-      </div>
-      <div class="detail-stat-tile">
-        <span class="detail-stat-icon">${icons.clock}</span>
-        <span class="detail-stat-value">${customer.last_visit_at ? new Date(customer.last_visit_at).toLocaleDateString() : "—"}</span>
-        <span class="detail-stat-label">${t("last_visit")}</span>
-      </div>
+      ${tile("sales", icons.cart, formatAmd(salesThisMonth), t("sales_this_month"))}
+      ${tile("debt", icons.payment, debtText, t("outstanding_debt"), { danger: debtDanger, sub: debtSub })}
+      ${tile("last-order", icons.box, lastOrderDate ? escapeHtml(lastOrderDate) : "—", t("last_order"), { disabled: !lastOrderDate })}
+      ${tile("last-visit", icons.clock, customer.last_visit_at ? new Date(customer.last_visit_at).toLocaleDateString() : "—", t("last_visit"), { disabled: !customer.last_visit_at })}
     </div>
   `;
 }
@@ -365,30 +394,7 @@ function renderErpOrdersOnlyCard(customer, erpOrders) {
     })
     .reduce((sum, o) => sum + Number(o.total_amd), 0);
   const lastOrderDate = parseDateOnly(customer.erp_last_order_date)?.toLocaleDateString();
-  return `
-    <div class="detail-stat-grid">
-      <div class="detail-stat-tile">
-        <span class="detail-stat-icon">${icons.cart}</span>
-        <span class="detail-stat-value">${formatAmd(salesThisMonth)}</span>
-        <span class="detail-stat-label">${t("sales_this_month")}</span>
-      </div>
-      <div class="detail-stat-tile">
-        <span class="detail-stat-icon">${icons.payment}</span>
-        <span class="detail-stat-value">${formatAmd(0)}</span>
-        <span class="detail-stat-label">${t("outstanding_debt")}</span>
-      </div>
-      <div class="detail-stat-tile">
-        <span class="detail-stat-icon">${icons.box}</span>
-        <span class="detail-stat-value">${lastOrderDate ? escapeHtml(lastOrderDate) : "—"}</span>
-        <span class="detail-stat-label">${t("last_order")}</span>
-      </div>
-      <div class="detail-stat-tile">
-        <span class="detail-stat-icon">${icons.clock}</span>
-        <span class="detail-stat-value">${customer.last_visit_at ? new Date(customer.last_visit_at).toLocaleDateString() : "—"}</span>
-        <span class="detail-stat-label">${t("last_visit")}</span>
-      </div>
-    </div>
-  `;
+  return statTilesHtml({ customer, salesThisMonth, debtText: formatAmd(0), debtDanger: false, lastOrderDate });
 }
 
 function groupLinesByBrand(lines) {
@@ -399,6 +405,50 @@ function groupLinesByBrand(lines) {
     byBrand.get(brand).push(line);
   }
   return byBrand;
+}
+
+// Payments received from this customer: the Excel Cashflow ("Oil order" rows)
+// plus payments recorded in the app (pending / approved), newest first.
+async function openPaymentsReceivedSheet(customer) {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.innerHTML = `<div class="sheet"><p class="loading-state" role="status">${t("loading")}</p></div>`;
+  document.body.appendChild(overlay);
+  activateDialog(overlay);
+  overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+  let data;
+  try {
+    data = await api.getCustomerPaymentsReceived(customer.id);
+  } catch (err) {
+    overlay.querySelector(".sheet").innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    return;
+  }
+  const sourceBadge = (r) =>
+    r.source === "excel"
+      ? `<span class="badge badge-neutral">${t("payments_source_excel")}</span>`
+      : `<span class="badge ${r.status === "approved" ? "badge-success" : "badge-warning"}">${t("payments_source_app")} · ${t(r.status === "approved" ? "payment_status_approved" : "payment_status_pending")}</span>`;
+  overlay.querySelector(".sheet").innerHTML = `
+    <button type="button" class="icon-btn sheet-close-x" data-action="close-sheet" aria-label="${t("close")}">${icons.close}</button>
+    <h2>${t("payments_received_title")}</h2>
+    <p class="muted">${escapeHtml(customer.name)}</p>
+    ${
+      data.rows.length
+        ? `<div class="card erp-card payments-received-list">
+            ${data.rows
+              .map(
+                (r) => `<div class="payments-received-row">
+                  <span>${escapeHtml(formatDateDMY(r.date))}</span>
+                  ${sourceBadge(r)}
+                  <strong class="text-amount">${formatAmd(r.amount_amd)}</strong>
+                </div>`
+              )
+              .join("")}
+            <div class="payments-received-row payments-received-total"><span>${t("total")}</span><span></span><strong class="text-amount">${formatAmd(data.total_amd)}</strong></div>
+          </div>`
+        : `<p class="empty-state">${t("payments_received_empty")}</p>`
+    }
+    <div class="sheet-actions"><button type="button" class="btn" data-action="close-sheet">${t("done")}</button></div>`;
+  overlay.querySelectorAll('[data-action="close-sheet"]').forEach((b) => b.addEventListener("click", () => overlay.remove()));
 }
 
 export async function openOrderDetailSheet(customerId, orderId) {

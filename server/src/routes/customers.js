@@ -825,6 +825,59 @@ customersRouter.get("/:id/erp-orders", async (req, res) => {
   res.json(rows);
 });
 
+// Payments received from one customer, newest first: the Excel Cashflow
+// ("Oil order" rows, erp_cashflow_lines -- the trusted books) plus payments
+// recorded in this app (pending/approved). An app payment that the Excel
+// ledger already holds (same amount, within a few days) is hidden so the
+// same money isn't listed twice.
+customersRouter.get("/:id/payments-received", async (req, res) => {
+  const { rows: customerRows } = await pool.query("SELECT id, erp_customer_id, assigned_manager_id FROM customers WHERE id = $1", [req.params.id]);
+  const customer = customerRows[0];
+  if (!customer) return res.status(404).json({ error: "Customer not found" });
+
+  const excel =
+    customer.erp_customer_id && seesCustomerErpData(req.user.role, customer.assigned_manager_id, req.user.id)
+      ? (
+          await pool.query(
+            "SELECT to_char(cashflow_date, 'YYYY-MM-DD') AS date, amount_amd FROM erp_cashflow_lines WHERE erp_customer_id = $1 ORDER BY cashflow_date DESC, id DESC",
+            [customer.erp_customer_id]
+          )
+        ).rows
+      : [];
+
+  const appParams = [customer.id];
+  let appScope = "";
+  if (req.user.role === "sales_manager") {
+    appParams.push(req.user.id);
+    appScope = "AND sales_manager_id = $2";
+  }
+  const app = (
+    await pool.query(
+      `SELECT to_char(payment_date AT TIME ZONE 'Asia/Yerevan', 'YYYY-MM-DD') AS date, amount_amd, status, sales_manager_name_snapshot AS manager_name
+       FROM payments WHERE customer_id = $1 AND status IN ('pending', 'approved') ${appScope}
+       ORDER BY payment_date DESC, id DESC`,
+      appParams
+    )
+  ).rows;
+
+  const DAY = 24 * 3600 * 1000;
+  const unmatched = excel.map((r) => ({ ts: new Date(r.date).getTime(), amount: Number(r.amount_amd), used: false }));
+  const appRows = [];
+  for (const p of app) {
+    const ts = new Date(p.date).getTime();
+    const hit = unmatched.find((e) => !e.used && e.amount === Number(p.amount_amd) && Math.abs(e.ts - ts) <= 5 * DAY);
+    if (hit) {
+      hit.used = true;
+      continue;
+    }
+    appRows.push({ date: p.date, amount_amd: Number(p.amount_amd), source: "app", status: p.status, manager_name: p.manager_name });
+  }
+  const rows = [...excel.map((r) => ({ date: r.date, amount_amd: Number(r.amount_amd), source: "excel" })), ...appRows].sort(
+    (a, b) => String(b.date).localeCompare(String(a.date))
+  );
+  res.json({ rows, total_amd: rows.reduce((sum, r) => sum + r.amount_amd, 0) });
+});
+
 // Line-item detail for one order (product/brand/qty/price), for the
 // click-into-an-order view. Grouped by brand client-side.
 customersRouter.get("/:id/erp-orders/:orderId", async (req, res) => {

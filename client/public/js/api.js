@@ -216,6 +216,7 @@ export const api = {
     const qs = search ? `?search=${encodeURIComponent(search)}` : "";
     return request(`/erp-sync/unlinked${qs}`);
   },
+  getCustomerPaymentsReceived: (customerId) => request(`/customers/${customerId}/payments-received`),
   getErpOrders: (customerId, scope = "recent") => request(`/customers/${customerId}/erp-orders?scope=${scope}`),
   getErpOrderDetail: (customerId, orderId) =>
     request(`/customers/${customerId}/erp-orders/${encodeURIComponent(orderId)}`),
