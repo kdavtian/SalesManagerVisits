@@ -191,7 +191,12 @@ export const api = {
   deleteUserRecords: (id) => request(`/users/${id}/records`, { method: "DELETE" }),
 
   getSettings: () => request("/settings"),
-  updateSettings: (data) => json("/settings", "PATCH", data),
+  updateSettings: async (data) => {
+    const result = await json("/settings", "PATCH", data);
+    // Admin settings change what Home / the sidebar show: drop stale screens.
+    window.dispatchEvent(new Event("app-preferences-changed"));
+    return result;
+  },
 
   // Unauthenticated on purpose -- see routes/lockdown.js.
   getLockdownStatus: () => request("/lockdown"),
