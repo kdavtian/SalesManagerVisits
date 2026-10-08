@@ -299,4 +299,19 @@ test("accounting requests group: list filter, manual request status (incl. cance
   const back = await apiRequest(`/api/orders/${orderId}/accounting-status`, { method: "POST", cookie, body: { status: "pending" } });
   assert.equal(back.data.accounting_status, "pending");
   assert.equal(back.data.accounting_claimed_at, null);
+
+  // List groups: Requests = documents not made yet; Waybills / Invoices =
+  // created ones, optionally only signed / not yet signed.
+  const ids = async (qs) => (await apiRequest(`/api/orders?${qs}`, { cookie })).data.rows.map((o) => o.id);
+  assert.ok((await ids("accounting=requests")).includes(orderId));
+  assert.ok(!(await ids("accounting=waybill")).includes(orderId));
+  await pool.query("UPDATE orders SET accounting_status = 'exported_unsigned' WHERE id = $1", [orderId]);
+  assert.ok(!(await ids("accounting=requests")).includes(orderId));
+  assert.ok((await ids("accounting=waybill")).includes(orderId));
+  assert.ok((await ids("accounting=waybill&accounting_signed=unsigned")).includes(orderId));
+  assert.ok(!(await ids("accounting=waybill&accounting_signed=signed")).includes(orderId));
+  assert.ok(!(await ids("accounting=invoice")).includes(orderId));
+  await pool.query("UPDATE orders SET accounting_status = 'signed' WHERE id = $1", [orderId]);
+  assert.ok((await ids("accounting=waybill&accounting_signed=signed")).includes(orderId));
+  assert.ok(!(await ids("accounting=waybill&accounting_signed=unsigned")).includes(orderId));
 });

@@ -322,7 +322,7 @@ ordersRouter.post("/", async (req, res) => {
 const PAGE_SIZE = 100;
 
 ordersRouter.get("/", async (req, res) => {
-  let { customer_id, user_id, status, offset, accounting } = req.query;
+  let { customer_id, user_id, status, offset, accounting, accounting_signed } = req.query;
   if (!seesAllActivity(req.user.role)) {
     user_id = req.user.id;
   }
@@ -347,6 +347,20 @@ ordersRouter.get("/", async (req, res) => {
   if (accounting && canRequestAccountingDocs(req.user.role)) {
     if (accounting === "any") {
       conditions.push("o.accounting_status IS NOT NULL");
+    } else if (accounting === "requests") {
+      // Documents not made yet: waiting, being worked on, stuck or cancelled.
+      conditions.push("o.accounting_status IN ('pending', 'in_progress', 'needs_attention', 'cancelled')");
+    } else if (accounting === "waybill" || accounting === "invoice") {
+      // Already-created documents of one kind; optionally only signed / not yet signed.
+      params.push(accounting);
+      conditions.push(`o.accounting_doc_type = $${params.length}`);
+      if (accounting_signed === "signed") {
+        conditions.push("o.accounting_status = 'signed'");
+      } else if (accounting_signed === "unsigned") {
+        conditions.push("o.accounting_status IN ('waybill_created', 'partially_created', 'exported_unsigned')");
+      } else {
+        conditions.push("o.accounting_status IN ('waybill_created', 'partially_created', 'exported_unsigned', 'signed')");
+      }
     } else if (ACCOUNTING_STATUSES.includes(accounting)) {
       params.push(accounting);
       conditions.push(`o.accounting_status = $${params.length}`);
