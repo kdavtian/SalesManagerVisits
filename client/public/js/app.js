@@ -321,6 +321,29 @@ let lastHomeHash = "#/dashboard";
 // the previous page on the same tab").
 const NAV_TAB_ROOT_HASHES = new Set(["#/dashboard", "#/activity", "#/map", "#/customers", "#/orders"]);
 
+// Tapping the tab you are already on: the first tap jumps back to the top of
+// the screen, a second tap within a second RESTARTS the tab (a fresh render
+// with default filters and fresh data) -- the usual "tap the tab twice to
+// refresh" gesture. A single tap never reloads, so an accidental tap costs
+// nothing. Tapping any other tab navigates as before.
+let lastActiveTabTap = { hash: "", at: 0 };
+function handleNavTap(target) {
+  const targetBase = target.split("?")[0];
+  const currentBase = (location.hash || "#/dashboard").split("?")[0];
+  if (currentBase !== targetBase || !NAV_TAB_ROOT_HASHES.has(targetBase)) {
+    navigate(target);
+    return;
+  }
+  const now = Date.now();
+  if (lastActiveTabTap.hash === targetBase && now - lastActiveTabTap.at < 1000) {
+    lastActiveTabTap = { hash: "", at: 0 };
+    render();
+    return;
+  }
+  lastActiveTabTap = { hash: targetBase, at: now };
+  app.scrollTo({ top: 0, behavior: "instant" });
+}
+
 function homeNavTarget() {
   const currentPath = (location.hash || "#/dashboard").split("?")[0];
   return HOME_TREE_ROUTES.has(currentPath) ? "#/dashboard" : lastHomeHash;
@@ -1132,7 +1155,7 @@ function rebuildSidebarMarkup(hash) {
     </nav>
   `;
   sidebar.querySelectorAll("[data-hash]").forEach((el) => {
-    el.addEventListener("click", () => navigate(el.dataset.hash === "#/dashboard" ? homeNavTarget() : el.dataset.hash));
+    el.addEventListener("click", () => handleNavTap(el.dataset.hash === "#/dashboard" ? homeNavTarget() : el.dataset.hash));
   });
 }
 
@@ -1169,7 +1192,7 @@ function rebuildNavMarkup(hash) {
     .join("");
 
   navBar.querySelectorAll("[data-hash]").forEach((el) => {
-    el.addEventListener("click", () => navigate(el.dataset.hash === "#/dashboard" ? homeNavTarget() : el.dataset.hash));
+    el.addEventListener("click", () => handleNavTap(el.dataset.hash === "#/dashboard" ? homeNavTarget() : el.dataset.hash));
   });
 
   topBar.innerHTML = `

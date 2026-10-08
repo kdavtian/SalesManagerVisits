@@ -165,7 +165,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
 
     ${renderErpCard(customer, erpOrders)}
 
-    <div class="detail-actions-grid">
+    <div class="detail-actions-grid" style="--action-cols:${hasErpOrderHistory(customer) ? 5 : 4}">
       <button class="action-btn action-btn-primary" id="checkin-btn">
         <span>${icons.mapPinCheck}</span>${t("check_in")}
       </button>
