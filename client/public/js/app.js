@@ -282,6 +282,12 @@ function disposeBackEntry(entry) {
 // until the tab is restarted. Fired by Settings (language, theme, performance
 // mode, avatar, phone) and by api.updateSettings (admin settings such as the
 // Home tile visibility or the Bonuses switch).
+// A screen that detects it is broken (e.g. the map drew no tiles) asks for a
+// fresh render of the current route.
+window.addEventListener("app-rerender", () => {
+  if (state.user) render();
+});
+
 window.addEventListener("app-preferences-changed", () => {
   backStack.forEach(disposeBackEntry);
   backStack = [];

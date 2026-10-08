@@ -494,6 +494,12 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     // oversized for this app. Re-added below as a minimal, unobtrusive
     // control instead.
     attributionControl: false,
+    // Leaflet's own window-resize handler measures the container even while
+    // this view is parked (detached) in app.js's back stack, where it is 0x0:
+    // the map then believed it had no size and drew no tiles after returning
+    // (the blank map with working buttons). Resizing is handled below by a
+    // ResizeObserver that ignores a detached / zero-size container.
+    trackResize: false,
   }).setView(restoredView ? restoredView.center : [20, 0], restoredView ? restoredView.zoom : 2);
   L.control.attribution({ prefix: false, position: "bottomright" }).addTo(map);
   // Remember the view as it changes (not only on teardown: the back-cache can
@@ -723,15 +729,65 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   document.addEventListener("visibilitychange", refreshTileStyle);
   // iOS/Android can drop the map's GPU layers while the app sits in the
   // background; on return, re-measure and redraw instead of showing a blank map.
+  // A parked (detached) or hidden container measures 0x0 -- never re-measure
+  // then, or the map keeps that size and stays blank once it is shown again.
+  const mapIsMeasurable = () => mapEl.isConnected && mapEl.clientWidth > 0 && mapEl.clientHeight > 0;
   const redrawOnResume = () => {
-    if (document.visibilityState !== "visible") return;
+    if (document.visibilityState !== "visible" || !mapIsMeasurable()) return;
     try {
       map.invalidateSize();
       tileLayer?.redraw?.();
     } catch {
       // map already torn down
     }
+    checkMapNotBlank();
   };
+  // Safety net: a measurable map with no tile elements at all is the blank
+  // map. First try a re-measure + redraw; if it is still empty a moment later
+  // rebuild the screen once (app.js listens for "app-rerender"). Tile ERRORS
+  // (no network) still create tile elements, so offline use never loops.
+  let blankChecks = 0;
+  let blankTimer = null;
+  function checkMapNotBlank() {
+    clearTimeout(blankTimer);
+    blankTimer = setTimeout(() => {
+      if (!mapIsMeasurable() || document.visibilityState !== "visible") return;
+      const tiles = mapEl.querySelectorAll(".leaflet-tile").length;
+      if (tiles > 0) {
+        blankChecks = 0;
+        return;
+      }
+      blankChecks += 1;
+      try {
+        // A map that never received a view (nothing to draw) gets the default
+        // one before re-measuring.
+        if (!map._loaded) map.setView([40.1872, 44.5152], 15, { animate: false });
+        map.invalidateSize();
+        tileLayer?.redraw?.();
+      } catch {
+        // map already torn down
+      }
+      if (blankChecks >= 2) {
+        window.dispatchEvent(new Event("app-rerender"));
+        return;
+      }
+      checkMapNotBlank();
+    }, 2500);
+  }
+  // Size changes (rotation, keyboard, sidebar, returning from the back stack):
+  // re-measure only when the container really has a size.
+  const resizeObserver = typeof ResizeObserver === "function"
+    ? new ResizeObserver(() => {
+        if (!mapIsMeasurable()) return;
+        try {
+          map.invalidateSize({ animate: false });
+        } catch {
+          // map already torn down
+        }
+      })
+    : null;
+  resizeObserver?.observe(mapEl);
+  window.addEventListener("orientationchange", redrawOnResume);
   document.addEventListener("visibilitychange", redrawOnResume);
   window.addEventListener("pageshow", redrawOnResume);
 
@@ -744,6 +800,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     } catch {
       // See the matching try/catch around fitBounds below.
     }
+    checkMapNotBlank();
   });
 
   map.on("rotate", () => {
@@ -3412,6 +3469,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     document.removeEventListener("visibilitychange", refreshTileStyle);
     document.removeEventListener("visibilitychange", redrawOnResume);
     window.removeEventListener("pageshow", redrawOnResume);
+    window.removeEventListener("orientationchange", redrawOnResume);
+    resizeObserver?.disconnect();
+    clearTimeout(blankTimer);
     lastCustomers = [];
     factsCache.clear();
     document.removeEventListener("click", dismissAddressResultsOutside);
@@ -3438,6 +3498,17 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // sent them to the one screen that could invalidate it already implies
   // they were done with for now) and far better than silently stale data.
   cleanupMapInner.onRestore = () => {
+    // The container was detached while parked: measure it again now that it
+    // is back, then redraw the tiles (see trackResize above).
+    requestAnimationFrame(() => {
+      try {
+        map.invalidateSize({ animate: false });
+        tileLayer?.redraw?.();
+      } catch {
+        // map already torn down
+      }
+      checkMapNotBlank();
+    });
     // Back from a customer card: keep the exact pan/zoom (refreshing the
     // markers must not re-fit to every customer) and reopen the pin the
     // user tapped More on.

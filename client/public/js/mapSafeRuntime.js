@@ -108,7 +108,13 @@
       // map.js automatically recenters to GPS once customers load. When the
       // user is RETURNING to Map, preserve their previous viewport instead.
       // This is one-shot so the explicit Locate button continues to work.
+      // NEVER while the map has no view yet (map._loaded is false): the first
+      // setView of a fresh map is its own restored/initial view -- swallowing
+      // it left the map without any view, i.e. blank tiles with working
+      // buttons until the app was restarted (a saved view at the usual GPS
+      // zoom 15 triggered it on every return to the Map tab).
       if (
+        map._loaded &&
         suppressOneAutomaticGpsSetView &&
         Date.now() - createdAt < 6000 &&
         Number(requestedZoom) === 15
@@ -122,7 +128,7 @@
     };
 
     map.fitBounds = function safeFitBounds(bounds, options) {
-      if (suppressOneAutomaticFit && Date.now() - createdAt < 6000) {
+      if (map._loaded && suppressOneAutomaticFit && Date.now() - createdAt < 6000) {
         suppressOneAutomaticFit = false;
         return map;
       }
