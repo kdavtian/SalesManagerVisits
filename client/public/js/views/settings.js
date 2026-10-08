@@ -446,6 +446,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       form.set("avatar", compressed, "avatar.jpg");
       await api.uploadMyAvatar(form);
       state.user.has_avatar = true;
+      window.dispatchEvent(new Event("app-preferences-changed"));
       renderSettings(root, onLogout, onLanguageChange);
     } catch (err) {
       alert(err.message);
@@ -456,6 +457,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     try {
       await api.deleteMyAvatar();
       state.user.has_avatar = false;
+      window.dispatchEvent(new Event("app-preferences-changed"));
       renderSettings(root, onLogout, onLanguageChange);
     } catch (err) {
       alert(err.message);
@@ -465,14 +467,17 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
   // --- Preferences ---
   root.querySelector("#toggle-appearance").addEventListener("click", () => {
     setTheme(getTheme() === "dark" ? "light" : "dark");
+    window.dispatchEvent(new Event("app-preferences-changed"));
     renderSettings(root, onLogout, onLanguageChange);
   });
   root.querySelector("#toggle-language").addEventListener("click", () => {
     setLang(getLang() === "hy" ? "en" : "hy");
+    window.dispatchEvent(new Event("app-preferences-changed"));
     onLanguageChange();
   });
   root.querySelector("#toggle-perf-mode").addEventListener("click", () => {
     setPerfMode(getPerfMode() === "efficiency" ? "performance" : "efficiency");
+    window.dispatchEvent(new Event("app-preferences-changed"));
     renderSettings(root, onLogout, onLanguageChange);
   });
 
@@ -1329,6 +1334,7 @@ function openPhoneSheet(root, onLogout, onLanguageChange) {
     try {
       await api.updateMyProfile({ phone });
       state.user.phone = phone;
+      window.dispatchEvent(new Event("app-preferences-changed"));
       close();
       renderSettings(root, onLogout, onLanguageChange);
     } catch (err) {

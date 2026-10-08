@@ -275,6 +275,32 @@ function disposeBackEntry(entry) {
     // a failing cleanup must not break navigation
   }
 }
+// Screens kept in the back stack (and a parked sheet) are DOM snapshots drawn
+// with whatever language, theme, performance mode, profile or admin settings
+// were active when they were left. After a preference change they must be
+// thrown away, or Back / the menu icon brings the old language or tiles back
+// until the tab is restarted. Fired by Settings (language, theme, performance
+// mode, avatar, phone) and by api.updateSettings (admin settings such as the
+// Home tile visibility or the Bonuses switch).
+window.addEventListener("app-preferences-changed", () => {
+  backStack.forEach(disposeBackEntry);
+  backStack = [];
+  pruneParkedSheet([]);
+  lastNavSignature = null; // rebuild the tab bar, top bar and sidebar
+  if (!state.user) return;
+  // Admin-configurable settings (quick-action tiles, Bonuses switch) feed the
+  // desktop sidebar from this copy, which was only loaded at boot.
+  api
+    .getSettings()
+    .then((settings) => {
+      cachedSettings = settings;
+      lastNavSignature = null;
+      renderNav();
+    })
+    .catch(() => {});
+  renderNav();
+});
+
 function trimBackStack() {
   let sawMap = false;
   for (let i = backStack.length - 1; i >= 0; i--) {
