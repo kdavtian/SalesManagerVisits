@@ -10,6 +10,19 @@ export function accountingDocLabel(method) {
   return t(method === "cash" ? "acc_waybill" : "acc_invoice");
 }
 
+// Short names for badges ("Waybill" / "Invoice"; the long label above keeps the
+// Armenian term in brackets for the send-to-accounting dialog).
+export function accountingDocShort(docType) {
+  return t(docType === "waybill" ? "acc_doc_waybill" : "acc_doc_invoice");
+}
+
+// "Waybill created" only makes sense for a waybill: an invoice that Lily made
+// reads "Invoice created".
+export function accountingStatusLabel(status, docType) {
+  if (status === "waybill_created" && docType === "invoice") return t("acc_status_invoice_created");
+  return t(`acc_status_${status}`);
+}
+
 export const ACCOUNTING_STATUS_BADGE = {
   pending: "badge-neutral",
   in_progress: "badge-info",

@@ -13,7 +13,7 @@ import { getProductCatalog } from "./productCatalog.js";
 import { searchProducts, debounce } from "./productSearch.js";
 import { compareProducts } from "./productSort.js";
 import { documentsSectionHtml, bindDocumentRows } from "./accountingFiles.js";
-import { openAccountingDocSheet, accountingDocLabel, ACCOUNTING_STATUS_BADGE } from "./accountingDocSheet.js";
+import { openAccountingDocSheet, accountingDocShort, accountingStatusLabel, ACCOUNTING_STATUS_BADGE } from "./accountingDocSheet.js";
 
 // v3 5-state machine (see migrations/051_warehouse_delivery_v3.sql):
 // draft -> submitted -> confirmed -> packed_stock_out -> delivered, every
@@ -85,8 +85,8 @@ function accountingSectionHtml(order) {
   const err = order.accounting_error;
   return `
     <h3 class="list-group-heading">${t("acc_section_title")}</h3>
-    <p><span class="badge badge-neutral">${accountingDocLabel(order.accounting_doc_type === "waybill" ? "cash" : "invoice")}</span>
-      <span class="badge ${ACCOUNTING_STATUS_BADGE[order.accounting_status] ?? "badge-neutral"}">${t(`acc_status_${order.accounting_status}`)}</span></p>
+    <p><span class="badge badge-neutral">${accountingDocShort(order.accounting_doc_type)}</span>
+      <span class="badge ${ACCOUNTING_STATUS_BADGE[order.accounting_status] ?? "badge-neutral"}">${accountingStatusLabel(order.accounting_status, order.accounting_doc_type)}</span></p>
     ${docs
       .map(
         (d) =>
@@ -104,7 +104,7 @@ function accountingSectionHtml(order) {
              <label for="acc-status-select">${t("acc_request_status")}</label>
              <div class="acc-status-control-row">
                <select id="acc-status-select">
-                 ${ACCOUNTING_STATUS_OPTIONS.map((s) => `<option value="${s}" ${s === order.accounting_status ? "selected" : ""}>${t(`acc_status_${s}`)}</option>`).join("")}
+                 ${ACCOUNTING_STATUS_OPTIONS.map((s) => `<option value="${s}" ${s === order.accounting_status ? "selected" : ""}>${accountingStatusLabel(s, order.accounting_doc_type)}</option>`).join("")}
                </select>
                <button type="button" class="btn btn-sm" data-action="accounting-set-status">${t("acc_save_status")}</button>
              </div>

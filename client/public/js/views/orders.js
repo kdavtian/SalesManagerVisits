@@ -5,7 +5,7 @@ import { icons } from "../icons.js";
 import { ORDER_STATUS_ICONS } from "../ordersSearchEnhancements.js";
 import { loadWithCache } from "../listCache.js";
 import { STATUS_META, openOrderDetailSheet, paymentMethodBadgeHtml } from "../orderDetailSheet.js";
-import { ACCOUNTING_STATUS_BADGE, accountingDocLabel } from "../accountingDocSheet.js";
+import { ACCOUNTING_STATUS_BADGE, accountingDocShort, accountingStatusLabel } from "../accountingDocSheet.js";
 import { state } from "../state.js";
 
 // Who sees (and can filter by) the accounting-document status -- mirrors
@@ -47,9 +47,9 @@ export async function renderOrders(root, navigate) {
         </button>
       </div>
       <div class="order-status-filter-row" id="order-status-filters"></div>
-      <div class="order-status-filter-row order-acc-status-row" id="order-acc-status-filters" hidden></div>
-      <div class="order-status-filter-row order-acc-status-row" id="order-acc-signed-filters" hidden></div>
-      <p class="muted order-acc-agent" id="order-acc-agent" hidden></p>
+      <div class="segmented acc-segmented" id="order-acc-status-filters" hidden></div>
+      <div class="segmented acc-segmented" id="order-acc-signed-filters" hidden></div>
+      <p class="acc-agent" id="order-acc-agent" hidden></p>
       <div class="list-toolbar">
         <input type="search" id="order-search" placeholder="${t("search")}" aria-label="${t("search")}" />
         <button type="button" class="icon-btn" id="order-filter-btn" aria-label="${t("filter")}" aria-haspopup="menu" aria-expanded="false" aria-controls="order-filter-menu">${icons.filter}</button>
@@ -86,7 +86,7 @@ export async function renderOrders(root, navigate) {
   let accSigned = "";
   const chipRow = (row, attr, items, active) => {
     row.innerHTML = items
-      .map(([v, label]) => `<button class="map-filter-chip ${v === active ? "chip-active" : ""}" data-${attr}="${v}" aria-pressed="${v === active}">${label}</button>`)
+      .map(([v, label]) => `<button type="button" class="chip ${v === active ? "chip-active" : ""}" data-${attr}="${v}" aria-pressed="${v === active}">${label}</button>`)
       .join("");
     row.querySelectorAll(`[data-${attr}]`).forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -112,7 +112,7 @@ export async function renderOrders(root, navigate) {
     try {
       const a = await api.getAccountingAgent();
       agentEl.hidden = false;
-      agentEl.innerHTML = `<span class="status-dot ${a.online ? "status-dot-on" : "status-dot-off"}"></span> ${a.online ? t("acc_agent_online") : t("acc_agent_offline")}`;
+      agentEl.innerHTML = `<span class="status-dot ${a.online ? "status-dot-on" : "status-dot-off"}"></span>${a.online ? t("acc_agent_online") : t("acc_agent_offline")}`;
     } catch {
       agentEl.hidden = true;
     }
@@ -150,7 +150,7 @@ export async function renderOrders(root, navigate) {
           ? `<div class="dropdown-menu-heading muted" role="presentation">${t("acc_section_title")}</div>
       <button role="menuitemradio" aria-checked="${accountingFilter === ""}" data-accounting="">${t("acc_filter_any")}</button>
       <button role="menuitemradio" aria-checked="${accountingFilter === "none"}" data-accounting="none">${t("acc_filter_none")}</button>
-      ${ACCOUNTING_FILTERS.map((f) => `<button role="menuitemradio" aria-checked="${accountingFilter === f}" data-accounting="${f}">${t(`acc_status_${f}`)}</button>`).join("")}`
+      ${ACCOUNTING_FILTERS.map((f) => `<button role="menuitemradio" aria-checked="${accountingFilter === f}" data-accounting="${f}">${f === "waybill_created" ? t("acc_status_document_created") : t(`acc_status_${f}`)}</button>`).join("")}`
           : ""
       }
     `;
@@ -289,10 +289,10 @@ export async function renderOrders(root, navigate) {
             <div class="muted list-row-meta">${o.order_code ? `${escapeHtml(o.order_code)} · ` : ""}${escapeHtml(o.user_name)} · ${formatDate(o.created_at)}</div>
             <div class="list-row-bottom">
               <span class="badge ${meta.cls}">${t(meta.key)}</span>
-              ${paymentMethodBadgeHtml(o.payment_method)}
-              ${activeStatus === ACCOUNTING_TAB && o.accounting_doc_type ? `<span class="badge badge-neutral">${accountingDocLabel(o.accounting_doc_type === "waybill" ? "cash" : "invoice")}</span>` : ""}
-              ${o.document_count > 0 && ACCOUNTING_ROLES.has(state.user.role) ? `<span class="badge badge-neutral">📎 ${o.document_count}</span>` : ""}
-              ${o.accounting_status && ACCOUNTING_ROLES.has(state.user.role) ? `<span class="badge ${ACCOUNTING_STATUS_BADGE[o.accounting_status] ?? "badge-neutral"}">${t(`acc_status_${o.accounting_status}`)}</span>` : ""}
+              ${activeStatus === ACCOUNTING_TAB ? "" : paymentMethodBadgeHtml(o.payment_method)}
+              ${activeStatus === ACCOUNTING_TAB && accSub === "requests" && o.accounting_doc_type ? `<span class="badge badge-neutral">${accountingDocShort(o.accounting_doc_type)}</span>` : ""}
+              ${o.accounting_status && ACCOUNTING_ROLES.has(state.user.role) ? `<span class="badge ${ACCOUNTING_STATUS_BADGE[o.accounting_status] ?? "badge-neutral"}">${accountingStatusLabel(o.accounting_status, o.accounting_doc_type)}</span>` : ""}
+              ${o.document_count > 0 && ACCOUNTING_ROLES.has(state.user.role) ? `<span class="badge badge-neutral">&#128206; ${o.document_count}</span>` : ""}
             </div>
             ${activeStatus === ACCOUNTING_TAB && o.accounting_requested_at ? `<div class="muted list-row-meta">${t("acc_requested_label")}: ${formatDate(o.accounting_requested_at)}</div>` : ""}
           </div>
