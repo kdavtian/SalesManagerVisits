@@ -12,8 +12,6 @@ export const customersRouter = Router();
 
 customersRouter.use(requireAuth);
 
-const LAST_VISIT_SUBQUERY = `(SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id)`;
-
 // KF/CAS/CVO/PCO/OEM are channels Castrol serves through a route that
 // doesn't involve field visits (key accounts / distributor-managed / OEM
 // contracts), so these customers never need to show up as "overdue" or
@@ -24,18 +22,30 @@ export const NOT_NO_VISIT_CHANNEL_SQL = `COALESCE(c.sales_channel, '') <> ALL(AR
 // Derived visit status — no assignment/planning data exists yet, so
 // "overdue" is approximated from each customer's own visit_frequency_days
 // against their actual last check-in, not a fabricated schedule.
-const STATUS_COLUMNS = `
-  ${LAST_VISIT_SUBQUERY} AS last_visit_at,
-  EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= date_trunc('day', now())) AS visited_today,
-  EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= now() - interval '7 days') AS visited_this_week,
-  (
+//
+// The per-customer check-in facts come from ONE lateral aggregate (alias v)
+// instead of six correlated subqueries: PostgreSQL planned each
+// `max(timestamp)` subquery as a walk down the global timestamp index,
+// skipping every other customer's rows, so the list took ~1 s per 3,000
+// customers (and grew with the check-in history). Joined once per customer
+// through the customer_id index it is a few ms.
+const VISIT_STATUS_JOIN = `
+  LEFT JOIN LATERAL (
+    SELECT max(ch.timestamp) AS last_visit_at,
+           COALESCE(bool_or(ch.timestamp >= date_trunc('day', now())), false) AS visited_today,
+           COALESCE(bool_or(ch.timestamp >= now() - interval '7 days'), false) AS visited_this_week
+    FROM checkins ch WHERE ch.customer_id = c.id
+  ) v ON true`;
+const OVERDUE_SQL = `(
     ${NOT_NO_VISIT_CHANNEL_SQL}
-    AND NOT EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= date_trunc('day', now()))
-    AND (
-      ${LAST_VISIT_SUBQUERY} IS NULL
-      OR ${LAST_VISIT_SUBQUERY} < now() - (c.visit_frequency_days || ' days')::interval
-    )
-  ) AS overdue,
+    AND NOT v.visited_today
+    AND (v.last_visit_at IS NULL OR v.last_visit_at < now() - (c.visit_frequency_days || ' days')::interval)
+  )`;
+const STATUS_COLUMNS = `
+  v.last_visit_at AS last_visit_at,
+  v.visited_today AS visited_today,
+  v.visited_this_week AS visited_this_week,
+  ${OVERDUE_SQL} AS overdue,
   -- Whether this customer is on a channel that is visited in the field at
   -- all. Exposed as its own flag (rather than the client re-deriving it
   -- from sales_channel) so the exemption list lives in exactly one place;
@@ -48,7 +58,8 @@ const STATUS_COLUMNS = `
 // last-visit + N days SQL approximation once the active Route Plans rules
 // are known. No-visit channels and customers visited today are never overdue.
 async function applyPlannedOverdue(rows) {
-  const { rows: rules } = await pool.query(`SELECT day_of_week, customer_ids, areas FROM visit_plan_rules WHERE active`);
+  const { rows: ruleRows } = await pool.query(`SELECT day_of_week, customer_ids, areas FROM visit_plan_rules WHERE active`);
+  const rules = ruleRows.map((r) => ({ ...r, customer_id_set: new Set(r.customer_ids ?? []) }));
   const today = yerevanToday();
   for (const row of rows) {
     const due = computeVisitDue({
@@ -118,18 +129,11 @@ customersRouter.get("/", async (req, res) => {
     conditions.push(`c.assigned_manager_id = $${params.length}`);
   }
   if (visited === "visited") {
-    conditions.push(`EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= now() - interval '7 days')`);
+    conditions.push(`v.visited_this_week`);
   } else if (visited === "not_visited") {
-    conditions.push(`${NOT_NO_VISIT_CHANNEL_SQL} AND NOT EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= now() - interval '7 days')`);
+    conditions.push(`${NOT_NO_VISIT_CHANNEL_SQL} AND NOT v.visited_this_week`);
   } else if (visited === "overdue") {
-    conditions.push(`(
-      ${NOT_NO_VISIT_CHANNEL_SQL}
-      AND NOT EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= date_trunc('day', now()))
-      AND (
-        ${LAST_VISIT_SUBQUERY} IS NULL
-        OR ${LAST_VISIT_SUBQUERY} < now() - (c.visit_frequency_days || ' days')::interval
-      )
-    )`);
+    conditions.push(OVERDUE_SQL);
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -142,6 +146,7 @@ customersRouter.get("/", async (req, res) => {
     `SELECT c.*, ${debtColumn} am.name AS assigned_manager_name, ${STATUS_COLUMNS}
      FROM customers c
      LEFT JOIN users am ON am.id = c.assigned_manager_id
+     ${VISIT_STATUS_JOIN}
      ${debtJoin}
      ${where}
      ORDER BY c.name`,
@@ -501,9 +506,10 @@ customersRouter.get("/:id", async (req, res) => {
        -- not within that window.
        (SELECT MAX(eol.order_date) FROM erp_order_lines eol WHERE eol.erp_customer_id = c.erp_customer_id) AS erp_last_order_date
      FROM customers c
+     ${VISIT_STATUS_JOIN}
      LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
      LEFT JOIN users am ON am.id = c.assigned_manager_id
-     WHERE c.id = $1`,
+     WHERE c.id = $1`
     [req.params.id]
   );
   const customer = rows[0];

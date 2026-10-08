@@ -22,16 +22,32 @@ export const ALL_ROLES = [
 // ternary per tile in dashboard.js). It stays the fallback forever: a role
 // with no admin-saved override renders exactly what it rendered before this
 // feature existed.
+// The ORDER of this array is the order of the tiles on the Home screen, in
+// the desktop sidebar and in the admin tile editor.
 export const QUICK_ACTIONS = [
   { id: "qa_check_in", defaultRoles: ALL_ROLES },
-  { id: "qa_plan_route", defaultRoles: ALL_ROLES },
+  // Task management: everyone receives tasks; management creates them.
+  { id: "qa_tasks", defaultRoles: ALL_ROLES },
   { id: "qa_add_customer", defaultRoles: ALL_ROLES },
   {
     id: "qa_payments",
     defaultRoles: ALL_ROLES.filter((r) => r !== "warehouse_manager" && r !== "delivery_manager"),
   },
-  { id: "qa_cash_expense", defaultRoles: ALL_ROLES },
-  { id: "qa_pricelist", defaultRoles: ALL_ROLES },
+  // Visible to every role by default -- further gated at render time on
+  // app_settings.bonuses_enabled (off by default), since the tile itself
+  // carries no role restriction of its own (see dashboard.js/app.js).
+  { id: "qa_bonuses", defaultRoles: ALL_ROLES },
+  {
+    id: "qa_debt_balances",
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant", "sales_manager"],
+  },
+  { id: "qa_company_dashboard", defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"] },
+  {
+    id: "qa_team_performance",
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant", "sales_manager"],
+  },
+  { id: "qa_reports", defaultRoles: ALL_ROLES },
+  { id: "qa_delivery", defaultRoles: ["delivery_manager", "admin"] },
   // Sales Director and CEO/Operations Director included alongside
   // Warehouse Manager/admin -- the warehouse manager role isn't currently
   // using the app, so the director covers the same ground for now, and
@@ -44,30 +60,17 @@ export const QUICK_ACTIONS = [
     id: "qa_warehouse",
     defaultRoles: ["warehouse_manager", "sales_director", "ceo", "operations_director", "accountant", "admin"],
   },
-  { id: "qa_delivery", defaultRoles: ["delivery_manager", "admin"] },
-  { id: "qa_recorded", defaultRoles: ["admin", "ceo", "operations_director", "accountant"] },
-  {
-    id: "qa_team_performance",
-    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant", "sales_manager"],
-  },
-  { id: "qa_reports", defaultRoles: ALL_ROLES },
-  {
-    id: "qa_debt_balances",
-    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant", "sales_manager"],
-  },
-  { id: "qa_company_dashboard", defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"] },
+  { id: "qa_pricelist", defaultRoles: ALL_ROLES },
   // Same visibility as the financial exports/Company Dashboard -- raw
   // per-order ERP revenue is the same sensitivity class (see
   // seesFinancialExports in server/src/roles.js, which server/src/routes/
   // sales.js gates on too). A sales_manager already has their own
   // customers' order history via the customer detail page.
-  // Task management: everyone receives tasks; management creates them.
-  { id: "qa_tasks", defaultRoles: ALL_ROLES },
   { id: "qa_sales", defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"] },
-  // Visible to every role by default -- further gated at render time on
-  // app_settings.bonuses_enabled (off by default), since the tile itself
-  // carries no role restriction of its own (see dashboard.js/app.js).
-  { id: "qa_bonuses", defaultRoles: ALL_ROLES },
+  { id: "qa_cash_expense", defaultRoles: ALL_ROLES },
+  { id: "qa_recorded", defaultRoles: ["admin", "ceo", "operations_director", "accountant"] },
+  // Not in the owner's list of 15, kept (not removed) and placed last.
+  { id: "qa_plan_route", defaultRoles: ALL_ROLES },
 ];
 
 // Which route each tile jumps to -- shared between the Home screen's

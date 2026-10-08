@@ -145,7 +145,7 @@ export async function renderRoutePlans(root, navigate) {
 // scoped to that rep's assigned customers (assigned_manager_id) -- not the
 // whole customer book, since a route plan is about who this rep already
 // owns, not a general-purpose customer browser.
-async function openCustomerPickSheet({ userId, userName, days, existingCustomerIds = [], onSaved }) {
+async function openCustomerPickSheet({ userId, userName, days, existingCustomerIds = [], existingIdsPromise = null, onSaved }) {
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay sheet-overlay-light";
   overlay.innerHTML = `
@@ -176,7 +176,12 @@ async function openCustomerPickSheet({ userId, userName, days, existingCustomerI
   let selectedIds = new Set(existingCustomerIds);
 
   try {
-    const customers = await api.listCustomers({ assigned_manager_id: userId });
+    // The sheet is already on screen; its two reads run in parallel. The
+    // light route-plan customer list (id, name, region, subregion) replaces
+    // the full customer list, which carried ~700 bytes and several computed
+    // visit-status columns per customer that this picker never shows.
+    const [existing, { customers }] = await Promise.all([existingIdsPromise ?? existingCustomerIds, api.getRoutePlanCustomers(userId)]);
+    selectedIds = new Set(existing);
     if (!customers.length) {
       listEl.innerHTML = `<p class="empty-state">${t("no_assigned_customers")}</p>`;
       saveBtn.disabled = true;
@@ -218,14 +223,13 @@ async function openCustomerPickSheet({ userId, userName, days, existingCustomerI
 
 
 async function openEditSheet(userId, userName, dayOfWeek, onSaved) {
-  let existingCustomerIds = [];
-  try {
-    const rules = await api.getVisitPlanRules(userId);
-    existingCustomerIds = rules.find((r) => r.day_of_week === dayOfWeek)?.customer_ids ?? [];
-  } catch {
-    existingCustomerIds = [];
-  }
-  await openCustomerPickSheet({ userId, userName, days: [dayOfWeek], existingCustomerIds, onSaved });
+  // Open the sheet at once (with its loading state) and fetch inside it, so a
+  // tap always gives immediate feedback instead of waiting on a request first.
+  const existingIdsPromise = api
+    .getVisitPlanRules(userId)
+    .then((rules) => rules.find((r) => r.day_of_week === dayOfWeek)?.customer_ids ?? [])
+    .catch(() => []);
+  await openCustomerPickSheet({ userId, userName, days: [dayOfWeek], existingIdsPromise, onSaved });
 }
 
 // Read-only Region -> Subregion -> Customer accordion for the "View
