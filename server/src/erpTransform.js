@@ -68,6 +68,7 @@ export function transformErpCustomers(customers) {
   const legalErpIds = [];
   const tins = [];
   const legalNames = [];
+  const legalAddresses = [];
 
   for (const entry of isPlainArray(customers)) {
     if (!isPlainObject(entry) || !entry.erp_customer_id) continue;
@@ -94,10 +95,12 @@ export function transformErpCustomers(customers) {
     const rawTin = entry.tin != null ? String(entry.tin).trim().replace(/\.0$/, "") : "";
     const tin = /^\d{8}$/.test(rawTin) ? rawTin : null;
     const legalName = typeof entry.legal_name === "string" && entry.legal_name.trim() ? entry.legal_name.trim() : null;
-    if (tin || legalName) {
+    const legalAddress = typeof entry.legal_address === "string" && entry.legal_address.trim() ? entry.legal_address.trim() : null;
+    if (tin || legalName || legalAddress) {
       legalErpIds.push(String(entry.erp_customer_id));
       tins.push(tin);
       legalNames.push(legalName);
+      legalAddresses.push(legalAddress);
     }
     if (entry.region || entry.subregion) {
       regionErpIds.push(String(entry.erp_customer_id));
@@ -106,7 +109,7 @@ export function transformErpCustomers(customers) {
     }
   }
 
-  return { erpIds, names, reps, debts, balance0s, lastPayments, daysSince, agingBuckets, recentOrders, regionErpIds, regions, subregions, tierErpIds, tiers, legalErpIds, tins, legalNames };
+  return { erpIds, names, reps, debts, balance0s, lastPayments, daysSince, agingBuckets, recentOrders, regionErpIds, regions, subregions, tierErpIds, tiers, legalErpIds, tins, legalNames, legalAddresses };
 }
 
 // erp_customer_id, order_id, and date are all required -- an entry missing
