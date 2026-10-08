@@ -37,6 +37,8 @@ ISO 8601 with `+04:00`. Every call with a token is stored in `integration_audit_
 | GET | `/products?updated_since=YYYY-MM-DD` | 3.6 (also `unmapped=1`) |
 | POST | `/orders/{id}/issue` | 3.7 (`/problem` is an alias) |
 | GET | `/ping` | token check `{ ok, token, test_mode }` |
+| GET | `/wait?timeout=25` | long-poll: returns `{ pending, orders }` at once if requests are waiting, else holds up to 25 s and returns the moment KAD queues one |
+| POST | `/orders/{id}/documents?filename=&hc_doc_number=` | signed copy: raw PDF body, `Content-Type: application/pdf` (<= 15 MB); same `hc_doc_number` replaces the file |
 
 ### Order object (`GET /orders`, example, personal data removed)
 
@@ -135,3 +137,21 @@ exercised with them.
 - Order sheet: accounting status, waybill numbers (with e-invoicing state), issue messages;
   buttons Send / Change document / Send again / Mark as signed.
 - Orders list: accounting status badge and an "Accounting" filter in the filter menu.
+
+
+## Instant command channel (long-poll) and signed documents
+
+Lily runs as a page on the accountant's computer, so KAD cannot call her. Instead she keeps one
+call open: **`GET /wait?timeout=25`** in a loop. KAD answers the moment an order enters the queue
+(management sends it, or sets it back to `pending`), so she can claim and start at once; if nothing
+happens it returns `{ "pending": 0, "orders": [] }` after 25 s and she calls again. The same calls
+tell KAD she is online: the Accounting tab shows "Lily is online/offline" (seen within 60 s).
+
+She replies with the existing status calls (claim, waybills, einvoicing, issue). Each of the
+useful ones also sends the requester a notification (type `accounting_update`).
+
+**Signed copy.** `POST /orders/{id}/documents?filename=signed-255.pdf&hc_doc_number=255` with the PDF as
+the raw body (`Content-Type: application/pdf`). Only real PDFs (`%PDF-` header) are accepted. Stored in
+Postgres (`order_documents`), shown on the order sheet, on the customer card (everyone who can open
+the customer sees it) and counted on the Accounting tab. Re-sending the same `hc_doc_number` replaces
+the file. Admin/management/accountant can delete a stored file in KAD.

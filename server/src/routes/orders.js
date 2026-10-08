@@ -1,4 +1,5 @@
 import { nextStatusFromDocuments, ACCOUNTING_STATUSES } from "../accountingStatus.js";
+import { accountingQueueChanged } from "../accountingEvents.js";
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
@@ -382,7 +383,8 @@ ordersRouter.get("/", async (req, res) => {
        -- (e.g. "PCS") would need excluding here explicitly.
        (SELECT COALESCE(SUM(oi.quantity * NULLIF(regexp_replace(p.unit, 'L$', ''), '')::numeric), 0)
         FROM order_items oi JOIN products p ON p.id = oi.product_id
-        WHERE oi.order_id = o.id AND p.unit ~ '^[0-9.]+L$') AS total_liters
+        WHERE oi.order_id = o.id AND p.unit ~ '^[0-9.]+L$') AS total_liters,
+       (SELECT COUNT(*)::int FROM order_documents d WHERE d.order_id = o.id) AS document_count
      FROM orders o
      JOIN users u ON u.id = o.user_id
      JOIN customers c ON c.id = o.customer_id
@@ -392,6 +394,57 @@ ordersRouter.get("/", async (req, res) => {
     params
   );
   res.json({ rows: rows.slice(0, PAGE_SIZE), has_more: rows.length > PAGE_SIZE });
+});
+
+// Is Lily (the accounting agent) connected right now? She calls the
+// integration API every few seconds (a long-poll), so "seen in the last 60 s"
+// on a real (non-test) token means online. Shown as a small chip on the
+// Accounting tab. Declared ahead of GET /:id.
+ordersRouter.get("/accounting-agent", async (req, res) => {
+  if (!canRequestAccountingDocs(req.user.role)) return res.json({ online: false, last_seen_at: null });
+  const { rows } = await pool.query(
+    "SELECT MAX(last_used_at) AS last_seen_at FROM integration_tokens WHERE revoked_at IS NULL AND test_mode = false"
+  );
+  const last = rows[0].last_seen_at;
+  res.json({ online: !!last && Date.now() - new Date(last).getTime() < 60 * 1000, last_seen_at: last });
+});
+
+// Signed documents Lily stored on an order. Reps see their own orders'
+// documents, everyone with all-activity access sees all (same as the order).
+async function canSeeOrderDocs(user, orderId) {
+  const { rows } = await pool.query("SELECT user_id FROM orders WHERE id = $1", [orderId]);
+  if (!rows[0]) return null;
+  return seesAllActivity(user.role) || rows[0].user_id === user.id;
+}
+
+ordersRouter.get("/documents/:docId/file", async (req, res) => {
+  const { rows } = await pool.query("SELECT order_id, filename, content_type, data FROM order_documents WHERE id = $1", [req.params.docId]);
+  const doc = rows[0];
+  if (!doc) return res.status(404).json({ error: "Document not found" });
+  // Same access as the customer card, which lists these documents too.
+  res.set("Content-Type", doc.content_type);
+  res.set("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(doc.filename)}`);
+  res.set("X-Content-Type-Options", "nosniff");
+  res.set("Cache-Control", "private, max-age=3600");
+  res.send(doc.data);
+});
+
+ordersRouter.delete("/documents/:docId", async (req, res) => {
+  if (!canRequestAccountingDocs(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const { rowCount } = await pool.query("DELETE FROM order_documents WHERE id = $1", [req.params.docId]);
+  if (!rowCount) return res.status(404).json({ error: "Document not found" });
+  res.json({ ok: true });
+});
+
+ordersRouter.get("/:id/documents", async (req, res) => {
+  const allowed = await canSeeOrderDocs(req.user, req.params.id);
+  if (allowed === null) return res.status(404).json({ error: "Order not found" });
+  if (!allowed) return res.status(403).json({ error: "Not allowed" });
+  const { rows } = await pool.query(
+    "SELECT id, order_id, hc_doc_number, kind, filename, content_type, size_bytes, created_at FROM order_documents WHERE order_id = $1 ORDER BY created_at DESC",
+    [req.params.id]
+  );
+  res.json(rows);
 });
 
 // Backs the badge on the Orders nav icon -- how many orders are sitting in
@@ -821,6 +874,7 @@ ordersRouter.post("/:id/accounting-request", async (req, res) => {
     [order.id, method, docType, isTest, req.user.id, order.accounting_status]
   );
   if (!updated[0]) return res.status(409).json({ error: "This order was changed by someone else -- refresh and try again" });
+  accountingQueueChanged();
   res.json(updated[0]);
 });
 
@@ -849,6 +903,7 @@ ordersRouter.post("/:id/accounting-status", async (req, res) => {
     [order.id, next, error, order.accounting_status]
   );
   if (!updated[0]) return res.status(409).json({ error: "This request was changed by someone else -- refresh and try again" });
+  if (next === "pending") accountingQueueChanged();
   res.json(updated[0]);
 });
 

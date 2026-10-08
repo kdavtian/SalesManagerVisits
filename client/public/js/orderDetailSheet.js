@@ -5,13 +5,14 @@
 // tab's "Order placed" outcome row, for one -- can open the exact same
 // sheet without re-implementing it.
 import { api } from "./api.js";
-import { escapeHtml, formatAmd, activateDialog, formatDateTime, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo } from "./util.js";
+import { escapeHtml, formatAmd, activateDialog, formatDateTime, formatDateDMY, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo } from "./util.js";
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { state } from "./state.js";
 import { getProductCatalog } from "./productCatalog.js";
 import { searchProducts, debounce } from "./productSearch.js";
 import { compareProducts } from "./productSort.js";
+import { documentsSectionHtml, bindDocumentRows } from "./accountingFiles.js";
 import { openAccountingDocSheet, accountingDocLabel, ACCOUNTING_STATUS_BADGE } from "./accountingDocSheet.js";
 
 // v3 5-state machine (see migrations/051_warehouse_delivery_v3.sql):
@@ -237,6 +238,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       <p class="order-detail-total"><span>${t("total")}:</span> <span class="text-amount">${formatAmd(Number(order.total_amd))}</span></p>
       ${order.note ? `<p class="muted">${escapeHtml(order.note)}</p>` : ""}
       ${accountingSectionHtml(order)}
+      <div id="order-signed-docs"></div>
       ${orderTimelineHtml(order.history, order.status)}
       </div>
       </div>
@@ -306,6 +308,18 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
 
     actionsEl.querySelector("#order-detail-close")?.addEventListener("click", () => overlay.remove());
     overlay.querySelector('[data-action="close-sheet"]')?.addEventListener("click", () => overlay.remove());
+    // Signed copies Lily stored on this order (loaded after the sheet is up).
+    if (order.accounting_status) {
+      api
+        .listOrderDocuments(orderId)
+        .then((docs) => {
+          const slot = overlay.querySelector("#order-signed-docs");
+          if (!slot || !docs.length) return;
+          slot.innerHTML = documentsSectionHtml(docs);
+          bindDocumentRows(slot);
+        })
+        .catch(() => {});
+    }
     actionsEl.querySelectorAll("[data-status]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));

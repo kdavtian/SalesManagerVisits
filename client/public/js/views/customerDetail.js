@@ -185,6 +185,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     </div>
 
     <div id="customer-tasks-slot"></div>
+    <div id="customer-docs-slot"></div>
 
     <div class="card next-visit-card">
       <div class="next-visit-header"><span>${t("next_visit")}</span></div>
@@ -260,6 +261,18 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   container.querySelector("#order-history-btn")?.addEventListener("click", () => {
     navigate(`#/customers/${customerId}/orders`);
   });
+
+  // Signed accounting documents (from Lily) of this customer's orders.
+  api
+    .listCustomerDocuments(customerId)
+    .then(async (docs) => {
+      const slot = container.querySelector("#customer-docs-slot");
+      if (!slot || !docs.length) return;
+      const files = await import("../accountingFiles.js");
+      slot.innerHTML = files.documentsSectionHtml(docs);
+      files.bindDocumentRows(slot);
+    })
+    .catch(() => {});
 
   // Open tasks attached to this customer (above Next visit), plus "Add task" for management.
   loadCustomerTaskBlock();

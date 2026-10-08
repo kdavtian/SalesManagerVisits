@@ -482,6 +482,17 @@ customersRouter.get("/tin-lookup", async (req, res) => {
   res.json(data);
 });
 
+// Signed accounting documents (from Lily) of all this customer's orders.
+customersRouter.get("/:id/documents", async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT d.id, d.order_id, d.hc_doc_number, d.filename, d.size_bytes, d.created_at, o.order_code, o.accounting_doc_type
+     FROM order_documents d JOIN orders o ON o.id = d.order_id
+     WHERE o.customer_id = $1 ORDER BY d.created_at DESC`,
+    [req.params.id]
+  );
+  res.json(rows);
+});
+
 customersRouter.get("/:id", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT c.*, ${STATUS_COLUMNS},
