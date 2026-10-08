@@ -509,7 +509,7 @@ customersRouter.get("/:id", async (req, res) => {
      ${VISIT_STATUS_JOIN}
      LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
      LEFT JOIN users am ON am.id = c.assigned_manager_id
-     WHERE c.id = $1`
+     WHERE c.id = $1`,
     [req.params.id]
   );
   const customer = rows[0];
