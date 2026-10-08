@@ -12,7 +12,7 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
-  canConfirmOrders,
+  canConfirmSubmittedOrders,
   seesAllPayments,
   seesUnrecordedBadge,
   canManageWarehouse,
@@ -29,7 +29,7 @@ badgesRouter.get("/", async (req, res) => {
   const userId = req.user.id;
 
   const [orders, payments, unrecorded, warehouse, delivery, notifications, planApprovals, editRequests] = await Promise.all([
-    canConfirmOrders(role)
+    canConfirmSubmittedOrders(role)
       ? pool.query("SELECT COUNT(*)::int AS count FROM orders WHERE status = 'submitted'")
       : Promise.resolve({ rows: [{ count: 0 }] }),
 

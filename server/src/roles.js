@@ -105,6 +105,27 @@ export function canConfirmOrders(role) {
   return role === "admin" || role === "sales_director" || role === "ceo" || role === "operations_director";
 }
 
+// The accountant works the order queue alongside the directors: they confirm
+// a submitted order and ask accounting for its invoice / waybill. This is
+// deliberately NOT canConfirmOrders -- that one also unlocks editing a
+// submitted order, individual price setting and discount approval, which stay
+// with the directors (a discounted order still needs the director's approval
+// before anyone, including the accountant, can confirm it).
+export function canConfirmSubmittedOrders(role) {
+  return canConfirmOrders(role) || role === "accountant";
+}
+
+// Same people: send a confirmed order to accounting (invoice / waybill).
+export function canRequestAccountingDocs(role) {
+  return canConfirmSubmittedOrders(role);
+}
+
+// Submitting a rep's draft on their behalf (own drafts are always allowed;
+// admin already may submit any).
+export function canSubmitOrdersForOthers(role) {
+  return role === "accountant";
+}
+
 // Every field-facing role broadcasts its own foreground location while the
 // app is open, so the office-based roles (admin, CEO, Operations Director)
 // have something to look at; those don't visit customers themselves, so
