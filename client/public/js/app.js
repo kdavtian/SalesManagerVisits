@@ -262,7 +262,10 @@ let fieldErrorId = 0;
 //   * An entry that is not the newest is only restored by a genuine history
 //     traversal (Back / long-press Back), never by tapping a link or tab.
 //   * Only the newest Map entry is kept (Leaflet + GPS watchers are heavy).
-const BACK_STACK_MAX = 5;
+// iPhone/iPad keep 10 screens (iPadOS reports itself as a Mac with a touch
+// screen); other devices keep 5, since every kept screen is live DOM in memory.
+const IS_IOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+const BACK_STACK_MAX = IS_IOS ? 10 : 5;
 let renderSeq = 0; // see render()'s safety net
 let backStack = []; // [{ hash, nodes: DocumentFragment, cleanup, scrollTop, appClassName, bodyClassName }]
 function disposeBackEntry(entry) {
