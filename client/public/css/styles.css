@@ -7244,7 +7244,6 @@ button.list-row-icon {
     border-width: 2px;
   }
 
-  .detail-actions-grid,
   .quick-actions-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -10743,8 +10742,16 @@ form select,
 
 /* Customer action buttons: 3 per row on phones so long Armenian labels
    ("Պատվերներ") fit on one line instead of breaking mid-word. */
-@media (max-width: 520px) {
-  .detail-actions-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* Customer action buttons stay on ONE row (check in, navigate, orders, new
+   order, photos): equal columns, tight padding, type that shrinks with the
+   screen so the widest Armenian word ("Պատվերներ") still fits unbroken. */
+.detail-actions-grid {
+  grid-template-columns: repeat(var(--action-cols, 5), minmax(0, 1fr));
+  gap: 6px;
+}
+.detail-actions-grid .action-btn {
+  padding: 10px 2px;
+  font-size: clamp(0.56rem, 2.45vw, 0.7rem);
 }
 .action-btn { min-width: 0; text-align: center; hyphens: none; overflow-wrap: normal; word-break: keep-all; line-height: 1.2; }
 
@@ -10754,7 +10761,6 @@ form select,
 .quick-action { padding-left: 3px; padding-right: 3px; overflow-wrap: break-word; hyphens: manual; }
 @media (max-width: 380px) {
   .quick-action { font-size: 0.7rem; }
-  .action-btn { font-size: 0.68rem; }
 }
 
 /* Payments (Excel) report rows */
