@@ -1,5 +1,6 @@
 import { nextStatusFromDocuments, ACCOUNTING_STATUSES } from "../accountingStatus.js";
 import { accountingQueueChanged } from "../accountingEvents.js";
+import { accountingBadgeCount } from "../accountingBadge.js";
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
@@ -345,7 +346,9 @@ ordersRouter.get("/", async (req, res) => {
   // "Accounting requests" group: every order that was sent to accounting
   // (accounting=any), or only those in one request status. Only the roles that
   // can see requests get this filter.
-  if (accounting && canRequestAccountingDocs(req.user.role)) {
+  // Everyone can open the Accounting page; what they see is already limited
+  // by the visibility conditions above (a rep only gets their own orders).
+  if (accounting) {
     if (accounting === "any") {
       conditions.push("o.accounting_status IS NOT NULL");
     } else if (accounting === "requests") {
@@ -394,6 +397,11 @@ ordersRouter.get("/", async (req, res) => {
     params
   );
   res.json({ rows: rows.slice(0, PAGE_SIZE), has_more: rows.length > PAGE_SIZE });
+});
+
+// Badge on the Accounting quick action (see accountingBadge.js for who counts what).
+ordersRouter.get("/accounting-count", async (req, res) => {
+  res.json({ count: await accountingBadgeCount(req.user) });
 });
 
 // Is Lily (the accounting agent) connected right now? She calls the

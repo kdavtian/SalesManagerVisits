@@ -5,7 +5,7 @@ import { icons } from "../icons.js";
 import { ORDER_STATUS_ICONS } from "../ordersSearchEnhancements.js";
 import { loadWithCache } from "../listCache.js";
 import { STATUS_META, openOrderDetailSheet, paymentMethodBadgeHtml } from "../orderDetailSheet.js";
-import { ACCOUNTING_STATUS_BADGE, accountingDocShort, accountingStatusLabel } from "../accountingDocSheet.js";
+import { ACCOUNTING_STATUS_BADGE, accountingStatusLabel } from "../accountingDocSheet.js";
 import { state } from "../state.js";
 
 // Who sees (and can filter by) the accounting-document status -- mirrors
@@ -14,7 +14,6 @@ const ACCOUNTING_ROLES = new Set(["admin", "sales_director", "ceo", "operations_
 const ACCOUNTING_FILTERS = ["pending", "in_progress", "waybill_created", "partially_created", "exported_unsigned", "signed", "needs_attention", "cancelled"];
 // The "Accounting" group next to Draft: every order that was sent to accounting
 // (a waybill or invoice request), with its own row of request-status chips.
-const ACCOUNTING_TAB = "accounting";
 
 // Draft is last: it is not yet part of the live pipeline.
 const STATUS_FILTERS = ["", "submitted", "confirmed", "packed_stock_out", "delivered", "draft"];
@@ -47,9 +46,6 @@ export async function renderOrders(root, navigate) {
         </button>
       </div>
       <div class="order-status-filter-row" id="order-status-filters"></div>
-      <div class="segmented acc-segmented" id="order-acc-status-filters" hidden></div>
-      <div class="segmented acc-segmented" id="order-acc-signed-filters" hidden></div>
-      <p class="acc-agent" id="order-acc-agent" hidden></p>
       <div class="list-toolbar">
         <input type="search" id="order-search" placeholder="${t("search")}" aria-label="${t("search")}" />
         <button type="button" class="icon-btn" id="order-filter-btn" aria-label="${t("filter")}" aria-haspopup="menu" aria-expanded="false" aria-controls="order-filter-menu">${icons.filter}</button>
@@ -67,61 +63,17 @@ export async function renderOrders(root, navigate) {
   const DEFAULT_STATUS_FILTER = "submitted";
 
   const filterRow = root.querySelector("#order-status-filters");
-  const canSeeAccounting = ACCOUNTING_ROLES.has(state.user.role);
-  const tabs = canSeeAccounting ? [...STATUS_FILTERS, ACCOUNTING_TAB] : STATUS_FILTERS;
-  filterRow.innerHTML = tabs
+  filterRow.innerHTML = STATUS_FILTERS
     .map(
       (s) =>
         `<button class="map-filter-chip ${s === DEFAULT_STATUS_FILTER ? "chip-active" : ""}" data-status="${s}" aria-pressed="${s === DEFAULT_STATUS_FILTER ? "true" : "false"}">${
-          s === ACCOUNTING_TAB ? t("acc_tab") : s ? t(STATUS_META[s].key) : t("all_statuses")
+          s ? t(STATUS_META[s].key) : t("all_statuses")
         }</button>`
     )
     .join("");
-  const accRow = root.querySelector("#order-acc-status-filters");
-  const accSignedRow = root.querySelector("#order-acc-signed-filters");
-  // Accounting group: what is shown ("requests" = documents not made yet,
-  // "waybill" / "invoice" = already created ones) and, for created ones, whether
-  // it is signed yet ("" = all). Precise statuses stay in the filter menu.
-  let accSub = "requests";
-  let accSigned = "";
-  const chipRow = (row, attr, items, active) => {
-    row.innerHTML = items
-      .map(([v, label]) => `<button type="button" class="chip ${v === active ? "chip-active" : ""}" data-${attr}="${v}" aria-pressed="${v === active}">${label}</button>`)
-      .join("");
-    row.querySelectorAll(`[data-${attr}]`).forEach((btn) => {
-      btn.addEventListener("click", () => {
-        row.querySelectorAll(`[data-${attr}]`).forEach((b) => {
-          b.setAttribute("aria-pressed", "false");
-          b.classList.remove("chip-active");
-        });
-        btn.setAttribute("aria-pressed", "true");
-        btn.classList.add("chip-active");
-        if (attr === "acc-sub") accSub = btn.dataset.accSub;
-        else accSigned = btn.dataset.accSigned;
-        accSignedRow.hidden = activeStatus !== ACCOUNTING_TAB || accSub === "requests";
-        load();
-      });
-    });
-  };
-  chipRow(accRow, "acc-sub", [["requests", t("acc_group_requests")], ["waybill", t("acc_group_waybills")], ["invoice", t("acc_group_invoices")]], accSub);
-  chipRow(accSignedRow, "acc-signed", [["", t("acc_signed_all")], ["unsigned", t("acc_signed_not_yet")], ["signed", t("acc_status_signed")]], accSigned);
-  // "Lily is online / offline": she calls KAD every few seconds while open.
-  const agentEl = root.querySelector("#order-acc-agent");
-  async function refreshAgent() {
-    if (activeStatus !== ACCOUNTING_TAB) return;
-    try {
-      const a = await api.getAccountingAgent();
-      agentEl.hidden = false;
-      agentEl.innerHTML = `<span class="status-dot ${a.online ? "status-dot-on" : "status-dot-off"}"></span>${a.online ? t("acc_agent_online") : t("acc_agent_offline")}`;
-    } catch {
-      agentEl.hidden = true;
-    }
-  }
-
   // Server query for the current tab (the Accounting group asks for orders
   // that have an accounting request instead of a fulfilment status).
   function listParams() {
-    if (activeStatus === ACCOUNTING_TAB) return accSub === "requests" ? { accounting: "requests" } : { accounting: accSub, accounting_signed: accSigned };
     return activeStatus ? { status: activeStatus } : {};
   }
 
@@ -194,7 +146,7 @@ export async function renderOrders(root, navigate) {
     try {
       const params = listParams();
       await loadWithCache(
-        `orders-list:${activeStatus || "all"}${activeStatus === ACCOUNTING_TAB ? `:${accSub}:${accSigned}` : ""}`,
+        `orders-list:${activeStatus || "all"}`,
         () => api.listOrders(params),
         (result) => {
           orders = result.rows;
@@ -241,7 +193,7 @@ export async function renderOrders(root, navigate) {
     }
 
     if (!filtered.length) {
-      listEl.innerHTML = `<p class="empty-state">${activeStatus === ACCOUNTING_TAB && !search ? t("acc_no_requests") : t("no_orders_found")}</p>`;
+      listEl.innerHTML = `<p class="empty-state">${t("no_orders_found")}</p>`;
       return;
     }
 
@@ -289,12 +241,10 @@ export async function renderOrders(root, navigate) {
             <div class="muted list-row-meta">${o.order_code ? `${escapeHtml(o.order_code)} · ` : ""}${escapeHtml(o.user_name)} · ${formatDate(o.created_at)}</div>
             <div class="list-row-bottom">
               <span class="badge ${meta.cls}">${t(meta.key)}</span>
-              ${activeStatus === ACCOUNTING_TAB ? "" : paymentMethodBadgeHtml(o.payment_method)}
-              ${activeStatus === ACCOUNTING_TAB && accSub === "requests" && o.accounting_doc_type ? `<span class="badge badge-neutral">${accountingDocShort(o.accounting_doc_type)}</span>` : ""}
-              ${o.accounting_status && ACCOUNTING_ROLES.has(state.user.role) ? `<span class="badge ${ACCOUNTING_STATUS_BADGE[o.accounting_status] ?? "badge-neutral"}">${accountingStatusLabel(o.accounting_status, o.accounting_doc_type)}</span>` : ""}
-              ${o.document_count > 0 && ACCOUNTING_ROLES.has(state.user.role) ? `<span class="badge badge-neutral">&#128206; ${o.document_count}</span>` : ""}
+              ${paymentMethodBadgeHtml(o.payment_method)}
+              ${o.accounting_status ? `<span class="badge ${ACCOUNTING_STATUS_BADGE[o.accounting_status] ?? "badge-neutral"}">${accountingStatusLabel(o.accounting_status, o.accounting_doc_type)}</span>` : ""}
+              ${o.document_count > 0 ? `<span class="badge badge-neutral">&#128206; ${o.document_count}</span>` : ""}
             </div>
-            ${activeStatus === ACCOUNTING_TAB && o.accounting_requested_at ? `<div class="muted list-row-meta">${t("acc_requested_label")}: ${formatDate(o.accounting_requested_at)}</div>` : ""}
           </div>
           <span class="chevron">&#8250;</span>
         </button>
@@ -325,10 +275,6 @@ export async function renderOrders(root, navigate) {
       btn.setAttribute("aria-pressed", "true");
       btn.classList.add("chip-active");
       activeStatus = btn.dataset.status;
-      accRow.hidden = activeStatus !== ACCOUNTING_TAB;
-      accSignedRow.hidden = activeStatus !== ACCOUNTING_TAB || accSub === "requests";
-      agentEl.hidden = true;
-      refreshAgent();
       load();
     });
   });

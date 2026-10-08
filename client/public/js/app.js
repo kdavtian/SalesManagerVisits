@@ -415,6 +415,7 @@ function persistBadgeCounts() {
         payments: paymentBadgeCount,
         unrecorded: unrecordedBadgeCount,
         warehouse: warehouseBadgeCount,
+        accounting: accountingBadgeCount,
         delivery: deliveryBadgeCount,
         notifications: unreadNotificationCount,
         planApprovals: planApprovalBadgeCount,
@@ -564,6 +565,37 @@ async function refreshWarehouseBadge() {
 }
 
 window.addEventListener("warehouse-changed", refreshWarehouseBadge);
+
+// Same pattern again, on the Accounting quick action -- requests Lily has not
+// finished (accounting roles) or orders whose document is ready (warehouse);
+// 0 for everyone else (see server/src/accountingBadge.js). The Accounting
+// page fires "accounting-changed" after each load so the number follows.
+let accountingBadgeCount = 0;
+
+export function applyAccountingBadge() {
+  const el = document.getElementById("qa-accounting-badge");
+  if (!el) return;
+  if (accountingBadgeCount > 0) {
+    el.textContent = accountingBadgeCount > 99 ? "99+" : String(accountingBadgeCount);
+    el.hidden = false;
+  } else {
+    el.hidden = true;
+  }
+}
+
+async function refreshAccountingBadge() {
+  if (!state.user) return;
+  try {
+    const { count } = await api.getAccountingCount();
+    accountingBadgeCount = count;
+  } catch {
+    return;
+  }
+  applyAccountingBadge();
+  persistBadgeCounts();
+}
+
+window.addEventListener("accounting-changed", refreshAccountingBadge);
 
 // Same pattern again, on the Delivery quick action -- packed orders still
 // awaiting a route plus route stops not yet delivered (role-aware
@@ -857,6 +889,7 @@ async function renderRoute() {
       refreshPaymentBadge();
       refreshUnrecordedBadge();
       refreshWarehouseBadge();
+      refreshAccountingBadge();
       refreshDeliveryBadge();
       refreshNotificationBadge();
       refreshPlanApprovalBadge();
@@ -1051,6 +1084,8 @@ async function renderRoute() {
     (await import("./views/warehouse.js")).renderWarehouse(app, navigate);
   } else if (path === "#/delivery") {
     (await import("./views/deliveryRoute.js")).renderDelivery(app, navigate);
+  } else if (path === "#/accounting") {
+    (await import("./views/accounting.js")).renderAccounting(app, navigate);
   } else if (path === "#/recorded") {
     (await import("./views/recorded.js")).renderRecorded(app, navigate);
   } else if (path === "#/debt-balances") {
@@ -1120,6 +1155,7 @@ const SIDEBAR_ITEM_ICON = {
   qa_warehouse: { icon: icons.box, colorClass: "quick-action-icon-warehouse" },
   qa_delivery: { icon: icons.truck, colorClass: "quick-action-icon-delivery" },
   qa_recorded: { icon: icons.clock, colorClass: "quick-action-icon-recorded" },
+  qa_accounting: { icon: icons.note, colorClass: "quick-action-icon-accounting" },
   qa_team_performance: { icon: icons.target, colorClass: "quick-action-icon-team" },
   qa_reports: { icon: icons.chart, colorClass: "quick-action-icon-reports" },
   qa_debt_balances: { icon: icons.wallet, colorClass: "quick-action-icon-debt" },
@@ -1390,6 +1426,7 @@ async function init() {
       paymentBadgeCount = cachedBadgeCounts.payments ?? 0;
       unrecordedBadgeCount = cachedBadgeCounts.unrecorded ?? 0;
       warehouseBadgeCount = cachedBadgeCounts.warehouse ?? 0;
+      accountingBadgeCount = cachedBadgeCounts.accounting ?? 0;
       deliveryBadgeCount = cachedBadgeCounts.delivery ?? 0;
       unreadNotificationCount = cachedBadgeCounts.notifications ?? 0;
       planApprovalBadgeCount = cachedBadgeCounts.planApprovals ?? 0;
@@ -1456,6 +1493,7 @@ async function init() {
   refreshPaymentBadge();
   refreshUnrecordedBadge();
   refreshWarehouseBadge();
+  refreshAccountingBadge();
   refreshDeliveryBadge();
   refreshNotificationBadge();
   refreshPlanApprovalBadge();
@@ -1481,6 +1519,7 @@ async function refreshAllBadgesFromServer() {
   paymentBadgeCount = counts.payments;
   unrecordedBadgeCount = counts.unrecorded;
   warehouseBadgeCount = counts.warehouse;
+  accountingBadgeCount = counts.accounting ?? 0;
   deliveryBadgeCount = counts.delivery;
   unreadNotificationCount = counts.notifications;
   planApprovalBadgeCount = counts.planApprovals;
@@ -1489,6 +1528,7 @@ async function refreshAllBadgesFromServer() {
   applyPaymentBadge();
   applyUnrecordedBadge();
   applyWarehouseBadge();
+  applyAccountingBadge();
   applyDeliveryBadge();
   applyNotificationBadge();
   applyPlanApprovalBadge();

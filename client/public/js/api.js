@@ -343,6 +343,7 @@ export const api = {
   getOrder: (id) => request(`/orders/${id}`),
   listOrderDocuments: (id) => request(`/orders/${id}/documents`),
   listCustomerDocuments: (id) => request(`/customers/${id}/documents`),
+  getAccountingCount: () => request("/orders/accounting-count"),
   getAccountingAgent: () => request("/orders/accounting-agent"),
   // A signed PDF is binary, so it bypasses request()'s JSON handling.
   downloadOrderDocument: async (docId) => {

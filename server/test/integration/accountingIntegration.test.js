@@ -190,10 +190,13 @@ test("accounting request, Lily's pull/claim/report flow, idempotency and revocat
   assert.ok(notes.length >= 1);
 
   // Instant command: a waiting Lily returns the moment an order is queued.
-  const waitNow = await apiRequest("/api/integration/v1/wait?timeout=1", { headers: bearer(token) });
+  // A test-mode token only sees test orders, so flag this one and wait with the
+  // test token: nothing else in the shared database can answer the call early.
+  await pool.query("UPDATE orders SET accounting_is_test = true WHERE id = $1", [orderId]);
+  const waitNow = await apiRequest("/api/integration/v1/wait?timeout=1", { headers: bearer(testTok.token) });
   assert.equal(waitNow.data.pending, 0);
   const t0 = Date.now();
-  const waiting = apiRequest("/api/integration/v1/wait?timeout=20", { headers: bearer(token) });
+  const waiting = apiRequest("/api/integration/v1/wait?timeout=20", { headers: bearer(testTok.token) });
   await new Promise((r) => setTimeout(r, 300));
   const requeued = await apiRequest(`/api/orders/${orderId}/accounting-status`, { method: "POST", cookie: adminCookie, body: { status: "pending" } });
   assert.equal(requeued.status, 200);
@@ -318,7 +321,7 @@ test("accounting requests group: list filter, manual request status (incl. cance
   assert.ok(any.data.rows.some((o) => o.id === orderId));
   const pending = await apiRequest("/api/orders?accounting=pending", { cookie });
   assert.ok(pending.data.rows.some((o) => o.id === orderId));
-  // A sales manager has no Accounting group (the param is ignored for them).
+  // A sales manager only gets their own orders in the Accounting list (this one is the director's).
   const mgrView = await apiRequest("/api/orders?accounting=pending", { cookie: managerCookie });
   assert.ok(!mgrView.data.rows.some((o) => o.id === orderId));
 
@@ -335,6 +338,10 @@ test("accounting requests group: list filter, manual request status (incl. cance
   const again = await apiRequest(`/api/orders/${orderId}/accounting-request`, { method: "POST", cookie, body: {} });
   assert.equal(again.status, 200);
   assert.equal(again.data.accounting_status, "pending");
+  // Badge on the Accounting quick action: waiting requests for the accountant, none for a rep.
+  const accCount = await apiRequest("/api/orders/accounting-count", { cookie: accCookie });
+  assert.ok(accCount.data.count >= 1);
+  assert.equal((await apiRequest("/api/orders/accounting-count", { cookie: managerCookie })).data.count, 0);
   const created = await apiRequest(`/api/orders/${orderId}/accounting-status`, { method: "POST", cookie, body: { status: "waybill_created" } });
   assert.equal(created.data.accounting_status, "waybill_created");
   const back = await apiRequest(`/api/orders/${orderId}/accounting-status`, { method: "POST", cookie, body: { status: "pending" } });
@@ -355,4 +362,10 @@ test("accounting requests group: list filter, manual request status (incl. cance
   await pool.query("UPDATE orders SET accounting_status = 'signed' WHERE id = $1", [orderId]);
   assert.ok((await ids("accounting=waybill&accounting_signed=signed")).includes(orderId));
   assert.ok(!(await ids("accounting=waybill&accounting_signed=unsigned")).includes(orderId));
+
+  // A rep sees their own orders in the Accounting list (and only theirs).
+  await pool.query("UPDATE orders SET user_id = $2 WHERE id = $1", [orderId, manager.id]);
+  const mineView = await apiRequest("/api/orders?accounting=waybill", { cookie: managerCookie });
+  assert.equal(mineView.status, 200);
+  assert.ok(mineView.data.rows.some((o) => o.id === orderId));
 });

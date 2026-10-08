@@ -60,6 +60,10 @@ export const QUICK_ACTIONS = [
     id: "qa_warehouse",
     defaultRoles: ["warehouse_manager", "sales_director", "ceo", "operations_director", "accountant", "admin"],
   },
+  // Waybills / invoices from accounting. Everyone: a rep sees only their own
+  // orders (server-side), the warehouse needs the document before it hands
+  // the goods to delivery.
+  { id: "qa_accounting", defaultRoles: ALL_ROLES },
   { id: "qa_pricelist", defaultRoles: ALL_ROLES },
   // Same visibility as the financial exports/Company Dashboard -- raw
   // per-order ERP revenue is the same sensitivity class (see
@@ -84,6 +88,7 @@ export const QUICK_ACTION_ROUTE = {
   qa_cash_expense: "#/expenses",
   qa_pricelist: "#/pricelist",
   qa_warehouse: "#/warehouse",
+  qa_accounting: "#/accounting",
   qa_delivery: "#/delivery",
   qa_recorded: "#/recorded",
   qa_team_performance: "#/team-performance",

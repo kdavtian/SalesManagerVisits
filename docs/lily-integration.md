@@ -155,3 +155,12 @@ the raw body (`Content-Type: application/pdf`). Only real PDFs (`%PDF-` header) 
 Postgres (`order_documents`), shown on the order sheet, on the customer card (everyone who can open
 the customer sees it) and counted on the Accounting tab. Re-sending the same `hc_doc_number` replaces
 the file. Admin/management/accountant can delete a stored file in KAD.
+
+## Accounting page in KAD
+
+Home > quick action **Accounting** (everyone; the admin tile editor can hide it per role). Tabs: Requests |
+Waybills | Invoices, with All | Unsigned | Signed for created documents, plus search. A rep only sees their
+own orders there (the order list is already limited server-side); warehouse, accountant, directors, CEO and
+admin see all. Badge on the tile: accounting roles = requests Lily has not finished (pending / in progress /
+needs attention); warehouse manager = confirmed orders whose document is already made; others none
+(`server/src/accountingBadge.js`). The Orders page no longer has an Accounting chip.
