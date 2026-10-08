@@ -10913,3 +10913,21 @@ form select,
 .checkin-head .icon-btn {
   flex: 0 0 auto;
 }
+
+/* Route plans: pressing a weekday chip must highlight THAT chip only. The
+   generic ".card:active" press effect (shrink + fade) used to fire on the
+   whole rep card, because the chip is a child of the card. */
+.route-plan-rep-card:active {
+  transform: none;
+  opacity: 1;
+  background: var(--bg-card);
+}
+.route-plan-day-chip {
+  transition: transform 0.1s ease, background-color 0.1s ease, border-color 0.1s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.route-plan-day-chip:active {
+  transform: scale(0.92);
+  background: var(--bg-card-pressed);
+  border-color: var(--accent);
+}

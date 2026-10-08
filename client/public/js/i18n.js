@@ -3129,6 +3129,16 @@ const dict = {
     payments_received_title: "Ստացված վճարումներ",
     payments_received_empty: "Այս հաճախորդից վճարումներ դեռ չեն ստացվել։",
     order_payment_method_label: "Վճարման եղանակ",
+
+    qa_bonuses: "Բոնուսներ",
+    bonus_badge_first_delivered_order: "Առաջին առաքումը",
+    bonus_badge_first_delivered_order_desc: "Առաքեցիք ձեր առաջին պատվերը։",
+    bonus_badge_first_accepted_collection: "Առաջին գանձումը",
+    bonus_badge_first_accepted_collection_desc: "Ձեր առաջին վճարման գանձումը հաստատվեց։",
+    bonus_badge_first_approved_reward: "Առաջին պարգևը",
+    bonus_badge_first_approved_reward_desc: "Ձեր առաջին պարգևի հայտը հաստատվեց։",
+    bonus_badge_first_balanced_basket: "Առաջին հավասարակշռված զամբյուղը",
+    bonus_badge_first_balanced_basket_desc: "Ավարտեցիք առաջին «հավասարակշռված զամբյուղ» մարտահրավերը։",
   },
 };
 

@@ -22,7 +22,9 @@ function addDays(dateOnly, n) {
 export function ruleWeekdaysFor(customer, rules) {
   const days = new Set();
   for (const r of rules) {
-    const byId = (r.customer_ids ?? []).includes(customer.id);
+    // customer_id_set: optional precomputed Set (see customers.js) so a long list
+    // doesn't scan every rule's id array once per customer.
+    const byId = r.customer_id_set ? r.customer_id_set.has(customer.id) : (r.customer_ids ?? []).includes(customer.id);
     const byArea =
       Array.isArray(r.areas) &&
       r.areas.some((a) => a?.region && a.region === customer.region && (!a.subregion || a.subregion === customer.subregion));
