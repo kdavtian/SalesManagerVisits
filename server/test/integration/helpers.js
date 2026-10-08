@@ -164,6 +164,14 @@ export async function apiRequest(path, { method = "GET", body, cookie, headers =
   return { status: res.status, data, cookie: newCookie };
 }
 
+// Raw-body request (e.g. a PDF from Lily): the body is sent as is with the
+// given Content-Type; the response is parsed like apiRequest().
+export async function apiRawRequest(path, { method = "POST", body, contentType, headers = {} } = {}) {
+  const res = await fetch(`${baseUrl}${path}`, { method, headers: { "Content-Type": contentType, ...headers }, body, redirect: "manual" });
+  const isJson = res.headers.get("content-type")?.includes("application/json");
+  return { status: res.status, data: isJson ? await res.json().catch(() => null) : Buffer.from(await res.arrayBuffer()) };
+}
+
 // Multipart counterpart to apiRequest(), for the one route (POST
 // /api/checkins) that accepts file uploads via multer -- a JSON body can't
 // carry files, so this sends a real FormData body instead, attaching the

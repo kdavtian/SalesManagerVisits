@@ -6,6 +6,8 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { hashToken } from "../integrationTokens.js";
 import { nextStatusFromDocuments } from "../accountingStatus.js";
+import { notifyUser } from "../notifications.js";
+import { waitForQueueChange } from "../accountingEvents.js";
 
 export const integrationRouter = Router();
 
@@ -108,7 +110,7 @@ async function expireStaleClaims() {
 const ORDER_SELECT = `
   SELECT o.id, o.order_code, o.created_at, o.note, o.payment_method, o.discount_pct, o.discount_amd, o.total_amd,
          o.status AS kad_status, o.accounting_doc_type, o.accounting_status, o.accounting_is_test,
-         o.accounting_requested_at, o.accounting_claimed_at, o.accounting_documents, o.accounting_error,
+         o.accounting_requested_at, o.accounting_requested_by, o.accounting_claimed_at, o.accounting_documents, o.accounting_error,
          c.name AS customer_name, c.erp_customer_id, c.tin AS customer_tin
   FROM orders o
   JOIN customers c ON c.id = o.customer_id`;
@@ -198,6 +200,42 @@ async function respondWithOrder(res, id) {
 
 integrationRouter.get("/ping", (req, res) => {
   res.json({ ok: true, token: req.integration.name, test_mode: req.integration.test_mode });
+});
+
+// Tell whoever sent the order to accounting what Lily just did, at once.
+async function notifyRequester(order, title, body) {
+  if (!order.accounting_requested_by) return;
+  try {
+    await notifyUser(order.accounting_requested_by, "accounting_update", { title, body: `${order.customer_name} · ${order.order_code || `KAD-${order.id}`}: ${body}`, url: "/#/orders" });
+  } catch (err) {
+    console.error("Accounting notification failed:", err);
+  }
+}
+
+// Long-poll: "tell me the moment there is something to do". Returns at once
+// when orders are waiting, otherwise holds the call open (<= 25 s, re-checking
+// the database every 5 s) and returns as soon as KAD puts an order in the
+// queue. Lily calls it in a loop, so a new request reaches her within a
+// moment instead of on her next scheduled poll; the same calls also tell KAD
+// she is online.
+async function pendingOrderRefs(req) {
+  await expireStaleClaims();
+  const { rows } = await pool.query(
+    `SELECT o.id FROM orders o WHERE o.accounting_status = 'pending' ${testScope(req)} ORDER BY o.accounting_requested_at LIMIT 50`
+  );
+  return rows.map((r) => orderRef(r.id));
+}
+
+integrationRouter.get("/wait", async (req, res) => {
+  const timeoutMs = Math.min(Math.max(Number(req.query.timeout) || 25, 1), 25) * 1000;
+  const startedAt = Date.now();
+  let orders = await pendingOrderRefs(req);
+  while (!orders.length && Date.now() - startedAt < timeoutMs && !req.aborted) {
+    await waitForQueueChange(Math.min(5000, timeoutMs - (Date.now() - startedAt)));
+    orders = await pendingOrderRefs(req);
+  }
+  pool.query("UPDATE integration_tokens SET last_used_at = now() WHERE id = $1", [req.integration.id]).catch(() => {});
+  res.json({ pending: orders.length, orders });
 });
 
 // 3.1  "Ready" = management confirmed the order in KAD and asked accounting
@@ -298,6 +336,9 @@ integrationRouter.post("/orders/:id/waybills", async (req, res) => {
     "UPDATE orders SET accounting_documents = $2::jsonb, accounting_status = $3, accounting_error = NULL, accounting_updated_at = now() WHERE id = $1",
     [order.id, JSON.stringify(merged), next]
   );
+  if (next !== order.accounting_status) {
+    await notifyRequester(order, next === "partially_created" ? "Բեռնագիրը մասամբ ստեղծված է" : "Փաստաթուղթը ստեղծված է", next === "partially_created" ? "մի մասը դեռ սպասում է" : "Լիլին ստեղծեց փաստաթուղթը");
+  }
   res.json({ id: orderRef(order.id), waybill_status: next, waybills: merged });
 });
 
@@ -317,7 +358,42 @@ integrationRouter.post("/orders/:id/waybills/:number/einvoicing", async (req, re
     "UPDATE orders SET accounting_documents = $2::jsonb, accounting_status = $3, accounting_error = NULL, accounting_updated_at = now() WHERE id = $1",
     [order.id, JSON.stringify(docs), next]
   );
+  if (next === "signed" && order.accounting_status !== "signed") {
+    await notifyRequester(order, "Փաստաթուղթը ստորագրված է", "ստորագրված է");
+  }
   res.json({ id: orderRef(order.id), waybill_status: next, waybills: docs });
+});
+
+// Signed copy of a document, sent by Lily as the raw PDF body:
+//   POST /orders/{id}/documents?filename=...&hc_doc_number=...   Content-Type: application/pdf
+// Stored in the database and shown on the order, the customer and the
+// Accounting tab. Re-sending the same hc_doc_number replaces that file.
+integrationRouter.post("/orders/:id/documents", async (req, res) => {
+  const order = await loadOrder(req, res);
+  if (!order) return;
+  const body = req.body;
+  if (!Buffer.isBuffer(body) || !body.length) return fail(res, 400, "invalid_body", "Send the PDF as the raw request body with Content-Type: application/pdf");
+  if (body.subarray(0, 5).toString("latin1") !== "%PDF-") return fail(res, 400, "not_a_pdf", "The file is not a PDF");
+  const number = req.query.hc_doc_number ? String(req.query.hc_doc_number).slice(0, 60) : null;
+  const rawName = String(req.query.filename || "").split(/[\\/]/).pop().replace(/[^\p{L}\p{N}._ -]/gu, "_").slice(0, 120);
+  const filename = rawName || `${order.order_code || `KAD-${order.id}`}${number ? `-${number}` : ""}.pdf`;
+  const { rows } = number
+    ? await pool.query(
+        `INSERT INTO order_documents (order_id, hc_doc_number, filename, size_bytes, data, uploaded_by_token)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (order_id, hc_doc_number) WHERE hc_doc_number IS NOT NULL
+         DO UPDATE SET filename = EXCLUDED.filename, size_bytes = EXCLUDED.size_bytes, data = EXCLUDED.data, uploaded_by_token = EXCLUDED.uploaded_by_token, created_at = now()
+         RETURNING id, hc_doc_number, filename, size_bytes, created_at, (xmax = 0) AS inserted`,
+        [order.id, number, filename, body.length, body, req.integration.id]
+      )
+    : await pool.query(
+        `INSERT INTO order_documents (order_id, filename, size_bytes, data, uploaded_by_token)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id, hc_doc_number, filename, size_bytes, created_at, true AS inserted`,
+        [order.id, filename, body.length, body, req.integration.id]
+      );
+  if (rows[0].inserted) await notifyRequester(order, "Ստորագրված պատճենը պահպանված է", "ստորագրված պատճենը ավելացվեց");
+  const { inserted, ...doc } = rows[0];
+  res.status(inserted ? 201 : 200).json({ id: orderRef(order.id), document: doc });
 });
 
 // 3.6  KAD product -> HC code. Read-only for Lily; management maintains it in KAD.
@@ -359,5 +435,6 @@ async function reportIssue(req, res) {
     "UPDATE orders SET accounting_status = 'needs_attention', accounting_error = $2::jsonb, accounting_claimed_at = NULL, accounting_updated_at = now() WHERE id = $1",
     [order.id, JSON.stringify(issue)]
   );
+  await notifyRequester(order, "Պահանջվում է ուշադրություն", String(message).slice(0, 200));
   res.json({ id: orderRef(order.id), waybill_status: "needs_attention", issue });
 }

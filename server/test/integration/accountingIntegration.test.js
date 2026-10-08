@@ -13,6 +13,7 @@ import {
   createProduct,
   loginAs,
   apiRequest,
+  apiRawRequest,
   trackOrder,
 } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
@@ -161,6 +162,46 @@ test("accounting request, Lily's pull/claim/report flow, idempotency and revocat
   assert.ok(audit.data.some((a) => a.token_name === "Lily itest" && a.path.endsWith("/claim")));
   const tokenRows = await apiRequest("/api/integration-tokens", { cookie: adminCookie });
   assert.equal(JSON.stringify(tokenRows.data).includes(token), false);
+
+  // Signed copy: Lily sends the PDF as the raw body; KAD stores it on the order.
+  const pdf = Buffer.from("%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n");
+  const up = await apiRawRequest(`/api/integration/v1/orders/ord_${String(orderId).padStart(6, "0")}/documents?filename=signed-255.pdf&hc_doc_number=255`, {
+    body: pdf,
+    contentType: "application/pdf",
+    headers: bearer(token),
+  });
+  assert.equal(up.status, 201);
+  assert.equal(up.data.document.hc_doc_number, "255");
+  const again = await apiRawRequest(`/api/integration/v1/orders/ord_${String(orderId).padStart(6, "0")}/documents?hc_doc_number=255`, { body: pdf, contentType: "application/pdf", headers: bearer(token) });
+  assert.equal(again.status, 200); // same document number replaces the file
+  const notPdf = await apiRawRequest(`/api/integration/v1/orders/ord_${String(orderId).padStart(6, "0")}/documents`, { body: Buffer.from("hello"), contentType: "application/pdf", headers: bearer(token) });
+  assert.equal(notPdf.status, 400);
+  const docs = await apiRequest(`/api/orders/${orderId}/documents`, { cookie });
+  assert.equal(docs.data.length, 1);
+  const file = await apiRequest(`/api/orders/documents/${docs.data[0].id}/file`, { cookie });
+  assert.match(String(file.data), /^%PDF-/);
+  const custDocs = await apiRequest(`/api/customers/${customer.id}/documents`, { cookie });
+  assert.equal(custDocs.data.length, 1);
+  assert.equal(custDocs.data[0].order_id, orderId);
+  const listed = await apiRequest("/api/orders", { cookie });
+  assert.equal(listed.data.rows.find((o) => o.id === orderId).document_count, 1);
+  // The requester was told about the document and the signature.
+  const { rows: notes } = await pool.query("SELECT body FROM notifications WHERE type = 'accounting_update' AND user_id = (SELECT accounting_requested_by FROM orders WHERE id = $1)", [orderId]);
+  assert.ok(notes.length >= 1);
+
+  // Instant command: a waiting Lily returns the moment an order is queued.
+  const waitNow = await apiRequest("/api/integration/v1/wait?timeout=1", { headers: bearer(token) });
+  assert.equal(waitNow.data.pending, 0);
+  const t0 = Date.now();
+  const waiting = apiRequest("/api/integration/v1/wait?timeout=20", { headers: bearer(token) });
+  await new Promise((r) => setTimeout(r, 300));
+  const requeued = await apiRequest(`/api/orders/${orderId}/accounting-status`, { method: "POST", cookie: adminCookie, body: { status: "pending" } });
+  assert.equal(requeued.status, 200);
+  const woke = await waiting;
+  assert.equal(woke.data.pending, 1);
+  assert.ok(Date.now() - t0 < 4000, "wait returned promptly");
+  const agent = await apiRequest("/api/orders/accounting-agent", { cookie });
+  assert.equal(agent.data.online, true);
 
   // Revoking stops the token immediately.
   const revoked = await apiRequest(`/api/integration-tokens/${issued.data.id}`, { method: "DELETE", cookie: adminCookie });

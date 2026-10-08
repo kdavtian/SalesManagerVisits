@@ -172,7 +172,8 @@ app.use("/api/dashboard", express.json(), dashboardRouter);
 app.use("/api/settings", express.json(), settingsRouter);
 app.use("/api/edit-requests", express.json(), editRequestsRouter);
 app.use("/api/locations", express.json(), locationsRouter);
-app.use("/api/integration/v1", express.json({ limit: "2mb" }), integrationRouter);
+// A signed PDF from Lily arrives as the raw request body (<= 15 MB).
+app.use("/api/integration/v1", express.raw({ type: "application/pdf", limit: "15mb" }), express.json({ limit: "2mb" }), integrationRouter);
 app.use("/api/integration-tokens", express.json(), integrationAdminRouter);
 app.use("/api/erp-sync", express.json({ limit: "25mb" }), erpSyncRouter);
 app.use("/api/geocode", geocodeRouter);

@@ -341,6 +341,15 @@ export const api = {
     return request(`/orders${qs ? `?${qs}` : ""}`);
   },
   getOrder: (id) => request(`/orders/${id}`),
+  listOrderDocuments: (id) => request(`/orders/${id}/documents`),
+  listCustomerDocuments: (id) => request(`/customers/${id}/documents`),
+  getAccountingAgent: () => request("/orders/accounting-agent"),
+  // A signed PDF is binary, so it bypasses request()'s JSON handling.
+  downloadOrderDocument: async (docId) => {
+    const res = await fetch(`/api/orders/documents/${docId}/file`, { credentials: "include", headers: { "X-App-Version": APP_VERSION } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.blob();
+  },
   getOrdersPendingCount: () => request("/orders/pending-count"),
   updateOrderItems: (id, items) => json(`/orders/${id}`, "PATCH", { items }),
   updateOrderStatus: (id, status) => json(`/orders/${id}`, "PATCH", { status }),

@@ -49,6 +49,7 @@ export async function renderOrders(root, navigate) {
       <div class="order-status-filter-row" id="order-status-filters"></div>
       <div class="order-status-filter-row order-acc-status-row" id="order-acc-status-filters" hidden></div>
       <div class="order-status-filter-row order-acc-status-row" id="order-acc-signed-filters" hidden></div>
+      <p class="muted order-acc-agent" id="order-acc-agent" hidden></p>
       <div class="list-toolbar">
         <input type="search" id="order-search" placeholder="${t("search")}" aria-label="${t("search")}" />
         <button type="button" class="icon-btn" id="order-filter-btn" aria-label="${t("filter")}" aria-haspopup="menu" aria-expanded="false" aria-controls="order-filter-menu">${icons.filter}</button>
@@ -104,6 +105,19 @@ export async function renderOrders(root, navigate) {
   };
   chipRow(accRow, "acc-sub", [["requests", t("acc_group_requests")], ["waybill", t("acc_group_waybills")], ["invoice", t("acc_group_invoices")]], accSub);
   chipRow(accSignedRow, "acc-signed", [["", t("acc_signed_all")], ["unsigned", t("acc_signed_not_yet")], ["signed", t("acc_status_signed")]], accSigned);
+  // "Lily is online / offline": she calls KAD every few seconds while open.
+  const agentEl = root.querySelector("#order-acc-agent");
+  async function refreshAgent() {
+    if (activeStatus !== ACCOUNTING_TAB) return;
+    try {
+      const a = await api.getAccountingAgent();
+      agentEl.hidden = false;
+      agentEl.innerHTML = `<span class="status-dot ${a.online ? "status-dot-on" : "status-dot-off"}"></span> ${a.online ? t("acc_agent_online") : t("acc_agent_offline")}`;
+    } catch {
+      agentEl.hidden = true;
+    }
+  }
+
   // Server query for the current tab (the Accounting group asks for orders
   // that have an accounting request instead of a fulfilment status).
   function listParams() {
@@ -277,6 +291,7 @@ export async function renderOrders(root, navigate) {
               <span class="badge ${meta.cls}">${t(meta.key)}</span>
               ${paymentMethodBadgeHtml(o.payment_method)}
               ${activeStatus === ACCOUNTING_TAB && o.accounting_doc_type ? `<span class="badge badge-neutral">${accountingDocLabel(o.accounting_doc_type === "waybill" ? "cash" : "invoice")}</span>` : ""}
+              ${o.document_count > 0 && ACCOUNTING_ROLES.has(state.user.role) ? `<span class="badge badge-neutral">📎 ${o.document_count}</span>` : ""}
               ${o.accounting_status && ACCOUNTING_ROLES.has(state.user.role) ? `<span class="badge ${ACCOUNTING_STATUS_BADGE[o.accounting_status] ?? "badge-neutral"}">${t(`acc_status_${o.accounting_status}`)}</span>` : ""}
             </div>
             ${activeStatus === ACCOUNTING_TAB && o.accounting_requested_at ? `<div class="muted list-row-meta">${t("acc_requested_label")}: ${formatDate(o.accounting_requested_at)}</div>` : ""}
@@ -312,6 +327,8 @@ export async function renderOrders(root, navigate) {
       activeStatus = btn.dataset.status;
       accRow.hidden = activeStatus !== ACCOUNTING_TAB;
       accSignedRow.hidden = activeStatus !== ACCOUNTING_TAB || accSub === "requests";
+      agentEl.hidden = true;
+      refreshAgent();
       load();
     });
   });

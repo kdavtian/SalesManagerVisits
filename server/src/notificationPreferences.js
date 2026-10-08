@@ -43,6 +43,9 @@ export const NOTIFICATION_TYPES = [
   "task_assigned",
   "task_deadline",
   "task_completed",
+  // Lily (accounting) reported on an order the user sent to accounting:
+  // document created, signed, or needs attention.
+  "accounting_update",
 ];
 
 // Warehouse Manager: an order just entered their queue.
