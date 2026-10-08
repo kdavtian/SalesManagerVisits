@@ -10639,7 +10639,10 @@ form select,
 .acc-status-control-row { display: flex; gap: 8px; align-items: center; }
 .acc-status-control-row select { flex: 1; min-width: 0; }
 .order-acc-status-row { margin-top: -4px; }
-.order-acc-agent { margin: 2px 2px 6px; font-size: var(--fs-row-meta); display: flex; align-items: center; gap: 6px; }
+.acc-segmented { margin: 2px 0 8px; }
+.acc-segmented[hidden], .acc-agent[hidden] { display: none; }
+.acc-segmented .chip { font-size: 0.76rem; padding: 7px 4px; overflow: hidden; text-overflow: ellipsis; }
+.acc-agent { margin: 0 2px 8px; display: flex; align-items: center; gap: 6px; font-size: var(--fs-row-meta); color: var(--text-dim); white-space: nowrap; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--text-dim); }
 .status-dot-on { background: var(--success, #2e9e5b); }
 .status-dot-off { background: var(--danger, #d64545); }
