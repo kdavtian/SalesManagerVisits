@@ -48,6 +48,7 @@ export async function renderOrders(root, navigate) {
       </div>
       <div class="order-status-filter-row" id="order-status-filters"></div>
       <div class="order-status-filter-row order-acc-status-row" id="order-acc-status-filters" hidden></div>
+      <div class="order-status-filter-row order-acc-status-row" id="order-acc-signed-filters" hidden></div>
       <div class="list-toolbar">
         <input type="search" id="order-search" placeholder="${t("search")}" aria-label="${t("search")}" />
         <button type="button" class="icon-btn" id="order-filter-btn" aria-label="${t("filter")}" aria-haspopup="menu" aria-expanded="false" aria-controls="order-filter-menu">${icons.filter}</button>
@@ -76,27 +77,37 @@ export async function renderOrders(root, navigate) {
     )
     .join("");
   const accRow = root.querySelector("#order-acc-status-filters");
-  // The request-status chip selected inside the Accounting group ("" = all).
-  let accSub = "";
-  accRow.innerHTML = ["", ...ACCOUNTING_FILTERS]
-    .map((s) => `<button class="map-filter-chip ${s === "" ? "chip-active" : ""}" data-acc-sub="${s}" aria-pressed="${s === "" ? "true" : "false"}">${s ? t(`acc_status_${s}`) : t("acc_all_requests")}</button>`)
-    .join("");
-  accRow.querySelectorAll("[data-acc-sub]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      accRow.querySelectorAll("[data-acc-sub]").forEach((b) => {
-        b.setAttribute("aria-pressed", "false");
-        b.classList.remove("chip-active");
+  const accSignedRow = root.querySelector("#order-acc-signed-filters");
+  // Accounting group: what is shown ("requests" = documents not made yet,
+  // "waybill" / "invoice" = already created ones) and, for created ones, whether
+  // it is signed yet ("" = all). Precise statuses stay in the filter menu.
+  let accSub = "requests";
+  let accSigned = "";
+  const chipRow = (row, attr, items, active) => {
+    row.innerHTML = items
+      .map(([v, label]) => `<button class="map-filter-chip ${v === active ? "chip-active" : ""}" data-${attr}="${v}" aria-pressed="${v === active}">${label}</button>`)
+      .join("");
+    row.querySelectorAll(`[data-${attr}]`).forEach((btn) => {
+      btn.addEventListener("click", () => {
+        row.querySelectorAll(`[data-${attr}]`).forEach((b) => {
+          b.setAttribute("aria-pressed", "false");
+          b.classList.remove("chip-active");
+        });
+        btn.setAttribute("aria-pressed", "true");
+        btn.classList.add("chip-active");
+        if (attr === "acc-sub") accSub = btn.dataset.accSub;
+        else accSigned = btn.dataset.accSigned;
+        accSignedRow.hidden = activeStatus !== ACCOUNTING_TAB || accSub === "requests";
+        load();
       });
-      btn.setAttribute("aria-pressed", "true");
-      btn.classList.add("chip-active");
-      accSub = btn.dataset.accSub;
-      load();
     });
-  });
+  };
+  chipRow(accRow, "acc-sub", [["requests", t("acc_group_requests")], ["waybill", t("acc_group_waybills")], ["invoice", t("acc_group_invoices")]], accSub);
+  chipRow(accSignedRow, "acc-signed", [["", t("acc_signed_all")], ["unsigned", t("acc_signed_not_yet")], ["signed", t("acc_status_signed")]], accSigned);
   // Server query for the current tab (the Accounting group asks for orders
   // that have an accounting request instead of a fulfilment status).
   function listParams() {
-    if (activeStatus === ACCOUNTING_TAB) return { accounting: accSub || "any" };
+    if (activeStatus === ACCOUNTING_TAB) return accSub === "requests" ? { accounting: "requests" } : { accounting: accSub, accounting_signed: accSigned };
     return activeStatus ? { status: activeStatus } : {};
   }
 
@@ -169,7 +180,7 @@ export async function renderOrders(root, navigate) {
     try {
       const params = listParams();
       await loadWithCache(
-        `orders-list:${activeStatus || "all"}${activeStatus === ACCOUNTING_TAB ? `:${accSub || "any"}` : ""}`,
+        `orders-list:${activeStatus || "all"}${activeStatus === ACCOUNTING_TAB ? `:${accSub}:${accSigned}` : ""}`,
         () => api.listOrders(params),
         (result) => {
           orders = result.rows;
@@ -300,6 +311,7 @@ export async function renderOrders(root, navigate) {
       btn.classList.add("chip-active");
       activeStatus = btn.dataset.status;
       accRow.hidden = activeStatus !== ACCOUNTING_TAB;
+      accSignedRow.hidden = activeStatus !== ACCOUNTING_TAB || accSub === "requests";
       load();
     });
   });
