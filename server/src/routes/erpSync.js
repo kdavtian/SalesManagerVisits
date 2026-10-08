@@ -7,6 +7,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { notifyUser } from "../notifications.js";
 import {
   transformErpCustomers,
+  transformErpCustomerLegal,
   transformErpOrderLines,
   transformErpCashflowLines,
   transformErpSalesPerformance,
@@ -118,7 +119,7 @@ function isPlainObject(value) {
 // merged row by row) so a customer that drops out of the extract -- debt
 // fully paid, no recent orders -- doesn't keep showing stale data forever.
 erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
-  const { customers, order_lines, cashflow_lines, sales_performance, products, brand_volume } = req.body ?? {};
+  const { customers, order_lines, cashflow_lines, sales_performance, products, brand_volume, customer_legal } = req.body ?? {};
   if (!Array.isArray(customers)) {
     return res.status(400).json({ error: "customers must be an array" });
   }
@@ -137,9 +138,17 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
   if (brand_volume !== undefined && !Array.isArray(brand_volume)) {
     return res.status(400).json({ error: "brand_volume must be an array" });
   }
+  if (customer_legal !== undefined && !Array.isArray(customer_legal)) {
+    return res.status(400).json({ error: "customer_legal must be an array" });
+  }
 
-  const { erpIds, names, reps, debts, balance0s, lastPayments, daysSince, agingBuckets, recentOrders, regionErpIds, regions, subregions, tierErpIds, tiers, legalErpIds, tins, legalNames, legalAddresses } =
+  const { erpIds, names, reps, debts, balance0s, lastPayments, daysSince, agingBuckets, recentOrders, regionErpIds, regions, subregions, tierErpIds, tiers, legalErpIds: extractLegalIds, tins: extractTins, legalNames: extractLegalNames, legalAddresses: extractLegalAddresses } =
     transformErpCustomers(customers);
+  const extra = transformErpCustomerLegal(customer_legal);
+  const legalErpIds = [...extractLegalIds, ...extra.legalErpIds];
+  const tins = [...extractTins, ...extra.tins];
+  const legalNames = [...extractLegalNames, ...extra.legalNames];
+  const legalAddresses = [...extractLegalAddresses, ...extra.legalAddresses];
 
   const {
     lineErpIds,

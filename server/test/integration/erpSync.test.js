@@ -163,6 +163,30 @@ test("POST /api/erp-sync: TIN, legal name and legal address are filled from the 
   assert.deepEqual(await rowOf(b.id), { tin: "11111111", legal_name: "Typed LLC", legal_address: "Typed St 1" });
 });
 
+test("POST /api/erp-sync: customer_legal fills TIN/legal info for customers outside the customers[] extract, without creating erp_customer_data rows", async () => {
+  const manager = await createUser("sales_manager");
+  const stamp = Date.now();
+  const a = await createCustomer({ created_by: manager.id, erp_customer_id: `ITEST-CL-A-${stamp}` });
+  const res = await syncRequest(
+    {
+      customers: [],
+      customer_legal: [
+        { erp_customer_id: a.erp_customer_id, tin: "44444444", legal_name: "Legal Only LLC", legal_address: "Addr 7" },
+        { erp_customer_id: `ITEST-CL-MISSING-${stamp}`, tin: "55555555" },
+        { erp_customer_id: a.erp_customer_id, tin: "bad" },
+      ],
+    },
+    { "X-Sync-Key": SYNC_KEY, ...BYPASS }
+  );
+  assert.equal(res.status, 200);
+  const row = (await pool.query("SELECT tin, legal_name, legal_address FROM customers WHERE id = $1", [a.id])).rows[0];
+  assert.deepEqual(row, { tin: "44444444", legal_name: "Legal Only LLC", legal_address: "Addr 7" });
+  const erp = await pool.query("SELECT 1 FROM erp_customer_data WHERE erp_customer_id = $1", [a.erp_customer_id]);
+  assert.equal(erp.rowCount, 0);
+  const bad = await syncRequest({ customers: [], customer_legal: "x" }, { "X-Sync-Key": SYNC_KEY, ...BYPASS });
+  assert.equal(bad.status, 400);
+});
+
 // Regression: a pre-existing, never-synced product whose stored
 // name/brand/unit had drifted whitespace ("Orlen   5w40", a double space)
 // used to fail the claim-by-identity match against an incoming sync row

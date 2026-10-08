@@ -45,6 +45,40 @@ export function normalizeErpUnitKey(value) {
   return String(value).trim().replace(/\s+/g, "").toLowerCase();
 }
 
+// Legal name / TIN / address from the workbook (Customers sheet). TIN must be
+// the 8-digit Armenian format (Excel often stores it as a number, so accept
+// that too); name and address are just trimmed. Returns null when the entry
+// has no usable value, so callers only collect rows that can fill something.
+function legalFieldsOf(entry) {
+  const rawTin = entry.tin != null ? String(entry.tin).trim().replace(/\.0$/, "") : "";
+  const tin = /^\d{8}$/.test(rawTin) ? rawTin : null;
+  const text = (v) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  const legalName = text(entry.legal_name);
+  const legalAddress = text(entry.legal_address);
+  return tin || legalName || legalAddress ? { tin, legalName, legalAddress } : null;
+}
+
+// Separate top-level `customer_legal` list: TIN / legal name / address for
+// EVERY workbook customer (the customers[] extract is narrowed to current
+// debt / recent orders, but invoicing needs the TIN of any customer). It only
+// fills customers.* and never touches erp_customer_data.
+export function transformErpCustomerLegal(rows) {
+  const legalErpIds = [];
+  const tins = [];
+  const legalNames = [];
+  const legalAddresses = [];
+  for (const entry of isPlainArray(rows)) {
+    if (!isPlainObject(entry) || !entry.erp_customer_id) continue;
+    const legal = legalFieldsOf(entry);
+    if (!legal) continue;
+    legalErpIds.push(String(entry.erp_customer_id));
+    tins.push(legal.tin);
+    legalNames.push(legal.legalName);
+    legalAddresses.push(legal.legalAddress);
+  }
+  return { legalErpIds, tins, legalNames, legalAddresses };
+}
+
 // customers is the only required top-level field (see the contract) --
 // an entry is skipped entirely without erp_customer_id, since that's the
 // join key everything else in the app keys off. region/subregion are only
@@ -88,19 +122,12 @@ export function transformErpCustomers(customers) {
       tierErpIds.push(String(entry.erp_customer_id));
       tiers.push(erpTier);
     }
-    // Legal name / TIN from the workbook (Customers sheet). TIN must be the
-    // 8-digit Armenian format (Excel often stores it as a number, so accept
-    // that too); legal name is just trimmed. Only entries with at least one
-    // usable value are collected -- the caller fills them where still empty.
-    const rawTin = entry.tin != null ? String(entry.tin).trim().replace(/\.0$/, "") : "";
-    const tin = /^\d{8}$/.test(rawTin) ? rawTin : null;
-    const legalName = typeof entry.legal_name === "string" && entry.legal_name.trim() ? entry.legal_name.trim() : null;
-    const legalAddress = typeof entry.legal_address === "string" && entry.legal_address.trim() ? entry.legal_address.trim() : null;
-    if (tin || legalName || legalAddress) {
+    const legal = legalFieldsOf(entry);
+    if (legal) {
       legalErpIds.push(String(entry.erp_customer_id));
-      tins.push(tin);
-      legalNames.push(legalName);
-      legalAddresses.push(legalAddress);
+      tins.push(legal.tin);
+      legalNames.push(legal.legalName);
+      legalAddresses.push(legal.legalAddress);
     }
     if (entry.region || entry.subregion) {
       regionErpIds.push(String(entry.erp_customer_id));
