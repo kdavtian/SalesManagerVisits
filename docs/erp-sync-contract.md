@@ -33,7 +33,10 @@ which is upsert-only and never truncated).
       "aging_bucket": "0-30",
       "recent_orders": [ /* up to 10 kept */ ],
       "region": "Yerevan",               // only backfills customers.region where still unset
-      "subregion": "Kentron"
+      "subregion": "Kentron",
+      "tin": "12345678",                 // optional; Customers-sheet TIN (8 digits). Fills customers.tin only where empty
+      "legal_name": "Example LLC",       // optional; Customers-sheet Legal Name. Fills customers.legal_name only where empty
+      "legal_address": "1 Example St, Yerevan" // optional; Customers-sheet Address. Fills customers.legal_address only where empty
     }
   ],
 

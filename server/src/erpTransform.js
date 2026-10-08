@@ -65,6 +65,10 @@ export function transformErpCustomers(customers) {
   const subregions = [];
   const tierErpIds = [];
   const tiers = [];
+  const legalErpIds = [];
+  const tins = [];
+  const legalNames = [];
+  const legalAddresses = [];
 
   for (const entry of isPlainArray(customers)) {
     if (!isPlainObject(entry) || !entry.erp_customer_id) continue;
@@ -84,6 +88,20 @@ export function transformErpCustomers(customers) {
       tierErpIds.push(String(entry.erp_customer_id));
       tiers.push(erpTier);
     }
+    // Legal name / TIN from the workbook (Customers sheet). TIN must be the
+    // 8-digit Armenian format (Excel often stores it as a number, so accept
+    // that too); legal name is just trimmed. Only entries with at least one
+    // usable value are collected -- the caller fills them where still empty.
+    const rawTin = entry.tin != null ? String(entry.tin).trim().replace(/\.0$/, "") : "";
+    const tin = /^\d{8}$/.test(rawTin) ? rawTin : null;
+    const legalName = typeof entry.legal_name === "string" && entry.legal_name.trim() ? entry.legal_name.trim() : null;
+    const legalAddress = typeof entry.legal_address === "string" && entry.legal_address.trim() ? entry.legal_address.trim() : null;
+    if (tin || legalName || legalAddress) {
+      legalErpIds.push(String(entry.erp_customer_id));
+      tins.push(tin);
+      legalNames.push(legalName);
+      legalAddresses.push(legalAddress);
+    }
     if (entry.region || entry.subregion) {
       regionErpIds.push(String(entry.erp_customer_id));
       regions.push(entry.region != null ? String(entry.region) : null);
@@ -91,7 +109,7 @@ export function transformErpCustomers(customers) {
     }
   }
 
-  return { erpIds, names, reps, debts, balance0s, lastPayments, daysSince, agingBuckets, recentOrders, regionErpIds, regions, subregions, tierErpIds, tiers };
+  return { erpIds, names, reps, debts, balance0s, lastPayments, daysSince, agingBuckets, recentOrders, regionErpIds, regions, subregions, tierErpIds, tiers, legalErpIds, tins, legalNames, legalAddresses };
 }
 
 // erp_customer_id, order_id, and date are all required -- an entry missing

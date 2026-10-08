@@ -138,7 +138,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     return res.status(400).json({ error: "brand_volume must be an array" });
   }
 
-  const { erpIds, names, reps, debts, balance0s, lastPayments, daysSince, agingBuckets, recentOrders, regionErpIds, regions, subregions, tierErpIds, tiers } =
+  const { erpIds, names, reps, debts, balance0s, lastPayments, daysSince, agingBuckets, recentOrders, regionErpIds, regions, subregions, tierErpIds, tiers, legalErpIds, tins, legalNames, legalAddresses } =
     transformErpCustomers(customers);
 
   const {
@@ -225,6 +225,23 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
          FROM unnest($1::text[], $2::text[], $3::text[]) AS t(erp_customer_id, region, subregion)
          WHERE c.erp_customer_id = t.erp_customer_id`,
         [regionErpIds, regions, subregions]
+      );
+    }
+
+    // Auto-fill TIN, legal name and legal address from the workbook, only where the app
+    // value is still empty -- a value typed/looked-up in the app sticks.
+    if (legalErpIds.length) {
+      await client.query(
+        `UPDATE customers c
+         SET tin = COALESCE(NULLIF(btrim(c.tin), ''), t.tin),
+             legal_name = COALESCE(NULLIF(btrim(c.legal_name), ''), t.legal_name),
+             legal_address = COALESCE(NULLIF(btrim(c.legal_address), ''), t.legal_address)
+         FROM unnest($1::text[], $2::text[], $3::text[], $4::text[]) AS t(erp_customer_id, tin, legal_name, legal_address)
+         WHERE c.erp_customer_id = t.erp_customer_id
+           AND ((NULLIF(btrim(c.tin), '') IS NULL AND t.tin IS NOT NULL)
+             OR (NULLIF(btrim(c.legal_name), '') IS NULL AND t.legal_name IS NOT NULL)
+             OR (NULLIF(btrim(c.legal_address), '') IS NULL AND t.legal_address IS NOT NULL))`,
+        [legalErpIds, tins, legalNames, legalAddresses]
       );
     }
 
