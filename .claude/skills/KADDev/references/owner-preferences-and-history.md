@@ -32,6 +32,12 @@
 8. Data not from Excel (landing cost, net cost, last payment, hc_code): verify the source sheet/column and the sync payload, not only the UI. Duplicates (products, customers, test users).
 9. Test data left in production DB (itest users) - clean up in tests and in prod.
 10. Tier/permission matrices: sales_manager scoping must be enforced server-side, not just hidden in the UI.
+11. A missing comma in `i18n.js` blanks the app (hy `acc_no_requests` once) - `node --check` after every i18n edit; a missing `hy` key silently shows English (the whole Bonuses module had no Armenian).
+12. Slow lists come from per-row correlated subqueries, not the network: EXPLAIN them on seeded data (3,000+ rows) before blaming the client.
+13. Repeated requests: the owner re-sent a list already shipped in 1.259.0 - check `git log`/the code first, verify in the browser, report which items already existed.
+14. A typo in a template-string SQL (missing comma before the params array turned the query into `"..."[id]` -> `syntax error at or near "L"`) passed the local suite and only the e2e job caught it: add a regression test whenever a query is edited, and read CI logs (`get_job_logs` with `tail_lines` 400) instead of guessing.
+15. Press feedback: generic `.card:active` makes a whole card shrink when a child chip is pressed (route plans) - override on container cards.
+16. Overwriting an existing file with `cat >` (a router named `exports.js`) - check names first.
 
 ## Timeline of what has been built (purpose in brackets)
 - Early: customer tiers & category selector (segmenting accounts); customer cards redesign (many rounds on icon sizing/position); activity tab ranges (calendar week/month), limits 15 -> 25 -> 200 -> 1000; delivery module fixes (route planning losing orders, delivered without route, director gets warehouse permissions); team performance plan editing fixed and simplified (sales + collections only).
@@ -46,7 +52,16 @@
 
 - v1.245.0: Routes Distribution moved to Route Plans as a multi-select accordion tree with channel buttons; customer tier follows Excel Tier; silver wholesale price + net cost refreshed from workbook on warehouse/products.
 
-## Open threads at the time this skill was written
+- v1.248-1.274 (Oct 2026, PRs #248-#263): back stack + in-app downloads + debt aging filters + report order + route badge (1.259); map brand-chip filter and loader race fix (1.260); Sales search keeps period (1.262); faster location detection (1.263); customer legal name/address with TIN registry lookup (1.264, live site selectors still unverified); accountant home snapshot / read-only route plans / direct payment acceptance (1.265); Orders "Accounting requests" group + status change + wide PC order dialog (1.266); customer-card stat tiles open details, payments-received sheet, label overlap fixes, white-screen safety net (1.267); Payments (Excel) report (1.268); TASK MANAGEMENT module (1.269); Sales | Payments tabs + Excel export, Tasks list fix (1.270); "!" popup, Home chevron alignment, file export sheet, check-in X (1.271); 10-screen back stack on iOS (1.272); customer buttons one row + double-tap tab restart (1.273); route plan chip press fix, 10x faster customer list + planner, Home tile order, Armenian Bonuses (1.274).
+- Owner decisions: financial director role does not exist (accountant only); accountant approves any pending payment; back stack 5 (10 on iOS); tile order list (route plans kept last); map tiles are standard OSM (soft on retina) - a retina/@2x provider (MapTiler/Stadia/Mapbox, API key + cost) is a possible upgrade, undecided.
+
+## Open threads (updated 2026-10-08)
+- Legal name/address registry lookup (`registryLookup.js`, migration 091) is unverified against the live e-register.moj.am page; the sandbox cannot reach it - ask the owner for page text/screenshot of TIN 02256083.
+- Warehouse "Power1/Transmax" labels need droplet bot pull + restart + workbook re-send.
+- Suggested, NOT built (owner said no changes for now): limit + "Load more" on Check-ins and New-customers reports; map loads only visible pins; `team-today` on demand; pull-to-refresh; swipe actions on cards; "Today's route" mode; "Repeat last order"; undo toast; offline status badge; saved filter views; voice note on check-in; repeating tasks/priority/templates for Tasks.
+- (older, from 2026-10-05) PR #230 / bot PR #28 items below were merged/handled in later releases - verify before acting on them.
+
+## Older open threads at the time this skill was first written
 - PR #230 (tier pricing, gold prices, customer type/tier filter) waiting on CI/merge; migration 087 must be run on the droplet.
 - Bot PR #28 (workbook 2.0.7, silver fallback) needs merge + bot restart + re-send workbook.
 - Possible: UI for managing gold individual prices outside the order form; Lily real-token flow live; HC code coverage check.
