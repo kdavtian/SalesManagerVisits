@@ -3,7 +3,7 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { tierListPrice } from "../tierPricing.js";
-import { seesAllActivity, canConfirmOrders, canAssignErpCustomerId, canRecordOrders, seesUnrecordedBadge, canMarkDeliveredWithoutRoute } from "../roles.js";
+import { seesAllActivity, canConfirmOrders, canConfirmSubmittedOrders, canRequestAccountingDocs, canSubmitOrdersForOthers, canAssignErpCustomerId, canRecordOrders, seesUnrecordedBadge, canMarkDeliveredWithoutRoute } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { notifyUser } from "../notifications.js";
 import { ORDER_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES, DELIVERY_OUTCOME_NOTIFY_ROLES } from "../notificationPreferences.js";
@@ -344,7 +344,7 @@ ordersRouter.get("/", async (req, res) => {
   // "Accounting requests" group: every order that was sent to accounting
   // (accounting=any), or only those in one request status. Only the roles that
   // can see requests get this filter.
-  if (accounting && (canConfirmOrders(req.user.role) || req.user.role === "accountant")) {
+  if (accounting && canRequestAccountingDocs(req.user.role)) {
     if (accounting === "any") {
       conditions.push("o.accounting_status IS NOT NULL");
     } else if (ACCOUNTING_STATUSES.includes(accounting)) {
@@ -384,7 +384,7 @@ ordersRouter.get("/", async (req, res) => {
 // "submitted" waiting on a confirm/reject/edit decision. Declared ahead of
 // GET /:id so Express doesn't try to match "pending-count" as an :id.
 ordersRouter.get("/pending-count", async (req, res) => {
-  if (!canConfirmOrders(req.user.role)) return res.json({ count: 0 });
+  if (!canConfirmSubmittedOrders(req.user.role)) return res.json({ count: 0 });
   const { rows } = await pool.query("SELECT COUNT(*)::int AS count FROM orders WHERE status = 'submitted'");
   res.json({ count: rows[0].count });
 });
@@ -474,7 +474,7 @@ ordersRouter.post("/:id/submit", async (req, res) => {
   );
   const order = rows[0];
   if (!order) return res.status(404).json({ error: "Order not found" });
-  if (order.user_id !== req.user.id && req.user.role !== "admin") {
+  if (order.user_id !== req.user.id && req.user.role !== "admin" && !canSubmitOrdersForOthers(req.user.role)) {
     return res.status(403).json({ error: "Not allowed to submit this order" });
   }
   if (order.status !== "draft") {
@@ -641,7 +641,7 @@ ordersRouter.patch("/:id", async (req, res) => {
   if (status !== undefined) {
     // Only a director (or admin) reviewing a fresh "submitted" order can
     // confirm it via this generic endpoint -- see GENERIC_PATCH_TARGETS.
-    const canReviewSubmitted = order.status === "submitted" && canConfirmOrders(req.user.role);
+    const canReviewSubmitted = order.status === "submitted" && canConfirmSubmittedOrders(req.user.role);
     if (!canReviewSubmitted) {
       return res.status(403).json({ error: "Only a director confirming a submitted order can update its status here" });
     }
@@ -778,7 +778,7 @@ ordersRouter.patch("/:id", async (req, res) => {
 // switch method) or "needs_attention" (retry); once Lily has claimed it the
 // document is her's to finish.
 ordersRouter.post("/:id/accounting-request", async (req, res) => {
-  if (!canConfirmOrders(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  if (!canRequestAccountingDocs(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const { rows } = await pool.query(
     `SELECT o.*, c.erp_customer_id, c.tin AS customer_tin FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = $1`,
     [req.params.id]

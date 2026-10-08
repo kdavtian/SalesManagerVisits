@@ -51,6 +51,11 @@ const DISCOUNT_APPROVER_ROLES = new Set(["admin", "sales_director", "ceo", "oper
 // Who reviews a freshly-submitted order -- mirrors canConfirmOrders in the
 // server's roles.js.
 const CONFIRM_ROLES = new Set(["admin", "sales_director", "ceo", "operations_director"]);
+// The accountant also confirms a submitted order, submits a rep's draft and
+// asks accounting for the invoice/waybill (canConfirmSubmittedOrders,
+// canSubmitOrdersForOthers, canRequestAccountingDocs in server/src/roles.js) --
+// but does not edit/reject orders or approve price changes.
+const CONFIRM_SUBMITTED_ROLES = new Set([...CONFIRM_ROLES, "accountant"]);
 // Who can move a packed order straight to delivered without a planned
 // route -- mirrors canMarkDeliveredWithoutRoute in the server's roles.js.
 // Exists because the driver (delivery_manager) role isn't currently using
@@ -190,6 +195,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     // the rep who placed it (or an admin) can still edit it too while
     // it's waiting on that review.
     const canReviewSubmitted = CONFIRM_ROLES.has(state.user.role) && order.status === "submitted";
+    const canConfirmSubmitted = CONFIRM_SUBMITTED_ROLES.has(state.user.role) && order.status === "submitted";
     // A draft is editable too (server/src/routes/orders.js's PATCH /:id
     // already accepted this -- this button just never offered it), owner/
     // admin only since canReviewSubmitted is always false for a draft (a
@@ -246,7 +252,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     });
 
     const buttons = [];
-    if (order.status === "draft" && isOwnerOrAdmin) {
+    if (order.status === "draft" && (isOwnerOrAdmin || state.user.role === "accountant")) {
       if (order.draft_reason) {
         buttons.push({ label: `${t("draft_reason_label")}: ${order.draft_reason}`, action: "noop", cls: "btn", disabledDisplay: true });
       }
@@ -256,18 +262,20 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       buttons.push({ label: t("approve_price_change"), action: "approve-discount", cls: "btn btn-primary" });
       buttons.push({ label: t("reject_price_change"), action: "reject-discount", cls: "btn btn-danger" });
     }
-    if (canReviewSubmitted) {
+    if (canConfirmSubmitted) {
       buttons.push({ label: t("confirm_order"), status: "confirmed", cls: "btn btn-primary" });
+    }
+    if (canReviewSubmitted) {
       buttons.push({ label: t("reject_order"), action: "reject-order", cls: "btn btn-danger" });
     }
-    if (CONFIRM_ROLES.has(state.user.role) && ACCOUNTING_ELIGIBLE.has(order.status) && ["pending", "needs_attention", "cancelled", null].includes(order.accounting_status ?? null)) {
+    if (CONFIRM_SUBMITTED_ROLES.has(state.user.role) && ACCOUNTING_ELIGIBLE.has(order.status) && ["pending", "needs_attention", "cancelled", null].includes(order.accounting_status ?? null)) {
       buttons.push({
         label: order.accounting_status === "needs_attention" || order.accounting_status === "cancelled" ? t("acc_send_again") : order.accounting_status === "pending" ? t("acc_change_document") : t("acc_send_to_accounting"),
         action: "accounting-document",
         cls: "btn",
       });
     }
-    if (CONFIRM_ROLES.has(state.user.role) && ["waybill_created", "partially_created", "exported_unsigned"].includes(order.accounting_status)) {
+    if (CONFIRM_SUBMITTED_ROLES.has(state.user.role) && ["waybill_created", "partially_created", "exported_unsigned"].includes(order.accounting_status)) {
       buttons.push({ label: t("acc_mark_signed"), action: "accounting-signed", cls: "btn" });
     }
     if (order.status === "packed_stock_out") {
