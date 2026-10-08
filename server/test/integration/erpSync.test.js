@@ -142,6 +142,27 @@ test("POST /api/erp-sync: customer tier follows the workbook Tier column (compet
   assert.deepEqual(audit.rows, [{ old_tier: "bronze", new_tier: "gold" }]);
 });
 
+test("POST /api/erp-sync: TIN and legal name are filled from the workbook only where empty", async () => {
+  const manager = await createUser("sales_manager");
+  const stamp = Date.now();
+  const a = await createCustomer({ created_by: manager.id, erp_customer_id: `ITEST-LEG-A-${stamp}` });
+  const b = await createCustomer({ created_by: manager.id, erp_customer_id: `ITEST-LEG-B-${stamp}` });
+  await pool.query("UPDATE customers SET tin = '11111111', legal_name = 'Typed LLC' WHERE id = $1", [b.id]);
+  const res = await syncRequest(
+    {
+      customers: [
+        { erp_customer_id: a.erp_customer_id, customer_name: a.name, tin: 22222222, legal_name: "  Excel LLC " },
+        { erp_customer_id: b.erp_customer_id, customer_name: b.name, tin: "33333333", legal_name: "Other LLC" },
+      ],
+    },
+    { "X-Sync-Key": SYNC_KEY, ...BYPASS }
+  );
+  assert.equal(res.status, 200);
+  const rowOf = async (id) => (await pool.query("SELECT tin, legal_name FROM customers WHERE id = $1", [id])).rows[0];
+  assert.deepEqual(await rowOf(a.id), { tin: "22222222", legal_name: "Excel LLC" });
+  assert.deepEqual(await rowOf(b.id), { tin: "11111111", legal_name: "Typed LLC" });
+});
+
 // Regression: a pre-existing, never-synced product whose stored
 // name/brand/unit had drifted whitespace ("Orlen   5w40", a double space)
 // used to fail the claim-by-identity match against an incoming sync row
