@@ -281,31 +281,38 @@ export async function openTaskEditor({ customer = null, task = null, onSaved } =
       <button type="button" class="icon-btn sheet-close-x" data-action="close" aria-label="${t("close")}">${icons.close}</button>
       <h2>${task ? t("task_edit") : t("task_new")}</h2>
       <form id="task-form">
-        <label>${t("task_title_label")}<input name="title" maxlength="160" required value="${escapeHtml(task?.title ?? "")}" /></label>
-
-        <div class="task-field">
-          <span class="field-label">${t("task_customer")}</span>
-          <div id="task-customer-box"></div>
-        </div>
-
-        <label>${t("task_assigned_to")}
-          <select name="assignee" id="task-assignee"></select>
-        </label>
-
-        <div class="task-field">
-          <span class="field-label">${t("task_deadline")}</span>
-          <div class="segmented" id="task-deadline-mode">
-            <button type="button" class="chip" data-mode="next">${t("task_deadline_next_visit")}</button>
-            <button type="button" class="chip" data-mode="date">${t("task_deadline_date")}</button>
+        <div class="task-two-col">
+          <div class="task-col">
+            <span class="task-label">${t("task_customer")}</span>
+            <div id="task-customer-box"></div>
           </div>
-          <input type="date" id="task-due" value="${dueDate}" />
-          <p class="muted" id="task-due-hint" hidden></p>
+          <div class="task-col">
+            <span class="task-label">${t("task_assigned_to")}</span>
+            <div class="task-select-wrap">
+              <select class="task-control" id="task-assignee" aria-label="${t("task_assigned_to")}"></select>
+            </div>
+          </div>
+        </div>
+        <div class="card-list task-customer-results" id="task-customer-results" hidden></div>
+
+        <div class="task-field">
+          <span class="task-label">${t("task_deadline")}</span>
+          <div class="task-deadline-row">
+            <input type="date" class="task-control" id="task-due" value="${dueDate}" aria-label="${t("task_deadline")}" />
+            <button type="button" class="task-toggle-btn" data-mode="next">${t("task_deadline_next_visit")}</button>
+            <button type="button" class="task-toggle-btn" data-mode="date">${t("task_deadline_date")}</button>
+          </div>
+          <p class="muted task-hint" id="task-due-hint" hidden></p>
         </div>
 
         <div class="task-field">
-          <span class="field-label">${t("task_checklist")}</span>
+          <label class="task-label" for="task-title-input">${t("task_title_label")}</label>
+          <input class="task-control" id="task-title-input" name="title" maxlength="160" required value="${escapeHtml(task?.title ?? "")}" />
+        </div>
+
+        <div class="task-field">
+          <span class="task-label">${t("task_checklist")}</span>
           <div id="task-items"></div>
-          <button type="button" class="btn btn-sm" id="task-add-item">+ ${t("task_add_item")}</button>
         </div>
         <p class="form-error" id="task-form-error" hidden></p>
       </form>
@@ -336,7 +343,8 @@ export async function openTaskEditor({ customer = null, task = null, onSaved } =
     overlay.querySelectorAll("[data-mode]").forEach((b) => {
       const isNext = b.dataset.mode === "next";
       b.disabled = isNext && !customerId;
-      b.classList.toggle("chip-active", b.dataset.mode === deadlineMode);
+      b.classList.toggle("task-toggle-active", b.dataset.mode === deadlineMode);
+      b.setAttribute("aria-pressed", String(b.dataset.mode === deadlineMode));
     });
     dueInput.value = dueDate;
     dueInput.disabled = deadlineMode === "next";
@@ -360,7 +368,8 @@ export async function openTaskEditor({ customer = null, task = null, onSaved } =
 
   function paintCustomer() {
     if (customerId) {
-      customerBox.innerHTML = `<div class="task-customer-chip"><strong>${escapeHtml(customerName)}</strong>${customer?.locked ? "" : `<button type="button" class="btn-link" id="task-customer-clear">${t("task_change_customer")}</button>`}</div>`;
+      overlay.querySelector("#task-customer-results").hidden = true;
+      customerBox.innerHTML = `<div class="task-control task-customer-chip"><strong>${escapeHtml(customerName)}</strong>${customer?.locked ? "" : `<button type="button" class="task-chip-x" id="task-customer-clear" aria-label="${t("task_change_customer")}">${icons.close}</button>`}</div>`;
       customerBox.querySelector("#task-customer-clear")?.addEventListener("click", () => {
         customerId = null;
         customerName = "";
@@ -370,11 +379,10 @@ export async function openTaskEditor({ customer = null, task = null, onSaved } =
       });
       return;
     }
-    customerBox.innerHTML = `
-      <input type="search" id="task-customer-search" placeholder="${t("search_customers")}" aria-label="${t("search_customers")}" />
-      <div class="card-list task-customer-results" id="task-customer-results" hidden></div>`;
+    customerBox.innerHTML = `<input type="search" class="task-control" id="task-customer-search" placeholder="${t("search_customers")}" aria-label="${t("search_customers")}" />`;
     const search = customerBox.querySelector("#task-customer-search");
-    const results = customerBox.querySelector("#task-customer-results");
+    const results = overlay.querySelector("#task-customer-results");
+    results.hidden = true;
     let timer;
     let seq = 0;
     search.addEventListener("input", () => {
@@ -417,25 +425,35 @@ export async function openTaskEditor({ customer = null, task = null, onSaved } =
   }
 
   let items = (task?.items ?? []).map((i) => ({ id: i.id, text: i.text }));
+  // One row per item: [+] [text] [x]. The + (add another item) sits on the
+  // last row only; earlier rows keep an empty spacer so the fields line up.
+  const MAX_TASK_ITEMS = 30;
   function paintItems() {
     itemsEl.innerHTML = items
-      .map(
-        (it, idx) => `<div class="task-item-edit"><input data-idx="${idx}" value="${escapeHtml(it.text)}" maxlength="300" placeholder="${t("task_item_placeholder")}" /><button type="button" class="icon-btn" data-remove="${idx}" aria-label="${t("delete")}">${icons.close}</button></div>`
-      )
+      .map((it, idx) => {
+        const isLast = idx === items.length - 1;
+        const plus =
+          isLast && items.length < MAX_TASK_ITEMS
+            ? `<button type="button" class="task-icon-btn" data-add aria-label="${t("task_add_item")}">${icons.plus}</button>`
+            : `<span class="task-icon-btn task-icon-spacer" aria-hidden="true"></span>`;
+        return `<div class="task-item-row">${plus}<input class="task-control" data-idx="${idx}" value="${escapeHtml(it.text)}" maxlength="300" placeholder="${t("task_item_placeholder")}" /><button type="button" class="task-icon-btn" data-remove="${idx}" aria-label="${t("delete")}">${icons.close}</button></div>`;
+      })
       .join("");
     itemsEl.querySelectorAll("input[data-idx]").forEach((inp) => inp.addEventListener("input", () => (items[Number(inp.dataset.idx)].text = inp.value)));
     itemsEl.querySelectorAll("[data-remove]").forEach((b) =>
       b.addEventListener("click", () => {
-        items.splice(Number(b.dataset.remove), 1);
+        const idx = Number(b.dataset.remove);
+        if (items.length === 1) items[0] = { id: null, text: "" };
+        else items.splice(idx, 1);
         paintItems();
       })
     );
+    itemsEl.querySelector("[data-add]")?.addEventListener("click", () => {
+      items.push({ id: null, text: "" });
+      paintItems();
+      itemsEl.querySelector(`input[data-idx="${items.length - 1}"]`)?.focus();
+    });
   }
-  overlay.querySelector("#task-add-item").addEventListener("click", () => {
-    items.push({ id: null, text: "" });
-    paintItems();
-    itemsEl.querySelector(`input[data-idx="${items.length - 1}"]`)?.focus();
-  });
   if (!items.length) items.push({ id: null, text: "" });
 
   // Default person for a customer opened from its card (customer.assigned_manager_id).
@@ -453,7 +471,7 @@ export async function openTaskEditor({ customer = null, task = null, onSaved } =
     const saveBtn = overlay.querySelector("#task-save");
     saveBtn.disabled = true;
     const payload = {
-      title: form.querySelector('[name="title"]').value.trim(),
+      title: form.querySelector("#task-title-input").value.trim(),
       assignee_id: assigneeId,
       customer_id: customerId,
       due_date: dueDate,
