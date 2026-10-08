@@ -27,13 +27,18 @@ You are the sole developer of two linked systems owned by one person (the owner,
 7. **If you do not understand a request, ask** (for big new features such as the pricelist builder the owner explicitly wants clarifying questions first -- use AskUserQuestion with 3-4 concrete options) (the owner said so explicitly: "If you don't understand problem, please ask me"). Use short, concrete questions. Otherwise do not ask - decide, state the assumption in the summary.
 8. **Decisions that change policy/behaviour of the app go to the owner** ("If this plan conflicts with current policy, let me decide"). When the owner asks for suggestions ("suggest, don't implement"), only suggest (optionally with visuals) and wait.
 
+9. **"No changes, just answer" / "suggest, don't implement" means NO code, no commits.** Read code to answer accurately, then reply. Say which suggestions you would do first and wait.
+10. **Never create a file before checking the name is free** (`ls`/`git status`/`grep -rn "<name>"`): `server/src/routes/exports.js` already existed once and was overwritten by mistake (restored from git; the new code went to `tableExport.js`). New server modules: grep for an existing router/helper first.
+11. **After EVERY edit of `client/public/js/i18n.js` run `node --check client/public/js/i18n.js`** (a missing comma blanks the whole app) and keep every key in BOTH `en` and `hy` blocks (a missing hy key silently shows English - the whole Bonuses module did for months).
+12. **Before building a "new" request, check whether it already shipped** (`git log --oneline -30`, grep the code): the owner sometimes re-sends an earlier list (e.g. the 1.259.0 items). Verify each point in the running app, fix only what is truly wrong, and say plainly which items already existed and in which version (and ask them to check Settings -> version / "Check for updates").
+
 ## Standard workflow for a task
 
 1. Read the request carefully; it is usually a numbered list - answer EVERY point, in order, and mention each in the summary. Screenshots ("image1") matter: look at them if attached.
 2. Orient: `git status`, `git log -3`, `git fetch origin`; read the relevant reference file and the actual code (`grep` first; views are large).
 3. Implement the smallest consistent change. Reuse shared components (see app-architecture: `regionTree.js` tri-state sheet, `util.js`, i18n, icons, listCache, offlineQueue).
 4. Add/adjust tests (server `node --test`, Playwright e2e where a flow is covered). Run: `cd server && npm run migrate && npm test && npm run verify:ui` with `DATABASE_URL`, `JWT_SECRET` (>=16 chars) set; start Postgres with `pg_ctlcluster 16 main start` if needed. `npm test` takes >2 min: run it in background and read the output file.
-5. For UI work, drive it in a real browser (Playwright + Chromium preinstalled at /opt/pw-browsers; server on port 3001 with `E2E_RATE_LIMIT_BYPASS_TOKEN`), take screenshots and LOOK at them - alignment, overlap, 44px targets, Armenian long labels, dark mode.
+5. For performance work, MEASURE first: seed thousands of rows (`generate_series`), time endpoints (`apiRequest` loop) and `EXPLAIN (ANALYZE, BUFFERS)` the query; compare before/after in the summary. For UI work, drive it in a real browser (Playwright + Chromium preinstalled at /opt/pw-browsers; server on port 3001 with `E2E_RATE_LIMIT_BYPASS_TOKEN`), take screenshots and LOOK at them - alignment, overlap, 44px targets, Armenian long labels, dark mode.
 6. Bump versions (rule 1), commit with the attribution trailers from the session prompt, push, draft PR, subscribe, merge on green.
 7. Final message to the owner: short numbered list of what changed (matching their numbering), deployment commands if anything on the droplet must be run (migrations! bot restart!), caveats/assumptions, and `APP_VERSION`.
 
