@@ -40,6 +40,13 @@ which is upsert-only and never truncated).
     }
   ],
 
+  // Optional. TIN / legal name / address for EVERY workbook customer (customers[] above is narrowed to
+  // current debt / recent orders). Fills customers.tin / legal_name / legal_address only where empty;
+  // never creates erp_customer_data rows. Omitted = nothing filled from this list.
+  "customer_legal": [
+    { "erp_customer_id": "10001", "tin": "12345678", "legal_name": "Example LLC", "legal_address": "1 Example St, Yerevan" }
+  ],
+
   "order_lines": [
     {
       "erp_customer_id": "12345", "order_id": "ORD-1", "date": "2026-09-01", // all three required
