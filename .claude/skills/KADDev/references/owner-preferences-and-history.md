@@ -37,6 +37,8 @@
 13. Repeated requests: the owner re-sent a list already shipped in 1.259.0 - check `git log`/the code first, verify in the browser, report which items already existed.
 14. A typo in a template-string SQL (missing comma before the params array turned the query into `"..."[id]` -> `syntax error at or near "L"`) passed the local suite and only the e2e job caught it: add a regression test whenever a query is edited, and read CI logs (`get_job_logs` with `tail_lines` 400) instead of guessing.
 15. Press feedback: generic `.card:active` makes a whole card shrink when a child chip is pressed (route plans) - override on container cards.
+17. The global `form input { margin-top: 6px; padding: 11px 12px }` rule breaks flex/grid rows of inputs and buttons (task checklist misalignment). Inside a form, give custom controls an explicit scoped class (`.task-editor .task-control`: margin 0, fixed 44px height) - class + one ancestor beats `input[type="search"]`.
+18. An attached screenshot ("img1") may not arrive: if no image is visible, say so in the summary and work from the description + the code; never pretend to have seen it.
 16. Overwriting an existing file with `cat >` (a router named `exports.js`) - check names first.
 
 ## Timeline of what has been built (purpose in brackets)
@@ -53,6 +55,7 @@
 - v1.245.0: Routes Distribution moved to Route Plans as a multi-select accordion tree with channel buttons; customer tier follows Excel Tier; silver wholesale price + net cost refreshed from workbook on warehouse/products.
 
 - v1.248-1.274 (Oct 2026, PRs #248-#263): back stack + in-app downloads + debt aging filters + report order + route badge (1.259); map brand-chip filter and loader race fix (1.260); Sales search keeps period (1.262); faster location detection (1.263); customer legal name/address with TIN registry lookup (1.264, live site selectors still unverified); accountant home snapshot / read-only route plans / direct payment acceptance (1.265); Orders "Accounting requests" group + status change + wide PC order dialog (1.266); customer-card stat tiles open details, payments-received sheet, label overlap fixes, white-screen safety net (1.267); Payments (Excel) report (1.268); TASK MANAGEMENT module (1.269); Sales | Payments tabs + Excel export, Tasks list fix (1.270); "!" popup, Home chevron alignment, file export sheet, check-in X (1.271); 10-screen back stack on iOS (1.272); customer buttons one row + double-tap tab restart (1.273); route plan chip press fix, 10x faster customer list + planner, Home tile order, Armenian Bonuses (1.274).
+- v1.275-1.276 (Oct 8): Task editor redesigned (sections: Customer | Assigned to, Deadline row with date + Next visit + Specific date, "What needs to be done", Checklist rows [+][text][x]; 44px rounded controls, scrolling form with pinned Cancel/Save) (1.275); accountant may submit a rep's draft, confirm submitted orders and request invoice/waybill, but not edit/reject/approve discounts (1.276).
 - Owner decisions: financial director role does not exist (accountant only); accountant approves any pending payment; back stack 5 (10 on iOS); tile order list (route plans kept last); map tiles are standard OSM (soft on retina) - a retina/@2x provider (MapTiler/Stadia/Mapbox, API key + cost) is a possible upgrade, undecided.
 
 ## Open threads (updated 2026-10-08)
