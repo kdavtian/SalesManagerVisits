@@ -3,7 +3,7 @@ import { escapeHtml, formatDistance, formatRelative, formatAmd, getCurrentPositi
 import { state, canViewTeamLocations } from "../state.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { applyPaymentBadge, applyUnrecordedBadge, applyWarehouseBadge, applyDeliveryBadge } from "../app.js";
+import { applyPaymentBadge, applyUnrecordedBadge, applyWarehouseBadge, applyDeliveryBadge, applyAccountingBadge } from "../app.js";
 import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds } from "../quickActions.js";
 import { loadWithCache } from "../listCache.js";
 
@@ -58,6 +58,8 @@ const QUICK_ACTION_ICON = {
   qa_pricelist: () => `<span class="quick-action-icon quick-action-icon-pricelist">${icons.tag}</span>`,
   qa_warehouse: () =>
     `<span class="quick-action-icon quick-action-icon-warehouse">${icons.box}<span class="nav-badge count-badge" id="qa-warehouse-badge" hidden></span></span>`,
+  qa_accounting: () =>
+    `<span class="quick-action-icon quick-action-icon-accounting">${icons.note}<span class="nav-badge count-badge" id="qa-accounting-badge" hidden></span></span>`,
   qa_delivery: () =>
     `<span class="quick-action-icon quick-action-icon-delivery">${icons.truck}<span class="nav-badge count-badge" id="qa-delivery-badge" hidden></span></span>`,
   qa_recorded: () =>
@@ -463,6 +465,7 @@ export async function renderDashboard(root, navigate) {
   applyUnrecordedBadge();
   applyWarehouseBadge();
   applyDeliveryBadge();
+  applyAccountingBadge();
 
   const progressCard = container.querySelector("#progress-card");
   const byManagerSection = container.querySelector("#by-manager-section");

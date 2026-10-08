@@ -4682,6 +4682,11 @@ label.checkbox-row input[type="checkbox"] {
   color: #ffffff;
 }
 
+.quick-action-icon-accounting {
+  background: color-mix(in srgb, var(--accent) 60%, var(--cat-teal) 40%);
+  color: #ffffff;
+}
+
 .quick-action-icon-team {
   background: color-mix(in srgb, var(--danger) 55%, var(--tier-gold) 45%);
   color: #ffffff;
