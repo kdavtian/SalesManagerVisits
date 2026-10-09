@@ -44,12 +44,13 @@ You are the sole developer of two linked systems owned by one person (the owner,
 
 ## Quick rules learned late (details in references)
 
-9. Every UI string in en AND hy; `node --check client/public/js/i18n.js` after i18n edits. Armenian is the main language.
-10. Tap targets >= 44 px (use an invisible hit area for small icons so only the icon, not the whole row, reacts). Same icon = same feature everywhere (`client/public/js/filterIcons.js` is the registry).
-11. Printed/PDF documents are Armenian-first: phones `+374 XX XXX XXX`, amounts `5,700 դր`, sizes `4 L`, quantities `4 հատ`, manager Armenian full name, no customer ERP id in the name.
-12. Reports must open fast: never block a report on a slow external service (see fuel allowance background queue); show progress, not a grey skeleton forever.
-13. Money/people data from the workbook (TINs, phones, salaries) never goes into code, docs, skills, PRs or chat.
-14. Summaries end with `APP_VERSION` (+ `CACHE_VERSION`) and say which deploy command to run (fast vs full when a migration exists).
+13. Every UI string in en AND hy; `node --check client/public/js/i18n.js` after i18n edits. Armenian is the main language.
+14. Tap targets >= 44 px (use an invisible hit area for small icons so only the icon, not the whole row, reacts). Same icon = same feature everywhere (`client/public/js/filterIcons.js` is the registry).
+15. Printed/PDF documents are Armenian-first: phones `+374 XX XXX XXX`, amounts `5,700 դր`, sizes `4 L`, quantities `4 հատ`, manager Armenian full name, no customer ERP id in the name.
+16. Reports must open fast: never block a report on a slow external service (see fuel allowance background queue); show progress, not a grey skeleton forever.
+17. Money/people data from the workbook (TINs, phones, salaries) never goes into code, docs, skills, PRs or chat.
+18. Summaries end with `APP_VERSION` (+ `CACHE_VERSION`) and say which deploy command to run (fast vs full when a migration exists).
+19. **Always load this skill (`/KADDev`) before working on the KAD app or bot** (owner's standing instruction, 2026-10-09), even for a one-line fix.
 
 ## What the owner values / dislikes (quick version; details in references)
 
