@@ -132,6 +132,7 @@ function drawHeader(c, doc, { order, customer, rep }, v) {
   field("Կոդ՝", customer?.erp_customer_id ?? "", 500, v.row2, 589.6, v.fs);
   field("Իրավ. անվանում՝", fit(customer?.legal_name ?? "", 285, v.fs), 21.6, v.row3, 420, v.fs);
   field("ՀՎՀՀ՝", customer?.tin ?? "", 440, v.row3, 589.6, v.fs);
+  field("Առաքման հասցե՝", fit(customer?.address ?? "", 400, v.fs), 21.6, v.row4, 589.6, v.fs);
   const title = "ՀԱՆՁՆՄԱՆ-ԸՆԴՈՒՆՄԱՆ ԱԿՏ";
   center(title, 21.6, 589.6, v.title, { bold: true, size: v.fs + 1 });
   const tw = c.textW(title, { bold: true, size: v.fs + 1 });
@@ -222,7 +223,7 @@ function drawFull(doc, data, firstPageDrawn) {
     doc.scale(K);
     const c = makeCanvas(doc);
     drawLogos(doc, 43, 40);
-    const v = { rule1: 81.5, rule2: 114, row1: 136, row2: 164, row3: 192, title: 227, fs: 10, lh: 13, cs: 9, tableTop: 262, headH: 28 };
+    const v = { rule1: 81.5, rule2: 114, row1: 136, row2: 162, row3: 188, row4: 214, title: 247, fs: 10, lh: 13, cs: 9, tableTop: 281, headH: 28 };
     drawHeader(c, doc, data, v);
     const rowCount = Math.max(FULL_MIN_ROWS, chunk.length);
     v.rowH = Math.min(20.7, (last ? 612 - v.tableTop - v.headH - 22 : 700 - v.tableTop - v.headH) / rowCount);
@@ -255,7 +256,7 @@ function drawHalf(doc, data, slotTop, slotH) {
   doc.scale(K);
   const c = makeCanvas(doc);
   drawLogos(doc, 24, 25);
-  const v = { rule1: 46, rule2: 76, row1: 82, row2: 97, row3: 112, title: 131, fs: 8.5, lh: 11, cs: 8, tableTop: 151, headH: 22, rowH: 15 };
+  const v = { rule1: 46, rule2: 76, row1: 81, row2: 95, row3: 109, row4: 123, title: 142, fs: 8.5, lh: 11, cs: 8, tableTop: 161, headH: 22, rowH: 14 };
   drawHeader(c, doc, data, v);
   const bottom = drawTable(c, doc, data.items.slice(0, HALF_MAX_ROWS), 1, HALF_MAX_ROWS, v);
   drawTotal(c, doc, bottom, t, 16, 9);
