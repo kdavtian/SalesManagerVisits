@@ -476,7 +476,7 @@ ordersRouter.post("/blank-pdf", async (req, res) => {
 
   const { rows: orders } = await pool.query(
     `SELECT o.id, o.order_code, o.created_at, o.total_amd, o.user_id,
-            c.name AS customer_name, c.erp_customer_id, u.name AS rep_name, u.phone AS rep_phone, erp.debt_amd
+            c.name AS customer_name, c.erp_customer_id, u.name AS rep_name, u.name_hy AS rep_name_hy, u.phone AS rep_phone, erp.debt_amd
      FROM orders o
      JOIN customers c ON c.id = o.customer_id
      JOIN users u ON u.id = o.user_id
@@ -495,7 +495,6 @@ ordersRouter.post("/blank-pdf", async (req, res) => {
     [ids]
   );
   const byOrder = new Map(orders.map((o) => [o.id, o]));
-  const office = `+(374) ${OFFICE_PHONE.replace(/^0/, "").replace(/-/g, " ")}`;
   const pdf = await buildOrderBlanksPdf(
     ids.map((id) => {
       const o = byOrder.get(id);
@@ -504,7 +503,7 @@ ordersRouter.post("/blank-pdf", async (req, res) => {
         order: { order_code: o.order_code, created_at: o.created_at, total_amd: o.total_amd },
         items: itemRows.filter((r) => r.order_id === id).map((r) => ({ ...r, quantity: Number(r.quantity), unit_price_amd: Number(r.unit_price_amd), line_total_amd: Number(r.line_total_amd) })),
         customer: { name: o.customer_name, erp_customer_id: o.erp_customer_id },
-        rep: { name: o.rep_name, phones: [o.rep_phone, office].filter(Boolean) },
+        rep: { name: o.rep_name_hy || o.rep_name, phone: o.rep_phone, officePhone: OFFICE_PHONE },
         // The customer's balance on file (Excel) before this order; blank line when unknown.
         previousDebtAmd: o.debt_amd != null ? Number(o.debt_amd) : null,
         paymentAmd: null,

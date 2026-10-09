@@ -285,6 +285,7 @@ export async function renderTeamSection(container) {
         </p>
         <form id="edit-user-form">
           <label>${t("name")}<input name="name" value="${escapeHtml(u.name)}" required /></label>
+          <label>${t("name_hy_label")}<input name="name_hy" value="${escapeHtml(u.name_hy || "")}" placeholder="Արտակ Հայրապետյան" /></label>
           <label>${t("email")}<input name="email" type="email" value="${escapeHtml(u.email)}" required /></label>
           <label>${t("phone")}<input name="phone" type="tel" value="${escapeHtml(u.phone || "")}" /></label>
           ${
@@ -370,6 +371,7 @@ export async function renderTeamSection(container) {
       try {
         await api.updateUser(u.id, {
           name: data.get("name"),
+          name_hy: data.get("name_hy") || null,
           email: data.get("email"),
           phone: data.get("phone") || null,
           position: isSalesManager ? data.get("position") || null : u.position,

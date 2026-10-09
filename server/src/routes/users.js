@@ -51,7 +51,7 @@ usersRouter.use(requireAdmin);
 
 usersRouter.get("/", async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT id, email, name, role, position, phone, created_at,
+    `SELECT id, email, name, role, position, phone, name_hy, created_at,
             last_seen_at, last_seen_app_version, last_seen_user_agent
      FROM users ORDER BY created_at DESC`
   );
@@ -64,7 +64,7 @@ usersRouter.get("/", async (req, res) => {
 // for a quick "fix a typo in their phone number" edit) and not password
 // (its own endpoint below, with its own rate limit and session-invalidation
 // behavior).
-const EDITABLE_PROFILE_FIELDS = ["name", "email", "position", "phone"];
+const EDITABLE_PROFILE_FIELDS = ["name", "name_hy", "email", "position", "phone"];
 
 usersRouter.patch("/:id", async (req, res) => {
   if (req.body?.email !== undefined && !req.body.email) {
@@ -88,7 +88,7 @@ usersRouter.patch("/:id", async (req, res) => {
   try {
     const { rows } = await pool.query(
       `UPDATE users SET ${updates.join(", ")} WHERE id = $${params.length}
-       RETURNING id, email, name, role, position, phone, created_at,
+       RETURNING id, email, name, role, position, phone, name_hy, created_at,
                  last_seen_at, last_seen_app_version, last_seen_user_agent`,
       params
     );
@@ -152,7 +152,7 @@ usersRouter.patch("/:id/role", async (req, res) => {
   }
   const { rows } = await pool.query(
     `UPDATE users SET role = $1 WHERE id = $2
-     RETURNING id, email, name, role, position, phone, created_at,
+     RETURNING id, email, name, role, position, phone, name_hy, created_at,
                last_seen_at, last_seen_app_version, last_seen_user_agent`,
     [role, req.params.id]
   );
