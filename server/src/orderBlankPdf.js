@@ -36,9 +36,37 @@ export function suggestVariant(items) {
   return items.length <= HALF_MAX_ROWS ? "half" : "full";
 }
 
+// "5,700դր" -- amounts always carry the currency on the blank.
 function amd(n) {
   if (n === null || n === undefined || n === "") return "";
-  return Math.round(Number(n)).toLocaleString("en-US");
+  return `${Math.round(Number(n)).toLocaleString("en-US")}դր`;
+}
+
+// Package size column: "4" / "4L" / "208 l" -> "4 L"; anything that is not a
+// plain litre figure (e.g. "pcs") is printed as is.
+export function formatSize(size) {
+  const raw = String(size ?? "").trim();
+  if (!raw) return "";
+  const m = raw.match(/^(\d+(?:[.,]\d+)?)\s*(?:l|L|լ|Լ)?$/);
+  return m ? `${m[1].replace(",", ".")} L` : raw;
+}
+
+// Customer name as printed: the ERP id is already in the "Կոդ" field, so a
+// leading "10324 " / "10324 - " is dropped.
+export function cleanCustomerName(name) {
+  return String(name ?? "").replace(/^\s*\d{4,6}\s*[-–—.:/]?\s*/, "").trim();
+}
+
+// "+374 33 007 059" for any Armenian number typed as 033007059, 33007059,
+// +37433007059 or +(374) 33 007 059; anything else is printed as typed.
+export function formatPhone(phone) {
+  const digits = String(phone ?? "").replace(/\D/g, "");
+  let national = null;
+  if (digits.length === 11 && digits.startsWith("374")) national = digits.slice(3);
+  else if (digits.length === 9 && digits.startsWith("0")) national = digits.slice(1);
+  else if (digits.length === 8) national = digits;
+  if (!national) return String(phone ?? "").trim();
+  return `+374 ${national.slice(0, 2)} ${national.slice(2, 5)} ${national.slice(5)}`;
 }
 
 // Everything drawn for one blank, in blank units, inside the current transform.
@@ -79,13 +107,13 @@ function totals({ order, items, previousDebtAmd = null, paymentAmd = null }) {
 
 function drawHeader(c, doc, { order, customer, rep }, v) {
   const { dd, mm, yyyy } = dateParts(order);
-  const { hline, text, center, field, fit } = c;
+  const { hline, text, center, field, fit, right } = c;
   hline(v.rule1);
   text(COMPANY_NAME, 21.6, v.rule1 + 3.5, { size: v.fs });
   text(`Մենեջեր՝ ${rep?.name ?? ""}`, 21.6, v.rule1 + 3.5 + v.lh, { size: v.fs });
-  const phones = (rep?.phones ?? []).filter(Boolean);
-  text("Հեռ՝", 413, v.rule1 + 3.5, { size: v.fs });
-  phones.slice(0, 2).forEach((p, i) => text(p, 448, v.rule1 + 3.5 + i * v.lh, { size: v.fs }));
+  // Phones, right aligned: the manager's own number, then the office.
+  const phoneLines = [rep?.phone ? `Հեռ՝ ${formatPhone(rep.phone)}` : null, rep?.officePhone ? `Գրասենյակ՝ ${formatPhone(rep.officePhone)}` : null].filter(Boolean);
+  phoneLines.forEach((line, i) => right(line, 589.6, v.rule1 + 3.5 + i * v.lh, { size: v.fs }));
   hline(v.rule2);
   field("Պատվերի No՝", order.order_code ?? "", 21.6, v.row1, 170, v.fs);
   text("Ամսաթիվ՝", 416, v.row1, { size: v.fs });
@@ -95,7 +123,7 @@ function drawHeader(c, doc, { order, customer, rep }, v) {
   center(mm, 505, 532, v.row1, { bold: true, size: v.fs });
   hline(v.row1 + v.fs + 1, 504, 534, "#555555", 0.5);
   text(`/ ${yyyy}թ.`, 537, v.row1, { size: v.fs });
-  field("Գործընկերոջ անվանում՝", fit(customer?.name ?? "", 250, v.fs), 21.6, v.row2, 400, v.fs);
+  field("Գործընկերոջ անվանում՝", fit(cleanCustomerName(customer?.name), 250, v.fs), 21.6, v.row2, 400, v.fs);
   field("Կոդ՝", customer?.erp_customer_id ?? "", 500, v.row2, 589.6, v.fs);
   const title = "ՀԱՆՁՆՄԱՆ-ԸՆԴՈՒՆՄԱՆ ԱԿՏ";
   center(title, 21.6, 589.6, v.title, { bold: true, size: v.fs + 1 });
@@ -123,9 +151,8 @@ function drawTable(c, doc, chunk, startNo, rowCount, v) {
     if (it) {
       const name = [it.brand, it.product_name].filter(Boolean).join(" ").replace(/\s+/g, " ");
       text(fit(name, COLS[2] - COLS[1] - 8, v.cs), COLS[1] + 4, ty, { size: v.cs });
-      const liters = it.size_l != null && it.size_l !== "" ? String(it.size_l).replace(/L$/i, "") : "";
-      center(liters, COLS[2], COLS[3], ty, { size: v.cs });
-      center(String(Number(it.quantity)), COLS[3], COLS[4], ty, { size: v.cs });
+      center(formatSize(it.size_l), COLS[2], COLS[3], ty, { size: v.cs });
+      center(`${Number(it.quantity)} հատ`, COLS[3], COLS[4], ty, { size: v.cs });
       right(amd(it.unit_price_amd), COLS[5] - 5, ty, { size: v.cs });
       right(amd(it.line_total_amd ?? Number(it.quantity) * Number(it.unit_price_amd)), COLS[6] - 5, ty, { size: v.cs });
     }
@@ -155,13 +182,17 @@ function drawSignatures(c, data, y, fs) {
 // horizontal axis, first flush with the left edge, last with the right edge and
 // the middle one equally spaced between them.
 const LOGO_ASPECT = { castrol: 558 / 148, lotos: 452 / 113, royal: 401 / 105 };
+// The Lotos artwork is wide and fills its box, so at the same height it looks
+// bigger than the Castrol mark; scaled down to match it optically.
+const LOGO_SCALE = { castrol: 1, lotos: 0.78, royal: 1 };
 function drawLogos(doc, cy, h) {
   const names = ["castrol", "lotos", "royal"];
-  const widths = names.map((n) => h * LOGO_ASPECT[n]);
+  const heights = names.map((n) => h * LOGO_SCALE[n]);
+  const widths = names.map((n, i) => heights[i] * LOGO_ASPECT[n]);
   const gap = (COLS[6] - COLS[0] - widths.reduce((a, b) => a + b, 0)) / 2;
   let x = COLS[0];
   names.forEach((n, i) => {
-    doc.image(logo(n), x, cy - h / 2, { width: widths[i], height: h });
+    doc.image(logo(n), x, cy - heights[i] / 2, { width: widths[i], height: heights[i] });
     x += widths[i] + gap;
   });
 }
@@ -199,6 +230,8 @@ function drawFull(doc, data, firstPageDrawn) {
     } else {
       c.text("Շարունակությունը հաջորդ էջում…", 21.6, bottom + 8, { size: 9 });
     }
+    // "Էջ 1/2" in the lower right corner of every sheet of a multi-page order.
+    if (pages.length > 1) c.right(`Էջ ${pi + 1}/${pages.length}`, 589.6, 767, { size: 9 });
     doc.restore();
   });
 }
