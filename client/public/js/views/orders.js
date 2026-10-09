@@ -42,10 +42,12 @@ export async function renderOrders(root, navigate) {
     <div class="detail-view">
       <div class="list-header-row">
         <h1>${t("orders_title")}</h1>
-        <button type="button" class="icon-btn" id="orders-print-btn" aria-label="${t("print_blank_select")}" aria-pressed="false">${icons.printer}</button>
-        <button type="button" class="icon-btn" id="orders-new-btn" aria-label="${t("create_order")}">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-        </button>
+        <div class="orders-header-actions">
+          <button type="button" class="icon-btn orders-new-action" id="orders-print-btn" aria-label="${t("print_blank_select")}" aria-pressed="false">${icons.printer}</button>
+          <button type="button" class="icon-btn" id="orders-new-btn" aria-label="${t("create_order")}">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
       </div>
       <div class="order-status-filter-row" id="order-status-filters"></div>
       <div class="list-toolbar">
@@ -97,7 +99,8 @@ export async function renderOrders(root, navigate) {
   function updateSelectBar() {
     selectBar.hidden = !selectMode;
     printBtn.setAttribute("aria-pressed", String(selectMode));
-    printBtn.classList.toggle("icon-btn-active", selectMode);
+    printBtn.classList.toggle("is-active", selectMode);
+    root.querySelector(".detail-view").classList.toggle("orders-select-mode", selectMode);
     root.querySelector("#orders-select-count").textContent = t("print_blank_selected").replace("{n}", selected.size);
     root.querySelector("#orders-select-print").disabled = selected.size === 0;
   }
@@ -263,8 +266,11 @@ export async function renderOrders(root, navigate) {
         }
         return `${dateHeading}
         <button class="card list-row${selectMode && selected.has(o.id) ? " order-row-selected" : ""}" data-order-id="${o.id}">
-          ${selectMode ? `<span class="order-select-check${selected.has(o.id) ? " is-on" : ""}" aria-hidden="true"></span>` : ""}
-          <span class="list-row-icon list-row-icon-${meta.iconTint}" aria-hidden="true">${ORDER_STATUS_ICONS[o.status] ?? ""}</span>
+          ${
+            selectMode
+              ? `<span class="list-row-icon order-select-slot" aria-hidden="true"><span class="order-select-check${selected.has(o.id) ? " is-on" : ""}"></span></span>`
+              : `<span class="list-row-icon list-row-icon-${meta.iconTint}" aria-hidden="true">${ORDER_STATUS_ICONS[o.status] ?? ""}</span>`
+          }
           <div class="list-row-body">
             <div class="list-row-top">
               <strong>${escapeHtml(o.customer_name)}</strong>

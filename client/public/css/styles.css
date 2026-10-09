@@ -11107,34 +11107,60 @@ form select,
 .sheet.task-editor { position: relative; }
 
 /* Print-ready order blanks: select mode on the Orders list and the version picker. */
-.icon-btn-active { background: var(--accent); color: #ffffff; border-color: var(--accent); }
+.orders-header-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.orders-new-action.is-active { background: var(--accent) !important; color: #ffffff !important; border-color: var(--accent) !important; }
+/* Select mode swaps the order icon for a check circle in the same slot. */
+.order-select-slot { background: transparent; border-color: transparent; }
 .order-select-check {
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  margin-right: 10px;
-  align-self: center;
+  width: 26px;
+  height: 26px;
   border: 2px solid var(--control-border);
   border-radius: 50%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.order-select-check.is-on { background: var(--accent); border-color: var(--accent); box-shadow: inset 0 0 0 4px var(--bg-card); }
+.order-select-check.is-on { background: var(--accent); border-color: var(--accent); }
+.order-select-check.is-on::after {
+  content: "";
+  width: 6px;
+  height: 11px;
+  margin-top: -2px;
+  border: solid #ffffff;
+  border-width: 0 2.5px 2.5px 0;
+  transform: rotate(45deg);
+}
 .order-row-selected { border-color: var(--accent); }
+.orders-select-mode #orders-list { padding-bottom: 96px; }
+/* Floating action row, stuck to the bottom above the tab bar. */
 .orders-select-bar {
-  position: sticky;
+  position: fixed;
+  left: 16px;
+  right: 16px;
   bottom: calc(60px + var(--nav-safe-bottom));
+  max-width: 560px;
+  margin: 0 auto;
+  z-index: 30;
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 12px;
   padding: 10px 12px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 6px 22px rgba(15, 23, 42, 0.18);
 }
 .orders-select-bar[hidden] { display: none; }
-.orders-select-bar > span { flex: 1; font-weight: 600; }
+.orders-select-bar > span { flex: 1; font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.orders-select-bar .btn { padding-left: 14px; padding-right: 14px; white-space: nowrap; }
 .print-blank-options { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
 .print-blank-option { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; }
 .print-blank-option input { margin-top: 3px; }
 .print-blank-option span { display: flex; flex-direction: column; gap: 2px; }
+/* "Creating PDF" progress bar. */
+.print-blank-progress { margin: 14px 0 4px; }
+.print-blank-progress[hidden] { display: none; }
+.print-blank-progress-label { display: flex; justify-content: space-between; font-size: var(--fs-row-meta); color: var(--text-dim); margin-bottom: 6px; }
+.print-blank-bar { height: 10px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 14%, var(--bg-card)); overflow: hidden; }
+.print-blank-bar > span { display: block; height: 100%; width: 0%; border-radius: 999px; background: var(--accent); transition: width 120ms linear; }

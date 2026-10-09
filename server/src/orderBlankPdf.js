@@ -151,6 +151,21 @@ function drawSignatures(c, data, y, fs) {
   center("ստորագրություն", 379 + textW("Ընդունեց՝", { size: fs }) + 4, 589.6, y + fs + 4, { size: 7 });
 }
 
+// Castrol, Lotos and Royal Super on one line: same height, centred on the same
+// horizontal axis, first flush with the left edge, last with the right edge and
+// the middle one equally spaced between them.
+const LOGO_ASPECT = { castrol: 558 / 148, lotos: 452 / 113, royal: 401 / 105 };
+function drawLogos(doc, cy, h) {
+  const names = ["castrol", "lotos", "royal"];
+  const widths = names.map((n) => h * LOGO_ASPECT[n]);
+  const gap = (COLS[6] - COLS[0] - widths.reduce((a, b) => a + b, 0)) / 2;
+  let x = COLS[0];
+  names.forEach((n, i) => {
+    doc.image(logo(n), x, cy - h / 2, { width: widths[i], height: h });
+    x += widths[i] + gap;
+  });
+}
+
 // ---- FULL: one order per A4 sheet (several sheets when it has many lines) -------------
 function drawFull(doc, data, firstPageDrawn) {
   const { items } = data;
@@ -164,10 +179,7 @@ function drawFull(doc, data, firstPageDrawn) {
     doc.save();
     doc.scale(K);
     const c = makeCanvas(doc);
-    // logos (Castrol left, Lotos middle, Royal Super right)
-    doc.image(logo("castrol"), 26, 8.25, { width: 182, height: 48.6 });
-    doc.image(logo("lotos"), 310.5, 45.8, { width: 127.5, height: 31.9 });
-    doc.image(logo("royal"), 452.25, 18.7, { width: 131.2, height: 34.2 });
+    drawLogos(doc, 43, 40);
     const v = { rule1: 81.5, rule2: 114, row1: 138, row2: 170, title: 213, fs: 10, lh: 13, cs: 9, tableTop: 249, headH: 28 };
     drawHeader(c, doc, data, v);
     const rowCount = Math.max(FULL_MIN_ROWS, chunk.length);
@@ -198,9 +210,7 @@ function drawHalf(doc, data, slotTop, slotH) {
   doc.translate(0, slotTop + (slotH - 396 * K) / 2);
   doc.scale(K);
   const c = makeCanvas(doc);
-  doc.image(logo("castrol"), 26, 3, { width: 120, height: 31.9 });
-  doc.image(logo("lotos"), 262, 20, { width: 86, height: 21.5 });
-  doc.image(logo("royal"), 478, 8, { width: 98, height: 25.6 });
+  drawLogos(doc, 24, 25);
   const v = { rule1: 46, rule2: 76, row1: 83, row2: 100, title: 119, fs: 8.5, lh: 11, cs: 8, tableTop: 139, headH: 22, rowH: 16.2 };
   drawHeader(c, doc, data, v);
   const bottom = drawTable(c, doc, data.items.slice(0, HALF_MAX_ROWS), 1, HALF_MAX_ROWS, v);
