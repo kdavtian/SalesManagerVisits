@@ -1,8 +1,9 @@
+import { FILTER_ICONS } from "./filterIcons.js";
 import { api } from "./api.js";
 import { APP_VERSION } from "./version.js";
 import { getLang, t } from "./i18n.js";
 
-const REGION_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 10c0 4.8-7 10-7 10S5 14.8 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2.25"/></svg>`;
+const REGION_ICON = FILTER_ICONS.region;
 const COUNTED_STATUSES = ["submitted", "confirmed", "packed"];
 
 let activeRegion = "";

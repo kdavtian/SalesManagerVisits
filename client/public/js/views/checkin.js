@@ -299,17 +299,33 @@ export async function renderCheckin(root, navigate, customerId) {
     const close = () => overlay.remove();
     overlay.addEventListener("click", (e) => e.target === overlay && close());
 
-    // "Available" and "Not available" are contradictory -- picking one
-    // clears the other, while every other tag stays freely combinable.
+    // "Available" and "Not available" are contradictory -- picking one clears
+    // the other. "Full range" implies "Available": ticking it ticks Available
+    // and locks Not available until Full range is unticked. Every other tag
+    // stays freely combinable.
+    const box = (value) => overlay.querySelector(`input[value="${value}"]`);
+    function syncExclusive(changed) {
+      const available = box("available");
+      const unavailable = box("unavailable");
+      const full = box("full_range");
+      if (!available || !unavailable) return;
+      if (changed === "unavailable" && unavailable.checked) {
+        available.checked = false;
+        if (full) full.checked = false;
+      } else if (changed === "available" && available.checked) {
+        unavailable.checked = false;
+      }
+      if (full?.checked) {
+        available.checked = true;
+        unavailable.checked = false;
+      }
+      unavailable.disabled = Boolean(full?.checked);
+      unavailable.closest("label")?.classList.toggle("is-disabled", unavailable.disabled);
+    }
     overlay.querySelectorAll('input[type="checkbox"]').forEach((input) => {
-      input.addEventListener("change", () => {
-        if (input.checked && (input.value === "available" || input.value === "unavailable")) {
-          const other = input.value === "available" ? "unavailable" : "available";
-          const otherInput = overlay.querySelector(`input[value="${other}"]`);
-          if (otherInput) otherInput.checked = false;
-        }
-      });
+      input.addEventListener("change", () => syncExclusive(input.value));
     });
+    syncExclusive();
 
     overlay.querySelector("#brand-sheet-done").addEventListener("click", () => {
       brandStatus[group.key] = [...overlay.querySelectorAll('input[type="checkbox"]:checked')].map((i) => i.value);

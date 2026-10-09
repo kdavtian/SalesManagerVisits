@@ -4,6 +4,7 @@ import { t } from "../i18n.js";
 import { buildCustomerTree, renderTriStateTree } from "../regionTree.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
+import { FILTER_ICONS } from "../filterIcons.js";
 import { nextVisitRowHtml, formatLastVisit } from "../visitSchedule.js";
 import { canViewTeamLocations, canEditDirectly, canPlanForOthers, canReassignCustomers, state } from "../state.js";
 import { getClusterPins, setClusterPins, getCompassMode, setCompassMode, getMapTileCacheEnabled } from "../mapPrefs.js";
@@ -129,12 +130,18 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
 }
 
 // Last pan/zoom of a plain browsing session, so leaving the Map tab and
-// coming back (bottom-nav remounts the view) lands where the user was.
+// coming back lands where the user was. Kept in localStorage (not
+// sessionStorage): an installed PWA is often killed by the OS in the
+// background, and the map used to forget its position every time that
+// happened. Older than MAP_VIEW_MAX_AGE_MS (a new working day, say) it is
+// ignored and the map starts on the user's own position instead.
 const MAP_VIEW_KEY = "fv_map_view";
+const MAP_VIEW_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 function loadMapView() {
   try {
-    const v = JSON.parse(sessionStorage.getItem(MAP_VIEW_KEY) || "null");
-    if (v && Array.isArray(v.center) && v.center.every(Number.isFinite) && Number.isFinite(v.zoom)) return v;
+    const v = JSON.parse(localStorage.getItem(MAP_VIEW_KEY) || sessionStorage.getItem(MAP_VIEW_KEY) || "null");
+    const fresh = !v?.at || Date.now() - v.at < MAP_VIEW_MAX_AGE_MS;
+    if (v && fresh && Array.isArray(v.center) && v.center.every(Number.isFinite) && Number.isFinite(v.zoom)) return v;
   } catch {
     // storage unavailable -- start fresh
   }
@@ -142,8 +149,11 @@ function loadMapView() {
 }
 function saveMapView(map) {
   try {
+    // A map measured at 0x0 (parked/hidden) reports a meaningless centre.
+    const size = map.getSize();
+    if (!size.x || !size.y) return;
     const c = map.getCenter();
-    sessionStorage.setItem(MAP_VIEW_KEY, JSON.stringify({ center: [c.lat, c.lng], zoom: map.getZoom() }));
+    localStorage.setItem(MAP_VIEW_KEY, JSON.stringify({ center: [c.lat, c.lng], zoom: map.getZoom(), at: Date.now() }));
   } catch {
     // ignore
   }
@@ -274,7 +284,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
                 <button class="map-filter-chip" data-filter="visited-7days" aria-pressed="false"><span class="map-filter-chip-icon">${icons.clock}</span>${t("filter_visited_7days")}</button>
                 <button class="map-filter-chip" data-filter="planned" aria-pressed="false"><span class="map-filter-chip-icon">${icons.send}</span>${t("filter_planned")}</button>
                 <button class="map-filter-chip" data-filter="nearby" aria-pressed="false"><span class="map-filter-chip-icon">${icons.locate}</span>${t("filter_nearby")}</button>
-                <button class="map-filter-chip" data-filter="brands" aria-pressed="false"><span class="map-filter-chip-icon">${icons.tag}</span>${t("filter_brands")}</button>
+                <button class="map-filter-chip" data-filter="brands" aria-pressed="false"><span class="map-filter-chip-icon">${FILTER_ICONS.brands}</span>${t("filter_brands")}</button>
               </div>
               <div class="map-filter-row" id="brand-picker-row" hidden></div>
               <div class="map-brand-legend" id="brand-legend" hidden>
@@ -961,7 +971,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     customerMarkerLayer.clearLayers();
     customerMarkerLayer = target;
     customerMarkerLayer.addTo(map);
-    applyFilter();
+    applyFilter({ refit: false });
   }
 
   // A plain solid teardrop with nothing inside read as "blank"/broken once
@@ -1032,7 +1042,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     try {
       const rows = await api.getTaskCustomerFlags();
       taskFlags = new Map(rows.map((r) => [r.customer_id, Boolean(r.due)]));
-      if (taskFlags.size) applyFilter();
+      if (taskFlags.size) applyFilter({ refit: false });
     } catch {
       /* optional overlay */
     }
@@ -1132,9 +1142,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           ${options
             .map(
               (o) => `
-            <button type="button" class="filter-sheet-option ${working.has(o.value) ? "filter-sheet-option-selected" : ""}" data-value="${escapeHtml(o.value)}">
+            <button type="button" role="menuitemcheckbox" aria-checked="${working.has(o.value)}" class="filter-sheet-option ${working.has(o.value) ? "filter-sheet-option-selected" : ""}" data-value="${escapeHtml(o.value)}">
+              <span class="filter-sheet-box" aria-hidden="true"></span>
               <span>${escapeHtml(o.label)}</span>
-              <span class="filter-sheet-check" ${working.has(o.value) ? "" : "hidden"}>${icons.checkCircle}</span>
             </button>
           `
             )
@@ -1155,7 +1165,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         if (working.has(value)) working.delete(value);
         else working.add(value);
         btn.classList.toggle("filter-sheet-option-selected", working.has(value));
-        btn.querySelector(".filter-sheet-check").hidden = !working.has(value);
+        btn.setAttribute("aria-checked", String(working.has(value)));
       });
     });
     overlay.querySelector("#map-multi-filter-clear").addEventListener("click", () => {
@@ -1189,7 +1199,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       await loadWithCache("customers-brand-summary", () => api.getBrandSummary(), (rows) => {
         brandSummary = indexBrandSummary(rows);
         renderIconFilterRow();
-        if (brandChipIds.size || searchQuery) applyFilter();
+        if (brandChipIds.size || searchQuery) applyFilter({ refit: false });
       });
     } catch {
       /* optional feature */
@@ -1203,13 +1213,13 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
     iconFilterRow.innerHTML = [
       channels.length
-        ? mapFilterIconButton({ key: "channel", icon: icons.route, label: t("filter_direction_title"), active: channelFilters.size > 0, count: channelFilters.size })
+        ? mapFilterIconButton({ key: "channel", icon: FILTER_ICONS.channel, label: t("filter_direction_title"), active: channelFilters.size > 0, count: channelFilters.size })
         : "",
       brandSummary.size
-        ? mapFilterIconButton({ key: "brandchips", icon: icons.tag, label: t("filter_brands_title"), active: brandChipIds.size > 0, count: brandChipIds.size })
+        ? mapFilterIconButton({ key: "brandchips", icon: FILTER_ICONS.brands, label: t("filter_brands_title"), active: brandChipIds.size > 0, count: brandChipIds.size })
         : "",
       categories.length
-        ? mapFilterIconButton({ key: "category", icon: icons.store, label: t("category"), active: categoryFilters.size > 0, count: categoryFilters.size })
+        ? mapFilterIconButton({ key: "category", icon: FILTER_ICONS.category, label: t("category"), active: categoryFilters.size > 0, count: categoryFilters.size })
         : "",
     ]
       .filter(Boolean)
@@ -1304,6 +1314,10 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // zooms out to the whole territory and makes people zoom back in
   // manually just to see what's around them.
   let initialViewApplied = Boolean(restoredView);
+  // Set on the first finger/mouse down on the map canvas: from then on no
+  // automatic recentre (late GPS fix, fallback fit) may move the camera.
+  let userTouchedMap = false;
+  mapEl.addEventListener("pointerdown", () => (userTouchedMap = true), { once: true, passive: true });
   // While true, applyFilter leaves the restored pan/zoom alone; any tap or
   // keystroke in the toolbar/filters (outside the map canvas) lets it re-fit.
   let lastPopupCustomerId = null; // pin whose More/Check in was tapped
@@ -1465,7 +1479,12 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     }
   });
 
-  function applyFilter() {
+  // refit: whether this pass may move the camera to fit the visible pins.
+  // True for something the USER just did (a filter, search, toggle); false
+  // for a background repaint (live data arriving after the cached list, the
+  // brand summary or task flags loading) -- those used to re-run fitBounds
+  // and yank the map to a zoomed-out view a moment after it had settled.
+  function applyFilter({ refit = true } = {}) {
     markerLayer.clearLayers();
     customerMarkerLayer.clearLayers();
     const bounds = [];
@@ -1577,10 +1596,13 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         getCurrentPosition({ timeout: 6000, goodAccuracy: 150, refineMs: 1500 })
           .then((pos) => {
             myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-            map.setView([myLocation.lat, myLocation.lng], 15);
+            // The fix can take several seconds; if the user has already
+            // panned/zoomed by then, never pull the map out from under them.
+            if (!userTouchedMap) map.setView([myLocation.lat, myLocation.lng], 15);
             refreshNearestCustomerBar();
           })
           .catch(() => {
+            if (userTouchedMap) return;
             try {
               map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
             } catch {
@@ -1589,6 +1611,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           });
         return;
       }
+      if (!refit) return;
       try {
         map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
       } catch {
@@ -2077,7 +2100,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
     resolveCustomersReady();
     renderIconFilterRow();
-    applyFilter();
+    applyFilter({ refit: false });
     refreshNearestCustomerBar();
     warmVisiblePopups();
 
@@ -2115,7 +2138,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     if (!skipMarkers && !bounds.length && navigator.geolocation && !emptyBoundsRecenterAttempted) {
       emptyBoundsRecenterAttempted = true;
       getCurrentPosition({ timeout: 10000, goodAccuracy: 500 })
-        .then((pos) => map.setView([pos.coords.latitude, pos.coords.longitude], 13))
+        .then((pos) => !userTouchedMap && map.setView([pos.coords.latitude, pos.coords.longitude], 13))
         .catch(() => {});
     }
   }

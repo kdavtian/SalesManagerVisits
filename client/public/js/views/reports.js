@@ -928,96 +928,122 @@ async function renderCustomerDebtReport(root, navigate) {
     });
   });
 
+  // The page frame (stat cards, bucket list, customer list) is built once;
+  // changing a filter only swaps the numbers and the two lists inside it, so
+  // nothing blinks or collapses to a spinner and the scroll position stays.
+  let scaffolded = false;
+  let loadSeq = 0;
+  function scaffold() {
+    body.innerHTML = `
+      <div id="debt-sync-badge"></div>
+      <div class="stat-grid">
+        <div class="stat-card">
+          <span class="stat-value report-debt-total-value" id="report-debt-total-value"></span>
+          <span class="stat-label">${t("report_customer_debt_total_debt")}</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value report-debt-total-value" id="report-debt-customers-value"></span>
+          <span class="stat-label">${t("report_customer_debt_customers_with_debt")}</span>
+        </div>
+      </div>
+      <div id="debt-adjusted-note"></div>
+      <h2 class="section-title">${t("report_customer_debt_by_bucket")}</h2>
+      <div class="card-list" id="debt-bucket-list"></div>
+      <h2 class="section-title" id="debt-customers-title"></h2>
+      <div class="card-list" id="debt-customer-list"></div>
+    `;
+    // Delegated once: the bucket rows are re-rendered on every load.
+    // Tapping an aging row filters the customer list (and totals) to that
+    // bucket; tap again to clear. Several buckets can be combined.
+    body.querySelector("#debt-bucket-list").addEventListener("click", (e) => {
+      const btn = e.target.closest(".report-bucket-btn");
+      if (!btn) return;
+      const bucket = btn.dataset.bucket;
+      if (selectedBuckets.has(bucket)) selectedBuckets.delete(bucket);
+      else selectedBuckets.add(bucket);
+      // Instant feedback on the row itself, before the numbers arrive.
+      btn.classList.toggle("report-bucket-active", selectedBuckets.has(bucket));
+      btn.setAttribute("aria-pressed", String(selectedBuckets.has(bucket)));
+      load();
+    });
+    scaffolded = true;
+  }
+
+  function paintDebt({ customers, by_bucket, totals, sync }) {
+    body.querySelector("#debt-sync-badge").innerHTML = syncBadgeHtml(sync);
+    body.querySelector("#report-debt-total-value").innerHTML = amdWithUnitHtml(Number(totals.total_debt_amd));
+    body.querySelector("#report-debt-customers-value").textContent = totals.customers_with_debt;
+    // Only meaningful in live mode -- totals.total_debt_amd_erp is always the
+    // raw live erp.debt_amd sum, which as-of-date mode has no reason to match
+    // (it's comparing two different things, not "collections since sync"),
+    // so this note would be misleading rather than explanatory there.
+    body.querySelector("#debt-adjusted-note").innerHTML =
+      !asOfInput.value && Number(totals.total_debt_amd_erp) !== Number(totals.total_debt_amd)
+        ? `<p class="muted" style="margin: 0 4px 12px;">${t("report_customer_debt_adjusted_note")
+            .replace("{erp}", formatAmd(Number(totals.total_debt_amd_erp)))
+            .replace("{adjusted}", formatAmd(Number(totals.total_debt_amd)))}</p>`
+        : "";
+    body.querySelector("#debt-bucket-list").innerHTML = by_bucket.length
+      ? by_bucket
+          .map(
+            (b) => `
+        <button type="button" class="card report-row report-bucket-btn ${selectedBuckets.has(b.aging_bucket) ? "report-bucket-active" : ""}" data-bucket="${escapeHtml(b.aging_bucket)}" aria-pressed="${selectedBuckets.has(b.aging_bucket)}">
+          <span>${escapeHtml(agingBucketLabel(b.aging_bucket))}</span>
+          <strong class="report-row-amount">${formatAmd(Number(b.total_debt_amd))} <span class="muted">(${b.customer_count})</span></strong>
+        </button>`
+          )
+          .join("")
+      : `<p class="empty-state">${t("no_data")}</p>`;
+    body.querySelector("#debt-customers-title").textContent = `${t("customers")} (${customers.length})`;
+    body.querySelector("#debt-customer-list").innerHTML = customers.length
+      ? customers
+          .map((c) => {
+            const collected = Number(c.collected_since_sync_amd);
+            return `
+        <div class="card report-row-multiline">
+          <div class="report-debt-customer-top">
+            <strong class="report-debt-customer-name">${escapeHtml(c.customer_name)}</strong>
+            <strong class="report-row-amount">${formatAmd(Number(c.estimated_debt_amd))}</strong>
+          </div>
+          <span class="muted">${t("customer_id_label")}: ${escapeHtml(c.erp_customer_id || "—")} · ${escapeHtml(channelDisplayLabel(c.assigned_sales_rep))}</span>
+          <span class="muted">${t("debt_balances_last_payment")}: ${c.last_payment_date ? escapeHtml(formatDateDMY(c.last_payment_date)) : t("report_customer_debt_no_payment")}</span>${
+              collected > 0
+                ? `
+          <span class="muted sync-adjusted-note">${formatAmd(Number(c.debt_amd))} ${t("report_customer_debt_per_sync")} − ${formatAmd(collected)} ${t("report_customer_debt_collected_since")}</span>`
+                : ""
+            }
+        </div>`;
+          })
+          .join("")
+      : `<p class="empty-state">${t("no_data")}</p>`;
+    fitReportStatValue(body.querySelector("#report-debt-total-value"));
+  }
+
   async function load() {
-    body.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+    const seq = ++loadSeq;
+    if (scaffolded) body.classList.add("report-body-refreshing");
+    else body.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     const data = new FormData(form);
     const params = Object.fromEntries([...data.entries()].filter(([, v]) => v));
     if (selectedChannels.size) params.sales_channel = [...selectedChannels].join(",");
     if (selectedBuckets.size) params.aging = [...selectedBuckets].join(",");
     try {
-      const { customers, by_bucket, totals, sync } = await api.getCustomerDebtReport(params);
-      body.innerHTML = `
-        ${syncBadgeHtml(sync)}
-        <div class="stat-grid">
-          <div class="stat-card">
-            <span class="stat-value report-debt-total-value" id="report-debt-total-value">${amdWithUnitHtml(Number(totals.total_debt_amd))}</span>
-            <span class="stat-label">${t("report_customer_debt_total_debt")}</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-value report-debt-total-value">${totals.customers_with_debt}</span>
-            <span class="stat-label">${t("report_customer_debt_customers_with_debt")}</span>
-          </div>
-        </div>
-        ${
-          // Only meaningful in live mode -- totals.total_debt_amd_erp is
-          // always the raw live erp.debt_amd sum, which as-of-date mode
-          // has no reason to match (it's comparing two different things,
-          // not "collections since sync"), so this note would be
-          // misleading rather than explanatory there.
-          !asOfInput.value && Number(totals.total_debt_amd_erp) !== Number(totals.total_debt_amd)
-            ? `<p class="muted" style="margin: 0 4px 12px;">${t("report_customer_debt_adjusted_note")
-                .replace("{erp}", formatAmd(Number(totals.total_debt_amd_erp)))
-                .replace("{adjusted}", formatAmd(Number(totals.total_debt_amd)))}</p>`
-            : ""
-        }
-
-        <h2 class="section-title">${t("report_customer_debt_by_bucket")}</h2>
-        <div class="card-list">
-          ${
-            by_bucket.length
-              ? by_bucket
-                  .map(
-                    (b) => `
-              <button type="button" class="card report-row report-bucket-btn ${selectedBuckets.has(b.aging_bucket) ? "report-bucket-active" : ""}" data-bucket="${escapeHtml(b.aging_bucket)}" aria-pressed="${selectedBuckets.has(b.aging_bucket)}">
-                <span>${escapeHtml(agingBucketLabel(b.aging_bucket))}</span>
-                <strong class="report-row-amount">${formatAmd(Number(b.total_debt_amd))} <span class="muted">(${b.customer_count})</span></strong>
-              </button>`
-                  )
-                  .join("")
-              : `<p class="empty-state">${t("no_data")}</p>`
-          }
-        </div>
-
-        <h2 class="section-title">${t("customers")} (${customers.length})</h2>
-        <div class="card-list">
-          ${
-            customers.length
-              ? customers
-                  .map((c) => {
-                    const collected = Number(c.collected_since_sync_amd);
-                    return `
-              <div class="card report-row-multiline">
-                <div class="report-debt-customer-top">
-                  <strong class="report-debt-customer-name">${escapeHtml(c.customer_name)}</strong>
-                  <strong class="report-row-amount">${formatAmd(Number(c.estimated_debt_amd))}</strong>
-                </div>
-                <span class="muted">${t("customer_id_label")}: ${escapeHtml(c.erp_customer_id || "—")} · ${escapeHtml(channelDisplayLabel(c.assigned_sales_rep))}</span>
-                <span class="muted">${t("debt_balances_last_payment")}: ${c.last_payment_date ? escapeHtml(formatDateDMY(c.last_payment_date)) : t("report_customer_debt_no_payment")}</span>${
-                      collected > 0
-                        ? `
-                <span class="muted sync-adjusted-note">${formatAmd(Number(c.debt_amd))} ${t("report_customer_debt_per_sync")} − ${formatAmd(collected)} ${t("report_customer_debt_collected_since")}</span>`
-                        : ""
-                    }
-              </div>`;
-                  })
-                  .join("")
-              : `<p class="empty-state">${t("no_data")}</p>`
-          }
-        </div>
-      `;
-      fitReportStatValue(body.querySelector("#report-debt-total-value"));
-      // Tapping an aging row filters the customer list (and totals) to that
-      // bucket; tap again to clear. Several buckets can be combined.
-      body.querySelectorAll(".report-bucket-btn").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const bucket = btn.dataset.bucket;
-          if (selectedBuckets.has(bucket)) selectedBuckets.delete(bucket);
-          else selectedBuckets.add(bucket);
-          load();
-        });
-      });
+      const result = await api.getCustomerDebtReport(params);
+      if (seq !== loadSeq) return; // a newer filter change is already in flight
+      if (!scaffolded) scaffold();
+      body.querySelector(":scope > .form-error")?.remove();
+      paintDebt(result);
+      body.classList.remove("report-body-refreshing");
     } catch (err) {
-      body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+      if (seq !== loadSeq) return;
+      body.classList.remove("report-body-refreshing");
+      if (scaffolded) {
+        // Keep the page; show the error above it.
+        body.querySelector(".form-error")?.remove();
+        body.insertAdjacentHTML("afterbegin", `<p class="form-error">${escapeHtml(err.message)}</p>`);
+      } else {
+        body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+      }
     }
   }
 

@@ -238,7 +238,7 @@ function groupNodeHtml(node, countUnitLabel, nested) {
       <div class="route-plan-tree-row" data-toggle="${escapeHtml(node.key)}" role="button" tabindex="0" aria-expanded="false">
         <input type="checkbox" class="route-plan-tree-check" data-group-key="${escapeHtml(node.key)}" />
         <span class="route-plan-tree-name">${escapeHtml(node.name)}</span>
-        <span class="route-plan-tree-count">${node.customerCount} ${countUnitLabel}</span>
+        <span class="route-plan-tree-count">${node.customerCount}<span class="route-plan-tree-unit"> ${countUnitLabel}</span></span>
         <span class="route-plan-tree-chevron" aria-hidden="true">${icons.chevronDown}</span>
       </div>
       <div class="route-plan-tree-children" data-children-for="${escapeHtml(node.key)}">

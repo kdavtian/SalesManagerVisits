@@ -1,6 +1,9 @@
-const MANAGER_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.2"/><path d="M3.5 20v-1.2A5.5 5.5 0 0 1 9 13.3h.1a5.5 5.5 0 0 1 5.5 5.5V20"/><path d="M15.3 14c.55-.25 1.15-.4 1.8-.4A4.4 4.4 0 0 1 21.5 18v2"/></svg>`;
-const CHANNEL_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21V5"/><path d="M8 5h8"/><path d="M7 9H3l2.4-2.4"/><path d="M3 9l2.4 2.4"/><path d="M17 14h4l-2.4-2.4"/><path d="M21 14l-2.4 2.4"/></svg>`;
-const CATEGORY_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1.4"/><rect x="14" y="4" width="6" height="6" rx="1.4"/><rect x="4" y="14" width="6" height="6" rx="1.4"/><rect x="14" y="14" width="6" height="6" rx="1.4"/></svg>`;
+import { FILTER_ICONS } from "./filterIcons.js";
+
+const MANAGER_ICON = FILTER_ICONS.manager;
+const CHANNEL_ICON = FILTER_ICONS.channel;
+const CATEGORY_ICON = FILTER_ICONS.category;
+const BRANDS_ICON = FILTER_ICONS.brands;
 
 let scheduled = false;
 let rowObserver = null;
@@ -9,6 +12,7 @@ let observedRow = null;
 function iconFor(key) {
   if (key === "channel") return CHANNEL_ICON;
   if (key === "category") return CATEGORY_ICON;
+  if (key === "brandchips") return BRANDS_ICON;
   return MANAGER_ICON;
 }
 
@@ -34,6 +38,14 @@ function compactNativeFilterSheet(button) {
     const left = Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12));
     const top = Math.min(rect.bottom + 8, window.innerHeight - 300);
     overlay.dataset.mapCompactPopover = "true";
+    // The tapped button reads as "open" while its popover is showing, like
+    // the manager and status buttons already do.
+    button.classList.add("activity-search-filter-btn-open");
+    new MutationObserver((_, observer) => {
+      if (overlay.isConnected) return;
+      button.classList.remove("activity-search-filter-btn-open");
+      observer.disconnect();
+    }).observe(document.body, { childList: true });
     overlay.classList.add("map-dimension-popover-overlay");
     sheet.classList.add("map-dimension-popover");
     sheet.style.setProperty("--map-popover-left", `${left}px`);

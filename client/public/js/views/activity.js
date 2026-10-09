@@ -4,6 +4,7 @@ import { t, getLang } from "../i18n.js";
 import { seesAllActivity } from "../state.js";
 import { openVisitDetailSheet } from "../visitDetail.js";
 import { loadWithCache } from "../listCache.js";
+import { FILTER_ICONS } from "../filterIcons.js";
 
 const OUTCOMES = [
   "order_placed",
@@ -36,11 +37,7 @@ const STATUS_ICON = {
   rejected: `<svg viewBox="0 0 24 24" width="20" height="20"><path d="M15.312 2a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586l-4.688-4.688A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2z" fill="currentColor"/><path d="M12 8v4" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="16" r="1.1" fill="#fff"/></svg>`,
 };
 
-const ACTIVITY_FILTER_ICONS = {
-  status: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.75"/><path d="m7.9 12.1 2.6 2.7 5.8-6"/></svg>`,
-  outcome: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3.75" width="14" height="16.5" rx="2.5"/><path d="M9 3.75v-.5A1.25 1.25 0 0 1 10.25 2h3.5A1.25 1.25 0 0 1 15 3.25v.5"/><path d="m8.5 11.7 1.8 1.8 4.7-5"/><path d="M8.5 17h7"/></svg>`,
-  sort: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M4 7l3-3 3 3M17 20V4M14 17l3 3 3-3"/></svg>`,
-};
+const ACTIVITY_FILTER_ICONS = { status: FILTER_ICONS.status, outcome: FILTER_ICONS.outcome, sort: FILTER_ICONS.sort };
 
 function checkinOutcomes(c) {
   if (c.outcomes?.length) return c.outcomes;

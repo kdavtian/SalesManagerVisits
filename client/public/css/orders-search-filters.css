@@ -49,9 +49,32 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 21px;
-  color: #536174;
+  color: var(--tile, #536174);
 }
 .order-status-filter-row .chip-active .order-filter-status-icon { color: currentColor; }
+
+/* One colour per workflow stage, shared by the filter chips and the row tiles
+   so a stage looks the same everywhere: draft amber, submitted blue, confirmed
+   teal, packed violet, delivered green. */
+.order-status-draft, .order-tile-draft { --tile: var(--warning, #d98a00); }
+.order-status-submitted, .order-tile-submitted { --tile: #2f6fed; }
+.order-status-confirmed, .order-tile-confirmed { --tile: #0f9d8a; }
+.order-status-packed_stock_out, .order-tile-packed_stock_out { --tile: #7a5af8; }
+.order-status-delivered, .order-tile-delivered { --tile: var(--success, #1f9d55); }
+html[data-theme="dark"] .order-status-submitted, html[data-theme="dark"] .order-tile-submitted { --tile: #6f9bff; }
+html[data-theme="dark"] .order-status-confirmed, html[data-theme="dark"] .order-tile-confirmed { --tile: #3cc9b4; }
+html[data-theme="dark"] .order-status-packed_stock_out, html[data-theme="dark"] .order-tile-packed_stock_out { --tile: #a592ff; }
+
+/* Row tile: soft stage-coloured square with the stage glyph in the same colour. */
+.list-row-icon.order-tile {
+  color: var(--tile);
+  background: color-mix(in srgb, var(--tile) 14%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--tile) 26%, transparent);
+}
+.list-row-icon.order-tile .order-status-svg {
+  width: 24px;
+  height: 24px;
+}
 .order-status-svg { display: block; width: 100%; height: 100%; }
 
 @media (max-width: 380px) {
