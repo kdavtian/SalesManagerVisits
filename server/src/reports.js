@@ -7,6 +7,15 @@ import { pool } from "./db/pool.js";
 // since a plain sales manager has no reason to see org-wide reports on
 // their own customers unless admin explicitly grants it.
 export const REPORTS = [
+  // Kilometres each rep really drove between the day's check-ins (home legs for
+  // days outside Yerevan) and the fuel money that distance is worth -- see
+  // fuelReport.js / routes/fuel.js.
+  {
+    key: "fuel_allowance",
+    nameKey: "report_fuel_allowance_name",
+    descriptionKey: "report_fuel_allowance_description",
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"],
+  },
   {
     key: "new_customers",
     nameKey: "report_new_customers_name",
@@ -132,6 +141,7 @@ const REPORT_DISPLAY_ORDER = [
   "orders_pipeline",
   "sales_budget",
   "checkins",
+  "fuel_allowance",
   "new_customers",
   "brand_volume",
   "brand_availability",

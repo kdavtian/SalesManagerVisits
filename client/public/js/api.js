@@ -179,6 +179,12 @@ export const api = {
   closeOutMonth: (month) => json("/dashboard/points/close-out", "POST", { month }),
   listMonthlyCloseouts: (month) => request(`/dashboard/points/closeouts${month ? `?month=${month}` : ""}`),
 
+  fuelReport: (month) => request(`/fuel/report?month=${month}`),
+  fuelSettings: (month) => request(`/fuel/settings?month=${month}`),
+  setFuelUser: (id, data) => json(`/fuel/settings/users/${id}`, "PUT", data),
+  setFuelPrice: (month, price) => json(`/fuel/prices/${month}`, "PUT", { price_amd_per_l: price }),
+  setFuelOverride: (data) => json("/fuel/overrides", "PUT", data),
+
   listUsers: () => request("/users"),
   listPlannableUsers: () => request("/users/plannable"),
   listAssignableManagers: () => request("/users/assignable-managers"),
