@@ -285,6 +285,20 @@ export const api = {
     }
     return res.blob();
   },
+  // Print-ready order blanks (PDF) for one or more orders; variant null = automatic.
+  buildOrderBlanks: async (orderIds, variant) => {
+    const res = await fetch("/api/orders/blank-pdf", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", "X-App-Version": APP_VERSION, ...(getCsrfToken() ? { "X-CSRF-Token": getCsrfToken() } : {}) },
+      body: JSON.stringify({ order_ids: orderIds, variant: variant || undefined }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.error || t("pdf_failed"));
+    }
+    return res.blob();
+  },
   // Excel file of a table the client already holds (Sales / Payments export).
   buildXlsx: async (payload) => {
     const res = await fetch("/api/table-export/xlsx", {

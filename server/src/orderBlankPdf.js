@@ -64,8 +64,10 @@ function makeCanvas(doc) {
 }
 
 function dateParts(order) {
-  const d = new Date(order.created_at ?? Date.now());
-  return { dd: String(d.getDate()).padStart(2, "0"), mm: String(d.getMonth() + 1).padStart(2, "0"), yyyy: d.getFullYear() };
+  // The order's Yerevan calendar date (the server runs in UTC).
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Yerevan", day: "2-digit", month: "2-digit", year: "numeric" }).formatToParts(new Date(order.created_at ?? Date.now()));
+  const get = (t) => parts.find((x) => x.type === t).value;
+  return { dd: get("day"), mm: get("month"), yyyy: get("year") };
 }
 
 function totals({ order, items, previousDebtAmd = null, paymentAmd = null }) {
