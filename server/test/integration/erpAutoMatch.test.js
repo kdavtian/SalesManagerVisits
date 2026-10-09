@@ -9,6 +9,9 @@ import { startTestServer, stopTestServer, cleanupAll, createCustomer, createUser
 import { pool } from "../../src/db/pool.js";
 import { autoDeliverOrdersFromErp, autoApprovePaymentsFromErp } from "../../src/erpAutoMatch.js";
 
+// The matchers work on Yerevan calendar dates; the database's CURRENT_DATE is
+// UTC, which differs from 20:00 UTC to midnight -- use Yerevan's today.
+const YEREVAN_TODAY = "(now() AT TIME ZONE 'Asia/Yerevan')::date";
 const stamp = Date.now();
 const erpIds = [];
 test.before(startTestServer);
@@ -72,7 +75,7 @@ test("order matching an ERP order (customer, date within a day, total) becomes D
     [b.erp_customer_id, `E${stamp}B`, 70000],
   ];
   for (const [cust, oid, rev] of lines) {
-    await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, revenue_amd) VALUES ($1, $2, CURRENT_DATE, $3)", [cust, oid, rev]);
+    await pool.query(`INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, revenue_amd) VALUES ($1, $2, ${YEREVAN_TODAY}, $3)`, [cust, oid, rev]);
   }
   const delivered = await run(autoDeliverOrdersFromErp);
   assert.ok(delivered.includes(orderA));
@@ -95,8 +98,8 @@ test("pending payment matching an ERP payment (customer, exact amount, date with
   const twin = await addPayment(c, rep.id, 150000, 2); // same amount, only one ERP row -> only one approved
   const farAway = await addPayment(c, rep.id, 80000, 9); // ERP row is 9 days away
   const noErp = await addPayment(c, rep.id, 99999, 0);
-  await pool.query("INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, CURRENT_DATE - 1, 150000)", [c.erp_customer_id]);
-  await pool.query("INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, CURRENT_DATE, 80000)", [c.erp_customer_id]);
+  await pool.query(`INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, ${YEREVAN_TODAY} - 1, 150000)`, [c.erp_customer_id]);
+  await pool.query(`INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, ${YEREVAN_TODAY}, 80000)`, [c.erp_customer_id]);
   const approved = await run(autoApprovePaymentsFromErp);
   assert.deepEqual(approved, [match]); // closest date wins, twin stays pending
   const row = (await pool.query("SELECT status, approved_from_erp, approved_by, erp_match_key FROM payments WHERE id = $1", [match])).rows[0];

@@ -103,7 +103,7 @@ export async function fetchRoadLegsKm(points) {
   for (const base of ROUTER_URLS()) {
     try {
       const res = await fetch(`${base.replace(/\/$/, "")}/route/v1/driving/${coords}?overview=false&steps=false`, {
-        signal: AbortSignal.timeout(7000),
+        signal: AbortSignal.timeout(4000),
         headers: { "User-Agent": "KAD-Motors-FieldVisits/1.0 (fuel allowance)" },
       });
       if (!res.ok) continue;
@@ -116,6 +116,87 @@ export async function fetchRoadLegsKm(points) {
     }
   }
   return null;
+}
+
+// ---- background road-distance fetching --------------------------------------
+// The report never waits on the routing engine for long: missing days are
+// fetched in the background (a few at a time, remembered in fuel_route_cache by
+// the caller) and the report answers at once with estimates for them. A route
+// that no engine could answer is not retried for 10 minutes, and after a streak
+// of failures the engine is left alone for a minute (so a dead engine cannot
+// pile up timeouts behind every page load).
+const CONCURRENCY = 3;
+const FAIL_TTL_MS = 10 * 60 * 1000;
+let active = 0;
+const waiting = [];
+const inflight = new Map();
+const failedAt = new Map();
+let failStreak = 0;
+let pausedUntil = 0;
+
+function acquire() {
+  return new Promise((resolve) => {
+    if (active < CONCURRENCY) {
+      active++;
+      resolve();
+    } else waiting.push(resolve);
+  });
+}
+function release() {
+  const next = waiting.shift();
+  if (next) next();
+  else active--;
+}
+
+export function resetRouteState() {
+  inflight.clear();
+  failedAt.clear();
+  failStreak = 0;
+  pausedUntil = 0;
+}
+
+// Forget recent failures so the next report asks the routing engine again.
+export function retryFailedRoutes() {
+  failedAt.clear();
+  failStreak = 0;
+  pausedUntil = 0;
+}
+
+// "pending" = being fetched now, "failed" = no engine answered recently, "idle" = not asked yet.
+export function routeState(key) {
+  if (inflight.has(key)) return "pending";
+  const f = failedAt.get(key);
+  if ((f && Date.now() - f < FAIL_TTL_MS) || Date.now() < pausedUntil) return "failed";
+  return "idle";
+}
+
+// Starts (or joins) the fetch of one route; resolves to the leg km, or null.
+// onSuccess({ km, source }) runs before it resolves (the caller caches it).
+export function requestRoute(key, points, onSuccess) {
+  if (inflight.has(key)) return inflight.get(key);
+  if (routeState(key) === "failed") return Promise.resolve(null);
+  const promise = (async () => {
+    await acquire();
+    try {
+      const res = await fetchRoadLegsKm(points);
+      if (res) {
+        failStreak = 0;
+        await onSuccess?.(res);
+        return res.km;
+      }
+      failedAt.set(key, Date.now());
+      if (++failStreak >= 6) pausedUntil = Date.now() + 60 * 1000;
+      return null;
+    } catch {
+      failedAt.set(key, Date.now());
+      return null;
+    } finally {
+      release();
+      inflight.delete(key);
+    }
+  })();
+  inflight.set(key, promise);
+  return promise;
 }
 
 // Fuel for a distance: litres = km x L/100km / 100, cost = litres x price.
