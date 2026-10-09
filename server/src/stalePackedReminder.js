@@ -35,17 +35,29 @@ export async function checkStalePackedOrders() {
   const toNotify = staleOrders.filter((o) => !alreadyNotified.has(o.id));
   if (!toNotify.length) return;
 
+  // One notification for the whole batch ("5 packed orders are waiting to be
+  // delivered"), not one per order; it counts every order that is stale now.
   const { rows: recipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [DRIVER_NOTIFY_ROLES]);
-  for (const order of toNotify) {
-    alreadyNotified.add(order.id);
-    for (const recipient of recipients) {
-      await notifyUser(recipient.id, "order_stale_packed", {
-        title: "Փաթեթավորված պատվերը սպասում է",
-        body: `${order.customer_name}-ի պատվերը (${order.order_code || order.id}) փաթեթավորված է ${STALE_HOURS} ժամից ավելի, բայց դեռ չի առաքվել։`,
-        url: "/#/delivery",
-      });
-    }
+  const message = buildStalePackedMessage(staleOrders);
+  for (const order of staleOrders) alreadyNotified.add(order.id);
+  for (const recipient of recipients) {
+    await notifyUser(recipient.id, "order_stale_packed", { ...message, url: "/#/delivery" });
   }
+}
+
+// Text of the single consolidated reminder: the customer for one order, a count for several.
+export function buildStalePackedMessage(staleOrders) {
+  if (staleOrders.length === 1) {
+    const o = staleOrders[0];
+    return {
+      title: "Փաթեթավորված պատվերը սպասում է",
+      body: `${o.customer_name}-ի պատվերը (${o.order_code || o.id}) փաթեթավորված է ${STALE_HOURS} ժամից ավելի, բայց դեռ չի առաքվել։`,
+    };
+  }
+  return {
+    title: "Փաթեթավորված պատվերներ են սպասում",
+    body: `${staleOrders.length} փաթեթավորված պատվեր սպասում է առաքման։`,
+  };
 }
 
 export function startStalePackedReminder() {
