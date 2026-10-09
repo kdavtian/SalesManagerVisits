@@ -7448,6 +7448,16 @@ button.list-row-icon {
   cursor: pointer;
   vertical-align: middle;
 }
+.settings-inline-hint-icon {
+  position: relative;
+}
+/* Invisible 44px hit area so a finger lands on the "!" and not on the whole
+   row (refresh / user-guide rows are full-width buttons). */
+.settings-inline-hint-icon::after {
+  content: "";
+  position: absolute;
+  inset: -14px;
+}
 .settings-inline-hint-icon[aria-expanded="true"] {
   border-color: var(--accent);
   color: var(--accent);
@@ -7458,6 +7468,9 @@ button.list-row-icon {
    instead of as a separate section further down the page. */
 .settings-expandable-row {
   padding-right: 8px;
+  /* The expanded list draws its own top hairline; keeping this row's
+     bottom border too left a stray line under the row while collapsed. */
+  border-bottom: none;
 }
 .settings-expand-btn {
   background: none;
