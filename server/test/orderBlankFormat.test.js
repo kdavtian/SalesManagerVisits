@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatSize, formatPhone, cleanCustomerName } from "../src/orderBlankPdf.js";
+import { formatSize, formatPhone, cleanCustomerName, lineLiters, formatLiters } from "../src/orderBlankPdf.js";
 
 test("package size always carries the litre mark", () => {
   assert.equal(formatSize("4"), "4 L");
@@ -23,4 +23,14 @@ test("the ERP id is dropped from the printed customer name", () => {
   assert.equal(cleanCustomerName("10324 - «Արտակ Ավտո» ՍՊԸ"), "«Արտակ Ավտո» ՍՊԸ");
   assert.equal(cleanCustomerName("Getq / Ara"), "Getq / Ara");
   assert.equal(cleanCustomerName("5 Star Garage"), "5 Star Garage");
+});
+
+test("total litres = quantity x package size, non-litre units add nothing", () => {
+  assert.equal(lineLiters({ size_l: "4L", quantity: 6 }), 24);
+  assert.equal(lineLiters({ size_l: "208", quantity: 1 }), 208);
+  assert.equal(lineLiters({ size_l: "0,5", quantity: 4 }), 2);
+  assert.equal(lineLiters({ size_l: "pcs", quantity: 9 }), 0);
+  assert.equal(formatLiters(34), "34 L");
+  assert.equal(formatLiters(12.25), "12.3 L");
+  assert.equal(formatLiters(1208), "1,208 L");
 });

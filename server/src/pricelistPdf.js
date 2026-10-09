@@ -11,6 +11,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import PDFDocument from "pdfkit";
 import { compareProducts, parseLiters, BRAND_PRIORITY } from "../../client/public/js/productSort.js";
+import { formatPhone } from "./phoneFormat.js";
 
 const ASSET_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "assets");
 
@@ -203,8 +204,8 @@ export function buildPricelistPdf({ products, columns, validUntil, includePhotos
     else right.push({ text: "KAD Motors", bold: true });
     if (contact.email) right.push({ text: `Էլ. հասցե՝ ${contact.email}` });
     const phones = [];
-    if (contact.mode === "rep" && contact.phone) phones.push(`Հեռ.՝ ${contact.phone}`);
-    phones.push(`Գրասենյակ՝ ${contact.officePhone || OFFICE_PHONE}`);
+    if (contact.mode === "rep" && contact.phone) phones.push(`Հեռ.՝ ${formatPhone(contact.phone)}`);
+    phones.push(`Գրասենյակ՝ ${formatPhone(contact.officePhone || OFFICE_PHONE)}`);
     right.push({ text: phones.join(" | ") });
     const rightWidth = Math.max(...right.map((l) => doc.font(l.bold ? "B" : "R").fontSize(l.bold ? 10 : 9).widthOfString(l.text)));
     const leftMax = Math.max(120, w - rightWidth - 40);

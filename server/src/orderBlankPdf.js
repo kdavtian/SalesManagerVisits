@@ -15,6 +15,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import PDFDocument from "pdfkit";
+import { formatPhone } from "./phoneFormat.js";
+import { OFFICE_PHONE } from "./pricelistPdf.js";
+
+export { formatPhone };
 
 const ASSET_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "assets");
 const logo = (name) => fs.readFileSync(path.join(ASSET_DIR, "logos", `ob-${name}.png`));
@@ -51,22 +55,20 @@ export function formatSize(size) {
   return m ? `${m[1].replace(",", ".")} L` : raw;
 }
 
+// Litres of one line: quantity x package size, 0 for a non-litre unit.
+export function lineLiters(item) {
+  const m = String(item.size_l ?? "").trim().match(/^(\d+(?:[.,]\d+)?)\s*(?:l|L|լ|Լ)?$/);
+  return m ? Number(m[1].replace(",", ".")) * Number(item.quantity) : 0;
+}
+
+export function formatLiters(total) {
+  return `${Number(total.toFixed(1)).toLocaleString("en-US")} L`;
+}
+
 // Customer name as printed: the ERP id is already in the "Կոդ" field, so a
 // leading "10324 " / "10324 - " is dropped.
 export function cleanCustomerName(name) {
   return String(name ?? "").replace(/^\s*\d{4,6}\s*[-–—.:/]?\s*/, "").trim();
-}
-
-// "+374 33 007 059" for any Armenian number typed as 033007059, 33007059,
-// +37433007059 or +(374) 33 007 059; anything else is printed as typed.
-export function formatPhone(phone) {
-  const digits = String(phone ?? "").replace(/\D/g, "");
-  let national = null;
-  if (digits.length === 11 && digits.startsWith("374")) national = digits.slice(3);
-  else if (digits.length === 9 && digits.startsWith("0")) national = digits.slice(1);
-  else if (digits.length === 8) national = digits;
-  if (!national) return String(phone ?? "").trim();
-  return `+374 ${national.slice(0, 2)} ${national.slice(2, 5)} ${national.slice(5)}`;
 }
 
 // Everything drawn for one blank, in blank units, inside the current transform.
@@ -102,7 +104,9 @@ function totals({ order, items, previousDebtAmd = null, paymentAmd = null }) {
   const sum = items.reduce((s, it) => s + Number(it.line_total_amd ?? Number(it.quantity) * Number(it.unit_price_amd)), 0);
   const orderTotal = order.total_amd != null ? Number(order.total_amd) : sum;
   const current = previousDebtAmd !== null && paymentAmd !== null ? Number(previousDebtAmd) + orderTotal - Number(paymentAmd) : null;
-  return { sum, orderTotal, current };
+  const liters = items.reduce((s, it) => s + lineLiters(it), 0);
+  const qty = items.reduce((s, it) => s + Number(it.quantity || 0), 0);
+  return { sum, orderTotal, current, liters, qty };
 }
 
 function drawHeader(c, doc, { order, customer, rep }, v) {
@@ -111,8 +115,9 @@ function drawHeader(c, doc, { order, customer, rep }, v) {
   hline(v.rule1);
   text(COMPANY_NAME, 21.6, v.rule1 + 3.5, { size: v.fs });
   text(`Մենեջեր՝ ${rep?.name ?? ""}`, 21.6, v.rule1 + 3.5 + v.lh, { size: v.fs });
-  // Phones, right aligned: the manager's own number, then the office.
-  const phoneLines = [rep?.phone ? `Հեռ՝ ${formatPhone(rep.phone)}` : null, rep?.officePhone ? `Գրասենյակ՝ ${formatPhone(rep.officePhone)}` : null].filter(Boolean);
+  // Phones, right aligned: the sales rep's own number first, the office number
+  // always (also when the rep has none on file).
+  const phoneLines = [rep?.phone ? `Հեռ՝ ${formatPhone(rep.phone)}` : null, `Գրասենյակ՝ ${formatPhone(rep?.officePhone || OFFICE_PHONE)}`].filter(Boolean);
   phoneLines.forEach((line, i) => right(line, 589.6, v.rule1 + 3.5 + i * v.lh, { size: v.fs }));
   hline(v.rule2);
   field("Պատվերի No՝", order.order_code ?? "", 21.6, v.row1, 170, v.fs);
@@ -125,6 +130,8 @@ function drawHeader(c, doc, { order, customer, rep }, v) {
   text(`/ ${yyyy}թ.`, 537, v.row1, { size: v.fs });
   field("Գործընկերոջ անվանում՝", fit(cleanCustomerName(customer?.name), 250, v.fs), 21.6, v.row2, 400, v.fs);
   field("Կոդ՝", customer?.erp_customer_id ?? "", 500, v.row2, 589.6, v.fs);
+  field("Իրավ. անվանում՝", fit(customer?.legal_name ?? "", 285, v.fs), 21.6, v.row3, 420, v.fs);
+  field("ՀՎՀՀ՝", customer?.tin ?? "", 440, v.row3, 589.6, v.fs);
   const title = "ՀԱՆՁՆՄԱՆ-ԸՆԴՈՒՆՄԱՆ ԱԿՏ";
   center(title, 21.6, 589.6, v.title, { bold: true, size: v.fs + 1 });
   const tw = c.textW(title, { bold: true, size: v.fs + 1 });
@@ -164,10 +171,14 @@ function drawTable(c, doc, chunk, startNo, rowCount, v) {
   return bottom;
 }
 
-function drawTotal(c, doc, y, sum, h, fs) {
+function drawTotal(c, doc, y, t, h, fs) {
   doc.save().rect(COLS[0], y, COLS[6] - COLS[0], h).lineWidth(0.8).strokeColor("#555555").stroke().restore();
-  c.text("ԸՆԴԱՄԵՆԸ՝", COLS[0] + 3, y + (h - fs) / 2, { bold: true, size: fs });
-  c.right(amd(sum), COLS[6] - 5, y + (h - fs) / 2, { bold: true, size: fs });
+  const ty = y + (h - fs) / 2;
+  c.text("ԸՆԴԱՄԵՆԸ՝", COLS[0] + 3, ty, { bold: true, size: fs });
+  // Total litres under the size column, total pieces under the quantity column.
+  if (t.liters > 0) c.center(formatLiters(t.liters), COLS[2], COLS[3], ty, { bold: true, size: fs - 0.5 });
+  c.center(`${t.qty} հատ`, COLS[3], COLS[4], ty, { bold: true, size: fs - 0.5 });
+  c.right(amd(t.sum), COLS[6] - 5, ty, { bold: true, size: fs });
 }
 
 function drawSignatures(c, data, y, fs) {
@@ -211,13 +222,13 @@ function drawFull(doc, data, firstPageDrawn) {
     doc.scale(K);
     const c = makeCanvas(doc);
     drawLogos(doc, 43, 40);
-    const v = { rule1: 81.5, rule2: 114, row1: 138, row2: 170, title: 213, fs: 10, lh: 13, cs: 9, tableTop: 249, headH: 28 };
+    const v = { rule1: 81.5, rule2: 114, row1: 136, row2: 164, row3: 192, title: 227, fs: 10, lh: 13, cs: 9, tableTop: 262, headH: 28 };
     drawHeader(c, doc, data, v);
     const rowCount = Math.max(FULL_MIN_ROWS, chunk.length);
     v.rowH = Math.min(20.7, (last ? 612 - v.tableTop - v.headH - 22 : 700 - v.tableTop - v.headH) / rowCount);
     const bottom = drawTable(c, doc, chunk, pi * FULL_PAGE_ROWS + 1, rowCount, v);
     if (last) {
-      drawTotal(c, doc, bottom, t.sum, 22, 10);
+      drawTotal(c, doc, bottom, t, 22, 10);
       const y = bottom + 22 + 22;
       [["Պարտքի նախկին մնացորդ՝", data.previousDebtAmd ?? null], ["Պատվեր՝", t.orderTotal], ["Վճարում՝", data.paymentAmd ?? null], ["Պարտքի ներկա մնացորդ՝", t.current]].forEach(([label, value], i) => {
         const ry = y + i * 21;
@@ -244,10 +255,10 @@ function drawHalf(doc, data, slotTop, slotH) {
   doc.scale(K);
   const c = makeCanvas(doc);
   drawLogos(doc, 24, 25);
-  const v = { rule1: 46, rule2: 76, row1: 83, row2: 100, title: 119, fs: 8.5, lh: 11, cs: 8, tableTop: 139, headH: 22, rowH: 16.2 };
+  const v = { rule1: 46, rule2: 76, row1: 82, row2: 97, row3: 112, title: 131, fs: 8.5, lh: 11, cs: 8, tableTop: 151, headH: 22, rowH: 15 };
   drawHeader(c, doc, data, v);
   const bottom = drawTable(c, doc, data.items.slice(0, HALF_MAX_ROWS), 1, HALF_MAX_ROWS, v);
-  drawTotal(c, doc, bottom, t.sum, 16, 9);
+  drawTotal(c, doc, bottom, t, 16, 9);
   // debt block: 2 x 2
   const y = bottom + 16 + 9;
   const cells = [
