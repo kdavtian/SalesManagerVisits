@@ -8,11 +8,15 @@ import { setRouteProvider, resetRouteState } from "../../src/fuelRoute.js";
 import { setRouteGraceMs } from "../../src/fuelReport.js";
 
 const MONTH = "2031-03";
-test.before(startTestServer);
+test.before(async () => {
+  await startTestServer();
+  await pool.query("DELETE FROM fuel_route_cache"); // derived data: keep earlier runs' routes out of these assertions
+});
 test.after(async () => {
   setRouteProvider(null);
   setRouteGraceMs(2500);
   resetRouteState();
+  await pool.query("DELETE FROM fuel_route_cache");
   await pool.query("DELETE FROM fuel_prices WHERE month = '2031-03-01'");
   await cleanupAll();
   await stopTestServer();
@@ -34,7 +38,7 @@ test("daily km, home legs, fuel cost, corrections and permissions", async () => 
   const admin = await createUser("admin");
   const accountant = await createUser("accountant");
   const director = await createUser("sales_director");
-  await pool.query("UPDATE users SET fuel_l_per_100km = 10, home_lat = 40.17, home_lng = 44.49, home_address = 'Home St 1' WHERE id = $1", [rep.id]);
+  await pool.query("UPDATE users SET fuel_l_per_100km = 10, fuel_highway_l_per_100km = 6, home_lat = 40.17, home_lng = 44.49, home_address = 'Home St 1' WHERE id = $1", [rep.id]);
   const cYer1 = await createCustomer({ created_by: rep.id });
   const cYer2 = await createCustomer({ created_by: rep.id });
   const cShirak = await createCustomer({ created_by: rep.id });
@@ -60,17 +64,29 @@ test("daily km, home legs, fuel cost, corrections and permissions", async () => 
   const tuesday = mine.days.find((d) => d.date === "2031-03-04");
   assert.equal(monday.km, 10);
   assert.equal(monday.skipped.length, 1);
-  assert.equal(monday.liters, 1);
+  assert.equal(monday.city_km, 10);
+  assert.equal(monday.highway_km, 0);
+  assert.equal(monday.liters, 1); // 10 city km x 10 L/100
   assert.equal(monday.amount, 400);
   assert.deepEqual(tuesday.route.map((p) => p.type), ["home", "checkin", "home"]);
   assert.equal(tuesday.km, 20);
+  // Home is in Yerevan, so the first kilometres of each home leg are city driving,
+  // the rest highway -- billed at 10 and 6 L/100 respectively.
+  assert.ok(tuesday.city_km > 0 && tuesday.highway_km > 15, `split ${tuesday.city_km}/${tuesday.highway_km}`);
+  assert.ok(Math.abs(tuesday.city_km + tuesday.highway_km - 20) < 0.11);
+  const expectedLiters = (tuesday.city_km * 10 + tuesday.highway_km * 6) / 100;
+  assert.ok(Math.abs(tuesday.liters - expectedLiters) < 0.06);
+  assert.ok(tuesday.liters < 2 && tuesday.liters > 1.2, "cheaper than 20 city km, dearer than 20 pure highway km");
   assert.equal(mine.totals.km, 30);
-  assert.equal(mine.totals.amount, 1200);
+  assert.equal(mine.totals.amount, monday.amount + tuesday.amount);
 
   // A correction replaces the computed distance.
   assert.equal((await apiRequest("/api/fuel/overrides", { method: "PUT", cookie: adminCookie, body: { user_id: rep.id, day: "2031-03-04", km: 12.5, note: "checked" } })).status, 204);
   const corrected = (await apiRequest(`/api/fuel/report?month=${MONTH}`, { cookie: adminCookie })).data.reps.find((r) => r.user_id === rep.id);
   assert.equal(corrected.days.find((d) => d.date === "2031-03-04").km, 12.5);
+  const fixed = corrected.days.find((d) => d.date === "2031-03-04");
+  assert.ok(Math.abs(fixed.city_km + fixed.highway_km - 12.5) < 0.11); // keeps the day's city/highway proportion
+  assert.ok(fixed.highway_km > fixed.city_km);
   assert.equal(corrected.days.find((d) => d.date === "2031-03-04").computed_km, 20);
 
   // Accountant and director can see, only admin/ceo can change; a rep sees nothing.
@@ -85,9 +101,11 @@ test("daily km, home legs, fuel cost, corrections and permissions", async () => 
   // Settings validation.
   assert.equal((await apiRequest(`/api/fuel/settings/users/${rep.id}`, { method: "PUT", cookie: adminCookie, body: { fuel_l_per_100km: 99 } })).status, 400);
   assert.equal((await apiRequest(`/api/fuel/settings/users/${rep.id}`, { method: "PUT", cookie: adminCookie, body: { home_lat: 40.1 } })).status, 400);
-  const saved = await apiRequest(`/api/fuel/settings/users/${rep.id}`, { method: "PUT", cookie: adminCookie, body: { fuel_l_per_100km: 8.5 } });
+  const saved = await apiRequest(`/api/fuel/settings/users/${rep.id}`, { method: "PUT", cookie: adminCookie, body: { fuel_l_per_100km: 8.5, fuel_highway_l_per_100km: 5.5 } });
   assert.equal(saved.status, 200);
   assert.equal(Number(saved.data.fuel_l_per_100km), 8.5);
+  assert.equal(Number(saved.data.fuel_highway_l_per_100km), 5.5);
+  assert.equal((await apiRequest(`/api/fuel/settings/users/${rep.id}`, { method: "PUT", cookie: adminCookie, body: { fuel_highway_l_per_100km: 0 } })).status, 400);
 
   const csv = await apiRequest(`/api/fuel/report.csv?month=${MONTH}`, { cookie: adminCookie });
   assert.equal(csv.status, 200);
@@ -96,6 +114,7 @@ test("daily km, home legs, fuel cost, corrections and permissions", async () => 
 
 test("a slow routing engine never blocks the report: estimates first, real distances once they arrive", async () => {
   resetRouteState();
+  await pool.query("DELETE FROM fuel_route_cache");
   setRouteGraceMs(30);
   // Unique coordinates so the route is not already cached by the other test.
   setRouteProvider(async (points) => {
@@ -122,6 +141,7 @@ test("a slow routing engine never blocks the report: estimates first, real dista
   const day2 = second.reps.find((r) => r.user_id === rep.id).days[0];
   assert.equal(day2.estimated, false);
   assert.equal(day2.km, 7);
+  assert.equal(day2.city_km, 7); // both stops in Yerevan
   assert.equal(second.routing.pending, 0);
 
   // An engine that answers nothing is reported as failed (not pending forever).

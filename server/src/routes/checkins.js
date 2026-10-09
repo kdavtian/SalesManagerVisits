@@ -102,13 +102,25 @@ function parseBrandStatus(raw) {
 
 const MAX_PHOTOS_PER_CHECKIN = 5;
 
+// A check-in sent from the offline queue arrives minutes or hours after the
+// visit: its `timestamp` is the moment the rep pressed submit (captured_at),
+// not the moment the server heard about it (created_at keeps that). Accepted
+// only when plausible -- not in the future, not older than a week -- so a wrong
+// phone clock cannot rewrite history.
+export function parseCapturedAt(value, now = Date.now()) {
+  if (!value) return null;
+  const t = new Date(value).getTime();
+  if (!Number.isFinite(t) || t > now + 5 * 60 * 1000 || t < now - 7 * 24 * 60 * 60 * 1000) return null;
+  return new Date(t).toISOString();
+}
+
 checkinsRouter.post("/", (req, res, next) => {
   photoUpload.array("photos", MAX_PHOTOS_PER_CHECKIN)(req, res, (err) => {
     if (err) return res.status(400).json({ error: err.message });
     next();
   });
 }, async (req, res) => {
-  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref } = req.body ?? {};
+  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref, captured_at } = req.body ?? {};
   const customerId = Number(customer_id);
   const latNum = Number(lat);
   const lngNum = Number(lng);
@@ -179,10 +191,10 @@ checkinsRouter.post("/", (req, res, next) => {
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
-      `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref, timestamp)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, COALESCE($13::timestamptz, now()))
        RETURNING *`,
-      [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, brandStatusValue, outcomeValues, amountCollected, availableProductsValue, client_ref || null]
+      [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, brandStatusValue, outcomeValues, amountCollected, availableProductsValue, client_ref || null, parseCapturedAt(captured_at)]
     );
     checkin = rows[0];
     for (const file of files) {

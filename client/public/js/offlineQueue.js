@@ -168,6 +168,9 @@ async function submitCheckin(entry) {
   // queued entry either way) for an entry queued by an older client build
   // that never set clientRef. See server/src/routes/checkins.js.
   form.set("client_ref", entry.clientRef || entry.id);
+  // When the rep pressed submit, not when this retry finally got through (the
+  // fuel report orders the day's visits by it).
+  if (entry.createdAt) form.set("captured_at", new Date(entry.createdAt).toISOString());
   if (entry.note) form.set("note", entry.note);
   if (entry.brandStatus && Object.keys(entry.brandStatus).length) form.set("brand_status", JSON.stringify(entry.brandStatus));
   if (entry.outcomes?.length) form.set("outcomes", JSON.stringify(entry.outcomes));
