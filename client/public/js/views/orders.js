@@ -5,6 +5,7 @@ import { icons } from "../icons.js";
 import { ORDER_STATUS_ICONS } from "../ordersSearchEnhancements.js";
 import { loadWithCache } from "../listCache.js";
 import { STATUS_META, openOrderDetailSheet, paymentMethodBadgeHtml } from "../orderDetailSheet.js";
+import { openPrintBlankSheet } from "../orderBlankPrint.js";
 import { ACCOUNTING_STATUS_BADGE, accountingStatusLabel } from "../accountingDocSheet.js";
 import { state } from "../state.js";
 
@@ -41,6 +42,7 @@ export async function renderOrders(root, navigate) {
     <div class="detail-view">
       <div class="list-header-row">
         <h1>${t("orders_title")}</h1>
+        <button type="button" class="icon-btn" id="orders-print-btn" aria-label="${t("print_blank_select")}" aria-pressed="false">${icons.printer}</button>
         <button type="button" class="icon-btn" id="orders-new-btn" aria-label="${t("create_order")}">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
         </button>
@@ -52,6 +54,11 @@ export async function renderOrders(root, navigate) {
         <div id="order-filter-menu" class="dropdown-menu" role="menu" hidden></div>
       </div>
       <div class="card-list" id="orders-list"><p class="loading-state" role="status">${t("loading")}</p></div>
+      <div class="orders-select-bar" id="orders-select-bar" hidden>
+        <span id="orders-select-count"></span>
+        <button type="button" class="btn" id="orders-select-cancel">${t("cancel")}</button>
+        <button type="button" class="btn btn-primary" id="orders-select-print">${t("print_blank_create")}</button>
+      </div>
     </div>
   `;
 
@@ -81,6 +88,30 @@ export async function renderOrders(root, navigate) {
   const searchInput = root.querySelector("#order-search");
   const filterBtn = root.querySelector("#order-filter-btn");
   const filterMenu = root.querySelector("#order-filter-menu");
+
+  // Select mode: tick orders, then print their blanks (small orders share a sheet).
+  let selectMode = false;
+  const selected = new Map(); // id -> order_code
+  const printBtn = root.querySelector("#orders-print-btn");
+  const selectBar = root.querySelector("#orders-select-bar");
+  function updateSelectBar() {
+    selectBar.hidden = !selectMode;
+    printBtn.setAttribute("aria-pressed", String(selectMode));
+    printBtn.classList.toggle("icon-btn-active", selectMode);
+    root.querySelector("#orders-select-count").textContent = t("print_blank_selected").replace("{n}", selected.size);
+    root.querySelector("#orders-select-print").disabled = selected.size === 0;
+  }
+  function setSelectMode(on) {
+    selectMode = on;
+    if (!on) selected.clear();
+    updateSelectBar();
+    paint();
+  }
+  printBtn.addEventListener("click", () => setSelectMode(!selectMode));
+  root.querySelector("#orders-select-cancel").addEventListener("click", () => setSelectMode(false));
+  root.querySelector("#orders-select-print").addEventListener("click", () => {
+    openPrintBlankSheet([...selected].map(([id, order_code]) => ({ id, order_code })));
+  });
 
   let activeStatus = DEFAULT_STATUS_FILTER;
   let channelFilter = "";
@@ -231,7 +262,8 @@ export async function renderOrders(root, navigate) {
             </div>`;
         }
         return `${dateHeading}
-        <button class="card list-row" data-order-id="${o.id}">
+        <button class="card list-row${selectMode && selected.has(o.id) ? " order-row-selected" : ""}" data-order-id="${o.id}">
+          ${selectMode ? `<span class="order-select-check${selected.has(o.id) ? " is-on" : ""}" aria-hidden="true"></span>` : ""}
           <span class="list-row-icon list-row-icon-${meta.iconTint}" aria-hidden="true">${ORDER_STATUS_ICONS[o.status] ?? ""}</span>
           <div class="list-row-body">
             <div class="list-row-top">
@@ -263,7 +295,15 @@ export async function renderOrders(root, navigate) {
     }
 
     listEl.querySelectorAll("[data-order-id]").forEach((row) => {
-      row.addEventListener("click", () => openOrderDetailSheet(Number(row.dataset.orderId), { onChanged: load, navigate }));
+      row.addEventListener("click", () => {
+        const id = Number(row.dataset.orderId);
+        if (!selectMode) return openOrderDetailSheet(id, { onChanged: load, navigate });
+        if (selected.has(id)) selected.delete(id);
+        else selected.set(id, orders.find((o) => o.id === id)?.order_code ?? null);
+        row.classList.toggle("order-row-selected", selected.has(id));
+        row.querySelector(".order-select-check")?.classList.toggle("is-on", selected.has(id));
+        updateSelectBar();
+      });
     });
   }
 

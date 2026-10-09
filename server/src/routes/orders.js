@@ -1,6 +1,8 @@
 import { nextStatusFromDocuments, ACCOUNTING_STATUSES } from "../accountingStatus.js";
 import { accountingQueueChanged } from "../accountingEvents.js";
 import { accountingBadgeCount } from "../accountingBadge.js";
+import { buildOrderBlanksPdf } from "../orderBlankPdf.js";
+import { OFFICE_PHONE } from "../pricelistPdf.js";
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
@@ -453,6 +455,59 @@ ordersRouter.get("/:id/documents", async (req, res) => {
     [req.params.id]
   );
   res.json(rows);
+});
+
+// Print-ready "Delivery-acceptance act" blanks for one or more orders, as one
+// PDF (see orderBlankPdf.js): small orders share an A4 sheet two by two, big
+// ones get a whole sheet. A rep can only print their own orders. Declared
+// ahead of GET /:id.
+ordersRouter.post("/blank-pdf", async (req, res) => {
+  const ids = [...new Set((Array.isArray(req.body?.order_ids) ? req.body.order_ids : []).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+  if (!ids.length) return res.status(400).json({ error: "order_ids is required" });
+  if (ids.length > 40) return res.status(400).json({ error: "Too many orders at once (max 40)" });
+  const variant = ["full", "half"].includes(req.body?.variant) ? req.body.variant : undefined; // undefined = automatic
+
+  const { rows: orders } = await pool.query(
+    `SELECT o.id, o.order_code, o.created_at, o.total_amd, o.user_id,
+            c.name AS customer_name, c.erp_customer_id, u.name AS rep_name, u.phone AS rep_phone, erp.debt_amd
+     FROM orders o
+     JOIN customers c ON c.id = o.customer_id
+     JOIN users u ON u.id = o.user_id
+     LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
+     WHERE o.id = ANY($1)`,
+    [ids]
+  );
+  if (orders.length !== ids.length) return res.status(404).json({ error: "Order not found" });
+  if (!seesAllActivity(req.user.role) && orders.some((o) => o.user_id !== req.user.id)) {
+    return res.status(403).json({ error: "Not allowed" });
+  }
+  const { rows: itemRows } = await pool.query(
+    `SELECT oi.order_id, oi.brand, oi.product_name, p.unit AS size_l, oi.quantity, oi.unit_price_amd, oi.line_total_amd
+     FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id
+     WHERE oi.order_id = ANY($1) ORDER BY oi.id`,
+    [ids]
+  );
+  const byOrder = new Map(orders.map((o) => [o.id, o]));
+  const office = `+(374) ${OFFICE_PHONE.replace(/^0/, "").replace(/-/g, " ")}`;
+  const pdf = await buildOrderBlanksPdf(
+    ids.map((id) => {
+      const o = byOrder.get(id);
+      return {
+        variant,
+        order: { order_code: o.order_code, created_at: o.created_at, total_amd: o.total_amd },
+        items: itemRows.filter((r) => r.order_id === id).map((r) => ({ ...r, quantity: Number(r.quantity), unit_price_amd: Number(r.unit_price_amd), line_total_amd: Number(r.line_total_amd) })),
+        customer: { name: o.customer_name, erp_customer_id: o.erp_customer_id },
+        rep: { name: o.rep_name, phones: [o.rep_phone, office].filter(Boolean) },
+        // The customer's balance on file (Excel) before this order; blank line when unknown.
+        previousDebtAmd: o.debt_amd != null ? Number(o.debt_amd) : null,
+        paymentAmd: null,
+      };
+    })
+  );
+  const name = ids.length === 1 && orders[0].order_code ? `Order-${orders[0].order_code}.pdf` : "Order-blanks.pdf";
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+  res.send(pdf);
 });
 
 // Backs the badge on the Orders nav icon -- how many orders are sitting in

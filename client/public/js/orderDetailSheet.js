@@ -13,6 +13,7 @@ import { getProductCatalog } from "./productCatalog.js";
 import { searchProducts, debounce } from "./productSearch.js";
 import { compareProducts } from "./productSort.js";
 import { documentsSectionHtml, bindDocumentRows } from "./accountingFiles.js";
+import { openPrintBlankSheet } from "./orderBlankPrint.js";
 import { openAccountingDocSheet, accountingDocShort, accountingStatusLabel, ACCOUNTING_STATUS_BADGE } from "./accountingDocSheet.js";
 
 // v3 5-state machine (see migrations/051_warehouse_delivery_v3.sql):
@@ -289,6 +290,8 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
         buttons.push({ label: t("mark_delivered_no_route"), action: "mark-delivered", cls: "btn btn-primary" });
       }
     }
+    // Print-ready delivery-acceptance act (any order the viewer can open).
+    buttons.push({ label: t("print_blank"), action: "print-blank", cls: "btn" });
     if (canEditThisOrder) {
       buttons.push({ label: t("edit_order"), action: "edit-order", cls: "btn" });
     }
@@ -306,7 +309,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
             b.action ? `data-action="${b.action}"` : `data-status="${b.status}"`
           }>${b.label}</button>`
       )
-      .join("") || `<button type="button" class="btn" id="order-detail-close">${t("done")}</button>`;
+      .join("") + (buttons.length <= 1 ? `<button type="button" class="btn" id="order-detail-close">${t("done")}</button>` : "");
 
     actionsEl.querySelector("#order-detail-close")?.addEventListener("click", () => overlay.remove());
     overlay.querySelector('[data-action="close-sheet"]')?.addEventListener("click", () => overlay.remove());
@@ -363,6 +366,10 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       btn.addEventListener("click", async () => {
         if (btn.dataset.action === "edit-order") {
           renderEditMode(order);
+          return;
+        }
+        if (btn.dataset.action === "print-blank") {
+          openPrintBlankSheet([{ id: order.id, order_code: order.order_code }]);
           return;
         }
         if (btn.dataset.action === "accounting-signed") {

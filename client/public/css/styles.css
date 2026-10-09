@@ -11105,3 +11105,36 @@ form select,
 .sheet.task-editor > h2 { margin-right: 52px; }
 .task-editor input[type="date"].task-control { font-size: 0.85rem; padding: 0 8px; }
 .sheet.task-editor { position: relative; }
+
+/* Print-ready order blanks: select mode on the Orders list and the version picker. */
+.icon-btn-active { background: var(--accent); color: #ffffff; border-color: var(--accent); }
+.order-select-check {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-right: 10px;
+  align-self: center;
+  border: 2px solid var(--control-border);
+  border-radius: 50%;
+}
+.order-select-check.is-on { background: var(--accent); border-color: var(--accent); box-shadow: inset 0 0 0 4px var(--bg-card); }
+.order-row-selected { border-color: var(--accent); }
+.orders-select-bar {
+  position: sticky;
+  bottom: calc(60px + var(--nav-safe-bottom));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+.orders-select-bar[hidden] { display: none; }
+.orders-select-bar > span { flex: 1; font-weight: 600; }
+.print-blank-options { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.print-blank-option { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; }
+.print-blank-option input { margin-top: 3px; }
+.print-blank-option span { display: flex; flex-direction: column; gap: 2px; }
