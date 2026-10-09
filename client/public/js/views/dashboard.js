@@ -255,10 +255,13 @@ export async function renderDashboard(root, navigate) {
              server). planned_to_date only counts approved plans, so it can
              legitimately be 0 (nobody's planned this week yet). -->
         <span class="progress-fraction">${totals.visited_to_date}${totals.planned_to_date ? `<span class="progress-fraction-total">/${totals.planned_to_date}</span>` : ""}</span>
-        <div class="progress-side">
-          <div class="progress-side-row"><span class="dot dot-success"></span>${totals.visited_today} ${t("stat_visited_today")}</div>
-          <div class="progress-side-row"><span class="dot dot-warning"></span>${remaining} ${t("stat_remaining")}</div>
-          <div class="progress-side-row"><span class="dot dot-danger"></span>${totals.overdue} ${t("stat_overdue")}</div>
+        <div class="progress-side-wrap">
+          <div class="progress-side">
+            <div class="progress-side-row"><span class="dot dot-success"></span>${totals.visited_today} ${t("stat_visited_today")}</div>
+            <div class="progress-side-row"><span class="dot dot-warning"></span>${remaining} ${t("stat_remaining")}</div>
+            <div class="progress-side-row"><span class="dot dot-danger"></span>${totals.overdue} ${t("stat_overdue")}</div>
+          </div>
+          ${summary.by_manager?.length ? `<span class="progress-card-chevron" aria-hidden="true">${icons.chevronDown}</span>` : ""}
         </div>
       </div>
       ${
@@ -268,7 +271,6 @@ export async function renderDashboard(root, navigate) {
           ? `<div class="progress-bar"><div class="progress-bar-fill" style="width:${Math.round((totals.visited_to_date / totals.planned_to_date) * 100)}%"></div></div>`
           : `<p class="muted progress-no-plan">${t("progress_no_plan")}</p>`
       }
-      ${summary.by_manager?.length ? `<span class="progress-card-chevron" aria-hidden="true">${icons.chevronDown}</span>` : ""}
     </div>
 
     ${

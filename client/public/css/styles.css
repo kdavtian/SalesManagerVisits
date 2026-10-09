@@ -1766,6 +1766,7 @@ input[type="search"]:focus-visible {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin-top: 8px;
+  margin-bottom: 14px;
 }
 
 .brand-chip {
@@ -1790,6 +1791,10 @@ input[type="search"]:focus-visible {
   flex-shrink: 0;
 }
 
+.brand-chip.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .brand-chip:has(input:checked) {
   border-color: var(--accent);
   background: rgba(255, 106, 19, 0.1);
@@ -3430,7 +3435,7 @@ label.checkbox-row input[type="checkbox"] {
 
 .progress-card {
   margin: 4px 0 8px;
-  padding: 14px;
+  padding: 11px 14px 12px;
   position: relative;
 }
 
@@ -3446,15 +3451,20 @@ label.checkbox-row input[type="checkbox"] {
    progress card, which has nothing to expand, never gets these. */
 .progress-card[role="button"] {
   cursor: pointer;
-  padding-right: 40px;
 }
 
+/* The expand arrow sits beside the three status rows, vertically centred on
+   them (level with "Remaining"), instead of floating in the card's top-right
+   corner and forcing extra side padding on the whole card. */
+.progress-side-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 .progress-card-chevron {
-  position: absolute;
-  top: 16px;
-  right: 14px;
   color: var(--text-dim);
   display: flex;
+  flex: 0 0 auto;
 }
 
 .progress-card-chevron svg {
@@ -3665,9 +3675,9 @@ label.checkbox-row input[type="checkbox"] {
 
 .progress-main {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  margin: 6px 0 10px;
+  margin: 4px 0 8px;
 }
 
 .progress-fraction {
@@ -3687,7 +3697,7 @@ label.checkbox-row input[type="checkbox"] {
 .progress-side {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   font-size: 0.8rem;
   color: var(--text-dim);
 }
@@ -10961,13 +10971,15 @@ form select,
 /* Check-in: customer name with a close (X) button on the right. */
 .checkin-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 .checkin-head h1 {
   flex: 1 1 auto;
   min-width: 0;
+  margin: 0;
+  line-height: 1.2;
 }
 .checkin-head .icon-btn {
   flex: 0 0 auto;
@@ -11200,4 +11212,19 @@ form select,
 .settings-list-group-item[hidden],
 .settings-admin-left .card[hidden] {
   display: none;
+}
+
+/* Customer debt report: while a filter change is loading the page stays put
+   (no spinner replacing it); the numbers and lists just dim until they land. */
+.report-body-refreshing {
+  pointer-events: none;
+}
+.report-body-refreshing .stat-grid,
+.report-body-refreshing .card-list,
+.report-body-refreshing #debt-adjusted-note {
+  opacity: 0.55;
+  transition: opacity 120ms ease;
+}
+.report-body-refreshing .report-bucket-btn {
+  pointer-events: none;
 }

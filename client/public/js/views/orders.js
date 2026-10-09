@@ -269,7 +269,7 @@ export async function renderOrders(root, navigate) {
           ${
             selectMode
               ? `<span class="list-row-icon order-select-slot" aria-hidden="true"><span class="order-select-check${selected.has(o.id) ? " is-on" : ""}"></span></span>`
-              : `<span class="list-row-icon list-row-icon-${meta.iconTint}" aria-hidden="true">${ORDER_STATUS_ICONS[o.status] ?? ""}</span>`
+              : `<span class="list-row-icon order-tile order-tile-${o.status}" aria-hidden="true">${ORDER_STATUS_ICONS[o.status] ?? ""}</span>`
           }
           <div class="list-row-body">
             <div class="list-row-top">

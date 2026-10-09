@@ -2,6 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks, activateDialog, firstUseHintHtml, activateFirstUseHints } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
+import { FILTER_ICONS } from "../filterIcons.js";
 import { compareProducts, parseLiters, normalizeUnitLabel, normalizeProductKey } from "../productSort.js";
 
 // "624" -> "624L", "4.5" -> "4.5L" -- compact, no space, matching how a WM
@@ -213,7 +214,7 @@ export async function renderWarehouse(root, navigate) {
         <div class="inventory-search-wrap">
           <input type="search" id="inventory-search" placeholder="${t("search")}" />
           <button type="button" class="inventory-search-filter-btn" id="inventory-filter-btn" aria-label="${t("warehouse_filters_title")}" title="${t("warehouse_filters_title")}">
-            ${icons.tag}
+            ${FILTER_ICONS.filters}
           </button>
         </div>
         <button type="button" class="filter-icon-btn" id="inventory-days-btn" aria-label="${t("warehouse_show_days_left")}" title="${t("warehouse_show_days_left")}" aria-pressed="false">

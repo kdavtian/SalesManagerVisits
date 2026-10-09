@@ -1,21 +1,13 @@
 import { icons } from "./icons.js";
+import { FILTER_ICONS } from "./filterIcons.js";
 import { getLang, t } from "./i18n.js";
 
 // One visual language for every search/filter surface. These are the exact
 // 24px / 1.9px-stroke forms used by Activity, so moving between tabs does
 // not feel like moving between different apps.
 const SEARCH_ICONS = {
-  manager: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17.5" cy="8.6" r="2.35"/><path d="M3.5 20v-1.2A5.5 5.5 0 0 1 9 13.3h.1a5.5 5.5 0 0 1 5.5 5.5V20"/><path d="M15.1 13.8c.7-.35 1.5-.55 2.35-.55A4.55 4.55 0 0 1 22 17.8V20"/></svg>`,
-  status: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.75"/><path d="m7.9 12.1 2.6 2.7 5.8-6"/></svg>`,
-  outcome: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3.75" width="14" height="16.5" rx="2.5"/><path d="M9 3.75v-.5A1.25 1.25 0 0 1 10.25 2h3.5A1.25 1.25 0 0 1 15 3.25v.5"/><path d="m8.5 11.7 1.8 1.8 4.7-5"/><path d="M8.5 17h7"/></svg>`,
-  sort: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M4 7l3-3 3 3M17 20V4M14 17l3 3 3-3"/></svg>`,
+  ...FILTER_ICONS,
   clear: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>`,
-  region: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 10c0 4.8-7 10-7 10S5 14.8 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2.25"/></svg>`,
-  subregion: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.75"/><path d="m15.3 8.7-2 4.6-4.6 2 2-4.6z"/></svg>`,
-  channel: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M8 6h8M12 8v8M8 6c2.6 0 4 1.4 4 4M16 6c-2.6 0-4 1.4-4 4"/></svg>`,
-  brands: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.73Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>`,
-  columns: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.2 4.5v15M14.8 4.5v15"/></svg>`,
-  size: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 15.5 15.5 3.5l5 5-12 12z"/><path d="m7 12 2.2 2.2M10 9l1.6 1.6M13 6l2.2 2.2"/></svg>`,
   orderAdd: `<svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="15" height="19" rx="3"/><path d="M9 9h7M9 13h5M9 17h4"/><circle cx="20.5" cy="19.5" r="5" fill="var(--accent)" stroke="var(--bg-card)" stroke-width="2"/><path d="M20.5 17v5M18 19.5h5" stroke="white" stroke-width="1.8"/></svg>`,
 };
 
@@ -316,8 +308,8 @@ function pricelistIconFor(key) {
   if (key === "tree") return SEARCH_ICONS.brands;
   if (key === "package") return SEARCH_ICONS.size;
   if (key === "columns") return SEARCH_ICONS.columns;
-  if (key === "special") return icons.tag;
-  return icons.filter;
+  if (key === "special") return SEARCH_ICONS.special;
+  return SEARCH_ICONS.filters;
 }
 
 function syncPricelistFilterButtons(filterRow) {
@@ -396,14 +388,14 @@ function enhancePricelist() {
 }
 
 function mapFilterIcon(value) {
-  if (value === "overdue") return icons.mapWarning;
+  if (value === "overdue") return SEARCH_ICONS.overdue;
   if (value === "visited") return SEARCH_ICONS.status;
   if (value === "visited-today") return SEARCH_ICONS.status;
-  if (value === "visited-7days") return icons.clock;
-  if (value === "planned") return SEARCH_ICONS.outcome;
-  if (value === "nearby") return SEARCH_ICONS.region;
-  if (value === "brands") return icons.tag;
-  return icons.filter;
+  if (value === "visited-7days") return SEARCH_ICONS.recent;
+  if (value === "planned") return SEARCH_ICONS.planned;
+  if (value === "nearby") return SEARCH_ICONS.nearby;
+  if (value === "brands") return SEARCH_ICONS.brands;
+  return SEARCH_ICONS.filters;
 }
 
 function enhanceMap() {
