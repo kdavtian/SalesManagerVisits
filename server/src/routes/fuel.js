@@ -4,6 +4,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { canAccessReport } from "../reports.js";
 import { canManageFuel } from "../roles.js";
 import { buildFuelReport, isMonth } from "../fuelReport.js";
+import { retryFailedRoutes } from "../fuelRoute.js";
 import { yerevanMonthStart } from "../utils/yerevanDate.js";
 
 export const fuelRouter = Router();
@@ -21,6 +22,7 @@ const monthOf = (q) => (isMonth(q) ? q : yerevanMonthStart().slice(0, 7));
 
 fuelRouter.get("/report", requireView, async (req, res) => {
   const month = monthOf(req.query.month);
+  if (req.query.retry === "1") retryFailedRoutes();
   const report = await buildFuelReport({ month });
   res.json({ ...report, can_manage: canManageFuel(req.user.role) });
 });

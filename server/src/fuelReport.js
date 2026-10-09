@@ -3,10 +3,14 @@
 // and AMD with the rep's consumption and the month's fuel price.
 import { pool } from "./db/pool.js";
 import { yerevanCustomRangeBounds, yerevanDateOf } from "./utils/yerevanDate.js";
-import { splitCheckins, buildWaypoints, routeKey, estimateLegsKm, fetchRoadLegsKm, fuelFor, round1 } from "./fuelRoute.js";
+import { splitCheckins, buildWaypoints, routeKey, estimateLegsKm, requestRoute, routeState, fuelFor, round1 } from "./fuelRoute.js";
 
-const TIME_BUDGET_MS = 25000; // beyond this, remaining days use estimates (and are marked pending)
-const CONCURRENCY = 4;
+// How long one report request waits for missing road distances before it answers
+// with estimates for the rest (they keep loading in the background).
+let graceMs = 2500;
+export function setRouteGraceMs(ms) {
+  graceMs = ms;
+}
 
 export function monthBounds(month) {
   const [y, m] = month.split("-").map(Number);
@@ -17,17 +21,6 @@ export function monthBounds(month) {
 }
 
 export const isMonth = (s) => typeof s === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
-
-async function mapLimit(items, limit, fn) {
-  let next = 0;
-  const run = async () => {
-    while (next < items.length) {
-      const i = next++;
-      await fn(items[i]);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, run));
-}
 
 export async function buildFuelReport({ month, userId = null }) {
   const { start, startAt, endAt } = monthBounds(month);
@@ -93,18 +86,20 @@ export async function buildFuelReport({ month, userId = null }) {
       }
     }
   }
-  // The rest from the routing engine, within a time budget.
+  // The rest from the routing engine in the background; wait only a moment.
   const missing = dayJobs.filter((j) => j.key && !j.legKm);
-  const deadline = Date.now() + TIME_BUDGET_MS;
-  await mapLimit(missing, CONCURRENCY, async (j) => {
-    if (Date.now() > deadline) return;
-    const res = await fetchRoadLegsKm(j.points);
-    if (res) {
-      j.legKm = res.km;
-      j.source = "osrm";
+  const fetches = missing.map((j) =>
+    requestRoute(j.key, j.points, async (res) => {
       await pool.query("INSERT INTO fuel_route_cache (key, leg_km, source) VALUES ($1, $2, $3) ON CONFLICT (key) DO NOTHING", [j.key, JSON.stringify(res.km), res.source]);
-    }
-  });
+    }).then((km) => {
+      if (km) {
+        j.legKm = km;
+        j.source = "osrm";
+      }
+    })
+  );
+  if (fetches.length) await Promise.race([Promise.allSettled(fetches), new Promise((resolve) => setTimeout(resolve, graceMs))]);
+  const routing = { total: dayJobs.filter((j) => j.key).length, pending: 0, failed: 0 };
   for (const j of dayJobs) {
     if (j.points.length < 2) {
       j.legKm = [];
@@ -112,7 +107,9 @@ export async function buildFuelReport({ month, userId = null }) {
     } else if (!j.legKm) {
       j.legKm = estimateLegsKm(j.points);
       j.source = "estimate";
-      j.pending = true;
+      j.state = routeState(j.key) === "pending" ? "pending" : "failed";
+      if (j.state === "pending") routing.pending++;
+      else routing.failed++;
     }
   }
 
@@ -153,6 +150,7 @@ export async function buildFuelReport({ month, userId = null }) {
       computed_km: computed,
       override,
       estimated: j.source === "estimate",
+      estimate_state: j.source === "estimate" ? j.state : null,
       missing_home: j.missingHome,
       liters: fuel.liters,
       amount: fuel.amount,
@@ -181,5 +179,6 @@ export async function buildFuelReport({ month, userId = null }) {
     reps: out,
     totals: { km: round1(sum((r) => r.totals.km)), liters: round1(sum((r) => r.totals.liters)), amount: price != null ? sum((r) => r.totals.amount) : null },
     estimated_days: pendingDays,
+    routing,
   };
 }

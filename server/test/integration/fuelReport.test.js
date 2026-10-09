@@ -4,12 +4,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, loginAs, apiRequest, trackCheckin } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { setRouteProvider } from "../../src/fuelRoute.js";
+import { setRouteProvider, resetRouteState } from "../../src/fuelRoute.js";
+import { setRouteGraceMs } from "../../src/fuelReport.js";
 
 const MONTH = "2031-03";
 test.before(startTestServer);
 test.after(async () => {
   setRouteProvider(null);
+  setRouteGraceMs(2500);
+  resetRouteState();
   await pool.query("DELETE FROM fuel_prices WHERE month = '2031-03-01'");
   await cleanupAll();
   await stopTestServer();
@@ -89,4 +92,46 @@ test("daily km, home legs, fuel cost, corrections and permissions", async () => 
   const csv = await apiRequest(`/api/fuel/report.csv?month=${MONTH}`, { cookie: adminCookie });
   assert.equal(csv.status, 200);
   assert.match(String(csv.data), /TOTAL/);
+});
+
+test("a slow routing engine never blocks the report: estimates first, real distances once they arrive", async () => {
+  resetRouteState();
+  setRouteGraceMs(30);
+  // Unique coordinates so the route is not already cached by the other test.
+  setRouteProvider(async (points) => {
+    await new Promise((r) => setTimeout(r, 400));
+    return { km: points.slice(1).map(() => 7), source: "osrm" };
+  });
+  const rep = await createUser("sales_manager");
+  const admin = await createUser("admin");
+  const c1 = await createCustomer({ created_by: rep.id });
+  const c2 = await createCustomer({ created_by: rep.id });
+  await pool.query("UPDATE customers SET region = 'Yerevan' WHERE id = ANY($1)", [[c1.id, c2.id]]);
+  await checkin(rep, c1, "2031-03-10T05:00:00Z", 40.1311, 44.4411);
+  await checkin(rep, c2, "2031-03-10T07:00:00Z", 40.1511, 44.4611);
+  const cookie = await loginAs(admin.email);
+
+  const first = (await apiRequest(`/api/fuel/report?month=${MONTH}`, { cookie })).data;
+  const day1 = first.reps.find((r) => r.user_id === rep.id).days[0];
+  assert.equal(day1.estimated, true);
+  assert.equal(day1.estimate_state, "pending");
+  assert.ok(first.routing.pending >= 1);
+
+  await new Promise((r) => setTimeout(r, 700));
+  const second = (await apiRequest(`/api/fuel/report?month=${MONTH}`, { cookie })).data;
+  const day2 = second.reps.find((r) => r.user_id === rep.id).days[0];
+  assert.equal(day2.estimated, false);
+  assert.equal(day2.km, 7);
+  assert.equal(second.routing.pending, 0);
+
+  // An engine that answers nothing is reported as failed (not pending forever).
+  resetRouteState();
+  setRouteProvider(async () => null);
+  const c3 = await createCustomer({ created_by: rep.id });
+  await pool.query("UPDATE customers SET region = 'Yerevan' WHERE id = $1", [c3.id]);
+  await checkin(rep, c3, "2031-03-11T05:00:00Z", 40.1711, 44.4811);
+  await checkin(rep, c3, "2031-03-11T08:00:00Z", 40.1911, 44.5011);
+  const down = (await apiRequest(`/api/fuel/report?month=${MONTH}`, { cookie })).data;
+  assert.ok(down.routing.failed >= 1);
+  assert.equal(down.reps.find((r) => r.user_id === rep.id).days.find((d) => d.date === "2031-03-11").estimate_state, "failed");
 });
