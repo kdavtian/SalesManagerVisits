@@ -20,7 +20,7 @@ You are the sole developer of two linked systems owned by one person (the owner,
 
 1. **Version bump on every shipped change under `client/public/`**: bump `APP_VERSION` in `client/public/js/version.js` (semver, usually minor, e.g. 1.244.0) AND `CACHE_VERSION` in `client/public/sw.js` (`field-visits-vNNN` -> +1). The service worker only reinstalls when sw.js bytes change; forgetting it left users stuck on old versions with "no updates". Changes only under `server/`, docs, `.claude/` need no bump (a new CHANGELOG entry is optional unless releasing).
 2. **End every task summary with the new `APP_VERSION`** (owner asked for this repeatedly; also say CACHE_VERSION when relevant).
-3. **Always merge after completing** (standing instruction: "Always merge after completing in this chat"): open a draft PR from the designated branch, subscribe, wait for CI (`test` + `e2e-smoke`), mark ready, squash-merge, unsubscribe. A red CI is yours to drive to green (see runbook). Never skip/disable tests.
+3. **Always merge after completing** (standing instruction, repeated many times: "Always merge after completing" / "merge it when CI is green"): open a draft PR from the designated branch, subscribe, wait for CI (`test` + `e2e-smoke`), mark ready, squash-merge, unsubscribe. A red CI is yours to drive to green (see runbook). Never skip/disable tests.
 4. **Work only on the designated branch** from the session prompt (`claude/kad-motors-qa-guidelines-sisbhk` so far). After a PR merges, restart that branch from `origin/main` (`git fetch origin main && git checkout -B <branch> origin/main`) - never stack on merged history. Force-push may be blocked by the harness; if the remote branch only holds already-merged history, merge it with `-s ours` and push normally. NOTE: the local checkout can be stale/reset between turns - always `git status`/`git log` and compare with `origin/<branch>` before assuming work is or is not committed.
 5. **Secrets never go in chat, files, commits or skills.** The owner has pasted tokens/passwords/API keys into chat before (ERP sync key, Postgres password, a Lily test token). Never repeat them; tell them to rotate if exposed. Do not write credentials into docs. The user's email is only for attribution.
 6. **The QA gate (owner's standing rule, from their first message):** act as senior mobile/PWA engineer + QA lead. Before finishing, audit every changed file and affected flow: works on iPhone Safari PWA and Android Chrome, no overlaps/overflow/frozen UI/broken taps, no RBAC or data regressions, no console errors, no extra network chatter or slowdowns, no offline/service-worker regressions, map/geolocation intact; self-review the diff critically, simplify, follow existing patterns; update the version. Do not call it done until related checks pass.
@@ -41,6 +41,16 @@ You are the sole developer of two linked systems owned by one person (the owner,
 5. For performance work, MEASURE first: seed thousands of rows (`generate_series`), time endpoints (`apiRequest` loop) and `EXPLAIN (ANALYZE, BUFFERS)` the query; compare before/after in the summary. For UI work, drive it in a real browser (Playwright + Chromium preinstalled at /opt/pw-browsers; server on port 3001 with `E2E_RATE_LIMIT_BYPASS_TOKEN`), take screenshots and LOOK at them - alignment, overlap, 44px targets, Armenian long labels, dark mode.
 6. Bump versions (rule 1), commit with the attribution trailers from the session prompt, push, draft PR, subscribe, merge on green.
 7. Final message to the owner: short numbered list of what changed (matching their numbering), deployment commands if anything on the droplet must be run (migrations! bot restart!), caveats/assumptions, and `APP_VERSION`.
+
+## Quick rules learned late (details in references)
+
+13. Every UI string in en AND hy; `node --check client/public/js/i18n.js` after i18n edits. Armenian is the main language.
+14. Tap targets >= 44 px (use an invisible hit area for small icons so only the icon, not the whole row, reacts). Same icon = same feature everywhere (`client/public/js/filterIcons.js` is the registry).
+15. Printed/PDF documents are Armenian-first: phones `+374 XX XXX XXX`, amounts `5,700 դր`, sizes `4 L`, quantities `4 հատ`, manager Armenian full name, no customer ERP id in the name.
+16. Reports must open fast: never block a report on a slow external service (see fuel allowance background queue); show progress, not a grey skeleton forever.
+17. Money/people data from the workbook (TINs, phones, salaries) never goes into code, docs, skills, PRs or chat.
+18. Summaries end with `APP_VERSION` (+ `CACHE_VERSION`) and say which deploy command to run (fast vs full when a migration exists).
+19. **Always load this skill (`/KADDev`) before working on the KAD app or bot** (owner's standing instruction, 2026-10-09), even for a one-line fix.
 
 ## What the owner values / dislikes (quick version; details in references)
 

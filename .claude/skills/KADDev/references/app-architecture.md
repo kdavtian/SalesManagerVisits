@@ -50,3 +50,10 @@ Repo `kdavtian/SalesManagerVisits`. Production: one DigitalOcean droplet, docker
 - Bottom sheets (`activateDialog`) trap focus, close on Escape/backdrop, restore focus; swipe-back must close only the top-most sheet.
 - Touch targets >= 44 px; focus ring thin; icon buttons need aria-labels; 320 px width + long Armenian text must not overflow.
 - DB changes = new numbered migration, backward compatible; mention "run migrations" in deploy notes.
+
+
+## Additions 2026-10-09
+- Filter bars are assembled by several enhancer scripts (`unifiedSearchEnhancements.js`, `mapDimensionFilterPlacement.js`, `ordersSearchEnhancements.js`, `ordersRegionStatusEnhancements.js`) plus extra CSS; icons come from `filterIcons.js` (`FILTER_ICONS`). Change icons there only.
+- Secondary maps: `new L.Map(...)` (the `L.map` wrapper in `mapSafeRuntime.js` persists the main view).
+- Fuel allowance: `server/src/fuelRoute.js` (maths + background queue), `fuelReport.js`, `routes/fuel.js` (`/api/fuel`), `canManageFuel` in `roles.js`, client `views/fuelReport.js`; tables `fuel_route_cache`, `fuel_prices`, `fuel_day_overrides` (migrations 099-100).
+- Order blank PDF: `server/src/orderBlankPdf.js`, `phoneFormat.js`; users have `name_hy` (migration 098); check-ins have `captured_at`.

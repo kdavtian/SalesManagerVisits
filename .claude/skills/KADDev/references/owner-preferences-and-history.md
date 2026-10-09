@@ -80,3 +80,35 @@ Use these names in answers and in code comments; suggest the better pattern when
 - **Skeleton screen / placeholder** (grey blocks that keep the layout while loading), **empty state**, **toast/snackbar**, **popover/popup** (map pin), **accordion/tree picker**, **pull-to-refresh**, **infinite scroll / lazy rendering**, **prefetch**, **optimistic UI**, **deep link**, **back stack / back navigation**.
 - Bottom-sheet button position is standardized (`--sheet-pad-bottom`); never add per-sheet bottom padding.
 - Back from a screen opened by a sheet's link returns to that sheet (`leaveSheetTo` in util.js parks it; app.js restores it with the back-cache).
+
+
+## Update 2026-10-09 (v1.277 -> v1.293.0, PRs #280-#287)
+
+### Timeline
+- #280 notification reduction: one consolidated stale-packed reminder + one daily summary at 19:00 Yerevan.
+- #281 Settings tap targets (the "!" next to a row no longer triggers the whole row), stray line on the notifications button, admin workspace "Group & search", open the printed PDF after creating it, order lines saved in products-page order.
+- #282 map filters rebuilt (shared `filterIcons.js`, sticky Clear/Show, active-filter state visible, Competitors label), stable map camera, debt-report aging filters update in place (no blink), check-in header aligned with the X, order status icons, smaller Home "this week's progress" card.
+- #283/#284 order blank PDF polish; #285-#287 fuel allowance report (friendly redesign, background route queue, city vs highway consumption, "detect all issues" plausibility flags).
+
+### New preferences (owner's words in quotes)
+- "Merge it when CI is green" -- do not ask, merge. Report the version after.
+- Detect interaction bugs proactively: tapping a small icon must hit the icon, not the whole section (44 px invisible hit area).
+- "Same icon, same feature" across all filter bars; icons should look polished; standardise, don't invent per screen.
+- Admin screens must be friendly: grouped, searchable, with a setup checklist when configuration is missing.
+- A report stuck on a grey skeleton is a bug ("I only see this. Check everything and make it much more user friendly") -- fix root cause (never wait on a slow service), then polish the whole screen.
+- Documents the owner prints/sends are judged visually: logo balance, units (L, հատ, դր), page numbers "Էջ n/m", right-aligned phones, delivery address, TIN and legal name, totals in litres and pieces.
+- Asks for improvement suggestions after a list; suggest, then wait unless told to do it. Suggested but not built: order number/QR on the blank, discount line, payment-method stamp, signed-photo upload, remembered print variant, per-role notification defaults.
+- For anything with policy or money impact (fuel rules) ask with concrete options first (AskUserQuestion); the owner chose: real road distance, home leg only when first/last check-in is outside Yerevan, accountant also sees it, one fuel price per month.
+
+### Things that bit us (continued)
+20. CI-only red: a test used UTC `CURRENT_DATE` while code uses Yerevan dates -> use `(now() AT TIME ZONE 'Asia/Yerevan')::date`.
+21. Running tests locally without `NODE_ENV=test` -> 10 s notification debounce, spurious failures.
+22. A secondary Leaflet map created through the wrapped `L.map` overwrites the main map's saved view; use `new L.Map(...)`.
+23. A report that awaits OSRM/network hangs forever when the service is slow; use cache + background queue + polling.
+24. Local leftovers (order seq, `fuel_route_cache`) break repeat test runs; tests clean their own state.
+25. Playwright browser path mismatch: symlink `chromium_headless_shell-1243` to the installed `1194` directory.
+
+### Open items for the owner on the droplet (as of 1.293.0)
+- Deploy #287 with the FULL `./deploy/deploy.sh` (migration 100).
+- Reports > Fuel allowance > Settings: each rep's city/highway L/100 km, home address, monthly fuel price.
+- Team > Edit: Armenian full name (`name_hy`) for each manager (used on the order blank).

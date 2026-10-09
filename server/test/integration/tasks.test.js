@@ -32,6 +32,16 @@ test.after(async () => {
 const notificationsFor = async (userId, type) =>
   (await pool.query("SELECT * FROM notifications WHERE user_id = $1 AND type = $2", [userId, type])).rows;
 
+// notifyUser() is fire-and-forget in the route, so a row can land a few ms after the response.
+const waitForNotifications = async (userId, type, count = 1) => {
+  for (let i = 0; i < 40; i++) {
+    const rows = await notificationsFor(userId, type);
+    if (rows.length >= count) return rows;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return notificationsFor(userId, type);
+};
+
 test("only management creates tasks; a sales director assigns to sales managers only, the CEO to anyone", async () => {
   const body = (assignee) => ({ title: "Tell Aram about ON EV", assignee_id: assignee.id, due_date: yerevanToday(), items: ["Show the leaflet"] });
   const asManager = await apiRequest("/api/tasks", { method: "POST", cookie: cookies.sales_manager, body: body(users.manager2) });
@@ -61,7 +71,7 @@ test("assignee is notified, sees the task, ticks the checklist, and completing n
   const task = created.data;
   assert.equal(task.customer_name, customer.name);
   assert.equal(task.items.length, 2);
-  assert.equal((await notificationsFor(users.sales_manager.id, "task_assigned")).length >= 1, true);
+  assert.equal((await waitForNotifications(users.sales_manager.id, "task_assigned")).length >= 1, true);
 
   const mine = await apiRequest("/api/tasks?scope=mine&due=today", { cookie: cookies.sales_manager });
   assert.ok(mine.data.rows.some((t) => t.id === task.id));
@@ -78,7 +88,7 @@ test("assignee is notified, sees the task, ticks the checklist, and completing n
   assert.equal(after1.data.status, "open");
   const after2 = await apiRequest(`/api/tasks/${task.id}/items/${task.items[1].id}`, { method: "POST", cookie: cookies.sales_manager, body: { done: true } });
   assert.equal(after2.data.status, "done");
-  assert.equal((await notificationsFor(users.sales_director.id, "task_completed")).length, 1);
+  assert.equal((await waitForNotifications(users.sales_director.id, "task_completed")).length, 1);
   // Done tasks leave the Map flags and the open list; unticking reopens.
   const flagsAfter = await apiRequest("/api/tasks/customer-flags", { cookie: cookies.sales_manager });
   assert.ok(!flagsAfter.data.some((f) => f.customer_id === customer.id));
