@@ -17,9 +17,9 @@ const sum = (items) => items.reduce((s, i) => s + i.line_total_amd, 0);
 const order = (code, items) => ({ order_code: code, created_at: new Date("2026-10-08T10:00:00+04:00"), total_amd: sum(items) });
 
 const pdf = await buildOrderBlanksPdf([
-  { variant: "half", order: order("26100802", smallA), items: smallA, customer: { name: "10228 «Արտակ Ավտո» ՍՊԸ", erp_customer_id: "10228" }, rep, previousDebtAmd: 185000 },
-  { variant: "half", order: order("26100803", smallB), items: smallB, customer: { name: "Գևորգ Մկրտչյան ԱՁ", erp_customer_id: "10301" }, rep, previousDebtAmd: 0 },
-  { variant: "full", order: order("26100801", big), items: big, customer: { name: "10228 «Արտակ Ավտո» ՍՊԸ", erp_customer_id: "10228" }, rep, previousDebtAmd: 185000 },
+  { variant: "half", order: order("26100802", smallA), items: smallA, customer: { name: "10228 «Արտակ Ավտո» ՍՊԸ", erp_customer_id: "10228", tin: "00000000", address: "ք. Երևան, Տիգրան Մեծի 12", legal_name: "«Արտակ Ավտո» Սահմանափակ պատասխանատվությամբ ընկերություն" }, rep, previousDebtAmd: 185000 },
+  { variant: "half", order: order("26100803", smallB), items: smallB, customer: { name: "Գևորգ Մկրտչյան ԱՁ", erp_customer_id: "10301", tin: "11111111", address: "ք. Գյումրի, Շիրակացու 5", legal_name: "Գևորգ Մկրտչյան ԱՁ" }, rep, previousDebtAmd: 0 },
+  { variant: "full", order: order("26100801", big), items: big, customer: { name: "10228 «Արտակ Ավտո» ՍՊԸ", erp_customer_id: "10228", tin: "00000000", address: "ք. Երևան, Տիգրան Մեծի 12", legal_name: "«Արտակ Ավտո» Սահմանափակ պատասխանատվությամբ ընկերություն" }, rep, previousDebtAmd: 185000 },
 ]);
 fs.writeFileSync("order-blank-sample.pdf", pdf);
 console.log("order-blank-sample.pdf", pdf.length, "bytes");
