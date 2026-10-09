@@ -113,6 +113,7 @@ export async function renderAccounting(root, navigate) {
             <div class="muted list-row-meta">${o.order_code ? `${escapeHtml(o.order_code)} · ` : ""}${escapeHtml(o.user_name)} · ${formatDate(o.created_at)}${numbers.length ? ` · № ${escapeHtml(numbers.join(", "))}` : ""}</div>
             <div class="list-row-bottom">
               <span class="badge ${meta.cls}">${t(meta.key)}</span>
+              ${o.delivered_from_erp ? `<span class="badge badge-info">${t("from_erp")}</span>` : ""}
               ${group === "requests" && o.accounting_doc_type ? `<span class="badge badge-neutral">${accountingDocShort(o.accounting_doc_type)}</span>` : ""}
               <span class="badge ${ACCOUNTING_STATUS_BADGE[o.accounting_status] ?? "badge-neutral"}">${accountingStatusLabel(o.accounting_status, o.accounting_doc_type)}</span>
               ${o.document_count > 0 ? `<span class="badge badge-neutral">&#128206; ${o.document_count}</span>` : ""}

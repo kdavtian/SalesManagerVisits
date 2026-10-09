@@ -8186,12 +8186,44 @@ form select,
   height: 18px;
 }
 
-/* A day whose cash-reconciliation difference exceeds the server's alert
-   threshold (renderCashReconciliationReport) -- same left-edge treatment
-   the sync-badge-stale warning already uses elsewhere, so "needs a look"
-   reads consistently across screens. */
-.report-row-alert {
-  border-left: 3px solid var(--danger);
+/* Cash reconciliation (renderCashReconciliationReport): date left, difference
+   right; any day whose difference is not 0 fills the whole card red (no outline). */
+.cash-recon-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cash-recon-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.cash-recon-top > strong {
+  text-align: left;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cash-recon-top > span {
+  margin-left: auto;
+  text-align: right;
+}
+
+.cash-recon-card-diff {
+  background: color-mix(in srgb, var(--danger) 20%, var(--bg-card));
+  border-color: transparent;
+}
+
+.cash-recon-card-diff .muted {
+  color: var(--text);
+}
+
+.cash-recon-diff-amount {
+  font-weight: 700;
+  color: var(--danger);
 }
 
 /* Freshness note on a report backed by the Castrol Excel sync (see

@@ -746,10 +746,12 @@ async function renderCashReconciliationReport(root, navigate) {
           .map((r) => {
             const diff = Number(r.difference_amd);
             return `
-            <div class="card report-row-multiline${r.alert ? " report-row-alert" : ""}">
-              <strong>${formatDateDMY(r.day)}</strong>
+            <div class="card cash-recon-card${diff !== 0 ? " cash-recon-card-diff" : ""}">
+              <div class="cash-recon-top">
+                <strong>${formatDateDMY(r.day)}</strong>
+                <span class="${diff !== 0 ? "cash-recon-diff-amount" : "muted"}">${t("report_cash_reconciliation_difference")}: ${diff > 0 ? "+" : ""}${formatAmd(diff)}</span>
+              </div>
               <span class="muted">${t("report_cash_reconciliation_collected")}: ${formatAmd(Number(r.collected_amd))} · ${t("report_cash_reconciliation_submitted")}: ${formatAmd(Number(r.submitted_amd))}</span>
-              <span class="${r.alert ? "text-amount" : "muted"}">${t("report_cash_reconciliation_difference")}: ${diff >= 0 ? "+" : ""}${formatAmd(diff)}</span>
             </div>`;
           })
           .join("")}

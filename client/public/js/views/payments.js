@@ -355,6 +355,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
         </button>
         <div class="payment-row-bottom-line">
           <span class="badge payment-status-badge ${meta.cls}">${t(meta.key)}</span>
+          ${p.approved_from_erp ? `<span class="badge badge-info">${t("from_erp")}</span>` : ""}
           <span class="text-amount">${formatAmd(Number(p.amount_amd))}</span>
           ${
             p.status === "pending" && canReview
@@ -476,7 +477,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
       const meta = STATUS_META[p.status] ?? STATUS_META.pending;
       overlay.querySelector(".sheet").innerHTML = `
         <h2>${t("payment_detail_title")}</h2>
-        <p><span class="badge ${meta.cls}">${t(meta.key)}</span></p>
+        <p><span class="badge ${meta.cls}">${t(meta.key)}</span>${p.approved_from_erp ? ` <span class="badge badge-info">${t("from_erp")}</span>` : ""}</p>
         <div class="card-list" style="margin:12px 0;">
           <div class="order-line-row">
             <div class="order-line-top">${customerNameLinkHtml(p.customer_name_snapshot, p.customer_id, "span", "order-line-name")}<strong class="text-amount">${formatAmd(Number(p.amount_amd))}</strong></div>
