@@ -196,7 +196,11 @@ export async function renderFuelReport(root, navigate) {
     const chips = [
       rep.fuel_l_per_100km == null
         ? `<button type="button" class="badge badge-warning fuel-chip" data-edit="${rep.user_id}" ${canManage ? "" : "disabled"}>${t("fuel_no_consumption")}</button>`
-        : `<span class="badge badge-neutral">${num(rep.fuel_l_per_100km)} ${t("fuel_liters_unit")}/100${t("fuel_km_unit")}</span>`,
+        : `<span class="badge badge-neutral">${t("fuel_city_short")} ${num(rep.fuel_l_per_100km)} · ${t("fuel_highway_short")} ${num(rep.fuel_highway_l_per_100km ?? rep.fuel_l_per_100km)} ${t("fuel_liters_unit")}/100${t("fuel_km_unit")}</span>`,
+      rep.fuel_l_per_100km != null && rep.fuel_highway_l_per_100km == null && rep.totals.highway_km > 0
+        ? `<button type="button" class="badge badge-warning fuel-chip" data-edit="${rep.user_id}" ${canManage ? "" : "disabled"}>${t("fuel_no_highway")}</button>`
+        : "",
+      rep.totals.suspicious_days ? `<span class="badge badge-warning">⚠ ${rep.totals.suspicious_days} ${t("fuel_check_days")}</span>` : "",
       rep.totals.missing_home_days ? `<button type="button" class="badge badge-warning fuel-chip" data-edit="${rep.user_id}" ${canManage ? "" : "disabled"}>${t("fuel_home_missing")}</button>` : "",
       rep.totals.estimated_days ? `<span class="badge badge-neutral">${t("fuel_estimated")}</span>` : "",
     ].join("");
@@ -224,7 +228,7 @@ export async function renderFuelReport(root, navigate) {
       <div class="fuel-day ${open ? "is-open" : ""}">
         <button type="button" class="fuel-day-head" data-day="${key}" aria-expanded="${open}">
           <span class="fuel-day-date"><b>${escapeHtml(p.weekday)}</b><span>${p.dm}</span></span>
-          <span class="fuel-day-mid"><span class="fuel-day-km">${km(d.km)} ${badge}</span><span class="muted">${n} ${n === 1 ? t("fuel_stop_one") : t("fuel_stops")}${d.missing_home ? ` · ⚠ ${t("fuel_home_missing")}` : ""}</span></span>
+          <span class="fuel-day-mid"><span class="fuel-day-km">${km(d.km)} ${badge}</span><span class="muted">${n} ${n === 1 ? t("fuel_stop_one") : t("fuel_stops")}${d.highway_km > 0 ? ` · ${t("fuel_city_short")} ${num(d.city_km)} / ${t("fuel_highway_short")} ${num(d.highway_km)}` : ""}${d.missing_home ? ` · ⚠ ${t("fuel_home_missing")}` : ""}${d.suspicious ? ` · ⚠ ${t("fuel_check_day")}` : ""}</span></span>
           <span class="fuel-day-amount">${d.amount == null ? "" : formatAmd(d.amount)}</span>
         </button>
         ${open ? routeHtml(rep, d, key) : ""}
@@ -239,7 +243,7 @@ export async function renderFuelReport(root, navigate) {
         <li class="fuel-stop fuel-stop-${p.type}">
           <span class="fuel-time">${p.time ? timeOf(p.time) : ""}</span>
           <span class="fuel-dot" aria-hidden="true">${p.type === "home" ? "⌂" : i + (d.route[0].type === "home" ? 0 : 1)}</span>
-          <span class="fuel-stop-body"><strong>${title}</strong>${p.km_from_prev != null ? `<span class="fuel-leg">+ ${km(p.km_from_prev)}</span>` : ""}</span>
+          <span class="fuel-stop-body"><strong>${title}</strong>${p.km_from_prev != null ? `<span class="fuel-leg">+ ${km(p.km_from_prev)}${p.km_from_prev > 0 && p.city_km != null && p.city_km < p.km_from_prev - 0.05 ? ` (${t("fuel_highway_short")} ${num(p.km_from_prev - p.city_km)})` : ""}</span>` : ""}</span>
         </li>`;
       })
       .join("");
@@ -252,6 +256,7 @@ export async function renderFuelReport(root, navigate) {
     return `
       <div class="fuel-route">
         ${d.missing_home ? `<p class="fuel-note fuel-note-warn">${t("fuel_home_missing_day")}</p>` : ""}
+        ${d.suspicious ? `<p class="fuel-note fuel-note-warn">${t("fuel_suspicious_day")}</p>` : ""}
         ${d.override ? `<p class="fuel-note">${fill(t("fuel_computed_km"), { km: d.computed_km })}${d.override.note ? ` · ${escapeHtml(d.override.note)}` : ""}</p>` : ""}
         <ol class="fuel-stops">${stops || `<li class="muted">${t("fuel_no_visits")}</li>`}</ol>
         ${skipped || merged ? `<ul class="fuel-skipped-list">${skipped}${merged}</ul>` : ""}
@@ -379,7 +384,10 @@ export async function renderFuelReport(root, navigate) {
             (r) => `
           <div class="card fuel-rep-settings" data-user="${r.id}">
             <strong>${escapeHtml(r.name_hy || r.name)}</strong>
-            <label>${t("fuel_consumption")}<input type="number" class="fs-cons" min="1" max="60" step="0.1" inputmode="decimal" value="${r.fuel_l_per_100km ?? ""}" /></label>
+            <div class="fuel-cons-row">
+              <label>${t("fuel_consumption_city")}<input type="number" class="fs-cons" min="1" max="60" step="0.1" inputmode="decimal" value="${r.fuel_l_per_100km ?? ""}" /></label>
+              <label>${t("fuel_consumption_highway")}<input type="number" class="fs-cons-hwy" min="1" max="60" step="0.1" inputmode="decimal" value="${r.fuel_highway_l_per_100km ?? ""}" /></label>
+            </div>
             <label>${t("fuel_home_address")}<input type="text" class="fs-home" maxlength="300" value="${escapeHtml(r.home_address ?? "")}" placeholder="${t("fuel_home_placeholder")}" /></label>
             <input type="hidden" class="fs-lat" value="${r.home_lat ?? ""}" /><input type="hidden" class="fs-lng" value="${r.home_lng ?? ""}" />
             <div class="fuel-home-status muted">${r.home_lat != null ? `📍 ${t("fuel_home_saved")}` : t("fuel_home_missing")}</div>
@@ -450,6 +458,7 @@ export async function renderFuelReport(root, navigate) {
         try {
           await api.setFuelUser(Number(card.dataset.user), {
             fuel_l_per_100km: card.querySelector(".fs-cons").value === "" ? null : Number(card.querySelector(".fs-cons").value),
+            fuel_highway_l_per_100km: card.querySelector(".fs-cons-hwy").value === "" ? null : Number(card.querySelector(".fs-cons-hwy").value),
             home_address: home.value || null,
             home_lat: lat.value === "" ? null : Number(lat.value),
             home_lng: lng.value === "" ? null : Number(lng.value),

@@ -11320,3 +11320,5 @@ form select,
 .fuel-search-results { display: flex; flex-direction: column; gap: 4px; }
 .fuel-result { text-align: left; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-card); color: var(--text); font: inherit; font-size: 0.85rem; cursor: pointer; }
 .fuel-home-status { font-size: 0.8rem; }
+.fuel-cons-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.fuel-cons-row label { margin: 0; }

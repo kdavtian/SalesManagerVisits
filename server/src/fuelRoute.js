@@ -8,6 +8,10 @@ import { haversineMeters } from "./osrm.js";
 export const YEREVAN_CENTER = { lat: 40.1792, lng: 44.4991 };
 export const YEREVAN_RADIUS_KM = 13; // used only when the customer has no region on file
 export const SAME_PLACE_KM = 0.15; // check-ins closer than this are one stop
+// Driving inside this radius of the centre is "city" (stop-and-go, higher
+// consumption); everything outside it is "highway". Yerevan's built-up area is
+// roughly this size -- a deliberate approximation, the owner can correct a day.
+export const CITY_RADIUS_KM = Number(process.env.FUEL_CITY_RADIUS_KM) || 10;
 const ROAD_FACTOR = Number(process.env.FUEL_ROAD_FACTOR) || 1.3; // straight line -> road, when routing is unreachable
 
 export function haversineKm(a, b) {
@@ -22,6 +26,32 @@ export function isYerevanPoint(point, region = null) {
 }
 
 const round1 = (n) => Math.round(n * 10) / 10;
+
+const inCity = (p) => haversineKm(p, YEREVAN_CENTER) <= CITY_RADIUS_KM;
+
+// Share (0..1) of the straight line a -> b that lies inside the city circle.
+export function cityShare(a, b, samples = 80) {
+  let inside = 0;
+  for (let i = 0; i < samples; i++) {
+    const f = (i + 0.5) / samples;
+    if (inCity({ lat: a.lat + (b.lat - a.lat) * f, lng: a.lng + (b.lng - a.lng) * f })) inside++;
+  }
+  return inside / samples;
+}
+
+// Share of a real road geometry ([[lng, lat], ...]) inside the city circle.
+function pathCityShare(coords) {
+  let total = 0;
+  let city = 0;
+  for (let i = 1; i < coords.length; i++) {
+    const a = { lat: coords[i - 1][1], lng: coords[i - 1][0] };
+    const b = { lat: coords[i][1], lng: coords[i][0] };
+    const len = haversineKm(a, b);
+    total += len;
+    if (inCity({ lat: (a.lat + b.lat) / 2, lng: (a.lng + b.lng) / 2 })) city += len;
+  }
+  return total > 0 ? city / total : 0;
+}
 
 // A rep's check-ins for one Yerevan day -> the stops that count and the ones
 // that do not. A check-in made far from its customer (within_range = false)
@@ -75,19 +105,29 @@ export function buildWaypoints(stops, home) {
 }
 
 export function routeKey(points) {
-  const s = points.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join(";");
+  // "v2": cached legs carry their city share (older entries are plain km).
+  const s = "v2|" + points.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join(";");
   return crypto.createHash("sha1").update(s).digest("hex");
 }
 
-export function estimateLegsKm(points) {
-  const km = [];
-  for (let i = 1; i < points.length; i++) km.push(haversineKm(points[i - 1], points[i]) * ROAD_FACTOR);
-  return km;
+// Legs are { km, city } -- road km of the leg and how many of them are city.
+export function estimateLegs(points) {
+  const legs = [];
+  for (let i = 1; i < points.length; i++) {
+    const km = haversineKm(points[i - 1], points[i]) * ROAD_FACTOR;
+    legs.push({ km, city: km * cityShare(points[i - 1], points[i]) });
+  }
+  return legs;
+}
+
+// A routing answer that only has km (a test stub) gets its city share from the straight line.
+function withCityShare(points, km) {
+  return km.map((k, i) => ({ km: k, city: k * cityShare(points[i], points[i + 1]) }));
 }
 
 // Road distances (km) of the legs between consecutive points, from the
 // self-hosted OSRM first, then the public demo server. Returns
-// { km: number[], source: "osrm" } or null when no engine answered.
+// { legs: [{ km, city }], source: "osrm" } or null when no engine answered.
 const ROUTER_URLS = () => (process.env.FUEL_OSRM_URLS ? process.env.FUEL_OSRM_URLS.split(",") : [process.env.OSRM_URL || "http://localhost:5001", "https://router.project-osrm.org"]).map((u) => u.trim()).filter(Boolean);
 
 let routeProvider = null; // tests inject a stub
@@ -96,13 +136,17 @@ export function setRouteProvider(fn) {
 }
 
 export async function fetchRoadLegsKm(points) {
-  if (routeProvider) return routeProvider(points);
+  if (routeProvider) {
+    const res = await routeProvider(points);
+    if (!res) return null;
+    return res.legs ? res : { legs: withCityShare(points, res.km), source: res.source ?? "osrm" };
+  }
   if (process.env.NODE_ENV === "test") return null; // never touch the network in tests
-  if (points.length < 2) return { km: [], source: "osrm" };
+  if (points.length < 2) return { legs: [], source: "osrm" };
   const coords = points.map((p) => `${p.lng},${p.lat}`).join(";");
   for (const base of ROUTER_URLS()) {
     try {
-      const res = await fetch(`${base.replace(/\/$/, "")}/route/v1/driving/${coords}?overview=false&steps=false`, {
+      const res = await fetch(`${base.replace(/\/$/, "")}/route/v1/driving/${coords}?overview=false&steps=true&geometries=geojson`, {
         signal: AbortSignal.timeout(4000),
         headers: { "User-Agent": "KAD-Motors-FieldVisits/1.0 (fuel allowance)" },
       });
@@ -110,7 +154,16 @@ export async function fetchRoadLegsKm(points) {
       const data = await res.json();
       const legs = data?.routes?.[0]?.legs;
       if (data.code !== "Ok" || !Array.isArray(legs) || legs.length !== points.length - 1) continue;
-      return { km: legs.map((l) => l.distance / 1000), source: "osrm" };
+      return {
+        legs: legs.map((l) => {
+          const km = l.distance / 1000;
+          // City km from the real road geometry, step by step.
+          let city = 0;
+          for (const step of l.steps ?? []) city += (step.distance / 1000) * pathCityShare(step.geometry?.coordinates ?? []);
+          return { km, city: Math.min(km, city) };
+        }),
+        source: "osrm",
+      };
     } catch {
       // try the next engine
     }
@@ -170,7 +223,7 @@ export function routeState(key) {
   return "idle";
 }
 
-// Starts (or joins) the fetch of one route; resolves to the leg km, or null.
+// Starts (or joins) the fetch of one route; resolves to the legs, or null.
 // onSuccess({ km, source }) runs before it resolves (the caller caches it).
 export function requestRoute(key, points, onSuccess) {
   if (inflight.has(key)) return inflight.get(key);
@@ -182,7 +235,7 @@ export function requestRoute(key, points, onSuccess) {
       if (res) {
         failStreak = 0;
         await onSuccess?.(res);
-        return res.km;
+        return res.legs;
       }
       failedAt.set(key, Date.now());
       if (++failStreak >= 6) pausedUntil = Date.now() + 60 * 1000;
@@ -199,11 +252,14 @@ export function requestRoute(key, points, onSuccess) {
   return promise;
 }
 
-// Fuel for a distance: litres = km x L/100km / 100, cost = litres x price.
-export function fuelFor(km, lPer100, pricePerL) {
-  const liters = lPer100 != null ? (km * lPer100) / 100 : null;
-  const amount = liters != null && pricePerL != null ? Math.round(liters * pricePerL) : null;
-  return { liters: liters != null ? round1(liters) : null, amount };
+// Fuel for a day: city km at the city consumption, highway km at the (lower)
+// highway consumption. A missing figure falls back to the other one.
+export function fuelFor(cityKm, highwayKm, cityL100, highwayL100, pricePerL) {
+  const city = cityL100 ?? highwayL100;
+  const highway = highwayL100 ?? cityL100;
+  if (city == null) return { liters: null, amount: null };
+  const liters = (cityKm * city + highwayKm * highway) / 100;
+  return { liters: round1(liters), amount: pricePerL != null ? Math.round(liters * pricePerL) : null };
 }
 
 export { round1 };

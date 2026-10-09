@@ -3,7 +3,7 @@
 // and AMD with the rep's consumption and the month's fuel price.
 import { pool } from "./db/pool.js";
 import { yerevanCustomRangeBounds, yerevanDateOf } from "./utils/yerevanDate.js";
-import { splitCheckins, buildWaypoints, routeKey, estimateLegsKm, requestRoute, routeState, fuelFor, round1 } from "./fuelRoute.js";
+import { splitCheckins, buildWaypoints, routeKey, estimateLegs, requestRoute, routeState, fuelFor, round1 } from "./fuelRoute.js";
 
 // How long one report request waits for missing road distances before it answers
 // with estimates for the rest (they keep loading in the background).
@@ -32,7 +32,7 @@ export async function buildFuelReport({ month, userId = null }) {
   }
 
   const { rows: reps } = await pool.query(
-    `SELECT id, name, name_hy, role, fuel_l_per_100km, home_address, home_lat, home_lng
+    `SELECT id, name, name_hy, role, fuel_l_per_100km, fuel_highway_l_per_100km, home_address, home_lat, home_lng
      FROM users
      WHERE (role = 'sales_manager' OR id IN (SELECT user_id FROM checkins WHERE timestamp >= $1 AND timestamp < $2))
        ${userId ? "AND id = $3" : ""}
@@ -71,29 +71,29 @@ export async function buildFuelReport({ month, userId = null }) {
     const home = rep.home_lat != null && rep.home_lng != null ? { lat: Number(rep.home_lat), lng: Number(rep.home_lng), address: rep.home_address } : null;
     const { stops, skipped } = splitCheckins(list);
     const { points, missingHome } = buildWaypoints(stops, home);
-    dayJobs.push({ rep, day, stops, skipped, points, missingHome, key: points.length > 1 ? routeKey(points) : null, legKm: null, source: "none", pending: false });
+    dayJobs.push({ rep, day, stops, skipped, points, missingHome, key: points.length > 1 ? routeKey(points) : null, legs: null, source: "none", pending: false });
   }
 
   // Cached road distances first.
   const keys = dayJobs.map((j) => j.key).filter(Boolean);
   if (keys.length) {
-    const { rows } = await pool.query("SELECT key, leg_km FROM fuel_route_cache WHERE key = ANY($1)", [keys]);
-    const cached = new Map(rows.map((r) => [r.key, r.leg_km]));
+    const { rows } = await pool.query("SELECT key, leg_km AS legs FROM fuel_route_cache WHERE key = ANY($1)", [keys]);
+    const cached = new Map(rows.map((r) => [r.key, r.legs]));
     for (const j of dayJobs) {
       if (j.key && cached.has(j.key)) {
-        j.legKm = cached.get(j.key).map(Number);
+        j.legs = cached.get(j.key).map((l) => ({ km: Number(l.km), city: Number(l.city) }));
         j.source = "osrm";
       }
     }
   }
   // The rest from the routing engine in the background; wait only a moment.
-  const missing = dayJobs.filter((j) => j.key && !j.legKm);
+  const missing = dayJobs.filter((j) => j.key && !j.legs);
   const fetches = missing.map((j) =>
     requestRoute(j.key, j.points, async (res) => {
-      await pool.query("INSERT INTO fuel_route_cache (key, leg_km, source) VALUES ($1, $2, $3) ON CONFLICT (key) DO NOTHING", [j.key, JSON.stringify(res.km), res.source]);
-    }).then((km) => {
-      if (km) {
-        j.legKm = km;
+      await pool.query("INSERT INTO fuel_route_cache (key, leg_km, source) VALUES ($1, $2, $3) ON CONFLICT (key) DO NOTHING", [j.key, JSON.stringify(res.legs), res.source]);
+    }).then((legs) => {
+      if (legs) {
+        j.legs = legs;
         j.source = "osrm";
       }
     })
@@ -102,10 +102,10 @@ export async function buildFuelReport({ month, userId = null }) {
   const routing = { total: dayJobs.filter((j) => j.key).length, pending: 0, failed: 0 };
   for (const j of dayJobs) {
     if (j.points.length < 2) {
-      j.legKm = [];
+      j.legs = [];
       j.source = "none";
-    } else if (!j.legKm) {
-      j.legKm = estimateLegsKm(j.points);
+    } else if (!j.legs) {
+      j.legs = estimateLegs(j.points);
       j.source = "estimate";
       j.state = routeState(j.key) === "pending" ? "pending" : "failed";
       if (j.state === "pending") routing.pending++;
@@ -119,19 +119,25 @@ export async function buildFuelReport({ month, userId = null }) {
     name: rep.name,
     name_hy: rep.name_hy,
     fuel_l_per_100km: rep.fuel_l_per_100km != null ? Number(rep.fuel_l_per_100km) : null,
+    fuel_highway_l_per_100km: rep.fuel_highway_l_per_100km != null ? Number(rep.fuel_highway_l_per_100km) : null,
     home_address: rep.home_address,
     home_set: rep.home_lat != null && rep.home_lng != null,
     days: [],
-    totals: { km: 0, liters: null, amount: null, days: 0, estimated_days: 0, missing_home_days: 0 },
+    totals: { km: 0, city_km: 0, highway_km: 0, liters: null, amount: null, days: 0, estimated_days: 0, missing_home_days: 0, suspicious_days: 0 },
   }));
   const outById = new Map(out.map((r) => [r.user_id, r]));
 
   for (const j of dayJobs) {
     const rep = outById.get(j.rep.id);
-    const computed = round1(j.legKm.reduce((s, k) => s + k, 0));
+    const computed = round1(j.legs.reduce((s, l) => s + l.km, 0));
+    const computedCity = j.legs.reduce((s, l) => s + l.city, 0);
     const override = overrides.get(`${j.rep.id}:${j.day}`) ?? null;
     const km = override ? override.km : computed;
-    const fuel = fuelFor(km, rep.fuel_l_per_100km, price);
+    // A corrected distance keeps the day's city/highway proportion.
+    const cityKm = round1(computed > 0 ? (km * computedCity) / computed : km);
+    const highwayKm = round1(km - cityKm);
+    const fuel = fuelFor(cityKm, highwayKm, rep.fuel_l_per_100km, rep.fuel_highway_l_per_100km, price);
+    const longestLeg = Math.max(0, ...j.legs.map((l) => l.km));
     const route = j.points.map((p, i) => ({
       type: p.type,
       back: Boolean(p.back),
@@ -140,7 +146,8 @@ export async function buildFuelReport({ month, userId = null }) {
       in_yerevan: p.inYerevan,
       lat: p.lat,
       lng: p.lng,
-      km_from_prev: i === 0 ? null : round1(j.legKm[i - 1] ?? 0),
+      km_from_prev: i === 0 ? null : round1(j.legs[i - 1]?.km ?? 0),
+      city_km: i === 0 ? null : round1(j.legs[i - 1]?.city ?? 0),
     }));
     // Stops merged into the previous one (same place) are listed for transparency.
     const merged = j.stops.flatMap((s) => s.merged.map((m) => ({ time: m.timestamp, name: m.customer_name })));
@@ -148,6 +155,10 @@ export async function buildFuelReport({ month, userId = null }) {
       date: j.day,
       km,
       computed_km: computed,
+      city_km: cityKm,
+      highway_km: highwayKm,
+      // A leg over 150 km or a day over 400 km is more likely a GPS slip than real driving.
+      suspicious: longestLeg > 150 || computed > 400,
       override,
       estimated: j.source === "estimate",
       estimate_state: j.source === "estimate" ? j.state : null,
@@ -164,10 +175,13 @@ export async function buildFuelReport({ month, userId = null }) {
     rep.days.sort((a, b) => (a.date < b.date ? 1 : -1));
     rep.totals.days = rep.days.filter((d) => d.km > 0 || d.route.length).length;
     rep.totals.km = round1(rep.days.reduce((s, d) => s + d.km, 0));
+    rep.totals.city_km = round1(rep.days.reduce((s, d) => s + d.city_km, 0));
+    rep.totals.highway_km = round1(rep.days.reduce((s, d) => s + d.highway_km, 0));
+    rep.totals.suspicious_days = rep.days.filter((d) => d.suspicious).length;
     rep.totals.estimated_days = rep.days.filter((d) => d.estimated).length;
     rep.totals.missing_home_days = rep.days.filter((d) => d.missing_home).length;
     pendingDays += rep.totals.estimated_days;
-    if (rep.fuel_l_per_100km != null) {
+    if (rep.fuel_l_per_100km != null || rep.fuel_highway_l_per_100km != null) {
       rep.totals.liters = round1(rep.days.reduce((s, d) => s + (d.liters ?? 0), 0));
       rep.totals.amount = price != null ? rep.days.reduce((s, d) => s + (d.amount ?? 0), 0) : null;
     }
@@ -177,7 +191,7 @@ export async function buildFuelReport({ month, userId = null }) {
     month,
     price_amd_per_l: price,
     reps: out,
-    totals: { km: round1(sum((r) => r.totals.km)), liters: round1(sum((r) => r.totals.liters)), amount: price != null ? sum((r) => r.totals.amount) : null },
+    totals: { km: round1(sum((r) => r.totals.km)), city_km: round1(sum((r) => r.totals.city_km)), highway_km: round1(sum((r) => r.totals.highway_km)), liters: round1(sum((r) => r.totals.liters)), amount: price != null ? sum((r) => r.totals.amount) : null },
     estimated_days: pendingDays,
     routing,
   };
