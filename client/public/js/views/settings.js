@@ -227,6 +227,8 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       <section id="settings-admin-panel" role="tabpanel" aria-labelledby="settings-admin-tab" hidden>
       <div class="settings-admin-layout">
       <div class="settings-admin-left">
+      <input type="search" class="admin-search" id="admin-search" placeholder="${t("admin_search_placeholder")}" aria-label="${t("admin_search_placeholder")}" autocomplete="off" />
+      <p class="muted admin-search-empty" id="admin-search-empty" hidden>${t("admin_search_empty")}</p>
 
       ${
         admin
@@ -413,6 +415,28 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         event.preventDefault();
         selectWorkspace((index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length, true);
       });
+    });
+  }
+
+  // --- Admin search: hide rows that don't match, and any group left empty ---
+  const adminSearch = root.querySelector("#admin-search");
+  if (adminSearch) {
+    const adminLeft = adminSearch.parentElement;
+    const adminRows = [...adminLeft.querySelectorAll(".settings-list-row, .settings-list-group-item")].filter((row) => !row.closest(".settings-expandable-content"));
+    adminSearch.addEventListener("input", () => {
+      const q = adminSearch.value.trim().toLowerCase();
+      adminRows.forEach((row) => {
+        row.hidden = !!q && !row.textContent.toLowerCase().includes(q);
+      });
+      let anyVisible = false;
+      adminLeft.querySelectorAll(":scope > .card").forEach((card) => {
+        const visible = !q || adminRows.some((row) => card.contains(row) && !row.hidden);
+        card.hidden = !visible;
+        const title = card.previousElementSibling;
+        if (title?.classList.contains("section-title")) title.hidden = !visible;
+        if (visible) anyVisible = true;
+      });
+      root.querySelector("#admin-search-empty").hidden = anyVisible || !q;
     });
   }
 

@@ -11,6 +11,7 @@ import { seesAllActivity, canConfirmOrders, canConfirmSubmittedOrders, canReques
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { notifyUser } from "../notifications.js";
 import { ORDER_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES, DELIVERY_OUTCOME_NOTIFY_ROLES } from "../notificationPreferences.js";
+import { compareProducts } from "../../../client/public/js/productSort.js";
 
 export const ordersRouter = Router();
 
@@ -90,6 +91,7 @@ async function buildOrderLines(items, { customerId, tier, canSetPrices = false, 
       }
     }
     lines.push({
+      product,
       product_id: product.id,
       product_name: product.name,
       brand: product.brand ?? null,
@@ -106,6 +108,11 @@ async function buildOrderLines(items, { customerId, tier, canSetPrices = false, 
       [customerId, productId, price, userId]
     );
   }
+  // Saved in the products page's order (brand -> family -> viscosity -> spec
+  // -> size), whatever order the rep tapped them in, so the order, its PDF
+  // and the printed blank all read tidily. order_items are read back by id.
+  lines.sort((a, b) => compareProducts(a.product, b.product));
+  for (const line of lines) delete line.product;
   return lines;
 }
 
