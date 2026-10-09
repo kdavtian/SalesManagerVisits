@@ -22,6 +22,12 @@ export function seesFinancialExports(role) {
   return role === "admin" || role === "ceo" || role === "operations_director" || role === "sales_director" || role === "accountant";
 }
 
+// Fuel allowance: consumption, fuel price, home addresses and day corrections
+// decide how much money is paid out, so only the owner-level roles change them.
+export function canManageFuel(role) {
+  return role === "admin" || role === "ceo";
+}
+
 export function canDeleteOrEditDirectly(role) {
   return role === "admin";
 }
