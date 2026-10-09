@@ -187,6 +187,18 @@ test("POST /api/erp-sync: customer_legal fills TIN/legal info for customers outs
   assert.equal(bad.status, 400);
 });
 
+test("POST /api/erp-sync: customer_legal restores the leading zero Excel drops from a numeric TIN", async () => {
+  const manager = await createUser("sales_manager");
+  const a = await createCustomer({ created_by: manager.id, erp_customer_id: `ITEST-CL-Z-${Date.now()}` });
+  const res = await syncRequest(
+    { customers: [], customer_legal: [{ erp_customer_id: a.erp_customer_id, tin: 2256083 }] },
+    { "X-Sync-Key": SYNC_KEY, ...BYPASS }
+  );
+  assert.equal(res.status, 200);
+  const row = (await pool.query("SELECT tin FROM customers WHERE id = $1", [a.id])).rows[0];
+  assert.equal(row.tin, "02256083");
+});
+
 // Regression: a pre-existing, never-synced product whose stored
 // name/brand/unit had drifted whitespace ("Orlen   5w40", a double space)
 // used to fail the claim-by-identity match against an incoming sync row

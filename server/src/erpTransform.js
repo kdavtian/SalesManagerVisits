@@ -51,7 +51,9 @@ export function normalizeErpUnitKey(value) {
 // has no usable value, so callers only collect rows that can fill something.
 function legalFieldsOf(entry) {
   const rawTin = entry.tin != null ? String(entry.tin).trim().replace(/\.0$/, "") : "";
-  const tin = /^\d{8}$/.test(rawTin) ? rawTin : null;
+  // Excel stores a numeric TIN without its leading zero (02256083 -> 2256083).
+  const padded = /^\d{7}$/.test(rawTin) ? `0${rawTin}` : rawTin;
+  const tin = /^\d{8}$/.test(padded) ? padded : null;
   const text = (v) => (typeof v === "string" && v.trim() ? v.trim() : null);
   const legalName = text(entry.legal_name);
   const legalAddress = text(entry.legal_address);
