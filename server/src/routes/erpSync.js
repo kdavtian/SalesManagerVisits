@@ -5,6 +5,7 @@ import multer from "multer";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { notifyUser } from "../notifications.js";
+import { autoDeliverOrdersFromErp, autoApprovePaymentsFromErp } from "../erpAutoMatch.js";
 import {
   transformErpCustomers,
   transformErpCustomerLegal,
@@ -315,6 +316,11 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
         );
       }
     }
+    // Anything the workbook already shows is settled in KAD too: matching
+    // orders become Delivered, matching pending cash payments become
+    // Approved (both marked "from ERP"; see erpAutoMatch.js).
+    if (order_lines !== undefined) await autoDeliverOrdersFromErp(client);
+    if (cashflow_lines !== undefined) await autoApprovePaymentsFromErp(client);
     // Upsert-only, never TRUNCATE: unlike the other tables above, products
     // can also be created directly in the app (no erp_product_id), and a
     // manual price/name correction here must survive later syncs -- so a

@@ -220,6 +220,8 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       </div>
       <h2 class="order-detail-customer">${customerNameLinkHtml(order.customer_name, order.customer_id)}</h2>
       <p><span class="badge ${meta.cls}">${t(meta.key)}</span>${
+      order.delivered_from_erp ? ` <span class="badge badge-info">${t("from_erp")}</span>` : ""
+    }${
       order.payment_method ? ` ${paymentMethodBadgeHtml(order.payment_method)}` : ""
     }${
       hasDiscount && approvalMeta ? ` <span class="badge ${approvalMeta.cls}">${t(approvalMeta.key)}</span>` : ""
