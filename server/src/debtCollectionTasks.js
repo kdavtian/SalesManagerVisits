@@ -1,13 +1,14 @@
 // "Հավաքագրիր պարտքը" (collect the debt): after every ERP sync, a sales rep gets
 // an automatic task for their next visit to each of THEIR customers that is
-// overdue with debt (Excel debt > 0 and no payment for longer than the
-// customer's credit term, `customers.credit_term_days`, default 45).
+// overdue with debt (Excel debt > 0 and its oldest unpaid invoice older than the
+// customer's credit term, `customers.credit_term_days`, default 45; see debtAge.js).
 //  - channels KF, CAS and OEM are skipped (owner's rule); CVO and PCO are
 //    included: the task goes to the assigned rep, or to the sales director
 //    (Martin) when the customer has no sales manager;
 //  - one open automatic task per customer (unique index, migration 102);
 //  - after a rep closes one, no new one for the same customer for 14 days;
-//  - when the debt is gone (or no longer overdue) the open task is closed;
+//  - when the debt is gone the open task is closed as done; when the debt is still there but
+//    not overdue (older tasks created by the previous, cruder rule) it is cancelled;
 //  - each rep gets ONE notification per run, not one per customer;
 //  - at most MAX_PER_REP new tasks per rep per run (largest debts first), so
 //    the first run does not bury a rep under dozens of tasks;
@@ -20,6 +21,7 @@
 import { pool } from "./db/pool.js";
 import { notifyUser } from "./notifications.js";
 import { yerevanToday } from "./utils/yerevanDate.js";
+import { DEBT_AGE_LATERAL, overdueDebtSql, debtAgeDaysSql } from "./debtAge.js";
 
 export const DEBT_TASK_TITLE = "Հավաքագրիր պարտքը";
 export const REORDER_TASK_TITLE = "Հաճախորդը վաղուց չի պատվիրել՝ զանգահարիր կամ այցելիր";
@@ -27,7 +29,7 @@ const MAX_PER_REP = 15;
 const COOLDOWN_DAYS = 14;
 
 const SKIPPED_CHANNELS_SQL = `COALESCE(c.sales_channel, '') <> ALL(ARRAY['KF', 'CAS', 'OEM'])`;
-const OVERDUE_DEBT_SQL = `erp.debt_amd > 0 AND (erp.days_since_payment IS NULL OR erp.days_since_payment > COALESCE(c.credit_term_days, 45))`;
+// Overdue = the oldest unpaid invoice is older than the credit term (see debtAge.js).
 
 // Who is shown as the creator of automatic tasks: a sales director, else the CEO, else an admin.
 async function systemCreatorId(db) {
@@ -95,11 +97,17 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
   const today = yerevanToday(now);
   // 1) Close open automatic tasks whose debt is gone or no longer overdue.
   const { rows: closed } = await pool.query(
-    `UPDATE tasks t SET status = 'done', completed_at = now(), completion_note = 'Պարտքը մարվել է (Excel)', outcome = 'paid', updated_at = now()
-     FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
+    `UPDATE tasks t SET
+       status = CASE WHEN COALESCE(erp.debt_amd, 0) > 0 THEN 'cancelled' ELSE 'done' END,
+       completed_at = CASE WHEN COALESCE(erp.debt_amd, 0) > 0 THEN NULL ELSE now() END,
+       completion_note = CASE WHEN COALESCE(erp.debt_amd, 0) > 0 THEN 'Վճարման ժամկետը դեռ չի լրացել (Excel)' ELSE 'Պարտքը մարվել է (Excel)' END,
+       outcome = CASE WHEN COALESCE(erp.debt_amd, 0) > 0 THEN NULL ELSE 'paid' END,
+       updated_at = now()
+     FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id ${DEBT_AGE_LATERAL}
      WHERE t.customer_id = c.id AND t.auto_kind = 'debt_collection' AND t.status = 'open'
-       AND NOT (${OVERDUE_DEBT_SQL}) AND erp.erp_customer_id IS NOT NULL
-     RETURNING t.id`
+       AND NOT ${overdueDebtSql("$1::date")} AND erp.erp_customer_id IS NOT NULL
+     RETURNING t.id`,
+    [today]
   );
 
   const perRep = new Map();
@@ -111,13 +119,14 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
   const { rows: found } = await pool.query(
     `SELECT c.id AS customer_id, c.name AS customer_name, c.sales_channel,
             CASE WHEN u.role IN ('sales_manager', 'sales_director') THEN u.id END AS rep_id,
-            erp.debt_amd, erp.days_since_payment,
+            erp.debt_amd, COALESCE(${debtAgeDaysSql("$2::date")}, erp.days_since_payment) AS days_open,
             (SELECT to_char(t.promise_date, 'YYYY-MM-DD') FROM tasks t WHERE t.customer_id = c.id AND t.auto_kind = 'debt_collection' AND t.outcome = 'promised'
              ORDER BY t.created_at DESC LIMIT 1) AS last_promise_date
      FROM customers c
      JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
+     ${DEBT_AGE_LATERAL}
      LEFT JOIN users u ON u.id = c.assigned_manager_id
-     WHERE ${OVERDUE_DEBT_SQL} AND ${SKIPPED_CHANNELS_SQL}
+     WHERE ${overdueDebtSql("$2::date")} AND ${SKIPPED_CHANNELS_SQL}
        AND NOT EXISTS (
          SELECT 1 FROM tasks t WHERE t.customer_id = c.id AND t.auto_kind = 'debt_collection'
            AND (t.status = 'open'
@@ -136,7 +145,7 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
   const counts = new Map();
   for (const cand of candidates) {
     if ((counts.get(cand.rep_id) ?? 0) >= MAX_PER_REP) continue;
-    const days = cand.days_since_payment == null ? "" : ` · ${cand.days_since_payment} օր առանց վճարման`;
+    const days = cand.days_open == null ? "" : ` · ${cand.days_open} օր առանց վճարման`;
     const promiseBroken = Boolean(cand.last_promise_date) && cand.last_promise_date < today;
     // No checklist item: ticking it would close the task without recording the outcome.
     const title = `${DEBT_TASK_TITLE}՝ ${amd(cand.debt_amd)}${days}${promiseBroken ? " · խոստումը չի կատարվել" : ""}`;
@@ -191,12 +200,13 @@ export async function createReorderFollowupTasks(now = new Date(), { notify = tr
      FROM customers c
      JOIN stats st ON st.erp_customer_id = c.erp_customer_id
      LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
+     ${DEBT_AGE_LATERAL}
      LEFT JOIN users u ON u.id = c.assigned_manager_id
      WHERE st.n_gaps >= 3 AND st.median_gap BETWEEN 7 AND 90
        AND ($1::date - st.last_order) > GREATEST(st.median_gap * 1.5, st.median_gap + 7)
        AND ($1::date - st.last_order) <= 365
        AND ${SKIPPED_CHANNELS_SQL}
-       AND NOT (erp.erp_customer_id IS NOT NULL AND ${OVERDUE_DEBT_SQL})
+       AND NOT (erp.erp_customer_id IS NOT NULL AND ${overdueDebtSql("$1::date")})
        AND (c.credit_limit_amd IS NULL OR COALESCE(erp.debt_amd, 0) <= c.credit_limit_amd)
        AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.id AND o.created_at::date > st.last_order AND o.status <> 'draft')
        AND NOT EXISTS (
