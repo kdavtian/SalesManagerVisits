@@ -3,6 +3,7 @@
 import { api } from "../api.js";
 import { escapeHtml, formatAmd, formatDateDMY } from "../util.js";
 import { t } from "../i18n.js";
+import { dueChipHtml } from "../debtChip.js";
 
 const BACK_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>`;
 
@@ -176,5 +177,83 @@ export async function renderDeliverySpeed(root, navigate) {
       load();
     })
   );
+  load();
+}
+
+// Unpaid invoices (FIFO): every order still (partly) unpaid, oldest first. Tap an aging row to
+// filter, search by customer / order / manager.
+export async function renderUnpaidInvoices(root, navigate) {
+  const selected = new Set();
+  let q = "";
+  const body = shell(
+    root,
+    navigate,
+    "report_unpaid_invoices_name",
+    `<div class="activity-search-combined" style="margin:8px 0"><input type="search" id="unpaid-search" placeholder="${escapeHtml(t("unpaid_invoices_search"))}" aria-label="${escapeHtml(t("unpaid_invoices_search"))}" /></div>`
+  );
+  let seq = 0;
+  async function load() {
+    const mine = ++seq;
+    try {
+      const params = {};
+      if (q) params.q = q;
+      if (selected.size) params.bucket = [...selected].join(",");
+      const r = await api.getUnpaidInvoices(params);
+      if (mine !== seq) return;
+      body.innerHTML = `
+        <div class="card-list" id="unpaid-buckets">
+          ${r.summary
+            .map(
+              (b) => `<button type="button" class="card report-row report-bucket-btn ${selected.has(b.bucket) ? "report-bucket-active" : ""}" data-bucket="${b.bucket}" aria-pressed="${selected.has(b.bucket)}">
+                <span>${escapeHtml(t(`debt_bucket_${b.bucket}`))}</span>
+                <strong class="report-row-amount">${formatAmd(b.amount_amd)} <span class="muted">(${b.invoices})</span></strong>
+              </button>`
+            )
+            .join("")}
+        </div>
+        <div class="activity-count">${r.count} ${t("unpaid_invoices_count")} · ${formatAmd(r.total_unpaid_amd)}</div>
+        <div class="card-list" id="unpaid-list">
+          ${
+            r.rows.length
+              ? r.rows
+                  .map(
+                    (o) => `<button type="button" class="card sales-order-card ${o.due_days > 0 ? "unpaid-row-overdue" : "unpaid-row-due"}" data-customer-id="${o.customer_id}">
+                      <div class="sales-order-row">
+                        <span class="muted">${escapeHtml(o.order_id ?? t("unpaid_invoices_opening_note"))} · ${escapeHtml(formatDateDMY(o.order_date))}</span>
+                        <span class="text-amount sales-order-amount">${formatAmd(o.unpaid_amd)}</span>
+                      </div>
+                      <div class="sales-order-name-row">
+                        <strong>${escapeHtml(o.customer_name || "")}</strong>
+                        ${dueChipHtml(o.due_days)}
+                      </div>
+                      ${o.manager_name ? `<span class="muted" style="font-size:0.8em">${escapeHtml(o.manager_name)}</span>` : ""}
+                    </button>`
+                  )
+                  .join("")
+              : `<p class="empty-state">${t("no_data")}</p>`
+          }
+        </div>
+        ${r.truncated ? `<p class="muted" style="font-size:0.85em;margin:8px 4px">${t("unpaid_invoices_more")}</p>` : ""}`;
+      body.querySelectorAll("[data-bucket]").forEach((btn) =>
+        btn.addEventListener("click", () => {
+          const b = btn.dataset.bucket;
+          if (selected.has(b)) selected.delete(b);
+          else selected.add(b);
+          load();
+        })
+      );
+      body.querySelectorAll("[data-customer-id]").forEach((btn) => btn.addEventListener("click", () => navigate(`#/customers/${btn.dataset.customerId}/orders`)));
+    } catch (err) {
+      if (mine === seq) body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    }
+  }
+  let timer;
+  root.querySelector("#unpaid-search").addEventListener("input", (e) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      q = e.target.value.trim();
+      load();
+    }, 250);
+  });
   load();
 }

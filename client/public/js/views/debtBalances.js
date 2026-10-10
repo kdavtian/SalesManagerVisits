@@ -10,6 +10,7 @@ import { state } from "../state.js";
 import { t, getLang } from "../i18n.js";
 import { loadWithCache } from "../listCache.js";
 import { icons } from "../icons.js";
+import { dueChipHtml } from "../debtChip.js";
 
 // For last_visit_at, a real timestamp (checkins.timestamp) -- correctly
 // converted to the viewer's local calendar date, since it names an
@@ -63,6 +64,8 @@ export async function renderDebtBalances(root, navigate) {
   const canGroup = state.user.role !== "sales_manager";
   let mode = "flat";
   let managerFilter = "";
+  // "" = all, "overdue" = the oldest unpaid invoice is past its due date, "not_due" = unpaid but within the term.
+  let dueFilter = "";
   // Empty string = live erp_customer_data.debt_amd snapshot (the default,
   // and the only mode before this feature). A chosen date instead computes
   // a running balance from full order/cashflow history as of that date
@@ -108,6 +111,9 @@ export async function renderDebtBalances(root, navigate) {
              </div>`
           : ""
       }
+      <div class="debt-filter-row" id="debt-due-tabs">
+        ${[["", "debt_filter_all"], ["overdue", "debt_filter_overdue"], ["not_due", "debt_filter_not_due"]].map(([v, k]) => `<button type="button" class="chip ${v === "" ? "chip-active" : ""}" data-due="${v}">${t(k)}</button>`).join("")}
+      </div>
       <p class="form-error" id="debt-error" hidden></p>
       <div id="debt-list" class="card-list" style="margin-top:12px;"></div>
     </div>
@@ -166,6 +172,14 @@ export async function renderDebtBalances(root, navigate) {
     });
   }
 
+  container.querySelectorAll("#debt-due-tabs [data-due]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      dueFilter = btn.dataset.due;
+      container.querySelectorAll("#debt-due-tabs [data-due]").forEach((b) => b.classList.toggle("chip-active", b === btn));
+      render();
+    })
+  );
+
   if (canGroup) {
     const tabsEl = container.querySelector("#debt-mode-tabs");
     const filterWrap = container.querySelector("#debt-manager-filter-wrap");
@@ -202,12 +216,15 @@ export async function renderDebtBalances(root, navigate) {
   function rowHtml(r) {
     const managerLabel = canGroup && mode === "flat" ? escapeHtml(r.assigned_manager_name || t("unassigned")) : "";
     return `
-      <button type="button" class="card debt-balance-card" data-customer-id="${r.internal_customer_id}">
+      <button type="button" class="card debt-balance-card ${Number(r.remaining_balance) > 0 && r.oldest_due_days != null ? (r.oldest_due_days > 0 ? "unpaid-row-overdue" : "unpaid-row-due") : ""}" data-customer-id="${r.internal_customer_id}">
         <div class="debt-balance-row">
           <span class="muted">${t("customer_id_label")}: ${escapeHtml(r.customer_id || "")}${managerLabel ? ` · ${managerLabel}` : ""}</span>
           <span class="text-amount debt-balance-amount">${formatAmd(Number(r.remaining_balance))}</span>
         </div>
-        <strong>${escapeHtml(r.customer_name || "")}</strong>
+        <div class="sales-order-name-row">
+          <strong>${escapeHtml(r.customer_name || "")}</strong>
+          ${Number(r.remaining_balance) > 0 ? dueChipHtml(r.oldest_due_days) : ""}
+        </div>
         <div class="debt-balance-row debt-balance-row-dates muted">
           <span>${t("debt_balances_last_payment")}: ${formatDateOnly(r.last_payment_date)}</span>
           <span>${t("debt_balances_last_visit")}: ${formatDate(r.last_visit_at)}</span>
@@ -219,6 +236,8 @@ export async function renderDebtBalances(root, navigate) {
 
   function render() {
     let visible = rows;
+    if (dueFilter === "overdue") visible = visible.filter((r) => Number(r.remaining_balance) > 0 && r.oldest_due_days != null && r.oldest_due_days > 0);
+    else if (dueFilter === "not_due") visible = visible.filter((r) => Number(r.remaining_balance) > 0 && r.oldest_due_days != null && r.oldest_due_days <= 0);
     if (canGroup && mode === "by-manager" && managerFilter) {
       visible = visible.filter((r) => String(r.assigned_manager_id || "") === managerFilter);
     }

@@ -116,6 +116,13 @@ export const REPORTS = [
     // Accountant reconciles debt day to day, same reasoning as payments above.
     defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant", "sales_manager"],
   },
+  // Every order that is still (partly) unpaid, oldest first (FIFO; credit term deducted) -- see debtAging.js.
+  {
+    key: "unpaid_invoices",
+    nameKey: "report_unpaid_invoices_name",
+    descriptionKey: "report_unpaid_invoices_description",
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant", "sales_manager"],
+  },
   {
     key: "sales_budget",
     nameKey: "report_sales_budget_name",
@@ -157,6 +164,7 @@ export const REPORTS = [
 const REPORT_DISPLAY_ORDER = [
   "daily_management",
   "customer_debt",
+  "unpaid_invoices",
   "payments",
   "erp_payments",
   "orders_pipeline",

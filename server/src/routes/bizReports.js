@@ -6,6 +6,8 @@ import { requireAuth } from "../middleware/auth.js";
 import { canAccessReport } from "../reports.js";
 import { buildScorecard } from "../scorecard.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
+import { AGING_BUCKETS, allocateFifo, loadOrdersNewestFirst } from "../debtAging.js";
+import { ERP_OPENING_DATE } from "../debtAge.js";
 
 export const bizReportsRouter = Router();
 bizReportsRouter.use(requireAuth);
@@ -94,5 +96,57 @@ bizReportsRouter.get("/delivery-speed", async (req, res) => {
     within_48h_pct: within(48),
     open,
     slowest: [...done].filter((r) => r.total_hours !== null).sort((a, b) => b.total_hours - a.total_hours).slice(0, 10).map((r) => ({ id: r.id, order_code: r.order_code, customer_name: r.customer_name, total_hours: Math.round(r.total_hours * 10) / 10, from_excel: r.delivered_from_erp })),
+  });
+});
+
+// Unpaid invoices: every order that is still (partly) unpaid, company-wide (a sales manager sees
+// their own customers), oldest first. Payments clear the oldest invoices first (FIFO), each piece
+// ages from its own due date (order date + the customer's credit term) -- see debtAging.js.
+bizReportsRouter.get("/unpaid-invoices", async (req, res) => {
+  if (!(await canAccessReport(req.user.role, "unpaid_invoices"))) return res.status(403).json({ error: "Not allowed" });
+  const params = [];
+  let scope = "";
+  if (req.user.role === "sales_manager") {
+    params.push(req.user.id);
+    scope = `AND c.assigned_manager_id = $${params.length}`;
+  }
+  const { rows: customers } = await pool.query(
+    `SELECT c.id AS customer_id, c.name AS customer_name, c.erp_customer_id, c.credit_term_days, am.name AS manager_name,
+            COALESCE(erp.assigned_sales_rep, c.sales_channel) AS channel, erp.debt_amd
+     FROM erp_customer_data erp
+     JOIN customers c ON c.erp_customer_id = erp.erp_customer_id
+     LEFT JOIN users am ON am.id = c.assigned_manager_id
+     WHERE erp.debt_amd > 0 ${scope}`,
+    params
+  );
+  const today = yerevanToday();
+  const orders = await loadOrdersNewestFirst(pool, customers.map((c) => c.erp_customer_id));
+  const q = String(req.query.q ?? "").trim().toLowerCase();
+  const bucketFilter = String(req.query.bucket ?? "").split(",").filter((b) => AGING_BUCKETS.includes(b));
+  const all = [];
+  for (const c of customers) {
+    const a = allocateFifo({ orders: orders.get(c.erp_customer_id) ?? [], debt: Number(c.debt_amd), today, termDays: c.credit_term_days ?? 45 });
+    const base = { customer_id: c.customer_id, customer_name: c.customer_name, erp_customer_id: c.erp_customer_id, manager_name: c.manager_name, channel: c.channel };
+    for (const i of a.invoices) all.push({ ...base, order_id: i.order_id, order_date: i.date, total_amd: Math.round(i.total), unpaid_amd: Math.round(i.unpaid), due_days: i.due_days, bucket: i.bucket });
+    if (a.opening) all.push({ ...base, order_id: null, order_date: ERP_OPENING_DATE, total_amd: Math.round(a.opening.unpaid), unpaid_amd: Math.round(a.opening.unpaid), due_days: a.opening.due_days, bucket: "opening" });
+  }
+  const matching = q
+    ? all.filter((r) => [r.customer_name, r.erp_customer_id, r.order_id, r.manager_name].filter(Boolean).join(" ").toLowerCase().includes(q))
+    : all;
+  const summary = AGING_BUCKETS.map((bucket) => {
+    const list = matching.filter((r) => r.bucket === bucket);
+    return { bucket, amount_amd: list.reduce((s, r) => s + r.unpaid_amd, 0), invoices: list.length, customers: new Set(list.map((r) => r.customer_id)).size };
+  }).filter((b) => b.invoices > 0);
+  const shown = (bucketFilter.length ? matching.filter((r) => bucketFilter.includes(r.bucket)) : matching).sort(
+    (a, b) => b.due_days - a.due_days || b.unpaid_amd - a.unpaid_amd
+  );
+  const LIMIT = 400;
+  res.json({
+    today,
+    summary,
+    total_unpaid_amd: shown.reduce((s, r) => s + r.unpaid_amd, 0),
+    count: shown.length,
+    truncated: shown.length > LIMIT,
+    rows: shown.slice(0, LIMIT),
   });
 });

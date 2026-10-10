@@ -3,7 +3,8 @@ import { escapeHtml, firstUseHintHtml, activateFirstUseHints, activateDialog, do
 import { buildRegionSubregionTree, openTriStateTreeSheet, NO_GROUP_KEY } from "../regionTree.js";
 import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
-import { REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, CATEGORY_LIST, formatAmd, amdWithUnitHtml, agingBucketLabel, channelDisplayLabel, syncBadgeHtml, formatDateDMY, parseDateOnly } from "../util.js";
+import { dueChipHtml } from "../debtChip.js";
+import { REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, CATEGORY_LIST, formatAmd, amdWithUnitHtml, channelDisplayLabel, syncBadgeHtml, formatDateDMY, parseDateOnly } from "../util.js";
 
 // "all" (not "") for the All-time option: every one of this array's three
 // callers builds its request params with
@@ -77,6 +78,7 @@ export async function renderReports(root, navigate, reportKey) {
   if (reportKey === "weekly_scorecard") return (await import("./bizReports.js")).renderWeeklyScorecard(root, navigate);
   if (reportKey === "delivery_speed") return (await import("./bizReports.js")).renderDeliverySpeed(root, navigate);
   if (reportKey === "customer_pipeline") return (await import("./bizReports.js")).renderCustomerPipeline(root, navigate);
+  if (reportKey === "unpaid_invoices") return (await import("./bizReports.js")).renderUnpaidInvoices(root, navigate);
   if (reportKey === "fuel_allowance") return (await import("./fuelReport.js")).renderFuelReport(root, navigate);
   if (reportKey === "orders_pipeline") return renderOrdersPipelineReport(root, navigate);
   if (reportKey === "brand_availability") return renderBrandAvailabilityReport(root, navigate);
@@ -209,6 +211,7 @@ const REPORT_ICONS = {
   cash_custody: icons.wallet,
   cash_reconciliation: icons.clipboardCheck,
   customer_debt: icons.warning,
+  unpaid_invoices: icons.clipboardCheck,
   sales_budget: icons.target,
   brand_volume: icons.box,
   daily_management: icons.dashboard,
@@ -996,7 +999,7 @@ async function renderCustomerDebtReport(root, navigate) {
           .map(
             (b) => `
         <button type="button" class="card report-row report-bucket-btn ${selectedBuckets.has(b.aging_bucket) ? "report-bucket-active" : ""}" data-bucket="${escapeHtml(b.aging_bucket)}" aria-pressed="${selectedBuckets.has(b.aging_bucket)}">
-          <span>${escapeHtml(agingBucketLabel(b.aging_bucket))}</span>
+          <span>${escapeHtml(t(`debt_bucket_${b.aging_bucket}`))}</span>
           <strong class="report-row-amount">${formatAmd(Number(b.total_debt_amd))} <span class="muted">(${b.customer_count})</span></strong>
         </button>`
           )
@@ -1008,11 +1011,12 @@ async function renderCustomerDebtReport(root, navigate) {
           .map((c) => {
             const collected = Number(c.collected_since_sync_amd);
             return `
-        <div class="card report-row-multiline">
+        <div class="card report-row-multiline ${Number(c.estimated_debt_amd) > 0 && c.oldest_due_days != null ? (c.oldest_due_days > 0 ? "unpaid-row-overdue" : "unpaid-row-due") : ""}">
           <div class="report-debt-customer-top">
             <strong class="report-debt-customer-name">${escapeHtml(c.customer_name)}</strong>
             <strong class="report-row-amount">${formatAmd(Number(c.estimated_debt_amd))}</strong>
           </div>
+          ${c.oldest_due_days != null && Number(c.estimated_debt_amd) > 0 ? `<div class="debt-chip-line">${Number(c.overdue_amd) > 0 ? `<span class="muted">${t("debt_overdue_label")}: ${formatAmd(Number(c.overdue_amd))}</span>` : ""}${dueChipHtml(c.oldest_due_days)}</div>` : ""}
           <span class="muted">${t("customer_id_label")}: ${escapeHtml(c.erp_customer_id || "—")} · ${escapeHtml(channelDisplayLabel(c.assigned_sales_rep))}</span>
           <span class="muted">${t("debt_balances_last_payment")}: ${c.last_payment_date ? escapeHtml(formatDateDMY(c.last_payment_date)) : t("report_customer_debt_no_payment")}</span>${
               collected > 0

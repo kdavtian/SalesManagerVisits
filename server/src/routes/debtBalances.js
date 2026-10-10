@@ -2,6 +2,8 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { erpSyncFreshness } from "../erpSyncFreshness.js";
+import { allocateFifo, loadOrdersNewestFirst } from "../debtAging.js";
+import { yerevanToday } from "../utils/yerevanDate.js";
 
 export const debtBalancesRouter = Router();
 
@@ -174,7 +176,7 @@ debtBalancesRouter.get("/", async (req, res) => {
             ${balanceExpr} AS remaining_balance,
             ${lastPaymentExpr} AS last_payment_date,
             ${LAST_VISIT_SUBQUERY} AS last_visit_at,
-            c.assigned_manager_id,
+            c.assigned_manager_id, c.credit_term_days,
             am.name AS assigned_manager_name
      ${fromClause}
      LEFT JOIN users am ON am.id = c.assigned_manager_id
@@ -183,5 +185,13 @@ debtBalancesRouter.get("/", async (req, res) => {
      ORDER BY remaining_balance DESC`,
     params
   );
-  res.json({ rows, as_of_date: asOfDate, sync: await erpSyncFreshness("erp_customer_data") });
+  // FIFO aging per customer (payments clear the oldest invoices first, credit term deducted -- see
+  // debtAging.js): the oldest unpaid invoice's days past due and the overdue part of the balance.
+  const today = asOfDate ?? yerevanToday();
+  const orders = await loadOrdersNewestFirst(pool, rows.filter((r) => Number(r.remaining_balance) > 0).map((r) => r.customer_id), { asOf: asOfDate });
+  const withAging = rows.map(({ credit_term_days, ...r }) => {
+    const a = allocateFifo({ orders: orders.get(r.customer_id) ?? [], debt: Number(r.remaining_balance), today, termDays: credit_term_days ?? 45 });
+    return { ...r, oldest_due_days: a.oldest_due_days, overdue_amd: a.overdue_amd };
+  });
+  res.json({ rows: withAging, as_of_date: asOfDate, sync: await erpSyncFreshness("erp_customer_data") });
 });
