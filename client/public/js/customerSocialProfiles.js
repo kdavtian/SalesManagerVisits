@@ -1,4 +1,5 @@
 import { getLang, t } from "./i18n.js";
+import { labelColon } from "./util.js";
 import { patchCachedCustomer } from "./listCache.js";
 
 const INSTAGRAM_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.4" cy="6.7" r="1" fill="currentColor" stroke="none"/></svg>`;
@@ -198,8 +199,8 @@ async function decorateCustomerDetail() {
   const links = [
     data.instagram_username ? socialButton("instagram", data.instagram_username) : "",
     data.facebook_url ? socialButton("facebook", data.facebook_url) : "",
-    data.email ? linkButton("email", `mailto:${data.email}`, MAIL_ICON, `${t("customer_email")}: ${data.email}`) : "",
-    data.website ? linkButton("website", websiteHref(data.website), GLOBE_ICON, `${t("customer_website")}: ${data.website}`) : "",
+    data.email ? linkButton("email", `mailto:${data.email}`, MAIL_ICON, `${t("customer_email")}${labelColon()}${data.email}`) : "",
+    data.website ? linkButton("website", websiteHref(data.website), GLOBE_ICON, `${t("customer_website")}${labelColon()}${data.website}`) : "",
   ].filter(Boolean).join("");
 
   actions.innerHTML = links;

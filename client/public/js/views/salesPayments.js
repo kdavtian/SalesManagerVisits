@@ -3,7 +3,7 @@
 // From/To pills, channel pills with counts, one search box, day groups with
 // totals -- plus a Region filter and the Excel export (via the page header).
 import { api } from "../api.js";
-import { escapeHtml, openInfoPopup, formatAmd, channelDisplayLabel, syncBadgeHtml, parseDateOnly, regionLabelHy, monthShort } from "../util.js";
+import { escapeHtml, openInfoPopup, formatAmd, channelDisplayLabel, syncBadgeHtml, parseDateOnly, regionLabelHy, monthShort, labelColon } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { openTriStateTreeSheet, buildRegionSubregionTree } from "../regionTree.js";
 
@@ -109,7 +109,7 @@ export async function renderPaymentsTab(root, navigate) {
       listEl.innerHTML = `<p class="empty-state">${t("no_data")}</p>`;
       return;
     }
-    subtotalEl.textContent = `${t("sales_subtotal")}: ${formatAmd(Number(data.totals.total_amd))} (${data.totals.payment_count} ${t("report_erp_payments_count")})`;
+    subtotalEl.textContent = `${t("sales_subtotal")}${labelColon()}${formatAmd(Number(data.totals.total_amd))} (${data.totals.payment_count} ${t("report_erp_payments_count")})`;
     const days = new Map();
     for (const r of rows) {
       const d = days.get(r.date) ?? { total: 0, count: 0 };

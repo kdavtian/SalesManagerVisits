@@ -1,6 +1,6 @@
 import { renderVisitFirst } from "../visitFirstCard.js";
 import { api } from "../api.js";
-import { escapeHtml, formatDistance, formatRelative, formatAmd, getCurrentPosition, haversineMeters, categoryLabel, formatDayMonth } from "../util.js";
+import { escapeHtml, formatDistance, formatRelative, formatAmd, getCurrentPosition, haversineMeters, categoryLabel, formatDayMonth, labelColon } from "../util.js";
 import { state, canViewTeamLocations } from "../state.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
@@ -124,7 +124,7 @@ function companyDashboardPreviewHtml(planPreview) {
         <span class="muted"> / ${formatAmd(Math.round(totals.plan))}${totals.plan ? ` (${pct}%)` : ""}</span>
       </div>
       <div class="progress-bar"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
-      <p class="muted" style="margin:8px 0 0;">${t("company_dashboard_collected_label")}: ${formatAmd(Math.round(totals.collected))}${collectedPct !== null ? ` (${collectedPct}%)` : ""}</p>
+      <p class="muted" style="margin:8px 0 0;">${t("company_dashboard_collected_label")}${labelColon()}${formatAmd(Math.round(totals.collected))}${collectedPct !== null ? ` (${collectedPct}%)` : ""}</p>
     </button>
   `;
 }

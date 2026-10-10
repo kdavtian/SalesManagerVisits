@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, formatDateTime, activateDialog, channelDisplayLabel, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo } from "../util.js";
+import { escapeHtml, formatAmd, formatDateTime, activateDialog, channelDisplayLabel, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, labelColon } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 import { icons } from "../icons.js";
@@ -350,7 +350,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
             <strong>${escapeHtml(p.customer_name_snapshot)}</strong>
           </div>
           <div class="muted list-row-meta">
-            ${p.erp_customer_id_snapshot ? `${t("customer_id_label")}: ${escapeHtml(p.erp_customer_id_snapshot)} · ` : ""}${escapeHtml(p.sales_manager_name_snapshot)}${p.sales_channel ? ` · ${escapeHtml(channelDisplayLabel(p.sales_channel))}` : ""} · ${formatDateTime(p.payment_date)}
+            ${p.erp_customer_id_snapshot ? `${t("customer_id_label")}${labelColon()}${escapeHtml(p.erp_customer_id_snapshot)} · ` : ""}${escapeHtml(p.sales_manager_name_snapshot)}${p.sales_channel ? ` · ${escapeHtml(channelDisplayLabel(p.sales_channel))}` : ""} · ${formatDateTime(p.payment_date)}
           </div>
         </button>
         <div class="payment-row-bottom-line">
@@ -481,13 +481,13 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
         <div class="card-list" style="margin:12px 0;">
           <div class="order-line-row">
             <div class="order-line-top">${customerNameLinkHtml(p.customer_name_snapshot, p.customer_id, "span", "order-line-name")}<strong class="text-amount">${formatAmd(Number(p.amount_amd))}</strong></div>
-            <span class="order-line-meta">${p.erp_customer_id_snapshot ? `${t("customer_id_label")}: ${escapeHtml(p.erp_customer_id_snapshot)} · ` : ""}${formatDateTime(p.payment_date)}</span>
+            <span class="order-line-meta">${p.erp_customer_id_snapshot ? `${t("customer_id_label")}${labelColon()}${escapeHtml(p.erp_customer_id_snapshot)} · ` : ""}${formatDateTime(p.payment_date)}</span>
           </div>
         </div>
-        <p class="muted">${t("payment_manager_label")}: ${escapeHtml(p.sales_manager_name_snapshot)}${p.sales_channel ? ` · ${escapeHtml(channelDisplayLabel(p.sales_channel))}` : ""}</p>
+        <p class="muted">${t("payment_manager_label")}${labelColon()}${escapeHtml(p.sales_manager_name_snapshot)}${p.sales_channel ? ` · ${escapeHtml(channelDisplayLabel(p.sales_channel))}` : ""}</p>
         ${
           p.current_holder_name
-            ? `<p class="muted">${t("payment_current_holder_label")}: ${escapeHtml(p.current_holder_name)}${
+            ? `<p class="muted">${t("payment_current_holder_label")}${labelColon()}${escapeHtml(p.current_holder_name)}${
                 p.pending_handoff_to_name
                   ? ` · ${t("payment_handoff_pending_to").replace("{name}", escapeHtml(p.pending_handoff_to_name))}`
                   : ""
@@ -702,7 +702,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
             (c) => `
           <button type="button" class="card" style="text-align:left; width:100%;" data-customer-id="${c.id}">
             <strong>${escapeHtml(c.name)}</strong>
-            ${c.erp_customer_id ? `<div class="muted">${t("customer_id_label")}: ${escapeHtml(c.erp_customer_id)}</div>` : ""}
+            ${c.erp_customer_id ? `<div class="muted">${t("customer_id_label")}${labelColon()}${escapeHtml(c.erp_customer_id)}</div>` : ""}
           </button>`
           )
           .join("");

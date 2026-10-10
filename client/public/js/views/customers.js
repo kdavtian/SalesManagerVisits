@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { customerMatchesSearch, escapeHtml, formatDateTime, formatAmd, haversineMeters, getCurrentPosition, customerListIconHtml, categoryLabel, activateDialog, channelDisplayLabel, TIER_OPTIONS } from "../util.js";
+import { customerMatchesSearch, escapeHtml, formatDateTime, formatAmd, haversineMeters, getCurrentPosition, customerListIconHtml, categoryLabel, activateDialog, channelDisplayLabel, TIER_OPTIONS, labelColon } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state, seesAllActivity } from "../state.js";
@@ -533,7 +533,7 @@ export function renderCustomers(root, navigate, initialFilter) {
         // never been visited gets the status word only, since there's no
         // date to pair it with.
         const badge = visitStatusBadge(c);
-        const lastVisit = c.last_visit_at ? `${t("last_visit")}: ${formatDateTime(c.last_visit_at)}` : "";
+        const lastVisit = c.last_visit_at ? `${t("last_visit")}${labelColon()}${formatDateTime(c.last_visit_at)}` : "";
         const idAndType = [
           c.erp_customer_id ? `ID: ${escapeHtml(String(c.erp_customer_id))}` : "",
           c.category ? escapeHtml(categoryLabel(c.category)) : "",
@@ -552,7 +552,7 @@ export function renderCustomers(root, navigate, initialFilter) {
 
         const debtLabel =
           showDebt && c.debt_amd != null && Number(c.debt_amd) > 0
-            ? `<span class="customer-card-debt">${t("outstanding_debt_label")}: ${formatAmd(Number(c.debt_amd))}</span>`
+            ? `<span class="customer-card-debt">${t("outstanding_debt_label")}${labelColon()}${formatAmd(Number(c.debt_amd))}</span>`
             : "";
         const bottomRow =
           badge || lastVisit || debtLabel

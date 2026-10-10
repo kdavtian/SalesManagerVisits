@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, parseUserAgent, SALES_CHANNELS, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, parseDateOnly, formatPhoneDisplay } from "../util.js";
+import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, parseUserAgent, SALES_CHANNELS, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, parseDateOnly, formatPhoneDisplay, labelColon } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 import { ALL_ROLES, QUICK_ACTIONS, defaultQuickActionIds } from "../quickActions.js";
@@ -163,7 +163,7 @@ export async function renderTeamSection(container) {
               <span class="badge ${roleBadge.cls}">${t(roleBadge.key)}</span>
             </div>
             ${u.position ? `<div class="muted list-row-meta">${escapeHtml(u.position)}</div>` : ""}
-            <div class="muted list-row-meta">${t("last_seen")}: ${escapeHtml(lastSeenSummary(u))}</div>
+            <div class="muted list-row-meta">${t("last_seen")}${labelColon()}${escapeHtml(lastSeenSummary(u))}</div>
           </div>
           <span class="chevron">&#8250;</span>
         </button>
@@ -280,8 +280,8 @@ export async function renderTeamSection(container) {
       <div class="sheet">
         <h2>${t("edit_team_member")}</h2>
         <p class="muted">
-          ${t("last_seen")}: ${escapeHtml(lastSeenSummary(u))}<br />
-          ${t("device")}: ${escapeHtml(parseUserAgent(u.last_seen_user_agent) || t("unknown"))}
+          ${t("last_seen")}${labelColon()}${escapeHtml(lastSeenSummary(u))}<br />
+          ${t("device")}${labelColon()}${escapeHtml(parseUserAgent(u.last_seen_user_agent) || t("unknown"))}
         </p>
         <form id="edit-user-form">
           <label>${t("name")}<input name="name" value="${escapeHtml(u.name)}" required /></label>
@@ -603,7 +603,7 @@ export async function renderProductsSection(container) {
         ${t("landing_cost_diag_missing")
           .replace("{missing}", diag.missing_landing_cost)
           .replace("{total}", diag.synced_count)}
-        ${t("landing_cost_diag_last_synced")}: ${escapeHtml(lastSynced)}
+        ${t("landing_cost_diag_last_synced")}${labelColon()}${escapeHtml(lastSynced)}
       </p>
     `;
   })();
@@ -984,7 +984,7 @@ export async function renderProductsSection(container) {
                 </div>
                 <div class="user-row-meta">
                   <span class="muted">
-                    ${p.sku ? `${t("product_code_label")}: ${escapeHtml(p.sku)} · ` : ""}
+                    ${p.sku ? `${t("product_code_label")}${labelColon()}${escapeHtml(p.sku)} · ` : ""}
                     ${p.erp_product_id ? t("catalog_synced") : t("catalog_manual")}
                   </span>
                   <button class="btn-link" data-dup-edit="${p.id}">${t("edit")}</button>
@@ -1217,17 +1217,17 @@ function openImportSheet(onDone) {
                   <div class="user-row-meta">
                     ${
                       c.oldStandard !== c.newStandard
-                        ? `<span>${t("price_standard")}: ${formatAmd(c.oldStandard ?? 0)} &rarr; ${formatAmd(c.newStandard ?? 0)}</span>`
+                        ? `<span>${t("price_standard")}${labelColon()}${formatAmd(c.oldStandard ?? 0)} &rarr; ${formatAmd(c.newStandard ?? 0)}</span>`
                         : ""
                     }
                     ${
                       c.oldRetail !== c.newRetail
-                        ? `<span>${t("price_retail")}: ${formatAmd(c.oldRetail ?? 0)} &rarr; ${formatAmd(c.newRetail ?? 0)}</span>`
+                        ? `<span>${t("price_retail")}${labelColon()}${formatAmd(c.oldRetail ?? 0)} &rarr; ${formatAmd(c.newRetail ?? 0)}</span>`
                         : ""
                     }
                     ${
                       c.oldNetCost !== c.newNetCost
-                        ? `<span>${t("net_cost")}: ${c.oldNetCost != null ? formatAmd(c.oldNetCost) : "—"} &rarr; ${c.newNetCost != null ? formatAmd(c.newNetCost) : "—"}</span>`
+                        ? `<span>${t("net_cost")}${labelColon()}${c.oldNetCost != null ? formatAmd(c.oldNetCost) : "—"} &rarr; ${c.newNetCost != null ? formatAmd(c.newNetCost) : "—"}</span>`
                         : ""
                     }
                   </div>

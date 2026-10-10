@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd } from "../util.js";
+import { escapeHtml, formatAmd, labelColon } from "../util.js";
 import { t } from "../i18n.js";
 
 // A dependency-free CSS bar chart, same technique as dashboard.js's
@@ -187,7 +187,7 @@ function renderPlanSalesSection(leaderboard) {
         <div class="card">
           <strong>${escapeHtml(r.rep_name)}</strong>
           ${comparisonBarHtml(t("company_dashboard_sales_label"), safeAmd(r.sales_amd), safeAmd(r.plan_amd), safeAmd(r.collected_amd))}
-          <div class="muted">${t("company_dashboard_collected_label")}: ${formatAmd(Math.round(safeAmd(r.collected_amd)))}${collectedPctSuffix(safeAmd(r.collected_amd), safeAmd(r.sales_amd))}</div>
+          <div class="muted">${t("company_dashboard_collected_label")}${labelColon()}${formatAmd(Math.round(safeAmd(r.collected_amd)))}${collectedPctSuffix(safeAmd(r.collected_amd), safeAmd(r.sales_amd))}</div>
         </div>
       `
         )
@@ -226,8 +226,8 @@ function renderByChannelNumbers(salesByChannel, paymentsByChannel) {
           (code) => `
         <div class="card">
           <strong>${escapeHtml(code)}</strong>
-          <div class="muted">${t("company_dashboard_sales_label")}: ${formatAmd(Math.round(salesMap.get(code) || 0))}</div>
-          <div class="muted">${t("company_dashboard_collected_label")}: ${formatAmd(Math.round(paymentsMap.get(code) || 0))}${collectedPctSuffix(paymentsMap.get(code) || 0, salesMap.get(code) || 0)}</div>
+          <div class="muted">${t("company_dashboard_sales_label")}${labelColon()}${formatAmd(Math.round(salesMap.get(code) || 0))}</div>
+          <div class="muted">${t("company_dashboard_collected_label")}${labelColon()}${formatAmd(Math.round(paymentsMap.get(code) || 0))}${collectedPctSuffix(paymentsMap.get(code) || 0, salesMap.get(code) || 0)}</div>
         </div>
       `
         )

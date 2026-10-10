@@ -5,7 +5,7 @@
 // them. Deadline: the customer's next visit by default, or a chosen date.
 import { openCollectionOutcomeSheet } from "../collectionOutcomeSheet.js";
 import { api } from "../api.js";
-import { escapeHtml, activateDialog, formatDateDMY, parseDateOnly } from "../util.js";
+import { escapeHtml, activateDialog, formatDateDMY, parseDateOnly, labelColon } from "../util.js";
 import { FILTER_ICONS } from "../filterIcons.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
@@ -342,8 +342,8 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
       </p>
       <div class="detail-facts task-sheet-facts">
         ${task.customer_name ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.store}</span><a href="#/customers/${task.customer_id}" data-customer-link>${escapeHtml(task.customer_name)}</a></div>` : ""}
-        <div class="detail-fact"><span class="detail-fact-icon">${icons.customers}</span><span>${t("task_assigned_to")}: ${escapeHtml(task.assignee_name)}</span></div>
-        <div class="detail-fact"><span class="detail-fact-icon">${icons.note}</span><span>${t("task_created_by")}: ${escapeHtml(task.creator_name)}</span></div>
+        <div class="detail-fact"><span class="detail-fact-icon">${icons.customers}</span><span>${t("task_assigned_to")}${labelColon()}${escapeHtml(task.assignee_name)}</span></div>
+        <div class="detail-fact"><span class="detail-fact-icon">${icons.note}</span><span>${t("task_created_by")}${labelColon()}${escapeHtml(task.creator_name)}</span></div>
       </div>
       ${
         task.items.length
@@ -534,7 +534,7 @@ export async function openTaskEditor({ customer = null, task = null, onSaved } =
     dueInput.value = dueDate;
     dueInput.disabled = deadlineMode === "next";
     dueHint.hidden = deadlineMode !== "next";
-    dueHint.textContent = deadlineMode === "next" ? `${t("task_deadline_next_visit")}: ${dueDate ? formatDateDMY(dueDate) : "—"}` : "";
+    dueHint.textContent = deadlineMode === "next" ? `${t("task_deadline_next_visit")}${labelColon()}${dueDate ? formatDateDMY(dueDate) : "—"}` : "";
   }
   async function applyNextVisit() {
     if (deadlineMode !== "next" || !customerId) return;

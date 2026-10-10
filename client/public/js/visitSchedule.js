@@ -3,7 +3,7 @@
 // recurring Route Plans weekdays and the customer's own visit cadence. Used by
 // the Map pin popup and the customer card's "Next visit" card.
 import { t, getLang } from "./i18n.js";
-import { escapeHtml, parseDateOnly, formatDayMonth, formatDateTime } from "./util.js";
+import { escapeHtml, parseDateOnly, formatDayMonth, formatDateTime, labelColon } from "./util.js";
 
 export function formatScheduleDate(dateOnly) {
   const d = parseDateOnly(dateOnly);
@@ -34,7 +34,7 @@ export function cadenceLineHtml(schedule) {
   if (!c) return "";
   if (c.never_visited) return `<span class="badge badge-neutral">${t("never_visited")}</span>`;
   const every = c.frequency_days ? ` (${t("visit_every_n_days").replace("{n}", c.frequency_days)})` : "";
-  if (c.overdue) return `<span class="badge badge-danger">${t("filter_overdue")}: ${escapeHtml(formatScheduleDate(c.due_by))}</span>${escapeHtml(every)}`;
+  if (c.overdue) return `<span class="badge badge-danger">${t("filter_overdue")}${labelColon()}${escapeHtml(formatScheduleDate(c.due_by))}</span>${escapeHtml(every)}`;
   return `<span>${escapeHtml(formatScheduleDate(c.due_by))}</span>${escapeHtml(every)}`;
 }
 

@@ -5,7 +5,7 @@
 // accountant additionally get a Flat/By-manager toggle and a manager
 // filter, grouping the same payload client-side.
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, syncNote, openInfoPopup, parseDateOnly, monthShort, formatDayMonth } from "../util.js";
+import { escapeHtml, formatAmd, syncNote, openInfoPopup, parseDateOnly, monthShort, formatDayMonth, labelColon } from "../util.js";
 import { state } from "../state.js";
 import { t, getLang } from "../i18n.js";
 import { loadWithCache } from "../listCache.js";
@@ -217,7 +217,7 @@ export async function renderDebtBalances(root, navigate) {
     return `
       <button type="button" class="card debt-balance-card ${Number(r.remaining_balance) > 0 && r.oldest_due_days != null ? (r.oldest_due_days > 0 ? "unpaid-row-overdue" : "unpaid-row-due") : ""}" data-customer-id="${r.internal_customer_id}">
         <div class="debt-balance-row">
-          <span class="muted">${t("customer_id_label")}: ${escapeHtml(r.customer_id || "")}${managerLabel ? ` · ${managerLabel}` : ""}</span>
+          <span class="muted">${t("customer_id_label")}${labelColon()}${escapeHtml(r.customer_id || "")}${managerLabel ? ` · ${managerLabel}` : ""}</span>
           <span class="text-amount debt-balance-amount">${formatAmd(Number(r.remaining_balance))}</span>
         </div>
         <div class="sales-order-name-row">
@@ -225,8 +225,8 @@ export async function renderDebtBalances(root, navigate) {
           ${Number(r.remaining_balance) > 0 ? dueChipHtml(r.oldest_due_days) : ""}
         </div>
         <div class="debt-balance-row debt-balance-row-dates muted">
-          <span>${t("debt_balances_last_payment")}: ${formatDateOnly(r.last_payment_date)}</span>
-          <span>${t("debt_balances_last_visit")}: ${formatDate(r.last_visit_at)}</span>
+          <span>${t("debt_balances_last_payment")}${labelColon()}${formatDateOnly(r.last_payment_date)}</span>
+          <span>${t("debt_balances_last_visit")}${labelColon()}${formatDate(r.last_visit_at)}</span>
         </div>
       </button>`;
   }

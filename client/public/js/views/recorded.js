@@ -5,7 +5,7 @@
 // whether an order is paid -- Excel remains that source of truth -- it
 // only tracks whether someone has looked at each delivered order.
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks, formatDayMonth } from "../util.js";
+import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks, formatDayMonth, labelColon } from "../util.js";
 import { t } from "../i18n.js";
 
 function formatDate(value) {
@@ -87,18 +87,18 @@ export async function renderRecorded(root, navigate) {
     return `
       <div class="card">
         <div class="order-detail-ids">
-          <span>${t("customer_id_label")}: ${escapeHtml(r.erp_customer_id || "")}</span>
-          ${r.order_code ? `<span>${t("order_id_label")}: ${escapeHtml(r.order_code)}</span>` : ""}
+          <span>${t("customer_id_label")}${labelColon()}${escapeHtml(r.erp_customer_id || "")}</span>
+          ${r.order_code ? `<span>${t("order_id_label")}${labelColon()}${escapeHtml(r.order_code)}</span>` : ""}
         </div>
         <strong>${customerNameLinkHtml(r.customer_name, r.customer_id)}</strong>
-        <p class="muted">${t("delivery_open_stop")}: ${formatDate(r.delivered_at)}</p>
+        <p class="muted">${t("delivery_open_stop")}${labelColon()}${formatDate(r.delivered_at)}</p>
         <p><span class="text-amount">${formatAmd(Number(r.total_amd))}</span></p>
         ${
           r.amount_collected_amd != null
-            ? `<p class="muted">${t("delivery_amount_collected")}: ${formatAmd(Number(r.amount_collected_amd))}${r.payment_method ? ` · ${t(r.payment_method === "cash" ? "payment_method_cash" : "payment_method_other")}` : ""}</p>`
+            ? `<p class="muted">${t("delivery_amount_collected")}${labelColon()}${formatAmd(Number(r.amount_collected_amd))}${r.payment_method ? ` · ${t(r.payment_method === "cash" ? "payment_method_cash" : "payment_method_other")}` : ""}</p>`
             : ""
         }
-        ${outstanding != null ? `<p class="muted">${t("delivery_new_balance")}: ${formatAmd(outstanding)}</p>` : ""}
+        ${outstanding != null ? `<p class="muted">${t("delivery_new_balance")}${labelColon()}${formatAmd(outstanding)}</p>` : ""}
         <button type="button" class="link-btn" data-view-signature="${r.id}">${t("recorded_view_signature")}</button>
         ${
           r.pod_record_id && Number(r.amount_collected_amd) > 0
@@ -110,7 +110,7 @@ export async function renderRecorded(root, navigate) {
         <div class="sheet-actions" style="margin-top:8px;">
           ${
             r.recorded
-              ? `<span class="muted">${t("recorded_recorded_by")}: ${escapeHtml(r.recorded_by_name || "")}</span>
+              ? `<span class="muted">${t("recorded_recorded_by")}${labelColon()}${escapeHtml(r.recorded_by_name || "")}</span>
                  <button type="button" class="btn" data-unrecord="${r.id}">${t("recorded_undo")}</button>`
               : `<button type="button" class="btn btn-primary btn-block" data-record="${r.id}">${t("recorded_mark_recorded")}</button>`
           }
@@ -126,18 +126,18 @@ export async function renderRecorded(root, navigate) {
       r.debt_balance_before_amd != null ? Number(r.debt_balance_before_amd) + Number(r.total_amd) - Number(r.amount_collected_amd || 0) : null;
     return `
       <div class="order-detail-ids">
-        <span>${t("customer_id_label")}: ${escapeHtml(r.erp_customer_id || "")}</span>
-        ${r.order_code ? `<span>${t("order_id_label")}: ${escapeHtml(r.order_code)}</span>` : ""}
+        <span>${t("customer_id_label")}${labelColon()}${escapeHtml(r.erp_customer_id || "")}</span>
+        ${r.order_code ? `<span>${t("order_id_label")}${labelColon()}${escapeHtml(r.order_code)}</span>` : ""}
       </div>
       <h2 class="section-title">${customerNameLinkHtml(r.customer_name, r.customer_id)}</h2>
-      <p class="muted">${t("delivery_open_stop")}: ${formatDate(r.delivered_at)}</p>
+      <p class="muted">${t("delivery_open_stop")}${labelColon()}${formatDate(r.delivered_at)}</p>
       <p><span class="text-amount">${formatAmd(Number(r.total_amd))}</span></p>
       ${
         r.amount_collected_amd != null
-          ? `<p class="muted">${t("delivery_amount_collected")}: ${formatAmd(Number(r.amount_collected_amd))}${r.payment_method ? ` · ${t(r.payment_method === "cash" ? "payment_method_cash" : "payment_method_other")}` : ""}</p>`
+          ? `<p class="muted">${t("delivery_amount_collected")}${labelColon()}${formatAmd(Number(r.amount_collected_amd))}${r.payment_method ? ` · ${t(r.payment_method === "cash" ? "payment_method_cash" : "payment_method_other")}` : ""}</p>`
           : ""
       }
-      ${outstanding != null ? `<p class="muted">${t("delivery_new_balance")}: ${formatAmd(outstanding)}</p>` : ""}
+      ${outstanding != null ? `<p class="muted">${t("delivery_new_balance")}${labelColon()}${formatAmd(outstanding)}</p>` : ""}
       <img src="${api.podSignatureUrl(r.id)}" alt="${t("delivery_signature_label")}" style="width:100%;max-width:360px;border-radius:8px;background:#fff;margin:12px 0;" />
       ${
         r.pod_record_id && Number(r.amount_collected_amd) > 0
@@ -149,7 +149,7 @@ export async function renderRecorded(root, navigate) {
       <div class="sheet-actions" style="margin-top:8px;">
         ${
           r.recorded
-            ? `<span class="muted">${t("recorded_recorded_by")}: ${escapeHtml(r.recorded_by_name || "")}</span>
+            ? `<span class="muted">${t("recorded_recorded_by")}${labelColon()}${escapeHtml(r.recorded_by_name || "")}</span>
                <button type="button" class="btn" data-unrecord="${r.id}">${t("recorded_undo")}</button>`
             : `<button type="button" class="btn btn-primary btn-block" data-record="${r.id}">${t("recorded_mark_recorded")}</button>`
         }

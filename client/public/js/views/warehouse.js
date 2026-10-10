@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks, activateDialog, firstUseHintHtml, activateFirstUseHints } from "../util.js";
+import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks, activateDialog, firstUseHintHtml, activateFirstUseHints, labelColon } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { FILTER_ICONS } from "../filterIcons.js";
@@ -86,8 +86,8 @@ export async function renderWarehouse(root, navigate) {
               <div><strong>${escapeHtml(r.name)}</strong><br><span class="muted">${[r.brand, normalizeUnitLabel(r.unit)].filter(Boolean).map(escapeHtml).join(" · ")}</span></div>
               <span class="badge ${cls}">${t(key)}</span>
             </div>
-            <p class="muted" style="margin:6px 0 0">${t("warehouse_reorder_stock")}: ${r.stock_qty ?? 0}${r.reserved_qty ? ` (${t("warehouse_reorder_reserved")}: ${r.reserved_qty})` : ""}${days}</p>
-            <p style="margin:4px 0 0"><strong>${t("warehouse_reorder_buy")}: ${r.suggested_qty} ${t("warehouse_pcs_suffix")}</strong></p>
+            <p class="muted" style="margin:6px 0 0">${t("warehouse_reorder_stock")}${labelColon()}${r.stock_qty ?? 0}${r.reserved_qty ? ` (${t("warehouse_reorder_reserved")}${labelColon()}${r.reserved_qty})` : ""}${days}</p>
+            <p style="margin:4px 0 0"><strong>${t("warehouse_reorder_buy")}${labelColon()}${r.suggested_qty} ${t("warehouse_pcs_suffix")}</strong></p>
           </div>`;
           })
           .join("")}
@@ -148,7 +148,7 @@ export async function renderWarehouse(root, navigate) {
           </div>
           <div class="pick-list-qty">
             <span class="pick-list-qty-value">${r.total_quantity}</span>
-            ${r.stock_qty != null ? `<span class="pick-list-stock">${t("warehouse_in_stock")}: ${r.stock_qty}</span>` : ""}
+            ${r.stock_qty != null ? `<span class="pick-list-stock">${t("warehouse_in_stock")}${labelColon()}${r.stock_qty}</span>` : ""}
           </div>
         </button>`
           )
@@ -235,15 +235,15 @@ export async function renderWarehouse(root, navigate) {
           <span>${t("warehouse_select_for_bulk")}</span>
         </label>
         <div class="order-detail-ids">
-          <span>${t("customer_id_label")}: ${escapeHtml(o.erp_customer_id || "")}</span>
-          ${o.order_code ? `<span>${t("order_id_label")}: ${escapeHtml(o.order_code)}</span>` : ""}
+          <span>${t("customer_id_label")}${labelColon()}${escapeHtml(o.erp_customer_id || "")}</span>
+          ${o.order_code ? `<span>${t("order_id_label")}${labelColon()}${escapeHtml(o.order_code)}</span>` : ""}
         </div>
         <strong>${customerNameLinkHtml(o.customer_name, o.customer_id)}</strong>
         <p class="muted">${escapeHtml(o.address || "")}</p>
         <div class="card-list" style="margin:8px 0;">
           ${o.items.map((i) => `<div class="order-product-row"><span>${i.brand ? `${escapeHtml(i.brand)} · ` : ""}${escapeHtml(i.product_name)}${i.size ? ` · ${escapeHtml(normalizeUnitLabel(i.size))}` : ""} × ${i.quantity}</span></div>`).join("")}
         </div>
-        <p>${t("total")}: <span class="text-amount">${formatAmd(Number(o.total_amd))}</span></p>
+        <p>${t("total")}${labelColon()}<span class="text-amount">${formatAmd(Number(o.total_amd))}</span></p>
         <div class="sheet-actions">
           <button type="button" class="btn btn-primary" data-mark-packed="${o.id}">${t("mark_packed")}</button>
           <button type="button" class="btn btn-danger" data-flag-issue="${o.id}">${t("flag_stock_issue")}</button>
