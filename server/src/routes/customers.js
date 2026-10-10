@@ -4,6 +4,7 @@ import { yerevanToday } from "../utils/yerevanDate.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData, canSetCreditTerms } from "../roles.js";
 import { creditSnapshot } from "../creditLimit.js";
+import { visitPriorities } from "../visitPriorities.js";
 import { getDefaultVisitFrequencyDays } from "../settings.js";
 import { haversineMeters } from "../utils/geo.js";
 import { lookupCompanyByTin, isValidTin } from "../registryLookup.js";
@@ -471,6 +472,13 @@ customersRouter.get("/map-facts", async (req, res) => {
 
 // Legal name + legal address from the state register, by TIN. Best-effort:
 // { found: false, reason } means "enter it manually" (never an HTTP error).
+// "Visit first": the caller's own customers ranked by debt / overdue visit / gone quiet (visitPriorities.js).
+// Registered before "/:id" so it is not read as a customer id.
+customersRouter.get("/visit-priorities", async (req, res) => {
+  if (req.user.role !== "sales_manager") return res.json([]);
+  res.json(await visitPriorities(req.user.id));
+});
+
 // Registered before "/:id" so "tin-lookup" isn't read as a customer id.
 const tinLookupCache = new Map();
 customersRouter.get("/tin-lookup", async (req, res) => {

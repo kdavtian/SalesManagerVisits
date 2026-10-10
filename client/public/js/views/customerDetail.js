@@ -4,7 +4,7 @@ import { currentChips, chipHtml } from "../brandChips.js";
 import { nextVisitRowHtml } from "../visitSchedule.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { canEditDirectly, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, isAdmin, seesFinancialExports, seesAllActivity } from "../state.js";
+import { state, canEditDirectly, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, isAdmin, seesFinancialExports, seesAllActivity } from "../state.js";
 import { openVisitDetailSheet, openPhotoLightbox } from "../visitDetail.js";
 import { visitStatusBadge } from "./customers.js";
 import { fetchCustomerSocial, saveCustomerSocial, socialFieldsHtml, collectSocialPayload } from "../customerSocialProfiles.js";
@@ -119,6 +119,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       </div>
     </div>
 
+    <div id="open-visit-slot"></div>
     <div class="card detail-facts-card">
       <!-- One toolbar row: social/contact links (Instagram/Facebook/email/
            website) on the left, Account settings + Edit on the right.
@@ -224,6 +225,26 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   container.querySelector("#customer-detail-name").addEventListener("click", (e) => {
     e.currentTarget.classList.toggle("customer-detail-name-expanded");
   });
+  // "End visit": a rep who checked in here today and has not ended the visit yet.
+  if (state.user.role === "sales_manager") {
+    const slot = container.querySelector("#open-visit-slot");
+    api
+      .getOpenVisit(customerId)
+      .then((open) => {
+        if (!open || !slot) return;
+        slot.innerHTML = `<button type="button" class="btn btn-block" id="end-visit-btn" style="min-height:44px;margin-bottom:12px">${t("end_visit")}</button>`;
+        slot.querySelector("#end-visit-btn").addEventListener("click", async (e) => {
+          e.currentTarget.disabled = true;
+          try {
+            await api.endVisit(open.id);
+            slot.innerHTML = "";
+          } catch {
+            e.currentTarget.disabled = false;
+          }
+        });
+      })
+      .catch(() => {});
+  }
   container.querySelector("#new-order-btn").addEventListener("click", () => {
     navigate(`#/orders/new/${customerId}`);
   });

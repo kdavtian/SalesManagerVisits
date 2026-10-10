@@ -21,6 +21,8 @@ export const NOTIFICATION_TYPES = [
   "payment_due_soon",
   // The Excel sync changed prices (one notification per sync, see priceSyncLog.js).
   "price_changed",
+  // Monday 09:00: last week's numbers (see scorecard.js).
+  "weekly_scorecard",
   // Cash custody chain (migrations/059): the receiver is told a handoff is
   // waiting for them to count and confirm; the sender is told the outcome.
   "cash_handoff_submitted",

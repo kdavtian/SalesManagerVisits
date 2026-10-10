@@ -1,3 +1,4 @@
+import { renderVisitFirst } from "../visitFirstCard.js";
 import { api } from "../api.js";
 import { escapeHtml, formatDistance, formatRelative, formatAmd, getCurrentPosition, haversineMeters, categoryLabel } from "../util.js";
 import { state, canViewTeamLocations } from "../state.js";
@@ -237,7 +238,7 @@ export async function renderDashboard(root, navigate) {
     </div>`
     }
 
-    ${state.user.role === "sales_manager" ? `<div id="today-plan-slot"></div>` : ""}
+    ${state.user.role === "sales_manager" ? `<div id="today-plan-slot"></div><div id="visit-first-slot"></div>` : ""}
 
     <div class="card progress-card" id="progress-card" ${
       // Only made tappable when there's actually a by-manager section to
@@ -463,6 +464,8 @@ export async function renderDashboard(root, navigate) {
   for (const [id, route] of Object.entries(QUICK_ACTION_ROUTE)) {
     container.querySelector(`#${quickActionDomId(id)}`)?.addEventListener("click", () => navigate(route));
   }
+  const visitFirstSlot = container.querySelector("#visit-first-slot");
+  if (visitFirstSlot) renderVisitFirst(visitFirstSlot, navigate);
   applyPaymentBadge();
   applyUnrecordedBadge();
   applyWarehouseBadge();
