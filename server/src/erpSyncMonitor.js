@@ -24,7 +24,7 @@ const ALERT_ROLES = ["admin", "ceo", "operations_director"];
 // files. Each can go stale independently of the others -- the bot best-
 // effort-pushes each on its own, so one silently failing doesn't imply the
 // others did too.
-const SOURCES = [
+export const SOURCES = [
   { key: "erp_customer_data", table: "erp_customer_data", label: "Debt/հաճախորդների քաղվածք" },
   { key: "sales_performance", table: "sales_performance", label: "Վաճառքի ցուցանիշներ" },
   { key: "perf_actuals_brand_monthly", table: "perf_actuals_brand_monthly", label: "Բրենդի ծավալներ" },
@@ -35,7 +35,7 @@ const SOURCES = [
 // checked here, same as the report page's own default, since that's the one
 // period the bot is expected to push every single run (see
 // sync_field_visits.sync_all_period_reports).
-async function dailyReportFreshness() {
+export async function dailyReportFreshness() {
   const { rows } = await pool.query(`SELECT MAX(synced_at) AS synced_at FROM erp_daily_report WHERE period = 'daily'`);
   const syncedAt = rows[0]?.synced_at ?? null;
   const hoursSinceSync = syncedAt ? (Date.now() - new Date(syncedAt).getTime()) / 3.6e6 : null;

@@ -4,6 +4,7 @@ import { getTheme, setTheme } from "../theme.js";
 import { getPerfMode, setPerfMode } from "../perfMode.js";
 import { state, isAdmin, canPlanForOthers, seesFinancialExports, canManageProducts, isPerfCeo } from "../state.js";
 import { renderTeamSection, renderPlanApprovalsSection, renderEditRequestsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection, renderSalesChannelOwnersSection, renderQuickActionVisibilitySection, renderDataQualitySection, renderNotificationDeliveryLogSection, renderClientErrorLogSection } from "./admin.js";
+import { renderSystemHealthSection } from "./systemHealth.js";
 import { renderBonusChallengesSection, renderBonusRewardClaimsSection } from "./bonusChallengesAdmin.js";
 import { escapeHtml, compressImage, activateDialog, attachSwipeToDismiss, formatPhoneDisplay, normalizePhone, downloadFromUrl } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
@@ -339,6 +340,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
           ${settingsRow({ icon: ICON.database, label: t("sales_channel_owners_title"), id: "row-sales-channel-owners", color: "purple" })}
           ${settingsRow({ icon: ICON.chart, label: t("quick_action_visibility_title"), id: "row-quick-actions", color: "indigo" })}
           ${settingsRow({ icon: ICON.chart, label: t("data_quality_title"), id: "row-data-quality", color: "red" })}
+          ${settingsRow({ icon: ICON.shield, label: t("system_health_title"), id: "row-system-health", color: "green" })}
           ${settingsRow({ icon: ICON.database, label: t("notification_delivery_log_title"), id: "row-notification-delivery-log", color: "teal" })}
           ${settingsRow({ icon: ICON.database, label: t("client_error_log_title"), id: "row-client-error-log", color: "gray" })}
         </div>`
@@ -841,6 +843,9 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     });
     root.querySelector("#row-data-quality").addEventListener("click", (e) => {
       openAdminSection(root, e.currentTarget, t("data_quality_title"), renderDataQualitySection);
+    });
+    root.querySelector("#row-system-health").addEventListener("click", (e) => {
+      openAdminSection(root, e.currentTarget, t("system_health_title"), renderSystemHealthSection);
     });
     root.querySelector("#row-notification-delivery-log").addEventListener("click", (e) => {
       openAdminSection(root, e.currentTarget, t("notification_delivery_log_title"), renderNotificationDeliveryLogSection);

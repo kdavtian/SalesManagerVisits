@@ -590,6 +590,7 @@ export const api = {
   // Admin data-quality dashboard (see server/src/routes/dataQuality.js) --
   // admin-only server-side already.
   getDataQuality: () => request("/data-quality"),
+  getSystemHealth: () => request("/system-health"),
 
   // Sales records (see server/src/routes/sales.js) -- read-only ERP order
   // history, role-scoped server-side already.

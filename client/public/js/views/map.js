@@ -10,6 +10,7 @@ import { canViewTeamLocations, canEditDirectly, canPlanForOthers, canReassignCus
 import { getClusterPins, setClusterPins, getCompassMode, setCompassMode, getMapTileCacheEnabled } from "../mapPrefs.js";
 import { getPerfMode } from "../perfMode.js";
 import { ensureLeaflet } from "../leafletLoader.js";
+import { routeLegs, openRouteInMaps } from "../routeNavigation.js";
 import { loadWithCache } from "../listCache.js";
 import { openTriStateTreeSheet } from "../regionTree.js";
 import { indexBrandSummary, brandSearchText, currentChips, matchedEverEntries, matchesSelectedChips, buildBrandChipTree, chipHtml, shortDate } from "../brandChips.js";
@@ -282,8 +283,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
       <div class="nearby-panel" id="planned-stops-panel" hidden>
         <div class="nearby-panel-header">
-          <span>${t("route_stops")}</span>
+          <span class="planned-stops-title"><span>${t("route_stops")}</span><small id="planned-stops-summary"></small></span>
           <span class="nearby-panel-header-actions">
+            <button type="button" class="icon-btn" id="open-route-btn" aria-label="${t("route_open_title")}" title="${t("route_open_title")}">${icons.navigation}</button>
             <button type="button" class="btn btn-sm" id="optimize-route-btn">${t("optimize_route")}</button>
             <button type="button" class="icon-btn" id="planned-stops-close" aria-label="${t("cancel")}">${icons.close}</button>
           </span>
@@ -1434,13 +1436,16 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     routeLine = L.polyline(latlngs, { color: accentColor, weight: 3, opacity: 0.8, dashArray: "6 6" }).addTo(map);
 
     plannedStopsPanel.hidden = false;
+    // About-km per leg (straight line x 1.3) and for the whole route, from the rep's position when known.
+    const { legs, total } = routeLegs(stops.map(({ c }) => c), myLocation);
+    plannedStopsPanel.querySelector("#planned-stops-summary").textContent = `${stops.length}${total ? ` · ≈ ${formatDistance(total)}` : ""}`;
     stopListEl.innerHTML = stops
       .map(({ c }, i) => {
         const visited = customerStatus(c) === "today";
         return `
         <div class="stop-row" data-index="${i}">
           <span class="stop-number ${visited ? "stop-number-done" : ""}">${visited ? "&#10003;" : i + 1}</span>
-          <span class="stop-name">${escapeHtml(c.name)}</span>
+          <span class="stop-name">${escapeHtml(c.name)}${legs[i] != null ? `<span class="stop-leg">≈ ${formatDistance(legs[i])}</span>` : ""}</span>
           <span class="stop-reorder">
             <button type="button" class="icon-btn" data-move="up" data-index="${i}" ${i === 0 ? "disabled" : ""} aria-label="${t("move_up")}">&uarr;</button>
             <button type="button" class="icon-btn" data-move="down" data-index="${i}" ${i === stops.length - 1 ? "disabled" : ""} aria-label="${t("move_down")}">&darr;</button>
@@ -1471,6 +1476,15 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
   root.querySelector("#planned-stops-close").addEventListener("click", () => {
     plannedStopsPanel.hidden = true;
+  });
+
+  // One tap: the whole planned route (the stops not visited yet, in this order) in Google/Yandex Maps.
+  root.querySelector("#open-route-btn").addEventListener("click", () => {
+    const remaining = (plannedCustomerIds ?? [])
+      .map((id) => lastCustomers.find((entry) => entry.c.id === id))
+      .filter((entry) => entry && customerStatus(entry.c) !== "today")
+      .map(({ c }) => ({ lat: c.lat, lng: c.lng }));
+    openRouteInMaps(remaining, myLocation);
   });
 
   // Greedy nearest-neighbor ordering -- not a true shortest-route solver,
