@@ -8,14 +8,29 @@
 import { pool } from "./db/pool.js";
 import { enabled as pushEnabled } from "./push.js";
 import { notifyUser } from "./notifications.js";
-import { DRIVER_NOTIFY_ROLES } from "./notificationPreferences.js";
+import { WAREHOUSE_NOTIFY_ROLES } from "./notificationPreferences.js";
 
 const CHECK_INTERVAL_MS = 30 * 60 * 1000; // every 30 minutes
 const STALE_HOURS = 4;
+// Reminders only go out in working time (Yerevan): 09:00-17:59, Monday-Saturday.
+// An order that turns stale at night is simply picked up by the first sweep of the morning.
+const WORK_START_HOUR = 9;
+const WORK_END_HOUR = 18; // exclusive
+const WORK_DAYS = [1, 2, 3, 4, 5, 6]; // Mon=1 ... Sun=7
 const alreadyNotified = new Set(); // order_id already nudged for its current packed spell
 
-export async function checkStalePackedOrders() {
+// True during the warehouse manager's working time (Yerevan, server runs in UTC).
+export function isWarehouseWorkingTime(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Yerevan", weekday: "short", hour: "2-digit", hourCycle: "h23" }).formatToParts(now);
+  const get = (t) => parts.find((p) => p.type === t).value;
+  const dow = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(get("weekday")) + 1;
+  const hour = Number(get("hour"));
+  return WORK_DAYS.includes(dow) && hour >= WORK_START_HOUR && hour < WORK_END_HOUR;
+}
+
+export async function checkStalePackedOrders(now = new Date()) {
   if (!pushEnabled) return;
+  if (!isWarehouseWorkingTime(now)) return;
 
   const { rows: staleOrders } = await pool.query(
     `SELECT o.id, o.order_code, c.name AS customer_name
@@ -37,7 +52,8 @@ export async function checkStalePackedOrders() {
 
   // One notification for the whole batch ("5 packed orders are waiting to be
   // delivered"), not one per order; it counts every order that is stale now.
-  const { rows: recipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [DRIVER_NOTIFY_ROLES]);
+  // It goes to the warehouse manager (who holds the packed goods), not the drivers.
+  const { rows: recipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [WAREHOUSE_NOTIFY_ROLES]);
   const message = buildStalePackedMessage(staleOrders);
   for (const order of staleOrders) alreadyNotified.add(order.id);
   for (const recipient of recipients) {
