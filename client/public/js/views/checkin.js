@@ -524,6 +524,7 @@ export async function renderCheckin(root, navigate, customerId) {
         enqueueCheckin({
           clientRef,
           customerId,
+          customerName: customer.name,
           lat,
           lng,
           note,

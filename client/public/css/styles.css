@@ -767,6 +767,11 @@ a {
   background: var(--danger);
 }
 
+/* Waiting (not stuck): still tappable, but the calm accent colour. */
+.sync-banner.sync-banner-link[role="button"] {
+  background: var(--accent);
+}
+
 /* Install banner */
 
 .install-banner {
@@ -1737,12 +1742,14 @@ input[type="search"]:focus-visible {
 
 .gps-status.gps-ok {
   color: var(--success);
-  border-color: var(--success);
+  border-color: transparent;
+  background: color-mix(in srgb, var(--success) 10%, var(--bg-card));
 }
 
 .gps-status.gps-error {
   color: var(--danger);
-  border-color: var(--danger);
+  border-color: transparent;
+  background: color-mix(in srgb, var(--danger) 9%, var(--bg-card));
 }
 
 .visually-hidden {
@@ -8283,7 +8290,8 @@ form select,
 }
 
 .sync-diagnostic-banner-warning {
-  border-color: var(--warning);
+  border-color: transparent;
+  background: color-mix(in srgb, var(--warning) 10%, var(--bg-card));
   color: var(--warning);
 }
 
@@ -9021,7 +9029,7 @@ form select,
 }
 .pick-item-picked {
   background: rgba(48, 209, 88, 0.12);
-  border-color: var(--success);
+  border-color: transparent;
 }
 .pick-item-picked .pick-item-check {
   opacity: 1;
@@ -11251,7 +11259,7 @@ form select,
 @keyframes fuel-pulse { 50% { opacity: 0.5; } }
 .fuel-loading-note { text-align: center; margin-top: 12px; }
 .fuel-error { display: flex; flex-direction: column; gap: 10px; }
-.fuel-setup { margin-bottom: 12px; border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); background: color-mix(in srgb, var(--warning) 8%, var(--bg-card)); }
+.fuel-setup { margin-bottom: 12px; border-color: transparent; background: color-mix(in srgb, var(--warning) 8%, var(--bg-card)); }
 .fuel-setup p { margin: 4px 0 8px; font-size: 0.85rem; }
 .fuel-setup-item { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 46px; padding: 8px 4px; background: none; border: 0; border-top: 1px solid var(--border); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
 .fuel-hero { display: flex; flex-direction: column; gap: 4px; padding: 16px; margin-bottom: 10px; }
@@ -11590,4 +11598,117 @@ form select,
   font-size: 0.72rem;
   font-weight: 400;
   text-align: right;
+}
+
+/* Waiting-to-send sheet (syncQueueSheet.js): gentle rows, no outlines. */
+.sync-queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+.sync-queue-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--bg-elevated);
+}
+.sync-queue-item-stuck {
+  background: color-mix(in srgb, var(--danger) 9%, var(--bg-card));
+}
+.sync-queue-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  width: 20px;
+  margin-top: 2px;
+  color: var(--text-dim);
+}
+.sync-queue-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.sync-queue-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sync-queue-error {
+  font-size: 0.75rem;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+.sync-queue-side {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.sync-queue-discard {
+  min-height: 36px;
+  padding: 0 10px;
+  font-size: 0.8rem;
+}
+.sync-queue-discard-armed {
+  color: var(--danger);
+}
+
+/* Admin > System health (views/systemHealth.js). */
+.health-card {
+  margin-bottom: 12px;
+}
+.health-title {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.health-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 0;
+  font-size: 0.88rem;
+}
+.health-label {
+  color: var(--text-dim);
+  min-width: 0;
+}
+.health-value {
+  text-align: right;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.health-note {
+  margin: 6px 0 0;
+  font-size: 0.75rem;
+}
+.health-update-btn {
+  width: 100%;
+  margin-top: 8px;
+}
+
+/* Map planned stops: the leg length under the customer name. */
+.stop-leg {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+.planned-stops-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+.planned-stops-title small {
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--text-dim);
 }

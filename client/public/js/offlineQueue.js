@@ -223,6 +223,15 @@ let flushing = false;
 // "Refresh data" tap (flushQueue({ force: true })) -- see settings.js.
 const NEEDS_ATTENTION_THRESHOLD = 3;
 
+// Removes one queued entry for good (the "Discard" button of the waiting-to-send sheet, offered
+// for entries that stopped retrying on their own).
+export async function discardEntry(id) {
+  await ready;
+  memoryQueue = memoryQueue.filter((e) => e.id !== id);
+  await removeEntry(id);
+  notify();
+}
+
 export function getLastSyncedAt() {
   const raw = localStorage.getItem(LAST_SYNC_KEY);
   return raw ? Number(raw) : null;

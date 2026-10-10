@@ -519,6 +519,8 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
         enqueueOrder({
           clientRef,
           customerId: Number(customerId),
+          customerName: customer.name,
+          totalAmd: cartTotalAmd(),
           checkinId: checkinId ? Number(checkinId) : undefined,
           items,
           discount_pct: discountPctToSend,
