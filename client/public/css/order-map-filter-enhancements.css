@@ -259,3 +259,45 @@
     transition: none;
   }
 }
+
+/* The search row (with its dropdown menus) must stack above the rows under it. Without this
+   the brand chips row, a later sibling with its own stacking context, painted over the top of
+   the status menu and hid its first option ("All"), so nothing could be switched off again. */
+.map-view .map-top-controls .map-search-row {
+  position: relative;
+  z-index: 3;
+}
+
+/* Customer tier chips inside the Map's type filter: the new-customer tier chips, but they wrap
+   (the filter opens as a narrow popover) and several can be on at once. */
+.map-tier-filter-title {
+  margin: 14px 0 6px;
+  padding: 0 14px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.map-tier-filter-chips {
+  flex-wrap: wrap;
+  overflow: visible;
+  gap: 6px;
+  padding: 2px 12px;
+  margin-bottom: 72px;
+}
+
+.map-tier-filter-chips .tier-btn {
+  flex: 1 1 calc(33.333% - 6px);
+  min-height: 44px;
+}
+
+.map-tier-filter-chips .tier-btn {
+  padding: 6px 2px;
+}
+
+.map-tier-filter-chips .tier-btn .tier-label {
+  font-size: 0.6rem;
+  text-overflow: clip;
+}
