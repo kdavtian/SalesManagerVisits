@@ -65,8 +65,9 @@ test("credit limit: an over-limit order needs a director's approval before it ca
   assert.equal(blocked.status, 409);
   assert.match(blocked.data.error, /credit limit/i);
 
-  assert.equal((await apiRequest(`/api/orders/${big.id}/approve-credit`, { method: "POST", cookie: cookies.accountant })).status, 403);
-  const approved = await apiRequest(`/api/orders/${big.id}/approve-credit`, { method: "POST", cookie: cookies.sales_director });
+  // A sales rep cannot approve; the accountant can.
+  assert.equal((await apiRequest(`/api/orders/${big.id}/approve-credit`, { method: "POST", cookie: cookies.sales_manager })).status, 403);
+  const approved = await apiRequest(`/api/orders/${big.id}/approve-credit`, { method: "POST", cookie: cookies.accountant });
   assert.equal(approved.status, 200);
   assert.equal(approved.data.credit_status, "approved");
   const confirmed = await apiRequest(`/api/orders/${big.id}`, { method: "PATCH", cookie: cookies.sales_director, body: { status: "confirmed" } });
