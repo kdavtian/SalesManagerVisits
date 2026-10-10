@@ -18,6 +18,7 @@ test.before(async () => {
 });
 test.after(async () => {
   await pool.query("DELETE FROM tasks WHERE assignee_id = $1", [rep.id]);
+  await pool.query("DELETE FROM erp_order_lines WHERE erp_customer_id = ANY($1)", [erpIds]);
   await pool.query("DELETE FROM erp_customer_data WHERE erp_customer_id = ANY($1)", [erpIds]);
   await cleanupAll();
   await stopTestServer();
@@ -112,4 +113,55 @@ test("quiet hours: no phone push between 22:00 and 07:59 Yerevan", () => {
   assert.equal(isQuietHours(new Date("2026-10-10T20:00:00Z")), true); // 00:00
   assert.equal(isQuietHours(new Date("2026-10-11T03:59:00Z")), true); // 07:59
   assert.equal(isQuietHours(new Date("2026-10-11T04:00:00Z")), false); // 08:00
+});
+
+async function order(erpId, orderId, daysAgo, total) {
+  await pool.query(
+    "INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, revenue_amd) VALUES ($1, $2, (now() AT TIME ZONE 'Asia/Yerevan')::date - $3::int, $4)",
+    [erpId, orderId, daysAgo, total]
+  );
+}
+
+test("the debt is overdue only when its OLDEST UNPAID INVOICE is older than the credit term (customer 10365: never paid, last order 11 days ago)", async () => {
+  // Never paid ("no payment found"), the whole debt is one order from 11 days ago: not due yet.
+  const fresh = await debtor("age-h", { debt: 658000, days: null });
+  await order(fresh.erp_customer_id, `H1-${stamp}`, 11, 658000);
+  // Paid long ago (80 days), but the debt is again only a recent order: not due yet either.
+  const paidLongAgo = await debtor("age-i", { debt: 300000, days: 80 });
+  await order(paidLongAgo.erp_customer_id, `I1-${stamp}`, 90, 500000);
+  await order(paidLongAgo.erp_customer_id, `I2-${stamp}`, 12, 300000);
+  // Debt reaches back to an order 60 days old (older order of 100k is paid, FIFO): overdue, age 60.
+  const old = await debtor("age-j", { debt: 400000, days: 5 });
+  await order(old.erp_customer_id, `J1-${stamp}`, 100, 100000);
+  await order(old.erp_customer_id, `J2-${stamp}`, 60, 250000);
+  await order(old.erp_customer_id, `J3-${stamp}`, 10, 300000);
+  // Debt larger than the whole order history (opening balance): falls back to the payment rule.
+  const opening = await debtor("age-k", { debt: 900000, days: 70 });
+  await order(opening.erp_customer_id, `K1-${stamp}`, 5, 100000);
+
+  await createDebtCollectionTasks();
+  assert.equal((await openTasks(fresh.id)).length, 0, "never paid but only 11 days old");
+  assert.equal((await openTasks(paidLongAgo.id)).length, 0, "paid long ago but the debt is a recent order");
+  const oldTasks = await openTasks(old.id);
+  assert.equal(oldTasks.length, 1);
+  assert.match(oldTasks[0].title, /60 օր/);
+  assert.equal((await openTasks(opening.id)).length, 1);
+
+  // Once the 11-day-old order passes the 45-day term the task appears.
+  await pool.query("UPDATE erp_order_lines SET order_date = order_date - 40 WHERE erp_customer_id = $1", [fresh.erp_customer_id]);
+  await createDebtCollectionTasks();
+  assert.equal((await openTasks(fresh.id)).length, 1);
+});
+
+test("an open task whose debt is not overdue by the invoice-age rule is cancelled, not reported as paid", async () => {
+  const c = await debtor("age-m", { debt: 200000, days: null });
+  await order(c.erp_customer_id, `M1-${stamp}`, 100, 200000); // old enough: overdue, gets a task
+  await createDebtCollectionTasks();
+  assert.equal((await openTasks(c.id)).length, 1);
+  await pool.query("UPDATE erp_order_lines SET order_date = order_date + 90 WHERE erp_customer_id = $1", [c.erp_customer_id]); // now 10 days old
+  await createDebtCollectionTasks();
+  const t = (await openTasks(c.id))[0];
+  assert.equal(t.status, "cancelled");
+  assert.equal(t.outcome, null);
+  await pool.query("UPDATE erp_customer_data SET debt_amd = 0 WHERE erp_customer_id = $1", [c.erp_customer_id]);
 });
