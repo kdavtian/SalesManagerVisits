@@ -150,6 +150,13 @@ function enhanceActivity() {
   installClearButton(input, container, actions);
 }
 
+function enhanceTasks() {
+  const input = document.querySelector("#task-search");
+  const container = input?.closest(".activity-search-combined");
+  const actions = container?.querySelector(".activity-search-actions");
+  if (input && container && actions) installClearButton(input, container, actions);
+}
+
 function enhanceOrders() {
   const input = document.querySelector("#order-search");
   const container = input?.closest(".activity-search-combined");
@@ -500,6 +507,7 @@ function enhanceMap() {
 
 function enhanceAll() {
   enhanceActivity();
+  enhanceTasks();
   enhanceOrders();
   enhanceCustomers();
   enhancePayments();

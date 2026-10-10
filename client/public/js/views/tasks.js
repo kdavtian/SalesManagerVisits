@@ -6,6 +6,7 @@
 import { openCollectionOutcomeSheet } from "../collectionOutcomeSheet.js";
 import { api } from "../api.js";
 import { escapeHtml, activateDialog, formatDateDMY, parseDateOnly } from "../util.js";
+import { FILTER_ICONS } from "../filterIcons.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state } from "../state.js";
@@ -26,6 +27,15 @@ export function taskDueInfo(task, today) {
   return { cls: due ? "badge-danger" : "badge-warning", due, label };
 }
 
+// Debt collection and reorder follow-ups are created automatically; everything else was
+// given by a person.
+function taskKindIcon(task) {
+  if (task.status === "done") return icons.checkCircle;
+  if (task.auto_kind === "debt_collection") return icons.wallet;
+  if (task.auto_kind === "reorder_followup") return icons.repeat;
+  return icons.tasks;
+}
+
 function progressText(task) {
   const total = task.items.length;
   if (!total) return "";
@@ -37,7 +47,7 @@ export function taskCardHtml(task, today, { showCustomer = true } = {}) {
   const mine = task.assignee_id === state.user.id;
   return `
     <button type="button" class="card list-row task-card ${task.status !== "open" ? "task-card-closed" : ""}" data-task-id="${task.id}">
-      <span class="list-row-icon list-row-icon-${info.due ? "danger" : "warning"}" aria-hidden="true">${icons.tasks}</span>
+      <span class="list-row-icon list-row-icon-${task.status === "done" ? "success" : info.due ? "danger" : "warning"}" aria-hidden="true">${taskKindIcon(task)}</span>
       <div class="list-row-body">
         <div class="list-row-top">
           <strong>${escapeHtml(task.title)}</strong>
@@ -54,79 +64,243 @@ export function taskCardHtml(task, today, { showCustomer = true } = {}) {
     </button>`;
 }
 
+// The Tasks page follows the Activity page: status tabs, one pill per person (busiest first,
+// tap again to clear), and a search bar with icon filters (who / type / sort). Everything is
+// loaded once (open tasks always come first in the 500-row cap) and filtered on the phone, so
+// switching tabs, people and filters is instant.
+const TASK_KINDS = ["debt_collection", "reorder_followup", "manual"];
+const kindOf = (r) => r.auto_kind || "manual";
+
 export async function renderTasks(root, navigate, openId) {
   const creator = canCreateTasks();
   const sawAll = SEES_ALL_ROLES.has(state.user.role);
-  root.innerHTML = `
-    <div class="detail-view">
-      <div class="list-header-row">
-        <h1>${t("tasks_title")}</h1>
-        ${creator ? `<button type="button" class="icon-btn" id="task-new-btn" aria-label="${t("task_new")}"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>` : ""}
-      </div>
-      ${
-        creator || sawAll
-          ? `<div class="order-status-filter-row" id="task-scope-row">
-              <button class="map-filter-chip" data-scope="mine" aria-pressed="false">${t("tasks_scope_mine")}</button>
-              <button class="map-filter-chip" data-scope="created" aria-pressed="false">${t("tasks_scope_created")}</button>
-              <button class="map-filter-chip chip-active" data-scope="all" aria-pressed="true">${t("tasks_scope_all")}</button>
-            </div>`
-          : ""
-      }
-      <div class="order-status-filter-row" id="task-status-row">
-        <button class="map-filter-chip" data-status="today" aria-pressed="false">${t("tasks_filter_today")}</button>
-        <button class="map-filter-chip chip-active" data-status="open" aria-pressed="true">${t("tasks_filter_open")}</button>
-        <button class="map-filter-chip" data-status="done" aria-pressed="false">${t("task_status_done")}</button>
-        <button class="map-filter-chip" data-status="cancelled" aria-pressed="false">${t("task_status_cancelled")}</button>
-      </div>
-      <div class="list-toolbar"><input type="search" id="task-search" placeholder="${t("search")}" aria-label="${t("search")}" /></div>
-      <div class="card-list" id="task-list"><p class="loading-state" role="status">${t("loading")}</p></div>
-    </div>`;
-  const container = root.querySelector(".detail-view");
-  const listEl = container.querySelector("#task-list");
-  // Managers see everything they gave or received (a task they just created for
-  // someone else must show up); open tasks of any date by default.
-  let scope = creator || sawAll ? "all" : "mine";
-  let status = "open";
+  root.innerHTML = `<div class="activity-view tasks-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
+  const container = root.querySelector(".tasks-view");
+
+  // Managers see everything they gave or received (a task they just created for someone else
+  // must show up); open tasks of any date by default.
+  const f = { tab: "open", scope: creator || sawAll ? "all" : "mine", person: "", kind: "", sort: "due", search: "" };
   let rows = [];
   let today = "";
+  let openDropdown = null;
+  let loaded = false;
+  let loadError = "";
 
-  function paint() {
-    const q = container.querySelector("#task-search").value.trim().toLowerCase();
-    const shown = q ? rows.filter((r) => [r.title, r.customer_name, r.assignee_name, r.creator_name].filter(Boolean).join(" ").toLowerCase().includes(q)) : rows;
-    listEl.innerHTML = shown.length ? shown.map((r) => taskCardHtml(r, today)).join("") : `<p class="empty-state">${t("tasks_empty")}</p>`;
-    listEl.querySelectorAll("[data-task-id]").forEach((el) => el.addEventListener("click", () => openTaskSheet(Number(el.dataset.taskId), { onChanged: load, navigate })));
-  }
-  async function load() {
-    listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
-    try {
-      const params = { scope };
-      if (status === "today") Object.assign(params, { status: "open", due: "today" });
-      else params.status = status;
-      const result = await api.listTasks(params);
-      rows = result.rows;
-      today = result.today;
-      paint();
-    } catch (err) {
-      listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+  const inTab = (r, tab) => (tab === "today" ? r.status === "open" && r.due_date <= today : tab === "open" ? r.status === "open" : r.status === tab);
+  const inScope = (r) => f.scope === "all" || (f.scope === "mine" ? r.assignee_id === state.user.id : r.creator_id === state.user.id);
+  const matchesSearch = (r) => {
+    const q = f.search.trim().toLowerCase();
+    return !q || [r.title, r.customer_name, r.assignee_name, r.creator_name].filter(Boolean).join(" ").toLowerCase().includes(q);
+  };
+  // `skip` lets the tab counts and person pills ignore their own filter.
+  const visible = ({ tab = f.tab, person = f.person } = {}) =>
+    rows.filter((r) => inTab(r, tab) && inScope(r) && (!f.kind || kindOf(r) === f.kind) && (!person || String(r.assignee_id) === person) && matchesSearch(r));
+
+  function sorted(list) {
+    const byDue = (a, b) => (a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : b.id - a.id);
+    const copy = [...list];
+    if (f.tab === "done" || f.tab === "cancelled") {
+      // Newest result first: when it was closed matters more than when it was due.
+      return copy.sort((a, b) => String(b.updated_at || b.due_date).localeCompare(String(a.updated_at || a.due_date)) || b.id - a.id);
     }
+    if (f.sort === "newest") return copy.sort((a, b) => b.id - a.id);
+    if (f.sort === "person") return copy.sort((a, b) => String(a.assignee_name).localeCompare(String(b.assignee_name)) || byDue(a, b));
+    return copy.sort(byDue);
   }
-  const wireChips = (rowId, key, setter) =>
-    container.querySelectorAll(`#${rowId} [${key}]`).forEach((btn) =>
-      btn.addEventListener("click", () => {
-        container.querySelectorAll(`#${rowId} [${key}]`).forEach((b) => {
-          b.classList.toggle("chip-active", b === btn);
-          b.setAttribute("aria-pressed", String(b === btn));
-        });
-        setter(btn.getAttribute(key));
-        load();
+
+  function dropdownHtml(key, options, current, icon, label, applied) {
+    const isOpen = openDropdown === key;
+    return `
+      <div class="activity-icon-dropdown">
+        <button type="button" class="activity-search-filter-btn ${applied ? "activity-search-filter-btn-active" : ""} ${isOpen ? "activity-search-filter-btn-open" : ""}"
+          data-dropdown="${key}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}" aria-haspopup="menu" aria-expanded="${isOpen}">
+          ${icon}${applied ? `<span class="activity-search-filter-dot" aria-hidden="true"></span>` : ""}
+        </button>
+        <div class="activity-search-menu" role="menu" data-dropdown-menu="${key}" ${isOpen ? "" : "hidden"}>
+          ${options.map((o) => `<button type="button" role="menuitemradio" aria-checked="${o.value === current}" data-value="${escapeHtml(o.value)}" class="${o.value === current ? "filter-dropdown-selected" : ""}"><span>${escapeHtml(o.label)}</span>${o.value === current ? `<span class="activity-menu-check" aria-hidden="true">✓</span>` : ""}</button>`).join("")}
+        </div>
+      </div>`;
+  }
+
+  function personPillsHtml() {
+    const counts = new Map();
+    const names = new Map();
+    for (const r of visible({ person: "" })) {
+      counts.set(String(r.assignee_id), (counts.get(String(r.assignee_id)) ?? 0) + 1);
+      names.set(String(r.assignee_id), r.assignee_name);
+    }
+    // One person (a plain sales manager, or a filter that leaves one) has nothing to split by.
+    if (names.size < 2 && !f.person) return "";
+    const total = [...counts.values()].reduce((a, b) => a + b, 0);
+    const pills = [{ value: "", label: t("filter_all"), count: total }, ...[...names.entries()].map(([id, name]) => ({ value: id, label: name, count: counts.get(id) })).sort((a, b) => b.count - a.count)];
+    if (f.person && !names.has(f.person)) pills.push({ value: f.person, label: rows.find((r) => String(r.assignee_id) === f.person)?.assignee_name ?? "", count: 0 });
+    return `<div class="customer-stats-bar activity-manager-bar" id="task-person-bar" aria-label="${escapeHtml(t("tasks_people"))}">
+      ${pills.map((p) => `<button type="button" class="stat-pill ${f.person === p.value ? "stat-pill-active" : ""}" data-person="${escapeHtml(p.value)}" aria-pressed="${f.person === p.value}"><strong>${p.count}</strong><span>${escapeHtml(p.label)}</span></button>`).join("")}
+    </div>`;
+  }
+
+  function tabHtml(key, label) {
+    const active = f.tab === key;
+    // Counts only where they help decide what to open (what is waiting); closed tasks just list.
+    const count = key === "today" || key === "open" ? `<span class="tasks-tab-count">${visible({ tab: key, person: f.person }).length}</span>` : "";
+    return `<button role="tab" aria-selected="${active}" class="activity-tab tasks-tab ${active ? "activity-tab-active" : ""}" data-tab="${key}"><span>${label}</span>${count}</button>`;
+  }
+
+  function renderShell() {
+    const scopeOptions = [
+      { value: "all", label: t("tasks_scope_all") },
+      { value: "mine", label: t("tasks_scope_mine") },
+      { value: "created", label: t("tasks_scope_created") },
+    ];
+    const kindOptions = [
+      { value: "", label: t("tasks_kind_all") },
+      { value: "debt_collection", label: t("tasks_kind_debt") },
+      { value: "reorder_followup", label: t("tasks_kind_reorder") },
+      { value: "manual", label: t("tasks_kind_manual") },
+    ];
+    const sortOptions = [
+      { value: "due", label: t("tasks_sort_due") },
+      { value: "newest", label: t("tasks_sort_newest") },
+      { value: "person", label: t("tasks_sort_person") },
+    ];
+    const closedTab = f.tab === "done" || f.tab === "cancelled";
+    container.innerHTML = `
+      <div class="list-header">
+        <div><h1>${t("tasks_title")}</h1></div>
+        ${creator ? `<button type="button" class="icon-btn" id="task-new-btn" aria-label="${t("task_new")}">${icons.plus}</button>` : ""}
+      </div>
+      <div class="activity-tabs" role="tablist" id="task-tabs"></div>
+      <div id="task-people"></div>
+      <div class="activity-search-combined" id="task-search-combined">
+        <label class="visually-hidden" for="task-search">${t("search")}</label>
+        <input type="search" id="task-search" placeholder="${t("search")}" aria-label="${t("search")}" value="${escapeHtml(f.search)}" />
+        <div class="activity-search-actions" aria-label="${t("filters")}">
+          ${creator || sawAll ? dropdownHtml("scope", scopeOptions, f.scope, FILTER_ICONS.manager, t("tasks_scope_label"), f.scope !== "all") : ""}
+          ${dropdownHtml("kind", kindOptions, f.kind, FILTER_ICONS.outcome, t("tasks_kind_label"), Boolean(f.kind))}
+          ${closedTab ? "" : dropdownHtml("sort", sortOptions, f.sort, FILTER_ICONS.sort, t("sort"), f.sort !== "due")}
+        </div>
+      </div>
+      <div class="activity-count" id="task-count"></div>
+      <div class="card-list" id="task-list"></div>`;
+
+    const searchInput = container.querySelector("#task-search");
+    searchInput.addEventListener("input", () => {
+      f.search = searchInput.value;
+      paintChrome();
+      paintList();
+    });
+    container.querySelector("#task-new-btn")?.addEventListener("click", () => openTaskEditor({ onSaved: load }));
+    container.querySelectorAll("[data-dropdown]").forEach((btn) =>
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openDropdown = openDropdown === btn.dataset.dropdown ? null : btn.dataset.dropdown;
+        renderShell();
       })
     );
-  wireChips("task-status-row", "data-status", (v) => (status = v));
-  if (creator || sawAll) wireChips("task-scope-row", "data-scope", (v) => (scope = v));
-  container.querySelector("#task-search").addEventListener("input", paint);
-  container.querySelector("#task-new-btn")?.addEventListener("click", () => openTaskEditor({ onSaved: load }));
+    container.querySelectorAll("[data-dropdown-menu] button").forEach((opt) =>
+      opt.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const key = opt.closest("[data-dropdown-menu]").dataset.dropdownMenu;
+        f[key] = opt.dataset.value;
+        openDropdown = null;
+        renderShell();
+      })
+    );
+    paintChrome();
+    paintList();
+  }
+
+  // The tabs (with their counts) and the person pills depend on every other filter, including the
+  // search text, so they are redrawn on their own while typing without touching the input.
+  function paintChrome() {
+    container.querySelector("#task-tabs").innerHTML = [
+      tabHtml("today", t("tasks_filter_today")),
+      tabHtml("open", t("tasks_filter_open")),
+      tabHtml("done", t("task_status_done")),
+      tabHtml("cancelled", t("task_status_cancelled")),
+    ].join("");
+    container.querySelector("#task-people").innerHTML = personPillsHtml();
+    container.querySelectorAll("[data-tab]").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        f.tab = btn.dataset.tab;
+        openDropdown = null;
+        renderShell();
+      })
+    );
+    container.querySelectorAll("[data-person]").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        // Tapping the person that is already on clears it, so "All" is not the only way back.
+        f.person = f.person === btn.dataset.person ? "" : btn.dataset.person;
+        paintChrome();
+        paintList();
+      })
+    );
+  }
+
+  function groupHeading(label, n) {
+    return `<h3 class="list-group-heading tasks-group-heading">${escapeHtml(label)} <span class="muted">${n}</span></h3>`;
+  }
+
+  function paintList() {
+    const listEl = container.querySelector("#task-list");
+    const countEl = container.querySelector("#task-count");
+    if (!loaded) {
+      countEl.textContent = "";
+      listEl.innerHTML = loadError ? `<p class="form-error">${escapeHtml(loadError)}</p>` : `<p class="loading-state" role="status">${t("loading")}</p>`;
+      return;
+    }
+    const list = sorted(visible());
+    countEl.textContent = `${list.length} ${t("tasks_count")}`;
+    if (!list.length) {
+      listEl.innerHTML = `<p class="empty-state">${t("tasks_empty")}</p>`;
+      return;
+    }
+    let html;
+    if (f.tab !== "done" && f.tab !== "cancelled" && f.sort === "due") {
+      // Overdue / today / upcoming, so what needs doing first is the first thing seen.
+      const groups = [
+        [t("task_overdue"), list.filter((r) => r.due_date < today)],
+        [t("task_due_today"), list.filter((r) => r.due_date === today)],
+        [t("tasks_group_upcoming"), list.filter((r) => r.due_date > today)],
+      ];
+      html = groups.filter(([, g]) => g.length).map(([label, g]) => groupHeading(label, g.length) + g.map((r) => taskCardHtml(r, today)).join("")).join("");
+    } else {
+      html = list.map((r) => taskCardHtml(r, today)).join("");
+    }
+    listEl.innerHTML = html;
+    listEl.querySelectorAll("[data-task-id]").forEach((el) => el.addEventListener("click", () => openTaskSheet(Number(el.dataset.taskId), { onChanged: load, navigate })));
+  }
+
+  container.addEventListener("click", (e) => {
+    if (openDropdown && !e.target.closest("[data-dropdown]") && !e.target.closest("[data-dropdown-menu]")) {
+      openDropdown = null;
+      renderShell();
+    }
+  });
+  container.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && openDropdown) {
+      openDropdown = null;
+      renderShell();
+    }
+  });
+
+  // Reloads without blanking the screen: after completing/cancelling/restoring a task the list
+  // updates in place.
+  async function load() {
+    try {
+      const result = await api.listTasks({ scope: "all", status: "all" });
+      rows = result.rows;
+      today = result.today;
+      loaded = true;
+      loadError = "";
+    } catch (err) {
+      loadError = err.message;
+    }
+    renderShell();
+  }
   window.addEventListener("tasks-changed", load, { once: true });
 
+  renderShell();
   await load();
   if (openId) openTaskSheet(Number(openId), { onChanged: load, navigate });
 }
@@ -188,6 +362,7 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
       }
       ${task.outcome ? `<p><span class="badge badge-neutral">${t(`collect_outcome_${task.outcome}`)}${task.promise_date ? ` · ${escapeHtml(task.promise_date)}` : ""}</span></p>` : ""}
       ${task.completion_note ? `<p class="muted">${escapeHtml(task.completion_note)}</p>` : ""}
+      ${open && !task.items.length && task.auto_kind !== "debt_collection" ? `<textarea id="task-complete-note" class="task-complete-note" rows="2" maxlength="500" placeholder="${escapeHtml(t("task_note_placeholder"))}" aria-label="${escapeHtml(t("task_note_placeholder"))}"></textarea>` : ""}
       <p class="form-error" id="task-sheet-error" hidden></p>
       <div class="sheet-actions" id="task-sheet-actions" style="flex-wrap:wrap;">
         ${open ? `<button type="button" class="btn btn-primary" data-action="complete">${t("task_mark_complete")}</button>` : ""}
@@ -227,12 +402,14 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
         if (result) refresh(api.completeTask(task.id, result.note, { outcome: result.outcome, promise_date: result.promise_date }));
         return;
       }
-      const note = task.items.length ? "" : prompt(t("task_complete_note_prompt")) || "";
+      // The optional note is an inline field now (a native prompt() popup blocked the screen).
+      const note = sheet.querySelector("#task-complete-note")?.value ?? "";
       refresh(api.completeTask(task.id, note.trim()));
     });
     sheet.querySelector('[data-action="reopen"]')?.addEventListener("click", () => refresh(api.reopenTask(task.id)));
     sheet.querySelector('[data-action="cancel"]')?.addEventListener("click", () => {
-      if (confirm(t("task_confirm_cancel"))) refresh(api.updateTask(task.id, { status: "cancelled" }));
+      // No confirmation: a cancelled task can be restored with one tap.
+      refresh(api.updateTask(task.id, { status: "cancelled" }));
     });
     sheet.querySelector('[data-action="restore"]')?.addEventListener("click", () => refresh(api.updateTask(task.id, { status: "open" })));
     sheet.querySelector('[data-action="edit"]')?.addEventListener("click", () => {

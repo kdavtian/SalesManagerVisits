@@ -11331,3 +11331,64 @@ form select,
 .fuel-home-status { font-size: 0.8rem; }
 .fuel-cons-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .fuel-cons-row label { margin: 0; }
+
+/* Tasks page (same look as Activity: tabs, person pills, combined search) */
+.tasks-view .list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tasks-view .activity-tabs {
+  gap: 4px;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+.tasks-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding-left: 3px;
+  padding-right: 3px;
+  font-size: 0.72rem;
+}
+
+.tasks-tab-count {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.16);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.activity-tab-active .tasks-tab-count {
+  background: var(--accent);
+  color: #fff;
+}
+
+.tasks-group-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 14px 4px 4px;
+}
+
+.tasks-group-heading .muted {
+  font-weight: 500;
+}
+
+.task-complete-note {
+  width: 100%;
+  margin: 8px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
