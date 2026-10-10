@@ -4,6 +4,8 @@ import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { ROLES } from "../roles.js";
 import { REPORTS, findReport, canAccessReport } from "../reports.js";
 import { erpSyncFreshness } from "../erpSyncFreshness.js";
+import { AGING_BUCKETS, allocateFifo, loadOrdersNewestFirst } from "../debtAging.js";
+import { yerevanToday } from "../utils/yerevanDate.js";
 
 export const reportsRouter = Router();
 
@@ -681,18 +683,9 @@ reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async 
     conditions.push(`${debtExpr} > 0`);
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  // Aging filter (comma-separated bucket labels; "—" = no bucket): narrows the
-  // customer list and the totals, while the by-bucket summary keeps showing
-  // every bucket so the filter chips stay available.
-  const agingList = String(aging ?? "").split(",").map((a) => a.trim()).filter(Boolean);
-  let whereWithAging = where;
-  let paramsWithAging = params;
-  if (agingList.length) {
-    paramsWithAging = [...params, agingList.filter((a) => a !== "—")];
-    const idx = paramsWithAging.length;
-    const clause = `(erp.aging_bucket = ANY($${idx})${agingList.includes("—") ? " OR erp.aging_bucket IS NULL" : ""})`;
-    whereWithAging = where ? `${where} AND ${clause}` : `WHERE ${clause}`;
-  }
+  // Aging filter (comma-separated bucket keys, see debtAging.js): narrows the customer list and the
+  // totals, while the by-bucket summary keeps showing every bucket so the filter chips stay available.
+  const agingList = String(aging ?? "").split(",").map((a) => a.trim()).filter((a) => AGING_BUCKETS.includes(a));
 
   // Most recent payment from any source -- the sync's own (often blank)
   // last_payment_date, the full ERP cashflow history, and approved in-app
@@ -707,43 +700,50 @@ reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async 
       (SELECT max((p.payment_date AT TIME ZONE 'Asia/Yerevan')::date) FROM payments p JOIN customers pc ON pc.id = p.customer_id WHERE pc.erp_customer_id = erp.erp_customer_id AND p.status = 'approved'${appPaymentBound})
     )`;
 
-  const { rows: customerRows } = await pool.query(
+  const { rows: baseRows } = await pool.query(
     `SELECT erp.erp_customer_id, erp.customer_name, erp.assigned_sales_rep, erp.debt_amd,
             ${lastPaymentExpr} AS last_payment_date, erp.days_since_payment, erp.aging_bucket,
+            (SELECT cc.credit_term_days FROM customers cc WHERE cc.erp_customer_id = erp.erp_customer_id LIMIT 1) AS credit_term_days,
             ${asOfDate ? "0" : "COALESCE(collected.amount, 0)"} AS collected_since_sync_amd,
             ${debtExpr} AS estimated_debt_amd
      FROM erp_customer_data erp
      ${debtJoin}
-     ${whereWithAging}
-     ORDER BY estimated_debt_amd DESC NULLS LAST`,
-    paramsWithAging
-  );
-
-  const { rows: byBucket } = await pool.query(
-    `SELECT COALESCE(erp.aging_bucket, '—') AS aging_bucket, count(*)::int AS customer_count,
-            COALESCE(sum(${debtExpr}), 0) AS total_debt_amd
-     FROM erp_customer_data erp
-     ${debtJoin}
      ${where}
-     GROUP BY erp.aging_bucket
-     ORDER BY total_debt_amd DESC`,
+     ORDER BY estimated_debt_amd DESC NULLS LAST`,
     params
   );
 
-  const { rows: totalsRows } = await pool.query(
-    `SELECT COALESCE(sum(${debtExpr}), 0) AS total_debt_amd,
-            COALESCE(sum(erp.debt_amd), 0) AS total_debt_amd_erp,
-            count(*) FILTER (WHERE ${debtExpr} > 0)::int AS customers_with_debt
-     FROM erp_customer_data erp
-     ${debtJoin}
-     ${whereWithAging}`,
-    paramsWithAging
-  );
+  // Invoice-based aging (FIFO, credit term deducted -- see debtAging.js), as of the chosen date
+  // or today. The debt allocated is the same figure the list shows (estimated / as-of).
+  const today = asOfDate ?? yerevanToday();
+  const ordersByCustomer = await loadOrdersNewestFirst(pool, baseRows.filter((r) => Number(r.estimated_debt_amd) > 0).map((r) => r.erp_customer_id), { asOf: asOfDate });
+  const bucketTotals = Object.fromEntries(AGING_BUCKETS.map((b) => [b, { total: 0, customers: 0 }]));
+  const withAging = baseRows.map((r) => {
+    const a = allocateFifo({ orders: ordersByCustomer.get(r.erp_customer_id) ?? [], debt: Number(r.estimated_debt_amd), today, termDays: r.credit_term_days ?? 45 });
+    for (const b of AGING_BUCKETS) {
+      if (a.buckets[b] > 0) {
+        bucketTotals[b].total += a.buckets[b];
+        bucketTotals[b].customers += 1;
+      }
+    }
+    return { ...r, oldest_due_days: a.oldest_due_days, overdue_amd: a.overdue_amd, opening_amd: Math.round(a.buckets.opening), _buckets: a.buckets };
+  });
+  const customerRows = (agingList.length ? withAging.filter((r) => agingList.some((b) => r._buckets[b] > 0)) : withAging).map(({ _buckets, ...r }) => r);
+  const byBucket = AGING_BUCKETS.filter((b) => bucketTotals[b].customers > 0).map((b) => ({
+    aging_bucket: b,
+    customer_count: bucketTotals[b].customers,
+    total_debt_amd: Math.round(bucketTotals[b].total),
+  }));
+  const totals = {
+    total_debt_amd: customerRows.reduce((sum, r) => sum + (Number(r.estimated_debt_amd) || 0), 0),
+    total_debt_amd_erp: customerRows.reduce((sum, r) => sum + (Number(r.debt_amd) || 0), 0),
+    customers_with_debt: customerRows.filter((r) => Number(r.estimated_debt_amd) > 0).length,
+  };
 
   res.json({
     customers: customerRows,
     by_bucket: byBucket,
-    totals: totalsRows[0],
+    totals,
     as_of_date: asOfDate,
     sync: await erpSyncFreshness("erp_customer_data"),
   });

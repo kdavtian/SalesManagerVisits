@@ -1,7 +1,7 @@
 import { api } from "../api.js";
 import { escapeHtml, formatDateDMY, formatAmd } from "../util.js";
 import { t } from "../i18n.js";
-import { dueChipHtml, unpaidRowClass, unpaidChipsHtml } from "../debtChip.js";
+import { dueChipHtml, unpaidRowClass, partialChipHtml } from "../debtChip.js";
 
 export async function renderCustomerOrders(root, navigate, customerId) {
   root.innerHTML = `<div class="detail-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
@@ -49,7 +49,8 @@ export async function renderCustomerOrders(root, navigate, customerId) {
             <span>${escapeHtml(formatDateDMY(o.order_date))}</span>
             <span class="erp-order-id">${escapeHtml(o.order_id)}</span>
             <span>${formatAmd(o.total_amd)}</span>
-            ${unpaidChipsHtml(o) ? `<div class="erp-order-due-line">${unpaidChipsHtml(o)}</div>` : ""}
+            ${partialChipHtml(o) ? `<div class="erp-order-partial">${partialChipHtml(o)}</div>` : ""}
+            ${Number(o.unpaid_amd) > 0 ? `<div class="erp-order-due">${dueChipHtml(o.due_days)}</div>` : ""}
           </div>`
           )
           .join("")}
@@ -59,7 +60,7 @@ export async function renderCustomerOrders(root, navigate, customerId) {
                  <span>${escapeHtml(formatDateDMY("2025-05-01"))}</span>
                  <span class="erp-order-id">${t("opening_balance_label")}</span>
                  <span>${formatAmd(openingUnpaid)}</span>
-                 <div class="erp-order-due-line"><span class="unpaid-chips">${dueChipHtml(openingDueDays)}</span></div>
+                 <div class="erp-order-due">${dueChipHtml(openingDueDays)}</div>
                </div>`
             : ""
         }

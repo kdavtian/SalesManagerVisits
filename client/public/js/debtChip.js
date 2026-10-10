@@ -26,10 +26,9 @@ export function unpaidRowClass(order) {
   return order.due_days > 0 ? "unpaid-row unpaid-row-overdue" : "unpaid-row unpaid-row-due";
 }
 
-// Chips under an order: the days past/until due and, when only part of the order is still owed,
-// how much.
-export function unpaidChipsHtml(order) {
+// How much of an order is still owed when it is only partly paid (null when fully unpaid).
+export function partialChipHtml(order) {
   if (!(Number(order?.unpaid_amd) > 0) || order.due_days == null) return "";
-  const partial = Number(order.unpaid_amd) < Number(order.total_amd) - 1;
-  return `<span class="unpaid-chips">${dueChipHtml(order.due_days)}${partial ? `<span class="due-chip due-chip-amount">${t("debt_unpaid_amount")}: ${formatAmd(order.unpaid_amd)}</span>` : ""}</span>`;
+  if (Number(order.unpaid_amd) >= Number(order.total_amd) - 1) return "";
+  return `<span class="due-chip due-chip-amount">${t("debt_unpaid_amount")}: ${formatAmd(order.unpaid_amd)}</span>`;
 }
