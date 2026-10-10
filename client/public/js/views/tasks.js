@@ -3,6 +3,7 @@
 // also opened from a customer card (customer pre-attached). Management gives
 // tasks (server/src/roles.js canCreateTasks); everyone receives and completes
 // them. Deadline: the customer's next visit by default, or a chosen date.
+import { openCollectionOutcomeSheet } from "../collectionOutcomeSheet.js";
 import { api } from "../api.js";
 import { escapeHtml, activateDialog, formatDateDMY, parseDateOnly } from "../util.js";
 import { t } from "../i18n.js";
@@ -185,6 +186,7 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
              </div>`
           : ""
       }
+      ${task.outcome ? `<p><span class="badge badge-neutral">${t(`collect_outcome_${task.outcome}`)}${task.promise_date ? ` · ${escapeHtml(task.promise_date)}` : ""}</span></p>` : ""}
       ${task.completion_note ? `<p class="muted">${escapeHtml(task.completion_note)}</p>` : ""}
       <p class="form-error" id="task-sheet-error" hidden></p>
       <div class="sheet-actions" id="task-sheet-actions" style="flex-wrap:wrap;">
@@ -218,7 +220,13 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
     sheet.querySelectorAll("[data-item]").forEach((box) =>
       box.addEventListener("change", () => refresh(api.setTaskItemDone(task.id, Number(box.dataset.item), box.checked)))
     );
-    sheet.querySelector('[data-action="complete"]')?.addEventListener("click", () => {
+    sheet.querySelector('[data-action="complete"]')?.addEventListener("click", async () => {
+      if (task.auto_kind === "debt_collection") {
+        // How did the collection go? (a promised payment needs a date)
+        const result = await openCollectionOutcomeSheet();
+        if (result) refresh(api.completeTask(task.id, result.note, { outcome: result.outcome, promise_date: result.promise_date }));
+        return;
+      }
       const note = task.items.length ? "" : prompt(t("task_complete_note_prompt")) || "";
       refresh(api.completeTask(task.id, note.trim()));
     });

@@ -11,7 +11,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { canManageWarehouse } from "../roles.js";
 import { notifyUser } from "../notifications.js";
 import { STOCK_ISSUE_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES } from "../notificationPreferences.js";
-import { computeStockForecast } from "../stockForecast.js";
+import { computeStockForecast, computeReorderSuggestion } from "../stockForecast.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
 
 export const warehouseRouter = Router();
@@ -192,6 +192,40 @@ warehouseRouter.get("/inventory", async (req, res) => {
   // thousands, so computing the forecast for every active row first is
   // cheap; 500 is just a sane upper bound on response size.
   res.json(annotated.slice(0, 500));
+});
+
+// "To order" list for the owner/warehouse: products that are out or running low,
+// with how many pieces to buy to be covered for 90 days again (stockForecast.js).
+warehouseRouter.get("/reorder-suggestions", async (req, res) => {
+  const today = yerevanToday();
+  const { rows } = await pool.query(
+    `WITH demand AS (
+       SELECT product_id,
+              SUM(qty) FILTER (WHERE order_date >= $1::date - 30) AS qty_30d,
+              SUM(qty) FILTER (WHERE order_date >= $1::date - 90) AS qty_90d,
+              MAX(order_date) AS last_sale_date
+       FROM erp_order_lines WHERE product_id IS NOT NULL GROUP BY product_id
+     )
+     SELECT p.id, p.name, p.brand, p.family, p.unit, p.stock_qty, p.created_at, d.qty_30d, d.qty_90d, d.last_sale_date,
+            COALESCE((SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON o.id = oi.order_id
+                      WHERE oi.product_id = p.id AND o.status IN ('submitted', 'confirmed', 'packed_stock_out')), 0)::int AS reserved_qty
+     FROM products p LEFT JOIN demand d ON d.product_id = p.erp_product_id
+     WHERE p.active`,
+    [today]
+  );
+  const out = [];
+  for (const row of rows) {
+    const forecast = computeStockForecast({ stockQty: row.stock_qty, qty30d: row.qty_30d, qty90d: row.qty_90d, lastSaleDate: row.last_sale_date, createdAt: row.created_at, today });
+    const suggestion = computeReorderSuggestion({
+      stockQty: row.stock_qty, reservedQty: row.reserved_qty, status: forecast.status,
+      dailyDemand: forecast.dailyDemand, daysOfStock: forecast.daysOfStock, qty90d: row.qty_90d,
+    });
+    if (!suggestion) continue;
+    out.push({ id: row.id, name: row.name, brand: row.brand, family: row.family, unit: row.unit, stock_qty: row.stock_qty, reserved_qty: row.reserved_qty, demand_trend: forecast.trend, ...suggestion });
+  }
+  const rank = { out: 0, critical: 1, low: 2 };
+  out.sort((a, b) => rank[a.urgency] - rank[b.urgency] || (a.days_of_stock ?? 0) - (b.days_of_stock ?? 0));
+  res.json(out.slice(0, 300));
 });
 
 // Distinct brand/size lists for the inventory screen's filter sheet -- kept

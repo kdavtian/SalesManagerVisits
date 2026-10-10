@@ -6,6 +6,7 @@
 import { pool } from "./db/pool.js";
 import { notifyUser } from "./notifications.js";
 import { yerevanToday } from "./utils/yerevanDate.js";
+import { runAutoTasks } from "./debtCollectionTasks.js";
 
 const CHECK_INTERVAL_MS = 60 * 1000;
 const REMINDER_MINUTES = 9 * 60 + 30; // 09:30
@@ -36,8 +37,19 @@ export async function sendDeadlineReminders(now = new Date()) {
   return rows.length;
 }
 
+// Automatic tasks (debt collection, reorder follow-up) also run once a day at 09:05 so a
+// payment promise that has passed is followed up even when no ERP sync happened that day.
+const AUTO_TASKS_MINUTES = 9 * 60 + 5;
+let autoTasksDay = null;
+
 export function startTaskReminders() {
   setInterval(() => {
     sendDeadlineReminders().catch((err) => console.error("Task reminder check failed:", err.message));
+    const now = new Date();
+    const today = yerevanToday(now);
+    if (yerevanMinutesOfDay(now) >= AUTO_TASKS_MINUTES && autoTasksDay !== today) {
+      autoTasksDay = today;
+      runAutoTasks(now).catch((err) => console.error("Automatic tasks failed:", err.message));
+    }
   }, CHECK_INTERVAL_MS);
 }

@@ -39,10 +39,11 @@ export async function renderWarehouse(root, navigate) {
         </button>
         <div class="detail-header-title"><h1>${t("qa_warehouse")}</h1></div>
       </div>
-      <div class="segmented" id="warehouse-tabs">
-        <button type="button" class="chip" data-tab="pick-list">${t("warehouse_tab_pick_list")}</button>
-        <button type="button" class="chip" data-tab="staging">${t("warehouse_tab_staging")}</button>
-        <button type="button" class="chip chip-active" data-tab="inventory">${t("warehouse_tab_inventory")}</button>
+      <div class="segmented" id="warehouse-tabs" style="overflow-x:auto;max-width:100%;flex-wrap:nowrap">
+        <button type="button" class="chip" style="flex:0 0 auto" data-tab="pick-list">${t("warehouse_tab_pick_list")}</button>
+        <button type="button" class="chip" style="flex:0 0 auto" data-tab="staging">${t("warehouse_tab_staging")}</button>
+        <button type="button" class="chip chip-active" style="flex:0 0 auto" data-tab="inventory">${t("warehouse_tab_inventory")}</button>
+        <button type="button" class="chip" style="flex:0 0 auto" data-tab="reorder">${t("warehouse_tab_reorder")}</button>
       </div>
       <p class="form-error" id="warehouse-error" hidden></p>
       <div id="warehouse-content" style="margin-top:12px;"></div>
@@ -62,12 +63,54 @@ export async function renderWarehouse(root, navigate) {
     });
   });
 
+  // "To order": out-of-stock / low products with how many pieces to buy to be covered
+  // for 90 days again (server: stockForecast.js computeReorderSuggestion).
+  async function loadReorder() {
+    const rows = await api.getReorderSuggestions();
+    rows.sort((a, b) => ({ out: 0, critical: 1, low: 2 })[a.urgency] - ({ out: 0, critical: 1, low: 2 })[b.urgency] || compareProducts(a, b));
+    if (!rows.length) {
+      contentEl.innerHTML = `<p class="muted">${t("warehouse_reorder_none")}</p>`;
+      return;
+    }
+    const badge = { out: ["badge-danger", "warehouse_reorder_out"], critical: ["badge-danger", "warehouse_reorder_critical"], low: ["badge-warning", "warehouse_reorder_low"] };
+    contentEl.innerHTML = `
+      <p class="muted">${t("warehouse_reorder_hint")}</p>
+      <div class="card-list">
+        ${rows
+          .map((r) => {
+            const [cls, key] = badge[r.urgency];
+            const days = r.days_of_stock != null ? ` · ${Math.round(r.days_of_stock)} ${t("warehouse_reorder_days")}` : "";
+            return `
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
+              <div><strong>${escapeHtml(r.name)}</strong><br><span class="muted">${[r.brand, normalizeUnitLabel(r.unit)].filter(Boolean).map(escapeHtml).join(" · ")}</span></div>
+              <span class="badge ${cls}">${t(key)}</span>
+            </div>
+            <p class="muted" style="margin:6px 0 0">${t("warehouse_reorder_stock")}: ${r.stock_qty ?? 0}${r.reserved_qty ? ` (${t("warehouse_reorder_reserved")}: ${r.reserved_qty})` : ""}${days}</p>
+            <p style="margin:4px 0 0"><strong>${t("warehouse_reorder_buy")}: ${r.suggested_qty} ${t("warehouse_pcs_suffix")}</strong></p>
+          </div>`;
+          })
+          .join("")}
+      </div>
+      <button type="button" class="btn btn-block" id="reorder-copy" style="margin-top:12px">${t("warehouse_reorder_copy")}</button>`;
+    contentEl.querySelector("#reorder-copy").addEventListener("click", async () => {
+      const text = rows.map((r) => `${r.name} ${normalizeUnitLabel(r.unit)} — ${r.suggested_qty} ${t("warehouse_pcs_suffix")}`).join("\n");
+      try {
+        await navigator.clipboard.writeText(text);
+        contentEl.querySelector("#reorder-copy").textContent = t("warehouse_reorder_copied");
+      } catch {
+        /* clipboard blocked: nothing to do */
+      }
+    });
+  }
+
   async function load() {
     contentEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     errorEl.hidden = true;
     try {
       if (activeTab === "pick-list") await loadPickList();
       else if (activeTab === "staging") await loadStaging();
+      else if (activeTab === "reorder") await loadReorder();
       else await loadInventory();
     } catch (err) {
       errorEl.textContent = err.message;

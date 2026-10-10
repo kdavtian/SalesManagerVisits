@@ -350,7 +350,7 @@ export const api = {
   getTask: (id) => request(`/tasks/${id}`),
   createTask: (data) => json("/tasks", "POST", data),
   updateTask: (id, data) => json(`/tasks/${id}`, "PATCH", data),
-  completeTask: (id, note) => json(`/tasks/${id}/complete`, "POST", note ? { note } : {}),
+  completeTask: (id, note, extra = {}) => json(`/tasks/${id}/complete`, "POST", { ...(note ? { note } : {}), ...extra }),
   reopenTask: (id) => json(`/tasks/${id}/reopen`, "POST", {}),
   setTaskItemDone: (id, itemId, done) => json(`/tasks/${id}/items/${itemId}`, "POST", { done }),
   getTaskCustomerFlags: () => request("/tasks/customer-flags"),
@@ -382,6 +382,7 @@ export const api = {
   deleteOrder: (id) => request(`/orders/${id}`, { method: "DELETE" }),
   rejectOrderDiscount: (id) => request(`/orders/${id}/reject-discount`, { method: "POST" }),
   getCreditStatus: (customerId) => request(`/customers/${customerId}/credit-status`),
+  getCreditHistory: (customerId) => request(`/customers/${customerId}/credit-history`),
   setCreditLimit: (customerId, limit) => request(`/customers/${customerId}/credit-terms`, { method: "PUT", body: JSON.stringify({ credit_limit_amd: limit }) }),
   approveOrderCredit: (id) => request(`/orders/${id}/approve-credit`, { method: "POST" }),
   rejectOrderCredit: (id) => request(`/orders/${id}/reject-credit`, { method: "POST" }),
@@ -402,6 +403,7 @@ export const api = {
     const s = qs.toString();
     return request(`/warehouse/inventory${s ? `?${s}` : ""}`);
   },
+  getReorderSuggestions: () => request("/warehouse/reorder-suggestions"),
   getInventoryBrands: () => request("/warehouse/inventory/brands"),
   getInventorySizes: () => request("/warehouse/inventory/sizes"),
   markOrderPacked: (id) => request(`/warehouse/orders/${id}/packed`, { method: "POST" }),

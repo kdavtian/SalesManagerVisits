@@ -244,6 +244,12 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
           ? `<p class="muted">${t("price_change_label")}: ${discountAmd > 0 ? formatAmd(discountAmd) : `${discountPct}%`}</p>`
           : ""
       }
+      ${
+        order.pricing_check && order.pricing_check.margin_pct !== null
+          ? `<p class="muted">${t("margin_label")}: ${order.pricing_check.margin_pct}%</p>`
+          : ""
+      }
+      ${order.pricing_check?.below_cost ? `<p class="order-stock-warning order-stock-danger">${t("below_cost_warning")}</p>` : ""}
       <p class="order-detail-total"><span>${t("total")}:</span> <span class="text-amount">${formatAmd(Number(order.total_amd))}</span></p>
       ${order.credit_status === "pending" ? `<p class="muted">${t("credit_status_pending_hint")}</p>` : ""}
       ${order.note ? `<p class="muted">${escapeHtml(order.note)}</p>` : ""}
@@ -271,7 +277,10 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       buttons.push({ label: t("submit_order"), action: "submit-order", cls: "btn btn-primary" });
     }
     if (canApproveDiscount) {
-      buttons.push({ label: t("approve_price_change"), action: "approve-discount", cls: "btn btn-primary" });
+      // Below net cost only the CEO / admin may approve (server: discountPolicy.js).
+      if (order.pricing_check?.can_approve_discount !== false) {
+        buttons.push({ label: t("approve_price_change"), action: "approve-discount", cls: "btn btn-primary" });
+      }
       buttons.push({ label: t("reject_price_change"), action: "reject-discount", cls: "btn btn-danger" });
     }
     if (canApproveCredit) {
