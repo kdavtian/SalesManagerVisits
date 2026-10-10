@@ -75,6 +75,7 @@ export async function renderReports(root, navigate, reportKey) {
   if (reportKey === "new_customers") return renderNewCustomersReport(root, navigate);
   if (reportKey === "checkins") return renderCheckinsReport(root, navigate);
   if (reportKey === "weekly_scorecard") return (await import("./bizReports.js")).renderWeeklyScorecard(root, navigate);
+  if (reportKey === "delivery_speed") return (await import("./bizReports.js")).renderDeliverySpeed(root, navigate);
   if (reportKey === "customer_pipeline") return (await import("./bizReports.js")).renderCustomerPipeline(root, navigate);
   if (reportKey === "fuel_allowance") return (await import("./fuelReport.js")).renderFuelReport(root, navigate);
   if (reportKey === "orders_pipeline") return renderOrdersPipelineReport(root, navigate);
@@ -200,6 +201,7 @@ const REPORT_ICONS = {
   fuel_allowance: icons.route,
   weekly_scorecard: icons.clipboardCheck,
   customer_pipeline: icons.mapPinPlus,
+  delivery_speed: icons.route,
   orders_pipeline: icons.cart,
   brand_availability: icons.store,
   payments: icons.payment,

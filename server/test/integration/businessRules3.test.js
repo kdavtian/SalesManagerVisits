@@ -117,3 +117,41 @@ test("customer pipeline lists customers without an ERP id, oldest first, for the
   assert.ok(res.data.funnel.created >= 1);
   assert.equal((await apiRequest("/api/biz-reports/pipeline", { cookie: cookies.sales_manager })).status, 403);
 });
+
+test("delivery speed: hours from confirmed to packed to delivered, by hand vs Excel, and orders waiting now", async () => {
+  const customer = await createCustomer({ created_by: users.sales_director.id, assigned_manager_id: users.sales_manager.id, name: "Speed Customer" });
+  const product = await createProduct({ unit_price_amd: 1000 });
+  const mk = async () => {
+    const o = await apiRequest("/api/orders", { method: "POST", cookie: cookies.sales_manager, body: { customer_id: customer.id, items: [{ product_id: product.id, quantity: 1 }], payment_method: "cash" } });
+    trackOrder(o.data.id);
+    return o.data.id;
+  };
+  const hist = (id, from, to, ago) =>
+    pool.query("INSERT INTO order_status_history (order_id, old_status, new_status, changed_at) VALUES ($1, $2, $3, now() - $4::interval)", [id, from, to, ago]);
+  // Delivered by hand: confirmed 30 h ago, packed 24 h ago, delivered 6 h ago -> pack 6 h, deliver 18 h, total 24 h.
+  const done = await mk();
+  await pool.query("UPDATE orders SET status = 'delivered' WHERE id = $1", [done]);
+  await hist(done, "submitted", "confirmed", "30 hours");
+  await hist(done, "confirmed", "packed_stock_out", "24 hours");
+  await hist(done, "packed_stock_out", "delivered", "6 hours");
+  // Delivered via Excel.
+  const viaExcel = await mk();
+  await pool.query("UPDATE orders SET status = 'delivered', delivered_from_erp = true WHERE id = $1", [viaExcel]);
+  await hist(viaExcel, "submitted", "confirmed", "80 hours");
+  await hist(viaExcel, "confirmed", "packed_stock_out", "78 hours");
+  await hist(viaExcel, "packed_stock_out", "delivered", "1 hours");
+  // Still waiting: confirmed 50 h ago, never packed.
+  const waiting = await mk();
+  await pool.query("UPDATE orders SET status = 'confirmed' WHERE id = $1", [waiting]);
+  await hist(waiting, "submitted", "confirmed", "50 hours");
+
+  const res = await apiRequest("/api/biz-reports/delivery-speed?days=30", { cookie: cookies.sales_director });
+  assert.equal(res.status, 200);
+  assert.ok(res.data.delivered >= 2);
+  assert.ok(res.data.deliver_by_hand.n >= 1 && res.data.deliver_from_excel.n >= 1);
+  const slow = res.data.slowest.find((r) => r.id === viaExcel);
+  assert.ok(slow && slow.from_excel === true && Math.round(slow.total_hours) === 79);
+  const wait = res.data.open.find((r) => r.id === waiting);
+  assert.ok(wait && Math.round(wait.waiting_hours) === 50 && wait.status === "confirmed");
+  assert.equal((await apiRequest("/api/biz-reports/delivery-speed", { cookie: cookies.accountant })).status, 403);
+});

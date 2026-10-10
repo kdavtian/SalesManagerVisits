@@ -43,3 +43,56 @@ bizReportsRouter.get("/pipeline", async (req, res) => {
   );
   res.json({ waiting, funnel: funnel[0] });
 });
+
+// Delivery speed (item 12 of the process review): how long confirmed orders take to be packed and
+// delivered. Drivers do not use the app, so "delivered" is either marked by hand or set when the Excel
+// sync finds the order (delivered_from_erp) -- the report splits the two, because an Excel match carries
+// the lag of the sync.
+const HOURS = (a, b) => `EXTRACT(EPOCH FROM (${b} - ${a})) / 3600`;
+bizReportsRouter.get("/delivery-speed", async (req, res) => {
+  if (!(await canAccessReport(req.user.role, "delivery_speed"))) return res.status(403).json({ error: "Not allowed" });
+  const days = [7, 30, 90].includes(Number(req.query.days)) ? Number(req.query.days) : 30;
+  const base = `
+    SELECT o.id, o.order_code, o.status, o.delivered_from_erp, c.name AS customer_name,
+      (SELECT min(x.changed_at) FROM order_status_history x WHERE x.order_id = o.id AND x.new_status = 'confirmed') AS confirmed_at,
+      (SELECT max(x.changed_at) FROM order_status_history x WHERE x.order_id = o.id AND x.old_status = 'confirmed' AND x.new_status = 'packed_stock_out') AS packed_at,
+      (SELECT max(x.changed_at) FROM order_status_history x WHERE x.order_id = o.id AND x.new_status = 'delivered') AS delivered_at
+    FROM orders o JOIN customers c ON c.id = o.customer_id`;
+  const { rows: done } = await pool.query(
+    `WITH b AS (${base})
+     SELECT id, order_code, customer_name, delivered_from_erp, confirmed_at, packed_at, delivered_at,
+            ${HOURS("confirmed_at", "packed_at")}::float8 AS pack_hours,
+            ${HOURS("packed_at", "delivered_at")}::float8 AS deliver_hours,
+            ${HOURS("confirmed_at", "delivered_at")}::float8 AS total_hours
+     FROM b WHERE status = 'delivered' AND confirmed_at IS NOT NULL AND delivered_at >= now() - ($1 || ' days')::interval
+     ORDER BY delivered_at DESC LIMIT 2000`,
+    [days]
+  );
+  const { rows: open } = await pool.query(
+    `WITH b AS (${base})
+     SELECT id, order_code, customer_name, status, confirmed_at, packed_at,
+            ${HOURS("COALESCE(packed_at, confirmed_at)", "now()")}::float8 AS waiting_hours
+     FROM b WHERE status IN ('confirmed', 'packed_stock_out') AND confirmed_at IS NOT NULL
+     ORDER BY COALESCE(packed_at, confirmed_at) ASC LIMIT 15`
+  );
+  const nums = (key, only) => done.filter((r) => (only ? only(r) : true) && r[key] !== null && r[key] >= 0).map((r) => r[key]).sort((a, b) => a - b);
+  const stat = (values) => ({
+    n: values.length,
+    avg: values.length ? Math.round((values.reduce((a, v) => a + v, 0) / values.length) * 10) / 10 : null,
+    median: values.length ? Math.round(values[Math.floor(values.length / 2)] * 10) / 10 : null,
+  });
+  const totals = nums("total_hours");
+  const within = (h) => (totals.length ? Math.round((totals.filter((v) => v <= h).length / totals.length) * 100) : null);
+  res.json({
+    days,
+    delivered: done.length,
+    pack: stat(nums("pack_hours")),
+    deliver_by_hand: stat(nums("deliver_hours", (r) => !r.delivered_from_erp)),
+    deliver_from_excel: stat(nums("deliver_hours", (r) => r.delivered_from_erp)),
+    total: stat(totals),
+    within_24h_pct: within(24),
+    within_48h_pct: within(48),
+    open,
+    slowest: [...done].filter((r) => r.total_hours !== null).sort((a, b) => b.total_hours - a.total_hours).slice(0, 10).map((r) => ({ id: r.id, order_code: r.order_code, customer_name: r.customer_name, total_hours: Math.round(r.total_hours * 10) / 10, from_excel: r.delivered_from_erp })),
+  });
+});
