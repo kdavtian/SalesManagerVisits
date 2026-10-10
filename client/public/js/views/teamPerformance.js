@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, activateDialog } from "../util.js";
+import { escapeHtml, formatAmd, activateDialog, labelColon } from "../util.js";
 import { icons } from "../icons.js";
 import { t } from "../i18n.js";
 import { state, seesAllPerformance, isPerfCeo, canEditChannelPlan, canReviewPerfPlan, canCloseMonth, canReopenPerfPlanAsDraft } from "../state.js";
@@ -105,9 +105,9 @@ function mergedBarHtml(row) {
       ${collectionsPct != null ? `<div class="perf-collections-tick" style="left:${collectionsPct}%" title="${escapeHtml(t("perf_collections"))}: ${formatAmd(Math.round(collections.actual))}"></div>` : ""}
     </div>
     <div class="perf-bar-foot muted">
-      <span>${t("perf_collections")}: <strong>${formatAmd(Math.round(collections.actual))}</strong></span>
-      ${sales.forecast != null ? ` · ${t("perf_forecast")}: ${formatAmd(Math.round(sales.forecast))}` : ""}
-      ${sales.required_daily_rate != null && sales.required_daily_rate > 0 ? ` · ${t("perf_required_daily_rate")}: ${formatAmd(Math.round(sales.required_daily_rate))}` : ""}
+      <span>${t("perf_collections")}${labelColon()}<strong>${formatAmd(Math.round(collections.actual))}</strong></span>
+      ${sales.forecast != null ? ` · ${t("perf_forecast")}${labelColon()}${formatAmd(Math.round(sales.forecast))}` : ""}
+      ${sales.required_daily_rate != null && sales.required_daily_rate > 0 ? ` · ${t("perf_required_daily_rate")}${labelColon()}${formatAmd(Math.round(sales.required_daily_rate))}` : ""}
     </div>
     ${
       collections.pending_amd
@@ -506,7 +506,7 @@ async function renderManagementView(root, navigate, managerId) {
         <div class="card" style="margin-bottom:10px;">
           <strong>${t(`perf_status_${plan.status}`)}</strong>
           <span class="muted"> · v${plan.version}</span>
-          ${plan.status === "rejected" && plan.rejected_reason ? `<p class="muted" style="margin:6px 0 0;">${t("perf_rejected_reason_label")}: ${escapeHtml(plan.rejected_reason)}</p>` : ""}
+          ${plan.status === "rejected" && plan.rejected_reason ? `<p class="muted" style="margin:6px 0 0;">${t("perf_rejected_reason_label")}${labelColon()}${escapeHtml(plan.rejected_reason)}</p>` : ""}
         </div>
         <div class="card-list" id="perf-channel-list"></div>
         ${isEditableStatus ? `<button type="button" class="btn btn-primary btn-block" id="perf-submit-btn" ${canSubmit ? "" : "disabled"} style="margin-top:12px;">${plan.status === "rejected" ? t("perf_resubmit_for_approval") : t("perf_submit_for_approval")}</button>` : ""}
@@ -588,7 +588,7 @@ async function renderManagementView(root, navigate, managerId) {
       .map(
         (a) => `
       <button type="button" class="card settings-list-row" data-plan-id="${a.id}">
-        <span class="settings-row-label">${escapeHtml(formatMonthLabel(a.month))}<br/><span class="muted">${t("perf_submitted_by")}: ${escapeHtml(a.submitted_by_name)} · ${a.channel_count} ${t("perf_channel_count")}</span></span>
+        <span class="settings-row-label">${escapeHtml(formatMonthLabel(a.month))}<br/><span class="muted">${t("perf_submitted_by")}${labelColon()}${escapeHtml(a.submitted_by_name)} · ${a.channel_count} ${t("perf_channel_count")}</span></span>
         <span class="settings-row-chevron">›</span>
       </button>`
       )
@@ -634,7 +634,7 @@ async function renderManagementView(root, navigate, managerId) {
         key: "unmappedSalesReps",
         rows: dq.unmappedSalesReps,
         title: t("perf_dq_unmapped_sales"),
-        render: (r) => `${escapeHtml(r.rep_name)} <span class="muted">· ${t("perf_dq_latest")}: ${new Date(r.latest_sync).toLocaleDateString()}</span>`,
+        render: (r) => `${escapeHtml(r.rep_name)} <span class="muted">· ${t("perf_dq_latest")}${labelColon()}${new Date(r.latest_sync).toLocaleDateString()}</span>`,
       },
       {
         key: "unmappedErpReps",
@@ -646,7 +646,7 @@ async function renderManagementView(root, navigate, managerId) {
         key: "staleChannels",
         rows: dq.staleChannels,
         title: t("perf_dq_stale"),
-        render: (r) => `${escapeHtml(r.name)} <span class="muted">· ${t("perf_dq_latest")}: ${r.latest_sync ? new Date(r.latest_sync).toLocaleDateString() : t("perf_dq_never")}</span>`,
+        render: (r) => `${escapeHtml(r.name)} <span class="muted">· ${t("perf_dq_latest")}${labelColon()}${r.latest_sync ? new Date(r.latest_sync).toLocaleDateString() : t("perf_dq_never")}</span>`,
       },
       {
         key: "unassignedChannels",

@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { cssColor, escapeHtml, formatAmd, formatDateDMY, getCurrentPosition, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo } from "../util.js";
+import { cssColor, escapeHtml, formatAmd, formatDateDMY, getCurrentPosition, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, labelColon } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 import { ensureLeaflet } from "../leafletLoader.js";
@@ -109,7 +109,7 @@ export async function renderDelivery(root, navigate) {
       .map(
         (s, i) => `
       <div class="card ${s.completed_at ? "route-stop-done" : ""}">
-        <div class="order-detail-ids"><span>${t("order_id_label")}: ${escapeHtml(s.order_code || "")}</span></div>
+        <div class="order-detail-ids"><span>${t("order_id_label")}${labelColon()}${escapeHtml(s.order_code || "")}</span></div>
         <strong>${i + 1}. ${escapeHtml(s.customer_name)}</strong>
         <p class="muted">${escapeHtml(s.address || "")}</p>
         <p><span class="text-amount">${formatAmd(Number(s.total_amd))}</span></p>
@@ -135,7 +135,7 @@ export async function renderDelivery(root, navigate) {
     contentEl.innerHTML = `
       <label class="form-label" for="plan-driver">${t("delivery_choose_driver")}</label>
       <select id="plan-driver">${drivers.map((d) => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join("")}</select>
-      <p class="muted" style="margin:10px 0 4px;">${t("delivery_waiting_orders_count")}: ${packedOrders.filter((o) => o.lat != null).length}</p>
+      <p class="muted" style="margin:10px 0 4px;">${t("delivery_waiting_orders_count")}${labelColon()}${packedOrders.filter((o) => o.lat != null).length}</p>
       ${
         packedOrders.some((o) => o.lat == null)
           ? `<p class="muted">${packedOrders.filter((o) => o.lat == null).length} ${t("delivery_no_location")}</p>`
@@ -220,7 +220,7 @@ export async function renderDelivery(root, navigate) {
         <h2>${customerNameLinkHtml(stop.customer_name, stop.customer_id)}</h2>
         ${stop.address ? `<p class="muted">${escapeHtml(stop.address)}</p>` : ""}
         <div class="card" style="margin:12px 0;">
-          <div class="order-detail-ids"><span>${t("order_id_label")}: ${escapeHtml(stop.order_code || "")}</span></div>
+          <div class="order-detail-ids"><span>${t("order_id_label")}${labelColon()}${escapeHtml(stop.order_code || "")}</span></div>
           <p><span class="text-amount">${formatAmd(Number(stop.total_amd))}</span></p>
           <p class="muted">${escapeHtml(stop.driver_name)} &middot; ${formatDateDMY(stop.route_date)}</p>
         </div>
@@ -315,15 +315,15 @@ export async function renderDelivery(root, navigate) {
     function newBalanceHtml() {
       if (debtBefore == null) return `<p class="muted">${t("delivery_debt_unknown")}</p>`;
       const newBalance = debtBefore + snapshot.order_amount_amd - amountCollected;
-      return `<p>${t("delivery_new_balance")}: <span class="text-amount">${formatAmd(newBalance)}</span></p>`;
+      return `<p>${t("delivery_new_balance")}${labelColon()}<span class="text-amount">${formatAmd(newBalance)}</span></p>`;
     }
 
     overlay.querySelector(".sheet").innerHTML = `
       <h2>${escapeHtml(stop.customer_name)}</h2>
       <p class="muted">${escapeHtml(stop.address || "")}</p>
       <div class="card" style="margin:12px 0;">
-        ${debtBefore != null ? `<p>${t("delivery_debt_before")}: <span class="text-amount">${formatAmd(debtBefore)}</span></p>` : ""}
-        <p>${t("delivery_order_amount")}: <span class="text-amount">${formatAmd(snapshot.order_amount_amd)}</span></p>
+        ${debtBefore != null ? `<p>${t("delivery_debt_before")}${labelColon()}<span class="text-amount">${formatAmd(debtBefore)}</span></p>` : ""}
+        <p>${t("delivery_order_amount")}${labelColon()}<span class="text-amount">${formatAmd(snapshot.order_amount_amd)}</span></p>
         <label class="form-label" for="amount-collected-input">${t("delivery_amount_collected")}</label>
         <input type="number" id="amount-collected-input" min="0" step="1" value="0" inputmode="numeric" />
         <div class="segmented" id="payment-method-row">

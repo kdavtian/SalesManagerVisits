@@ -5,7 +5,7 @@
 // sales.js: no write-back, ERP/Excel stays the source of truth, same
 // contract as Debt Balances.
 import { api } from "../api.js";
-import { escapeHtml, saveBlob, openInfoPopup, formatAmd, formatLiters, channelDisplayLabel, activateDialog, syncBadgeHtml, parseDateOnly, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, erpLineDiscountRowHtml, monthShort } from "../util.js";
+import { escapeHtml, saveBlob, openInfoPopup, formatAmd, formatLiters, channelDisplayLabel, activateDialog, syncBadgeHtml, parseDateOnly, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, erpLineDiscountRowHtml, monthShort, labelColon } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { seesFinancialExports } from "../state.js";
 import { icons } from "../icons.js";
@@ -227,7 +227,7 @@ async function renderSalesTab(root, navigate) {
     }
     const subtotal = rows.reduce((sum, o) => sum + Number(o.total_amd || 0), 0);
     const subtotalLiters = rows.reduce((sum, o) => sum + Number(o.total_liters || 0), 0);
-    subtotalEl.textContent = `${t("sales_subtotal")}: ${formatAmd(subtotal)} (${formatLiters(subtotalLiters)} | ${rows.length} ${t("sales_order_count")})`;
+    subtotalEl.textContent = `${t("sales_subtotal")}${labelColon()}${formatAmd(subtotal)} (${formatLiters(subtotalLiters)} | ${rows.length} ${t("sales_order_count")})`;
 
     const dayTotals = new Map();
     for (const o of rows) {

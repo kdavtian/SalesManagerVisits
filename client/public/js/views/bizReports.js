@@ -1,7 +1,7 @@
 // Weekly scorecard per sales rep and the new-customer pipeline (server: scorecard.js,
 // routes/bizReports.js). Both are plain read-only report pages.
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, formatDateDMY } from "../util.js";
+import { escapeHtml, formatAmd, formatDateDMY, labelColon } from "../util.js";
 import { t } from "../i18n.js";
 import { dueChipHtml } from "../debtChip.js";
 
@@ -105,7 +105,7 @@ export async function renderCustomerPipeline(root, navigate) {
             <span class="badge ${c.age_days >= 3 ? "badge-danger" : "badge-neutral"}">${c.age_days} ${t("pipeline_days")}</span>
           </div>
           <div class="muted" style="font-size:0.85em">${[c.manager_name, c.created_by_name, c.region].filter(Boolean).map(escapeHtml).join(" · ")}</div>
-          ${c.draft_orders ? `<div style="font-size:0.85em">${t("pipeline_draft_orders")}: ${c.draft_orders} · ${formatAmd(c.draft_amd)}</div>` : ""}
+          ${c.draft_orders ? `<div style="font-size:0.85em">${t("pipeline_draft_orders")}${labelColon()}${c.draft_orders} · ${formatAmd(c.draft_amd)}</div>` : ""}
         </button>`
               )
               .join("")

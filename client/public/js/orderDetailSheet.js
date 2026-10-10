@@ -5,7 +5,7 @@
 // tab's "Order placed" outcome row, for one -- can open the exact same
 // sheet without re-implementing it.
 import { api } from "./api.js";
-import { escapeHtml, formatAmd, activateDialog, formatDateTime, formatDateDMY, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo } from "./util.js";
+import { escapeHtml, formatAmd, activateDialog, formatDateTime, formatDateDMY, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, labelColon } from "./util.js";
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { state } from "./state.js";
@@ -222,8 +222,8 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       <button type="button" class="icon-btn sheet-close-x" data-action="close-sheet" aria-label="${t("close")}">${icons.close}</button>
       <div class="order-detail-head">
       <div class="order-detail-ids">
-        <span>${t("customer_id_label")}: ${escapeHtml(order.erp_customer_id || String(order.customer_id))}</span>
-        ${order.order_code ? `<span>${t("order_id_label")}: ${escapeHtml(order.order_code)}</span>` : ""}
+        <span>${t("customer_id_label")}${labelColon()}${escapeHtml(order.erp_customer_id || String(order.customer_id))}</span>
+        ${order.order_code ? `<span>${t("order_id_label")}${labelColon()}${escapeHtml(order.order_code)}</span>` : ""}
       </div>
       <h2 class="order-detail-customer">${customerNameLinkHtml(order.customer_name, order.customer_id)}</h2>
       <p><span class="badge ${meta.cls}">${t(meta.key)}</span>${
@@ -241,16 +241,16 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       <div class="order-detail-side">
       ${
         hasDiscount
-          ? `<p class="muted">${t("price_change_label")}: ${discountAmd > 0 ? formatAmd(discountAmd) : `${discountPct}%`}</p>`
+          ? `<p class="muted">${t("price_change_label")}${labelColon()}${discountAmd > 0 ? formatAmd(discountAmd) : `${discountPct}%`}</p>`
           : ""
       }
       ${
         order.pricing_check && order.pricing_check.margin_pct !== null
-          ? `<p class="muted">${t("margin_label")}: ${order.pricing_check.margin_pct}%</p>`
+          ? `<p class="muted">${t("margin_label")}${labelColon()}${order.pricing_check.margin_pct}%</p>`
           : ""
       }
       ${order.pricing_check?.below_cost ? `<p class="order-stock-warning order-stock-danger">${t("below_cost_warning")}</p>` : ""}
-      <p class="order-detail-total"><span>${t("total")}:</span> <span class="text-amount">${formatAmd(Number(order.total_amd))}</span></p>
+      <p class="order-detail-total"><span>${t("total")}${labelColon().trim()}</span> <span class="text-amount">${formatAmd(Number(order.total_amd))}</span></p>
       ${order.credit_status === "pending" ? `<p class="muted">${t("credit_status_pending_hint")}</p>` : ""}
       ${order.note ? `<p class="muted">${escapeHtml(order.note)}</p>` : ""}
       ${accountingSectionHtml(order)}
@@ -272,7 +272,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     const buttons = [];
     if (order.status === "draft" && (isOwnerOrAdmin || state.user.role === "accountant")) {
       if (order.draft_reason) {
-        buttons.push({ label: `${t("draft_reason_label")}: ${order.draft_reason}`, action: "noop", cls: "btn", disabledDisplay: true });
+        buttons.push({ label: `${t("draft_reason_label")}${labelColon()}${order.draft_reason}`, action: "noop", cls: "btn", disabledDisplay: true });
       }
       buttons.push({ label: t("submit_order"), action: "submit-order", cls: "btn btn-primary" });
     }
@@ -537,7 +537,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
         </div>
       </div>
       ${selfApproves ? "" : `<p class="muted price-change-hint">${t("price_change_hint")}</p>`}
-      <p>${t("total")}: <span id="edit-order-total" class="text-amount"></span></p>
+      <p>${t("total")}${labelColon()}<span id="edit-order-total" class="text-amount"></span></p>
       <p class="form-error" id="order-detail-error" hidden></p>
       <div class="sheet-actions">
         <button type="button" class="btn" id="edit-order-cancel">${t("cancel_edit")}</button>

@@ -64,7 +64,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   }
 
   const idCategoryLine = [
-    customer.erp_customer_id ? `${t("customer_id_label")}: ${escapeHtml(customer.erp_customer_id)}` : "",
+    customer.erp_customer_id ? `${t("customer_id_label")}${labelColon()}${escapeHtml(customer.erp_customer_id)}` : "",
     customer.category ? escapeHtml(categoryLabel(customer.category)) : "",
   ]
     .filter(Boolean)
@@ -144,7 +144,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       }
       ${noVisitChannel ? "" : `<div class="detail-fact"><span class="detail-fact-icon">${icons.repeat}</span><span>${t("visit_every_prefix")}${customer.visit_frequency_days}${t("visit_every_suffix")}</span></div>`}
       <div class="detail-fact"><span class="detail-fact-icon">${icons.wallet}</span><span>${t(customer.payment_method === "cash" ? "payment_method_cash" : "payment_method_invoice")} &middot; ${t("credit_term_fact").replace("{n}", customer.credit_term_days)}</span></div>
-      ${customer.credit_limit_amd != null ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.wallet}</span><span>${t("credit_limit_label")}: ${formatAmd(customer.credit_limit_amd)}</span></div>` : ""}
+      ${customer.credit_limit_amd != null ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.wallet}</span><span>${t("credit_limit_label")}${labelColon()}${formatAmd(customer.credit_limit_amd)}</span></div>` : ""}
       ${customer.last_visit_at ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.clock}</span><span>${t("last_visit")}${labelColon()}${formatDateTime(customer.last_visit_at)}</span></div>` : ""}
       ${customer.notes ? `<div class="detail-fact muted"><span class="detail-fact-icon">${icons.note}</span><span>${escapeHtml(customer.notes)}</span></div>` : ""}
     </div>
@@ -408,7 +408,7 @@ function renderErpCard(customer, erpOrders) {
     // same rule as the chip, the reports and the tasks), or the data is broken. A 0 balance is fine.
     debtDanger: isDataError || (debt > 0 && (customer.debt_summary?.oldest_due_days ?? 0) > 0),
     debtSub:
-      !isDataError && collectedSinceSync > 0 ? `${t("estimated_remaining")}: ${formatAmd(estimatedDebt)}` : "",
+      !isDataError && collectedSinceSync > 0 ? `${t("estimated_remaining")}${labelColon()}${formatAmd(estimatedDebt)}` : "",
     // Days past (or until) the due date of the oldest unpaid invoice, credit term deducted.
     debtChip: !isDataError && debt > 0 ? dueChipHtml(customer.debt_summary?.oldest_due_days) : "",
     lastOrderDate,

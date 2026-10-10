@@ -3,7 +3,7 @@
 // the credit term is already deducted from due_days: > 0 = that many days overdue, <= 0 = due in
 // that many days.
 import { t } from "./i18n.js";
-import { formatAmd } from "./util.js";
+import { formatAmd, labelColon } from "./util.js";
 
 export function dueChipHtml(dueDays, { extraClass = "" } = {}) {
   if (dueDays == null) return "";
@@ -30,5 +30,5 @@ export function unpaidRowClass(order) {
 export function partialChipHtml(order) {
   if (!(Number(order?.unpaid_amd) > 0) || order.due_days == null) return "";
   if (Number(order.unpaid_amd) >= Number(order.total_amd) - 1) return "";
-  return `<span class="due-chip due-chip-amount">${t("debt_unpaid_amount")}: ${formatAmd(order.unpaid_amd)}</span>`;
+  return `<span class="due-chip due-chip-amount">${t("debt_unpaid_amount")}${labelColon()}${formatAmd(order.unpaid_amd)}</span>`;
 }

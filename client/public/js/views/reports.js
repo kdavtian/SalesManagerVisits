@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, firstUseHintHtml, activateFirstUseHints, activateDialog, downloadFromUrl, saveBlob, monthShort, formatDateTime as formatDateTimeShared, formatDayMonth } from "../util.js";
+import { escapeHtml, firstUseHintHtml, activateFirstUseHints, activateDialog, downloadFromUrl, saveBlob, monthShort, formatDateTime as formatDateTimeShared, formatDayMonth, labelColon } from "../util.js";
 import { buildRegionSubregionTree, openTriStateTreeSheet, NO_GROUP_KEY } from "../regionTree.js";
 import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
@@ -761,9 +761,9 @@ async function renderCashReconciliationReport(root, navigate) {
             <div class="card cash-recon-card${diff !== 0 ? " cash-recon-card-diff" : ""}">
               <div class="cash-recon-top">
                 <strong>${formatDateDMY(r.day)}</strong>
-                <span class="${diff !== 0 ? "cash-recon-diff-amount" : "muted"}">${t("report_cash_reconciliation_difference")}: ${diff > 0 ? "+" : ""}${formatAmd(diff)}</span>
+                <span class="${diff !== 0 ? "cash-recon-diff-amount" : "muted"}">${t("report_cash_reconciliation_difference")}${labelColon()}${diff > 0 ? "+" : ""}${formatAmd(diff)}</span>
               </div>
-              <span class="muted">${t("report_cash_reconciliation_collected")}: ${formatAmd(Number(r.collected_amd))} · ${t("report_cash_reconciliation_submitted")}: ${formatAmd(Number(r.submitted_amd))}</span>
+              <span class="muted">${t("report_cash_reconciliation_collected")}${labelColon()}${formatAmd(Number(r.collected_amd))} · ${t("report_cash_reconciliation_submitted")}${labelColon()}${formatAmd(Number(r.submitted_amd))}</span>
             </div>`;
           })
           .join("")}
@@ -1037,9 +1037,9 @@ async function renderCustomerDebtReport(root, navigate) {
             <strong class="report-debt-customer-name">${escapeHtml(c.customer_name)}</strong>
             <strong class="report-row-amount">${formatAmd(Number(c.estimated_debt_amd))}</strong>
           </div>
-          ${c.oldest_due_days != null && Number(c.estimated_debt_amd) > 0 ? `<div class="debt-chip-line">${Number(c.overdue_amd) > 0 ? `<span class="muted">${t("debt_overdue_label")}: ${formatAmd(Number(c.overdue_amd))}</span>` : ""}${dueChipHtml(c.oldest_due_days)}</div>` : ""}
-          <span class="muted">${t("customer_id_label")}: ${escapeHtml(c.erp_customer_id || "—")} · ${escapeHtml(channelDisplayLabel(c.assigned_sales_rep))}</span>
-          <span class="muted">${t("debt_balances_last_payment")}: ${c.last_payment_date ? escapeHtml(formatDateDMY(c.last_payment_date)) : t("report_customer_debt_no_payment")}</span>${
+          ${c.oldest_due_days != null && Number(c.estimated_debt_amd) > 0 ? `<div class="debt-chip-line">${Number(c.overdue_amd) > 0 ? `<span class="muted">${t("debt_overdue_label")}${labelColon()}${formatAmd(Number(c.overdue_amd))}</span>` : ""}${dueChipHtml(c.oldest_due_days)}</div>` : ""}
+          <span class="muted">${t("customer_id_label")}${labelColon()}${escapeHtml(c.erp_customer_id || "—")} · ${escapeHtml(channelDisplayLabel(c.assigned_sales_rep))}</span>
+          <span class="muted">${t("debt_balances_last_payment")}${labelColon()}${c.last_payment_date ? escapeHtml(formatDateDMY(c.last_payment_date)) : t("report_customer_debt_no_payment")}</span>${
               collected > 0
                 ? `
           <span class="muted sync-adjusted-note">${formatAmd(Number(c.debt_amd))} ${t("report_customer_debt_per_sync")} − ${formatAmd(collected)} ${t("report_customer_debt_collected_since")}</span>`
@@ -1141,7 +1141,7 @@ async function renderSalesBudgetReport(root, navigate) {
                     (r) => `
               <div class="card report-row-multiline">
                 <strong>${escapeHtml(r.channel_name || channelDisplayLabel(r.rep_name))}</strong>
-                <span class="muted">${formatAmd(Number(r.sales_amd))} / ${formatAmd(Number(r.budget_amd))} (${achievedPct(Number(r.sales_amd), Number(r.budget_amd))}) · ${t("report_sales_budget_collected")}: ${formatAmd(Number(r.collected_amd))}</span>
+                <span class="muted">${formatAmd(Number(r.sales_amd))} / ${formatAmd(Number(r.budget_amd))} (${achievedPct(Number(r.sales_amd), Number(r.budget_amd))}) · ${t("report_sales_budget_collected")}${labelColon()}${formatAmd(Number(r.collected_amd))}</span>
               </div>`
                   )
                   .join("")
@@ -1313,8 +1313,8 @@ async function renderDailyManagementReport(root, navigate) {
             )
             .join("")}
         </div>
-        <p class="muted" style="margin: 0 4px 8px;">${t("report_daily_management_change_prev")}: ${signedAmd(r.sales_change_amd)}${r.sales_change_liters != null ? ` · ${r.sales_change_liters > 0 ? "+" : ""}${Number(r.sales_change_liters).toLocaleString()} L` : ""}</p>
-        <p class="muted" style="margin: 0 4px 8px;">${t("report_daily_management_margin")}: ${formatAmd(r.sales_margin_amd)}${r.sales_margin_pct != null ? ` (${Number(r.sales_margin_pct).toFixed(1)}%)` : ""}</p>
+        <p class="muted" style="margin: 0 4px 8px;">${t("report_daily_management_change_prev")}${labelColon()}${signedAmd(r.sales_change_amd)}${r.sales_change_liters != null ? ` · ${r.sales_change_liters > 0 ? "+" : ""}${Number(r.sales_change_liters).toLocaleString()} L` : ""}</p>
+        <p class="muted" style="margin: 0 4px 8px;">${t("report_daily_management_margin")}${labelColon()}${formatAmd(r.sales_margin_amd)}${r.sales_margin_pct != null ? ` (${Number(r.sales_margin_pct).toFixed(1)}%)` : ""}</p>
 
         <h2 class="section-title">${t("report_daily_management_sales")} · ${t("by_channel")} (${formatDateOnly(r.report_date)})</h2>
         <div class="card-list">
@@ -1383,7 +1383,7 @@ async function renderDailyManagementReport(root, navigate) {
 
           <p class="list-group-heading">${t("report_daily_management_group_other")}</p>
           <div class="card report-row"><span>${t("report_daily_management_credit_line")}</span><strong>${formatUsd(r.credit_line_usd)}</strong></div>
-          <div class="card report-row"><span>${t("report_daily_management_receivables")}</span><strong>${formatAmd(r.receivables_total_amd)} (${t("report_daily_management_receivables_net")}: ${formatAmd(r.receivables_net_amd)})</strong></div>
+          <div class="card report-row"><span>${t("report_daily_management_receivables")}</span><strong>${formatAmd(r.receivables_total_amd)} (${t("report_daily_management_receivables_net")}${labelColon()}${formatAmd(r.receivables_net_amd)})</strong></div>
           <div class="card report-row"><span>${t("report_daily_management_warehouse")}</span><strong>${formatAmd(r.warehouse_value_amd)} · ${r.warehouse_liters != null ? `${Number(r.warehouse_liters).toLocaleString()} L` : "—"}</strong></div>
         </div>
         ${
