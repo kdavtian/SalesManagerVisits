@@ -180,7 +180,7 @@ visitPlansRouter.get("/team-today", async (req, res) => {
   const { rows: customerRows } = allCustomerIds.size
     ? await pool.query(
         `SELECT id, name,
-           EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= date_trunc('day', now())) AS visited_today
+           EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range AND ch.timestamp >= date_trunc('day', now())) AS visited_today
          FROM customers c WHERE id = ANY($1)`,
         [[...allCustomerIds]]
       )

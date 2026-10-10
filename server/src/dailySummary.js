@@ -59,10 +59,10 @@ async function countOverdueCustomers() {
   const { rows } = await pool.query(
     `SELECT count(*)::int AS count FROM customers c
      WHERE ${NOT_NO_VISIT_CHANNEL_SQL}
-       AND NOT EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= date_trunc('day', now()))
+       AND NOT EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range AND ch.timestamp >= date_trunc('day', now()))
        AND (
-         (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id) IS NULL
-         OR (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id) < now() - (c.visit_frequency_days || ' days')::interval
+         (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range) IS NULL
+         OR (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range) < now() - (c.visit_frequency_days || ' days')::interval
        )`
   );
   return rows[0].count;

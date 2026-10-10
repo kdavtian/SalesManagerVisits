@@ -157,6 +157,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       }
       <div class="detail-fact"><span class="detail-fact-icon">${icons.repeat}</span><span>${t("visit_every_prefix")}${customer.visit_frequency_days}${t("visit_every_suffix")}</span></div>
       <div class="detail-fact"><span class="detail-fact-icon">${icons.wallet}</span><span>${t(customer.payment_method === "cash" ? "payment_method_cash" : "payment_method_invoice")} &middot; ${t("credit_term_fact").replace("{n}", customer.credit_term_days)}</span></div>
+      ${customer.credit_limit_amd != null ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.wallet}</span><span>${t("credit_limit_label")}: ${formatAmd(customer.credit_limit_amd)}</span></div>` : ""}
       ${customer.last_visit_at ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.clock}</span><span>${t("last_visit")}: ${formatDateTime(customer.last_visit_at)}</span></div>` : ""}
       ${customer.notes ? `<div class="detail-fact muted"><span class="detail-fact-icon">${icons.note}</span><span>${escapeHtml(customer.notes)}</span></div>` : ""}
     </div>
@@ -683,6 +684,9 @@ async function openAccountSettingsSheet(customer, onDone) {
                </label>
                <label>${t("credit_term_days_label")}
                  <input type="number" name="credit_term_days" min="1" step="1" value="${customer.credit_term_days ?? 45}" />
+               </label>
+               <label>${t("credit_limit_label")} (${t("credit_limit_hint")})
+                 <input type="number" name="credit_limit_amd" min="0" step="1" inputmode="numeric" value="${customer.credit_limit_amd != null ? Math.round(Number(customer.credit_limit_amd)) : ""}" placeholder="${t("credit_limit_none")}" />
                </label>`
             : ""
         }
@@ -847,6 +851,12 @@ async function openAccountSettingsSheet(customer, onDone) {
           // clamp it here instead of trusting whatever was last stored.
           credit_term_days: Math.max(1, Number(data.get("credit_term_days")) || 45),
         }),
+      });
+      // The credit limit has its own endpoint (accountant + directors); empty = no limit.
+      const limitRaw = String(data.get("credit_limit_amd") ?? "").trim();
+      sections.push({
+        label: t("credit_limit_label"),
+        promise: api.setCreditLimit(customer.id, limitRaw === "" ? null : Number(limitRaw)),
       });
     }
 

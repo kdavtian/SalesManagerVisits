@@ -114,9 +114,9 @@ dashboardRouter.get("/summary", async (req, res) => {
        -- customers were actually still to be visited that day.
        (SELECT count(*) FROM customers c WHERE ${NOT_NO_VISIT_CHANNEL_SQL} ${customerFilter}) AS total_customers,
        (SELECT count(DISTINCT ch.customer_id) FROM checkins ch
-          WHERE ch.timestamp >= date_trunc('day', now()) ${userFilter}) AS visited_today,
+          WHERE ch.within_range AND ch.timestamp >= date_trunc('day', now()) ${userFilter}) AS visited_today,
        (SELECT count(DISTINCT ch.customer_id) FROM checkins ch
-          WHERE ch.timestamp >= date_trunc('week', now()) ${userFilter}) AS visited_this_week,
+          WHERE ch.within_range AND ch.timestamp >= date_trunc('week', now()) ${userFilter}) AS visited_this_week,
        (SELECT count(*) FROM checkins ch
           WHERE ch.timestamp >= date_trunc('week', now()) ${userFilter}) AS checkins_this_week,
        (SELECT count(*) FROM checkins ch
@@ -125,11 +125,11 @@ dashboardRouter.get("/summary", async (req, res) => {
           WHERE ${NOT_NO_VISIT_CHANNEL_SQL}
           ${customerFilter}
           AND NOT EXISTS (
-            SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.timestamp >= date_trunc('day', now())
+            SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range AND ch.timestamp >= date_trunc('day', now())
           )
           AND (
-            (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id) IS NULL
-            OR (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id)
+            (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range) IS NULL
+            OR (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range)
                < now() - (c.visit_frequency_days || ' days')::interval
           )) AS overdue`,
     params
@@ -159,16 +159,16 @@ dashboardRouter.get("/summary", async (req, res) => {
                 count(DISTINCT ch.customer_id) AS customers_visited_this_week,
                 (SELECT count(*) FROM customers c WHERE c.assigned_manager_id = u.id AND ${NOT_NO_VISIT_CHANNEL_SQL}) AS total_customers,
                 (SELECT count(DISTINCT ch2.customer_id) FROM checkins ch2
-                   WHERE ch2.user_id = u.id AND ch2.timestamp >= date_trunc('day', now())) AS visited_today,
+                   WHERE ch2.within_range AND ch2.user_id = u.id AND ch2.timestamp >= date_trunc('day', now())) AS visited_today,
                 (SELECT count(*) FROM customers c
                    WHERE c.assigned_manager_id = u.id
                    AND ${NOT_NO_VISIT_CHANNEL_SQL}
                    AND NOT EXISTS (
-                     SELECT 1 FROM checkins ch3 WHERE ch3.customer_id = c.id AND ch3.timestamp >= date_trunc('day', now())
+                     SELECT 1 FROM checkins ch3 WHERE ch3.customer_id = c.id AND ch3.within_range AND ch3.timestamp >= date_trunc('day', now())
                    )
                    AND (
-                     (SELECT max(ch4.timestamp) FROM checkins ch4 WHERE ch4.customer_id = c.id) IS NULL
-                     OR (SELECT max(ch4.timestamp) FROM checkins ch4 WHERE ch4.customer_id = c.id)
+                     (SELECT max(ch4.timestamp) FROM checkins ch4 WHERE ch4.customer_id = c.id AND ch4.within_range) IS NULL
+                     OR (SELECT max(ch4.timestamp) FROM checkins ch4 WHERE ch4.customer_id = c.id AND ch4.within_range)
                         < now() - (c.visit_frequency_days || ' days')::interval
                    )) AS overdue
          FROM users u

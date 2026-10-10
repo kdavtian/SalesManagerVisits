@@ -121,6 +121,11 @@ export function canConfirmSubmittedOrders(role) {
   return canConfirmOrders(role) || role === "accountant";
 }
 
+// Credit terms (a customer's credit limit): the accountant and the directors set them.
+export function canSetCreditTerms(role) {
+  return canConfirmSubmittedOrders(role);
+}
+
 // Same people: send a confirmed order to accounting (invoice / waybill).
 export function canRequestAccountingDocs(role) {
   return canConfirmSubmittedOrders(role);

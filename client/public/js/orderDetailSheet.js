@@ -14,6 +14,7 @@ import { searchProducts, debounce } from "./productSearch.js";
 import { compareProducts } from "./productSort.js";
 import { documentsSectionHtml, bindDocumentRows } from "./accountingFiles.js";
 import { openPrintBlankSheet } from "./orderBlankPrint.js";
+import { openErpLinkSheet } from "./erpLinkSheet.js";
 import { openAccountingDocSheet, accountingDocShort, accountingStatusLabel, ACCOUNTING_STATUS_BADGE } from "./accountingDocSheet.js";
 
 // v3 5-state machine (see migrations/051_warehouse_delivery_v3.sql):
@@ -210,6 +211,9 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     // A pending or rejected discount blocks fulfillment server-side too --
     // don't offer a forward-status button that would just 409.
     const canApproveDiscount = DISCOUNT_APPROVER_ROLES.has(state.user.role) && order.approval_status === "pending";
+    // Credit limit exception (migration 101): same directors decide.
+    const creditMeta = { pending: ["credit_status_pending", "badge-warning"], approved: ["credit_status_approved", "badge-success"], rejected: ["credit_status_rejected", "badge-danger"] }[order.credit_status];
+    const canApproveCredit = DISCOUNT_APPROVER_ROLES.has(state.user.role) && order.credit_status === "pending";
 
     overlay.querySelector(".sheet").classList.add("order-detail-sheet");
     overlay.querySelector(".sheet").innerHTML = `
@@ -226,7 +230,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       order.payment_method ? ` ${paymentMethodBadgeHtml(order.payment_method)}` : ""
     }${
       hasDiscount && approvalMeta ? ` <span class="badge ${approvalMeta.cls}">${t(approvalMeta.key)}</span>` : ""
-    }</p>
+    }${creditMeta ? ` <span class="badge ${creditMeta[1]}">${t(creditMeta[0])}</span>` : ""}</p>
       </div>
       <div class="order-detail-body">
       <div class="order-detail-main card-list" style="margin:12px 0;">
@@ -239,6 +243,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
           : ""
       }
       <p class="order-detail-total"><span>${t("total")}:</span> <span class="text-amount">${formatAmd(Number(order.total_amd))}</span></p>
+      ${order.credit_status === "pending" ? `<p class="muted">${t("credit_status_pending_hint")}</p>` : ""}
       ${order.note ? `<p class="muted">${escapeHtml(order.note)}</p>` : ""}
       ${accountingSectionHtml(order)}
       <div id="order-signed-docs"></div>
@@ -267,6 +272,10 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       buttons.push({ label: t("approve_price_change"), action: "approve-discount", cls: "btn btn-primary" });
       buttons.push({ label: t("reject_price_change"), action: "reject-discount", cls: "btn btn-danger" });
     }
+    if (canApproveCredit) {
+      buttons.push({ label: t("approve_credit"), action: "approve-credit", cls: "btn btn-primary" });
+      buttons.push({ label: t("reject_credit"), action: "reject-credit", cls: "btn btn-danger" });
+    }
     if (canConfirmSubmitted) {
       buttons.push({ label: t("confirm_order"), status: "confirmed", cls: "btn btn-primary" });
     }
@@ -282,6 +291,9 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     }
     if (CONFIRM_SUBMITTED_ROLES.has(state.user.role) && ["waybill_created", "partially_created", "exported_unsigned"].includes(order.accounting_status)) {
       buttons.push({ label: t("acc_mark_signed"), action: "accounting-signed", cls: "btn" });
+    }
+    if ((order.status === "confirmed" || order.status === "packed_stock_out") && order.erp_customer_id && MARK_DELIVERED_ROLES.has(state.user.role)) {
+      buttons.push({ label: t("erp_link_btn"), action: "link-erp", cls: "btn" });
     }
     if (order.status === "packed_stock_out") {
       // No route/signature required here -- see canMarkDeliveredWithoutRoute
@@ -385,6 +397,16 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
           }
           return;
         }
+        if (btn.dataset.action === "link-erp") {
+          const linked = await openErpLinkSheet(order);
+          if (linked) {
+            overlay.remove();
+            window.dispatchEvent(new Event("delivery-changed"));
+            notifyOrdersChanged();
+            onChanged?.();
+          }
+          return;
+        }
         if (btn.dataset.action === "accounting-document") {
           overlay.remove();
           await openAccountingDocSheet(order);
@@ -428,7 +450,9 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
         }
         actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
         try {
-          if (btn.dataset.action === "approve-discount") await api.approveOrderDiscount(orderId);
+          if (btn.dataset.action === "approve-credit") await api.approveOrderCredit(orderId);
+          else if (btn.dataset.action === "reject-credit") await api.rejectOrderCredit(orderId);
+          else if (btn.dataset.action === "approve-discount") await api.approveOrderDiscount(orderId);
           else if (btn.dataset.action === "reject-discount") await api.rejectOrderDiscount(orderId);
           else if (btn.dataset.action === "submit-order") await api.submitOrder(orderId);
           else if (btn.dataset.action === "mark-delivered") {

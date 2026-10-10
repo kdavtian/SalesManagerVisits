@@ -12,6 +12,7 @@ import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { notifyUser } from "../notifications.js";
 import { ORDER_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES, DELIVERY_OUTCOME_NOTIFY_ROLES } from "../notificationPreferences.js";
 import { compareProducts } from "../../../client/public/js/productSort.js";
+import { evaluateCredit } from "../creditLimit.js";
 
 export const ordersRouter = Router();
 
@@ -248,6 +249,11 @@ ordersRouter.post("/", async (req, res) => {
   // "submitted" into fulfillment (see the approval_status gate in PATCH
   // below) -- no discount means nothing to approve.
   const approvalStatus = discountPct > 0 || discountAmd > 0 ? "pending" : "not_required";
+  // Credit limit (migration 101): an order that pushes the customer over their
+  // limit also needs a director's sign-off. A draft (no ERP link yet, so no
+  // debt known) is checked later, when it is submitted.
+  const credit = initialStatus === "submitted" ? await evaluateCredit(pool, customer.id, totalAmd) : null;
+  const creditStatus = credit?.exceeded ? "pending" : "not_required";
 
   const client = await pool.connect();
   let order;
@@ -255,9 +261,11 @@ ordersRouter.post("/", async (req, res) => {
     await client.query("BEGIN");
     const orderCode = await nextOrderCode(client);
     const { rows } = await client.query(
-      `INSERT INTO orders (customer_id, user_id, checkin_id, status, total_amd, note, discount_pct, discount_amd, approval_status, order_code, payment_method, client_ref)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
-      [customerId, req.user.id, checkin_id || null, initialStatus, totalAmd, note || null, discountPct, discountAmd, approvalStatus, orderCode, payment_method, client_ref || null]
+      `INSERT INTO orders (customer_id, user_id, checkin_id, status, total_amd, note, discount_pct, discount_amd, approval_status, order_code, payment_method, client_ref,
+                           credit_status, credit_exposure_amd, credit_limit_snapshot_amd)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING *`,
+      [customerId, req.user.id, checkin_id || null, initialStatus, totalAmd, note || null, discountPct, discountAmd, approvalStatus, orderCode, payment_method, client_ref || null,
+       creditStatus, credit ? credit.exposure : null, credit ? credit.limit : null]
     );
     order = rows[0];
     for (const line of lines) {
@@ -312,15 +320,17 @@ ordersRouter.post("/", async (req, res) => {
           : discountPct > 0
           ? ` (զեղչ՝ ${discountPct}%, սպասում է տնօրենի հաստատմանը)`
           : "";
+      const creditSuffix = credit?.exceeded ? ` (credit limit exceeded by ${Math.round(credit.over).toLocaleString()} AMD)` : "";
+      const creditSuffixHy = credit?.exceeded ? ` (վարկային սահմանը գերազանցված է ${Math.round(credit.over).toLocaleString()} ԱՄԴ-ով, սպասում է հաստատման)` : "";
       notifyTelegram(
-        `🛒 <b>New order</b>\n${escapeHtml(repName)} — ${escapeHtml(customer.name)}\n${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD${escapeHtml(discountSuffix)}`
+        `🛒 <b>New order</b>\n${escapeHtml(repName)} — ${escapeHtml(customer.name)}\n${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD${escapeHtml(discountSuffix + creditSuffix)}`
       );
 
       const { rows: notifyRecipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [ORDER_NOTIFY_ROLES]);
       for (const recipient of notifyRecipients) {
         notifyUser(recipient.id, "order_placed", {
           title: "Նոր պատվեր",
-          body: `${repName}-ը պատվեր է ձևակերպել ${customer.name}-ի համար — ${lines.length} ապրանք, ${Number(totalAmd).toLocaleString()} ԱՄԴ${discountSuffixHy}`,
+          body: `${repName}-ը պատվեր է ձևակերպել ${customer.name}-ի համար — ${lines.length} ապրանք, ${Number(totalAmd).toLocaleString()} ԱՄԴ${discountSuffixHy}${creditSuffixHy}`,
           url: "/#/orders",
         });
       }
@@ -634,9 +644,12 @@ ordersRouter.post("/:id/submit", async (req, res) => {
   // (e.g. a double-tap or two tabs) racing this one -- the loser gets 0
   // rows back and a 409 instead of silently re-submitting an already-moved
   // order.
+  const credit = await evaluateCredit(pool, order.customer_id, order.total_amd, order.id);
   const { rows: updatedRows } = await pool.query(
-    "UPDATE orders SET status = 'submitted', updated_at = now() WHERE id = $1 AND status = 'draft' RETURNING *",
-    [order.id]
+    `UPDATE orders SET status = 'submitted', updated_at = now(),
+            credit_status = $2, credit_exposure_amd = $3, credit_limit_snapshot_amd = $4
+     WHERE id = $1 AND status = 'draft' RETURNING *`,
+    [order.id, credit?.exceeded ? "pending" : "not_required", credit ? credit.exposure : null, credit ? credit.limit : null]
   );
   const updated = updatedRows[0];
   if (!updated) {
@@ -773,6 +786,19 @@ ordersRouter.patch("/:id", async (req, res) => {
     nextTotal = applyDiscount(Number(subtotal), nextDiscountPct, nextDiscountAmd);
   }
 
+  // Credit limit: a changed total is checked again (a draft has no debt yet, it
+  // is checked at submit). An approval stays valid while the total does not grow.
+  let nextCreditStatus = order.credit_status;
+  let nextCreditExposure = order.credit_exposure_amd;
+  let nextCreditLimit = order.credit_limit_snapshot_amd;
+  if (order.status === "submitted" && Number(nextTotal) !== Number(order.total_amd)) {
+    const credit = await evaluateCredit(pool, order.customer_id, nextTotal, order.id);
+    nextCreditExposure = credit ? credit.exposure : null;
+    nextCreditLimit = credit ? credit.limit : null;
+    if (!credit?.exceeded) nextCreditStatus = "not_required";
+    else if (!(order.credit_status === "approved" && Number(nextTotal) <= Number(order.total_amd))) nextCreditStatus = "pending";
+  }
+
   let nextStatus = order.status;
   if (status !== undefined) {
     // Only a director (or admin) reviewing a fresh "submitted" order can
@@ -798,6 +824,29 @@ ordersRouter.patch("/:id", async (req, res) => {
             ? "This order's price change is awaiting director approval"
             : "This order's price change was rejected -- edit the order to remove or adjust it before it can proceed",
       });
+    }
+    // Credit limit gate (migration 101): like a discount, an over-limit order
+    // needs a director's approval first. An order that was fine at submit time
+    // is re-checked live, because the customer's debt may have grown since.
+    if (status === "confirmed" && nextCreditStatus !== "approved") {
+      if (nextCreditStatus === "not_required") {
+        const live = await evaluateCredit(pool, order.customer_id, nextTotal, order.id);
+        if (live?.exceeded) {
+          await pool.query(
+            "UPDATE orders SET credit_status = 'pending', credit_exposure_amd = $2, credit_limit_snapshot_amd = $3 WHERE id = $1 AND credit_status = 'not_required'",
+            [order.id, live.exposure, live.limit]
+          );
+          nextCreditStatus = "pending";
+        }
+      }
+      if (nextCreditStatus === "pending" || nextCreditStatus === "rejected") {
+        return res.status(409).json({
+          error:
+            nextCreditStatus === "pending"
+              ? "This order is over the customer's credit limit and needs a director's approval first"
+              : "This order's credit-limit approval was rejected -- reduce the order before it can proceed",
+        });
+      }
     }
     if (!NEXT_STATUS[order.status]?.includes(status)) {
       return res.status(409).json({ error: `Cannot move an order from "${order.status}" to "${status}"` });
@@ -835,9 +884,10 @@ ordersRouter.patch("/:id", async (req, res) => {
     const { rows: updatedRows } = await client.query(
       `UPDATE orders
        SET status = $1, total_amd = $2, note = COALESCE($3, note),
-           discount_pct = $4, discount_amd = $7, approval_status = $5, updated_at = now()
+           discount_pct = $4, discount_amd = $7, approval_status = $5, updated_at = now(),
+           credit_status = $10, credit_exposure_amd = $11, credit_limit_snapshot_amd = $12
        WHERE id = $6 AND status = $8 AND approval_status = $9 RETURNING *`,
-      [nextStatus, nextTotal, note ?? null, nextDiscountPct, nextApprovalStatus, order.id, nextDiscountAmd, order.status, order.approval_status]
+      [nextStatus, nextTotal, note ?? null, nextDiscountPct, nextApprovalStatus, order.id, nextDiscountAmd, order.status, order.approval_status, nextCreditStatus, nextCreditExposure, nextCreditLimit]
     );
     updated = updatedRows[0];
     if (!updated) {
@@ -1049,6 +1099,50 @@ ordersRouter.post("/:id/approve-discount", async (req, res) => {
   })();
 });
 
+// Credit-limit approval (migration 101): the same directors who approve
+// discounts decide on an order that goes over the customer's credit limit.
+async function decideCredit(req, res, decision) {
+  if (!canConfirmOrders(req.user.role)) {
+    return res.status(403).json({ error: "Only a director can decide on a credit-limit exception" });
+  }
+  const { rows } = await pool.query("SELECT * FROM orders WHERE id = $1", [req.params.id]);
+  const order = rows[0];
+  if (!order) return res.status(404).json({ error: "Order not found" });
+  if (order.credit_status !== "pending") {
+    return res.status(409).json({ error: "This order has no pending credit-limit decision" });
+  }
+  const { rows: updatedRows } = await pool.query(
+    `UPDATE orders SET credit_status = $3, credit_decided_by = $1, credit_decided_at = now(), updated_at = now()
+     WHERE id = $2 AND credit_status = 'pending' RETURNING *`,
+    [req.user.id, order.id, decision]
+  );
+  if (!updatedRows[0]) return res.status(409).json({ error: "This order has no pending credit-limit decision" });
+  await pool.query(
+    `INSERT INTO order_status_history (order_id, old_status, new_status, reason, changed_by)
+     VALUES ($1, $2, $2, $3, $4)`,
+    [order.id, order.status, decision === "approved" ? "Credit limit exception approved" : "Credit limit exception rejected", req.user.id]
+  );
+  res.json(updatedRows[0]);
+
+  (async () => {
+    try {
+      const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
+      const customerName = customerRows[0]?.name || "";
+      if (req.user.id !== order.user_id) {
+        notifyUser(order.user_id, "order_status_changed", {
+          title: decision === "approved" ? "Վարկային սահմանի բացառությունը հաստատվեց" : "Վարկային սահմանի բացառությունը մերժվեց",
+          body: `${customerName}-ի պատվերը՝ ${decision === "approved" ? "կարող է շարունակվել" : "պետք է փոքրացնել"}։`,
+          url: "/#/orders",
+        });
+      }
+    } catch (err) {
+      console.error("Post-credit-decision notification failed:", err);
+    }
+  })();
+}
+ordersRouter.post("/:id/approve-credit", (req, res) => decideCredit(req, res, "approved"));
+ordersRouter.post("/:id/reject-credit", (req, res) => decideCredit(req, res, "rejected"));
+
 ordersRouter.post("/:id/reject-discount", async (req, res) => {
   if (!canConfirmOrders(req.user.role)) {
     return res.status(403).json({ error: "Only a sales director can reject a discount" });
@@ -1141,6 +1235,84 @@ ordersRouter.post("/:id/reject", async (req, res) => {
 // above, for the same reason packed_stock_out/delivered are excluded from
 // there -- so the normal signature-capturing path stays the only way to
 // reach "delivered" for anyone NOT in this explicit override list.
+// Manual twin of erpAutoMatch.autoDeliverOrdersFromErp: when the accountant
+// changed the order in Excel (quantity, discount, date) the automatic match
+// finds no unique twin and the order would wait for ever. These two endpoints
+// list the free Excel orders of the same customer and let a person link one.
+ordersRouter.get("/:id/erp-candidates", async (req, res) => {
+  if (!canMarkDeliveredWithoutRoute(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const { rows } = await pool.query(
+    `SELECT o.id, o.total_amd, o.created_at, c.erp_customer_id
+     FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = $1`,
+    [req.params.id]
+  );
+  const order = rows[0];
+  if (!order) return res.status(404).json({ error: "Order not found" });
+  if (!order.erp_customer_id) return res.json([]);
+  const { rows: candidates } = await pool.query(
+    `SELECT l.order_id AS erp_order_id, MIN(l.order_date) AS order_date, ROUND(SUM(l.revenue_amd)) AS total_amd,
+            ABS(ROUND(SUM(l.revenue_amd)) - ROUND($2::numeric)) AS diff_amd
+     FROM erp_order_lines l
+     WHERE l.erp_customer_id = $1
+       AND NOT EXISTS (SELECT 1 FROM orders x WHERE x.erp_matched_order_id = l.order_id)
+     GROUP BY l.order_id
+     HAVING MIN(l.order_date) >= (($3::timestamptz AT TIME ZONE 'Asia/Yerevan')::date - 30)
+     ORDER BY diff_amd ASC, MIN(l.order_date) DESC
+     LIMIT 20`,
+    [order.erp_customer_id, order.total_amd, order.created_at]
+  );
+  res.json(candidates.map((c) => ({ ...c, total_amd: Number(c.total_amd), diff_amd: Number(c.diff_amd) })));
+});
+
+ordersRouter.post("/:id/link-erp", async (req, res) => {
+  if (!canMarkDeliveredWithoutRoute(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const erpOrderId = String(req.body?.erp_order_id ?? "").trim();
+  if (!erpOrderId) return res.status(400).json({ error: "erp_order_id is required" });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `SELECT o.*, c.erp_customer_id FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = $1 FOR UPDATE OF o`,
+      [req.params.id]
+    );
+    const order = rows[0];
+    if (!order) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Order not found" });
+    }
+    if (order.status !== "confirmed" && order.status !== "packed_stock_out") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: `Only a confirmed or packed order can be linked (this one is "${order.status}")` });
+    }
+    const { rows: erpRows } = await client.query(
+      `SELECT 1 FROM erp_order_lines l WHERE l.order_id = $1 AND l.erp_customer_id = $2
+         AND NOT EXISTS (SELECT 1 FROM orders x WHERE x.erp_matched_order_id = l.order_id) LIMIT 1`,
+      [erpOrderId, order.erp_customer_id]
+    );
+    if (!erpRows[0]) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "That Excel order is not available for this customer (wrong customer or already linked)" });
+    }
+    await client.query("UPDATE route_stops SET completed_at = now() WHERE order_id = $1 AND completed_at IS NULL", [order.id]);
+    const { rows: updatedRows } = await client.query(
+      "UPDATE orders SET status = 'delivered', delivered_from_erp = true, erp_matched_order_id = $2, updated_at = now() WHERE id = $1 RETURNING *",
+      [order.id, erpOrderId]
+    );
+    await client.query(
+      `INSERT INTO order_status_history (order_id, old_status, new_status, reason, changed_by)
+       VALUES ($1, $2, 'delivered', $3, $4)`,
+      [order.id, order.status, `Linked by hand to Excel order ${erpOrderId}`, req.user.id]
+    );
+    await client.query("COMMIT");
+    res.json(updatedRows[0]);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+});
+
 ordersRouter.post("/:id/mark-delivered", async (req, res) => {
   if (!canMarkDeliveredWithoutRoute(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const { rows } = await pool.query(

@@ -21,7 +21,7 @@ debtBalancesRouter.use(requireAuth);
 // Same shape customers.js uses for its own last-visit column, kept
 // identical on purpose so the two screens can never report a different
 // "last visit" for the same customer.
-const LAST_VISIT_SUBQUERY = `(SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id)`;
+const LAST_VISIT_SUBQUERY = `(SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range)`;
 
 // The ERP sync's own last_payment_date routinely lags or is simply blank
 // for a customer whose most recent payment was logged in-app (a cash
