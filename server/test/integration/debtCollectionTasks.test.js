@@ -38,6 +38,8 @@ test("an overdue debtor gets one collect-the-debt task; paid-up, in-term and no-
   const inTerm = await debtor("b", { debt: 500000, days: 10 });
   const paid = await debtor("c", { debt: 0, days: 90 });
   const keyAccount = await debtor("d", { debt: 500000, days: 90, channel: "KF" });
+  const cas = await debtor("d2", { debt: 500000, days: 90, channel: "CAS" });
+  const oem = await debtor("d3", { debt: 500000, days: 90, channel: "OEM" });
 
   const first = await createDebtCollectionTasks();
   assert.ok(first.created >= 1);
@@ -50,6 +52,8 @@ test("an overdue debtor gets one collect-the-debt task; paid-up, in-term and no-
   assert.equal((await openTasks(inTerm.id)).length, 0);
   assert.equal((await openTasks(paid.id)).length, 0);
   assert.equal((await openTasks(keyAccount.id)).length, 0);
+  assert.equal((await openTasks(cas.id)).length, 0);
+  assert.equal((await openTasks(oem.id)).length, 0);
 
   // Running again does not duplicate it.
   await createDebtCollectionTasks();
@@ -63,6 +67,33 @@ test("an overdue debtor gets one collect-the-debt task; paid-up, in-term and no-
   await pool.query("UPDATE tasks SET status = 'done' WHERE customer_id = $1", [overdue.id]);
   await createDebtCollectionTasks();
   assert.equal((await openTasks(overdue.id)).filter((t) => t.status === "open").length, 0);
+});
+
+test("CVO and PCO customers are included: their rep gets the task, or the sales director when they have no sales manager", async () => {
+  const cvo = await debtor("f", { debt: 400000, days: 80, channel: "CVO" }); // assigned to the rep
+  const erpId = `ITEST-DT-g-${stamp}`;
+  erpIds.push(erpId);
+  const pco = await createCustomer({ created_by: director.id, assigned_manager_id: director.id, erp_customer_id: erpId, sales_channel: "PCO" });
+  await pool.query("INSERT INTO erp_customer_data (erp_customer_id, customer_name, debt_amd, days_since_payment, synced_at) VALUES ($1, 'x', 300000, 80, now())", [erpId]);
+  await createDebtCollectionTasks();
+  assert.equal((await openTasks(cvo.id))[0].assignee_id, rep.id);
+  const pcoTasks = await openTasks(pco.id);
+  assert.equal(pcoTasks.length, 1);
+  assert.equal(pcoTasks[0].assignee_id, director.id);
+  await pool.query("DELETE FROM tasks WHERE assignee_id = $1", [director.id]);
+
+  // No sales manager at all: goes to a sales director (Martin when he exists).
+  const orphanId = `ITEST-DT-h-${stamp}`;
+  erpIds.push(orphanId);
+  const orphan = await createCustomer({ created_by: director.id, erp_customer_id: orphanId, sales_channel: "CVO" });
+  await pool.query("UPDATE customers SET assigned_manager_id = NULL WHERE id = $1", [orphan.id]);
+  await pool.query("INSERT INTO erp_customer_data (erp_customer_id, customer_name, debt_amd, days_since_payment, synced_at) VALUES ($1, 'x', 200000, 80, now())", [orphanId]);
+  await createDebtCollectionTasks();
+  const orphanTasks = await openTasks(orphan.id);
+  assert.equal(orphanTasks.length, 1);
+  const { rows: who } = await pool.query("SELECT role FROM users WHERE id = $1", [orphanTasks[0].assignee_id]);
+  assert.equal(who[0].role, "sales_director");
+  await pool.query("DELETE FROM tasks WHERE customer_id = $1", [orphan.id]);
 });
 
 test("the open task closes by itself once the debt is paid", async () => {

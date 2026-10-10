@@ -2,6 +2,9 @@
 // an automatic task for their next visit to each of THEIR customers that is
 // overdue with debt (Excel debt > 0 and no payment for longer than the
 // customer's credit term, `customers.credit_term_days`, default 45).
+//  - channels KF, CAS and OEM are skipped (owner's rule); CVO and PCO are
+//    included: the task goes to the assigned rep, or to the sales director
+//    (Martin) when the customer has no sales manager;
 //  - one open automatic task per customer (unique index, migration 102);
 //  - after a rep closes one, no new one for the same customer for 14 days;
 //  - when the debt is gone (or no longer overdue) the open task is closed;
@@ -11,12 +14,12 @@
 import { pool } from "./db/pool.js";
 import { notifyUser } from "./notifications.js";
 import { yerevanToday } from "./utils/yerevanDate.js";
-import { NOT_NO_VISIT_CHANNEL_SQL } from "./routes/customers.js";
 
 export const DEBT_TASK_TITLE = "Հավաքագրիր պարտքը";
 const MAX_PER_REP = 15;
 const COOLDOWN_DAYS = 14;
 
+const SKIPPED_CHANNELS_SQL = `COALESCE(c.sales_channel, '') <> ALL(ARRAY['KF', 'CAS', 'OEM'])`;
 const OVERDUE_DEBT_SQL = `erp.debt_amd > 0 AND (erp.days_since_payment IS NULL OR erp.days_since_payment > COALESCE(c.credit_term_days, 45))`;
 
 // Who is shown as the creator of automatic tasks: a sales director, else the CEO, else an admin.
@@ -24,6 +27,16 @@ async function systemCreatorId(db) {
   const { rows } = await db.query(
     `SELECT id FROM users WHERE role IN ('sales_director', 'ceo', 'admin')
      ORDER BY CASE role WHEN 'sales_director' THEN 0 WHEN 'ceo' THEN 1 ELSE 2 END, id LIMIT 1`
+  );
+  return rows[0]?.id ?? null;
+}
+
+// The sales director who receives CVO / PCO debt tasks that have no sales manager: the one named
+// Martin if there is one, else the first sales director.
+async function martinId(db) {
+  const { rows } = await db.query(
+    `SELECT id FROM users WHERE role = 'sales_director'
+     ORDER BY (name ILIKE '%martin%' OR name ILIKE '%մարտին%') DESC, id LIMIT 1`
   );
   return rows[0]?.id ?? null;
 }
@@ -44,19 +57,25 @@ export async function createDebtCollectionTasks(now = new Date()) {
   if (!creatorId) return { created: 0, closed: closed.length };
 
   // 2) New tasks: overdue debtors of sales managers, no open / recent automatic task.
-  const { rows: candidates } = await pool.query(
-    `SELECT c.id AS customer_id, c.name AS customer_name, c.assigned_manager_id AS rep_id,
+  const director = await martinId(pool);
+  const { rows: found } = await pool.query(
+    `SELECT c.id AS customer_id, c.name AS customer_name, c.sales_channel,
+            CASE WHEN u.role IN ('sales_manager', 'sales_director') THEN u.id END AS rep_id,
             erp.debt_amd, erp.days_since_payment
      FROM customers c
      JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
-     JOIN users u ON u.id = c.assigned_manager_id AND u.role = 'sales_manager'
-     WHERE ${OVERDUE_DEBT_SQL} AND ${NOT_NO_VISIT_CHANNEL_SQL}
+     LEFT JOIN users u ON u.id = c.assigned_manager_id
+     WHERE ${OVERDUE_DEBT_SQL} AND ${SKIPPED_CHANNELS_SQL}
        AND NOT EXISTS (
          SELECT 1 FROM tasks t WHERE t.customer_id = c.id AND t.auto_kind = 'debt_collection'
            AND (t.status = 'open' OR t.created_at > now() - ($1 || ' days')::interval))
-     ORDER BY c.assigned_manager_id, erp.debt_amd DESC`,
+     ORDER BY erp.debt_amd DESC`,
     [COOLDOWN_DAYS]
   );
+  // Customers without a sales manager only get a task if they are CVO / PCO -- then it goes to the sales director.
+  const candidates = found
+    .map((c) => ({ ...c, rep_id: c.rep_id ?? (["CVO", "PCO"].includes(c.sales_channel) ? director : null) }))
+    .filter((c) => c.rep_id);
 
   const today = yerevanToday(now);
   const perRep = new Map();
