@@ -1,7 +1,7 @@
 import { api } from "../api.js";
-import { cssColor, activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, rememberPosition, getLastKnownPosition, tierSelectorHtml, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, regionLabelHy, subregionLabelHy, channelDisplayLabel, parseDateOnly } from "../util.js";
+import { cssColor, activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, rememberPosition, getLastKnownPosition, tierSelectorHtml, TIER_OPTIONS, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, regionLabelHy, subregionLabelHy, channelDisplayLabel, parseDateOnly } from "../util.js";
 import { t } from "../i18n.js";
-import { buildCustomerTree, renderTriStateTree } from "../regionTree.js";
+import { buildCustomerTree, renderTriStateTree, buildDirectionManagerTree, NO_GROUP_KEY } from "../regionTree.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
 import { FILTER_ICONS } from "../filterIcons.js";
@@ -16,16 +16,7 @@ import { indexBrandSummary, brandSearchText, currentChips, matchedEverEntries, m
 
 const NEARBY_RADIUS_METERS = 5000;
 
-// Fixed display order for the Map tab's channel filter (per explicit
-// request), independent of SALES_CHANNELS' own order used elsewhere --
-// Potential right after "All channels" (customers with no ERP link yet
-// are the ones a rep is most likely to be filtering for), then field
-// reps' own channels, then the non-field channels. Anything not listed
-// here (shouldn't happen, but a new channel could exist before this list
-// is updated) sorts alphabetically after these.
-const MAP_CHANNEL_ORDER = ["POTENTIAL", "SM YVN", "SM Davtashen", "SM Shirak", "SM CAS", "SM B2B", "PCO", "CVO", "OEM", "KF", "CAS"];
-
-// The channel filter's own default (per explicit request): a field sales
+// The channel/rep filter's own default (per explicit request): a field sales
 // manager's own assigned book -- every "SM ..." channel -- plus Potential
 // (not yet ERP-linked, so not yet assigned to any channel at all). The
 // non-field/office channels (SM B2B, PCO, CVO, OEM, KF, bare CAS) are
@@ -34,16 +25,6 @@ const MAP_CHANNEL_ORDER = ["POTENTIAL", "SM YVN", "SM Davtashen", "SM Shirak", "
 // not a hard restriction: opening the channel filter sheet and selecting
 // any of them (or Clear, for "show everything") works exactly as before.
 const MAP_DEFAULT_CHANNEL_FILTERS = ["POTENTIAL", "SM YVN", "SM Davtashen", "SM Shirak", "SM CAS"];
-function sortMapChannels(channels) {
-  return [...channels].sort((a, b) => {
-    const ia = MAP_CHANNEL_ORDER.indexOf(a);
-    const ib = MAP_CHANNEL_ORDER.indexOf(b);
-    if (ia !== -1 && ib !== -1) return ia - ib;
-    if (ia !== -1) return -1;
-    if (ib !== -1) return 1;
-    return a.localeCompare(b);
-  });
-}
 
 // Mirrors the brand_status shape recorded at check-in (see BRAND_GROUPS in
 // checkin.js) -- castrol/lotos/royal get their own status tags, each
@@ -263,17 +244,6 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
                   <input type="search" id="map-customer-search" placeholder="${t("map_search_placeholder")}" aria-label="${t("map_search_placeholder")}" />
                   <div class="map-address-results" id="map-address-results" hidden></div>
                 </div>
-                ${
-                  canViewTeamLocations()
-                    ? `<div class="filter-dropdown-wrap" id="map-manager-filter-wrap">
-                         <button type="button" class="filter-dropdown-btn" id="map-manager-filter-btn" aria-haspopup="menu" aria-expanded="false">
-                           <span id="map-manager-filter-label">${t("all_managers")}</span>
-                           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-                         </button>
-                         <div class="filter-dropdown-menu" id="map-manager-filter-menu" role="menu" hidden></div>
-                       </div>`
-                    : ""
-                }
               </div>
               <p class="map-search-no-results" id="map-search-no-results" hidden>${t("map_search_no_results")}</p>
               <div class="customer-filter-row" id="map-icon-filter-row"></div>
@@ -1082,7 +1052,12 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // filter -- comparing two channels or categories side by side on the map
   // is a real, common query, and a single-value filter forced picking one
   // at a time to do it.
-  let channelFilters = new Set(MAP_DEFAULT_CHANNEL_FILTERS);
+  // One merged "sales channel > sales rep" filter (the same tri-state tree the Customers tab
+  // uses): leaf ids are "channel::managerId". null = the default channel set above, a Set =
+  // the user's own choice (empty = no filter at all).
+  let assignmentKeys = null;
+  // Customer tier chips (potential/bronze/silver/gold/competitor); empty = no filter.
+  let tierFilters = new Set();
   // "Products at the shop" chips recorded at check-ins (fake Castrol, no
   // Castrol, Lotos available, ...) -- the same data and the same picker as
   // the Customers tab (brandChips.js). brandChipIds are "group:value" ids;
@@ -1097,6 +1072,39 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // filter row (openFilterSheet there is identical) -- duplicated here
   // rather than imported since it's a private closure over that view's own
   // state, not an exported helper.
+  const assignmentKeyOf = (c) => `${c.sales_channel || NO_GROUP_KEY}::${c.assigned_manager_id ?? NO_GROUP_KEY}`;
+  function passesAssignment(c) {
+    // Default: only the field channels (a customer with no channel at all is never hidden by it).
+    if (assignmentKeys === null) return !c.sales_channel || MAP_DEFAULT_CHANNEL_FILTERS.includes(c.sales_channel);
+    return !assignmentKeys.size || assignmentKeys.has(assignmentKeyOf(c));
+  }
+  function currentAssignmentIds() {
+    if (assignmentKeys !== null) return assignmentKeys;
+    return new Set(lastCustomers.filter(({ c }) => passesAssignment(c)).map(({ c }) => assignmentKeyOf(c)));
+  }
+  // The rep whose plan "Planned" should show: a sales manager's own id, else the single rep
+  // the user picked in the assignment filter (several reps or none = everyone's plans).
+  function selectedPlanManagerId() {
+    if (managerFilter) return managerFilter;
+    if (assignmentKeys === null || !assignmentKeys.size) return "";
+    const ids = new Set([...assignmentKeys].map((k) => k.split("::")[1]));
+    return ids.size === 1 && !ids.has(NO_GROUP_KEY) ? [...ids][0] : "";
+  }
+  // Competitors stay hidden unless asked for; picking the Competitor tier (or a COMPETITORS
+  // channel) is that explicit ask, and un-picking it hides them again.
+  function syncCompetitorsForFilters() {
+    const mapView = root.querySelector(".map-view");
+    if (!mapView) return;
+    const wanted = tierFilters.has("competitor") || (assignmentKeys !== null && [...assignmentKeys].some((k) => k.startsWith("COMPETITORS::")));
+    if (wanted && !mapView.classList.contains("kad-show-competitors")) {
+      mapView.dataset.competitorsForcedByFilter = "true";
+      mapView.classList.add("kad-show-competitors");
+    } else if (!wanted && mapView.dataset.competitorsForcedByFilter === "true") {
+      delete mapView.dataset.competitorsForcedByFilter;
+      mapView.classList.remove("kad-show-competitors");
+    }
+  }
+
   function openMapFilterSheet(titleText, options, currentValue, onSelect) {
     const overlay = document.createElement("div");
     overlay.className = "sheet-overlay";
@@ -1128,21 +1136,21 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     });
   }
 
-  // Multi-select variant (checkbox-style, Clear/Done actions) -- same
-  // pattern as Customers.js's own openMultiFilterSheet, duplicated here for
-  // the same reason openMapFilterSheet above is: private closure state.
-  function openMapMultiFilterSheet(titleText, options, currentSet, onApply) {
-    const working = new Set(currentSet);
+  // Customer type (shop, workshop, ...) rows plus customer tier chips (the same chips as the
+  // new-customer form, but multi-select) in one sheet; both empty = no filter.
+  function openMapTypeTierSheet(categoryOptions, currentCategories, currentTiers, onApply) {
+    const workingCategories = new Set(currentCategories);
+    const workingTiers = new Set(currentTiers);
     const overlay = document.createElement("div");
     overlay.className = "sheet-overlay";
     overlay.innerHTML = `
       <div class="sheet filter-sheet">
-        <h2>${escapeHtml(titleText)}</h2>
+        <h2>${escapeHtml(t("category"))}</h2>
         <div class="filter-sheet-options">
-          ${options
+          ${categoryOptions
             .map(
               (o) => `
-            <button type="button" role="menuitemcheckbox" aria-checked="${working.has(o.value)}" class="filter-sheet-option ${working.has(o.value) ? "filter-sheet-option-selected" : ""}" data-value="${escapeHtml(o.value)}">
+            <button type="button" role="menuitemcheckbox" aria-checked="${workingCategories.has(o.value)}" class="filter-sheet-option ${workingCategories.has(o.value) ? "filter-sheet-option-selected" : ""}" data-value="${escapeHtml(o.value)}">
               <span class="filter-sheet-box" aria-hidden="true"></span>
               <span>${escapeHtml(o.label)}</span>
             </button>
@@ -1150,9 +1158,19 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
             )
             .join("")}
         </div>
+        <h3 class="map-tier-filter-title">${escapeHtml(t("customer_tier"))}</h3>
+        <div class="tier-selector map-tier-filter-chips" role="group" aria-label="${escapeHtml(t("customer_tier"))}">
+          ${TIER_OPTIONS.map(
+            (opt) => `
+            <button type="button" class="tier-btn ${opt.cls} ${workingTiers.has(opt.value) ? "tier-btn-active" : ""}" data-tier="${opt.value}" aria-pressed="${workingTiers.has(opt.value)}">
+              <span class="tier-icon">${opt.icon}</span>
+              <span class="tier-label">${escapeHtml(t(opt.labelKey))}</span>
+            </button>`
+          ).join("")}
+        </div>
         <div class="sheet-actions sheet-actions-floating">
-          <button type="button" class="btn" id="map-multi-filter-clear">${t("clear")}</button>
-          <button type="button" class="btn btn-primary" id="map-multi-filter-done">${t("show_results")}</button>
+          <button type="button" class="btn" id="map-type-tier-clear">${t("clear")}</button>
+          <button type="button" class="btn btn-primary" id="map-type-tier-done">${t("show_results")}</button>
         </div>
       </div>
     `;
@@ -1162,20 +1180,28 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     overlay.querySelectorAll(".filter-sheet-option").forEach((btn) => {
       btn.addEventListener("click", () => {
         const value = btn.dataset.value;
-        if (working.has(value)) working.delete(value);
-        else working.add(value);
-        btn.classList.toggle("filter-sheet-option-selected", working.has(value));
-        btn.setAttribute("aria-checked", String(working.has(value)));
+        if (workingCategories.has(value)) workingCategories.delete(value);
+        else workingCategories.add(value);
+        btn.classList.toggle("filter-sheet-option-selected", workingCategories.has(value));
+        btn.setAttribute("aria-checked", String(workingCategories.has(value)));
       });
     });
-    overlay.querySelector("#map-multi-filter-clear").addEventListener("click", () => {
-      working.clear();
-      overlay.remove();
-      onApply(working);
+    overlay.querySelectorAll(".map-tier-filter-chips .tier-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const value = btn.dataset.tier;
+        if (workingTiers.has(value)) workingTiers.delete(value);
+        else workingTiers.add(value);
+        btn.classList.toggle("tier-btn-active", workingTiers.has(value));
+        btn.setAttribute("aria-pressed", String(workingTiers.has(value)));
+      });
     });
-    overlay.querySelector("#map-multi-filter-done").addEventListener("click", () => {
+    overlay.querySelector("#map-type-tier-clear").addEventListener("click", () => {
       overlay.remove();
-      onApply(working);
+      onApply(new Set(), new Set());
+    });
+    overlay.querySelector("#map-type-tier-done").addEventListener("click", () => {
+      overlay.remove();
+      onApply(workingCategories, workingTiers);
     });
   }
 
@@ -1208,34 +1234,42 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
   function renderIconFilterRow() {
     if (!iconFilterRow) return;
-    const channels = sortMapChannels([...new Set(lastCustomers.map(({ c }) => c.sales_channel).filter(Boolean))]);
     const categories = [...new Set(lastCustomers.map(({ c }) => c.category).filter(Boolean))];
+    const assignmentIds = currentAssignmentIds();
+    const assignmentChannelCount = new Set([...assignmentIds].map((k) => k.split("::")[0])).size;
+    const typeCount = categoryFilters.size + tierFilters.size;
 
     iconFilterRow.innerHTML = [
-      channels.length
-        ? mapFilterIconButton({ key: "channel", icon: FILTER_ICONS.channel, label: t("filter_direction_title"), active: channelFilters.size > 0, count: channelFilters.size })
+      lastCustomers.length
+        ? mapFilterIconButton({ key: "assignment", icon: FILTER_ICONS.manager, label: t("filter_direction_manager_title"), active: assignmentIds.size > 0, count: assignmentChannelCount })
         : "",
       brandSummary.size
         ? mapFilterIconButton({ key: "brandchips", icon: FILTER_ICONS.brands, label: t("filter_brands_title"), active: brandChipIds.size > 0, count: brandChipIds.size })
         : "",
-      categories.length
-        ? mapFilterIconButton({ key: "category", icon: FILTER_ICONS.category, label: t("category"), active: categoryFilters.size > 0, count: categoryFilters.size })
+      lastCustomers.length
+        ? mapFilterIconButton({ key: "category", icon: FILTER_ICONS.category, label: t("category"), active: typeCount > 0, count: typeCount })
         : "",
     ]
       .filter(Boolean)
       .join("");
 
-    iconFilterRow.querySelector('[data-map-filter-btn="channel"]')?.addEventListener("click", () => {
-      openMapMultiFilterSheet(
-        t("filter_direction_title"),
-        channels.map((c) => ({ value: c, label: channelDisplayLabel(c) })),
-        channelFilters,
-        (selected) => {
-          channelFilters = selected;
+    iconFilterRow.querySelector('[data-map-filter-btn="assignment"]')?.addEventListener("click", () => {
+      openTriStateTreeSheet(t("filter_direction_manager_title"), {
+        tree: buildDirectionManagerTree(
+          lastCustomers.map(({ c }) => c),
+          { channelLabel: channelDisplayLabel, noDirectionLabel: t("no_direction"), unassignedLabel: t("unassigned") }
+        ),
+        initialSelectedIds: assignmentIds,
+        countUnitLabel: t("perf_dq_customers_unit"),
+        onApply: (selectedIds) => {
+          assignmentKeys = new Set(selectedIds);
           renderIconFilterRow();
-          applyFilter();
-        }
-      );
+          // "Planned" follows the picked rep, so it has to re-fetch when the pick changes.
+          if (activeFilter === "planned") loadPlannedFilter();
+          else if (plannedTodayOnly) loadPlannedTodayFilter();
+          else applyFilter();
+        },
+      });
     });
 
     iconFilterRow.querySelector('[data-map-filter-btn="brandchips"]')?.addEventListener("click", () => {
@@ -1253,12 +1287,13 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     });
 
     iconFilterRow.querySelector('[data-map-filter-btn="category"]')?.addEventListener("click", () => {
-      openMapMultiFilterSheet(
-        t("category"),
+      openMapTypeTierSheet(
         categories.map((v) => ({ value: v, label: categoryLabel(v) })),
         categoryFilters,
-        (selected) => {
-          categoryFilters = selected;
+        tierFilters,
+        (cats, tiers) => {
+          categoryFilters = cats;
+          tierFilters = tiers;
           renderIconFilterRow();
           applyFilter();
         }
@@ -1507,11 +1542,13 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     // never actually visible once it splits apart -- leaving the number on
     // the badge wrong. Reading the toggle's own class keeps this in sync
     // without depending on anything from that module directly.
+    syncCompetitorsForFilters();
     const showCompetitors = root.querySelector(".map-view")?.classList.contains("kad-show-competitors");
     for (const { c, marker } of lastCustomers) {
       const status = customerStatus(c);
       if (c.customer_tier === "competitor" && !showCompetitors) continue;
       if (managerFilter && String(c.assigned_manager_id) !== managerFilter) continue;
+      if (tierFilters.size && !tierFilters.has(c.customer_tier || "potential")) continue;
       // A customer with no sales_channel at all (normally normalized to
       // "POTENTIAL" by customerPortfolioUi.js, but not for the edge case
       // of an ERP-linked customer whose channel just hasn't been assigned
@@ -1519,7 +1556,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       // filter, default-on or user-selected -- an ambiguous/unassigned
       // customer should stay visible, not silently disappear because it
       // doesn't match whatever channels happen to be selected.
-      if (channelFilters.size && c.sales_channel && !channelFilters.has(c.sales_channel)) continue;
+      if (!passesAssignment(c)) continue;
       if (categoryFilters.size && !categoryFilters.has(c.category)) continue;
       if (plannedTodayOnly && !plannedTodayIdSet?.has(c.id)) continue;
       if (brandChipIds.size && !matchesSelectedChips(brandSummary.get(c.id), brandChipIds)) continue;
@@ -1739,7 +1776,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   async function fetchTodayPlannedIds() {
     let ids = [];
     try {
-      if (managerFilter || !canViewTeamLocations()) {
+      const planManager = selectedPlanManagerId();
+      if (planManager || !canViewTeamLocations()) {
         // canViewTeamLocations roles (admin/director/ceo) can pick a specific
         // manager from the map's own manager filter -- the Planned filter
         // needs to follow that same selection instead of always asking for
@@ -1749,7 +1787,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         // director/admin choosing a manager and tapping Planned always saw
         // nothing, because it silently kept querying their own account's
         // plan regardless of who was selected.
-        const plan = await api.getMyVisitPlan(undefined, managerFilter || undefined);
+        const plan = await api.getMyVisitPlan(undefined, planManager || undefined);
         ids = plan?.status === "approved" ? plan.customer_ids : [];
       } else {
         // Still true even with the fix above: a director/admin/CEO who
@@ -1954,58 +1992,6 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   root.addEventListener("click", (e) => {
     if (e.target.closest(".map-competitor-toggle")) applyFilter();
   });
-
-  // Manager filter -- director/ceo/admin only (canViewTeamLocations gate
-  // above decides whether the control even renders). Populated from the
-  // same "plannable" roster the route-planning picker uses, since that's
-  // already the right list (sales managers only) with no extra endpoint.
-  const managerFilterBtn = root.querySelector("#map-manager-filter-btn");
-  const managerFilterMenu = root.querySelector("#map-manager-filter-menu");
-  const managerFilterLabel = root.querySelector("#map-manager-filter-label");
-  if (managerFilterBtn) {
-    api
-      .listPlannableUsers()
-      .then((users) => {
-        managerFilterMenu.innerHTML = `
-          <button type="button" role="menuitemradio" aria-checked="true" class="filter-dropdown-selected" data-value="">${t("all_managers")}</button>
-          ${users.map((u) => `<button type="button" role="menuitemradio" aria-checked="false" data-value="${u.id}">${escapeHtml(u.name)}</button>`).join("")}
-        `;
-        managerFilterMenu.querySelectorAll("button").forEach((btn) => {
-          btn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            managerFilter = btn.dataset.value;
-            managerFilterLabel.textContent = btn.textContent;
-            managerFilterMenu.querySelectorAll("button").forEach((b) => {
-              b.classList.toggle("filter-dropdown-selected", b === btn);
-              b.setAttribute("aria-checked", String(b === btn));
-            });
-            managerFilterMenu.hidden = true;
-            managerFilterBtn.setAttribute("aria-expanded", "false");
-            // Planned pulls from a per-user plan (see loadPlannedFilter),
-            // so switching managers while it's active must re-fetch --
-            // otherwise the pins shown stay whatever was loaded for the
-            // previously selected manager (or nobody, at first). Same for
-            // the independent "Planned today" toggle.
-            if (activeFilter === "planned") loadPlannedFilter();
-            else if (plannedTodayOnly) loadPlannedTodayFilter();
-            else applyFilter();
-          });
-        });
-      })
-      .catch(() => {});
-
-    managerFilterBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      managerFilterMenu.hidden = !managerFilterMenu.hidden;
-      managerFilterBtn.setAttribute("aria-expanded", String(!managerFilterMenu.hidden));
-    });
-    root.addEventListener("click", () => {
-      if (!managerFilterMenu.hidden) {
-        managerFilterMenu.hidden = true;
-        managerFilterBtn.setAttribute("aria-expanded", "false");
-      }
-    });
-  }
 
   // Shared "focus the map on one customer" mechanism -- used both by the
   // #/map?customer=<id> deep link (customer detail's "Show on map") and,
