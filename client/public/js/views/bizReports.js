@@ -17,7 +17,7 @@ function shell(root, navigate, titleKey, extra = "") {
       ${extra}
       <div id="biz-body"><p class="loading-state" role="status">${t("loading")}</p></div>
     </div>`;
-  root.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  root.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/reports"));
   return root.querySelector("#biz-body");
 }
 

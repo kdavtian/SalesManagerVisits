@@ -6,7 +6,7 @@ import { state, isAdmin, canPlanForOthers, seesFinancialExports, canManageProduc
 import { renderTeamSection, renderPlanApprovalsSection, renderEditRequestsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection, renderSalesChannelOwnersSection, renderQuickActionVisibilitySection, renderDataQualitySection, renderNotificationDeliveryLogSection, renderClientErrorLogSection } from "./admin.js";
 import { renderSystemHealthSection } from "./systemHealth.js";
 import { renderBonusChallengesSection, renderBonusRewardClaimsSection } from "./bonusChallengesAdmin.js";
-import { escapeHtml, compressImage, activateDialog, attachSwipeToDismiss, formatPhoneDisplay, normalizePhone, downloadFromUrl } from "../util.js";
+import { escapeHtml, compressImage, activateDialog, attachSwipeToDismiss, formatPhoneDisplay, normalizePhone, downloadFromUrl, formatDateTime } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
 import { checkForUpdateManually } from "../updateBanner.js";
@@ -598,7 +598,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         : t("sync_status_synced");
     const lastSyncedAt = getLastSyncedAt();
     lastSyncValue.textContent = lastSyncedAt
-      ? new Date(lastSyncedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+      ? formatDateTime(new Date(lastSyncedAt).toISOString())
       : t("never_synced");
     // Stopped auto-retrying (see offlineQueue.js's NEEDS_ATTENTION_THRESHOLD)
     // -- surface the actual last error so the rep isn't just told "stuck"

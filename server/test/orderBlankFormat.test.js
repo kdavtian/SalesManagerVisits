@@ -10,11 +10,11 @@ test("package size always carries the litre mark", () => {
   assert.equal(formatSize(null), "");
 });
 
-test("phones print as +374 XX XXX XXX", () => {
-  assert.equal(formatPhone("033007059"), "+374 33 007 059");
-  assert.equal(formatPhone("091-007-019"), "+374 91 007 019");
-  assert.equal(formatPhone("+(374) 96 007 015"), "+374 96 007 015");
-  assert.equal(formatPhone("+37433007059"), "+374 33 007 059");
+test("phones print as +374 XX XXXXXX", () => {
+  assert.equal(formatPhone("033007059"), "+374 33 007059");
+  assert.equal(formatPhone("091-007-019"), "+374 91 007019");
+  assert.equal(formatPhone("+(374) 96 007 015"), "+374 96 007015");
+  assert.equal(formatPhone("+37433007059"), "+374 33 007059");
   assert.equal(formatPhone("12345"), "12345");
 });
 

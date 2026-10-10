@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, activateDialog, channelDisplayLabel, formatLiters } from "../util.js";
+import { escapeHtml, formatAmd, activateDialog, channelDisplayLabel, formatLiters, monthShort, formatDateTime } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
 import { ORDER_STATUS_ICONS } from "../ordersSearchEnhancements.js";
@@ -20,7 +20,7 @@ const ACCOUNTING_FILTERS = ["pending", "in_progress", "waybill_created", "partia
 const STATUS_FILTERS = ["", "submitted", "confirmed", "packed_stock_out", "delivered", "draft"];
 
 function formatDate(value) {
-  return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return formatDateTime(value);
 }
 
 // Local calendar-day key an order's created_at falls into -- grouping is by
@@ -33,7 +33,7 @@ function orderDateKey(value) {
 
 function formatOrderDateHeading(value) {
   const d = new Date(value);
-  const month = d.toLocaleDateString(getLang() === "hy" ? "hy" : "en", { month: "short" });
+  const month = monthShort(d);
   return `${d.getDate()} ${month}`;
 }
 

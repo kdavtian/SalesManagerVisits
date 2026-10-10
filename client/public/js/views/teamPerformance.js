@@ -322,7 +322,7 @@ async function renderMyPerformanceView(root, navigate) {
       </div>
     `;
     const container = root.querySelector(".detail-view");
-    container.querySelector("#back-btn").addEventListener("click", () => navigate("#/dashboard"));
+    container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
     wireMonthPicker(container, month, (newMonth) => {
       month = newMonth;
       paintShell();
@@ -386,7 +386,7 @@ async function renderManagementView(root, navigate, managerId) {
       </div>
     `;
     const container = root.querySelector(".detail-view");
-    container.querySelector("#back-btn").addEventListener("click", () => navigate("#/dashboard"));
+    container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
 
     const tabWrap = container.querySelector("#perf-tab-filter-wrap");
     const tabBtn = tabWrap.querySelector("#perf-tab-filter-btn");

@@ -4,7 +4,7 @@
 // orders (the server limits the list), the warehouse sees every order so it
 // can receive the document before handing the goods to delivery.
 import { api } from "../api.js";
-import { escapeHtml, formatAmd } from "../util.js";
+import { escapeHtml, formatAmd, formatDateTime } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 import { STATUS_META, openOrderDetailSheet } from "../orderDetailSheet.js";
@@ -13,7 +13,7 @@ import { ACCOUNTING_STATUS_BADGE, accountingDocShort, accountingStatusLabel } fr
 const AGENT_ROLES = new Set(["admin", "sales_director", "ceo", "operations_director", "accountant"]);
 
 function formatDate(value) {
-  return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return formatDateTime(value);
 }
 
 export async function renderAccounting(root, navigate) {

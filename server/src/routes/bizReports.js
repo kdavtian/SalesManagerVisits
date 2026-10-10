@@ -25,7 +25,7 @@ bizReportsRouter.get("/scorecard", async (req, res) => {
 bizReportsRouter.get("/pipeline", async (req, res) => {
   if (!(await canAccessReport(req.user.role, "customer_pipeline"))) return res.status(403).json({ error: "Not allowed" });
   const { rows: waiting } = await pool.query(
-    `SELECT c.id, c.name, c.region, c.created_at, (CURRENT_DATE - (c.created_at AT TIME ZONE 'Asia/Yerevan')::date)::int AS age_days,
+    `SELECT c.id, c.name, c.region, c.created_at, ((now() AT TIME ZONE 'Asia/Yerevan')::date - (c.created_at AT TIME ZONE 'Asia/Yerevan')::date)::int AS age_days,
             cu.name AS created_by_name, am.name AS manager_name,
             (SELECT count(*)::int FROM orders o WHERE o.customer_id = c.id AND o.status = 'draft') AS draft_orders,
             COALESCE((SELECT SUM(o.total_amd) FROM orders o WHERE o.customer_id = c.id AND o.status = 'draft'), 0)::float8 AS draft_amd

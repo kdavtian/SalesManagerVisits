@@ -28,9 +28,9 @@ export async function renderCustomerOrders(root, navigate, customerId) {
     <div class="card-list card-list-spaced" id="orders-list"></div>
   `;
 
-  container.querySelector("#back-btn").addEventListener("click", () => {
-    navigate(`#/customers/${customerId}`);
-  });
+  // Back = one step back in history (the customer card, restored from the back stack), never a new
+  // forward navigation to it -- that left the orders page one more Back away.
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack(`#/customers/${customerId}`));
 
   const listEl = container.querySelector("#orders-list");
   if (!orders.length) {

@@ -26,7 +26,7 @@ export async function renderProductDetail(root, navigate, productId) {
     container.innerHTML = `
       <div class="detail-header"><button class="icon-btn" id="back-btn" aria-label="${t("back")}">${icons.chevronUp}</button></div>
       <p class="form-error">${escapeHtml(err.status === 404 ? t("product_not_found") : err.message)}</p>`;
-    container.querySelector("#back-btn").addEventListener("click", () => navigate("#/pricelist"));
+    container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/pricelist"));
     return;
   }
 
@@ -136,7 +136,7 @@ export async function renderProductDetail(root, navigate, productId) {
       }
     `;
 
-    container.querySelector("#back-btn").addEventListener("click", () => history.length > 1 ? history.back() : navigate("#/pricelist"));
+    container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/pricelist"));
     container.querySelectorAll("[data-image-id]").forEach((btn) =>
       btn.addEventListener("click", () => {
         activeImageId = Number(btn.dataset.imageId);

@@ -5,7 +5,7 @@
 // accountant additionally get a Flat/By-manager toggle and a manager
 // filter, grouping the same payload client-side.
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, syncBadgeHtml, parseDateOnly } from "../util.js";
+import { escapeHtml, formatAmd, syncNote, openInfoPopup, parseDateOnly, monthShort, formatDayMonth } from "../util.js";
 import { state } from "../state.js";
 import { t, getLang } from "../i18n.js";
 import { loadWithCache } from "../listCache.js";
@@ -17,7 +17,7 @@ import { dueChipHtml } from "../debtChip.js";
 // actual instant.
 function formatDate(value) {
   if (!value) return "—";
-  return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return formatDayMonth(new Date(value), { year: true });
 }
 
 // For last_payment_date, a plain calendar date (Postgres `date`, no time
@@ -34,11 +34,7 @@ function formatDateOnly(value) {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
   if (!match) return formatDate(value);
   const [, yyyy, mm, dd] = match;
-  return new Date(Number(yyyy), Number(mm) - 1, Number(dd)).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatDayMonth(new Date(Number(yyyy), Number(mm) - 1, Number(dd)), { year: true });
 }
 
 // Local calendar-date components, not toISOString() -- see sales.js's own
@@ -56,7 +52,7 @@ function formatDateInput(date) {
 function formatAsOfCaption(dateOnly) {
   const d = parseDateOnly(dateOnly);
   if (!d) return String(dateOnly ?? "");
-  const month = d.toLocaleDateString(getLang() === "hy" ? "hy" : "en", { month: "short" });
+  const month = monthShort(d);
   return `${d.getDate()} ${month} ${d.getFullYear()}`;
 }
 
@@ -80,7 +76,7 @@ export async function renderDebtBalances(root, navigate) {
         <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
-        <div class="detail-header-title"><h1>${t("debt_balances_title")}</h1></div>
+        <div class="detail-header-title"><div class="sales-heading-with-hint"><h1>${t("debt_balances_title")}</h1><button type="button" class="settings-hint-icon" id="debt-sync-hint-btn" aria-label="${t("more_info")}" hidden>!</button></div></div>
         <div class="debt-as-of-filter-wrap" id="debt-as-of-filter-wrap">
           <button type="button" class="debt-as-of-filter-btn" tabindex="-1" aria-hidden="true">
             <span class="debt-as-of-filter-value" id="debt-as-of-value">${t("debt_balances_as_of_live")}</span>
@@ -126,6 +122,9 @@ export async function renderDebtBalances(root, navigate) {
   const totalCardEl = container.querySelector("#debt-total-card");
   const totalAmountEl = container.querySelector("#debt-total-amount");
   const syncBadgeEl = container.querySelector("#debt-sync-badge");
+  const syncHintBtn = container.querySelector("#debt-sync-hint-btn");
+  let syncInfoHtml = "";
+  syncHintBtn.addEventListener("click", () => openInfoPopup(syncInfoHtml));
   const asOfInput = container.querySelector("#debt-as-of-input");
   const asOfValueEl = container.querySelector("#debt-as-of-value");
   const asOfClearBtn = container.querySelector("#debt-as-of-clear");
@@ -279,7 +278,12 @@ export async function renderDebtBalances(root, navigate) {
 
   function paintData(data) {
     rows = data.rows;
-    syncBadgeEl.innerHTML = syncBadgeHtml(data.sync);
+    // "Castrol data as of ..." sits behind the "!" next to the heading; only a stale/never-synced
+    // feed stays visible (see syncNote in util.js).
+    const note = syncNote(data.sync);
+    syncBadgeEl.innerHTML = note.alert;
+    syncInfoHtml = note.info;
+    syncHintBtn.hidden = !note.info;
     if (canGroup) {
       // Preserve whatever the user already has selected -- loadWithCache
       // can repaint this a second time (stale cache, then the real fetch

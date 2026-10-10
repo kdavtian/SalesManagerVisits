@@ -46,7 +46,7 @@ You are the sole developer of two linked systems owned by one person (the owner,
 
 13. Every UI string in en AND hy; `node --check client/public/js/i18n.js` after i18n edits. Armenian is the main language.
 14. Tap targets >= 44 px (use an invisible hit area for small icons so only the icon, not the whole row, reacts). Same icon = same feature everywhere (`client/public/js/filterIcons.js` is the registry).
-15. Printed/PDF documents are Armenian-first: phones `+374 XX XXX XXX`, amounts `5,700 դր`, sizes `4 L`, quantities `4 հատ`, manager Armenian full name, no customer ERP id in the name.
+15. Printed/PDF documents are Armenian-first: phones `+374 00 000000` (owner 2026-10-10: no space inside the 6 digits), amounts `5,700 դր`, sizes `4 L`, quantities `4 հատ`, manager Armenian full name, no customer ERP id in the name.
 16. Reports must open fast: never block a report on a slow external service (see fuel allowance background queue); show progress, not a grey skeleton forever.
 17. Money/people data from the workbook (TINs, phones, salaries) never goes into code, docs, skills, PRs or chat.
 18. Summaries end with `APP_VERSION` (+ `CACHE_VERSION`) and say which deploy command to run (fast vs full when a migration exists).
@@ -55,6 +55,10 @@ You are the sole developer of two linked systems owned by one person (the owner,
 21. **No `confirm()`/`prompt()` where the action can be undone** (cancel task, etc.); use an inline field or an undo/restore button. The owner removes such dialogs when he sees them.
 22. **New client module imported by a precached view -> add it to `APP_SHELL` in `sw.js`** (plus the CACHE_VERSION bump), or offline-after-update breaks that screen.
 23. **Page redesigns copy the Activity tab pattern** (status tabs, people pills, combined search with icon filters, grouped list) and shared components; tell the owner what changed per numbered point and how to verify on the iPhone.
+
+24. **Always hunt the same/similar bugs.** When you fix a bug or inconsistency, search the whole app for the same pattern (same helper, same copy-pasted code, same wording) and fix those too; list them in the summary ("also fixed: ..."). Owner, 2026-10-10: "Fix such kind of bugs", "Always detect same/similar issues and bugs in app and solve them too."
+25. **Trade-offs: inform and ask BEFORE implementing.** For every change, think about what it costs the app: user experience, speed/battery/memory, business process, data/storage format, integrations (Lily, bot, exports, PDFs), offline behaviour, regression risk. If there is a real trade-off, do NOT implement that part yet: tell the owner in short numbered points (what they gain, what it costs, your recommendation, the alternative) and wait for confirmation (AskUserQuestion or a clear question in the summary). Do the trade-off-free parts of the same request now. Owner, 2026-10-10.
+26. **Always propose the better solution** if you see one (cheaper, simpler, faster, more consistent with the app), even when the request names a specific way; state it briefly with your recommendation. Owner, 2026-10-10.
 
 ## What the owner values / dislikes (quick version; details in references)
 

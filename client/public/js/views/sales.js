@@ -5,7 +5,7 @@
 // sales.js: no write-back, ERP/Excel stays the source of truth, same
 // contract as Debt Balances.
 import { api } from "../api.js";
-import { escapeHtml, saveBlob, openInfoPopup, formatAmd, formatLiters, channelDisplayLabel, activateDialog, syncBadgeHtml, parseDateOnly, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, erpLineDiscountRowHtml } from "../util.js";
+import { escapeHtml, saveBlob, openInfoPopup, formatAmd, formatLiters, channelDisplayLabel, activateDialog, syncBadgeHtml, parseDateOnly, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, erpLineDiscountRowHtml, monthShort } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { seesFinancialExports } from "../state.js";
 import { icons } from "../icons.js";
@@ -32,7 +32,7 @@ function formatDateInput(date) {
 function formatSalesDateHeading(dateOnly) {
   const d = parseDateOnly(dateOnly);
   if (!d) return String(dateOnly ?? "");
-  const month = d.toLocaleDateString(getLang() === "hy" ? "hy" : "en", { month: "short" });
+  const month = monthShort(d);
   return `${d.getDate()} ${month}`;
 }
 
@@ -42,7 +42,7 @@ function formatSalesDateHeading(dateOnly) {
 function formatSalesDateCaption(dateOnly) {
   const d = parseDateOnly(dateOnly);
   if (!d) return String(dateOnly ?? "");
-  const month = d.toLocaleDateString(getLang() === "hy" ? "hy" : "en", { month: "short" });
+  const month = monthShort(d);
   return `${d.getDate()} ${month} ${d.getFullYear()}`;
 }
 

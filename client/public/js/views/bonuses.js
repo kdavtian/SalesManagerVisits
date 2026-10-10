@@ -115,7 +115,7 @@ export async function renderBonuses(root, navigate) {
     </div>
   `;
   const container = root.querySelector(".detail-view");
-  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/dashboard"));
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
   const contentEl = container.querySelector("#bonuses-content");
 
   let summary;

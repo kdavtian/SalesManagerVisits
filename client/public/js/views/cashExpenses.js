@@ -1,11 +1,7 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, activateDialog, parseDateOnly } from "../util.js";
+import { escapeHtml, formatAmd, activateDialog, parseDateOnly, monthShort, formatDateTime } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { state, seesFinancialExports } from "../state.js";
-
-function formatDateTime(value) {
-  return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-}
 
 // "15 Sep 2026" style, same short-date convention as sales.js's own
 // formatSalesDateCaption -- parseDateOnly rather than `new Date(value)`
@@ -13,7 +9,7 @@ function formatDateTime(value) {
 function formatFilterDateCaption(dateOnly) {
   const d = parseDateOnly(dateOnly);
   if (!d) return String(dateOnly ?? "");
-  const month = d.toLocaleDateString(getLang() === "hy" ? "hy" : "en", { month: "short" });
+  const month = monthShort(d);
   return `${d.getDate()} ${month} ${d.getFullYear()}`;
 }
 
@@ -45,7 +41,7 @@ export async function renderCashExpenses(root, navigate) {
     </div>
   `;
   const container = root.querySelector(".detail-view");
-  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/dashboard"));
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
 
   const listEl = container.querySelector("#expenses-list");
   const errorEl = container.querySelector("#expenses-error");
