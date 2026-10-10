@@ -45,10 +45,10 @@ test("an overdue debtor gets one collect-the-debt task; paid-up, in-term and no-
   assert.ok(first.created >= 1);
   const tasks = await openTasks(overdue.id);
   assert.equal(tasks.length, 1);
-  assert.equal(tasks[0].title, DEBT_TASK_TITLE);
+  assert.ok(tasks[0].title.startsWith(DEBT_TASK_TITLE));
+  assert.match(tasks[0].title, /500,000/);
   assert.equal(tasks[0].assignee_id, rep.id);
   assert.equal(tasks[0].due_is_next_visit, true);
-  assert.match(tasks[0].item, /500,000/);
   assert.equal((await openTasks(inTerm.id)).length, 0);
   assert.equal((await openTasks(paid.id)).length, 0);
   assert.equal((await openTasks(keyAccount.id)).length, 0);

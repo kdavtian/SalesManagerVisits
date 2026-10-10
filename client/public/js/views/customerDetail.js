@@ -687,7 +687,8 @@ async function openAccountSettingsSheet(customer, onDone) {
                </label>
                <label>${t("credit_limit_label")} (${t("credit_limit_hint")})
                  <input type="number" name="credit_limit_amd" min="0" step="1" inputmode="numeric" value="${customer.credit_limit_amd != null ? Math.round(Number(customer.credit_limit_amd)) : ""}" placeholder="${t("credit_limit_none")}" />
-               </label>`
+               </label>
+               <div id="credit-history" class="muted" style="font-size:0.85em;margin:-4px 0 8px"></div>`
             : ""
         }
         <p class="form-error" id="account-settings-error" hidden></p>
@@ -700,6 +701,20 @@ async function openAccountSettingsSheet(customer, onDone) {
   `;
   document.body.appendChild(overlay);
   activateDialog(overlay);
+
+  // Who changed the credit limit and when (last 3 changes).
+  const historyEl = overlay.querySelector("#credit-history");
+  if (historyEl) {
+    api
+      .getCreditHistory(customer.id)
+      .then((rows) => {
+        historyEl.innerHTML = rows
+          .slice(0, 3)
+          .map((r) => `${r.old_limit == null ? "—" : formatAmd(r.old_limit)} → ${r.new_limit == null ? t("credit_limit_none") : formatAmd(r.new_limit)} · ${escapeHtml(r.changed_by_name || "")} · ${formatDateTime(r.changed_at)}`)
+          .join("<br>");
+      })
+      .catch(() => {});
+  }
 
   function close() {
     overlay.remove();

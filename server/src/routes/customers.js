@@ -1127,6 +1127,19 @@ customersRouter.get("/:id/credit-status", async (req, res) => {
   res.json({ limit: snap.limit, debt_amd: snap.debt, open_orders_amd: snap.openOrders });
 });
 
+customersRouter.get("/:id/credit-history", async (req, res) => {
+  if (!canSetCreditTerms(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const customerId = Number(req.params.id);
+  if (!Number.isInteger(customerId)) return res.status(400).json({ error: "Invalid customer id" });
+  const { rows } = await pool.query(
+    `SELECT l.id, l.old_limit, l.new_limit, l.changed_at, u.name AS changed_by_name
+     FROM customer_credit_limit_log l LEFT JOIN users u ON u.id = l.changed_by
+     WHERE l.customer_id = $1 ORDER BY l.changed_at DESC, l.id DESC LIMIT 20`,
+    [customerId]
+  );
+  res.json(rows.map((r) => ({ ...r, old_limit: r.old_limit === null ? null : Number(r.old_limit), new_limit: r.new_limit === null ? null : Number(r.new_limit) })));
+});
+
 customersRouter.put("/:id/credit-terms", async (req, res) => {
   if (!canSetCreditTerms(req.user.role)) return res.status(403).json({ error: "Only the accountant or a director can set credit terms" });
   const customerId = Number(req.params.id);
@@ -1137,8 +1150,14 @@ customersRouter.put("/:id/credit-terms", async (req, res) => {
     limit = Math.round(Number(raw));
     if (!Number.isFinite(limit) || limit < 0 || limit >= 1e13) return res.status(400).json({ error: "credit_limit_amd must be a non-negative amount (empty = no limit)" });
   }
+  const { rows: beforeRows } = await pool.query("SELECT credit_limit_amd FROM customers WHERE id = $1", [customerId]);
+  if (!beforeRows[0]) return res.status(404).json({ error: "Customer not found" });
+  const oldLimit = beforeRows[0].credit_limit_amd === null ? null : Number(beforeRows[0].credit_limit_amd);
   const { rows } = await pool.query("UPDATE customers SET credit_limit_amd = $2 WHERE id = $1 RETURNING id, credit_limit_amd", [customerId, limit]);
-  if (!rows[0]) return res.status(404).json({ error: "Customer not found" });
+  // Append-only trail of who changed the limit (only real changes are logged).
+  if (oldLimit !== limit) {
+    await pool.query("INSERT INTO customer_credit_limit_log (customer_id, old_limit, new_limit, changed_by) VALUES ($1, $2, $3, $4)", [customerId, oldLimit, limit, req.user.id]);
+  }
   res.json({ id: rows[0].id, credit_limit_amd: rows[0].credit_limit_amd === null ? null : Number(rows[0].credit_limit_amd) });
 });
 

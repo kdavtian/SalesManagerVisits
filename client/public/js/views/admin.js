@@ -920,7 +920,7 @@ export async function renderProductsSection(container) {
     overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
 
     const listEl = overlay.querySelector("#price-history-list");
-    const PRICE_TYPE_LABEL = { standard: t("price_standard"), retail: t("price_retail"), special: t("price_special_period") };
+    const PRICE_TYPE_LABEL = { standard: t("price_standard"), retail: t("price_retail"), special: t("price_special_period"), bronze: t("tier_bronze"), silver: t("tier_silver"), gold: t("tier_gold") };
     const entries = await api.getProductPriceHistory(product.id);
     listEl.innerHTML = entries.length
       ? entries

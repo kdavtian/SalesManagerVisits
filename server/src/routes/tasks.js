@@ -12,6 +12,8 @@ export const tasksRouter = Router();
 tasksRouter.use(requireAuth);
 
 const MAX_ITEMS = 30;
+const DEBT_OUTCOMES = ["paid", "partial", "promised", "no_answer", "refused"];
+const MAX_PROMISE_DAYS = 60;
 const isDate = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
 const isId = (v) => /^\d+$/.test(String(v));
 
@@ -29,7 +31,7 @@ function visibilitySql(user, params) {
 }
 
 const TASK_SELECT = `
-  SELECT t.*, to_char(t.due_date, 'YYYY-MM-DD') AS due_date,
+  SELECT t.*, to_char(t.due_date, 'YYYY-MM-DD') AS due_date, to_char(t.promise_date, 'YYYY-MM-DD') AS promise_date,
          cu.name AS creator_name, au.name AS assignee_name, au.role AS assignee_role, c.name AS customer_name,
          COALESCE((SELECT json_agg(json_build_object('id', i.id, 'text', i.text, 'done', i.done) ORDER BY i.sort_order, i.id)
                    FROM task_items i WHERE i.task_id = t.id), '[]'::json) AS items
@@ -271,10 +273,10 @@ tasksRouter.patch("/:id", async (req, res) => {
 
 // Marks a task finished: by the assignee (the normal case), its creator or
 // anyone who sees all tasks. The creator is told.
-async function finishTask(task, user, note) {
+async function finishTask(task, user, note, outcome = null, promiseDate = null) {
   await pool.query(
-    `UPDATE tasks SET status = 'done', completed_at = now(), completed_by = $2, completion_note = $3, updated_at = now() WHERE id = $1`,
-    [task.id, user.id, note || null]
+    `UPDATE tasks SET status = 'done', completed_at = now(), completed_by = $2, completion_note = $3, outcome = $4, promise_date = $5, updated_at = now() WHERE id = $1`,
+    [task.id, user.id, note || null, outcome, promiseDate]
   );
   if (task.creator_id !== user.id && !task.auto_kind) {
     notifyUser(task.creator_id, "task_completed", {
@@ -295,8 +297,23 @@ tasksRouter.post("/:id/complete", async (req, res) => {
   if (!task) return res.status(404).json({ error: "Task not found" });
   if (!mayWork(task, req.user)) return res.status(403).json({ error: "Not allowed" });
   if (task.status !== "open") return res.status(409).json({ error: "This task is not open" });
+  // A collect-the-debt task records how the visit went (and a promised date, which
+  // keeps new tasks away until it passes -- see debtCollectionTasks.js).
+  let outcome = null;
+  let promiseDate = null;
+  if (task.auto_kind === "debt_collection") {
+    outcome = String(req.body?.outcome ?? "");
+    if (!DEBT_OUTCOMES.includes(outcome)) return res.status(400).json({ error: "Choose how the collection went" });
+    if (outcome === "promised") {
+      promiseDate = String(req.body?.promise_date ?? "");
+      const limit = new Date(`${yerevanToday()}T00:00:00Z`).getTime() + MAX_PROMISE_DAYS * 86400000;
+      if (!isDate(promiseDate) || promiseDate <= yerevanToday() || new Date(`${promiseDate}T00:00:00Z`).getTime() > limit) {
+        return res.status(400).json({ error: `A promised date after today (within ${MAX_PROMISE_DAYS} days) is required` });
+      }
+    }
+  }
   await pool.query("UPDATE task_items SET done = true, done_at = COALESCE(done_at, now()) WHERE task_id = $1", [task.id]);
-  await finishTask(task, req.user, String(req.body?.note ?? "").trim().slice(0, 500));
+  await finishTask(task, req.user, String(req.body?.note ?? "").trim().slice(0, 500), outcome, promiseDate);
   res.json(await loadTask(task.id, req.user));
 });
 

@@ -6,7 +6,8 @@ import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { notifyUser } from "../notifications.js";
 import { autoDeliverOrdersFromErp, autoApprovePaymentsFromErp } from "../erpAutoMatch.js";
-import { createDebtCollectionTasks } from "../debtCollectionTasks.js";
+import { runAutoTasks } from "../debtCollectionTasks.js";
+import { snapshotTierPrices, logTierPriceChanges } from "../priceSyncLog.js";
 import {
   transformErpCustomers,
   transformErpCustomerLegal,
@@ -190,6 +191,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
   const { volChannelCodes, volMonths, volBrands, volLiters } = transformErpBrandVolume(brand_volume);
 
   const client = await pool.connect();
+  let priceChangedProducts = 0;
   let releaseErr;
   try {
     await client.query("BEGIN");
@@ -328,6 +330,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     // row an admin has touched since its last sync is skipped, not
     // overwritten out from under them.
     if (prodErpIds.length) {
+      const pricesBefore = await snapshotTierPrices(client, prodErpIds);
       // A product can already exist here with erp_product_id still NULL --
       // created by hand in the admin Product edit sheet, or by the Excel
       // pricelist import (see productImport.js), both of which predate
@@ -445,6 +448,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
          WHERE products.erp_product_id = t.erp_product_id AND t.hc_code IS NOT NULL AND products.hc_code IS DISTINCT FROM t.hc_code`,
         [prodErpIds, prodHcCodes]
       );
+      priceChangedProducts = await logTierPriceChanges(client, pricesBefore, prodErpIds);
     }
 
     if (brand_volume !== undefined) {
@@ -471,9 +475,23 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     client.release(releaseErr);
   }
 
+  // Prices that changed in this sync: ONE notification to the sales team.
+  if (priceChangedProducts > 0) {
+    (async () => {
+      const { rows: team } = await pool.query("SELECT id FROM users WHERE role IN ('sales_manager', 'sales_director')");
+      for (const u of team) {
+        await notifyUser(u.id, "price_changed", {
+          title: "Գները թարմացվել են",
+          body: `${priceChangedProducts} ապրանքի գինը փոխվել է՝ տե՛ս Ապրանքներ էջը։`,
+          url: "/#/pricelist",
+        });
+      }
+    })().catch((err) => console.error("Price-change notification failed:", err.message));
+  }
+
   // New debt figures just landed: give reps a "collect the debt" task where due.
   if (process.env.NODE_ENV !== "test") {
-    createDebtCollectionTasks().catch((err) => console.error("Debt collection tasks failed:", err.message));
+    runAutoTasks().catch((err) => console.error("Automatic tasks failed:", err.message));
   }
 
   res.json({
