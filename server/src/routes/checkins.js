@@ -364,6 +364,29 @@ checkinsRouter.get("/", async (req, res) => {
 // Legacy single-photo endpoint -- still works for check-ins recorded before
 // the multi-photo table existed (backfilled into checkin_photos, but this
 // keeps old client caches / bookmarked URLs working).
+// "End visit" (migration 106): the rep's own check-in made today at a customer and not ended yet.
+checkinsRouter.get("/open", async (req, res) => {
+  const customerId = Number(req.query.customer_id);
+  if (!Number.isInteger(customerId)) return res.status(400).json({ error: "customer_id is required" });
+  const { rows } = await pool.query(
+    `SELECT id, customer_id, timestamp FROM checkins
+     WHERE user_id = $1 AND customer_id = $2 AND within_range AND ended_at IS NULL
+       AND (timestamp AT TIME ZONE 'Asia/Yerevan')::date = (now() AT TIME ZONE 'Asia/Yerevan')::date
+     ORDER BY timestamp DESC LIMIT 1`,
+    [req.user.id, customerId]
+  );
+  res.json(rows[0] ?? null);
+});
+
+checkinsRouter.post("/:id/end", async (req, res) => {
+  const { rows } = await pool.query(
+    `UPDATE checkins SET ended_at = now() WHERE id = $1 AND user_id = $2 AND ended_at IS NULL RETURNING id, timestamp, ended_at`,
+    [req.params.id, req.user.id]
+  );
+  if (!rows[0]) return res.status(404).json({ error: "No open visit to end" });
+  res.json(rows[0]);
+});
+
 checkinsRouter.get("/:id/photo", async (req, res) => {
   const { rows } = await pool.query("SELECT user_id, photo_path FROM checkins WHERE id = $1", [
     req.params.id,

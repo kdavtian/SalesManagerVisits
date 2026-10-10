@@ -16,6 +16,20 @@ export const REPORTS = [
     descriptionKey: "report_fuel_allowance_description",
     defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"],
   },
+  // Monday-Sunday numbers per sales rep (visits, orders, conversion, collected, visit length)
+  // and the customers still waiting for an ERP ID -- see scorecard.js / routes/bizReports.js.
+  {
+    key: "weekly_scorecard",
+    nameKey: "report_weekly_scorecard_name",
+    descriptionKey: "report_weekly_scorecard_description",
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "sales_manager"],
+  },
+  {
+    key: "customer_pipeline",
+    nameKey: "report_customer_pipeline_name",
+    descriptionKey: "report_customer_pipeline_description",
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"],
+  },
   {
     key: "new_customers",
     nameKey: "report_new_customers_name",
@@ -142,6 +156,8 @@ const REPORT_DISPLAY_ORDER = [
   "sales_budget",
   "checkins",
   "fuel_allowance",
+  "weekly_scorecard",
+  "customer_pipeline",
   "new_customers",
   "brand_volume",
   "brand_availability",

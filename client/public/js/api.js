@@ -403,6 +403,11 @@ export const api = {
     const s = qs.toString();
     return request(`/warehouse/inventory${s ? `?${s}` : ""}`);
   },
+  getVisitPriorities: () => request("/customers/visit-priorities"),
+  getOpenVisit: (customerId) => request(`/checkins/open?customer_id=${customerId}`),
+  endVisit: (checkinId) => request(`/checkins/${checkinId}/end`, { method: "POST" }),
+  getScorecard: (week) => request(`/biz-reports/scorecard${week ? `?week=${week}` : ""}`),
+  getCustomerPipeline: () => request("/biz-reports/pipeline"),
   getReorderSuggestions: () => request("/warehouse/reorder-suggestions"),
   getInventoryBrands: () => request("/warehouse/inventory/brands"),
   getInventorySizes: () => request("/warehouse/inventory/sizes"),
