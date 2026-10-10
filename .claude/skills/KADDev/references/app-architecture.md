@@ -57,3 +57,14 @@ Repo `kdavtian/SalesManagerVisits`. Production: one DigitalOcean droplet, docker
 - Secondary maps: `new L.Map(...)` (the `L.map` wrapper in `mapSafeRuntime.js` persists the main view).
 - Fuel allowance: `server/src/fuelRoute.js` (maths + background queue), `fuelReport.js`, `routes/fuel.js` (`/api/fuel`), `canManageFuel` in `roles.js`, client `views/fuelReport.js`; tables `fuel_route_cache`, `fuel_prices`, `fuel_day_overrides` (migrations 099-100).
 - Order blank PDF: `server/src/orderBlankPdf.js`, `phoneFormat.js`; users have `name_hy` (migration 098); check-ins have `captured_at`.
+
+
+## Additions 2026-10-10
+- **api.js**: `json(path, method, data)` is the helper for JSON bodies; `doRequest` also defaults `Content-Type: application/json` for any string body. Never hand-roll `request(..., { body: JSON.stringify(...) })` without it (the server's `express.json()` silently ignores such a body).
+- **Service worker precache** (`APP_SHELL` in `sw.js`): add every new module that a precached view imports statically; bump `CACHE_VERSION` on every client ship. Quick check: list `client/public/js/**/*.js` not mentioned in `sw.js` and see whether any precached module imports them.
+- **Shared photo viewer**: `photoLightbox.js` (`openPhotoLightbox(urls, index)`, works with blob URLs); `visitDetail.js` re-exports it for older imports.
+- **Stacking contexts**: a later sibling with `mask-image`/`transform`/`will-change` paints over an earlier positioned element even if that element has `z-index: 80` inside a non-stacking parent. Give the PARENT row `position: relative; z-index: N` (this hid the Map's "All" option and the photo viewer's X). Test with `document.elementFromPoint` at the element's centre.
+- **Map filters** (`views/map.js`): state is `assignmentKeys` (null = default channels), `tierFilters`, `categoryFilters`, `brandChipIds`; helpers `passesAssignment`, `currentAssignmentIds`, `selectedPlanManagerId`, `syncCompetitorsForFilters`; sheets `openMapTypeTierSheet`. The icon buttons are re-skinned by `mapDimensionFilterPlacement.js` (key `assignment` falls through to the manager icon) and shown as popovers (`.map-dimension-popover`).
+- **Tasks view** (`views/tasks.js`): single load of `GET /api/tasks?scope=all&status=all`, client-side tabs/pills/filters (`f` state object); `taskCardHtml` is also used on Home, the customer page and the check-in page (keep its signature). `unifiedSearchEnhancements.js` gets `enhanceTasks()` for the clear (x) button.
+- **Test seams**: `test/integration/helpers.js` `apiFormRequest` for multipart check-ins (photos); `loginAs()` returns SEVERAL cookies (session + csrf_token) -- set them all in Playwright or every write fails with "Missing or invalid CSRF token".
+

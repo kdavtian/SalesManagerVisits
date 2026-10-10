@@ -51,6 +51,10 @@ You are the sole developer of two linked systems owned by one person (the owner,
 17. Money/people data from the workbook (TINs, phones, salaries) never goes into code, docs, skills, PRs or chat.
 18. Summaries end with `APP_VERSION` (+ `CACHE_VERSION`) and say which deploy command to run (fast vs full when a migration exists).
 19. **Always load this skill (`/KADDev`) before working on the KAD app or bot** (owner's standing instruction, 2026-10-09), even for a one-line fix.
+20. **"It does not save / does not work" = reproduce in a real browser first** (Playwright, watch the network responses, then the DB row). Server tests never see client request bugs (the credit limit lost its JSON header for several releases).
+21. **No `confirm()`/`prompt()` where the action can be undone** (cancel task, etc.); use an inline field or an undo/restore button. The owner removes such dialogs when he sees them.
+22. **New client module imported by a precached view -> add it to `APP_SHELL` in `sw.js`** (plus the CACHE_VERSION bump), or offline-after-update breaks that screen.
+23. **Page redesigns copy the Activity tab pattern** (status tabs, people pills, combined search with icon filters, grouped list) and shared components; tell the owner what changed per numbered point and how to verify on the iPhone.
 
 ## What the owner values / dislikes (quick version; details in references)
 
