@@ -2,7 +2,8 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData } from "../roles.js";
+import { seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData, canSetCreditTerms } from "../roles.js";
+import { creditSnapshot } from "../creditLimit.js";
 import { getDefaultVisitFrequencyDays } from "../settings.js";
 import { haversineMeters } from "../utils/geo.js";
 import { lookupCompanyByTin, isValidTin } from "../registryLookup.js";
@@ -34,7 +35,7 @@ const VISIT_STATUS_JOIN = `
     SELECT max(ch.timestamp) AS last_visit_at,
            COALESCE(bool_or(ch.timestamp >= date_trunc('day', now())), false) AS visited_today,
            COALESCE(bool_or(ch.timestamp >= now() - interval '7 days'), false) AS visited_this_week
-    FROM checkins ch WHERE ch.customer_id = c.id
+    FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range
   ) v ON true`;
 const OVERDUE_SQL = `(
     ${NOT_NO_VISIT_CHANNEL_SQL}
@@ -453,7 +454,7 @@ customersRouter.get("/map-facts", async (req, res) => {
     loadScheduleContext(req),
     pool.query(
       `SELECT c.id, c.region, c.subregion, c.visit_frequency_days, c.assigned_manager_id, erp.debt_amd,
-              (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id) AS last_visit_at
+              (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range) AS last_visit_at
        FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
        WHERE c.id = ANY($1)`,
       [ids]
@@ -1077,7 +1078,7 @@ function scheduleForCustomer(customer, ctx) {
 async function buildVisitSchedule(req, customerId) {
   const { rows: custRows } = await pool.query(
     `SELECT c.id, c.region, c.subregion, c.visit_frequency_days,
-            (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id) AS last_visit_at
+            (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range) AS last_visit_at
      FROM customers c WHERE c.id = $1`,
     [customerId]
   );
@@ -1110,6 +1111,35 @@ customersRouter.get("/:id/map-facts", async (req, res) => {
   if (!schedule || !rows[0]) return res.status(404).json({ error: "Customer not found" });
   const sees = seesCustomerErpData(req.user.role, rows[0].assigned_manager_id, req.user.id);
   res.json({ ...schedule, last_visit_at: schedule.cadence.last_visit_at, erp_debt_amd: sees ? rows[0].debt_amd : null });
+});
+
+// Credit terms (migration 101). The order form reads the current position to warn
+// before an order goes over the limit; the accountant/directors set the limit.
+customersRouter.get("/:id/credit-status", async (req, res) => {
+  const customerId = Number(req.params.id);
+  if (!Number.isInteger(customerId)) return res.status(400).json({ error: "Invalid customer id" });
+  const { rows } = await pool.query("SELECT assigned_manager_id FROM customers WHERE id = $1", [customerId]);
+  if (!rows[0]) return res.status(404).json({ error: "Customer not found" });
+  if (!seesCustomerErpData(req.user.role, rows[0].assigned_manager_id, req.user.id)) {
+    return res.status(403).json({ error: "Not allowed" });
+  }
+  const snap = await creditSnapshot(pool, customerId);
+  res.json({ limit: snap.limit, debt_amd: snap.debt, open_orders_amd: snap.openOrders });
+});
+
+customersRouter.put("/:id/credit-terms", async (req, res) => {
+  if (!canSetCreditTerms(req.user.role)) return res.status(403).json({ error: "Only the accountant or a director can set credit terms" });
+  const customerId = Number(req.params.id);
+  if (!Number.isInteger(customerId)) return res.status(400).json({ error: "Invalid customer id" });
+  const raw = req.body?.credit_limit_amd;
+  let limit = null;
+  if (raw !== null && raw !== undefined && raw !== "") {
+    limit = Math.round(Number(raw));
+    if (!Number.isFinite(limit) || limit < 0 || limit >= 1e13) return res.status(400).json({ error: "credit_limit_amd must be a non-negative amount (empty = no limit)" });
+  }
+  const { rows } = await pool.query("UPDATE customers SET credit_limit_amd = $2 WHERE id = $1 RETURNING id, credit_limit_amd", [customerId, limit]);
+  if (!rows[0]) return res.status(404).json({ error: "Customer not found" });
+  res.json({ id: rows[0].id, credit_limit_amd: rows[0].credit_limit_amd === null ? null : Number(rows[0].credit_limit_amd) });
 });
 
 customersRouter.get("/:id/checkins", async (req, res) => {

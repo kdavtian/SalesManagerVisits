@@ -96,7 +96,13 @@ function stockWarning(product, requestedQty) {
   const stock = product.stock_qty;
   if (stock === null || stock === undefined) return null;
   if (stock <= 0) return { level: "danger", text: t("out_of_stock") };
-  if (requestedQty > stock) return { level: "warning", text: `${t("only_n_available_prefix")}${stock}${t("only_n_available_suffix")}` };
+  // available = stock minus what other open orders already promised (server: available_qty)
+  const available = product.available_qty ?? stock;
+  if (requestedQty > available) {
+    const reserved = Number(product.reserved_qty) || 0;
+    const base = `${t("only_n_available_prefix")}${Math.max(available, 0)}${t("only_n_available_suffix")}`;
+    return { level: "warning", text: reserved > 0 ? `${base} (${t("reserved_by_orders_prefix")}${reserved})` : base };
+  }
   return null;
 }
 
@@ -165,6 +171,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
     <p class="form-error" id="order-error" hidden></p>
 
     <div class="order-cart-bar" id="order-cart-bar" hidden>
+      <p class="order-stock-warning" id="order-credit-banner" hidden></p>
       <div class="order-discount-row">
         <label for="order-payment-method-input">${t("order_payment_method_label")}</label>
         <select id="order-payment-method-input">
@@ -256,7 +263,31 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
     cartBar.hidden = false;
     cartCount.textContent = `${count} ${count === 1 ? t("item") : t("items")}`;
     cartTotal.textContent = formatAmd(cartTotalAmd());
+    updateCreditBanner();
   }
+
+  // Credit limit (accountant/directors set it on the customer): warn before the
+  // order goes over, because it will then wait for a director's approval.
+  let creditStatus = null;
+  const creditBanner = container.querySelector("#order-credit-banner");
+  function updateCreditBanner() {
+    if (!creditBanner) return;
+    const limit = creditStatus?.limit;
+    if (limit == null) {
+      creditBanner.hidden = true;
+      return;
+    }
+    const exposure = Number(creditStatus.debt_amd) + Number(creditStatus.open_orders_amd) + cartTotalAmd();
+    const over = exposure - limit;
+    creditBanner.hidden = over <= 0;
+    if (over > 0) creditBanner.textContent = `${t("credit_over_banner_prefix")}${formatAmd(Math.round(over))}${t("credit_over_banner_suffix")}`;
+  }
+  api.getCreditStatus(customerId).then((s) => {
+    creditStatus = s;
+    updateCartBar();
+  }).catch(() => {
+    /* offline or not allowed to see debt: no warning, the server still checks */
+  });
 
   discountInput.addEventListener("input", updateCartBar);
   discountTypeRow.querySelectorAll("[data-type]").forEach((btn) => {

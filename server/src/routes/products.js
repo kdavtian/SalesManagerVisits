@@ -43,7 +43,14 @@ export async function fetchPricedProducts(where, params, role) {
   // LIMIT 1 picks the most recently created if two promo windows somehow
   // overlap, rather than erroring or picking arbitrarily.
   const { rows } = await pool.query(
-    `SELECT p.*, promo.id AS promo_id, promo.promo_price_amd, promo.starts_on AS promo_starts_on, promo.ends_on AS promo_ends_on
+    `SELECT p.*,
+            -- Pieces already promised to other orders: in the pipeline (submitted/confirmed/packed)
+            -- or delivered since the last stock sync (the Excel stock does not know them yet).
+            COALESCE((SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON o.id = oi.order_id
+                      WHERE oi.product_id = p.id
+                        AND (o.status IN ('submitted', 'confirmed', 'packed_stock_out')
+                             OR (o.status = 'delivered' AND p.synced_at IS NOT NULL AND o.updated_at > p.synced_at))), 0)::int AS reserved_qty,
+            promo.id AS promo_id, promo.promo_price_amd, promo.starts_on AS promo_starts_on, promo.ends_on AS promo_ends_on
      FROM products p
      LEFT JOIN LATERAL (
        SELECT id, promo_price_amd, starts_on, ends_on FROM product_promos
@@ -64,6 +71,7 @@ export async function fetchPricedProducts(where, params, role) {
     );
     return {
       ...row,
+      available_qty: row.stock_qty === null || row.stock_qty === undefined ? null : Number(row.stock_qty) - row.reserved_qty,
       effective_standard_amd: pricing.standard,
       effective_special_amd: pricing.special,
       effective_retail_amd: pricing.retail,

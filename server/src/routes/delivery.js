@@ -413,9 +413,9 @@ deliveryRouter.post("/orders/:id/confirm", (req, res, next) => {
 });
 
 // Delivery failed -- no reason required, no stock adjustment (per spec).
-// Drops the order back to "draft" (the shared exception loop -- see
-// migrations/051_warehouse_delivery_v3.sql) for the rep/director to fix up
-// and resubmit.
+// The order stays "Packed / Stock Out" (owner's rule, 2026-10): it is still
+// packed and waiting, just off its route, so it can be put on a new route.
+// It is NOT sent back to draft, which looked like an unfinished order.
 deliveryRouter.post("/orders/:id/fail", async (req, res) => {
   if (!canDeliverOrders(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const { rows } = await pool.query(
@@ -433,7 +433,7 @@ deliveryRouter.post("/orders/:id/fail", async (req, res) => {
   // (e.g. this same "fail" tapped twice, or a race against /confirm) beats
   // it to the actual UPDATE.
   const { rows: updatedRows } = await pool.query(
-    "UPDATE orders SET status = 'draft', draft_reason = 'Delivery attempt failed', updated_at = now() WHERE id = $1 AND status = 'packed_stock_out' RETURNING *",
+    "UPDATE orders SET updated_at = now() WHERE id = $1 AND status = 'packed_stock_out' RETURNING *",
     [order.id]
   );
   if (!updatedRows[0]) {
@@ -442,7 +442,7 @@ deliveryRouter.post("/orders/:id/fail", async (req, res) => {
   await pool.query("UPDATE route_stops SET completed_at = now() WHERE order_id = $1", [order.id]);
   await pool.query(
     `INSERT INTO order_status_history (order_id, old_status, new_status, reason, changed_by)
-     VALUES ($1, 'packed_stock_out', 'draft', 'Delivery attempt failed', $2)`,
+     VALUES ($1, 'packed_stock_out', 'packed_stock_out', 'Delivery attempt failed -- back to packed', $2)`,
     [order.id, req.user.id]
   );
   res.json(updatedRows[0]);
@@ -453,7 +453,7 @@ deliveryRouter.post("/orders/:id/fail", async (req, res) => {
       for (const recipient of recipients) {
         notifyUser(recipient.id, "order_returned", {
           title: "Առաքումը ձախողվեց",
-          body: `${order.customer_name}-ի առաքման փորձը ձախողվել է և վերադարձվել է սևագիր։`,
+          body: `${order.customer_name}-ի առաքման փորձը ձախողվել է, պատվերը մնում է «Փաթեթավորված»՝ նոր փորձի համար։`,
           url: "/#/orders",
         });
       }

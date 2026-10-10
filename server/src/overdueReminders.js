@@ -44,7 +44,7 @@ export async function checkOverdueReminders() {
 
     const { rows: visitedRows } = await pool.query(
       `SELECT DISTINCT customer_id FROM checkins
-       WHERE user_id = $1 AND customer_id = ANY($2) AND timestamp >= date_trunc('day', now())`,
+       WHERE within_range AND user_id = $1 AND customer_id = ANY($2) AND timestamp >= date_trunc('day', now())`,
       [plan.user_id, eligibleIds]
     );
     const visited = new Set(visitedRows.map((r) => r.customer_id));

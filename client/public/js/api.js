@@ -381,6 +381,12 @@ export const api = {
   approveOrderDiscount: (id) => request(`/orders/${id}/approve-discount`, { method: "POST" }),
   deleteOrder: (id) => request(`/orders/${id}`, { method: "DELETE" }),
   rejectOrderDiscount: (id) => request(`/orders/${id}/reject-discount`, { method: "POST" }),
+  getCreditStatus: (customerId) => request(`/customers/${customerId}/credit-status`),
+  setCreditLimit: (customerId, limit) => request(`/customers/${customerId}/credit-terms`, { method: "PUT", body: JSON.stringify({ credit_limit_amd: limit }) }),
+  approveOrderCredit: (id) => request(`/orders/${id}/approve-credit`, { method: "POST" }),
+  rejectOrderCredit: (id) => request(`/orders/${id}/reject-credit`, { method: "POST" }),
+  getErpCandidates: (id) => request(`/orders/${id}/erp-candidates`),
+  linkOrderToErp: (id, erpOrderId) => request(`/orders/${id}/link-erp`, { method: "POST", body: JSON.stringify({ erp_order_id: erpOrderId }) }),
   markOrderDeliveredWithoutRoute: (id) => request(`/orders/${id}/mark-delivered`, { method: "POST" }),
 
   // Warehouse (see server/src/routes/warehouse.js)

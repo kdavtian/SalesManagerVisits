@@ -550,7 +550,7 @@ export async function renderCheckin(root, navigate, customerId) {
         <p>${
           checkin.within_range
             ? t("checked_in_onsite")
-            : `${t("you_were")} ${formatDistance(checkin.distance_meters)} ${t("from")} ${escapeHtml(customer.name)}.`
+            : `${t("you_were")} ${formatDistance(checkin.distance_meters)} ${t("from")} ${escapeHtml(customer.name)}. ${t("checkin_not_counted")}`
         }</p>
         ${placedOrder ? `<button class="btn btn-primary btn-block" id="create-order-btn">${t("create_order")}</button>` : ""}
         <button class="btn ${placedOrder ? "" : "btn-primary"} btn-block" id="back-to-customer">${t("done")}</button>
