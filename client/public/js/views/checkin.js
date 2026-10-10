@@ -4,6 +4,7 @@ import { enqueueCheckin } from "../offlineQueue.js";
 import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state } from "../state.js";
+import { openPhotoLightbox } from "../photoLightbox.js";
 
 const OUTCOME_OPTIONS = [
   { value: "order_placed", labelKey: "outcome_order_placed", icon: icons.cart },
@@ -376,6 +377,11 @@ export async function renderCheckin(root, navigate, customerId) {
       `
       )
       .join("");
+    // Tap a thumbnail to look at the photo full-screen (pinch to zoom, swipe between photos)
+    // before submitting -- the grid thumbnails are too small to judge focus or legibility.
+    photoThumbGrid.querySelectorAll(".photo-thumb img").forEach((img, i) => {
+      img.addEventListener("click", () => openPhotoLightbox(photos.map((photo) => photo.url), i));
+    });
     photoThumbGrid.querySelectorAll(".photo-remove-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         URL.revokeObjectURL(photos[Number(btn.dataset.index)].url);
