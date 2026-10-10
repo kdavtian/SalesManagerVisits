@@ -276,7 +276,7 @@ async function finishTask(task, user, note) {
     `UPDATE tasks SET status = 'done', completed_at = now(), completed_by = $2, completion_note = $3, updated_at = now() WHERE id = $1`,
     [task.id, user.id, note || null]
   );
-  if (task.creator_id !== user.id) {
+  if (task.creator_id !== user.id && !task.auto_kind) {
     notifyUser(task.creator_id, "task_completed", {
       title: `Առաջադրանքը կատարված է՝ ${task.title}`,
       body: `${user.name}${task.customer_name ? ` · ${task.customer_name}` : ""}${note ? ` · ${note}` : ""}`,

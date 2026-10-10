@@ -6,6 +6,7 @@ import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { notifyUser } from "../notifications.js";
 import { autoDeliverOrdersFromErp, autoApprovePaymentsFromErp } from "../erpAutoMatch.js";
+import { createDebtCollectionTasks } from "../debtCollectionTasks.js";
 import {
   transformErpCustomers,
   transformErpCustomerLegal,
@@ -468,6 +469,11 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     throw err;
   } finally {
     client.release(releaseErr);
+  }
+
+  // New debt figures just landed: give reps a "collect the debt" task where due.
+  if (process.env.NODE_ENV !== "test") {
+    createDebtCollectionTasks().catch((err) => console.error("Debt collection tasks failed:", err.message));
   }
 
   res.json({

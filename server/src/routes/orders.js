@@ -1099,11 +1099,12 @@ ordersRouter.post("/:id/approve-discount", async (req, res) => {
   })();
 });
 
-// Credit-limit approval (migration 101): the same directors who approve
-// discounts decide on an order that goes over the customer's credit limit.
+// Credit-limit approval (migration 101): the directors and the accountant
+// decide on an order that goes over the customer's credit limit.
 async function decideCredit(req, res, decision) {
-  if (!canConfirmOrders(req.user.role)) {
-    return res.status(403).json({ error: "Only a director can decide on a credit-limit exception" });
+  // Directors and the accountant (canConfirmSubmittedOrders) decide on credit-limit exceptions.
+  if (!canConfirmSubmittedOrders(req.user.role)) {
+    return res.status(403).json({ error: "Only a director or the accountant can decide on a credit-limit exception" });
   }
   const { rows } = await pool.query("SELECT * FROM orders WHERE id = $1", [req.params.id]);
   const order = rows[0];

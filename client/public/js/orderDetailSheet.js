@@ -51,6 +51,8 @@ const APPROVAL_META = {
 const SELF_APPROVING_ROLES = new Set(["ceo", "operations_director", "admin"]);
 const sortProducts = (list) => [...list].sort(compareProducts);
 const DISCOUNT_APPROVER_ROLES = new Set(["admin", "sales_director", "ceo", "operations_director"]);
+// Credit-limit exceptions: the same directors plus the accountant.
+const CREDIT_APPROVER_ROLES = new Set([...DISCOUNT_APPROVER_ROLES, "accountant"]);
 // Who reviews a freshly-submitted order -- mirrors canConfirmOrders in the
 // server's roles.js.
 const CONFIRM_ROLES = new Set(["admin", "sales_director", "ceo", "operations_director"]);
@@ -211,9 +213,9 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     // A pending or rejected discount blocks fulfillment server-side too --
     // don't offer a forward-status button that would just 409.
     const canApproveDiscount = DISCOUNT_APPROVER_ROLES.has(state.user.role) && order.approval_status === "pending";
-    // Credit limit exception (migration 101): same directors decide.
+    // Credit limit exception (migration 101): directors and the accountant decide.
     const creditMeta = { pending: ["credit_status_pending", "badge-warning"], approved: ["credit_status_approved", "badge-success"], rejected: ["credit_status_rejected", "badge-danger"] }[order.credit_status];
-    const canApproveCredit = DISCOUNT_APPROVER_ROLES.has(state.user.role) && order.credit_status === "pending";
+    const canApproveCredit = CREDIT_APPROVER_ROLES.has(state.user.role) && order.credit_status === "pending";
 
     overlay.querySelector(".sheet").classList.add("order-detail-sheet");
     overlay.querySelector(".sheet").innerHTML = `

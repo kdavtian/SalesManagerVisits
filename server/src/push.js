@@ -3,6 +3,7 @@
 // fixed admin/CEO channel. Silently disabled (logged once at boot) if
 // unconfigured, same pattern as Telegram and ERP_SYNC_KEY.
 
+import { isQuietHours } from "./quietHours.js";
 import webpush from "web-push";
 import { pool } from "./db/pool.js";
 
@@ -112,6 +113,8 @@ async function notifyOneSubscription(row, payload, userId, notificationId, attem
 // GET /delivery-log for the visible side of this.
 export async function notifyUser(userId, payload, notificationId = null) {
   if (!enabled) return;
+  // Night: keep the in-app notification, skip the phone push (see quietHours.js).
+  if (isQuietHours()) return;
 
   const { rows } = await pool.query(
     "SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1",

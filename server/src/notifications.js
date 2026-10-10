@@ -12,10 +12,20 @@ import { notifyUser as sendPush } from "./push.js";
 export async function notifyUser(userId, type, { title, body, url } = {}) {
   if (!(await isNotificationEnabled(userId, type))) return;
 
-  const { rows } = await pool.query(
-    `INSERT INTO notifications (user_id, type, title, body, url) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-    [userId, type, title, body, url ?? null]
-  );
+  let rows;
+  try {
+    ({ rows } = await pool.query(
+      `INSERT INTO notifications (user_id, type, title, body, url) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [userId, type, title, body, url ?? null]
+    ));
+  } catch (err) {
+    // 23503 = foreign_key_violation: the user was deleted between the trigger
+    // and this insert (callers fire notifyUser() without awaiting it, so this
+    // used to surface as an unhandledRejection, e.g. in CI after a test's
+    // cleanup). Nobody left to notify -- not an error.
+    if (err.code === "23503") return;
+    throw err;
+  }
 
   // Awaited and caught here, not left to run unattached -- most callers
   // (order/payment/plan notification fan-outs) call notifyUser() itself
