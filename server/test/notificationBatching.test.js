@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { isSummaryWindow, summaryDayKey } from "../src/dailySummary.js";
-import { buildStalePackedMessage } from "../src/stalePackedReminder.js";
+import { buildStalePackedMessage, isWarehouseWorkingTime } from "../src/stalePackedReminder.js";
 
 test("daily summary window is 19:00-21:59 Yerevan time (UTC+4)", () => {
   assert.equal(isSummaryWindow(new Date("2026-10-08T14:59:00Z")), false); // 18:59 Yerevan
@@ -25,4 +25,14 @@ test("stale packed orders: one consolidated message with the count", () => {
   assert.ok(!many.body.includes("Customer 0"));
   const one = buildStalePackedMessage([five[0]]);
   assert.ok(one.body.includes("Customer 0"));
+});
+
+test("stale packed reminders only go out in working time: 09:00-17:59 Yerevan, Mon-Sat", () => {
+  assert.equal(isWarehouseWorkingTime(new Date("2026-10-08T04:59:00Z")), false); // Thu 08:59
+  assert.equal(isWarehouseWorkingTime(new Date("2026-10-08T05:00:00Z")), true); // Thu 09:00
+  assert.equal(isWarehouseWorkingTime(new Date("2026-10-08T13:59:00Z")), true); // Thu 17:59
+  assert.equal(isWarehouseWorkingTime(new Date("2026-10-08T14:00:00Z")), false); // Thu 18:00
+  assert.equal(isWarehouseWorkingTime(new Date("2026-10-08T20:00:00Z")), false); // Fri 00:00 (night)
+  assert.equal(isWarehouseWorkingTime(new Date("2026-10-10T08:00:00Z")), true); // Sat 12:00
+  assert.equal(isWarehouseWorkingTime(new Date("2026-10-11T08:00:00Z")), false); // Sun 12:00
 });
