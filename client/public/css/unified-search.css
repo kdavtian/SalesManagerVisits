@@ -191,7 +191,7 @@
   width: min(260px, calc(100vw - 24px)) !important;
   min-width: 0 !important;
   max-width: min(260px, calc(100vw - 24px)) !important;
-  max-height: min(390px, 58vh) !important;
+  max-height: min(440px, 70vh) !important;
 }
 
 .map-search-filter-menu:not([hidden]) {

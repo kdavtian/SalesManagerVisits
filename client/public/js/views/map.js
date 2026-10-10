@@ -1136,35 +1136,39 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     });
   }
 
-  // Customer type (shop, workshop, ...) rows plus customer tier chips (the same chips as the
-  // new-customer form, but multi-select) in one sheet; both empty = no filter.
-  function openMapTypeTierSheet(categoryOptions, currentCategories, currentTiers, onApply) {
+  // Customer tier chips (gold, silver, bronze, potential, competitor -- multi-select, the same
+  // chips as the new-customer form) above the customer type rows (oil change point, shop,
+  // workshop, other, always all four). Both empty = no filter. Compact on purpose: the whole
+  // sheet shows without scrolling (.map-type-tier-sheet).
+  const MAP_TIER_ORDER = ["gold", "silver", "bronze", "potential", "competitor"];
+  function openMapTypeTierSheet(currentCategories, currentTiers, onApply) {
     const workingCategories = new Set(currentCategories);
     const workingTiers = new Set(currentTiers);
+    const tiers = MAP_TIER_ORDER.map((v) => TIER_OPTIONS.find((o) => o.value === v)).filter(Boolean);
     const overlay = document.createElement("div");
     overlay.className = "sheet-overlay";
     overlay.innerHTML = `
-      <div class="sheet filter-sheet">
-        <h2>${escapeHtml(t("category"))}</h2>
-        <div class="filter-sheet-options">
-          ${categoryOptions
-            .map(
-              (o) => `
-            <button type="button" role="menuitemcheckbox" aria-checked="${workingCategories.has(o.value)}" class="filter-sheet-option ${workingCategories.has(o.value) ? "filter-sheet-option-selected" : ""}" data-value="${escapeHtml(o.value)}">
-              <span class="filter-sheet-box" aria-hidden="true"></span>
-              <span>${escapeHtml(o.label)}</span>
-            </button>
-          `
-            )
-            .join("")}
-        </div>
+      <div class="sheet filter-sheet map-type-tier-sheet">
+        <h2>${escapeHtml(t("customer_tier"))}</h2>
         <h3 class="map-tier-filter-title">${escapeHtml(t("customer_tier"))}</h3>
         <div class="tier-selector map-tier-filter-chips" role="group" aria-label="${escapeHtml(t("customer_tier"))}">
-          ${TIER_OPTIONS.map(
-            (opt) => `
+          ${tiers
+            .map(
+              (opt) => `
             <button type="button" class="tier-btn ${opt.cls} ${workingTiers.has(opt.value) ? "tier-btn-active" : ""}" data-tier="${opt.value}" aria-pressed="${workingTiers.has(opt.value)}">
               <span class="tier-icon">${opt.icon}</span>
               <span class="tier-label">${escapeHtml(t(opt.labelKey))}</span>
+            </button>`
+            )
+            .join("")}
+        </div>
+        <h3 class="map-tier-filter-title">${escapeHtml(t("category"))}</h3>
+        <div class="filter-sheet-options map-type-options">
+          ${CATEGORY_LIST.map(
+            (o) => `
+            <button type="button" role="menuitemcheckbox" aria-checked="${workingCategories.has(o.value)}" class="filter-sheet-option ${workingCategories.has(o.value) ? "filter-sheet-option-selected" : ""}" data-value="${escapeHtml(o.value)}">
+              <span class="filter-sheet-box" aria-hidden="true"></span>
+              <span>${escapeHtml(t(o.labelKey))}</span>
             </button>`
           ).join("")}
         </div>
@@ -1234,7 +1238,6 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
   function renderIconFilterRow() {
     if (!iconFilterRow) return;
-    const categories = [...new Set(lastCustomers.map(({ c }) => c.category).filter(Boolean))];
     const assignmentIds = currentAssignmentIds();
     const assignmentChannelCount = new Set([...assignmentIds].map((k) => k.split("::")[0])).size;
     const typeCount = categoryFilters.size + tierFilters.size;
@@ -1287,17 +1290,12 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     });
 
     iconFilterRow.querySelector('[data-map-filter-btn="category"]')?.addEventListener("click", () => {
-      openMapTypeTierSheet(
-        categories.map((v) => ({ value: v, label: categoryLabel(v) })),
-        categoryFilters,
-        tierFilters,
-        (cats, tiers) => {
-          categoryFilters = cats;
-          tierFilters = tiers;
-          renderIconFilterRow();
-          applyFilter();
-        }
-      );
+      openMapTypeTierSheet(categoryFilters, tierFilters, (cats, tiers) => {
+        categoryFilters = cats;
+        tierFilters = tiers;
+        renderIconFilterRow();
+        applyFilter();
+      });
     });
   }
 

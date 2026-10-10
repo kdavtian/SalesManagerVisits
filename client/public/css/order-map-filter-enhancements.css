@@ -105,7 +105,7 @@
   left: var(--map-popover-left);
   top: var(--map-popover-top);
   width: min(280px, calc(100vw - 24px));
-  max-height: min(420px, 62vh);
+  max-height: min(560px, 78vh);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -285,7 +285,7 @@
   overflow: visible;
   gap: 6px;
   padding: 2px 12px;
-  margin-bottom: 72px;
+  margin-bottom: 4px;
 }
 
 .map-tier-filter-chips .tier-btn {
@@ -300,4 +300,26 @@
 .map-tier-filter-chips .tier-btn .tier-label {
   font-size: 0.6rem;
   text-overflow: clip;
+}
+
+/* The type + tier filter always shows complete, no scrolling: compact rows, no inner scroll area. */
+.map-dimension-popover.map-type-tier-sheet {
+  max-height: none;
+  overflow: visible;
+}
+
+.map-type-tier-sheet .map-type-options {
+  flex: 0 0 auto;
+  overflow: visible;
+  padding: 2px 7px 8px;
+}
+
+.map-type-tier-sheet .map-type-options .filter-sheet-option {
+  min-height: 40px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.map-type-tier-sheet .map-tier-filter-title:first-of-type {
+  margin-top: 10px;
 }
