@@ -8,6 +8,7 @@ import { notifyUser } from "./notifications.js";
 import { yerevanToday } from "./utils/yerevanDate.js";
 import { runAutoTasks } from "./debtCollectionTasks.js";
 import { sendWeeklyScorecards } from "./scorecard.js";
+import { sendWeeklyDebtDigest } from "./debtDigest.js";
 
 const CHECK_INTERVAL_MS = 60 * 1000;
 const REMINDER_MINUTES = 9 * 60 + 30; // 09:30
@@ -49,6 +50,7 @@ export function startTaskReminders() {
     const now = new Date();
     const today = yerevanToday(now);
     sendWeeklyScorecards(now).catch((err) => console.error("Weekly scorecard failed:", err.message));
+    sendWeeklyDebtDigest(now).catch((err) => console.error("Weekly debt digest failed:", err.message));
     if (yerevanMinutesOfDay(now) >= AUTO_TASKS_MINUTES && autoTasksDay !== today) {
       autoTasksDay = today;
       runAutoTasks(now).catch((err) => console.error("Automatic tasks failed:", err.message));

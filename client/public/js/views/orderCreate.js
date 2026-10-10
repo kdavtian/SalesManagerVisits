@@ -161,6 +161,8 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
       </div>
     </div>
 
+    <p class="order-debt-hold" id="order-debt-hold" role="status" hidden></p>
+
     <div class="order-search-row">
       <input type="search" id="product-search" placeholder="${t("search_products_placeholder")}" aria-label="${t("search_products_placeholder")}" />
     </div>
@@ -282,8 +284,14 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
     creditBanner.hidden = over <= 0;
     if (over > 0) creditBanner.textContent = `${t("credit_over_banner_prefix")}${formatAmd(Math.round(over))}${t("credit_over_banner_suffix")}`;
   }
+  const holdBanner = container.querySelector("#order-debt-hold");
   api.getCreditStatus(customerId).then((s) => {
     creditStatus = s;
+    // Soft credit hold: old unpaid invoices. A warning only -- the order can still be made.
+    if (s.debt_hold?.on_hold && holdBanner) {
+      holdBanner.textContent = t("debt_hold_banner").replace("{amount}", formatAmd(s.debt_hold.overdue_amd)).replace("{days}", String(s.debt_hold.oldest_due_days));
+      holdBanner.hidden = false;
+    }
     updateCartBar();
   }).catch(() => {
     /* offline or not allowed to see debt: no warning, the server still checks */

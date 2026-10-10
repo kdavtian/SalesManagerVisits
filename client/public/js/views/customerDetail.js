@@ -8,25 +8,8 @@ import { icons } from "../icons.js";
 import { state, canEditDirectly, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, isAdmin, seesFinancialExports, seesAllActivity } from "../state.js";
 import { openVisitDetailSheet, openPhotoLightbox } from "../visitDetail.js";
 import { visitStatusBadge } from "./customers.js";
+import { openFileReadySheet } from "../fileReadySheet.js";
 import { fetchCustomerSocial, saveCustomerSocial, socialFieldsHtml, collectSocialPayload } from "../customerSocialProfiles.js";
-
-const AGING_BADGE = {
-  "0-7 days": "badge-success",
-  "8-14 days": "badge-info",
-  "15-30 days": "badge-warning",
-  "30+ days": "badge-danger",
-  "No payment found": "badge-neutral",
-  "Data error - review": "badge-neutral",
-};
-
-const AGING_LABEL_KEY = {
-  "0-7 days": "aging_0_7",
-  "8-14 days": "aging_8_14",
-  "15-30 days": "aging_15_30",
-  "30+ days": "aging_30_plus",
-  "No payment found": "aging_no_payment",
-  "Data error - review": "aging_data_error",
-};
 
 const EDIT_FIELDS = [
   { name: "name", labelKey: "name", type: "text" },
@@ -384,7 +367,6 @@ function renderErpCard(customer, erpOrders) {
   const debt = Number(customer.erp_debt_amd) || 0;
   const collectedSinceSync = Number(customer.collected_since_sync_amd) || 0;
   const estimatedDebt = customer.estimated_debt_amd != null ? Number(customer.estimated_debt_amd) : null;
-  const agingClass = AGING_BADGE[customer.erp_aging_bucket] || "badge-neutral";
   const isDataError = customer.erp_aging_bucket === "Data error - review";
   const orders = Array.isArray(erpOrders) ? erpOrders : [];
 
@@ -416,9 +398,9 @@ function renderErpCard(customer, erpOrders) {
     customer,
     salesThisMonth,
     debtText: isDataError ? t("erp_debt_unknown") : formatAmd(debt),
-    // Red only while there actually is a debt that is overdue (a 0 balance
-    // is fine) or the data is broken.
-    debtDanger: isDataError || (debt > 0 && agingClass === "badge-danger"),
+    // Red only while some unpaid invoice is past its due date (FIFO, credit term deducted -- the
+    // same rule as the chip, the reports and the tasks), or the data is broken. A 0 balance is fine.
+    debtDanger: isDataError || (debt > 0 && (customer.debt_summary?.oldest_due_days ?? 0) > 0),
     debtSub:
       !isDataError && collectedSinceSync > 0 ? `${t("estimated_remaining")}: ${formatAmd(estimatedDebt)}` : "",
     // Days past (or until) the due date of the oldest unpaid invoice, credit term deducted.
@@ -516,8 +498,30 @@ async function openPaymentsReceivedSheet(customer) {
           </div>`
         : `<p class="empty-state">${t("payments_received_empty")}</p>`
     }
-    <div class="sheet-actions"><button type="button" class="btn" data-action="close-sheet">${t("done")}</button></div>`;
+    <p class="form-error" id="debt-statement-error" hidden></p>
+    <div class="sheet-actions">
+      ${Number(customer.erp_debt_amd) > 0 ? `<button type="button" class="btn" data-action="debt-statement">${t("debt_statement_button")}</button>` : ""}
+      <button type="button" class="btn" data-action="close-sheet">${t("done")}</button>
+    </div>`;
   overlay.querySelectorAll('[data-action="close-sheet"]').forEach((b) => b.addEventListener("click", () => overlay.remove()));
+  // Debt statement: the unpaid invoices on one page, ready to send to the customer.
+  const statementBtn = overlay.querySelector('[data-action="debt-statement"]');
+  statementBtn?.addEventListener("click", async () => {
+    const errorEl = overlay.querySelector("#debt-statement-error");
+    errorEl.hidden = true;
+    statementBtn.disabled = true;
+    statementBtn.textContent = t("debt_statement_creating");
+    try {
+      const blob = await api.buildDebtStatement(customer.id);
+      openFileReadySheet(blob, `Debt-statement-${customer.erp_customer_id || customer.id}.pdf`);
+    } catch (err) {
+      errorEl.textContent = err.message || t("pdf_failed");
+      errorEl.hidden = false;
+    } finally {
+      statementBtn.disabled = false;
+      statementBtn.textContent = t("debt_statement_button");
+    }
+  });
 }
 
 export async function openOrderDetailSheet(customerId, orderId) {
