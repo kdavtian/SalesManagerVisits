@@ -112,3 +112,5 @@ Use these names in answers and in code comments; suggest the better pattern when
 - Deploy #287 with the FULL `./deploy/deploy.sh` (migration 100).
 - Reports > Fuel allowance > Settings: each rep's city/highway L/100 km, home address, monthly fuel price.
 - Team > Edit: Armenian full name (`name_hy`) for each manager (used on the order blank).
+
+- **Tasks page (1.302.0)**: built like Activity (status tabs with counts, one pill per person busiest-first, combined search with icon filters: whose / type / sort, grouped Overdue / Today / Upcoming). All tasks load once and filter on the phone. Owner dislikes confirmation dialogs where an undo exists: cancelling a task no longer asks (Restore is one tap), and the completion note is an inline field, not a native prompt().
