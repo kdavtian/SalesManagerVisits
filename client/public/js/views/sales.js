@@ -9,6 +9,7 @@ import { escapeHtml, saveBlob, openInfoPopup, formatAmd, formatLiters, channelDi
 import { t, getLang } from "../i18n.js";
 import { seesFinancialExports } from "../state.js";
 import { icons } from "../icons.js";
+import { unpaidRowClass, dueChipHtml } from "../debtChip.js";
 
 // Local calendar-date components, not toISOString() -- that converts to
 // UTC first, so a local midnight east of UTC (Yerevan is UTC+4) lands on
@@ -201,12 +202,15 @@ async function renderSalesTab(root, navigate) {
   // every card in one group and would just repeat.
   function rowHtml(o) {
     return `
-      <button type="button" class="card sales-order-card" data-erp-customer-id="${escapeHtml(o.erp_customer_id)}" data-order-id="${escapeHtml(o.order_id)}">
+      <button type="button" class="card sales-order-card ${unpaidRowClass(o)}" data-erp-customer-id="${escapeHtml(o.erp_customer_id)}" data-order-id="${escapeHtml(o.order_id)}">
         <div class="sales-order-row">
           <span class="muted">${[o.order_id, o.erp_customer_id, o.channel ? channelDisplayLabel(o.channel) : ""].filter(Boolean).map(escapeHtml).join(" · ")}</span>
           <span class="text-amount sales-order-amount">${formatAmd(Number(o.total_amd))}</span>
         </div>
-        <strong>${escapeHtml(o.customer_name || "")}</strong>
+        <div class="sales-order-name-row">
+          <strong>${escapeHtml(o.customer_name || "")}</strong>
+          ${Number(o.unpaid_amd) > 0 ? dueChipHtml(o.due_days) : ""}
+        </div>
       </button>`;
   }
 

@@ -4234,7 +4234,7 @@ label.checkbox-row input[type="checkbox"] {
   align-items: center;
 }
 
-.erp-order-row > span:last-child {
+.erp-order-row > span:nth-child(3) {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -11391,4 +11391,136 @@ form select,
   color: var(--text);
   font: inherit;
   resize: vertical;
+}
+
+
+/* Debt: FIFO due chips ("Due: 71 days") and the unpaid-order highlight (customer orders, Sales,
+   the Outstanding debt tile). Red = past its due date (credit term deducted), amber = unpaid but
+   still within the term. */
+.due-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.due-chip-overdue {
+  background: color-mix(in srgb, var(--danger) 16%, var(--bg-card));
+  color: var(--danger);
+}
+
+.due-chip-soon {
+  background: color-mix(in srgb, var(--warning) 18%, var(--bg-card));
+  color: var(--warning);
+}
+
+.due-chip-amount {
+  background: var(--bg);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+}
+
+.unpaid-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.erp-order-due-line {
+  grid-column: 1 / -1;
+  margin-top: -4px;
+}
+
+/* Inset shadow, not border-left: it follows a card's rounded corners without a crescent. */
+.unpaid-row-overdue {
+  background: color-mix(in srgb, var(--danger) 9%, var(--bg-card));
+  box-shadow: inset 4px 0 0 var(--danger);
+}
+
+.unpaid-row-due {
+  background: color-mix(in srgb, var(--warning) 10%, var(--bg-card));
+  box-shadow: inset 4px 0 0 var(--warning);
+}
+
+.erp-order-row.unpaid-row {
+  padding-left: 12px;
+  border-radius: 8px;
+}
+
+.sales-order-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sales-order-name-row strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.detail-stat-tile {
+  position: relative;
+}
+
+.detail-stat-chip {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.readonly-field {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0 2px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.readonly-field-label {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.readonly-field-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.readonly-field-credit {
+  color: var(--success);
+}
+
+.readonly-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 28px;
+  margin: -8px 0 -8px 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.readonly-info-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.erp-order-row.unpaid-row {
+  padding-right: 10px;
 }
