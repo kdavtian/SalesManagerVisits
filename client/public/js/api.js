@@ -73,10 +73,15 @@ function getCsrfToken() {
 async function doRequest(path, options) {
   const method = (options.method || "GET").toUpperCase();
   const csrfToken = method !== "GET" ? getCsrfToken() : null;
+  // A JSON string body without a Content-Type is silently ignored by the server's
+  // express.json() (req.body stays empty): the credit limit and the manual Excel order
+  // link both "saved" nothing that way. Default it here so no call can forget it.
+  const jsonBody = typeof options.body === "string" && !options.headers?.["Content-Type"];
   const res = await fetch(`/api${path}`, {
     credentials: "include",
     ...options,
     headers: {
+      ...(jsonBody ? { "Content-Type": "application/json" } : {}),
       "X-App-Version": APP_VERSION,
       ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
       ...options.headers,
@@ -383,11 +388,11 @@ export const api = {
   rejectOrderDiscount: (id) => request(`/orders/${id}/reject-discount`, { method: "POST" }),
   getCreditStatus: (customerId) => request(`/customers/${customerId}/credit-status`),
   getCreditHistory: (customerId) => request(`/customers/${customerId}/credit-history`),
-  setCreditLimit: (customerId, limit) => request(`/customers/${customerId}/credit-terms`, { method: "PUT", body: JSON.stringify({ credit_limit_amd: limit }) }),
+  setCreditLimit: (customerId, limit) => json(`/customers/${customerId}/credit-terms`, "PUT", { credit_limit_amd: limit }),
   approveOrderCredit: (id) => request(`/orders/${id}/approve-credit`, { method: "POST" }),
   rejectOrderCredit: (id) => request(`/orders/${id}/reject-credit`, { method: "POST" }),
   getErpCandidates: (id) => request(`/orders/${id}/erp-candidates`),
-  linkOrderToErp: (id, erpOrderId) => request(`/orders/${id}/link-erp`, { method: "POST", body: JSON.stringify({ erp_order_id: erpOrderId }) }),
+  linkOrderToErp: (id, erpOrderId) => json(`/orders/${id}/link-erp`, "POST", { erp_order_id: erpOrderId }),
   markOrderDeliveredWithoutRoute: (id) => request(`/orders/${id}/mark-delivered`, { method: "POST" }),
 
   // Warehouse (see server/src/routes/warehouse.js)
