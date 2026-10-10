@@ -115,3 +115,66 @@ export async function renderCustomerPipeline(root, navigate) {
     body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
   }
 }
+
+const fmtHours = (h) => {
+  if (h === null || h === undefined) return "—";
+  return h >= 48 ? `${Math.round(h / 24)} ${t("delivery_days")}` : `${Math.round(h * 10) / 10} ${t("delivery_hours")}`;
+};
+
+export async function renderDeliverySpeed(root, navigate) {
+  let days = 30;
+  const chips = `
+    <div class="chip-row" id="delivery-days" style="display:flex;gap:8px;margin:8px 0">
+      ${[7, 30, 90].map((d) => `<button type="button" class="chip ${d === days ? "chip-active" : ""}" data-days="${d}" style="min-height:44px">${d} ${t("delivery_days")}</button>`).join("")}
+    </div>`;
+  const body = shell(root, navigate, "report_delivery_speed_name", chips);
+  async function load() {
+    body.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+    try {
+      const r = await api.getDeliverySpeed(days);
+      body.innerHTML = `
+        <div class="card" style="margin-bottom:12px">
+          <strong>${r.delivered} ${t("delivery_delivered_orders")}</strong>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px">
+            ${metric(t("delivery_confirm_to_pack"), fmtHours(r.pack.avg), `${t("delivery_median")} ${fmtHours(r.pack.median)}`)}
+            ${metric(t("delivery_pack_to_delivered_hand"), fmtHours(r.deliver_by_hand.avg), `${r.deliver_by_hand.n} ${t("delivery_orders")}`)}
+            ${metric(t("delivery_pack_to_delivered_excel"), fmtHours(r.deliver_from_excel.avg), `${r.deliver_from_excel.n} ${t("delivery_orders")}`)}
+            ${metric(t("delivery_total"), fmtHours(r.total.avg), `${t("delivery_median")} ${fmtHours(r.total.median)}`)}
+            ${metric(t("delivery_within_24h"), r.within_24h_pct === null ? "—" : `${r.within_24h_pct}%`)}
+            ${metric(t("delivery_within_48h"), r.within_48h_pct === null ? "—" : `${r.within_48h_pct}%`)}
+          </div>
+          <p class="muted" style="font-size:0.8em;margin:8px 0 0">${t("delivery_excel_note")}</p>
+        </div>
+        <h3 class="list-group-heading">${t("delivery_waiting_now")}</h3>
+        ${
+          r.open.length
+            ? r.open
+                .map(
+                  (o) => `<div class="card" style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;gap:8px"><strong>${escapeHtml(o.customer_name)}</strong><span class="badge ${o.waiting_hours >= 24 ? "badge-danger" : "badge-neutral"}">${fmtHours(o.waiting_hours)}</span></div><div class="muted" style="font-size:0.85em">${o.order_code ? escapeHtml(o.order_code) + " · " : ""}${t(o.status === "confirmed" ? "delivery_waiting_pack" : "delivery_waiting_delivery")}</div></div>`
+                )
+                .join("")
+            : `<p class="muted">${t("delivery_nothing_waiting")}</p>`
+        }
+        <h3 class="list-group-heading">${t("delivery_slowest")}</h3>
+        ${
+          r.slowest.length
+            ? r.slowest
+                .map(
+                  (o) => `<div class="card" style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;gap:8px"><strong>${escapeHtml(o.customer_name)}</strong><span class="badge badge-neutral">${fmtHours(o.total_hours)}</span></div><div class="muted" style="font-size:0.85em">${o.order_code ? escapeHtml(o.order_code) + " · " : ""}${o.from_excel ? t("delivery_from_excel") : t("delivery_by_hand")}</div></div>`
+                )
+                .join("")
+            : `<p class="muted">${t("delivery_none")}</p>`
+        }`;
+    } catch (err) {
+      body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    }
+  }
+  root.querySelectorAll("[data-days]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      days = Number(btn.dataset.days);
+      root.querySelectorAll("[data-days]").forEach((b) => b.classList.toggle("chip-active", b === btn));
+      load();
+    })
+  );
+  load();
+}

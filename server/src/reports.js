@@ -30,6 +30,13 @@ export const REPORTS = [
     descriptionKey: "report_customer_pipeline_description",
     defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"],
   },
+  // How long confirmed orders wait to be packed and delivered (routes/bizReports.js).
+  {
+    key: "delivery_speed",
+    nameKey: "report_delivery_speed_name",
+    descriptionKey: "report_delivery_speed_description",
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "warehouse_manager", "delivery_manager"],
+  },
   {
     key: "new_customers",
     nameKey: "report_new_customers_name",
@@ -158,6 +165,7 @@ const REPORT_DISPLAY_ORDER = [
   "fuel_allowance",
   "weekly_scorecard",
   "customer_pipeline",
+  "delivery_speed",
   "new_customers",
   "brand_volume",
   "brand_availability",

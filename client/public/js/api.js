@@ -407,6 +407,7 @@ export const api = {
   getOpenVisit: (customerId) => request(`/checkins/open?customer_id=${customerId}`),
   endVisit: (checkinId) => request(`/checkins/${checkinId}/end`, { method: "POST" }),
   getScorecard: (week) => request(`/biz-reports/scorecard${week ? `?week=${week}` : ""}`),
+  getDeliverySpeed: (days) => request(`/biz-reports/delivery-speed?days=${days}`),
   getCustomerPipeline: () => request("/biz-reports/pipeline"),
   getReorderSuggestions: () => request("/warehouse/reorder-suggestions"),
   getInventoryBrands: () => request("/warehouse/inventory/brands"),
