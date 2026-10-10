@@ -4,8 +4,10 @@ import { yerevanToday } from "../utils/yerevanDate.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData, canSetCreditTerms } from "../roles.js";
 import { creditSnapshot } from "../creditLimit.js";
-import { loadUnpaidOrders, summarizeDebt, dueDays } from "../debtAge.js";
+import { loadUnpaidOrders, summarizeDebt, dueDays, debtHoldInfo } from "../debtAge.js";
 import { visitPriorities } from "../visitPriorities.js";
+import { allocateFifo, loadOrdersNewestFirst } from "../debtAging.js";
+import { buildDebtStatementPdf } from "../debtStatementPdf.js";
 import { getDefaultVisitFrequencyDays } from "../settings.js";
 import { haversineMeters } from "../utils/geo.js";
 import { lookupCompanyByTin, isValidTin } from "../registryLookup.js";
@@ -1158,7 +1160,45 @@ customersRouter.get("/:id/credit-status", async (req, res) => {
     return res.status(403).json({ error: "Not allowed" });
   }
   const snap = await creditSnapshot(pool, customerId);
-  res.json({ limit: snap.limit, debt_amd: snap.debt, open_orders_amd: snap.openOrders });
+  // debt_hold: soft warning when the oldest unpaid invoice is far past due (debtAge.js).
+  res.json({ limit: snap.limit, debt_amd: snap.debt, open_orders_amd: snap.openOrders, debt_hold: await debtHoldInfo(pool, customerId, yerevanToday()) });
+});
+
+// One-page Armenian PDF of the customer's unpaid invoices (oldest first, FIFO) for the rep to send
+// to the customer: order, date, due date, amount, unpaid, days late. Same RBAC as the debt itself.
+customersRouter.get("/:id/debt-statement", async (req, res) => {
+  const customerId = Number(req.params.id);
+  if (!Number.isInteger(customerId)) return res.status(400).json({ error: "Invalid customer id" });
+  const { rows } = await pool.query(
+    `SELECT c.name, c.erp_customer_id, c.legal_name, c.tin, c.assigned_manager_id, COALESCE(c.credit_term_days, 45) AS term_days,
+            erp.debt_amd, to_char(erp.synced_at AT TIME ZONE 'Asia/Yerevan', 'YYYY-MM-DD') AS synced_on,
+            u.name AS rep_name, u.name_hy AS rep_name_hy, u.phone AS rep_phone
+     FROM customers c
+     LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
+     LEFT JOIN users u ON u.id = c.assigned_manager_id
+     WHERE c.id = $1`,
+    [customerId]
+  );
+  const c = rows[0];
+  if (!c) return res.status(404).json({ error: "Customer not found" });
+  if (!seesCustomerErpData(req.user.role, c.assigned_manager_id, req.user.id)) return res.status(403).json({ error: "Not allowed" });
+  const debt = Number(c.debt_amd) || 0;
+  if (!c.erp_customer_id || debt <= 0) return res.status(400).json({ error: "This customer has no outstanding debt" });
+  const today = yerevanToday();
+  const orders = (await loadOrdersNewestFirst(pool, [c.erp_customer_id])).get(c.erp_customer_id) ?? [];
+  const termDays = Number(c.term_days);
+  const pdf = await buildDebtStatementPdf({
+    today,
+    termDays,
+    customer: { name: c.name, erp_customer_id: c.erp_customer_id, legal_name: c.legal_name, tin: c.tin },
+    rep: { name: c.rep_name_hy || c.rep_name, phone: c.rep_phone },
+    alloc: allocateFifo({ orders, debt, today, termDays }),
+    debt_amd: debt,
+    synced_at: c.synced_on,
+  });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="Debt-statement-${String(c.erp_customer_id).replace(/[^A-Za-z0-9_-]/g, "")}-${today}.pdf"`);
+  res.send(pdf);
 });
 
 customersRouter.get("/:id/credit-history", async (req, res) => {

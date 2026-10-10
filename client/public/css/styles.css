@@ -11545,3 +11545,49 @@ form select,
 .debt-balance-card.unpaid-row-due {
   border-color: transparent;
 }
+
+/* Soft credit hold on the new-order form: gentle red fill, no outline. */
+.order-debt-hold {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 9%, var(--bg-card));
+}
+
+/* Home "Visit first": name + reasons on the left, the money at stake right-aligned. */
+.visit-first-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  text-align: left;
+}
+.visit-first-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.visit-first-reasons {
+  font-size: 0.85em;
+}
+.visit-first-money {
+  flex: 0 0 auto;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.visit-first-money-soft {
+  font-weight: 500;
+  color: var(--text-dim);
+}
+.visit-first-per-month {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 400;
+  text-align: right;
+}

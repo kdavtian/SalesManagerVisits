@@ -310,6 +310,15 @@ export const api = {
     }
     return res.blob();
   },
+  // One-page Armenian PDF of the customer's unpaid invoices (debt statement).
+  buildDebtStatement: async (customerId) => {
+    const res = await fetch(`/api/customers/${customerId}/debt-statement`, { credentials: "include", headers: { "X-App-Version": APP_VERSION } });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.error || t("pdf_failed"));
+    }
+    return res.blob();
+  },
   // Excel file of a table the client already holds (Sales / Payments export).
   buildXlsx: async (payload) => {
     const res = await fetch("/api/table-export/xlsx", {

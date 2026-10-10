@@ -108,3 +108,27 @@ export function summarizeDebt({ unpaid, opening, today, termDays }) {
     opening_due_days: opening ? dueDays(ERP_OPENING_DATE, today, termDays) : null,
   };
 }
+
+// Soft "credit hold" warning: a customer whose oldest unpaid invoice is more than this many days
+// PAST its due date is flagged when a new order is made for them. Warning only -- nothing is blocked.
+export const DEBT_HOLD_DAYS = 90;
+
+// { ...summarizeDebt, debt_amd, hold_days, on_hold } for a customer with debt; null when none.
+export async function debtHoldInfo(db, customerId, today) {
+  const { rows } = await db.query(
+    `SELECT c.erp_customer_id, COALESCE(c.credit_term_days, 45) AS term_days, erp.debt_amd
+     FROM customers c JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
+     WHERE c.id = $1 AND erp.debt_amd > 0`,
+    [customerId]
+  );
+  const row = rows[0];
+  if (!row) return null;
+  const unpaid = await loadUnpaidOrders(db, [row.erp_customer_id]);
+  const summary = summarizeDebt({ unpaid, opening: unpaid.opening.get(row.erp_customer_id), today, termDays: Number(row.term_days) });
+  return {
+    ...summary,
+    debt_amd: Math.round(Number(row.debt_amd)),
+    hold_days: DEBT_HOLD_DAYS,
+    on_hold: summary.oldest_due_days != null && summary.oldest_due_days > DEBT_HOLD_DAYS,
+  };
+}

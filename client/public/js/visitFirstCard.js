@@ -1,11 +1,11 @@
 // Home card for sales managers: "Visit first" -- the customers that most deserve the next
-// visit (overdue debt, overdue visit, gone quiet), from GET /customers/visit-priorities.
+// visit (overdue debt, overdue visit, gone quiet), ranked by the money at stake, from GET /customers/visit-priorities.
 import { api } from "./api.js";
 import { escapeHtml, formatAmd } from "./util.js";
 import { t } from "./i18n.js";
 
 function reasonText(r) {
-  if (r.type === "debt") return `${t("visit_first_debt")} ${formatAmd(r.amount)}`;
+  if (r.type === "debt") return t("visit_first_debt"); // the amount is shown on the right of the row
   if (r.type === "visit_overdue") return `${t("visit_first_overdue")} ${r.days} ${t("visit_first_days")}`;
   if (r.type === "never_visited") return t("visit_first_never");
   if (r.type === "dormant") return `${t("visit_first_dormant")} ${r.days} ${t("visit_first_days")}`;
@@ -28,9 +28,12 @@ export async function renderVisitFirst(slot, navigate) {
           .slice(0, 5)
           .map(
             (r) => `
-          <button type="button" class="btn" data-customer="${r.customer_id}" style="text-align:left;min-height:44px;display:block;width:100%">
-            <strong>${escapeHtml(r.name)}</strong><br>
-            <span class="muted" style="font-size:0.85em">${r.reasons.map((x) => escapeHtml(reasonText(x))).filter(Boolean).join(" · ")}</span>
+          <button type="button" class="btn visit-first-row" data-customer="${r.customer_id}">
+            <span class="visit-first-main">
+              <strong>${escapeHtml(r.name)}</strong>
+              <span class="muted visit-first-reasons">${r.reasons.map((x) => escapeHtml(reasonText(x))).filter(Boolean).join(" · ")}</span>
+            </span>
+            ${r.money_amd > 0 ? `<span class="visit-first-money text-amount ${r.money_kind === "monthly" ? "visit-first-money-soft" : ""}">${formatAmd(r.money_amd)}${r.money_kind === "monthly" ? `<span class="visit-first-per-month">${t("visit_first_per_month")}</span>` : ""}</span>` : ""}
           </button>`
           )
           .join("")}

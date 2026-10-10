@@ -13,6 +13,8 @@ import { notifyUser } from "../notifications.js";
 import { ORDER_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES, DELIVERY_OUTCOME_NOTIFY_ROLES } from "../notificationPreferences.js";
 import { compareProducts } from "../../../client/public/js/productSort.js";
 import { evaluateCredit } from "../creditLimit.js";
+import { debtHoldInfo } from "../debtAge.js";
+import { yerevanToday } from "../utils/yerevanDate.js";
 import { orderCostCheck, decideDiscountApproval, canApproveDiscountRole } from "../discountPolicy.js";
 
 export const ordersRouter = Router();
@@ -327,17 +329,21 @@ ordersRouter.post("/", async (req, res) => {
           : discountPct > 0
           ? ` (զեղչ՝ ${discountPct}%, սպասում է տնօրենի հաստատմանը)`
           : "";
+      // Soft credit hold: the customer's oldest unpaid invoice is far past due (warning only).
+      const hold = await debtHoldInfo(pool, customer.id, yerevanToday()).catch(() => null);
+      const holdSuffix = hold?.on_hold ? ` (overdue debt ${Math.round(hold.overdue_amd).toLocaleString()} AMD, oldest ${hold.oldest_due_days} days past due)` : "";
+      const holdSuffixHy = hold?.on_hold ? ` (ժամկետանց պարտք՝ ${Math.round(hold.overdue_amd).toLocaleString()} ԱՄԴ, ամենահինը՝ ${hold.oldest_due_days} օր ուշացումով)` : "";
       const creditSuffix = credit?.exceeded ? ` (credit limit exceeded by ${Math.round(credit.over).toLocaleString()} AMD)` : "";
       const creditSuffixHy = credit?.exceeded ? ` (վարկային սահմանը գերազանցված է ${Math.round(credit.over).toLocaleString()} ԱՄԴ-ով, սպասում է հաստատման)` : "";
       notifyTelegram(
-        `🛒 <b>New order</b>\n${escapeHtml(repName)} — ${escapeHtml(customer.name)}\n${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD${escapeHtml(discountSuffix + creditSuffix)}`
+        `🛒 <b>New order</b>\n${escapeHtml(repName)} — ${escapeHtml(customer.name)}\n${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD${escapeHtml(discountSuffix + creditSuffix + holdSuffix)}`
       );
 
       const { rows: notifyRecipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [ORDER_NOTIFY_ROLES]);
       for (const recipient of notifyRecipients) {
         notifyUser(recipient.id, "order_placed", {
           title: "Նոր պատվեր",
-          body: `${repName}-ը պատվեր է ձևակերպել ${customer.name}-ի համար — ${lines.length} ապրանք, ${Number(totalAmd).toLocaleString()} ԱՄԴ${discountSuffixHy}${creditSuffixHy}`,
+          body: `${repName}-ը պատվեր է ձևակերպել ${customer.name}-ի համար — ${lines.length} ապրանք, ${Number(totalAmd).toLocaleString()} ԱՄԴ${discountSuffixHy}${creditSuffixHy}${holdSuffixHy}`,
           url: "/#/orders",
         });
       }
