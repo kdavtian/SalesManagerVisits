@@ -4,7 +4,7 @@
 // dialog). Live: it repaints whenever the queue changes and closes itself when the queue is empty.
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
-import { activateDialog, escapeHtml, formatAmd } from "./util.js";
+import { activateDialog, escapeHtml, formatAmd, formatDateTime } from "./util.js";
 import { getQueue, onQueueChange, flushQueue, discardEntry, getLastSyncedAt } from "./offlineQueue.js";
 
 let openSheet = null;
@@ -32,7 +32,7 @@ export function openSyncQueueSheet() {
     const isOrder = entry.type === "order";
     const stuck = Boolean(entry.needsAttention);
     const name = entry.customerName || `#${entry.customerId}`;
-    const when = entry.createdAt ? new Date(entry.createdAt).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "";
+    const when = entry.createdAt ? formatDateTime(new Date(entry.createdAt).toISOString()) : "";
     const status = stuck
       ? `<span class="badge badge-danger">${t("sync_item_attention")}</span>`
       : `<span class="badge badge-neutral">${t(navigator.onLine ? "sync_item_sending" : "sync_item_waiting")}</span>`;
@@ -63,7 +63,7 @@ export function openSyncQueueSheet() {
     sheet.innerHTML = `
       <button type="button" class="icon-btn sheet-close-x" data-action="close" aria-label="${t("close")}">${icons.close}</button>
       <h2>${t("sync_sheet_title")}</h2>
-      <p class="muted">${t(navigator.onLine ? "sync_sheet_online_hint" : "sync_sheet_offline_hint")}${last ? ` · ${t("sync_sheet_last")} ${escapeHtml(new Date(last).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }))}` : ""}</p>
+      <p class="muted">${t(navigator.onLine ? "sync_sheet_online_hint" : "sync_sheet_offline_hint")}${last ? ` · ${t("sync_sheet_last")} ${escapeHtml(formatDateTime(new Date(last).toISOString()))}` : ""}</p>
       <div class="sync-queue-list">${queue.map(itemHtml).join("")}</div>
       <div class="sheet-actions">
         <button type="button" class="btn" data-action="close">${t("close")}</button>

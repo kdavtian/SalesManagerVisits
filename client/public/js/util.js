@@ -612,14 +612,34 @@ export function formatDistance(meters) {
   return meters < 1000 ? `${Math.round(meters)}${unitM}` : `${(meters / 1000).toFixed(1)}${unitKm}`;
 }
 
-export function formatDateTime(iso) {
+// Armenian short month / weekday names (Intl's "hy" is missing on many phones, which then show
+// English months inside the Armenian UI).
+const HY_MONTHS_SHORT = ["Հնվ", "Փտվ", "Մրտ", "Ապր", "Մյս", "Հնս", "Հլս", "Օգս", "Սպտ", "Հկտ", "Նյմ", "Դկտ"];
+const HY_WEEKDAYS_SHORT = ["Կիր", "Երկ", "Երք", "Չրք", "Հնգ", "Ուր", "Շբթ"]; // Sunday first
+const pad2 = (n) => String(n).padStart(2, "0");
+
+// "Օգս" / "Aug"
+export function monthShort(d) {
+  return getLang() === "hy" ? HY_MONTHS_SHORT[d.getMonth()] : d.toLocaleDateString("en", { month: "short" });
+}
+
+// "13 Հկտ" / "13 Oct", optionally with the weekday ("Երկ, 13 Հկտ") and/or the year.
+export function formatDayMonth(d, { weekday = false, year = false } = {}) {
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) return "";
+  const wd = weekday ? `${getLang() === "hy" ? HY_WEEKDAYS_SHORT[d.getDay()] : d.toLocaleDateString("en", { weekday: "short" })}, ` : "";
+  return `${wd}${d.getDate()} ${monthShort(d)}${year ? ` ${d.getFullYear()}` : ""}`;
+}
+
+// "23 Օգս, 15:06" (24-hour clock, month in the app language) for a real timestamp.
+export function formatDateTime(iso, { year = false } = {}) {
   const d = new Date(iso);
-  return d.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  if (Number.isNaN(d.getTime())) return "";
+  return `${formatDayMonth(d, { year })}, ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+// Label + value separator: Armenian uses "՝" (Վերջին այց՝ ...), English ":".
+export function labelColon() {
+  return getLang() === "hy" ? "՝ " : ": ";
 }
 
 // Shared by every screen showing ERP-synced data (reports.js, sales.js,
@@ -638,6 +658,15 @@ export function syncBadgeHtml(sync) {
   if (!sync.stale) return `<p class="sync-badge">${label}</p>`;
   const warning = t("report_sync_stale_note").replace("{h}", sync.stale_after_hours);
   return `<p class="sync-badge sync-badge-stale">${label} — ${warning}</p>`;
+}
+
+// The freshness note split for pages that keep it behind a "!" icon next to the heading:
+// `info` is the full "Castrol data as of ..." line (shown in the popup); `alert` is that same line
+// only when the feed is stale or never synced -- a broken sync must stay visible, not hidden.
+export function syncNote(sync) {
+  if (!sync) return { alert: "", info: "" };
+  const full = syncBadgeHtml(sync);
+  return { alert: !sync.synced_at || sync.stale ? full : "", info: full };
 }
 
 // Shared by any per-day subtotal heading (Orders, Sales) that sums a

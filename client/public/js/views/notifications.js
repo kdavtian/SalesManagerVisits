@@ -24,7 +24,7 @@ export async function renderNotifications(root, navigate, onCountChange) {
     </div>
   `;
   const container = root.querySelector(".detail-view");
-  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/dashboard"));
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
 
   const listEl = container.querySelector("#notifications-list");
   const errorEl = container.querySelector("#notifications-error");

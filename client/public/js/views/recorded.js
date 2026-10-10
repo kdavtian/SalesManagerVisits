@@ -5,11 +5,11 @@
 // whether an order is paid -- Excel remains that source of truth -- it
 // only tracks whether someone has looked at each delivered order.
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks } from "../util.js";
+import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks, formatDayMonth } from "../util.js";
 import { t } from "../i18n.js";
 
 function formatDate(value) {
-  return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return formatDayMonth(new Date(value), { year: true });
 }
 
 // Desktop only (see .recorded-layout in styles.css): a persistent

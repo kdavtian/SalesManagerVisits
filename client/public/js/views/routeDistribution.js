@@ -32,7 +32,7 @@ export async function renderRouteDistribution(root, navigate) {
     </div>
   `;
   const container = root.querySelector(".detail-view");
-  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/route-plans"));
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/route-plans"));
   const treeEl = container.querySelector("#rd-tree");
   const errorEl = container.querySelector("#rd-error");
   const bulkBar = container.querySelector("#rd-bulk-bar");

@@ -1,6 +1,6 @@
 import { renderVisitFirst } from "../visitFirstCard.js";
 import { api } from "../api.js";
-import { escapeHtml, formatDistance, formatRelative, formatAmd, getCurrentPosition, haversineMeters, categoryLabel } from "../util.js";
+import { escapeHtml, formatDistance, formatRelative, formatAmd, getCurrentPosition, haversineMeters, categoryLabel, formatDayMonth } from "../util.js";
 import { state, canViewTeamLocations } from "../state.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
@@ -17,7 +17,7 @@ function trendChartHtml(daily) {
   const bars = daily
     .map((d) => {
       const heightPct = Math.round((d.visits / max) * 100);
-      const label = new Date(`${d.day}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+      const label = formatDayMonth(new Date(`${d.day}T00:00:00`));
       return `<div class="trend-bar" style="height:${Math.max(heightPct, d.visits > 0 ? 4 : 0)}%" title="${label}: ${d.visits}"></div>`;
     })
     .join("");

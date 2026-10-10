@@ -3,7 +3,7 @@
 // From/To pills, channel pills with counts, one search box, day groups with
 // totals -- plus a Region filter and the Excel export (via the page header).
 import { api } from "../api.js";
-import { escapeHtml, openInfoPopup, formatAmd, channelDisplayLabel, syncBadgeHtml, parseDateOnly, regionLabelHy } from "../util.js";
+import { escapeHtml, openInfoPopup, formatAmd, channelDisplayLabel, syncBadgeHtml, parseDateOnly, regionLabelHy, monthShort } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { openTriStateTreeSheet, buildRegionSubregionTree } from "../regionTree.js";
 
@@ -13,7 +13,7 @@ function dateInput(date) {
 function dayHeading(dateOnly) {
   const d = parseDateOnly(dateOnly);
   if (!d) return String(dateOnly ?? "");
-  return `${d.getDate()} ${d.toLocaleDateString(getLang() === "hy" ? "hy" : "en", { month: "short" })}`;
+  return `${d.getDate()} ${monthShort(d)}`;
 }
 function dateCaption(dateOnly) {
   const d = parseDateOnly(dateOnly);

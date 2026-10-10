@@ -196,7 +196,7 @@ export async function renderPricelist(root, navigate) {
     <div id="pricelist-catalog"></div>
   `;
 
-  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/dashboard"));
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
   container.querySelector("#export-btn").addEventListener("click", () => openExportSheet());
 
   const sortBtn = container.querySelector("#pricelist-sort-btn");

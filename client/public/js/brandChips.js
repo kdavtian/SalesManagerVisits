@@ -6,7 +6,7 @@
 //              that group (a visit that skips a group leaves it unchanged);
 //   ever    -- every value any visit recorded + the latest date it was seen.
 import { t } from "./i18n.js";
-import { escapeHtml } from "./util.js";
+import { escapeHtml, formatDayMonth } from "./util.js";
 
 export const BRAND_GROUP_ORDER = ["castrol", "lotos", "royal", "competitors"];
 
@@ -152,5 +152,5 @@ export function buildBrandChipTree(summaryByCustomer, customerIds) {
 export function shortDate(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  return formatDayMonth(d);
 }

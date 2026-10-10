@@ -1,10 +1,10 @@
 import { api } from "../api.js";
-import { escapeHtml, firstUseHintHtml, activateFirstUseHints, activateDialog, downloadFromUrl, saveBlob } from "../util.js";
+import { escapeHtml, firstUseHintHtml, activateFirstUseHints, activateDialog, downloadFromUrl, saveBlob, monthShort, formatDateTime as formatDateTimeShared, formatDayMonth } from "../util.js";
 import { buildRegionSubregionTree, openTriStateTreeSheet, NO_GROUP_KEY } from "../regionTree.js";
 import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
 import { dueChipHtml } from "../debtChip.js";
-import { REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, CATEGORY_LIST, formatAmd, amdWithUnitHtml, channelDisplayLabel, syncBadgeHtml, formatDateDMY, parseDateOnly } from "../util.js";
+import { REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, CATEGORY_LIST, formatAmd, amdWithUnitHtml, channelDisplayLabel, syncBadgeHtml, syncNote, openInfoPopup, formatDateDMY, parseDateOnly } from "../util.js";
 
 // "all" (not "") for the All-time option: every one of this array's three
 // callers builds its request params with
@@ -39,7 +39,7 @@ const OUTCOME_OPTIONS = [
 // payment's created_at, ...) -- correctly converted to the viewer's
 // local calendar date, since it names an actual instant.
 function formatDate(value) {
-  return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return formatDayMonth(new Date(value), { year: true });
 }
 
 // For a plain calendar date with no time component (erp_daily_report's
@@ -55,11 +55,7 @@ function formatDateOnly(value) {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
   if (!match) return formatDate(value);
   const [, yyyy, mm, dd] = match;
-  return new Date(Number(yyyy), Number(mm) - 1, Number(dd)).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatDayMonth(new Date(Number(yyyy), Number(mm) - 1, Number(dd)), { year: true });
 }
 
 function selectHtml(name, options, value) {
@@ -109,7 +105,7 @@ async function renderDocumentsReport(root, navigate) {
     </div>
   `;
   const container = root.querySelector(".detail-view");
-  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/reports"));
   const listEl = container.querySelector("#documents-list");
 
   try {
@@ -167,7 +163,7 @@ async function renderReportsList(root, navigate) {
     </div>
   `;
   const container = root.querySelector(".detail-view");
-  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/dashboard"));
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
   activateFirstUseHints(container);
   const listEl = container.querySelector("#reports-list");
 
@@ -218,20 +214,25 @@ const REPORT_ICONS = {
   documents: icons.note,
 };
 
-function reportHeaderHtml(titleKey) {
+// hint: a "!" button next to the title (the data-freshness note lives behind it).
+function reportHeaderHtml(titleKey, { hint = false } = {}) {
   return `
     <div class="detail-header report-header">
       <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
-      <div class="detail-header-title"><h1>${t(titleKey)}</h1></div>
+      <div class="detail-header-title">${
+        hint
+          ? `<div class="sales-heading-with-hint"><h1>${t(titleKey)}</h1><button type="button" class="settings-hint-icon" id="report-sync-hint-btn" aria-label="${t("more_info")}" hidden>!</button></div>`
+          : `<h1>${t(titleKey)}</h1>`
+      }</div>
     </div>
   `;
 }
 
 function formatDateTime(value) {
   if (!value) return "—";
-  return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return formatDateTimeShared(value);
 }
 
 // syncBadgeHtml now lives in util.js, shared with sales.js and
@@ -263,7 +264,7 @@ async function renderNewCustomersReport(root, navigate) {
     </div>
   `;
   const container = root.querySelector(".detail-view");
-  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/reports"));
   const form = container.querySelector("#report-filters");
   const body = container.querySelector("#report-body");
 
@@ -350,7 +351,7 @@ async function renderCheckinsReport(root, navigate) {
     </div>
   `;
   const container = root.querySelector(".detail-view");
-  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/reports"));
   const form = container.querySelector("#report-filters");
   const body = container.querySelector("#report-body");
 
@@ -411,7 +412,7 @@ async function renderOrdersPipelineReport(root, navigate) {
     </div>
   `;
   const container = root.querySelector(".detail-view");
-  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/reports"));
   const form = container.querySelector("#report-filters");
   const body = container.querySelector("#report-body");
 
@@ -532,7 +533,7 @@ async function renderPaymentsReport(root, navigate) {
     </div>
   `;
   const container = root.querySelector(".detail-view");
-  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/reports"));
   const form = container.querySelector("#report-filters");
   const body = container.querySelector("#report-body");
 
@@ -660,7 +661,7 @@ async function renderCashCustodyReport(root, navigate) {
     </div>
   `;
   const container = root.querySelector(".detail-view");
-  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/reports"));
   const body = container.querySelector("#report-body");
 
   try {
@@ -740,7 +741,7 @@ async function renderCashReconciliationReport(root, navigate) {
     </div>
   `;
   const container = root.querySelector(".detail-view");
-  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/reports"));
   const body = container.querySelector("#report-body");
 
   try {
@@ -793,7 +794,7 @@ function currentYearMonthDay() {
 function formatReportAsOfCaption(dateOnly) {
   const d = parseDateOnly(dateOnly);
   if (!d) return String(dateOnly ?? "");
-  const month = d.toLocaleDateString(getLang() === "hy" ? "hy" : "en", { month: "short" });
+  const month = monthShort(d);
   return `${d.getDate()} ${month} ${d.getFullYear()}`;
 }
 
@@ -824,10 +825,24 @@ function fitReportStatValue(el) {
   }
 }
 
+// Report pages whose header has the "!" hint button: returns paint(sync) -> the visible alert html
+// (stale / never synced only) and keeps the full "Castrol data as of ..." line behind the icon.
+function wireSyncHint(container) {
+  const btn = container.querySelector("#report-sync-hint-btn");
+  let info = "";
+  btn.addEventListener("click", () => openInfoPopup(info));
+  return (sync) => {
+    const note = syncNote(sync);
+    info = note.info;
+    btn.hidden = !note.info;
+    return note.alert;
+  };
+}
+
 async function renderCustomerDebtReport(root, navigate) {
   root.innerHTML = `
     <div class="detail-view">
-      ${reportHeaderHtml("report_customer_debt_name")}
+      ${reportHeaderHtml("report_customer_debt_name", { hint: true })}
       <form id="report-filters" class="report-filter-form report-debt-filters">
         <div class="pill-date-filter-row">
           <div class="pill-date-filter-wrap">
@@ -853,12 +868,15 @@ async function renderCustomerDebtReport(root, navigate) {
     </div>
   `;
   const container = root.querySelector(".detail-view");
-  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/reports"));
   const form = container.querySelector("#report-filters");
   const body = container.querySelector("#report-body");
   const asOfInput = container.querySelector("#report-debt-as-of-input");
   const asOfValueEl = container.querySelector("#report-debt-as-of-value");
   const asOfClearBtn = container.querySelector("#report-debt-as-of-clear");
+  const debtSyncHintBtn = container.querySelector("#report-sync-hint-btn");
+  let debtSyncInfoHtml = "";
+  debtSyncHintBtn.addEventListener("click", () => openInfoPopup(debtSyncInfoHtml));
 
   // Just paints the pill's own caption -- reloading is already handled by
   // the form-level "change" listener below (this input lives inside
@@ -981,7 +999,10 @@ async function renderCustomerDebtReport(root, navigate) {
   }
 
   function paintDebt({ customers, by_bucket, totals, sync }) {
-    body.querySelector("#debt-sync-badge").innerHTML = syncBadgeHtml(sync);
+    const note = syncNote(sync);
+    body.querySelector("#debt-sync-badge").innerHTML = note.alert;
+    debtSyncInfoHtml = note.info;
+    debtSyncHintBtn.hidden = !note.info;
     body.querySelector("#report-debt-total-value").innerHTML = amdWithUnitHtml(Number(totals.total_debt_amd));
     body.querySelector("#report-debt-customers-value").textContent = totals.customers_with_debt;
     // Only meaningful in live mode -- totals.total_debt_amd_erp is always the
@@ -1066,7 +1087,7 @@ async function renderCustomerDebtReport(root, navigate) {
 async function renderSalesBudgetReport(root, navigate) {
   root.innerHTML = `
     <div class="detail-view">
-      ${reportHeaderHtml("report_sales_budget_name")}
+      ${reportHeaderHtml("report_sales_budget_name", { hint: true })}
       <form id="report-filters" class="report-filter-form">
         <input type="month" name="month" value="${currentYearMonth()}" />
       </form>
@@ -1074,7 +1095,8 @@ async function renderSalesBudgetReport(root, navigate) {
     </div>
   `;
   const container = root.querySelector(".detail-view");
-  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  const syncAlert = wireSyncHint(container);
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/reports"));
   const form = container.querySelector("#report-filters");
   const body = container.querySelector("#report-body");
 
@@ -1090,7 +1112,7 @@ async function renderSalesBudgetReport(root, navigate) {
     try {
       const { rows, totals, sync } = await api.getSalesBudgetReport(params);
       body.innerHTML = `
-        ${syncBadgeHtml(sync)}
+        ${syncAlert(sync)}
         <div class="stat-grid">
           <div class="stat-card">
             <span class="stat-value stat-value-amd">${amdWithUnitHtml(totals.sales_amd)}</span>
@@ -1143,7 +1165,7 @@ function brandLabel(key) {
 async function renderBrandVolumeReport(root, navigate) {
   root.innerHTML = `
     <div class="detail-view">
-      ${reportHeaderHtml("report_brand_volume_name")}
+      ${reportHeaderHtml("report_brand_volume_name", { hint: true })}
       <form id="report-filters" class="report-filter-form">
         <input type="month" name="month" value="${currentYearMonth()}" />
         <select name="sales_channel"><option value="">${t("all_channels")}</option></select>
@@ -1152,7 +1174,8 @@ async function renderBrandVolumeReport(root, navigate) {
     </div>
   `;
   const container = root.querySelector(".detail-view");
-  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  const syncAlert = wireSyncHint(container);
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/reports"));
   const form = container.querySelector("#report-filters");
   const body = container.querySelector("#report-body");
 
@@ -1170,7 +1193,7 @@ async function renderBrandVolumeReport(root, navigate) {
     try {
       const { rows, by_brand, sync } = await api.getBrandVolumeReport(params);
       body.innerHTML = `
-        ${syncBadgeHtml(sync)}
+        ${syncAlert(sync)}
         <h2 class="section-title">${t("report_brand_volume_total")}</h2>
         <div class="card-list">
           ${
@@ -1241,7 +1264,7 @@ async function renderDailyManagementReport(root, navigate) {
     </div>
   `;
   const container = root.querySelector(".detail-view");
-  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/reports"));
   const form = container.querySelector("#report-filters");
   const periodSelect = form.querySelector('select[name="period"]');
   const dateSelect = form.querySelector('select[name="date"]');
@@ -1419,7 +1442,7 @@ async function renderBrandAvailabilityReport(root, navigate) {
     </div>
   `;
   const container = root.querySelector(".detail-view");
-  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/reports"));
   const form = container.querySelector("#report-filters");
   const body = container.querySelector("#report-body");
 

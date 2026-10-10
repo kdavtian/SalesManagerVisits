@@ -54,7 +54,7 @@ export async function fetchPricedProducts(where, params, role) {
      FROM products p
      LEFT JOIN LATERAL (
        SELECT id, promo_price_amd, starts_on, ends_on FROM product_promos
-       WHERE product_id = p.id AND CURRENT_DATE BETWEEN starts_on AND ends_on
+       WHERE product_id = p.id AND (now() AT TIME ZONE 'Asia/Yerevan')::date BETWEEN starts_on AND ends_on
        ORDER BY created_at DESC LIMIT 1
      ) promo ON true
      ${where}

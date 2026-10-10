@@ -77,7 +77,7 @@ export async function renderFuelReport(root, navigate) {
   const container = root.querySelector(".fuel-view");
   const body = container.querySelector("#fuel-body");
   const monthInput = container.querySelector("#fuel-month");
-  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/reports"));
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/reports"));
 
   function setMonth(next) {
     month = next;

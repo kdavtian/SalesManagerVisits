@@ -98,7 +98,7 @@ export async function renderDashboardOverview(root, navigate) {
     </div>
   `;
   const container = root.querySelector(".detail-view");
-  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/dashboard"));
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
 
   const salesEl = container.querySelector("#company-dashboard-sales");
   const restEl = container.querySelector("#company-dashboard-rest");

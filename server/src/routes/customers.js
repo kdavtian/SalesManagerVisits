@@ -457,7 +457,7 @@ customersRouter.get("/map-facts", async (req, res) => {
   const [ctx, { rows }] = await Promise.all([
     loadScheduleContext(req),
     pool.query(
-      `SELECT c.id, c.region, c.subregion, c.visit_frequency_days, c.assigned_manager_id, erp.debt_amd,
+      `SELECT c.id, c.region, c.subregion, c.sales_channel, c.visit_frequency_days, c.assigned_manager_id, erp.debt_amd,
               (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range) AS last_visit_at
        FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
        WHERE c.id = ANY($1)`,
@@ -1012,7 +1012,7 @@ customersRouter.get("/:id/planned-visits", async (req, res) => {
     `SELECT vp.plan_date, vp.user_id, u.name AS user_name
      FROM visit_plans vp
      JOIN users u ON u.id = vp.user_id
-     WHERE $1 = ANY(vp.customer_ids) AND vp.status = 'approved' AND vp.plan_date >= CURRENT_DATE
+     WHERE $1 = ANY(vp.customer_ids) AND vp.status = 'approved' AND vp.plan_date >= (now() AT TIME ZONE 'Asia/Yerevan')::date
      ORDER BY vp.plan_date
      LIMIT 5`,
     [req.params.id]
@@ -1057,10 +1057,21 @@ async function loadScheduleContext(req) {
   return { today, ruleRows, planRows, allRules, planByUserDate: new Map(planRows.map((p) => [`${p.user_id}:${p.plan_date}`, p])) };
 }
 
-// customer: { id, region, subregion, visit_frequency_days, last_visit_at }
+// customer: { id, region, subregion, sales_channel, visit_frequency_days, last_visit_at }
 function scheduleForCustomer(customer, ctx) {
   const { today, ruleRows, planRows, allRules, planByUserDate } = ctx;
   const customerId = customer.id;
+  // KF/CAS/CVO/PCO/OEM are never visited in the field: no due date, no overdue days, no planned visits
+  // (not even from a Route Plans area rule that happens to cover their region).
+  if (NO_VISIT_CHANNELS.includes(customer.sales_channel)) {
+    return {
+      today,
+      no_visit: true,
+      planned: [],
+      planned_today: false,
+      cadence: { frequency_days: null, last_visit_at: customer.last_visit_at, due_by: null, planned_date: null, overdue: false, overdue_days: 0, never_visited: false, no_visit: true },
+    };
+  }
   const matchingRules = ruleRows.filter(
     (r) =>
       (r.customer_ids ?? []).includes(customerId) ||
@@ -1113,7 +1124,7 @@ function scheduleForCustomer(customer, ctx) {
 
 async function buildVisitSchedule(req, customerId) {
   const { rows: custRows } = await pool.query(
-    `SELECT c.id, c.region, c.subregion, c.visit_frequency_days,
+    `SELECT c.id, c.region, c.subregion, c.sales_channel, c.visit_frequency_days,
             (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range) AS last_visit_at
      FROM customers c WHERE c.id = $1`,
     [customerId]

@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, SALES_CHANNELS, channelDisplayLabel, parseDateOnly, formatDateDMY, erpLineDiscountRowHtml } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, SALES_CHANNELS, channelDisplayLabel, parseDateOnly, formatDateDMY, formatDayMonth, labelColon, erpLineDiscountRowHtml } from "../util.js";
 import { currentChips, chipHtml } from "../brandChips.js";
 import { nextVisitRowHtml } from "../visitSchedule.js";
 import { t } from "../i18n.js";
@@ -50,13 +50,15 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   const statusBadge = visitStatusBadge(customer);
   const brandChipList = currentChips(brandSummaryRows?.[0]?.current);
 
+  // KF/CAS/CVO/PCO/OEM channels are not visited in the field (server: requires_visit = false).
+  const noVisitChannel = customer.requires_visit === false;
   let nextVisitHtml = "";
   if (customer.overdue) {
     nextVisitHtml = `<span class="badge badge-danger">${t("filter_overdue")}</span>`;
   } else if (customer.last_visit_at) {
     const next = new Date(customer.last_visit_at);
     next.setDate(next.getDate() + customer.visit_frequency_days);
-    nextVisitHtml = `<span class="muted">${t("next_due")}: ${formatDateTime(next.toISOString())}</span>`;
+    nextVisitHtml = `<span class="muted">${t("next_due")}${labelColon()}${formatDateTime(next.toISOString())}</span>`;
   } else {
     nextVisitHtml = `<span class="muted">${t("never_visited")}</span>`;
   }
@@ -140,10 +142,10 @@ export async function renderCustomerDetail(root, navigate, customerId) {
           ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.box}</span><span>${[customer.sales_channel ? channelDisplayLabel(customer.sales_channel) : "", customer.assigned_manager_name].filter(Boolean).map(escapeHtml).join(" &middot; ")}</span></div>`
           : ""
       }
-      <div class="detail-fact"><span class="detail-fact-icon">${icons.repeat}</span><span>${t("visit_every_prefix")}${customer.visit_frequency_days}${t("visit_every_suffix")}</span></div>
+      ${noVisitChannel ? "" : `<div class="detail-fact"><span class="detail-fact-icon">${icons.repeat}</span><span>${t("visit_every_prefix")}${customer.visit_frequency_days}${t("visit_every_suffix")}</span></div>`}
       <div class="detail-fact"><span class="detail-fact-icon">${icons.wallet}</span><span>${t(customer.payment_method === "cash" ? "payment_method_cash" : "payment_method_invoice")} &middot; ${t("credit_term_fact").replace("{n}", customer.credit_term_days)}</span></div>
       ${customer.credit_limit_amd != null ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.wallet}</span><span>${t("credit_limit_label")}: ${formatAmd(customer.credit_limit_amd)}</span></div>` : ""}
-      ${customer.last_visit_at ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.clock}</span><span>${t("last_visit")}: ${formatDateTime(customer.last_visit_at)}</span></div>` : ""}
+      ${customer.last_visit_at ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.clock}</span><span>${t("last_visit")}${labelColon()}${formatDateTime(customer.last_visit_at)}</span></div>` : ""}
       ${customer.notes ? `<div class="detail-fact muted"><span class="detail-fact-icon">${icons.note}</span><span>${escapeHtml(customer.notes)}</span></div>` : ""}
     </div>
 
@@ -173,12 +175,16 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     <div id="customer-tasks-slot"></div>
     <div id="customer-docs-slot"></div>
 
-    <div class="card next-visit-card">
+    ${
+      noVisitChannel
+        ? ""
+        : `<div class="card next-visit-card">
       <div class="next-visit-header"><span>${t("next_visit")}</span></div>
       <div class="next-visit-due">
         ${visitSchedule ? nextVisitRowHtml(visitSchedule) : `<div>${nextVisitHtml}</div>`}
       </div>
-    </div>
+    </div>`
+    }
 
     <h2 class="section-title section-title-tight product-chips-title">${t("brand_chips_title")}</h2>
     <div class="card product-chips-card" id="product-chips-card">
@@ -389,9 +395,9 @@ function renderErpCard(customer, erpOrders) {
   // older cached customer object (offline/stale listCache) that hasn't
   // picked up the new field yet.
   const lastOrderDate = customer.erp_last_order_date
-    ? parseDateOnly(customer.erp_last_order_date)?.toLocaleDateString()
+    ? formatDateDMY(customer.erp_last_order_date)
     : orders[0]
-      ? parseDateOnly(orders[0].order_date)?.toLocaleDateString()
+      ? formatDateDMY(orders[0].order_date)
       : null;
 
   return statTilesHtml({
@@ -427,7 +433,7 @@ function statTilesHtml({ customer, salesThisMonth, debtText, debtDanger, debtSub
       ${tile("sales", icons.cart, formatAmd(salesThisMonth), t("sales_this_month"))}
       ${tile("debt", icons.payment, debtText, t("outstanding_debt"), { danger: debtDanger, sub: debtSub, chip: debtChip })}
       ${tile("last-order", icons.box, lastOrderDate ? escapeHtml(lastOrderDate) : "—", t("last_order"), { disabled: !lastOrderDate })}
-      ${tile("last-visit", icons.clock, customer.last_visit_at ? new Date(customer.last_visit_at).toLocaleDateString() : "—", t("last_visit"), { disabled: !customer.last_visit_at })}
+      ${tile("last-visit", icons.clock, customer.last_visit_at ? formatDayMonth(new Date(customer.last_visit_at), { year: true }) : "—", t("last_visit"), { disabled: !customer.last_visit_at })}
     </div>
   `;
 }
@@ -444,7 +450,7 @@ function renderErpOrdersOnlyCard(customer, erpOrders) {
       return d && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
     })
     .reduce((sum, o) => sum + Number(o.total_amd), 0);
-  const lastOrderDate = parseDateOnly(customer.erp_last_order_date)?.toLocaleDateString();
+  const lastOrderDate = formatDateDMY(customer.erp_last_order_date) || null;
   return statTilesHtml({ customer, salesThisMonth, debtText: formatAmd(0), debtDanger: false, lastOrderDate });
 }
 

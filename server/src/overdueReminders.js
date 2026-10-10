@@ -21,7 +21,7 @@ export async function checkOverdueReminders() {
 
   const today = todayKey();
   const { rows: plans } = await pool.query(
-    `SELECT user_id, customer_ids FROM visit_plans WHERE plan_date = current_date AND status = 'approved'`
+    `SELECT user_id, customer_ids FROM visit_plans WHERE plan_date = (now() AT TIME ZONE 'Asia/Yerevan')::date AND status = 'approved'`
   );
 
   for (const plan of plans) {

@@ -41,7 +41,7 @@ export async function renderRoutePlans(root, navigate) {
     </div>
   `;
   const container = root.querySelector(".detail-view");
-  container.querySelector("#back-btn").addEventListener("click", () => navigate("#/dashboard"));
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
   const bodyEl = container.querySelector("#route-plans-body");
   const errorEl = container.querySelector("#route-plans-error");
 

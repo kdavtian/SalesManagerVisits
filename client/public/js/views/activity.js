@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatDistance, formatAmd, categoryIcon, customerIconTint } from "../util.js";
+import { escapeHtml, formatDistance, formatAmd, categoryIcon, customerIconTint, formatDayMonth } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { seesAllActivity } from "../state.js";
 import { openVisitDetailSheet } from "../visitDetail.js";
@@ -72,14 +72,14 @@ function checkinStatus(c) {
 function formatActivityDate(iso) {
   const d = new Date(iso);
   const now = new Date();
-  const time = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   const isSameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
 
   if (isSameDay(d, now)) return `${t("tab_today")}, ${time}`;
   if (isSameDay(d, yesterday)) return `${t("yesterday")}, ${time}`;
-  return `${d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}, ${time}`;
+  return `${formatDayMonth(d, { year: true })}, ${time}`;
 }
 
 export async function renderActivity(root, navigate) {

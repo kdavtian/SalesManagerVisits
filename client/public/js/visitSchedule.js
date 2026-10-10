@@ -3,12 +3,12 @@
 // recurring Route Plans weekdays and the customer's own visit cadence. Used by
 // the Map pin popup and the customer card's "Next visit" card.
 import { t, getLang } from "./i18n.js";
-import { escapeHtml, parseDateOnly } from "./util.js";
+import { escapeHtml, parseDateOnly, formatDayMonth, formatDateTime } from "./util.js";
 
 export function formatScheduleDate(dateOnly) {
   const d = parseDateOnly(dateOnly);
   if (!d) return String(dateOnly ?? "");
-  return d.toLocaleDateString(getLang() === "hy" ? "hy" : "en", { weekday: "short", day: "numeric", month: "short" });
+  return formatDayMonth(d, { weekday: true });
 }
 
 // "Mon, 13 Oct · weekly" per upcoming planned visit (the planner's name is
@@ -48,6 +48,8 @@ export function cadenceLineHtml(schedule) {
 export function nextVisitRowHtml(schedule) {
   const c = schedule?.cadence;
   if (!schedule || !c) return "";
+  // KF/CAS/CVO/PCO/OEM customers are not visited in the field: no next visit, no overdue days.
+  if (schedule.no_visit) return "";
   if (schedule.planned_today) {
     return `<div class="popup-fact"><span class="muted">${t("visit_planned_label")}</span><strong>${t("visit_planned_today")}</strong></div>`;
   }
@@ -68,12 +70,7 @@ export function nextVisitRowHtml(schedule) {
   return `<div class="popup-fact"><span class="muted">${t("visit_planned_label")}</span><strong>${escapeHtml(formatScheduleDate(date))}</strong></div>`;
 }
 
-// "Sun, 27 Sep at 10:07" -- weekday + date + time of a check-in.
+// "23 Օգս, 15:06" -- date + time of a check-in.
 export function formatLastVisit(iso) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const locale = getLang() === "hy" ? "hy" : "en-GB";
-  const date = d.toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" });
-  const time = d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", hour12: false });
-  return `${date} ${t("visit_at")} ${time}`;
+  return formatDateTime(iso);
 }
