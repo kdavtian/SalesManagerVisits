@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v311";
+const CACHE_VERSION = "field-visits-v312";
 // v5: drops tiles cached while requests went out without a Referer (OSM may have
 // answered those with placeholder images) -- see Referrer-Policy in server/src/app.js.
 const TILE_CACHE = "field-visits-tiles-v5";
@@ -108,6 +108,26 @@ const APP_SHELL = [
   "/js/views/recorded.js",
   "/js/views/debtBalances.js",
   "/js/views/sales.js",
+  // Modules that precached views import statically, plus the task / report /
+  // accounting screens: without them an update installed just before going
+  // offline could leave Orders, Dashboard or Customer detail unable to load.
+  "/js/accountingDocSheet.js",
+  "/js/accountingFiles.js",
+  "/js/brandChips.js",
+  "/js/collectionOutcomeSheet.js",
+  "/js/erpLinkSheet.js",
+  "/js/errorMonitoring.js",
+  "/js/orderBlankPrint.js",
+  "/js/orderDetailSheet.js",
+  "/js/productSearch.js",
+  "/js/productSort.js",
+  "/js/updateBanner.js",
+  "/js/visitFirstCard.js",
+  "/js/visitSchedule.js",
+  "/js/views/accounting.js",
+  "/js/views/bizReports.js",
+  "/js/views/salesPayments.js",
+  "/js/views/tasks.js",
   // Pre-approved marker/category artwork -- the map pins and the blue
   // category glyphs every other screen uses (see util.js).
   "/icons/markers/customer-drop.png",
