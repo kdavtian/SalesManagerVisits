@@ -11714,3 +11714,21 @@ form select,
   font-weight: 400;
   color: var(--text-dim);
 }
+
+/* Back animation (app.js playBackSlide): a page-coloured sheet slides off to the right over the
+   content area, uncovering the screen we returned to. */
+.back-slide-sheet {
+  position: fixed;
+  z-index: 40;
+  background: var(--bg);
+  pointer-events: none;
+  box-shadow: -10px 0 22px rgba(0, 0, 0, 0.1);
+  animation: back-slide-out 0.24s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+@keyframes back-slide-out {
+  from { transform: translateX(0); }
+  to { transform: translateX(105%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .back-slide-sheet { display: none; }
+}

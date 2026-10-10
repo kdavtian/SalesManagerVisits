@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, parseUserAgent, SALES_CHANNELS, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, parseDateOnly } from "../util.js";
+import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, parseUserAgent, SALES_CHANNELS, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, parseDateOnly, formatPhoneDisplay } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 import { ALL_ROLES, QUICK_ACTIONS, defaultQuickActionIds } from "../quickActions.js";
@@ -287,7 +287,7 @@ export async function renderTeamSection(container) {
           <label>${t("name")}<input name="name" value="${escapeHtml(u.name)}" required /></label>
           <label>${t("name_hy_label")}<input name="name_hy" value="${escapeHtml(u.name_hy || "")}" placeholder="Արտակ Հայրապետյան" /></label>
           <label>${t("email")}<input name="email" type="email" value="${escapeHtml(u.email)}" required /></label>
-          <label>${t("phone")}<input name="phone" type="tel" value="${escapeHtml(u.phone || "")}" /></label>
+          <label>${t("phone")}<input name="phone" type="tel" value="${escapeHtml(formatPhoneDisplay(u.phone || ""))}" /></label>
           ${
             isSalesManager
               ? `<label>${t("sales_channel")}
@@ -1282,7 +1282,7 @@ export async function renderCompanyProfileSection(container) {
     <div class="card">
       <form id="company-profile-form">
         <label>${t("company_name")}<input name="name" value="${escapeHtml(profile.name || "")}" required /></label>
-        <label>${t("phone")}<input name="phone" value="${escapeHtml(profile.phone || "")}" /></label>
+        <label>${t("phone")}<input name="phone" type="tel" value="${escapeHtml(formatPhoneDisplay(profile.phone || ""))}" /></label>
         <label>${t("email")}<input name="email" type="email" value="${escapeHtml(profile.email || "")}" /></label>
         <label>${t("website")}<input name="website" value="${escapeHtml(profile.website || "")}" /></label>
         <label>${t("address")}<textarea name="address" rows="2">${escapeHtml(profile.address || "")}</textarea></label>

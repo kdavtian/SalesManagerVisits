@@ -7,6 +7,7 @@ import { pool } from "../db/pool.js";
 import { issueSession, clearSession, requireAuth } from "../middleware/auth.js";
 import { photoUpload, uploadDirPath } from "../upload.js";
 import { matchesDeclaredImageType } from "../utils/imageSniff.js";
+import { normalizePhoneForStorage } from "../phoneFormat.js";
 
 export const authRouter = Router();
 
@@ -100,7 +101,7 @@ meRouter.patch("/profile", requireAuth, async (req, res) => {
   if (phone !== undefined && phone !== null && String(phone).length > 40) {
     return res.status(400).json({ error: "phone is too long" });
   }
-  await pool.query("UPDATE users SET phone = $1 WHERE id = $2", [phone ? String(phone).trim() : null, req.user.id]);
+  await pool.query("UPDATE users SET phone = $1 WHERE id = $2", [normalizePhoneForStorage(phone), req.user.id]);
   res.status(204).end();
 });
 

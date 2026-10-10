@@ -156,7 +156,45 @@ export function formatPhoneDisplay(raw) {
   if (!raw) return "";
   const digits = normalizePhone(raw);
   if (!digits.startsWith("374") || digits.length !== 11) return String(raw);
-  return `+374 ${digits.slice(3, 5)} ${digits.slice(5)}`;
+  return `+374 ${digits.slice(3, 5)} ${digits.slice(5, 8)} ${digits.slice(8)}`;
+}
+
+// Typing mask for phone fields: whatever is typed or pasted (091007019, +37491007019, 91 007 019 ...)
+// becomes "+374 91 007 019" as the digits come in. The country code can't be typed over, and a
+// leading 0 (local dialling) is dropped. Saved as digits only: "+" + the digits (server: phoneFormat.js).
+export function formatPhoneInput(raw) {
+  let d = String(raw ?? "").replace(/\D/g, "");
+  if (!d) return "";
+  if (d.startsWith("00374")) d = d.slice(2);
+  if (d.startsWith("374")) d = d.slice(3);
+  else if (d === "3" || d === "37") d = ""; // inside the country code
+  else if (d.startsWith("0")) d = d.slice(1);
+  d = d.slice(0, 8);
+  const groups = [d.slice(0, 2), d.slice(2, 5), d.slice(5)].filter(Boolean);
+  return `+374 ${groups.join(" ")}`.trimEnd();
+}
+
+// One delegated listener masks every <input name="phone"> in the app, present and future.
+let phoneMaskInstalled = false;
+export function installPhoneMask() {
+  if (phoneMaskInstalled) return;
+  phoneMaskInstalled = true;
+  const isPhone = (el) => el instanceof HTMLInputElement && el.name === "phone";
+  document.addEventListener("input", (e) => {
+    if (!isPhone(e.target)) return;
+    const masked = formatPhoneInput(e.target.value);
+    if (masked !== e.target.value) {
+      e.target.value = masked;
+      try {
+        e.target.setSelectionRange(masked.length, masked.length);
+      } catch {
+        // some input types refuse selection ranges; the value is already right
+      }
+    }
+  });
+  document.addEventListener("focusin", (e) => {
+    if (isPhone(e.target) && !e.target.value) e.target.value = "+374 "; // country code pre-filled
+  });
 }
 
 const EARTH_RADIUS_METERS = 6371000;
