@@ -10,6 +10,7 @@ import { allocateFifo, loadOrdersNewestFirst } from "../debtAging.js";
 import { buildDebtStatementPdf } from "../debtStatementPdf.js";
 import { getDefaultVisitFrequencyDays } from "../settings.js";
 import { haversineMeters } from "../utils/geo.js";
+import { normalizePhoneForStorage } from "../phoneFormat.js";
 import { lookupCompanyByTin, isValidTin } from "../registryLookup.js";
 import { computeVisitDue, ruleWeekdaysFor } from "../utils/visitDue.js";
 
@@ -332,7 +333,7 @@ customersRouter.post("/", async (req, res) => {
       [
         name,
         category ?? null,
-        phone ?? null,
+        normalizePhoneForStorage(phone),
         address ?? null,
         notes ?? null,
         lat,
@@ -721,7 +722,7 @@ customersRouter.patch("/:id", async (req, res) => {
 
   for (const field of EDITABLE_FIELDS) {
     if (fieldsToApply[field] !== undefined) {
-      params.push(fieldsToApply[field]);
+      params.push(field === "phone" ? normalizePhoneForStorage(fieldsToApply[field]) : fieldsToApply[field]);
       updates.push(`${field} = $${params.length}`);
       changedFields.push(field);
     }

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { EDITABLE_FIELDS } from "./customers.js";
+import { normalizePhoneForStorage } from "../phoneFormat.js";
 
 export const editRequestsRouter = Router();
 
@@ -17,7 +18,7 @@ editRequestsRouter.post("/", async (req, res) => {
 
   const filtered = {};
   for (const field of EDITABLE_FIELDS) {
-    if (changes[field] !== undefined) filtered[field] = changes[field];
+    if (changes[field] !== undefined) filtered[field] = field === "phone" ? normalizePhoneForStorage(changes[field]) : changes[field];
   }
   if (!Object.keys(filtered).length) {
     return res.status(400).json({ error: "No editable fields in changes" });
@@ -110,7 +111,7 @@ editRequestsRouter.patch("/:id", requireAdmin, async (req, res) => {
       const changedFields = [];
       for (const [field, value] of Object.entries(request.changes)) {
         if (!EDITABLE_FIELDS.includes(field)) continue;
-        params.push(value);
+        params.push(field === "phone" ? normalizePhoneForStorage(value) : value);
         updates.push(`${field} = $${params.length}`);
         changedFields.push(field);
       }

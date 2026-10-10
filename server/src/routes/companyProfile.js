@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireProductManager } from "../middleware/auth.js";
+import { normalizePhoneForStorage } from "../phoneFormat.js";
 
 export const companyProfileRouter = Router();
 
@@ -20,7 +21,7 @@ companyProfileRouter.patch("/", requireProductManager, async (req, res) => {
   if (!updates.length) return res.status(400).json({ error: "No editable fields provided" });
 
   const setClauses = updates.map(([key], i) => `${key} = $${i + 1}`);
-  const values = updates.map(([, value]) => value);
+  const values = updates.map(([key, value]) => (key === "phone" ? normalizePhoneForStorage(value) : value));
 
   const { rows } = await pool.query(
     `UPDATE company_profile SET ${setClauses.join(", ")}, updated_by = $${values.length + 1}, updated_at = now()

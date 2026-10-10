@@ -10,11 +10,11 @@ test("package size always carries the litre mark", () => {
   assert.equal(formatSize(null), "");
 });
 
-test("phones print as +374 XX XXXXXX", () => {
-  assert.equal(formatPhone("033007059"), "+374 33 007059");
-  assert.equal(formatPhone("091-007-019"), "+374 91 007019");
-  assert.equal(formatPhone("+(374) 96 007 015"), "+374 96 007015");
-  assert.equal(formatPhone("+37433007059"), "+374 33 007059");
+test("phones print as +374 XX XXX XXX", () => {
+  assert.equal(formatPhone("033007059"), "+374 33 007 059");
+  assert.equal(formatPhone("091-007-019"), "+374 91 007 019");
+  assert.equal(formatPhone("+(374) 96 007 015"), "+374 96 007 015");
+  assert.equal(formatPhone("+37433007059"), "+374 33 007 059");
   assert.equal(formatPhone("12345"), "12345");
 });
 
@@ -33,4 +33,16 @@ test("total litres = quantity x package size, non-litre units add nothing", () =
   assert.equal(formatLiters(34), "34 L");
   assert.equal(formatLiters(12.25), "12.3 L");
   assert.equal(formatLiters(1208), "1,208 L");
+});
+
+test("phones are stored as digits only: +37491007019", async () => {
+  const { normalizePhoneForStorage } = await import("../src/phoneFormat.js");
+  assert.equal(normalizePhoneForStorage("091-007-019"), "+37491007019");
+  assert.equal(normalizePhoneForStorage("+374 91 007 019"), "+37491007019");
+  assert.equal(normalizePhoneForStorage("+374 91 007019"), "+37491007019");
+  assert.equal(normalizePhoneForStorage("91007019"), "+37491007019");
+  assert.equal(normalizePhoneForStorage(" "), null);
+  assert.equal(normalizePhoneForStorage("+374 "), null);
+  assert.equal(normalizePhoneForStorage(null), null);
+  assert.equal(normalizePhoneForStorage("+7 495 123 45 67"), "+7 495 123 45 67", "foreign numbers are left alone");
 });

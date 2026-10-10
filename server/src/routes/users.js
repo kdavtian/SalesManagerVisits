@@ -4,6 +4,7 @@ import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { ROLES, canPlanForOthers, canReassignCustomers } from "../roles.js";
 import { passwordChangeLimiter } from "./auth.js";
+import { normalizePhoneForStorage } from "../phoneFormat.js";
 
 export const usersRouter = Router();
 
@@ -78,7 +79,7 @@ usersRouter.patch("/:id", async (req, res) => {
   const params = [];
   for (const field of EDITABLE_PROFILE_FIELDS) {
     if (req.body?.[field] === undefined) continue;
-    const value = field === "email" ? String(req.body.email).toLowerCase() : req.body[field] || null;
+    const value = field === "email" ? String(req.body.email).toLowerCase() : field === "phone" ? normalizePhoneForStorage(req.body.phone) : req.body[field] || null;
     params.push(value);
     updates.push(`${field} = $${params.length}`);
   }
