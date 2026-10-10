@@ -3,6 +3,7 @@ import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDis
 import { currentChips, chipHtml } from "../brandChips.js";
 import { nextVisitRowHtml } from "../visitSchedule.js";
 import { t } from "../i18n.js";
+import { dueChipHtml } from "../debtChip.js";
 import { icons } from "../icons.js";
 import { state, canEditDirectly, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, isAdmin, seesFinancialExports, seesAllActivity } from "../state.js";
 import { openVisitDetailSheet, openPhotoLightbox } from "../visitDetail.js";
@@ -420,6 +421,8 @@ function renderErpCard(customer, erpOrders) {
     debtDanger: isDataError || (debt > 0 && agingClass === "badge-danger"),
     debtSub:
       !isDataError && collectedSinceSync > 0 ? `${t("estimated_remaining")}: ${formatAmd(estimatedDebt)}` : "",
+    // Days past (or until) the due date of the oldest unpaid invoice, credit term deducted.
+    debtChip: !isDataError && debt > 0 ? dueChipHtml(customer.debt_summary?.oldest_due_days) : "",
     lastOrderDate,
   });
 }
@@ -428,9 +431,10 @@ function renderErpCard(customer, erpOrders) {
 // the customer's orders, Outstanding debt -> payments received, Last order ->
 // that order's details, Last visit -> that visit's details (handlers are
 // attached in renderCustomerDetail through data-stat).
-function statTilesHtml({ customer, salesThisMonth, debtText, debtDanger, debtSub = "", lastOrderDate }) {
-  const tile = (stat, icon, value, label, { danger = false, sub = "", disabled = false } = {}) => `
+function statTilesHtml({ customer, salesThisMonth, debtText, debtDanger, debtSub = "", debtChip = "", lastOrderDate }) {
+  const tile = (stat, icon, value, label, { danger = false, sub = "", disabled = false, chip = "" } = {}) => `
       <button type="button" class="detail-stat-tile detail-stat-tile-btn ${danger ? "detail-stat-danger" : ""}" data-stat="${stat}" ${disabled ? "disabled" : ""}>
+        ${chip ? `<span class="detail-stat-chip">${chip}</span>` : ""}
         <span class="detail-stat-icon">${icon}</span>
         <span class="detail-stat-value">${value}</span>
         <span class="detail-stat-label">${label}</span>
@@ -439,7 +443,7 @@ function statTilesHtml({ customer, salesThisMonth, debtText, debtDanger, debtSub
   return `
     <div class="detail-stat-grid">
       ${tile("sales", icons.cart, formatAmd(salesThisMonth), t("sales_this_month"))}
-      ${tile("debt", icons.payment, debtText, t("outstanding_debt"), { danger: debtDanger, sub: debtSub })}
+      ${tile("debt", icons.payment, debtText, t("outstanding_debt"), { danger: debtDanger, sub: debtSub, chip: debtChip })}
       ${tile("last-order", icons.box, lastOrderDate ? escapeHtml(lastOrderDate) : "—", t("last_order"), { disabled: !lastOrderDate })}
       ${tile("last-visit", icons.clock, customer.last_visit_at ? new Date(customer.last_visit_at).toLocaleDateString() : "—", t("last_visit"), { disabled: !customer.last_visit_at })}
     </div>
@@ -709,7 +713,16 @@ async function openAccountSettingsSheet(customer, onDone) {
                <label>${t("credit_limit_label")} (${t("credit_limit_hint")})
                  <input type="number" name="credit_limit_amd" min="0" step="1" inputmode="numeric" value="${customer.credit_limit_amd != null ? Math.round(Number(customer.credit_limit_amd)) : ""}" placeholder="${t("credit_limit_none")}" />
                </label>
-               <div id="credit-history" class="muted" style="font-size:0.85em;margin:-4px 0 8px"></div>`
+               <div id="credit-history" class="muted" style="font-size:0.85em;margin:-4px 0 8px"></div>
+               ${
+                 customer.erp_balance0_amd != null
+                   ? `<div class="readonly-field" id="opening-balance-field">
+                        <span class="readonly-field-label">${t("opening_balance_label")}<button type="button" class="readonly-info-btn" id="opening-info-btn" aria-label="${t("opening_balance_hint")}" aria-expanded="false">${icons.info}</button></span>
+                        <strong class="readonly-field-value ${Number(customer.erp_balance0_amd) < 0 ? "readonly-field-credit" : ""}">${formatAmd(customer.erp_balance0_amd)}${Number(customer.erp_balance0_amd) < 0 ? ` · ${t("opening_balance_credit")}` : ""}</strong>
+                      </div>
+                      <p class="muted" id="opening-info-text" style="font-size:0.85em;margin:2px 0 8px" hidden>${t("opening_balance_hint")}</p>`
+                   : ""
+               }`
             : ""
         }
         <p class="form-error" id="account-settings-error" hidden></p>
@@ -724,6 +737,11 @@ async function openAccountSettingsSheet(customer, onDone) {
   activateDialog(overlay);
 
   // Who changed the credit limit and when (last 3 changes).
+  overlay.querySelector("#opening-info-btn")?.addEventListener("click", (e) => {
+    const text = overlay.querySelector("#opening-info-text");
+    text.hidden = !text.hidden;
+    e.currentTarget.setAttribute("aria-expanded", String(!text.hidden));
+  });
   const historyEl = overlay.querySelector("#credit-history");
   if (historyEl) {
     api

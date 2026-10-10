@@ -4,6 +4,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { seesFinancialExports } from "../roles.js";
 import { yerevanToday, yerevanMonthStart } from "../utils/yerevanDate.js";
 import { erpSyncFreshness } from "../erpSyncFreshness.js";
+import { loadUnpaidOrders, dueDays } from "../debtAge.js";
 
 export const salesRouter = Router();
 
@@ -105,8 +106,8 @@ salesRouter.get("/", async (req, res) => {
   const havingSql = having.length ? `HAVING ${having.join(" AND ")}` : "";
 
   const { rows } = await pool.query(
-    `SELECT eol.order_id, eol.order_date, eol.erp_customer_id,
-            c.id AS internal_customer_id,
+    `SELECT eol.order_id, eol.order_date, to_char(eol.order_date, 'YYYY-MM-DD') AS date_key, eol.erp_customer_id,
+            c.id AS internal_customer_id, c.credit_term_days,
             COALESCE(c.name, eol.erp_customer_id) AS customer_name,
             COALESCE(ecd.assigned_sales_rep, c.sales_channel) AS channel,
             sum(eol.revenue_amd) AS total_amd,
@@ -130,7 +131,7 @@ salesRouter.get("/", async (req, res) => {
      LEFT JOIN customers c ON c.erp_customer_id = eol.erp_customer_id
      LEFT JOIN erp_customer_data ecd ON ecd.erp_customer_id = eol.erp_customer_id
      ${where}
-     GROUP BY eol.order_id, eol.order_date, eol.erp_customer_id, c.id, c.name, ecd.assigned_sales_rep, c.sales_channel
+     GROUP BY eol.order_id, eol.order_date, eol.erp_customer_id, c.id, c.credit_term_days, c.name, ecd.assigned_sales_rep, c.sales_channel
      ${havingSql}
      ORDER BY eol.order_date DESC, eol.order_id DESC
      LIMIT ${searching ? SEARCH_ROW_LIMIT : 10000}`,
@@ -140,7 +141,16 @@ salesRouter.get("/", async (req, res) => {
   // and re-inserted in the same transaction as erp_customer_data on every
   // sync -- see routes/erpSync.js), so erp_customer_data's own synced_at
   // is an accurate proxy for "when was this order data last refreshed".
-  res.json({ from, to, searching, rows, sync: await erpSyncFreshness("erp_customer_data") });
+  // FIFO: mark the orders that are still (partly) unpaid and how many days past due they are
+  // (the credit term, default 45 days, already deducted).
+  const unpaid = await loadUnpaidOrders(pool, rows.map((r) => r.erp_customer_id));
+  const today = yerevanToday();
+  const annotated = rows.map((r) => {
+    const { date_key: date, credit_term_days: term, ...row } = r;
+    const u = unpaid.orders.get(`${r.erp_customer_id}|${r.order_id}|${date}`);
+    return u ? { ...row, unpaid_amd: u.unpaid_amd, due_days: dueDays(date, today, term ?? 45) } : { ...row, unpaid_amd: 0, due_days: null };
+  });
+  res.json({ from, to, searching, rows: annotated, sync: await erpSyncFreshness("erp_customer_data") });
 });
 
 // Line-item detail for one order -- erp_customer_id + order_id together,

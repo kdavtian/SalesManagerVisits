@@ -4,6 +4,7 @@ import { yerevanToday } from "../utils/yerevanDate.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData, canSetCreditTerms } from "../roles.js";
 import { creditSnapshot } from "../creditLimit.js";
+import { loadUnpaidOrders, summarizeDebt, dueDays } from "../debtAge.js";
 import { visitPriorities } from "../visitPriorities.js";
 import { getDefaultVisitFrequencyDays } from "../settings.js";
 import { haversineMeters } from "../utils/geo.js";
@@ -508,6 +509,7 @@ customersRouter.get("/:id", async (req, res) => {
        am.name AS assigned_manager_name,
        erp.assigned_sales_rep AS erp_assigned_sales_rep,
        erp.debt_amd AS erp_debt_amd,
+       erp.balance0_amd AS erp_balance0_amd,
        erp.last_payment_date AS erp_last_payment_date,
        erp.days_since_payment AS erp_days_since_payment,
        erp.aging_bucket AS erp_aging_bucket,
@@ -543,12 +545,26 @@ customersRouter.get("/:id", async (req, res) => {
     customer.estimated_debt_amd = Math.max(0, Number(customer.erp_debt_amd) - Number(customer.collected_since_sync_amd));
   }
 
+  if (customer.erp_balance0_amd != null) customer.erp_balance0_amd = Number(customer.erp_balance0_amd);
+  // Opening balance and how overdue the unpaid invoices are (FIFO, see debtAge.js) for the debt
+  // chip on the customer card.
+  if (customer.erp_customer_id && customer.erp_debt_amd != null && seesCustomerErpData(req.user.role, customer.assigned_manager_id, req.user.id)) {
+    const unpaid = await loadUnpaidOrders(pool, [customer.erp_customer_id]);
+    customer.debt_summary = summarizeDebt({
+      unpaid,
+      opening: unpaid.opening.get(customer.erp_customer_id),
+      today: yerevanToday(),
+      termDays: customer.credit_term_days ?? 45,
+    });
+  }
+
   // ERP commercial data (debt, payment/order history) is withheld from a
   // sales_manager for a customer that isn't theirs -- everything else on
   // the card (name, address, category, ...) still comes back.
   if (!seesCustomerErpData(req.user.role, customer.assigned_manager_id, req.user.id)) {
     customer.erp_assigned_sales_rep = null;
     customer.erp_debt_amd = null;
+    customer.erp_balance0_amd = null;
     customer.erp_last_payment_date = null;
     customer.erp_days_since_payment = null;
     customer.erp_aging_bucket = null;
@@ -840,7 +856,7 @@ customersRouter.get("/:id/erp-orders", async (req, res) => {
 
   const dateFilter = scope === "recent" ? "AND order_date >= now() - interval '3 months'" : "";
   const { rows } = await pool.query(
-    `SELECT order_id, order_date, sum(revenue_amd) AS total_amd
+    `SELECT order_id, order_date, to_char(order_date, 'YYYY-MM-DD') AS date_key, sum(revenue_amd) AS total_amd
      FROM erp_order_lines
      WHERE erp_customer_id = $1 ${dateFilter}
      GROUP BY order_id, order_date
@@ -848,7 +864,17 @@ customersRouter.get("/:id/erp-orders", async (req, res) => {
      LIMIT 10000`,
     [erpCustomerId]
   );
-  res.json(rows);
+  // FIFO: which of these orders are still (partly) unpaid and how many days past due they are.
+  const unpaid = await loadUnpaidOrders(pool, [erpCustomerId]);
+  const today = yerevanToday();
+  const termDays = (await pool.query("SELECT credit_term_days FROM customers WHERE id = $1", [req.params.id])).rows[0]?.credit_term_days ?? 45;
+  res.json(
+    rows.map((r) => {
+      const { date_key: date, ...row } = r;
+      const u = unpaid.orders.get(`${erpCustomerId}|${r.order_id}|${date}`);
+      return u ? { ...row, unpaid_amd: u.unpaid_amd, due_days: dueDays(date, today, termDays) } : { ...row, unpaid_amd: 0, due_days: null };
+    })
+  );
 });
 
 // Payments received from one customer, newest first: the Excel Cashflow

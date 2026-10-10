@@ -1,6 +1,7 @@
 import { api } from "../api.js";
 import { escapeHtml, formatDateDMY, formatAmd } from "../util.js";
 import { t } from "../i18n.js";
+import { dueChipHtml, unpaidRowClass, unpaidChipsHtml } from "../debtChip.js";
 
 export async function renderCustomerOrders(root, navigate, customerId) {
   root.innerHTML = `<div class="detail-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
@@ -36,18 +37,32 @@ export async function renderCustomerOrders(root, navigate, customerId) {
     listEl.innerHTML = `<p class="empty-state">${t("no_orders_found")}</p>`;
   } else {
     const subtotal = orders.reduce((sum, o) => sum + Number(o.total_amd || 0), 0);
+    // The part of the debt older than the Excel order history: the opening balance (paper era).
+    const openingUnpaid = Number(customer.debt_summary?.opening_unpaid_amd) || 0;
+    const openingDueDays = customer.debt_summary?.opening_due_days ?? null;
     listEl.innerHTML = `
       <div class="card erp-card">
         ${orders
           .map(
             (o) => `
-          <div class="erp-order-row" data-order-id="${escapeHtml(o.order_id)}" role="button" tabindex="0">
+          <div class="erp-order-row ${unpaidRowClass(o)}" data-order-id="${escapeHtml(o.order_id)}" role="button" tabindex="0">
             <span>${escapeHtml(formatDateDMY(o.order_date))}</span>
             <span class="erp-order-id">${escapeHtml(o.order_id)}</span>
             <span>${formatAmd(o.total_amd)}</span>
+            ${unpaidChipsHtml(o) ? `<div class="erp-order-due-line">${unpaidChipsHtml(o)}</div>` : ""}
           </div>`
           )
           .join("")}
+        ${
+          openingUnpaid > 0
+            ? `<div class="erp-order-row erp-order-opening unpaid-row ${openingDueDays != null && openingDueDays > 0 ? "unpaid-row-overdue" : "unpaid-row-due"}">
+                 <span>${escapeHtml(formatDateDMY("2025-05-01"))}</span>
+                 <span class="erp-order-id">${t("opening_balance_label")}</span>
+                 <span>${formatAmd(openingUnpaid)}</span>
+                 <div class="erp-order-due-line"><span class="unpaid-chips">${dueChipHtml(openingDueDays)}</span></div>
+               </div>`
+            : ""
+        }
         <div class="erp-order-row erp-order-subtotal-row">
           <span></span>
           <span class="erp-order-subtotal-label">${t("orders_subtotal")}</span>
@@ -55,7 +70,7 @@ export async function renderCustomerOrders(root, navigate, customerId) {
         </div>
       </div>
     `;
-    listEl.querySelectorAll(".erp-order-row:not(.erp-order-subtotal-row)").forEach((row) => {
+    listEl.querySelectorAll(".erp-order-row:not(.erp-order-subtotal-row):not(.erp-order-opening)").forEach((row) => {
       row.addEventListener("click", async () => {
         const { openOrderDetailSheet } = await import("./customerDetail.js");
         openOrderDetailSheet(customerId, row.dataset.orderId);
