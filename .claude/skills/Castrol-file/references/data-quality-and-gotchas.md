@@ -48,7 +48,7 @@ Found by profiling `Castrol_2.0.7.xlsx` (values as of 2026-10-03) and re-profile
 ## D. Questions worth putting to the owner (unresolved)
 - ~~Fix `Debits[Assigned To]` in Excel (index 5)~~ done in 2.1.0 (24 customers without a channel still show 0).
 - ~~Correct the 53 orders with Silver/Gold in Sales_Rep~~ done in 2.1.0.
-- Should import VAT stay inside Landing/Net cost (owner 2026-10-12: keep it)? Net cost per price tier: owner chose YES for the app's discount approvals (done in code, v1.312.0). **Open:** should `Other FC` (790 AMD/L allocated fixed cost) be part of the discount floor? Fix the per-liter/per-pack bug in Excel? Replace MAXIFS in Debits?
+- Should import VAT stay inside Landing/Net cost (owner 2026-10-12: keep it)? Net cost per price tier: owner chose YES for the app's discount approvals (done in code, v1.312.0). Owner 2026-10-12: `Other FC` (790 AMD/L) STAYS in the app's discount floor. **Still open (owner: not yet / later):** fix the per-liter/per-pack bug in Excel; repair/replace MAXIFS in Debits.
 - Gold prices below landing cost (12 products) - intentional?
 - How should Balance0-only customers with big debt and no orders (e.g. >10M) be followed up?
 
