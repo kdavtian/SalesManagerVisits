@@ -1,0 +1,20 @@
+# Owner's goal and the app roadmap (set 2026-10-12)
+
+**Goal (owner, verbatim intent):** take the main part of the oil (lubricants) market of Armenia and become **No. 1 in volume, sales and profit**. Judge every feature, suggestion and trade-off against this: does it raise volume (liters), sales (AMD) or profit (margin AMD), or protect cash? Prefer features that move more than one.
+
+## Where KAD stands (workbook 2.1.0, 2026-10-12; recompute before quoting)
+- 2026 YTD: 259.9M AMD, 72.7k L, 1,172 orders, 230 buying customers; 159 customers active in the last 90 days of 266 that ever ordered. Gross margin ~32% at landing cost. Collections 90% of sales.
+- Receivables 107M AMD (about 5 months of sales); 25M belongs to customers who never paid; top-10 debtors = 64%.
+- Sales concentration: a handful of key accounts (OEM dealers, fleets, garage chains) carry more than half of sales; SM YVN is the only large field channel; regions are thin (Yerevan 222 of 416 customers).
+- True profit per product/customer is not known yet: workbook Net Cost is unreliable (unit bug, 790 AMD/L allocated cost) and market size/share is not measured at all.
+
+## Roadmap (app side)
+**Phase 0 - Trust the numbers (now, 1 month)**: profit per order/customer/product/channel/rep computed in the app from landing cost (not the workbook Net Cost); fix workbook gaps with the owner (MAXIFS, net cost unit bug, 24 customers without channel, 36 without region); a "Goal" dashboard on Home for CEO/director: liters, sales, gross profit vs targets, month and YTD.
+**Phase 1 - Grow what we already have (1-3 months, volume)**: customer health score (order frequency drop, share of wallet by brand/family, days since last order) with auto win-back and churn tasks; cross-sell prompts at check-in/order (products the shop never bought, bundles of 4L+1L, Castrol vs competitor brand seen on the shelf); volume rebate/loyalty program for garages and oil-change points (monthly liter tiers, shown in the app); 2-tap reorder for customers (own list, last order, "usual basket"); promo campaigns with targeted customer lists and measured uplift.
+**Phase 2 - Win new customers (3-6 months, coverage)**: a market map of every garage, oil-change point, car service, fleet and shop in Armenia (potential customers already exist as a tier); white-space heat map (market vs our customers per region/district); new-customer targets per rep with a pipeline (lead -> first visit -> first order -> repeat); competitor intelligence from check-ins (brand shelf share per region/customer type, price photos); route density planning so each rep visits more of the right shops per day.
+**Phase 3 - Win share and profit (6-12 months)**: pricing guard rails by tier/channel/region with margin shown to directors; rep bonuses on gross profit and collected cash, not liters alone; demand forecast -> purchase order suggestions timed with cash and credit line (Sole Trans/GT Group/Luk Oil/Orlen lead times, container sizes); credit scoring and limits per customer (soft credit hold exists) plus early-payment incentives; margin-aware discount approval (exists, keep tuned).
+**Phase 4 - Scale (12+ months)**: key-account module for OEM/fleet contracts (contract prices, volume commitments, renewal reminders); regional hubs/delivery routing; customer-facing ordering (PWA/WhatsApp/Telegram) for garages; service-reminder tools that garages use with their own customers (pull-through demand); integrations that remove double entry (Lily accounting, ERP).
+**Always**: measure market share (customs import statistics for lubricant HS codes, competitor distributor lists, own sell-in) so "No. 1" has a number; set yearly targets for liters, sales, profit per region/channel; every release should state which goal metric it moves.
+
+## Open questions for the owner (ask when relevant, do not decide alone)
+Which customer segment first (garages/oil-change points, fleets/OEM, retail shops); what market-share definition and year targets (liters/sales/profit); budget for field staff vs software; whether to open new regions or deepen Yerevan first.
