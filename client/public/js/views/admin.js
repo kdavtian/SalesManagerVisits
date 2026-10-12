@@ -594,11 +594,18 @@ export async function renderProductsSection(container) {
       bannerEl.innerHTML = `<p class="sync-diagnostic-banner">${t("landing_cost_diag_never_synced")}</p>`;
       return;
     }
+    if (diag.net_cost_suspect_count) {
+      bannerEl.innerHTML += `
+        <p class="sync-diagnostic-banner sync-diagnostic-banner-warning">
+          ${t("net_cost_diag_suspect").replace("{count}", diag.net_cost_suspect_count)}
+          ${diag.net_cost_suspect.map((p) => `${escapeHtml(p.name)} ${escapeHtml(p.unit ?? "")} (${t(`net_cost_diag_${p.reason}`)})`).join("; ")}
+        </p>`;
+    }
     if (diag.missing_landing_cost === 0) {
-      return; // Nothing to flag -- every synced product has a landing cost.
+      return; // Nothing more to flag -- every synced product has a landing cost.
     }
     const lastSynced = diag.last_synced_at ? formatDateTime(diag.last_synced_at) : t("landing_cost_diag_unknown");
-    bannerEl.innerHTML = `
+    bannerEl.innerHTML += `
       <p class="sync-diagnostic-banner sync-diagnostic-banner-warning">
         ${t("landing_cost_diag_missing")
           .replace("{missing}", diag.missing_landing_cost)

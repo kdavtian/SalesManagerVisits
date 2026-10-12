@@ -32,7 +32,8 @@ export async function runReconciliationSweep({ lookbackHours = DEFAULT_LOOKBACK_
   const { rows: visitCheckins } = await pool.query(
     `SELECT c.id FROM checkins c
      LEFT JOIN bonus_source_contributions sc ON sc.source_table = 'checkin' AND sc.source_id = c.id
-     WHERE c.created_at >= $1 AND sc.id IS NULL`,
+     WHERE c.created_at >= $1 AND sc.id IS NULL
+       AND NOT EXISTS (SELECT 1 FROM customers oc WHERE oc.id = c.customer_id AND oc.checkin_for_all)`,
     [since]
   );
   for (const { id } of visitCheckins) await ingestVisitContribution(id);

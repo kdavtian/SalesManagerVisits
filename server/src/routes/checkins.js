@@ -10,6 +10,7 @@ import { getCheckinRadiusMeters } from "../settings.js";
 import { seesAllActivity } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { insertPayment } from "./payments.js";
+import { autoCompleteCollectionTasks } from "../taskAutoComplete.js";
 
 // Below this, a payment isn't worth interrupting anyone's Telegram for.
 const LARGE_PAYMENT_THRESHOLD_AMD = 100000;
@@ -136,6 +137,12 @@ checkinsRouter.post("/", (req, res, next) => {
     return res.status(400).json({ error: "One or more uploaded files are not valid images" });
   }
 
+  // Checking in at the office (customers.checkin_for_all) needs no visit outcome: it is just "I'm here".
+  if (customerId && !outcomeValues.length) {
+    const { rows: officeRows } = await pool.query("SELECT 1 FROM customers WHERE id = $1 AND checkin_for_all", [customerId]);
+    if (officeRows.length) outcomeValues.push("other");
+  }
+
   if (!customerId || Number.isNaN(latNum) || Number.isNaN(lngNum) || !outcomeValues.length) {
     files.forEach((f) => fs.unlink(f.path, () => {}));
     return res.status(400).json({ error: "customer_id, lat, lng and at least one outcome are required" });
@@ -256,6 +263,11 @@ checkinsRouter.post("/", (req, res, next) => {
   }
 
   res.status(201).json({ ...checkin, photo_count: files.length });
+
+  // Money collected on this visit closes the customer's "collect the debt" task (taskAutoComplete.js).
+  if (amountCollected != null) {
+    autoCompleteCollectionTasks({ customerId, actorId: req.user.id, amountAmd: amountCollected }).catch((err) => console.error("Task auto-complete failed:", err.message));
+  }
 
   if (amountCollected != null && amountCollected >= LARGE_PAYMENT_THRESHOLD_AMD) {
     notifyTelegram(

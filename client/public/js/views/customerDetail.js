@@ -394,10 +394,15 @@ function renderErpCard(customer, erpOrders) {
   // history, just not within it. orders[0] is still the fallback for an
   // older cached customer object (offline/stale listCache) that hasn't
   // picked up the new field yet.
+  // Same style as the Last visit tile ("12 Oct 2026" / "12 Հկտ 2026").
+  const dayMonthYear = (value) => {
+    const d = parseDateOnly(value);
+    return d ? formatDayMonth(d, { year: true }) : null;
+  };
   const lastOrderDate = customer.erp_last_order_date
-    ? formatDateDMY(customer.erp_last_order_date)
+    ? dayMonthYear(customer.erp_last_order_date)
     : orders[0]
-      ? formatDateDMY(orders[0].order_date)
+      ? dayMonthYear(orders[0].order_date)
       : null;
 
   return statTilesHtml({
@@ -450,7 +455,7 @@ function renderErpOrdersOnlyCard(customer, erpOrders) {
       return d && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
     })
     .reduce((sum, o) => sum + Number(o.total_amd), 0);
-  const lastOrderDate = formatDateDMY(customer.erp_last_order_date) || null;
+  const lastOrderDate = parseDateOnly(customer.erp_last_order_date) ? formatDayMonth(parseDateOnly(customer.erp_last_order_date), { year: true }) : null;
   return statTilesHtml({ customer, salesThisMonth, debtText: formatAmd(0), debtDanger: false, lastOrderDate });
 }
 

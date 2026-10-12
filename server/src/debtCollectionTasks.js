@@ -20,6 +20,7 @@
 // stopped ordering in their usual rhythm (see createReorderFollowupTasks).
 import { pool } from "./db/pool.js";
 import { notifyUser } from "./notifications.js";
+import { queueSyncNotice } from "./syncNotifier.js";
 import { yerevanToday } from "./utils/yerevanDate.js";
 import { DEBT_AGE_LATERAL, overdueDebtSql, debtAgeDaysSql } from "./debtAge.js";
 
@@ -93,6 +94,15 @@ async function notifyReps(perRep) {
   }
 }
 
+async function notifyBrokenPromises(director, broken) {
+  if (!broken.length || !director) return;
+  await notifyUser(director, "task_assigned", {
+    title: `Վճարման խոստումը չի կատարվել՝ ${broken.length}`,
+    body: `${broken.slice(0, 3).join(", ")}${broken.length > 3 ? "…" : ""}`,
+    url: "/#/tasks",
+  }).catch((err) => console.error("Broken-promise notification failed:", err.message));
+}
+
 export async function createDebtCollectionTasks(now = new Date(), { notify = true } = {}) {
   const today = yerevanToday(now);
   // 1) Close open automatic tasks whose debt is gone or no longer overdue.
@@ -159,17 +169,12 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
     if (promiseBroken) broken.push(cand.customer_name);
   }
 
-  // A broken promise is also reported to the sales director.
-  if (broken.length && director) {
-    await notifyUser(director, "task_assigned", {
-      title: `Վճարման խոստումը չի կատարվել՝ ${broken.length}`,
-      body: `${broken.slice(0, 3).join(", ")}${broken.length > 3 ? "…" : ""}`,
-      url: "/#/tasks",
-    }).catch((err) => console.error("Broken-promise notification failed:", err.message));
+  // A broken promise is also reported to the sales director (by the caller when notify is false).
+  if (notify) {
+    await notifyBrokenPromises(director, broken);
+    await notifyReps(perRep);
   }
-
-  if (notify) await notifyReps(perRep);
-  return { created, closed: closed.length, perRep, broken: broken.length };
+  return { created, closed: closed.length, perRep, broken: broken.length, brokenNames: broken, director };
 }
 
 // Customers who ordered regularly (>= 4 orders, usual gap 7-90 days) and are now well past
@@ -235,12 +240,31 @@ export async function createReorderFollowupTasks(now = new Date(), { notify = tr
   return { created, perRep };
 }
 
-// Both kinds, ONE notification per rep.
-export async function runAutoTasks(now = new Date()) {
+// Both kinds, ONE notification per rep. After an ERP sync (viaSync) the lines join the sync's single
+// combined notification (syncNotifier.js) instead of a notification of their own.
+export async function runAutoTasks(now = new Date(), { viaSync = false } = {}) {
   const debt = await createDebtCollectionTasks(now, { notify: false });
   const reorder = await createReorderFollowupTasks(now, { notify: false });
   const merged = new Map();
   for (const m of [debt.perRep, reorder.perRep]) for (const [rep, list] of m) for (const e of list) addTo(merged, rep, e);
-  await notifyReps(merged);
+  if (viaSync) {
+    for (const [repId, list] of merged) {
+      if (!list.length) continue;
+      queueSyncNotice({
+        type: "task_assigned",
+        userIds: [repId],
+        text: list.length === 1 ? `Նոր առաջադրանք՝ ${list[0].customer}` : `${list.length} նոր առաջադրանք`,
+        url: list.length === 1 ? `/#/tasks?open=${list[0].taskId}` : "/#/tasks",
+        title: list.length === 1 ? `Նոր առաջադրանք՝ ${list[0].label}` : `${list.length} նոր առաջադրանք`,
+        order: 3,
+      });
+    }
+    if (debt.brokenNames?.length && debt.director) {
+      queueSyncNotice({ type: "task_assigned", userIds: [debt.director], text: `Վճարման խոստումը չի կատարվել՝ ${debt.brokenNames.length}`, url: "/#/tasks", order: 4 });
+    }
+  } else {
+    await notifyBrokenPromises(debt.director, debt.brokenNames ?? []);
+    await notifyReps(merged);
+  }
   return { debt: debt.created, reorder: reorder.created };
 }

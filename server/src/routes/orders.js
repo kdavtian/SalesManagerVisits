@@ -14,6 +14,7 @@ import { ORDER_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES, DELIVERY_OUTCOME_NOTIFY_ROL
 import { compareProducts } from "../../../client/public/js/productSort.js";
 import { evaluateCredit } from "../creditLimit.js";
 import { debtHoldInfo } from "../debtAge.js";
+import { autoCompleteReorderTasks } from "../taskAutoComplete.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
 import { orderCostCheck, decideDiscountApproval, canApproveDiscountRole } from "../discountPolicy.js";
 
@@ -301,6 +302,11 @@ ordersRouter.post("/", async (req, res) => {
   }
 
   res.status(201).json({ ...order, items: lines });
+
+  // An order for this customer closes their "stopped ordering" task (taskAutoComplete.js).
+  if (initialStatus === "submitted") {
+    autoCompleteReorderTasks({ customerId: customer.id, actorId: req.user.id, orderCode: order.order_code }).catch((err) => console.error("Task auto-complete failed:", err.message));
+  }
 
   // Fire after responding -- the rep shouldn't wait on a Telegram round
   // trip for their order confirmation. Wrapped so a late DB hiccup here
