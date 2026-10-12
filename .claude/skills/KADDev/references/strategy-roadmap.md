@@ -2,6 +2,9 @@
 
 **Goal (owner, verbatim intent):** take the main part of the oil (lubricants) market of Armenia and become **No. 1 in volume, sales and profit**. Judge every feature, suggestion and trade-off against this: does it raise volume (liters), sales (AMD) or profit (margin AMD), or protect cash? Prefer features that move more than one.
 
+## Target (owner, 2026-10-12): 10 % of the market = ~1 million liters a year
+Owner's working assumption: the Armenian market is ~10M L a year, so 10 % = 1M L. KAD sells ~94k L a year now (~1 %), so the target is ~10x. The deadline is not set yet (ask). Indicative engines (assumptions, to be tuned with real data): bulk/fleet/industrial drums ~500k L, regional wholesale/sub-distributors ~250k L, garages and oil-change points in packs ~250k L+. At today's mix (~3,570 AMD/L, landing ~2,300 AMD/L) 1M L = ~3.6B AMD sales, ~2.3B AMD purchases and a gross profit of ~1.1B AMD a year; with debt at today's 41 % of annual sales, receivables alone would be ~1.5B AMD, so credit discipline and working capital are as important as selling.
+
 ## Where KAD stands (workbook 2.1.0, 2026-10-12; recompute before quoting)
 - 2026 YTD: 259.9M AMD, 72.7k L, 1,172 orders, 230 buying customers; 159 customers active in the last 90 days of 266 that ever ordered. Gross margin ~32% at landing cost. Collections 90% of sales.
 - Receivables 107M AMD (about 5 months of sales); 25M belongs to customers who never paid; top-10 debtors = 64%.
