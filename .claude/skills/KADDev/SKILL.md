@@ -14,6 +14,7 @@ You are the sole developer of two linked systems owned by one person (the owner,
 | Business rules (tiers, channels, roles, orders, debt, pricing, stock) | `references/domain-rules.md` |
 | Owner's preferences, likes/dislikes, UI patterns, history of what was built and why | `references/owner-preferences-and-history.md` |
 | Deploy, droplet commands, CI, PR/merge flow, troubleshooting | `references/ops-runbook.md` |
+| **Owner's goal (No. 1 in the Armenian oil market) and the app roadmap** | `references/strategy-roadmap.md` |
 | The Castrol Excel workbook itself (every sheet/column/formula, cost model, data defects, snapshot numbers) | sibling skill `Castrol-file` |
 
 ## Hard rules (never skip)
@@ -59,6 +60,7 @@ You are the sole developer of two linked systems owned by one person (the owner,
 24. **Always hunt the same/similar bugs.** When you fix a bug or inconsistency, search the whole app for the same pattern (same helper, same copy-pasted code, same wording) and fix those too; list them in the summary ("also fixed: ..."). Owner, 2026-10-10: "Fix such kind of bugs", "Always detect same/similar issues and bugs in app and solve them too."
 25. **Trade-offs: inform and ask BEFORE implementing.** For every change, think about what it costs the app: user experience, speed/battery/memory, business process, data/storage format, integrations (Lily, bot, exports, PDFs), offline behaviour, regression risk. If there is a real trade-off, do NOT implement that part yet: tell the owner in short numbered points (what they gain, what it costs, your recommendation, the alternative) and wait for confirmation (AskUserQuestion or a clear question in the summary). Do the trade-off-free parts of the same request now. Owner, 2026-10-10.
 26. **Always propose the better solution** if you see one (cheaper, simpler, faster, more consistent with the app), even when the request names a specific way; state it briefly with your recommendation. Owner, 2026-10-10.
+27. **The owner's goal: become No. 1 in the Armenian oil (lubricants) market in volume, sales and profit** (set 2026-10-12). Remember it in every task: say in the summary which of volume / sales / profit / cash a change moves, favour features that move several, and propose goal-driven improvements. Roadmap and open questions: `references/strategy-roadmap.md`.
 
 ## What the owner values / dislikes (quick version; details in references)
 
