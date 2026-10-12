@@ -5,6 +5,7 @@ import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state } from "../state.js";
 import { openPhotoLightbox } from "../photoLightbox.js";
+import { openOrderTaskSheet } from "../orderTaskSheet.js";
 
 const OUTCOME_OPTIONS = [
   { value: "order_placed", labelKey: "outcome_order_placed", icon: icons.cart },
@@ -145,6 +146,12 @@ export async function renderCheckin(root, navigate, customerId) {
   `;
   container.querySelector("#checkin-close-btn").addEventListener("click", () => navigate.goBack(`#/customers/${customerId}`));
 
+  // Open "make an order" tasks of this rep at this customer (filled by showCustomerTasks below);
+  // submitting a check-in without an order shows them as a bottom sheet first.
+  let openOrderTasks = [];
+  let orderTaskAnswered = false;
+  let skippedOrderTasks = null;
+
   // What management asked for at this customer (open tasks): shown above the
   // form so the visit covers them; tap one to tick its checklist off.
   (async function showCustomerTasks() {
@@ -155,6 +162,7 @@ export async function renderCheckin(root, navigate, customerId) {
       const load = async () => {
         const { rows, today } = await tasksModule.loadCustomerTasks(customerId);
         const mine = rows.filter((r) => r.assignee_id === state.user.id || r.creator_id === state.user.id);
+        openOrderTasks = mine.filter((r) => r.auto_kind === "reorder_followup" && r.assignee_id === state.user.id);
         slot.innerHTML = mine.length
           ? `<h2 class="section-title section-title-tight">${t("tasks_customer_title")}</h2><div class="card-list">${mine.map((r) => tasksModule.taskCardHtml(r, today, { showCustomer: false })).join("")}</div>`
           : "";
@@ -487,6 +495,20 @@ export async function renderCheckin(root, navigate, customerId) {
       return;
     }
 
+    if (openOrderTasks.length && !orderTaskAnswered && !outcomes.includes("order_placed")) {
+      const answer = await openOrderTaskSheet(openOrderTasks);
+      if (!answer) return;
+      orderTaskAnswered = true;
+      if (answer.action === "order") {
+        outcomes.push("order_placed");
+        const box = container.querySelector('input[name="outcomes"][value="order_placed"]');
+        if (box) box.checked = true;
+      } else {
+        if (!outcomes.includes("no_order")) outcomes.push("no_order");
+        skippedOrderTasks = { tasks: openOrderTasks, reason: answer.reason };
+      }
+    }
+
     errorEl.hidden = true;
     submitBtn.disabled = true;
     submitBtn.textContent = t("submitting");
@@ -517,6 +539,11 @@ export async function renderCheckin(root, navigate, customerId) {
 
     try {
       const checkin = await api.createCheckin(formData);
+      if (skippedOrderTasks) {
+        // Best effort: the visit is saved either way, the task simply stays open if this fails.
+        const note = `${t("order_task_closed_note")}: ${t(`order_task_reason_${skippedOrderTasks.reason}`)}`;
+        await Promise.all(skippedOrderTasks.tasks.map((task) => api.completeTask(task.id, note).catch(() => {})));
+      }
       showResult(checkin);
     } catch (err) {
       if (err instanceof TypeError) {
