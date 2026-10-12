@@ -18,3 +18,10 @@
 
 ## Open questions for the owner (ask when relevant, do not decide alone)
 Which customer segment first (garages/oil-change points, fleets/OEM, retail shops); what market-share definition and year targets (liters/sales/profit); budget for field staff vs software; whether to open new regions or deepen Yerevan first.
+
+## Market size and KAD's share - first estimate (2026-10-12, UNVERIFIED model)
+Web searches found NO official data on Armenia's lubricant market (no import tonnage for HS 2710 19, no fleet total, no brand shares). Everything below is a model with assumptions the owner must replace with real data.
+- **KAD today** (workbook 2.1.0): last 12 months 89.5k L sold (Castrol 47.9k, Lotos 23.7k, Royal 17.8k), 322M AMD; 2026 run-rate ~94k L and ~338M AMD a year (~3,570 AMD/L). 2026 YTD: 52 % of liters are drums >= 60 L (bulk/fleet), 38 % are 1-5 L packs, 10 % 1 L; Yerevan = 64 % of sales, Ararat 11 %, Shirak 6 %, Kotayk 5 %, Syunik 5 %.
+- **Model:** automotive engine-oil demand = vehicles x liters per vehicle per year (fleet 500k / 700k / 900k assumed; 5 / 6.5 / 8 L), plus 40 % for non-automotive lubricants (industrial, hydraulic, gear, grease). Gives ~3.5M L / ~6.4M L / ~10M L; KAD share by volume ~2.7 % / ~1.5 % / ~0.9 %. Automotive-only scope: ~3.8 % / ~2.1 % / ~1.3 %. Best single guess today: **about 1.5-3 % of volume, similar by value** (error band +-2x).
+- Known competitors (self-descriptions, not shares): Prime Motors (TotalEnergies, Mobil/ExxonMobil, Cepsa), Autofan (Gazprom Neft), NAKOIL (importer with lubrication stations), Royal Oil (Shell fuel retail), ELF via Karkomavto (old), small local blenders (Green Light).
+- **How to replace the guess with facts:** (1) customs import declarations for HS 2710 19 (monthly, by importer: ask the State Revenue Committee / customs broker - gives total market AND competitor shares), (2) Armstat foreign-trade tables for 2710 19, (3) vehicle fleet from the Police registration data / Armstat transport tables, (4) the app's own check-in competitor/shelf data per region and customer type, (5) top-20 garage/oil-change survey on brand share of purchases.
