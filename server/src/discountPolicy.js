@@ -6,11 +6,13 @@
 //    the CEO and admin may approve any discount.
 // Net cost = products.net_cost_amd (per unit, same basis as the price). A line
 // whose product has no net cost is not checked.
-// The workbook computes Net Cost on the BRONZE price (owner decision 2026-10-12: use the price the
-// customer really pays), so each line's net cost is recomputed at its selling price with the same
-// formula: landing + 4 % x price + 18 % x max(0, price - landing + real transport). The real
-// transport is derived from the workbook's own net/landing/bronze values; where it cannot be
-// derived (or landing is missing) the flat workbook net cost is used.
+// The workbook's Net Cost (Products!AE) is computed at the Silver price and mixes a per-LITER landing
+// cost into a per-PACK price (Products!AA/AB, workbook 2.1.0), which overstates it by ~18 % for packs
+// over 1 L -- most 4 L and drum silver prices then look "below cost". So every line's net cost is
+// recomputed here at its real selling price with the workbook's own parameters (Products!Z1, AA1,
+// AB1, AD1) but per pack: landing + 4 % x price + 20 % VAT on (price - landing) + 18 % profit tax
+// on the rest + 790 AMD fixed cost per litre. Where landing cost or pack size is unknown the flat
+// workbook net cost is used. Keep the constants in step with the workbook.
 export const AUTO_APPROVE_PCT = 3;
 const UNLIMITED_APPROVER_ROLES = ["ceo", "admin"];
 
@@ -20,23 +22,27 @@ export function effectiveDiscountPct(subtotal, discountPct, discountAmd) {
   return Number(discountPct) || 0;
 }
 
-export function netCostAtPrice({ net_cost_amd, landing_cost_amd, bronze_price_amd }, price) {
-  const net = Number(net_cost_amd) || 0;
+const MANAGER_PCT = 0.04; // Products!Z1
+const PROFIT_TAX_PCT = 0.18; // Products!AA1
+const VAT_ON_MARGIN_PCT = 0.2; // Products!AB1
+const FIXED_COST_PER_LITER_AMD = 790; // Products!AD1
+
+// product: { net_cost_amd, landing_cost_amd, unit } (unit like "4L"); price = selling price per pack.
+export function netCostAtPrice({ net_cost_amd, landing_cost_amd, unit }, price) {
+  const flat = Number(net_cost_amd) || 0;
   const landing = Number(landing_cost_amd) || 0;
+  const liters = parseFloat(String(unit ?? ""));
   const p = Number(price) || 0;
-  if (!net || !landing || !(p > 0)) return net;
-  const bronze = Number(bronze_price_amd) || 0;
-  let transport = 0;
-  if (bronze > 0 && net > landing + 0.04 * bronze + 0.5) {
-    transport = Math.max(0, (net - landing - 0.04 * bronze) / 0.18 - bronze + landing);
-  }
-  return landing + 0.04 * p + 0.18 * Math.max(0, p - landing + transport);
+  if (!(landing > 0) || !(liters > 0) || !(p > 0)) return flat;
+  const margin = Math.max(0, p - landing);
+  const vat = VAT_ON_MARGIN_PCT * margin;
+  return landing + MANAGER_PCT * p + vat + PROFIT_TAX_PCT * (margin - vat) + FIXED_COST_PER_LITER_AMD * liters;
 }
 
 // lines: [{ product_id, unit_price_amd, quantity }], total = subtotal after discount.
 export async function orderCostCheck(db, lines, subtotal, total) {
   const ids = [...new Set(lines.map((l) => Number(l.product_id)).filter(Number.isInteger))];
-  const { rows } = ids.length ? await db.query("SELECT id, net_cost_amd, landing_cost_amd, bronze_price_amd FROM products WHERE id = ANY($1)", [ids]) : { rows: [] };
+  const { rows } = ids.length ? await db.query("SELECT id, net_cost_amd, landing_cost_amd, unit FROM products WHERE id = ANY($1)", [ids]) : { rows: [] };
   const products = new Map(rows.map((r) => [r.id, r]));
   const factor = subtotal > 0 ? Number(total) / subtotal : 1;
   let netCostTotal = 0;
