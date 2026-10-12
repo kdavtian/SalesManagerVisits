@@ -81,8 +81,9 @@ def main(path):
         if PL and col in PL[0]:
             problems.append(f"PriceList {col}: {zero(col)}/{len(PL)} empty (0). Bronze empty -> fall back to silver")
 
-    # 6. Error cells in key columns.
-    for sheet, cols in (("Debits", ("Debit", "Risk", "Due Days")), ("PriceList", ("Margin", "Discount"))):
+    # 6. Error cells in key columns (2.1.0: Debits Last Payment/Last Order were #NAME? for every row because
+    #    MAXIFS was not supported by the app that last saved the file -> Due Days blank -> Risk "High" for all).
+    for sheet, cols in (("Debits", ("Debit", "Risk", "Due Days", "Last Payment", "Last Order")), ("PriceList", ("Margin", "Discount", "Net Cost"))):
         for col in cols:
             n = sum(1 for r in data.get(sheet, []) if isinstance(r.get(col), str) and r.get(col).startswith("#"))
             if n:
@@ -94,6 +95,45 @@ def main(path):
     for col in ("Assigned To", "Region", "Subregion", "Phone Number", "TIN"):
         n = sum(1 for r in Cu if not r.get(col))
         problems.append(f"Customers missing {col}: {n}/{len(Cu)}")
+
+    # 8. Net cost sanity (2.1.0 mixes per-LITER landing cost into a per-PACK price for packs > 1 L, so net cost
+    #    comes out above the silver price for most 4 L / drum products). Count products whose net >= silver.
+    def num(x):
+        return x if isinstance(x, (int, float)) else 0
+    active = [r for r in P if str(r.get("SKU Status") or "").strip() == "Active" and num(r.get("Price T2 Silver")) > 0]
+    over = [r for r in active if num(r.get("Net Cost AMD")) >= num(r.get("Price T2 Silver"))]
+    if active:
+        bysize = collections.Counter(num(r.get("Size L")) > 1 for r in over)
+        problems.append(f"Net Cost AMD >= Silver price for {len(over)}/{len(active)} active products (packs>1L: {bysize[True]}, 1L: {bysize[False]}) - expect <=~20 if the formula is right")
+        gold_low = [r["ProductID"] for r in active if 0 < num(r.get("Price T3 Gold")) < num(r.get("Landing Cost AMD"))]
+        if gold_low:
+            problems.append(f"Gold price below landing cost: {len(gold_low)} products {gold_low[:6]}")
+
+    # 9. Duplicate Customer IDs, customers without channel (Debits VLOOKUP then returns 0).
+    ids = collections.Counter(r.get("Customer ID") for r in Cu)
+    dup_ids = [k for k, v in ids.items() if v > 1]
+    if dup_ids:
+        problems.append(f"Duplicate Customer IDs in Customers: {dup_ids}")
+    zero_ch = sum(1 for r in Db if r.get("Assigned To") in (0, "0"))
+    if zero_ch:
+        problems.append(f"Debits 'Assigned To' = 0 for {zero_ch} customers (blank channel in Customers)")
+
+    # 10. Cashflow source / brand spelling variants (Excel matches case-insensitively, Python does not).
+    if "Cashflow" in data:
+        src = collections.defaultdict(set)
+        for r in data["Cashflow"]:
+            if r.get("Source"):
+                src[str(r["Source"]).casefold()].add(str(r["Source"]))
+        variants = {k: sorted(v) for k, v in src.items() if len(v) > 1}
+        if variants:
+            problems.append(f"Cashflow Source spelling variants (casefold when comparing): {variants}")
+    brands = collections.defaultdict(set)
+    for r in O:
+        if r.get("Brand"):
+            brands[str(r["Brand"]).casefold()].add(str(r["Brand"]))
+    bv = {k: sorted(v) for k, v in brands.items() if len(v) > 1}
+    if bv:
+        problems.append(f"ORDERS Brand spelling variants: {bv}")
 
     print("\n=== CHECKS ===")
     for p in problems:
