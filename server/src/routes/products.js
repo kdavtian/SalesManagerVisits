@@ -205,9 +205,10 @@ productsRouter.get("/all", async (req, res) => {
 // in-app bug -- this exists to make that visible without needing direct
 // DB access, since support requests for "landing cost isn't showing" have
 // no other way to distinguish "sync never sent it" from "app dropped it".
-// net_cost_amd is the opposite: purely hand-entered (migration 080, no
-// ERP source at all), so its count here is just "how many are filled in",
-// not a sync signal.
+// net_cost_amd is synced too (PriceList "Net Cost" / Products "Net Cost AMD", computed in the workbook
+// on the BRONZE price), so net_cost_suspect lists the values that cannot be right: net below landing,
+// net equal to landing (no bronze price, so the 4% + profit-tax add-ons are 0) or a selling price at or
+// under net.
 productsRouter.get("/sync-diagnostics", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT
@@ -219,7 +220,20 @@ productsRouter.get("/sync-diagnostics", async (req, res) => {
      WHERE active`
   );
   const r = rows[0];
+  const { rows: suspect } = await pool.query(
+    `SELECT name, unit, landing_cost_amd, net_cost_amd,
+            CASE WHEN net_cost_amd < landing_cost_amd THEN 'below_landing'
+                 WHEN net_cost_amd = landing_cost_amd THEN 'equals_landing'
+                 ELSE 'price_below_net' END AS reason
+     FROM products
+     WHERE active AND net_cost_amd > 0 AND landing_cost_amd > 0
+       AND (net_cost_amd <= landing_cost_amd
+            OR COALESCE(NULLIF(silver_price_amd, 0), NULLIF(bronze_price_amd, 0)) <= net_cost_amd)
+     ORDER BY name`
+  );
   res.json({
+    net_cost_suspect_count: suspect.length,
+    net_cost_suspect: suspect.slice(0, 8),
     synced_count: Number(r.synced_count),
     missing_landing_cost: Number(r.missing_landing_cost),
     missing_net_cost: Number(r.missing_net_cost),

@@ -23,12 +23,12 @@ export async function buildScorecard(weekDate, { userId = null } = {}) {
   const { from, to } = weekRange(weekDate);
   const { rows } = await pool.query(
     `SELECT u.id, u.name,
-       (SELECT count(*)::int FROM checkins ch WHERE ch.user_id = u.id AND ch.within_range AND ${D("ch.timestamp")} >= $1::date AND ${D("ch.timestamp")} < $2::date) AS visits,
-       (SELECT count(DISTINCT ch.customer_id)::int FROM checkins ch WHERE ch.user_id = u.id AND ch.within_range AND ${D("ch.timestamp")} >= $1::date AND ${D("ch.timestamp")} < $2::date) AS customers_visited,
+       (SELECT count(*)::int FROM checkins ch WHERE ch.user_id = u.id AND ch.within_range AND NOT EXISTS (SELECT 1 FROM customers oc WHERE oc.id = ch.customer_id AND oc.checkin_for_all) AND ${D("ch.timestamp")} >= $1::date AND ${D("ch.timestamp")} < $2::date) AS visits,
+       (SELECT count(DISTINCT ch.customer_id)::int FROM checkins ch WHERE ch.user_id = u.id AND ch.within_range AND NOT EXISTS (SELECT 1 FROM customers oc WHERE oc.id = ch.customer_id AND oc.checkin_for_all) AND ${D("ch.timestamp")} >= $1::date AND ${D("ch.timestamp")} < $2::date) AS customers_visited,
        (SELECT count(*)::int FROM orders o WHERE o.user_id = u.id AND o.status <> 'draft' AND ${D("o.created_at")} >= $1::date AND ${D("o.created_at")} < $2::date) AS orders,
        COALESCE((SELECT SUM(o.total_amd) FROM orders o WHERE o.user_id = u.id AND o.status <> 'draft' AND ${D("o.created_at")} >= $1::date AND ${D("o.created_at")} < $2::date), 0)::float8 AS orders_amd,
        (SELECT count(DISTINCT ch.customer_id)::int FROM checkins ch
-          WHERE ch.user_id = u.id AND ch.within_range AND ${D("ch.timestamp")} >= $1::date AND ${D("ch.timestamp")} < $2::date
+          WHERE ch.user_id = u.id AND ch.within_range AND NOT EXISTS (SELECT 1 FROM customers oc WHERE oc.id = ch.customer_id AND oc.checkin_for_all) AND ${D("ch.timestamp")} >= $1::date AND ${D("ch.timestamp")} < $2::date
             AND EXISTS (SELECT 1 FROM orders o WHERE o.user_id = u.id AND o.customer_id = ch.customer_id AND o.status <> 'draft'
                         AND ${D("o.created_at")} >= $1::date AND ${D("o.created_at")} < $2::date)) AS visited_and_ordered,
        COALESCE((SELECT SUM(p.amount_amd) FROM payments p WHERE p.sales_manager_id = u.id AND p.status = 'approved'

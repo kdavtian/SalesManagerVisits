@@ -23,7 +23,9 @@ customersRouter.use(requireAuth);
 // contracts), so these customers never need to show up as "overdue" or
 // "not visited" no matter how long since their last check-in.
 export const NO_VISIT_CHANNELS = ["KF", "CAS", "CVO", "PCO", "OEM"];
-export const NOT_NO_VISIT_CHANNEL_SQL = `COALESCE(c.sales_channel, '') <> ALL(ARRAY[${NO_VISIT_CHANNELS.map((v) => `'${v}'`).join(",")}])`;
+// The Castrol Office (customers.checkin_for_all) is a check-in place for every rep, not a sales visit:
+// it is exempt exactly like the no-visit channels.
+export const NOT_NO_VISIT_CHANNEL_SQL = `(COALESCE(c.sales_channel, '') <> ALL(ARRAY[${NO_VISIT_CHANNELS.map((v) => `'${v}'`).join(",")}]) AND NOT COALESCE(c.checkin_for_all, false))`;
 
 // Derived visit status — no assignment/planning data exists yet, so
 // "overdue" is approximated from each customer's own visit_frequency_days
@@ -132,7 +134,8 @@ customersRouter.get("/", async (req, res) => {
   }
   if (assigned_manager_id) {
     params.push(assigned_manager_id);
-    conditions.push(`c.assigned_manager_id = $${params.length}`);
+    // The office-style "check in for everyone" customers stay visible to every rep.
+    conditions.push(`(c.assigned_manager_id = $${params.length} OR c.checkin_for_all)`);
   }
   if (visited === "visited") {
     conditions.push(`v.visited_this_week`);
@@ -458,7 +461,7 @@ customersRouter.get("/map-facts", async (req, res) => {
   const [ctx, { rows }] = await Promise.all([
     loadScheduleContext(req),
     pool.query(
-      `SELECT c.id, c.region, c.subregion, c.sales_channel, c.visit_frequency_days, c.assigned_manager_id, erp.debt_amd,
+      `SELECT c.id, c.region, c.subregion, c.sales_channel, c.checkin_for_all, c.visit_frequency_days, c.assigned_manager_id, erp.debt_amd,
               (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range) AS last_visit_at
        FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
        WHERE c.id = ANY($1)`,
@@ -1064,7 +1067,7 @@ function scheduleForCustomer(customer, ctx) {
   const customerId = customer.id;
   // KF/CAS/CVO/PCO/OEM are never visited in the field: no due date, no overdue days, no planned visits
   // (not even from a Route Plans area rule that happens to cover their region).
-  if (NO_VISIT_CHANNELS.includes(customer.sales_channel)) {
+  if (NO_VISIT_CHANNELS.includes(customer.sales_channel) || customer.checkin_for_all) {
     return {
       today,
       no_visit: true,
@@ -1125,7 +1128,7 @@ function scheduleForCustomer(customer, ctx) {
 
 async function buildVisitSchedule(req, customerId) {
   const { rows: custRows } = await pool.query(
-    `SELECT c.id, c.region, c.subregion, c.sales_channel, c.visit_frequency_days,
+    `SELECT c.id, c.region, c.subregion, c.sales_channel, c.checkin_for_all, c.visit_frequency_days,
             (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range) AS last_visit_at
      FROM customers c WHERE c.id = $1`,
     [customerId]

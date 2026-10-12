@@ -469,6 +469,8 @@ export async function renderCheckin(root, navigate, customerId) {
 
     const data = new FormData(form);
     const outcomes = data.getAll("outcomes");
+    // The office check-in (every rep's "I'm at work") needs no visit outcome.
+    if (!outcomes.length && customer.checkin_for_all) outcomes.push("other");
     if (!outcomes.length) {
       outcomeError.hidden = false;
       outcomeError.scrollIntoView({ behavior: "smooth", block: "center" });

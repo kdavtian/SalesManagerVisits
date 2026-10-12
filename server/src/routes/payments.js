@@ -6,6 +6,7 @@
 // only status that represents confirmed, reconciled collection -- reports
 // and Team Performance must never treat PENDING as collected.
 import { Router } from "express";
+import { autoCompleteCollectionTasks } from "../taskAutoComplete.js";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments, PAYMENT_NOTIFY_ROLES } from "../roles.js";
@@ -269,6 +270,9 @@ paymentsRouter.post("/", async (req, res) => {
 
   const payment = await loadPaymentRow(paymentId);
   res.status(201).json(payment);
+
+  // A recorded payment closes the customer's "collect the debt" task (taskAutoComplete.js).
+  autoCompleteCollectionTasks({ customerId: customer.id, actorId: req.user.id, amountAmd: amount }).catch((err) => console.error("Task auto-complete failed:", err.message));
 });
 
 paymentsRouter.get("/pending-count", async (req, res) => {

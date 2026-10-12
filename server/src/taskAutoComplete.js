@@ -1,0 +1,59 @@
+// Automatic tasks close themselves when the rep does what they ask (owner, 2026-10-12):
+//  - "Հավաքագրիր պարտքը" (debt_collection): money was collected for that customer (a check-in with
+//    "payment collected", or a payment recorded in the Payments tab). Any amount counts: the outcome is
+//    `paid` when it covers the Excel debt, else `partial` (the 14-day cooldown / next ERP sync decides
+//    whether a new task is needed for the rest);
+//  - "call or visit, he stopped ordering" (reorder_followup): an order was made for that customer.
+// The assignee is told ("task completed automatically"), also when they did it themselves.
+import { pool } from "./db/pool.js";
+import { notifyUser } from "./notifications.js";
+
+const amd = (n) => `${Math.round(Number(n)).toLocaleString("en-US")} դր.`;
+
+async function closeTasks(kind, { customerId, actorId, note, outcome = null, body }) {
+  const { rows } = await pool.query(
+    `UPDATE tasks t SET status = 'done', completed_at = now(), completed_by = $3, completion_note = $4, outcome = $5, updated_at = now()
+     FROM customers c
+     WHERE t.customer_id = $1 AND t.auto_kind = $2 AND t.status = 'open' AND c.id = t.customer_id
+     RETURNING t.id, t.title, t.assignee_id, c.name AS customer_name`,
+    [customerId, kind, actorId, note, outcome]
+  );
+  for (const task of rows) {
+    await pool.query("UPDATE task_items SET done = true, done_at = COALESCE(done_at, now()) WHERE task_id = $1", [task.id]);
+    await notifyUser(task.assignee_id, "task_completed", {
+      title: "Առաջադրանքը ավտոմատ կատարվեց",
+      body: `${task.customer_name} · ${body}`,
+      url: `/#/tasks?open=${task.id}`,
+    }).catch((err) => console.error("Auto-complete notification failed:", err.message));
+  }
+  return rows.length;
+}
+
+// Money was collected from the customer: closes their open debt-collection task.
+export async function autoCompleteCollectionTasks({ customerId, actorId, amountAmd }) {
+  const amount = Number(amountAmd);
+  if (!(amount > 0)) return 0;
+  const { rows } = await pool.query(
+    "SELECT COALESCE(erp.debt_amd, 0) AS debt FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id WHERE c.id = $1",
+    [customerId]
+  );
+  const debt = Number(rows[0]?.debt ?? 0);
+  const outcome = debt > 0 && amount < debt - 1 ? "partial" : "paid";
+  return closeTasks("debt_collection", {
+    customerId,
+    actorId,
+    outcome,
+    note: `Ավտոմատ՝ հավաքագրվել է ${amd(amount)}`,
+    body: `հավաքագրվել է ${amd(amount)}${outcome === "partial" ? " (մասնակի)" : ""}`,
+  });
+}
+
+// An order (not a draft) was made for the customer: closes their open "stopped ordering" task.
+export async function autoCompleteReorderTasks({ customerId, actorId, orderCode }) {
+  return closeTasks("reorder_followup", {
+    customerId,
+    actorId,
+    note: `Ավտոմատ՝ պատվեր է ձևակերպվել${orderCode ? ` (${orderCode})` : ""}`,
+    body: `պատվեր է ձևակերպվել${orderCode ? ` (${orderCode})` : ""}`,
+  });
+}

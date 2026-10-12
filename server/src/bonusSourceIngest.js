@@ -67,6 +67,13 @@ export async function ingestVisitContribution(checkinId) {
     const checkin = rows[0];
     if (!checkin) throw new Error(`ingestVisitContribution: no checkin with id ${checkinId}`);
 
+    // Checking in at the office (customers.checkin_for_all) is attendance, not a customer visit.
+    const { rows: officeRows } = await client.query("SELECT 1 FROM customers WHERE id = $1 AND checkin_for_all", [checkin.customer_id]);
+    if (officeRows.length) {
+      await client.query("COMMIT");
+      return { contribution: null, ledger: null };
+    }
+
     const localDate = yerevanDateOf(checkin.timestamp);
     const unit = await getEarningUnitForUpdate(client, {
       userId: checkin.user_id,
