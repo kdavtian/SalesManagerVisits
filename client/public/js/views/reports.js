@@ -85,6 +85,7 @@ export async function renderReports(root, navigate, reportKey) {
   if (reportKey === "cash_reconciliation") return renderCashReconciliationReport(root, navigate);
   if (reportKey === "customer_debt") return renderCustomerDebtReport(root, navigate);
   if (reportKey === "sales_budget") return renderSalesBudgetReport(root, navigate);
+  if (reportKey === "product_liters") return (await import("./volumeReport.js")).renderVolumeReport(root, navigate);
   if (reportKey === "brand_volume") return renderBrandVolumeReport(root, navigate);
   if (reportKey === "daily_management") return renderDailyManagementReport(root, navigate);
   if (reportKey === "documents") return renderDocumentsReport(root, navigate);
@@ -209,6 +210,7 @@ const REPORT_ICONS = {
   customer_debt: icons.warning,
   unpaid_invoices: icons.clipboardCheck,
   sales_budget: icons.target,
+  product_liters: icons.box,
   brand_volume: icons.box,
   daily_management: icons.dashboard,
   documents: icons.note,

@@ -11928,3 +11928,231 @@ form select,
 .spots-legend-suggest {
   color: #1f9d55;
 }
+
+/* Reports > Products & liters (views/volumeReport.js) */
+.vol-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 0 6px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.vol-chips::-webkit-scrollbar {
+  display: none;
+}
+.vol-chips .map-filter-chip {
+  flex: 0 0 auto;
+  min-height: 36px;
+  white-space: nowrap;
+}
+.vol-chips-small .map-filter-chip {
+  min-height: 32px;
+  font-size: 0.8rem;
+}
+.vol-active {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.vol-active:empty {
+  display: none;
+}
+.vol-active-chip {
+  min-height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 16px;
+  background: var(--accent-fill-soft, rgba(10, 132, 255, 0.12));
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.vol-loading {
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+.vol-kpis {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 10px 0 6px;
+}
+.vol-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--bg-card, #fff);
+  box-shadow: var(--shadow-card, 0 1px 3px rgba(0, 0, 0, 0.08));
+}
+.vol-kpi-main {
+  grid-column: 1 / -1;
+  background: var(--accent-fill-soft, rgba(10, 132, 255, 0.1));
+}
+.vol-kpi-label {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+.vol-kpi-value {
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+.vol-kpi-main .vol-kpi-value {
+  font-size: 1.9rem;
+}
+.vol-kpi-prev {
+  font-size: 0.78rem;
+}
+.vol-delta {
+  margin-left: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.vol-delta-up {
+  color: var(--success, #1f9d55);
+}
+.vol-delta-down {
+  color: var(--danger);
+}
+.vol-pending {
+  margin: 4px 0 8px;
+  font-size: 0.82rem;
+  color: var(--warning, #b36b00);
+}
+.vol-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+.vol-row-tap {
+  cursor: pointer;
+}
+.vol-row-top,
+.vol-row-sub {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.vol-row-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.vol-row-liters {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.vol-row-sub {
+  font-size: 0.8rem;
+}
+.vol-bar {
+  display: block;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+.vol-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent-fill, var(--accent));
+}
+.vol-share {
+  align-self: flex-end;
+  font-size: 0.72rem;
+  margin-top: -2px;
+}
+.vol-hint {
+  font-size: 0.8rem;
+}
+.vol-periods,
+.vol-trend {
+  margin-top: 12px;
+}
+.vol-period-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.vol-period-row:first-of-type {
+  border-top: none;
+}
+.vol-period-name {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.9rem;
+}
+.vol-period-name .muted {
+  font-size: 0.74rem;
+}
+.vol-period-vals {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-variant-numeric: tabular-nums;
+}
+.vol-period-vals .muted {
+  font-size: 0.74rem;
+}
+.vol-trend-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 90px;
+  margin-top: 8px;
+}
+.vol-trend-col {
+  flex: 1 1 0;
+  min-width: 2px;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+.vol-trend-col > span {
+  display: block;
+  width: 100%;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent-fill, var(--accent));
+}
+.vol-trend-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 0.72rem;
+}
+.vol-sync {
+  margin: 14px 0 20px;
+}
+
+.vol-view .report-header {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+.vol-view .report-header .detail-header-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.vol-view .report-header h1 {
+  font-size: 1.3rem;
+}
+.vol-delta-flat {
+  color: var(--text-dim);
+}
+
+.vol-view .list-toolbar {
+  position: static;
+  top: auto;
+}

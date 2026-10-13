@@ -118,6 +118,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     lineUnitPrices,
     lineRevenues,
     lineDiscounts,
+    lineSalesReps,
   } = transformErpOrderLines(order_lines);
 
   const { cashErpIds, cashDates, cashAmounts } = transformErpCashflowLines(cashflow_lines);
@@ -251,11 +252,11 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
       if (lineErpIds.length) {
         await client.query(
           `INSERT INTO erp_order_lines
-             (erp_customer_id, order_id, order_date, product_id, brand, product_name, size_l, qty, unit_price_amd, revenue_amd, discount_amd)
-           SELECT erp_customer_id, order_id, order_date, product_id, brand, product_name, size_l, qty, unit_price_amd, revenue_amd, discount_amd
-           FROM unnest($1::text[], $2::text[], $3::date[], $4::text[], $5::text[], $6::text[], $7::text[], $8::numeric[], $9::numeric[], $10::numeric[], $11::numeric[])
-             AS t(erp_customer_id, order_id, order_date, product_id, brand, product_name, size_l, qty, unit_price_amd, revenue_amd, discount_amd)`,
-          [lineErpIds, lineOrderIds, lineDates, lineProductIds, lineBrands, lineProductNames, lineSizes, lineQtys, lineUnitPrices, lineRevenues, lineDiscounts]
+             (erp_customer_id, order_id, order_date, product_id, brand, product_name, size_l, qty, unit_price_amd, revenue_amd, discount_amd, sales_rep)
+           SELECT erp_customer_id, order_id, order_date, product_id, brand, product_name, size_l, qty, unit_price_amd, revenue_amd, discount_amd, sales_rep
+           FROM unnest($1::text[], $2::text[], $3::date[], $4::text[], $5::text[], $6::text[], $7::text[], $8::numeric[], $9::numeric[], $10::numeric[], $11::numeric[], $12::text[])
+             AS t(erp_customer_id, order_id, order_date, product_id, brand, product_name, size_l, qty, unit_price_amd, revenue_amd, discount_amd, sales_rep)`,
+          [lineErpIds, lineOrderIds, lineDates, lineProductIds, lineBrands, lineProductNames, lineSizes, lineQtys, lineUnitPrices, lineRevenues, lineDiscounts, lineSalesReps]
         );
       }
       // How often each customer usually orders ("Reorder due" chip), from the order history just replaced.
