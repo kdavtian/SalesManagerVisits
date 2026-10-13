@@ -12370,3 +12370,342 @@ form select,
 #radius-form.is-off .radius-help {
   opacity: 0.5;
 }
+
+/* Route plan sets: Auto route plan sheet, plans list, plan editor (views/routePlanSets.js) */
+.rps-top-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.rps-top-row .btn {
+  min-height: 44px;
+  padding-left: 8px;
+  padding-right: 8px;
+  white-space: normal;
+  line-height: 1.2;
+}
+.rps-auto-btn {
+  background: var(--accent-fill-soft, rgba(10, 132, 255, 0.12));
+  color: var(--accent);
+  border: none;
+  font-weight: 600;
+}
+.rps-sheet {
+  max-height: 88vh;
+  overflow-y: auto;
+}
+.rps-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rps-sheet-head h2 {
+  margin: 0;
+}
+.rps-label {
+  display: block;
+  margin: 14px 0 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.rps-note {
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+}
+.rps-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.rps-chips .map-filter-chip {
+  min-height: 40px;
+  min-width: 44px;
+}
+.rps-chips input[type="number"] {
+  width: 72px;
+  min-height: 40px;
+}
+.rps-day-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0;
+}
+.rps-day-name {
+  flex: 0 0 44px;
+  font-weight: 600;
+}
+.rps-seg {
+  flex: 1 1 auto;
+  display: flex;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--bg-card-pressed, rgba(128, 128, 128, 0.15));
+}
+.rps-seg button {
+  flex: 1 1 0;
+  min-height: 40px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.rps-seg button.seg-active {
+  background: var(--bg-card, #fff);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+.rps-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.rps-link {
+  border: none;
+  background: none;
+  padding: 0 4px;
+  min-height: 44px;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rps-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 0;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rps-row-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.rps-row-main .muted {
+  font-size: 0.78rem;
+}
+.rps-badge {
+  flex: 0 0 auto;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--success, #1f9d55) 16%, transparent);
+  color: var(--success, #1f9d55);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.rps-badge-off {
+  background: var(--bg-card-pressed, rgba(128, 128, 128, 0.15));
+  color: var(--text-dim);
+}
+.rps-head-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rps-head-top .settings-hint-icon {
+  margin-left: auto;
+}
+.rps-head-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+.rps-head-stats > span {
+  display: flex;
+  flex-direction: column;
+  font-variant-numeric: tabular-nums;
+}
+.rps-head-stats strong {
+  font-size: 1.15rem;
+}
+.rps-head-stats .muted {
+  font-size: 0.74rem;
+}
+.rps-warn {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: var(--warning, #b36b00);
+}
+.rps-freq-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 0.9rem;
+}
+.rps-actions {
+  margin-top: 8px;
+}
+.rps-actions-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.rps-actions-row .btn {
+  flex: 1 1 0;
+  min-height: 44px;
+  padding-left: 6px;
+  padding-right: 6px;
+  white-space: normal;
+  line-height: 1.2;
+}
+.rps-rep {
+  margin-top: 10px;
+  cursor: default;
+}
+.rps-rep-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.rps-unplanned {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  margin-top: 8px;
+  border: none;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--warning, #b36b00) 14%, transparent);
+  color: var(--warning, #b36b00);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rps-daylist {
+  margin-top: 10px;
+}
+.rps-daylist-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.rps-daylist-head .rps-link {
+  margin-left: auto;
+}
+.rps-cust {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 6px 0;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rps-cust:disabled {
+  cursor: default;
+}
+.rps-cust-n {
+  flex: 0 0 24px;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+.rps-cust-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.rps-cust-main .muted {
+  font-size: 0.78rem;
+}
+.rps-chev {
+  color: var(--text-dim);
+}
+.rps-day-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 10px 0;
+}
+.rps-day-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-height: 52px;
+  border: none;
+  border-radius: 12px;
+  background: var(--accent-fill-soft, rgba(10, 132, 255, 0.12));
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+.rps-day-pick.is-current {
+  background: var(--bg-card-pressed, rgba(128, 128, 128, 0.15));
+  color: var(--text-dim);
+  cursor: default;
+}
+.rps-unplanned-item {
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.rps-unplanned-item > strong {
+  display: block;
+}
+.rps-unplanned-item .muted {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.78rem;
+}
+.rps-delete {
+  display: block;
+  margin: 4px 0 0 auto;
+  color: var(--danger);
+}
+.rps-sheet input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 0 12px;
+  font: inherit;
+}
+.rps-seg button {
+  min-height: 36px;
+}
+.rps-view .detail-header {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+.rps-view .detail-header .detail-header-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.rps-view .detail-header h1 {
+  font-size: 1.15rem;
+  overflow-wrap: anywhere;
+}
+.rps-head #rps-ok {
+  margin-top: 10px;
+}

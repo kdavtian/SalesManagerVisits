@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, getCurrentPosition, locationErrorHint, compressImage, formatDistance, haversineMeters, activateDialog } from "../util.js";
+import { escapeHtml, getCurrentPosition, locationErrorHint, compressImage, formatDistance, haversineMeters, creditedDistanceMeters, activateDialog } from "../util.js";
 import { enqueueCheckin } from "../offlineQueue.js";
 import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
@@ -462,7 +462,7 @@ export async function renderCheckin(root, navigate, customerId) {
       `;
       // Check-in allowance: a sales manager too far from the pin cannot check in (management can). The pin
       // may be the thing that is wrong, so offer the map with the real spots and "you are here".
-      checkinBlocked = allowanceOn && !withinRange && state.user?.role === "sales_manager";
+      checkinBlocked = allowanceOn && creditedDistanceMeters(distance, position.coords.accuracy) > radiusMeters && state.user?.role === "sales_manager";
       if (checkinBlocked) {
         submitBtn.disabled = true;
         // Where the rep really stands is evidence for the Pin review (best effort, nothing to do if offline).

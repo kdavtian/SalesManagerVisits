@@ -199,6 +199,13 @@ export function installPhoneMask() {
 
 const EARTH_RADIUS_METERS = 6371000;
 
+// Same rule as the server (utils/geo.js): a GPS fix is a circle, so up to 100 m of its accuracy is forgiven when
+// judging whether a sales manager is too far from the customer to check in.
+export function creditedDistanceMeters(distanceMeters, accuracyMeters) {
+  const credit = Number.isFinite(accuracyMeters) && accuracyMeters > 0 ? Math.min(accuracyMeters, 100) : 0;
+  return Math.max(0, distanceMeters - credit);
+}
+
 export function haversineMeters(lat1, lng1, lat2, lng2) {
   const toRad = (deg) => (deg * Math.PI) / 180;
   const dLat = toRad(lat2 - lat1);

@@ -1053,6 +1053,7 @@ async function renderRoute() {
   const orderCreateMatch = path.match(/^#\/orders\/new\/(\d+)$/);
   const paymentDetailMatch = path.match(/^#\/payments\/(\d+)$/);
   const handoffDetailMatch = path.match(/^#\/cash-handoffs\/(\d+)$/);
+  const routePlanSetMatch = path.match(/^#\/route-plan-sets\/(\d+)$/);
 
   if (path === "#/dashboard") {
     (await import("./views/dashboard.js")).renderDashboard(app, navigate);
@@ -1092,6 +1093,8 @@ async function renderRoute() {
     (await import("./views/reports.js")).renderReports(app, navigate, query.get("r"));
   } else if (path === "#/route-distribution") {
     (await import("./views/routeDistribution.js")).renderRouteDistribution(app, navigate);
+  } else if (routePlanSetMatch) {
+    (await import("./views/routePlanSets.js")).renderRoutePlanSet(app, navigate, Number(routePlanSetMatch[1]));
   } else if (path === "#/route-plans") {
     (await import("./views/routePlans.js")).renderRoutePlans(app, navigate);
   } else if (path === "#/team-performance") {

@@ -269,6 +269,15 @@ export const api = {
   getVisitPlanRules: (userId) => request(`/visit-plans/rules${userId ? `?user_id=${userId}` : ""}`),
   saveVisitPlanRule: (dayOfWeek, areas, userId, customerIds) =>
     json(`/visit-plans/rules/${dayOfWeek}`, "PUT", { areas, user_id: userId, customer_ids: customerIds }),
+  listRoutePlanSets: () => request("/route-plan-sets"),
+  autoRoutePlanSet: (data) => json("/route-plan-sets/auto", "POST", data),
+  snapshotRoutePlanSet: (name) => json("/route-plan-sets/snapshot", "POST", { name }),
+  getRoutePlanSet: (id) => request(`/route-plan-sets/${id}`),
+  updateRoutePlanSet: (id, data) => json(`/route-plan-sets/${id}`, "PATCH", data),
+  setRoutePlanSetRep: (id, userId, days) => json(`/route-plan-sets/${id}/reps/${userId}`, "PUT", { days }),
+  duplicateRoutePlanSet: (id, name) => json(`/route-plan-sets/${id}/duplicate`, "POST", { name }),
+  activateRoutePlanSet: (id, previousName) => json(`/route-plan-sets/${id}/activate`, "POST", { previous_name: previousName }),
+  deleteRoutePlanSet: (id) => request(`/route-plan-sets/${id}`, { method: "DELETE" }),
   getRoutePlansOverview: () => request("/visit-plans/rules/overview"),
   getRoutePlanCustomers: (userId) => request(`/visit-plans/rules/customers${userId ? `?user_id=${userId}` : ""}`),
 
