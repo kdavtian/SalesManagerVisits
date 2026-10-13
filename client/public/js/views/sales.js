@@ -5,7 +5,7 @@
 // sales.js: no write-back, ERP/Excel stays the source of truth, same
 // contract as Debt Balances.
 import { api } from "../api.js";
-import { escapeHtml, saveBlob, openInfoPopup, formatAmd, formatLiters, channelDisplayLabel, activateDialog, syncBadgeHtml, parseDateOnly, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, erpLineDiscountRowHtml, erpLineSoldPrice, monthShort, labelColon } from "../util.js";
+import { escapeHtml, saveBlob, openInfoPopup, formatAmd, formatLiters, channelDisplayLabel, activateDialog, syncBadgeHtml, parseDateOnly, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, erpLineDiscountRowHtml, monthShort, labelColon } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { seesFinancialExports } from "../state.js";
 import { icons } from "../icons.js";
@@ -83,7 +83,7 @@ async function openSalesOrderSheet(erpCustomerId, orderId, navigate) {
         <div class="erp-line-row">
           <span>${escapeHtml(l.product_name || "")}${l.size_l ? ` ${escapeHtml(String(l.size_l))}L` : ""}</span>
           <span class="muted">${escapeHtml(String(l.qty ?? ""))}pcs</span>
-          <span>${formatAmd(erpLineSoldPrice(l))}</span>
+          <span>${formatAmd(l.unit_price_amd)}</span>
         </div>
         ${erpLineDiscountRowHtml(l)}`
         )

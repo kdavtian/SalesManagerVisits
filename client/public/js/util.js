@@ -631,36 +631,28 @@ export function agingBucketLabel(bucket) {
 // negative sign), so a price add shows the same way a discount does,
 // without the app asserting a direction of its own. Returns "" (no row)
 // for a line with no discount recorded, including exactly 0.
-// Price one unit was actually sold for: the workbook's line Total / Qty. The workbook's UnitPrice
-// column is the list price BEFORE the line's Discount/price adjustment (Total = Qty * (UnitPrice +
-// Discount)), so showing UnitPrice made a 550,000 sale read as 530,000 next to a 550,000 total.
-export function erpLineSoldPrice(line) {
+// Workbook line: Total = Qty * (UnitPrice + Discount). The line shows UnitPrice; when the line was
+// sold at a different price, the difference per unit goes in a red row under it ("Discount +20,000"),
+// so list price + discount = sold price is readable without printing the sold price.
+function erpLineDiscountPerUnit(line) {
   const qty = Number(line.qty);
   const revenue = line.revenue_amd == null ? NaN : Number(line.revenue_amd);
-  if (qty > 0 && Number.isFinite(revenue)) return revenue / qty;
-  return Number(line.unit_price_amd);
+  const list = Number(line.unit_price_amd);
+  if (qty > 0 && Number.isFinite(revenue) && Number.isFinite(list)) return revenue / qty - list;
+  return Number(line.discount_amd) || 0;
 }
 
-// Muted rows under an ERP order line when it was sold at a price other than the list price: the
-// list price and the discount / price change per unit (signed, same as the workbook's Discount
-// column: sold price = list price + discount). Falls back to the workbook's own Discount amount
-// when the sold price cannot be derived (no qty / total).
+// Muted row under an ERP order line: the signed discount / price change per unit in red (same sign
+// as the workbook's Discount column), or nothing when the line was sold at the listed price.
 export function erpLineDiscountRowHtml(line) {
-  const list = Number(line.unit_price_amd);
-  const diff = Number.isFinite(list) ? erpLineSoldPrice(line) - list : 0;
-  const row = (label, value, cls = "") => `
+  const diff = erpLineDiscountPerUnit(line);
+  if (Math.abs(diff) < 1) return "";
+  return `
     <div class="erp-line-row erp-line-discount-row">
-      <span class="muted">${label}</span>
+      <span>${t("erp_line_discount_label")}</span>
       <span></span>
-      <span class="${cls}">${value}</span>
+      <span class="erp-line-discount-value">${diff > 0 ? "+" : "\u2212"}${formatAmd(Math.abs(diff))}</span>
     </div>`;
-  if (Math.abs(diff) >= 1) {
-    const signed = `${diff > 0 ? "+" : "\u2212"}${formatAmd(Math.abs(diff))}`;
-    return row(t("erp_line_list_price_label"), formatAmd(list), "muted") + row(t("erp_line_discount_label"), signed);
-  }
-  const discount = line.discount_amd;
-  if (discount == null || Number(discount) === 0) return "";
-  return row(t("erp_line_discount_label"), formatAmd(discount));
 }
 
 export function formatDistance(meters) {
