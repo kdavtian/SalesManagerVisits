@@ -282,6 +282,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
           ? `
         <h2 class="section-title">${t("admin_group_app_config")}</h2>
         <div class="card settings-list-group">
+          ${settingsToggleRow({ icon: ICON.gps, label: t("checkin_allowance_label"), value: "", id: "toggle-checkin-allowance", checked: true, color: "green" })}
           <form id="radius-form" class="settings-list-group-item">
             <label>
               <span class="settings-form-label">${ICON.gps}${t("gps_verification_settings")}</span>
@@ -700,6 +701,12 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     const disconnectBtn = root.querySelector("#emergency-disconnect-btn");
     const disconnectSuccess = root.querySelector("#emergency-disconnect-success");
 
+    const allowanceToggle = root.querySelector("#toggle-checkin-allowance");
+    function paintAllowanceToggle(enabled) {
+      allowanceToggle.setAttribute("aria-checked", String(enabled));
+      radiusForm.classList.toggle("is-off", !enabled);
+    }
+
     function paintCalcModeToggle(enabled) {
       calcModeToggle.setAttribute("aria-checked", String(enabled));
       calcModeToggleValue.textContent = enabled ? t("toggle_on") : t("toggle_off");
@@ -708,6 +715,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
 
     api.getSettings().then((s) => {
       radiusInput.value = s.checkin_radius_meters;
+      paintAllowanceToggle(s.checkin_allowance_enabled !== false);
       frequencyInput.value = s.default_visit_frequency_days;
       incentiveInput.value = s.incentive_message || "";
       // Write-only field (see routes/settings.js) -- never pre-filled with
@@ -715,6 +723,20 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       pinStatus.textContent = s.calculator_pin_is_custom ? t("calculator_pin_help_custom") : t("calculator_pin_help");
       paintCalcModeToggle(s.calculator_mode_enabled);
       if (bonusesToggle) paintBonusesToggle(s.bonuses_enabled);
+    });
+
+    // Instant save, no confirm(): switching it back is one tap.
+    allowanceToggle.addEventListener("click", async () => {
+      const turningOn = allowanceToggle.getAttribute("aria-checked") !== "true";
+      allowanceToggle.disabled = true;
+      try {
+        const result = await api.updateSettings({ checkin_allowance_enabled: turningOn });
+        paintAllowanceToggle(result.checkin_allowance_enabled);
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        allowanceToggle.disabled = false;
+      }
     });
 
     calcModeToggle.addEventListener("click", async () => {
