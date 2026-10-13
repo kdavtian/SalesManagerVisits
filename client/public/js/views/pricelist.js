@@ -135,7 +135,8 @@ export async function renderPricelist(root, navigate) {
 
   let products;
   try {
-    products = await api.listProducts();
+    // Merch (free items such as Castrol Stend) is not for sale, so it is not on the customer pricelist.
+    products = (await api.listProducts()).filter((p) => String(p.family || "").toLowerCase() !== "merch");
   } catch (err) {
     container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     return;
