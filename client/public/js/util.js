@@ -631,14 +631,27 @@ export function agingBucketLabel(bucket) {
 // negative sign), so a price add shows the same way a discount does,
 // without the app asserting a direction of its own. Returns "" (no row)
 // for a line with no discount recorded, including exactly 0.
+// Workbook line: Total = Qty * (UnitPrice + Discount). The line shows UnitPrice; when the line was
+// sold at a different price, the difference per unit goes in a red row under it ("Discount +20,000"),
+// so list price + discount = sold price is readable without printing the sold price.
+function erpLineDiscountPerUnit(line) {
+  const qty = Number(line.qty);
+  const revenue = line.revenue_amd == null ? NaN : Number(line.revenue_amd);
+  const list = Number(line.unit_price_amd);
+  if (qty > 0 && Number.isFinite(revenue) && Number.isFinite(list)) return revenue / qty - list;
+  return Number(line.discount_amd) || 0;
+}
+
+// Muted row under an ERP order line: the signed discount / price change per unit in red (same sign
+// as the workbook's Discount column), or nothing when the line was sold at the listed price.
 export function erpLineDiscountRowHtml(line) {
-  const discount = line.discount_amd;
-  if (discount == null || Number(discount) === 0) return "";
+  const diff = erpLineDiscountPerUnit(line);
+  if (Math.abs(diff) < 1) return "";
   return `
     <div class="erp-line-row erp-line-discount-row">
-      <span class="muted">${t("erp_line_discount_label")}</span>
+      <span>${t("erp_line_discount_label")}</span>
       <span></span>
-      <span>${formatAmd(discount)}</span>
+      <span class="erp-line-discount-value">${diff > 0 ? "+" : "\u2212"}${formatAmd(Math.abs(diff))}</span>
     </div>`;
 }
 
