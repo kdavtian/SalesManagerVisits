@@ -150,6 +150,10 @@ export const api = {
     return created;
   },
   getCustomer: (id) => request(`/customers/${id}`),
+  getPinReview: () => request("/pin-review"),
+  acceptPinReview: (customerId) => json(`/pin-review/${customerId}/accept`, "POST", {}),
+  dismissPinReview: (customerId) => json(`/pin-review/${customerId}/dismiss`, "POST", {}),
+  reportFarAttempt: (data) => json("/checkins/far-attempt", "POST", data),
   getCheckinSpots: (id) => request(`/customers/${id}/checkin-spots`),
   getCustomerProductPrices: (id) => request(`/customers/${id}/product-prices`),
   updateCustomer: async (id, data) => {

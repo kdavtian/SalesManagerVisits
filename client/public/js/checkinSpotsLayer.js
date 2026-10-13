@@ -21,14 +21,21 @@ const spotIcon = (n, withinRange) =>
 const hereIcon = () => L.divIcon({ className: "spots-here", html: "<span></span>", iconSize: [20, 20] });
 
 export function spotLabel(spot) {
-  return `${escapeHtml(spot.user_name)} · ${formatDateTime(spot.timestamp)} · ${formatDistance(spot.distance_meters)}`;
+  return `${escapeHtml(spot.user_name)} · ${formatDateTime(spot.timestamp)} · ${formatDistance(spot.distance_meters)}${spot.attempt ? ` · ${t("spots_attempt")}` : ""}`;
 }
+const suggestIcon = () =>
+  L.divIcon({
+    className: "spots-pin",
+    html: '<svg viewBox="0 0 24 32" width="28" height="36" aria-hidden="true"><path d="M12 0C5.4 0 0 5.2 0 11.7 0 20 12 32 12 32s12-12 12-20.3C24 5.2 18.6 0 12 0z" fill="#1f9d55" stroke="#fff" stroke-width="1.5"/><circle cx="12" cy="11.5" r="4.5" fill="#fff"/></svg>',
+    iconSize: [28, 36],
+    iconAnchor: [14, 36],
+  });
 
 // data = GET /customers/:id/checkin-spots; here = {lat, lng} | null;
 // onUse(latlng) adds a "Use this spot" button to each popup (the Change location flow);
 // showPin = false skips the customer pin + allowance circle (the Change location map draws its own pin).
 // Returns { bounds, markers: Map(checkinId -> marker) }.
-export function paintCheckinSpots(map, data, { here = null, onUse = null, showPin = true } = {}) {
+export function paintCheckinSpots(map, data, { here = null, onUse = null, showPin = true, suggest = null } = {}) {
   const { customer, spots, allowance_meters: allowance } = data;
   const bounds = L.latLngBounds([[customer.lat, customer.lng]]);
   const markers = new Map();
@@ -60,9 +67,14 @@ export function paintCheckinSpots(map, data, { here = null, onUse = null, showPi
         });
       });
     }
-    markers.set(spot.id, marker);
+    markers.set(String(spot.id), marker);
     bounds.extend([spot.lat, spot.lng]);
   });
+
+  if (suggest) {
+    L.marker([suggest.lat, suggest.lng], { icon: suggestIcon(), zIndexOffset: 450 }).addTo(map).bindPopup(`<strong>${t("spots_suggested_pin")}</strong>`);
+    bounds.extend([suggest.lat, suggest.lng]);
+  }
 
   if (here) {
     const marker = L.marker([here.lat, here.lng], { icon: hereIcon(), zIndexOffset: 400 }).addTo(map);

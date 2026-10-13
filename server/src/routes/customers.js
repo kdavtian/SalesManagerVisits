@@ -1213,13 +1213,20 @@ customersRouter.get("/:id/checkin-spots", async (req, res) => {
   if (!Number.isInteger(customerId)) return res.status(400).json({ error: "Invalid customer id" });
   const { rows: customerRows } = await pool.query("SELECT id, name, lat, lng FROM customers WHERE id = $1", [customerId]);
   if (!customerRows[0]) return res.status(404).json({ error: "Customer not found" });
-  const own = seesAllActivity(req.user.role) ? "" : "AND ch.user_id = $2";
+  const ownCh = seesAllActivity(req.user.role) ? "" : "AND ch.user_id = $2";
+  const ownAt = seesAllActivity(req.user.role) ? "" : "AND a.user_id = $2";
+  // Refused check-ins (checkin_far_attempts) are real evidence of where the rep stood: listed too, flagged.
   const { rows } = await pool.query(
-    `SELECT ch.id, ch.lat, ch.lng, ch.distance_meters, ch.within_range, ch.timestamp, ch.user_id, u.name AS user_name
-     FROM checkins ch JOIN users u ON u.id = ch.user_id
-     WHERE ch.customer_id = $1 ${own}
-     ORDER BY ch.timestamp DESC, ch.id DESC LIMIT 5`,
-    own ? [customerId, req.user.id] : [customerId]
+    `SELECT * FROM (
+       SELECT ch.id::text AS id, ch.lat, ch.lng, ch.distance_meters, ch.within_range, ch.timestamp, ch.user_id, u.name AS user_name, false AS attempt
+       FROM checkins ch JOIN users u ON u.id = ch.user_id
+       WHERE ch.customer_id = $1 ${ownCh}
+       UNION ALL
+       SELECT 'a' || a.id, a.lat, a.lng, a.distance_meters, false, a.created_at, a.user_id, u.name, true
+       FROM checkin_far_attempts a JOIN users u ON u.id = a.user_id
+       WHERE a.customer_id = $1 ${ownAt}
+     ) s ORDER BY timestamp DESC, id DESC LIMIT 5`,
+    ownCh ? [customerId, req.user.id] : [customerId]
   );
   res.json({ customer: customerRows[0], allowance_meters: await getCheckinRadiusMeters(), spots: rows });
 });

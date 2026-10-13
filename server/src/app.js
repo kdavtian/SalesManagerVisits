@@ -24,6 +24,7 @@ import { checkinsRouter } from "./routes/checkins.js";
 import { dashboardRouter } from "./routes/dashboard.js";
 import { settingsRouter } from "./routes/settings.js";
 import { editRequestsRouter } from "./routes/editRequests.js";
+import { pinReviewRouter } from "./routes/pinReview.js";
 import { locationsRouter } from "./routes/locations.js";
 import { integrationRouter } from "./routes/integration.js";
 import { integrationAdminRouter } from "./routes/integrationAdmin.js";
@@ -174,6 +175,7 @@ app.use("/api/checkins", checkinsRouter);
 app.use("/api/dashboard", express.json(), dashboardRouter);
 app.use("/api/settings", express.json(), settingsRouter);
 app.use("/api/edit-requests", express.json(), editRequestsRouter);
+app.use("/api/pin-review", express.json(), pinReviewRouter);
 app.use("/api/locations", express.json(), locationsRouter);
 // A signed PDF from Lily arrives as the raw request body (<= 15 MB).
 app.use("/api/integration/v1", express.raw({ type: "application/pdf", limit: "15mb" }), express.json({ limit: "2mb" }), integrationRouter);

@@ -324,7 +324,8 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     // Permanent delete (distinct from a director's reject, which keeps
     // the order as a record back at draft) -- admin only, for a
     // duplicate or mistaken order.
-    if (state.user.role === "admin") {
+    // A sales manager may also delete their OWN order until management confirms it (draft / submitted).
+    if (state.user.role === "admin" || (state.user.role === "sales_manager" && order.user_id === state.user.id && ["draft", "submitted"].includes(order.status))) {
       buttons.push({ label: t("delete_order"), action: "delete-order", cls: "btn btn-danger" });
     }
 

@@ -1,4 +1,4 @@
-import { Router } from "express";
+import express, { Router } from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { pool } from "../db/pool.js";
@@ -19,6 +19,34 @@ const LARGE_PAYMENT_THRESHOLD_AMD = 100000;
 export const checkinsRouter = Router();
 
 checkinsRouter.use(requireAuth);
+
+// GPS accuracy in meters as the phone reported it; anything unusable is stored as NULL.
+function parseAccuracy(value) {
+  const n = Math.round(Number(value));
+  return Number.isFinite(n) && n >= 0 && n < 100000 ? n : null;
+}
+
+// The app refused a sales manager's check-in for being too far (Check-in allowance) and reports where they
+// stood: evidence for the Pin review (is the customer's pin wrong?). Best effort, deduplicated per rep +
+// customer within 5 minutes.
+checkinsRouter.post("/far-attempt", express.json(), async (req, res) => {
+  if (req.user.role !== FIELD_REP_ROLE) return res.status(204).end();
+  const customerId = Number(req.body?.customer_id);
+  const lat = Number(req.body?.lat);
+  const lng = Number(req.body?.lng);
+  if (!Number.isInteger(customerId) || !Number.isFinite(lat) || !Number.isFinite(lng)) return res.status(400).json({ error: "customer_id, lat and lng are required" });
+  const { rows } = await pool.query("SELECT lat, lng FROM customers WHERE id = $1", [customerId]);
+  if (!rows[0]) return res.status(404).json({ error: "Customer not found" });
+  const distance = haversineMeters(lat, lng, rows[0].lat, rows[0].lng);
+  if (!(distance > (await getCheckinRadiusMeters()))) return res.status(204).end(); // not far: nothing to record
+  await pool.query(
+    `INSERT INTO checkin_far_attempts (customer_id, user_id, lat, lng, distance_meters, accuracy_m)
+     SELECT $1, $2, $3, $4, $5, $6
+     WHERE NOT EXISTS (SELECT 1 FROM checkin_far_attempts WHERE customer_id = $1 AND user_id = $2 AND created_at > now() - interval '5 minutes')`,
+    [customerId, req.user.id, lat, lng, distance, parseAccuracy(req.body?.accuracy_m)]
+  );
+  res.status(204).end();
+});
 
 const VALID_OUTCOMES = new Set([
   "order_placed",
@@ -122,7 +150,7 @@ checkinsRouter.post("/", (req, res, next) => {
     next();
   });
 }, async (req, res) => {
-  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref, captured_at } = req.body ?? {};
+  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref, captured_at, accuracy_m } = req.body ?? {};
   const customerId = Number(customer_id);
   const latNum = Number(lat);
   const lngNum = Number(lng);
@@ -211,10 +239,10 @@ checkinsRouter.post("/", (req, res, next) => {
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
-      `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref, timestamp)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, COALESCE($13::timestamptz, now()))
+      `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref, timestamp, accuracy_m)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, COALESCE($13::timestamptz, now()), $14)
        RETURNING *`,
-      [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, brandStatusValue, outcomeValues, amountCollected, availableProductsValue, client_ref || null, parseCapturedAt(captured_at)]
+      [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, brandStatusValue, outcomeValues, amountCollected, availableProductsValue, client_ref || null, parseCapturedAt(captured_at), parseAccuracy(accuracy_m)]
     );
     checkin = rows[0];
     for (const file of files) {

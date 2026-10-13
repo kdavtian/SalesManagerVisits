@@ -5,7 +5,7 @@ import { buildOrderBlanksPdf } from "../orderBlankPdf.js";
 import { OFFICE_PHONE } from "../pricelistPdf.js";
 import { Router } from "express";
 import { pool } from "../db/pool.js";
-import { requireAuth, requireAdmin } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
 import { tierListPrice } from "../tierPricing.js";
 import { seesAllActivity, canConfirmOrders, canConfirmSubmittedOrders, canRequestAccountingDocs, canSubmitOrdersForOthers, canAssignErpCustomerId, canRecordOrders, seesUnrecordedBadge, canMarkDeliveredWithoutRoute, seesProductCosts } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
@@ -1448,11 +1448,77 @@ ordersRouter.patch("/:id/recorded", async (req, res) => {
   res.json(updatedRows[0]);
 });
 
-// Permanent removal (not the same as rejecting, which keeps the order as
-// a record) -- admin-only, for a duplicate or mistaken order that
-// shouldn't appear in reports at all. order_items cascades with it.
-ordersRouter.delete("/:id", requireAdmin, async (req, res) => {
-  const { rowCount } = await pool.query("DELETE FROM orders WHERE id = $1", [req.params.id]);
-  if (!rowCount) return res.status(404).json({ error: "Order not found" });
+// Permanent removal (not the same as rejecting, which keeps the order as a record), for a duplicate or
+// mistaken order that shouldn't appear in reports at all. order_items cascades with it. Admin: any order.
+// A sales manager: their OWN order, only until management confirms it (draft / submitted). Every deletion
+// is written to deleted_orders_log (the order's own history goes with it), and management is told when a
+// submitted order -- one they were already notified about -- is deleted by the rep.
+ordersRouter.delete("/:id", async (req, res) => {
+  const orderId = Number(req.params.id);
+  if (!Number.isInteger(orderId)) return res.status(400).json({ error: "Invalid order id" });
+  const { rows } = await pool.query(
+    `SELECT o.id, o.order_code, o.status, o.total_amd, o.user_id, o.customer_id, c.name AS customer_name
+     FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = $1`,
+    [orderId]
+  );
+  const order = rows[0];
+  if (!order) return res.status(404).json({ error: "Order not found" });
+  const isAdmin = req.user.role === "admin";
+  const repDeletesOwn = req.user.role === "sales_manager" && order.user_id === req.user.id;
+  if (!isAdmin && !repDeletesOwn) return res.status(403).json({ error: "Not allowed" });
+  if (!isAdmin && !["draft", "submitted"].includes(order.status)) {
+    return res.status(403).json({ error: "This order was already approved by management and can no longer be deleted" });
+  }
+
+  const client = await pool.connect();
+  let releaseErr;
+  try {
+    await client.query("BEGIN");
+    const { rows: items } = await client.query(
+      "SELECT product_name, brand, unit_price_amd, quantity, line_total_amd FROM order_items WHERE order_id = $1 ORDER BY id",
+      [orderId]
+    );
+    await client.query(
+      `INSERT INTO deleted_orders_log (order_id, order_code, customer_id, customer_name, order_user_id, status, total_amd, items, deleted_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [order.id, order.order_code, order.customer_id, order.customer_name, order.user_id, order.status, order.total_amd, JSON.stringify(items), req.user.id]
+    );
+    // Guard against a confirm racing this delete: only an order still in the allowed status goes.
+    const { rowCount } = await client.query(
+      isAdmin ? "DELETE FROM orders WHERE id = $1" : "DELETE FROM orders WHERE id = $1 AND status IN ('draft', 'submitted')",
+      [orderId]
+    );
+    if (!rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "This order was just approved by management and can no longer be deleted" });
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    releaseErr = err;
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release(releaseErr);
+  }
   res.status(204).end();
+
+  if (!isAdmin && order.status === "submitted") {
+    (async () => {
+      try {
+        const { rows: repRows } = await pool.query("SELECT name FROM users WHERE id = $1", [req.user.id]);
+        const repName = repRows[0]?.name || "Someone";
+        notifyTelegram(`🗑 <b>Order deleted by the rep</b>\n${escapeHtml(repName)} — ${escapeHtml(order.customer_name)}\n${Number(order.total_amd).toLocaleString()} AMD`);
+        const { rows: recipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [ORDER_NOTIFY_ROLES]);
+        for (const recipient of recipients) {
+          notifyUser(recipient.id, "order_placed", {
+            title: "Պատվերը ջնջվել է",
+            body: `${repName}-ը ջնջել է իր պատվերը ${order.customer_name}-ի համար — ${Number(order.total_amd).toLocaleString()} ԱՄԴ։`,
+            url: "/#/orders",
+          });
+        }
+      } catch (err) {
+        console.error("Order-deleted notification failed:", err);
+      }
+    })();
+  }
 });
