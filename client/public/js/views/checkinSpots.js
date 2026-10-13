@@ -19,7 +19,8 @@ export async function renderCheckinSpots(root, navigate, customerId, query) {
     return;
   }
   const here = parseHere(query.get("here"));
-  const focusId = Number(query.get("checkin")) || null;
+  const suggest = parseHere(query.get("suggest"));
+  const focusId = query.get("checkin") || null;
 
   container.innerHTML = `
     <div class="detail-header">
@@ -34,7 +35,8 @@ export async function renderCheckinSpots(root, navigate, customerId, query) {
     <div class="spots-map" id="spots-map"></div>
     <ul class="spots-legend">
       <li><span class="spots-legend-pin">&#9679;</span>${t("spots_customer_pin")}</li>
-      ${data.spots.map((s, i) => `<li><button type="button" class="spots-legend-row" data-spot="${s.id}"><span class="spots-legend-n${s.within_range ? "" : " spots-spot-far"}">${i + 1}</span><span>${spotLabel(s)}</span></button></li>`).join("")}
+      ${suggest ? `<li><span class="spots-legend-pin spots-legend-suggest">&#9679;</span>${t("spots_suggested_pin")}</li>` : ""}
+      ${data.spots.map((s, i) => `<li><button type="button" class="spots-legend-row" data-spot="${escapeHtml(String(s.id))}"><span class="spots-legend-n${s.within_range ? "" : " spots-spot-far"}">${i + 1}</span><span>${spotLabel(s)}</span></button></li>`).join("")}
       ${data.spots.length ? "" : `<li class="muted">${t("spots_none")}</li>`}
     </ul>
     <p class="muted spots-help">${t("spots_help").replace("{m}", String(data.allowance_meters))}</p>
@@ -50,15 +52,15 @@ export async function renderCheckinSpots(root, navigate, customerId, query) {
   const mapEl = container.querySelector("#spots-map");
   const map = L.map(mapEl, { zoomControl: true, attributionControl: false, kadPlainView: true });
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, subdomains: "abc" }).addTo(map);
-  const { bounds, markers } = paintCheckinSpots(map, data, { here });
+  const { bounds, markers } = paintCheckinSpots(map, data, { here, suggest });
   map.fitBounds(bounds, { padding: [36, 36], maxZoom: 18 });
   setTimeout(() => map.invalidateSize(), 50);
   const focus = (id) => {
-    const marker = markers.get(id);
+    const marker = markers.get(String(id));
     if (!marker) return;
     map.panTo(marker.getLatLng());
     marker.openPopup();
   };
-  container.querySelectorAll("[data-spot]").forEach((row) => row.addEventListener("click", () => focus(Number(row.dataset.spot))));
+  container.querySelectorAll("[data-spot]").forEach((row) => row.addEventListener("click", () => focus(row.dataset.spot)));
   if (focusId) setTimeout(() => focus(focusId), 300);
 }

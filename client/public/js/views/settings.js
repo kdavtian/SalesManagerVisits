@@ -2,9 +2,10 @@ import { api } from "../api.js";
 import { t, getLang, setLang } from "../i18n.js";
 import { getTheme, setTheme } from "../theme.js";
 import { getPerfMode, setPerfMode } from "../perfMode.js";
-import { state, isAdmin, canPlanForOthers, seesFinancialExports, canManageProducts, isPerfCeo } from "../state.js";
+import { state, isAdmin, canPlanForOthers, seesFinancialExports, canManageProducts, canReassignCustomers, isPerfCeo } from "../state.js";
 import { renderTeamSection, renderPlanApprovalsSection, renderEditRequestsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection, renderSalesChannelOwnersSection, renderQuickActionVisibilitySection, renderDataQualitySection, renderNotificationDeliveryLogSection, renderClientErrorLogSection } from "./admin.js";
 import { renderSystemHealthSection } from "./systemHealth.js";
+import { renderPinReviewSection } from "./pinReview.js";
 import { renderBonusChallengesSection, renderBonusRewardClaimsSection } from "./bonusChallengesAdmin.js";
 import { escapeHtml, compressImage, activateDialog, attachSwipeToDismiss, formatPhoneDisplay, normalizePhone, downloadFromUrl, formatDateTime } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
@@ -330,7 +331,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       }
 
       ${
-        admin || canManageProducts() || canApprovePlans || canExportFinancials
+        admin || canManageProducts() || canApprovePlans || canExportFinancials || canReassignCustomers()
           ? `
         <h2 class="section-title">${t("admin_group_data_integrations")}</h2>
         ${
@@ -343,6 +344,13 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
           ${settingsRow({ icon: ICON.shield, label: t("system_health_title"), id: "row-system-health", color: "green" })}
           ${settingsRow({ icon: ICON.database, label: t("notification_delivery_log_title"), id: "row-notification-delivery-log", color: "teal" })}
           ${settingsRow({ icon: ICON.database, label: t("client_error_log_title"), id: "row-client-error-log", color: "gray" })}
+        </div>`
+            : ""
+        }
+        ${
+          canReassignCustomers()
+            ? `<div class="card settings-list">
+          ${settingsRow({ icon: ICON.gps, label: t("pin_review_title"), id: "row-pin-review", color: "red" })}
         </div>`
             : ""
         }
@@ -854,6 +862,11 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       openAdminSection(root, e.currentTarget, t("client_error_log_title"), renderClientErrorLogSection);
     });
   }
+
+  // Pin review: admin and the director roles (canReassignCustomers), so outside the admin-only block above.
+  root.querySelector("#row-pin-review")?.addEventListener("click", (e) => {
+    openAdminSection(root, e.currentTarget, t("pin_review_title"), renderPinReviewSection);
+  });
 
   if (canManageChallenges) {
     root.querySelector("#row-bonus-challenges").addEventListener("click", (e) => {

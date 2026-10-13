@@ -463,6 +463,10 @@ export async function renderCheckin(root, navigate, customerId) {
       checkinBlocked = !withinRange && state.user?.role === "sales_manager";
       if (checkinBlocked) {
         submitBtn.disabled = true;
+        // Where the rep really stands is evidence for the Pin review (best effort, nothing to do if offline).
+        api
+          .reportFarAttempt({ customer_id: Number(customerId), lat: position.coords.latitude, lng: position.coords.longitude, accuracy_m: Math.round(position.coords.accuracy) })
+          .catch(() => {});
         verifyBanner.innerHTML = `
           <span class="verify-banner-icon">!</span>
           <div>
@@ -548,6 +552,7 @@ export async function renderCheckin(root, navigate, customerId) {
     formData.set("lat", lat);
     formData.set("lng", lng);
     formData.set("client_ref", clientRef);
+    if (Number.isFinite(position.coords.accuracy)) formData.set("accuracy_m", Math.round(position.coords.accuracy));
     if (note) formData.set("note", note);
     formData.set("outcomes", JSON.stringify(outcomes));
     if (amountCollected != null) formData.set("amount_collected_amd", amountCollected);
@@ -575,6 +580,7 @@ export async function renderCheckin(root, navigate, customerId) {
           customerName: customer.name,
           lat,
           lng,
+          accuracy: Number.isFinite(position.coords.accuracy) ? Math.round(position.coords.accuracy) : undefined,
           note,
           brandStatus: brandStatusPayload,
           outcomes,

@@ -161,6 +161,7 @@ async function submitCheckin(entry) {
   form.set("customer_id", entry.customerId);
   form.set("lat", entry.lat);
   form.set("lng", entry.lng);
+  if (entry.accuracy != null) form.set("accuracy_m", entry.accuracy);
   // entry.clientRef, when the caller generated one before its own first
   // (online) attempt, ties this queued retry back to that same attempt --
   // whichever one the server actually saved wins, the other is recognized
