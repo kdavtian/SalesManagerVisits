@@ -8,6 +8,7 @@ function reasonText(r) {
   if (r.type === "debt") return t("visit_first_debt"); // the amount is shown on the right of the row
   if (r.type === "visit_overdue") return `${t("visit_first_overdue")} ${r.days} ${t("visit_first_days")}`;
   if (r.type === "never_visited") return t("visit_first_never");
+  if (r.type === "reorder_due") return `${t("visit_first_reorder_due")} ~${r.usual} ${t("visit_first_days")}`;
   if (r.type === "dormant") return `${t("visit_first_dormant")} ${r.days} ${t("visit_first_days")}`;
   return "";
 }

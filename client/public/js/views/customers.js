@@ -1,4 +1,5 @@
 import { api } from "../api.js";
+import { reorderChipHtml } from "../reorder.js";
 import { customerMatchesSearch, escapeHtml, formatDateTime, formatAmd, haversineMeters, getCurrentPosition, customerListIconHtml, categoryLabel, activateDialog, channelDisplayLabel, TIER_OPTIONS, labelColon } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
@@ -554,10 +555,12 @@ export function renderCustomers(root, navigate, initialFilter) {
           showDebt && c.debt_amd != null && Number(c.debt_amd) > 0
             ? `<span class="customer-card-debt">${t("outstanding_debt_label")}${labelColon()}${formatAmd(Number(c.debt_amd))}</span>`
             : "";
+        const reorderChip = reorderChipHtml(c);
         const bottomRow =
-          badge || lastVisit || debtLabel
+          badge || lastVisit || debtLabel || reorderChip
             ? `<div class="list-row-bottom">
               ${badge ? `<span class="badge ${badge.cls}">${t(badge.labelKey)}</span>` : ""}
+              ${reorderChip}
               ${lastVisit ? `<span class="muted list-row-meta">${lastVisit}</span>` : ""}
               ${debtLabel}
             </div>`

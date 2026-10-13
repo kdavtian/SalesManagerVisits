@@ -1,4 +1,5 @@
 import { api } from "../api.js";
+import { reorderChipHtml } from "../reorder.js";
 import { cssColor, activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, rememberPosition, getLastKnownPosition, tierSelectorHtml, TIER_OPTIONS, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, regionLabelHy, subregionLabelHy, channelDisplayLabel, parseDateOnly } from "../util.js";
 import { t } from "../i18n.js";
 import { buildCustomerTree, renderTriStateTree, buildDirectionManagerTree, NO_GROUP_KEY } from "../regionTree.js";
@@ -2049,7 +2050,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         marker.bindPopup(`
           <div class="map-popup">
             <strong>${escapeHtml(c.name)}</strong>
-            ${c.sales_channel ? `<div class="popup-category">${escapeHtml(channelDisplayLabel(c.sales_channel))}</div>` : ""}
+            ${c.sales_channel || reorderChipHtml(c) ? `<div class="popup-category">${c.sales_channel ? escapeHtml(channelDisplayLabel(c.sales_channel)) : ""} ${reorderChipHtml(c)}</div>` : ""}
             <div class="popup-brand-chips" id="popup-brands-${c.id}">${popupBrandChipsHtml(c.id)}</div>
             <div class="popup-facts" id="popup-facts-${c.id}">${popupFactsHtml(factsCache.get(c.id)?.data)}</div>
             <div class="popup-actions">

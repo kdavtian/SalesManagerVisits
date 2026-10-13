@@ -6,6 +6,7 @@ import { icons } from "../icons.js";
 import { state } from "../state.js";
 import { openPhotoLightbox } from "../photoLightbox.js";
 import { openOrderTaskSheet } from "../orderTaskSheet.js";
+import { loadReorderProfile, usualOrderHash } from "../reorder.js";
 
 const OUTCOME_OPTIONS = [
   { value: "order_placed", labelKey: "outcome_order_placed", icon: icons.cart },
@@ -597,6 +598,13 @@ export async function renderCheckin(root, navigate, customerId) {
     });
     resultEl.querySelector("#create-order-btn")?.addEventListener("click", () => {
       navigate(`#/orders/new/${customerId}?checkin=${checkin.id}`);
+    });
+    // The customer's usual basket one tap away (only when they have one).
+    loadReorderProfile(customerId).then((profile) => {
+      if (!profile?.items?.length || !resultEl.querySelector("#back-to-customer")) return;
+      resultEl.querySelector("#back-to-customer").insertAdjacentHTML("beforebegin", `<button class="btn ${placedOrder ? "" : "btn-primary"} btn-block" id="order-usual-btn">${t("usual_order_btn")}</button>`);
+      resultEl.querySelector("#order-usual-btn").addEventListener("click", () => navigate(`${usualOrderHash(customerId)}&checkin=${checkin.id}`));
+      if (!placedOrder) resultEl.querySelector("#back-to-customer").classList.remove("btn-primary");
     });
   }
 

@@ -5,6 +5,7 @@
 // them. Deadline: the customer's next visit by default, or a chosen date.
 import { openCollectionOutcomeSheet } from "../collectionOutcomeSheet.js";
 import { api } from "../api.js";
+import { usualOrderHash } from "../reorder.js";
 import { escapeHtml, activateDialog, formatDateDMY, parseDateOnly, labelColon } from "../util.js";
 import { FILTER_ICONS } from "../filterIcons.js";
 import { t } from "../i18n.js";
@@ -365,7 +366,8 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
       ${open && !task.items.length && task.auto_kind !== "debt_collection" ? `<textarea id="task-complete-note" class="task-complete-note" rows="2" maxlength="500" placeholder="${escapeHtml(t("task_note_placeholder"))}" aria-label="${escapeHtml(t("task_note_placeholder"))}"></textarea>` : ""}
       <p class="form-error" id="task-sheet-error" hidden></p>
       <div class="sheet-actions" id="task-sheet-actions" style="flex-wrap:wrap;">
-        ${open ? `<button type="button" class="btn btn-primary" data-action="complete">${t("task_mark_complete")}</button>` : ""}
+        ${open && task.auto_kind === "reorder_followup" && task.customer_id ? `<button type="button" class="btn btn-primary" data-action="order-usual">${t("usual_order_btn")}</button>` : ""}
+        ${open ? `<button type="button" class="btn ${task.auto_kind === "reorder_followup" ? "" : "btn-primary"}" data-action="complete">${t("task_mark_complete")}</button>` : ""}
         ${task.status === "done" ? `<button type="button" class="btn" data-action="reopen">${t("task_reopen")}</button>` : ""}
         ${isCreator && task.status !== "cancelled" ? `<button type="button" class="btn" data-action="edit">${t("edit")}</button>` : ""}
         ${isCreator && open ? `<button type="button" class="btn btn-danger" data-action="cancel">${t("task_cancel")}</button>` : ""}
@@ -405,6 +407,10 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
       // The optional note is an inline field now (a native prompt() popup blocked the screen).
       const note = sheet.querySelector("#task-complete-note")?.value ?? "";
       refresh(api.completeTask(task.id, note.trim()));
+    });
+    sheet.querySelector('[data-action="order-usual"]')?.addEventListener("click", () => {
+      overlay.remove();
+      (navigate || ((h) => (location.hash = h)))(usualOrderHash(task.customer_id));
     });
     sheet.querySelector('[data-action="reopen"]')?.addEventListener("click", () => refresh(api.reopenTask(task.id)));
     sheet.querySelector('[data-action="cancel"]')?.addEventListener("click", () => {

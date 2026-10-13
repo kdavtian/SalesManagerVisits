@@ -4,6 +4,7 @@
 //    more as the overdue amount grows (1,000,000 AMD and more = the full 20)
 //  - visit overdue against the customer's cadence: up to 30 (2 points a day)
 //  - gone quiet: no order for longer than 1.5x their usual rhythm: 20
+//  - reorder due: the usual gap between their orders has passed (not yet 1.5x): 10
 //  - never visited: 15 (+10 for a gold/silver customer)
 //  - customer value: up to 10 more, by the average monthly purchases of the last 6 months
 //    (2,000,000 AMD a month and more = 10), added only when there already is a reason to go
@@ -97,6 +98,9 @@ export async function visitPriorities(userId, limit = 8, now = new Date()) {
       if (sinceOrder > Math.max(st.median_gap * 1.5, st.median_gap + 7) && sinceOrder <= 365) {
         score += 20;
         reasons.push({ type: "dormant", days: sinceOrder, usual: Math.round(st.median_gap) });
+      } else if (sinceOrder >= st.median_gap && sinceOrder <= 365) {
+        score += 10;
+        reasons.push({ type: "reorder_due", days: sinceOrder, usual: Math.round(st.median_gap) });
       }
     }
     if (score > 0) {

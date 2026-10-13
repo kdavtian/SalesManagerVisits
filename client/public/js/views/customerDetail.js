@@ -1,5 +1,6 @@
 import { api } from "../api.js";
-import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, SALES_CHANNELS, channelDisplayLabel, parseDateOnly, formatDateDMY, formatDayMonth, labelColon, erpLineDiscountRowHtml } from "../util.js";
+import { mountUsualSlot, reorderHash } from "../reorder.js";
+import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, SALES_CHANNELS, channelDisplayLabel, parseDateOnly, formatDateDMY, formatDayMonth, labelColon, erpLineDiscountRowHtml, leaveSheetTo } from "../util.js";
 import { currentChips, chipHtml } from "../brandChips.js";
 import { nextVisitRowHtml } from "../visitSchedule.js";
 import { t } from "../i18n.js";
@@ -172,6 +173,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       </button>
     </div>
 
+    <div id="customer-usual-slot"></div>
     <div id="customer-tasks-slot"></div>
     <div id="customer-docs-slot"></div>
 
@@ -238,6 +240,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   container.querySelector("#new-order-btn").addEventListener("click", () => {
     navigate(`#/orders/new/${customerId}`);
   });
+  mountUsualSlot(container.querySelector("#customer-usual-slot"), customer, navigate);
   container.querySelector("#edit-customer-btn").addEventListener("click", () => {
     openEditSheet(customer, navigate, () => renderCustomerDetail(root, navigate, customerId));
   });
@@ -582,8 +585,12 @@ export async function openOrderDetailSheet(customerId, orderId) {
       <span class="erp-debt-amount">${formatAmd(detail.total_amd)}</span>
     </div>
     ${brandSections}
+    <div class="sheet-actions"><button type="button" class="btn btn-primary" id="reorder-erp-order">${t("reorder_btn")}</button></div>
   `;
   overlay.querySelector("#close-order-detail").addEventListener("click", () => overlay.remove());
+  overlay.querySelector("#reorder-erp-order").addEventListener("click", () => {
+    leaveSheetTo(overlay, (h) => (location.hash = h), reorderHash(customerId, `erp:${orderId}`));
+  });
 }
 
 function renderPendingRequest(slot, request, onDone) {

@@ -1,11 +1,13 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, tierBadgeHtml, activateDialog, activateCombobox } from "../util.js";
+import { escapeHtml, formatAmd, tierBadgeHtml, activateDialog, activateCombobox, formatDateDMY, openInfoPopup } from "../util.js";
 import { t } from "../i18n.js";
 import { enqueueOrder } from "../offlineQueue.js";
 import { canAssignErpCustomerId, state } from "../state.js";
 import { compareProducts, sortedBrands } from "../productSort.js";
 import { getProductCatalog } from "../productCatalog.js";
 import { searchProducts, debounce } from "../productSearch.js";
+import { numOrNull, tierPrice } from "../productPricing.js";
+import { loadReorderProfile, reorderRhythmText } from "../reorder.js";
 
 // Reps often open "Create order" several times a visit (once per checkin);
 // the catalog rarely changes minute to minute, so this reads from the
@@ -70,26 +72,6 @@ function defaultQtyForUnit(unit) {
   return 1;
 }
 
-function numOrNull(value) {
-  if (value === null || value === undefined) return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
-// Bronze/potential/competitor customers all pay the bronze (standard)
-// price -- a potential or competitor account isn't a Silver/Gold
-// relationship yet, so it never gets a discounted or special price.
-function tierPrice(product, tier) {
-  // Mirrors tierListPrice on the server: an empty bronze falls back to
-  // silver, gold falls back to silver then bronze.
-  const pos = (v) => (numOrNull(v) > 0 ? numOrNull(v) : null);
-  const silverRaw = pos(product.silver_price_amd);
-  const bronze = pos(product.bronze_price_amd) ?? pos(product.unit_price_amd) ?? silverRaw ?? 0;
-  if (tier === "silver") return silverRaw ?? bronze;
-  if (tier === "gold") return pos(product.gold_price_amd) ?? silverRaw ?? bronze;
-  return bronze;
-}
-
 // null/undefined stock_qty means the catalog doesn't track stock for this
 // product (e.g. a manually added line) -- no warning, not "unavailable".
 function stockWarning(product, requestedQty) {
@@ -106,7 +88,9 @@ function stockWarning(product, requestedQty) {
   return null;
 }
 
-export async function renderOrderCreate(root, navigate, customerId, checkinId) {
+// opts.from = "erp:<order id>" | "app:<order id>" pre-fills the cart with that past order (Reorder);
+// opts.usual pre-fills it with the customer's usual basket (Order usual).
+export async function renderOrderCreate(root, navigate, customerId, checkinId, opts = {}) {
   root.innerHTML = `<div class="detail-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".detail-view");
 
@@ -166,6 +150,8 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
     <div class="order-search-row">
       <input type="search" id="product-search" placeholder="${t("search_products_placeholder")}" aria-label="${t("search_products_placeholder")}" />
     </div>
+    <p class="muted order-prefill-note" id="order-prefill-note" role="status" hidden></p>
+    <div id="order-usual" hidden></div>
     <div class="order-crumb-row" id="order-crumb-row" hidden></div>
     <div class="order-filter-row" id="order-filter-row" hidden></div>
     <div class="order-product-list" id="order-product-list"></div>
@@ -258,6 +244,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
     // toggled together with the sheet itself so an empty cart doesn't
     // leave dead space at the end of the list.
     listEl.classList.toggle("order-product-list-with-cart-bar", count > 0);
+    renderUsual();
     if (!count) {
       cartBar.hidden = true;
       return;
@@ -430,8 +417,9 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
         if (line.quantity <= 0) cart.delete(product.id);
         else cart.set(product.id, line);
 
+        const parent = row.parentElement;
         row.outerHTML = renderProductRow(product);
-        wireRow(listEl.querySelector(`[data-product-id="${product.id}"]`), product);
+        wireRow(parent.querySelector(`[data-product-id="${product.id}"]`), product);
         updateCartBar();
       });
     });
@@ -448,9 +436,120 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId) {
     });
   }
 
+  // ---- Order lines + usual basket (shown above the brand picker, never inside a brand/search list) ----
+  const usualEl = container.querySelector("#order-usual");
+  const prefillNote = container.querySelector("#order-prefill-note");
+  let usualProfile = null;
+  const catalogById = new Map(products.map((p) => [p.id, p]));
+
+  function addToCart(product, quantity) {
+    const existing = cart.get(product.id);
+    if (existing) existing.quantity += quantity;
+    else cart.set(product.id, { product_id: product.id, product_name: product.name, unit_price_amd: basePrice(product), quantity });
+  }
+
+  function usualRows() {
+    return (usualProfile?.items ?? [])
+      .map((item) => ({ item, product: catalogById.get(item.product_id) }))
+      .filter((x) => x.product && !cart.has(x.product.id));
+  }
+
+  function renderUsual() {
+    const inPicker = !searchQuery && !nav.brand;
+    usualEl.hidden = !inPicker;
+    if (!inPicker) {
+      usualEl.innerHTML = "";
+      return;
+    }
+    const lineProducts = [...cart.keys()].map((id) => catalogById.get(id)).filter(Boolean);
+    const rows = usualRows();
+    const addable = rows.filter((x) => isAvailable(x.product));
+    const note = reorderRhythmText(usualProfile?.cadence);
+    usualEl.innerHTML = `
+      ${
+        lineProducts.length
+          ? `<p class="section-title section-title-tight">${t("order_lines_title")}</p>
+             <div class="order-product-list order-lines-card">${lineProducts.map(renderProductRow).join("")}</div>`
+          : ""
+      }
+      ${
+        rows.length
+          ? `<p class="section-title section-title-tight order-usual-heading">${t("usual_order_title")}${
+              note ? ` <button type="button" class="settings-hint-icon" id="order-usual-info" aria-label="${t("more_info")}">!</button>` : ""
+            }</p>
+            <div class="order-usual-card">
+              ${rows
+                .map(({ item, product }) => {
+                  const out = !isAvailable(product);
+                  return `<div class="order-product-row" data-usual-id="${product.id}">
+                    <div class="order-product-info">
+                      <strong>${escapeHtml(product.name)}</strong>
+                      <span class="muted">${[product.brand, product.unit].filter(Boolean).map(escapeHtml).join(" · ")} × ${item.quantity} · ${formatAmd(basePrice(product))}</span>
+                      ${item.due ? `<span class="order-due-tag">${t("usual_item_due")}</span>` : ""}
+                    </div>
+                    ${out ? `<span class="badge badge-danger">${t("out_of_stock")}</span>` : `<button type="button" class="btn btn-sm" data-usual-add="${product.id}">${t("add")}</button>`}
+                  </div>`;
+                })
+                .join("")}
+              ${addable.length > 1 ? `<button type="button" class="btn btn-block order-usual-add-all" id="order-usual-add-all">${t("usual_order_add_all").replace("{n}", String(addable.length))}</button>` : ""}
+            </div>`
+          : ""
+      }`;
+    usualEl.querySelectorAll(".order-lines-card [data-product-id]").forEach((row) => wireRow(row, catalogById.get(Number(row.dataset.productId))));
+    usualEl.querySelectorAll("[data-usual-add]").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        const { item, product } = rows.find((x) => x.product.id === Number(btn.dataset.usualAdd));
+        addToCart(product, item.quantity);
+        updateCartBar();
+      })
+    );
+    usualEl.querySelector("#order-usual-add-all")?.addEventListener("click", () => {
+      for (const { item, product } of addable) addToCart(product, item.quantity);
+      updateCartBar();
+    });
+    usualEl.querySelector("#order-usual-info")?.addEventListener("click", () =>
+      openInfoPopup(`<p>${escapeHtml(note)}</p><p class="muted">${t("usual_order_hint").replace("{n}", String(usualProfile?.orders_considered ?? 0))}</p>`)
+    );
+  }
+
+  // One request: the usual basket, and (Reorder) the lines of the chosen past order. Never blocks the screen;
+  // offline or failed -> the order screen simply works as before.
+  (async function applyReorderProfile() {
+    const profile = await loadReorderProfile(customerId, opts.from || null);
+    if (!profile) return;
+    usualProfile = profile;
+    const notes = [];
+    if (opts.from && profile.lines) {
+      let skipped = profile.lines.not_available;
+      for (const line of profile.lines.lines) {
+        const product = catalogById.get(line.product_id);
+        if (product && isAvailable(product)) addToCart(product, line.quantity);
+        else skipped++;
+      }
+      notes.push(t("reorder_prefilled").replace("{date}", formatDateDMY(profile.lines.date)));
+      if (skipped) notes.push(t("reorder_skipped").replace("{n}", String(skipped)));
+    } else if (opts.usual) {
+      let skipped = 0;
+      for (const item of profile.items) {
+        const product = catalogById.get(item.product_id);
+        if (product && isAvailable(product)) addToCart(product, item.quantity);
+        else skipped++;
+      }
+      notes.push(t("usual_order_added"));
+      if (skipped) notes.push(t("reorder_skipped").replace("{n}", String(skipped)));
+    }
+    if (notes.length && profile.cadence.days_since_order === 0) notes.push(t("reorder_already_today"));
+    if (notes.length) {
+      prefillNote.textContent = notes.join(" · ");
+      prefillNote.hidden = false;
+    }
+    updateCartBar();
+  })();
+
   function render() {
     renderCrumbs();
     renderFilters();
+    renderUsual();
 
     if (searchQuery) {
       paintProductList(sortProducts(applyFilters(filterCatalog(products, searchQuery))));

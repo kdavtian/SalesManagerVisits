@@ -1072,7 +1072,7 @@ async function renderRoute() {
   } else if (customerOrdersMatch) {
     (await import("./views/customerOrders.js")).renderCustomerOrders(app, navigate, customerOrdersMatch[1]);
   } else if (orderCreateMatch) {
-    (await import("./views/orderCreate.js")).renderOrderCreate(app, navigate, orderCreateMatch[1], query.get("checkin"));
+    (await import("./views/orderCreate.js")).renderOrderCreate(app, navigate, orderCreateMatch[1], query.get("checkin"), { from: query.get("from"), usual: query.get("usual") === "1" });
   } else if (path === "#/orders") {
     (await import("./views/orders.js")).renderOrders(app, navigate);
   } else if (paymentDetailMatch) {

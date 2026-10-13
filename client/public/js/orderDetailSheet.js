@@ -5,6 +5,7 @@
 // tab's "Order placed" outcome row, for one -- can open the exact same
 // sheet without re-implementing it.
 import { api } from "./api.js";
+import { reorderHash } from "./reorder.js";
 import { escapeHtml, formatAmd, activateDialog, formatDateTime, formatDateDMY, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, labelColon } from "./util.js";
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
@@ -313,6 +314,8 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
         buttons.push({ label: t("mark_delivered_no_route"), action: "mark-delivered", cls: "btn btn-primary" });
       }
     }
+    // One tap to order the same lines again (opens Create order pre-filled at today's prices).
+    buttons.push({ label: t("reorder_btn"), action: "reorder-order", cls: buttons.some((b) => b.cls.includes("btn-primary")) ? "btn" : "btn btn-primary" });
     // Print-ready delivery-acceptance act (any order the viewer can open).
     buttons.push({ label: t("print_blank"), action: "print-blank", cls: "btn" });
     if (canEditThisOrder) {
@@ -332,7 +335,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
             b.action ? `data-action="${b.action}"` : `data-status="${b.status}"`
           }>${b.label}</button>`
       )
-      .join("") + (buttons.length <= 1 ? `<button type="button" class="btn" id="order-detail-close">${t("done")}</button>` : "");
+      .join("") + (buttons.filter((b) => b.action !== "reorder-order").length <= 1 ? `<button type="button" class="btn" id="order-detail-close">${t("done")}</button>` : "");
 
     actionsEl.querySelector("#order-detail-close")?.addEventListener("click", () => overlay.remove());
     overlay.querySelector('[data-action="close-sheet"]')?.addEventListener("click", () => overlay.remove());
@@ -387,6 +390,10 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     });
     actionsEl.querySelectorAll("[data-action]").forEach((btn) => {
       btn.addEventListener("click", async () => {
+        if (btn.dataset.action === "reorder-order") {
+          leaveSheetTo(overlay, navigate || ((h) => (location.hash = h)), reorderHash(order.customer_id, `app:${orderId}`));
+          return;
+        }
         if (btn.dataset.action === "edit-order") {
           renderEditMode(order);
           return;

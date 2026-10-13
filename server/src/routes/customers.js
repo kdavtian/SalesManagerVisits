@@ -6,6 +6,8 @@ import { seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssi
 import { creditSnapshot } from "../creditLimit.js";
 import { loadUnpaidOrders, summarizeDebt, dueDays, debtHoldInfo } from "../debtAge.js";
 import { visitPriorities } from "../visitPriorities.js";
+import { buildReorderProfile } from "../customerReorder.js";
+import { REORDER_COLUMNS, REORDER_JOIN, withReorderState } from "../orderRhythm.js";
 import { allocateFifo, loadOrdersNewestFirst } from "../debtAging.js";
 import { buildDebtStatementPdf } from "../debtStatementPdf.js";
 import { getDefaultVisitFrequencyDays } from "../settings.js";
@@ -152,10 +154,11 @@ customersRouter.get("/", async (req, res) => {
   const debtJoin = include_debt ? "LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id" : "";
   const debtColumn = include_debt ? "erp.debt_amd AS debt_amd," : "";
   const { rows } = await pool.query(
-    `SELECT c.*, ${debtColumn} am.name AS assigned_manager_name, ${STATUS_COLUMNS}
+    `SELECT c.*, ${debtColumn} am.name AS assigned_manager_name, ${STATUS_COLUMNS}, ${REORDER_COLUMNS}
      FROM customers c
      LEFT JOIN users am ON am.id = c.assigned_manager_id
      ${VISIT_STATUS_JOIN}
+     ${REORDER_JOIN}
      ${debtJoin}
      ${where}
      ORDER BY c.name`,
@@ -170,6 +173,7 @@ customersRouter.get("/", async (req, res) => {
     }
   }
   await applyPlannedOverdue(rows);
+  rows.forEach(withReorderState);
   res.json(rows);
 });
 
@@ -461,9 +465,9 @@ customersRouter.get("/map-facts", async (req, res) => {
   const [ctx, { rows }] = await Promise.all([
     loadScheduleContext(req),
     pool.query(
-      `SELECT c.id, c.region, c.subregion, c.sales_channel, c.checkin_for_all, c.visit_frequency_days, c.assigned_manager_id, erp.debt_amd,
+      `SELECT c.id, c.region, c.subregion, c.sales_channel, c.checkin_for_all, c.visit_frequency_days, c.assigned_manager_id, erp.debt_amd, ${REORDER_COLUMNS},
               (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range) AS last_visit_at
-       FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
+       FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id ${REORDER_JOIN}
        WHERE c.id = ANY($1)`,
       [ids]
     ),
@@ -472,7 +476,15 @@ customersRouter.get("/map-facts", async (req, res) => {
   for (const row of rows) {
     const schedule = scheduleForCustomer(row, ctx);
     const sees = seesCustomerErpData(req.user.role, row.assigned_manager_id, req.user.id);
-    out[row.id] = { ...schedule, last_visit_at: schedule.cadence.last_visit_at, erp_debt_amd: sees ? row.debt_amd : null };
+    withReorderState(row);
+    out[row.id] = {
+      ...schedule,
+      last_visit_at: schedule.cadence.last_visit_at,
+      erp_debt_amd: sees ? row.debt_amd : null,
+      reorder_state: row.reorder_state,
+      reorder_gap_days: row.reorder_gap_days,
+      reorder_days_since: row.reorder_days_since,
+    };
   }
   res.json(out);
 });
@@ -979,6 +991,20 @@ customersRouter.get("/:id/product-prices", async (req, res) => {
     [id]
   );
   res.json(rows.map((r) => ({ product_id: r.product_id, price_amd: Number(r.price_amd) })));
+});
+
+// What the customer usually buys (+ their ordering rhythm), and with ?from=erp:<id>|app:<id> the lines of one
+// past order -- the "Order usual" / "Reorder" buttons (customerReorder.js). A sales manager only gets the
+// Excel history of their own customers (same rule as the ERP order lists).
+customersRouter.get("/:id/reorder-profile", async (req, res) => {
+  const customerId = Number(req.params.id);
+  if (!Number.isInteger(customerId)) return res.status(400).json({ error: "Invalid customer id" });
+  const { rows } = await pool.query("SELECT assigned_manager_id FROM customers WHERE id = $1", [customerId]);
+  if (!rows[0]) return res.status(404).json({ error: "Customer not found" });
+  if (!seesCustomerErpData(req.user.role, rows[0].assigned_manager_id, req.user.id)) {
+    return res.json({ cadence: { median_gap_days: null, days_since_order: null, state: null }, orders_considered: 0, items: [], skipped: 0, lines: null });
+  }
+  res.json(await buildReorderProfile(customerId, { from: req.query.from ? String(req.query.from) : null }));
 });
 
 customersRouter.get("/:id/ordered-products", async (req, res) => {
