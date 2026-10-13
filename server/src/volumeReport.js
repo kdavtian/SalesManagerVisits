@@ -1,9 +1,10 @@
-// "Products & liters" report: what was sold (liters, AMD, orders, customers), for any period, product, channel
+// "Products & liters" report: what was sold (liters, orders, customers -- liters only, no money), for any period, product, channel
 // and place -- one engine behind every management question ("how many liters of Castrol this month / last
 // year / YTD", "Magnatec 5W-30 C3 in Yerevan Ajapnyak", "Royal 0W-8 sold by SM YVN or CVO").
 //
 // Source: the ERP order lines (erp_order_lines, the invoiced truth from the Excel ORDERS sheet). Customer
-// 10000 "Inventory" (the pre-ERP stock write-outs, value 0) is never a sale and is excluded. Orders made in
+// 10000 "Inventory" (the pre-ERP stock write-outs, value 0) is never a sale and is excluded. Amounts / margin
+// are deliberately not part of this report (a separate amounts report is planned). Orders made in
 // the app that the Excel does not hold yet (confirmed / packed / delivered, newer than the last ERP order day)
 // are kept apart ("pending"), never added into the sold numbers, so nothing is counted twice.
 import { pool } from "./db/pool.js";
@@ -32,6 +33,19 @@ const addYears = (s, n) => {
   const lastDay = +monthEnd(`${y}-${s.slice(5, 7)}-01`).slice(8, 10);
   return `${y}-${s.slice(5, 7)}-${String(Math.min(+s.slice(8, 10), lastDay)).padStart(2, "0")}`;
 };
+
+// Every bucket key ("YYYY-MM-DD" for day / week-Monday, "YYYY-MM" for month) between two dates, so charts
+// show empty days as zero instead of skipping them.
+export function bucketKeys(from, to, bucket) {
+  const keys = [];
+  if (bucket === "month") {
+    for (let m = monthStart(from); m <= to; m = addMonths(m, 1)) keys.push(m.slice(0, 7));
+  } else {
+    const step = bucket === "week" ? 7 : 1;
+    for (let d = bucket === "week" ? mondayOf(from) : from; d <= to; d = addDays(d, step)) keys.push(d);
+  }
+  return keys;
+}
 
 // The standard periods, each with the equivalent window just before it to compare with.
 export function standardPeriods(today) {
@@ -147,26 +161,24 @@ const GROUP_SQL = {
 };
 const TIME_GROUPS = new Set(["month", "week", "day"]);
 
+const fillBuckets = (keys, rows) => {
+  const by = new Map(rows.map((r) => [r.key, num(r.liters)]));
+  return keys.map((key) => ({ key, liters: by.get(key) || 0 }));
+};
 const num = (v) => (v === null || v === undefined ? 0 : Number(v));
 const aggs = (cond) => `
   COALESCE(sum(liters) FILTER (WHERE ${cond}), 0) AS liters,
-  COALESCE(sum(revenue) FILTER (WHERE ${cond}), 0) AS revenue,
-  COALESCE(sum(cost) FILTER (WHERE ${cond}), 0) AS cost,
-  COALESCE(sum(revenue) FILTER (WHERE ${cond} AND cost_known), 0) AS revenue_costed,
   count(DISTINCT order_key) FILTER (WHERE ${cond}) AS orders,
   count(DISTINCT cust_key) FILTER (WHERE ${cond}) AS customers`;
 const inWin = (w, src = "erp") => `src = '${src}' AND d BETWEEN '${w.from}' AND '${w.to}'`;
 const shape = (r, prefix = "") => ({
   liters: num(r[`${prefix}liters`]),
-  revenue: num(r[`${prefix}revenue`]),
-  cost: num(r[`${prefix}cost`]),
-  revenue_costed: num(r[`${prefix}revenue_costed`]),
   orders: num(r[`${prefix}orders`]),
   customers: num(r[`${prefix}customers`]),
 });
 
-// opts: { query, scopeUserId (sales manager: only their customers), withCosts }
-export async function buildVolumeReport({ query, scopeUserId = null, withCosts = false }) {
+// opts: { query, scopeUserId (sales manager: only their customers) }
+export async function buildVolumeReport({ query, scopeUserId = null }) {
   const w = resolveWindows(query);
   const groupBy = GROUP_BYS.includes(query.group_by) ? query.group_by : "product";
   const winStart = [`${+w.today.slice(0, 4) - 2}-01-01`, w.from, w.prev?.from ?? w.from].sort()[0];
@@ -178,19 +190,19 @@ export async function buildVolumeReport({ query, scopeUserId = null, withCosts =
   try {
     await client.query("BEGIN");
     const scope = scopeUserId ? "AND c.assigned_manager_id = $3" : "";
-    // Every line in the window, enriched once: product line/viscosity/size, selling channel, place, liters, cost.
+    // Every line in the window, enriched once: product line/viscosity/size, selling channel, place, liters.
     await client.query(
       `CREATE TEMP TABLE vf ON COMMIT DROP AS
        WITH src AS (
          SELECT 'erp'::text AS src, eol.order_date AS d, 'e:' || eol.erp_customer_id || ':' || eol.order_id AS order_key,
                 eol.erp_customer_id, c1.id AS cid,
-                eol.brand, eol.product_name, eol.product_id, eol.size_l, eol.qty, eol.revenue_amd AS revenue, eol.sales_rep AS line_channel
+                eol.brand, eol.product_name, eol.product_id, eol.size_l, eol.qty, eol.sales_rep AS line_channel
            FROM erp_order_lines eol
            LEFT JOIN customers c1 ON c1.erp_customer_id = eol.erp_customer_id
           WHERE eol.order_date BETWEEN $1 AND $2 AND eol.erp_customer_id <> '10000'
          UNION ALL
          SELECT 'app', (o.created_at AT TIME ZONE 'Asia/Yerevan')::date, 'a:' || o.id, c0.erp_customer_id, c0.id,
-                oi.brand, oi.product_name, p0.erp_product_id, p0.unit, oi.quantity, oi.line_total_amd, NULL
+                oi.brand, oi.product_name, p0.erp_product_id, p0.unit, oi.quantity, NULL
            FROM order_items oi
            JOIN orders o ON o.id = oi.order_id
            JOIN customers c0 ON c0.id = o.customer_id
@@ -201,7 +213,7 @@ export async function buildVolumeReport({ query, scopeUserId = null, withCosts =
             AND (o.created_at AT TIME ZONE 'Asia/Yerevan')::date BETWEEN $1 AND $2
        ), j AS (
          SELECT s.*, c.id AS c_id, c.name AS c_name, c.sales_channel, c.region, c.subregion, c.customer_tier,
-                ecd.customer_name AS ecd_name, ecd.assigned_sales_rep, p.family, p.landing_cost_amd,
+                ecd.customer_name AS ecd_name, ecd.assigned_sales_rep, p.family,
                 COALESCE(NULLIF(${SIZE_SQL("s.size_l")}, 0), ${SIZE_SQL("p.unit")}) AS size_n
            FROM src s
            LEFT JOIN customers c ON c.id = s.cid
@@ -209,7 +221,7 @@ export async function buildVolumeReport({ query, scopeUserId = null, withCosts =
            LEFT JOIN products p ON lower(p.erp_product_id) = lower(s.product_id)
           WHERE TRUE ${scope}
        )
-       SELECT j.src, j.d, j.order_key, j.erp_customer_id, j.brand, j.revenue, j.family, j.size_n,
+       SELECT j.src, j.d, j.order_key, j.erp_customer_id, j.brand, j.family, j.size_n,
               COALESCE(j.erp_customer_id, 'c' || j.c_id::text) AS cust_key,
               COALESCE(NULLIF(trim(j.c_name), ''), j.ecd_name, j.erp_customer_id, '—') AS customer_name,
               COALESCE(j.line_channel, j.assigned_sales_rep, j.sales_channel) AS channel,
@@ -218,9 +230,7 @@ export async function buildVolumeReport({ query, scopeUserId = null, withCosts =
               trim(concat_ws(' ', j.product_name, CASE WHEN j.size_n > 0 THEN j.size_n::float8::text || 'L' END)) AS product_label,
               regexp_replace(substring(j.product_name from '(\\d{1,2}\\s*[Ww]\\s*-?\\s*\\d{1,3})'), '\\s*[Ww]\\s*-?\\s*', 'W-') AS grade,
               NULLIF(j.size_n, 0)::float8::text AS size_txt,
-              COALESCE(j.qty, 0) * j.size_n AS liters,
-              COALESCE(j.qty, 0) * COALESCE(j.landing_cost_amd, 0) AS cost,
-              COALESCE(j.landing_cost_amd, 0) > 0 AS cost_known
+              COALESCE(j.qty, 0) * j.size_n AS liters
          FROM j`,
       scopeUserId ? [winStart, winEnd, scopeUserId] : [winStart, winEnd]
     );
@@ -232,10 +242,7 @@ export async function buildVolumeReport({ query, scopeUserId = null, withCosts =
       ...(w.prev ? [aggs(inWin(w.prev)).replace(/AS (\w+)/g, "AS prev_$1")] : []),
       aggs(inWin(w, "app")).replace(/AS (\w+)/g, "AS pend_$1"),
       ...w.periods.map((p) => `COALESCE(sum(liters) FILTER (WHERE ${inWin(p)}), 0) AS p_${p.key}_liters,
-        COALESCE(sum(revenue) FILTER (WHERE ${inWin(p)}), 0) AS p_${p.key}_revenue,
-        count(DISTINCT order_key) FILTER (WHERE ${inWin(p)}) AS p_${p.key}_orders,
-        COALESCE(sum(liters) FILTER (WHERE ${inWin(p.prev)}), 0) AS p_${p.key}_prev_liters,
-        COALESCE(sum(revenue) FILTER (WHERE ${inWin(p.prev)}), 0) AS p_${p.key}_prev_revenue`),
+        COALESCE(sum(liters) FILTER (WHERE ${inWin(p.prev)}), 0) AS p_${p.key}_prev_liters`),
     ];
     const { rows: totalRows } = await client.query(`SELECT ${winCols.join(",")} FROM vl`);
     const t = totalRows[0];
@@ -244,34 +251,39 @@ export async function buildVolumeReport({ query, scopeUserId = null, withCosts =
       from: p.from,
       to: p.to,
       liters: num(t[`p_${p.key}_liters`]),
-      revenue: num(t[`p_${p.key}_revenue`]),
-      orders: num(t[`p_${p.key}_orders`]),
       prev_liters: num(t[`p_${p.key}_prev_liters`]),
-      prev_revenue: num(t[`p_${p.key}_prev_revenue`]),
     }));
 
     // 2) breakdown by the chosen dimension, with the comparison window beside it.
     const g = GROUP_SQL[groupBy];
-    const order = TIME_GROUPS.has(groupBy) ? "key ASC" : "liters DESC, revenue DESC";
+    const order = TIME_GROUPS.has(groupBy) ? "key ASC" : "liters DESC, label ASC";
     const { rows: groupRows } = await client.query(
       `SELECT ${g.key} AS key, MAX(${g.label}) AS label, ${g.sub} AS sub,
               ${aggs(inWin(w))}${w.prev ? `,
-              COALESCE(sum(liters) FILTER (WHERE ${inWin(w.prev)}), 0) AS prev_liters,
-              COALESCE(sum(revenue) FILTER (WHERE ${inWin(w.prev)}), 0) AS prev_revenue` : ""}
+              COALESCE(sum(liters) FILTER (WHERE ${inWin(w.prev)}), 0) AS prev_liters` : ""}
          FROM vl
         WHERE src = 'erp' AND d BETWEEN '${w.prev && w.prev.from < w.from ? w.prev.from : w.from}' AND '${w.prev && w.prev.to > w.to ? w.prev.to : w.to}'
         GROUP BY 1
-       HAVING COALESCE(sum(liters) FILTER (WHERE ${inWin(w)}), 0) <> 0 OR COALESCE(sum(revenue) FILTER (WHERE ${inWin(w)}), 0) <> 0
+       HAVING COALESCE(sum(liters) FILTER (WHERE ${inWin(w)}), 0) <> 0
         ORDER BY ${order}
         LIMIT ${MAX_ROWS}`
     );
 
-    // 3) trend of the selected window: days up to ~5 weeks, weeks up to ~4 months, else months.
+    // 3) trend of the selected window (days up to ~5 weeks, weeks up to ~4 months, else months), zero-filled, with
+    // the comparison window bucketed the same way so a chart can lay the two side by side by position.
     const span = daysBetween(w.from, w.to) + 1;
     const bucket = span <= 35 ? "day" : span <= 125 ? "week" : "month";
     const { rows: trendRows } = await client.query(
-      `SELECT ${GROUP_SQL[bucket].key} AS key, COALESCE(sum(liters), 0) AS liters, COALESCE(sum(revenue), 0) AS revenue
-         FROM vl WHERE ${inWin(w)} GROUP BY 1 ORDER BY 1`
+      `SELECT ${GROUP_SQL[bucket].key} AS key, COALESCE(sum(liters), 0) AS liters FROM vl WHERE ${inWin(w)} GROUP BY 1`
+    );
+    const prevTrendRows = w.prev
+      ? (await client.query(`SELECT ${GROUP_SQL[bucket].key} AS key, COALESCE(sum(liters), 0) AS liters FROM vl WHERE ${inWin(w.prev)} GROUP BY 1`)).rows
+      : [];
+    // 3b) month by month, this year and last year (independent of the selected period, same filters).
+    const year = +w.today.slice(0, 4);
+    const { rows: monthlyRows } = await client.query(
+      `SELECT to_char(d, 'YYYY-MM') AS key, COALESCE(sum(liters), 0) AS liters FROM vl
+        WHERE src = 'erp' AND d BETWEEN '${year - 1}-01-01' AND '${w.today}' GROUP BY 1`
     );
 
     // 4) filter options: what really occurs in the last two years (independent of the current filters).
@@ -306,24 +318,21 @@ export async function buildVolumeReport({ query, scopeUserId = null, withCosts =
       today: w.today,
       group_by: groupBy,
       last_erp_order_date: lastRows[0]?.last_order_date ?? null,
-      totals: { ...totals, avg_price_per_liter: totals.liters ? totals.revenue / totals.liters : 0, all_liters: num(allRows[0].main) },
+      totals: { ...totals, all_liters: num(allRows[0].main) },
       prev_totals: w.prev ? { ...shape(t, "prev_"), all_liters: num(allRows[0].prev) } : null,
       pending: shape(t, "pend_"),
       periods: periodsOut,
-      rows: groupRows.map((r) => ({ key: r.key, label: r.label, sub: r.sub, ...shape(r), prev_liters: w.prev ? num(r.prev_liters) : null, prev_revenue: w.prev ? num(r.prev_revenue) : null })),
+      rows: groupRows.map((r) => ({ key: r.key, label: r.label, sub: r.sub, ...shape(r), prev_liters: w.prev ? num(r.prev_liters) : null })),
       truncated: groupRows.length >= MAX_ROWS,
-      trend: { bucket, rows: trendRows.map((r) => ({ key: r.key, liters: num(r.liters), revenue: num(r.revenue) })) },
+      trend: {
+        bucket,
+        rows: fillBuckets(bucketKeys(w.from, w.to, bucket), trendRows),
+        prev_rows: w.prev ? fillBuckets(bucketKeys(w.prev.from, w.prev.to, bucket), prevTrendRows) : null,
+      },
+      monthly: { year, rows: fillBuckets(bucketKeys(`${year - 1}-01-01`, w.today, "month"), monthlyRows) },
       facets,
       standard_periods: w.periods.map((p) => ({ key: p.key, from: p.from, to: p.to })),
-      with_costs: withCosts,
     };
-    if (!withCosts) {
-      // Margin figures are for the roles that may see product costs only.
-      for (const o of [out.totals, out.prev_totals, out.pending, ...out.rows]) if (o) {
-        delete o.cost;
-        delete o.revenue_costed;
-      }
-    }
     return out;
   } catch (err) {
     releaseErr = err;

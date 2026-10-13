@@ -1,5 +1,5 @@
 // Products & liters report (server/src/volumeReport.js, GET /api/volume-report): periods, filters (product text,
-// brand/line/grade/size, channel of the LINE, region), comparison, breakdowns, scope and cost visibility.
+// brand/line/grade/size, channel of the LINE, region), comparison, breakdowns, scope. Liters only, no money.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, createProduct, loginAs, apiRequest } from "./helpers.js";
@@ -85,10 +85,10 @@ test("today's liters: size x qty, internal stock account excluded, ERP lines onl
   // our 2 lines only count if nothing else wrote today's lines in parallel; assert the parts we control via filters
   const mine = await get(`period=today&compare=none&cq=VR-${stamp}`);
   assert.equal(mine.data.totals.liters, 22); // 5 x 4 + 2 x 1; the 100 x 4 L of customer 10000 is not a sale
-  assert.equal(mine.data.totals.revenue, 112000);
   assert.equal(mine.data.totals.orders, 2);
   assert.equal(mine.data.totals.customers, 2);
-  assert.equal(Math.round(mine.data.totals.avg_price_per_liter), Math.round(112000 / 22));
+  // liters only: no money figures leave this report
+  for (const k of ["revenue", "cost", "avg_price_per_liter", "revenue_costed"]) assert.equal(mine.data.totals[k], undefined);
 });
 
 test("filters: product text ignoring punctuation, brand, line, grade, size, channel of the line, region", async () => {
@@ -128,6 +128,15 @@ test("comparison, periods card, breakdowns and trend", async () => {
   const byDay = await get(`from=${addDays(today, -2)}&to=${today}&compare=none&group_by=day&cq=VR-${stamp}`);
   assert.deepEqual(byDay.data.rows.map((r) => r.liters), [208, 22]);
   assert.equal(byDay.data.trend.bucket, "day");
+  // trend is zero-filled per day and the comparison window is laid out the same way
+  assert.deepEqual(byDay.data.trend.rows.map((r) => r.key), [addDays(today, -2), addDays(today, -1), today]);
+  assert.deepEqual(byDay.data.trend.rows.map((r) => r.liters), [0, 208, 22]);
+  assert.equal(byDay.data.trend.prev_rows, null);
+  assert.equal(res.data.trend.prev_rows.length, res.data.prev_totals ? res.data.trend.prev_rows.length : 0);
+  // month by month this year and last year (zero-filled, from January of last year to this month)
+  assert.equal(res.data.monthly.rows[0].key, `${res.data.monthly.year - 1}-01`);
+  assert.equal(res.data.monthly.rows.at(-1).key, today.slice(0, 7));
+  assert.ok(res.data.monthly.rows.find((r) => r.key === today.slice(0, 7)).liters >= 22);
   const lastYear = await get(`from=${addDays(today, -401)}&to=${addDays(today, -399)}&compare=none&cq=VR-${stamp}`);
   assert.equal(lastYear.data.totals.liters, 40);
   // facets list the options that exist, with liters
@@ -136,18 +145,12 @@ test("comparison, periods card, breakdowns and trend", async () => {
   assert.ok(res.data.facets.product.some((p) => p.label.includes("Royal 0W-8")));
 });
 
-test("sales manager sees only their own customers and no costs; costs for finance roles; others refused", async () => {
+test("sales manager sees only their own customers; others refused", async () => {
   const mineRep = await get(`period=today&compare=none&group_by=product`, "rep");
   assert.equal(mineRep.status, 200);
   assert.ok(mineRep.data.totals.liters >= 22);
   const names = mineRep.data.rows.map((r) => r.label).join("|");
   assert.ok(!/Edge/.test(names), "the other rep's customers are not in the numbers");
-  assert.equal(mineRep.data.totals.cost, undefined);
-  assert.equal(mineRep.data.with_costs, false);
-  const fin = await get(`period=today&compare=none&cq=VR-${stamp}`, "director");
-  assert.equal(fin.data.with_costs, true);
-  assert.equal(fin.data.totals.cost, 5 * 20000 + 2 * 5000);
-  assert.equal(fin.data.totals.revenue_costed, 112000);
   const warehouse = await createUser("warehouse_manager");
   assert.equal((await apiRequest("/api/volume-report", { cookie: await loginAs(warehouse.email) })).status, 403);
 });
