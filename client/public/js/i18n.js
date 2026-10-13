@@ -910,6 +910,7 @@ const dict = {
     plan_for_date: "Plan for",
     last_visit: "Last visit",
     never_visited: "Not visited yet",
+    visit_none_verified: "None verified ({n} from far away)",
     next_due: "Next due",
     visit_frequency: "Visit frequency (days)",
     every: "every",
@@ -1195,6 +1196,7 @@ const dict = {
     location_verified: "Location verified",
     location_mismatch_away: "Mismatch",
     checkin_not_counted: "The check-in is saved but does not count as a visit. Go to the customer and check in again.",
+    checkin_not_rep_visit: "Saved. Only a sales rep's check-in counts as the customer's visit, so the visit plan does not change.",
     away: "away",
 
     syncing_checkins: "Syncing {n} pending check-in{s}…",
@@ -2813,6 +2815,7 @@ const dict = {
     plan_for_date: "Պլան",
     last_visit: "Վերջին այց",
     never_visited: "Դեռ չայցելված",
+    visit_none_verified: "Հաստատված չէ ({n}՝ հեռվից)",
     next_due: "Հաջորդ այցը",
     visit_frequency: "Այցելության պարբերականություն (օր)",
     every: "ամեն",
@@ -3100,6 +3103,7 @@ const dict = {
     location_verified: "Տեղադրությունը հաստատված է",
     location_mismatch_away: "Անհամապատասխանություն",
     checkin_not_counted: "Այցը գրանցվել է, բայց չի հաշվվում որպես այց։ Մոտեցեք հաճախորդին և նորից գրանցվեք։",
+    checkin_not_rep_visit: "Գրանցվել է։ Որպես հաճախորդի այց հաշվվում է միայն վաճառքի ներկայացուցչի այցը, ուստի այցի պլանը չի փոխվում։",
     away: "հեռավորության վրա",
 
     syncing_checkins: "Համաժամացվում է {n} սպասող այցելություն{s}…",

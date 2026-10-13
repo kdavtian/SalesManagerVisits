@@ -5,14 +5,15 @@ import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
 
-let admin, adminCookie;
+let admin, rep, adminCookie;
 test.before(async () => {
   await startTestServer();
   admin = await createUser("admin");
+  rep = await createUser("sales_manager"); // only a rep's in-range check-in counts as a visit
   adminCookie = await loginAs(admin.email);
 });
 test.after(async () => {
-  await pool.query("DELETE FROM checkins WHERE user_id = $1", [admin.id]);
+  await pool.query("DELETE FROM checkins WHERE user_id = ANY($1)", [[admin.id, rep.id]]);
   await cleanupAll();
   await stopTestServer();
 });
@@ -21,7 +22,7 @@ async function customerVisitedLongAgo(channel) {
   const c = await createCustomer({ created_by: admin.id, assigned_manager_id: admin.id, sales_channel: channel });
   await pool.query(
     "INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, timestamp) VALUES ($1, $2, 40.18, 44.51, 5, true, now() - interval '42 days')",
-    [c.id, admin.id]
+    [c.id, rep.id]
   );
   return c;
 }

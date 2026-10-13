@@ -209,7 +209,12 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       return [0, 1, 2].map(() => '<div class="popup-fact popup-fact-skeleton"><span class="skeleton-bar"></span></div>').join("");
     }
     const debtLabel = data.erp_debt_amd != null ? formatAmd(data.erp_debt_amd) : "—";
-    const lastVisitLabel = data.last_visit_at ? formatLastVisit(data.last_visit_at) : t("never_visited");
+    // Check-ins saved far from the pin are not visits: say so instead of a bare "Not visited yet".
+    const lastVisitLabel = data.last_visit_at
+      ? formatLastVisit(data.last_visit_at)
+      : data.far_visits > 0
+        ? t("visit_none_verified").replace("{n}", String(data.far_visits))
+        : t("never_visited");
     return `
       <div class="popup-fact"><span class="muted">${t("outstanding_debt")}</span><strong>${escapeHtml(debtLabel)}</strong></div>
       <div class="popup-fact"><span class="muted">${t("last_visit")}</span><strong>${escapeHtml(lastVisitLabel)}</strong></div>

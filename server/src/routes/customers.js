@@ -15,6 +15,7 @@ import { haversineMeters } from "../utils/geo.js";
 import { normalizePhoneForStorage } from "../phoneFormat.js";
 import { lookupCompanyByTin, isValidTin } from "../registryLookup.js";
 import { computeVisitDue, ruleWeekdaysFor } from "../utils/visitDue.js";
+import { repVisitSql, FAR_VISITS_COLUMNS_SQL } from "../visitCount.js";
 
 export const customersRouter = Router();
 
@@ -44,7 +45,7 @@ const VISIT_STATUS_JOIN = `
     SELECT max(ch.timestamp) AS last_visit_at,
            COALESCE(bool_or(ch.timestamp >= date_trunc('day', now())), false) AS visited_today,
            COALESCE(bool_or(ch.timestamp >= now() - interval '7 days'), false) AS visited_this_week
-    FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range
+    FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}
   ) v ON true`;
 const OVERDUE_SQL = `(
     ${NOT_NO_VISIT_CHANNEL_SQL}
@@ -466,7 +467,8 @@ customersRouter.get("/map-facts", async (req, res) => {
     loadScheduleContext(req),
     pool.query(
       `SELECT c.id, c.region, c.subregion, c.sales_channel, c.checkin_for_all, c.visit_frequency_days, c.assigned_manager_id, erp.debt_amd, ${REORDER_COLUMNS},
-              (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range) AS last_visit_at
+              (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}) AS last_visit_at,
+              ${FAR_VISITS_COLUMNS_SQL}
        FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id ${REORDER_JOIN}
        WHERE c.id = ANY($1)`,
       [ids]
@@ -480,6 +482,8 @@ customersRouter.get("/map-facts", async (req, res) => {
     out[row.id] = {
       ...schedule,
       last_visit_at: schedule.cadence.last_visit_at,
+      far_visits: row.far_visits,
+      far_visit_last_at: row.far_visit_last_at,
       erp_debt_amd: sees ? row.debt_amd : null,
       reorder_state: row.reorder_state,
       reorder_gap_days: row.reorder_gap_days,
@@ -523,7 +527,7 @@ customersRouter.get("/:id/documents", async (req, res) => {
 
 customersRouter.get("/:id", async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT c.*, ${STATUS_COLUMNS},
+    `SELECT c.*, ${STATUS_COLUMNS}, ${FAR_VISITS_COLUMNS_SQL},
        am.name AS assigned_manager_name,
        erp.assigned_sales_rep AS erp_assigned_sales_rep,
        erp.debt_amd AS erp_debt_amd,
@@ -1155,12 +1159,14 @@ function scheduleForCustomer(customer, ctx) {
 async function buildVisitSchedule(req, customerId) {
   const { rows: custRows } = await pool.query(
     `SELECT c.id, c.region, c.subregion, c.sales_channel, c.checkin_for_all, c.visit_frequency_days,
-            (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range) AS last_visit_at
+            (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}) AS last_visit_at,
+            ${FAR_VISITS_COLUMNS_SQL}
      FROM customers c WHERE c.id = $1`,
     [customerId]
   );
   if (!custRows[0]) return null;
-  return scheduleForCustomer(custRows[0], await loadScheduleContext(req));
+  const schedule = scheduleForCustomer(custRows[0], await loadScheduleContext(req));
+  return { ...schedule, far_visits: custRows[0].far_visits, far_visit_last_at: custRows[0].far_visit_last_at };
 }
 
 customersRouter.get("/:id/visit-schedule", async (req, res) => {
