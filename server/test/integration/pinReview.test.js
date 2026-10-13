@@ -181,3 +181,26 @@ test("DELETE /api/orders/:id: a rep deletes their OWN draft/submitted order; con
   assert.equal((await pool.query("SELECT 1 FROM deleted_orders_log WHERE order_id = $1", [confirmed])).rows.length, 1);
   assert.equal((await apiRequest(`/api/orders/${others}`, { method: "DELETE", cookie: adminCookie })).status, 204);
 });
+
+test("moving a customer's pin re-measures its saved check-ins: 'mismatch' visits become verified (and vice versa)", async () => {
+  const c = await customerAt(40.18, 44.51);
+  const spot = { lat: 40.1802, lng: 44.5171 }; // where the rep really is, ~520 m from the wrong pin
+  const far = await pool.query(
+    `INSERT INTO checkins (customer_id, user_id, timestamp, lat, lng, distance_meters, within_range, outcomes)
+     VALUES ($1, $2, now() - interval '2 days', $3, $4, 520, false, '{other}') RETURNING id`,
+    [c.id, rep.id, spot.lat, spot.lng]
+  );
+  const near = await pool.query(
+    `INSERT INTO checkins (customer_id, user_id, timestamp, lat, lng, distance_meters, within_range, outcomes)
+     VALUES ($1, $2, now() - interval '3 days', 40.18, 44.51, 3, true, '{other}') RETURNING id`,
+    [c.id, rep.id]
+  );
+  const move = await apiRequest("/api/edit-requests", { method: "POST", cookie: directorCookie, body: { customer_id: c.id, changes: spot } });
+  assert.equal(move.data.status, "approved");
+  const { rows } = await pool.query("SELECT id, distance_meters, within_range FROM checkins WHERE id = ANY($1) ORDER BY id", [[far.rows[0].id, near.rows[0].id]]);
+  const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+  assert.equal(byId[far.rows[0].id].within_range, true, "the visit at the real shop is verified now");
+  assert.ok(byId[far.rows[0].id].distance_meters < 5);
+  assert.equal(byId[near.rows[0].id].within_range, false, "a check-in at the OLD spot is now away from the pin");
+  assert.ok(byId[near.rows[0].id].distance_meters > 400 && byId[near.rows[0].id].distance_meters < 700);
+});

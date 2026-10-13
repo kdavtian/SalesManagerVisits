@@ -129,6 +129,14 @@ export const REPORTS = [
     descriptionKey: "report_sales_budget_description",
     defaultRoles: ["admin", "ceo", "operations_director", "sales_director"],
   },
+  // Products & liters: what was sold, by period / product / channel / place -- see volumeReport.js.
+  // A sales manager sees only their own customers' numbers (and no costs).
+  {
+    key: "product_liters",
+    nameKey: "report_product_liters_name",
+    descriptionKey: "report_product_liters_description",
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant", "sales_manager"],
+  },
   {
     key: "brand_volume",
     nameKey: "report_brand_volume_name",
@@ -163,6 +171,7 @@ export const REPORTS = [
 // the order reports were added; this is the order users see.)
 const REPORT_DISPLAY_ORDER = [
   "daily_management",
+  "product_liters",
   "customer_debt",
   "unpaid_invoices",
   "payments",

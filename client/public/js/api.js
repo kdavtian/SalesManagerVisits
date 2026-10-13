@@ -150,6 +150,7 @@ export const api = {
     return created;
   },
   getCustomer: (id) => request(`/customers/${id}`),
+  getVolumeReport: (params) => request(`/volume-report?${new URLSearchParams(params).toString()}`),
   getPinReview: () => request("/pin-review"),
   acceptPinReview: (customerId) => json(`/pin-review/${customerId}/accept`, "POST", {}),
   dismissPinReview: (customerId) => json(`/pin-review/${customerId}/dismiss`, "POST", {}),

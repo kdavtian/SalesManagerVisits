@@ -155,6 +155,7 @@ export function transformErpOrderLines(orderLines) {
   const lineUnitPrices = [];
   const lineRevenues = [];
   const lineDiscounts = [];
+  const lineSalesReps = [];
 
   for (const line of isPlainArray(orderLines)) {
     if (!isPlainObject(line) || !line.erp_customer_id || !line.order_id || !line.date) continue;
@@ -172,6 +173,8 @@ export function transformErpOrderLines(orderLines) {
     // (see docs/erp-sync-contract.md), omitted/null for a line with no
     // discount or price adjustment recorded against it.
     lineDiscounts.push(Number.isFinite(line.discount_amd) ? line.discount_amd : null);
+    // The selling channel of this line (ORDERS Sales_Rep); optional, older bot versions do not send it.
+    lineSalesReps.push(typeof line.sales_rep === "string" && line.sales_rep.trim() ? line.sales_rep.trim() : null);
   }
 
   return {
@@ -186,6 +189,7 @@ export function transformErpOrderLines(orderLines) {
     lineUnitPrices,
     lineRevenues,
     lineDiscounts,
+    lineSalesReps,
   };
 }
 
