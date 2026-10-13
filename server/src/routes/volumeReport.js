@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import { canAccessReport } from "../reports.js";
-import { seesProductCosts } from "../roles.js";
 import { erpSyncFreshness } from "../erpSyncFreshness.js";
 import { buildVolumeReport } from "../volumeReport.js";
 
@@ -14,9 +13,8 @@ volumeReportRouter.get("/", async (req, res) => {
   if (!(await canAccessReport(req.user.role, "product_liters"))) return res.status(403).json({ error: "Not allowed" });
   const report = await buildVolumeReport({
     query: req.query,
-    // A sales manager sees the liters of their own customers only, and never the costs.
+    // A sales manager sees the liters of their own customers only.
     scopeUserId: req.user.role === "sales_manager" ? req.user.id : null,
-    withCosts: seesProductCosts(req.user.role),
   });
   res.json({ ...report, sync: await erpSyncFreshness("erp_customer_data") });
 });
