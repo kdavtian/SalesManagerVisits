@@ -139,6 +139,61 @@ test("POST /api/customers: a duplicate erp_customer_id is a clean 409, not a raw
   assert.equal(conflict.status, 409);
 });
 
+test("POST /api/customers: an ERP id already assigned to ANOTHER sales manager says whose it is and to contact management", async () => {
+  const erpId = `ITEST-ERP-OWNED-${Date.now()}`;
+  const owner = await createUser("sales_manager");
+  const mine = await createCustomer({ created_by: owner.id, assigned_manager_id: owner.id, erp_customer_id: erpId });
+  const conflict = await apiRequest("/api/customers", {
+    method: "POST",
+    cookie: cookies.sales_manager,
+    body: { name: `Itest ERP C ${Date.now()}`, lat: YEREVAN.lat + 0.4, lng: YEREVAN.lng + 0.4, erp_customer_id: erpId },
+  });
+  assert.equal(conflict.status, 409);
+  assert.equal(conflict.data.code, "erp_id_assigned");
+  assert.equal(conflict.data.assigned_manager_name, owner.name);
+  assert.match(conflict.data.error, /already assigned to .* Please contact management/);
+  // the owner themselves just gets the plain "already linked" error
+  const own = await apiRequest("/api/customers", {
+    method: "POST",
+    cookie: await loginAs(owner.email),
+    body: { name: `Itest ERP D ${Date.now()}`, lat: YEREVAN.lat + 0.3, lng: YEREVAN.lng + 0.3, erp_customer_id: erpId },
+  });
+  assert.equal(own.status, 409);
+  assert.equal(own.data.code, undefined);
+  assert.ok(mine.id);
+});
+
+// --- Pin corrections are auto-approved ------------------------------------------
+
+test("POST /api/edit-requests: a rep's pin correction on their OWN customer is applied at once; someone else's customer stays pending", async () => {
+  const mineC = await createCustomer({ created_by: users.sales_director.id, assigned_manager_id: users.sales_manager.id });
+  const next = { lat: YEREVAN.lat + 0.01, lng: YEREVAN.lng + 0.01 };
+  const res = await apiRequest("/api/edit-requests", { method: "POST", cookie: cookies.sales_manager, body: { customer_id: mineC.id, changes: next } });
+  assert.equal(res.status, 201);
+  assert.equal(res.data.status, "approved");
+  assert.match(res.data.note, /Auto-approved pin correction \(moved \d+ m\)/);
+  const { rows } = await pool.query("SELECT lat, lng FROM customers WHERE id = $1", [mineC.id]);
+  assert.equal(rows[0].lat, next.lat);
+  assert.equal(rows[0].lng, next.lng);
+
+  const otherRep = await createUser("sales_manager");
+  const theirs = await createCustomer({ created_by: otherRep.id, assigned_manager_id: otherRep.id });
+  const pending = await apiRequest("/api/edit-requests", { method: "POST", cookie: cookies.sales_manager, body: { customer_id: theirs.id, changes: next } });
+  assert.equal(pending.data.status, "pending");
+  const unchanged = await pool.query("SELECT lat FROM customers WHERE id = $1", [theirs.id]);
+  assert.notEqual(unchanged.rows[0].lat, next.lat);
+
+  // a pin plus any other field is not a plain pin correction: needs review; a pin outside Armenia too
+  const mixed = await apiRequest("/api/edit-requests", { method: "POST", cookie: cookies.sales_manager, body: { customer_id: mineC.id, changes: { ...next, notes: "x" } } });
+  assert.equal(mixed.data.status, "pending");
+  const outside = await apiRequest("/api/edit-requests", { method: "POST", cookie: cookies.sales_manager, body: { customer_id: mineC.id, changes: OUTSIDE_ARMENIA } });
+  assert.equal(outside.data.status, "pending");
+
+  // management corrects any customer's pin at once
+  const byDirector = await apiRequest("/api/edit-requests", { method: "POST", cookie: cookies.sales_director, body: { customer_id: theirs.id, changes: next } });
+  assert.equal(byDirector.data.status, "approved");
+});
+
 // --- Reassignment / finance-field role gating on PATCH --------------------------
 
 test("PATCH /api/customers/:id: reassigning region/manager requires canReassignCustomers -- sales_manager is 403, sales_director succeeds", async () => {
