@@ -8,7 +8,9 @@ import { prefetchGet } from "./api.js";
 
 // [selector, path builder] -- first match wins.
 const TARGETS = [
-  ["[data-order-id]", (el) => `/orders/${el.dataset.orderId}`],
+  // Only this app's own orders (numeric ids): ERP order rows reuse data-order-id with the workbook's
+  // order number, which is not an /orders/:id -- the prefetch used to 404/500 on every tap.
+  ["[data-order-id]", (el) => (/^\d+$/.test(el.dataset.orderId || "") && !el.hasAttribute("data-erp-customer-id") && !el.classList.contains("erp-order-row") ? `/orders/${el.dataset.orderId}` : null)],
   [".customer-name-link[data-customer-id], .activity-customer-name-btn[data-customer-id], .list-row-icon[data-customer-id]", (el) => `/customers/${el.dataset.customerId}`],
   ["button.list-row[data-id]", (el) => (location.hash === "#/customers" ? `/customers/${el.dataset.id}` : null)],
   ["[data-open-id]", (el) => `/products/${el.dataset.openId}`],

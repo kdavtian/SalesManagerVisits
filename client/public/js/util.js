@@ -631,7 +631,28 @@ export function agingBucketLabel(bucket) {
 // negative sign), so a price add shows the same way a discount does,
 // without the app asserting a direction of its own. Returns "" (no row)
 // for a line with no discount recorded, including exactly 0.
+// Price one unit was actually sold for: the workbook's line Total / Qty. The workbook's UnitPrice
+// column is the list price BEFORE the line's Discount/price adjustment (Total = Qty * (UnitPrice +
+// Discount)), so showing UnitPrice made a 550,000 sale read as 530,000 next to a 550,000 total.
+export function erpLineSoldPrice(line) {
+  const qty = Number(line.qty);
+  const revenue = line.revenue_amd == null ? NaN : Number(line.revenue_amd);
+  if (qty > 0 && Number.isFinite(revenue)) return revenue / qty;
+  return Number(line.unit_price_amd);
+}
+
+// Muted second row under an ERP order line: the list price when the line was sold at a different
+// price (so the gap is explained), else the workbook's own Discount amount if one was sent.
 export function erpLineDiscountRowHtml(line) {
+  const list = Number(line.unit_price_amd);
+  if (Number.isFinite(list) && Math.abs(erpLineSoldPrice(line) - list) >= 1) {
+    return `
+    <div class="erp-line-row erp-line-discount-row">
+      <span class="muted">${t("erp_line_list_price_label")}</span>
+      <span></span>
+      <span class="muted">${formatAmd(list)}</span>
+    </div>`;
+  }
   const discount = line.discount_amd;
   if (discount == null || Number(discount) === 0) return "";
   return `
