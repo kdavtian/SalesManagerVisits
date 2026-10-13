@@ -1,6 +1,6 @@
 import { pool } from "./db/pool.js";
 
-const ENV_DEFAULT_RADIUS = Number(process.env.CHECKIN_RADIUS_METERS) || 200;
+const ENV_DEFAULT_RADIUS = Number(process.env.CHECKIN_RADIUS_METERS) || 300;
 
 export async function getCheckinRadiusMeters() {
   const { rows } = await pool.query("SELECT checkin_radius_meters FROM app_settings WHERE id = 1");

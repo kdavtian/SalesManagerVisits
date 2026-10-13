@@ -11,6 +11,7 @@ import { canViewTeamLocations, canEditDirectly, canPlanForOthers, canReassignCus
 import { getClusterPins, setClusterPins, getCompassMode, setCompassMode, getMapTileCacheEnabled } from "../mapPrefs.js";
 import { getPerfMode } from "../perfMode.js";
 import { ensureLeaflet } from "../leafletLoader.js";
+import { paintCheckinSpots, parseHere } from "../checkinSpotsLayer.js";
 import { routeLegs, openRouteInMaps } from "../routeNavigation.js";
 import { loadWithCache } from "../listCache.js";
 import { openTriStateTreeSheet } from "../regionTree.js";
@@ -209,12 +210,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       return [0, 1, 2].map(() => '<div class="popup-fact popup-fact-skeleton"><span class="skeleton-bar"></span></div>').join("");
     }
     const debtLabel = data.erp_debt_amd != null ? formatAmd(data.erp_debt_amd) : "—";
-    // Check-ins saved far from the pin are not visits: say so instead of a bare "Not visited yet".
-    const lastVisitLabel = data.last_visit_at
-      ? formatLastVisit(data.last_visit_at)
-      : data.far_visits > 0
-        ? t("visit_none_verified").replace("{n}", String(data.far_visits))
-        : t("never_visited");
+    const lastVisitLabel = data.last_visit_at ? formatLastVisit(data.last_visit_at) : t("never_visited");
     return `
       <div class="popup-fact"><span class="muted">${t("outstanding_debt")}</span><strong>${escapeHtml(debtLabel)}</strong></div>
       <div class="popup-fact"><span class="muted">${t("last_visit")}</span><strong>${escapeHtml(lastVisitLabel)}</strong></div>
@@ -488,6 +484,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     // (the blank map with working buttons). Resizing is handled below by a
     // ResizeObserver that ignores a detached / zero-size container.
     trackResize: false,
+    // Change location: its own view (pin + the real check-in spots), not the Map tab's remembered one.
+    kadPlainView: Boolean(relocateCustomerId),
   }).setView(restoredView ? restoredView.center : [20, 0], restoredView ? restoredView.zoom : 2);
   L.control.attribution({ prefix: false, position: "bottomright" }).addTo(map);
   // Remember the view as it changes (not only on teardown: the back-cache can
@@ -3044,8 +3042,27 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     customersReady.then(() => {
       const existing = lastCustomers.find((entry) => String(entry.c.id) === String(relocateCustomerId));
       const startLatLng = existing ? L.latLng(existing.c.lat, existing.c.lng) : map.getCenter();
-      if (existing) map.setView(startLatLng, Math.max(map.getZoom(), 16));
+      // Not animated: Leaflet drops any setView/fitBounds issued while a zoom animation is still running,
+      // which would swallow the fit to the check-in spots below.
+      if (existing) map.setView(startLatLng, Math.max(map.getZoom(), 16), { animate: false });
       placeLocationPin(startLatLng, { source: "existing_customer", onConfirm: openRelocateConfirmDetails });
+      // The real GPS spots of the last check-ins (and "you are here" when coming from a blocked check-in),
+      // so the pin can be dragged to where the shop really is, or set with "Use this spot".
+      api
+        .getCheckinSpots(relocateCustomerId)
+        .then((data) => {
+          const here = parseHere(new URLSearchParams(location.hash.split("?")[1] || "").get("here"));
+          const { bounds } = paintCheckinSpots(map, data, {
+            here,
+            showPin: false,
+            onUse: (latlng) => placeLocationPin(latlng, { source: "dragged_pin", onConfirm: openRelocateConfirmDetails }),
+          });
+          if (data.spots.length || here) {
+            bounds.extend(startLatLng);
+            map.fitBounds(bounds, { padding: [48, 48], maxZoom: 17, animate: false });
+          }
+        })
+        .catch(() => {});
     });
   } else {
     // Tapping the FAB a second time while already picking cancels --

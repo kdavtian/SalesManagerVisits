@@ -8510,6 +8510,23 @@ form select,
   gap: 10px;
 }
 
+.visit-detail-info-row-btn {
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.visit-detail-info-row-btn .chevron {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-size: 1.3rem;
+}
+
 .visit-detail-info-icon {
   flex-shrink: 0;
   display: flex;
@@ -11772,3 +11789,96 @@ form select,
 .order-usual-heading { display: flex; align-items: center; gap: 8px; }
 .usual-order-title strong { font-size: 0.95rem; }
 .usual-order-card .btn { padding-left: 18px; padding-right: 18px; }
+
+
+/* Check-in locations page (views/checkinSpots.js) and the spots drawn on the Change location map. */
+.spots-map {
+  height: 46vh;
+  min-height: 260px;
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.spots-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.9rem;
+}
+.spots-legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.spots-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.spots-legend-pin {
+  color: #d6291f;
+  width: 22px;
+  text-align: center;
+}
+.spots-legend-n,
+.spots-spot span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.spots-spot span {
+  width: 26px;
+  height: 26px;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+.spots-spot-far {
+  background: var(--danger) !important;
+}
+.spots-here span {
+  display: block;
+  width: 16px;
+  height: 16px;
+  margin: 2px;
+  border-radius: 50%;
+  background: #1e90ff;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px rgba(30, 144, 255, 0.35);
+}
+.spots-pin svg {
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35));
+}
+.spots-help {
+  margin: 10px 0 0;
+  font-size: 0.82rem;
+}
+.spots-actions {
+  position: sticky;
+  bottom: 0;
+  padding: 12px 0 calc(8px + env(safe-area-inset-bottom));
+  background: var(--bg);
+}
+.spots-use-btn {
+  margin-top: 6px;
+  min-height: 36px;
+}

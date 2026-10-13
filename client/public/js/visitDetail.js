@@ -72,6 +72,8 @@ export function openVisitDetailSheet(ch, onPhotoDeleted, navigate) {
   const outcomeLabels = checkinOutcomeLabels(ch);
   const brandTags = checkinBrandTags(ch);
   const hasCustomer = Boolean(ch.customer_name);
+  // Tapping the location row opens the map: the customer's pin next to where the last check-ins really were.
+  const canShowSpots = Boolean(navigate && ch.customer_id);
 
   overlay.innerHTML = `
     <div class="sheet visit-detail-sheet">
@@ -87,12 +89,13 @@ export function openVisitDetailSheet(ch, onPhotoDeleted, navigate) {
       </div>
 
       <div class="visit-detail-info-card">
-        <div class="visit-detail-info-row">
+        <${canShowSpots ? 'button type="button" data-checkin-spots' : "div"} class="visit-detail-info-row${canShowSpots ? " visit-detail-info-row-btn" : ""}">
           <span class="visit-detail-info-icon">${ch.within_range ? icons.checkCircle : icons.mapWarning}</span>
           <span class="${ch.within_range ? "" : "visit-detail-danger-text"}">
             ${ch.within_range ? t("location_verified") : `${t("location_mismatch_away")} (${formatDistance(ch.distance_meters)} ${t("away")})`}
           </span>
-        </div>
+          ${canShowSpots ? '<span class="chevron" aria-hidden="true">&#8250;</span>' : ""}
+        </${canShowSpots ? "button" : "div"}>
         ${
           ch.amount_collected_amd != null
             ? `<div class="visit-detail-info-row">
@@ -175,6 +178,10 @@ export function openVisitDetailSheet(ch, onPhotoDeleted, navigate) {
   if (navigate) {
     activateCustomerNameLinks(overlay, (hash) => leaveSheetTo(overlay, navigate, hash));
   }
+
+  overlay.querySelector("[data-checkin-spots]")?.addEventListener("click", () => {
+    leaveSheetTo(overlay, navigate, `#/customers/${ch.customer_id}/spots?checkin=${ch.id}`);
+  });
 
   overlay.querySelectorAll("[data-order-id]").forEach((btn) => {
     btn.addEventListener("click", () => {

@@ -58,7 +58,7 @@ test("visit priorities: overdue debt first, visited-today customers left out, on
   assert.ok(res.data[0].reasons.some((r) => r.type === "debt" && r.amount === 900000));
   assert.ok(ids.includes(stale.id));
   assert.ok(!ids.includes(done.id), "visited today is left out");
-  assert.ok(ids.includes(outOfRange.id), "an out-of-range check-in is not a visit");
+  assert.ok(!ids.includes(outOfRange.id), "a rep's check-in counts at any distance (the allowance refuses far ones when checking in)");
   assert.deepEqual((await apiRequest("/api/customers/visit-priorities", { cookie: cookies.admin })).data, []);
 });
 
@@ -74,7 +74,7 @@ test("End visit: only the own open check-in of today, once", async () => {
   assert.equal((await apiRequest(`/api/checkins/open?customer_id=${customer.id}`, { cookie: cookies.sales_manager })).data, null);
 });
 
-test("weekly scorecard: counts in-range visits, orders, conversion and visit length; a rep sees only their own row", async () => {
+test("weekly scorecard: counts visits, orders, conversion and visit length; a rep sees only their own row", async () => {
   // A fresh rep, so the other tests' check-ins do not count.
   const rep = await createUser("sales_manager");
   const repCookie = await loginAs(rep.email);
@@ -86,7 +86,7 @@ test("weekly scorecard: counts in-range visits, orders, conversion and visit len
   const id = await checkin(customer, true, "0 days", rep.id);
   await pool.query("UPDATE checkins SET ended_at = timestamp + interval '30 minutes' WHERE id = $1", [id]);
   await checkin(other, true, "0 days", rep.id);
-  await checkin(other, false, "0 days", rep.id); // out of range: not counted
+  await checkin(other, false, "0 days", rep.id); // old far check-in by a rep: still a visit (distance no longer decides)
   const o = await apiRequest("/api/orders", { method: "POST", cookie: repCookie, body: { customer_id: customer.id, items: [{ product_id: product.id, quantity: 5 }], payment_method: "cash" } });
   assert.equal(o.status, 201, JSON.stringify(o.data));
   trackOrder(o.data.id);
@@ -94,7 +94,7 @@ test("weekly scorecard: counts in-range visits, orders, conversion and visit len
   const res = await apiRequest("/api/biz-reports/scorecard", { cookie: cookies.sales_director });
   assert.equal(res.status, 200);
   const row = res.data.reps.find((r) => r.id === rep.id);
-  assert.equal(row.visits, 2);
+  assert.equal(row.visits, 3);
   assert.equal(row.customers_visited, 2);
   assert.equal(row.orders, 1);
   assert.equal(row.orders_amd, 5000);

@@ -52,16 +52,55 @@ test("POST /api/checkins: submitting right at the customer's own coordinates rec
   assert.equal(res.data.within_range, true);
 });
 
-test("POST /api/checkins: submitting far from the customer still succeeds, just flagged within_range: false (non-blocking)", async () => {
-  // ~5.5km north of the customer -- far past any plausible configured radius.
+test("POST /api/checkins: a sales manager far from the customer is refused (Check-in allowance), nothing is saved", async () => {
+  // ~5.5km north of the customer -- far past the allowance.
   const farLat = customer.lat + 0.05;
   const res = await apiFormRequest("/api/checkins", {
     cookie,
     form: checkinForm({ customer_id: customer.id, lat: String(farLat), lng: String(customer.lng), outcomes: JSON.stringify(["no_order"]) }),
   });
-  assert.equal(res.status, 201, "an out-of-range check-in must still save, not be rejected");
+  assert.equal(res.status, 422);
+  assert.equal(res.data.code, "checkin_too_far");
+  assert.ok(res.data.distance_meters > 5000);
+  assert.ok(res.data.allowance_meters >= 10);
+  const { rows } = await pool.query("SELECT 1 FROM checkins WHERE customer_id = $1 AND user_id = $2 AND NOT within_range", [customer.id, manager.id]);
+  assert.equal(rows.length, 0);
+});
+
+test("POST /api/checkins: management (director) can check in from anywhere; it is saved flagged within_range: false", async () => {
+  const director = await createUser("sales_director");
+  const directorCookie = await loginAs(director.email);
+  const res = await apiFormRequest("/api/checkins", {
+    cookie: directorCookie,
+    form: checkinForm({ customer_id: customer.id, lat: String(customer.lat + 0.05), lng: String(customer.lng), outcomes: JSON.stringify(["no_order"]) }),
+  });
+  assert.equal(res.status, 201, "management is not limited by the allowance");
   trackCheckin(res.data.id);
   assert.equal(res.data.within_range, false);
+});
+
+test("GET /api/customers/:id/checkin-spots: last 5 real check-in spots + the pin; a rep sees only their own", async () => {
+  const other = await createUser("sales_manager");
+  for (let i = 0; i < 6; i++) {
+    await pool.query(
+      `INSERT INTO checkins (customer_id, user_id, timestamp, lat, lng, distance_meters, within_range, outcomes)
+       VALUES ($1, $2, now() - ($3 || ' hours')::interval, $4, $5, 120, true, '{other}')`,
+      [customer.id, manager.id, String(i + 1), customer.lat + 0.001 * i, customer.lng]
+    );
+  }
+  await pool.query(
+    `INSERT INTO checkins (customer_id, user_id, timestamp, lat, lng, distance_meters, within_range, outcomes)
+     VALUES ($1, $2, now(), $3, $4, 50, true, '{other}')`,
+    [customer.id, other.id, customer.lat, customer.lng]
+  );
+  const res = await apiRequest(`/api/customers/${customer.id}/checkin-spots`, { cookie });
+  assert.equal(res.status, 200);
+  assert.equal(res.data.customer.id, customer.id);
+  assert.equal(res.data.spots.length, 5);
+  assert.ok(res.data.spots.every((sp) => sp.user_id === manager.id), "a rep sees only their own check-ins");
+  assert.ok(res.data.allowance_meters >= 10);
+  const times = res.data.spots.map((sp) => new Date(sp.timestamp).getTime());
+  assert.deepEqual(times, [...times].sort((x, y) => y - x), "newest first");
 });
 
 // --- payment_collected outcome auto-creates a linked payment --------------------

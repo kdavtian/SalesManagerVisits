@@ -150,6 +150,7 @@ export const api = {
     return created;
   },
   getCustomer: (id) => request(`/customers/${id}`),
+  getCheckinSpots: (id) => request(`/customers/${id}/checkin-spots`),
   getCustomerProductPrices: (id) => request(`/customers/${id}/product-prices`),
   updateCustomer: async (id, data) => {
     const updated = await json(`/customers/${id}`, "PATCH", data);

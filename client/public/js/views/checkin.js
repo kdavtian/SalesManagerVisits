@@ -428,8 +428,10 @@ export async function renderCheckin(root, navigate, customerId) {
     }
   });
 
+  let checkinBlocked = false;
   async function acquirePosition() {
     position = null;
+    checkinBlocked = false;
     submitBtn.disabled = true;
     submitBtn.textContent = t("locating");
     verifyBanner.hidden = true;
@@ -456,6 +458,22 @@ export async function renderCheckin(root, navigate, customerId) {
           <span class="muted">${t("you_are")} ${formatDistance(distance)} ${t("from_customer")}</span>
         </div>
       `;
+      // Check-in allowance: a sales manager too far from the pin cannot check in (management can). The pin
+      // may be the thing that is wrong, so offer the map with the real spots and "you are here".
+      checkinBlocked = !withinRange && state.user?.role === "sales_manager";
+      if (checkinBlocked) {
+        submitBtn.disabled = true;
+        verifyBanner.innerHTML = `
+          <span class="verify-banner-icon">!</span>
+          <div>
+            <strong>${t("checkin_too_far").replace("{d}", formatDistance(distance)).replace("{m}", String(radiusMeters))}</strong>
+            <button type="button" class="btn btn-sm" id="checkin-see-map">${t("checkin_too_far_map")}</button>
+          </div>
+        `;
+        verifyBanner.querySelector("#checkin-see-map").addEventListener("click", () => {
+          navigate(`#/customers/${customerId}/spots?here=${position.coords.latitude.toFixed(6)},${position.coords.longitude.toFixed(6)}`);
+        });
+      }
     } catch (err) {
       gpsStatus.textContent = `${t("location_error")}. ${locationErrorHint(err)} `;
       gpsStatus.classList.add("gps-error");
@@ -474,7 +492,7 @@ export async function renderCheckin(root, navigate, customerId) {
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (!position) return;
+    if (!position || checkinBlocked) return;
 
     const data = new FormData(form);
     const outcomes = data.getAll("outcomes");
@@ -587,7 +605,7 @@ export async function renderCheckin(root, navigate, customerId) {
         <p>${
           checkin.within_range
             ? t("checked_in_onsite")
-            : `${t("you_were")} ${formatDistance(checkin.distance_meters)} ${t("from")} ${escapeHtml(customer.name)}. ${t("checkin_not_counted")}`
+            : `${t("you_were")} ${formatDistance(checkin.distance_meters)} ${t("from")} ${escapeHtml(customer.name)}.`
         }</p>
         ${checkin.within_range && state.user?.role !== "sales_manager" ? `<p class="muted">${t("checkin_not_rep_visit")}</p>` : ""}
         ${placedOrder ? `<button class="btn btn-primary btn-block" id="create-order-btn">${t("create_order")}</button>` : ""}

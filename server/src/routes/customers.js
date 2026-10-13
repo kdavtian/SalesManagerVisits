@@ -10,12 +10,12 @@ import { buildReorderProfile } from "../customerReorder.js";
 import { REORDER_COLUMNS, REORDER_JOIN, withReorderState } from "../orderRhythm.js";
 import { allocateFifo, loadOrdersNewestFirst } from "../debtAging.js";
 import { buildDebtStatementPdf } from "../debtStatementPdf.js";
-import { getDefaultVisitFrequencyDays } from "../settings.js";
+import { getDefaultVisitFrequencyDays, getCheckinRadiusMeters } from "../settings.js";
 import { haversineMeters } from "../utils/geo.js";
 import { normalizePhoneForStorage } from "../phoneFormat.js";
 import { lookupCompanyByTin, isValidTin } from "../registryLookup.js";
 import { computeVisitDue, ruleWeekdaysFor } from "../utils/visitDue.js";
-import { repVisitSql, FAR_VISITS_COLUMNS_SQL } from "../visitCount.js";
+import { repVisitSql } from "../visitCount.js";
 
 export const customersRouter = Router();
 
@@ -467,8 +467,7 @@ customersRouter.get("/map-facts", async (req, res) => {
     loadScheduleContext(req),
     pool.query(
       `SELECT c.id, c.region, c.subregion, c.sales_channel, c.checkin_for_all, c.visit_frequency_days, c.assigned_manager_id, erp.debt_amd, ${REORDER_COLUMNS},
-              (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}) AS last_visit_at,
-              ${FAR_VISITS_COLUMNS_SQL}
+              (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}) AS last_visit_at
        FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id ${REORDER_JOIN}
        WHERE c.id = ANY($1)`,
       [ids]
@@ -482,8 +481,6 @@ customersRouter.get("/map-facts", async (req, res) => {
     out[row.id] = {
       ...schedule,
       last_visit_at: schedule.cadence.last_visit_at,
-      far_visits: row.far_visits,
-      far_visit_last_at: row.far_visit_last_at,
       erp_debt_amd: sees ? row.debt_amd : null,
       reorder_state: row.reorder_state,
       reorder_gap_days: row.reorder_gap_days,
@@ -527,7 +524,7 @@ customersRouter.get("/:id/documents", async (req, res) => {
 
 customersRouter.get("/:id", async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT c.*, ${STATUS_COLUMNS}, ${FAR_VISITS_COLUMNS_SQL},
+    `SELECT c.*, ${STATUS_COLUMNS},
        am.name AS assigned_manager_name,
        erp.assigned_sales_rep AS erp_assigned_sales_rep,
        erp.debt_amd AS erp_debt_amd,
@@ -1159,14 +1156,12 @@ function scheduleForCustomer(customer, ctx) {
 async function buildVisitSchedule(req, customerId) {
   const { rows: custRows } = await pool.query(
     `SELECT c.id, c.region, c.subregion, c.sales_channel, c.checkin_for_all, c.visit_frequency_days,
-            (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}) AS last_visit_at,
-            ${FAR_VISITS_COLUMNS_SQL}
+            (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}) AS last_visit_at
      FROM customers c WHERE c.id = $1`,
     [customerId]
   );
   if (!custRows[0]) return null;
-  const schedule = scheduleForCustomer(custRows[0], await loadScheduleContext(req));
-  return { ...schedule, far_visits: custRows[0].far_visits, far_visit_last_at: custRows[0].far_visit_last_at };
+  return scheduleForCustomer(custRows[0], await loadScheduleContext(req));
 }
 
 customersRouter.get("/:id/visit-schedule", async (req, res) => {
@@ -1194,6 +1189,25 @@ customersRouter.get("/:id/map-facts", async (req, res) => {
   if (!schedule || !rows[0]) return res.status(404).json({ error: "Customer not found" });
   const sees = seesCustomerErpData(req.user.role, rows[0].assigned_manager_id, req.user.id);
   res.json({ ...schedule, last_visit_at: schedule.cadence.last_visit_at, erp_debt_amd: sees ? rows[0].debt_amd : null });
+});
+
+// Where this customer's check-ins were REALLY made (the GPS spot saved with every check-in) next to the
+// customer's pin -- the evidence for fixing a wrong pin. Last 5, newest first; a sales manager sees only
+// their own check-ins, like the visit history.
+customersRouter.get("/:id/checkin-spots", async (req, res) => {
+  const customerId = Number(req.params.id);
+  if (!Number.isInteger(customerId)) return res.status(400).json({ error: "Invalid customer id" });
+  const { rows: customerRows } = await pool.query("SELECT id, name, lat, lng FROM customers WHERE id = $1", [customerId]);
+  if (!customerRows[0]) return res.status(404).json({ error: "Customer not found" });
+  const own = seesAllActivity(req.user.role) ? "" : "AND ch.user_id = $2";
+  const { rows } = await pool.query(
+    `SELECT ch.id, ch.lat, ch.lng, ch.distance_meters, ch.within_range, ch.timestamp, ch.user_id, u.name AS user_name
+     FROM checkins ch JOIN users u ON u.id = ch.user_id
+     WHERE ch.customer_id = $1 ${own}
+     ORDER BY ch.timestamp DESC, ch.id DESC LIMIT 5`,
+    own ? [customerId, req.user.id] : [customerId]
+  );
+  res.json({ customer: customerRows[0], allowance_meters: await getCheckinRadiusMeters(), spots: rows });
 });
 
 // Credit terms (migration 101). The order form reads the current position to warn
