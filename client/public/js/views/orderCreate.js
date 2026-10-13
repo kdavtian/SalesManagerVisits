@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, tierBadgeHtml, activateDialog, activateCombobox, formatDateDMY, openInfoPopup } from "../util.js";
+import { escapeHtml, formatAmd, formatPriceOrFree, tierBadgeHtml, activateDialog, activateCombobox, formatDateDMY, openInfoPopup } from "../util.js";
 import { t } from "../i18n.js";
 import { enqueueOrder } from "../offlineQueue.js";
 import { canAssignErpCustomerId, state } from "../state.js";
@@ -29,7 +29,7 @@ function filterCatalog(list, query) {
 // Category filter groups, from the Product Family recorded in the workbook:
 // the non-engine families are categories of their own, every other family
 // (Edge, Magnatec, GTX, CRB, Vecton, ON, Engine Oil, ...) is engine oil.
-const NON_ENGINE_CATEGORIES = ["Transmission", "Hydraulic", "Antifreeze", "Grease", "EV fluids", "Other"];
+const NON_ENGINE_CATEGORIES = ["Transmission", "Hydraulic", "Antifreeze", "Grease", "EV fluids", "Merch", "Other"];
 // Workbook family -> category where the names differ (Castrol ON = EV fluids).
 const FAMILY_TO_CATEGORY = { on: "EV fluids" };
 const CATEGORY_LABEL_KEY = {
@@ -39,6 +39,7 @@ const CATEGORY_LABEL_KEY = {
   Antifreeze: "category_antifreeze",
   Grease: "category_grease",
   "EV fluids": "category_ev_fluids",
+  Merch: "category_merch",
   Other: "category_other",
 };
 function productCategory(product) {
@@ -373,7 +374,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
       <div class="order-product-row" data-product-id="${product.id}">
         <div class="order-product-info">
           <strong>${escapeHtml(product.name)}</strong>
-          <span class="muted">${[product.brand, product.unit].filter(Boolean).map(escapeHtml).join(" · ")} ${formatAmd(price)}</span>
+          <span class="muted">${[product.brand, product.unit].filter(Boolean).map(escapeHtml).join(" · ")} ${formatPriceOrFree(price)}</span>
           ${qty > 0 && canSetPrices ? `<label class="muted">${t("custom_price")} <input type="number" min="0" step="1" inputmode="numeric" class="order-price-input" data-price-input value="${price}" style="width:6rem"></label>` : ""}
           ${warning ? `<span class="order-stock-warning${warning.level === "danger" ? " order-stock-danger" : ""}">${warning.text}</span>` : ""}
         </div>
@@ -484,7 +485,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
                   return `<div class="order-product-row" data-usual-id="${product.id}">
                     <div class="order-product-info">
                       <strong>${escapeHtml(product.name)}</strong>
-                      <span class="muted">${[product.brand, product.unit].filter(Boolean).map(escapeHtml).join(" · ")} × ${item.quantity} · ${formatAmd(basePrice(product))}</span>
+                      <span class="muted">${[product.brand, product.unit].filter(Boolean).map(escapeHtml).join(" · ")} × ${item.quantity} · ${formatPriceOrFree(basePrice(product))}</span>
                       ${item.due ? `<span class="order-due-tag">${t("usual_item_due")}</span>` : ""}
                     </div>
                     ${out ? `<span class="badge badge-danger">${t("out_of_stock")}</span>` : `<button type="button" class="btn btn-sm" data-usual-add="${product.id}">${t("add")}</button>`}

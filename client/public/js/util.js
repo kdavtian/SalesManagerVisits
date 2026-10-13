@@ -590,6 +590,11 @@ export function formatAmd(value) {
   return `${Math.round(Number(value)).toLocaleString()} ${t("amd")}`;
 }
 
+// A price of exactly 0 is a free item (merch such as Castrol Stend), not "0 AMD".
+export function formatPriceOrFree(value) {
+  return value != null && Number(value) === 0 ? t("price_free") : formatAmd(value);
+}
+
 // Same amount as formatAmd, but with the currency unit in its own smaller,
 // dimmer span so a large total in a half-width stat card reads as a number
 // first and a unit second -- and the number+unit pair stays on one line

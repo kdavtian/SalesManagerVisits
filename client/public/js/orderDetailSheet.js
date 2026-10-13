@@ -6,7 +6,7 @@
 // sheet without re-implementing it.
 import { api } from "./api.js";
 import { reorderHash } from "./reorder.js";
-import { escapeHtml, formatAmd, activateDialog, formatDateTime, formatDateDMY, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, labelColon } from "./util.js";
+import { escapeHtml, formatAmd, formatPriceOrFree, activateDialog, formatDateTime, formatDateDMY, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, labelColon } from "./util.js";
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { state } from "./state.js";
@@ -157,9 +157,9 @@ function orderLineHtml(i) {
       ${i.brand ? `<span class="order-line-brand">${escapeHtml(i.brand)}</span>` : ""}
       <div class="order-line-top">
         <span class="order-line-name">${escapeHtml(i.product_name)}${i.size ? ` · ${escapeHtml(i.size)}` : ""}</span>
-        <strong class="text-amount">${formatAmd(Number(i.line_total_amd))}</strong>
+        <strong class="text-amount">${formatPriceOrFree(Number(i.line_total_amd))}</strong>
       </div>
-      <span class="order-line-meta">${formatAmd(Number(i.unit_price_amd))} &times; ${Number(i.quantity)}</span>
+      <span class="order-line-meta">${formatPriceOrFree(Number(i.unit_price_amd))} &times; ${Number(i.quantity)}</span>
     </div>`;
 }
 
