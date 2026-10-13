@@ -938,7 +938,7 @@ async function openAccountSettingsSheet(customer, onDone) {
 
     const results = await Promise.allSettled(sections.map((s) => s.promise));
     const failures = results
-      .map((r, i) => (r.status === "rejected" ? `${sections[i].label}: ${r.reason.message}` : null))
+      .map((r, i) => (r.status === "rejected" ? `${sections[i].label}: ${r.reason.body?.code === "erp_id_assigned" ? t("erp_id_assigned").replace("{name}", r.reason.body.assigned_manager_name) : r.reason.message}` : null))
       .filter(Boolean);
 
     // Refresh the page underneath regardless -- some or all sections may

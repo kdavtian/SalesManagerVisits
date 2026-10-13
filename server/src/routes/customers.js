@@ -186,7 +186,7 @@ const CUSTOMER_TIERS = new Set(["potential", "bronze", "silver", "gold", "compet
 // last, not to be a strict customs-grade boundary).
 const ARMENIA_BOUNDS = { minLat: 38.8, maxLat: 41.35, minLng: 43.4, maxLng: 46.65 };
 
-function isWithinArmenia(lat, lng) {
+export function isWithinArmenia(lat, lng) {
   return (
     lat >= ARMENIA_BOUNDS.minLat &&
     lat <= ARMENIA_BOUNDS.maxLat &&
@@ -206,16 +206,30 @@ function isWithinArmenia(lat, lng) {
 // "missing/incorrect assignment data in debt balances". Checked before
 // every create/link below, on top of the DB-level uniqueness constraint
 // itself (migration 069) that's the actual backstop against a race.
-async function findErpCustomerIdConflict(erpCustomerId, excludeId) {
+// When that customer is assigned to a (different) sales manager, the person trying to add/link it is
+// told whose it is and to contact management (code erp_id_assigned; the app shows it in the user's language).
+async function findErpCustomerIdConflict(erpCustomerId, excludeId, requesterId) {
   const params = [erpCustomerId];
-  let where = "erp_customer_id = $1";
+  let where = "c.erp_customer_id = $1";
   if (excludeId) {
     params.push(excludeId);
-    where += ` AND id != $${params.length}`;
+    where += ` AND c.id != $${params.length}`;
   }
-  const { rows } = await pool.query(`SELECT id, name FROM customers WHERE ${where}`, params);
-  if (!rows[0]) return null;
-  return { error: `ERP customer ID "${erpCustomerId}" is already linked to another customer (${rows[0].name})` };
+  const { rows } = await pool.query(
+    `SELECT c.id, c.name, c.assigned_manager_id, u.name AS manager_name
+     FROM customers c LEFT JOIN users u ON u.id = c.assigned_manager_id WHERE ${where}`,
+    params
+  );
+  const found = rows[0];
+  if (!found) return null;
+  if (found.assigned_manager_id && found.assigned_manager_id !== requesterId && found.manager_name) {
+    return {
+      error: `This customer is already assigned to ${found.manager_name} (sales manager). Please contact management.`,
+      code: "erp_id_assigned",
+      assigned_manager_name: found.manager_name,
+    };
+  }
+  return { error: `ERP customer ID "${erpCustomerId}" is already linked to another customer (${found.name})` };
 }
 
 export function normalizeCustomerName(name) {
@@ -299,7 +313,7 @@ customersRouter.post("/", async (req, res) => {
     return res.status(400).json({ error: "credit_term_days must be a positive whole number" });
   }
   if (erp_customer_id) {
-    const conflict = await findErpCustomerIdConflict(erp_customer_id);
+    const conflict = await findErpCustomerIdConflict(erp_customer_id, undefined, req.user.id);
     if (conflict) return res.status(409).json(conflict);
   }
   if (!req.body?.confirm_duplicate) {
@@ -364,7 +378,7 @@ customersRouter.post("/", async (req, res) => {
     // race of two requests linking the same erp_customer_id at once (see
     // customers_erp_customer_id_unique_idx, migration 069).
     if (err.code === "23505" && erp_customer_id) {
-      const conflict = await findErpCustomerIdConflict(erp_customer_id);
+      const conflict = await findErpCustomerIdConflict(erp_customer_id, undefined, req.user.id);
       if (conflict) return res.status(409).json(conflict);
     }
     throw err;
@@ -708,7 +722,7 @@ customersRouter.patch("/:id", async (req, res) => {
   const autoUpgradeToBronze = isNewErpLink && req.body?.customer_tier === undefined && current.customer_tier === "potential";
 
   if (newErpId && newErpId !== current.erp_customer_id) {
-    const conflict = await findErpCustomerIdConflict(newErpId, req.params.id);
+    const conflict = await findErpCustomerIdConflict(newErpId, req.params.id, req.user.id);
     if (conflict) return res.status(409).json(conflict);
   }
 
@@ -759,7 +773,7 @@ customersRouter.patch("/:id", async (req, res) => {
     // race of two requests linking the same erp_customer_id at once (see
     // customers_erp_customer_id_unique_idx, migration 069).
     if (err.code === "23505" && newErpId) {
-      const conflict = await findErpCustomerIdConflict(newErpId, req.params.id);
+      const conflict = await findErpCustomerIdConflict(newErpId, req.params.id, req.user.id);
       if (conflict) return res.status(409).json(conflict);
     }
     throw err;

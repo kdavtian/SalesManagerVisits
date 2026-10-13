@@ -3109,17 +3109,20 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // form again.
   function openRelocateConfirmDetails(latlng) {
     closeLocationPanel();
+    // A pin correction is applied at once for the rep's own customers and for management (server:
+    // editRequests.js canAutoApprovePin); only someone else's customer still waits for approval.
+    const pinAppliesAtOnce = canEditDirectly() || ["sales_manager", "sales_director", "operations_director", "ceo"].includes(state.user?.role);
     placingMarker?.dragging?.disable();
     const overlay = document.createElement("div");
     overlay.className = "sheet-overlay sheet-overlay-light";
     overlay.innerHTML = `
       <div class="sheet">
         <h2>${t("confirm_new_location")}</h2>
-        <p class="muted">${canEditDirectly() ? t("confirm_new_location_hint") : t("confirm_new_location_hint_request")}</p>
+        <p class="muted">${pinAppliesAtOnce ? t("confirm_new_location_hint") : t("confirm_new_location_hint_request")}</p>
         <p class="form-error" id="relocate-error" hidden></p>
         <div class="sheet-actions">
           <button type="button" class="btn" id="cancel-relocate-confirm">${t("cancel")}</button>
-          <button type="button" class="btn btn-primary" id="save-relocate">${canEditDirectly() ? t("save") : t("submit_request")}</button>
+          <button type="button" class="btn btn-primary" id="save-relocate">${pinAppliesAtOnce ? t("save") : t("submit_request")}</button>
         </div>
       </div>
     `;
@@ -3490,7 +3493,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           form.removeAttribute("aria-busy");
           return;
         }
-        errorEl.textContent = err.message;
+        errorEl.textContent = err.body?.code === "erp_id_assigned" ? t("erp_id_assigned").replace("{name}", err.body.assigned_manager_name) : err.message;
         errorEl.hidden = false;
         submitBtn.disabled = false;
         submitBtn.textContent = t("save_customer");

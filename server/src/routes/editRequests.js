@@ -1,12 +1,60 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { EDITABLE_FIELDS } from "./customers.js";
+import { EDITABLE_FIELDS, isWithinArmenia } from "./customers.js";
+import { haversineMeters } from "../utils/geo.js";
 import { normalizePhoneForStorage } from "../phoneFormat.js";
 
 export const editRequestsRouter = Router();
 
 editRequestsRouter.use(requireAuth);
+
+// Same staleness problem as a direct PATCH /customers/:id (see the comment there): another still-pending
+// request for this same customer might propose one of the fields just applied, with a now-outdated value
+// snapshotted at its own submission time. Left alone, approving *that* one later would silently revert this
+// change right back. Strip the stale fields from it, or auto-reject it if that empties it out.
+async function supersedePending(client, customerId, exceptRequestId, changedFields, reviewerId) {
+  const { rows: otherPending } = await client.query(
+    "SELECT id, changes FROM customer_edit_requests WHERE customer_id = $1 AND status = 'pending' AND id != $2 FOR UPDATE",
+    [customerId, exceptRequestId]
+  );
+  for (const pr of otherPending) {
+    const remaining = { ...pr.changes };
+    let stale = false;
+    for (const field of changedFields) {
+      if (remaining[field] !== undefined) {
+        delete remaining[field];
+        stale = true;
+      }
+    }
+    if (!stale) continue;
+    if (Object.keys(remaining).length) {
+      await client.query("UPDATE customer_edit_requests SET changes = $1 WHERE id = $2", [JSON.stringify(remaining), pr.id]);
+    } else {
+      await client.query(
+        `UPDATE customer_edit_requests
+         SET status = 'rejected', reviewed_by = $1, reviewed_at = now(),
+             note = COALESCE(note || ' — ', '') || 'Auto-rejected: superseded by another approved request'
+         WHERE id = $2`,
+        [reviewerId, pr.id]
+      );
+    }
+  }
+}
+
+// Pin corrections (lat + lng only) are applied at once -- nobody should have to wait for approval to fix
+// a wrong pin, and with the check-in allowance a wrong pin blocks a rep from checking in. A sales manager
+// may correct the pin of their OWN customers (assigned to them or created by them); management roles any
+// customer. Everything else (and a rep's request for someone else's customer) still waits for review.
+const PIN_AUTO_APPROVE_MANAGEMENT = new Set(["ceo", "operations_director", "sales_director"]);
+function canAutoApprovePin(user, customer, filtered) {
+  const keys = Object.keys(filtered);
+  if (keys.length !== 2 || filtered.lat === undefined || filtered.lng === undefined) return false;
+  if (typeof filtered.lat !== "number" || typeof filtered.lng !== "number" || !isWithinArmenia(filtered.lat, filtered.lng)) return false;
+  if (customer.checkin_for_all) return false; // the office pin is not a rep's to move
+  if (PIN_AUTO_APPROVE_MANAGEMENT.has(user.role)) return true;
+  return user.role === "sales_manager" && (customer.assigned_manager_id === user.id || customer.created_by === user.id);
+}
 
 editRequestsRouter.post("/", async (req, res) => {
   const { customer_id, changes, note } = req.body ?? {};
@@ -24,10 +72,36 @@ editRequestsRouter.post("/", async (req, res) => {
     return res.status(400).json({ error: "No editable fields in changes" });
   }
 
-  const { rows: customerRows } = await pool.query("SELECT id FROM customers WHERE id = $1", [
-    customerId,
-  ]);
+  const { rows: customerRows } = await pool.query(
+    "SELECT id, lat, lng, created_by, assigned_manager_id, checkin_for_all FROM customers WHERE id = $1",
+    [customerId]
+  );
   if (!customerRows[0]) return res.status(404).json({ error: "Customer not found" });
+
+  if (canAutoApprovePin(req.user, customerRows[0], filtered)) {
+    const client = await pool.connect();
+    let releaseErr;
+    try {
+      await client.query("BEGIN");
+      await client.query("UPDATE customers SET lat = $1, lng = $2 WHERE id = $3", [filtered.lat, filtered.lng, customerId]);
+      const moved = Math.round(haversineMeters(customerRows[0].lat, customerRows[0].lng, filtered.lat, filtered.lng));
+      const { rows } = await client.query(
+        `INSERT INTO customer_edit_requests (customer_id, requested_by, changes, note, status, reviewed_at)
+         VALUES ($1, $2, $3, $4, 'approved', now())
+         RETURNING *`,
+        [customerId, req.user.id, JSON.stringify(filtered), `${note ? `${note} — ` : ""}Auto-approved pin correction (moved ${moved} m)`]
+      );
+      await supersedePending(client, customerId, rows[0].id, ["lat", "lng"], req.user.id);
+      await client.query("COMMIT");
+      return res.status(201).json(rows[0]);
+    } catch (err) {
+      releaseErr = err;
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release(releaseErr);
+    }
+  }
 
   const { rows } = await pool.query(
     `INSERT INTO customer_edit_requests (customer_id, requested_by, changes, note)
@@ -122,42 +196,7 @@ editRequestsRouter.patch("/:id", requireAdmin, async (req, res) => {
           params
         );
 
-        // Same staleness problem as a direct PATCH /customers/:id (see the
-        // comment there): another still-pending request for this same
-        // customer might propose one of the fields just applied here, with
-        // a now-outdated value snapshotted at its own submission time.
-        // Left alone, approving *that* one later would silently revert
-        // this approval right back. Strip the stale fields from it, or
-        // auto-reject it if that empties it out.
-        const { rows: otherPending } = await client.query(
-          "SELECT id, changes FROM customer_edit_requests WHERE customer_id = $1 AND status = 'pending' AND id != $2 FOR UPDATE",
-          [request.customer_id, request.id]
-        );
-        for (const pr of otherPending) {
-          const remaining = { ...pr.changes };
-          let stale = false;
-          for (const field of changedFields) {
-            if (remaining[field] !== undefined) {
-              delete remaining[field];
-              stale = true;
-            }
-          }
-          if (!stale) continue;
-          if (Object.keys(remaining).length) {
-            await client.query("UPDATE customer_edit_requests SET changes = $1 WHERE id = $2", [
-              JSON.stringify(remaining),
-              pr.id,
-            ]);
-          } else {
-            await client.query(
-              `UPDATE customer_edit_requests
-               SET status = 'rejected', reviewed_by = $1, reviewed_at = now(),
-                   note = COALESCE(note || ' — ', '') || 'Auto-rejected: superseded by another approved request'
-               WHERE id = $2`,
-              [req.user.id, pr.id]
-            );
-          }
-        }
+        await supersedePending(client, request.customer_id, request.id, changedFields, req.user.id);
       }
     }
 
