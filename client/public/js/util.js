@@ -641,26 +641,26 @@ export function erpLineSoldPrice(line) {
   return Number(line.unit_price_amd);
 }
 
-// Muted second row under an ERP order line: the list price when the line was sold at a different
-// price (so the gap is explained), else the workbook's own Discount amount if one was sent.
+// Muted rows under an ERP order line when it was sold at a price other than the list price: the
+// list price and the discount / price change per unit (signed, same as the workbook's Discount
+// column: sold price = list price + discount). Falls back to the workbook's own Discount amount
+// when the sold price cannot be derived (no qty / total).
 export function erpLineDiscountRowHtml(line) {
   const list = Number(line.unit_price_amd);
-  if (Number.isFinite(list) && Math.abs(erpLineSoldPrice(line) - list) >= 1) {
-    return `
+  const diff = Number.isFinite(list) ? erpLineSoldPrice(line) - list : 0;
+  const row = (label, value, cls = "") => `
     <div class="erp-line-row erp-line-discount-row">
-      <span class="muted">${t("erp_line_list_price_label")}</span>
+      <span class="muted">${label}</span>
       <span></span>
-      <span class="muted">${formatAmd(list)}</span>
+      <span class="${cls}">${value}</span>
     </div>`;
+  if (Math.abs(diff) >= 1) {
+    const signed = `${diff > 0 ? "+" : "\u2212"}${formatAmd(Math.abs(diff))}`;
+    return row(t("erp_line_list_price_label"), formatAmd(list), "muted") + row(t("erp_line_discount_label"), signed);
   }
   const discount = line.discount_amd;
   if (discount == null || Number(discount) === 0) return "";
-  return `
-    <div class="erp-line-row erp-line-discount-row">
-      <span class="muted">${t("erp_line_discount_label")}</span>
-      <span></span>
-      <span>${formatAmd(discount)}</span>
-    </div>`;
+  return row(t("erp_line_discount_label"), formatAmd(discount));
 }
 
 export function formatDistance(meters) {
