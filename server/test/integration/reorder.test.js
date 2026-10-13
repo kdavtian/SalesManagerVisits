@@ -6,12 +6,15 @@ import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer
 import { pool } from "../../src/db/pool.js";
 import { refreshOrderRhythm } from "../../src/orderRhythm.js";
 import { visitPriorities } from "../../src/visitPriorities.js";
+import { yerevanToday } from "../../src/utils/yerevanDate.js";
+import { addDays } from "../../src/volumeReport.js";
 
 const stamp = Date.now();
 const erpId = `ITEST-RO-${stamp}`;
 let director, rep, other, repCookie, otherCookie, customer, edge, drum, retired, appOnly;
 
-const daysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+// Yerevan calendar day, like the server (a UTC date is one day behind between 20:00 and 24:00 UTC)
+const daysAgo = (n) => addDays(yerevanToday(), -n);
 async function line(orderId, daysBack, product, qty, price = 10000) {
   await pool.query(
     `INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, product_id, brand, product_name, qty, unit_price_amd, revenue_amd)

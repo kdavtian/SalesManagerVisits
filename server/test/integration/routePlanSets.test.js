@@ -162,6 +162,8 @@ test("snapshot saves the live plan as a set; deleting a customer removes it from
   assert.equal(snap.data.kind, "snapshot");
   assert.equal(repOf(snap.data, repB).days.flatMap((d) => d.customers).length, 4);
   await pool.query("UPDATE route_plan_set_rules SET customer_ids = array_remove(customer_ids, $1) WHERE set_id = $2", [custB[0].id, snap.data.id]);
+  const after = await apiRequest(`/api/route-plan-sets/${snap.data.id}`, { cookie: adminCookie });
+  assert.equal(repOf(after.data, repB).days.flatMap((d) => d.customers).length, 3, "the removed customer is gone from the set");
   const list = await apiRequest("/api/route-plan-sets", { cookie: adminCookie });
-  assert.ok(list.data.some((s) => s.id === snap.data.id && s.customer_count >= 16));
+  assert.ok(list.data.some((s) => s.id === snap.data.id && s.customer_count >= 15));
 });
