@@ -67,6 +67,30 @@ test("POST /api/checkins: a sales manager far from the customer is refused (Chec
   assert.equal(rows.length, 0);
 });
 
+test("Check-in allowance switch: admin turns it off -> a far sales manager check-in is saved (flagged within_range: false); on again -> refused", async () => {
+  const admin = await createUser("admin");
+  const adminCookie = await loginAs(admin.email);
+  const far = () =>
+    apiFormRequest("/api/checkins", {
+      cookie,
+      form: checkinForm({ customer_id: customer.id, lat: String(customer.lat + 0.05), lng: String(customer.lng), outcomes: JSON.stringify(["no_order"]) }),
+    });
+  assert.equal((await apiRequest("/api/settings", { cookie })).data.checkin_allowance_enabled, true, "on by default");
+  assert.equal((await apiRequest("/api/settings", { method: "PATCH", cookie, body: { checkin_allowance_enabled: "no" } })).status, 403, "admin only");
+  assert.equal((await apiRequest("/api/settings", { method: "PATCH", cookie: adminCookie, body: { checkin_allowance_enabled: "no" } })).status, 400);
+  try {
+    const off = await apiRequest("/api/settings", { method: "PATCH", cookie: adminCookie, body: { checkin_allowance_enabled: false } });
+    assert.equal(off.data.checkin_allowance_enabled, false);
+    const res = await far();
+    assert.equal(res.status, 201, "no refusal while the allowance is off");
+    trackCheckin(res.data.id);
+    assert.equal(res.data.within_range, false, "the distance is still recorded and flagged");
+  } finally {
+    await apiRequest("/api/settings", { method: "PATCH", cookie: adminCookie, body: { checkin_allowance_enabled: true } });
+  }
+  assert.equal((await far()).status, 422);
+});
+
 test("POST /api/checkins: management (director) can check in from anywhere; it is saved flagged within_range: false", async () => {
   const director = await createUser("sales_director");
   const directorCookie = await loginAs(director.email);

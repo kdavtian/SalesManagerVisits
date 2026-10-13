@@ -68,6 +68,8 @@ export async function renderCheckin(root, navigate, customerId) {
     return;
   }
   const radiusMeters = settings.checkin_radius_meters;
+  // Admin can switch the Check-in allowance off in Settings: then nobody is blocked for distance.
+  const allowanceOn = settings.checkin_allowance_enabled !== false;
 
   container.innerHTML = `
     <div class="checkin-head">
@@ -460,7 +462,7 @@ export async function renderCheckin(root, navigate, customerId) {
       `;
       // Check-in allowance: a sales manager too far from the pin cannot check in (management can). The pin
       // may be the thing that is wrong, so offer the map with the real spots and "you are here".
-      checkinBlocked = !withinRange && state.user?.role === "sales_manager";
+      checkinBlocked = allowanceOn && !withinRange && state.user?.role === "sales_manager";
       if (checkinBlocked) {
         submitBtn.disabled = true;
         // Where the rep really stands is evidence for the Pin review (best effort, nothing to do if offline).

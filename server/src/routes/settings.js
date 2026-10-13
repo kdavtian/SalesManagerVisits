@@ -3,6 +3,8 @@ import bcrypt from "bcryptjs";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import {
   getCheckinRadiusMeters,
+  getCheckinAllowanceEnabled,
+  setCheckinAllowanceEnabled,
   setCheckinRadiusMeters,
   getDefaultVisitFrequencyDays,
   setDefaultVisitFrequencyDays,
@@ -27,6 +29,7 @@ settingsRouter.use(requireAuth);
 settingsRouter.get("/", async (req, res) => {
   const [
     checkinRadiusMeters,
+    checkinAllowanceEnabled,
     defaultVisitFrequencyDays,
     incentiveMessage,
     quickActionVisibility,
@@ -35,6 +38,7 @@ settingsRouter.get("/", async (req, res) => {
     bonusesEnabled,
   ] = await Promise.all([
     getCheckinRadiusMeters(),
+    getCheckinAllowanceEnabled(),
     getDefaultVisitFrequencyDays(),
     getIncentiveMessage(),
     getQuickActionVisibility(),
@@ -44,6 +48,7 @@ settingsRouter.get("/", async (req, res) => {
   ]);
   res.json({
     checkin_radius_meters: checkinRadiusMeters,
+    checkin_allowance_enabled: checkinAllowanceEnabled,
     default_visit_frequency_days: defaultVisitFrequencyDays,
     incentive_message: incentiveMessage,
     // Read by every role (the dashboard needs its own row to decide which
@@ -72,6 +77,13 @@ settingsRouter.patch("/", requireAdmin, async (req, res) => {
       return res.status(400).json({ error: "checkin_radius_meters must be between 10 and 5000" });
     }
     result.checkin_radius_meters = await setCheckinRadiusMeters(Math.round(meters));
+  }
+
+  if (req.body?.checkin_allowance_enabled !== undefined) {
+    if (typeof req.body.checkin_allowance_enabled !== "boolean") {
+      return res.status(400).json({ error: "checkin_allowance_enabled must be a boolean" });
+    }
+    result.checkin_allowance_enabled = await setCheckinAllowanceEnabled(req.body.checkin_allowance_enabled);
   }
 
   if (req.body?.default_visit_frequency_days !== undefined) {

@@ -17,6 +17,23 @@ export async function setCheckinRadiusMeters(meters) {
   return rows[0].checkin_radius_meters;
 }
 
+// On/Off switch of the Check-in allowance: off = a far check-in is never refused (it is still saved with its
+// distance and within_range flag).
+export async function getCheckinAllowanceEnabled() {
+  const { rows } = await pool.query("SELECT checkin_allowance_enabled FROM app_settings WHERE id = 1");
+  return rows[0]?.checkin_allowance_enabled ?? true;
+}
+
+export async function setCheckinAllowanceEnabled(enabled) {
+  const { rows } = await pool.query(
+    `INSERT INTO app_settings (id, checkin_allowance_enabled) VALUES (1, $1)
+     ON CONFLICT (id) DO UPDATE SET checkin_allowance_enabled = EXCLUDED.checkin_allowance_enabled
+     RETURNING checkin_allowance_enabled`,
+    [enabled]
+  );
+  return rows[0].checkin_allowance_enabled;
+}
+
 export async function getIncentiveMessage() {
   const { rows } = await pool.query("SELECT incentive_message FROM app_settings WHERE id = 1");
   return rows[0]?.incentive_message ?? null;

@@ -12364,3 +12364,9 @@ form select,
   position: static;
   top: auto;
 }
+
+/* Settings > Check-in allowance switched off: the meters field is dimmed (still editable). */
+#radius-form.is-off input,
+#radius-form.is-off .radius-help {
+  opacity: 0.5;
+}
