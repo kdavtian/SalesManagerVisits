@@ -13,6 +13,7 @@ import { pool } from "./db/pool.js";
 import { enabled as pushEnabled } from "./push.js";
 import { notifyUser } from "./notifications.js";
 import { NOT_NO_VISIT_CHANNEL_SQL } from "./routes/customers.js";
+import { repVisitSql } from "./visitCount.js";
 
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes; only sends inside the 7 pm window, once a day
 // The summary goes out once a day at 19:00 Yerevan time (the check that lands
@@ -59,10 +60,10 @@ async function countOverdueCustomers() {
   const { rows } = await pool.query(
     `SELECT count(*)::int AS count FROM customers c
      WHERE ${NOT_NO_VISIT_CHANNEL_SQL}
-       AND NOT EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range AND ch.timestamp >= date_trunc('day', now()))
+       AND NOT EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")} AND ch.timestamp >= date_trunc('day', now()))
        AND (
-         (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range) IS NULL
-         OR (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range) < now() - (c.visit_frequency_days || ' days')::interval
+         (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}) IS NULL
+         OR (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}) < now() - (c.visit_frequency_days || ' days')::interval
        )`
   );
   return rows[0].count;

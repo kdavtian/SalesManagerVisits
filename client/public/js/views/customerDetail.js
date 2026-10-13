@@ -146,7 +146,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       ${noVisitChannel ? "" : `<div class="detail-fact"><span class="detail-fact-icon">${icons.repeat}</span><span>${t("visit_every_prefix")}${customer.visit_frequency_days}${t("visit_every_suffix")}</span></div>`}
       <div class="detail-fact"><span class="detail-fact-icon">${icons.wallet}</span><span>${t(customer.payment_method === "cash" ? "payment_method_cash" : "payment_method_invoice")} &middot; ${t("credit_term_fact").replace("{n}", customer.credit_term_days)}</span></div>
       ${customer.credit_limit_amd != null ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.wallet}</span><span>${t("credit_limit_label")}${labelColon()}${formatAmd(customer.credit_limit_amd)}</span></div>` : ""}
-      ${customer.last_visit_at ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.clock}</span><span>${t("last_visit")}${labelColon()}${formatDateTime(customer.last_visit_at)}</span></div>` : ""}
+      ${customer.last_visit_at ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.clock}</span><span>${t("last_visit")}${labelColon()}${formatDateTime(customer.last_visit_at)}</span></div>` : customer.far_visits > 0 ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.clock}</span><span>${t("last_visit")}${labelColon()}${t("visit_none_verified").replace("{n}", String(customer.far_visits))}</span></div>` : ""}
       ${customer.notes ? `<div class="detail-fact muted"><span class="detail-fact-icon">${icons.note}</span><span>${escapeHtml(customer.notes)}</span></div>` : ""}
     </div>
 

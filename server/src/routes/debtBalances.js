@@ -4,6 +4,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { erpSyncFreshness } from "../erpSyncFreshness.js";
 import { allocateFifo, loadOrdersNewestFirst } from "../debtAging.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
+import { repVisitSql } from "../visitCount.js";
 
 export const debtBalancesRouter = Router();
 
@@ -23,7 +24,7 @@ debtBalancesRouter.use(requireAuth);
 // Same shape customers.js uses for its own last-visit column, kept
 // identical on purpose so the two screens can never report a different
 // "last visit" for the same customer.
-const LAST_VISIT_SUBQUERY = `(SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range)`;
+const LAST_VISIT_SUBQUERY = `(SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")})`;
 
 // The ERP sync's own last_payment_date routinely lags or is simply blank
 // for a customer whose most recent payment was logged in-app (a cash

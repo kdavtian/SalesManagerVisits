@@ -13,13 +13,14 @@ import { pool } from "./db/pool.js";
 import { NOT_NO_VISIT_CHANNEL_SQL } from "./routes/customers.js";
 import { yerevanToday } from "./utils/yerevanDate.js";
 import { DEBT_AGE_LATERAL, overdueDebtSql, debtAgeDaysSql, loadUnpaidOrders, summarizeDebt } from "./debtAge.js";
+import { repVisitSql } from "./visitCount.js";
 
 export async function visitPriorities(userId, limit = 8, now = new Date()) {
   const today = yerevanToday(now);
   const { rows } = await pool.query(
     `SELECT c.id, c.name, c.erp_customer_id, c.customer_tier, c.visit_frequency_days, COALESCE(c.credit_term_days, 45) AS credit_term_days,
-            (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range) AS last_visit,
-            EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ch.within_range
+            (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}) AS last_visit,
+            EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}
                     AND (ch.timestamp AT TIME ZONE 'Asia/Yerevan')::date = $2::date) AS visited_today,
             erp.debt_amd, ${overdueDebtSql("$2::date")} AS debt_overdue,
             COALESCE(${debtAgeDaysSql("$2::date")}, erp.days_since_payment) AS debt_days
