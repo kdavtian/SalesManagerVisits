@@ -67,6 +67,30 @@ test("POST /api/checkins: a sales manager far from the customer is refused (Chec
   assert.equal(rows.length, 0);
 });
 
+test("POST /api/checkins: GPS accuracy up to 100 m is forgiven when judging the allowance", async () => {
+  // ~390 m north: past the 300 m allowance with an exact fix, inside it when the fix is only good to +-150 m (100 m credited)
+  const lat = customer.lat + 0.0035;
+  const post = (accuracy, at = lat) =>
+    apiFormRequest("/api/checkins", {
+      cookie,
+      form: checkinForm({ customer_id: customer.id, lat: String(at), lng: String(customer.lng), accuracy_m: String(accuracy), outcomes: JSON.stringify(["no_order"]) }),
+    });
+  const admin = await createUser("admin");
+  const adminCookie = await loginAs(admin.email);
+  const radius = (await apiRequest("/api/settings", { cookie })).data.checkin_radius_meters;
+  await apiRequest("/api/settings", { method: "PATCH", cookie: adminCookie, body: { checkin_radius_meters: 300 } });
+  try {
+    assert.equal((await post(10)).status, 422, "a precise fix 390 m away is refused");
+    const ok = await post(150);
+    assert.equal(ok.status, 201, "a +-150 m fix gets 100 m of credit");
+    trackCheckin(ok.data.id);
+    assert.equal(ok.data.within_range, false, "the real distance is still recorded as outside the allowance");
+    assert.equal((await post(5000, customer.lat + 0.0048)).status, 422, "credit is capped at 100 m: ~530 m away stays refused however coarse the fix");
+  } finally {
+    await apiRequest("/api/settings", { method: "PATCH", cookie: adminCookie, body: { checkin_radius_meters: radius } });
+  }
+});
+
 test("Check-in allowance switch: admin turns it off -> a far sales manager check-in is saved (flagged within_range: false); on again -> refused", async () => {
   const admin = await createUser("admin");
   const adminCookie = await loginAs(admin.email);

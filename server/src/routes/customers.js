@@ -849,6 +849,7 @@ customersRouter.delete("/:id", requireAdmin, async (req, res) => {
       "UPDATE visit_plan_rules SET customer_ids = array_remove(customer_ids, $1) WHERE $1 = ANY(customer_ids)",
       [customerId]
     );
+    await client.query("UPDATE route_plan_set_rules SET customer_ids = array_remove(customer_ids, $1) WHERE $1 = ANY(customer_ids)", [customerId]);
     const { rowCount } = await client.query("DELETE FROM customers WHERE id = $1", [customerId]);
     if (!rowCount) {
       await client.query("ROLLBACK");

@@ -5,6 +5,10 @@ import { state, canPlanForOthers, canViewAllRoutePlans } from "../state.js";
 import { buildCustomerTree, renderTriStateTree } from "../regionTree.js";
 import { icons } from "../icons.js";
 
+// The Route Plans screen kept in the back stack is a DOM snapshot; the plan editor (routePlanSets.js) calls this after it
+// changed something so that going back shows the new state instead of the old one.
+export const routePlansPage = { refresh: null };
+
 const WEEKDAY_KEYS = ["weekday_sun", "weekday_mon", "weekday_tue", "weekday_wed", "weekday_thu", "weekday_fri", "weekday_sat"];
 // Display order only -- day_of_week values stay 0=Sun..6=Sat (JS Date#getDay()),
 // but the week is shown Monday-first everywhere in the UI.
@@ -34,8 +38,9 @@ export async function renderRoutePlans(root, navigate) {
         </button>
         <div class="detail-header-title"><h1>${t("route_plans")}</h1></div>
       </div>
-      ${canManage ? `<button type="button" class="btn btn-primary btn-block" id="new-route-plan-btn">+ ${t("new_route_plan")}</button>` : ""}
+      ${canManage ? `<div class="rps-top-row"><button type="button" class="btn btn-primary" id="new-route-plan-btn">+ ${t("new_route_plan")}</button><button type="button" class="btn rps-auto-btn" id="auto-route-plan-btn">${t("auto_route_plan")}</button></div>` : ""}
       ${canManage ? `<button type="button" class="btn btn-block" id="route-distribution-btn" style="margin-top:8px;">${t("route_distribution_title")}</button>` : ""}
+      ${canViewAll ? `<div id="route-plan-sets-card" style="margin-top:12px;"></div>` : ""}
       <p class="form-error" id="route-plans-error" hidden></p>
       <div id="route-plans-body" style="margin-top:12px;"><p class="loading-state" role="status">${t("loading")}</p></div>
     </div>
@@ -136,6 +141,18 @@ export async function renderRoutePlans(root, navigate) {
   container.querySelector("#new-route-plan-btn")?.addEventListener("click", () => {
     openNewRoutePlanFlow(load);
   });
+  container.querySelector("#auto-route-plan-btn")?.addEventListener("click", async () => {
+    (await import("./routePlanSets.js")).openAutoPlanSheet(navigate);
+  });
+  const setsCard = container.querySelector("#route-plan-sets-card");
+  const paintSets = async () => {
+    if (setsCard) (await import("./routePlanSets.js")).renderPlanSetsCard(setsCard, navigate);
+  };
+  routePlansPage.refresh = () => {
+    paintSets();
+    load();
+  };
+  paintSets();
 
   await load();
 }

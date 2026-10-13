@@ -5,7 +5,7 @@ import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { photoUpload, uploadDirPath } from "../upload.js";
 import { matchesDeclaredImageType } from "../utils/imageSniff.js";
-import { haversineMeters } from "../utils/geo.js";
+import { haversineMeters, creditedDistanceMeters } from "../utils/geo.js";
 import { getCheckinRadiusMeters, getCheckinAllowanceEnabled } from "../settings.js";
 import { seesAllActivity } from "../roles.js";
 import { FIELD_REP_ROLE } from "../visitCount.js";
@@ -38,7 +38,7 @@ checkinsRouter.post("/far-attempt", express.json(), async (req, res) => {
   const { rows } = await pool.query("SELECT lat, lng FROM customers WHERE id = $1", [customerId]);
   if (!rows[0]) return res.status(404).json({ error: "Customer not found" });
   const distance = haversineMeters(lat, lng, rows[0].lat, rows[0].lng);
-  if (!(distance > (await getCheckinRadiusMeters()))) return res.status(204).end(); // not far: nothing to record
+  if (!(creditedDistanceMeters(distance, parseAccuracy(req.body?.accuracy_m)) > (await getCheckinRadiusMeters()))) return res.status(204).end(); // not far: nothing to record
   await pool.query(
     `INSERT INTO checkin_far_attempts (customer_id, user_id, lat, lng, distance_meters, accuracy_m)
      SELECT $1, $2, $3, $4, $5, $6
@@ -221,7 +221,9 @@ checkinsRouter.post("/", (req, res, next) => {
   const radiusMeters = await getCheckinRadiusMeters();
   const distance = haversineMeters(latNum, lngNum, customer.lat, customer.lng);
   const withinRange = distance <= radiusMeters;
-  if (!withinRange && req.user.role === FIELD_REP_ROLE && (await getCheckinAllowanceEnabled())) {
+  // The refusal forgives GPS accuracy up to 100 m (owner, 2026-10-13); the real distance and within_range are what get saved.
+  const tooFar = creditedDistanceMeters(distance, parseAccuracy(accuracy_m)) > radiusMeters;
+  if (tooFar && req.user.role === FIELD_REP_ROLE && (await getCheckinAllowanceEnabled())) {
     files.forEach((f) => fs.unlink(f.path, () => {}));
     return res.status(422).json({
       error: `You are ${Math.round(distance)} m from the customer; check-in is allowed within ${radiusMeters} m`,
