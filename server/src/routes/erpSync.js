@@ -7,6 +7,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { queueReportLabel, queueSyncNotice } from "../syncNotifier.js";
 import { autoDeliverOrdersFromErp, autoApprovePaymentsFromErp } from "../erpAutoMatch.js";
 import { runAutoTasks } from "../debtCollectionTasks.js";
+import { refreshOrderRhythm } from "../orderRhythm.js";
 import { snapshotTierPrices, logTierPriceChanges } from "../priceSyncLog.js";
 import {
   transformErpCustomers,
@@ -257,6 +258,8 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
           [lineErpIds, lineOrderIds, lineDates, lineProductIds, lineBrands, lineProductNames, lineSizes, lineQtys, lineUnitPrices, lineRevenues, lineDiscounts]
         );
       }
+      // How often each customer usually orders ("Reorder due" chip), from the order history just replaced.
+      await refreshOrderRhythm(client);
     }
 
     if (cashflow_lines !== undefined) {

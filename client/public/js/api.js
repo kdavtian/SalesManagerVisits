@@ -169,6 +169,7 @@ export const api = {
   getMapFacts: (id) => request(`/customers/${id}/map-facts`),
   getMapFactsBatch: (ids) => request(`/customers/map-facts?ids=${ids.join(",")}`),
   customerOrderedProducts: (id) => request(`/customers/${id}/ordered-products`),
+  getReorderProfile: (id, from) => request(`/customers/${id}/reorder-profile${from ? `?from=${encodeURIComponent(from)}` : ""}`),
 
   createCheckin: (formData) =>
     request("/checkins", { method: "POST", body: formData }),

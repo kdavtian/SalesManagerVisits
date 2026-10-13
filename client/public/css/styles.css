@@ -11732,3 +11732,43 @@ form select,
 @media (prefers-reduced-motion: reduce) {
   .back-slide-sheet { display: none; }
 }
+
+/* Order usual / Reorder (order screen, customer card) */
+.order-lines-card { margin-bottom: 12px; }
+.order-usual-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-radius: var(--radius);
+  padding: 4px 12px 12px;
+  margin-bottom: 12px;
+}
+.order-usual-card .order-product-row { background: transparent; border: 0; padding: 8px 0; }
+.order-usual-add-all { margin-top: 4px; min-height: 44px; }
+.order-due-tag {
+  align-self: flex-start;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.order-prefill-note { margin: 0 0 10px; font-size: 0.82rem; }
+.usual-order-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.usual-order-card-due { background: color-mix(in srgb, var(--accent) 8%, var(--bg-card)); }
+.usual-order-text { flex: 1; min-width: 0; }
+.usual-order-title { display: flex; align-items: center; gap: 6px; }
+.usual-order-sub { font-size: 0.8rem; margin-top: 2px; }
+.usual-order-card .btn { flex-shrink: 0; min-height: 44px; }
+.order-usual-heading { display: flex; align-items: center; gap: 8px; }
+.usual-order-title strong { font-size: 0.95rem; }
+.usual-order-card .btn { padding-left: 18px; padding-right: 18px; }
