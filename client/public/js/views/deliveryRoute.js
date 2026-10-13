@@ -22,7 +22,7 @@ async function paintRouteMap(el, stops) {
   }
   await ensureLeaflet();
   el.innerHTML = "";
-  const map = L.map(el, { zoomControl: true, attributionControl: false }).setView([stops[0].lat, stops[0].lng], 12);
+  const map = L.map(el, { zoomControl: true, attributionControl: false, kadPlainView: true }).setView([stops[0].lat, stops[0].lng], 12);
   // CARTO's rastertiles (used here previously) now requires a paid API key
   // for every request -- see views/map.js's own TILE_URLS comment. OSM
   // needs no key/account.

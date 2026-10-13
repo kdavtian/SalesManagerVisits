@@ -1048,6 +1048,7 @@ async function renderRoute() {
   const customerMatch = path.match(/^#\/customers\/(\d+)$/);
   const productMatch = path.match(/^#\/product\/(\d+)$/);
   const customerOrdersMatch = path.match(/^#\/customers\/(\d+)\/orders$/);
+  const checkinSpotsMatch = path.match(/^#\/customers\/(\d+)\/spots$/);
   const checkinMatch = path.match(/^#\/checkin\/(\d+)$/);
   const orderCreateMatch = path.match(/^#\/orders\/new\/(\d+)$/);
   const paymentDetailMatch = path.match(/^#\/payments\/(\d+)$/);
@@ -1069,6 +1070,8 @@ async function renderRoute() {
     );
   } else if (path === "#/customers") {
     (await import("./views/customers.js")).renderCustomers(app, navigate, query.get("visited"));
+  } else if (checkinSpotsMatch) {
+    (await import("./views/checkinSpots.js")).renderCheckinSpots(app, navigate, checkinSpotsMatch[1], query);
   } else if (customerOrdersMatch) {
     (await import("./views/customerOrders.js")).renderCustomerOrders(app, navigate, customerOrdersMatch[1]);
   } else if (orderCreateMatch) {

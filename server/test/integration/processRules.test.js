@@ -1,4 +1,4 @@
-// Process-logic fixes: credit limit approval, out-of-range check-ins not
+// Process-logic fixes: credit limit approval, far check-ins
 // counting as visits, a failed delivery staying "packed", the manual
 // order <-> Excel link, and stock available after other orders' reservations.
 import test from "node:test";
@@ -79,18 +79,18 @@ test("credit limit: an over-limit order needs a director's approval before it ca
   assert.equal(free.credit_status, "not_required");
 });
 
-test("an out-of-range check-in does not count as a visit", async () => {
+test("a rep's check-in counts as a visit at any distance; a director's never does", async () => {
   const customer = await createCustomer({ created_by: users.sales_director.id, assigned_manager_id: users.sales_manager.id });
-  const insert = (withinRange) =>
+  const insert = (userId, withinRange) =>
     pool.query(
       `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, timestamp) VALUES ($1, $2, 40.18, 44.51, $3, $4, now()) RETURNING id`,
-      [customer.id, users.sales_manager.id, withinRange ? 5 : 5000, withinRange]
+      [customer.id, userId, withinRange ? 5 : 5000, withinRange]
     );
-  await insert(false);
+  await insert(users.sales_director.id, true);
   const before = await apiRequest(`/api/customers/${customer.id}`, { cookie: cookies.sales_manager });
   assert.equal(before.data.last_visit_at, null);
   assert.equal(before.data.visited_today, false);
-  await insert(true);
+  await insert(users.sales_manager.id, false); // saved before the check-in allowance existed / pin was wrong
   const after = await apiRequest(`/api/customers/${customer.id}`, { cookie: cookies.sales_manager });
   assert.ok(after.data.last_visit_at);
   assert.equal(after.data.visited_today, true);

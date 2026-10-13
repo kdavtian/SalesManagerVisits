@@ -8,6 +8,7 @@ import { matchesDeclaredImageType } from "../utils/imageSniff.js";
 import { haversineMeters } from "../utils/geo.js";
 import { getCheckinRadiusMeters } from "../settings.js";
 import { seesAllActivity } from "../roles.js";
+import { FIELD_REP_ROLE } from "../visitCount.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { insertPayment } from "./payments.js";
 import { autoCompleteCollectionTasks } from "../taskAutoComplete.js";
@@ -186,9 +187,21 @@ checkinsRouter.post("/", (req, res, next) => {
     return res.status(404).json({ error: "Customer not found" });
   }
 
+  // Check-in allowance (Settings): a sales manager must be within this many meters of the customer's pin,
+  // otherwise the check-in is refused. Management roles (director, admin, CEO...) check in from anywhere;
+  // theirs is saved with within_range = false when far, and never counts as the customer's visit anyway.
   const radiusMeters = await getCheckinRadiusMeters();
   const distance = haversineMeters(latNum, lngNum, customer.lat, customer.lng);
   const withinRange = distance <= radiusMeters;
+  if (!withinRange && req.user.role === FIELD_REP_ROLE) {
+    files.forEach((f) => fs.unlink(f.path, () => {}));
+    return res.status(422).json({
+      error: `You are ${Math.round(distance)} m from the customer; check-in is allowed within ${radiusMeters} m`,
+      code: "checkin_too_far",
+      distance_meters: Math.round(distance),
+      allowance_meters: radiusMeters,
+    });
+  }
   const brandStatusValue = parseBrandStatus(brand_status);
   const availableProductsValue = parseAvailableProducts(available_products);
 

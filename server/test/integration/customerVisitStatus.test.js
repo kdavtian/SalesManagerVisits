@@ -58,34 +58,28 @@ test("visited= filters use the same facts", async () => {
   assert.ok(!(await ids("not_visited")).includes(visited.id));
 });
 
-test("only a field rep's in-range check-in is a visit: a director's, or one made far away, is not", async () => {
+test("only a field rep's check-in is a visit (a director's is not); distance does not matter", async () => {
   const c = await createCustomer({ created_by: admin.id });
   await pool.query(
     `INSERT INTO checkins (customer_id, user_id, timestamp, lat, lng, distance_meters, within_range)
-     VALUES ($1, $2, now(), 40.1, 44.5, 5, true),                      -- director, in range: saved, not a visit
-            ($1, $3, now() - interval '1 day', 40.1, 44.5, 900, false), -- rep, far from the pin
-            ($1, $3, now() - interval '2 days', 40.1, 44.5, 800, false)`,
-    [c.id, director.id, rep.id]
+     VALUES ($1, $2, now(), 40.1, 44.5, 5, true)`, // director, in range: saved, not a visit
+    [c.id, director.id]
   );
   const card = await apiRequest(`/api/customers/${c.id}`, { cookie });
   assert.equal(card.data.last_visit_at, null);
   assert.equal(card.data.visited_today, false);
-  assert.equal(card.data.far_visits, 2);
 
-  const facts = await apiRequest(`/api/customers/${c.id}/map-facts`, { cookie });
-  assert.equal(facts.data.last_visit_at, null);
-  assert.equal(facts.data.far_visits, 2);
-  const batch = await apiRequest(`/api/customers/map-facts?ids=${c.id}`, { cookie });
-  assert.equal(batch.data[c.id].last_visit_at, null);
-  assert.equal(batch.data[c.id].far_visits, 2);
-
-  // The rep then really visits: it counts, and the director's visit still adds nothing of its own.
+  // A rep's check-in made far from the pin (old data, or a pin that was wrong) still counts as the visit.
   await pool.query(
     `INSERT INTO checkins (customer_id, user_id, timestamp, lat, lng, distance_meters, within_range)
-     VALUES ($1, $2, now() - interval '3 days', 40.1, 44.5, 5, true)`,
+     VALUES ($1, $2, now() - interval '2 days', 40.1, 44.5, 900, false)`,
     [c.id, rep.id]
   );
   const after = await apiRequest(`/api/customers/${c.id}`, { cookie });
-  assert.equal(new Date(after.data.last_visit_at).getTime() < Date.now() - 2 * 24 * 3600 * 1000, true);
-  assert.equal(after.data.visited_today, false);
+  assert.ok(after.data.last_visit_at, "a far check-in by a rep is the last visit");
+  assert.equal(after.data.visited_today, false, "the director's check-in today does not make it visited today");
+  const facts = await apiRequest(`/api/customers/${c.id}/map-facts`, { cookie });
+  assert.equal(new Date(facts.data.last_visit_at).getTime(), new Date(after.data.last_visit_at).getTime());
+  const batch = await apiRequest(`/api/customers/map-facts?ids=${c.id}`, { cookie });
+  assert.equal(new Date(batch.data[c.id].last_visit_at).getTime(), new Date(after.data.last_visit_at).getTime());
 });

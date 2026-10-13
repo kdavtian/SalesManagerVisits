@@ -73,7 +73,11 @@
   const nativeMapFactory = window.L.map.bind(window.L);
   window.L.map = function safeMapFactory(...args) {
     const map = nativeMapFactory(...args);
-    const restored = readView();
+    // A small helper map (check-in locations, delivery route, Change location) opts out of the Map tab's
+    // remembered view: it must neither be steered by it (the first fit/zoom would be swallowed) nor
+    // overwrite it with its own position.
+    const plain = Boolean(args[1]?.kadPlainView);
+    const restored = plain ? null : readView();
     const createdAt = Date.now();
     let bootstrapHandled = false;
     let suppressOneAutomaticGpsSetView = Boolean(restored);
@@ -136,7 +140,7 @@
       return nativeFitBounds(bounds, { ...options, maxZoom: Math.min(19, Number(options?.maxZoom) || 19) });
     };
 
-    map.on("moveend zoomend rotate", () => saveView(map));
+    if (!plain) map.on("moveend zoomend rotate", () => saveView(map));
     return map;
   };
 })();
