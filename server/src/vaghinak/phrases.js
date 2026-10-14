@@ -1,0 +1,191 @@
+// Vaghinak's voice. Every idea has SEVERAL wordings and he never repeats the one he used last (pickVariant keeps the
+// recently used ones out), so he sounds alive. Reps get warm, plain, jokey Armenian; management gets the formal tone.
+// No gender is guessed from a name: he addresses people by "<first name> ջան" / the first name / "Հարազատս", or by
+// whatever management typed into the person's "how Vaghinak addresses me" field (users.vaghinak_address).
+//
+// This file is the "phrase engine" seam: V2 can ask an AI to phrase the same facts and fall back to this bank.
+
+const word = (s) => String(s ?? "").trim().split(/\s+/).filter(Boolean);
+const firstNameOf = (u) => word(u.name_hy || u.name)[0] ?? "";
+const lastNameOf = (u) => {
+  const w = word(u.name_hy || u.name);
+  return w.length > 1 ? w[w.length - 1] : w[0] ?? "";
+};
+
+export function addressFor(user, audience, pick = Math.random) {
+  if (user.vaghinak_address?.trim()) return user.vaghinak_address.trim();
+  const first = firstNameOf(user);
+  if (audience === "management") return `Հարգելի ${lastNameOf(user) || first}`;
+  const forms = [`${first} ջան`, `${first} ջան`, first, "Հարազատս", `${first} ջան`];
+  return forms[Math.floor(pick() * forms.length)];
+}
+
+export function durationHy(min) {
+  const m = Math.max(0, Math.round(min));
+  if (m < 60) return `${m} րոպե`;
+  const h = Math.floor(m / 60);
+  const rest = m % 60;
+  return rest >= 10 ? `${h} ժամ ${rest} րոպե` : `${h} ժամ`;
+}
+
+export const clock = (min) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+
+// kind -> level -> audience -> [templates]. Placeholders: {addr} {late} {time} {dur} {n} {idle} {done} {planned} {pct} ...
+const BANK = {
+  late_start: {
+    1: {
+      rep: [
+        "{addr}, այսօր սկսեցիր {late} րոպե ուշ։ Մեծ բան չի, բայց վաղը փորձենք ժամանակին, լա՞վ 😊",
+        "{addr}, առավոտը մի քիչ քաշեց էսօր՝ {late} րոպե ուշացում։ Արի վաղը 09:30-ին արդեն դաշտում լինենք։",
+        "Հե՜յ {addr}, ժամացույցը նայե՞լ ես։ {late} րոպե ուշ էիր էսօր։ Վաղը ժամանակին, խոստանո՞ւմ ես։",
+        "{addr}, {late} րոպե ուշ սկսեցիր։ Գիտեմ՝ պատճառներ միշտ լինում են 😄 բայց հաճախորդները շուտ են արթնանում։ Վաղը ժամանակին՞",
+        "{addr}, էսօր {late} րոպե ուշացար։ Օրվա մնացածը լավ անցկացրու, իսկ վաղվանը թող ժամանակին սկսվի։",
+      ],
+    },
+  },
+  not_started: {
+    1: {
+      rep: [
+        "{addr}, արդեն {time} է, դեռ ոչ մի այց չեմ տեսնում։ Ամեն ինչ կարգի՞ն է։",
+        "{addr}, բարև 🙂 Օրը վաղուց սկսվել է, իսկ քեզ դեռ չեմ տեսնում։ Ինչպե՞ս ես, ի՞նչ կա։",
+        "Ողջույն {addr}, {time} է արդեն։ Չորոշեցինք էսօր տանը մնալ, չէ՞ 😄 Ասա՝ ինչ է կատարվում։",
+        "{addr}, դեռ ոչ մի այց չկա։ Գոնե մի բառ գրիր՝ ուր ես ու ինչով կարող եմ օգնել։",
+      ],
+    },
+    2: {
+      rep: [
+        "{addr}, արդեն {time} է, իսկ այցեր չկան։ Խնդրում եմ պատասխանիր՝ ինչ է կատարվում, որ կարողանամ օգնել։",
+        "{addr}, կարևոր է՝ օրվա կեսը մոտենում է, այցեր չկան։ Ասա խնդրեմ՝ ինչպե՞ս ես ու ինչով օգնեմ։",
+        "{addr}, պետք է իմանամ՝ ինչո՞ւ դեռ չես սկսել։ Մի րոպե հատկացրու ու պատասխանիր։",
+      ],
+    },
+  },
+  office_long: {
+    1: {
+      rep: [
+        "{addr}, գրասենյակում արդեն {dur} ես, իսկ այսօր {n} այց կա պլանում։ Հաճախորդները սպասում են՝ դուրս գանք դաշտ։",
+        "{addr}, հաճախորդների մոտ պատվերները գրասենյակի թեյից ավելի քաղցր են 😄 {dur} է նստած ես, {n} այց մնաց։",
+        "{addr}, գրասենյակն ապահով է, բայց վաճառքը փողոցում է։ {n} այց ունես՝ ժամանակն է շարժվել։",
+        "{addr}, {dur} գրասենյակում ես։ Պլանում դեռ {n} հաճախորդ կա, չսպասեցնենք նրանց։",
+        "Դե ինչ, {addr}, սուրճն էլ խմեցինք, թղթերն էլ նայեցինք 😉 հիմա դաշտ։ Օրվա պլանից {n} այց մնաց։",
+      ],
+    },
+    2: {
+      rep: [
+        "{addr}, արդեն {dur} գրասենյակում ես, իսկ {n} այց դեռ մնացել է։ Խնդրում եմ ասա՝ ինչն է պահում, որ կարողանամ օգնել։",
+        "{addr}, պետք է հարցնեմ՝ ինչո՞ւ ես դեռ գրասենյակում ({dur})։ Պլանում {n} այց կա։ Կպատասխանե՞ս, խնդրեմ։",
+        "{addr}, {dur} գրասենյակում, {n} այց՝ պլանում։ Մի րոպե հատկացրու ու ասա՝ ինչ է պատահել։",
+      ],
+    },
+  },
+  stopped_early: {
+    1: {
+      rep: [
+        "{addr}, վերջին այցից {idle} է անցել, իսկ պլանում դեռ {n} հաճախորդ կա։ Շարունակե՞նք։",
+        "Ապրես, արդեն մի քանի այց արեցիր, բայց {n} հաճախորդ դեռ սպասում է։ Վերջին այցը {idle} առաջ էր, {addr}՝ գնա՞նք հաջորդին։",
+        "{addr}, կարծես դադար ես տվել՝ {idle} է։ Հաճախորդները սպասում են ({n})։ Հաջորդը որտե՞ղ է։",
+        "Հե՜յ {addr}, ճանապարհը շարունակենք 😊 մնացել է {n} այց, դեռ ժամանակ կա։",
+        "{addr}, լավ սկսել էիր, մի ավարտենք էլ։ {n} այց մնաց, վերջին այցը {idle} առաջ էր։",
+      ],
+    },
+    2: {
+      rep: [
+        "{addr}, {idle} է այց չկա, իսկ {n} հաճախորդ դեռ պլանում է։ Խնդրում եմ ասա՝ ինչ է պատահել։",
+        "{addr}, պետք է հարցնեմ՝ ինչո՞ւ կանգ առար։ Պլանում դեռ {n} այց կա։",
+        "{addr}, {n} այց մնացել է, իսկ քեզ {idle} է չեմ տեսնում դաշտում։ Պատասխան ունե՞ս ինձ։",
+      ],
+    },
+  },
+  day_wrap_high: {
+    1: {
+      rep: [
+        "{addr}, ապրես 👏 էսօր {done} այց արեցիր ({done}/{planned})։ Լավ պրոդուկտիվ օր էր։ Վաղը նույն թափով։",
+        "Էս օրվա համար մեծ ապրես, {addr}։ Պլանի {pct}%-ը կատարվեց։ Հանգստացիր, վաստակել ես 😉",
+        "{addr}, այսօրվա համար ձեռքդ չցավի՝ {done} այց ու պլանի {pct}%։ Այսպես շարունակիր։",
+      ],
+    },
+  },
+  day_wrap_mid: {
+    1: {
+      rep: [
+        "{addr}, էսօր {done} այց արեցիր՝ պլանի {pct}%։ Ոչ վատ, բայց ես գիտեմ՝ կարող ես ավելին։ Վաղը մնացած հաճախորդներին էլ հասնենք։",
+        "Այսօր {done}/{planned} այց։ Լավ ընթացք է, {addr}․ վաղը փորձենք փակել մնացածը։",
+      ],
+    },
+  },
+  day_wrap_low: {
+    1: {
+      rep: [
+        "{addr}, էսօր պլանի միայն {pct}%-ը կատարվեց ({done}/{planned})։ Վաղը միասին շտկենք՝ առավոտյան շուտ դուրս գանք դաշտ։",
+        "{addr}, օրը հեշտ չէր երևի՝ {done}/{planned} այց։ Վաղը նոր օր է, ավելի ուժեղ կսկսենք 💪",
+      ],
+    },
+  },
+  day_wrap_free: {
+    1: {
+      rep: [
+        "{addr}, էսօր {done} այց արեցիր, ապրես։ Վաղվա համար թող պլանը պատրաստ լինի։",
+        "{addr}, {done} այց էսօր․ լավ է։ Վաղը էլի դաշտում ենք 😊",
+      ],
+    },
+  },
+  mgmt_brief_quiet: {
+    1: {
+      management: [
+        "{addr}, այսօր վաճառքի մենեջերների մասով էական խնդիրներ չեմ նկատել։ Պլանի միջին կատարումը՝ {avg}%, ուշացումներ՝ {lateN}։",
+        "{addr}, օրն անցավ հանգիստ․ վաճառքի թիմում լուրջ շեղումներ չկան։ Պլանի միջին կատարումը՝ {avg}%։",
+        "{addr}, այսօր թիմը աշխատել է կայուն․ պլանի կատարումը՝ {avg}%, ուշացումներ՝ {lateN}։",
+      ],
+    },
+  },
+  mgmt_brief_issues: {
+    1: {
+      management: [
+        "{addr}, այսօր ուշադրության արժանի {k} հարց կա՝ {list}։ Պլանի միջին կատարումը՝ {avg}%։",
+        "{addr}, վաճառքի թիմում նկատեցի՝ {list}։ Պլանի միջին կատարումը՝ {avg}%։",
+        "{addr}, օրվա ամփոփում․ {list}։ Պլանի միջին կատարումը՝ {avg}%։",
+      ],
+    },
+  },
+};
+
+export const QUESTION_CHOICES = {
+  not_started: [
+    { key: "day_off", label: "Ազատ օր է" },
+    { key: "sick", label: "Հիվանդ եմ" },
+    { key: "on_way", label: "Հիմա կսկսեմ" },
+    { key: "other", label: "Այլ" },
+  ],
+  office_long: [
+    { key: "meeting", label: "Ժողով / հանդիպում" },
+    { key: "paperwork", label: "Փաստաթղթեր / հաշվետվություն" },
+    { key: "waiting", label: "Սպասում եմ պատվերի կամ ապրանքի" },
+    { key: "car", label: "Մեքենայի խնդիր" },
+    { key: "other", label: "Այլ" },
+  ],
+  stopped_early: [
+    { key: "lunch", label: "Ճաշի ընդմիջում" },
+    { key: "customer", label: "Հաճախորդի մոտ եմ / սպասում եմ" },
+    { key: "car", label: "Մեքենայի խնդիր" },
+    { key: "done", label: "Ավարտեցի օրը" },
+    { key: "other", label: "Այլ" },
+  ],
+};
+
+// Picks a template for (kind, level, audience), skipping the variants in `recent` (ids like "office_long:1:rep:3")
+// unless that leaves nothing. Returns { text, variant }.
+export function pickVariant(kind, level, audience, ctx, recent = [], pick = Math.random) {
+  const list = BANK[kind]?.[level]?.[audience];
+  if (!list?.length) throw new Error(`No wording for ${kind}/${level}/${audience}`);
+  const ids = list.map((_, i) => `${kind}:${level}:${audience}:${i}`);
+  const fresh = ids.filter((id) => !recent.includes(id));
+  const pool = fresh.length ? fresh : ids;
+  const variant = pool[Math.floor(pick() * pool.length)];
+  const template = list[ids.indexOf(variant)];
+  const text = template.replace(/\{(\w+)\}/g, (_, key) => String(ctx[key] ?? ""));
+  return { text, variant };
+}
+
+export function variantCount(kind, level, audience) {
+  return BANK[kind]?.[level]?.[audience]?.length ?? 0;
+}

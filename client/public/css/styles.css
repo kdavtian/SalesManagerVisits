@@ -13175,3 +13175,47 @@ form select,
 .purge-warning { margin: 0; }
 .purge-block #purge-btn { min-height: 44px; }
 .purge-block #purge-btn.is-armed { background: var(--danger); color: #ffffff; }
+
+/* ===== Vaghinak (Home -> Vaghinak): messages, team pulse, blocking question ===== */
+.quick-action-icon-vaghinak { background: color-mix(in srgb, var(--accent) 80%, #6d28d9 20%); color: #ffffff; }
+.vg-avatar { width: 56px; height: 56px; border-radius: 50%; background: var(--accent); color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 700; margin: 0 auto 8px; }
+.vg-avatar-sm { width: 40px; height: 40px; font-size: 20px; margin: 0; flex: 0 0 auto; }
+.vg-list { gap: 10px; }
+.vg-msg { display: flex; flex-direction: column; gap: 8px; }
+.vg-msg.vg-unread { border-left: 3px solid var(--accent); }
+.vg-msg.vg-open { border-color: var(--warning); }
+.vg-msg-body { font-size: var(--fs-body, 15px); line-height: 1.45; overflow-wrap: anywhere; }
+.vg-msg-meta { font-size: var(--fs-row-meta); }
+.vg-answered { padding: 8px 10px; border-radius: var(--radius); background: color-mix(in srgb, var(--success) 12%, var(--bg-card)); font-size: 14px; }
+.vg-waiting { color: var(--warning); font-weight: 600; font-size: 14px; }
+.vg-answer { display: flex; flex-direction: column; gap: 10px; }
+.vg-choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.vg-choice { min-height: 44px; }
+.vg-text { width: 100%; box-sizing: border-box; resize: vertical; min-height: 64px; padding: 10px 12px; border: 1px solid var(--control-border); border-radius: var(--radius); background: var(--bg-card); color: var(--text); font: inherit; }
+.vg-send { min-height: 44px; }
+.vg-react { display: flex; gap: 8px; }
+.vg-react-btn { flex: 1 1 0; min-height: 44px; border: 1px solid var(--control-border); border-radius: var(--radius); background: var(--bg-card); color: var(--text-dim); font: inherit; cursor: pointer; }
+.vg-react-btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.vg-rep { display: flex; flex-direction: column; gap: 6px; }
+.vg-rep.vg-muted { opacity: 0.65; }
+.vg-rep-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.vg-plan { display: flex; align-items: center; gap: 10px; }
+.vg-plan .progress-bar { flex: 1 1 auto; }
+.vg-plan span { white-space: nowrap; font-size: var(--fs-row-meta); color: var(--text-dim); }
+.vg-flags { display: flex; flex-wrap: wrap; gap: 6px; }
+.vg-mute { align-self: flex-start; min-height: 44px; }
+.vg-mode-line { margin: 4px 0; }
+.vg-hint { font-size: var(--fs-row-meta); margin: 4px 0 8px; }
+.vg-modes { display: flex; flex-wrap: wrap; gap: 8px; }
+.vg-fields { display: flex; flex-direction: column; gap: 0; padding: 4px 12px; }
+.vg-field { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; border-bottom: 1px solid var(--border); }
+.vg-field:last-child { border-bottom: 0; }
+.vg-field > span { flex: 1 1 auto; font-size: 14px; }
+.vg-field input { width: 132px; min-height: 44px; box-sizing: border-box; text-align: right; border: 1px solid var(--control-border); border-radius: var(--radius); padding: 0 10px; background: var(--bg-card); color: var(--text); font: inherit; }
+.vg-field input[type="text"] { width: 150px; }
+/* The mandatory question covers the whole app until it is answered. */
+.vg-block { position: fixed; inset: 0; z-index: 10000; background: rgba(15, 23, 42, 0.72); display: flex; align-items: flex-end; justify-content: center; padding: 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom)); overflow-y: auto; }
+.vg-block-card { width: 100%; max-width: 480px; background: var(--bg-card); border-radius: 20px; padding: 20px 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35); }
+.vg-block-card h2 { margin: 0; text-align: center; font-size: 1.1rem; }
+.vg-block-body { margin: 0; line-height: 1.5; font-size: 16px; }
+.vg-block-hint { margin: 0; text-align: center; font-size: var(--fs-row-meta); }

@@ -1019,7 +1019,7 @@ async function loadSalesPerformance(slot, role) {
   slot.innerHTML = sections.join("");
 }
 
-const NOTIFICATION_TYPES = ["plan_submitted", "plan_reviewed", "order_status_changed", "order_placed", "visit_reminder", "task_assigned", "task_deadline", "task_completed", "accounting_update"];
+const NOTIFICATION_TYPES = ["plan_submitted", "plan_reviewed", "order_status_changed", "order_placed", "visit_reminder", "task_assigned", "task_deadline", "task_completed", "accounting_update", "vaghinak"];
 
 async function loadNotificationPreferences(slot) {
   let prefs;

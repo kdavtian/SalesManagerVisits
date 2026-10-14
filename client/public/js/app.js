@@ -12,6 +12,7 @@ import { icons } from "./icons.js";
 // in this codebase for cross-view references (e.g. customerOrders.js's own
 // import("./customerDetail.js")).
 import { flushQueue, getQueue, onQueueChange } from "./offlineQueue.js";
+import { startVaghinakWatch } from "./vaghinak.js";
 import { openSyncQueueSheet } from "./syncQueueSheet.js";
 import { getPerfMode } from "./perfMode.js";
 import { clearListCache, clearCacheIfRoleChanged } from "./listCache.js";
@@ -1100,6 +1101,8 @@ async function renderRoute() {
     (await import("./views/routePlanSets.js")).renderRoutePlanSet(app, navigate, Number(routePlanSetMatch[1]));
   } else if (path === "#/route-plans") {
     (await import("./views/routePlans.js")).renderRoutePlans(app, navigate);
+  } else if (path === "#/vaghinak") {
+    (await import("./views/vaghinak.js")).renderVaghinak(app, navigate);
   } else if (path === "#/team-progress") {
     (await import("./views/repProgress.js")).renderRepProgress(app, navigate);
   } else if (path === "#/team-performance") {
@@ -1192,6 +1195,7 @@ const SIDEBAR_ITEM_ICON = {
   qa_company_dashboard: { icon: icons.dashboard, colorClass: "quick-action-icon-company" },
   qa_sales: { icon: icons.trendUp, colorClass: "quick-action-icon-sales" },
   qa_tasks: { icon: icons.tasks, colorClass: "quick-action-icon-tasks" },
+  qa_vaghinak: { icon: icons.vaghinak, colorClass: "quick-action-icon-vaghinak" },
   qa_bonuses: { icon: icons.gift, colorClass: "quick-action-icon-bonuses" },
 };
 
@@ -1519,6 +1523,7 @@ async function init() {
   refreshNotificationBadge();
   refreshPlanApprovalBadge();
   refreshEditRequestBadge();
+  startVaghinakWatch();
   // The refresh*Badge() calls just above are the initial, right-at-
   // boot values (each its own single-purpose endpoint, so the very first
   // paint reflects whichever ones this role can even see without waiting

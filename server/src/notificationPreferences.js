@@ -52,6 +52,8 @@ export const NOTIFICATION_TYPES = [
   // Lily (accounting) reported on an order the user sent to accounting:
   // document created, signed, or needs attention.
   "accounting_update",
+  // Vaghinak (the AI operations deputy director): reminders, questions and day wrap-ups (see vaghinak/engine.js).
+  "vaghinak",
 ];
 
 // Warehouse Manager: an order just entered their queue.

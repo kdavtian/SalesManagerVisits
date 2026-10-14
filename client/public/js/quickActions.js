@@ -28,6 +28,8 @@ export const QUICK_ACTIONS = [
   { id: "qa_check_in", defaultRoles: ALL_ROLES },
   // Task management: everyone receives tasks; management creates them.
   { id: "qa_tasks", defaultRoles: ALL_ROLES },
+  // Vaghinak, the AI operations deputy director: his messages, questions and (for management) the team pulse.
+  { id: "qa_vaghinak", defaultRoles: ALL_ROLES },
   { id: "qa_add_customer", defaultRoles: ALL_ROLES },
   {
     id: "qa_payments",
@@ -97,6 +99,7 @@ export const QUICK_ACTION_ROUTE = {
   qa_company_dashboard: "#/company-dashboard",
   qa_sales: "#/sales",
   qa_tasks: "#/tasks",
+  qa_vaghinak: "#/vaghinak",
   qa_bonuses: "#/bonuses",
 };
 

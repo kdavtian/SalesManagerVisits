@@ -1,4 +1,4 @@
-# Vaghinak (Վաղինակ) - AI Operations Deputy Director (brief of 2026-10-14; NOT BUILT YET)
+# Vaghinak (Վաղինակ) - AI Operations Deputy Director (brief of 2026-10-14; V1 BUILT in 1.331.0, V2+ not yet)
 
 Owner's words, condensed: "Collecting data alone adds 0 value. Data-driven decisions and actions add value." Vaghinak turns the data the app already collects into timely actions: he controls staff, watches activity all day, assesses performance, finds operational problems and friction between roles (sales rep - warehouse - driver - accountant), plan completion, day offs, and keeps leading and MOTIVATING the team. Goal: a more engaged, motivated, responsible team whose performance and financial numbers keep growing. Status: design discussion (owner asked for pros/cons of "inside the app vs elsewhere" and will decide). Update this file with every decision.
 
@@ -37,4 +37,7 @@ V2: cluster-skip rule (customers within ~300 m / same street left behind), check
 V3: stage 1/2/3 tracking per customer + region penetration map (partners vs potential), warehouse/driver/accountant cooperation questions, day-off/leave handling, effectiveness dashboard, ask-Vaghinak chat for management.
 
 ## Decisions log
-(none yet - waiting for the owner: where he lives, LLM or templates, day-off recording, MVP scope)
+- 2026-10-14 (owner): LIVES = HYBRID (brain + data in the app server; delivery in app: Home tile + badge, his page, Tasks, blocking screen for mandatory questions; push; Telegram later for urgent only).
+- WORDING = rules compute facts, AI (Claude API) only phrases them, with a large role-aware template bank as fallback. V1 ships the template bank with many variants and a "phrase engine" seam so AI phrasing plugs in at V2.
+- DAY OFFS = rep requests in the app, management approves (V2; in V1 management can mute a rep for a day).
+- V1 SCOPE = core control loop: tile + badge + page, silent lateness log, office-too-long reminder + mandatory clarification, "stopped with planned visits left", all automated tasks under his name.
