@@ -6,7 +6,7 @@ import { nextVisitRowHtml } from "../visitSchedule.js";
 import { t } from "../i18n.js";
 import { dueChipHtml } from "../debtChip.js";
 import { icons } from "../icons.js";
-import { state, canEditDirectly, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, isAdmin, seesFinancialExports, seesAllActivity } from "../state.js";
+import { state, canSetCustomerPrices, canEditDirectly, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, isAdmin, seesFinancialExports, seesAllActivity } from "../state.js";
 import { openVisitDetailSheet, openPhotoLightbox } from "../visitDetail.js";
 import { visitStatusBadge } from "./customers.js";
 import { openFileReadySheet } from "../fileReadySheet.js";
@@ -747,6 +747,11 @@ async function openAccountSettingsSheet(customer, onDone) {
                }`
             : ""
         }
+        ${
+          customer.customer_tier === "gold" && canSetCustomerPrices()
+            ? `<button type="button" class="btn btn-block" id="open-special-prices">${t("sp_open_btn")} ›</button>`
+            : ""
+        }
         <p class="form-error" id="account-settings-error" hidden></p>
         <div class="sheet-actions">
           <button type="button" class="btn" id="cancel-account-settings">${t("cancel")}</button>
@@ -781,6 +786,10 @@ async function openAccountSettingsSheet(customer, onDone) {
     overlay.remove();
   }
   overlay.querySelector("#cancel-account-settings").addEventListener("click", close);
+  overlay.querySelector("#open-special-prices")?.addEventListener("click", () => {
+    close();
+    location.hash = `#/customers/${customer.id}/special-prices`;
+  });
   overlay.addEventListener("click", (e) => e.target === overlay && close());
 
   if (showReassign) {

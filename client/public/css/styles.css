@@ -11193,7 +11193,8 @@ form select,
   transform: rotate(45deg);
 }
 .order-row-selected { border-color: var(--accent); }
-.orders-select-mode #orders-list { padding-bottom: 96px; }
+.orders-select-mode #orders-list { padding-bottom: 190px; }
+.orders-select-mode [data-order-id] { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
 /* Floating action row, stuck to the bottom above the tab bar. */
 .orders-select-bar {
   position: fixed;
@@ -11204,7 +11205,7 @@ form select,
   margin: 0 auto;
   z-index: 30;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
   padding: 10px 12px;
   background: var(--bg-card);
@@ -11213,8 +11214,13 @@ form select,
   box-shadow: 0 6px 22px rgba(15, 23, 42, 0.18);
 }
 .orders-select-bar[hidden] { display: none; }
-.orders-select-bar > span { flex: 1; font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.orders-select-bar .btn { padding-left: 14px; padding-right: 14px; white-space: nowrap; }
+.osb-summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.osb-summary > span { flex: 1; font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.osb-all { min-height: 44px; padding: 0 4px; white-space: nowrap; }
+.osb-note input { width: 100%; box-sizing: border-box; height: 44px; }
+.osb-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.osb-actions .btn { min-height: 44px; padding: 6px 12px; flex: 1 1 100%; min-width: 0; white-space: normal; line-height: 1.2; }
+.osb-actions .osb-secondary { flex: 1 1 calc(50% - 4px); order: 2; }
 .print-blank-options { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
 .print-blank-option { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; }
 .print-blank-option input { margin-top: 3px; }
@@ -12791,6 +12797,7 @@ form select,
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-bottom: 10px;
 }
 .order-search-row input[type="search"] {
   flex: 1 1 auto;
@@ -13162,4 +13169,82 @@ form select,
   border-radius: 12px 0 0 12px;
   -webkit-appearance: none;
   appearance: none;
+}
+
+/* ---- Special pricelist (views/specialPrices.js) ---- */
+.price-diff {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bg-card-pressed, rgba(128, 128, 128, 0.16));
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.price-diff-down {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+.price-diff-up {
+  background: color-mix(in srgb, var(--success, #1f9d55) 14%, transparent);
+  color: var(--success, #1f9d55);
+}
+.oc-price-line {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.sp-row.is-dirty {
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-card));
+}
+.sp-side {
+  flex: 0 0 auto;
+}
+.sp-field {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.sp-input {
+  flex: 0 0 auto;
+  width: 7.2rem;
+}
+.sp-chip-slot {
+  min-width: 56px;
+  text-align: right;
+}
+.sp-lists {
+  font-size: 0.74rem;
+}
+.sp-bar {
+  gap: 10px;
+}
+.sp-bar-actions {
+  display: flex;
+  gap: 8px;
+}
+.sp-bar-actions .btn {
+  min-height: 44px;
+  padding: 0 12px;
+}
+.oc-searchbar .search-input-clear-wrap {
+  border: 0;
+  background: transparent;
+  border-radius: 12px 0 0 12px;
+}
+.sp-bar {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.sp-bar .order-cart-summary {
+  flex-direction: row;
+  font-weight: 600;
+}
+.sp-bar-actions .btn {
+  flex: 1 1 0;
 }
