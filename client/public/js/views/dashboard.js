@@ -1,7 +1,7 @@
 import { renderVisitFirst } from "../visitFirstCard.js";
 import { api } from "../api.js";
 import { escapeHtml, formatDistance, formatRelative, formatAmd, getCurrentPosition, haversineMeters, categoryLabel, formatDayMonth, labelColon } from "../util.js";
-import { state, canViewTeamLocations } from "../state.js";
+import { state, canViewTeamLocations, seesAllActivity } from "../state.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { applyPaymentBadge, applyUnrecordedBadge, applyWarehouseBadge, applyDeliveryBadge, applyAccountingBadge } from "../app.js";
@@ -204,6 +204,7 @@ export async function renderDashboard(root, navigate) {
   function paint({ summary, customers, trends, settings, planPreview, myPlan, teamTodayPlans }) {
   const totals = summary.totals;
   const remaining = Math.max(0, totals.total_customers - totals.visited_today);
+  const canOpenRepProgress = seesAllActivity();
   // "Here's your field plan for today" only means something to someone who
   // actually has a personal field plan -- a sales_manager (and, loosely, a
   // delivery_manager). Office/management roles (admin/ceo/sales_director/
@@ -241,11 +242,9 @@ export async function renderDashboard(root, navigate) {
     ${state.user.role === "sales_manager" ? `<div id="today-plan-slot"></div><div id="visit-first-slot"></div>` : ""}
 
     <div class="card progress-card" id="progress-card" ${
-      // Only made tappable when there's actually a by-manager section to
-      // reveal (see summary.by_manager?.length gating below) -- a
-      // sales_manager's own progress card has nothing to expand, so it
-      // stays a plain static card, not a dead-looking button.
-      summary.by_manager?.length ? `role="button" tabindex="0" aria-expanded="false" aria-controls="by-manager-section" aria-label="${t("toggle_by_manager_aria")}"` : ""
+      // Management taps through to "Progress by reps" (reps as columns, metrics as rows); a rep's own card has
+      // nothing behind it, so it stays a plain static card.
+      canOpenRepProgress ? `role="link" tabindex="0" aria-label="${t("rp_open_aria")}"` : ""
     }>
       <span class="progress-label">${t("today_progress")}</span>
       <div class="progress-main">
@@ -262,7 +261,7 @@ export async function renderDashboard(root, navigate) {
             <div class="progress-side-row"><span class="dot dot-warning"></span>${remaining} ${t("stat_remaining")}</div>
             <div class="progress-side-row"><span class="dot dot-danger"></span>${totals.overdue} ${t("stat_overdue")}</div>
           </div>
-          ${summary.by_manager?.length ? `<span class="progress-card-chevron" aria-hidden="true">${icons.chevronDown}</span>` : ""}
+          ${canOpenRepProgress ? `<span class="progress-card-chevron" aria-hidden="true">${icons.chevronDown}</span>` : ""}
         </div>
       </div>
       ${
@@ -273,45 +272,6 @@ export async function renderDashboard(root, navigate) {
           : `<p class="muted progress-no-plan">${t("progress_no_plan")}</p>`
       }
     </div>
-
-    ${
-      // by_manager is only ever non-null for the roles that see company-wide
-      // data (director/admin/ceo/accountant) -- a sales_manager gets null
-      // here and never sees this section, since the single progress card
-      // above is already their own. Hidden by default (grid-template-rows
-      // 0fr -- see .by-manager-collapse) and revealed by tapping the
-      // progress card above; each row further expands in place into that
-      // one manager's own progress-card numbers for a quick glance, and
-      // carries a "View full performance" link into Team Performance
-      // pre-scoped to that manager for the real drill-down.
-      summary.by_manager?.length
-        ? `<div class="by-manager-collapse" id="by-manager-section">
-             <div class="by-manager-collapse-inner">
-               <h2 class="section-title">${t("by_manager_week")}</h2>
-               <div class="card-list" id="by-manager-list">
-                 ${summary.by_manager
-                   .map(
-                     (m) => `
-                   <details class="manager-drill-row">
-                     <summary>
-                       <span class="manager-drill-name">${escapeHtml(m.user_name)}</span>
-                       <span class="muted">${m.checkins_this_week} ${t("qa_check_in")} · ${m.customers_visited_this_week} ${t("stat_visited_week")}</span>
-                     </summary>
-                     <div class="manager-drill-detail">
-                       <div class="progress-side-row"><span class="dot dot-success"></span>${m.visited_today} ${t("stat_visited_today")}</div>
-                       <div class="progress-side-row"><span class="dot dot-warning"></span>${Math.max(0, m.total_customers - m.visited_today)} ${t("stat_remaining")}</div>
-                       <div class="progress-side-row"><span class="dot dot-danger"></span>${m.overdue} ${t("stat_overdue")}</div>
-                       <div class="progress-side-row">${m.total_customers} ${t("total")}</div>
-                       <button type="button" class="link-btn manager-drill-view-btn" data-view-manager="${m.user_id}">${t("view_full_performance")}</button>
-                     </div>
-                   </details>`
-                   )
-                   .join("")}
-               </div>
-             </div>
-           </div>`
-        : ""
-    }
 
     <div>
     <h2 class="section-title section-title-tight">${t("quick_actions")}</h2>
@@ -473,18 +433,13 @@ export async function renderDashboard(root, navigate) {
   applyAccountingBadge();
 
   const progressCard = container.querySelector("#progress-card");
-  const byManagerSection = container.querySelector("#by-manager-section");
-  if (progressCard && byManagerSection) {
-    const toggleByManager = () => {
-      const expanded = progressCard.getAttribute("aria-expanded") === "true";
-      progressCard.setAttribute("aria-expanded", String(!expanded));
-      byManagerSection.classList.toggle("expanded", !expanded);
-    };
-    progressCard.addEventListener("click", toggleByManager);
+  if (progressCard && canOpenRepProgress) {
+    const open = () => navigate("#/team-progress");
+    progressCard.addEventListener("click", open);
     progressCard.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
-        toggleByManager();
+        open();
       }
     });
   }
@@ -521,9 +476,6 @@ export async function renderDashboard(root, navigate) {
       }
     });
   }
-  container.querySelectorAll("[data-view-manager]").forEach((btn) => {
-    btn.addEventListener("click", () => navigate(`#/team-performance?manager=${encodeURIComponent(btn.dataset.viewManager)}`));
-  });
   container.querySelectorAll("#team-today-plans .today-plan-row").forEach((row) => {
     row.addEventListener("click", () => navigate(`#/customers/${row.dataset.customerId}`));
   });

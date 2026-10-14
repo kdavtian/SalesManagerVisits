@@ -3454,10 +3454,8 @@ label.checkbox-row input[type="checkbox"] {
   margin-top: 6px;
 }
 
-/* Only present when there's a by-manager section to reveal (see
-   summary.by_manager?.length gating in dashboard.js) -- a sales_manager's
-   progress card, which has nothing to expand, never gets these. */
-.progress-card[role="button"] {
+/* Only management's progress card links to "Progress by reps" -- a sales_manager's own card never gets these. */
+.progress-card[role="link"] {
   cursor: pointer;
 }
 
@@ -3476,44 +3474,9 @@ label.checkbox-row input[type="checkbox"] {
 }
 
 .progress-card-chevron svg {
-  transition: transform 0.2s ease;
+  transform: rotate(-90deg);
 }
 
-.progress-card[aria-expanded="true"] .progress-card-chevron svg {
-  transform: rotate(180deg);
-}
-
-/* Collapsed-by-default reveal for the "By manager" section -- a
-   grid-template-rows 0fr->1fr transition animates smoothly without ever
-   needing to know the content's real height (unlike max-height, which
-   requires guessing a large-enough value). See dashboard.js for the
-   .progress-card click/keyboard toggle that flips the .expanded class. */
-.by-manager-collapse {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 0.25s ease;
-}
-
-.by-manager-collapse.expanded {
-  grid-template-rows: 1fr;
-}
-
-.by-manager-collapse-inner {
-  overflow: hidden;
-  min-height: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .by-manager-collapse,
-  .progress-card-chevron svg {
-    transition: none;
-  }
-}
-
-.manager-drill-view-btn {
-  align-self: flex-start;
-  margin-top: 2px;
-}
 
 .points-card {
   margin: 0 0 18px;
@@ -3596,7 +3559,7 @@ label.checkbox-row input[type="checkbox"] {
 }
 
 /* Whole-row tap target to reveal the leaderboard below, same pattern as
-   .progress-card's own by-manager reveal (see dashboard.js) -- collapsed
+   the progress card's old reveal -- collapsed
    by default so the board doesn't push every other Home tab card down
    for someone who just wants today's own numbers first. */
 .leaderboard-toggle {
@@ -4772,46 +4735,6 @@ label.checkbox-row input[type="checkbox"] {
   min-height: 148px;
   display: grid;
   place-items: center;
-}
-
-/* Per-manager drill-down row on the consolidated dashboard (item 5) -- a
-   <details> per manager, same expand/collapse language as
-   .dashboard-insights above so tapping a row to reveal that manager's own
-   progress-card numbers reads as one consistent interaction, not a bespoke
-   one-off. */
-.manager-drill-row {
-  border-bottom: 1px solid var(--border);
-}
-
-.manager-drill-row:last-child {
-  border-bottom: none;
-}
-
-.manager-drill-row > summary {
-  min-height: 52px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-  padding: 8px 4px;
-  cursor: pointer;
-  list-style: none;
-}
-
-.manager-drill-row > summary::-webkit-details-marker {
-  display: none;
-}
-
-.manager-drill-name {
-  font-weight: 700;
-  color: var(--text);
-}
-
-.manager-drill-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 4px 4px 12px;
 }
 
 /* ===== Customers list redesign ===== */
@@ -13248,3 +13171,26 @@ form select,
 .sp-bar-actions .btn {
   flex: 1 1 0;
 }
+
+/* ===== Progress by reps (Home progress card -> tap): reps as columns, metrics as rows ===== */
+.rp-range { margin: 2px 0 8px; font-size: var(--fs-row-meta); }
+.rp-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); margin-bottom: 8px; }
+.rp-table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 14px; }
+.rp-table th, .rp-table td { padding: 9px 10px; white-space: nowrap; border-bottom: 1px solid var(--border); }
+.rp-table tr:last-child th, .rp-table tr:last-child td { border-bottom: 0; }
+.rp-table .rp-metric { position: sticky; left: 0; z-index: 1; background: var(--bg-card); text-align: left; font-weight: 500; min-width: 96px; max-width: 130px; white-space: normal; box-shadow: 1px 0 0 var(--border); }
+.rp-table thead .rp-metric, .rp-table tr:first-child .rp-metric { top: 0; }
+.rp-table .rp-col { text-align: right; min-width: 78px; font-weight: 600; }
+.rp-table .rp-num { text-align: right; font-variant-numeric: tabular-nums; }
+.rp-table .rp-total { font-weight: 700; background: color-mix(in srgb, var(--accent) 6%, var(--bg-card)); }
+.rp-table .rp-best { font-weight: 700; color: var(--accent); }
+.rp-table .rp-zero { color: var(--text-dim); }
+.rp-table .rp-section th { position: static; background: var(--bg); color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; text-align: left; padding: 8px 10px; box-shadow: none; }
+.rp-rep-link { background: none; border: 0; color: inherit; font: inherit; font-weight: 600; min-height: 44px; padding: 0 2px; cursor: pointer; text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 3px; }
+.rp-note { font-size: var(--fs-row-meta); margin: 4px 2px 16px; }
+.purge-block { border: 1px solid var(--danger); border-radius: var(--radius); padding: 12px; margin: 12px 0; display: flex; flex-direction: column; gap: 8px; }
+.purge-block .list-group-heading { margin: 0; }
+.purge-keep { margin: 4px 0 0; font-weight: 600; }
+.purge-warning { margin: 0; }
+.purge-block #purge-btn { min-height: 44px; }
+.purge-block #purge-btn.is-armed { background: var(--danger); color: #ffffff; }

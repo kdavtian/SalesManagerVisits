@@ -6,6 +6,7 @@ import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { NOT_NO_VISIT_CHANNEL_SQL } from "./customers.js";
 import { batchExpandAreas } from "./visitPlans.js";
 import { repVisitSql } from "../visitCount.js";
+import { computeRepProgress, PERIODS } from "../repProgress.js";
 
 export const dashboardRouter = Router();
 
@@ -92,6 +93,14 @@ async function computeWeekProgress(targetUserIds) {
   return { planned_to_date: plannedToDate, visited_to_date: visitedToDate };
 }
 
+// Progress by reps (the Home progress card's drill-down): management only -- a rep sees their own card.
+dashboardRouter.get("/rep-progress", async (req, res) => {
+  if (!seesAllActivity(req.user.role)) return res.status(403).json({ error: "Forbidden" });
+  const period = req.query.period ?? "week";
+  if (!PERIODS.includes(period)) return res.status(400).json({ error: "period must be one of " + PERIODS.join(", ") });
+  res.json(await computeRepProgress(period));
+});
+
 dashboardRouter.get("/summary", async (req, res) => {
   const seesAll = seesAllActivity(req.user.role);
   const userFilter = seesAll ? "" : "AND ch.user_id = $1";
@@ -148,43 +157,6 @@ dashboardRouter.get("/summary", async (req, res) => {
     params
   );
 
-  // Per-manager breakdown for the consolidated Director/Admin/CEO/Accountant
-  // dashboard's drill-down (item 5) -- each row carries the same three
-  // "progress card" numbers as the single-manager totals above
-  // (total_customers/visited_today/overdue), scoped to that one manager via
-  // a correlated subquery on u.id, plus the pre-existing this-week figures.
-  const byManagerQuery = seesAll
-    ? pool.query(
-        `SELECT u.id AS user_id, u.name AS user_name,
-                count(ch.id) AS checkins_this_week,
-                count(DISTINCT ch.customer_id) AS customers_visited_this_week,
-                (SELECT count(*) FROM customers c WHERE c.assigned_manager_id = u.id AND ${NOT_NO_VISIT_CHANNEL_SQL}) AS total_customers,
-                (SELECT count(DISTINCT ch2.customer_id) FROM checkins ch2
-                   WHERE ${repVisitSql("ch2")} AND ch2.user_id = u.id AND ch2.timestamp >= date_trunc('day', now())) AS visited_today,
-                (SELECT count(*) FROM customers c
-                   WHERE c.assigned_manager_id = u.id
-                   AND ${NOT_NO_VISIT_CHANNEL_SQL}
-                   AND NOT EXISTS (
-                     SELECT 1 FROM checkins ch3 WHERE ch3.customer_id = c.id AND ${repVisitSql("ch3")} AND ch3.timestamp >= date_trunc('day', now())
-                   )
-                   AND (
-                     (SELECT max(ch4.timestamp) FROM checkins ch4 WHERE ch4.customer_id = c.id AND ${repVisitSql("ch4")}) IS NULL
-                     OR (SELECT max(ch4.timestamp) FROM checkins ch4 WHERE ch4.customer_id = c.id AND ${repVisitSql("ch4")})
-                        < now() - (c.visit_frequency_days || ' days')::interval
-                   )) AS overdue
-         FROM users u
-         LEFT JOIN checkins ch
-           ON ch.user_id = u.id AND ch.timestamp >= date_trunc('week', now())
-         -- Sales managers only: this breakdown measures progress against an
-         -- assigned customer book, and accountants/drivers/warehouse and
-         -- delivery managers don't have one -- their rows were always
-         -- 0/0/0 noise that pushed the real reps down the list.
-         WHERE u.role = 'sales_manager'
-         GROUP BY u.id, u.name
-         ORDER BY checkins_this_week DESC`
-      )
-    : Promise.resolve({ rows: null });
-
   // Points: 1 per customer actually visited that day (repeat visits to the
   // same customer on the same day don't stack), +1 more if that day's
   // visit(s) to that customer included a photo. Derived straight from
@@ -224,17 +196,16 @@ dashboardRouter.get("/summary", async (req, res) => {
      ORDER BY total_points DESC, u.name`
   );
 
-  // Company-wide roles get the whole team's week-to-date figure (matching
-  // the by_manager breakdown below); everyone else gets just their own --
+  // Company-wide roles get the whole team's week-to-date figure (see
+  // GET /rep-progress for the per-rep comparison); everyone else gets just their own --
   // same population as /users/plannable (sales managers are the only role
   // that ever has a visit plan).
   const weekProgressQuery = (seesAll ? pool.query("SELECT id FROM users WHERE role = 'sales_manager'") : Promise.resolve({ rows: [{ id: req.user.id }] }))
     .then((r) => computeWeekProgress(r.rows.map((row) => row.id)));
 
-  const [totals, recentActivity, byManager, points, weekProgress] = await Promise.all([
+  const [totals, recentActivity, points, weekProgress] = await Promise.all([
     totalsQuery,
     recentActivityQuery,
-    byManagerQuery,
     pointsQuery,
     weekProgressQuery,
   ]);
@@ -249,7 +220,6 @@ dashboardRouter.get("/summary", async (req, res) => {
   res.json({
     totals: { ...totals.rows[0], ...weekProgress },
     recent_activity: recentActivity.rows,
-    by_manager: byManager.rows,
     my_points: {
       total_points: myPoints.total_points,
       visit_points: myPoints.visit_points,

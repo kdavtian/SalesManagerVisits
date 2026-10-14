@@ -194,6 +194,7 @@ export const api = {
 
   dashboardSummary: () => request("/dashboard/summary"),
   dashboardTrends: () => request("/dashboard/trends"),
+  getRepProgress: (period) => request(`/dashboard/rep-progress?period=${encodeURIComponent(period)}`),
   closeOutMonth: (month) => json("/dashboard/points/close-out", "POST", { month }),
   listMonthlyCloseouts: (month) => request(`/dashboard/points/closeouts${month ? `?month=${month}` : ""}`),
 
@@ -212,6 +213,7 @@ export const api = {
   resetUserPassword: (id, password) => json(`/users/${id}/password`, "PATCH", { password }),
   deleteUser: (id) => request(`/users/${id}`, { method: "DELETE" }),
   getUserDeletionReport: (id) => request(`/users/${id}/deletion-report`),
+  purgeUser: (id) => json(`/users/${id}/purge`, "POST", { confirm: true }),
   deleteUserRecords: (id) => request(`/users/${id}/records`, { method: "DELETE" }),
 
   getSettings: () => request("/settings"),
