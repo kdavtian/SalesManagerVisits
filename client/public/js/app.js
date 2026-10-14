@@ -1100,6 +1100,8 @@ async function renderRoute() {
     (await import("./views/routePlanSets.js")).renderRoutePlanSet(app, navigate, Number(routePlanSetMatch[1]));
   } else if (path === "#/route-plans") {
     (await import("./views/routePlans.js")).renderRoutePlans(app, navigate);
+  } else if (path === "#/team-progress") {
+    (await import("./views/repProgress.js")).renderRepProgress(app, navigate);
   } else if (path === "#/team-performance") {
     (await import("./views/teamPerformance.js")).renderTeamPerformance(app, navigate, query);
   } else if (path === "#/company-dashboard") {

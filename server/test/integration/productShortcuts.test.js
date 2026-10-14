@@ -1,18 +1,16 @@
-// New order screen: per-user favorite products (star) and the "Frequent" ranking.
+// New order screen: the "Frequent" ranking.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createProduct, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
 
-let repA, repB, cookieA, cookieB, p1, p2, p3;
+let repA, cookieA, p1, p2, p3;
 const stamp = Date.now();
 
 test.before(async () => {
   await startTestServer();
   repA = await createUser("sales_manager");
-  repB = await createUser("sales_manager");
   cookieA = await loginAs(repA.email);
-  cookieB = await loginAs(repB.email);
   [p1, p2, p3] = [await createProduct({ unit: "4L" }), await createProduct({ unit: "1L" }), await createProduct({ unit: "208L" })];
   for (const [p, key] of [[p1, "a"], [p2, "b"], [p3, "c"]]) {
     await pool.query("UPDATE products SET erp_product_id = $2 WHERE id = $1", [p.id, `ITEST-FAV-${key}-${stamp}`]);
@@ -23,20 +21,6 @@ test.after(async () => {
   await pool.query("DELETE FROM erp_order_lines WHERE order_id LIKE $1", [`FAV-${stamp}-%`]);
   await cleanupAll();
   await stopTestServer();
-});
-
-test("favorites: per user, add / list / remove, idempotent, unknown product 404", async () => {
-  assert.deepEqual((await apiRequest("/api/products/favorites", { cookie: cookieA })).data, []);
-  assert.equal((await apiRequest(`/api/products/favorites/${p1.id}`, { method: "PUT", cookie: cookieA })).status, 204);
-  assert.equal((await apiRequest(`/api/products/favorites/${p1.id}`, { method: "PUT", cookie: cookieA })).status, 204, "adding twice is fine");
-  await apiRequest(`/api/products/favorites/${p2.id}`, { method: "PUT", cookie: cookieA });
-  assert.deepEqual((await apiRequest("/api/products/favorites", { cookie: cookieA })).data, [p1.id, p2.id]);
-  assert.deepEqual((await apiRequest("/api/products/favorites", { cookie: cookieB })).data, [], "another user does not see them");
-  assert.equal((await apiRequest(`/api/products/favorites/${p1.id}`, { method: "DELETE", cookie: cookieA })).status, 204);
-  assert.deepEqual((await apiRequest("/api/products/favorites", { cookie: cookieA })).data, [p2.id]);
-  assert.equal((await apiRequest("/api/products/favorites/99999999", { method: "PUT", cookie: cookieA })).status, 404);
-  assert.equal((await apiRequest("/api/products/favorites/abc", { method: "PUT", cookie: cookieA })).status, 400);
-  assert.equal((await apiRequest("/api/products/favorites")).status, 401);
 });
 
 test("frequent: products by number of distinct orders in the last 90 days, internal stock account and old lines ignored", async () => {

@@ -1,5 +1,5 @@
 // Special pricelist of a Gold customer (Customer settings -> Special pricelist). The same product browser as the New
-// order screen (chips: favorites, Frequent, Special prices, brands, Merch; search; categories), but every card has a
+// order screen (chips: Frequent, Special prices, brands, Merch; search; categories), but every card has a
 // price field instead of "Add". A field left empty means "the Gold list price"; the chip beside it is the difference to
 // the SILVER price. Changed fields raise a bottom sheet: Cancel (drop the edits), Reset (every price to Silver),
 // Submit (save). New orders for this customer pick these prices automatically.
@@ -10,8 +10,8 @@ import { compareProducts, sortedBrands } from "../productSort.js";
 import { getProductCatalog } from "../productCatalog.js";
 import { searchProducts, debounce } from "../productSearch.js";
 import { tierPrice } from "../productPricing.js";
-import { loadFavorites, setFavorite, loadFrequentIds } from "../productFavorites.js";
-import { NON_ENGINE_CATEGORIES, CATEGORY_LABEL_KEY, productCategory, STAR_SVG, priceDiffChipHtml } from "../productBrowse.js";
+import { loadFrequentIds } from "../productFrequent.js";
+import { NON_ENGINE_CATEGORIES, CATEGORY_LABEL_KEY, productCategory, priceDiffChipHtml } from "../productBrowse.js";
 import { canSetCustomerPrices } from "../state.js";
 
 const MERCH = "__merch__";
@@ -48,7 +48,6 @@ export async function renderSpecialPrices(root, navigate, customerId) {
 
   const view = { chip: "frequent", category: null };
   let searchQuery = "";
-  let favorites = new Set();
   let frequentIds = [];
   let everOrdered = [];
 
@@ -97,7 +96,6 @@ export async function renderSpecialPrices(root, navigate, customerId) {
     const chip = (key, inner, aria) =>
       `<button type="button" class="map-filter-chip ${!searching && view.chip === key ? "chip-active" : ""}" data-chip="${escapeHtml(key)}" aria-pressed="${!searching && view.chip === key}" ${aria ? `aria-label="${escapeHtml(aria)}"` : ""}>${inner}</button>`;
     chipsEl.innerHTML =
-      chip("fav", `${STAR_SVG(true)}${favorites.size ? `<span class="oc-chip-n">${favorites.size}</span>` : ""}`, t("oc_favorites")) +
       chip("frequent", escapeHtml(t("oc_frequent"))) +
       chipKeys
         .map((k) => {
@@ -136,7 +134,6 @@ export async function renderSpecialPrices(root, navigate, customerId) {
   }
   function baseList() {
     if (searchQuery.trim()) return sortProducts(searchProducts(products, searchQuery));
-    if (view.chip === "fav") return sortProducts(products.filter((p) => favorites.has(p.id)));
     if (view.chip === "frequent") return frequentList();
     if (view.chip === "special") return sortProducts(products.filter((p) => currentSpecial(p) != null));
     return sortProducts(chipProducts(view.chip));
@@ -162,11 +159,9 @@ export async function renderSpecialPrices(root, navigate, customerId) {
 
   function rowHtml(p) {
     const cur = currentSpecial(p);
-    const fav = favorites.has(p.id);
     const gold = goldList(p);
     const silver = silverOf(p);
     return `<div class="order-product-row sp-row ${isDirty(p) ? "is-dirty" : ""}" data-product-id="${p.id}">
-      <button type="button" class="oc-star ${fav ? "is-fav" : ""}" data-action="star" aria-pressed="${fav}" aria-label="${fav ? t("oc_remove_favorite") : t("oc_add_favorite")}">${STAR_SVG(fav)}</button>
       <div class="order-product-info">
         <strong>${escapeHtml(p.name)}</strong>
         <span class="muted">${[p.brand, p.unit].filter(Boolean).map(escapeHtml).join(" · ")}</span>
@@ -182,17 +177,6 @@ export async function renderSpecialPrices(root, navigate, customerId) {
   }
 
   function wireRow(row, p) {
-    row.querySelector('[data-action="star"]').addEventListener("click", async () => {
-      const on = !favorites.has(p.id);
-      const ok = await setFavorite(favorites, p.id, on);
-      showToast(ok ? (on ? t("oc_favorite_added") : t("oc_favorite_removed")) : t("oc_favorite_failed"));
-      if (view.chip === "fav" && !searchQuery.trim()) render();
-      else {
-        row.querySelector(".oc-star").classList.toggle("is-fav", favorites.has(p.id));
-        row.querySelector(".oc-star").innerHTML = STAR_SVG(favorites.has(p.id));
-        renderChips();
-      }
-    });
     const input = row.querySelector("[data-price]");
     const slot = row.querySelector(".sp-chip-slot");
     const field = bindAmdInput(input, () => {
@@ -210,7 +194,6 @@ export async function renderSpecialPrices(root, navigate, customerId) {
   }
   function emptyText() {
     if (searchQuery.trim()) return t("no_products_found");
-    if (view.chip === "fav") return t("oc_no_favorites");
     if (view.chip === "special") return t("sp_none_yet");
     return t("no_products_found");
   }
@@ -274,11 +257,10 @@ export async function renderSpecialPrices(root, navigate, customerId) {
 
   render();
   (async () => {
-    const [fav, freq, ever] = await Promise.all([loadFavorites(), loadFrequentIds(), api.getOrderedProductIds(customerId).catch(() => [])]);
-    favorites = fav;
+    const [freq, ever] = await Promise.all([loadFrequentIds(), api.getOrderedProductIds(customerId).catch(() => [])]);
     frequentIds = freq;
     everOrdered = ever;
-    if (view.chip === "frequent" && !frequentList().length) view.chip = special.size ? "special" : brands[0] ?? "fav";
+    if (view.chip === "frequent" && !frequentList().length) view.chip = special.size ? "special" : brands[0] ?? "frequent";
     render();
   })();
 }

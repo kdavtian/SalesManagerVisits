@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, parseUserAgent, SALES_CHANNELS, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, parseDateOnly, formatPhoneDisplay, labelColon, groupDigits, parseAmd, bindAmdInput } from "../util.js";
+import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, parseUserAgent, SALES_CHANNELS, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, parseDateOnly, formatPhoneDisplay, labelColon, groupDigits, parseAmd, bindAmdInput, showToast } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 import { ALL_ROLES, QUICK_ACTIONS, defaultQuickActionIds } from "../quickActions.js";
@@ -52,6 +52,39 @@ function recordCountRows(counts) {
     .join("");
 }
 
+// Same rule as the server (userPurge.js): by NAME only.
+const looksLikeTestUser = (u) => /test|թեստ|тест/i.test(u.name ?? "");
+
+// "Delete a test user with all their data": what goes and what stays, shown BEFORE the (two-tap) delete button.
+function purgeBlockHtml(purge) {
+  const d = purge.willDelete;
+  const row = (labelKey, value) => `<div class="connected-records-row"><span>${t(labelKey)}</span><strong>${value}</strong></div>`;
+  const rows = [
+    d.customers && row("purge_customers", d.customers),
+    d.checkins && row("purge_checkins", d.checkins),
+    d.orders && row("purge_orders", `${d.orders} · ${formatAmd(d.orders_amount_amd)}`),
+    d.payments && row("purge_payments", `${d.payments} · ${formatAmd(d.payments_amount_amd)}`),
+    d.cash_handoffs && row("purge_cash_handoffs", d.cash_handoffs),
+    d.delivery_routes && row("purge_delivery_routes", d.delivery_routes),
+    d.cash_expenses && row("purge_cash_expenses", d.cash_expenses),
+    d.perf_plans && row("purge_perf_plans", d.perf_plans),
+  ].filter(Boolean);
+  const keep = [
+    [purge.willKeep.customers_with_erp_id_handed_to_you, "purge_keep_erp_customers"],
+    [purge.willKeep.customers_only_assigned_unassigned, "purge_keep_assigned"],
+    [purge.willKeep.plans_written_for_other_reps_handed_to_you, "purge_keep_plans"],
+  ].filter(([n]) => n > 0);
+  return `
+    <div class="purge-block">
+      <h3 class="list-group-heading">${t("purge_title")}</h3>
+      <p class="muted">${t("purge_intro")}</p>
+      <div class="connected-records-list">${rows.join("") || `<p class="muted">${t("purge_nothing")}</p>`}</div>
+      ${keep.length ? `<p class="muted purge-keep">${t("purge_keep_title")}</p><div class="connected-records-list">${keep.map(([n, key]) => row(key, n)).join("")}</div>` : ""}
+      <p class="form-error purge-warning">${t("purge_warning")}</p>
+      <button type="button" class="btn btn-danger btn-block" id="purge-btn">${t("purge_btn")}</button>
+    </div>`;
+}
+
 // The one-case escape hatch for a test account that accumulated enough
 // check-ins/edit-requests/etc. to permanently 23503 out of DELETE /:id --
 // see server/src/routes/users.js's AUTO_CLEAR/MUST_RESOLVE for what's safe
@@ -60,7 +93,7 @@ function recordCountRows(counts) {
 // attempt (already wired to show this sheet again on another 409), so a
 // successful clear here can immediately re-attempt it instead of making
 // the admin tap "Delete" a second time.
-function openUserRecordsSheet(u, retryDelete) {
+function openUserRecordsSheet(u, retryDelete, onPurged) {
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
   overlay.innerHTML = `<div class="sheet"><p class="loading-state" role="status">${t("loading")}</p></div>`;
@@ -84,7 +117,8 @@ function openUserRecordsSheet(u, retryDelete) {
     overlay.querySelector(".sheet").innerHTML = `
       <h2>${t("connected_records_title")}</h2>
       <p class="muted">${escapeHtml(u.name)} · ${escapeHtml(u.email)}</p>
-      ${!hasAnything ? `<p class="empty-state">${t("connected_records_none")}</p>` : ""}
+      ${report.purgeAllowed ? purgeBlockHtml(report.purge) : ""}
+      ${!hasAnything && !report.purgeAllowed ? `<p class="empty-state">${t("connected_records_none")}</p>` : ""}
       ${
         mustResolveRows
           ? `<h3 class="list-group-heading">${t("connected_records_must_resolve")}</h3>
@@ -112,6 +146,37 @@ function openUserRecordsSheet(u, retryDelete) {
     `;
 
     overlay.querySelector("#records-sheet-close").addEventListener("click", () => overlay.remove());
+    // Two taps on purpose (no confirm() dialog): the first arms the button and shows what it will do, the second deletes.
+    const purgeBtn = overlay.querySelector("#purge-btn");
+    if (purgeBtn) {
+      let armedTimer = null;
+      purgeBtn.addEventListener("click", async () => {
+        if (!purgeBtn.classList.contains("is-armed")) {
+          purgeBtn.classList.add("is-armed");
+          purgeBtn.textContent = t("purge_btn_armed");
+          armedTimer = setTimeout(() => {
+            purgeBtn.classList.remove("is-armed");
+            purgeBtn.textContent = t("purge_btn");
+          }, 6000);
+          return;
+        }
+        clearTimeout(armedTimer);
+        purgeBtn.disabled = true;
+        const errorEl = overlay.querySelector("#records-sheet-error");
+        try {
+          await api.purgeUser(u.id);
+          overlay.remove();
+          onPurged?.();
+          showToast(t("purge_done"), { ms: 4000 });
+        } catch (err) {
+          errorEl.textContent = err.message;
+          errorEl.hidden = false;
+          purgeBtn.disabled = false;
+          purgeBtn.classList.remove("is-armed");
+          purgeBtn.textContent = t("purge_btn");
+        }
+      });
+    }
     overlay.querySelector("#records-sheet-clear")?.addEventListener("click", async (e) => {
       if (!confirm(t("confirm_clear_records"))) return;
       const btn = e.currentTarget;
@@ -305,6 +370,7 @@ export async function renderTeamSection(container) {
           <button type="button" class="btn-link" id="edit-user-reset">${t("reset_password")}</button>
           ${u.id !== state.user.id ? `<button type="button" class="btn-link" id="edit-user-change-role">${t("change_role")}</button>` : ""}
           ${u.id !== state.user.id ? `<button type="button" class="btn-link btn-link-danger" id="edit-user-delete">${t("delete_user")}</button>` : ""}
+          ${u.id !== state.user.id && looksLikeTestUser(u) ? `<button type="button" class="btn-link btn-link-danger" id="edit-user-purge">${t("purge_link")}</button>` : ""}
         </div>
       </div>
     `;
@@ -355,6 +421,12 @@ export async function renderTeamSection(container) {
       }
     }
 
+    overlay.querySelector("#edit-user-purge")?.addEventListener("click", () =>
+      openUserRecordsSheet(u, attemptDelete, () => {
+        close();
+        loadUsers();
+      })
+    );
     overlay.querySelector("#edit-user-delete")?.addEventListener("click", async () => {
       if (!confirm(t("confirm_delete_user"))) return;
       await attemptDelete();

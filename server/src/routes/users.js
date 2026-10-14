@@ -5,6 +5,7 @@ import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { ROLES, canPlanForOthers, canReassignCustomers } from "../roles.js";
 import { passwordChangeLimiter } from "./auth.js";
 import { normalizePhoneForStorage } from "../phoneFormat.js";
+import { isTestUser, previewPurge, purgeUser } from "../userPurge.js";
 
 export const usersRouter = Router();
 
@@ -260,6 +261,10 @@ usersRouter.get("/:id/deletion-report", async (req, res) => {
   const { rows } = await pool.query("SELECT id, name, email FROM users WHERE id = $1", [userId]);
   if (!rows[0]) return res.status(404).json({ error: "User not found" });
 
+  // Test accounts (name says "test") can be wiped completely -- see userPurge.js; the preview is shown first.
+  const purgeAllowed = isTestUser(rows[0]) && userId !== req.user.id;
+  const purge = purgeAllowed ? await previewPurge(pool, userId) : null;
+
   const mustResolve = await countRows(pool, MUST_RESOLVE, userId);
   const willClear = await countRows(pool, AUTO_CLEAR, userId);
   const willCascade = await countRows(pool, WILL_CASCADE, userId);
@@ -270,7 +275,39 @@ usersRouter.get("/:id/deletion-report", async (req, res) => {
     willClear,
     willCascade,
     canDeleteRecords: Object.values(mustResolve).every((n) => n === 0),
+    purgeAllowed,
+    purge,
   });
+});
+
+// Deletes a TEST user and everything connected to them (see userPurge.js) in one transaction.
+usersRouter.post("/:id/purge", async (req, res) => {
+  const userId = Number(req.params.id);
+  if (!userId) return res.status(400).json({ error: "Invalid user id" });
+  if (userId === req.user.id) return res.status(400).json({ error: "You can't delete your own account" });
+  if (req.body?.confirm !== true) return res.status(400).json({ error: "Confirmation required" });
+  const { rows } = await pool.query("SELECT id, name, email FROM users WHERE id = $1", [userId]);
+  if (!rows[0]) return res.status(404).json({ error: "User not found" });
+  if (!isTestUser(rows[0])) return res.status(403).json({ error: "Only test users (the name contains \"test\") can be deleted with all their data" });
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const preview = await previewPurge(client, userId);
+    await purgeUser(client, userId, req.user.id);
+    await client.query("COMMIT");
+    console.info(`[purge] admin ${req.user.id} deleted test user ${userId} (${rows[0].email}) with`, JSON.stringify(preview.willDelete));
+    res.json({ deleted: preview.willDelete, kept: preview.willKeep });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    if (err.code === "23503") {
+      console.error("[purge] blocked by", err.constraint, err.detail);
+      return res.status(409).json({ error: "Something still references this user, so nothing was deleted. Ask the developer to look at it.", constraint: err.constraint });
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
 });
 
 // Clears every AUTO_CLEAR row for this user, so a subsequent DELETE /:id no

@@ -15,7 +15,7 @@ test.describe("Offline order creation and later synchronization", () => {
 
     await loginViaUi(page, manager.email);
     await page.goto(`/#/orders/new/${customer.id}`);
-    // One scrolling chip row (favorites, Frequent, brands): pick the brand to list its products.
+    // One scrolling chip row (Frequent, brands): pick the brand to list its products.
     await page.locator(`[data-chip="${product.brand}"]`).click();
     await expect(page.locator("#order-product-list")).toContainText(product.name, { timeout: 10000 });
 
