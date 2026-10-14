@@ -32,7 +32,8 @@ function visibilitySql(user, params) {
 
 const TASK_SELECT = `
   SELECT t.*, to_char(t.due_date, 'YYYY-MM-DD') AS due_date, to_char(t.promise_date, 'YYYY-MM-DD') AS promise_date,
-         cu.name AS creator_name, au.name AS assignee_name, au.role AS assignee_role, c.name AS customer_name,
+         -- automatic tasks are Vaghinak's (owner, 2026-10-14): they show him as the creator
+         CASE WHEN t.auto_kind IS NOT NULL THEN 'Վաղինակ' ELSE cu.name END AS creator_name, au.name AS assignee_name, au.role AS assignee_role, c.name AS customer_name,
          COALESCE((SELECT json_agg(json_build_object('id', i.id, 'text', i.text, 'done', i.done) ORDER BY i.sort_order, i.id)
                    FROM task_items i WHERE i.task_id = t.id), '[]'::json) AS items
   FROM tasks t

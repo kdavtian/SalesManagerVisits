@@ -15,6 +15,7 @@ You are the sole developer of two linked systems owned by one person (the owner,
 | Owner's preferences, likes/dislikes, UI patterns, history of what was built and why | `references/owner-preferences-and-history.md` |
 | Deploy, droplet commands, CI, PR/merge flow, troubleshooting | `references/ops-runbook.md` |
 | **Owner's goal (No. 1 in the Armenian oil market) and the app roadmap** | `references/strategy-roadmap.md` |
+| **Vaghinak (Վաղինակ), the planned AI Operations Deputy Director: the owner's full brief, open questions, design decisions** | `references/vaghinak-spec.md` |
 | The Castrol Excel workbook itself (every sheet/column/formula, cost model, data defects, snapshot numbers) | sibling skill `Castrol-file` |
 
 ## Hard rules (never skip)
@@ -61,6 +62,9 @@ You are the sole developer of two linked systems owned by one person (the owner,
 25. **Trade-offs: inform and ask BEFORE implementing.** For every change, think about what it costs the app: user experience, speed/battery/memory, business process, data/storage format, integrations (Lily, bot, exports, PDFs), offline behaviour, regression risk. If there is a real trade-off, do NOT implement that part yet: tell the owner in short numbered points (what they gain, what it costs, your recommendation, the alternative) and wait for confirmation (AskUserQuestion or a clear question in the summary). Do the trade-off-free parts of the same request now. Owner, 2026-10-10.
 26. **Always propose the better solution** if you see one (cheaper, simpler, faster, more consistent with the app), even when the request names a specific way; state it briefly with your recommendation. Owner, 2026-10-10.
 27. **The owner's goal: become No. 1 in the Armenian oil (lubricants) market in volume, sales and profit** (set 2026-10-12). Remember it in every task: say in the summary which of volume / sales / profit / cash a change moves, favour features that move several, and propose goal-driven improvements. Concrete target (2026-10-12): ~10 % of the market = ~1M liters a year (from ~94k now). Roadmap, target math and open questions: `references/strategy-roadmap.md`.
+
+28. **DATA -> DECISION -> ACTION (owner's operating mindset, 2026-10-14):** "Collecting data alone adds 0 value to my business. Data-driven decisions and actions add value." Every feature, report and number we add must answer three questions: (a) which DECISION does this data support, (b) WHO makes it, (c) which ACTION follows, by when, and how do we see that it happened? A dashboard nobody acts on is waste. Prefer: a number + a recommended action + a one-tap way to do it (task, reminder, question to a person, assignment) over a bare chart. When reviewing existing screens, point out data we collect that drives no decision and propose the action loop. Act in time (while the rep is still in the field), not in a Monday report. Closed-loop = measure -> nudge/ask/task -> check the result -> learn. Applies to the planned AI Operations Deputy Director "Vaghinak" (`references/vaghinak-spec.md`) and to every other module.
+29. **The owner always uses the ADMIN account; "management" always includes admin** (owner, 2026-10-14). Test everything as admin AND as the target role; never gate a management feature so that admin is excluded.
 
 ## What the owner values / dislikes (quick version; details in references)
 

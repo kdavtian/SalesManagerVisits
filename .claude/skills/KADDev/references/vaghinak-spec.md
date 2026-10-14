@@ -1,0 +1,43 @@
+# Vaghinak (Վաղինակ) - AI Operations Deputy Director (brief of 2026-10-14; V1 BUILT in 1.331.0, V2+ not yet)
+
+Owner's words, condensed: "Collecting data alone adds 0 value. Data-driven decisions and actions add value." Vaghinak turns the data the app already collects into timely actions: he controls staff, watches activity all day, assesses performance, finds operational problems and friction between roles (sales rep - warehouse - driver - accountant), plan completion, day offs, and keeps leading and MOTIVATING the team. Goal: a more engaged, motivated, responsible team whose performance and financial numbers keep growing. Status: design discussion (owner asked for pros/cons of "inside the app vs elsewhere" and will decide). Update this file with every decision.
+
+## Owner's requirements (verbatim intent)
+- Lives on Home tab / Quick actions as a tile with a BADGE = count of important messages. Own page inside the app. His questions, recommendations and tasks can live in the Tasks page (owner open to suggestions). ALL automated tasks move under his name inside Tasks.
+- Talks differently to every role, with different wording, and keeps confidential data confidential. Admin/CEO: professional ("Պարոն Դավթյան, այսօր վաճառքի մենեջերների մասով խնդիրներ չեմ նկատել..."). Sales reps: friendly, plain, funny, jokey, Armenian street-warm ("Հարազատս / Արտակ ջան / Արտ ջան ապրես, էսօր լավ պրոդուկտիվ էիր, մնումա տակի 3 կլիենտի մոտ էլ երևաս ու էսօր շաբաշ"; "Ախպերս շատ ես ուշանում, կարանք չէ նենց անենք ժամանակին գաս գործի?"). Accountant, sales director, warehouse manager, driver: in between.
+- Staff, esp. sales reps, must LOVE him and do his tasks with love. Natural, never robotic; the SAME idea is worded DIFFERENTLY every time so he feels alive.
+- Understands the whole business process; asks questions to the right people; the admin sees all those questions and answers in a separate section of the Vaghinak page.
+- Working day 09:30 - 17:30 (finish no earlier than 17:30). Reps may be up to 30 min late: he stays quiet but silently logs every delay and reports weekly.
+- Monday morning: insights + recommendations to staff and summaries to management (weekly delays, plan completion, etc.).
+- Monitors reps all day and ACTS IMMEDIATELY (not a report afterwards):
+  1. Rep checked in at the office and stays > ~2 h (threshold must be tuned from real data) while he has e.g. 25 visits planned -> reminder; still there later -> a clarification question that is MANDATORY (cannot be skipped).
+  2. Rep started field visits, stopped working, planned visits remain -> remind/ask; goal is that he continues and completes the plan.
+  3. 5 customers on one street/area, rep visited 3 and left for a far customer -> remind him so no customer is missed.
+- Reads check-in data AND comments, analyses them, asks follow-ups: payment collection problems, did the rep explain genuine vs fake product, etc.
+- Tracks the 3-stage market plan per customer/region/rep: STAGE 1 every customer in Armenia knows our products, quality, genuine vs fake, how to order, and who his sales rep is ("the only way to get our brands is buying from us"); STAGE 2 the customer understands the VALUE of being our partner (partner earns, non-partner loses); STAGE 3 the customer is motivated to sell OUR products to end customers whatever other brands are on his shelf.
+- Tracks regions: customers per region, how many are partners (bronze/silver/gold), which are potential, helps reps penetrate the market.
+- Owner always uses the ADMIN account; "management" includes admin.
+
+## Existing building blocks in the app (reuse, do not rebuild)
+`tasks` table + `routes/tasks.js` (has `auto_kind`), `taskReminders.js`, `taskAutoComplete.js`, `debtCollectionTasks.js`; `notifications.js` + `push.js` (web push) + `notificationPreferences.js` + `quietHours.js`; `dailySummary.js`, `overdueReminders.js`, `stalePackedReminder.js` (schedulers); `checkins` (timestamp, ended_at, lat/lng, note, outcome(s), brand_status, available_products, amount_collected_amd, accuracy_m); visit plans + route plan sets (planned customers per rep per day); `repProgress.js` (hours worked, visits, orders, payments); customers with tier (potential/bronze/silver/gold), region/district, lat/lng, visit_frequency_days; bonuses module (attendance records, challenges) for rewards; `visitCount.js` (what counts as a rep visit). NOT in the app yet: day-off/leave records, an LLM, a notion of "at the office" other than the office channel/customer (verify), customer stage 1/2/3.
+
+## Design notes so far (my recommendations; owner decides)
+- Architecture: HYBRID. Brain + data inside the app server (rule engine, message store, tasks, RBAC); delivery inside the app (Tasks, Vaghinak page, Home badge, mandatory-question screen) + web push; Telegram only for urgent items if the owner wants it later.
+- Facts are computed by deterministic rules (never by an LLM); an LLM (Claude API, small model) may only PHRASE a message from a fact bundle + role/tone + a "recently used phrasings" list; fallback = a role-aware template bank with many variants. Send the LLM only the minimum facts (no AMD amounts for reps, no other reps' data). API key lives in server env, never in chat/files.
+- Storage (new, migration): `vaghinak_messages` (to_user, kind, severity, text, facts json, mandatory, status, answer, answered_at, task_id, created_at, reaction), `vaghinak_day_log` (user, date, first_checkin_at, late_minutes, office_minutes, planned, visited, last_activity_at), `vaghinak_rules` (thresholds the admin can tune: grace 30 min, office warn 2 h, daily message cap, quiet hours), `vaghinak_weekly` (digest snapshots). Tasks created by him use `auto_kind = 'vaghinak_*'` and show him as the creator.
+- Anti-annoyance: daily message cap per person (default ~6), importance score, batching, quiet hours, vacation/day-off mute, reaction buttons (helpful / not relevant) that tune him; positive:corrective ratio target >= 2:1; never shame in front of peers (no public rankings of the weakest).
+- Measure HIM (closed loop): for every nudge store "did the rep act within 60 min" and show the admin Vaghinak's own effectiveness.
+- Mandatory question = full-screen blocking sheet on next app open + push; stays until answered; admin sees the unanswered list.
+- Privacy: a rep sees only own data; peers' numbers never leave management; confirm GPS/attendance monitoring is covered by the staff's employment/data-protection consent (owner to confirm).
+- Armenian tone is configurable per person (how he addresses them: "Արտակ ջան" / "Արտ ջան" / "Պարոն Դավթյան"; formal դուք vs informal դու).
+
+## Phasing proposal
+V1 (deterministic, no LLM): Vaghinak tile + badge + page (inbox, admin sections: Team pulse, Questions and answers, Settings), message store, silent lateness log, office-too-long reminder + mandatory clarification, "stopped with planned visits left" rule, role-aware variant bank, all automated tasks re-badged under his name.
+V2: cluster-skip rule (customers within ~300 m / same street left behind), check-in comment analysis + follow-up questions, Monday digests (staff + management), LLM phrasing, thresholds learned from real timing data.
+V3: stage 1/2/3 tracking per customer + region penetration map (partners vs potential), warehouse/driver/accountant cooperation questions, day-off/leave handling, effectiveness dashboard, ask-Vaghinak chat for management.
+
+## Decisions log
+- 2026-10-14 (owner): LIVES = HYBRID (brain + data in the app server; delivery in app: Home tile + badge, his page, Tasks, blocking screen for mandatory questions; push; Telegram later for urgent only).
+- WORDING = rules compute facts, AI (Claude API) only phrases them, with a large role-aware template bank as fallback. V1 ships the template bank with many variants and a "phrase engine" seam so AI phrasing plugs in at V2.
+- DAY OFFS = rep requests in the app, management approves (V2; in V1 management can mute a rep for a day).
+- V1 SCOPE = core control loop: tile + badge + page, silent lateness log, office-too-long reminder + mandatory clarification, "stopped with planned visits left", all automated tasks under his name.
