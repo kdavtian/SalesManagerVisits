@@ -11,6 +11,7 @@ import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { state } from "./state.js";
 import { getProductCatalog } from "./productCatalog.js";
+import { packQty, packStepUp, packStepDown, bindStepperButton } from "./stepper.js";
 import { searchProducts, debounce } from "./productSearch.js";
 import { compareProducts } from "./productSort.js";
 import { documentsSectionHtml, bindDocumentRows } from "./accountingFiles.js";
@@ -231,6 +232,8 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       order.delivered_from_erp ? ` <span class="badge badge-info">${t("from_erp")}</span>` : ""
     }${
       order.payment_method ? ` ${paymentMethodBadgeHtml(order.payment_method)}` : ""
+    }${
+      order.payment_method === "invoice" && order.payment_term_days ? ` <span class="badge badge-neutral">${t("oc_due_days_badge").replace("{n}", String(order.payment_term_days))}</span>` : ""
     }${
       hasDiscount && approvalMeta ? ` <span class="badge ${approvalMeta.cls}">${t(approvalMeta.key)}</span>` : ""
     }${creditMeta ? ` <span class="badge ${creditMeta[1]}">${t(creditMeta[0])}</span>` : ""}</p>
@@ -590,6 +593,24 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
         </div>`
         )
         .join("");
+      // + / - : a tap is 1, a long press one pack (stepper.js)
+      linesEl.querySelectorAll("[data-line-index]").forEach((row) => {
+        const i = Number(row.dataset.lineIndex);
+        const pack = packQty(lines[i].size ?? lines[i].unit ?? lines[i].product_unit);
+        const apply = (qty) => {
+          lines[i].quantity = Math.max(1, qty); // a line is removed with the bin button, never by stepping to 0
+          renderLines();
+          if (!panelEl.hidden) renderResults();
+        };
+        bindStepperButton(row.querySelector('[data-action="inc"]'), {
+          onTap: () => apply(lines[i].quantity + 1),
+          onHold: () => apply(packStepUp(lines[i].quantity, pack)),
+        });
+        bindStepperButton(row.querySelector('[data-action="dec"]'), {
+          onTap: () => apply(lines[i].quantity - 1),
+          onHold: () => apply(packStepDown(lines[i].quantity, pack)),
+        });
+      });
       updateTotal();
     }
 
@@ -600,10 +621,8 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       const row = btn?.closest("[data-line-index]");
       if (!btn || !row) return;
       const i = Number(row.dataset.lineIndex);
-      if (btn.dataset.action === "inc") lines[i].quantity += 1;
-      else if (btn.dataset.action === "dec") {
-        if (lines[i].quantity > 1) lines[i].quantity -= 1;
-      } else if (btn.dataset.action === "remove") lines.splice(i, 1);
+      if (btn.dataset.action !== "remove") return; // + / - are bound per row (long press support)
+      lines.splice(i, 1);
       renderLines();
       if (!panelEl.hidden) renderResults();
     });

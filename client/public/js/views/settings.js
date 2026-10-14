@@ -957,7 +957,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
 }
 
 function formatAmdShort(value) {
-  return `${Math.round(value).toLocaleString()} ${t("amd")}`;
+  return `${Math.round(value).toLocaleString("en-US")} ${t("amd")}`;
 }
 
 function targetProgressHtml(salesAmd, budgetAmd) {

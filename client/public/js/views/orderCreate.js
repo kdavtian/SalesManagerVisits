@@ -1,5 +1,6 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, formatPriceOrFree, tierBadgeHtml, activateDialog, activateCombobox, formatDateDMY, openInfoPopup, showToast } from "../util.js";
+import { escapeHtml, formatAmd, groupDigits, bindAmdInput, formatPriceOrFree, tierBadgeHtml, activateDialog, activateCombobox, formatDateDMY, openInfoPopup, showToast } from "../util.js";
+import { packQty, packStepUp, packStepDown, bindStepperButton } from "../stepper.js";
 import { t } from "../i18n.js";
 import { enqueueOrder } from "../offlineQueue.js";
 import { canAssignErpCustomerId, state } from "../state.js";
@@ -133,15 +134,20 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
   // out-of-stock hiding so a manager can still see (and order) a product that's temporarily at 0 on hand.
   const view = { chip: "frequent", category: null };
   let searchQuery = "";
-  let showAll = false;
+  // "Available only" (Yes by default). Frequent lists everything the customer ever ordered, so it starts with the
+  // switch OFF; leaving Frequent puts it back to Yes. The user can flip it either way.
+  let showAll = true;
   let favorites = new Set();
-  let frequentIds = [];
+  let frequentIds = []; // company-wide most ordered: only the fallback for a customer with no history
+  let everOrdered = []; // [{ product_id, times }] this customer's whole history
   let usualProfile = null;
   let dataReady = { favorites: false, frequent: false, usual: false };
   const allReady = () => dataReady.favorites && dataReady.frequent && dataReady.usual;
-  let discountType = "pct";
-  let discountRaw = "0";
+  let discountType = "amd";
+  let discountAmount = 0; // the number typed in the discount field (AMD or %)
   let paymentMethod = customer.payment_method === "cash" ? "cash" : "invoice";
+  let paymentTermDays = Number(customer.credit_term_days) > 0 ? Number(customer.credit_term_days) : 45;
+  let termsOpen = false;
 
   container.innerHTML = `
     <div class="detail-header oc-header">
@@ -158,21 +164,22 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     <p class="muted order-prefill-note" id="order-prefill-note" role="status" hidden></p>
 
     <div class="oc-chips" id="oc-chips" role="group" aria-label="${t("oc_lists")}"></div>
-    <div class="order-search-row">
+    <div class="order-search-row oc-searchbar">
       <input type="search" id="product-search" placeholder="${t("search_products_placeholder")}" aria-label="${t("search_products_placeholder")}" autocomplete="off" />
-      <button type="button" class="map-filter-chip oc-avail" id="order-availability-toggle"></button>
+      <span class="oc-avail-label" id="oc-avail-label">${t("oc_available_only")}</span>
+      <button type="button" class="toggle-switch" id="order-availability-toggle" role="switch" aria-checked="false" aria-labelledby="oc-avail-label"><span class="toggle-thumb"></span></button>
     </div>
     <div class="oc-chips oc-chips-small" id="oc-categories" hidden></div>
     <div id="oc-list-head"></div>
     <div class="order-product-list" id="order-product-list"></div>
 
-    <button type="button" class="order-cart-bar" id="order-cart-bar" hidden aria-label="${t("oc_review_order")}">
-      <span class="order-cart-summary">
+    <div class="order-cart-bar" id="order-cart-bar" hidden>
+      <div class="order-cart-summary">
         <span id="order-cart-count"></span>
-        <strong id="order-cart-total"></strong>
-      </span>
+        <span class="oc-total-line"><strong id="order-cart-total"></strong><button type="button" class="settings-hint-icon" id="oc-bar-info" aria-label="${t("more_info")}">!</button></span>
+      </div>
       <span class="btn btn-primary oc-review-btn">${t("oc_review_order")} ›</span>
-    </button>
+    </div>
   `;
 
   const holdBanner = container.querySelector("#order-debt-hold");
@@ -199,7 +206,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
 
   // ---- money -------------------------------------------------------------------------------------------------------
   function discountValue() {
-    const n = Number(discountRaw);
+    const n = Number(discountAmount);
     if (!Number.isFinite(n) || n <= 0) return 0;
     return discountType === "pct" ? Math.min(100, n) : n;
   }
@@ -264,10 +271,18 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
 
   // ---- chips ---------------------------------------------------------------------------------------------------------
   const STAR_SVG = (filled) => `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false" fill="${filled ? "currentColor" : "none"}" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3.2l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 17l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8z"/></svg>`;
-  const brands = sortedBrands(products);
-  function cartCountForBrand(brand) {
+  // Merch (Castrol Stend and other give-aways) is its own chip at the end, not part of the Castrol brand.
+  const MERCH = "__merch__";
+  const isMerch = (p) => productCategory(p) === "Merch";
+  const brands = sortedBrands(products.filter((p) => !isMerch(p)));
+  const chipKeys = products.some(isMerch) ? [...brands, MERCH] : brands;
+  const chipProducts = (key) => products.filter((p) => (key === MERCH ? isMerch(p) : p.brand === key && !isMerch(p)));
+  function cartCountForChip(key) {
     let n = 0;
-    for (const id of cart.keys()) if (catalogById.get(id)?.brand === brand) n++;
+    for (const id of cart.keys()) {
+      const p = catalogById.get(id);
+      if (p && (key === MERCH ? isMerch(p) : p.brand === key && !isMerch(p))) n++;
+    }
     return n;
   }
   function renderChips() {
@@ -277,11 +292,16 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     chipsEl.innerHTML =
       chip("fav", `${STAR_SVG(true)}${favorites.size ? `<span class="oc-chip-n">${favorites.size}</span>` : ""}`, t("oc_favorites")) +
       chip("frequent", escapeHtml(t("oc_frequent"))) +
-      brands.map((b) => chip(b, `${escapeHtml(b)}${cartCountForBrand(b) ? `<span class="oc-chip-n oc-chip-n-cart">${cartCountForBrand(b)}</span>` : ""}`)).join("");
+      chipKeys.map((k) => chip(k, `${escapeHtml(k === MERCH ? t("category_merch") : k)}${cartCountForChip(k) ? `<span class="oc-chip-n oc-chip-n-cart">${cartCountForChip(k)}</span>` : ""}`)).join("");
     chipsEl.querySelectorAll("[data-chip]").forEach((btn) =>
       btn.addEventListener("click", () => {
+        const leavingFrequent = view.chip === "frequent" && btn.dataset.chip !== "frequent";
+        const enteringFrequent = view.chip !== "frequent" && btn.dataset.chip === "frequent";
         view.chip = btn.dataset.chip;
         view.category = null;
+        // Frequent shows everything ever ordered, so "Available only" goes OFF there and back ON elsewhere
+        if (enteringFrequent) showAll = true;
+        else if (leavingFrequent) showAll = false;
         // choosing a list ends a search: the chips are the way to browse
         if (searchQuery) {
           searchQuery = "";
@@ -297,28 +317,28 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
   function usualRows() {
     return (usualProfile?.items ?? []).map((item) => ({ item, product: catalogById.get(item.product_id) })).filter((x) => x.product);
   }
-  // Frequent = this customer's usual products first, then what the company orders most (last 90 days).
+  // Frequent = every product this customer has EVER ordered, from all brands: the usual basket first (its typical
+  // quantity is shown), then by how many orders they appeared in. A customer with no history gets the company's most
+  // ordered products instead, so the list is never empty for a new shop.
   function frequentList() {
     const out = [];
     const seen = new Set();
-    for (const { product } of usualRows()) {
-      out.push(product);
-      seen.add(product.id);
-    }
-    for (const id of frequentIds) {
-      const product = catalogById.get(id);
-      if (product && !seen.has(id)) {
+    const push = (product) => {
+      if (product && !seen.has(product.id)) {
         out.push(product);
-        seen.add(id);
+        seen.add(product.id);
       }
-    }
+    };
+    for (const { product } of usualRows()) push(product);
+    for (const r of everOrdered) push(catalogById.get(r.product_id));
+    if (!out.length) for (const id of frequentIds) push(catalogById.get(id));
     return out;
   }
   function baseList() {
     if (searchQuery.trim()) return sortProducts(filterCatalog(products, searchQuery));
     if (view.chip === "fav") return sortProducts(products.filter((p) => favorites.has(p.id)));
     if (view.chip === "frequent") return frequentList();
-    return sortProducts(products.filter((p) => p.brand === view.chip));
+    return sortProducts(chipProducts(view.chip));
   }
   const usualItemOf = (productId) => usualProfile?.items?.find((i) => i.product_id === productId);
 
@@ -356,21 +376,24 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
         <button type="button" class="oc-star ${fav ? "is-fav" : ""}" data-action="star" aria-pressed="${fav}" aria-label="${fav ? t("oc_remove_favorite") : t("oc_add_favorite")}">${STAR_SVG(fav)}</button>
         <div class="order-product-info">
           <strong>${escapeHtml(product.name)}</strong>
-          <span class="muted">${[product.brand, product.unit].filter(Boolean).map(escapeHtml).join(" · ")}${usual ? ` × ${usual.quantity}` : ""} · ${formatPriceOrFree(price)}</span>
+          <span class="muted">${[product.brand, product.unit].filter(Boolean).map(escapeHtml).join(" · ")}${usual ? ` × ${usual.quantity}` : ""}</span>
           ${usual?.due ? `<span class="order-due-tag">${t("usual_item_due")}</span>` : ""}
-          ${warning ? `<span class="order-stock-warning${warning.level === "danger" ? " order-stock-danger" : ""}">${warning.text}</span>` : ""}
+          ${warning && !outOfStock ? `<span class="order-stock-warning">${warning.text}</span>` : ""}
         </div>
-        ${
-          qty > 0
-            ? `<div class="order-qty-stepper">
-                <button type="button" class="icon-btn" data-action="dec" aria-label="${t("decrease")}">&minus;</button>
-                <span>${qty}</span>
-                <button type="button" class="icon-btn" data-action="inc" aria-label="${t("increase")}">&plus;</button>
-              </div>`
-            : outOfStock
-            ? `<span class="badge badge-danger">${t("out_of_stock")}</span>`
-            : `<button type="button" class="btn btn-sm" data-action="add">${t("add")}</button>`
-        }
+        <div class="oc-row-side">
+          <span class="oc-price">${formatPriceOrFree(price)}</span>
+          ${
+            qty > 0
+              ? `<div class="order-qty-stepper">
+                  <button type="button" class="icon-btn" data-action="dec" aria-label="${t("decrease")}">&minus;</button>
+                  <span>${qty}</span>
+                  <button type="button" class="icon-btn" data-action="inc" aria-label="${t("increase")}">&plus;</button>
+                </div>`
+              : outOfStock
+              ? `<span class="badge badge-danger">${t("out_of_stock")}</span>`
+              : `<button type="button" class="btn btn-sm" data-action="add">${t("add")}</button>`
+          }
+        </div>
       </div>
     `;
   }
@@ -405,18 +428,41 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     wireRow(listEl.querySelector(`[data-product-id="${product.id}"]`), product);
   }
 
+  // Long press on + / - moves by one pack (see stepper.js); a tap by 1.
+  function setQty(product, qty) {
+    const line = cart.get(product.id);
+    const current = line?.quantity ?? 0;
+    changeQty(product, qty - current);
+  }
   function wireRow(row, product) {
+    const pack = packQty(product.unit);
     row.querySelectorAll("[data-action]").forEach((btn) => {
+      const action = btn.dataset.action;
+      const after = () => {
+        rerenderRow(product);
+        updateCartBar();
+      };
+      if (action === "inc" || action === "dec") {
+        bindStepperButton(btn, {
+          onTap: () => {
+            changeQty(product, action === "inc" ? 1 : -1);
+            after();
+          },
+          onHold: () => {
+            const current = cart.get(product.id)?.quantity ?? 0;
+            setQty(product, action === "inc" ? packStepUp(current, pack) : packStepDown(current, pack));
+            after();
+          },
+        });
+        return;
+      }
       btn.addEventListener("click", () => {
-        const action = btn.dataset.action;
         if (action === "star") {
           toggleFavorite(product);
           return;
         }
-        if (action === "add") changeQty(product, defaultQtyForUnit(product.unit));
-        else changeQty(product, action === "inc" ? 1 : -1);
-        rerenderRow(product);
-        updateCartBar();
+        changeQty(product, defaultQtyForUnit(product.unit));
+        after();
       });
     });
   }
@@ -465,9 +511,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
 
   function render() {
     renderChips();
-    availToggle.classList.toggle("chip-active", !showAll);
-    availToggle.setAttribute("aria-pressed", String(!showAll));
-    availToggle.textContent = showAll ? t("show_all_products") : t("available_only");
+    availToggle.setAttribute("aria-checked", String(!showAll)); // ON = "Available only: Yes"
     const base = baseList();
     renderCategories(base);
     let list = view.category ? base.filter((p) => productCategory(p) === view.category) : base;
@@ -479,14 +523,16 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
 
   // Favorites, the Frequent ranking and the usual basket arrive after the screen is up; nothing blocks on them.
   (async function loadShortcuts() {
-    const [fav, freq, profile] = await Promise.all([
+    const [fav, freq, profile, ever] = await Promise.all([
       loadFavorites().finally(() => (dataReady.favorites = true)),
       loadFrequentIds().finally(() => (dataReady.frequent = true)),
       loadReorderProfile(customerId, opts.from || null).finally(() => (dataReady.usual = true)),
+      api.getOrderedProductIds(customerId).catch(() => []),
     ]);
     favorites = fav;
     frequentIds = freq;
     usualProfile = profile;
+    everOrdered = ever;
     const notes = [];
     if (profile && opts.from && profile.lines) {
       let skipped = profile.lines.not_available;
@@ -513,7 +559,10 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
       prefillNote.hidden = false;
     }
     // Nothing to call "frequent" (new customer, offline): open the first brand instead of an empty page.
-    if (view.chip === "frequent" && !frequentList().length && brands.length) view.chip = brands[0];
+    if (view.chip === "frequent" && !frequentList().length && brands.length) {
+      view.chip = brands[0];
+      showAll = false;
+    }
     render();
     updateCartBar();
   })();
@@ -529,6 +578,50 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
 
   // ---- "Your order": the lines, discount, payment method and Save ---------------------------------------------------
   cartBar.addEventListener("click", openOrderSheet);
+  cartBar.querySelector("#oc-bar-info").addEventListener("click", (e) => {
+    e.stopPropagation();
+    openTierComparison();
+  });
+
+  // "!" next to the total: what this order would cost on each price list, so the rep (and the customer) can see
+  // how much the customer's tier saves, and what another tier would change. Before discount. A role that cannot see
+  // the gold list (sales managers) simply gets no gold row.
+  function openTierComparison() {
+    const lines = [...cart.values()].map((l) => ({ line: l, product: catalogById.get(l.product_id) })).filter((x) => x.product);
+    if (!lines.length) return;
+    const current = cartSubtotalAmd();
+    const total = (priceOf) => lines.reduce((sum, { line, product }) => sum + priceOf(product) * line.quantity, 0);
+    const hasGold = lines.every(({ product }) => Number(product.gold_price_amd) > 0);
+    const retail = total((p) => Number(p.effective_retail_amd ?? p.retail_price_amd) || tierPrice(p, "bronze"));
+    const rows = [
+      { key: "retail", label: t("price_retail"), amount: retail },
+      { key: "bronze", label: t("tier_bronze"), amount: total((p) => tierPrice(p, "bronze")) },
+      { key: "silver", label: t("tier_silver"), amount: total((p) => tierPrice(p, "silver")) },
+      ...(hasGold ? [{ key: "gold", label: t("tier_gold"), amount: total((p) => tierPrice(p, "gold")) }] : []),
+    ];
+    const customerTierKey = tier === "silver" || tier === "gold" ? tier : "bronze";
+    const hasSpecial = lines.some(({ product }) => individualPrices.has(product.id));
+    const signed = (n) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${groupDigits(Math.abs(n))}`;
+    const saved = Math.round(retail - current);
+    openInfoPopup(`
+      <h3 class="oc-tier-title">${t("oc_tier_title")}</h3>
+      <p class="muted">${t("oc_tier_note")}</p>
+      <table class="oc-tier-table">
+        <thead><tr><th></th><th>${t("oc_tier_total")}</th><th>${t("oc_tier_diff")}</th></tr></thead>
+        <tbody>
+          ${rows
+            .map((r) => {
+              const diff = Math.round(r.amount - current);
+              const mine = r.key === customerTierKey && !hasSpecial;
+              return `<tr class="${mine ? "is-mine" : ""}"><td>${escapeHtml(r.label)}${mine ? ` <span class="oc-tier-mine">${t("oc_tier_this")}</span>` : ""}</td><td>${groupDigits(r.amount)}</td><td class="${diff < 0 ? "oc-tier-less" : diff > 0 ? "oc-tier-more" : ""}">${diff === 0 ? "—" : signed(diff)}</td></tr>`;
+            })
+            .join("")}
+        </tbody>
+      </table>
+      <p><strong>${t("oc_tier_this_order")}: ${groupDigits(current)} ${t("amd")}</strong>${hasSpecial ? ` <span class="muted">(${t("oc_tier_special")})</span>` : ""}</p>
+      ${saved > 0 ? `<p class="oc-tier-less">${t("oc_tier_saved_vs_retail").replace("{amount}", formatAmd(saved))}</p>` : ""}
+      <p class="muted">${t("oc_tier_diff_hint")}</p>`);
+  }
 
   function openOrderSheet() {
     if (!cart.size) return;
@@ -552,6 +645,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
       }
       const lines = [...cart.values()];
       const over = creditOverAmd();
+      const itemCount = lines.reduce((n, l) => n + l.quantity, 0);
       sheet.innerHTML = `
         <div class="oc-sheet-head">
           <div><h2>${t("oc_your_order")}</h2><span class="muted">${escapeHtml(customer.name)}</span></div>
@@ -564,11 +658,12 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
             return `<div class="oc-line" data-line="${line.product_id}">
               <div class="oc-line-info">
                 <strong>${escapeHtml(line.product_name)}</strong>
-                <span class="muted">${product ? [product.brand, product.unit].filter(Boolean).map(escapeHtml).join(" · ") + " · " : ""}${formatPriceOrFree(line.unit_price_amd)}</span>
-                ${canSetPrices ? `<label class="muted">${t("custom_price")} <input type="number" min="0" step="1" inputmode="numeric" class="order-price-input" data-price-input value="${line.unit_price_amd}" style="width:6rem"></label>` : ""}
+                <span class="muted">${product ? [product.brand, product.unit].filter(Boolean).map(escapeHtml).join(" · ") : ""}</span>
+                ${canSetPrices ? `<label class="oc-price-edit muted">${t("custom_price")} <input class="order-price-input amd-input" data-price-input value="${groupDigits(line.unit_price_amd)}"></label>` : ""}
                 ${warning ? `<span class="order-stock-warning${warning.level === "danger" ? " order-stock-danger" : ""}">${warning.text}</span>` : ""}
               </div>
               <div class="oc-line-side">
+                <span class="oc-price">${formatPriceOrFree(line.unit_price_amd)}</span>
                 <div class="order-qty-stepper">
                   <button type="button" class="icon-btn" data-dec aria-label="${t("decrease")}">&minus;</button>
                   <span>${line.quantity}</span>
@@ -581,63 +676,123 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
           .join("")}</div>
         <button type="button" class="btn btn-block oc-add-more" data-close>${t("oc_add_more")}</button>
         ${over > 0 ? `<p class="order-stock-warning oc-credit">${t("credit_over_banner_prefix")}${formatAmd(Math.round(over))}${t("credit_over_banner_suffix")}</p>` : ""}
-        <div class="order-discount-row">
-          <label for="order-payment-method-input">${t("order_payment_method_label")}</label>
-          <select id="order-payment-method-input">
-            <option value="invoice" ${paymentMethod !== "cash" ? "selected" : ""}>${t("payment_method_invoice")}</option>
-            <option value="cash" ${paymentMethod === "cash" ? "selected" : ""}>${t("payment_method_cash")}</option>
-          </select>
-        </div>
-        <div class="order-discount-row">
+        <div class="oc-discount-row">
           <label for="order-discount-input">${t("discount_pct_label")}</label>
-          <input type="number" id="order-discount-input" min="0" step="1" value="${escapeHtml(discountRaw)}" inputmode="numeric" />
-          <div class="segmented" id="order-discount-type">
-            <button type="button" class="chip ${discountType === "pct" ? "chip-active" : ""}" data-type="pct">${t("discount_type_pct")}</button>
-            <button type="button" class="chip ${discountType === "amd" ? "chip-active" : ""}" data-type="amd">${t("discount_type_amd")}</button>
+          <input id="order-discount-input" class="oc-field" placeholder="0" />
+          <div class="oc-seg" id="order-discount-type">
+            <button type="button" class="${discountType === "amd" ? "is-on" : ""}" data-type="amd">${t("discount_type_amd")}</button>
+            <button type="button" class="${discountType === "pct" ? "is-on" : ""}" data-type="pct">${t("discount_type_pct")}</button>
           </div>
         </div>
+        ${
+          termsOpen
+            ? `<div class="oc-terms">
+                <div class="oc-terms-row">
+                  <span>${t("order_payment_method_label")}</span>
+                  <div class="oc-seg" id="oc-method">
+                    <button type="button" class="${paymentMethod === "cash" ? "is-on" : ""}" data-method="cash">${t("payment_method_cash")}</button>
+                    <button type="button" class="${paymentMethod === "invoice" ? "is-on" : ""}" data-method="invoice">${t("payment_method_invoice")}</button>
+                  </div>
+                </div>
+                ${
+                  paymentMethod === "invoice"
+                    ? `<div class="oc-terms-row">
+                        <label for="oc-due-days">${t("oc_payment_due")}</label>
+                        <span class="oc-due"><input id="oc-due-days" class="oc-field oc-field-days" inputmode="numeric" value="${paymentTermDays}" /> <span class="muted">${t("oc_days_unit")}</span></span>
+                      </div>`
+                    : ""
+                }
+              </div>`
+            : ""
+        }
         <p class="form-error" id="order-error" hidden></p>
         <div class="order-cart-bar-row">
           <div class="order-cart-summary">
-            <span>${lines.reduce((n, l) => n + l.quantity, 0)} ${t("items")}</span>
-            <strong id="oc-sheet-total">${formatAmd(cartTotalAmd())}</strong>
+            <span>${itemCount} ${t("items")}</span>
+            <span class="oc-total-line"><strong id="oc-sheet-total">${formatAmd(cartTotalAmd())}</strong><button type="button" class="settings-hint-icon" data-tier-info aria-label="${t("more_info")}">!</button></span>
           </div>
-          <button type="button" class="btn btn-primary" id="save-order-btn">${t("save_order")}</button>
+          ${
+            termsOpen
+              ? `<button type="button" class="btn btn-primary" id="save-order-btn">${t("save_order")}</button>`
+              : `<button type="button" class="btn btn-primary" id="oc-terms-btn">${t("oc_payment_terms")} ›</button>`
+          }
         </div>`;
       sheet.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", close));
+      sheet.querySelector("[data-tier-info]").addEventListener("click", openTierComparison);
       sheet.querySelectorAll("[data-line]").forEach((row) => {
         const id = Number(row.dataset.line);
-        const product = catalogById.get(id);
-        row.querySelector("[data-dec]").addEventListener("click", () => {
-          changeQty(product ?? { id, name: cart.get(id).product_name }, -1);
+        const product = catalogById.get(id) ?? { id, name: cart.get(id).product_name, unit: "" };
+        const pack = packQty(product.unit);
+        const stepTo = (qty) => {
+          changeQty(product, qty - (cart.get(id)?.quantity ?? 0));
           paintSheet();
+        };
+        bindStepperButton(row.querySelector("[data-dec]"), {
+          onTap: () => stepTo((cart.get(id)?.quantity ?? 0) - 1),
+          onHold: () => stepTo(packStepDown(cart.get(id)?.quantity ?? 0, pack)),
         });
-        row.querySelector("[data-inc]").addEventListener("click", () => {
-          changeQty(product ?? { id, name: cart.get(id).product_name }, 1);
-          paintSheet();
+        bindStepperButton(row.querySelector("[data-inc]"), {
+          onTap: () => stepTo((cart.get(id)?.quantity ?? 0) + 1),
+          onHold: () => stepTo(packStepUp(cart.get(id)?.quantity ?? 0, pack)),
         });
-        row.querySelector("[data-price-input]")?.addEventListener("change", (e) => {
-          const line = cart.get(id);
-          const n = Number(e.target.value);
-          if (!line || !Number.isFinite(n) || n < 0) return;
-          line.unit_price_amd = n;
-          line.price_override = product ? n !== basePrice(product) : true;
-          paintSheet();
-        });
+        const priceInput = row.querySelector("[data-price-input]");
+        if (priceInput) {
+          const amd = bindAmdInput(priceInput);
+          priceInput.addEventListener("change", () => {
+            const line = cart.get(id);
+            const n = amd.get();
+            if (!line || n == null || n < 0) return;
+            line.unit_price_amd = n;
+            line.price_override = catalogById.get(id) ? n !== basePrice(catalogById.get(id)) : true;
+            paintSheet();
+          });
+        }
       });
-      sheet.querySelector("#order-payment-method-input").addEventListener("change", (e) => (paymentMethod = e.target.value === "cash" ? "cash" : "invoice"));
+      // discount: AMD (default) or %
       const discountInput = sheet.querySelector("#order-discount-input");
-      discountInput.addEventListener("input", () => {
-        discountRaw = discountInput.value;
+      const refreshTotals = () => {
         sheet.querySelector("#oc-sheet-total").textContent = formatAmd(cartTotalAmd());
-      });
+      };
+      if (discountType === "amd") {
+        const amd = bindAmdInput(discountInput, () => {
+          discountAmount = amd.get() ?? 0;
+          refreshTotals();
+        });
+        amd.set(discountAmount || null);
+      } else {
+        discountInput.inputMode = "decimal";
+        discountInput.classList.add("amd-input");
+        discountInput.value = discountAmount ? String(discountAmount) : "";
+        discountInput.addEventListener("input", () => {
+          discountAmount = Math.min(100, Math.max(0, Number(discountInput.value.replace(",", ".")) || 0));
+          refreshTotals();
+        });
+      }
       sheet.querySelectorAll("#order-discount-type [data-type]").forEach((btn) =>
         btn.addEventListener("click", () => {
+          if (discountType === btn.dataset.type) return;
           discountType = btn.dataset.type;
+          discountAmount = 0;
           paintSheet();
         })
       );
-      sheet.querySelector("#save-order-btn").addEventListener("click", () => saveOrder(overlay, sheet));
+      sheet.querySelector("#oc-terms-btn")?.addEventListener("click", () => {
+        termsOpen = true;
+        paintSheet();
+        sheet.querySelector(".oc-terms")?.scrollIntoView({ block: "nearest" });
+      });
+      sheet.querySelectorAll("#oc-method [data-method]").forEach((btn) =>
+        btn.addEventListener("click", () => {
+          paymentMethod = btn.dataset.method;
+          paintSheet();
+        })
+      );
+      sheet.querySelector("#oc-due-days")?.addEventListener("input", (e) => {
+        const digits = e.target.value.replace(/\D/g, "").slice(0, 3);
+        e.target.value = digits;
+        paymentTermDays = Number(digits) || 0;
+      });
+      sheet.querySelector("#save-order-btn")?.addEventListener("click", () => saveOrder(overlay, sheet));
     }
     paintSheet();
   }
@@ -647,6 +802,11 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     const saveBtn = sheet.querySelector("#save-order-btn");
     const sheetError = sheet.querySelector("#order-error");
     sheetError.hidden = true;
+    if (paymentMethod === "invoice" && !(Number.isInteger(paymentTermDays) && paymentTermDays >= 1 && paymentTermDays <= 365)) {
+      sheetError.textContent = t("oc_due_invalid");
+      sheetError.hidden = false;
+      return;
+    }
     saveBtn.disabled = true;
     saveBtn.textContent = t("saving");
     const items = [...cart.values()].map((l) => ({
@@ -671,6 +831,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
         discount_pct: discountPctToSend,
         discount_amd: discountAmdToSend,
         payment_method: paymentMethod,
+        ...(paymentMethod === "invoice" ? { payment_term_days: paymentTermDays } : {}),
         client_ref: clientRef,
       });
       overlay.remove();
@@ -688,6 +849,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
           discount_pct: discountPctToSend,
           discount_amd: discountAmdToSend,
           payment_method: paymentMethod,
+          ...(paymentMethod === "invoice" ? { payment_term_days: paymentTermDays } : {}),
         });
         overlay.remove();
         showOrderQueued();
