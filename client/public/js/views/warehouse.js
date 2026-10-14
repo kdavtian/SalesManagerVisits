@@ -11,7 +11,7 @@ import { compareProducts, parseLiters, normalizeUnitLabel, normalizeProductKey }
 function formatLitersCompact(value) {
   const n = Number(value) || 0;
   const rounded = Math.round(n * 10) / 10;
-  return `${rounded.toLocaleString()}L`;
+  return `${rounded.toLocaleString("en-US")}L`;
 }
 
 // Right-hand side of an inventory row: "21pcs" alone for a non-liter item

@@ -202,6 +202,7 @@ function submitOrder(entry) {
     discount_pct: entry.discount_pct,
     discount_amd: entry.discount_amd,
     payment_method: entry.payment_method,
+    payment_term_days: entry.payment_term_days,
     client_ref: entry.clientRef || entry.id,
   });
 }

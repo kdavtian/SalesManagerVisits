@@ -1023,6 +1023,34 @@ customersRouter.get("/:id/reorder-profile", async (req, res) => {
   res.json(await buildReorderProfile(customerId, { from: req.query.from ? String(req.query.from) : null }));
 });
 
+// Every active catalog product this customer has EVER ordered (Excel history + app orders the Excel does not hold
+// yet), most-ordered first -- the "Frequent" list of the new order screen. A sales manager gets it for their own
+// customers only (same rule as the reorder profile).
+customersRouter.get("/:id/ordered-product-ids", async (req, res) => {
+  const customerId = Number(req.params.id);
+  if (!Number.isInteger(customerId)) return res.status(400).json({ error: "Invalid customer id" });
+  const { rows } = await pool.query("SELECT erp_customer_id, assigned_manager_id FROM customers WHERE id = $1", [customerId]);
+  if (!rows[0]) return res.status(404).json({ error: "Customer not found" });
+  if (!seesCustomerErpData(req.user.role, rows[0].assigned_manager_id, req.user.id)) return res.json([]);
+  const { rows: found } = await pool.query(
+    `WITH last_erp AS (SELECT max(order_date) AS d FROM erp_order_lines WHERE erp_customer_id = $2)
+     SELECT product_id, sum(n)::int AS times, max(last_date)::text AS last_date FROM (
+       SELECT p.id AS product_id, count(DISTINCT l.order_id) AS n, max(l.order_date) AS last_date
+         FROM erp_order_lines l JOIN products p ON lower(p.erp_product_id) = lower(l.product_id)
+        WHERE l.erp_customer_id = $2 AND COALESCE(l.qty, 0) > 0 AND p.active
+        GROUP BY p.id
+       UNION ALL
+       SELECT oi.product_id, count(DISTINCT o.id), max((o.created_at AT TIME ZONE 'Asia/Yerevan')::date)
+         FROM order_items oi JOIN orders o ON o.id = oi.order_id JOIN products p ON p.id = oi.product_id
+        WHERE o.customer_id = $1 AND o.status <> 'draft' AND p.active
+          AND ((SELECT d FROM last_erp) IS NULL OR (o.created_at AT TIME ZONE 'Asia/Yerevan')::date > (SELECT d FROM last_erp))
+        GROUP BY oi.product_id
+     ) x GROUP BY product_id ORDER BY times DESC, max(last_date) DESC, product_id`,
+    [customerId, rows[0].erp_customer_id]
+  );
+  res.json(found.map((r) => ({ product_id: r.product_id, times: r.times, last_date: r.last_date })));
+});
+
 customersRouter.get("/:id/ordered-products", async (req, res) => {
   const { rows: customerRows } = await pool.query("SELECT erp_customer_id FROM customers WHERE id = $1", [
     req.params.id,

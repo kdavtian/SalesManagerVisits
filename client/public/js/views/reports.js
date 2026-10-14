@@ -1205,7 +1205,7 @@ async function renderBrandVolumeReport(root, navigate) {
                     (b) => `
               <div class="card report-row">
                 <span>${escapeHtml(brandLabel(b.brand))}</span>
-                <strong>${Number(b.total_liters).toLocaleString()} L</strong>
+                <strong>${Number(b.total_liters).toLocaleString("en-US")} L</strong>
               </div>`
                   )
                   .join("")
@@ -1222,7 +1222,7 @@ async function renderBrandVolumeReport(root, navigate) {
                     (r) => `
               <div class="card report-row">
                 <span>${escapeHtml(r.channel_name || channelDisplayLabel(r.channel_code))} · ${escapeHtml(brandLabel(r.brand))}</span>
-                <strong>${Number(r.liters).toLocaleString()} L</strong>
+                <strong>${Number(r.liters).toLocaleString("en-US")} L</strong>
               </div>`
                   )
                   .join("")
@@ -1241,7 +1241,7 @@ async function renderBrandVolumeReport(root, navigate) {
 
 function formatUsd(value) {
   if (value == null) return "";
-  return `${Number(value).toLocaleString()} ${t("usd")}`;
+  return `${Number(value).toLocaleString("en-US")} ${t("usd")}`;
 }
 
 function signedAmd(value) {
@@ -1310,12 +1310,12 @@ async function renderDailyManagementReport(root, navigate) {
             <div class="stat-card">
               <span class="stat-value stat-value-amd">${amdWithUnitHtml(amd)}</span>
               <span class="stat-label">${label}</span>
-              <span class="muted">${liters != null ? `${Number(liters).toLocaleString()} L` : "—"} · ${orders != null ? orders : "—"}</span>
+              <span class="muted">${liters != null ? `${Number(liters).toLocaleString("en-US")} L` : "—"} · ${orders != null ? orders : "—"}</span>
             </div>`
             )
             .join("")}
         </div>
-        <p class="muted" style="margin: 0 4px 8px;">${t("report_daily_management_change_prev")}${labelColon()}${signedAmd(r.sales_change_amd)}${r.sales_change_liters != null ? ` · ${r.sales_change_liters > 0 ? "+" : ""}${Number(r.sales_change_liters).toLocaleString()} L` : ""}</p>
+        <p class="muted" style="margin: 0 4px 8px;">${t("report_daily_management_change_prev")}${labelColon()}${signedAmd(r.sales_change_amd)}${r.sales_change_liters != null ? ` · ${r.sales_change_liters > 0 ? "+" : ""}${Number(r.sales_change_liters).toLocaleString("en-US")} L` : ""}</p>
         <p class="muted" style="margin: 0 4px 8px;">${t("report_daily_management_margin")}${labelColon()}${formatAmd(r.sales_margin_amd)}${r.sales_margin_pct != null ? ` (${Number(r.sales_margin_pct).toFixed(1)}%)` : ""}</p>
 
         <h2 class="section-title">${t("report_daily_management_sales")} · ${t("by_channel")} (${formatDateOnly(r.report_date)})</h2>
@@ -1327,7 +1327,7 @@ async function renderDailyManagementReport(root, navigate) {
                     (c) => `
               <div class="card report-row">
                 <span>${escapeHtml(channelDisplayLabel(c.channel_code))}</span>
-                <strong>${formatAmd(c.amd)} · ${c.liters != null ? `${Number(c.liters).toLocaleString()} L` : "—"} · ${c.orders != null ? c.orders : "—"}</strong>
+                <strong>${formatAmd(c.amd)} · ${c.liters != null ? `${Number(c.liters).toLocaleString("en-US")} L` : "—"} · ${c.orders != null ? c.orders : "—"}</strong>
               </div>`
                   )
                   .join("")
@@ -1386,7 +1386,7 @@ async function renderDailyManagementReport(root, navigate) {
           <p class="list-group-heading">${t("report_daily_management_group_other")}</p>
           <div class="card report-row"><span>${t("report_daily_management_credit_line")}</span><strong>${formatUsd(r.credit_line_usd)}</strong></div>
           <div class="card report-row"><span>${t("report_daily_management_receivables")}</span><strong>${formatAmd(r.receivables_total_amd)} (${t("report_daily_management_receivables_net")}${labelColon()}${formatAmd(r.receivables_net_amd)})</strong></div>
-          <div class="card report-row"><span>${t("report_daily_management_warehouse")}</span><strong>${formatAmd(r.warehouse_value_amd)} · ${r.warehouse_liters != null ? `${Number(r.warehouse_liters).toLocaleString()} L` : "—"}</strong></div>
+          <div class="card report-row"><span>${t("report_daily_management_warehouse")}</span><strong>${formatAmd(r.warehouse_value_amd)} · ${r.warehouse_liters != null ? `${Number(r.warehouse_liters).toLocaleString("en-US")} L` : "—"}</strong></div>
         </div>
         ${
           r.prev_report_date

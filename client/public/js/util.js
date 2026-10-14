@@ -592,9 +592,49 @@ export function setTierSelectorValue(container, tier) {
 // (rounded, not truncated), never with decimals, regardless of what
 // precision the underlying value carries (e.g. a computed landing/net
 // cost synced from the source spreadsheet's own formulas).
+// Thousands separators are always commas ("57,000"), whatever the phone's own region format says.
+export function groupDigits(value) {
+  if (value == null || value === "") return "";
+  const n = Math.round(Number(value));
+  return Number.isFinite(n) ? n.toLocaleString("en-US") : "";
+}
+
 export function formatAmd(value) {
   if (value == null) return "";
-  return `${Math.round(Number(value)).toLocaleString()} ${t("amd")}`;
+  return `${groupDigits(value)} ${t("amd")}`;
+}
+
+// "57,000" / "57 000" / "57000" -> 57000 (null when empty).
+export function parseAmd(value) {
+  const digits = String(value ?? "").replace(/[^\d]/g, "");
+  return digits ? Number(digits) : null;
+}
+
+// An amount field that reads "57,000" while typing, right-aligned like every other price. Returns { get, set }
+// (the number, or null when empty). onInput fires after each edit.
+export function bindAmdInput(input, onInput = null) {
+  input.type = "text";
+  input.inputMode = "numeric";
+  input.autocomplete = "off";
+  input.classList.add("amd-input");
+  const reformat = () => {
+    const digits = input.value.replace(/\D/g, "");
+    input.value = digits ? Number(digits).toLocaleString("en-US") : "";
+  };
+  reformat();
+  input.addEventListener("input", () => {
+    reformat();
+    onInput?.();
+  });
+  return {
+    get: () => {
+      const digits = input.value.replace(/\D/g, "");
+      return digits ? Number(digits) : null;
+    },
+    set: (n) => {
+      input.value = n == null ? "" : groupDigits(n);
+    },
+  };
 }
 
 // A price of exactly 0 is a free item (merch such as Castrol Stend), not "0 AMD".
@@ -611,7 +651,7 @@ export function formatPriceOrFree(value) {
 // number itself is never split or clipped.
 export function amdWithUnitHtml(value) {
   if (value == null) return "";
-  return `<span class="stat-num">${Math.round(Number(value)).toLocaleString()}</span> <span class="stat-unit">${escapeHtml(t("amd"))}</span>`;
+  return `<span class="stat-num">${Math.round(Number(value)).toLocaleString("en-US")}</span> <span class="stat-unit">${escapeHtml(t("amd"))}</span>`;
 }
 
 // The Castrol sync's own aging_bucket strings, translated for display. A

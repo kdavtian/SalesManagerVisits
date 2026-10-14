@@ -13,7 +13,7 @@ function barChartHtml(items, { labelKey, valueKey, unit = "", ariaLabel = "" } =
     .map((i) => {
       const value = Number(i[valueKey]) || 0;
       const heightPct = Math.round((value / max) * 100);
-      return `<div class="trend-bar" style="height:${Math.max(heightPct, value > 0 ? 4 : 0)}%" title="${escapeHtml(String(i[labelKey]))}: ${Math.round(value).toLocaleString()}${unit}"></div>`;
+      return `<div class="trend-bar" style="height:${Math.max(heightPct, value > 0 ? 4 : 0)}%" title="${escapeHtml(String(i[labelKey]))}: ${Math.round(value).toLocaleString("en-US")}${unit}"></div>`;
     })
     .join("");
   return `<div class="trend-chart" role="img" aria-label="${escapeHtml(ariaLabel)}">${bars}</div>`;
@@ -275,7 +275,7 @@ function sizeLiters(unit) {
 
 function formatLiters(value) {
   const n = Number(value) || 0;
-  return Number.isInteger(n) ? `${n.toLocaleString()} L` : `${n.toFixed(1)} L`;
+  return Number.isInteger(n) ? `${n.toLocaleString("en-US")} L` : `${n.toFixed(1)} L`;
 }
 
 // Section 3: inventory balance, by liters and AMD value rather than a raw
@@ -372,7 +372,7 @@ function renderBrandVolumeSection(brandActuals) {
           ([brand, liters]) => `
         <div class="card list-row">
           <span>${escapeHtml(brand)}</span>
-          <span class="card-trailing muted">${Math.round(liters).toLocaleString()} L</span>
+          <span class="card-trailing muted">${Math.round(liters).toLocaleString("en-US")} L</span>
         </div>
       `
         )

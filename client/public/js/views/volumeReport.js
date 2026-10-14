@@ -24,7 +24,7 @@ const DRILL_STATE = { product: "products", family: "families", brand: "brands", 
 
 const fmtL = (n) => {
   const v = Number(n) || 0;
-  const s = Math.abs(v) >= 100 ? Math.round(v).toLocaleString() : (Math.round(v * 10) / 10).toLocaleString();
+  const s = Math.abs(v) >= 100 ? Math.round(v).toLocaleString("en-US") : (Math.round(v * 10) / 10).toLocaleString();
   return `${s} ${t("vol_unit_l")}`;
 };
 const pctChange = (now, before) => (before ? ((now - before) / Math.abs(before)) * 100 : null);

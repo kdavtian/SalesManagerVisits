@@ -181,7 +181,7 @@ async function loadOrderWithItems(orderId) {
 }
 
 ordersRouter.post("/", async (req, res) => {
-  const { customer_id, checkin_id, note, items, discount_pct, discount_amd, payment_method, client_ref } = req.body ?? {};
+  const { customer_id, checkin_id, note, items, discount_pct, discount_amd, payment_method, payment_term_days, client_ref } = req.body ?? {};
   const customerId = Number(customer_id);
   if (!customerId || !Array.isArray(items) || !items.length) {
     return res.status(400).json({ error: "customer_id and at least one item are required" });
@@ -200,6 +200,14 @@ ordersRouter.post("/", async (req, res) => {
   // the DB level so it doesn't break pre-existing orders; enforced here.
   if (payment_method !== "cash" && payment_method !== "invoice") {
     return res.status(400).json({ error: "payment_method must be 'cash' or 'invoice'" });
+  }
+  // "Payment due: N days" (Invoice orders only; cash is paid at once).
+  let paymentTermDays = null;
+  if (payment_method === "invoice" && payment_term_days !== undefined && payment_term_days !== null && payment_term_days !== "") {
+    paymentTermDays = Number(payment_term_days);
+    if (!Number.isInteger(paymentTermDays) || paymentTermDays < 1 || paymentTermDays > 365) {
+      return res.status(400).json({ error: "payment_term_days must be a whole number of days between 1 and 365" });
+    }
   }
   let discountPct = discount_pct !== undefined ? Number(discount_pct) : 0;
   if (!Number.isFinite(discountPct) || discountPct < 0 || discountPct > 100) {
@@ -268,10 +276,10 @@ ordersRouter.post("/", async (req, res) => {
     const orderCode = await nextOrderCode(client);
     const { rows } = await client.query(
       `INSERT INTO orders (customer_id, user_id, checkin_id, status, total_amd, note, discount_pct, discount_amd, approval_status, order_code, payment_method, client_ref,
-                           credit_status, credit_exposure_amd, credit_limit_snapshot_amd)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING *`,
+                           credit_status, credit_exposure_amd, credit_limit_snapshot_amd, payment_term_days)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *`,
       [customerId, req.user.id, checkin_id || null, initialStatus, totalAmd, note || null, discountPct, discountAmd, approvalStatus, orderCode, payment_method, client_ref || null,
-       creditStatus, credit ? credit.exposure : null, credit ? credit.limit : null]
+       creditStatus, credit ? credit.exposure : null, credit ? credit.limit : null, paymentTermDays]
     );
     order = rows[0];
     for (const line of lines) {
