@@ -15,9 +15,8 @@ test.describe("Offline order creation and later synchronization", () => {
 
     await loginViaUi(page, manager.email);
     await page.goto(`/#/orders/new/${customer.id}`);
-    // The picker navigates brand-first -- a brand chip, not the flat product
-    // list, is what actually renders until one is picked (or a search is typed).
-    await page.locator(`.chip[data-value="${product.brand}"]`).click();
+    // One scrolling chip row (favorites, Frequent, brands): pick the brand to list its products.
+    await page.locator(`[data-chip="${product.brand}"]`).click();
     await expect(page.locator("#order-product-list")).toContainText(product.name, { timeout: 10000 });
 
     await page
@@ -26,6 +25,8 @@ test.describe("Offline order creation and later synchronization", () => {
       .click();
     await expect(page.locator("#order-cart-bar")).toBeVisible();
 
+    // The bottom bar opens "Your order" (lines, discount, payment method, Save).
+    await page.locator("#order-cart-bar").click();
     await context.setOffline(true);
     await page.locator("#save-order-btn").click();
 
