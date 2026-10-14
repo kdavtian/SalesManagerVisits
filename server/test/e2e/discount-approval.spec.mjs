@@ -16,11 +16,11 @@ test.describe("Discount approval", () => {
     const { context: repContext, page: repPage } = await newIdentityPage(browser);
     await loginViaUi(repPage, manager.email);
     await repPage.goto(`/#/orders/new/${customer.id}`);
-    // The picker navigates brand-first -- a brand chip, not the flat product
-    // list, is what actually renders until one is picked (or a search is typed).
-    await repPage.locator(`.chip[data-value="${product.brand}"]`).click();
+    // One scrolling chip row (favorites, Frequent, brands): pick the brand to list its products.
+    await repPage.locator(`[data-chip="${product.brand}"]`).click();
     await expect(repPage.locator("#order-product-list")).toContainText(product.name, { timeout: 10000 });
     await repPage.locator(`[data-product-id="${product.id}"]`).locator('[data-action="add"]').click();
+    await repPage.locator("#order-cart-bar").click(); // "Your order" sheet holds the discount and Save
     await repPage.locator("#order-discount-input").fill("10");
 
     const [orderResponse] = await Promise.all([

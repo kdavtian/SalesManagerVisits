@@ -7877,7 +7877,7 @@ button.list-row-icon {
    showing (see updateCartBar in orderCreate.js), since with an empty cart
    there's nothing to clear. */
 .order-product-list-with-cart-bar {
-  padding-bottom: 260px;
+  padding-bottom: 110px;
 }
 
 .order-cart-bar-row {
@@ -12708,4 +12708,260 @@ form select,
 }
 .rps-head #rps-ok {
   margin-top: 10px;
+}
+
+/* New order screen (views/orderCreate.js): header, one scrolling chip row, star on every card, "Your order" sheet */
+.oc-header {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+.oc-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.oc-title h1 {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 800;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+.oc-customer {
+  display: block;
+  margin-top: 1px;
+  font-size: 0.95rem;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+.oc-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 0 8px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.oc-chips::-webkit-scrollbar {
+  display: none;
+}
+.oc-chips .map-filter-chip {
+  flex: 0 0 auto;
+  min-height: 40px;
+  white-space: nowrap;
+}
+.oc-chips-small .map-filter-chip {
+  min-height: 34px;
+  font-size: 0.78rem;
+}
+.oc-chips .map-filter-chip svg {
+  color: #e0a100;
+}
+.oc-chip-n {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--bg-card-pressed, rgba(128, 128, 128, 0.18));
+  font-size: 0.72rem;
+  line-height: 18px;
+  text-align: center;
+}
+.oc-chip-n-cart {
+  background: var(--accent);
+  color: var(--on-accent, #fff);
+}
+.oc-chips .map-filter-chip.chip-active .oc-chip-n {
+  background: rgba(255, 255, 255, 0.28);
+  color: inherit;
+}
+.oc-list-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.oc-list-head-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.order-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.order-search-row input[type="search"] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.order-search-row .oc-avail {
+  flex: 0 0 auto;
+  min-height: 40px;
+  font-size: 0.78rem;
+}
+.oc-head-note {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+}
+.oc-list-head-left .btn {
+  min-height: 40px;
+}
+.order-product-row {
+  position: relative;
+}
+.oc-star {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: -10px 0 0 -12px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.oc-star.is-fav {
+  color: #e0a100;
+}
+.order-product-row .order-product-info {
+  flex: 1 1 auto;
+  margin-left: -6px;
+}
+.order-product-info strong {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* the bottom bar is one big tap target that opens "Your order" */
+.order-cart-bar {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-left: none;
+  border-right: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.order-cart-bar .order-cart-summary {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.oc-review-btn {
+  flex: 0 0 auto;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 18px;
+  pointer-events: none;
+}
+.oc-order-sheet {
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.oc-sheet-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.oc-sheet-head h2 {
+  margin: 0;
+}
+.oc-sheet-head .sheet-close-x {
+  position: static;
+  float: none;
+  margin: 0;
+}
+.oc-lines {
+  margin: 8px 0;
+}
+.oc-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.oc-line-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.oc-line-info .muted {
+  font-size: 0.78rem;
+}
+.oc-line-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.oc-line-total {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+}
+.oc-add-more {
+  min-height: 44px;
+  margin-bottom: 10px;
+}
+.oc-credit {
+  margin: 4px 0 8px;
+}
+.oc-order-sheet .order-discount-row {
+  margin-bottom: 8px;
+}
+.oc-order-sheet .order-cart-bar-row {
+  margin-top: 6px;
+}
+.app-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(110px + var(--nav-safe-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(92vw, 420px);
+  padding: 10px 16px;
+  border-radius: 14px;
+  background: rgba(30, 30, 32, 0.94);
+  color: #fff;
+  font-size: 0.88rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  animation: app-toast-in 0.18s ease-out;
+}
+.app-toast-action {
+  min-height: 44px;
+  margin: -10px -8px -10px 0;
+  padding: 0 8px;
+  border: none;
+  background: none;
+  color: #8ec5ff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+@keyframes app-toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }

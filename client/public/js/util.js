@@ -1322,3 +1322,26 @@ export function customerMatchesSearch(c, query, extraText = "") {
     return digits.length >= 3 && phone.includes(digits);
   });
 }
+
+// A small message that fades by itself (confirming an action that needs no dialog), optionally with one action
+// such as "Undo". One at a time: a new toast replaces the one on screen.
+let toastTimer = null;
+export function showToast(text, { actionLabel = "", onAction = null, ms = 2600 } = {}) {
+  document.querySelector(".app-toast")?.remove();
+  clearTimeout(toastTimer);
+  const el = document.createElement("div");
+  el.className = "app-toast";
+  el.setAttribute("role", "status");
+  el.innerHTML = `<span></span>${actionLabel ? `<button type="button" class="app-toast-action"></button>` : ""}`;
+  el.querySelector("span").textContent = text;
+  if (actionLabel) {
+    const btn = el.querySelector("button");
+    btn.textContent = actionLabel;
+    btn.addEventListener("click", () => {
+      el.remove();
+      onAction?.();
+    });
+  }
+  document.body.appendChild(el);
+  toastTimer = setTimeout(() => el.remove(), actionLabel ? Math.max(ms, 4000) : ms);
+}

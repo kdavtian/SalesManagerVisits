@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, formatPriceOrFree, tierBadgeHtml, activateDialog, activateCombobox, formatDateDMY, openInfoPopup } from "../util.js";
+import { escapeHtml, formatAmd, formatPriceOrFree, tierBadgeHtml, activateDialog, activateCombobox, formatDateDMY, openInfoPopup, showToast } from "../util.js";
 import { t } from "../i18n.js";
 import { enqueueOrder } from "../offlineQueue.js";
 import { canAssignErpCustomerId, state } from "../state.js";
@@ -8,6 +8,7 @@ import { getProductCatalog } from "../productCatalog.js";
 import { searchProducts, debounce } from "../productSearch.js";
 import { numOrNull, tierPrice } from "../productPricing.js";
 import { loadReorderProfile, reorderRhythmText } from "../reorder.js";
+import { loadFavorites, setFavorite, loadFrequentIds } from "../productFavorites.js";
 
 // Reps often open "Create order" several times a visit (once per checkin);
 // the catalog rarely changes minute to minute, so this reads from the
@@ -91,6 +92,10 @@ function stockWarning(product, requestedQty) {
 
 // opts.from = "erp:<order id>" | "app:<order id>" pre-fills the cart with that past order (Reorder);
 // opts.usual pre-fills it with the customer's usual basket (Order usual).
+//
+// Layout (owner, 2026-10-14): heading + customer, debt warning, ONE scrolling chip row (favorites star, Frequent,
+// brands), search, category chips, the product list with a star on every card. The lines the user added are always
+// reachable: the bottom bar opens "Your order" (lines with steppers, discount, payment method, Save).
 export async function renderOrderCreate(root, navigate, customerId, checkinId, opts = {}) {
   root.innerHTML = `<div class="detail-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".detail-view");
@@ -117,166 +122,110 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     }
   }
   const basePrice = (product) => (individualPrices.has(product.id) ? individualPrices.get(product.id) : tierPrice(product, tier));
+  const catalogById = new Map(products.map((p) => [p.id, p]));
 
-  // Keyed by product id. No product can be sold out of catalog (decision
-  // C6), so every line is a real catalog product -- persists across
-  // brand/family navigation so a rep can pick items from several
-  // brands/families into one order.
+  // Keyed by product id. No product can be sold out of catalog (decision C6), so every line is a real catalog
+  // product. The cart survives every chip/search change, so items can come from several brands and favorites.
   const cart = new Map();
 
-  // Brand -> flat product list -- no extra family step, just pick a brand
-  // and see everything under it. A non-empty search query bypasses even
-  // that, showing a flat filtered list across every brand. category narrows
-  // further within that (engine oil vs transmission); showAll turns off the
-  // default out-of-stock hiding so a manager can still see (and order) a
-  // product that's temporarily at 0 on hand.
-  const nav = { brand: null, category: null };
+  // Which list is showing: "fav" (starred), "frequent" (default) or a brand name. A search looks through ALL
+  // products whatever the chip; category narrows whichever list is showing; showAll turns off the default
+  // out-of-stock hiding so a manager can still see (and order) a product that's temporarily at 0 on hand.
+  const view = { chip: "frequent", category: null };
   let searchQuery = "";
   let showAll = false;
+  let favorites = new Set();
+  let frequentIds = [];
+  let usualProfile = null;
+  let dataReady = { favorites: false, frequent: false, usual: false };
+  const allReady = () => dataReady.favorites && dataReady.frequent && dataReady.usual;
+  let discountType = "pct";
+  let discountRaw = "0";
+  let paymentMethod = customer.payment_method === "cash" ? "cash" : "invoice";
 
   container.innerHTML = `
-    <div class="detail-header">
+    <div class="detail-header oc-header">
       <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
-      <div class="detail-header-title">
+      <div class="detail-header-title oc-title">
         <h1>${t("create_order")}</h1>
-        <span class="badge badge-neutral">${escapeHtml(customer.name)}</span>
-        ${tierBadgeHtml(tier)}
+        <span class="oc-customer">${escapeHtml(customer.name)} ${tierBadgeHtml(tier)}</span>
       </div>
     </div>
 
     <p class="order-debt-hold" id="order-debt-hold" role="status" hidden></p>
-
-    <div class="order-search-row">
-      <input type="search" id="product-search" placeholder="${t("search_products_placeholder")}" aria-label="${t("search_products_placeholder")}" />
-    </div>
     <p class="muted order-prefill-note" id="order-prefill-note" role="status" hidden></p>
-    <div id="order-usual" hidden></div>
-    <div class="order-crumb-row" id="order-crumb-row" hidden></div>
-    <div class="order-filter-row" id="order-filter-row" hidden></div>
+
+    <div class="oc-chips" id="oc-chips" role="group" aria-label="${t("oc_lists")}"></div>
+    <div class="order-search-row">
+      <input type="search" id="product-search" placeholder="${t("search_products_placeholder")}" aria-label="${t("search_products_placeholder")}" autocomplete="off" />
+      <button type="button" class="map-filter-chip oc-avail" id="order-availability-toggle"></button>
+    </div>
+    <div class="oc-chips oc-chips-small" id="oc-categories" hidden></div>
+    <div id="oc-list-head"></div>
     <div class="order-product-list" id="order-product-list"></div>
 
-    <p class="form-error" id="order-error" hidden></p>
-
-    <div class="order-cart-bar" id="order-cart-bar" hidden>
-      <p class="order-stock-warning" id="order-credit-banner" hidden></p>
-      <div class="order-discount-row">
-        <label for="order-payment-method-input">${t("order_payment_method_label")}</label>
-        <select id="order-payment-method-input">
-          <option value="invoice" ${customer.payment_method !== "cash" ? "selected" : ""}>${t("payment_method_invoice")}</option>
-          <option value="cash" ${customer.payment_method === "cash" ? "selected" : ""}>${t("payment_method_cash")}</option>
-        </select>
-      </div>
-      <div class="order-discount-row">
-        <label for="order-discount-input">${t("discount_pct_label")}</label>
-        <input type="number" id="order-discount-input" min="0" step="1" value="0" inputmode="numeric" />
-        <div class="segmented" id="order-discount-type">
-          <button type="button" class="chip chip-active" data-type="pct">${t("discount_type_pct")}</button>
-          <button type="button" class="chip" data-type="amd">${t("discount_type_amd")}</button>
-        </div>
-      </div>
-      <div class="order-cart-bar-row">
-        <div class="order-cart-summary">
-          <span id="order-cart-count"></span>
-          <strong id="order-cart-total"></strong>
-        </div>
-        <button type="button" class="btn btn-primary" id="save-order-btn">${t("save_order")}</button>
-      </div>
-    </div>
+    <button type="button" class="order-cart-bar" id="order-cart-bar" hidden aria-label="${t("oc_review_order")}">
+      <span class="order-cart-summary">
+        <span id="order-cart-count"></span>
+        <strong id="order-cart-total"></strong>
+      </span>
+      <span class="btn btn-primary oc-review-btn">${t("oc_review_order")} ›</span>
+    </button>
   `;
 
-  const backBtn = container.querySelector("#back-btn");
-  backBtn.addEventListener("click", () => {
+  const holdBanner = container.querySelector("#order-debt-hold");
+  const prefillNote = container.querySelector("#order-prefill-note");
+  const chipsEl = container.querySelector("#oc-chips");
+  const categoriesEl = container.querySelector("#oc-categories");
+  const listHead = container.querySelector("#oc-list-head");
+  const listEl = container.querySelector("#order-product-list");
+  const searchInput = container.querySelector("#product-search");
+  const availToggle = container.querySelector("#order-availability-toggle");
+  const cartBar = container.querySelector("#order-cart-bar");
+  const cartCount = container.querySelector("#order-cart-count");
+  const cartTotal = container.querySelector("#order-cart-total");
+
+  container.querySelector("#back-btn").addEventListener("click", () => {
     if (searchQuery) {
       searchQuery = "";
       searchInput.value = "";
       render();
       return;
     }
-    if (nav.brand !== null) {
-      nav.brand = null;
-      render();
-      return;
-    }
     navigate(`#/customers/${customerId}`);
   });
 
-  const crumbRow = container.querySelector("#order-crumb-row");
-  const filterRow = container.querySelector("#order-filter-row");
-  const listEl = container.querySelector("#order-product-list");
-  const searchInput = container.querySelector("#product-search");
-  const cartBar = container.querySelector("#order-cart-bar");
-  const cartCount = container.querySelector("#order-cart-count");
-  const cartTotal = container.querySelector("#order-cart-total");
-  const discountInput = container.querySelector("#order-discount-input");
-  const discountTypeRow = container.querySelector("#order-discount-type");
-  const errorEl = container.querySelector("#order-error");
-  const saveBtn = container.querySelector("#save-order-btn");
-
-  // A rep negotiating "5,000 off" doesn't want to convert that to a percent
-  // by hand -- the two are mutually exclusive per order, same as the
-  // server enforces (see discount_amd in routes/orders.js).
-  let discountType = "pct";
-
+  // ---- money -------------------------------------------------------------------------------------------------------
   function discountValue() {
-    const n = Number(discountInput.value);
+    const n = Number(discountRaw);
     if (!Number.isFinite(n) || n <= 0) return 0;
     return discountType === "pct" ? Math.min(100, n) : n;
   }
-
   function cartSubtotalAmd() {
     let total = 0;
     for (const line of cart.values()) total += line.unit_price_amd * line.quantity;
     return total;
   }
-
   function cartTotalAmd() {
     const subtotal = cartSubtotalAmd();
     const value = discountValue();
     return discountType === "amd" ? Math.max(0, subtotal - value) : subtotal * (1 - value / 100);
   }
 
-  function updateCartBar() {
-    const count = [...cart.values()].reduce((sum, l) => sum + l.quantity, 0);
-    // The cart bar is a fixed bottom sheet now (see .order-cart-bar), not
-    // part of the list's own scroll flow -- the list needs reserved bottom
-    // padding while it's showing so the sheet doesn't cover the last rows,
-    // toggled together with the sheet itself so an empty cart doesn't
-    // leave dead space at the end of the list.
-    listEl.classList.toggle("order-product-list-with-cart-bar", count > 0);
-    renderUsual();
-    if (!count) {
-      cartBar.hidden = true;
-      return;
-    }
-    cartBar.hidden = false;
-    cartCount.textContent = `${count} ${count === 1 ? t("item") : t("items")}`;
-    cartTotal.textContent = formatAmd(cartTotalAmd());
-    updateCreditBanner();
-  }
-
-  // Credit limit (accountant/directors set it on the customer): warn before the
-  // order goes over, because it will then wait for a director's approval.
+  // Credit limit (accountant/directors set it on the customer): warn before the order goes over, because it will
+  // then wait for a director's approval.
   let creditStatus = null;
-  const creditBanner = container.querySelector("#order-credit-banner");
-  function updateCreditBanner() {
-    if (!creditBanner) return;
+  function creditOverAmd() {
     const limit = creditStatus?.limit;
-    if (limit == null) {
-      creditBanner.hidden = true;
-      return;
-    }
-    const exposure = Number(creditStatus.debt_amd) + Number(creditStatus.open_orders_amd) + cartTotalAmd();
-    const over = exposure - limit;
-    creditBanner.hidden = over <= 0;
-    if (over > 0) creditBanner.textContent = `${t("credit_over_banner_prefix")}${formatAmd(Math.round(over))}${t("credit_over_banner_suffix")}`;
+    if (limit == null) return 0;
+    return Math.max(0, Number(creditStatus.debt_amd) + Number(creditStatus.open_orders_amd) + cartTotalAmd() - limit);
   }
-  const holdBanner = container.querySelector("#order-debt-hold");
   api.getCreditStatus(customerId).then((s) => {
     creditStatus = s;
     // Soft credit hold: old unpaid invoices. A warning only -- the order can still be made.
-    if (s.debt_hold?.on_hold && holdBanner) {
+    if (s.debt_hold?.on_hold) {
       holdBanner.textContent = t("debt_hold_banner").replace("{amount}", formatAmd(s.debt_hold.overdue_amd)).replace("{days}", String(s.debt_hold.oldest_due_days));
       holdBanner.hidden = false;
     }
@@ -285,97 +234,130 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     /* offline or not allowed to see debt: no warning, the server still checks */
   });
 
-  discountInput.addEventListener("input", updateCartBar);
-  discountTypeRow.querySelectorAll("[data-type]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      discountType = btn.dataset.type;
-      discountTypeRow.querySelectorAll("[data-type]").forEach((b) => b.classList.toggle("chip-active", b === btn));
-      discountInput.max = discountType === "pct" ? "100" : "";
-      updateCartBar();
-    });
-  });
-
-  function renderCrumbs() {
-    crumbRow.hidden = !nav.brand;
-    if (!nav.brand) return;
-    crumbRow.innerHTML = `
-      <span>${escapeHtml(nav.brand)}</span>
-      <button type="button" class="btn-link" id="order-switch-brand-btn">${t("switch_brand")}</button>
-    `;
-    crumbRow.querySelector("#order-switch-brand-btn").addEventListener("click", () => {
-      nav.brand = null;
-      render();
-    });
+  // ---- cart ----------------------------------------------------------------------------------------------------------
+  function addToCart(product, quantity) {
+    const existing = cart.get(product.id);
+    if (existing) existing.quantity += quantity;
+    else cart.set(product.id, { product_id: product.id, product_name: product.name, unit_price_amd: basePrice(product), quantity });
+  }
+  function changeQty(product, delta) {
+    const line = cart.get(product.id) ?? { product_id: product.id, product_name: product.name, unit_price_amd: basePrice(product), quantity: 0 };
+    line.quantity += delta;
+    if (line.quantity <= 0) cart.delete(product.id);
+    else cart.set(product.id, line);
   }
 
-  function renderFilters() {
-    // Only meaningful once there's an actual product list on screen (a
-    // specific brand, or a search) -- the brand-picker itself has nothing
-    // to filter yet.
-    filterRow.hidden = !nav.brand && !searchQuery;
-    if (filterRow.hidden) return;
+  function updateCartBar() {
+    const count = [...cart.values()].reduce((sum, l) => sum + l.quantity, 0);
+    // The bar is a fixed bottom sheet (see .order-cart-bar); the list needs reserved padding while it shows so it
+    // does not cover the last rows.
+    listEl.classList.toggle("order-product-list-with-cart-bar", count > 0);
+    renderChips(); // brand chips show how many lines they hold
+    if (!count) {
+      cartBar.hidden = true;
+      return;
+    }
+    cartBar.hidden = false;
+    cartCount.textContent = `${count} ${count === 1 ? t("item") : t("items")}`;
+    cartTotal.textContent = formatAmd(cartTotalAmd());
+  }
 
-    // Only categories that actually have products are offered.
-    const present = new Set(products.map(productCategory));
-    const categories = [
-      { value: null, label: t("category_all") },
-      ...["Engine oil", ...NON_ENGINE_CATEGORIES]
-        .filter((c) => present.has(c))
-        .map((c) => ({ value: c, label: t(CATEGORY_LABEL_KEY[c]) })),
-    ];
-    filterRow.innerHTML = `
-      <div class="segmented order-category-chips">
-        ${categories
-          .map(
-            (c) =>
-              `<button type="button" class="chip ${nav.category === c.value ? "chip-active" : ""}" data-category="${c.value ?? ""}">${escapeHtml(c.label)}</button>`
-          )
-          .join("")}
-      </div>
-      <button type="button" class="chip order-availability-toggle ${showAll ? "" : "chip-active"}" id="order-availability-toggle">
-        ${showAll ? t("show_all_products") : t("available_only")}
-      </button>
-    `;
-    filterRow.querySelectorAll("[data-category]").forEach((btn) => {
+  // ---- chips ---------------------------------------------------------------------------------------------------------
+  const STAR_SVG = (filled) => `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false" fill="${filled ? "currentColor" : "none"}" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3.2l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 17l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8z"/></svg>`;
+  const brands = sortedBrands(products);
+  function cartCountForBrand(brand) {
+    let n = 0;
+    for (const id of cart.keys()) if (catalogById.get(id)?.brand === brand) n++;
+    return n;
+  }
+  function renderChips() {
+    const searching = Boolean(searchQuery.trim());
+    const chip = (key, inner, aria) =>
+      `<button type="button" class="map-filter-chip ${!searching && view.chip === key ? "chip-active" : ""}" data-chip="${escapeHtml(key)}" aria-pressed="${!searching && view.chip === key}" ${aria ? `aria-label="${escapeHtml(aria)}"` : ""}>${inner}</button>`;
+    chipsEl.innerHTML =
+      chip("fav", `${STAR_SVG(true)}${favorites.size ? `<span class="oc-chip-n">${favorites.size}</span>` : ""}`, t("oc_favorites")) +
+      chip("frequent", escapeHtml(t("oc_frequent"))) +
+      brands.map((b) => chip(b, `${escapeHtml(b)}${cartCountForBrand(b) ? `<span class="oc-chip-n oc-chip-n-cart">${cartCountForBrand(b)}</span>` : ""}`)).join("");
+    chipsEl.querySelectorAll("[data-chip]").forEach((btn) =>
       btn.addEventListener("click", () => {
-        nav.category = btn.dataset.category || null;
+        view.chip = btn.dataset.chip;
+        view.category = null;
+        // choosing a list ends a search: the chips are the way to browse
+        if (searchQuery) {
+          searchQuery = "";
+          searchInput.value = "";
+        }
         render();
-      });
-    });
-    filterRow.querySelector("#order-availability-toggle").addEventListener("click", () => {
-      showAll = !showAll;
-      render();
-    });
+        btn.scrollIntoView({ inline: "center", block: "nearest" });
+      })
+    );
   }
 
-  function applyFilters(list) {
-    let filtered = list;
-    if (nav.category) filtered = filtered.filter((p) => productCategory(p) === nav.category);
-    if (!showAll) filtered = filtered.filter((p) => isAvailable(p) || cart.has(p.id));
-    return filtered;
+  // ---- what the current list holds ---------------------------------------------------------------------------------
+  function usualRows() {
+    return (usualProfile?.items ?? []).map((item) => ({ item, product: catalogById.get(item.product_id) })).filter((x) => x.product);
+  }
+  // Frequent = this customer's usual products first, then what the company orders most (last 90 days).
+  function frequentList() {
+    const out = [];
+    const seen = new Set();
+    for (const { product } of usualRows()) {
+      out.push(product);
+      seen.add(product.id);
+    }
+    for (const id of frequentIds) {
+      const product = catalogById.get(id);
+      if (product && !seen.has(id)) {
+        out.push(product);
+        seen.add(id);
+      }
+    }
+    return out;
+  }
+  function baseList() {
+    if (searchQuery.trim()) return sortProducts(filterCatalog(products, searchQuery));
+    if (view.chip === "fav") return sortProducts(products.filter((p) => favorites.has(p.id)));
+    if (view.chip === "frequent") return frequentList();
+    return sortProducts(products.filter((p) => p.brand === view.chip));
+  }
+  const usualItemOf = (productId) => usualProfile?.items?.find((i) => i.product_id === productId);
+
+  function renderCategories(list) {
+    const present = new Set(list.map(productCategory));
+    const cats = ["Engine oil", ...NON_ENGINE_CATEGORIES].filter((c) => present.has(c));
+    if (view.category && !present.has(view.category)) view.category = null;
+    categoriesEl.hidden = cats.length < 2;
+    if (cats.length < 2) {
+      categoriesEl.innerHTML = "";
+      return;
+    }
+    categoriesEl.innerHTML = [{ value: null, label: t("category_all") }, ...cats.map((c) => ({ value: c, label: t(CATEGORY_LABEL_KEY[c]) }))]
+      .map((c) => `<button type="button" class="map-filter-chip ${view.category === c.value ? "chip-active" : ""}" data-category="${c.value ?? ""}" aria-pressed="${view.category === c.value}">${escapeHtml(c.label)}</button>`)
+      .join("");
+    categoriesEl.querySelectorAll("[data-category]").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        view.category = btn.dataset.category || null;
+        render();
+      })
+    );
   }
 
-  function renderChipRow(items, onPick, labelFor = (x) => x) {
-    listEl.innerHTML = `<div class="segmented order-chip-grid">${items
-      .map((item) => `<button type="button" class="chip" data-value="${escapeHtml(String(item))}">${escapeHtml(labelFor(item))}</button>`)
-      .join("")}</div>`;
-    listEl.querySelectorAll("[data-value]").forEach((btn, i) => {
-      btn.addEventListener("click", () => onPick(items[i]));
-    });
-  }
-
+  // ---- rows ------------------------------------------------------------------------------------------------------------
   function renderProductRow(product) {
     const line = cart.get(product.id);
     const qty = line?.quantity ?? 0;
     const price = line?.unit_price_amd ?? basePrice(product);
     const warning = stockWarning(product, qty || defaultQtyForUnit(product.unit));
     const outOfStock = product.stock_qty !== null && product.stock_qty !== undefined && product.stock_qty <= 0;
+    const fav = favorites.has(product.id);
+    const usual = view.chip === "frequent" && !searchQuery.trim() ? usualItemOf(product.id) : null;
     return `
       <div class="order-product-row" data-product-id="${product.id}">
+        <button type="button" class="oc-star ${fav ? "is-fav" : ""}" data-action="star" aria-pressed="${fav}" aria-label="${fav ? t("oc_remove_favorite") : t("oc_add_favorite")}">${STAR_SVG(fav)}</button>
         <div class="order-product-info">
           <strong>${escapeHtml(product.name)}</strong>
-          <span class="muted">${[product.brand, product.unit].filter(Boolean).map(escapeHtml).join(" · ")} ${formatPriceOrFree(price)}</span>
-          ${qty > 0 && canSetPrices ? `<label class="muted">${t("custom_price")} <input type="number" min="0" step="1" inputmode="numeric" class="order-price-input" data-price-input value="${price}" style="width:6rem"></label>` : ""}
+          <span class="muted">${[product.brand, product.unit].filter(Boolean).map(escapeHtml).join(" · ")}${usual ? ` × ${usual.quantity}` : ""} · ${formatPriceOrFree(price)}</span>
+          ${usual?.due ? `<span class="order-due-tag">${t("usual_item_due")}</span>` : ""}
           ${warning ? `<span class="order-stock-warning${warning.level === "danger" ? " order-stock-danger" : ""}">${warning.text}</span>` : ""}
         </div>
         ${
@@ -393,134 +375,120 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     `;
   }
 
+  async function toggleFavorite(product) {
+    const on = !favorites.has(product.id);
+    const ok = await setFavorite(favorites, product.id, on);
+    if (!ok) {
+      showToast(t("oc_favorite_failed"));
+    } else if (on) {
+      showToast(t("oc_favorite_added"));
+    } else {
+      showToast(t("oc_favorite_removed"), { actionLabel: t("undo"), onAction: () => toggleFavoriteTo(product, true) });
+    }
+    if (view.chip === "fav" && !searchQuery.trim()) render();
+    else {
+      rerenderRow(product);
+      renderChips();
+    }
+  }
+  async function toggleFavoriteTo(product, on) {
+    if (favorites.has(product.id) === on) return;
+    const ok = await setFavorite(favorites, product.id, on);
+    if (!ok) showToast(t("oc_favorite_failed"));
+    render();
+  }
+
+  function rerenderRow(product) {
+    const row = listEl.querySelector(`[data-product-id="${product.id}"]`);
+    if (!row) return;
+    row.outerHTML = renderProductRow(product);
+    wireRow(listEl.querySelector(`[data-product-id="${product.id}"]`), product);
+  }
+
   function wireRow(row, product) {
-    const priceInput = row.querySelector("[data-price-input]");
-    priceInput?.addEventListener("change", () => {
-      const line = cart.get(product.id);
-      const n = Number(priceInput.value);
-      if (!line || !Number.isFinite(n) || n < 0) return;
-      line.unit_price_amd = n;
-      line.price_override = n !== basePrice(product);
-      updateCartBar();
-    });
     row.querySelectorAll("[data-action]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        const line = cart.get(product.id) ?? {
-          product_id: product.id,
-          product_name: product.name,
-          unit_price_amd: basePrice(product),
-          quantity: 0,
-        };
-        if (btn.dataset.action === "add") line.quantity += defaultQtyForUnit(product.unit);
-        else if (btn.dataset.action === "inc") line.quantity += 1;
-        else line.quantity -= 1;
-
-        if (line.quantity <= 0) cart.delete(product.id);
-        else cart.set(product.id, line);
-
-        const parent = row.parentElement;
-        row.outerHTML = renderProductRow(product);
-        wireRow(parent.querySelector(`[data-product-id="${product.id}"]`), product);
+        const action = btn.dataset.action;
+        if (action === "star") {
+          toggleFavorite(product);
+          return;
+        }
+        if (action === "add") changeQty(product, defaultQtyForUnit(product.unit));
+        else changeQty(product, action === "inc" ? 1 : -1);
+        rerenderRow(product);
         updateCartBar();
       });
     });
   }
 
   function paintProductList(list) {
-    listEl.innerHTML = list.length
-      ? list.map(renderProductRow).join("")
-      : `<p class="empty-state">${t("no_products_found")}</p>`;
-
-    listEl.querySelectorAll("[data-product-id]").forEach((row) => {
-      const product = list.find((p) => p.id === Number(row.dataset.productId));
-      wireRow(row, product);
-    });
+    listEl.innerHTML = list.length ? list.map(renderProductRow).join("") : "";
+    listEl.querySelectorAll("[data-product-id]").forEach((row) => wireRow(row, catalogById.get(Number(row.dataset.productId))));
   }
 
-  // ---- Order lines + usual basket (shown above the brand picker, never inside a brand/search list) ----
-  const usualEl = container.querySelector("#order-usual");
-  const prefillNote = container.querySelector("#order-prefill-note");
-  let usualProfile = null;
-  const catalogById = new Map(products.map((p) => [p.id, p]));
-
-  function addToCart(product, quantity) {
-    const existing = cart.get(product.id);
-    if (existing) existing.quantity += quantity;
-    else cart.set(product.id, { product_id: product.id, product_name: product.name, unit_price_amd: basePrice(product), quantity });
-  }
-
-  function usualRows() {
-    return (usualProfile?.items ?? [])
-      .map((item) => ({ item, product: catalogById.get(item.product_id) }))
-      .filter((x) => x.product && !cart.has(x.product.id));
-  }
-
-  function renderUsual() {
-    const inPicker = !searchQuery && !nav.brand;
-    usualEl.hidden = !inPicker;
-    if (!inPicker) {
-      usualEl.innerHTML = "";
-      return;
-    }
-    const lineProducts = [...cart.keys()].map((id) => catalogById.get(id)).filter(Boolean);
-    const rows = usualRows();
-    const addable = rows.filter((x) => isAvailable(x.product));
-    const note = reorderRhythmText(usualProfile?.cadence);
-    usualEl.innerHTML = `
-      ${
-        lineProducts.length
-          ? `<p class="section-title section-title-tight">${t("order_lines_title")}</p>
-             <div class="order-product-list order-lines-card">${lineProducts.map(renderProductRow).join("")}</div>`
-          : ""
+  // The line above the list: for Frequent the one-tap "add the usual basket", and the availability toggle.
+  function renderListHead(shown) {
+    const searching = Boolean(searchQuery.trim());
+    let left = "";
+    if (searching) left = `<span class="oc-head-note muted">${t("oc_search_all").replace("{n}", String(shown.length))}</span>`;
+    else if (view.chip === "frequent") {
+      const addable = usualRows().filter((x) => isAvailable(x.product) && !cart.has(x.product.id));
+      const note = reorderRhythmText(usualProfile?.cadence);
+      if (addable.length > 1) {
+        left = `<button type="button" class="btn btn-sm" id="order-usual-add-all">${t("usual_order_add_all").replace("{n}", String(addable.length))}</button>${
+          note ? `<button type="button" class="settings-hint-icon" id="order-usual-info" aria-label="${t("more_info")}">!</button>` : ""
+        }`;
       }
-      ${
-        rows.length
-          ? `<p class="section-title section-title-tight order-usual-heading">${t("usual_order_title")}${
-              note ? ` <button type="button" class="settings-hint-icon" id="order-usual-info" aria-label="${t("more_info")}">!</button>` : ""
-            }</p>
-            <div class="order-usual-card">
-              ${rows
-                .map(({ item, product }) => {
-                  const out = !isAvailable(product);
-                  return `<div class="order-product-row" data-usual-id="${product.id}">
-                    <div class="order-product-info">
-                      <strong>${escapeHtml(product.name)}</strong>
-                      <span class="muted">${[product.brand, product.unit].filter(Boolean).map(escapeHtml).join(" · ")} × ${item.quantity} · ${formatPriceOrFree(basePrice(product))}</span>
-                      ${item.due ? `<span class="order-due-tag">${t("usual_item_due")}</span>` : ""}
-                    </div>
-                    ${out ? `<span class="badge badge-danger">${t("out_of_stock")}</span>` : `<button type="button" class="btn btn-sm" data-usual-add="${product.id}">${t("add")}</button>`}
-                  </div>`;
-                })
-                .join("")}
-              ${addable.length > 1 ? `<button type="button" class="btn btn-block order-usual-add-all" id="order-usual-add-all">${t("usual_order_add_all").replace("{n}", String(addable.length))}</button>` : ""}
-            </div>`
-          : ""
-      }`;
-    usualEl.querySelectorAll(".order-lines-card [data-product-id]").forEach((row) => wireRow(row, catalogById.get(Number(row.dataset.productId))));
-    usualEl.querySelectorAll("[data-usual-add]").forEach((btn) =>
-      btn.addEventListener("click", () => {
-        const { item, product } = rows.find((x) => x.product.id === Number(btn.dataset.usualAdd));
-        addToCart(product, item.quantity);
-        updateCartBar();
-      })
-    );
-    usualEl.querySelector("#order-usual-add-all")?.addEventListener("click", () => {
-      for (const { item, product } of addable) addToCart(product, item.quantity);
+    }
+    listHead.innerHTML = left ? `<div class="oc-list-head-row"><div class="oc-list-head-left">${left}</div></div>` : "";
+    listHead.querySelector("#order-usual-add-all")?.addEventListener("click", () => {
+      for (const { item, product } of usualRows()) if (isAvailable(product) && !cart.has(product.id)) addToCart(product, item.quantity);
+      render();
       updateCartBar();
     });
-    usualEl.querySelector("#order-usual-info")?.addEventListener("click", () =>
-      openInfoPopup(`<p>${escapeHtml(note)}</p><p class="muted">${t("usual_order_hint").replace("{n}", String(usualProfile?.orders_considered ?? 0))}</p>`)
+    listHead.querySelector("#order-usual-info")?.addEventListener("click", () =>
+      openInfoPopup(`<p>${escapeHtml(reorderRhythmText(usualProfile?.cadence))}</p><p class="muted">${t("usual_order_hint").replace("{n}", String(usualProfile?.orders_considered ?? 0))}</p>`)
     );
   }
 
-  // One request: the usual basket, and (Reorder) the lines of the chosen past order. Never blocks the screen;
-  // offline or failed -> the order screen simply works as before.
-  (async function applyReorderProfile() {
-    const profile = await loadReorderProfile(customerId, opts.from || null);
-    if (!profile) return;
+  function emptyText() {
+    if (searchQuery.trim()) return t("no_products_found");
+    if (view.chip === "fav") return t("oc_no_favorites");
+    if (view.chip === "frequent") return allReady() ? t("oc_no_frequent") : t("loading");
+    return t("no_products_found");
+  }
+
+  availToggle.addEventListener("click", () => {
+    showAll = !showAll;
+    render();
+  });
+
+  function render() {
+    renderChips();
+    availToggle.classList.toggle("chip-active", !showAll);
+    availToggle.setAttribute("aria-pressed", String(!showAll));
+    availToggle.textContent = showAll ? t("show_all_products") : t("available_only");
+    const base = baseList();
+    renderCategories(base);
+    let list = view.category ? base.filter((p) => productCategory(p) === view.category) : base;
+    if (!showAll) list = list.filter((p) => isAvailable(p) || cart.has(p.id));
+    renderListHead(list);
+    paintProductList(list);
+    if (!list.length) listEl.innerHTML = `<p class="empty-state">${emptyText()}</p>`;
+  }
+
+  // Favorites, the Frequent ranking and the usual basket arrive after the screen is up; nothing blocks on them.
+  (async function loadShortcuts() {
+    const [fav, freq, profile] = await Promise.all([
+      loadFavorites().finally(() => (dataReady.favorites = true)),
+      loadFrequentIds().finally(() => (dataReady.frequent = true)),
+      loadReorderProfile(customerId, opts.from || null).finally(() => (dataReady.usual = true)),
+    ]);
+    favorites = fav;
+    frequentIds = freq;
     usualProfile = profile;
     const notes = [];
-    if (opts.from && profile.lines) {
+    if (profile && opts.from && profile.lines) {
       let skipped = profile.lines.not_available;
       for (const line of profile.lines.lines) {
         const product = catalogById.get(line.product_id);
@@ -529,7 +497,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
       }
       notes.push(t("reorder_prefilled").replace("{date}", formatDateDMY(profile.lines.date)));
       if (skipped) notes.push(t("reorder_skipped").replace("{n}", String(skipped)));
-    } else if (opts.usual) {
+    } else if (profile && opts.usual) {
       let skipped = 0;
       for (const item of profile.items) {
         const product = catalogById.get(item.product_id);
@@ -544,33 +512,13 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
       prefillNote.textContent = notes.join(" · ");
       prefillNote.hidden = false;
     }
+    // Nothing to call "frequent" (new customer, offline): open the first brand instead of an empty page.
+    if (view.chip === "frequent" && !frequentList().length && brands.length) view.chip = brands[0];
+    render();
     updateCartBar();
   })();
 
-  function render() {
-    renderCrumbs();
-    renderFilters();
-    renderUsual();
-
-    if (searchQuery) {
-      paintProductList(sortProducts(applyFilters(filterCatalog(products, searchQuery))));
-      return;
-    }
-
-    if (!nav.brand) {
-      renderChipRow(sortedBrands(products), (brand) => {
-        nav.brand = brand;
-        render();
-      });
-      return;
-    }
-
-    const brandProducts = applyFilters(products.filter((p) => p.brand === nav.brand));
-    paintProductList(sortProducts(brandProducts));
-  }
-
   render();
-
   searchInput.addEventListener(
     "input",
     debounce(() => {
@@ -579,11 +527,126 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     }, 150)
   );
 
-  const paymentMethodInput = container.querySelector("#order-payment-method-input");
+  // ---- "Your order": the lines, discount, payment method and Save ---------------------------------------------------
+  cartBar.addEventListener("click", openOrderSheet);
 
-  saveBtn.addEventListener("click", async () => {
+  function openOrderSheet() {
     if (!cart.size) return;
-    errorEl.hidden = true;
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `<div class="sheet oc-order-sheet"></div>`;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    const sheet = overlay.querySelector(".sheet");
+    const close = () => {
+      overlay.remove();
+      render();
+      updateCartBar();
+    };
+    overlay.addEventListener("click", (e) => e.target === overlay && close());
+
+    function paintSheet() {
+      if (!cart.size) {
+        close();
+        return;
+      }
+      const lines = [...cart.values()];
+      const over = creditOverAmd();
+      sheet.innerHTML = `
+        <div class="oc-sheet-head">
+          <div><h2>${t("oc_your_order")}</h2><span class="muted">${escapeHtml(customer.name)}</span></div>
+          <button type="button" class="icon-btn sheet-close-x" data-close aria-label="${t("close")}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+        <div class="oc-lines">${lines
+          .map((line) => {
+            const product = catalogById.get(line.product_id);
+            const warning = product ? stockWarning(product, line.quantity) : null;
+            return `<div class="oc-line" data-line="${line.product_id}">
+              <div class="oc-line-info">
+                <strong>${escapeHtml(line.product_name)}</strong>
+                <span class="muted">${product ? [product.brand, product.unit].filter(Boolean).map(escapeHtml).join(" · ") + " · " : ""}${formatPriceOrFree(line.unit_price_amd)}</span>
+                ${canSetPrices ? `<label class="muted">${t("custom_price")} <input type="number" min="0" step="1" inputmode="numeric" class="order-price-input" data-price-input value="${line.unit_price_amd}" style="width:6rem"></label>` : ""}
+                ${warning ? `<span class="order-stock-warning${warning.level === "danger" ? " order-stock-danger" : ""}">${warning.text}</span>` : ""}
+              </div>
+              <div class="oc-line-side">
+                <div class="order-qty-stepper">
+                  <button type="button" class="icon-btn" data-dec aria-label="${t("decrease")}">&minus;</button>
+                  <span>${line.quantity}</span>
+                  <button type="button" class="icon-btn" data-inc aria-label="${t("increase")}">&plus;</button>
+                </div>
+                <strong class="oc-line-total">${formatAmd(line.unit_price_amd * line.quantity)}</strong>
+              </div>
+            </div>`;
+          })
+          .join("")}</div>
+        <button type="button" class="btn btn-block oc-add-more" data-close>${t("oc_add_more")}</button>
+        ${over > 0 ? `<p class="order-stock-warning oc-credit">${t("credit_over_banner_prefix")}${formatAmd(Math.round(over))}${t("credit_over_banner_suffix")}</p>` : ""}
+        <div class="order-discount-row">
+          <label for="order-payment-method-input">${t("order_payment_method_label")}</label>
+          <select id="order-payment-method-input">
+            <option value="invoice" ${paymentMethod !== "cash" ? "selected" : ""}>${t("payment_method_invoice")}</option>
+            <option value="cash" ${paymentMethod === "cash" ? "selected" : ""}>${t("payment_method_cash")}</option>
+          </select>
+        </div>
+        <div class="order-discount-row">
+          <label for="order-discount-input">${t("discount_pct_label")}</label>
+          <input type="number" id="order-discount-input" min="0" step="1" value="${escapeHtml(discountRaw)}" inputmode="numeric" />
+          <div class="segmented" id="order-discount-type">
+            <button type="button" class="chip ${discountType === "pct" ? "chip-active" : ""}" data-type="pct">${t("discount_type_pct")}</button>
+            <button type="button" class="chip ${discountType === "amd" ? "chip-active" : ""}" data-type="amd">${t("discount_type_amd")}</button>
+          </div>
+        </div>
+        <p class="form-error" id="order-error" hidden></p>
+        <div class="order-cart-bar-row">
+          <div class="order-cart-summary">
+            <span>${lines.reduce((n, l) => n + l.quantity, 0)} ${t("items")}</span>
+            <strong id="oc-sheet-total">${formatAmd(cartTotalAmd())}</strong>
+          </div>
+          <button type="button" class="btn btn-primary" id="save-order-btn">${t("save_order")}</button>
+        </div>`;
+      sheet.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", close));
+      sheet.querySelectorAll("[data-line]").forEach((row) => {
+        const id = Number(row.dataset.line);
+        const product = catalogById.get(id);
+        row.querySelector("[data-dec]").addEventListener("click", () => {
+          changeQty(product ?? { id, name: cart.get(id).product_name }, -1);
+          paintSheet();
+        });
+        row.querySelector("[data-inc]").addEventListener("click", () => {
+          changeQty(product ?? { id, name: cart.get(id).product_name }, 1);
+          paintSheet();
+        });
+        row.querySelector("[data-price-input]")?.addEventListener("change", (e) => {
+          const line = cart.get(id);
+          const n = Number(e.target.value);
+          if (!line || !Number.isFinite(n) || n < 0) return;
+          line.unit_price_amd = n;
+          line.price_override = product ? n !== basePrice(product) : true;
+          paintSheet();
+        });
+      });
+      sheet.querySelector("#order-payment-method-input").addEventListener("change", (e) => (paymentMethod = e.target.value === "cash" ? "cash" : "invoice"));
+      const discountInput = sheet.querySelector("#order-discount-input");
+      discountInput.addEventListener("input", () => {
+        discountRaw = discountInput.value;
+        sheet.querySelector("#oc-sheet-total").textContent = formatAmd(cartTotalAmd());
+      });
+      sheet.querySelectorAll("#order-discount-type [data-type]").forEach((btn) =>
+        btn.addEventListener("click", () => {
+          discountType = btn.dataset.type;
+          paintSheet();
+        })
+      );
+      sheet.querySelector("#save-order-btn").addEventListener("click", () => saveOrder(overlay, sheet));
+    }
+    paintSheet();
+  }
+
+  async function saveOrder(overlay, sheet) {
+    if (!cart.size) return;
+    const saveBtn = sheet.querySelector("#save-order-btn");
+    const sheetError = sheet.querySelector("#order-error");
+    sheetError.hidden = true;
     saveBtn.disabled = true;
     saveBtn.textContent = t("saving");
     const items = [...cart.values()].map((l) => ({
@@ -596,10 +659,8 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     const value = discountValue();
     const discountPctToSend = discountType === "pct" ? value : 0;
     const discountAmdToSend = discountType === "amd" ? value : 0;
-    const paymentMethod = paymentMethodInput.value === "cash" ? "cash" : "invoice";
-    // Generated once, before the first (online) attempt -- reused as-is if
-    // this falls through to enqueueOrder below, so a retry after a lost
-    // response can't create a second order. See server/src/routes/orders.js
+    // Generated once, before the first (online) attempt -- reused as-is if this falls through to enqueueOrder
+    // below, so a retry after a lost response can't create a second order. See server/src/routes/orders.js
     // and offlineQueue.js.
     const clientRef = crypto.randomUUID();
     try {
@@ -612,6 +673,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
         payment_method: paymentMethod,
         client_ref: clientRef,
       });
+      overlay.remove();
       showOrderSaved(order);
     } catch (err) {
       if (err instanceof TypeError) {
@@ -627,15 +689,16 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
           discount_amd: discountAmdToSend,
           payment_method: paymentMethod,
         });
+        overlay.remove();
         showOrderQueued();
       } else {
-        errorEl.textContent = err.message;
-        errorEl.hidden = false;
+        sheetError.textContent = err.message;
+        sheetError.hidden = false;
         saveBtn.disabled = false;
         saveBtn.textContent = t("save_order");
       }
     }
-  });
+  }
 
   function showOrderSaved(order) {
     if (order.status === "draft") {

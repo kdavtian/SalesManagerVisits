@@ -175,6 +175,10 @@ export const api = {
   getMapFacts: (id) => request(`/customers/${id}/map-facts`),
   getMapFactsBatch: (ids) => request(`/customers/map-facts?ids=${ids.join(",")}`),
   customerOrderedProducts: (id) => request(`/customers/${id}/ordered-products`),
+  getFavoriteProducts: () => request("/products/favorites"),
+  addFavoriteProduct: (id) => request(`/products/favorites/${id}`, { method: "PUT" }),
+  removeFavoriteProduct: (id) => request(`/products/favorites/${id}`, { method: "DELETE" }),
+  getFrequentProducts: () => request("/products/frequent"),
   getReorderProfile: (id, from) => request(`/customers/${id}/reorder-profile${from ? `?from=${encodeURIComponent(from)}` : ""}`),
 
   createCheckin: (formData) =>
