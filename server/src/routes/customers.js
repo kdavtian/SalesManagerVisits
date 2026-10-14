@@ -2,7 +2,7 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData, canSetCreditTerms } from "../roles.js";
+import { canConfirmOrders, seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData, canSetCreditTerms } from "../roles.js";
 import { creditSnapshot } from "../creditLimit.js";
 import { loadUnpaidOrders, summarizeDebt, dueDays, debtHoldInfo } from "../debtAge.js";
 import { visitPriorities } from "../visitPriorities.js";
@@ -1006,6 +1006,54 @@ customersRouter.get("/:id/product-prices", async (req, res) => {
     "SELECT product_id, price_amd FROM customer_product_prices WHERE customer_id = $1",
     [id]
   );
+  res.json(rows.map((r) => ({ product_id: r.product_id, price_amd: Number(r.price_amd) })));
+});
+
+// Special pricelist of a Gold customer (Customer settings -> Special pricelist): one request saves what the user
+// changed -- [{ product_id, price_amd }], price_amd null = back to the Gold list price. Directors / admin / CEO only.
+customersRouter.put("/:id/product-prices", async (req, res) => {
+  if (!canConfirmOrders(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: "Invalid customer id" });
+  const { rows: customerRows } = await pool.query("SELECT customer_tier FROM customers WHERE id = $1", [id]);
+  if (!customerRows[0]) return res.status(404).json({ error: "Customer not found" });
+  if (customerRows[0].customer_tier !== "gold") return res.status(409).json({ error: "Special prices exist for Gold customers only" });
+  const list = Array.isArray(req.body?.prices) ? req.body.prices : null;
+  if (!list || !list.length || list.length > 2000) return res.status(400).json({ error: "prices must be a list of 1 to 2000 entries" });
+  const set = [];
+  const clear = [];
+  for (const entry of list) {
+    const productId = Number(entry?.product_id);
+    if (!Number.isInteger(productId)) return res.status(400).json({ error: "Every entry needs a product_id" });
+    if (entry.price_amd === null) clear.push(productId);
+    else {
+      const price = Number(entry.price_amd);
+      if (!Number.isFinite(price) || price < 0) return res.status(400).json({ error: "price_amd must be a non-negative number or null" });
+      set.push([productId, Math.round(price)]);
+    }
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    if (clear.length) await client.query("DELETE FROM customer_product_prices WHERE customer_id = $1 AND product_id = ANY($2)", [id, clear]);
+    if (set.length) {
+      await client.query(
+        `INSERT INTO customer_product_prices (customer_id, product_id, price_amd, set_by, updated_at)
+         SELECT $1, x.product_id, x.price, $4, now()
+           FROM unnest($2::int[], $3::numeric[]) AS x(product_id, price)
+           JOIN products p ON p.id = x.product_id
+         ON CONFLICT (customer_id, product_id) DO UPDATE SET price_amd = EXCLUDED.price_amd, set_by = EXCLUDED.set_by, updated_at = now()`,
+        [id, set.map((x) => x[0]), set.map((x) => x[1]), req.user.id]
+      );
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+  const { rows } = await pool.query("SELECT product_id, price_amd FROM customer_product_prices WHERE customer_id = $1", [id]);
   res.json(rows.map((r) => ({ product_id: r.product_id, price_amd: Number(r.price_amd) })));
 });
 

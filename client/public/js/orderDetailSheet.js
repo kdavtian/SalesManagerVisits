@@ -52,24 +52,24 @@ const APPROVAL_META = {
 // director-reject.
 const SELF_APPROVING_ROLES = new Set(["ceo", "operations_director", "admin"]);
 const sortProducts = (list) => [...list].sort(compareProducts);
-const DISCOUNT_APPROVER_ROLES = new Set(["admin", "sales_director", "ceo", "operations_director"]);
+export const DISCOUNT_APPROVER_ROLES = new Set(["admin", "sales_director", "ceo", "operations_director"]);
 // Credit-limit exceptions: the same directors plus the accountant.
-const CREDIT_APPROVER_ROLES = new Set([...DISCOUNT_APPROVER_ROLES, "accountant"]);
+export const CREDIT_APPROVER_ROLES = new Set([...DISCOUNT_APPROVER_ROLES, "accountant"]);
 // Who reviews a freshly-submitted order -- mirrors canConfirmOrders in the
 // server's roles.js.
-const CONFIRM_ROLES = new Set(["admin", "sales_director", "ceo", "operations_director"]);
+export const CONFIRM_ROLES = new Set(["admin", "sales_director", "ceo", "operations_director"]);
 // The accountant also confirms a submitted order, submits a rep's draft and
 // asks accounting for the invoice/waybill (canConfirmSubmittedOrders,
 // canSubmitOrdersForOthers, canRequestAccountingDocs in server/src/roles.js) --
 // but does not edit/reject orders or approve price changes.
-const CONFIRM_SUBMITTED_ROLES = new Set([...CONFIRM_ROLES, "accountant"]);
+export const CONFIRM_SUBMITTED_ROLES = new Set([...CONFIRM_ROLES, "accountant"]);
 // Who can move a packed order straight to delivered without a planned
 // route -- mirrors canMarkDeliveredWithoutRoute in the server's roles.js.
 // Exists because the driver (delivery_manager) role isn't currently using
 // the app to complete routes through the normal signature-capturing flow
 // (see views/deliveryRoute.js), which otherwise leaves a routed order with
 // no way back into view.
-const MARK_DELIVERED_ROLES = new Set(["delivery_manager", "sales_director", "accountant", "ceo", "operations_director", "admin"]);
+export const MARK_DELIVERED_ROLES = new Set(["delivery_manager", "sales_director", "accountant", "ceo", "operations_director", "admin"]);
 
 // Full created -> submitted -> confirmed -> packed -> delivered timeline
 // (server/src/routes/orders.js's order_status_history, populated at every
@@ -310,9 +310,10 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     if ((order.status === "confirmed" || order.status === "packed_stock_out") && order.erp_customer_id && MARK_DELIVERED_ROLES.has(state.user.role)) {
       buttons.push({ label: t("erp_link_btn"), action: "link-erp", cls: "btn" });
     }
-    if (order.status === "packed_stock_out") {
+    if (order.status === "packed_stock_out" || order.status === "confirmed") {
       // No route/signature required here -- see canMarkDeliveredWithoutRoute
-      // in server/src/roles.js for why this manual override exists.
+      // in server/src/roles.js for why this manual override exists. A CONFIRMED order can be marked delivered
+      // right away too (management skips the warehouse "packed" step).
       if (MARK_DELIVERED_ROLES.has(state.user.role)) {
         buttons.push({ label: t("mark_delivered_no_route"), action: "mark-delivered", cls: "btn btn-primary" });
       }

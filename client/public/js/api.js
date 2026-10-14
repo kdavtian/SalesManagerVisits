@@ -157,6 +157,7 @@ export const api = {
   reportFarAttempt: (data) => json("/checkins/far-attempt", "POST", data),
   getCheckinSpots: (id) => request(`/customers/${id}/checkin-spots`),
   getCustomerProductPrices: (id) => request(`/customers/${id}/product-prices`),
+  saveCustomerProductPrices: (id, prices) => json(`/customers/${id}/product-prices`, "PUT", { prices }),
   updateCustomer: async (id, data) => {
     const updated = await json(`/customers/${id}`, "PATCH", data);
     // Patch with what the server returned (falling back to what we sent) so

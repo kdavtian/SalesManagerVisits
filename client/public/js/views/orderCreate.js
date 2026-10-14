@@ -10,6 +10,7 @@ import { searchProducts, debounce } from "../productSearch.js";
 import { numOrNull, tierPrice } from "../productPricing.js";
 import { loadReorderProfile, reorderRhythmText } from "../reorder.js";
 import { loadFavorites, setFavorite, loadFrequentIds } from "../productFavorites.js";
+import { NON_ENGINE_CATEGORIES, CATEGORY_LABEL_KEY, productCategory, isAvailable, STAR_SVG, priceDiffChipHtml } from "../productBrowse.js";
 
 // Reps often open "Create order" several times a visit (once per checkin);
 // the catalog rarely changes minute to minute, so this reads from the
@@ -28,40 +29,12 @@ function filterCatalog(list, query) {
   return searchProducts(list, query);
 }
 
-// Category filter groups, from the Product Family recorded in the workbook:
-// the non-engine families are categories of their own, every other family
-// (Edge, Magnatec, GTX, CRB, Vecton, ON, Engine Oil, ...) is engine oil.
-const NON_ENGINE_CATEGORIES = ["Transmission", "Hydraulic", "Antifreeze", "Grease", "EV fluids", "Merch", "Other"];
-// Workbook family -> category where the names differ (Castrol ON = EV fluids).
-const FAMILY_TO_CATEGORY = { on: "EV fluids" };
-const CATEGORY_LABEL_KEY = {
-  "Engine oil": "category_engine_oil",
-  Transmission: "category_transmission",
-  Hydraulic: "category_hydraulic",
-  Antifreeze: "category_antifreeze",
-  Grease: "category_grease",
-  "EV fluids": "category_ev_fluids",
-  Merch: "category_merch",
-  Other: "category_other",
-};
-function productCategory(product) {
-  const family = (product.family || "").trim();
-  const match = FAMILY_TO_CATEGORY[family.toLowerCase()] || NON_ENGINE_CATEGORIES.find((c) => c.toLowerCase() === family.toLowerCase());
-  return match || (family.toLowerCase() === "transmission oils" ? "Transmission" : "Engine oil");
-}
-
 // Brand -> family -> viscosity grade -> size, the order a rep actually
 // presents the catalog to a customer -- see productSort.js for the full
 // priority lists (shared with Pricelist, Warehouse Inventory, and the
 // Product Catalog admin screen).
 function sortProducts(products) {
   return [...products].sort(compareProducts);
-}
-
-// null/undefined stock_qty means the catalog doesn't track stock for this
-// product -- treated as available, same as stockWarning below does.
-function isAvailable(product) {
-  return product.stock_qty === null || product.stock_qty === undefined || Number(product.stock_qty) > 0;
 }
 
 // 1L bottles are sold by the case (4), 4L/5L jugs by the pair, anything
@@ -124,6 +97,8 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
   }
   const basePrice = (product) => (individualPrices.has(product.id) ? individualPrices.get(product.id) : tierPrice(product, tier));
   const catalogById = new Map(products.map((p) => [p.id, p]));
+  // Gold customer's special price: a chip with the difference to the Silver price (Customer settings -> Special pricelist)
+  const specialChip = (product, price) => (tier === "gold" && individualPrices.has(product.id) ? priceDiffChipHtml(price, tierPrice(product, "silver")) : "");
 
   // Keyed by product id. No product can be sold out of catalog (decision C6), so every line is a real catalog
   // product. The cart survives every chip/search change, so items can come from several brands and favorites.
@@ -270,7 +245,6 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
   }
 
   // ---- chips ---------------------------------------------------------------------------------------------------------
-  const STAR_SVG = (filled) => `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false" fill="${filled ? "currentColor" : "none"}" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3.2l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 17l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8z"/></svg>`;
   // Merch (Castrol Stend and other give-aways) is its own chip at the end, not part of the Castrol brand.
   const MERCH = "__merch__";
   const isMerch = (p) => productCategory(p) === "Merch";
@@ -381,7 +355,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
           ${warning && !outOfStock ? `<span class="order-stock-warning">${warning.text}</span>` : ""}
         </div>
         <div class="oc-row-side">
-          <span class="oc-price">${formatPriceOrFree(price)}</span>
+          <span class="oc-price-line">${specialChip(product, price)}<span class="oc-price">${formatPriceOrFree(price)}</span></span>
           ${
             qty > 0
               ? `<div class="order-qty-stepper">
@@ -663,7 +637,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
                 ${warning ? `<span class="order-stock-warning${warning.level === "danger" ? " order-stock-danger" : ""}">${warning.text}</span>` : ""}
               </div>
               <div class="oc-line-side">
-                <span class="oc-price">${formatPriceOrFree(line.unit_price_amd)}</span>
+                <span class="oc-price-line">${catalogById.get(line.product_id) ? specialChip(catalogById.get(line.product_id), line.unit_price_amd) : ""}<span class="oc-price">${formatPriceOrFree(line.unit_price_amd)}</span></span>
                 <div class="order-qty-stepper">
                   <button type="button" class="icon-btn" data-dec aria-label="${t("decrease")}">&minus;</button>
                   <span>${line.quantity}</span>

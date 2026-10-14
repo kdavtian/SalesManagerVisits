@@ -1381,8 +1381,9 @@ ordersRouter.post("/:id/mark-delivered", async (req, res) => {
   );
   const order = rows[0];
   if (!order) return res.status(404).json({ error: "Order not found" });
-  if (order.status !== "packed_stock_out") {
-    return res.status(409).json({ error: `Cannot mark "${order.status}" as delivered -- only a packed order can be delivered` });
+  // A confirmed order can be delivered right away (management skips the warehouse "packed" step), as can a packed one.
+  if (order.status !== "packed_stock_out" && order.status !== "confirmed") {
+    return res.status(409).json({ error: `Cannot mark "${order.status}" as delivered -- only a confirmed or packed order can be delivered` });
   }
 
   const client = await pool.connect();
@@ -1396,18 +1397,18 @@ ordersRouter.post("/:id/mark-delivered", async (req, res) => {
     // here.
     await client.query("UPDATE route_stops SET completed_at = now() WHERE order_id = $1 AND completed_at IS NULL", [order.id]);
     const { rows: updatedRows } = await client.query(
-      "UPDATE orders SET status = 'delivered', updated_at = now() WHERE id = $1 AND status = 'packed_stock_out' RETURNING *",
-      [order.id]
+      "UPDATE orders SET status = 'delivered', updated_at = now() WHERE id = $1 AND status = $2 RETURNING *",
+      [order.id, order.status]
     );
     updatedOrder = updatedRows[0];
     if (!updatedOrder) {
       await client.query("ROLLBACK");
-      return res.status(409).json({ error: "Cannot mark as delivered -- only a packed order can be delivered" });
+      return res.status(409).json({ error: "Cannot mark as delivered -- the order changed in the meantime" });
     }
     await client.query(
       `INSERT INTO order_status_history (order_id, old_status, new_status, reason, changed_by)
-       VALUES ($1, 'packed_stock_out', 'delivered', 'Marked delivered (no route)', $2)`,
-      [order.id, req.user.id]
+       VALUES ($1, $2, 'delivered', 'Marked delivered (no route)', $3)`,
+      [order.id, order.status, req.user.id]
     );
     await client.query("COMMIT");
   } catch (err) {

@@ -1,10 +1,11 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, activateDialog, channelDisplayLabel, formatLiters, monthShort, formatDateTime } from "../util.js";
+import { escapeHtml, formatAmd, activateDialog, channelDisplayLabel, formatLiters, monthShort, formatDateTime, showToast } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
 import { ORDER_STATUS_ICONS } from "../ordersSearchEnhancements.js";
 import { loadWithCache } from "../listCache.js";
 import { STATUS_META, openOrderDetailSheet, paymentMethodBadgeHtml } from "../orderDetailSheet.js";
+import { availableBulkActions, runBulkAction } from "../orderBulk.js";
 import { openPrintBlankSheet } from "../orderBlankPrint.js";
 import { ACCOUNTING_STATUS_BADGE, accountingStatusLabel } from "../accountingDocSheet.js";
 import { state } from "../state.js";
@@ -57,9 +58,14 @@ export async function renderOrders(root, navigate) {
       </div>
       <div class="card-list" id="orders-list"><p class="loading-state" role="status">${t("loading")}</p></div>
       <div class="orders-select-bar" id="orders-select-bar" hidden>
-        <span id="orders-select-count"></span>
-        <button type="button" class="btn" id="orders-select-cancel">${t("cancel")}</button>
-        <button type="button" class="btn btn-primary" id="orders-select-print">${t("print_blank_create")}</button>
+        <div class="osb-summary">
+          <span id="orders-select-count"></span>
+          <button type="button" class="rps-link osb-all" id="orders-select-all">${t("bulk_select_all")}</button>
+        </div>
+        <div class="osb-note" id="osb-note" hidden>
+          <input type="text" id="osb-note-input" maxlength="300" placeholder="${t("reject_order_note_prompt")}" />
+        </div>
+        <div class="osb-actions" id="osb-actions"></div>
       </div>
     </div>
   `;
@@ -91,30 +97,79 @@ export async function renderOrders(root, navigate) {
   const filterBtn = root.querySelector("#order-filter-btn");
   const filterMenu = root.querySelector("#order-filter-menu");
 
-  // Select mode: tick orders, then print their blanks (small orders share a sheet).
+  // Select mode (long press an order, or the print button): tick orders, then run one action on all of them
+  // (confirm, reject, mark delivered, approve a price change / credit) or print their blanks.
   let selectMode = false;
   const selected = new Map(); // id -> order_code
   const printBtn = root.querySelector("#orders-print-btn");
   const selectBar = root.querySelector("#orders-select-bar");
+  const actionsEl = root.querySelector("#osb-actions");
+  const noteEl = root.querySelector("#osb-note");
+  let rejectPending = false; // the Reject button was pressed: ask for a reason first
+  let bulkBusy = false;
+  const selectedOrders = () => [...selected.keys()].map((id) => orders.find((o) => o.id === id)).filter(Boolean);
   function updateSelectBar() {
     selectBar.hidden = !selectMode;
     printBtn.setAttribute("aria-pressed", String(selectMode));
     printBtn.classList.toggle("is-active", selectMode);
     root.querySelector(".detail-view").classList.toggle("orders-select-mode", selectMode);
-    root.querySelector("#orders-select-count").textContent = t("print_blank_selected").replace("{n}", selected.size);
-    root.querySelector("#orders-select-print").disabled = selected.size === 0;
+    const list = selectedOrders();
+    const total = list.reduce((sum, o) => sum + Number(o.total_amd), 0);
+    root.querySelector("#orders-select-count").textContent = selected.size ? t("bulk_selected").replace("{n}", String(selected.size)).replace("{amount}", formatAmd(total)) : t("bulk_pick_hint");
+    noteEl.hidden = !rejectPending;
+    const actions = availableBulkActions(list);
+    actionsEl.innerHTML =
+      `<button type="button" class="btn osb-secondary" id="orders-select-cancel">${t("cancel")}</button>` +
+      actions
+        .map((a) => `<button type="button" class="btn ${a.danger ? "btn-danger" : a.primary ? "btn-primary" : ""}" data-bulk="${a.key}" ${bulkBusy ? "disabled" : ""}>${t(a.labelKey)} (${a.orders.length})</button>`)
+        .join("") +
+      `<button type="button" class="btn osb-secondary" id="orders-select-print" ${selected.size === 0 ? "disabled" : ""}>${t("print_blank_create")}</button>`;
+    actionsEl.querySelector("#orders-select-cancel").addEventListener("click", () => setSelectMode(false));
+    actionsEl.querySelector("#orders-select-print").addEventListener("click", () => {
+      openPrintBlankSheet([...selected].map(([id, order_code]) => ({ id, order_code })));
+    });
+    actionsEl.querySelectorAll("[data-bulk]").forEach((btn) =>
+      btn.addEventListener("click", () => startBulk(actions.find((a) => a.key === btn.dataset.bulk)))
+    );
   }
   function setSelectMode(on) {
     selectMode = on;
+    rejectPending = false;
     if (!on) selected.clear();
     updateSelectBar();
     paint();
   }
+  async function startBulk(action) {
+    if (bulkBusy) return;
+    if (action.needsNote && !rejectPending) {
+      rejectPending = true; // second press (after the reason field shows) really rejects
+      updateSelectBar();
+      root.querySelector("#osb-note-input").focus();
+      return;
+    }
+    const note = action.needsNote ? root.querySelector("#osb-note-input").value.trim() : "";
+    bulkBusy = true;
+    const label = t(action.labelKey);
+    root.querySelector("#orders-select-count").textContent = `${label}…`;
+    const { ok, failed } = await runBulkAction(action, action.orders, {
+      note,
+      onProgress: (done, total) => (root.querySelector("#orders-select-count").textContent = `${label} ${done}/${total}`),
+    });
+    bulkBusy = false;
+    window.dispatchEvent(new Event("orders-changed"));
+    if (action.key === "deliver") window.dispatchEvent(new Event("delivery-changed"));
+    setSelectMode(false);
+    await load();
+    showToast(failed.length ? t("bulk_result_failed").replace("{ok}", String(ok)).replace("{fail}", String(failed.length)).replace("{why}", failed[0].message) : t("bulk_result_ok").replace("{n}", String(ok)), { ms: failed.length ? 6000 : 3000 });
+  }
   printBtn.addEventListener("click", () => setSelectMode(!selectMode));
-  root.querySelector("#orders-select-cancel").addEventListener("click", () => setSelectMode(false));
-  root.querySelector("#orders-select-print").addEventListener("click", () => {
-    openPrintBlankSheet([...selected].map(([id, order_code]) => ({ id, order_code })));
+  root.querySelector("#orders-select-all").addEventListener("click", () => {
+    for (const o of visibleOrders) selected.set(o.id, o.order_code ?? null);
+    updateSelectBar();
+    paint();
   });
+  let visibleOrders = [];
+  let suppressClickUntil = 0;
 
   let activeStatus = DEFAULT_STATUS_FILTER;
   let channelFilter = "";
@@ -226,6 +281,7 @@ export async function renderOrders(root, navigate) {
       });
     }
 
+    visibleOrders = filtered;
     if (!filtered.length) {
       listEl.innerHTML = `<p class="empty-state">${t("no_orders_found")}</p>`;
       return;
@@ -301,14 +357,46 @@ export async function renderOrders(root, navigate) {
     }
 
     listEl.querySelectorAll("[data-order-id]").forEach((row) => {
-      row.addEventListener("click", () => {
-        const id = Number(row.dataset.orderId);
-        if (!selectMode) return openOrderDetailSheet(id, { onChanged: load, navigate });
+      const id = Number(row.dataset.orderId);
+      const toggle = () => {
         if (selected.has(id)) selected.delete(id);
         else selected.set(id, orders.find((o) => o.id === id)?.order_code ?? null);
         row.classList.toggle("order-row-selected", selected.has(id));
         row.querySelector(".order-select-check")?.classList.toggle("is-on", selected.has(id));
         updateSelectBar();
+      };
+      let timer = null;
+      let startX = 0;
+      let startY = 0;
+      const cancelHold = () => {
+        clearTimeout(timer);
+        timer = null;
+      };
+      // Long press: enters select mode with this order selected (the status icons turn into check boxes).
+      row.addEventListener("pointerdown", (e) => {
+        startX = e.clientX;
+        startY = e.clientY;
+        cancelHold();
+        timer = setTimeout(() => {
+          suppressClickUntil = Date.now() + 800; // paint() replaces the row, so the release lands on the new one
+          navigator.vibrate?.(15);
+          if (!selectMode) {
+            selectMode = true;
+            selected.set(id, orders.find((o) => o.id === id)?.order_code ?? null);
+            updateSelectBar();
+            paint();
+          } else toggle();
+        }, 500);
+      });
+      row.addEventListener("pointermove", (e) => {
+        if (timer && Math.hypot(e.clientX - startX, e.clientY - startY) > 10) cancelHold();
+      });
+      for (const type of ["pointerup", "pointercancel", "pointerleave"]) row.addEventListener(type, cancelHold);
+      row.addEventListener("contextmenu", (e) => e.preventDefault());
+      row.addEventListener("click", () => {
+        if (Date.now() < suppressClickUntil) return;
+        if (!selectMode) return openOrderDetailSheet(id, { onChanged: load, navigate });
+        toggle();
       });
     });
   }

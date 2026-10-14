@@ -171,3 +171,8 @@ export function canCloseMonth() {
 export function canReopenPerfPlanAsDraft() {
   return isPerfCeo() || state.user?.role === "sales_director" || state.user?.role === "accountant";
 }
+
+// Special pricelist of a Gold customer (individually negotiated prices): the roles that review orders.
+export function canSetCustomerPrices() {
+  return ["admin", "sales_director", "ceo", "operations_director"].includes(state.user?.role);
+}
