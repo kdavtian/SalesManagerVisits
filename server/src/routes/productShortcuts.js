@@ -1,4 +1,4 @@
-// New order screen shortcuts: each user's favorite products (star) and the "Frequent" ranking.
+// New order screen shortcuts: the "Frequent" ranking.
 // Mounted under /api/products BEFORE productsRouter (whose later routes need product-manager rights; these are for
 // everyone who can build an order).
 import { Router } from "express";
@@ -10,33 +10,6 @@ productShortcutsRouter.use(requireAuth);
 
 const FREQUENT_DAYS = 90;
 const FREQUENT_LIMIT = 30;
-
-productShortcutsRouter.get("/favorites", async (req, res) => {
-  const { rows } = await pool.query("SELECT product_id FROM user_favorite_products WHERE user_id = $1 ORDER BY created_at", [req.user.id]);
-  res.json(rows.map((r) => r.product_id));
-});
-
-productShortcutsRouter.put("/favorites/:productId", async (req, res) => {
-  const productId = Number(req.params.productId);
-  if (!Number.isInteger(productId)) return res.status(400).json({ error: "Invalid product id" });
-  const { rowCount } = await pool.query(
-    `INSERT INTO user_favorite_products (user_id, product_id) SELECT $1, id FROM products WHERE id = $2
-     ON CONFLICT DO NOTHING`,
-    [req.user.id, productId]
-  );
-  if (!rowCount) {
-    const { rows } = await pool.query("SELECT 1 FROM products WHERE id = $1", [productId]);
-    if (!rows[0]) return res.status(404).json({ error: "Product not found" });
-  }
-  res.status(204).end();
-});
-
-productShortcutsRouter.delete("/favorites/:productId", async (req, res) => {
-  const productId = Number(req.params.productId);
-  if (!Number.isInteger(productId)) return res.status(400).json({ error: "Invalid product id" });
-  await pool.query("DELETE FROM user_favorite_products WHERE user_id = $1 AND product_id = $2", [req.user.id, productId]);
-  res.status(204).end();
-});
 
 // "Frequent": the active products ordered most often (distinct orders) over the last 90 days across the whole
 // company -- Excel order lines plus app orders the Excel does not hold yet. Only ids, no money or customer data,

@@ -16,7 +16,7 @@ test.describe("Discount approval", () => {
     const { context: repContext, page: repPage } = await newIdentityPage(browser);
     await loginViaUi(repPage, manager.email);
     await repPage.goto(`/#/orders/new/${customer.id}`);
-    // One scrolling chip row (favorites, Frequent, brands): pick the brand to list its products.
+    // One scrolling chip row (Frequent, brands): pick the brand to list its products.
     await repPage.locator(`[data-chip="${product.brand}"]`).click();
     await expect(repPage.locator("#order-product-list")).toContainText(product.name, { timeout: 10000 });
     await repPage.locator(`[data-product-id="${product.id}"]`).locator('[data-action="add"]').click();

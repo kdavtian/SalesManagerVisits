@@ -9,8 +9,8 @@ import { getProductCatalog } from "../productCatalog.js";
 import { searchProducts, debounce } from "../productSearch.js";
 import { numOrNull, tierPrice } from "../productPricing.js";
 import { loadReorderProfile, reorderRhythmText } from "../reorder.js";
-import { loadFavorites, setFavorite, loadFrequentIds } from "../productFavorites.js";
-import { NON_ENGINE_CATEGORIES, CATEGORY_LABEL_KEY, productCategory, isAvailable, STAR_SVG, priceDiffChipHtml } from "../productBrowse.js";
+import { loadFrequentIds } from "../productFrequent.js";
+import { NON_ENGINE_CATEGORIES, CATEGORY_LABEL_KEY, productCategory, isAvailable, priceDiffChipHtml } from "../productBrowse.js";
 
 // Reps often open "Create order" several times a visit (once per checkin);
 // the catalog rarely changes minute to minute, so this reads from the
@@ -67,8 +67,8 @@ function stockWarning(product, requestedQty) {
 // opts.from = "erp:<order id>" | "app:<order id>" pre-fills the cart with that past order (Reorder);
 // opts.usual pre-fills it with the customer's usual basket (Order usual).
 //
-// Layout (owner, 2026-10-14): heading + customer, debt warning, ONE scrolling chip row (favorites star, Frequent,
-// brands), search, category chips, the product list with a star on every card. The lines the user added are always
+// Layout (owner, 2026-10-14): heading + customer, debt warning, ONE scrolling chip row (Frequent, brands, Merch),
+// search, category chips, the product list. The lines the user added are always
 // reachable: the bottom bar opens "Your order" (lines with steppers, discount, payment method, Save).
 export async function renderOrderCreate(root, navigate, customerId, checkinId, opts = {}) {
   root.innerHTML = `<div class="detail-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
@@ -101,10 +101,10 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
   const specialChip = (product, price) => (tier === "gold" && individualPrices.has(product.id) ? priceDiffChipHtml(price, tierPrice(product, "silver")) : "");
 
   // Keyed by product id. No product can be sold out of catalog (decision C6), so every line is a real catalog
-  // product. The cart survives every chip/search change, so items can come from several brands and favorites.
+  // product. The cart survives every chip/search change, so items can come from several brands.
   const cart = new Map();
 
-  // Which list is showing: "fav" (starred), "frequent" (default) or a brand name. A search looks through ALL
+  // Which list is showing: "frequent" (default), a brand name or Merch. A search looks through ALL
   // products whatever the chip; category narrows whichever list is showing; showAll turns off the default
   // out-of-stock hiding so a manager can still see (and order) a product that's temporarily at 0 on hand.
   const view = { chip: "frequent", category: null };
@@ -112,12 +112,11 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
   // "Available only" (Yes by default). Frequent lists everything the customer ever ordered, so it starts with the
   // switch OFF; leaving Frequent puts it back to Yes. The user can flip it either way.
   let showAll = true;
-  let favorites = new Set();
   let frequentIds = []; // company-wide most ordered: only the fallback for a customer with no history
   let everOrdered = []; // [{ product_id, times }] this customer's whole history
   let usualProfile = null;
-  let dataReady = { favorites: false, frequent: false, usual: false };
-  const allReady = () => dataReady.favorites && dataReady.frequent && dataReady.usual;
+  let dataReady = { frequent: false, usual: false };
+  const allReady = () => dataReady.frequent && dataReady.usual;
   let discountType = "amd";
   let discountAmount = 0; // the number typed in the discount field (AMD or %)
   let paymentMethod = customer.payment_method === "cash" ? "cash" : "invoice";
@@ -264,7 +263,6 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     const chip = (key, inner, aria) =>
       `<button type="button" class="map-filter-chip ${!searching && view.chip === key ? "chip-active" : ""}" data-chip="${escapeHtml(key)}" aria-pressed="${!searching && view.chip === key}" ${aria ? `aria-label="${escapeHtml(aria)}"` : ""}>${inner}</button>`;
     chipsEl.innerHTML =
-      chip("fav", `${STAR_SVG(true)}${favorites.size ? `<span class="oc-chip-n">${favorites.size}</span>` : ""}`, t("oc_favorites")) +
       chip("frequent", escapeHtml(t("oc_frequent"))) +
       chipKeys.map((k) => chip(k, `${escapeHtml(k === MERCH ? t("category_merch") : k)}${cartCountForChip(k) ? `<span class="oc-chip-n oc-chip-n-cart">${cartCountForChip(k)}</span>` : ""}`)).join("");
     chipsEl.querySelectorAll("[data-chip]").forEach((btn) =>
@@ -310,7 +308,6 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
   }
   function baseList() {
     if (searchQuery.trim()) return sortProducts(filterCatalog(products, searchQuery));
-    if (view.chip === "fav") return sortProducts(products.filter((p) => favorites.has(p.id)));
     if (view.chip === "frequent") return frequentList();
     return sortProducts(chipProducts(view.chip));
   }
@@ -343,11 +340,9 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     const price = line?.unit_price_amd ?? basePrice(product);
     const warning = stockWarning(product, qty || defaultQtyForUnit(product.unit));
     const outOfStock = product.stock_qty !== null && product.stock_qty !== undefined && product.stock_qty <= 0;
-    const fav = favorites.has(product.id);
     const usual = view.chip === "frequent" && !searchQuery.trim() ? usualItemOf(product.id) : null;
     return `
       <div class="order-product-row" data-product-id="${product.id}">
-        <button type="button" class="oc-star ${fav ? "is-fav" : ""}" data-action="star" aria-pressed="${fav}" aria-label="${fav ? t("oc_remove_favorite") : t("oc_add_favorite")}">${STAR_SVG(fav)}</button>
         <div class="order-product-info">
           <strong>${escapeHtml(product.name)}</strong>
           <span class="muted">${[product.brand, product.unit].filter(Boolean).map(escapeHtml).join(" · ")}${usual ? ` × ${usual.quantity}` : ""}</span>
@@ -370,29 +365,6 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
         </div>
       </div>
     `;
-  }
-
-  async function toggleFavorite(product) {
-    const on = !favorites.has(product.id);
-    const ok = await setFavorite(favorites, product.id, on);
-    if (!ok) {
-      showToast(t("oc_favorite_failed"));
-    } else if (on) {
-      showToast(t("oc_favorite_added"));
-    } else {
-      showToast(t("oc_favorite_removed"), { actionLabel: t("undo"), onAction: () => toggleFavoriteTo(product, true) });
-    }
-    if (view.chip === "fav" && !searchQuery.trim()) render();
-    else {
-      rerenderRow(product);
-      renderChips();
-    }
-  }
-  async function toggleFavoriteTo(product, on) {
-    if (favorites.has(product.id) === on) return;
-    const ok = await setFavorite(favorites, product.id, on);
-    if (!ok) showToast(t("oc_favorite_failed"));
-    render();
   }
 
   function rerenderRow(product) {
@@ -431,10 +403,6 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
         return;
       }
       btn.addEventListener("click", () => {
-        if (action === "star") {
-          toggleFavorite(product);
-          return;
-        }
         changeQty(product, defaultQtyForUnit(product.unit));
         after();
       });
@@ -473,7 +441,6 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
 
   function emptyText() {
     if (searchQuery.trim()) return t("no_products_found");
-    if (view.chip === "fav") return t("oc_no_favorites");
     if (view.chip === "frequent") return allReady() ? t("oc_no_frequent") : t("loading");
     return t("no_products_found");
   }
@@ -495,15 +462,13 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     if (!list.length) listEl.innerHTML = `<p class="empty-state">${emptyText()}</p>`;
   }
 
-  // Favorites, the Frequent ranking and the usual basket arrive after the screen is up; nothing blocks on them.
+  // The Frequent ranking and the usual basket arrive after the screen is up; nothing blocks on them.
   (async function loadShortcuts() {
-    const [fav, freq, profile, ever] = await Promise.all([
-      loadFavorites().finally(() => (dataReady.favorites = true)),
+    const [freq, profile, ever] = await Promise.all([
       loadFrequentIds().finally(() => (dataReady.frequent = true)),
       loadReorderProfile(customerId, opts.from || null).finally(() => (dataReady.usual = true)),
       api.getOrderedProductIds(customerId).catch(() => []),
     ]);
-    favorites = fav;
     frequentIds = freq;
     usualProfile = profile;
     everOrdered = ever;

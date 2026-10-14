@@ -30,8 +30,6 @@ export function isAvailable(product) {
   return product.stock_qty === null || product.stock_qty === undefined || Number(product.stock_qty) > 0;
 }
 
-export const STAR_SVG = (filled) => `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false" fill="${filled ? "currentColor" : "none"}" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3.2l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 17l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8z"/></svg>`;
-
 // "−2,000" / "+17,000" / "0" -- the difference of a price to the Silver price.
 export function priceDiffChipHtml(price, silver) {
   if (!(Number(silver) > 0) || price == null) return "";

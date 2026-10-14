@@ -177,9 +177,6 @@ export const api = {
   getMapFactsBatch: (ids) => request(`/customers/map-facts?ids=${ids.join(",")}`),
   customerOrderedProducts: (id) => request(`/customers/${id}/ordered-products`),
   getOrderedProductIds: (customerId) => request(`/customers/${customerId}/ordered-product-ids`),
-  getFavoriteProducts: () => request("/products/favorites"),
-  addFavoriteProduct: (id) => request(`/products/favorites/${id}`, { method: "PUT" }),
-  removeFavoriteProduct: (id) => request(`/products/favorites/${id}`, { method: "DELETE" }),
   getFrequentProducts: () => request("/products/frequent"),
   getReorderProfile: (id, from) => request(`/customers/${id}/reorder-profile${from ? `?from=${encodeURIComponent(from)}` : ""}`),
 

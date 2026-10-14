@@ -12639,7 +12639,7 @@ form select,
   margin-top: 10px;
 }
 
-/* New order screen (views/orderCreate.js): header, one scrolling chip row, star on every card, "Your order" sheet */
+/* New order screen (views/orderCreate.js): header, one scrolling chip row, "Your order" sheet */
 .oc-header {
   flex-wrap: nowrap;
   align-items: flex-start;
@@ -12741,27 +12741,8 @@ form select,
 .order-product-row {
   position: relative;
 }
-.oc-star {
-  flex: 0 0 auto;
-  align-self: flex-start;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  margin: -10px 0 0 -12px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--text-dim);
-  cursor: pointer;
-}
-.oc-star.is-fav {
-  color: #e0a100;
-}
 .order-product-row .order-product-info {
   flex: 1 1 auto;
-  margin-left: -6px;
 }
 .order-product-info strong {
   white-space: normal;
