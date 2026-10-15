@@ -1003,10 +1003,11 @@ customersRouter.get("/:id/product-prices", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: "Invalid customer id" });
   const { rows } = await pool.query(
-    "SELECT product_id, price_amd FROM customer_product_prices WHERE customer_id = $1",
+    `SELECT cpp.product_id, cpp.price_amd, COALESCE(p.landing_cost_amd > 0 AND cpp.price_amd > 0 AND cpp.price_amd < p.landing_cost_amd, false) AS below_landing
+     FROM customer_product_prices cpp JOIN products p ON p.id = cpp.product_id WHERE cpp.customer_id = $1`,
     [id]
   );
-  res.json(rows.map((r) => ({ product_id: r.product_id, price_amd: Number(r.price_amd) })));
+  res.json(rows.map((r) => ({ product_id: r.product_id, price_amd: Number(r.price_amd), below_landing: r.below_landing })));
 });
 
 // Special pricelist of a Gold customer (Customer settings -> Special pricelist): one request saves what the user
@@ -1053,8 +1054,9 @@ customersRouter.put("/:id/product-prices", async (req, res) => {
   } finally {
     client.release();
   }
-  const { rows } = await pool.query("SELECT product_id, price_amd FROM customer_product_prices WHERE customer_id = $1", [id]);
-  res.json(rows.map((r) => ({ product_id: r.product_id, price_amd: Number(r.price_amd) })));
+  const { rows } = await pool.query(`SELECT cpp.product_id, cpp.price_amd, COALESCE(p.landing_cost_amd > 0 AND cpp.price_amd > 0 AND cpp.price_amd < p.landing_cost_amd, false) AS below_landing
+     FROM customer_product_prices cpp JOIN products p ON p.id = cpp.product_id WHERE cpp.customer_id = $1`, [id]);
+  res.json(rows.map((r) => ({ product_id: r.product_id, price_amd: Number(r.price_amd), below_landing: r.below_landing })));
 });
 
 // What the customer usually buys (+ their ordering rhythm), and with ?from=erp:<id>|app:<id> the lines of one

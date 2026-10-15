@@ -73,6 +73,7 @@ const QUICK_ACTION_ICON = {
   qa_sales: () => `<span class="quick-action-icon quick-action-icon-sales">${icons.trendUp}</span>`,
   qa_tasks: () => `<span class="quick-action-icon quick-action-icon-tasks">${icons.tasks}<span class="nav-badge count-badge" id="qa-tasks-badge" hidden></span></span>`,
   qa_vaghinak: () => `<span class="quick-action-icon quick-action-icon-vaghinak">${icons.vaghinak}<span class="nav-badge count-badge" id="qa-vaghinak-badge" hidden></span></span>`,
+  qa_ops_control: () => `<span class="quick-action-icon quick-action-icon-ops">${icons.gauge}</span>`,
   qa_bonuses: () => `<span class="quick-action-icon quick-action-icon-bonuses">${icons.gift}</span>`,
 };
 

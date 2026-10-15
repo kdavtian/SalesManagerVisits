@@ -3,7 +3,8 @@
 //    as long as no line drops below the product's net cost;
 //  - a bigger discount needs a director: the sales director / operations
 //    director may approve only while every line stays at or above net cost;
-//    the CEO and admin may approve any discount.
+//    the CEO and admin may approve any discount;
+//  - a line below LANDING cost needs the CEO or an admin whatever the discount (price floor, 2026-10-15).
 // Net cost = products.net_cost_amd (per unit, same basis as the price). A line
 // whose product has no net cost is not checked.
 // The workbook's Net Cost (Products!AE) is computed at the Silver price and mixes a per-LITER landing
@@ -47,28 +48,41 @@ export async function orderCostCheck(db, lines, subtotal, total) {
   const factor = subtotal > 0 ? Number(total) / subtotal : 1;
   let netCostTotal = 0;
   let belowCost = false;
+  // Price floor (owner, 2026-10-15): a line selling BELOW LANDING COST (what the goods really cost us) needs the CEO or
+  // an admin, with or without a discount -- a tier price, a special price or a discount can all cause it. Landing, not
+  // net cost: net cost carries 790 AMD/L of allocated overhead and would flag ordinary drum sales.
+  let belowLanding = false;
+  const belowLandingProductIds = [];
   for (const l of lines) {
     const product = products.get(Number(l.product_id));
-    if (!product || !(Number(product.net_cost_amd) > 0)) continue;
+    if (!product) continue;
     const price = Number(l.unit_price_amd) * factor;
+    const landing = Number(product.landing_cost_amd) || 0;
+    if (price > 0 && landing > 0 && price < landing - 0.5) {
+      belowLanding = true;
+      belowLandingProductIds.push(Number(l.product_id));
+    }
+    if (!(Number(product.net_cost_amd) > 0)) continue;
     const c = netCostAtPrice(product, price);
     netCostTotal += c * Number(l.quantity);
     if (price < c - 0.5) belowCost = true;
   }
   const revenue = Number(total);
   const marginPct = netCostTotal > 0 && revenue > 0 ? ((revenue - netCostTotal) / revenue) * 100 : null;
-  return { netCostTotal, revenue, marginPct, belowCost };
+  return { netCostTotal, revenue, marginPct, belowCost, belowLanding, belowLandingProductIds };
 }
 
 // 'not_required' | 'approved' (automatic) | 'pending'
-export function decideDiscountApproval({ discountPct, discountAmd, subtotal, belowCost }) {
+export function decideDiscountApproval({ discountPct, discountAmd, subtotal, belowCost, belowLanding = false }) {
+  if (belowLanding) return "pending"; // below landing cost: never automatic, even without a discount
   if (!(Number(discountPct) > 0) && !(Number(discountAmd) > 0)) return "not_required";
   const pct = effectiveDiscountPct(subtotal, discountPct, discountAmd);
   return pct <= AUTO_APPROVE_PCT && !belowCost ? "approved" : "pending";
 }
 
-export function canApproveDiscountRole(role, belowCost) {
+export function canApproveDiscountRole(role, belowCost, belowLanding = false) {
   if (UNLIMITED_APPROVER_ROLES.includes(role)) return true;
+  if (belowLanding) return false;
   if (role === "sales_director" || role === "operations_director") return !belowCost;
   return false;
 }

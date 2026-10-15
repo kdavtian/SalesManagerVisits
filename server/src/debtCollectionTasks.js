@@ -120,6 +120,15 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
     [today]
   );
 
+  // Management decided this account is disputed / with lawyers / written off: no automatic chasing (Operations control).
+  const { rows: onHold } = await pool.query(
+    `UPDATE tasks t SET status = 'cancelled', completion_note = 'Ղեկավարության որոշում՝ պարտքի հավաքագրումը դադարեցված է', updated_at = now()
+     FROM debt_decisions d
+     WHERE t.customer_id = d.customer_id AND d.decision IN ('dispute', 'legal', 'write_off') AND t.auto_kind = 'debt_collection' AND t.status = 'open'
+     RETURNING t.id`
+  );
+  closed.push(...onHold);
+
   const perRep = new Map();
   const creatorId = await systemCreatorId(pool);
   if (!creatorId) return { created: 0, closed: closed.length, perRep };
@@ -129,14 +138,17 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
   const { rows: found } = await pool.query(
     `SELECT c.id AS customer_id, c.name AS customer_name, c.sales_channel,
             CASE WHEN u.role IN ('sales_manager', 'sales_director') THEN u.id END AS rep_id,
-            erp.debt_amd, COALESCE(${debtAgeDaysSql("$2::date")}, erp.days_since_payment) AS days_open,
+            fc.force_collect, erp.debt_amd, COALESCE(${debtAgeDaysSql("$2::date")}, erp.days_since_payment) AS days_open,
             (SELECT to_char(t.promise_date, 'YYYY-MM-DD') FROM tasks t WHERE t.customer_id = c.id AND t.auto_kind = 'debt_collection' AND t.outcome = 'promised'
              ORDER BY t.created_at DESC LIMIT 1) AS last_promise_date
      FROM customers c
      JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
      ${DEBT_AGE_LATERAL}
      LEFT JOIN users u ON u.id = c.assigned_manager_id
-     WHERE ${overdueDebtSql("$2::date")} AND ${SKIPPED_CHANNELS_SQL}
+     CROSS JOIN LATERAL (SELECT EXISTS (SELECT 1 FROM debt_decisions d WHERE d.customer_id = c.id AND d.decision = 'collect') AS force_collect) fc
+     WHERE ${overdueDebtSql("$2::date")}
+       AND (${SKIPPED_CHANNELS_SQL} OR fc.force_collect)
+       AND NOT EXISTS (SELECT 1 FROM debt_decisions dd WHERE dd.customer_id = c.id AND dd.decision IN ('dispute', 'legal', 'write_off'))
        AND NOT EXISTS (
          SELECT 1 FROM tasks t WHERE t.customer_id = c.id AND t.auto_kind = 'debt_collection'
            AND (t.status = 'open'
@@ -147,7 +159,7 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
   );
   // Customers without a sales manager only get a task if they are CVO / PCO -- then it goes to the sales director.
   const candidates = found
-    .map((c) => ({ ...c, rep_id: c.rep_id ?? (["CVO", "PCO"].includes(c.sales_channel) ? director : null) }))
+    .map((c) => ({ ...c, rep_id: c.rep_id ?? (["CVO", "PCO"].includes(c.sales_channel) || c.force_collect ? director : null) }))
     .filter((c) => c.rep_id);
 
   let created = 0;

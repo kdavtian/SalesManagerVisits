@@ -156,6 +156,7 @@ export const api = {
   dismissPinReview: (customerId) => json(`/pin-review/${customerId}/dismiss`, "POST", {}),
   reportFarAttempt: (data) => json("/checkins/far-attempt", "POST", data),
   getCheckinSpots: (id) => request(`/customers/${id}/checkin-spots`),
+  priceCheckOrder: (body) => json("/orders/price-check", "POST", body),
   getCustomerProductPrices: (id) => request(`/customers/${id}/product-prices`),
   saveCustomerProductPrices: (id, prices) => json(`/customers/${id}/product-prices`, "PUT", { prices }),
   updateCustomer: async (id, data) => {
@@ -189,6 +190,11 @@ export const api = {
   checkinPhotoByIdUrl: (photoId) => `/api/checkins/photos/${photoId}`,
   deleteCheckinPhotoById: (photoId) => request(`/checkins/photos/${photoId}`, { method: "DELETE" }),
 
+  // Operations control
+  opsLegacyBalances: () => request("/ops/legacy-balances"),
+  opsDecideLegacy: (customerId, decision, note) => json(`/ops/legacy-balances/${customerId}`, "PUT", { decision, note }),
+  opsCreditLimits: () => request("/ops/credit-limits"),
+  opsApplyCreditLimits: (items) => json("/ops/credit-limits/apply", "POST", { items }),
   // Vaghinak (the AI operations deputy director)
   vaghinakBadge: () => request("/vaghinak/badge"),
   vaghinakPending: () => request("/vaghinak/pending"),

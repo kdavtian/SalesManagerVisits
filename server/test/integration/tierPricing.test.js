@@ -51,7 +51,7 @@ test("tier prices, silver fallback and individual gold prices", async () => {
   assert.equal(price(await order(dCookie, gold.id, product.id, { unit_price_amd: 750, price_override: true })), 750);
   assert.equal(price(await order(mCookie, gold.id, product.id)), 750);
   const saved = await apiRequest(`/api/customers/${gold.id}/product-prices`, { cookie: mCookie });
-  assert.deepEqual(saved.data, [{ product_id: product.id, price_amd: 750 }]);
+  assert.deepEqual(saved.data, [{ product_id: product.id, price_amd: 750, below_landing: false }]);
   // Non-gold customers ignore overrides.
   assert.equal(price(await order(dCookie, (await mk("silver")).id, product.id, { unit_price_amd: 1, price_override: true })), 900);
 });

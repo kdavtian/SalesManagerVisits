@@ -33,6 +33,7 @@ export async function renderSpecialPrices(root, navigate, customerId) {
 
   const byId = new Map(products.map((p) => [p.id, p]));
   const special = new Map(saved.map((r) => [r.product_id, Number(r.price_amd)])); // what is saved on the server
+  let belowLanding = new Set(saved.filter((r) => r.below_landing).map((r) => r.product_id)); // saved prices under our landing cost
   const edits = new Map(); // product id -> new number, or null = back to the Gold list price
   const goldList = (p) => tierPrice(p, "gold");
   const silverOf = (p) => tierPrice(p, "silver");
@@ -170,7 +171,7 @@ export async function renderSpecialPrices(root, navigate, customerId) {
       <div class="sp-side">
         <div class="sp-field">
           <input class="oc-field amd-input sp-input" data-price placeholder="${groupDigits(gold)}" value="${cur != null ? groupDigits(cur) : ""}" aria-label="${escapeHtml(p.name)}" />
-          <span class="sp-chip-slot">${cur != null ? priceDiffChipHtml(cur, silver) : ""}</span>
+          <span class="sp-chip-slot">${cur != null ? priceDiffChipHtml(cur, silver) : ""}</span>${belowLanding.has(p.id) && !isDirty(p) ? `<span class="badge badge-danger sp-below">${t("sp_below_landing_chip")}</span>` : ""}
         </div>
       </div>
     </div>`;
@@ -238,8 +239,11 @@ export async function renderSpecialPrices(root, navigate, customerId) {
       const result = await api.saveCustomerProductPrices(customerId, prices);
       special.clear();
       for (const r of result) special.set(r.product_id, Number(r.price_amd));
+      belowLanding = new Set(result.filter((r) => r.below_landing).map((r) => r.product_id));
       edits.clear();
       showToast(t("sp_saved"));
+      const below = [...belowLanding].map((id) => byId.get(id)?.name).filter(Boolean);
+      if (below.length) openInfoPopup(`<p>${escapeHtml(t("sp_below_landing_warning"))}</p><p class="muted">${below.slice(0, 8).map(escapeHtml).join(", ")}${below.length > 8 ? "…" : ""}</p>`);
       render();
     } catch (err) {
       showToast(err.message);
