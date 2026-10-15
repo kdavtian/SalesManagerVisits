@@ -7,6 +7,7 @@ import { canSetCreditTerms } from "../roles.js";
 import { creditLimitSuggestions } from "../creditLimitSuggest.js";
 import { DEBT_AGE_LATERAL, debtAgeDaysSql } from "../debtAge.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
+import { priceRealization, fxStatus, setFxRate, fxReviewDone, deadStock, setStockAction, STOCK_ACTIONS, winback, orderFlow, dataScorecard } from "../opsReports.js";
 
 export const opsControlRouter = Router();
 opsControlRouter.use(requireAuth);
@@ -122,3 +123,52 @@ opsControlRouter.post("/credit-limits/apply", async (req, res) => {
   }
   res.json({ applied, skipped: items.length - applied });
 });
+
+// ---- Margin: price realization + USD/AMD review ----
+const FX_ROLES = ["admin", "ceo", "operations_director", "accountant"];
+const STOCK_ROLES = ["admin", "ceo", "operations_director", "sales_director"];
+
+opsControlRouter.get("/margin", async (req, res) => {
+  const days = [30, 90, 180].includes(Number(req.query.days)) ? Number(req.query.days) : 90;
+  const [realization, fx] = await Promise.all([priceRealization(pool, days), fxStatus(pool)]);
+  res.json({ realization, fx, can_set_fx: FX_ROLES.includes(req.user.role) });
+});
+
+opsControlRouter.post("/fx", async (req, res) => {
+  if (!FX_ROLES.includes(req.user.role)) return res.status(403).json({ error: "Only the accountant, CEO, an operations director or an admin can set the rate" });
+  const rate = Number(req.body?.rate);
+  if (!Number.isFinite(rate) || rate < 100 || rate > 2000) return res.status(400).json({ error: "rate must be the AMD price of 1 USD (100 to 2000)" });
+  const note = typeof req.body?.note === "string" ? req.body.note.trim().slice(0, 200) : null;
+  res.json(await setFxRate(Math.round(rate * 100) / 100, req.user.id, note || null));
+});
+
+// "Prices were reviewed at this rate": resets the drift baseline and closes the review tasks.
+opsControlRouter.post("/fx/review-done", async (req, res) => {
+  const status = await fxReviewDone(req.user.id);
+  if (!status) return res.status(409).json({ error: "Set the USD/AMD rate first" });
+  res.json(status);
+});
+
+// ---- Stock: dead stock and what to do with it ----
+opsControlRouter.get("/stock", async (req, res) => res.json({ ...(await deadStock(pool)), can_decide: STOCK_ROLES.includes(req.user.role) }));
+
+opsControlRouter.put("/stock/:productId", async (req, res) => {
+  if (!STOCK_ROLES.includes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const productId = Number(req.params.productId);
+  const { action, note, due_date: dueDate, assignee_id: assigneeId } = req.body ?? {};
+  if (!Number.isInteger(productId)) return res.status(400).json({ error: "Invalid product id" });
+  if (!STOCK_ACTIONS.includes(action)) return res.status(400).json({ error: `action must be one of ${STOCK_ACTIONS.join(", ")}` });
+  if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) return res.status(400).json({ error: "due_date must be YYYY-MM-DD" });
+  const result = await setStockAction({ productId, action, note: typeof note === "string" ? note.trim().slice(0, 300) : null, dueDate: dueDate || null, assigneeId: Number.isInteger(Number(assigneeId)) ? Number(assigneeId) : null, userId: req.user.id });
+  if (!result) return res.status(404).json({ error: "Product not found" });
+  res.json(result);
+});
+
+// ---- Customers: win-back result ----
+opsControlRouter.get("/customers", async (_req, res) => res.json(await winback(pool, 8)));
+
+// ---- Flow: order step timing ----
+opsControlRouter.get("/flow", async (req, res) => res.json(await orderFlow(pool, [7, 30, 90].includes(Number(req.query.days)) ? Number(req.query.days) : 30)));
+
+// ---- Data: scorecard + Excel upload ----
+opsControlRouter.get("/data", async (_req, res) => res.json(await dataScorecard(pool)));

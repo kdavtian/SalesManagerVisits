@@ -24,6 +24,9 @@ const SETTING_FIELDS = [
   ["idleWarnMin", "vg_set_idleWarnMin", "min"],
   ["idleAskMin", "vg_set_idleAskMin", "min"],
   ["dailyCap", "vg_set_dailyCap", "min"],
+  ["slaConfirmH", "vg_set_slaConfirmH", "min"],
+  ["slaPackH", "vg_set_slaPackH", "min"],
+  ["slaDeliverH", "vg_set_slaDeliverH", "min"],
 ];
 
 export async function renderVaghinak(root, navigate) {

@@ -15,6 +15,10 @@ export const DEFAULTS = {
   idleWarnMin: 75, // field visits started, then no check-in this long with visits left -> reminds
   idleAskMin: 150, // ... -> mandatory question
   dailyCap: 6, // max non-mandatory messages per person per day
+  // Order flow SLAs in HOURS (Operations control, order waiting too long at a step): management chases after this
+  slaConfirmH: 4, // submitted -> confirmed
+  slaPackH: 24, // confirmed -> packed
+  slaDeliverH: 48, // packed -> delivered
 };
 
 const NUMERIC = Object.keys(DEFAULTS).filter((k) => k !== "mode");

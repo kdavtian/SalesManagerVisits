@@ -34,6 +34,7 @@ function taskKindIcon(task) {
   if (task.status === "done") return icons.checkCircle;
   if (task.auto_kind === "debt_collection") return icons.wallet;
   if (task.auto_kind === "reorder_followup") return icons.repeat;
+  if (task.auto_kind) return icons.gauge;
   return icons.tasks;
 }
 
@@ -69,8 +70,8 @@ export function taskCardHtml(task, today, { showCustomer = true } = {}) {
 // tap again to clear), and a search bar with icon filters (who / type / sort). Everything is
 // loaded once (open tasks always come first in the 500-row cap) and filtered on the phone, so
 // switching tabs, people and filters is instant.
-const TASK_KINDS = ["debt_collection", "reorder_followup", "manual"];
-const kindOf = (r) => r.auto_kind || "manual";
+const TASK_KINDS = ["debt_collection", "reorder_followup", "ops", "manual"];
+const kindOf = (r) => (r.auto_kind === "debt_collection" || r.auto_kind === "reorder_followup" ? r.auto_kind : r.auto_kind ? "ops" : "manual");
 
 export async function renderTasks(root, navigate, openId) {
   const creator = canCreateTasks();
@@ -157,6 +158,7 @@ export async function renderTasks(root, navigate, openId) {
       { value: "", label: t("tasks_kind_all") },
       { value: "debt_collection", label: t("tasks_kind_debt") },
       { value: "reorder_followup", label: t("tasks_kind_reorder") },
+      { value: "ops", label: t("tasks_kind_ops") },
       { value: "manual", label: t("tasks_kind_manual") },
     ];
     const sortOptions = [

@@ -9,6 +9,7 @@ import { batchExpandAreas } from "../routes/visitPlans.js";
 import { evaluateRep, flagsOf } from "./evaluate.js";
 import { getVaghinakSettings } from "./settings.js";
 import { addressFor, clock, durationHy, pickVariant, QUESTION_CHOICES } from "./phrases.js";
+import { dataChase, orderChase } from "./chasers.js";
 
 const YEREVAN_OFFSET_MS = 4 * 60 * 60 * 1000;
 export const MANAGEMENT_ROLES = ["admin", "ceo", "operations_director", "sales_director", "accountant"];
@@ -19,7 +20,7 @@ export const minuteOfDay = (date) => {
   return d.getUTCHours() * 60 + d.getUTCMinutes();
 };
 
-async function isWorkingDay(db, day) {
+export async function isWorkingDay(db, day) {
   if (new Date(`${day}T00:00:00Z`).getUTCDay() === 0) return false;
   const { rows } = await db.query("SELECT 1 FROM company_holidays WHERE holiday_date = $1", [day]);
   return rows.length === 0;
@@ -99,12 +100,18 @@ export async function createMessage(db, user, { kind, level, day, ctx = {}, audi
     );
     if (rows[0].n >= settings.dailyCap) return null;
   }
-  const { rows } = await db.query(
-    `INSERT INTO vaghinak_messages (user_id, kind, day, level, severity, body, facts, variant, needs_answer, mandatory, choices, shadow)
-     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11::jsonb, $12)
-     ON CONFLICT (user_id, kind, day, level) DO NOTHING RETURNING *`,
-    [user.id, kind, day, level, mandatory ? "important" : severity, text, JSON.stringify(ctx), variant, needsAnswer, mandatory, choices ? JSON.stringify(choices) : null, shadow]
-  );
+  let rows;
+  try {
+    ({ rows } = await db.query(
+      `INSERT INTO vaghinak_messages (user_id, kind, day, level, severity, body, facts, variant, needs_answer, mandatory, choices, shadow)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11::jsonb, $12)
+       ON CONFLICT (user_id, kind, day, level) DO NOTHING RETURNING *`,
+      [user.id, kind, day, level, mandatory ? "important" : severity, text, JSON.stringify(ctx), variant, needsAnswer, mandatory, choices ? JSON.stringify(choices) : null, shadow]
+    ));
+  } catch (err) {
+    if (err.code === "23503") return null; // the person was deleted meanwhile: nobody to tell
+    throw err;
+  }
   const message = rows[0] ?? null;
   if (message && !shadow) {
     await notifyUser(user.id, "vaghinak", { title: "Վաղինակ", body: text.slice(0, 160), url: "/#/vaghinak" });
@@ -132,21 +139,31 @@ export async function tick(now = new Date(), db = pool, { pick } = {}) {
   const states = await loadRepStates(db, day, nowMin, settings);
   let created = 0;
   for (const { rep, facts, actions } of states) {
-    await db.query(
-      `INSERT INTO vaghinak_day_log (user_id, day, first_checkin_at, late_minutes, office_minutes, planned_count, visited_count, last_checkin_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
-       ON CONFLICT (user_id, day) DO UPDATE SET
-         first_checkin_at = COALESCE(vaghinak_day_log.first_checkin_at, EXCLUDED.first_checkin_at),
-         late_minutes = CASE WHEN vaghinak_day_log.first_checkin_at IS NOT NULL THEN vaghinak_day_log.late_minutes ELSE EXCLUDED.late_minutes END,
-         office_minutes = GREATEST(vaghinak_day_log.office_minutes, EXCLUDED.office_minutes),
-         planned_count = EXCLUDED.planned_count, visited_count = EXCLUDED.visited_count,
-         last_checkin_at = EXCLUDED.last_checkin_at, updated_at = now()`,
-      [rep.id, day, facts.started ? firstAt(states, rep.id) : null, facts.started ? facts.lateMinutes : 0, facts.officeMinutes, facts.plannedCount, facts.visitedPlanned, lastAt(states, rep.id)]
-    );
+    try {
+      await db.query(
+        `INSERT INTO vaghinak_day_log (user_id, day, first_checkin_at, late_minutes, office_minutes, planned_count, visited_count, last_checkin_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+         ON CONFLICT (user_id, day) DO UPDATE SET
+           first_checkin_at = COALESCE(vaghinak_day_log.first_checkin_at, EXCLUDED.first_checkin_at),
+           late_minutes = CASE WHEN vaghinak_day_log.first_checkin_at IS NOT NULL THEN vaghinak_day_log.late_minutes ELSE EXCLUDED.late_minutes END,
+           office_minutes = GREATEST(vaghinak_day_log.office_minutes, EXCLUDED.office_minutes),
+           planned_count = EXCLUDED.planned_count, visited_count = EXCLUDED.visited_count,
+           last_checkin_at = EXCLUDED.last_checkin_at, updated_at = now()`,
+        [rep.id, day, facts.started ? firstAt(states, rep.id) : null, facts.started ? facts.lateMinutes : 0, facts.officeMinutes, facts.plannedCount, facts.visitedPlanned, lastAt(states, rep.id)]
+      );
+    } catch (err) {
+      if (err.code === "23503") continue; // the rep was deleted meanwhile
+      throw err;
+    }
     for (const action of actions) {
       const message = await createMessage(db, rep, { ...action, day, ctx: FLAG_CONTEXT({ ...facts, nowMin }), audience: "rep", settings, pick });
       if (message) created++;
     }
+  }
+  // beyond the field rules: missing customer data and orders waiting too long (chasers.js)
+  if (nowMin >= settings.workStartMin + 10 && nowMin < settings.workEndMin) {
+    created += await dataChase({ db, day, settings, pick });
+    created += await orderChase({ db, day, settings, pick });
   }
   return { created };
 }
