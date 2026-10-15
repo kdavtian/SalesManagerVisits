@@ -835,6 +835,15 @@ export function parseUserAgent(ua) {
   return [os, browser].filter(Boolean).join(" · ");
 }
 
+// 200 minutes -> "3h 20m" (hours and minutes, never a bare minute count)
+export function formatDuration(totalMinutes) {
+  const m = Math.max(0, Math.round(Number(totalMinutes) || 0));
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  if (!h) return `${r}${t("dur_m")}`;
+  return r ? `${h}${t("dur_h")} ${r}${t("dur_m")}` : `${h}${t("dur_h")}`;
+}
+
 export function formatRelative(iso) {
   const diffMs = Date.now() - new Date(iso).getTime();
   const mins = Math.round(diffMs / 60000);

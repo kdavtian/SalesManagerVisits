@@ -56,7 +56,9 @@ export function currentChips(current) {
   for (const group of BRAND_GROUP_ORDER) {
     const values = current?.[group]?.values;
     if (!Array.isArray(values)) continue;
-    const defs = values.map((v) => DEF_BY_ID.get(`${group}:${v}`)).filter(Boolean);
+    // "Full range" already says the brand is on the shelf, so a separate "available" chip would only repeat it.
+    const shown = values.includes("full_range") ? values.filter((v) => v !== "available") : values;
+    const defs = shown.map((v) => DEF_BY_ID.get(`${group}:${v}`)).filter(Boolean);
     defs.sort((a, b) => CHIP_DEFS.indexOf(a) - CHIP_DEFS.indexOf(b));
     chips.push(...defs);
   }

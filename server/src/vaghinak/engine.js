@@ -123,7 +123,7 @@ export async function createMessage(db, user, { kind, level, day, ctx = {}, audi
 }
 
 const FLAG_CONTEXT = (f) => ({
-  late: f.lateMinutes,
+  late: durationHy(f.lateMinutes),
   time: clock(f.nowMin ?? 0),
   dur: durationHy(f.officeMinutes),
   idle: durationHy(f.idleMinutes),
@@ -213,7 +213,7 @@ export async function wrapUp(now = new Date(), db = pool, { pick } = {}) {
     }
     if (!l.first_checkin_at && l.planned_count > 0) lines.push(`${first} — այցեր չկան`);
     else {
-      if (l.late_minutes > settings.lateGraceMin) lines.push(`${first} — ուշացել է ${l.late_minutes} րոպե`);
+      if (l.late_minutes > settings.lateGraceMin) lines.push(`${first} — ուշացել է ${durationHy(l.late_minutes)}`);
       if (pct !== null && pct < 50) lines.push(`${first} — պլանի ${pct}%`);
     }
   }

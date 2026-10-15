@@ -13545,22 +13545,38 @@ html[data-text-size="xlarge"] { font-size: 130%; }
 .order-share-btn { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; }
 .order-share-btn svg { width: 20px; height: 20px; }
 
-/* Vaghinak's page: his sections + the Operations quick actions as ONE grid of small tiles, 4 per row (11 tiles = 4 + 4 + 3). */
-.vg-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 4px 0 12px; }
-.vg-tiles .quick-action {
-  min-height: 64px;
-  padding: 8px 2px 6px;
-  gap: 4px;
-  border-radius: 12px;
-  font-size: 0.68rem;
-  line-height: 1.15;
-  overflow-wrap: anywhere;
+/* Vaghinak's page (1.343.0): a "Today" summary card, then his sections as one slim swipeable chip row, then the
+   Operations shortcuts as a second chip row; his messages start right below. */
+.vg-summary { padding: 12px 14px; margin: 4px 0 10px; }
+.vg-summary-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.vg-summary-top .badge { margin-left: auto; }
+.vg-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.vg-stat {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  min-height: 56px; padding: 8px 10px; border: 1px solid var(--control-border); border-radius: 12px;
+  background: var(--bg-card); color: var(--text); font: inherit; text-align: left; cursor: pointer;
 }
-.vg-tiles .quick-action-icon { width: 28px; height: 28px; border-radius: 8px; }
-.vg-tiles .quick-action-icon svg { width: 16px; height: 16px; }
-.vg-tiles .vg-tile-active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-card)); }
-.vg-tiles .vg-tile-label { display: block; max-width: 100%; }
-html[data-text-size="xlarge"] .vg-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.vg-stat strong { font-size: 1.35rem; line-height: 1.1; }
+.vg-stat span { font-size: 0.72rem; line-height: 1.2; color: var(--text-dim); }
+.vg-stat .vg-warn { color: var(--warning); }
+.vg-stat .vg-bad { color: var(--danger); }
+.vg-chips { display: flex; gap: 8px; overflow-x: auto; margin: 0 -16px 8px; padding: 2px 16px; scrollbar-width: none; align-items: center; }
+.vg-chips::-webkit-scrollbar { display: none; }
+.vg-chip {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px;
+  border: 1px solid var(--control-border); border-radius: 22px; background: var(--bg-card); color: var(--text);
+  font: inherit; font-size: 0.86rem; white-space: nowrap; cursor: pointer;
+}
+.vg-chip-icon { display: inline-flex; width: 18px; height: 18px; color: var(--accent); }
+.vg-chip-icon svg { width: 18px; height: 18px; }
+.vg-chip-ops .vg-chip-icon { color: var(--success); }
+.vg-chip-active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-card)); font-weight: 600; }
+.vg-chips-label { flex: 0 0 auto; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-dim); }
+.vg-msg-foot { display: flex; align-items: center; gap: 8px; }
+.vg-msg-foot .vg-react { margin-left: auto; }
+.vg-msg-foot .vg-react-btn { flex: none; min-height: 36px; padding: 0 12px; border-radius: 18px; font-size: 0.82rem; position: relative; }
+.vg-msg-foot .vg-react-btn::after { content: ""; position: absolute; inset: -4px 0; }
+.vg-dur { margin-left: 6px; color: var(--accent); font-weight: 700; white-space: nowrap; }
 .order-share-btn { margin-bottom: 10px; }
 .oc-line .oc-meta-text { white-space: nowrap; flex: 0 0 auto; }
 

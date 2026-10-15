@@ -5,7 +5,7 @@ import { api } from "../api.js";
 import { state } from "../state.js";
 import { icons } from "../icons.js";
 import { t } from "../i18n.js";
-import { escapeHtml, formatDateTime, formatRelative, showToast } from "../util.js";
+import { escapeHtml, formatDateTime, formatDuration, formatRelative, showToast } from "../util.js";
 import { answerFormHtml, wireAnswerForm, setVaghinakBadge } from "../vaghinak.js";
 
 const MANAGEMENT = new Set(["admin", "ceo", "operations_director", "sales_director", "accountant"]);
@@ -13,7 +13,7 @@ const SETTINGS_ROLES = new Set(["admin", "ceo", "operations_director"]);
 
 const clock = (min) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 
-// [key, i18n label key, "time" (minutes of day shown as HH:MM) | "min"]
+// [key, i18n label key, "time" (minutes of day shown as HH:MM) | "min" (minutes, also shown as hours + minutes) | "plain" (a plain number)]
 const SETTING_FIELDS = [
   ["workStartMin", "vg_set_workStartMin", "time"],
   ["workEndMin", "vg_set_workEndMin", "time"],
@@ -24,12 +24,12 @@ const SETTING_FIELDS = [
   ["officeAskMin", "vg_set_officeAskMin", "min"],
   ["idleWarnMin", "vg_set_idleWarnMin", "min"],
   ["idleAskMin", "vg_set_idleAskMin", "min"],
-  ["clusterRadiusM", "vg_set_clusterRadiusM", "min"],
-  ["clusterFarM", "vg_set_clusterFarM", "min"],
-  ["dailyCap", "vg_set_dailyCap", "min"],
-  ["slaConfirmH", "vg_set_slaConfirmH", "min"],
-  ["slaPackH", "vg_set_slaPackH", "min"],
-  ["slaDeliverH", "vg_set_slaDeliverH", "min"],
+  ["clusterRadiusM", "vg_set_clusterRadiusM", "plain"],
+  ["clusterFarM", "vg_set_clusterFarM", "plain"],
+  ["dailyCap", "vg_set_dailyCap", "plain"],
+  ["slaConfirmH", "vg_set_slaConfirmH", "plain"],
+  ["slaPackH", "vg_set_slaPackH", "plain"],
+  ["slaDeliverH", "vg_set_slaDeliverH", "plain"],
 ];
 
 // Operations control (cash, margin, stock, customers, order flow, data): the roles that had its Home tile.
@@ -52,17 +52,18 @@ export async function renderVaghinak(root, navigate) {
         <div class="vg-avatar vg-avatar-sm" aria-hidden="true">Վ</div>
         <div class="detail-header-title oc-title"><h1>${t("vg_title")}</h1><span class="oc-customer">${t("vg_subtitle")}</span></div>
       </div>
+      ${isManagement ? `<div id="vg-summary"></div>` : ""}
       ${
-        // One grid of small tiles (5 per row): his own sections first (they switch the tab below), then the Operations
-        // control quick actions (each opens that tab of the Operations page). A rep only has Messages, so no grid.
+        // His sections (they switch the tab below) as one slim swipeable row, then the Operations control quick actions
+        // (each opens that tab of the Operations page) as a second row. A rep only has Messages, so no rows.
         tabs.length > 1 || OPS_ROLES.has(state.user.role)
-          ? `<div class="vg-tiles" id="vg-tiles" role="tablist">${tabs
-              .map(([k, label]) => `<button type="button" class="quick-action vg-tile${k === tab ? " vg-tile-active" : ""}" data-tab="${k}" role="tab" aria-selected="${k === tab}"><span class="quick-action-icon quick-action-icon-vaghinak">${icons[TAB_ICON[k]]}</span><span class="vg-tile-label">${t(label)}</span></button>`)
-              .join("")}${
+          ? `<div class="vg-chips" id="vg-tiles" role="tablist">${tabs
+              .map(([k, label]) => `<button type="button" class="vg-chip${k === tab ? " vg-chip-active" : ""}" data-tab="${k}" role="tab" aria-selected="${k === tab}"><span class="vg-chip-icon">${icons[TAB_ICON[k]]}</span>${t(label)}</button>`)
+              .join("")}</div>${
               OPS_ROLES.has(state.user.role)
-                ? OPS_QUICK.map(([k, icon]) => `<button type="button" class="quick-action vg-tile" data-ops-tab="${k}"><span class="quick-action-icon quick-action-icon-ops">${icons[icon]}</span><span class="vg-tile-label">${t("ops_tab_" + k)}</span></button>`).join("")
+                ? `<div class="vg-chips vg-chips-ops"><span class="vg-chips-label">${t("vg_ops_label")}</span>${OPS_QUICK.map(([k, icon]) => `<button type="button" class="vg-chip vg-chip-ops" data-ops-tab="${k}"><span class="vg-chip-icon">${icons[icon]}</span>${t("ops_tab_" + k)}</button>`).join("")}</div>`
                 : ""
-            }</div>`
+            }`
           : ""
       }
       <div id="vg-body"><p class="loading-state" role="status">${t("loading")}</p></div>
@@ -71,16 +72,43 @@ export async function renderVaghinak(root, navigate) {
   const body = root.querySelector("#vg-body");
   // Operations control lives here: one quick action per Operations tab.
   root.querySelectorAll("[data-ops-tab]").forEach((btn) => btn.addEventListener("click", () => navigate(`#/ops-control?tab=${btn.dataset.opsTab}`)));
-  root.querySelectorAll("[data-tab]").forEach((btn) =>
-    btn.addEventListener("click", () => {
-      tab = btn.dataset.tab;
-      root.querySelectorAll("[data-tab]").forEach((b) => {
-        b.classList.toggle("vg-tile-active", b === btn);
-        b.setAttribute("aria-selected", String(b === btn));
-      });
-      load();
-    })
-  );
+  function selectTab(k) {
+    tab = k;
+    root.querySelectorAll("[data-tab]").forEach((b) => {
+      const on = b.dataset.tab === k;
+      b.classList.toggle("vg-chip-active", on);
+      b.setAttribute("aria-selected", String(on));
+    });
+    load();
+  }
+  root.querySelectorAll("[data-tab]").forEach((btn) => btn.addEventListener("click", () => selectTab(btn.dataset.tab)));
+
+  // The "Today" card (management): team plan, people needing attention, open questions -- each tap opens its tab.
+  async function paintSummary() {
+    const slot = root.querySelector("#vg-summary");
+    if (!slot) return;
+    try {
+      const data = await api.vaghinakPulse();
+      const reps = data.reps.filter((r) => !r.muted);
+      const planned = reps.reduce((n, r) => n + r.plannedCount, 0);
+      const done = reps.reduce((n, r) => n + r.visitedPlanned, 0);
+      const attention = reps.filter((r) => r.flags.length).length;
+      const questions = data.reps.reduce((n, r) => n + r.open_questions, 0);
+      const planPct = planned ? Math.round((done / planned) * 100) : null;
+      const modeKey = { off: "vg_ms_off", shadow: "vg_ms_shadow", live: "vg_ms_live" }[data.settings.mode];
+      slot.innerHTML = `<div class="card vg-summary">
+        <div class="vg-summary-top"><strong>${t("vg_sum_today")}</strong><span class="muted">${clock(data.nowMin)}</span><span class="badge ${data.settings.mode === "live" ? "badge-success" : "badge-neutral"}">${t(modeKey)}</span></div>
+        <div class="vg-stats">
+          <button type="button" class="vg-stat" data-go="pulse"><strong class="${planPct !== null && planPct < 50 ? "vg-bad" : ""}">${planPct === null ? "—" : planPct + "%"}</strong><span>${t("vg_sum_plan")}</span></button>
+          <button type="button" class="vg-stat" data-go="pulse"><strong class="${attention ? "vg-warn" : ""}">${attention}</strong><span>${t("vg_sum_attention")}</span></button>
+          <button type="button" class="vg-stat" data-go="qa"><strong class="${questions ? "vg-warn" : ""}">${questions}</strong><span>${t("vg_sum_questions")}</span></button>
+        </div>
+      </div>`;
+      slot.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => selectTab(b.dataset.go)));
+    } catch {
+      slot.innerHTML = "";
+    }
+  }
 
   const showError = (err) => (body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`);
   let token = 0;
@@ -111,9 +139,9 @@ export async function renderVaghinak(root, navigate) {
         const open = m.needs_answer && !m.answered_at;
         return `<div class="card vg-msg ${m.read_at ? "" : "vg-unread"} ${open ? "vg-open" : ""}" data-id="${m.id}">
           <div class="vg-msg-body">${escapeHtml(m.body)}</div>
-          <div class="muted vg-msg-meta">${escapeHtml(formatRelative(m.created_at))}${m.answered_at ? ` · ${t("vg_answered")}` : ""}</div>
           ${m.answered_at ? `<div class="vg-answered">${escapeHtml(answerLabel(m))}</div>` : ""}
-          ${open ? answerFormHtml(m, `vg-m${m.id}`) : m.needs_answer ? "" : reactHtml(m)}
+          <div class="vg-msg-foot"><span class="muted vg-msg-meta">${escapeHtml(formatRelative(m.created_at))}${m.answered_at ? ` · ${t("vg_answered")}` : ""}</span>${open || m.needs_answer ? "" : reactHtml(m)}</div>
+          ${open ? answerFormHtml(m, `vg-m${m.id}`) : ""}
         </div>`;
       })
       .join("")}</div>`;
@@ -146,7 +174,7 @@ export async function renderVaghinak(root, navigate) {
     const data = await api.vaghinakPulse();
     if (mine !== token) return;
     const modeKey = { off: "vg_mode_off", shadow: "vg_mode_shadow", live: "vg_mode_live" }[data.settings.mode];
-    const flagText = (f) => t(`vg_flag_${f.code}`).replace("{n}", String(f.remaining ?? f.minutes ?? ""));
+    const flagText = (f) => t(`vg_flag_${f.code}`).replace("{n}", f.code === "stopped_early" ? String(f.remaining ?? "") : f.minutes != null ? formatDuration(f.minutes) : "");
     body.innerHTML = `
       <p class="muted vg-mode-line"><span class="badge ${data.settings.mode === "live" ? "badge-success" : "badge-neutral"}">${t(modeKey)}</span> ${data.day} · ${clock(data.nowMin)}</p>
       ${data.settings.mode === "shadow" ? `<p class="muted vg-hint">${t("vg_mode_hint_shadow")}</p>` : ""}
@@ -158,8 +186,8 @@ export async function renderVaghinak(root, navigate) {
                   const pct = r.plannedCount ? Math.round((r.visitedPlanned / r.plannedCount) * 100) : null;
                   const facts = [
                     r.started ? `${t("vg_p_started")} ${clock(r.firstMin)}` : t("vg_p_none"),
-                    r.atOffice ? `${t("vg_p_office")} ${r.officeMinutes} ${t("vg_min")}` : "",
-                    !r.atOffice && r.started && r.idleMinutes ? `${t("vg_p_idle")} ${r.idleMinutes} ${t("vg_min")}` : "",
+                    r.atOffice ? `${t("vg_p_office")} ${formatDuration(r.officeMinutes)}` : "",
+                    !r.atOffice && r.started && r.idleMinutes ? `${t("vg_p_idle")} ${formatDuration(r.idleMinutes)}` : "",
                   ].filter(Boolean);
                   return `<div class="card vg-rep ${r.muted ? "vg-muted" : ""}">
                     <div class="vg-rep-top"><strong>${escapeHtml(r.name)}</strong>${r.open_questions ? `<span class="badge badge-warning">${t("vg_open_q").replace("{n}", String(r.open_questions))}</span>` : ""}</div>
@@ -240,7 +268,7 @@ export async function renderVaghinak(root, navigate) {
       <p class="muted vg-hint">${t(`vg_mode_hint_${settings.mode}`)}</p>
       <h2 class="section-title">${t("vg_set_thresholds")}</h2>
       <div class="card vg-fields">${SETTING_FIELDS.map(([key, label, kind]) =>
-        `<label class="vg-field"><span>${t(label)}</span><input data-setting="${key}" data-kind="${kind}" ${kind === "time" ? `type="time" value="${clock(settings[key])}"` : `type="number" inputmode="numeric" min="0" max="1440" value="${settings[key]}"`} /></label>`
+        `<label class="vg-field"><span>${t(label)}${kind === "min" ? ` <b class="vg-dur" data-dur="${key}">${formatDuration(settings[key])}</b>` : ""}</span><input data-setting="${key}" data-kind="${kind}" ${kind === "time" ? `type="time" value="${clock(settings[key])}"` : `type="number" inputmode="numeric" min="0" max="1440" value="${settings[key]}"`} /></label>`
       ).join("")}</div>
       <h2 class="section-title">${t("vg_set_people")}</h2>
       <p class="muted vg-hint">${t("vg_set_people_hint")}</p>
@@ -256,6 +284,12 @@ export async function renderVaghinak(root, navigate) {
         } catch (err) {
           showToast(err.message);
         }
+      })
+    );
+    body.querySelectorAll('[data-kind="min"]').forEach((input) =>
+      input.addEventListener("input", () => {
+        const cap = body.querySelector(`[data-dur="${input.dataset.setting}"]`);
+        if (cap) cap.textContent = formatDuration(input.value);
       })
     );
     body.querySelectorAll("[data-setting]").forEach((input) =>
@@ -282,4 +316,5 @@ export async function renderVaghinak(root, navigate) {
   }
 
   load();
+  paintSummary();
 }

@@ -93,8 +93,8 @@ test("dead stock: stock with no sale for 180 days is listed with its value; a de
   const again = (await apiRequest("/api/ops/stock", { cookie: directorCookie })).data.items.find((i) => i.product_id === slow.id);
   assert.equal(again.action, "campaign");
   assert.equal(again.assignee_name != null, true);
-  // a recent sale takes it off the list
-  await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, product_id, brand, product_name, qty, unit_price_amd, revenue_amd, sales_rep) VALUES ($1, $2, current_date - 3, $3, 'Castrol', 'x', 1, 1, 1, $4)", [`OPSB-${stamp}`, `OPSB-O-${stamp}-9`, `OPSB-S-${stamp}`, CH]);
+  // a recent sale takes it off the list (dated by the YEREVAN day: after 20:00 UTC Yerevan is already on the next date, and the win-back test below compares against the task's Yerevan date)
+  await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, product_id, brand, product_name, qty, unit_price_amd, revenue_amd, sales_rep) VALUES ($1, $2, (now() AT TIME ZONE 'Asia/Yerevan')::date - 3, $3, 'Castrol', 'x', 1, 1, 1, $4)", [`OPSB-${stamp}`, `OPSB-O-${stamp}-9`, `OPSB-S-${stamp}`, CH]);
   assert.equal((await apiRequest("/api/ops/stock", { cookie: directorCookie })).data.items.some((i) => i.product_id === slow.id), false);
 });
 
