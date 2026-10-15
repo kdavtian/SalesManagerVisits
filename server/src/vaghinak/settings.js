@@ -14,6 +14,8 @@ export const DEFAULTS = {
   officeAskMin: 165, // ... and still there -> mandatory question
   idleWarnMin: 75, // field visits started, then no check-in this long with visits left -> reminds
   idleAskMin: 150, // ... -> mandatory question
+  clusterRadiusM: 300, // planned customers this close to a place the rep visited count as "next door"
+  clusterFarM: 1000, // ... and the rep counts as gone once his latest visit is farther than this from them
   dailyCap: 6, // max non-mandatory messages per person per day
   // Order flow SLAs in HOURS (Operations control, order waiting too long at a step): management chases after this
   slaConfirmH: 4, // submitted -> confirmed

@@ -10,6 +10,8 @@ import { evaluateRep, flagsOf } from "./evaluate.js";
 import { getVaghinakSettings } from "./settings.js";
 import { addressFor, clock, durationHy, pickVariant, QUESTION_CHOICES } from "./phrases.js";
 import { dataChase, orderChase, downpaymentChase } from "./chasers.js";
+import { clusterChase } from "./cluster.js";
+import { weeklyDigest } from "./digest.js";
 
 const YEREVAN_OFFSET_MS = 4 * 60 * 60 * 1000;
 export const MANAGEMENT_ROLES = ["admin", "ceo", "operations_director", "sales_director", "accountant"];
@@ -74,7 +76,7 @@ export async function loadRepStates(db, day, nowMin, settings, { includeMuted = 
     const visited = new Set(cks.filter((c) => !c.isOffice).map((c) => c.customerId));
     const visitedPlanned = [...plan].filter((id) => visited.has(id)).length;
     const result = evaluateRep({ nowMin, settings, checkins: cks, plannedCount: plan.size, visitedPlanned });
-    return { rep, checkins: cks, ...result };
+    return { rep, checkins: cks, plan, visited, ...result };
   });
 }
 
@@ -159,6 +161,9 @@ export async function tick(now = new Date(), db = pool, { pick } = {}) {
       const message = await createMessage(db, rep, { ...action, day, ctx: FLAG_CONTEXT({ ...facts, nowMin }), audience: "rep", settings, pick });
       if (message) created++;
     }
+  }
+  if (nowMin >= settings.workStartMin && nowMin < settings.workEndMin - 45) {
+    created += await clusterChase({ db, day, settings, pick, states });
   }
   // beyond the field rules: missing customer data and orders waiting too long (chasers.js)
   if (nowMin >= settings.workStartMin + 10 && nowMin < settings.workEndMin) {
@@ -259,6 +264,7 @@ export function startVaghinak() {
     const now = new Date();
     tick(now).catch((err) => console.error("Vaghinak tick failed:", err.message));
     wrapUp(now).catch((err) => console.error("Vaghinak wrap-up failed:", err.message));
+    weeklyDigest(now).catch((err) => console.error("Vaghinak weekly digest failed:", err.message));
   }, 5 * 60 * 1000);
   timer.unref?.();
 }

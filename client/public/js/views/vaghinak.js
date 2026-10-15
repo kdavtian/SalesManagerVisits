@@ -24,6 +24,8 @@ const SETTING_FIELDS = [
   ["officeAskMin", "vg_set_officeAskMin", "min"],
   ["idleWarnMin", "vg_set_idleWarnMin", "min"],
   ["idleAskMin", "vg_set_idleAskMin", "min"],
+  ["clusterRadiusM", "vg_set_clusterRadiusM", "min"],
+  ["clusterFarM", "vg_set_clusterFarM", "min"],
   ["dailyCap", "vg_set_dailyCap", "min"],
   ["slaConfirmH", "vg_set_slaConfirmH", "min"],
   ["slaPackH", "vg_set_slaPackH", "min"],
