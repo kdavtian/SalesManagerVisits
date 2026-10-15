@@ -1,7 +1,7 @@
 import { api } from "../api.js";
 import { mountUsualSlot, reorderHash } from "../reorder.js";
 import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, SALES_CHANNELS, channelDisplayLabel, parseDateOnly, formatDateDMY, formatDayMonth, labelColon, erpLineDiscountRowHtml, leaveSheetTo, showToast, openInfoPopup } from "../util.js";
-import { currentChips, chipHtml, chipParts } from "../brandChips.js";
+import { currentChips, chipHtml, chipColumns } from "../brandChips.js";
 import { nextVisitRowHtml } from "../visitSchedule.js";
 import { t } from "../i18n.js";
 import { dueChipHtml } from "../debtChip.js";
@@ -197,14 +197,9 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     <div class="card product-chips-card" id="product-chips-card">
       ${
         brandChipList.length
-          ? chipParts(brandChipList)
-              .map(
-                (part) => `<div class="product-chips-part">
-                  <div class="product-chips-part-label muted">${t(part.label)}</div>
-                  <div class="product-chips-list">${part.chips.map((d) => chipHtml(d)).join("")}</div>
-                </div>`
-              )
-              .join("")
+          ? `<div class="product-chips-columns">${chipColumns(brandChipList)
+              .map((chips) => `<div class="product-chips-col">${chips.map((d) => chipHtml(d)).join("")}</div>`)
+              .join("")}</div>`
           : `<p class="muted product-chips-hint">${t("brand_chips_empty")}</p>`
       }
     </div>

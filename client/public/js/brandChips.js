@@ -63,16 +63,13 @@ export function currentChips(current) {
   return chips;
 }
 
-// The customer card shows the chips in three labelled parts (owner, 2026-10-15): Castrol / Lotos, Royal, Orlen /
-// Other (Mobil, Motul...). A part with no chips is left out.
-export const CHIP_PARTS = [
-  { key: "castrol", groups: ["castrol"], label: "chip_part_castrol" },
-  { key: "polish", groups: ["lotos", "royal"], label: "chip_part_polish" },
-  { key: "other", groups: ["competitors"], label: "chip_part_other" },
-];
+// The customer card shows the chips in three equal columns, no headings (owner, 2026-10-15): Castrol |
+// Lotos, Royal, Orlen | Other (Mobil, Motul...). All three columns are always returned (an empty one stays blank)
+// so the columns keep their place from customer to customer.
+const CHIP_COLUMNS = [["castrol"], ["lotos", "royal"], ["competitors"]];
 
-export function chipParts(chips) {
-  return CHIP_PARTS.map((part) => ({ ...part, chips: chips.filter((c) => part.groups.includes(c.group)) })).filter((part) => part.chips.length);
+export function chipColumns(chips) {
+  return CHIP_COLUMNS.map((groups) => chips.filter((c) => groups.includes(c.group)));
 }
 
 export function chipHtml(def, suffix = "") {
