@@ -2,7 +2,7 @@
 // the mandatory question, takes the answer, stays quiet for a day off, and the wrap-up / management brief appear.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs } from "./helpers.js";
+import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, createProduct, apiRequest, loginAs, trackOrder } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
 import { tick, wrapUp } from "../../src/vaghinak/engine.js";
 import { saveVaghinakSettings } from "../../src/vaghinak/settings.js";
@@ -162,4 +162,93 @@ test("automatic tasks show Vaghinak as the creator", async () => {
   const res = await apiRequest(`/api/tasks/${task.rows[0].id}`, { cookie: adminCookie });
   assert.equal(res.data.creator_name, "Վաղինակ");
   await pool.query("DELETE FROM tasks WHERE id = $1", [task.rows[0].id]);
+});
+
+// ---- chasers (missing customer data, orders waiting): fixtures live here so the whole file runs in sequence ----
+const CH_DAY = "2026-10-12";
+const CH_STAMP = Date.now();
+let chAdmin, chDirector, chWarehouse, chRep, chRepCookie, chNoPhone, chComplete, chUnowned, chProduct;
+test.before(async () => {
+  chAdmin = await createUser("admin");
+  chDirector = await createUser("sales_director");
+  chWarehouse = await createUser("warehouse_manager");
+  chRep = await createUser("sales_manager", { name: "Chase Rep" });
+  chRepCookie = await loginAs(chRep.email);
+  chProduct = await createProduct({ unit: "4L" });
+  chNoPhone = await createCustomer({ created_by: chAdmin.id, assigned_manager_id: chRep.id, name: "No Phone Garage", erp_customer_id: `CH-${CH_STAMP}-1` });
+  chComplete = await createCustomer({ created_by: chAdmin.id, assigned_manager_id: chRep.id, name: "Complete Garage", erp_customer_id: `CH-${CH_STAMP}-2` });
+  chUnowned = await createCustomer({ created_by: chAdmin.id, name: "Nobody Garage", erp_customer_id: `CH-${CH_STAMP}-3` });
+  await pool.query("UPDATE customers SET phone = NULL, region = NULL, sales_channel = 'SM YVN' WHERE id = $1", [chNoPhone.id]);
+  await pool.query("UPDATE customers SET phone = '+37491000000', region = 'Yerevan', sales_channel = 'SM YVN' WHERE id = $1", [chComplete.id]);
+  await pool.query("UPDATE customers SET assigned_manager_id = NULL, sales_channel = NULL WHERE id = $1", [chUnowned.id]);
+});
+test.after(async () => {
+  await pool.query("DELETE FROM tasks WHERE auto_kind = 'data_missing'");
+});
+
+const chaseMsgs = async (userId) => (await pool.query("SELECT kind, shadow, body FROM vaghinak_messages WHERE user_id = $1 AND day = $2 ORDER BY id", [userId, CH_DAY])).rows;
+const chaseClean = async () => {
+  await pool.query("DELETE FROM vaghinak_messages WHERE user_id = ANY($1)", [[chRep.id, chDirector.id, chWarehouse.id, chAdmin.id]]);
+  await pool.query("DELETE FROM tasks WHERE auto_kind = 'data_missing'");
+};
+
+test("shadow mode: only a shadow message about missing data, no task reaches the chRep", async () => {
+  await chaseClean();
+  await saveVaghinakSettings({ mode: "shadow" });
+  await tick(at(10, 0), pool, { pick: () => 0 });
+  const m = (await chaseMsgs(chRep.id)).find((x) => x.kind === "data_chase");
+  assert.ok(m && m.shadow);
+  assert.ok(m.body.includes("No Phone Garage"));
+  assert.equal((await pool.query("SELECT count(*)::int AS n FROM tasks WHERE auto_kind = 'data_missing'")).rows[0].n, 0);
+});
+
+test("live: a next-visit task for the chRep's customer with missing data (not for chComplete ones), one for the chUnowned customer to the sales chDirector; closes itself when filled", async () => {
+  await chaseClean();
+  await saveVaghinakSettings({ mode: "live" });
+  await tick(at(10, 0), pool, { pick: () => 0 });
+  const mine = (await pool.query("SELECT t.id, t.customer_id, t.due_is_next_visit, t.title FROM tasks t WHERE t.auto_kind = 'data_missing' AND t.assignee_id = $1 AND t.status = 'open'", [chRep.id])).rows;
+  assert.equal(mine.length, 1);
+  assert.equal(mine[0].customer_id, chNoPhone.id);
+  assert.equal(mine[0].due_is_next_visit, true);
+  const items = (await pool.query("SELECT text FROM task_items WHERE task_id = $1 ORDER BY sort_order", [mine[0].id])).rows.map((r) => r.text);
+  assert.equal(items.length, 2, "phone and region");
+  const dirTasks = (await pool.query("SELECT title FROM tasks WHERE auto_kind = 'data_missing' AND assignee_id = $1 AND status = 'open'", [chDirector.id])).rows;
+  assert.ok(dirTasks.length >= 1, "chUnowned customers go to the sales chDirector");
+  assert.ok((await chaseMsgs(chDirector.id)).some((x) => x.kind === "data_chase_owner" && !x.shadow));
+  // asked once: a second pass the same day changes nothing
+  await tick(at(11, 0), pool, { pick: () => 0 });
+  assert.equal((await pool.query("SELECT count(*)::int AS n FROM tasks WHERE auto_kind = 'data_missing' AND assignee_id = $1", [chRep.id])).rows[0].n, 1);
+  // the chRep fills the data -> the task closes by itself
+  await pool.query("UPDATE customers SET phone = '+37491111111', region = 'Yerevan' WHERE id = $1", [chNoPhone.id]);
+  await tick(at(12, 0), pool, { pick: () => 0 });
+  assert.equal((await pool.query("SELECT status FROM tasks WHERE id = $1", [mine[0].id])).rows[0].status, "done");
+  // mandatory customer fields are untouched: a customer can still be created without phone and region
+  const created = await apiRequest("/api/customers", { method: "POST", cookie: chRepCookie, body: { name: "Bare Customer", lat: 40.18, lng: 44.51 } });
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  await pool.query("DELETE FROM customers WHERE id = $1", [created.data.id]);
+});
+
+test("orders waiting over the limit: the person who holds the step is told; twice the limit also reaches the CEO/chAdmin", async () => {
+  await chaseClean();
+  await saveVaghinakSettings({ mode: "live" });
+  const make = async () => {
+    const r = await apiRequest("/api/orders", { method: "POST", cookie: chRepCookie, body: { customer_id: chComplete.id, payment_method: "cash", items: [{ product_id: chProduct.id, quantity: 1 }] } });
+    assert.equal(r.status, 201);
+    trackOrder(r.data.id);
+    return r.data.id;
+  };
+  const a = await make();
+  // 'submitted' 9 hours ago (limit 4 h, so over, but not twice over)
+  await pool.query("UPDATE orders SET created_at = $2, status = 'submitted', approval_status = 'not_required' WHERE id = $1", [a, new Date(at(10, 0).getTime() - 9 * 3600 * 1000)]);
+  await tick(at(10, 0), pool, { pick: () => 0 });
+  assert.ok((await chaseMsgs(chDirector.id)).some((x) => x.kind === "order_waiting_confirm"), "the sales chDirector holds the confirm step");
+  assert.equal((await chaseMsgs(chAdmin.id)).some((x) => x.kind === "order_waiting_escalation"), true, "9 h > 2 x 4 h: the chAdmin hears about it too");
+  assert.equal((await chaseMsgs(chRep.id)).some((x) => x.kind.startsWith("order_waiting")), false, "never the chRep");
+
+  await chaseClean();
+  await pool.query("UPDATE orders SET status = 'confirmed', updated_at = $2 WHERE id = $1", [a, new Date(at(10, 0).getTime() - 30 * 3600 * 1000)]);
+  await pool.query("INSERT INTO order_status_history (order_id, old_status, new_status, changed_at) VALUES ($1, 'submitted', 'confirmed', $2)", [a, new Date(at(10, 0).getTime() - 30 * 3600 * 1000)]);
+  await tick(at(10, 0), pool, { pick: () => 0 });
+  assert.ok((await chaseMsgs(chWarehouse.id)).some((x) => x.kind === "order_waiting_pack"), "the chWarehouse manager holds the pack step");
+  await pool.query("DELETE FROM order_status_history WHERE order_id = $1", [a]);
 });

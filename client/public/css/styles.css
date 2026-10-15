@@ -13249,3 +13249,17 @@ form select,
 .ops-limit-input { width: 118px; flex: 0 0 auto; text-align: right; }
 .ops-over { color: var(--danger); font-size: var(--fs-row-meta); }
 .ops-sheet .sheet-actions { position: sticky; bottom: 0; background: var(--bg-card); padding-top: 10px; }
+.ops-static { cursor: default; }
+.ops-bad { color: var(--danger); font-weight: 600; }
+.ops-fx-row { display: flex; gap: 8px; align-items: center; }
+.ops-fx-input { flex: 1 1 auto; text-align: right; }
+.ops-table-wrap { overflow-x: auto; }
+.ops-table { border-collapse: collapse; width: 100%; font-size: 14px; }
+.ops-table th, .ops-table td { padding: 8px 6px; text-align: right; white-space: nowrap; border-top: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.ops-table th:first-child { text-align: left; white-space: normal; font-weight: 600; }
+.ops-table tr:first-child th, .ops-table tr:first-child td { border-top: 0; color: var(--text-dim); font-size: 12px; font-weight: 500; }
+.ops-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 8px; }
+.ops-step { min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
+.ops-view .ops-card h2 { margin: 0; font-size: 1.05rem; }
+.ops-step { display: flex; flex-direction: column; gap: 2px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); }
+.ops-step strong { font-size: 1.15rem; }

@@ -1,5 +1,6 @@
 // Operations control (Home -> Operations): the operations director's console. Each card answers: which decision, who
-// takes it, which action follows. Tabs: Cash (legacy balances + credit limits). More tabs are added per release.
+// takes it, which action follows. Tabs: Cash (legacy balances, credit limits), Margin (price realization, USD/AMD),
+// Stock (dead stock actions), Customers (win-back result), Flow (order step timing), Data (scorecard, Excel upload).
 import { api } from "../api.js";
 import { state } from "../state.js";
 import { t } from "../i18n.js";
@@ -10,7 +11,7 @@ const DECISIONS = ["collect", "restructure", "dispute", "legal", "write_off"];
 const DECISION_BADGE = { collect: "badge-warning", restructure: "badge-info", dispute: "badge-neutral", legal: "badge-danger", write_off: "badge-neutral" };
 
 export async function renderOpsControl(root, navigate) {
-  const tabs = [["cash", "ops_tab_cash"]];
+  const tabs = [["cash", "ops_tab_cash"], ["margin", "ops_tab_margin"], ["stock", "ops_tab_stock"], ["customers", "ops_tab_customers"], ["flow", "ops_tab_flow"], ["data", "ops_tab_data"]];
   let tab = "cash";
   root.innerHTML = `
     <div class="detail-view ops-view">
@@ -40,6 +41,11 @@ export async function renderOpsControl(root, navigate) {
     body.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     try {
       if (tab === "cash") await paintCash();
+      else if (tab === "margin") await paintMargin();
+      else if (tab === "stock") await paintStock();
+      else if (tab === "customers") await paintCustomers();
+      else if (tab === "flow") await paintFlow();
+      else if (tab === "data") await paintData();
     } catch (err) {
       body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     }
@@ -197,6 +203,161 @@ export async function renderOpsControl(root, navigate) {
         applyBtn.disabled = false;
       }
     });
+  }
+
+  // ---------------- Margin: price realization + USD/AMD ----------------
+  let marginDays = 90;
+  async function paintMargin() {
+    const { realization, fx, can_set_fx: canSetFx } = await api.opsMargin(marginDays);
+    const pctCls = (v, floor) => (v == null ? "" : v < floor ? "ops-bad" : "");
+    const driftTxt = fx.current ? `${fx.drift_pct > 0 ? "+" : ""}${fx.drift_pct}%` : "";
+    body.innerHTML = `
+      <section class="card ops-card">
+        <div class="ops-card-head"><h2>${t("ops_fx_title")}</h2><button type="button" class="settings-hint-icon" id="ops-fx-info" aria-label="${t("more_info")}">!</button></div>
+        ${
+          fx.current
+            ? `<p class="ops-sum"><strong>${fx.current.rate}</strong> <span class="muted">AMD / USD · ${t("ops_fx_since_review")}: ${fx.baseline.rate} → <span class="${fx.needs_review ? "ops-bad" : ""}">${driftTxt}</span></span></p>`
+            : `<p class="muted">${t("ops_fx_none")}</p>`
+        }
+        ${fx.needs_review ? `<p class="order-stock-warning order-stock-danger">${t("ops_fx_needs_review").replace("{pct}", String(fx.review_pct))}</p><button type="button" class="btn btn-primary btn-block" id="ops-fx-done">${t("ops_fx_review_done")}</button>` : ""}
+        ${canSetFx ? `<div class="ops-fx-row"><input id="ops-fx-input" class="oc-field ops-fx-input" inputmode="decimal" placeholder="${t("ops_fx_placeholder")}" aria-label="${t("ops_fx_title")}" /><button type="button" class="btn" id="ops-fx-save">${t("save")}</button></div>` : ""}
+      </section>
+      <section class="card ops-card">
+        <div class="ops-card-head"><h2>${t("ops_real_title")}</h2><button type="button" class="settings-hint-icon" id="ops-real-info" aria-label="${t("more_info")}">!</button></div>
+        <div class="oc-chips">${[30, 90, 180].map((d) => `<button type="button" class="map-filter-chip${d === marginDays ? " chip-active" : ""}" data-days="${d}">${d} ${t("ops_days")}</button>`).join("")}</div>
+        <p class="ops-sum"><strong>${realization.total.realization_pct ?? "–"}%</strong> <span class="muted">${t("ops_realization")}</span> · <strong>${realization.total.margin_pct ?? "–"}%</strong> <span class="muted">${t("ops_margin")}</span></p>
+        <div class="ops-table-wrap"><table class="ops-table">
+          <tr><th></th><th>${t("ops_revenue")}</th><th>${t("ops_realization_short")}</th><th>${t("ops_margin")}</th><th>${t("ops_below_short")}</th></tr>
+          ${realization.channels.map((c) => `<tr><th scope="row">${escapeHtml(c.channel)}</th><td>${groupDigits(c.revenue_amd)}</td><td class="${pctCls(c.realization_pct, 85)}">${c.realization_pct ?? "–"}%</td><td class="${pctCls(c.margin_pct, 25)}">${c.margin_pct ?? "–"}%</td><td class="${c.below_landing_lines ? "ops-bad" : ""}">${c.below_landing_lines || "–"}</td></tr>`).join("")}
+        </table></div>
+      </section>
+      <section class="card ops-card">
+        <h2>${t("ops_below_title")}</h2>
+        ${realization.below_landing.length ? `<div class="ops-list">${realization.below_landing.map((w) => `<div class="ops-row ops-static"><span class="ops-row-main"><strong>${escapeHtml(w.product)}</strong><span class="muted">${escapeHtml(w.customer)} · ${escapeHtml(w.channel)} · ${w.order_date}</span><span class="muted ops-facts">${groupDigits(w.price)} < ${groupDigits(w.landing)} × ${w.qty}</span></span><span class="ops-row-side"><strong class="ops-amount ops-bad">−${groupDigits(w.loss)}</strong></span></div>`).join("")}</div>` : `<p class="empty-state">${t("ops_none_below")}</p>`}
+      </section>`;
+    body.querySelector("#ops-fx-info").addEventListener("click", () => infoPopup(t("ops_fx_info")));
+    body.querySelector("#ops-real-info").addEventListener("click", () => infoPopup(t("ops_real_info")));
+    body.querySelectorAll("[data-days]").forEach((b) => b.addEventListener("click", () => { marginDays = Number(b.dataset.days); load(); }));
+    body.querySelector("#ops-fx-save")?.addEventListener("click", async () => {
+      const rate = Number(body.querySelector("#ops-fx-input").value.replace(",", "."));
+      try { await api.opsSetFx(rate); showToast(t("vg_saved")); load(); } catch (err) { showToast(err.message); }
+    });
+    body.querySelector("#ops-fx-done")?.addEventListener("click", async () => {
+      try { await api.opsFxReviewDone(); showToast(t("vg_saved")); load(); } catch (err) { showToast(err.message); }
+    });
+  }
+
+  // ---------------- Stock: dead stock ----------------
+  const STOCK_ACTIONS = ["campaign", "bundle", "discount", "transfer", "keep"];
+  async function paintStock() {
+    const data = await api.opsStock();
+    const shown = data.items.slice(0, 40);
+    body.innerHTML = `
+      <section class="card ops-card">
+        <div class="ops-card-head"><h2>${t("ops_stock_title")}</h2><button type="button" class="settings-hint-icon" id="ops-stock-info" aria-label="${t("more_info")}">!</button></div>
+        <p class="ops-sum"><strong>${formatAmd(data.total_landing_amd)}</strong> <span class="muted">· ${data.items.length} SKU · ${t("ops_at_silver")} ${groupDigits(data.total_silver_amd)}</span></p>
+        <p class="muted ops-undecided">${data.undecided ? `${t("ops_undecided")}: ${data.undecided}` : t("ops_all_decided")}</p>
+        <div class="ops-list">${shown.map((r) => `<button type="button" class="ops-row" data-stock="${r.product_id}"><span class="ops-row-main"><strong>${escapeHtml(r.name)}</strong><span class="muted">${escapeHtml([r.brand, r.unit].filter(Boolean).join(" · "))} · ${r.stock_qty} ${t("ops_pcs")}</span><span class="muted ops-facts">${r.last_sale ? `${t("ops_last_sale")} ${r.days_since_sale} ${t("ops_days")}` : t("ops_never_sold")}</span></span><span class="ops-row-side"><strong class="ops-amount">${groupDigits(r.value_landing_amd)}</strong>${r.action ? `<span class="badge badge-info">${t(`ops_act_${r.action}`)}</span>` : `<span class="badge badge-neutral">${t("ops_dec_none")}</span>`}</span></button>`).join("") || `<p class="empty-state">${t("ops_nothing")}</p>`}</div>
+        ${data.items.length > shown.length ? `<p class="muted ops-more">${t("ops_showing_top").replace("{n}", String(shown.length))}</p>` : ""}
+      </section>`;
+    body.querySelector("#ops-stock-info").addEventListener("click", () => infoPopup(t("ops_stock_info")));
+    body.querySelectorAll("[data-stock]").forEach((row) => row.addEventListener("click", () => openStockSheet(data.items.find((i) => i.product_id === Number(row.dataset.stock)), data.can_decide)));
+  }
+
+  async function openStockSheet(r, canDecide) {
+    let assignees = [];
+    try { assignees = await api.listTaskAssignees(); } catch { assignees = []; }
+    let action = r.action;
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    const paint = () => {
+      overlay.innerHTML = `<div class="sheet ops-sheet">
+        <h2>${escapeHtml(r.name)}</h2>
+        <p class="muted">${r.stock_qty} ${t("ops_pcs")} · ${formatAmd(r.value_landing_amd)} · ${r.last_sale ? `${t("ops_last_sale")} ${r.days_since_sale} ${t("ops_days")}` : t("ops_never_sold")}</p>
+        <div class="ops-decisions" role="radiogroup">${STOCK_ACTIONS.map((a) => `<button type="button" class="ops-decision${action === a ? " is-on" : ""}" data-action="${a}" role="radio" aria-checked="${action === a}" ${canDecide ? "" : "disabled"}><strong>${t(`ops_act_${a}`)}</strong><span class="muted">${t(`ops_act_${a}_hint`)}</span></button>`).join("")}</div>
+        ${action && action !== "keep" ? `<label class="vg-field"><span>${t("ops_assign_to")}</span><select id="ops-assignee" class="task-control">${assignees.map((a) => `<option value="${a.id}" ${a.id === r.assignee_id ? "selected" : ""}>${escapeHtml(a.name)}</option>`).join("")}</select></label>
+        <label class="vg-field"><span>${t("ops_due")}</span><input type="date" id="ops-due" value="${r.due_date ?? ""}" /></label>` : ""}
+        <textarea class="vg-text" id="ops-note" rows="2" maxlength="300" placeholder="${t("ops_note_placeholder")}" ${canDecide ? "" : "disabled"}>${escapeHtml(r.note ?? "")}</textarea>
+        <p class="form-error" id="ops-error" hidden></p>
+        <div class="sheet-actions"><button type="button" class="btn" data-close>${t("cancel")}</button>${canDecide ? `<button type="button" class="btn btn-primary" id="ops-save" ${action ? "" : "disabled"}>${t("save")}</button>` : ""}</div>
+      </div>`;
+      overlay.querySelectorAll("[data-action]").forEach((b) => b.addEventListener("click", () => { r.note = overlay.querySelector("#ops-note").value; action = b.dataset.action; paint(); }));
+      overlay.querySelector("#ops-save")?.addEventListener("click", async () => {
+        try {
+          await api.opsStockAction(r.product_id, { action, note: overlay.querySelector("#ops-note").value, due_date: overlay.querySelector("#ops-due")?.value || null, assignee_id: Number(overlay.querySelector("#ops-assignee")?.value) || null });
+          overlay.remove();
+          showToast(t("vg_saved"));
+          load();
+        } catch (err) {
+          const el = overlay.querySelector("#ops-error");
+          el.textContent = err.message;
+          el.hidden = false;
+        }
+      });
+    };
+    paint();
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.addEventListener("click", (e) => (e.target === overlay || e.target.closest("[data-close]")) && overlay.remove());
+  }
+
+  // ---------------- Customers: win-back ----------------
+  async function paintCustomers() {
+    const d = await api.opsCustomers();
+    const rowsHtml = (list) => list.map((e) => `<tr><th scope="row">${escapeHtml(e.label)}</th><td>${e.created}</td><td>${e.done}</td><td>${e.returned}</td><td>${groupDigits(e.returned_amd)}</td></tr>`).join("");
+    const head = `<tr><th></th><th>${t("ops_wb_created")}</th><th>${t("ops_wb_done")}</th><th>${t("ops_wb_returned")}</th><th>${t("ops_wb_amount")}</th></tr>`;
+    body.innerHTML = `
+      <section class="card ops-card">
+        <div class="ops-card-head"><h2>${t("ops_wb_title")}</h2><button type="button" class="settings-hint-icon" id="ops-wb-info" aria-label="${t("more_info")}">!</button></div>
+        <p class="ops-sum"><strong>${d.lapsed_customers}</strong> <span class="muted">${t("ops_wb_lapsed")} · ${d.active_customers} ${t("ops_wb_active")}</span></p>
+        <p class="muted ops-undecided">${t("ops_wb_at_stake")}: ${formatAmd(d.lapsed_year_amd)}</p>
+      </section>
+      <section class="card ops-card"><h2>${t("ops_wb_by_week")}</h2>
+        ${d.by_week.length ? `<div class="ops-table-wrap"><table class="ops-table">${head}${rowsHtml(d.by_week)}</table></div>` : `<p class="empty-state">${t("ops_wb_none")}</p>`}</section>
+      <section class="card ops-card"><h2>${t("ops_wb_by_rep")}</h2>
+        ${d.by_rep.length ? `<div class="ops-table-wrap"><table class="ops-table">${head}${rowsHtml(d.by_rep)}</table></div>` : `<p class="empty-state">${t("ops_wb_none")}</p>`}</section>`;
+    body.querySelector("#ops-wb-info").addEventListener("click", () => infoPopup(t("ops_wb_info")));
+  }
+
+  // ---------------- Flow: order step timing ----------------
+  let flowDays = 30;
+  async function paintFlow() {
+    const d = await api.opsFlow(flowDays);
+    const stepCard = (key) => {
+      const s = d.steps[key];
+      return `<div class="ops-step"><span class="muted">${t(`ops_step_${key}`)}</span><strong>${s ? `${s.p50_h} ${t("ops_h")}` : "–"}</strong><span class="muted ops-facts">${s ? `P90 ${s.p90_h} ${t("ops_h")} · n=${s.n}` : ""}</span><span class="muted ops-facts">SLA ${d.sla[key]} ${t("ops_h")}</span></div>`;
+    };
+    body.innerHTML = `
+      <section class="card ops-card">
+        <div class="ops-card-head"><h2>${t("ops_flow_title")}</h2><button type="button" class="settings-hint-icon" id="ops-flow-info" aria-label="${t("more_info")}">!</button></div>
+        <div class="oc-chips">${[7, 30, 90].map((x) => `<button type="button" class="map-filter-chip${x === flowDays ? " chip-active" : ""}" data-days="${x}">${x} ${t("ops_days")}</button>`).join("")}</div>
+        <div class="ops-steps">${["confirm", "pack", "deliver"].map(stepCard).join("")}</div>
+      </section>
+      <section class="card ops-card">
+        <h2>${t("ops_waiting_title")} <span class="muted">(${d.waiting_count}${d.over_sla_count ? ` · ${d.over_sla_count} ${t("ops_over_sla")}` : ""})</span></h2>
+        ${d.waiting.length ? `<div class="ops-list">${d.waiting.map((w) => `<button type="button" class="ops-row" data-order="${w.id}"><span class="ops-row-main"><strong>${escapeHtml(w.customer_name)}</strong><span class="muted">${escapeHtml(w.order_code ?? "")} · ${t(`ops_step_${w.step}`)}${w.blocked_by ? ` · ${t(`ops_blocked_${w.blocked_by}`)}` : ""}</span></span><span class="ops-row-side"><strong class="ops-amount">${groupDigits(w.total_amd)}</strong><span class="badge ${w.over_sla ? "badge-danger" : "badge-neutral"}">${w.waiting_h} ${t("ops_h")}</span></span></button>`).join("")}</div>` : `<p class="empty-state">${t("ops_nothing")}</p>`}
+      </section>`;
+    body.querySelector("#ops-flow-info").addEventListener("click", () => infoPopup(t("ops_flow_info")));
+    body.querySelectorAll("[data-days]").forEach((b) => b.addEventListener("click", () => { flowDays = Number(b.dataset.days); load(); }));
+    body.querySelectorAll("[data-order]").forEach((b) => b.addEventListener("click", async () => (await import("../orderDetailSheet.js")).openOrderDetailSheet(Number(b.dataset.order), { onChanged: load, navigate })));
+  }
+
+  // ---------------- Data: scorecard + Excel upload ----------------
+  async function paintData() {
+    const d = await api.opsData();
+    const ex = d.excel;
+    const sorted = [...d.checks].sort((a, b) => (b.severity === "fix") - (a.severity === "fix") || b.count - a.count);
+    body.innerHTML = `
+      <section class="card ops-card">
+        <div class="ops-card-head"><h2>${t("ops_excel_title")}</h2></div>
+        <p class="ops-sum"><span class="badge ${ex.today_synced ? "badge-success" : "badge-danger"}">${ex.today_synced ? t("ops_excel_today") : t("ops_excel_missing")}</span> <span class="muted">${ex.synced_at ? `${t("ops_excel_last")}: ${String(ex.synced_at).slice(0, 16).replace("T", " ")} (${ex.hours_ago} ${t("ops_h")})` : t("ops_excel_never")}</span></p>
+      </section>
+      <section class="card ops-card">
+        <div class="ops-card-head"><h2>${t("ops_data_title")}</h2><button type="button" class="settings-hint-icon" id="ops-data-info" aria-label="${t("more_info")}">!</button></div>
+        <p class="ops-sum"><strong>${d.fix_count}</strong> <span class="muted">${t("ops_data_to_fix")}</span></p>
+        <div class="ops-list">${sorted.map((c) => `<div class="ops-row ops-static"><span class="ops-row-main"><strong>${t(`ops_chk_${c.key}`)}</strong>${c.samples.length ? `<span class="muted ops-facts">${c.samples.map(escapeHtml).join(", ")}</span>` : ""}</span><span class="ops-row-side"><span class="badge ${c.count === 0 ? "badge-success" : c.severity === "fix" ? "badge-danger" : "badge-neutral"}">${c.count}</span></span></div>`).join("")}</div>
+      </section>`;
+    body.querySelector("#ops-data-info").addEventListener("click", () => infoPopup(t("ops_data_info")));
   }
 
   load();
