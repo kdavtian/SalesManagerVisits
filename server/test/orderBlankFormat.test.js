@@ -46,3 +46,13 @@ test("phones are stored as digits only: +37491007019", async () => {
   assert.equal(normalizePhoneForStorage(null), null);
   assert.equal(normalizePhoneForStorage("+7 495 123 45 67"), "+7 495 123 45 67", "foreign numbers are left alone");
 });
+
+test("payment terms line: due days + downpayment only, nothing for an old order", async () => {
+  const { paymentTermsText } = await import("../src/orderBlankPdf.js");
+  assert.deepEqual(paymentTermsText(null), { due: null, down: null });
+  assert.deepEqual(paymentTermsText({ dueDays: null, downpaymentAmd: null, downpaymentPct: null }), { due: null, down: null });
+  assert.equal(paymentTermsText({ dueDays: 45, downpaymentAmd: 301350, downpaymentPct: "30.00" }).due, "Վճարման ժամկետ՝ 45 օր");
+  assert.equal(paymentTermsText({ dueDays: 45, downpaymentAmd: 301350, downpaymentPct: "30.00" }).down, "Կանխավճար՝ 301,350դր (30%)");
+  assert.equal(paymentTermsText({ dueDays: 0 }).due, "Վճարման ժամկետ՝ առաքման պահին");
+  assert.equal(paymentTermsText({ dueDays: 7, downpaymentAmd: 0, downpaymentPct: 0 }).down, "Կանխավճար՝ 0դր");
+});

@@ -1,18 +1,11 @@
-// "Print blank": the print-ready delivery-acceptance act for one or more
-// orders (server/src/orderBlankPdf.js). A small bottom sheet asks which
-// version (automatic: small orders share an A4 sheet two by two, big ones get
-// a whole sheet; or always full / always half), then hands the PDF to
-// saveBlob (share sheet / download -- never navigates the app to the file).
+// "Print blank": the print-ready delivery-acceptance act for one or more orders (server/src/orderBlankPdf.js). Always the
+// automatic layout (small orders share an A4 sheet two by two, big ones get a whole sheet) -- nobody ever picked
+// another one, so the sheet goes straight to building the PDF (with a progress bar) and then hands it over through the
+// file-ready step (open / share / save; never navigates the app to the file).
 import { api } from "./api.js";
 import { t } from "./i18n.js";
 import { activateDialog, escapeHtml } from "./util.js";
 import { renderFileReady } from "./fileReadySheet.js";
-
-const VARIANTS = [
-  ["auto", "print_blank_auto", "print_blank_auto_hint"],
-  ["full", "print_blank_full", "print_blank_full_hint"],
-  ["half", "print_blank_half", "print_blank_half_hint"],
-];
 
 // orders: [{ id, order_code }]  (the codes only name the file)
 export function openPrintBlankSheet(orders) {
@@ -22,32 +15,27 @@ export function openPrintBlankSheet(orders) {
     <div class="sheet" role="dialog" aria-modal="true">
       <h2>${t("print_blank_title")}</h2>
       <p class="muted">${escapeHtml(t("print_blank_count").replace("{n}", orders.length))}</p>
-      <div class="print-blank-options" role="radiogroup">
-        ${VARIANTS.map(
-          ([v, label, hint], i) => `
-          <label class="print-blank-option">
-            <input type="radio" name="print-blank-variant" value="${v}" ${i === 0 ? "checked" : ""} />
-            <span><strong>${t(label)}</strong><span class="muted">${t(hint)}</span></span>
-          </label>`
-        ).join("")}
-      </div>
-      <div class="print-blank-progress" id="print-blank-progress" hidden role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="print-blank-progress" id="print-blank-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
         <div class="print-blank-progress-label"><span>${t("print_blank_creating")}</span><span id="print-blank-pct">0%</span></div>
         <div class="print-blank-bar"><span id="print-blank-fill"></span></div>
       </div>
       <p class="form-error" id="print-blank-error" hidden></p>
       <div class="sheet-actions">
         <button type="button" class="btn" data-action="cancel">${t("cancel")}</button>
-        <button type="button" class="btn btn-primary" data-action="create">${t("print_blank_create")}</button>
+        <button type="button" class="btn btn-primary" data-action="retry" hidden>${t("retry")}</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
   activateDialog(overlay);
-  const close = () => overlay.remove();
+  let cancelled = false;
+  const close = () => {
+    cancelled = true;
+    overlay.remove();
+  };
   overlay.addEventListener("click", (e) => e.target === overlay && close());
   overlay.querySelector('[data-action="cancel"]').addEventListener("click", close);
   const errorEl = overlay.querySelector("#print-blank-error");
-  const createBtn = overlay.querySelector('[data-action="create"]');
+  const retryBtn = overlay.querySelector('[data-action="retry"]');
   const progressEl = overlay.querySelector("#print-blank-progress");
   const fillEl = overlay.querySelector("#print-blank-fill");
   const pctEl = overlay.querySelector("#print-blank-pct");
@@ -67,28 +55,28 @@ export function openPrintBlankSheet(orders) {
     const timer = setInterval(() => setProgress(92 * (1 - Math.exp(-(Date.now() - t0) / (estimateMs / 2.2)))), 120);
     return () => clearInterval(timer);
   }
-  const showReady = (blob, name) => renderFileReady(overlay.querySelector(".sheet"), blob, name, close);
-  createBtn.addEventListener("click", async () => {
-    const variant = overlay.querySelector('input[name="print-blank-variant"]:checked').value;
-    overlay.querySelectorAll("input, button").forEach((el) => (el.disabled = true));
+  async function build() {
     errorEl.hidden = true;
+    retryBtn.hidden = true;
     const stop = startProgress();
     try {
-      const blob = await api.buildOrderBlanks(
-        orders.map((o) => o.id),
-        variant === "auto" ? null : variant
-      );
+      const blob = await api.buildOrderBlanks(orders.map((o) => o.id), null);
       stop();
+      if (cancelled) return;
       setProgress(100);
-      await new Promise((r) => setTimeout(r, 350));
+      await new Promise((r) => setTimeout(r, 250));
+      if (cancelled) return;
       const name = orders.length === 1 && orders[0].order_code ? `Order-${orders[0].order_code}.pdf` : "Order-blanks.pdf";
-      showReady(blob, name);
+      renderFileReady(overlay.querySelector(".sheet"), blob, name, close);
     } catch (err) {
       stop();
+      if (cancelled) return;
       progressEl.hidden = true;
-      overlay.querySelectorAll("input, button").forEach((el) => (el.disabled = false));
       errorEl.textContent = err.message || t("pdf_failed");
       errorEl.hidden = false;
+      retryBtn.hidden = false;
     }
-  });
+  }
+  retryBtn.addEventListener("click", build);
+  build();
 }

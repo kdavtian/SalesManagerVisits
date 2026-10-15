@@ -2,6 +2,7 @@ import { api } from "../api.js";
 import { t, getLang, setLang } from "../i18n.js";
 import { getTheme, setTheme } from "../theme.js";
 import { getPerfMode, setPerfMode } from "../perfMode.js";
+import { getTextSize, setTextSize } from "../textSize.js";
 import { state, isAdmin, canPlanForOthers, seesFinancialExports, canManageProducts, canReassignCustomers, isPerfCeo } from "../state.js";
 import { renderTeamSection, renderPlanApprovalsSection, renderEditRequestsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection, renderSalesChannelOwnersSection, renderQuickActionVisibilitySection, renderDataQualitySection, renderNotificationDeliveryLogSection, renderClientErrorLogSection } from "./admin.js";
 import { renderSystemHealthSection } from "./systemHealth.js";
@@ -186,6 +187,16 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         </div>
         <div class="settings-list settings-expandable-content" id="notification-prefs-list" hidden>
           <p class="loading-state" role="status">${t("loading")}</p>
+        </div>
+      </div>
+
+      <h2 class="section-title">${t("accessibility")}</h2>
+      <div class="card settings-list">
+        <div class="settings-list-row"><span class="settings-row-label">${t("text_size")}</span></div>
+        <div class="settings-textsize" id="text-size-picker" role="radiogroup" aria-label="${t("text_size")}">
+          ${[["normal", "ts-a1", "text_size_normal"], ["large", "ts-a2", "text_size_large"], ["xlarge", "ts-a3", "text_size_xlarge"]]
+            .map(([v, cls, key]) => `<button type="button" role="radio" class="${cls}${getTextSize() === v ? " is-on" : ""}" aria-checked="${getTextSize() === v}" data-text-size="${v}">${t(key)}</button>`)
+            .join("")}
         </div>
       </div>
 
@@ -510,6 +521,15 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     window.dispatchEvent(new Event("app-preferences-changed"));
     onLanguageChange();
   });
+  root.querySelectorAll("[data-text-size]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      setTextSize(btn.dataset.textSize);
+      root.querySelectorAll("[data-text-size]").forEach((b) => {
+        b.classList.toggle("is-on", b === btn);
+        b.setAttribute("aria-checked", String(b === btn));
+      });
+    })
+  );
   root.querySelector("#toggle-perf-mode").addEventListener("click", () => {
     setPerfMode(getPerfMode() === "efficiency" ? "performance" : "efficiency");
     window.dispatchEvent(new Event("app-preferences-changed"));

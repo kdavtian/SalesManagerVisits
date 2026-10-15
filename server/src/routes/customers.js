@@ -1311,7 +1311,7 @@ customersRouter.get("/:id/checkin-spots", async (req, res) => {
 });
 
 // Defaults for the new order sheet: the downpayment suggestion (30 % on a new customer's FIRST order, 15 % after
-// that -- the rep can change it) and the customer's own credit term for "Payment due". "First order" = no ERP order
+// that -- the rep can change it), the customer's own credit term for "Payment due" and the terms of their last order. "First order" = no ERP order
 // line and no real app order (not a draft / cancelled one) for this customer. No money figures, so no debt RBAC.
 customersRouter.get("/:id/order-defaults", async (req, res) => {
   const customerId = Number(req.params.id);
@@ -1325,7 +1325,21 @@ customersRouter.get("/:id/order-defaults", async (req, res) => {
   );
   if (!rows[0]) return res.status(404).json({ error: "Customer not found" });
   const firstOrder = !rows[0].has_orders;
-  res.json({ first_order: firstOrder, downpayment_pct: firstOrder ? 30 : 15, credit_term_days: rows[0].credit_term_days ?? 45 });
+  // The terms of this customer's latest real order (method, due days, downpayment %): the sheet starts from them
+  // ("remember the last terms"). One more indexed look-up (idx_orders_customer), no extra request from the app.
+  const { rows: last } = await pool.query(
+    `SELECT payment_method, payment_term_days, downpayment_pct FROM orders
+     WHERE customer_id = $1 AND status NOT IN ('draft', 'cancelled') AND payment_method IS NOT NULL
+     ORDER BY created_at DESC LIMIT 1`,
+    [customerId]
+  );
+  const lt = last[0];
+  res.json({
+    first_order: firstOrder,
+    downpayment_pct: firstOrder ? 30 : 15,
+    credit_term_days: rows[0].credit_term_days ?? 45,
+    last_terms: lt ? { payment_method: lt.payment_method, payment_term_days: lt.payment_term_days, downpayment_pct: lt.downpayment_pct == null ? null : Number(lt.downpayment_pct) } : null,
+  });
 });
 
 // Credit terms (migration 101). The order form reads the current position to warn

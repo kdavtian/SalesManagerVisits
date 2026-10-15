@@ -81,6 +81,13 @@ test("order-defaults: 30 % on a customer's first order, 15 % once they have one;
   const next = await apiRequest(`/api/customers/${fresh.id}/order-defaults`, { cookie });
   assert.equal(next.data.first_order, false);
   assert.equal(next.data.downpayment_pct, 15);
+  // the last order's terms come back so the sheet can start from them
+  assert.equal(next.data.last_terms.payment_method, "invoice");
+  const second = await apiRequest("/api/orders", { method: "POST", cookie, body: { customer_id: fresh.id, payment_method: "cash", payment_term_days: 7, downpayment_pct: 20, items: [{ product_id: product.id, quantity: 1 }] } });
+  trackOrder(second.data.id);
+  const after = await apiRequest(`/api/customers/${fresh.id}/order-defaults`, { cookie });
+  assert.deepEqual(after.data.last_terms, { payment_method: "cash", payment_term_days: 7, downpayment_pct: 20 });
+  assert.equal(first.data.last_terms, null, "a customer with no order has no last terms");
   assert.equal((await apiRequest("/api/customers/99999999/order-defaults", { cookie })).status, 404);
 });
 

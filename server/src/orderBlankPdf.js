@@ -46,6 +46,17 @@ function amd(n) {
   return `${Math.round(Number(n)).toLocaleString("en-US")}դր`;
 }
 
+// Payment terms line of the blank (1.337.0): only the due days and the downpayment, so the customer signs for them
+// together with the goods. NULL = an order made before these fields existed (nothing is printed for it).
+export function paymentTermsText(terms) {
+  if (!terms) return { due: null, down: null };
+  const days = terms.dueDays;
+  const due = days == null ? null : Number(days) === 0 ? "Վճարման ժամկետ՝ առաքման պահին" : `Վճարման ժամկետ՝ ${Number(days)} օր`;
+  const pct = terms.downpaymentPct != null && Number(terms.downpaymentPct) > 0 ? ` (${Number(terms.downpaymentPct)}%)` : "";
+  const down = terms.downpaymentAmd == null ? null : `Կանխավճար՝ ${amd(terms.downpaymentAmd)}${pct}`;
+  return { due, down };
+}
+
 // Package size column: "4" / "4L" / "208 l" -> "4 L"; anything that is not a
 // plain litre figure (e.g. "pcs") is printed as is.
 export function formatSize(size) {
@@ -238,7 +249,16 @@ function drawFull(doc, data, firstPageDrawn) {
         if (value !== null && value !== undefined) c.right(amd(value), 580, ry + 1, { bold: true, size: 10 });
         else c.hline(ry + 12, 215, 589, "#555555", 0.5);
       });
-      drawSignatures(c, data, y + 4 * 21 + 38, 10);
+      const terms = paymentTermsText(data.terms);
+      let sigY = y + 4 * 21 + 38;
+      if (terms.due || terms.down) {
+        const ry = y + 4 * 21;
+        doc.save().rect(21.6, ry - 3, 568, 21).fill(SHADE).restore();
+        if (terms.due) c.text(terms.due, 24.6, ry + 1, { bold: true, size: 10 });
+        if (terms.down) c.right(terms.down, 580, ry + 1, { bold: true, size: 10 });
+        sigY = y + 5 * 21 + 30;
+      }
+      drawSignatures(c, data, sigY, 10);
     } else {
       c.text("Շարունակությունը հաջորդ էջում…", 21.6, bottom + 8, { size: 9 });
     }
@@ -275,7 +295,15 @@ function drawHalf(doc, data, slotTop, slotH) {
     if (value !== null && value !== undefined) c.right(amd(value), x2 - 2, ry, { bold: true, size: 8.5 });
     else c.hline(ry + 10, lx, x2, "#555555", 0.5);
   });
-  drawSignatures(c, data, y + 30 + 16, 8.5);
+  const terms = paymentTermsText(data.terms);
+  let sigY = y + 30 + 16;
+  if (terms.due || terms.down) {
+    const ry = y + 30;
+    if (terms.due) c.text(terms.due, 23.6, ry, { bold: true, size: 8.5 });
+    if (terms.down) c.right(terms.down, 587.6, ry, { bold: true, size: 8.5 });
+    sigY = y + 45 + 10;
+  }
+  drawSignatures(c, data, sigY, 8.5);
   doc.restore();
 }
 

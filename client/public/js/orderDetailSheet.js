@@ -221,7 +221,10 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
 
     overlay.querySelector(".sheet").classList.add("order-detail-sheet");
     overlay.querySelector(".sheet").innerHTML = `
-      <button type="button" class="icon-btn sheet-close-x" data-action="close-sheet" aria-label="${t("close")}">${icons.close}</button>
+      <div class="sheet-head-actions">
+        <button type="button" class="icon-btn" data-action="print-blank" aria-label="${t("print_blank")}" title="${t("print_blank")}">${icons.printer}</button>
+        <button type="button" class="icon-btn sheet-close-x" data-action="close-sheet" aria-label="${t("close")}">${icons.close}</button>
+      </div>
       <div class="order-detail-head">
       <div class="order-detail-ids">
         <span>${t("customer_id_label")}${labelColon()}${escapeHtml(order.erp_customer_id || String(order.customer_id))}</span>
@@ -325,8 +328,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     }
     // One tap to order the same lines again (opens Create order pre-filled at today's prices).
     buttons.push({ label: t("reorder_btn"), action: "reorder-order", cls: buttons.some((b) => b.cls.includes("btn-primary")) ? "btn" : "btn btn-primary" });
-    // Print-ready delivery-acceptance act (any order the viewer can open).
-    buttons.push({ label: t("print_blank"), action: "print-blank", cls: "btn" });
+    // Print-ready delivery-acceptance act: the printer icon next to the close button (any order the viewer can open).
     if (canEditThisOrder) {
       buttons.push({ label: t("edit_order"), action: "edit-order", cls: "btn" });
     }
@@ -349,6 +351,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
 
     actionsEl.querySelector("#order-detail-close")?.addEventListener("click", () => overlay.remove());
     overlay.querySelector('[data-action="close-sheet"]')?.addEventListener("click", () => overlay.remove());
+    overlay.querySelector('.sheet-head-actions [data-action="print-blank"]')?.addEventListener("click", () => openPrintBlankSheet([{ id: order.id, order_code: order.order_code }]));
     // Signed copies Lily stored on this order (loaded after the sheet is up).
     if (order.accounting_status) {
       api
