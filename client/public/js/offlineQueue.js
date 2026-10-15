@@ -205,6 +205,7 @@ function submitOrder(entry) {
     payment_term_days: entry.payment_term_days,
     downpayment_pct: entry.downpayment_pct,
     downpayment_amd: entry.downpayment_amd,
+    metrics: entry.metrics,
     client_ref: entry.clientRef || entry.id,
   });
 }

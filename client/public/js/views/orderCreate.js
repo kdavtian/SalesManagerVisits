@@ -170,6 +170,16 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     </div>
   `;
 
+  // Effort measurement (migration 124): where the order started, seconds from opening this screen to Save, and taps. Two
+  // numbers kept in memory and sent with the order: no extra request, no timers.
+  const startedAt = Date.now();
+  let taps = 0;
+  container.addEventListener("click", () => taps++);
+  const orderMetrics = () => {
+    const seconds = Math.round((Date.now() - startedAt) / 1000);
+    return { source: opts.usual ? "usual" : opts.from ? "repeat" : "new", ...(seconds <= 1800 ? { seconds } : {}), taps };
+  };
+
   const holdBanner = container.querySelector("#order-debt-hold");
   const prefillNote = container.querySelector("#order-prefill-note");
   const chipsEl = container.querySelector("#oc-chips");
@@ -656,6 +666,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
       updateCartBar();
     };
     overlay.addEventListener("click", (e) => e.target === overlay && close());
+    overlay.addEventListener("click", () => taps++);
 
     let floorSeq = 0;
     // flash = { id, action } -- the stepper button just pressed gets a short highlight and the new number a pop, because
@@ -923,6 +934,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
         payment_method: paymentMethod,
         payment_term_days: dueDays(),
         ...downpayment,
+        metrics: orderMetrics(),
         client_ref: clientRef,
       });
       overlay.remove();
@@ -942,6 +954,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
           payment_method: paymentMethod,
           payment_term_days: dueDays(),
           ...downpayment,
+          metrics: orderMetrics(),
         });
         overlay.remove();
         showOrderQueued();

@@ -181,7 +181,7 @@ async function loadOrderWithItems(orderId) {
 }
 
 ordersRouter.post("/", async (req, res) => {
-  const { customer_id, checkin_id, note, items, discount_pct, discount_amd, payment_method, payment_term_days, downpayment_pct, downpayment_amd, client_ref } = req.body ?? {};
+  const { customer_id, checkin_id, note, items, discount_pct, discount_amd, payment_method, payment_term_days, downpayment_pct, downpayment_amd, metrics, client_ref } = req.body ?? {};
   const customerId = Number(customer_id);
   if (!customerId || !Array.isArray(items) || !items.length) {
     return res.status(400).json({ error: "customer_id and at least one item are required" });
@@ -218,6 +218,13 @@ ordersRouter.post("/", async (req, res) => {
   if (downpaymentAmdIn !== null && (!Number.isFinite(downpaymentAmdIn) || downpaymentAmdIn < 0)) {
     return res.status(400).json({ error: "downpayment_amd must be a non-negative number" });
   }
+  // How the order was made (device-side measurement, see migration 124): silently ignored when absent or odd -- it must
+  // never block an order.
+  const effort = {
+    source: ["new", "usual", "repeat"].includes(metrics?.source) ? metrics.source : null,
+    seconds: Number.isInteger(metrics?.seconds) && metrics.seconds >= 0 && metrics.seconds <= 86400 ? metrics.seconds : null,
+    taps: Number.isInteger(metrics?.taps) && metrics.taps >= 0 && metrics.taps <= 10000 ? metrics.taps : null,
+  };
   let discountPct = discount_pct !== undefined ? Number(discount_pct) : 0;
   if (!Number.isFinite(discountPct) || discountPct < 0 || discountPct > 100) {
     return res.status(400).json({ error: "discount_pct must be a number between 0 and 100" });
@@ -296,10 +303,11 @@ ordersRouter.post("/", async (req, res) => {
     const orderCode = await nextOrderCode(client);
     const { rows } = await client.query(
       `INSERT INTO orders (customer_id, user_id, checkin_id, status, total_amd, note, discount_pct, discount_amd, approval_status, order_code, payment_method, client_ref,
-                           credit_status, credit_exposure_amd, credit_limit_snapshot_amd, payment_term_days, downpayment_pct, downpayment_amd)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING *`,
+                           credit_status, credit_exposure_amd, credit_limit_snapshot_amd, payment_term_days, downpayment_pct, downpayment_amd,
+                           order_source, build_seconds, build_taps)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21) RETURNING *`,
       [customerId, req.user.id, checkin_id || null, initialStatus, totalAmd, note || null, discountPct, discountAmd, approvalStatus, orderCode, payment_method, client_ref || null,
-       creditStatus, credit ? credit.exposure : null, credit ? credit.limit : null, paymentTermDays, downpaymentPct, downpaymentAmd]
+       creditStatus, credit ? credit.exposure : null, credit ? credit.limit : null, paymentTermDays, downpaymentPct, downpaymentAmd, effort.source, effort.seconds, effort.taps]
     );
     order = rows[0];
     for (const line of lines) {

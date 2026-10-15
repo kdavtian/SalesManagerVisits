@@ -99,3 +99,15 @@ test("editing an order's lines keeps its downpayment percentage", async () => {
   assert.equal(Number(edited.data.downpayment_pct), 20);
   assert.equal(Number(edited.data.downpayment_amd), Math.round(Number(edited.data.total_amd) * 0.2));
 });
+
+test("recent-orders: the order menu's picker lists the customer's last orders with their lines", async () => {
+  const c = await createCustomer({ created_by: rep.id, assigned_manager_id: rep.id, erp_customer_id: `PTR-${Date.now()}` });
+  assert.deepEqual((await apiRequest(`/api/customers/${c.id}/recent-orders`, { cookie })).data.orders, []);
+  const made = await apiRequest("/api/orders", { method: "POST", cookie, body: { customer_id: c.id, payment_method: "cash", items: [{ product_id: product.id, quantity: 3 }] } });
+  trackOrder(made.data.id);
+  const list = (await apiRequest(`/api/customers/${c.id}/recent-orders`, { cookie })).data.orders;
+  assert.equal(list.length, 1);
+  assert.equal(list[0].key, `app:${made.data.id}`);
+  assert.equal(list[0].lines[0].qty, 3);
+  assert.equal((await apiRequest("/api/customers/99999999/recent-orders", { cookie })).status, 404);
+});

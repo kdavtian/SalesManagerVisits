@@ -9,7 +9,7 @@ import { batchExpandAreas } from "../routes/visitPlans.js";
 import { evaluateRep, flagsOf } from "./evaluate.js";
 import { getVaghinakSettings } from "./settings.js";
 import { addressFor, clock, durationHy, pickVariant, QUESTION_CHOICES } from "./phrases.js";
-import { dataChase, orderChase } from "./chasers.js";
+import { dataChase, orderChase, downpaymentChase } from "./chasers.js";
 
 const YEREVAN_OFFSET_MS = 4 * 60 * 60 * 1000;
 export const MANAGEMENT_ROLES = ["admin", "ceo", "operations_director", "sales_director", "accountant"];
@@ -164,6 +164,7 @@ export async function tick(now = new Date(), db = pool, { pick } = {}) {
   if (nowMin >= settings.workStartMin + 10 && nowMin < settings.workEndMin) {
     created += await dataChase({ db, day, settings, pick });
     created += await orderChase({ db, day, settings, pick });
+    created += await downpaymentChase({ db, day, settings, pick, now });
   }
   return { created };
 }

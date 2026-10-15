@@ -111,3 +111,58 @@ export async function orderChase({ db, day, settings, pick }) {
   }
   return created;
 }
+
+// DOWNPAYMENT FOLLOW-UP (1.338.0): an order with a downpayment whose goods are already packed or delivered, while the
+// customer has not paid that amount since the order was made (payments of the customer, not rejected, dated from the
+// order day). The rep gets a message and a task, once a day, three times at most; management hears about orders
+// delivered 3+ days ago with the downpayment still missing. The task closes itself when the money is in. In shadow mode
+// only shadow messages are written and no reminder is counted.
+const amdText = (n) => `${Math.round(n).toLocaleString("en-US")} դրամ`;
+
+export async function downpaymentChase({ db, day, settings, pick, now = new Date() }) {
+  const { rows } = await db.query(
+    `SELECT o.id, o.customer_id, o.user_id AS rep_id, o.downpayment_amd::float8 AS down, o.downpayment_reminders, o.downpayment_reminded_on::text AS reminded_on,
+            c.name AS customer_name, u.name, u.name_hy, u.role, u.vaghinak_address,
+            COALESCE((SELECT sum(p.amount_amd) FROM payments p WHERE p.customer_id = o.customer_id AND p.status <> 'rejected'
+                       AND p.payment_date >= o.created_at - interval '1 day'), 0)::float8 AS paid,
+            COALESCE((SELECT MIN(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status IN ('packed_stock_out', 'delivered')), o.updated_at) AS since
+     FROM orders o
+     JOIN customers c ON c.id = o.customer_id
+     JOIN users u ON u.id = o.user_id AND u.role = 'sales_manager' AND u.vaghinak_muted_day IS DISTINCT FROM $1::date
+     WHERE o.downpayment_amd > 0 AND o.status IN ('packed_stock_out', 'delivered') AND o.created_at > now() - interval '60 days'`,
+    [day]
+  );
+  const missing = rows.filter((o) => o.paid < o.down);
+  // close the tasks whose customer has no missing downpayment any more
+  await db.query(
+    `UPDATE tasks SET status = 'done', completed_at = now(), completion_note = 'Կանխավճարը ստացվել է', updated_at = now()
+     WHERE auto_kind = 'downpayment' AND status = 'open' AND NOT (customer_id = ANY($1::int[]))`,
+    [[...new Set(missing.map((o) => o.customer_id))]]
+  );
+  let created = 0;
+  const byRep = new Map();
+  for (const o of missing) {
+    if (o.downpayment_reminders >= 3 || o.reminded_on === day) continue;
+    (byRep.get(o.rep_id) ?? byRep.set(o.rep_id, []).get(o.rep_id)).push(o);
+  }
+  for (const [repId, list] of byRep) {
+    const rep = { id: repId, name: list[0].name, name_hy: list[0].name_hy, role: list[0].role, vaghinak_address: list[0].vaghinak_address };
+    const total = list.reduce((s, o) => s + (o.down - o.paid), 0);
+    if (settings.mode === "live") {
+      for (const o of list) {
+        await createOpsTask({ kind: "downpayment", title: `Կանխավճար՝ ${o.customer_name} (${amdText(o.down - o.paid)})`, assigneeId: repId, customerId: o.customer_id, notify: false, db });
+        await db.query("UPDATE orders SET downpayment_reminders = downpayment_reminders + 1, downpayment_reminded_on = $2 WHERE id = $1", [o.id, day]);
+      }
+    }
+    if (await createMessage(db, rep, { kind: "downpayment_due", level: 1, day, ctx: { names: firstNames(list.map((o) => ({ name: o.customer_name }))), amount: amdText(total) }, audience: "rep", settings, pick })) created++;
+  }
+  // delivered 3+ days ago and still no downpayment -> management
+  const late = missing.filter((o) => now.getTime() - new Date(o.since).getTime() > 3 * 86400000);
+  if (late.length) {
+    const ids = [...(await usersWithRole("sales_director", db)), ...(await usersWithRole("ceo", db)), ...(await usersWithRole("admin", db))];
+    const { rows: mgmt } = ids.length ? await db.query("SELECT id, name, name_hy, role, vaghinak_address FROM users WHERE id = ANY($1)", [ids]) : { rows: [] };
+    const ctx = { n: late.length, amount: amdText(late.reduce((s, o) => s + (o.down - o.paid), 0)), customer: late[0].customer_name };
+    for (const u of mgmt) if (await createMessage(db, u, { kind: "downpayment_overdue", level: 1, day, ctx, audience: "management", settings, pick })) created++;
+  }
+  return created;
+}

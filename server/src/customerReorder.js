@@ -178,3 +178,16 @@ export async function buildReorderProfile(customerId, { from = null, today = yer
   }
   return profile;
 }
+
+// The customer's last few orders (newest first: Excel history plus app orders the sync has not brought back yet) with
+// their lines -- for the "Repeat order" picker of the order menu. Same data (and same RBAC) as the reorder profile.
+export async function recentOrdersFor(customerId) {
+  const { rows: [customer] } = await pool.query("SELECT id, erp_customer_id FROM customers WHERE id = $1", [customerId]);
+  if (!customer) return null;
+  const history = await loadHistory(customer);
+  return history.map((o) => ({
+    key: o.key,
+    date: String(o.date instanceof Date ? o.date.toISOString() : o.date).slice(0, 10),
+    lines: o.lines.map((l) => ({ name: [l.brand, l.name].filter(Boolean).join(" "), qty: l.qty })),
+  }));
+}

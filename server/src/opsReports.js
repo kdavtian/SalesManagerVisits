@@ -272,7 +272,34 @@ export async function orderFlow(db = pool, days = 30) {
       blocked_by: w.approval_status === "pending" ? "price_approval" : w.credit_status === "pending" ? "credit_approval" : null,
     };
   });
-  return { days, sla, steps: stepMap, waiting: list.slice(0, 40), waiting_count: list.length, over_sla_count: list.filter((w) => w.over_sla).length };
+  return { days, sla, steps: stepMap, waiting: list.slice(0, 40), waiting_count: list.length, over_sla_count: list.filter((w) => w.over_sla).length, effort: await orderEffort(db, days) };
+}
+
+// How long it takes the reps to make an order (measured on the device, migration 124): this period against the one
+// before it, and by where the order started. Whatever shortcut does not make orders faster or fewer taps is a
+// candidate to cut. Only orders that carry the measurement count.
+export async function orderEffort(db = pool, days = 30) {
+  const { rows } = await db.query(
+    `SELECT order_source AS source, build_seconds AS s, build_taps AS taps, (created_at >= now() - ($1 || ' days')::interval) AS cur
+     FROM orders WHERE build_seconds IS NOT NULL AND status <> 'draft' AND created_at >= now() - ($1 || ' days')::interval * 2`,
+    [days]
+  );
+  const median = (nums) => {
+    if (!nums.length) return null;
+    const v = [...nums].sort((x, y) => x - y);
+    const m = Math.floor(v.length / 2);
+    return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+  };
+  const summary = (list) => ({
+    n: list.length,
+    median_seconds: list.length ? Math.round(median(list.map((r) => r.s))) : null,
+    median_taps: list.length ? Math.round(median(list.filter((r) => r.taps != null).map((r) => r.taps))) : null,
+  });
+  const cur = rows.filter((r) => r.cur);
+  const prev = rows.filter((r) => !r.cur);
+  const by_source = {};
+  for (const src of ["new", "usual", "repeat"]) by_source[src] = summary(cur.filter((r) => r.source === src));
+  return { current: summary(cur), previous: summary(prev), by_source, usual_share_pct: cur.length ? Math.round((100 * cur.filter((r) => r.source === "usual").length) / cur.length) : null };
 }
 
 // ---------- data scorecard ----------

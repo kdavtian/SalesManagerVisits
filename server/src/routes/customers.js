@@ -6,7 +6,7 @@ import { canConfirmOrders, seesAllActivity, canReassignCustomers, canDeleteOrEdi
 import { creditSnapshot } from "../creditLimit.js";
 import { loadUnpaidOrders, summarizeDebt, dueDays, debtHoldInfo } from "../debtAge.js";
 import { visitPriorities } from "../visitPriorities.js";
-import { buildReorderProfile } from "../customerReorder.js";
+import { buildReorderProfile, recentOrdersFor } from "../customerReorder.js";
 import { REORDER_COLUMNS, REORDER_JOIN, withReorderState } from "../orderRhythm.js";
 import { allocateFifo, loadOrdersNewestFirst } from "../debtAging.js";
 import { buildDebtStatementPdf } from "../debtStatementPdf.js";
@@ -1071,6 +1071,16 @@ customersRouter.get("/:id/reorder-profile", async (req, res) => {
     return res.json({ cadence: { median_gap_days: null, days_since_order: null, state: null }, orders_considered: 0, items: [], skipped: 0, lines: null });
   }
   res.json(await buildReorderProfile(customerId, { from: req.query.from ? String(req.query.from) : null }));
+});
+
+// The order menu's "Repeat order" picker: the last few orders with their lines (keys work with ?from= of the order screen).
+customersRouter.get("/:id/recent-orders", async (req, res) => {
+  const customerId = Number(req.params.id);
+  if (!Number.isInteger(customerId)) return res.status(400).json({ error: "Invalid customer id" });
+  const { rows } = await pool.query("SELECT assigned_manager_id FROM customers WHERE id = $1", [customerId]);
+  if (!rows[0]) return res.status(404).json({ error: "Customer not found" });
+  if (!seesCustomerErpData(req.user.role, rows[0].assigned_manager_id, req.user.id)) return res.json({ orders: [] });
+  res.json({ orders: await recentOrdersFor(customerId) });
 });
 
 // Every active catalog product this customer has EVER ordered (Excel history + app orders the Excel does not hold
