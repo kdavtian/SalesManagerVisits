@@ -401,3 +401,22 @@ test("Monday digest: each rep gets last week's result once; management gets one 
     await saveVaghinakSettings({ mode: "shadow" });
   }
 });
+
+test("durations in his messages are hours + minutes, never a bare minute count (202 min late -> 3 ժամ 22 րոպե)", async () => {
+  const lateRep = await createUser("sales_manager", { name: "Late Rep" });
+  const cust = await createCustomer({ created_by: lateRep.id, assigned_manager_id: lateRep.id, name: "Late Customer" });
+  try {
+    await saveVaghinakSettings({ mode: "live" });
+    await checkin(lateRep, cust, at(12, 52)); // 09:30 + 202 min
+    await tick(at(13, 0), pool, { pick: () => 0 });
+    const msg = (await pool.query("SELECT body FROM vaghinak_messages WHERE user_id = $1 AND kind = 'late_start'", [lateRep.id])).rows[0];
+    assert.ok(msg, "a late-start word was written");
+    assert.ok(msg.body.includes("3 ժամ 22 րոպե"), msg.body);
+    assert.ok(!msg.body.includes("202"), "no bare minute count");
+  } finally {
+    await pool.query("DELETE FROM vaghinak_messages WHERE user_id = $1", [lateRep.id]);
+    await pool.query("DELETE FROM vaghinak_day_log WHERE user_id = $1", [lateRep.id]);
+    await pool.query("DELETE FROM checkins WHERE user_id = $1", [lateRep.id]);
+    await saveVaghinakSettings({ mode: "shadow" });
+  }
+});
