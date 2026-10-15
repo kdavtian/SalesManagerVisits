@@ -13468,3 +13468,16 @@ form select,
 .cl-legend-row .badge { flex: 0 0 auto; }
 .cl-legend-row .list-row-icon { width: 32px; height: 32px; flex: 0 0 auto; }
 .cl-legend-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+/* Special-price customers (admin / directors): the unit price in the line IS the editable field -- no third row. */
+.oc-line .oc-price-input {
+  width: 6.4rem;
+  height: 40px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+}

@@ -665,9 +665,8 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
               <strong>${escapeHtml(line.product_name)}</strong>
               <span class="oc-meta-line">
                 <span class="muted oc-meta-text">${product?.unit ? escapeHtml(product.unit) : ""}</span>
-                <span class="oc-price-line">${product ? specialChip(product, line.unit_price_amd) : ""}<span class="oc-price">${formatPriceOrFree(line.unit_price_amd)}</span><strong class="oc-line-total">${formatAmd(line.unit_price_amd * line.quantity)}</strong></span>
+                <span class="oc-price-line">${product ? specialChip(product, line.unit_price_amd) : ""}${canSetPrices ? `<input class="order-price-input amd-input oc-price-input" data-price-input inputmode="numeric" aria-label="${t("custom_price")}" value="${groupDigits(line.unit_price_amd)}">` : `<span class="oc-price">${formatPriceOrFree(line.unit_price_amd)}</span>`}<strong class="oc-line-total">${formatAmd(line.unit_price_amd * line.quantity)}</strong></span>
               </span>
-              ${canSetPrices ? `<label class="oc-price-edit muted">${t("custom_price")} <input class="order-price-input amd-input" data-price-input value="${groupDigits(line.unit_price_amd)}"></label>` : ""}
               ${warning ? `<span class="order-stock-warning${warning.level === "danger" ? " order-stock-danger" : ""}">${warning.text}</span>` : ""}
             </div>
             <div class="order-qty-stepper">
