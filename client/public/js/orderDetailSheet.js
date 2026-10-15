@@ -233,7 +233,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     }${
       order.payment_method ? ` ${paymentMethodBadgeHtml(order.payment_method)}` : ""
     }${
-      order.payment_method === "invoice" && order.payment_term_days ? ` <span class="badge badge-neutral">${t("oc_due_days_badge").replace("{n}", String(order.payment_term_days))}</span>` : ""
+      order.payment_term_days != null ? ` <span class="badge badge-neutral">${Number(order.payment_term_days) === 0 ? t("oc_due_on_delivery") : t("oc_due_days_badge").replace("{n}", String(order.payment_term_days))}</span>` : ""
     }${
       hasDiscount && approvalMeta ? ` <span class="badge ${approvalMeta.cls}">${t(approvalMeta.key)}</span>` : ""
     }${creditMeta ? ` <span class="badge ${creditMeta[1]}">${t(creditMeta[0])}</span>` : ""}</p>
@@ -246,6 +246,11 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       ${
         hasDiscount
           ? `<p class="muted">${t("price_change_label")}${labelColon()}${discountAmd > 0 ? formatAmd(discountAmd) : `${discountPct}%`}</p>`
+          : ""
+      }
+      ${
+        order.downpayment_amd != null && Number(order.downpayment_amd) > 0
+          ? `<p class="muted">${t("oc_downpayment")}${labelColon()}${formatAmd(Number(order.downpayment_amd))}${order.downpayment_pct != null ? ` (${Number(order.downpayment_pct)}%)` : ""}</p>`
           : ""
       }
       ${

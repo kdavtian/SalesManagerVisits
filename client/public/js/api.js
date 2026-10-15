@@ -446,6 +446,7 @@ export const api = {
   deleteOrder: (id) => request(`/orders/${id}`, { method: "DELETE" }),
   rejectOrderDiscount: (id) => request(`/orders/${id}/reject-discount`, { method: "POST" }),
   getCreditStatus: (customerId) => request(`/customers/${customerId}/credit-status`),
+  getOrderDefaults: (customerId) => request(`/customers/${customerId}/order-defaults`),
   getCreditHistory: (customerId) => request(`/customers/${customerId}/credit-history`),
   setCreditLimit: (customerId, limit) => json(`/customers/${customerId}/credit-terms`, "PUT", { credit_limit_amd: limit }),
   approveOrderCredit: (id) => request(`/orders/${id}/approve-credit`, { method: "POST" }),

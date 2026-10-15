@@ -2,6 +2,10 @@ import { api } from "./api.js";
 import { state, setUser, isAdmin, canPlanForOthers, loadCachedUser } from "./state.js";
 import { getLang, t } from "./i18n.js";
 import { icons } from "./icons.js";
+
+// iOS Safari only applies :active (the pressed look of every button) once the page has a touch listener; without
+// it a tap shows no pressed state at all. A passive no-op listener on the document is enough.
+document.addEventListener("touchstart", () => {}, { passive: true });
 // Every view module below is loaded on demand (dynamic import()) from
 // render()'s route dispatch instead of statically here -- on boot, only the
 // screen the user actually lands on needs to be fetched/parsed/evaluated,

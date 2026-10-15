@@ -23,7 +23,6 @@ test.describe("Discount approval", () => {
     await repPage.locator("#order-cart-bar").click(); // "Your order" sheet holds the discount and Save
     await repPage.locator('#order-discount-type [data-type="pct"]').click(); // AMD is the default type
     await repPage.locator("#order-discount-input").fill("10");
-    await repPage.locator("#oc-terms-btn").click(); // Payment terms ... then Save order
 
     const [orderResponse] = await Promise.all([
       repPage.waitForResponse((res) => res.url().includes("/api/orders") && res.request().method() === "POST"),

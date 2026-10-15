@@ -181,7 +181,7 @@ async function loadOrderWithItems(orderId) {
 }
 
 ordersRouter.post("/", async (req, res) => {
-  const { customer_id, checkin_id, note, items, discount_pct, discount_amd, payment_method, payment_term_days, client_ref } = req.body ?? {};
+  const { customer_id, checkin_id, note, items, discount_pct, discount_amd, payment_method, payment_term_days, downpayment_pct, downpayment_amd, client_ref } = req.body ?? {};
   const customerId = Number(customer_id);
   if (!customerId || !Array.isArray(items) || !items.length) {
     return res.status(400).json({ error: "customer_id and at least one item are required" });
@@ -201,13 +201,22 @@ ordersRouter.post("/", async (req, res) => {
   if (payment_method !== "cash" && payment_method !== "invoice") {
     return res.status(400).json({ error: "payment_method must be 'cash' or 'invoice'" });
   }
-  // "Payment due: N days" (Invoice orders only; cash is paid at once).
+  // "Payment due: N days" -- asked for both methods since 1.334.0. Cash: 0 = pay on delivery, up to 365; Invoice: 1-365.
   let paymentTermDays = null;
-  if (payment_method === "invoice" && payment_term_days !== undefined && payment_term_days !== null && payment_term_days !== "") {
+  if (payment_term_days !== undefined && payment_term_days !== null && payment_term_days !== "") {
     paymentTermDays = Number(payment_term_days);
-    if (!Number.isInteger(paymentTermDays) || paymentTermDays < 1 || paymentTermDays > 365) {
-      return res.status(400).json({ error: "payment_term_days must be a whole number of days between 1 and 365" });
+    const min = payment_method === "invoice" ? 1 : 0;
+    if (!Number.isInteger(paymentTermDays) || paymentTermDays < min || paymentTermDays > 365) {
+      return res.status(400).json({ error: `payment_term_days must be a whole number of days between ${min} and 365` });
     }
+  }
+  const downpaymentPctIn = downpayment_pct === undefined || downpayment_pct === null || downpayment_pct === "" ? null : Number(downpayment_pct);
+  const downpaymentAmdIn = downpayment_amd === undefined || downpayment_amd === null || downpayment_amd === "" ? null : Number(downpayment_amd);
+  if (downpaymentPctIn !== null && (!Number.isFinite(downpaymentPctIn) || downpaymentPctIn < 0 || downpaymentPctIn > 100)) {
+    return res.status(400).json({ error: "downpayment_pct must be a number between 0 and 100" });
+  }
+  if (downpaymentAmdIn !== null && (!Number.isFinite(downpaymentAmdIn) || downpaymentAmdIn < 0)) {
+    return res.status(400).json({ error: "downpayment_amd must be a non-negative number" });
   }
   let discountPct = discount_pct !== undefined ? Number(discount_pct) : 0;
   if (!Number.isFinite(discountPct) || discountPct < 0 || discountPct > 100) {
@@ -257,6 +266,17 @@ ordersRouter.post("/", async (req, res) => {
 
   const subtotalAmd = lines.reduce((sum, l) => sum + l.line_total_amd, 0);
   const totalAmd = applyDiscount(subtotalAmd, discountPct, discountAmd);
+  // Downpayment (advance), on the total AFTER discount. A flat amount wins over a percentage if both come.
+  let downpaymentPct = null;
+  let downpaymentAmd = null;
+  if (downpaymentAmdIn !== null && (downpaymentAmdIn > 0 || downpaymentPctIn === null)) {
+    if (downpaymentAmdIn > totalAmd) return res.status(400).json({ error: "downpayment_amd cannot be more than the order total" });
+    downpaymentAmd = Math.round(downpaymentAmdIn);
+    downpaymentPct = totalAmd > 0 ? Math.round((downpaymentAmd / totalAmd) * 10000) / 100 : 0;
+  } else if (downpaymentPctIn !== null) {
+    downpaymentPct = Math.round(downpaymentPctIn * 100) / 100;
+    downpaymentAmd = Math.round((totalAmd * downpaymentPct) / 100);
+  }
   // A discount needs a director's sign-off before the order can move past
   // "submitted" into fulfillment (see the approval_status gate in PATCH
   // below) -- no discount means nothing to approve.
@@ -276,10 +296,10 @@ ordersRouter.post("/", async (req, res) => {
     const orderCode = await nextOrderCode(client);
     const { rows } = await client.query(
       `INSERT INTO orders (customer_id, user_id, checkin_id, status, total_amd, note, discount_pct, discount_amd, approval_status, order_code, payment_method, client_ref,
-                           credit_status, credit_exposure_amd, credit_limit_snapshot_amd, payment_term_days)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *`,
+                           credit_status, credit_exposure_amd, credit_limit_snapshot_amd, payment_term_days, downpayment_pct, downpayment_amd)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING *`,
       [customerId, req.user.id, checkin_id || null, initialStatus, totalAmd, note || null, discountPct, discountAmd, approvalStatus, orderCode, payment_method, client_ref || null,
-       creditStatus, credit ? credit.exposure : null, credit ? credit.limit : null, paymentTermDays]
+       creditStatus, credit ? credit.exposure : null, credit ? credit.limit : null, paymentTermDays, downpaymentPct, downpaymentAmd]
     );
     order = rows[0];
     for (const line of lines) {
@@ -964,7 +984,9 @@ ordersRouter.patch("/:id", async (req, res) => {
       `UPDATE orders
        SET status = $1, total_amd = $2, note = COALESCE($3, note),
            discount_pct = $4, discount_amd = $7, approval_status = $5, updated_at = now(),
-           credit_status = $10, credit_exposure_amd = $11, credit_limit_snapshot_amd = $12
+           credit_status = $10, credit_exposure_amd = $11, credit_limit_snapshot_amd = $12,
+           -- the downpayment keeps its percentage when the lines (and so the total) change
+           downpayment_amd = CASE WHEN downpayment_pct IS NULL THEN downpayment_amd ELSE ROUND($2::numeric * downpayment_pct / 100) END
        WHERE id = $6 AND status = $8 AND approval_status = $9 RETURNING *`,
       [nextStatus, nextTotal, note ?? null, nextDiscountPct, nextApprovalStatus, order.id, nextDiscountAmd, order.status, order.approval_status, nextCreditStatus, nextCreditExposure, nextCreditLimit]
     );

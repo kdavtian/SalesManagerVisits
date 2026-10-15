@@ -27,7 +27,6 @@ test.describe("Offline order creation and later synchronization", () => {
 
     // The bottom bar opens "Your order" (lines, discount, payment method, Save).
     await page.locator("#order-cart-bar").click();
-    await page.locator("#oc-terms-btn").click(); // Payment terms ... then Save order
     await context.setOffline(true);
     await page.locator("#save-order-btn").click();
 
