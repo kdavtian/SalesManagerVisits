@@ -30,8 +30,6 @@ export const QUICK_ACTIONS = [
   { id: "qa_tasks", defaultRoles: ALL_ROLES },
   // Vaghinak, the AI operations deputy director: his messages, questions and (for management) the team pulse.
   { id: "qa_vaghinak", defaultRoles: ALL_ROLES },
-  // Operations control: debt decisions, credit limits and the other business-process checks (management only).
-  { id: "qa_ops_control", defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"] },
   { id: "qa_add_customer", defaultRoles: ALL_ROLES },
   {
     id: "qa_payments",
@@ -102,7 +100,6 @@ export const QUICK_ACTION_ROUTE = {
   qa_sales: "#/sales",
   qa_tasks: "#/tasks",
   qa_vaghinak: "#/vaghinak",
-  qa_ops_control: "#/ops-control",
   qa_bonuses: "#/bonuses",
 };
 
