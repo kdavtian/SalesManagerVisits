@@ -6,6 +6,18 @@ import { icons } from "./icons.js";
 // iOS Safari only applies :active (the pressed look of every button) once the page has a touch listener; without
 // it a tap shows no pressed state at all. A passive no-op listener on the document is enough.
 document.addEventListener("touchstart", () => {}, { passive: true });
+
+// Number fields (amounts, days, percentages, quantities) select their whole content when tapped, so the user types
+// the new number straight away without deleting the old one first. A second tap places the cursor as usual.
+document.addEventListener("focusin", (e) => {
+  const el = e.target;
+  if (!(el instanceof HTMLInputElement) || el.readOnly || el.disabled) return;
+  if (!(el.classList.contains("amd-input") || el.classList.contains("oc-field") || el.inputMode === "numeric" || el.inputMode === "decimal")) return;
+  // after the browser has placed its caret (iOS ignores select() inside the focus event itself)
+  setTimeout(() => {
+    if (document.activeElement === el) el.setSelectionRange(0, el.value.length);
+  }, 0);
+});
 // Every view module below is loaded on demand (dynamic import()) from
 // render()'s route dispatch instead of statically here -- on boot, only the
 // screen the user actually lands on needs to be fetched/parsed/evaluated,
