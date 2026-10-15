@@ -120,8 +120,17 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
   let discountType = "amd";
   let discountAmount = 0; // the number typed in the discount field (AMD or %)
   let paymentMethod = customer.payment_method === "cash" ? "cash" : "invoice";
-  let paymentTermDays = Number(customer.credit_term_days) > 0 ? Number(customer.credit_term_days) : 45;
-  let termsOpen = false;
+  // "Payment due" is asked for both methods and each remembers its own number: cash 0 = pay on delivery, invoice =
+  // the customer's own credit term.
+  let dueCash = 0;
+  let dueInvoice = Number(customer.credit_term_days) > 0 ? Number(customer.credit_term_days) : 45;
+  // Downpayment: 30 % on a new customer's first order, 15 % after that (GET /customers/:id/order-defaults); the rep
+  // can change the number or switch it to AMD. dpTouched stops the late-arriving default from overwriting an edit.
+  let dpType = "pct";
+  let dpValue = 15;
+  let dpTouched = false;
+  let firstOrder = null; // null until the defaults arrive
+  let sheetRepaint = null;
 
   container.innerHTML = `
     <div class="detail-header oc-header">
@@ -214,6 +223,22 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
   }).catch(() => {
     /* offline or not allowed to see debt: no warning, the server still checks */
   });
+
+  api.getOrderDefaults(customerId).then((d) => {
+    if (Number(d.credit_term_days) > 0) dueInvoice = Number(d.credit_term_days);
+    firstOrder = Boolean(d.first_order);
+    if (!dpTouched) dpValue = Number(d.downpayment_pct) || 0;
+    sheetRepaint?.();
+  }).catch(() => {
+    /* offline: the repeat-customer default (15 %) stays; the rep can change it */
+  });
+
+  // Press feedback for the stepper buttons: the row/sheet is repainted on every tap, so the CSS :active state of the old
+  // button is gone at once. The new button flashes and the number pops so the tap is always seen.
+  function flashStepper(btn, qtyEl) {
+    btn?.classList.add("is-flash");
+    qtyEl?.classList.add("qty-pop");
+  }
 
   // ---- cart ----------------------------------------------------------------------------------------------------------
   function addToCart(product, quantity) {
@@ -341,16 +366,20 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     const warning = stockWarning(product, qty || defaultQtyForUnit(product.unit));
     const outOfStock = product.stock_qty !== null && product.stock_qty !== undefined && product.stock_qty <= 0;
     const usual = view.chip === "frequent" && !searchQuery.trim() ? usualItemOf(product.id) : null;
+    // Two lines: the name, then brand / size on the left and the price on the right. The Add button or stepper
+    // sits alone on the right, so the price never crowds it.
     return `
       <div class="order-product-row" data-product-id="${product.id}">
         <div class="order-product-info">
           <strong>${escapeHtml(product.name)}</strong>
-          <span class="muted">${[product.brand, product.unit].filter(Boolean).map(escapeHtml).join(" · ")}${usual ? ` × ${usual.quantity}` : ""}</span>
+          <span class="oc-meta-line">
+            <span class="muted oc-meta-text">${[product.brand, product.unit].filter(Boolean).map(escapeHtml).join(" · ")}${usual ? ` × ${usual.quantity}` : ""}</span>
+            <span class="oc-price-line">${specialChip(product, price)}<span class="oc-price">${formatPriceOrFree(price)}</span></span>
+          </span>
           ${usual?.due ? `<span class="order-due-tag">${t("usual_item_due")}</span>` : ""}
           ${warning && !outOfStock ? `<span class="order-stock-warning">${warning.text}</span>` : ""}
         </div>
         <div class="oc-row-side">
-          <span class="oc-price-line">${specialChip(product, price)}<span class="oc-price">${formatPriceOrFree(price)}</span></span>
           ${
             qty > 0
               ? `<div class="order-qty-stepper">
@@ -367,11 +396,13 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     `;
   }
 
-  function rerenderRow(product) {
+  function rerenderRow(product, action) {
     const row = listEl.querySelector(`[data-product-id="${product.id}"]`);
     if (!row) return;
     row.outerHTML = renderProductRow(product);
-    wireRow(listEl.querySelector(`[data-product-id="${product.id}"]`), product);
+    const fresh = listEl.querySelector(`[data-product-id="${product.id}"]`);
+    wireRow(fresh, product);
+    if (action) flashStepper(fresh.querySelector(`[data-action="${action === "add" ? "inc" : action}"]`), fresh.querySelector(".order-qty-stepper span"));
   }
 
   // Long press on + / - moves by one pack (see stepper.js); a tap by 1.
@@ -385,7 +416,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     row.querySelectorAll("[data-action]").forEach((btn) => {
       const action = btn.dataset.action;
       const after = () => {
-        rerenderRow(product);
+        rerenderRow(product, action);
         updateCartBar();
       };
       if (action === "inc" || action === "dec") {
@@ -562,6 +593,33 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
       <p class="muted">${t("oc_tier_diff_hint")}</p>`);
   }
 
+  // The lines of the cart grouped by brand (Castrol, Lotos, Orlen, Royal, other brands A-Z, then Merch), each group in
+  // the canonical catalog order (productSort.js) -- the order the rep walks the customer through the pricelist.
+  function groupedCartLines() {
+    const groups = new Map();
+    for (const line of cart.values()) {
+      const product = catalogById.get(line.product_id) ?? null;
+      const key = !product ? "" : productCategory(product) === "Merch" ? MERCH : product.brand || "";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push({ line, product });
+    }
+    const order = [...sortedBrands([...groups.keys()].filter((k) => k && k !== MERCH).map((brand) => ({ brand }))), ...(groups.has(MERCH) ? [MERCH] : []), ...(groups.has("") ? [""] : [])];
+    return order.map((key) => ({
+      key,
+      label: key === MERCH ? t("category_merch") : key || "—",
+      rows: groups.get(key).sort((a, b) => (a.product && b.product ? compareProducts(a.product, b.product) : a.line.product_name.localeCompare(b.line.product_name))),
+    }));
+  }
+
+  // Downpayment (advance) in AMD, on the total after the discount.
+  function downpaymentAmd() {
+    const v = Number(dpValue);
+    if (!Number.isFinite(v) || v <= 0) return 0;
+    return dpType === "pct" ? Math.round((cartTotalAmd() * Math.min(100, v)) / 100) : Math.round(v);
+  }
+  const dueDays = () => (paymentMethod === "cash" ? dueCash : dueInvoice);
+  const dueValid = () => Number.isInteger(dueDays()) && dueDays() >= (paymentMethod === "cash" ? 0 : 1) && dueDays() <= 365;
+
   function openOrderSheet() {
     if (!cart.size) return;
     const overlay = document.createElement("div");
@@ -572,109 +630,111 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     const sheet = overlay.querySelector(".sheet");
     const close = () => {
       overlay.remove();
+      sheetRepaint = null;
       render();
       updateCartBar();
     };
     overlay.addEventListener("click", (e) => e.target === overlay && close());
 
     let floorSeq = 0;
-    function paintSheet() {
+    // flash = { id, action } -- the stepper button just pressed gets a short highlight and the new number a pop, because
+    // the whole sheet is repainted and the finger-down state of the old button is gone with it.
+    function paintSheet(flash) {
       if (!cart.size) {
         close();
         return;
       }
-      const lines = [...cart.values()];
       const over = creditOverAmd();
-      const itemCount = lines.reduce((n, l) => n + l.quantity, 0);
+      const itemCount = [...cart.values()].reduce((n, l) => n + l.quantity, 0);
+      const lineHtml = ({ line, product }) => {
+        const warning = product ? stockWarning(product, line.quantity) : null;
+        return `<div class="oc-line" data-line="${line.product_id}">
+            <div class="oc-line-info">
+              <strong>${escapeHtml(line.product_name)}</strong>
+              <span class="oc-meta-line">
+                <span class="muted oc-meta-text">${product?.unit ? escapeHtml(product.unit) : ""}</span>
+                <span class="oc-price-line">${product ? specialChip(product, line.unit_price_amd) : ""}<span class="oc-price">${formatPriceOrFree(line.unit_price_amd)}</span><strong class="oc-line-total">${formatAmd(line.unit_price_amd * line.quantity)}</strong></span>
+              </span>
+              ${canSetPrices ? `<label class="oc-price-edit muted">${t("custom_price")} <input class="order-price-input amd-input" data-price-input value="${groupDigits(line.unit_price_amd)}"></label>` : ""}
+              ${warning ? `<span class="order-stock-warning${warning.level === "danger" ? " order-stock-danger" : ""}">${warning.text}</span>` : ""}
+            </div>
+            <div class="order-qty-stepper">
+              <button type="button" class="icon-btn" data-dec aria-label="${t("decrease")}">&minus;</button>
+              <span>${line.quantity}</span>
+              <button type="button" class="icon-btn" data-inc aria-label="${t("increase")}">&plus;</button>
+            </div>
+          </div>`;
+      };
+      const unit = (type) => (type === "pct" ? "%" : t("amd"));
       sheet.innerHTML = `
         <div class="oc-sheet-head">
           <div><h2>${t("oc_your_order")}</h2><span class="muted">${escapeHtml(customer.name)}</span></div>
           <button type="button" class="icon-btn sheet-close-x" data-close aria-label="${t("close")}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
         </div>
-        <div class="oc-lines">${lines
-          .map((line) => {
-            const product = catalogById.get(line.product_id);
-            const warning = product ? stockWarning(product, line.quantity) : null;
-            return `<div class="oc-line" data-line="${line.product_id}">
-              <div class="oc-line-info">
-                <strong>${escapeHtml(line.product_name)}</strong>
-                <span class="muted">${product ? [product.brand, product.unit].filter(Boolean).map(escapeHtml).join(" · ") : ""}</span>
-                ${canSetPrices ? `<label class="oc-price-edit muted">${t("custom_price")} <input class="order-price-input amd-input" data-price-input value="${groupDigits(line.unit_price_amd)}"></label>` : ""}
-                ${warning ? `<span class="order-stock-warning${warning.level === "danger" ? " order-stock-danger" : ""}">${warning.text}</span>` : ""}
-              </div>
-              <div class="oc-line-side">
-                <span class="oc-price-line">${catalogById.get(line.product_id) ? specialChip(catalogById.get(line.product_id), line.unit_price_amd) : ""}<span class="oc-price">${formatPriceOrFree(line.unit_price_amd)}</span></span>
-                <div class="order-qty-stepper">
-                  <button type="button" class="icon-btn" data-dec aria-label="${t("decrease")}">&minus;</button>
-                  <span>${line.quantity}</span>
-                  <button type="button" class="icon-btn" data-inc aria-label="${t("increase")}">&plus;</button>
-                </div>
-                <strong class="oc-line-total">${formatAmd(line.unit_price_amd * line.quantity)}</strong>
-              </div>
-            </div>`;
-          })
+        <div class="oc-lines">${groupedCartLines()
+          .map(
+            (g) => `<div class="oc-group"><div class="oc-group-head"><span>${escapeHtml(g.label)}</span><span>${formatAmd(g.rows.reduce((s, r) => s + r.line.unit_price_amd * r.line.quantity, 0))}</span></div>${g.rows.map(lineHtml).join("")}</div>`
+          )
           .join("")}</div>
         <button type="button" class="btn btn-block oc-add-more" data-close>${t("oc_add_more")}</button>
         <p class="order-stock-warning order-stock-danger oc-floor" id="oc-floor" hidden>${t("oc_floor_warning")}</p>
         ${over > 0 ? `<p class="order-stock-warning oc-credit">${t("credit_over_banner_prefix")}${formatAmd(Math.round(over))}${t("credit_over_banner_suffix")}</p>` : ""}
-        <div class="oc-discount-row">
-          <label for="order-discount-input">${t("discount_pct_label")}</label>
-          <input id="order-discount-input" class="oc-field" placeholder="0" />
-          <div class="oc-seg" id="order-discount-type">
-            <button type="button" class="${discountType === "amd" ? "is-on" : ""}" data-type="amd">${t("discount_type_amd")}</button>
-            <button type="button" class="${discountType === "pct" ? "is-on" : ""}" data-type="pct">${t("discount_type_pct")}</button>
+        <div class="oc-terms">
+          <div class="oc-terms-row">
+            <span class="oc-terms-label">${t("order_payment_method_label")}</span>
+            <div class="oc-seg oc-seg-wide" id="oc-method">
+              <button type="button" class="${paymentMethod === "cash" ? "is-on" : ""}" data-method="cash">${t("payment_method_cash")}</button>
+              <button type="button" class="${paymentMethod === "invoice" ? "is-on" : ""}" data-method="invoice">${t("payment_method_invoice")}</button>
+            </div>
           </div>
+          <div class="oc-terms-row">
+            <label class="oc-terms-label" for="oc-due-days">${t("oc_payment_due")}</label>
+            <span class="oc-due"><input id="oc-due-days" class="oc-field oc-field-days" inputmode="numeric" placeholder="${paymentMethod === "cash" ? "0" : ""}" value="${dueDays()}" /> <span class="muted" id="oc-due-unit"></span></span>
+          </div>
+          <div class="oc-terms-row">
+            <label class="oc-terms-label" for="order-discount-input">${t("discount_pct_label")}</label>
+            <input id="order-discount-input" class="oc-field" placeholder="0" aria-label="${t("discount_pct_label")} (${unit(discountType)})" />
+            <div class="oc-seg" id="order-discount-type">
+              <button type="button" class="${discountType === "amd" ? "is-on" : ""}" data-type="amd">${t("discount_type_amd")}</button>
+              <button type="button" class="${discountType === "pct" ? "is-on" : ""}" data-type="pct">${t("discount_type_pct")}</button>
+            </div>
+          </div>
+          <div class="oc-terms-row">
+            <label class="oc-terms-label" for="oc-dp-input">${t("oc_downpayment")}${firstOrder === null ? "" : `<small>${t(firstOrder ? "oc_dp_first" : "oc_dp_repeat")}</small>`}</label>
+            <input id="oc-dp-input" class="oc-field" placeholder="0" aria-label="${t("oc_downpayment")} (${unit(dpType)})" />
+            <div class="oc-seg" id="oc-dp-type">
+              <button type="button" class="${dpType === "amd" ? "is-on" : ""}" data-type="amd">${t("discount_type_amd")}</button>
+              <button type="button" class="${dpType === "pct" ? "is-on" : ""}" data-type="pct">${t("discount_type_pct")}</button>
+            </div>
+          </div>
+          <p class="oc-dp-summary" id="oc-dp-summary"></p>
         </div>
-        ${
-          termsOpen
-            ? `<div class="oc-terms">
-                <div class="oc-terms-row">
-                  <span>${t("order_payment_method_label")}</span>
-                  <div class="oc-seg" id="oc-method">
-                    <button type="button" class="${paymentMethod === "cash" ? "is-on" : ""}" data-method="cash">${t("payment_method_cash")}</button>
-                    <button type="button" class="${paymentMethod === "invoice" ? "is-on" : ""}" data-method="invoice">${t("payment_method_invoice")}</button>
-                  </div>
-                </div>
-                ${
-                  paymentMethod === "invoice"
-                    ? `<div class="oc-terms-row">
-                        <label for="oc-due-days">${t("oc_payment_due")}</label>
-                        <span class="oc-due"><input id="oc-due-days" class="oc-field oc-field-days" inputmode="numeric" value="${paymentTermDays}" /> <span class="muted">${t("oc_days_unit")}</span></span>
-                      </div>`
-                    : ""
-                }
-              </div>`
-            : ""
-        }
         <p class="form-error" id="order-error" hidden></p>
-        <div class="order-cart-bar-row">
+        <div class="oc-sheet-foot">
           <div class="order-cart-summary">
-            <span>${itemCount} ${t("items")}</span>
             <span class="oc-total-line"><strong id="oc-sheet-total">${formatAmd(cartTotalAmd())}</strong><button type="button" class="settings-hint-icon" data-tier-info aria-label="${t("more_info")}">!</button></span>
+            <span class="muted oc-foot-sub">${itemCount} ${t("items")}</span>
           </div>
-          ${
-            termsOpen
-              ? `<button type="button" class="btn btn-primary" id="save-order-btn">${t("save_order")}</button>`
-              : `<button type="button" class="btn btn-primary" id="oc-terms-btn">${t("oc_payment_terms")} ›</button>`
-          }
+          <button type="button" class="btn btn-primary" id="save-order-btn">${t("save_order")}</button>
         </div>`;
+      sheetRepaint = paintSheet;
       sheet.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", close));
       sheet.querySelector("[data-tier-info]").addEventListener("click", openTierComparison);
       sheet.querySelectorAll("[data-line]").forEach((row) => {
         const id = Number(row.dataset.line);
         const product = catalogById.get(id) ?? { id, name: cart.get(id).product_name, unit: "" };
         const pack = packQty(product.unit);
-        const stepTo = (qty) => {
+        const stepTo = (qty, action) => {
           changeQty(product, qty - (cart.get(id)?.quantity ?? 0));
-          paintSheet();
+          paintSheet({ id, action });
         };
         bindStepperButton(row.querySelector("[data-dec]"), {
-          onTap: () => stepTo((cart.get(id)?.quantity ?? 0) - 1),
-          onHold: () => stepTo(packStepDown(cart.get(id)?.quantity ?? 0, pack)),
+          onTap: () => stepTo((cart.get(id)?.quantity ?? 0) - 1, "dec"),
+          onHold: () => stepTo(packStepDown(cart.get(id)?.quantity ?? 0, pack), "dec"),
         });
         bindStepperButton(row.querySelector("[data-inc]"), {
-          onTap: () => stepTo((cart.get(id)?.quantity ?? 0) + 1),
-          onHold: () => stepTo(packStepUp(cart.get(id)?.quantity ?? 0, pack)),
+          onTap: () => stepTo((cart.get(id)?.quantity ?? 0) + 1, "inc"),
+          onHold: () => stepTo(packStepUp(cart.get(id)?.quantity ?? 0, pack), "inc"),
         });
         const priceInput = row.querySelector("[data-price-input]");
         if (priceInput) {
@@ -689,8 +749,11 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
           });
         }
       });
-      // discount: AMD (default) or %
-      const discountInput = sheet.querySelector("#order-discount-input");
+      if (flash) {
+        const row = sheet.querySelector(`[data-line="${flash.id}"]`);
+        flashStepper(row?.querySelector(flash.action === "inc" ? "[data-inc]" : "[data-dec]"), row?.querySelector(".order-qty-stepper span"));
+      }
+
       // Price floor preview: is a line below landing cost (needs the CEO / an admin)? Asked from the server, which
       // never returns a cost. Debounced; a stale answer is dropped.
       let floorTimer = null;
@@ -714,26 +777,42 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
           }
         }, 350);
       };
+      // Everything that depends on the typed numbers: the total, the due-days hint, the downpayment line.
       const refreshTotals = () => {
-        sheet.querySelector("#oc-sheet-total").textContent = formatAmd(cartTotalAmd());
+        const total = cartTotalAmd();
+        sheet.querySelector("#oc-sheet-total").textContent = formatAmd(total);
+        const down = Math.min(downpaymentAmd(), Math.round(total));
+        const dpSummary = sheet.querySelector("#oc-dp-summary");
+        const tooMuch = downpaymentAmd() > Math.round(total);
+        dpSummary.classList.toggle("is-error", tooMuch);
+        dpSummary.textContent = tooMuch
+          ? t("oc_downpayment_invalid")
+          : `${t("oc_down_short")} ${formatAmd(down)} · ${t("oc_left_short")} ${formatAmd(Math.round(total) - down)}`;
+        sheet.querySelector("#oc-due-unit").textContent = paymentMethod === "cash" && dueCash === 0 ? t("oc_due_on_delivery") : t("oc_days_unit");
         checkFloor();
       };
-      checkFloor();
-      if (discountType === "amd") {
-        const amd = bindAmdInput(discountInput, () => {
-          discountAmount = amd.get() ?? 0;
+      // A money-or-percent field (discount, downpayment): AMD with thousands separators, or a % up to 100.
+      const bindValueField = (input, type, get, set) => {
+        if (type === "amd") {
+          const amd = bindAmdInput(input, () => {
+            set(amd.get() ?? 0);
+            refreshTotals();
+          });
+          amd.set(get() || null);
+          return;
+        }
+        input.inputMode = "decimal";
+        input.classList.add("amd-input");
+        input.value = get() ? String(get()) : "";
+        input.addEventListener("input", () => {
+          set(Math.min(100, Math.max(0, Number(input.value.replace(",", ".")) || 0)));
           refreshTotals();
         });
-        amd.set(discountAmount || null);
-      } else {
-        discountInput.inputMode = "decimal";
-        discountInput.classList.add("amd-input");
-        discountInput.value = discountAmount ? String(discountAmount) : "";
-        discountInput.addEventListener("input", () => {
-          discountAmount = Math.min(100, Math.max(0, Number(discountInput.value.replace(",", ".")) || 0));
-          refreshTotals();
-        });
-      }
+      };
+      bindValueField(sheet.querySelector("#order-discount-input"), discountType, () => discountAmount, (v) => (discountAmount = v));
+      bindValueField(sheet.querySelector("#oc-dp-input"), dpType, () => dpValue, (v) => ((dpValue = v), (dpTouched = true)));
+      refreshTotals();
+
       sheet.querySelectorAll("#order-discount-type [data-type]").forEach((btn) =>
         btn.addEventListener("click", () => {
           if (discountType === btn.dataset.type) return;
@@ -742,23 +821,31 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
           paintSheet();
         })
       );
-      sheet.querySelector("#oc-terms-btn")?.addEventListener("click", () => {
-        termsOpen = true;
-        paintSheet();
-        sheet.querySelector(".oc-terms")?.scrollIntoView({ block: "nearest" });
-      });
+      // Switching the downpayment between % and AMD keeps the same money amount (30 % of 1,000,000 <-> 300,000).
+      sheet.querySelectorAll("#oc-dp-type [data-type]").forEach((btn) =>
+        btn.addEventListener("click", () => {
+          if (dpType === btn.dataset.type) return;
+          const total = cartTotalAmd();
+          dpValue = dpType === "pct" ? downpaymentAmd() : total > 0 ? Math.round((downpaymentAmd() / total) * 1000) / 10 : 0;
+          dpType = btn.dataset.type;
+          dpTouched = true;
+          paintSheet();
+        })
+      );
       sheet.querySelectorAll("#oc-method [data-method]").forEach((btn) =>
         btn.addEventListener("click", () => {
           paymentMethod = btn.dataset.method;
           paintSheet();
         })
       );
-      sheet.querySelector("#oc-due-days")?.addEventListener("input", (e) => {
+      sheet.querySelector("#oc-due-days").addEventListener("input", (e) => {
         const digits = e.target.value.replace(/\D/g, "").slice(0, 3);
         e.target.value = digits;
-        paymentTermDays = Number(digits) || 0;
+        if (paymentMethod === "cash") dueCash = digits === "" ? 0 : Number(digits);
+        else dueInvoice = Number(digits) || 0;
+        refreshTotals();
       });
-      sheet.querySelector("#save-order-btn")?.addEventListener("click", () => saveOrder(overlay, sheet));
+      sheet.querySelector("#save-order-btn").addEventListener("click", () => saveOrder(overlay, sheet));
     }
     paintSheet();
   }
@@ -768,8 +855,14 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     const saveBtn = sheet.querySelector("#save-order-btn");
     const sheetError = sheet.querySelector("#order-error");
     sheetError.hidden = true;
-    if (paymentMethod === "invoice" && !(Number.isInteger(paymentTermDays) && paymentTermDays >= 1 && paymentTermDays <= 365)) {
+    if (!dueValid()) {
       sheetError.textContent = t("oc_due_invalid");
+      sheetError.hidden = false;
+      sheet.querySelector("#oc-due-days")?.focus();
+      return;
+    }
+    if (downpaymentAmd() > Math.round(cartTotalAmd())) {
+      sheetError.textContent = t("oc_downpayment_invalid");
       sheetError.hidden = false;
       return;
     }
@@ -789,6 +882,8 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     // below, so a retry after a lost response can't create a second order. See server/src/routes/orders.js
     // and offlineQueue.js.
     const clientRef = crypto.randomUUID();
+    // The downpayment goes as the unit the rep typed (a % stays a % if the total changes server-side).
+    const downpayment = dpType === "pct" ? { downpayment_pct: Math.min(100, Number(dpValue) || 0) } : { downpayment_amd: downpaymentAmd() };
     try {
       const order = await api.createOrder({
         customer_id: Number(customerId),
@@ -797,7 +892,8 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
         discount_pct: discountPctToSend,
         discount_amd: discountAmdToSend,
         payment_method: paymentMethod,
-        ...(paymentMethod === "invoice" ? { payment_term_days: paymentTermDays } : {}),
+        payment_term_days: dueDays(),
+        ...downpayment,
         client_ref: clientRef,
       });
       overlay.remove();
@@ -815,7 +911,8 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
           discount_pct: discountPctToSend,
           discount_amd: discountAmdToSend,
           payment_method: paymentMethod,
-          ...(paymentMethod === "invoice" ? { payment_term_days: paymentTermDays } : {}),
+          payment_term_days: dueDays(),
+          ...downpayment,
         });
         overlay.remove();
         showOrderQueued();

@@ -109,7 +109,8 @@ export async function renderRepProgress(root, navigate) {
             return `<tr><th class="rp-metric" scope="row">${t(labelKey)}</th><td class="rp-num rp-total">${tot == null ? "–" : fmt(tot)}</td>${cells}</tr>`;
           })
           .join("");
-        return `<tr class="rp-section"><th colspan="${reps.length + 2}">${t(secKey)}</th></tr>${body}`;
+        // the title sits in a sticky span: the row spans the whole (sideways scrolling) table, the words stay on screen
+        return `<tr class="rp-section"><th colspan="${reps.length + 2}"><span class="rp-sec-label">${t(secKey)}</span></th></tr>${body}`;
       })
       .join("");
 
@@ -117,8 +118,11 @@ export async function renderRepProgress(root, navigate) {
       .map((d) => {
         const cells = reps.map((r) => `<td class="rp-num${r.hours_by_day[d] ? "" : " rp-zero"}">${r.hours_by_day[d] ? hoursLabel(r.hours_by_day[d]) : "–"}</td>`).join("");
         const dayTotal = reps.reduce((s, r) => s + (r.hours_by_day[d] ?? 0), 0);
-        const label = new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", timeZone: "UTC" });
-        return `<tr><th class="rp-metric" scope="row">${label}</th><td class="rp-num rp-total">${dayTotal ? hoursLabel(dayTotal) : "–"}</td>${cells}</tr>`;
+        // weekday and day number in their own aligned columns (Mon  3 / Tue 10), not one ragged string
+        const date = new Date(`${d}T12:00:00Z`);
+        const weekday = date.toLocaleDateString(undefined, { weekday: "short", timeZone: "UTC" });
+        const label = `<span class="rp-wd">${escapeHtml(weekday)}</span><span class="rp-dn">${date.getUTCDate()}</span>`;
+        return `<tr><th class="rp-metric rp-day" scope="row">${label}</th><td class="rp-num rp-total">${dayTotal ? hoursLabel(dayTotal) : "–"}</td>${cells}</tr>`;
       })
       .join("");
 

@@ -1310,6 +1310,24 @@ customersRouter.get("/:id/checkin-spots", async (req, res) => {
   res.json({ customer: customerRows[0], allowance_meters: await getCheckinRadiusMeters(), spots: rows });
 });
 
+// Defaults for the new order sheet: the downpayment suggestion (30 % on a new customer's FIRST order, 15 % after
+// that -- the rep can change it) and the customer's own credit term for "Payment due". "First order" = no ERP order
+// line and no real app order (not a draft / cancelled one) for this customer. No money figures, so no debt RBAC.
+customersRouter.get("/:id/order-defaults", async (req, res) => {
+  const customerId = Number(req.params.id);
+  if (!Number.isInteger(customerId)) return res.status(400).json({ error: "Invalid customer id" });
+  const { rows } = await pool.query(
+    `SELECT c.credit_term_days,
+            (EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.id AND o.status NOT IN ('draft', 'cancelled', 'rejected'))
+             OR (c.erp_customer_id IS NOT NULL AND EXISTS (SELECT 1 FROM erp_order_lines l WHERE l.erp_customer_id = c.erp_customer_id))) AS has_orders
+     FROM customers c WHERE c.id = $1`,
+    [customerId]
+  );
+  if (!rows[0]) return res.status(404).json({ error: "Customer not found" });
+  const firstOrder = !rows[0].has_orders;
+  res.json({ first_order: firstOrder, downpayment_pct: firstOrder ? 30 : 15, credit_term_days: rows[0].credit_term_days ?? 45 });
+});
+
 // Credit terms (migration 101). The order form reads the current position to warn
 // before an order goes over the limit; the accountant/directors set the limit.
 customersRouter.get("/:id/credit-status", async (req, res) => {

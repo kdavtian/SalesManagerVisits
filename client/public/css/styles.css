@@ -13263,3 +13263,172 @@ form select,
 .ops-view .ops-card h2 { margin: 0; font-size: 1.05rem; }
 .ops-step { display: flex; flex-direction: column; gap: 2px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); }
 .ops-step strong { font-size: 1.15rem; }
+
+/* ---- New order screen, round 3 (1.334.0) ---- */
+/* Press feedback everywhere (owner: "user doesn't understand which button is pressed"). The base rules above scale a
+   few controls; this gives every button a visible pressed state, and the +/- steppers a stronger one. Low specificity
+   (:where) so any specific rule still wins. */
+:where(button:not(:disabled), [role="button"], [role="switch"], summary):active {
+  opacity: 0.65;
+}
+.icon-btn:active,
+.map-filter-chip:active,
+.oc-seg button:active,
+.settings-hint-icon:active {
+  transform: scale(0.92);
+  opacity: 1;
+  background-color: var(--bg-card-pressed, rgba(128, 128, 128, 0.2));
+}
+.order-qty-stepper .icon-btn:active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent, #fff);
+  transform: scale(0.9);
+}
+.oc-seg button:not(.is-on):active {
+  background: var(--accent-fill-soft, rgba(10, 132, 255, 0.16));
+}
+.map-filter-chip:active {
+  background-color: var(--accent-fill-soft, rgba(10, 132, 255, 0.16));
+}
+/* The row/sheet is repainted on every tap (the pressed button is replaced), so the new button flashes and the
+   number pops: the tap is seen even on a quick press. */
+@keyframes oc-btn-flash {
+  0% { background: var(--accent); border-color: var(--accent); color: var(--on-accent, #fff); transform: scale(0.88); }
+  100% { background: var(--bg-card); border-color: var(--border); color: var(--text); transform: scale(1); }
+}
+@keyframes oc-qty-pop {
+  0% { transform: scale(1.6); color: var(--accent); }
+  100% { transform: scale(1); }
+}
+.order-qty-stepper .icon-btn.is-flash {
+  animation: oc-btn-flash 0.4s ease-out;
+}
+.order-qty-stepper span.qty-pop {
+  display: inline-block;
+  animation: oc-qty-pop 0.3s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .order-qty-stepper .icon-btn.is-flash,
+  .order-qty-stepper span.qty-pop { animation: none; }
+}
+
+/* Product card: name, then brand/size left + price right; the Add button / stepper alone on the right. Two lines,
+   so more cards fit on the phone screen. */
+.order-product-list { gap: 6px; }
+.order-product-row {
+  padding: 8px 10px 8px 12px;
+  gap: 8px;
+}
+.order-product-row .order-product-info { gap: 1px; }
+.order-product-row .order-product-info strong { line-height: 1.25; }
+.oc-meta-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.oc-meta-text {
+  min-width: 0;
+  font-size: 0.78rem;
+}
+.oc-meta-line .oc-price-line { flex: 0 0 auto; }
+.oc-row-side {
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 0;
+}
+.oc-row-side .btn-sm { min-width: 72px; }
+.order-qty-stepper { gap: 4px; }
+.order-qty-stepper .icon-btn { width: 40px; height: 44px; border-radius: 12px; }
+.order-qty-stepper span { min-width: 1.6em; font-variant-numeric: tabular-nums; }
+
+/* "Your order" sheet: brand groups, two-line lines, the terms always visible, a sticky Save. */
+.oc-lines { margin: 6px 0 4px; }
+.oc-group { margin-bottom: 4px; }
+.oc-group-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0 2px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.oc-line {
+  padding: 6px 0;
+  gap: 8px;
+}
+.oc-line-info { flex: 1 1 auto; gap: 1px; }
+.oc-line-info > strong { line-height: 1.25; }
+.oc-line-info .oc-price-line { gap: 8px; }
+.oc-line-info .oc-price { font-size: 0.82rem; font-weight: 600; color: var(--text-dim); }
+.oc-line-total { font-size: 0.9rem; }
+.oc-add-more { min-height: 40px; margin: 4px 0 8px; }
+.oc-terms {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 10px;
+}
+.oc-terms-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+}
+.oc-terms-label {
+  flex: 0 0 96px;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  line-height: 1.2;
+}
+.oc-terms .oc-seg { width: 128px; }
+.oc-terms .oc-seg.oc-seg-wide { flex: 1 1 auto; width: auto; }
+.oc-terms .oc-field { min-width: 0; }
+.oc-terms .oc-field-days { flex: 0 0 76px; width: 76px; }
+.oc-due { display: inline-flex; align-items: center; gap: 8px; font-size: 0.82rem; }
+.oc-dp-summary {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text);
+}
+.oc-dp-summary.is-error { color: var(--danger); }
+.oc-sheet-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 -16px calc(-1 * var(--sheet-pad-bottom, 16px));
+  padding: 10px 16px calc(10px + var(--sheet-pad-bottom, 16px));
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+}
+.oc-sheet-foot .order-cart-summary { display: flex; flex-direction: column; min-width: 0; }
+.oc-foot-sub { font-size: 0.78rem; }
+.oc-sheet-foot .btn-primary { min-width: 120px; min-height: 48px; }
+.oc-terms-label small {
+  display: block;
+  font-size: 0.68rem;
+  opacity: 0.8;
+}
+
+/* Progress by reps: section titles stay on screen while the table scrolls sideways; weekday / day number aligned
+   in two columns in "Hours by day" (1.334.0). */
+.rp-table .rp-section th { padding: 0; }
+.rp-table .rp-sec-label { position: sticky; left: 0; display: inline-block; padding: 8px 10px; }
+.rp-table .rp-day { white-space: nowrap; }
+.rp-day .rp-wd { display: inline-block; min-width: 2.6em; text-align: left; }
+.rp-day .rp-dn { display: inline-block; min-width: 1.6em; text-align: right; font-variant-numeric: tabular-nums; }

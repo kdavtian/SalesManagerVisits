@@ -203,6 +203,8 @@ function submitOrder(entry) {
     discount_amd: entry.discount_amd,
     payment_method: entry.payment_method,
     payment_term_days: entry.payment_term_days,
+    downpayment_pct: entry.downpayment_pct,
+    downpayment_amd: entry.downpayment_amd,
     client_ref: entry.clientRef || entry.id,
   });
 }
