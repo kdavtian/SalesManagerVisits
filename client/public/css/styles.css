@@ -13424,3 +13424,11 @@ form select,
   font-size: 0.68rem;
   opacity: 0.8;
 }
+
+/* Progress by reps: section titles stay on screen while the table scrolls sideways; weekday / day number aligned
+   in two columns in "Hours by day" (1.334.0). */
+.rp-table .rp-section th { padding: 0; }
+.rp-table .rp-sec-label { position: sticky; left: 0; display: inline-block; padding: 8px 10px; }
+.rp-table .rp-day { white-space: nowrap; }
+.rp-day .rp-wd { display: inline-block; min-width: 2.6em; text-align: left; }
+.rp-day .rp-dn { display: inline-block; min-width: 1.6em; text-align: right; font-variant-numeric: tabular-nums; }
