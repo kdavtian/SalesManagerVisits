@@ -2,6 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml, getCurrentPosition, locationErrorHint, compressImage, formatDistance, haversineMeters, creditedDistanceMeters, activateDialog } from "../util.js";
 import { enqueueCheckin } from "../offlineQueue.js";
 import { openSyncQueueSheet } from "../syncQueueSheet.js";
+import { openOrderMenu } from "../orderMenu.js";
 import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state } from "../state.js";
@@ -192,6 +193,8 @@ export async function renderCheckin(root, navigate, customerId) {
   const photoThumbGrid = container.querySelector("#photo-thumb-grid");
   const highResToggle = container.querySelector("#high-res-photo-toggle");
   const outcomeError = container.querySelector("#outcome-error");
+  // With "Order placed" ticked the button says what will happen next: confirm the check-in AND open the order menu.
+  const submitLabel = () => (container.querySelector('input[name="outcomes"][value="order_placed"]')?.checked ? t("submit_checkin_and_order") : t("submit_checkin"));
 
   let position = null;
   let photos = [];
@@ -370,6 +373,7 @@ export async function renderCheckin(root, navigate, customerId) {
   container.querySelectorAll('input[name="outcomes"]').forEach((input) => {
     input.addEventListener("change", () => {
       outcomeError.hidden = true;
+      if (!submitBtn.disabled) submitBtn.textContent = submitLabel();
       syncAmountFieldVisibility();
       syncAvailableProductsVisibility();
     });
@@ -448,7 +452,7 @@ export async function renderCheckin(root, navigate, customerId) {
       gpsStatus.textContent = `${t("location_captured")} (±${accuracy}${unit} ${t("accuracy")})`;
       gpsStatus.classList.add("gps-ok");
       submitBtn.disabled = false;
-      submitBtn.textContent = t("submit_checkin");
+      submitBtn.textContent = submitLabel();
 
       const distance = haversineMeters(position.coords.latitude, position.coords.longitude, customer.lat, customer.lng);
       const withinRange = distance <= radiusMeters;
@@ -596,7 +600,7 @@ export async function renderCheckin(root, navigate, customerId) {
         errorEl.textContent = err.message;
         errorEl.hidden = false;
         submitBtn.disabled = false;
-        submitBtn.textContent = t("submit_checkin");
+        submitBtn.textContent = submitLabel();
         form.removeAttribute("aria-busy");
       }
     }
@@ -627,6 +631,8 @@ export async function renderCheckin(root, navigate, customerId) {
     resultEl.querySelector("#create-order-btn")?.addEventListener("click", () => {
       navigate(`#/orders/new/${customerId}?checkin=${checkin.id}`);
     });
+    // "Order placed": the check-in is confirmed, now the order menu opens (new / usual / repeat last / repeat an order).
+    if (placedOrder) openOrderMenu({ customer: { ...customer, id: Number(customerId) }, navigate, checkinId: checkin.id });
     // The customer's usual basket one tap away (only when they have one).
     loadReorderProfile(customerId).then((profile) => {
       if (!profile?.items?.length || !resultEl.querySelector("#back-to-customer")) return;

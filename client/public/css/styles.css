@@ -13532,3 +13532,42 @@ html[data-text-size="xlarge"] { font-size: 130%; }
 html[data-text-size="xlarge"] .vg-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .order-share-btn { margin-bottom: 10px; }
 .oc-line .oc-meta-text { white-space: nowrap; flex: 0 0 auto; }
+
+/* Order menu (long press on New order / after "Submit check-in and create order"). */
+.om-options { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 4px; }
+.om-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-card);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.om-option:disabled { opacity: 0.5; }
+.om-icon {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--accent-fill-soft, rgba(10, 132, 255, 0.12));
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.om-icon svg { width: 22px; height: 22px; }
+.om-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.om-text .muted { font-size: 0.8rem; overflow-wrap: anywhere; }
+.om-loading { text-align: center; margin: 4px 0; }
+.om-lines { margin: 8px 0; max-height: 45vh; overflow-y: auto; }
+.om-line { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-top: 1px solid var(--border); }
+.om-line span { min-width: 0; overflow-wrap: anywhere; }
+.om-line strong { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.ops-good { color: var(--success, #1f9d55); font-weight: 600; }
+#new-order-btn { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: manipulation; }

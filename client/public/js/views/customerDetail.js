@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { mountUsualSlot, reorderHash } from "../reorder.js";
-import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, SALES_CHANNELS, channelDisplayLabel, parseDateOnly, formatDateDMY, formatDayMonth, labelColon, erpLineDiscountRowHtml, leaveSheetTo } from "../util.js";
+import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, SALES_CHANNELS, channelDisplayLabel, parseDateOnly, formatDateDMY, formatDayMonth, labelColon, erpLineDiscountRowHtml, leaveSheetTo, showToast } from "../util.js";
 import { currentChips, chipHtml } from "../brandChips.js";
 import { nextVisitRowHtml } from "../visitSchedule.js";
 import { t } from "../i18n.js";
@@ -10,6 +10,8 @@ import { state, canSetCustomerPrices, canEditDirectly, canReassignCustomers, can
 import { openVisitDetailSheet, openPhotoLightbox } from "../visitDetail.js";
 import { visitStatusBadge } from "./customers.js";
 import { openFileReadySheet } from "../fileReadySheet.js";
+import { openOrderMenu } from "../orderMenu.js";
+import { bindStepperButton } from "../stepper.js";
 import { fetchCustomerSocial, saveCustomerSocial, socialFieldsHtml, collectSocialPayload } from "../customerSocialProfiles.js";
 
 const EDIT_FIELDS = [
@@ -237,9 +239,29 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       })
       .catch(() => {});
   }
-  container.querySelector("#new-order-btn").addEventListener("click", () => {
-    navigate(`#/orders/new/${customerId}`);
+  // A tap starts a new order at once; a long press opens the menu (new / usual / repeat last / repeat an order).
+  bindStepperButton(container.querySelector("#new-order-btn"), {
+    onTap: () => navigate(`#/orders/new/${customerId}`),
+    onHold: () => {
+      try {
+        localStorage.setItem("fieldvisits_om_hint", "1");
+      } catch {
+        /* ignore */
+      }
+      openOrderMenu({ customer, navigate });
+    },
   });
+  // One-time tip so the long press is found: shown once, never over an open sheet, and not at all for someone who
+  // has already opened the menu.
+  setTimeout(() => {
+    try {
+      if (localStorage.getItem("fieldvisits_om_hint") || document.querySelector(".sheet-overlay") || !container.isConnected) return;
+      localStorage.setItem("fieldvisits_om_hint", "1");
+      showToast(t("om_hint"), { ms: 6000 });
+    } catch {
+      /* private mode: no tip */
+    }
+  }, 1500);
   mountUsualSlot(container.querySelector("#customer-usual-slot"), customer, navigate);
   container.querySelector("#edit-customer-btn").addEventListener("click", () => {
     openEditSheet(customer, navigate, () => renderCustomerDetail(root, navigate, customerId));

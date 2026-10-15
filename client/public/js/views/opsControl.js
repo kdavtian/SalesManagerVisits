@@ -333,13 +333,36 @@ export async function renderOpsControl(root, navigate, startTab) {
         <div class="oc-chips">${[7, 30, 90].map((x) => `<button type="button" class="map-filter-chip${x === flowDays ? " chip-active" : ""}" data-days="${x}">${x} ${t("ops_days")}</button>`).join("")}</div>
         <div class="ops-steps">${["confirm", "pack", "deliver"].map(stepCard).join("")}</div>
       </section>
+      ${effortCardHtml(d.effort)}
       <section class="card ops-card">
         <h2>${t("ops_waiting_title")} <span class="muted">(${d.waiting_count}${d.over_sla_count ? ` · ${d.over_sla_count} ${t("ops_over_sla")}` : ""})</span></h2>
         ${d.waiting.length ? `<div class="ops-list">${d.waiting.map((w) => `<button type="button" class="ops-row" data-order="${w.id}"><span class="ops-row-main"><strong>${escapeHtml(w.customer_name)}</strong><span class="muted">${escapeHtml(w.order_code ?? "")} · ${t(`ops_step_${w.step}`)}${w.blocked_by ? ` · ${t(`ops_blocked_${w.blocked_by}`)}` : ""}</span></span><span class="ops-row-side"><strong class="ops-amount">${groupDigits(w.total_amd)}</strong><span class="badge ${w.over_sla ? "badge-danger" : "badge-neutral"}">${w.waiting_h} ${t("ops_h")}</span></span></button>`).join("")}</div>` : `<p class="empty-state">${t("ops_nothing")}</p>`}
       </section>`;
     body.querySelector("#ops-flow-info").addEventListener("click", () => infoPopup(t("ops_flow_info")));
+    body.querySelector("#ops-effort-info")?.addEventListener("click", () => infoPopup(t("ops_effort_info")));
     body.querySelectorAll("[data-days]").forEach((b) => b.addEventListener("click", () => { flowDays = Number(b.dataset.days); load(); }));
     body.querySelectorAll("[data-order]").forEach((b) => b.addEventListener("click", async () => (await import("../orderDetailSheet.js")).openOrderDetailSheet(Number(b.dataset.order), { onChanged: load, navigate })));
+  }
+
+  // How long the reps take to make an order and how they start it (measured on the device). The decision it feeds:
+  // a shortcut that does not make orders faster or shorter is cut.
+  function effortCardHtml(e) {
+    if (!e) return "";
+    const line = (x) => (x?.n ? `${x.median_seconds ?? "–"} ${t("ops_sec")} · ${x.median_taps ?? "–"} ${t("ops_taps")}` : "–");
+    const delta =
+      e.current.n && e.previous.n && e.current.median_seconds != null && e.previous.median_seconds != null
+        ? e.current.median_seconds - e.previous.median_seconds
+        : null;
+    return `<section class="card ops-card">
+      <div class="ops-card-head"><h2>${t("ops_effort_title")}</h2><button type="button" class="settings-hint-icon" id="ops-effort-info" aria-label="${t("more_info")}">!</button></div>
+      <p class="ops-sum"><strong>${line(e.current)}</strong> <span class="muted">n=${e.current.n}${
+        delta == null ? "" : ` · <span class="${delta <= 0 ? "ops-good" : "ops-bad"}">${delta > 0 ? "+" : ""}${delta} ${t("ops_sec")} ${t("ops_vs_before")}</span>`
+      }</span></p>
+      <div class="ops-list">${["new", "usual", "repeat"]
+        .map((k) => `<div class="ops-row ops-static"><span class="ops-row-main"><strong>${t(`ops_src_${k}`)}</strong><span class="muted ops-facts">n=${e.by_source[k].n}</span></span><span class="ops-row-side"><strong class="ops-amount">${line(e.by_source[k])}</strong></span></div>`)
+        .join("")}</div>
+      <p class="muted ops-facts">${t("ops_usual_share")}: ${e.usual_share_pct == null ? "–" : `${e.usual_share_pct}%`}</p>
+    </section>`;
   }
 
   // ---------------- Data: scorecard + Excel upload ----------------

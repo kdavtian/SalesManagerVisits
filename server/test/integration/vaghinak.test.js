@@ -252,3 +252,64 @@ test("orders waiting over the limit: the person who holds the step is told; twic
   assert.ok((await chaseMsgs(chWarehouse.id)).some((x) => x.kind === "order_waiting_pack"), "the chWarehouse manager holds the pack step");
   await pool.query("DELETE FROM order_status_history WHERE order_id = $1", [a]);
 });
+
+test("downpayment follow-up: goods out and the downpayment missing -> a message and a task for the rep, once a day; closes itself when paid; management hears when it is 3+ days late", async () => {
+  await chaseClean();
+  await pool.query("DELETE FROM tasks WHERE auto_kind = 'downpayment'");
+  await saveVaghinakSettings({ mode: "live" });
+  const r = await apiRequest("/api/orders", { method: "POST", cookie: chRepCookie, body: { customer_id: chComplete.id, payment_method: "invoice", payment_term_days: 30, downpayment_pct: 30, items: [{ product_id: chProduct.id, quantity: 2 }] } });
+  assert.equal(r.status, 201, JSON.stringify(r.data));
+  trackOrder(r.data.id);
+  const down = Number(r.data.downpayment_amd);
+  assert.ok(down > 0);
+  const stamp = (daysAgo) => new Date(at(10, 0).getTime() - daysAgo * 86400000);
+  // still only submitted: nothing to chase yet
+  await tick(at(10, 0), pool, { pick: () => 0 });
+  assert.equal((await pool.query("SELECT count(*)::int AS n FROM tasks WHERE auto_kind = 'downpayment'")).rows[0].n, 0);
+  // packed 1 day ago
+  await pool.query("UPDATE orders SET status = 'packed_stock_out', created_at = $2, updated_at = $2, approval_status = 'not_required' WHERE id = $1", [r.data.id, stamp(1)]);
+  await tick(at(10, 0), pool, { pick: () => 0 });
+  const task = (await pool.query("SELECT id, customer_id FROM tasks WHERE auto_kind = 'downpayment' AND assignee_id = $1 AND status = 'open'", [chRep.id])).rows;
+  assert.equal(task.length, 1);
+  assert.equal(task[0].customer_id, chComplete.id);
+  assert.ok((await chaseMsgs(chRep.id)).some((x) => x.kind === "downpayment_due" && !x.shadow));
+  assert.equal((await pool.query("SELECT downpayment_reminders AS n FROM orders WHERE id = $1", [r.data.id])).rows[0].n, 1);
+  // a second pass the same day: still one reminder
+  await tick(at(11, 0), pool, { pick: () => 0 });
+  assert.equal((await pool.query("SELECT downpayment_reminders AS n FROM orders WHERE id = $1", [r.data.id])).rows[0].n, 1);
+  // management hears only once it is 3+ days late
+  assert.equal((await chaseMsgs(chDirector.id)).some((x) => x.kind === "downpayment_overdue"), false);
+  await pool.query("UPDATE orders SET updated_at = $2 WHERE id = $1", [r.data.id, stamp(5)]);
+  await pool.query("INSERT INTO order_status_history (order_id, old_status, new_status, changed_at) VALUES ($1, 'confirmed', 'packed_stock_out', $2)", [r.data.id, stamp(5)]);
+  await tick(at(12, 0), pool, { pick: () => 0 });
+  assert.equal((await chaseMsgs(chDirector.id)).some((x) => x.kind === "downpayment_overdue"), true);
+  // the customer pays the downpayment -> the task closes by itself
+  const { rows: pay } = await pool.query(
+    `INSERT INTO payments (customer_id, customer_name_snapshot, amount_amd, payment_date, sales_manager_id, sales_manager_name_snapshot, status, created_by)
+     VALUES ($1, 'x', $2, now(), $3, 'x', 'approved', $3) RETURNING id`,
+    [chComplete.id, down, chRep.id]
+  );
+  await tick(at(13, 0), pool, { pick: () => 0 });
+  assert.equal((await pool.query("SELECT status FROM tasks WHERE id = $1", [task[0].id])).rows[0].status, "done");
+  await pool.query("DELETE FROM payments WHERE id = $1", [pay[0].id]);
+  await pool.query("DELETE FROM tasks WHERE auto_kind = 'downpayment'");
+  await pool.query("DELETE FROM order_status_history WHERE order_id = $1", [r.data.id]);
+});
+
+test("order effort: the measurement (source / seconds / taps) is stored, junk is ignored, the Ops flow report summarises it", async () => {
+  const ok = await apiRequest("/api/orders", { method: "POST", cookie: chRepCookie, body: { customer_id: chComplete.id, payment_method: "cash", metrics: { source: "usual", seconds: 41, taps: 9 }, items: [{ product_id: chProduct.id, quantity: 1 }] } });
+  trackOrder(ok.data.id);
+  assert.equal(ok.data.order_source, "usual");
+  assert.equal(ok.data.build_seconds, 41);
+  assert.equal(ok.data.build_taps, 9);
+  const junk = await apiRequest("/api/orders", { method: "POST", cookie: chRepCookie, body: { customer_id: chComplete.id, payment_method: "cash", metrics: { source: "hack", seconds: -3, taps: "x" }, items: [{ product_id: chProduct.id, quantity: 1 }] } });
+  trackOrder(junk.data.id);
+  assert.equal(junk.status, 201);
+  assert.equal(junk.data.order_source, null);
+  assert.equal(junk.data.build_seconds, null);
+  const { orderEffort } = await import("../../src/opsReports.js");
+  const e = await orderEffort(pool, 30);
+  assert.ok(e.current.n >= 1);
+  assert.ok(e.by_source.usual.n >= 1);
+  assert.ok(e.usual_share_pct >= 1);
+});
