@@ -292,6 +292,15 @@ test("downpayment follow-up: goods out and the downpayment missing -> a message 
   await tick(at(13, 0), pool, { pick: () => 0 });
   assert.equal((await pool.query("SELECT status FROM tasks WHERE id = $1", [task[0].id])).rows[0].status, "done");
   await pool.query("DELETE FROM payments WHERE id = $1", [pay[0].id]);
+  // the same again, but the customer pays by BANK TRANSFER: it reaches the app only as a line of the workbook's cashflow
+  await pool.query("UPDATE orders SET downpayment_reminders = 0, downpayment_reminded_on = NULL WHERE id = $1", [r.data.id]);
+  await tick(at(14, 0), pool, { pick: () => 0 });
+  const again = (await pool.query("SELECT id FROM tasks WHERE auto_kind = 'downpayment' AND assignee_id = $1 AND status = 'open'", [chRep.id])).rows;
+  assert.equal(again.length, 1, "missing again: a new reminder task");
+  await pool.query("INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, $2::date, $3)", [chComplete.erp_customer_id, DAY, down]);
+  await tick(at(15, 0), pool, { pick: () => 0 });
+  assert.equal((await pool.query("SELECT status FROM tasks WHERE id = $1", [again[0].id])).rows[0].status, "done", "the bank transfer closes it too");
+  await pool.query("DELETE FROM erp_cashflow_lines WHERE erp_customer_id = $1", [chComplete.erp_customer_id]);
   await pool.query("DELETE FROM tasks WHERE auto_kind = 'downpayment'");
   await pool.query("DELETE FROM order_status_history WHERE order_id = $1", [r.data.id]);
 });

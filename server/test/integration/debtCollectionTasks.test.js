@@ -19,6 +19,7 @@ test.before(async () => {
 test.after(async () => {
   await pool.query("DELETE FROM tasks WHERE assignee_id = $1", [rep.id]);
   await pool.query("DELETE FROM erp_order_lines WHERE erp_customer_id = ANY($1)", [erpIds]);
+  await pool.query("DELETE FROM erp_cashflow_lines WHERE erp_customer_id = ANY($1)", [erpIds]);
   await pool.query("DELETE FROM erp_customer_data WHERE erp_customer_id = ANY($1)", [erpIds]);
   await cleanupAll();
   await stopTestServer();
@@ -164,4 +165,62 @@ test("an open task whose debt is not overdue by the invoice-age rule is cancelle
   assert.equal(t.status, "cancelled");
   assert.equal(t.outcome, null);
   await pool.query("UPDATE erp_customer_data SET debt_amd = 0 WHERE erp_customer_id = $1", [c.erp_customer_id]);
+});
+
+// ---- tasks must close themselves when the ERP shows the customer paid (customer 10167: bank transfer, never closed) ----
+const withFillerRows = async (n, fn) => {
+  const fillers = Array.from({ length: n }, (_, i) => `ITEST-FILL-${i}-${stamp}`);
+  await pool.query("INSERT INTO erp_customer_data (erp_customer_id, customer_name, debt_amd, synced_at) SELECT x, 'filler', 0, now() FROM unnest($1::text[]) x", [fillers]);
+  try {
+    return await fn();
+  } finally {
+    await pool.query("DELETE FROM erp_customer_data WHERE erp_customer_id = ANY($1)", [fillers]);
+  }
+};
+
+test("a customer who paid up and DROPPED OUT of the ERP extract: the open task closes as paid (only when the extract is a real one)", async () => {
+  const c = await debtor("drop", { debt: 900000, days: 70 });
+  await createDebtCollectionTasks();
+  assert.equal((await openTasks(c.id)).filter((t) => t.status === "open").length, 1);
+  // the next sync no longer contains the customer
+  await pool.query("DELETE FROM erp_customer_data WHERE erp_customer_id = $1", [c.erp_customer_id]);
+  // a nearly empty extract proves nothing: the task stays
+  await createDebtCollectionTasks();
+  assert.equal((await openTasks(c.id))[0].status, "open", "too few customers in the extract to trust the absence");
+  // a normal extract: gone from it = paid up
+  await withFillerRows(25, () => createDebtCollectionTasks());
+  const t = (await openTasks(c.id))[0];
+  assert.equal(t.status, "done");
+  assert.equal(t.outcome, "paid");
+  assert.match(t.completion_note, /Excel/);
+});
+
+test("a bank transfer clears the overdue invoices but newer ones remain: the task is DONE (paid), not cancelled", async () => {
+  const c = await debtor("bank", { debt: 300000, days: null });
+  await order(c.erp_customer_id, `BK1-${stamp}`, 100, 300000); // old and unpaid: overdue
+  await createDebtCollectionTasks();
+  assert.equal((await openTasks(c.id)).filter((t) => t.status === "open").length, 1);
+  // the old invoice is paid by bank transfer (ERP cashflow today); a fresh invoice of the same size is now the whole debt
+  await pool.query("UPDATE erp_order_lines SET order_date = order_date + 95 WHERE erp_customer_id = $1", [c.erp_customer_id]);
+  await pool.query("INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, (now() AT TIME ZONE 'Asia/Yerevan')::date, 300000)", [c.erp_customer_id]);
+  await createDebtCollectionTasks();
+  const t = (await openTasks(c.id))[0];
+  assert.equal(t.status, "done");
+  assert.equal(t.outcome, "paid");
+  await pool.query("DELETE FROM erp_cashflow_lines WHERE erp_customer_id = $1", [c.erp_customer_id]);
+});
+
+test("a stopped-ordering task closes when the customer orders through the workbook (not only through the app)", async () => {
+  const { createReorderFollowupTasks } = await import("../../src/debtCollectionTasks.js");
+  const c = await debtor("reord", { debt: 0, days: 5 });
+  const { rows } = await pool.query(
+    "INSERT INTO tasks (title, creator_id, assignee_id, customer_id, due_date, due_is_next_visit, auto_kind, created_at) VALUES ('ro', $1, $2, $3, current_date, true, 'reorder_followup', now() - interval '2 days') RETURNING id",
+    [director.id, rep.id, c.id]
+  );
+  await createReorderFollowupTasks(new Date(), { notify: false });
+  assert.equal((await pool.query("SELECT status FROM tasks WHERE id = $1", [rows[0].id])).rows[0].status, "open", "no order yet");
+  await order(c.erp_customer_id, `RO1-${stamp}`, 0, 120000);
+  await pool.query("UPDATE erp_order_lines SET qty = 4 WHERE erp_customer_id = $1", [c.erp_customer_id]);
+  await createReorderFollowupTasks(new Date(), { notify: false });
+  assert.equal((await pool.query("SELECT status FROM tasks WHERE id = $1", [rows[0].id])).rows[0].status, "done");
 });
