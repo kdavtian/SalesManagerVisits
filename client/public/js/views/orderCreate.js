@@ -577,6 +577,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     };
     overlay.addEventListener("click", (e) => e.target === overlay && close());
 
+    let floorSeq = 0;
     function paintSheet() {
       if (!cart.size) {
         close();
@@ -614,6 +615,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
           })
           .join("")}</div>
         <button type="button" class="btn btn-block oc-add-more" data-close>${t("oc_add_more")}</button>
+        <p class="order-stock-warning order-stock-danger oc-floor" id="oc-floor" hidden>${t("oc_floor_warning")}</p>
         ${over > 0 ? `<p class="order-stock-warning oc-credit">${t("credit_over_banner_prefix")}${formatAmd(Math.round(over))}${t("credit_over_banner_suffix")}</p>` : ""}
         <div class="oc-discount-row">
           <label for="order-discount-input">${t("discount_pct_label")}</label>
@@ -689,9 +691,34 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
       });
       // discount: AMD (default) or %
       const discountInput = sheet.querySelector("#order-discount-input");
+      // Price floor preview: is a line below landing cost (needs the CEO / an admin)? Asked from the server, which
+      // never returns a cost. Debounced; a stale answer is dropped.
+      let floorTimer = null;
+      const checkFloor = () => {
+        clearTimeout(floorTimer);
+        const seq = ++floorSeq;
+        floorTimer = setTimeout(async () => {
+          const el = sheet.querySelector("#oc-floor");
+          if (!el || !cart.size) return;
+          const value = discountValue();
+          try {
+            const res = await api.priceCheckOrder({
+              customer_id: Number(customerId),
+              items: [...cart.values()].map((l) => ({ product_id: l.product_id, quantity: l.quantity, unit_price_amd: l.unit_price_amd, ...(l.price_override ? { price_override: true } : {}) })),
+              discount_pct: discountType === "pct" ? value : 0,
+              discount_amd: discountType === "amd" ? value : 0,
+            });
+            if (seq === floorSeq) el.hidden = !res.below_landing;
+          } catch {
+            /* offline or not allowed: no preview, the server still decides when the order is saved */
+          }
+        }, 350);
+      };
       const refreshTotals = () => {
         sheet.querySelector("#oc-sheet-total").textContent = formatAmd(cartTotalAmd());
+        checkFloor();
       };
+      checkFloor();
       if (discountType === "amd") {
         const amd = bindAmdInput(discountInput, () => {
           discountAmount = amd.get() ?? 0;

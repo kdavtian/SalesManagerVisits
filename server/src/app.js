@@ -70,6 +70,7 @@ import { bonusRewardClaimsRouter } from "./routes/bonusRewardClaims.js";
 import { bonusSummaryRouter } from "./routes/bonusSummary.js";
 import { tasksRouter } from "./routes/tasks.js";
 import { vaghinakRouter } from "./routes/vaghinak.js";
+import { opsControlRouter } from "./routes/opsControl.js";
 import { tableExportRouter } from "./routes/tableExport.js";
 import { getCalculatorModeEnabled } from "./settings.js";
 import { requireAuth } from "./middleware/auth.js";
@@ -221,6 +222,7 @@ app.use("/api/bonus-reward-claims", express.json(), bonusRewardClaimsRouter);
 app.use("/api/bonus-summary", bonusSummaryRouter);
 app.use("/api/tasks", express.json(), tasksRouter);
 app.use("/api/vaghinak", express.json(), vaghinakRouter);
+app.use("/api/ops", express.json(), opsControlRouter);
 app.use("/api/table-export", express.json({ limit: "8mb" }), tableExportRouter);
 
 // The stylesheets are hand-edited source (comments, full indentation) --
