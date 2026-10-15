@@ -1,4 +1,4 @@
-// Operations control (Home -> Operations): the operations director's console. Each card answers: which decision, who
+// Operations control (Vaghinak -> quick actions): the operations director's console. Each card answers: which decision, who
 // takes it, which action follows. Tabs: Cash (legacy balances, credit limits), Margin (price realization, USD/AMD),
 // Stock (dead stock actions), Customers (win-back result), Flow (order step timing), Data (scorecard, Excel upload).
 import { api } from "../api.js";
@@ -10,9 +10,9 @@ const DECIDE_ROLES = new Set(["admin", "ceo", "operations_director"]);
 const DECISIONS = ["collect", "restructure", "dispute", "legal", "write_off"];
 const DECISION_BADGE = { collect: "badge-warning", restructure: "badge-info", dispute: "badge-neutral", legal: "badge-danger", write_off: "badge-neutral" };
 
-export async function renderOpsControl(root, navigate) {
+export async function renderOpsControl(root, navigate, startTab) {
   const tabs = [["cash", "ops_tab_cash"], ["margin", "ops_tab_margin"], ["stock", "ops_tab_stock"], ["customers", "ops_tab_customers"], ["flow", "ops_tab_flow"], ["data", "ops_tab_data"]];
-  let tab = "cash";
+  let tab = tabs.some(([k]) => k === startTab) ? startTab : "cash";
   root.innerHTML = `
     <div class="detail-view ops-view">
       <div class="detail-header oc-header">

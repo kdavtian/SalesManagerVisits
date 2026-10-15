@@ -3,6 +3,7 @@
 // said (also what he WOULD say in test mode) and Settings (mode, thresholds, how he addresses people).
 import { api } from "../api.js";
 import { state } from "../state.js";
+import { icons } from "../icons.js";
 import { t } from "../i18n.js";
 import { escapeHtml, formatDateTime, formatRelative, showToast } from "../util.js";
 import { answerFormHtml, wireAnswerForm, setVaghinakBadge } from "../vaghinak.js";
@@ -29,6 +30,10 @@ const SETTING_FIELDS = [
   ["slaDeliverH", "vg_set_slaDeliverH", "min"],
 ];
 
+// Operations control (cash, margin, stock, customers, order flow, data): the roles that had its Home tile.
+const OPS_ROLES = new Set(["admin", "ceo", "operations_director", "sales_director", "accountant"]);
+const OPS_QUICK = [["cash", "wallet"], ["margin", "trendUp"], ["stock", "box"], ["customers", "customers"], ["flow", "clock"], ["data", "dashboard"]];
+
 export async function renderVaghinak(root, navigate) {
   const isManagement = MANAGEMENT.has(state.user.role);
   const canSettings = SETTINGS_ROLES.has(state.user.role);
@@ -44,11 +49,15 @@ export async function renderVaghinak(root, navigate) {
         <div class="vg-avatar vg-avatar-sm" aria-hidden="true">Վ</div>
         <div class="detail-header-title oc-title"><h1>${t("vg_title")}</h1><span class="oc-customer">${t("vg_subtitle")}</span></div>
       </div>
+      ${OPS_ROLES.has(state.user.role) ? `<section id="vg-quick" aria-label="${t("ops_title")}"><div class="quick-actions-grid vg-quick-grid">${OPS_QUICK.map(([k, icon]) => `<button type="button" class="quick-action" data-ops-tab="${k}"><span class="quick-action-icon quick-action-icon-ops">${icons[icon]}</span>${t("ops_tab_" + k)}</button>`).join("")}</div></section>` : ""}
       ${tabs.length > 1 ? `<div class="oc-chips" id="vg-tabs" role="tablist">${tabs.map(([k, label]) => `<button type="button" class="map-filter-chip${k === tab ? " chip-active" : ""}" data-tab="${k}" role="tab" aria-selected="${k === tab}">${t(label)}</button>`).join("")}</div>` : ""}
       <div id="vg-body"><p class="loading-state" role="status">${t("loading")}</p></div>
     </div>`;
   root.querySelector("#back-btn").addEventListener("click", () => history.back());
   const body = root.querySelector("#vg-body");
+  // Operations control lives here: one quick action per Operations tab, on his home (Messages) tab.
+  const quick = root.querySelector("#vg-quick");
+  quick?.querySelectorAll("[data-ops-tab]").forEach((btn) => btn.addEventListener("click", () => navigate(`#/ops-control?tab=${btn.dataset.opsTab}`)));
   root.querySelectorAll("[data-tab]").forEach((btn) =>
     btn.addEventListener("click", () => {
       tab = btn.dataset.tab;
@@ -64,6 +73,7 @@ export async function renderVaghinak(root, navigate) {
   let token = 0;
   async function load() {
     const mine = ++token;
+    if (quick) quick.hidden = tab !== "messages";
     body.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     try {
       if (tab === "messages") return await paintMessages(mine);
