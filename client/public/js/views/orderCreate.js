@@ -120,15 +120,16 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
   let discountType = "amd";
   let discountAmount = 0; // the number typed in the discount field (AMD or %)
   let paymentMethod = customer.payment_method === "cash" ? "cash" : "invoice";
-  // "Payment due" is asked for both methods and each remembers its own number: cash 0 = pay on delivery, invoice =
-  // the customer's own credit term.
-  let dueCash = 0;
-  let dueInvoice = Number(customer.credit_term_days) > 0 ? Number(customer.credit_term_days) : 45;
+  // "Payment due" is asked for both methods and starts at the customer's own credit term (Customer settings, 45 by
+  // default) whichever method is tapped; the rep can type another number (0 = on delivery is allowed for cash).
+  let paymentTermDays = Number(customer.credit_term_days) > 0 ? Number(customer.credit_term_days) : 45;
   // Downpayment: 30 % on a new customer's first order, 15 % after that (GET /customers/:id/order-defaults); the rep
   // can change the number or switch it to AMD. dpTouched stops the late-arriving default from overwriting an edit.
   let dpType = "pct";
   let dpValue = 15;
   let dpTouched = false;
+  let dueTouched = false;
+  let floorBelow = false; // last answer of the price-floor check, kept across repaints so the warning never blinks
   let firstOrder = null; // null until the defaults arrive
   let sheetRepaint = null;
 
@@ -225,7 +226,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
   });
 
   api.getOrderDefaults(customerId).then((d) => {
-    if (Number(d.credit_term_days) > 0) dueInvoice = Number(d.credit_term_days);
+    if (Number(d.credit_term_days) > 0 && !dueTouched) paymentTermDays = Number(d.credit_term_days);
     firstOrder = Boolean(d.first_order);
     if (!dpTouched) dpValue = Number(d.downpayment_pct) || 0;
     sheetRepaint?.();
@@ -440,8 +441,17 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     });
   }
 
-  function paintProductList(list) {
-    listEl.innerHTML = list.length ? list.map(renderProductRow).join("") : "";
+  // grouped = Frequent and search results: brand headers, each brand sorted in the catalog order (a single brand chip is
+  // already one group, so it needs no headers).
+  function paintProductList(list, grouped) {
+    if (grouped && list.length) {
+      const groups = brandGroups(list.map((product) => ({ product, name: product.name })));
+      listEl.innerHTML = groups
+        .map((g) => `${groups.length > 1 ? `<div class="oc-list-group">${escapeHtml(g.label)}</div>` : ""}${g.rows.map((r) => renderProductRow(r.product)).join("")}`)
+        .join("");
+    } else {
+      listEl.innerHTML = list.length ? list.map(renderProductRow).join("") : "";
+    }
     listEl.querySelectorAll("[data-product-id]").forEach((row) => wireRow(row, catalogById.get(Number(row.dataset.productId))));
   }
 
@@ -489,7 +499,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     let list = view.category ? base.filter((p) => productCategory(p) === view.category) : base;
     if (!showAll) list = list.filter((p) => isAvailable(p) || cart.has(p.id));
     renderListHead(list);
-    paintProductList(list);
+    paintProductList(list, view.chip === "frequent" || Boolean(searchQuery.trim()));
     if (!list.length) listEl.innerHTML = `<p class="empty-state">${emptyText()}</p>`;
   }
 
@@ -593,23 +603,25 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
       <p class="muted">${t("oc_tier_diff_hint")}</p>`);
   }
 
-  // The lines of the cart grouped by brand (Castrol, Lotos, Orlen, Royal, other brands A-Z, then Merch), each group in
-  // the canonical catalog order (productSort.js) -- the order the rep walks the customer through the pricelist.
-  function groupedCartLines() {
+  // Entries ({ product, ...}) grouped by brand -- Castrol, Lotos, Orlen, Royal, other brands A-Z, then Merch, then anything
+  // without a catalog product -- each group in the canonical catalog order (productSort.js), the order the rep walks the
+  // customer through the pricelist. Used by the cart sheet and the Frequent / search lists.
+  function brandGroups(entries) {
     const groups = new Map();
-    for (const line of cart.values()) {
-      const product = catalogById.get(line.product_id) ?? null;
+    for (const entry of entries) {
+      const product = entry.product;
       const key = !product ? "" : productCategory(product) === "Merch" ? MERCH : product.brand || "";
       if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push({ line, product });
+      groups.get(key).push(entry);
     }
     const order = [...sortedBrands([...groups.keys()].filter((k) => k && k !== MERCH).map((brand) => ({ brand }))), ...(groups.has(MERCH) ? [MERCH] : []), ...(groups.has("") ? [""] : [])];
     return order.map((key) => ({
       key,
       label: key === MERCH ? t("category_merch") : key || "—",
-      rows: groups.get(key).sort((a, b) => (a.product && b.product ? compareProducts(a.product, b.product) : a.line.product_name.localeCompare(b.line.product_name))),
+      rows: groups.get(key).sort((x, y) => (x.product && y.product ? compareProducts(x.product, y.product) : (x.name || "").localeCompare(y.name || ""))),
     }));
   }
+  const groupedCartLines = () => brandGroups([...cart.values()].map((line) => ({ line, product: catalogById.get(line.product_id) ?? null, name: line.product_name })));
 
   // Downpayment (advance) in AMD, on the total after the discount.
   function downpaymentAmd() {
@@ -617,7 +629,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     if (!Number.isFinite(v) || v <= 0) return 0;
     return dpType === "pct" ? Math.round((cartTotalAmd() * Math.min(100, v)) / 100) : Math.round(v);
   }
-  const dueDays = () => (paymentMethod === "cash" ? dueCash : dueInvoice);
+  const dueDays = () => paymentTermDays;
   const dueValid = () => Number.isInteger(dueDays()) && dueDays() >= (paymentMethod === "cash" ? 0 : 1) && dueDays() <= 365;
 
   function openOrderSheet() {
@@ -653,9 +665,8 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
               <strong>${escapeHtml(line.product_name)}</strong>
               <span class="oc-meta-line">
                 <span class="muted oc-meta-text">${product?.unit ? escapeHtml(product.unit) : ""}</span>
-                <span class="oc-price-line">${product ? specialChip(product, line.unit_price_amd) : ""}<span class="oc-price">${formatPriceOrFree(line.unit_price_amd)}</span><strong class="oc-line-total">${formatAmd(line.unit_price_amd * line.quantity)}</strong></span>
+                <span class="oc-price-line">${product ? specialChip(product, line.unit_price_amd) : ""}${canSetPrices ? `<input class="order-price-input amd-input oc-price-input" data-price-input inputmode="numeric" aria-label="${t("custom_price")}" value="${groupDigits(line.unit_price_amd)}">` : `<span class="oc-price">${formatPriceOrFree(line.unit_price_amd)}</span>`}<strong class="oc-line-total">${formatAmd(line.unit_price_amd * line.quantity)}</strong></span>
               </span>
-              ${canSetPrices ? `<label class="oc-price-edit muted">${t("custom_price")} <input class="order-price-input amd-input" data-price-input value="${groupDigits(line.unit_price_amd)}"></label>` : ""}
               ${warning ? `<span class="order-stock-warning${warning.level === "danger" ? " order-stock-danger" : ""}">${warning.text}</span>` : ""}
             </div>
             <div class="order-qty-stepper">
@@ -666,7 +677,9 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
           </div>`;
       };
       const unit = (type) => (type === "pct" ? "%" : t("amd"));
+      const keepScroll = sheet.querySelector(".oc-sheet-scroll")?.scrollTop ?? 0;
       sheet.innerHTML = `
+        <div class="oc-sheet-scroll">
         <div class="oc-sheet-head">
           <div><h2>${t("oc_your_order")}</h2><span class="muted">${escapeHtml(customer.name)}</span></div>
           <button type="button" class="icon-btn sheet-close-x" data-close aria-label="${t("close")}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
@@ -677,7 +690,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
           )
           .join("")}</div>
         <button type="button" class="btn btn-block oc-add-more" data-close>${t("oc_add_more")}</button>
-        <p class="order-stock-warning order-stock-danger oc-floor" id="oc-floor" hidden>${t("oc_floor_warning")}</p>
+        <p class="order-stock-warning order-stock-danger oc-floor" id="oc-floor"${floorBelow ? "" : " hidden"}>${t("oc_floor_warning")}</p>
         ${over > 0 ? `<p class="order-stock-warning oc-credit">${t("credit_over_banner_prefix")}${formatAmd(Math.round(over))}${t("credit_over_banner_suffix")}</p>` : ""}
         <div class="oc-terms">
           <div class="oc-terms-row">
@@ -689,7 +702,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
           </div>
           <div class="oc-terms-row">
             <label class="oc-terms-label" for="oc-due-days">${t("oc_payment_due")}</label>
-            <span class="oc-due"><input id="oc-due-days" class="oc-field oc-field-days" inputmode="numeric" placeholder="${paymentMethod === "cash" ? "0" : ""}" value="${dueDays()}" /> <span class="muted" id="oc-due-unit"></span></span>
+            <span class="oc-due"><input id="oc-due-days" class="oc-field oc-field-days" inputmode="numeric" value="${dueDays()}" /> <span class="muted" id="oc-due-unit"></span></span>
           </div>
           <div class="oc-terms-row">
             <label class="oc-terms-label" for="order-discount-input">${t("discount_pct_label")}</label>
@@ -709,14 +722,18 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
           </div>
           <p class="oc-dp-summary" id="oc-dp-summary"></p>
         </div>
-        <p class="form-error" id="order-error" hidden></p>
+        </div>
         <div class="oc-sheet-foot">
-          <div class="order-cart-summary">
-            <span class="oc-total-line"><strong id="oc-sheet-total">${formatAmd(cartTotalAmd())}</strong><button type="button" class="settings-hint-icon" data-tier-info aria-label="${t("more_info")}">!</button></span>
-            <span class="muted oc-foot-sub">${itemCount} ${t("items")}</span>
+          <p class="form-error" id="order-error" hidden></p>
+          <div class="oc-sheet-foot-row">
+            <div class="order-cart-summary">
+              <span class="oc-total-line"><strong id="oc-sheet-total">${formatAmd(cartTotalAmd())}</strong><button type="button" class="settings-hint-icon" data-tier-info aria-label="${t("more_info")}">!</button></span>
+              <span class="muted oc-foot-sub">${itemCount} ${t("items")}</span>
+            </div>
+            <button type="button" class="btn btn-primary" id="save-order-btn">${t("save_order")}</button>
           </div>
-          <button type="button" class="btn btn-primary" id="save-order-btn">${t("save_order")}</button>
         </div>`;
+      sheet.querySelector(".oc-sheet-scroll").scrollTop = keepScroll;
       sheetRepaint = paintSheet;
       sheet.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", close));
       sheet.querySelector("[data-tier-info]").addEventListener("click", openTierComparison);
@@ -771,7 +788,9 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
               discount_pct: discountType === "pct" ? value : 0,
               discount_amd: discountType === "amd" ? value : 0,
             });
-            if (seq === floorSeq) el.hidden = !res.below_landing;
+            if (seq !== floorSeq) return;
+            floorBelow = Boolean(res.below_landing);
+            el.hidden = !floorBelow;
           } catch {
             /* offline or not allowed: no preview, the server still decides when the order is saved */
           }
@@ -788,7 +807,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
         dpSummary.textContent = tooMuch
           ? t("oc_downpayment_invalid")
           : `${t("oc_down_short")} ${formatAmd(down)} · ${t("oc_left_short")} ${formatAmd(Math.round(total) - down)}`;
-        sheet.querySelector("#oc-due-unit").textContent = paymentMethod === "cash" && dueCash === 0 ? t("oc_due_on_delivery") : t("oc_days_unit");
+        sheet.querySelector("#oc-due-unit").textContent = paymentMethod === "cash" && paymentTermDays === 0 ? t("oc_due_on_delivery") : t("oc_days_unit");
         checkFloor();
       };
       // A money-or-percent field (discount, downpayment): AMD with thousands separators, or a % up to 100.
@@ -841,8 +860,8 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
       sheet.querySelector("#oc-due-days").addEventListener("input", (e) => {
         const digits = e.target.value.replace(/\D/g, "").slice(0, 3);
         e.target.value = digits;
-        if (paymentMethod === "cash") dueCash = digits === "" ? 0 : Number(digits);
-        else dueInvoice = Number(digits) || 0;
+        paymentTermDays = digits === "" ? 0 : Number(digits);
+        dueTouched = true;
         refreshTotals();
       });
       sheet.querySelector("#save-order-btn").addEventListener("click", () => saveOrder(overlay, sheet));

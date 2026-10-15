@@ -13403,18 +13403,37 @@ form select,
   color: var(--text);
 }
 .oc-dp-summary.is-error { color: var(--danger); }
+/* A real bottom sheet: the content scrolls, the total + Save row is a fixed part of the sheet (not sticky inside the
+   padded scroller, which floated it too high on iPhone and covered the downpayment line), with the home-bar safe area
+   below it. */
+.oc-order-sheet {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  max-height: 90vh;
+  max-height: 90dvh;
+}
+.oc-sheet-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 20px 16px 12px;
+}
 .oc-sheet-foot {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
+  flex: 0 0 auto;
+  padding: 10px 16px calc(12px + var(--nav-safe-bottom, 0px));
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+}
+.oc-sheet-foot .form-error { margin: 0 0 8px; }
+.oc-sheet-foot-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: 0 -16px calc(-1 * var(--sheet-pad-bottom, 16px));
-  padding: 10px 16px calc(10px + var(--sheet-pad-bottom, 16px));
-  background: var(--bg-card);
-  border-top: 1px solid var(--border);
 }
 .oc-sheet-foot .order-cart-summary { display: flex; flex-direction: column; min-width: 0; }
 .oc-foot-sub { font-size: 0.78rem; }
@@ -13432,3 +13451,33 @@ form select,
 .rp-table .rp-day { white-space: nowrap; }
 .rp-day .rp-wd { display: inline-block; min-width: 2.6em; text-align: left; }
 .rp-day .rp-dn { display: inline-block; min-width: 1.6em; text-align: right; font-variant-numeric: tabular-nums; }
+.oc-list-group {
+  padding: 8px 2px 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.oc-list-group:first-child { padding-top: 0; }
+.cl-legend-btn { position: relative; flex: 0 0 auto; }
+.cl-legend-btn::after { content: ""; position: absolute; inset: -13px; }
+.cl-legend-tiers { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0 0 12px; }
+.cl-legend-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+.cl-legend-tiers .cl-legend-row { margin: 0; }
+.cl-legend-row .badge { flex: 0 0 auto; }
+.cl-legend-row .list-row-icon { width: 32px; height: 32px; flex: 0 0 auto; }
+.cl-legend-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+/* Special-price customers (admin / directors): the unit price in the line IS the editable field -- no third row. */
+.oc-line .oc-price-input {
+  width: 6.4rem;
+  height: 40px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+}

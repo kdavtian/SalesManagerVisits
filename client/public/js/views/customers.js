@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { reorderChipHtml } from "../reorder.js";
-import { customerMatchesSearch, escapeHtml, formatDateTime, formatAmd, haversineMeters, getCurrentPosition, customerListIconHtml, categoryLabel, activateDialog, channelDisplayLabel, TIER_OPTIONS, labelColon } from "../util.js";
+import { customerMatchesSearch, escapeHtml, formatDateTime, formatAmd, haversineMeters, getCurrentPosition, customerListIconHtml, categoryLabel, activateDialog, channelDisplayLabel, TIER_OPTIONS, labelColon, openInfoPopup } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state, seesAllActivity } from "../state.js";
@@ -85,6 +85,7 @@ export function renderCustomers(root, navigate, initialFilter) {
     <div class="list-view">
       <div class="list-header">
         <h1>${t("nav_customers")}</h1>
+        <button type="button" class="settings-hint-icon cl-legend-btn" id="cl-legend-btn" aria-label="${t("cl_legend_title")}">!</button>
         <button class="list-header-add-btn" id="toggle-debt-btn" aria-label="${t("show_outstanding_debt")}" title="${t("show_outstanding_debt")}" aria-pressed="false">${icons.payment}</button>
         <button class="list-header-add-btn customer-map-add-action" id="add-customer-btn" aria-label="${t("add_customer")}" title="${t("add_customer")}">${icons.mapPinPlus}</button>
       </div>
@@ -143,6 +144,19 @@ export function renderCustomers(root, navigate, initialFilter) {
   // session rather than always fetched with the rest of the list.
   let showDebt = false;
   const filterRow = root.querySelector("#customer-filter-row");
+  // "!" next to the title: what the icon colours and the chips on this list mean.
+  root.querySelector("#cl-legend-btn").addEventListener("click", () => {
+    const tiers = TIER_OPTIONS.map((o) => `<div class="cl-legend-row">${customerListIconHtml({ customer_tier: o.value, category: "" })}<span>${escapeHtml(t(o.labelKey))}</span></div>`).join("");
+    const chip = (cls, text, label) => `<div class="cl-legend-row"><span class="badge ${cls}">${escapeHtml(text)}</span><span class="muted">${escapeHtml(label)}</span></div>`;
+    openInfoPopup(`
+      <h3 class="oc-tier-title">${t("cl_legend_title")}</h3>
+      <p><strong>${t("cl_legend_icon")}</strong></p>
+      <div class="cl-legend-tiers">${tiers}</div>
+      <p><strong>${t("cl_legend_chips")}</strong></p>
+      <div class="cl-legend-chips">${["today", "recent", "overdue", "never"].map((k) => `<span class="badge ${STATUS_BADGE[k].cls}">${escapeHtml(t(STATUS_BADGE[k].labelKey))}</span>`).join("")}</div>
+      ${chip("badge-info", t("reorder_chip"), t("cl_legend_due"))}
+      ${chip("badge-warning", t("reorder_chip"), t("cl_legend_late"))}`);
+  });
   const debtToggleBtn = root.querySelector("#toggle-debt-btn");
 
   root.querySelector("#add-customer-btn").addEventListener("click", () => navigate("#/map?add=1"));
