@@ -1,6 +1,7 @@
 import { api } from "../api.js";
 import { escapeHtml, getCurrentPosition, locationErrorHint, compressImage, formatDistance, haversineMeters, creditedDistanceMeters, activateDialog } from "../util.js";
 import { enqueueCheckin } from "../offlineQueue.js";
+import { openSyncQueueSheet } from "../syncQueueSheet.js";
 import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state } from "../state.js";
@@ -642,11 +643,13 @@ export async function renderCheckin(root, navigate, customerId) {
     resultEl.innerHTML = `
       <div class="checkin-result result-warning">
         <div class="result-icon">⇪</div>
-        <h2>${t("youre_offline")}</h2>
-        <p>${t("offline_queued_message")}</p>
+        <h2>${t("saved_on_phone")}</h2>
+        <p>${t("queued_checkin_text")}</p>
+        <button class="btn btn-block" id="queue-btn">${t("view_waiting")}</button>
         <button class="btn btn-primary btn-block" id="back-to-customer">${t("done")}</button>
       </div>
     `;
+    resultEl.querySelector("#queue-btn").addEventListener("click", openSyncQueueSheet);
     resultEl.querySelector("#back-to-customer").addEventListener("click", () => {
       navigate(`#/customers/${customerId}`);
     });

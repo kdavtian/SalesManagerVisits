@@ -32,6 +32,7 @@ const SETTING_FIELDS = [
 
 // Operations control (cash, margin, stock, customers, order flow, data): the roles that had its Home tile.
 const OPS_ROLES = new Set(["admin", "ceo", "operations_director", "sales_director", "accountant"]);
+const TAB_ICON = { messages: "vaghinak", pulse: "team", qa: "info", feed: "history", settings: "settings" };
 const OPS_QUICK = [["cash", "wallet"], ["margin", "trendUp"], ["stock", "box"], ["customers", "customers"], ["flow", "clock"], ["data", "dashboard"]];
 
 export async function renderVaghinak(root, navigate) {
@@ -49,20 +50,30 @@ export async function renderVaghinak(root, navigate) {
         <div class="vg-avatar vg-avatar-sm" aria-hidden="true">Վ</div>
         <div class="detail-header-title oc-title"><h1>${t("vg_title")}</h1><span class="oc-customer">${t("vg_subtitle")}</span></div>
       </div>
-      ${OPS_ROLES.has(state.user.role) ? `<section id="vg-quick" aria-label="${t("ops_title")}"><div class="quick-actions-grid vg-quick-grid">${OPS_QUICK.map(([k, icon]) => `<button type="button" class="quick-action" data-ops-tab="${k}"><span class="quick-action-icon quick-action-icon-ops">${icons[icon]}</span>${t("ops_tab_" + k)}</button>`).join("")}</div></section>` : ""}
-      ${tabs.length > 1 ? `<div class="oc-chips" id="vg-tabs" role="tablist">${tabs.map(([k, label]) => `<button type="button" class="map-filter-chip${k === tab ? " chip-active" : ""}" data-tab="${k}" role="tab" aria-selected="${k === tab}">${t(label)}</button>`).join("")}</div>` : ""}
+      ${
+        // One grid of small tiles (5 per row): his own sections first (they switch the tab below), then the Operations
+        // control quick actions (each opens that tab of the Operations page). A rep only has Messages, so no grid.
+        tabs.length > 1 || OPS_ROLES.has(state.user.role)
+          ? `<div class="vg-tiles" id="vg-tiles" role="tablist">${tabs
+              .map(([k, label]) => `<button type="button" class="quick-action vg-tile${k === tab ? " vg-tile-active" : ""}" data-tab="${k}" role="tab" aria-selected="${k === tab}"><span class="quick-action-icon quick-action-icon-vaghinak">${icons[TAB_ICON[k]]}</span><span class="vg-tile-label">${t(label)}</span></button>`)
+              .join("")}${
+              OPS_ROLES.has(state.user.role)
+                ? OPS_QUICK.map(([k, icon]) => `<button type="button" class="quick-action vg-tile" data-ops-tab="${k}"><span class="quick-action-icon quick-action-icon-ops">${icons[icon]}</span><span class="vg-tile-label">${t("ops_tab_" + k)}</span></button>`).join("")
+                : ""
+            }</div>`
+          : ""
+      }
       <div id="vg-body"><p class="loading-state" role="status">${t("loading")}</p></div>
     </div>`;
   root.querySelector("#back-btn").addEventListener("click", () => history.back());
   const body = root.querySelector("#vg-body");
-  // Operations control lives here: one quick action per Operations tab, on his home (Messages) tab.
-  const quick = root.querySelector("#vg-quick");
-  quick?.querySelectorAll("[data-ops-tab]").forEach((btn) => btn.addEventListener("click", () => navigate(`#/ops-control?tab=${btn.dataset.opsTab}`)));
+  // Operations control lives here: one quick action per Operations tab.
+  root.querySelectorAll("[data-ops-tab]").forEach((btn) => btn.addEventListener("click", () => navigate(`#/ops-control?tab=${btn.dataset.opsTab}`)));
   root.querySelectorAll("[data-tab]").forEach((btn) =>
     btn.addEventListener("click", () => {
       tab = btn.dataset.tab;
       root.querySelectorAll("[data-tab]").forEach((b) => {
-        b.classList.toggle("chip-active", b === btn);
+        b.classList.toggle("vg-tile-active", b === btn);
         b.setAttribute("aria-selected", String(b === btn));
       });
       load();
@@ -73,7 +84,6 @@ export async function renderVaghinak(root, navigate) {
   let token = 0;
   async function load() {
     const mine = ++token;
-    if (quick) quick.hidden = tab !== "messages";
     body.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     try {
       if (tab === "messages") return await paintMessages(mine);

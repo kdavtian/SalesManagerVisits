@@ -34,7 +34,7 @@ test.describe("Offline order creation and later synchronization", () => {
     // network failure and queued rather than showing a raw error. Scoped to
     // the result panel itself (not a bare text search) since the top-bar
     // sync banner also renders "offline" text of its own at the same time.
-    await expect(page.locator(".checkin-result").getByRole("heading", { name: /offline/i })).toBeVisible({
+    await expect(page.locator(".checkin-result").getByRole("heading", { name: /saved on this phone/i })).toBeVisible({
       timeout: 10000,
     });
 

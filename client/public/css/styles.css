@@ -13481,3 +13481,54 @@ form select,
   font-size: 0.86rem;
   font-weight: 600;
 }
+
+/* ---- Accessibility: bigger text (Settings -> Accessibility, js/textSize.js) ---- */
+html[data-text-size="large"] { font-size: 115%; }
+html[data-text-size="xlarge"] { font-size: 130%; }
+.settings-textsize { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 12px 14px; }
+.settings-textsize button {
+  min-height: 56px;
+  border: 1.5px solid var(--accent);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.settings-textsize button.is-on { background: var(--accent); color: var(--on-accent, #fff); }
+.settings-textsize .ts-a1 { font-size: 0.95rem; }
+.settings-textsize .ts-a2 { font-size: 1.1rem; }
+.settings-textsize .ts-a3 { font-size: 1.3rem; }
+/* Order detail: Print + Close icon buttons side by side in the top-right corner. */
+.sheet-head-actions {
+  position: sticky;
+  top: -4px;
+  float: right;
+  z-index: 3;
+  display: flex;
+  gap: 8px;
+  margin: -4px 0 0 8px;
+}
+.sheet-head-actions .sheet-close-x { position: static; float: none; margin: 0; }
+.order-share-btn { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; }
+.order-share-btn svg { width: 20px; height: 20px; }
+
+/* Vaghinak's page: his sections + the Operations quick actions as ONE grid of small tiles, 4 per row (11 tiles = 4 + 4 + 3). */
+.vg-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 4px 0 12px; }
+.vg-tiles .quick-action {
+  min-height: 64px;
+  padding: 8px 2px 6px;
+  gap: 4px;
+  border-radius: 12px;
+  font-size: 0.68rem;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.vg-tiles .quick-action-icon { width: 28px; height: 28px; border-radius: 8px; }
+.vg-tiles .quick-action-icon svg { width: 16px; height: 16px; }
+.vg-tiles .vg-tile-active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-card)); }
+.vg-tiles .vg-tile-label { display: block; max-width: 100%; }
+html[data-text-size="xlarge"] .vg-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.order-share-btn { margin-bottom: 10px; }
+.oc-line .oc-meta-text { white-space: nowrap; flex: 0 0 auto; }

@@ -3,6 +3,9 @@ import { escapeHtml, formatAmd, groupDigits, bindAmdInput, formatPriceOrFree, ti
 import { packQty, packStepUp, packStepDown, bindStepperButton } from "../stepper.js";
 import { t } from "../i18n.js";
 import { enqueueOrder } from "../offlineQueue.js";
+import { openSyncQueueSheet } from "../syncQueueSheet.js";
+import { openPrintBlankSheet } from "../orderBlankPrint.js";
+import { icons } from "../icons.js";
 import { canAssignErpCustomerId, state } from "../state.js";
 import { compareProducts, sortedBrands } from "../productSort.js";
 import { getProductCatalog } from "../productCatalog.js";
@@ -129,6 +132,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
   let dpValue = 15;
   let dpTouched = false;
   let dueTouched = false;
+  let methodTouched = false;
   let floorBelow = false; // last answer of the price-floor check, kept across repaints so the warning never blinks
   let firstOrder = null; // null until the defaults arrive
   let sheetRepaint = null;
@@ -226,9 +230,14 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
   });
 
   api.getOrderDefaults(customerId).then((d) => {
-    if (Number(d.credit_term_days) > 0 && !dueTouched) paymentTermDays = Number(d.credit_term_days);
+    if (Number(d.credit_term_days) > 0 && !dueTouched && d.last_terms?.payment_term_days == null) paymentTermDays = Number(d.credit_term_days);
     firstOrder = Boolean(d.first_order);
-    if (!dpTouched) dpValue = Number(d.downpayment_pct) || 0;
+    // The last order's terms win over the generic defaults (and over the customer's setting): same method, same due
+    // days, same downpayment %, so a regular customer's order needs no typing at all.
+    const last = d.last_terms;
+    if (last && !methodTouched) paymentMethod = last.payment_method === "cash" ? "cash" : "invoice";
+    if (last?.payment_term_days != null && !dueTouched) paymentTermDays = Number(last.payment_term_days);
+    if (!dpTouched) dpValue = last?.downpayment_pct != null && dpType === "pct" ? Number(last.downpayment_pct) : Number(d.downpayment_pct) || 0;
     sheetRepaint?.();
   }).catch(() => {
     /* offline: the repeat-customer default (15 %) stays; the rep can change it */
@@ -854,6 +863,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
       sheet.querySelectorAll("#oc-method [data-method]").forEach((btn) =>
         btn.addEventListener("click", () => {
           paymentMethod = btn.dataset.method;
+          methodTouched = true;
           paintSheet();
         })
       );
@@ -955,9 +965,12 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
         <h2>${t("order_saved")}</h2>
         <p>${escapeHtml(customer.name)} · ${formatAmd(Number(order.total_amd))}</p>
         ${order.approval_status === "pending" ? `<p class="muted">${t("discount_pending_approval")}</p>` : ""}
+        <button class="btn btn-block order-share-btn" id="order-share-btn">${icons.printer}<span>${t("order_share_btn")}</span></button>
         <button class="btn btn-primary btn-block" id="order-done-btn">${t("done")}</button>
       </div>
     `;
+    // The delivery-acceptance act with the payment terms: open it, save it or send it to the customer.
+    container.querySelector("#order-share-btn").addEventListener("click", () => openPrintBlankSheet([{ id: order.id, order_code: order.order_code }]));
     container.querySelector("#order-done-btn").addEventListener("click", () => {
       navigate(`#/customers/${customerId}`);
     });
@@ -1083,11 +1096,13 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     container.innerHTML = `
       <div class="checkin-result result-warning">
         <div class="result-icon">⇪</div>
-        <h2>${t("youre_offline")}</h2>
-        <p>${t("offline_queued_message")}</p>
+        <h2>${t("saved_on_phone")}</h2>
+        <p>${t("queued_order_text")}</p>
+        <button class="btn btn-block" id="order-queue-btn">${t("view_waiting")}</button>
         <button class="btn btn-primary btn-block" id="order-done-btn">${t("done")}</button>
       </div>
     `;
+    container.querySelector("#order-queue-btn").addEventListener("click", openSyncQueueSheet);
     container.querySelector("#order-done-btn").addEventListener("click", () => {
       navigate(`#/customers/${customerId}`);
     });
