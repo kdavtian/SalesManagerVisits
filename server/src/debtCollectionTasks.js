@@ -30,6 +30,16 @@ export const REORDER_TASK_TITLE = "Հաճախորդը վաղուց չի պատվ
 const MAX_PER_REP = 15;
 const COOLDOWN_DAYS = 14;
 
+// A real extract has hundreds of customers; fewer rows than this means an empty / test sync, so "this customer is
+// not in the extract any more" proves nothing (see the drop-out rule in createDebtCollectionTasks).
+const MIN_ERP_ROWS_TO_TRUST_ABSENCE = 20;
+
+// The customer paid since the task was created: the workbook's last payment date, or a payment row in its cashflow
+// (bank transfers reach the app ONLY this way). Uses the task (t), customer (c) and erp aliases of the UPDATE below.
+const PAID_SINCE_TASK_SQL = `(COALESCE(erp.last_payment_date >= (t.created_at AT TIME ZONE 'Asia/Yerevan')::date, false)
+  OR EXISTS (SELECT 1 FROM erp_cashflow_lines cf WHERE cf.erp_customer_id = c.erp_customer_id AND cf.amount_amd > 0
+               AND cf.cashflow_date >= (t.created_at AT TIME ZONE 'Asia/Yerevan')::date))`;
+
 const SKIPPED_CHANNELS_SQL = `COALESCE(c.sales_channel, '') <> ALL(ARRAY['KF', 'CAS', 'OEM'])`;
 // Overdue = the oldest unpaid invoice is older than the credit term (see debtAge.js).
 
@@ -106,13 +116,18 @@ async function notifyBrokenPromises(director, broken) {
 
 export async function createDebtCollectionTasks(now = new Date(), { notify = true } = {}) {
   const today = yerevanToday(now);
-  // 1) Close open automatic tasks whose debt is gone or no longer overdue.
+  // 1) Close open automatic tasks whose debt is gone or no longer overdue. DONE (paid) when the debt is gone, or when
+  //    the customer paid since the task was created (a bank transfer clearing the overdue invoices while newer
+  //    in-term ones remain); CANCELLED only when the debt is still there and nobody paid anything (older tasks
+  //    created by the previous, cruder rule).
   const { rows: closed } = await pool.query(
     `UPDATE tasks t SET
-       status = CASE WHEN COALESCE(erp.debt_amd, 0) > 0 THEN 'cancelled' ELSE 'done' END,
-       completed_at = CASE WHEN COALESCE(erp.debt_amd, 0) > 0 THEN NULL ELSE now() END,
-       completion_note = CASE WHEN COALESCE(erp.debt_amd, 0) > 0 THEN 'Վճարման ժամկետը դեռ չի լրացել (Excel)' ELSE 'Պարտքը մարվել է (Excel)' END,
-       outcome = CASE WHEN COALESCE(erp.debt_amd, 0) > 0 THEN NULL ELSE 'paid' END,
+       status = CASE WHEN COALESCE(erp.debt_amd, 0) > 0 AND NOT ${PAID_SINCE_TASK_SQL} THEN 'cancelled' ELSE 'done' END,
+       completed_at = CASE WHEN COALESCE(erp.debt_amd, 0) > 0 AND NOT ${PAID_SINCE_TASK_SQL} THEN NULL ELSE now() END,
+       completion_note = CASE WHEN COALESCE(erp.debt_amd, 0) = 0 THEN 'Պարտքը մարվել է (Excel)'
+                              WHEN ${PAID_SINCE_TASK_SQL} THEN 'Ժամկետանց պարտքը մարվել է (Excel)'
+                              ELSE 'Վճարման ժամկետը դեռ չի լրացել (Excel)' END,
+       outcome = CASE WHEN COALESCE(erp.debt_amd, 0) > 0 AND NOT ${PAID_SINCE_TASK_SQL} THEN NULL ELSE 'paid' END,
        updated_at = now()
      FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id ${DEBT_AGE_LATERAL}
      WHERE t.customer_id = c.id AND t.auto_kind = 'debt_collection' AND t.status = 'open'
@@ -120,6 +135,21 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
      RETURNING t.id`,
     [today]
   );
+
+  // The workbook extract REPLACES the whole customer table on every sync: a customer whose debt is fully paid and who
+  // has no recent orders simply drops out of it. Such a customer has no row to compare with, so the rule above never
+  // saw them and their task stayed open for ever (customer 10167, 2026-10-15). Absent from a real extract = paid up.
+  const { rows: droppedOut } = await pool.query(
+    `UPDATE tasks t SET status = 'done', completed_at = now(), completion_note = 'Պարտքը մարվել է (Excel-ի ցանկում հաճախորդն այլևս չկա)', outcome = 'paid', updated_at = now()
+     FROM customers c
+     WHERE t.customer_id = c.id AND t.auto_kind = 'debt_collection' AND t.status = 'open'
+       AND c.erp_customer_id IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM erp_customer_data e WHERE e.erp_customer_id = c.erp_customer_id)
+       AND (SELECT count(*) FROM erp_customer_data) >= $1
+     RETURNING t.id`,
+    [MIN_ERP_ROWS_TO_TRUST_ABSENCE]
+  );
+  closed.push(...droppedOut);
 
   // Management decided this account is disputed / with lawyers / written off: no automatic chasing (Operations control).
   const { rows: onHold } = await pool.query(
@@ -197,6 +227,17 @@ const REORDER_COOLDOWN_DAYS = 30;
 const REORDER_MAX_PER_REP = 10;
 export async function createReorderFollowupTasks(now = new Date(), { notify = true } = {}) {
   const today = yerevanToday(now);
+  // The customer ordered again, but through the workbook (accountant / direct order), not through the app: the app's
+  // own order hook never fires for those, so close the task from the ERP order lines.
+  const { rows: ordered } = await pool.query(
+    `UPDATE tasks t SET status = 'done', completed_at = now(), completion_note = 'Ավտոմատ՝ պատվեր է ստացվել (Excel)', updated_at = now()
+     FROM customers c
+     WHERE t.customer_id = c.id AND t.auto_kind = 'reorder_followup' AND t.status = 'open' AND c.erp_customer_id IS NOT NULL
+       AND EXISTS (SELECT 1 FROM erp_order_lines l WHERE l.erp_customer_id = c.erp_customer_id
+                     AND l.order_date >= (t.created_at AT TIME ZONE 'Asia/Yerevan')::date AND COALESCE(l.qty, 0) > 0 AND COALESCE(l.revenue_amd, 0) > 0)
+     RETURNING t.id`
+  );
+  if (ordered.length) await pool.query("UPDATE task_items SET done = true, done_at = COALESCE(done_at, now()) WHERE task_id = ANY($1)", [ordered.map((r) => r.id)]);
   const perRep = new Map();
   const creatorId = await systemCreatorId(pool);
   if (!creatorId) return { created: 0, perRep };

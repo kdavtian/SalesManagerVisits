@@ -120,8 +120,14 @@ export async function downpaymentChase({ db, day, settings, pick, now = new Date
   const { rows } = await db.query(
     `SELECT o.id, o.customer_id, o.user_id AS rep_id, o.downpayment_amd::float8 AS down, o.downpayment_reminders, o.downpayment_reminded_on::text AS reminded_on,
             c.name AS customer_name, u.name, u.name_hy, u.role, u.vaghinak_address,
-            COALESCE((SELECT sum(p.amount_amd) FROM payments p WHERE p.customer_id = o.customer_id AND p.status <> 'rejected'
-                       AND p.payment_date >= o.created_at - interval '1 day'), 0)::float8 AS paid,
+            GREATEST(
+              COALESCE((SELECT sum(p.amount_amd) FROM payments p WHERE p.customer_id = o.customer_id AND p.status <> 'rejected'
+                         AND p.payment_date >= o.created_at - interval '1 day'), 0),
+              -- a bank transfer reaches the app only through the workbook's cashflow (GREATEST, not a sum: a payment a rep recorded
+              -- and the same money later seen in the cashflow must not count twice)
+              COALESCE((SELECT sum(cf.amount_amd) FROM erp_cashflow_lines cf WHERE cf.erp_customer_id = c.erp_customer_id AND cf.amount_amd > 0
+                         AND cf.cashflow_date >= (o.created_at AT TIME ZONE 'Asia/Yerevan')::date - 1), 0)
+            )::float8 AS paid,
             COALESCE((SELECT MIN(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status IN ('packed_stock_out', 'delivered')), o.updated_at) AS since
      FROM orders o
      JOIN customers c ON c.id = o.customer_id
