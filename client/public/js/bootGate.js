@@ -65,7 +65,11 @@ try {
   // Same fallback direction as above: treat as locked.
 }
 
-if (!calculatorModeEnabled || alreadyUnlocked) {
+// browser-check.js sets this when the browser is too old to run the app
+// (it shows its own "update your browser" screen); do not boot underneath.
+if (window.__fvBrowserBlocked) {
+  // nothing to boot
+} else if (!calculatorModeEnabled || alreadyUnlocked) {
   bootRealApp();
 } else {
   showLockScreen();
