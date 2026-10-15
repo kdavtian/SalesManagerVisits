@@ -313,3 +313,90 @@ test("order effort: the measurement (source / seconds / taps) is stored, junk is
   assert.ok(e.by_source.usual.n >= 1);
   assert.ok(e.usual_share_pct >= 1);
 });
+
+// ---- V2: cluster-skip reminder and the Monday digest (fixtures are created inside the tests so the earlier ones never see them) ----
+test("cluster-skip: planned customers left behind within 300 m of a visited place, rep now far away -> one friendly reminder, never repeated, at most two a day", async () => {
+  const adm = await createUser("admin");
+  const cRep = await createUser("sales_manager", { name: "Cluster Rep" });
+  const pin = (lat) => ({ lat, lng: 44.51 });
+  const mk = async (name, lat) => {
+    const c = await createCustomer({ created_by: adm.id, assigned_manager_id: cRep.id, name, ...pin(lat) });
+    await pool.query("UPDATE customers SET lat = $2, lng = $3 WHERE id = $1", [c.id, lat, 44.51]);
+    return c;
+  };
+  try {
+    const a = await mk("CL Anchor", 40.18);
+    const n1 = await mk("CL Next Door One", 40.181); // ~110 m from the anchor
+    const n2 = await mk("CL Next Door Two", 40.182); // ~220 m
+    const far = await mk("CL Same Street Far", 40.19); // ~1.1 km from the anchor: not "next door"
+    const b = await mk("CL Second Stop", 40.22);
+    const d = await mk("CL Next To Second", 40.221); // ~110 m from the second stop
+    const c = await mk("CL Third Stop", 40.3);
+    await pool.query("INSERT INTO visit_plan_rules (user_id, day_of_week, created_by, customer_ids) VALUES ($1, 1, $2, $3)", [cRep.id, adm.id, [a, n1, n2, far, b, d, c].map((x) => x.id)]);
+    await saveVaghinakSettings({ mode: "live" });
+    const cluster = async () => (await pool.query("SELECT level, body, facts FROM vaghinak_messages WHERE user_id = $1 AND kind = 'cluster_skip' ORDER BY level", [cRep.id])).rows;
+
+    await checkin(cRep, a, at(10, 0));
+    await tick(at(10, 30), pool, { pick: () => 0 });
+    assert.equal((await cluster()).length, 0, "still around the anchor: nothing yet");
+    await checkin(cRep, b, at(11, 0)); // 4.4 km away
+    await tick(at(11, 30), pool, { pick: () => 0 });
+    let msgs = await cluster();
+    assert.equal(msgs.length, 1);
+    assert.deepEqual([...msgs[0].facts.ids].sort(), [n1.id, n2.id].sort(), "only the two within 300 m, not the one 1.1 km away");
+    assert.ok(msgs[0].body.includes("CL Next Door One"));
+    await tick(at(11, 40), pool, { pick: () => 0 });
+    assert.equal((await cluster()).length, 1, "the same left-behind customers are never repeated");
+
+    await checkin(cRep, c, at(12, 0)); // 9 km further on
+    await tick(at(12, 30), pool, { pick: () => 0 });
+    msgs = await cluster();
+    assert.equal(msgs.length, 2, "a new group left behind -> the second (and last) reminder");
+    assert.deepEqual(msgs[1].facts.ids, [d.id]);
+    assert.equal(msgs[1].level, 2);
+  } finally {
+    await pool.query("DELETE FROM visit_plan_rules WHERE user_id = $1", [cRep.id]);
+    await pool.query("DELETE FROM vaghinak_messages WHERE user_id = ANY($1)", [[cRep.id, adm.id]]);
+    await pool.query("DELETE FROM vaghinak_day_log WHERE user_id = $1", [cRep.id]);
+    await pool.query("DELETE FROM checkins WHERE user_id = $1", [cRep.id]);
+    await saveVaghinakSettings({ mode: "shadow" });
+  }
+});
+
+test("Monday digest: each rep gets last week's result once; management gets one summary naming who needs a talk; nothing repeats", async () => {
+  const { weeklyDigest } = await import("../../src/vaghinak/digest.js");
+  const adm = await createUser("admin");
+  const good = await createUser("sales_manager", { name: "Digest Good" });
+  const weak = await createUser("sales_manager", { name: "Digest Weak" });
+  const row = (user, day, planned, visited, late) =>
+    pool.query(
+      "INSERT INTO vaghinak_day_log (user_id, day, first_checkin_at, late_minutes, planned_count, visited_count) VALUES ($1, $2, $3, $4, $5, $6)",
+      [user.id, day, `${day}T06:00:00Z`, late, planned, visited]
+    );
+  try {
+    await saveVaghinakSettings({ mode: "live" });
+    for (const [day, v, late] of [["2026-10-05", 9, 0], ["2026-10-06", 8, 45], ["2026-10-07", 8, 50]]) await row(good, day, 10, v, late);
+    for (const day of ["2026-10-05", "2026-10-06"]) await row(weak, day, 10, 3, 0);
+    assert.equal((await weeklyDigest(at(8, 0), pool, { pick: () => 0 })).created, 0, "before 09:00: nothing");
+    const r = await weeklyDigest(at(9, 30), pool, { pick: () => 0 });
+    assert.ok(r.created >= 3);
+    const mine = async (user) => (await pool.query("SELECT kind, body, to_char(day, 'YYYY-MM-DD') AS day FROM vaghinak_messages WHERE user_id = $1 AND kind LIKE 'week_%'", [user.id])).rows;
+    const g = await mine(good);
+    assert.equal(g.length, 1);
+    assert.equal(g[0].kind, "week_high"); // 25 of 30 = 83 %
+    assert.equal(g[0].day, "2026-10-12", "keyed to the Monday of the week it was sent");
+    assert.ok(g[0].body.includes("83"));
+    assert.ok(g[0].body.includes("2 օր"), "the two late days are mentioned once, gently");
+    assert.equal((await mine(weak))[0].kind, "week_low"); // 6 of 20 = 30 %
+    const m = await mine(adm);
+    assert.equal(m.length, 1);
+    assert.equal(m[0].kind, "week_mgmt_issues");
+    assert.ok(m[0].body.includes("Digest") && m[0].body.includes("30%"), "management hears who needs a talk");
+    const again = await weeklyDigest(at(10, 0), pool, { pick: () => 0 });
+    assert.equal(again.created, 0, "once a week");
+  } finally {
+    await pool.query("DELETE FROM vaghinak_messages WHERE kind LIKE 'week_%'");
+    await pool.query("DELETE FROM vaghinak_day_log WHERE user_id = ANY($1)", [[good.id, weak.id]]);
+    await saveVaghinakSettings({ mode: "shadow" });
+  }
+});
