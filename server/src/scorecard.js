@@ -2,6 +2,7 @@
 // customers visited, orders, how many visited customers also ordered, money collected,
 // average visit length (from "End visit"), and how the debt-collection tasks went.
 // Shown as a report and sent every Monday at 09:00 for the previous week.
+import { bullets } from "./utils/bullets.js";
 import { pool } from "./db/pool.js";
 import { notifyUser } from "./notifications.js";
 import { yerevanToday } from "./utils/yerevanDate.js";
@@ -76,10 +77,10 @@ export async function sendWeeklyScorecards(now = new Date()) {
   const card = await buildScorecard(lastWeek.from);
   let sent = 0;
   for (const r of card.reps) {
-    const conv = r.conversion_pct === null ? "" : ` · ${r.conversion_pct}%`;
+    const conv = r.conversion_pct === null ? "" : ` (${r.conversion_pct}%)`;
     await notifyUser(r.id, "weekly_scorecard", {
       title: "Անցած շաբաթվա արդյունքները",
-      body: `Այցեր՝ ${r.visits}${conv} · պատվերներ՝ ${r.orders} (${amd(r.orders_amd)}) · հավաքագրված՝ ${amd(r.collected_amd)}`,
+      body: bullets([`Այցեր՝ ${r.visits}${conv}`, `Պատվերներ՝ ${r.orders} (${amd(r.orders_amd)})`, `Հավաքագրված՝ ${amd(r.collected_amd)}`]),
       url: "/#/reports?r=weekly_scorecard",
     });
     sent++;
@@ -90,7 +91,7 @@ export async function sendWeeklyScorecards(now = new Date()) {
     for (const m of mgmt) {
       await notifyUser(m.id, "weekly_scorecard", {
         title: "Թիմի շաբաթական արդյունքները",
-        body: `${card.reps.length} մենեջեր · այցեր՝ ${total.visits} · պատվերներ՝ ${total.orders} (${amd(total.amd)}) · հավաքագրված՝ ${amd(total.col)}`,
+        body: bullets([`Մենեջերներ՝ ${card.reps.length}`, `Այցեր՝ ${total.visits}`, `Պատվերներ՝ ${total.orders} (${amd(total.amd)})`, `Հավաքագրված՝ ${amd(total.col)}`]),
         url: "/#/reports?r=weekly_scorecard",
       });
       sent++;

@@ -1,7 +1,7 @@
 import { api } from "../api.js";
 import { mountUsualSlot, reorderHash } from "../reorder.js";
-import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, SALES_CHANNELS, channelDisplayLabel, parseDateOnly, formatDateDMY, formatDayMonth, labelColon, erpLineDiscountRowHtml, leaveSheetTo, showToast } from "../util.js";
-import { currentChips, chipHtml } from "../brandChips.js";
+import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, SALES_CHANNELS, channelDisplayLabel, parseDateOnly, formatDateDMY, formatDayMonth, labelColon, erpLineDiscountRowHtml, leaveSheetTo, showToast, openInfoPopup } from "../util.js";
+import { currentChips, chipHtml, chipParts } from "../brandChips.js";
 import { nextVisitRowHtml } from "../visitSchedule.js";
 import { t } from "../i18n.js";
 import { dueChipHtml } from "../debtChip.js";
@@ -190,12 +190,21 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     </div>`
     }
 
-    <h2 class="section-title section-title-tight product-chips-title">${t("brand_chips_title")}</h2>
+    <div class="sales-heading-with-hint product-chips-heading">
+      <h2 class="section-title section-title-tight product-chips-title">${t("brand_chips_title")}</h2>
+      <button type="button" class="settings-hint-icon" id="chips-info-btn" aria-label="${t("more_info")}">!</button>
+    </div>
     <div class="card product-chips-card" id="product-chips-card">
       ${
         brandChipList.length
-          ? `<div class="product-chips-list">${brandChipList.map((d) => chipHtml(d)).join("")}</div>
-             <p class="muted product-chips-hint">${t("brand_chips_hint")}</p>`
+          ? chipParts(brandChipList)
+              .map(
+                (part) => `<div class="product-chips-part">
+                  <div class="product-chips-part-label muted">${t(part.label)}</div>
+                  <div class="product-chips-list">${part.chips.map((d) => chipHtml(d)).join("")}</div>
+                </div>`
+              )
+              .join("")
           : `<p class="muted product-chips-hint">${t("brand_chips_empty")}</p>`
       }
     </div>
@@ -204,6 +213,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     <div id="checkin-history" class="card-list"></div>
   `;
 
+  container.querySelector("#chips-info-btn").addEventListener("click", () => openInfoPopup(`<p>${escapeHtml(t("brand_chips_hint"))}</p>`));
   container.querySelector("#checkin-btn").addEventListener("click", () => {
     navigate(`#/checkin/${customerId}`);
   });

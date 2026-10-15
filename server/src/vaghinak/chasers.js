@@ -8,15 +8,12 @@ import { createMessage, plannedForDay } from "./engine.js";
 import { durationHy } from "./phrases.js";
 import { createOpsTask, usersWithRole } from "../opsTasks.js";
 import { orderFlow } from "../opsReports.js";
+import { bullets, bulletNames } from "../utils/bullets.js";
 
 const MAX_NEW_PER_REP_PER_DAY = 3;
 const MAX_OPEN_PER_REP = 8;
 const COOLDOWN_DAYS = 14;
 
-const firstNames = (rows) => {
-  const names = rows.slice(0, 2).map((r) => r.name);
-  return `${names.join(", ")}${rows.length > 2 ? "…" : ""}`;
-};
 
 export async function dataChase({ db, day, settings, pick }) {
   // close what is fixed
@@ -56,7 +53,7 @@ export async function dataChase({ db, day, settings, pick }) {
       }
     }
     // one friendly message per rep per day (a shadow one in test mode)
-    await createMessage(db, rep, { kind: "data_chase", level: 1, day, ctx: { n: picked.length, names: firstNames(picked) }, audience: "rep", settings, pick });
+    await createMessage(db, rep, { kind: "data_chase", level: 1, day, ctx: { n: picked.length, names: bulletNames(picked.map((c) => c.name)) }, audience: "rep", settings, pick });
   }
 
   // customers nobody owns -> the sales director
@@ -97,7 +94,7 @@ export async function orderChase({ db, day, settings, pick }) {
     const over = flow.waiting.filter((w) => w.step === step && w.over_sla);
     if (!over.length) continue;
     const oldest = over[0];
-    const ctx = { n: over.length, h: durationHy(Math.round(oldest.waiting_h * 60)), customer: oldest.customer_name };
+    const ctx = { stats: bullets([`Պատվերներ՝ ${over.length}`, `Ամենաերկարը՝ ${durationHy(Math.round(oldest.waiting_h * 60))}`, `Առաջինը՝ ${oldest.customer_name}`]) };
     for (const u of await userRow(await holders[step]())) {
       if (await createMessage(db, u, { kind: `order_waiting_${step}`, level: 1, day, ctx, audience: "management", settings, pick })) created++;
     }
@@ -105,7 +102,7 @@ export async function orderChase({ db, day, settings, pick }) {
     if (worst.length) {
       const escalate = await userRow([...(await usersWithRole("ceo", db)), ...(await usersWithRole("admin", db))]);
       for (const u of escalate) {
-        if (await createMessage(db, u, { kind: "order_waiting_escalation", level: 1, day, ctx: { n: worst.length, h: durationHy(Math.round(worst[0].waiting_h * 60)) }, audience: "management", settings, pick })) created++;
+        if (await createMessage(db, u, { kind: "order_waiting_escalation", level: 1, day, ctx: { stats: bullets([`Պատվերներ՝ ${worst.length}`, `Ամենաերկարը՝ ${durationHy(Math.round(worst[0].waiting_h * 60))}`]) }, audience: "management", settings, pick })) created++;
       }
     }
   }
@@ -147,21 +144,20 @@ export async function downpaymentChase({ db, day, settings, pick, now = new Date
   }
   for (const [repId, list] of byRep) {
     const rep = { id: repId, name: list[0].name, name_hy: list[0].name_hy, role: list[0].role, vaghinak_address: list[0].vaghinak_address };
-    const total = list.reduce((s, o) => s + (o.down - o.paid), 0);
     if (settings.mode === "live") {
       for (const o of list) {
         await createOpsTask({ kind: "downpayment", title: `Կանխավճար՝ ${o.customer_name} (${amdText(o.down - o.paid)})`, assigneeId: repId, customerId: o.customer_id, notify: false, db });
         await db.query("UPDATE orders SET downpayment_reminders = downpayment_reminders + 1, downpayment_reminded_on = $2 WHERE id = $1", [o.id, day]);
       }
     }
-    if (await createMessage(db, rep, { kind: "downpayment_due", level: 1, day, ctx: { names: firstNames(list.map((o) => ({ name: o.customer_name }))), amount: amdText(total) }, audience: "rep", settings, pick })) created++;
+    if (await createMessage(db, rep, { kind: "downpayment_due", level: 1, day, ctx: { items: bulletNames(list.map((o) => `${o.customer_name} — ${amdText(o.down - o.paid)}`)) }, audience: "rep", settings, pick })) created++;
   }
   // delivered 3+ days ago and still no downpayment -> management
   const late = missing.filter((o) => now.getTime() - new Date(o.since).getTime() > 3 * 86400000);
   if (late.length) {
     const ids = [...(await usersWithRole("sales_director", db)), ...(await usersWithRole("ceo", db)), ...(await usersWithRole("admin", db))];
     const { rows: mgmt } = ids.length ? await db.query("SELECT id, name, name_hy, role, vaghinak_address FROM users WHERE id = ANY($1)", [ids]) : { rows: [] };
-    const ctx = { n: late.length, amount: amdText(late.reduce((s, o) => s + (o.down - o.paid), 0)), customer: late[0].customer_name };
+    const ctx = { stats: bullets([`Պատվերներ՝ ${late.length}`, `Գումար՝ ${amdText(late.reduce((s, o) => s + (o.down - o.paid), 0))}`, `Առաջինը՝ ${late[0].customer_name}`]) };
     for (const u of mgmt) if (await createMessage(db, u, { kind: "downpayment_overdue", level: 1, day, ctx, audience: "management", settings, pick })) created++;
   }
   return created;

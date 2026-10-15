@@ -344,7 +344,7 @@ test("cluster-skip: planned customers left behind within 300 m of a visited plac
     let msgs = await cluster();
     assert.equal(msgs.length, 1);
     assert.deepEqual([...msgs[0].facts.ids].sort(), [n1.id, n2.id].sort(), "only the two within 300 m, not the one 1.1 km away");
-    assert.ok(msgs[0].body.includes("CL Next Door One"));
+    assert.ok(msgs[0].body.includes("• CL Next Door One\n• CL Next Door Two"), "the customers are listed as bullet lines");
     await tick(at(11, 40), pool, { pick: () => 0 });
     assert.equal((await cluster()).length, 1, "the same left-behind customers are never repeated");
 
@@ -391,7 +391,8 @@ test("Monday digest: each rep gets last week's result once; management gets one 
     const m = await mine(adm);
     assert.equal(m.length, 1);
     assert.equal(m[0].kind, "week_mgmt_issues");
-    assert.ok(m[0].body.includes("Digest") && m[0].body.includes("30%"), "management hears who needs a talk");
+    assert.ok(m[0].body.includes("• Digest") && m[0].body.includes("30%"), "management hears who needs a talk, as bullet lines");
+    assert.ok(m[0].body.includes("• Պլանի միջին կատարումը՝"), "the numbers are bullets too");
     const again = await weeklyDigest(at(10, 0), pool, { pick: () => 0 });
     assert.equal(again.created, 0, "once a week");
   } finally {

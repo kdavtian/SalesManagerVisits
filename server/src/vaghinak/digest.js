@@ -7,6 +7,7 @@ import { yerevanToday } from "../utils/yerevanDate.js";
 import { getVaghinakSettings } from "./settings.js";
 import { createMessage, isWorkingDay, minuteOfDay, MANAGEMENT_ROLES } from "./engine.js";
 import { durationHy } from "./phrases.js";
+import { bullets } from "../utils/bullets.js";
 
 const shiftDay = (day, delta) => new Date(new Date(`${day}T00:00:00Z`).getTime() + delta * 86400000).toISOString().slice(0, 10);
 export const mondayOf = (day) => shiftDay(day, -((new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7));
@@ -71,7 +72,7 @@ export async function weeklyDigest(now = new Date(), db = pool, { pick } = {}) {
   const { rows: managers } = await db.query("SELECT id, name, name_hy, role, vaghinak_address FROM users WHERE role = ANY($1)", [MANAGEMENT_ROLES]);
   for (const mgr of managers) {
     const kind = lines.length ? "week_mgmt_issues" : "week_mgmt_quiet";
-    const m = await createMessage(db, mgr, { kind, level: 1, day: thisMonday, ctx: { avg, lateDays, k: lines.length, list: lines.join("; "), best: bestName, n: week.length }, audience: "management", settings: { ...settings, mode: "live" }, pick });
+    const m = await createMessage(db, mgr, { kind, level: 1, day: thisMonday, ctx: { k: lines.length, list: bullets(lines), stats: bullets([`Պլանի միջին կատարումը՝ ${avg}%`, `Լավագույնը՝ ${bestName}`, `Ուշացած օրեր՝ ${lateDays}`, `Մենեջերներ՝ ${week.length}`]) }, audience: "management", settings: { ...settings, mode: "live" }, pick });
     if (m) created++;
   }
   return { created };
