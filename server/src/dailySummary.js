@@ -9,6 +9,7 @@
 // single-instance deployment. Checks periodically but only actually sends
 // once per calendar day (server-local date), remembered in-process.
 
+import { bullets } from "./utils/bullets.js";
 import { pool } from "./db/pool.js";
 import { enabled as pushEnabled } from "./push.js";
 import { notifyUser } from "./notifications.js";
@@ -106,7 +107,7 @@ export async function checkDailySummary(now = new Date()) {
   for (const recipient of recipients) {
     await notifyUser(recipient.id, "daily_summary", {
       title: "Օրվա ամփոփում",
-      body: `Չլուծված պատվերներ՝ ${summary.unresolvedOrders}, սպասող վճարումներ՝ ${summary.pendingPayments}, ուշացած այցելություններ՝ ${summary.overdueCustomers}։`,
+      body: bullets([`Չլուծված պատվերներ՝ ${summary.unresolvedOrders}`, `Սպասող վճարումներ՝ ${summary.pendingPayments}`, `Ուշացած այցելություններ՝ ${summary.overdueCustomers}`]),
       url: "/#/dashboard",
     });
   }

@@ -18,6 +18,7 @@
 //    created at once and the sales director is told the promise was broken.
 // A second kind, `reorder_followup`, asks the rep to call or visit a customer who
 // stopped ordering in their usual rhythm (see createReorderFollowupTasks).
+import { bulletNames } from "./utils/bullets.js";
 import { pool } from "./db/pool.js";
 import { notifyUser } from "./notifications.js";
 import { queueSyncNotice } from "./syncNotifier.js";
@@ -88,7 +89,7 @@ async function notifyReps(perRep) {
     const title = list.length === 1 ? `Նոր առաջադրանք՝ ${list[0].label}` : `${list.length} նոր առաջադրանք`;
     await notifyUser(repId, "task_assigned", {
       title,
-      body: `${list.slice(0, 3).map((x) => x.customer).join(", ")}${list.length > 3 ? "…" : ""}`,
+      body: bulletNames(list.map((x) => x.customer), 3),
       url: list.length === 1 ? `/#/tasks?open=${list[0].taskId}` : "/#/tasks",
     }).catch((err) => console.error("Automatic task notification failed:", err.message));
   }
@@ -98,7 +99,7 @@ async function notifyBrokenPromises(director, broken) {
   if (!broken.length || !director) return;
   await notifyUser(director, "task_assigned", {
     title: `Վճարման խոստումը չի կատարվել՝ ${broken.length}`,
-    body: `${broken.slice(0, 3).join(", ")}${broken.length > 3 ? "…" : ""}`,
+    body: bulletNames(broken, 3),
     url: "/#/tasks",
   }).catch((err) => console.error("Broken-promise notification failed:", err.message));
 }

@@ -4,6 +4,7 @@
 // findLeftBehind is pure (coordinates in, customers out); clusterChase loads the data and writes the message.
 import { haversineMeters } from "../utils/geo.js";
 import { createMessage } from "./engine.js";
+import { bulletNames } from "../utils/bullets.js";
 
 const MAX_PER_DAY = 2;
 
@@ -25,7 +26,6 @@ export function findLeftBehind({ fieldVisits, candidates, radiusM, farM }) {
   return [...found.values()].sort((a, b) => a.fromM - b.fromM);
 }
 
-const namesOf = (list) => `${list.slice(0, 2).map((c) => c.name).join(", ")}${list.length > 2 ? "…" : ""}`;
 
 // states: loadRepStates() result (reps with their checkins, plan and visited sets)
 export async function clusterChase({ db, day, settings, pick, states }) {
@@ -50,7 +50,7 @@ export async function clusterChase({ db, day, settings, pick, states }) {
     const fresh = left.filter((c) => !told.has(c.id));
     if (!fresh.length) continue;
     const level = sent.length + 1;
-    const message = await createMessage(db, rep, { kind: "cluster_skip", level, day, ctx: { n: fresh.length, names: namesOf(fresh), ids: fresh.map((c) => c.id) }, audience: "rep", settings, pick });
+    const message = await createMessage(db, rep, { kind: "cluster_skip", level, day, ctx: { n: fresh.length, names: bulletNames(fresh.map((c) => c.name)), ids: fresh.map((c) => c.id) }, audience: "rep", settings, pick });
     if (message) created++;
   }
   return created;

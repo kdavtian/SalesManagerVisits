@@ -63,6 +63,18 @@ export function currentChips(current) {
   return chips;
 }
 
+// The customer card shows the chips in three labelled parts (owner, 2026-10-15): Castrol / Lotos, Royal, Orlen /
+// Other (Mobil, Motul...). A part with no chips is left out.
+export const CHIP_PARTS = [
+  { key: "castrol", groups: ["castrol"], label: "chip_part_castrol" },
+  { key: "polish", groups: ["lotos", "royal"], label: "chip_part_polish" },
+  { key: "other", groups: ["competitors"], label: "chip_part_other" },
+];
+
+export function chipParts(chips) {
+  return CHIP_PARTS.map((part) => ({ ...part, chips: chips.filter((c) => part.groups.includes(c.group)) })).filter((part) => part.chips.length);
+}
+
 export function chipHtml(def, suffix = "") {
   return `<span class="badge badge-${def.tone} product-chip">${escapeHtml(chipLabel(def))}${suffix ? ` · ${escapeHtml(suffix)}` : ""}</span>`;
 }

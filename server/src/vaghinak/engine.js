@@ -11,6 +11,7 @@ import { getVaghinakSettings } from "./settings.js";
 import { addressFor, clock, durationHy, pickVariant, QUESTION_CHOICES } from "./phrases.js";
 import { dataChase, orderChase, downpaymentChase } from "./chasers.js";
 import { clusterChase } from "./cluster.js";
+import { bullets } from "../utils/bullets.js";
 import { weeklyDigest } from "./digest.js";
 
 const YEREVAN_OFFSET_MS = 4 * 60 * 60 * 1000;
@@ -116,7 +117,7 @@ export async function createMessage(db, user, { kind, level, day, ctx = {}, audi
   }
   const message = rows[0] ?? null;
   if (message && !shadow) {
-    await notifyUser(user.id, "vaghinak", { title: "Վաղինակ", body: text.slice(0, 160), url: "/#/vaghinak" });
+    await notifyUser(user.id, "vaghinak", { title: "Վաղինակ", body: text.slice(0, 300), url: "/#/vaghinak" });
   }
   return message;
 }
@@ -225,7 +226,7 @@ export async function wrapUp(now = new Date(), db = pool, { pick } = {}) {
   const { rows: managers } = await db.query("SELECT id, name, name_hy, role, vaghinak_address FROM users WHERE role = ANY($1)", [MANAGEMENT_ROLES]);
   for (const mgr of managers) {
     const kind = lines.length ? "mgmt_brief_issues" : "mgmt_brief_quiet";
-    const m = await createMessage(db, mgr, { kind, level: 1, day, ctx: { avg, lateN, k: lines.length, list: lines.join("; ") }, audience: "management", settings: { ...settings, mode: "live" }, pick });
+    const m = await createMessage(db, mgr, { kind, level: 1, day, ctx: { k: lines.length, list: bullets(lines), stats: bullets([`Պլանի միջին կատարումը՝ ${avg}%`, `Ուշացումներ՝ ${lateN}`]) }, audience: "management", settings: { ...settings, mode: "live" }, pick });
     if (m) created++;
   }
   return { created };
