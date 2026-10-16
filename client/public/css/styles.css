@@ -13825,3 +13825,10 @@ html[data-text-size="xlarge"] { font-size: 130%; }
 .cost-calc .cc-details[open] summary::after { content: "\2212"; }
 .cost-calc .cc-picked .task-chip-x { flex: 0 0 auto; }
 .cost-calc .cc-caption { margin: 12px 0 -6px; font-size: 0.74rem; color: var(--text-dim); }
+
+/* Map search: Customers / Addresses tabs with counts (owner 2026-10-17) */
+.map-sr-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px 8px 6px; background: var(--bg-card); }
+.map-sr-tab { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); color: var(--text-dim); font: inherit; font-size: 0.85rem; font-weight: 700; cursor: pointer; min-width: 0; }
+.map-sr-tab-active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.map-sr-count { min-width: 22px; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, currentColor 18%, transparent); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+#map-address-results .map-sr-list, .map-address-results .map-sr-list { max-height: 56vh; max-height: 56dvh; }

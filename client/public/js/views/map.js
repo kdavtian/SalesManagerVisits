@@ -1590,7 +1590,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       if (brandChipIds.size && !matchesSelectedChips(brandSummary.get(c.id), brandChipIds)) continue;
       if (searchQuery) {
         const haystack = `${c.name} ${c.address ?? ""} ${c.category ?? ""} ${c.erp_customer_id ?? ""} ${brandSearchText(brandSummary.get(c.id))}`.toLowerCase();
-        if (!haystack.includes(searchQuery)) continue;
+        if (!haystack.includes(searchQuery) && !phoneMatches(c, searchQuery)) continue;
       }
       searchMatchCount += 1;
       if (activeFilter === "brands") {
@@ -1945,14 +1945,26 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   let addressSearchDebounceTimer;
   let addressSearchToken = 0;
 
+  // "091 007 019", "+374 91 007019", "91007" all find the customer with phone +37491007019 (3+ digits; the country code and
+  // leading zeros are ignored on both sides).
+  const phoneTailDigits = (v) => String(v ?? "").replace(/\D/g, "").replace(/^374/, "").replace(/^0+/, "");
+  function phoneMatches(c, q) {
+    const query = phoneTailDigits(q);
+    return query.length >= 3 && phoneTailDigits(c.phone).includes(query);
+  }
+
+  // Which tab of the search panel is open: "customers" | "addresses". Follows the results until the person taps a tab.
+  let searchTab = "customers";
+  let searchTabChosen = false;
+
   function hideAddressResults() {
     searchPanelOpen = false;
     addressResultsEl.hidden = true;
     addressResultsEl.innerHTML = "";
   }
 
-  // One panel under the search field with two independently scrolling groups: the customers on the map that match (nearest
-  // first, with the distance) and the street addresses the geocoder found. Tap a customer -> the map flies to the pin and
+  // One panel under the search field with two tabs, each with its count: the customers on the map that match (nearest
+  // first, with the distance; name, ID, address, phone and brands match) and the street addresses the geocoder found. Tap a customer -> the map flies to the pin and
   // opens its card; tap an address -> a search pin is dropped there.
   const SEARCH_PANEL_CUSTOMER_CAP = 60;
   function renderSearchPanel() {
@@ -1968,7 +1980,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     const shown = customers.slice(0, SEARCH_PANEL_CUSTOMER_CAP);
     const customerRows = shown
       .map(({ c, d }) => {
-        const sub = [c.erp_customer_id ? `ID ${c.erp_customer_id}` : "", c.sales_channel ? channelDisplayLabel(c.sales_channel) : "", c.address || ""].filter(Boolean).join(" · ");
+        const byPhone = phoneMatches(c, q);
+        const sub = [byPhone ? c.phone : "", c.erp_customer_id ? `ID ${c.erp_customer_id}` : "", c.sales_channel ? channelDisplayLabel(c.sales_channel) : "", c.address || ""].filter(Boolean).join(" · ");
         return `<button type="button" class="map-sr-row" data-cid="${c.id}">
           <span class="map-sr-main"><strong>${escapeHtml(c.name)}</strong>${sub ? `<span class="muted">${escapeHtml(sub)}</span>` : ""}</span>
           <span class="map-sr-dist">${formatDistance(d)}</span>
@@ -1981,13 +1994,28 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       : addressResults.length
         ? addressResults.map((r, i) => `<button type="button" class="map-sr-row map-sr-address" data-aidx="${i}"><span class="map-sr-main"><strong>${escapeHtml(r.address)}</strong></span></button>`).join("")
         : `<p class="map-sr-empty muted">${t("map_search_no_addresses")}</p>`;
+    // Tabs: nothing found among customers but addresses found -> show the addresses until the person picks a tab.
+    if (!searchTabChosen) searchTab = !customers.length && showAddresses && addressResults.length ? "addresses" : "customers";
+    if (!showAddresses) searchTab = "customers";
+    const addrCount = addressLoading ? "…" : addressResults.length;
     addressResultsEl.innerHTML = `
-      <section class="map-sr-section">
-        <p class="map-address-results-label">${t("map_search_customers")} · ${customers.length}</p>
-        <div class="map-sr-list">${customerRows || `<p class="map-sr-empty muted">${t("map_search_no_results")}</p>`}</div>
-      </section>
-      ${showAddresses ? `<section class="map-sr-section"><p class="map-address-results-label">${t("map_search_address_matches")}</p><div class="map-sr-list">${addressBody}</div></section>` : ""}
+      ${
+        showAddresses
+          ? `<div class="map-sr-tabs" role="tablist">
+              <button type="button" role="tab" class="map-sr-tab ${searchTab === "customers" ? "map-sr-tab-active" : ""}" aria-selected="${searchTab === "customers"}" data-sr-tab="customers">${t("map_search_customers")} <span class="map-sr-count">${customers.length}</span></button>
+              <button type="button" role="tab" class="map-sr-tab ${searchTab === "addresses" ? "map-sr-tab-active" : ""}" aria-selected="${searchTab === "addresses"}" data-sr-tab="addresses">${t("map_search_address_matches")} <span class="map-sr-count">${addrCount}</span></button>
+            </div>`
+          : `<p class="map-address-results-label">${t("map_search_customers")} · ${customers.length}</p>`
+      }
+      <div class="map-sr-list">${searchTab === "addresses" ? addressBody : customerRows || `<p class="map-sr-empty muted">${t("map_search_no_results")}</p>`}</div>
     `;
+    addressResultsEl.querySelectorAll("[data-sr-tab]").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        searchTab = btn.dataset.srTab;
+        searchTabChosen = true;
+        renderSearchPanel();
+      })
+    );
     searchPanelOpen = true;
     addressResultsEl.hidden = false;
     addressResultsEl.querySelectorAll("[data-cid]").forEach((btn) => {
@@ -2045,6 +2073,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
   mapSearchInput?.addEventListener("input", () => {
     const raw = mapSearchInput.value.trim();
+    searchTabChosen = false;
     clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(() => {
       searchQuery = raw.toLowerCase();
@@ -2068,7 +2097,10 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // lightweight popover in this app -- it isn't a modal sheet, so nothing
   // else should block interacting with the rest of the map while it's open.
   function dismissAddressResultsOutside(e) {
-    if (addressResultsEl && !addressResultsEl.hidden && !e.target.closest(".map-search-row")) hideAddressResults();
+    // composedPath is fixed when the click starts: a tap on a panel button that re-renders the panel (a tab) has already
+    // detached e.target by the time this runs, and closest() on a detached node would wrongly count it as "outside".
+    const inside = (e.composedPath?.() ?? []).some((n) => n.classList?.contains("map-search-row")) || e.target.closest(".map-search-row");
+    if (addressResultsEl && !addressResultsEl.hidden && !inside) hideAddressResults();
   }
   document.addEventListener("click", dismissAddressResultsOutside);
 
