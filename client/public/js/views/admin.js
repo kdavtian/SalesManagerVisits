@@ -1,6 +1,7 @@
 import { api } from "../api.js";
 import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, parseUserAgent, SALES_CHANNELS, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, parseDateOnly, formatPhoneDisplay, labelColon, groupDigits, parseAmd, bindAmdInput, showToast } from "../util.js";
 import { t } from "../i18n.js";
+import { icons } from "../icons.js";
 import { state } from "../state.js";
 import { ALL_ROLES, QUICK_ACTIONS, defaultQuickActionIds } from "../quickActions.js";
 import { compareProducts } from "../productSort.js";
@@ -369,7 +370,7 @@ export async function renderTeamSection(container) {
         <div class="team-edit-secondary-actions">
           <button type="button" class="btn-link" id="edit-user-reset">${t("reset_password")}</button>
           ${u.id !== state.user.id ? `<button type="button" class="btn-link" id="edit-user-change-role">${t("change_role")}</button>` : ""}
-          ${u.id !== state.user.id ? `<button type="button" class="btn-link btn-link-danger" id="edit-user-delete">${t("delete_user")}</button>` : ""}
+          ${u.id !== state.user.id ? `<button type="button" class="btn-link btn-link-danger btn-has-icon" id="edit-user-delete">${icons.trash}${t("delete_user")}</button>` : ""}
           ${u.id !== state.user.id && looksLikeTestUser(u) ? `<button type="button" class="btn-link btn-link-danger" id="edit-user-purge">${t("purge_link")}</button>` : ""}
         </div>
       </div>
@@ -804,7 +805,7 @@ export async function renderProductsSection(container) {
             </div>
             <div class="user-row-meta">
               <span class="muted">${escapeHtml(starts)} &ndash; ${escapeHtml(ends)}</span>
-              <button class="btn-link btn-link-danger" data-promo-id="${promo.id}">${t("delete")}</button>
+              <button class="btn-link btn-link-danger btn-has-icon" data-promo-id="${promo.id}">${icons.trash}${t("delete")}</button>
             </div>
           </div>
         `;

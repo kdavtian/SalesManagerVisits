@@ -245,8 +245,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
                 <div class="map-search-input-wrap">
                   <span class="map-search-input-icon" aria-hidden="true">${icons.search}</span>
                   <input type="search" id="map-customer-search" placeholder="${t("map_search_placeholder")}" aria-label="${t("map_search_placeholder")}" />
-                  <div class="map-address-results" id="map-address-results" hidden></div>
                 </div>
+                <div class="map-address-results map-search-panel" id="map-address-results" hidden></div>
               </div>
               <p class="map-search-no-results" id="map-search-no-results" hidden>${t("map_search_no_results")}</p>
               <div class="customer-filter-row" id="map-icon-filter-row"></div>
@@ -1058,6 +1058,12 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // company's pins with no way for them to narrow it down themselves.
   let managerFilter = state.user?.role === "sales_manager" ? String(state.user.id) : "";
   let searchQuery = "";
+  // Customers currently passing every filter + the search (what applyFilter put on the map) and the last address lookup:
+  // the grouped search panel (Customers / Addresses) is drawn from these two.
+  let lastMatches = [];
+  let addressResults = [];
+  let addressLoading = false;
+  let searchPanelOpen = false;
   let searchDebounceTimer;
   let selectedBrand = "";
   // Multi-select ("show me A OR B") like Customers.js's own channel
@@ -1631,6 +1637,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       markersToAdd.forEach((m) => m.addTo(customerMarkerLayer));
     }
     renderSideList(sideListEntries);
+    lastMatches = sideListEntries;
+    // The grouped search panel lists exactly what is on the map now (same filters + search), so repaint it with the pins.
+    if (searchQuery && searchPanelOpen) renderSearchPanel();
     if (searchNoResults) searchNoResults.hidden = !(searchQuery && searchMatchCount === 0);
     if (activeFilter === "planned") {
       renderStopListPanel();
@@ -1937,8 +1946,63 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   let addressSearchToken = 0;
 
   function hideAddressResults() {
+    searchPanelOpen = false;
     addressResultsEl.hidden = true;
     addressResultsEl.innerHTML = "";
+  }
+
+  // One panel under the search field with two independently scrolling groups: the customers on the map that match (nearest
+  // first, with the distance) and the street addresses the geocoder found. Tap a customer -> the map flies to the pin and
+  // opens its card; tap an address -> a search pin is dropped there.
+  const SEARCH_PANEL_CUSTOMER_CAP = 60;
+  function renderSearchPanel() {
+    const q = mapSearchInput.value.trim();
+    if (q.length < 2) {
+      hideAddressResults();
+      return;
+    }
+    const ref = myLocation || (() => { const c = map.getCenter(); return { lat: c.lat, lng: c.lng }; })();
+    const customers = lastMatches
+      .map(({ c }) => ({ c, d: haversineMeters(ref.lat, ref.lng, c.lat, c.lng) }))
+      .sort((a, b) => a.d - b.d);
+    const shown = customers.slice(0, SEARCH_PANEL_CUSTOMER_CAP);
+    const customerRows = shown
+      .map(({ c, d }) => {
+        const sub = [c.erp_customer_id ? `ID ${c.erp_customer_id}` : "", c.sales_channel ? channelDisplayLabel(c.sales_channel) : "", c.address || ""].filter(Boolean).join(" · ");
+        return `<button type="button" class="map-sr-row" data-cid="${c.id}">
+          <span class="map-sr-main"><strong>${escapeHtml(c.name)}</strong>${sub ? `<span class="muted">${escapeHtml(sub)}</span>` : ""}</span>
+          <span class="map-sr-dist">${formatDistance(d)}</span>
+        </button>`;
+      })
+      .join("");
+    const showAddresses = q.length >= 3;
+    const addressBody = addressLoading
+      ? `<p class="map-sr-empty muted">${t("map_search_searching")}</p>`
+      : addressResults.length
+        ? addressResults.map((r, i) => `<button type="button" class="map-sr-row map-sr-address" data-aidx="${i}"><span class="map-sr-main"><strong>${escapeHtml(r.address)}</strong></span></button>`).join("")
+        : `<p class="map-sr-empty muted">${t("map_search_no_addresses")}</p>`;
+    addressResultsEl.innerHTML = `
+      <section class="map-sr-section">
+        <p class="map-address-results-label">${t("map_search_customers")} · ${customers.length}</p>
+        <div class="map-sr-list">${customerRows || `<p class="map-sr-empty muted">${t("map_search_no_results")}</p>`}</div>
+      </section>
+      ${showAddresses ? `<section class="map-sr-section"><p class="map-address-results-label">${t("map_search_address_matches")}</p><div class="map-sr-list">${addressBody}</div></section>` : ""}
+    `;
+    searchPanelOpen = true;
+    addressResultsEl.hidden = false;
+    addressResultsEl.querySelectorAll("[data-cid]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        hideAddressResults();
+        mapSearchInput.blur();
+        focusOnCustomerMarker(btn.dataset.cid);
+      });
+    });
+    addressResultsEl.querySelectorAll("[data-aidx]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        mapSearchInput.blur();
+        selectAddressResult(addressResults[Number(btn.dataset.aidx)]);
+      });
+    });
   }
 
   function selectAddressResult(result) {
@@ -1959,31 +2023,24 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // network round trip rather than a local array scan.
   async function runAddressSearch(query) {
     if (query.length < 3) {
-      hideAddressResults();
+      addressResults = [];
+      addressLoading = false;
+      renderSearchPanel();
       return;
     }
     const myToken = ++addressSearchToken;
-    let results;
+    addressLoading = true;
+    renderSearchPanel();
+    let results = [];
     try {
       results = await api.searchAddress(query);
     } catch {
-      if (myToken !== addressSearchToken) return;
-      hideAddressResults();
-      return;
+      results = [];
     }
     if (myToken !== addressSearchToken) return; // a newer query already superseded this one
-    if (!results.length) {
-      hideAddressResults();
-      return;
-    }
-    addressResultsEl.innerHTML = `
-      <p class="map-address-results-label">${t("map_search_address_matches")}</p>
-      ${results.map((r, i) => `<button type="button" class="address-search-result" data-index="${i}">${escapeHtml(r.address)}</button>`).join("")}
-    `;
-    addressResultsEl.hidden = false;
-    addressResultsEl.querySelectorAll("[data-index]").forEach((btn) => {
-      btn.addEventListener("click", () => selectAddressResult(results[Number(btn.dataset.index)]));
-    });
+    addressResults = results;
+    addressLoading = false;
+    renderSearchPanel();
   }
 
   mapSearchInput?.addEventListener("input", () => {
@@ -1992,17 +2049,26 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     searchDebounceTimer = setTimeout(() => {
       searchQuery = raw.toLowerCase();
       applyFilter();
+      renderSearchPanel();
     }, 300);
     clearTimeout(addressSearchDebounceTimer);
     addressSearchDebounceTimer = setTimeout(() => runAddressSearch(raw), 400);
-    if (!raw) hideAddressResults();
+    if (!raw) {
+      addressResults = [];
+      addressLoading = false;
+      hideAddressResults();
+    }
+  });
+  // Coming back to a half-typed search reopens the panel.
+  mapSearchInput?.addEventListener("focus", () => {
+    if (mapSearchInput.value.trim().length >= 2) renderSearchPanel();
   });
 
   // Dismiss the address-match dropdown on an outside tap, same as any other
   // lightweight popover in this app -- it isn't a modal sheet, so nothing
   // else should block interacting with the rest of the map while it's open.
   function dismissAddressResultsOutside(e) {
-    if (addressResultsEl && !addressResultsEl.hidden && !e.target.closest(".map-search-input-wrap")) hideAddressResults();
+    if (addressResultsEl && !addressResultsEl.hidden && !e.target.closest(".map-search-row")) hideAddressResults();
   }
   document.addEventListener("click", dismissAddressResultsOutside);
 

@@ -16,7 +16,9 @@ test.describe("GPS check-in", () => {
     await page.goto(`/#/checkin/${customer.id}`);
 
     const submitBtn = page.locator("#checkin-submit");
-    await expect(page.locator("#gps-status")).toContainText(/captured/i, { timeout: 10000 });
+    // One merged banner (position found + distance + accuracy) instead of two green boxes.
+    await expect(page.locator("#verify-banner")).toContainText(/±/, { timeout: 10000 });
+    await expect(page.locator("#gps-status")).toBeHidden();
     await expect(submitBtn).toBeEnabled();
 
     // The real checkbox is visually hidden (width/height 0, opacity 0 --

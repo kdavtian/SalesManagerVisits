@@ -6,7 +6,8 @@ import { icons } from "../icons.js";
 import { state, seesAllActivity } from "../state.js";
 import { loadWithCache } from "../listCache.js";
 import { indexBrandSummary, brandSearchText, matchedEverEntries, matchesSelectedChips, buildBrandChipTree, chipHtml, shortDate } from "../brandChips.js";
-import { buildRegionSubregionTree, buildDirectionManagerTree, buildCategoryTierTree, openTriStateTreeSheet, NO_GROUP_KEY } from "../regionTree.js";
+import { buildRegionSubregionTree, buildDirectionManagerTree, openTriStateTreeSheet, NO_GROUP_KEY } from "../regionTree.js";
+import { openTypeTierSheet } from "../typeTierSheet.js";
 
 const FILTERS = [
   { key: "", labelKey: "filter_all" },
@@ -131,8 +132,9 @@ export function renderCustomers(root, navigate, initialFilter) {
   let regionSubregionKeys = new Set();
   // Set of "channel::managerId" keys (buildDirectionManagerTree leaf ids); empty = no filter.
   let assignmentKeys = new Set();
-  // Set of "category::tier" keys (buildCategoryTierTree leaf ids); empty = no filter.
-  let typeTierKeys = new Set();
+  // Customer type (category or NO_GROUP_KEY) and tier chips, several of each at once; empty = no filter.
+  let typeFilters = new Set();
+  let tierFilters = new Set();
   // Set of "group:value" chip ids (brandChips.js); empty = no filter. A shop
   // passes when ANY visit ever recorded ANY selected product.
   let brandChipIds = new Set();
@@ -369,8 +371,8 @@ export function renderCustomers(root, navigate, initialFilter) {
             key: "channel",
             icon: icons.tag,
             label: t("filter_type_tier_title"),
-            active: typeTierKeys.size > 0,
-            count: typeTierKeys.size,
+            active: typeFilters.size + tierFilters.size > 0,
+            count: typeFilters.size + tierFilters.size,
           })
         : "",
     ]
@@ -427,17 +429,22 @@ export function renderCustomers(root, navigate, initialFilter) {
     });
 
     filterRow.querySelector('[data-filter-btn="channel"]')?.addEventListener("click", () => {
-      openTriStateTreeSheet(t("filter_type_tier_title"), {
-        tree: buildCategoryTierTree(allCustomers, {
-          categoryLabel,
-          tiers: TIER_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) })),
-          noCategoryLabel: t("no_customer_type"),
-        }),
-        initialSelectedIds: typeTierKeys,
-        countUnitLabel: t("perf_dq_customers_unit"),
-        searchPlaceholder: t("search"),
-        onApply: (selectedIds) => {
-          typeTierKeys = selectedIds;
+      openTypeTierSheet({
+        customers: allCustomers,
+        types: typeFilters,
+        tiers: tierFilters,
+        // How many rows the list would show with these chips on (every other filter and the status pill stay as they are).
+        countMatching: (types, tiers) => {
+          const saved = [typeFilters, tierFilters];
+          typeFilters = types;
+          tierFilters = tiers;
+          const n = applyNonStatusFilters(allCustomers).filter((c) => !filter || FILTER_STATUSES[filter]?.includes(visitStatus(c))).length;
+          [typeFilters, tierFilters] = saved;
+          return n;
+        },
+        onApply: (types, tiers) => {
+          typeFilters = types;
+          tierFilters = tiers;
           renderFilterRow();
           renderStatsBar();
           renderList();
@@ -459,9 +466,8 @@ export function renderCustomers(root, navigate, initialFilter) {
     if (regionSubregionKeys.size) {
       list = list.filter((c) => c.region && regionSubregionKeys.has(`${c.region}::${c.subregion || NO_GROUP_KEY}`));
     }
-    if (typeTierKeys.size) {
-      list = list.filter((c) => typeTierKeys.has(`${c.category || NO_GROUP_KEY}::${c.customer_tier || "potential"}`));
-    }
+    if (typeFilters.size) list = list.filter((c) => typeFilters.has(c.category || NO_GROUP_KEY));
+    if (tierFilters.size) list = list.filter((c) => tierFilters.has(c.customer_tier || "potential"));
     if (assignmentKeys.size) {
       list = list.filter((c) => assignmentKeys.has(`${c.sales_channel || NO_GROUP_KEY}::${c.assigned_manager_id ?? NO_GROUP_KEY}`));
     }

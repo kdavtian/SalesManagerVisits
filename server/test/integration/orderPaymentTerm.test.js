@@ -111,3 +111,40 @@ test("recent-orders: the order menu's picker lists the customer's last orders wi
   assert.equal(list[0].lines[0].qty, 3);
   assert.equal((await apiRequest("/api/customers/99999999/recent-orders", { cookie })).status, 404);
 });
+
+test("payment terms can be edited on a submitted order (owner or reviewer), with the same bounds; not after confirmation", async () => {
+  const created = await post({ payment_method: "invoice", payment_term_days: 45 });
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  trackOrder(created.data.id);
+  const id = created.data.id;
+  const patch = (body, c = cookie) => apiRequest(`/api/orders/${id}`, { method: "PATCH", cookie: c, body });
+
+  const toCash = await patch({ payment_method: "cash", payment_term_days: 0 });
+  assert.equal(toCash.status, 200, JSON.stringify(toCash.data));
+  assert.equal(toCash.data.payment_method, "cash");
+  assert.equal(toCash.data.payment_term_days, 0);
+
+  const back = await patch({ payment_method: "invoice", payment_term_days: 30 });
+  assert.equal(back.data.payment_method, "invoice");
+  assert.equal(back.data.payment_term_days, 30);
+
+  const daysOnly = await patch({ payment_term_days: 60 });
+  assert.equal(daysOnly.data.payment_term_days, 60);
+  assert.equal(daysOnly.data.payment_method, "invoice", "days alone keep the method");
+
+  assert.equal((await patch({ payment_method: "invoice", payment_term_days: 0 })).status, 400, "invoice needs 1+ days");
+  assert.equal((await patch({ payment_term_days: 400 })).status, 400);
+  assert.equal((await patch({ payment_method: "wire" })).status, 400);
+
+  // another rep cannot touch it
+  const other = await createUser("sales_manager");
+  const otherCookie = await loginAs(other.email);
+  assert.equal((await patch({ payment_term_days: 5 }, otherCookie)).status, 403);
+
+  // the director confirms -> terms are locked
+  const director = await createUser("sales_director");
+  const dirCookie = await loginAs(director.email);
+  const confirmed = await patch({ status: "confirmed" }, dirCookie);
+  assert.equal(confirmed.status, 200, JSON.stringify(confirmed.data));
+  assert.equal((await patch({ payment_term_days: 10 })).status, 409);
+});
