@@ -326,6 +326,10 @@ window.addEventListener("app-preferences-changed", () => {
   renderNav();
 });
 
+// "Change this customer's location" / "add a customer" maps are one-way flows with a frozen pin and open panels; a
+// cached copy of one would come back mid-flow on Back ("shows the change location page again").
+const isModalMapFlow = (hash) => /^#\/map\?(?:.*&)?(?:relocate|add)=/.test(hash);
+
 function trimBackStack() {
   let sawMap = false;
   for (let i = backStack.length - 1; i >= 0; i--) {
@@ -785,6 +789,24 @@ function navigate(hash) {
   location.hash = hash;
 }
 
+// Leaving a flow that must not be reachable again with Back (relocating a customer, adding one): the flow's own
+// history entry is REPLACED by the screen it ends on, so Back skips it instead of reopening "change location".
+navigate.replace = (hash) => {
+  if (location.hash === hash) return;
+  hasNavigatedInApp = true;
+  programmaticNav = true;
+  setTimeout(() => (programmaticNav = false), 800);
+  history.replaceState(null, "", hash);
+  window.dispatchEvent(new HashChangeEvent("hashchange"));
+};
+// The screen on display stays mounted but its route changes (a finished add-customer flow is now just "the map
+// focused on the new customer"): rewrite the address bar and the router's idea of the current hash, no re-render.
+navigate.rewrite = (hash) => {
+  if (location.hash === hash) return;
+  history.replaceState(null, "", hash);
+  lastRenderedHash = hash;
+};
+
 // A detail-style page's back button should return wherever the user
 // actually came from (Activity, Map, Dashboard, a filtered Customers list,
 // ...), not always the same hardcoded parent route -- that only happens to
@@ -1019,7 +1041,7 @@ async function renderRoute() {
       currentCleanup();
       currentCleanup = null;
     }
-  } else if (lastRenderedHash && lastRenderedHash !== hash && app.firstChild) {
+  } else if (lastRenderedHash && lastRenderedHash !== hash && app.firstChild && !isModalMapFlow(lastRenderedHash)) {
     // Captured BEFORE emptying #app below -- a scroll container with no
     // children always reports scrollTop 0, so reading it after the move
     // loop would silently throw away the real position every time.

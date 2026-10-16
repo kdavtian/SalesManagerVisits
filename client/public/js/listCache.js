@@ -146,7 +146,10 @@ export async function loadWithCache(key, fetcher, onData) {
 // the network refetch finally lands. These patch the cached lists in place
 // (or drop them when the change can't be applied locally, e.g. a new
 // customer), so the instant-open copy is already correct.
-const CUSTOMER_LIST_KEYS = ["customers-list:plain", "customers-list:with-debt"];
+// "map-customers" is the Map tab's own stale-while-revalidate copy: without it a new customer was missing, and a
+// relocated one still sat at its OLD spot, on the Map's first paint until the live fetch landed (or for good when
+// it was slow / offline).
+const CUSTOMER_LIST_KEYS = ["customers-list:plain", "customers-list:with-debt", "map-customers"];
 
 async function mutateCachedCustomerLists(mutate) {
   try {

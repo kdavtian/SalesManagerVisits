@@ -899,6 +899,12 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     mapEl.classList.add("map-picking");
   }
   let placingMarker = null;
+  // "Tap the map to place a pin" is only true while add mode is waiting for that tap: it used to stay on screen for the
+  // whole session (the add flow's own pin, the form, and after saving), telling the rep to tap when taps did nothing.
+  function syncAddHint() {
+    hint.hidden = !(addMode && !placingMarker && !relocateCustomerId);
+  }
+  syncAddHint();
   const markerLayer = L.layerGroup().addTo(map);
   // Customer pins specifically (not plan-day stop numbers, not team member
   // dots) get clustered -- a real customer base packed into a district
@@ -2017,8 +2023,17 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   function focusOnCustomerMarker(id) {
     const entry = lastCustomers.find((item) => String(item.c.id) === String(id));
     if (entry) {
-      map.setView([entry.c.lat, entry.c.lng], Math.max(map.getZoom(), 15));
-      entry.marker.openPopup();
+      // Zoom 17 and closer draws every pin on its own (disableClusteringAtZoom): at 15 the new customer could sit inside
+      // a cluster bubble next to a neighbour, i.e. "the new pin is not on the map".
+      map.setView([entry.c.lat, entry.c.lng], Math.max(map.getZoom(), 17), { animate: false });
+      // The cluster layer adds markers in chunks over the next frames, so the marker is not on the map yet: open its
+      // popup as soon as it is (openPopup on a marker without a map does nothing).
+      let tries = 0;
+      const openWhenShown = () => {
+        if (entry.marker._map) entry.marker.openPopup();
+        else if (++tries < 40) setTimeout(openWhenShown, 75);
+      };
+      openWhenShown();
     }
     return entry;
   }
@@ -2788,6 +2803,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       map.removeLayer(placingMarker);
       placingMarker = null;
     }
+    syncAddHint();
   }
 
   function closeLocationPanel() {
@@ -2809,6 +2825,12 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       fab.classList.remove("fab-active");
       fab.setAttribute("aria-pressed", "false");
       mapEl.classList.remove("map-picking");
+      syncAddHint();
+      // The add flow is over: the address must stop saying so, or Back / a later visit re-enters add mode.
+      if (startInAddMode) {
+        startInAddMode = false;
+        navigate.rewrite?.("#/map");
+      }
     }
   }
 
@@ -2818,6 +2840,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   function handoffToCustomerForm(latlng) {
     closeLocationPanel();
     addMode = false;
+    syncAddHint();
     fab.classList.remove("fab-active");
     fab.setAttribute("aria-pressed", "false");
     mapEl.classList.remove("map-picking");
@@ -2847,6 +2870,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         showLocationPanel(placingMarker.getLatLng(), { ...opts, source: "dragged_pin", accuracy: undefined, onConfirm: opts.onConfirm });
       });
     }
+    syncAddHint();
     showLocationPanel(latlng, opts);
   }
 
@@ -3037,7 +3061,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     fab.hidden = true;
     mapEl.classList.add("map-picking");
     root.querySelector("#cancel-relocate")?.addEventListener("click", () => {
-      navigate(`#/customers/${relocateCustomerId}`);
+      (navigate.replace ?? navigate)(`#/customers/${relocateCustomerId}`);
     });
     customersReady.then(() => {
       const existing = lastCustomers.find((entry) => String(entry.c.id) === String(relocateCustomerId));
@@ -3153,7 +3177,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           await api.createEditRequest(relocateCustomerId, changes);
         }
         overlay.remove();
-        navigate(`#/customers/${relocateCustomerId}`);
+        // Replace (not push) the flow's history entry: Back from the customer card must not reopen "change location".
+        (navigate.replace ?? navigate)(`#/customers/${relocateCustomerId}`);
       } catch (err) {
         errorEl.textContent = err.message;
         errorEl.hidden = false;
@@ -3235,6 +3260,12 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       if (placingMarker) {
         map.removeLayer(placingMarker);
         placingMarker = null;
+      }
+      syncAddHint();
+      // Cancelled from the details form: the add flow is over (see cancelLocationPicker).
+      if (startInAddMode) {
+        startInAddMode = false;
+        navigate.rewrite?.("#/map");
       }
     }
 
@@ -3469,6 +3500,10 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         // focus the new pin the same way the #/map?customer=<id> deep link
         // does (see focusOnCustomerMarker).
         startInAddMode = false;
+        syncAddHint();
+        // The saved customer is now the screen's subject: make the address say so. Left as "#/map?add=1" it made Back
+        // (from the customer's card) reopen "tap the map to place a pin".
+        if (created?.id != null) navigate.rewrite?.(`#/map?customer=${created.id}`);
         // Also pre-empt applyFilter's own "first settle" geolocation-recenter
         // path (see above) -- without this, loadCustomers() below can kick
         // off an async getCurrentPosition() that resolves after our
