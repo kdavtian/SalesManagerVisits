@@ -134,7 +134,8 @@ function paintCounts(counts = {}) {
       badge.setAttribute("aria-hidden", "true");
       chip.appendChild(badge);
     }
-    badge.textContent = String(Number(counts[status]) || 0);
+    const value = String(Number(counts[status]) || 0);
+    if (badge.textContent !== value) badge.textContent = value; // unchanged -> no write (a write re-triggers the page observers)
   });
 }
 

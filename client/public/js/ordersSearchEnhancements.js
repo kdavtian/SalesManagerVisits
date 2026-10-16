@@ -43,7 +43,11 @@ function decorateOrdersStatusUi() {
       icon.className = `order-filter-status-icon order-status-${status}`;
       btn.prepend(icon);
     }
-    icon.innerHTML = ORDER_STATUS_ICONS[status];
+    // innerHTML only when the icon is not there yet: rewriting it every pass queued a mutation that re-ran this forever.
+    if (icon._status !== status) {
+      icon.innerHTML = ORDER_STATUS_ICONS[status];
+      icon._status = status;
+    }
   });
 }
 

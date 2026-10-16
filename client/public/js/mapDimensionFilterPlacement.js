@@ -20,10 +20,15 @@ function syncDimensionButtons(row) {
   row?.querySelectorAll("[data-map-filter-btn]").forEach((button) => {
     const key = button.dataset.mapFilterBtn;
     const active = button.classList.contains("filter-icon-btn-active") || button.classList.contains("activity-search-filter-btn-active");
-    button.classList.remove("filter-icon-btn", "filter-icon-btn-active");
-    button.classList.add("activity-search-filter-btn", "map-dimension-filter-btn");
-    button.classList.toggle("activity-search-filter-btn-active", active);
+    // Skip when the button already shows this state: a no-op class/innerHTML write still queues a mutation record, and the
+    // page-wide observer below re-ran this on every frame forever (see unifiedSearchEnhancements.js).
+    const sig = `${key}|${active}`;
+    if (button._dimSig === sig) return;
+    for (const n of ["filter-icon-btn", "filter-icon-btn-active"]) if (button.classList.contains(n)) button.classList.remove(n);
+    for (const n of ["activity-search-filter-btn", "map-dimension-filter-btn"]) if (!button.classList.contains(n)) button.classList.add(n);
+    if (button.classList.contains("activity-search-filter-btn-active") !== active) button.classList.toggle("activity-search-filter-btn-active", active);
     button.innerHTML = `${iconFor(key)}${active ? '<span class="activity-search-filter-dot" aria-hidden="true"></span>' : ""}`;
+    button._dimSig = sig;
   });
 }
 
@@ -94,7 +99,7 @@ function enhanceMapDimensionFilters() {
     managerBtn.innerHTML = `${MANAGER_ICON}${active ? '<span class="activity-search-filter-dot" aria-hidden="true"></span>' : ""}`;
   }
 
-  filterRow.classList.add("map-dimension-filter-inline");
+  if (!filterRow.classList.contains("map-dimension-filter-inline")) filterRow.classList.add("map-dimension-filter-inline");
   const primaryFilter = actions.querySelector(".map-primary-filter-wrap");
   const managerWrap = actions.querySelector("#map-manager-filter-wrap");
 

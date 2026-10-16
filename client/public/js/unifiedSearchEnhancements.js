@@ -11,6 +11,17 @@ const SEARCH_ICONS = {
   orderAdd: `<svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="15" height="19" rx="3"/><path d="M9 9h7M9 13h5M9 17h4"/><circle cx="20.5" cy="19.5" r="5" fill="var(--accent)" stroke="var(--bg-card)" stroke-width="2"/><path d="M20.5 17v5M18 19.5h5" stroke="white" stroke-width="1.8"/></svg>`,
 };
 
+// Writes that change nothing still queue a mutation record (classList.add of a class already there, innerHTML with the same
+// markup), and the observers at the bottom of this file watch the whole page: a no-op write here re-ran every enhancer on the
+// next frame, forever (60 re-runs a second on Orders, Customers and Products even when idle -- battery and jank). So every write
+// below is guarded: add classes only when missing, rebuild a button only when what it should show changed.
+function addClasses(el, ...names) {
+  for (const n of names) if (!el.classList.contains(n)) el.classList.add(n);
+}
+function setClass(el, name, on) {
+  if (el.classList.contains(name) !== Boolean(on)) el.classList.toggle(name, Boolean(on));
+}
+
 function clearLabel() {
   return getLang() === "hy" ? "Մաքրել որոնումը" : "Clear search";
 }
@@ -166,8 +177,8 @@ function enhanceOrders() {
   const view = input?.closest(".detail-view");
   const header = view?.querySelector(".list-header-row");
   if (view && header) {
-    view.classList.add("orders-view-unified");
-    header.classList.add("list-header", "unified-list-header");
+    addClasses(view, "orders-view-unified");
+    addClasses(header, "list-header", "unified-list-header");
   }
 
   const filterBtn = document.querySelector("#order-filter-btn");
@@ -241,17 +252,19 @@ function syncCustomerFilterButtons(filterRow) {
     // small count badge customers.js itself renders, instead of collapsing
     // back to a plain dot once this script re-skins the button.
     const count = Number(button.dataset.filterCount || 0);
-    button.classList.remove("filter-icon-btn", "filter-icon-btn-active");
-    button.classList.add("activity-search-filter-btn", "unified-customer-filter-btn");
-    button.classList.toggle("activity-search-filter-btn-active", active);
+    const sig = `${button.dataset.filterBtn}|${active}|${count}`;
+    if (button._unifiedSig === sig) return; // already showing exactly this
+    for (const n of ["filter-icon-btn", "filter-icon-btn-active"]) if (button.classList.contains(n)) button.classList.remove(n);
+    addClasses(button, "activity-search-filter-btn", "unified-customer-filter-btn");
+    setClass(button, "activity-search-filter-btn-active", active);
     const badge =
       count > 1
         ? `<span class="activity-search-filter-count" aria-hidden="true">${count}</span>`
         : active
           ? '<span class="activity-search-filter-dot" aria-hidden="true"></span>'
           : "";
-    const wanted = `${customerIconFor(button.dataset.filterBtn)}${badge}`;
-    if (button.innerHTML !== wanted) button.innerHTML = wanted;
+    button.innerHTML = `${customerIconFor(button.dataset.filterBtn)}${badge}`;
+    button._unifiedSig = sig;
   });
 }
 
@@ -323,17 +336,19 @@ function syncPricelistFilterButtons(filterRow) {
   filterRow?.querySelectorAll("[data-filter-btn]").forEach((button) => {
     const active = button.classList.contains("filter-icon-btn-active") || button.classList.contains("activity-search-filter-btn-active");
     const count = Number(button.dataset.filterCount || 0);
-    button.classList.remove("filter-icon-btn", "filter-icon-btn-active");
-    button.classList.add("activity-search-filter-btn", "unified-pricelist-filter-btn");
-    button.classList.toggle("activity-search-filter-btn-active", active);
+    const sig = `${button.dataset.filterBtn}|${active}|${count}`;
+    if (button._unifiedSig === sig) return;
+    for (const n of ["filter-icon-btn", "filter-icon-btn-active"]) if (button.classList.contains(n)) button.classList.remove(n);
+    addClasses(button, "activity-search-filter-btn", "unified-pricelist-filter-btn");
+    setClass(button, "activity-search-filter-btn-active", active);
     const badge =
       count > 1
         ? `<span class="activity-search-filter-count" aria-hidden="true">${count}</span>`
         : active
           ? '<span class="activity-search-filter-dot" aria-hidden="true"></span>'
           : "";
-    const wanted = `${pricelistIconFor(button.dataset.filterBtn)}${badge}`;
-    if (button.innerHTML !== wanted) button.innerHTML = wanted;
+    button.innerHTML = `${pricelistIconFor(button.dataset.filterBtn)}${badge}`;
+    button._unifiedSig = sig;
   });
 }
 
