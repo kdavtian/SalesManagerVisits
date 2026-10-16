@@ -2,7 +2,7 @@
 // Excel lines plus app orders newer than the last sync) and the customer's own ordering rhythm.
 //  - usual items: products in at least 2 of the last 6 orders (any product of the last order for a customer
 //    with fewer than 3 orders), typical quantity = the median, flagged "due" when the product's own gap passed
-//  - `from`: the lines of one past order ("erp:<order id>" or "app:<order id>") for the Reorder button
+//  - `from`: the lines of one past order ("erp:<order id>", "app:<order id>" or "last" = the newest) for the Reorder button
 // Only products still active in the catalog can be reordered; the rest are counted in `skipped`.
 import { pool } from "./db/pool.js";
 import { yerevanToday } from "./utils/yerevanDate.js";
@@ -105,7 +105,10 @@ export async function buildReorderProfile(customerId, { from = null, today = yer
   if (!customer) return null;
   const todayNum = dayNumber(today);
 
-  const [history, single] = await Promise.all([loadHistory(customer), from ? loadSingleOrder(customer, from) : null]);
+  // from = "last": the order menu's "Repeat last order" -- the newest order, resolved here so the menu needs no data.
+  const wantsLast = from === "last";
+  const [history, single0] = await Promise.all([loadHistory(customer), from && !wantsLast ? loadSingleOrder(customer, from) : null]);
+  const single = wantsLast ? history[0] ?? null : single0;
   const resolve = await mapToCatalog(single ? [...history, single] : history);
 
   const { rows: [rhythm] } = customer.erp_customer_id

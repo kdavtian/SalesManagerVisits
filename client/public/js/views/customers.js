@@ -429,19 +429,16 @@ export function renderCustomers(root, navigate, initialFilter) {
     });
 
     filterRow.querySelector('[data-filter-btn="channel"]')?.addEventListener("click", () => {
+      // The rows the list would show with no type/tier chip on (all other filters and the status pill stay as they are).
+      const saved = [typeFilters, tierFilters];
+      typeFilters = new Set();
+      tierFilters = new Set();
+      const rows = applyNonStatusFilters(allCustomers).filter((c) => !filter || FILTER_STATUSES[filter]?.includes(visitStatus(c)));
+      [typeFilters, tierFilters] = saved;
       openTypeTierSheet({
-        customers: allCustomers,
+        rows,
         types: typeFilters,
         tiers: tierFilters,
-        // How many rows the list would show with these chips on (every other filter and the status pill stay as they are).
-        countMatching: (types, tiers) => {
-          const saved = [typeFilters, tierFilters];
-          typeFilters = types;
-          tierFilters = tiers;
-          const n = applyNonStatusFilters(allCustomers).filter((c) => !filter || FILTER_STATUSES[filter]?.includes(visitStatus(c))).length;
-          [typeFilters, tierFilters] = saved;
-          return n;
-        },
         onApply: (types, tiers) => {
           typeFilters = types;
           tierFilters = tiers;

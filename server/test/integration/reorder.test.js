@@ -80,6 +80,15 @@ test("Reorder: the lines of one past order, mapped to today's catalog", async ()
   assert.equal(res.data.lines.not_available, 1, "the retired product is reported, not silently dropped");
 });
 
+test("Repeat last order: from=last resolves to the newest order without the client knowing its id", async () => {
+  const res = await apiRequest(`/api/customers/${customer.id}/reorder-profile?from=last`, { cookie: repCookie });
+  assert.equal(res.status, 200);
+  assert.equal(res.data.lines.source, `erp:RO-${stamp}-6`);
+  assert.deepEqual(res.data.lines.lines.map((l) => [l.product_id, l.quantity]), [[edge.id, 4]]);
+  const none = await apiRequest(`/api/customers/${customer.id}/reorder-profile?from=last`, { cookie: otherCookie });
+  assert.equal(none.data.lines, null, "a rep without access gets nothing to repeat");
+});
+
 test("a rep without access to the customer gets no history; the list and map carry the reorder chip data", async () => {
   const empty = await apiRequest(`/api/customers/${customer.id}/reorder-profile`, { cookie: otherCookie });
   assert.equal(empty.status, 200);

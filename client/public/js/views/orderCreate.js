@@ -542,6 +542,8 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
       }
       notes.push(t("reorder_prefilled").replace("{date}", formatDateDMY(profile.lines.date)));
       if (skipped) notes.push(t("reorder_skipped").replace("{n}", String(skipped)));
+    } else if (opts.from && !profile?.lines) {
+      notes.push(t("reorder_none"));
     } else if (profile && opts.usual) {
       let skipped = 0;
       for (const item of profile.items) {
@@ -549,10 +551,12 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
         if (product && isAvailable(product)) addToCart(product, item.quantity);
         else skipped++;
       }
-      notes.push(t("usual_order_added"));
+      notes.push(profile.items.length ? t("usual_order_added") : t("usual_order_none"));
       if (skipped) notes.push(t("reorder_skipped").replace("{n}", String(skipped)));
+    } else if (opts.usual) {
+      notes.push(t("usual_order_none"));
     }
-    if (notes.length && profile.cadence.days_since_order === 0) notes.push(t("reorder_already_today"));
+    if (notes.length && profile?.cadence.days_since_order === 0) notes.push(t("reorder_already_today"));
     if (notes.length) {
       prefillNote.textContent = notes.join(" · ");
       prefillNote.hidden = false;

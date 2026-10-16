@@ -119,7 +119,7 @@ export async function renderVolumeReport(root, navigate) {
   // ---- chips ---------------------------------------------------------------------------------------------------------
   function renderPeriodChips() {
     $("#vol-periods").innerHTML = [...PERIODS, "custom"]
-      .map((k) => `<button type="button" class="map-filter-chip ${state.period === k ? "chip-active" : ""}" data-period="${k}" aria-pressed="${state.period === k}">${t(`vol_p_${k}`)}</button>`)
+      .map((k) => `<button type="button" class="map-filter-chip ${state.period === k ? "chip-active" : ""}" data-period="${k}" aria-pressed="${state.period === k}"${k === "custom" ? ` aria-label="${escapeHtml(t("vol_p_custom"))}" title="${escapeHtml(t("vol_p_custom"))}"` : ""}>${k === "custom" ? icons.calendar : t(`vol_p_${k}`)}</button>`)
       .join("");
     $("#vol-custom-row").hidden = state.period !== "custom";
     $("#vol-periods").querySelectorAll("[data-period]").forEach((b) =>
