@@ -4935,8 +4935,8 @@ label.checkbox-row input[type="checkbox"] {
 }
 
 .stat-pill-active {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
 }
 
 .stat-pill-active strong,
@@ -11366,7 +11366,7 @@ form select,
 }
 
 .activity-tab-active .tasks-tab-count {
-  background: var(--accent);
+  background: var(--accent-fill);
   color: #fff;
 }
 
@@ -13632,3 +13632,42 @@ html[data-text-size="xlarge"] { font-size: 130%; }
 .ops-good { color: var(--success, #1f9d55); font-weight: 600; }
 #new-order-btn { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
 .vg-block-body { white-space: pre-line; }
+
+/* ===== UI/UX audit round (1.346.0) ===== */
+/* Customers header: title + "!" + debt toggle + add button no longer clip the
+   title to "Հաճախորդն…" (the title shrinks a little instead of being cut). */
+.list-view .list-header h1 { font-size: clamp(1.3rem, 6vw, var(--fs-title)); }
+/* Customers stat pills: four equal pills that always fit the screen (360 px
+   Androids used to scroll the last one off), labels shrink instead of "Բաց թո…". */
+.customer-stats-bar .stat-pill { min-width: 0; padding: 6px 6px; }
+.customer-stats-bar .stat-pill span {
+  font-size: clamp(0.64rem, 2.9vw, 0.8125rem);
+  white-space: normal;
+  line-height: 1.15;
+}
+/* Payments: the cash-handoffs button no longer touches the title row. */
+#payments-handoffs-btn { margin-top: 12px; }
+/* Settings: sections already carry their own 16 px inset -- the extra 16 px
+   on the page made every row 32 px narrower than elsewhere (Push row wrapped
+   to 3 lines, its status was cut to "Անջա…"). */
+.settings-view { padding: 0; }
+/* Dark mode: white check mark on the bright green/orange circle was 2:1. */
+:root[data-theme="dark"] .verify-banner-success .verify-banner-icon,
+:root[data-theme="dark"] .verify-banner-warning .verify-banner-icon { color: #0b0d10; }
+:root[data-theme="dark"] .badge-danger { color: #ff6b61; }
+/* Selected tab text: 4.2:1 -> 6:1 on the light tint. */
+.activity-tab-active { color: var(--accent-dark); }
+:root[data-theme="dark"] .activity-tab-active { color: var(--accent); }
+/* Settings > Push notifications: status goes UNDER the label so the label keeps a
+   whole line (it was breaking mid-word, "ծանուցումնե-ր", with the status cut to "Անջատ…"). */
+#push-notifications-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: 12px;
+}
+#push-notifications-row .settings-row-icon { grid-column: 1; grid-row: 1 / span 2; }
+#push-notifications-row .settings-row-label { grid-column: 2; grid-row: 1; overflow-wrap: normal; }
+#push-notifications-row .settings-row-value { grid-column: 2; grid-row: 2; max-width: none; white-space: normal; font-size: 0.78rem; }
+#push-notifications-row .toggle-switch { grid-column: 3; grid-row: 1 / span 2; }
+#push-notifications-row .settings-row-chevron { grid-column: 4; grid-row: 1 / span 2; }
