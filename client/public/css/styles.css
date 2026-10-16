@@ -13832,3 +13832,4 @@ html[data-text-size="xlarge"] { font-size: 130%; }
 .map-sr-tab-active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .map-sr-count { min-width: 22px; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, currentColor 18%, transparent); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
 #map-address-results .map-sr-list, .map-address-results .map-sr-list { max-height: 56vh; max-height: 56dvh; }
+.list-more { height: 1px; flex: none; }

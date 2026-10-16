@@ -536,7 +536,18 @@ export function renderCustomers(root, navigate, initialFilter) {
     return sorted;
   }
 
+  const CUSTOMER_BATCH = 100;
+  let listShown = CUSTOMER_BATCH;
+  let lastListKey = "";
+  let moreObserver = null;
+  // One delegated handler for every card (cards are appended batch by batch).
+  listEl.addEventListener("click", (e) => {
+    const row = e.target.closest(".list-row[data-id]");
+    if (row && listEl.contains(row)) navigate(`#/customers/${row.dataset.id}`);
+  });
+
   function renderList() {
+    moreObserver?.disconnect();
     let customers = applyNonStatusFilters(allCustomers);
     if (FILTER_STATUSES[filter]) customers = customers.filter((c) => FILTER_STATUSES[filter].includes(visitStatus(c)));
     customers = sortCustomers(customers);
@@ -546,8 +557,15 @@ export function renderCustomers(root, navigate, initialFilter) {
       return;
     }
 
-    listEl.innerHTML = customers
-      .map((c) => {
+    // Only the first batch is built; the rest is appended as the list is scrolled (4,000 cards at once froze a phone for
+    // seconds). A new search / filter / sort starts again from the first batch; a data refresh of the same list keeps
+    // however far the person had scrolled.
+    const listKey = `${customers.length}|${customers[0]?.id}|${customers[customers.length - 1]?.id}|${filter}|${searchInput.value}`;
+    if (listKey !== lastListKey) {
+      lastListKey = listKey;
+      listShown = CUSTOMER_BATCH;
+    }
+    const cardHtml = (c) => {
         // Status word and last-visit date read as ONE line (e.g.
         // "Overdue &bull; Last visit: 23 Aug, 17:20"). Exempt channels get
         // the date only -- never a status word -- and a customer who has
@@ -607,12 +625,37 @@ export function renderCustomers(root, navigate, initialFilter) {
           <span class="chevron">&#8250;</span>
         </button>
       `;
-      })
-      .join("");
-
-    listEl.querySelectorAll(".list-row").forEach((el) => {
-      el.addEventListener("click", () => navigate(`#/customers/${el.dataset.id}`));
-    });
+    };
+    const paintMore = () => {
+      moreObserver?.disconnect();
+      listEl.querySelector("#customer-list-more")?.remove();
+      const from = listEl.querySelectorAll(".list-row").length;
+      const to = Math.min(customers.length, listShown);
+      if (to > from) listEl.insertAdjacentHTML("beforeend", customers.slice(from, to).map(cardHtml).join(""));
+      if (customers.length > to) {
+        listEl.insertAdjacentHTML("beforeend", `<div id="customer-list-more" class="list-more" aria-hidden="true"></div>`);
+        if (typeof IntersectionObserver === "function") {
+          // The page scrolls inside <main id="app">, not the window: observe relative to that scroller so the margin counts
+          // (an ancestor's clip hides the sentinel from a viewport-rooted observer until the very end).
+          let scroller = listEl.parentElement;
+          while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+          moreObserver = new IntersectionObserver(
+            (entries) => {
+              if (!entries.some((e) => e.isIntersecting)) return;
+              listShown += CUSTOMER_BATCH;
+              paintMore();
+            },
+            { root: scroller || null, rootMargin: "900px 0px" }
+          );
+          moreObserver.observe(listEl.querySelector("#customer-list-more"));
+        } else {
+          listShown = customers.length;
+          paintMore();
+        }
+      }
+    };
+    listEl.innerHTML = "";
+    paintMore();
   }
 
   function render() {
