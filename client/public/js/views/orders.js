@@ -38,7 +38,12 @@ function formatOrderDateHeading(value) {
   return `${d.getDate()} ${month}`;
 }
 
-export async function renderOrders(root, navigate) {
+// How stale the open Orders list may get before it quietly refreshes itself (only while the screen is showing).
+const AUTO_REFRESH_MS = 30000;
+
+// Returns the view's cleanup (app.js keeps it): stops the timers, and `onRestore` refreshes the list when this screen is
+// brought back from the Back cache -- its DOM and its rows are exactly what they were when the user left.
+export function renderOrders(root, navigate) {
   root.innerHTML = `
     <div class="detail-view">
       <div class="list-header-row">
@@ -178,6 +183,11 @@ export async function renderOrders(root, navigate) {
   let hasMore = false;
   let loadingMore = false;
   let searchDebounceTimer;
+  // Every load gets a number; a slower, older answer (tab switched meanwhile, two refreshes racing) is thrown away
+  // instead of painting rows of the wrong tab over the right ones.
+  let loadSeq = 0;
+  let lastLoadedAt = 0;
+  let pagesLoaded = 1;
 
   function renderFilterMenu() {
     const channels = [...new Set(orders.map((o) => o.sales_channel).filter(Boolean))].sort();
@@ -225,41 +235,83 @@ export async function renderOrders(root, navigate) {
     filterBtn.setAttribute("aria-expanded", "false");
   });
 
-  async function load() {
+  async function load({ silent = false } = {}) {
+    const mine = ++loadSeq;
+    if (silent) {
+      // Background refresh of an open screen: no spinner, no cached (older) rows first, and the list is left alone when
+      // the user is in the middle of something.
+      try {
+        const result = await api.listOrders(listParams(), { fresh: true });
+        if (mine !== loadSeq || selectMode || bulkBusy) return;
+        orders = result.rows;
+        hasMore = result.has_more;
+        pagesLoaded = 1;
+        lastLoadedAt = Date.now();
+        paint();
+      } catch {
+        /* the next refresh tries again; the rows on screen stay */
+      }
+      return;
+    }
     // Stale-while-revalidate (see listCache.js): repaint from last
     // session's first page for this exact status tab immediately, then
     // swap in the live page once it lands -- pagination (loadMore below)
     // stays fully live, only the first page benefits from this.
     listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+    pagesLoaded = 1;
     let paintedOnce = false;
     try {
       const params = listParams();
       await loadWithCache(
         `orders-list:${activeStatus || "all"}`,
-        () => api.listOrders(params),
+        () => api.listOrders(params, { fresh: true }),
         (result) => {
+          if (mine !== loadSeq) return;
           orders = result.rows;
           hasMore = result.has_more;
+          lastLoadedAt = Date.now();
           paint();
           paintedOnce = true;
         }
       );
     } catch (err) {
-      if (!paintedOnce) listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+      if (!paintedOnce && mine === loadSeq) listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     }
   }
+
+  // The open screen keeps itself current: when the app comes back to the front, on a slow timer, after a change made
+  // elsewhere, and when the screen is restored by Back. Counts on the nav badge refresh together with the list.
+  function refreshIfStale(maxAgeMs) {
+    if (!listEl.isConnected || document.visibilityState === "hidden") return;
+    if (selectMode || bulkBusy || loadingMore || pagesLoaded > 1) return;
+    if (Date.now() - lastLoadedAt < maxAgeMs) return;
+    load({ silent: true });
+    window.dispatchEvent(new Event("badges-refresh"));
+  }
+  const onVisible = () => {
+    if (document.visibilityState === "visible") refreshIfStale(8000);
+  };
+  const onOrdersChanged = () => refreshIfStale(0);
+  document.addEventListener("visibilitychange", onVisible);
+  window.addEventListener("orders-changed", onOrdersChanged);
+  const autoRefreshTimer = setInterval(() => refreshIfStale(AUTO_REFRESH_MS), 15000);
 
   async function loadMore() {
     if (loadingMore || !hasMore) return;
     loadingMore = true;
+    const mine = loadSeq;
     const btn = listEl.querySelector("#orders-load-more");
     if (btn) btn.disabled = true;
     try {
       const params = listParams();
       params.offset = orders.length;
-      const result = await api.listOrders(params);
-      orders = orders.concat(result.rows);
-      hasMore = result.has_more;
+      const result = await api.listOrders(params, { fresh: true });
+      // The tab (or a refresh) changed while this page was on its way: these rows belong to an older list.
+      if (mine === loadSeq) {
+        orders = orders.concat(result.rows);
+        hasMore = result.has_more;
+        pagesLoaded += 1;
+      }
     } finally {
       loadingMore = false;
     }
@@ -483,4 +535,12 @@ export async function renderOrders(root, navigate) {
   }
 
   load();
+
+  const cleanup = () => {
+    clearInterval(autoRefreshTimer);
+    document.removeEventListener("visibilitychange", onVisible);
+    window.removeEventListener("orders-changed", onOrdersChanged);
+  };
+  cleanup.onRestore = () => refreshIfStale(0);
+  return cleanup;
 }

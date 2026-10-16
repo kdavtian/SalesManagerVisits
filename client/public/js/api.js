@@ -45,6 +45,9 @@ async function request(path, options = {}) {
     prefetched.clear();
     return doRequest(path, options);
   }
+  // { fresh: true }: a screen that must show what is true NOW (the Orders list other people keep changing) skips both
+  // short-lived caches below.
+  if (options.fresh) return doRequest(path, {});
   const hit = prefetched.get(path);
   if (hit) {
     prefetched.delete(path);
@@ -432,9 +435,9 @@ export const api = {
   getTaskCustomerFlags: () => request("/tasks/customer-flags"),
   createOrder: (data) => json("/orders", "POST", data),
   submitOrder: (id, erpCustomerId) => json(`/orders/${id}/submit`, "POST", erpCustomerId ? { erp_customer_id: erpCustomerId } : {}),
-  listOrders: (params = {}) => {
+  listOrders: (params = {}, options = {}) => {
     const qs = new URLSearchParams(params).toString();
-    return request(`/orders${qs ? `?${qs}` : ""}`);
+    return request(`/orders${qs ? `?${qs}` : ""}`, options);
   },
   getOrder: (id) => request(`/orders/${id}`),
   listOrderDocuments: (id) => request(`/orders/${id}/documents`),

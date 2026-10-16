@@ -6,6 +6,7 @@
 import { openCollectionOutcomeSheet } from "../collectionOutcomeSheet.js";
 import { api } from "../api.js";
 import { usualOrderHash } from "../reorder.js";
+import { bindStepperButton } from "../stepper.js";
 import { escapeHtml, activateDialog, formatDateDMY, parseDateOnly, labelColon } from "../util.js";
 import { FILTER_ICONS } from "../filterIcons.js";
 import { t } from "../i18n.js";
@@ -32,6 +33,9 @@ export function taskDueInfo(task, today) {
 // given by a person.
 function taskKindIcon(task) {
   if (task.status === "done") return icons.checkCircle;
+  if (task.task_kind === "collect_debt") return icons.wallet;
+  if (task.task_kind === "make_order") return icons.cart;
+  if (task.task_kind === "check_products") return icons.box;
   if (task.auto_kind === "debt_collection") return icons.wallet;
   if (task.auto_kind === "reorder_followup") return icons.repeat;
   if (task.auto_kind) return icons.gauge;
@@ -70,8 +74,53 @@ export function taskCardHtml(task, today, { showCustomer = true } = {}) {
 // tap again to clear), and a search bar with icon filters (who / type / sort). Everything is
 // loaded once (open tasks always come first in the 500-row cap) and filtered on the phone, so
 // switching tabs, people and filters is instant.
-const TASK_KINDS = ["debt_collection", "reorder_followup", "ops", "manual"];
-const kindOf = (r) => (r.auto_kind === "debt_collection" || r.auto_kind === "reorder_followup" ? r.auto_kind : r.auto_kind ? "ops" : "manual");
+const TASK_KINDS = ["debt_collection", "reorder_followup", "check_products", "ops", "manual"];
+// A typed task given by a person sits in the same group as its automatic twin (Collect debt = debt collection,
+// Make order = reorder follow-up); "Check products" has its own group.
+const kindOf = (r) => {
+  if (r.task_kind === "collect_debt") return "debt_collection";
+  if (r.task_kind === "make_order") return "reorder_followup";
+  if (r.task_kind === "check_products") return "check_products";
+  return r.auto_kind === "debt_collection" || r.auto_kind === "reorder_followup" ? r.auto_kind : r.auto_kind ? "ops" : "manual";
+};
+
+// The four things a director can give: a plain task, or one of three typed ones that close themselves when the
+// work is done (payment / order / check-in with the shop's brands). Typed tasks need a customer.
+const NEW_TASK_TYPES = [
+  { kind: null, icon: "tasks", label: "task_new", sub: "task_type_plain_sub" },
+  { kind: "collect_debt", icon: "wallet", label: "task_type_collect_debt", sub: "task_type_collect_debt_sub" },
+  { kind: "make_order", icon: "cart", label: "task_type_make_order", sub: "task_type_make_order_sub" },
+  { kind: "check_products", icon: "box", label: "task_type_check_products", sub: "task_type_check_products_sub" },
+];
+
+// Long-press menu on the + button: pick the type, then the editor opens with the title and checklist pre-filled.
+function openTaskTypeMenu(onPick) {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.innerHTML = `
+    <div class="sheet om-sheet" role="dialog" aria-modal="true">
+      <button type="button" class="icon-btn sheet-close-x" data-close aria-label="${t("close")}">${icons.close}</button>
+      <h2>${t("task_new")}</h2>
+      <div class="om-options">
+        ${NEW_TASK_TYPES.map(
+          (ty) => `<button type="button" class="om-option" data-kind="${ty.kind ?? ""}">
+            <span class="om-icon">${icons[ty.icon]}</span>
+            <span class="om-text"><strong>${escapeHtml(t(ty.label))}</strong><span class="muted">${escapeHtml(t(ty.sub))}</span></span>
+          </button>`
+        ).join("")}
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  activateDialog(overlay);
+  overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+  overlay.querySelector("[data-close]").addEventListener("click", () => overlay.remove());
+  overlay.querySelectorAll("[data-kind]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      overlay.remove();
+      onPick(btn.dataset.kind || null);
+    })
+  );
+}
 
 export async function renderTasks(root, navigate, openId) {
   const creator = canCreateTasks();
@@ -158,6 +207,7 @@ export async function renderTasks(root, navigate, openId) {
       { value: "", label: t("tasks_kind_all") },
       { value: "debt_collection", label: t("tasks_kind_debt") },
       { value: "reorder_followup", label: t("tasks_kind_reorder") },
+      { value: "check_products", label: t("tasks_kind_check_products") },
       { value: "ops", label: t("tasks_kind_ops") },
       { value: "manual", label: t("tasks_kind_manual") },
     ];
@@ -192,7 +242,13 @@ export async function renderTasks(root, navigate, openId) {
       paintChrome();
       paintList();
     });
-    container.querySelector("#task-new-btn")?.addEventListener("click", () => openTaskEditor({ onSaved: load }));
+    // Tap = plain new task; hold = choose the type (New task / Collect debt / Make order / Check products).
+    const newBtn = container.querySelector("#task-new-btn");
+    if (newBtn)
+      bindStepperButton(newBtn, {
+        onTap: () => openTaskEditor({ onSaved: load }),
+        onHold: () => openTaskTypeMenu((kind) => openTaskEditor({ taskKind: kind, onSaved: load })),
+      });
     container.querySelectorAll("[data-dropdown]").forEach((btn) =>
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -365,11 +421,11 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
       }
       ${task.outcome ? `<p><span class="badge badge-neutral">${t(`collect_outcome_${task.outcome}`)}${task.promise_date ? ` · ${escapeHtml(task.promise_date)}` : ""}</span></p>` : ""}
       ${task.completion_note ? `<p class="muted">${escapeHtml(task.completion_note)}</p>` : ""}
-      ${open && !task.items.length && task.auto_kind !== "debt_collection" ? `<textarea id="task-complete-note" class="task-complete-note" rows="2" maxlength="500" placeholder="${escapeHtml(t("task_note_placeholder"))}" aria-label="${escapeHtml(t("task_note_placeholder"))}"></textarea>` : ""}
+      ${open && !task.items.length && task.auto_kind !== "debt_collection" && task.task_kind !== "collect_debt" ? `<textarea id="task-complete-note" class="task-complete-note" rows="2" maxlength="500" placeholder="${escapeHtml(t("task_note_placeholder"))}" aria-label="${escapeHtml(t("task_note_placeholder"))}"></textarea>` : ""}
       <p class="form-error" id="task-sheet-error" hidden></p>
       <div class="sheet-actions" id="task-sheet-actions" style="flex-wrap:wrap;">
-        ${open && task.auto_kind === "reorder_followup" && task.customer_id ? `<button type="button" class="btn btn-primary" data-action="order-usual">${t("usual_order_btn")}</button>` : ""}
-        ${open ? `<button type="button" class="btn ${task.auto_kind === "reorder_followup" ? "" : "btn-primary"}" data-action="complete">${t("task_mark_complete")}</button>` : ""}
+        ${open && (task.auto_kind === "reorder_followup" || task.task_kind === "make_order") && task.customer_id ? `<button type="button" class="btn btn-primary" data-action="order-usual">${t("usual_order_btn")}</button>` : ""}
+        ${open ? `<button type="button" class="btn ${task.auto_kind === "reorder_followup" || task.task_kind === "make_order" ? "" : "btn-primary"}" data-action="complete">${t("task_mark_complete")}</button>` : ""}
         ${task.status === "done" ? `<button type="button" class="btn" data-action="reopen">${t("task_reopen")}</button>` : ""}
         ${isCreator && task.status !== "cancelled" ? `<button type="button" class="btn" data-action="edit">${t("edit")}</button>` : ""}
         ${isCreator && open ? `<button type="button" class="btn btn-danger" data-action="cancel">${t("task_cancel")}</button>` : ""}
@@ -400,7 +456,7 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
       box.addEventListener("change", () => refresh(api.setTaskItemDone(task.id, Number(box.dataset.item), box.checked)))
     );
     sheet.querySelector('[data-action="complete"]')?.addEventListener("click", async () => {
-      if (task.auto_kind === "debt_collection") {
+      if (task.auto_kind === "debt_collection" || task.task_kind === "collect_debt") {
         // How did the collection go? (a promised payment needs a date)
         const result = await openCollectionOutcomeSheet();
         if (result) refresh(api.completeTask(task.id, result.note, { outcome: result.outcome, promise_date: result.promise_date }));
@@ -453,7 +509,7 @@ async function nextVisitDate(customerId) {
 
 // `customer` (optional): { id, name, assigned_manager_id } pre-attaches the task
 // (opened from a customer card). `task`: edit an existing one.
-export async function openTaskEditor({ customer = null, task = null, onSaved } = {}) {
+export async function openTaskEditor({ customer = null, task = null, taskKind = null, onSaved } = {}) {
   let assignees = [];
   try {
     assignees = await api.listTaskAssignees();
@@ -466,6 +522,9 @@ export async function openTaskEditor({ customer = null, task = null, onSaved } =
   let deadlineMode = task ? (task.due_is_next_visit ? "next" : "date") : customerId ? "next" : "date";
   let dueDate = task?.due_date ?? todayISO;
   let assigneeId = task?.assignee_id ?? null;
+  // Typed task (collect debt / make order / check products): fixed once created; needs a customer.
+  let kind = task ? task.task_kind ?? null : taskKind;
+  const kindLocked = Boolean(task);
 
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
@@ -474,9 +533,13 @@ export async function openTaskEditor({ customer = null, task = null, onSaved } =
       <button type="button" class="icon-btn sheet-close-x" data-action="close" aria-label="${t("close")}">${icons.close}</button>
       <h2>${task ? t("task_edit") : t("task_new")}</h2>
       <form id="task-form">
+        <div class="task-field" id="task-type-field" ${kindLocked && !kind ? "hidden" : ""}>
+          <span class="task-label">${t("task_type_label")}</span>
+          <div class="task-type-row" id="task-type-row"></div>
+        </div>
         <div class="task-two-col">
           <div class="task-col">
-            <span class="task-label">${t("task_customer")}</span>
+            <span class="task-label" id="task-customer-label">${t("task_customer")}</span>
             <div id="task-customer-box"></div>
           </div>
           <div class="task-col">
@@ -526,6 +589,47 @@ export async function openTaskEditor({ customer = null, task = null, onSaved } =
   const dueHint = overlay.querySelector("#task-due-hint");
   const itemsEl = overlay.querySelector("#task-items");
   const customerBox = overlay.querySelector("#task-customer-box");
+
+  // Pre-filled title + checklist per type. They are replaced when the type changes, but only while the person has
+  // not typed their own (title still empty / equal to a pre-fill; checklist still empty / equal to a pre-fill).
+  const kindTitle = (k) => (k ? t(`task_type_${k}`) : "");
+  const kindItems = (k) => (k ? [1, 2, 3].map((n) => t(`task_type_${k}_item${n}`)).filter((x) => x && !x.startsWith("task_type_")) : []);
+  const titleInput = overlay.querySelector("#task-title-input");
+  const isPrefill = (value, fn) => KINDS_FOR_PREFILL.some((k) => fn(k) === value);
+  const KINDS_FOR_PREFILL = [null, "collect_debt", "make_order", "check_products"];
+  function applyKindPrefill(prevKind) {
+    if (!titleInput.value.trim() || isPrefill(titleInput.value.trim(), kindTitle)) titleInput.value = kindTitle(kind);
+    const texts = items.map((i) => i.text.trim()).filter(Boolean);
+    const untouched = !texts.length || texts.join("|") === kindItems(prevKind).join("|");
+    if (untouched) {
+      items = (kindItems(kind).length ? kindItems(kind) : [""]).map((text) => ({ id: null, text }));
+      paintItems();
+    }
+  }
+  function paintKind() {
+    const row = overlay.querySelector("#task-type-row");
+    if (kindLocked) {
+      const ty = NEW_TASK_TYPES.find((x) => x.kind === kind);
+      row.innerHTML = ty ? `<span class="badge badge-neutral task-type-badge">${icons[ty.icon]} ${escapeHtml(t(ty.label))}</span>` : "";
+      return;
+    }
+    row.innerHTML = NEW_TASK_TYPES.map(
+      (ty) => `<button type="button" class="task-toggle-btn task-type-btn ${ty.kind === kind ? "task-toggle-active" : ""}" data-type="${ty.kind ?? ""}" aria-pressed="${ty.kind === kind}">${icons[ty.icon]}<span>${escapeHtml(ty.kind ? t(ty.label) : t("task_type_plain"))}</span></button>`
+    ).join("");
+    row.querySelectorAll("[data-type]").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        const prev = kind;
+        kind = btn.dataset.type || null;
+        paintKind();
+        applyKindPrefill(prev);
+        paintCustomerLabel();
+      })
+    );
+  }
+  function paintCustomerLabel() {
+    const lbl = overlay.querySelector("#task-customer-label");
+    if (lbl) lbl.textContent = kind ? `${t("task_customer")} *` : t("task_customer");
+  }
 
   function paintAssignees() {
     assigneeSel.innerHTML = [`<option value="">${t("task_choose_person")}</option>`, ...assignees.map((u) => `<option value="${u.id}" ${u.id === assigneeId ? "selected" : ""}>${escapeHtml(u.name)}</option>`)].join("");
@@ -657,6 +761,10 @@ export async function openTaskEditor({ customer = null, task = null, onSaved } =
   paintItems();
   paintDeadline();
   applyNextVisit();
+  paintKind();
+  paintCustomerLabel();
+  // Opened straight from the long-press menu: pre-fill for the chosen type.
+  if (!task && kind) applyKindPrefill(null);
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -671,8 +779,10 @@ export async function openTaskEditor({ customer = null, task = null, onSaved } =
       due_is_next_visit: deadlineMode === "next",
       items: items.filter((i) => i.text.trim()).map((i) => ({ id: i.id ?? undefined, text: i.text.trim() })),
     };
+    if (!task && kind) payload.task_kind = kind;
     try {
       if (!assigneeId) throw new Error(t("task_choose_person"));
+      if (kind && !customerId) throw new Error(t("task_type_needs_customer"));
       if (task) await api.updateTask(task.id, payload);
       else await api.createTask(payload);
       overlay.remove();

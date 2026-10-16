@@ -10,15 +10,24 @@ import { notifyUser } from "./notifications.js";
 
 const amd = (n) => `${Math.round(Number(n)).toLocaleString("en-US")} դր.`;
 
-async function closeTasks(kind, { customerId, actorId, note, outcome = null, body }) {
+// `kind` = the automatic task kind; `taskKind` = the matching type a person can give (migration 125) -- both close.
+async function closeTasks(kind, taskKind, { customerId, actorId, note, outcome = null, body }) {
   const { rows } = await pool.query(
     `UPDATE tasks t SET status = 'done', completed_at = now(), completed_by = $3, completion_note = $4, outcome = $5, updated_at = now()
      FROM customers c
-     WHERE t.customer_id = $1 AND t.auto_kind = $2 AND t.status = 'open' AND c.id = t.customer_id
-     RETURNING t.id, t.title, t.assignee_id, c.name AS customer_name`,
-    [customerId, kind, actorId, note, outcome]
+     WHERE t.customer_id = $1 AND (t.auto_kind = $2 OR t.task_kind = $6) AND t.status = 'open' AND c.id = t.customer_id
+     RETURNING t.id, t.title, t.assignee_id, t.creator_id, t.auto_kind, c.name AS customer_name`,
+    [customerId, kind, actorId, note, outcome, taskKind]
   );
   for (const task of rows) {
+    // The person who gave the task hears that it is done (automatic tasks have no person behind them).
+    if (!task.auto_kind && task.creator_id !== actorId && task.creator_id !== task.assignee_id) {
+      await notifyUser(task.creator_id, "task_completed", {
+        title: `Առաջադրանքը կատարված է՝ ${task.title}`,
+        body: `${task.customer_name} · ${body}`,
+        url: `/#/tasks?open=${task.id}`,
+      }).catch((err) => console.error("Auto-complete creator notification failed:", err.message));
+    }
     await pool.query("UPDATE task_items SET done = true, done_at = COALESCE(done_at, now()) WHERE task_id = $1", [task.id]);
     await notifyUser(task.assignee_id, "task_completed", {
       title: "Առաջադրանքը ավտոմատ կատարվեց",
@@ -39,7 +48,7 @@ export async function autoCompleteCollectionTasks({ customerId, actorId, amountA
   );
   const debt = Number(rows[0]?.debt ?? 0);
   const outcome = debt > 0 && amount < debt - 1 ? "partial" : "paid";
-  return closeTasks("debt_collection", {
+  return closeTasks("debt_collection", "collect_debt", {
     customerId,
     actorId,
     outcome,
@@ -50,10 +59,21 @@ export async function autoCompleteCollectionTasks({ customerId, actorId, amountA
 
 // An order (not a draft) was made for the customer: closes their open "stopped ordering" task.
 export async function autoCompleteReorderTasks({ customerId, actorId, orderCode }) {
-  return closeTasks("reorder_followup", {
+  return closeTasks("reorder_followup", "make_order", {
     customerId,
     actorId,
     note: `Ավտոմատ՝ պատվեր է ձևակերպվել${orderCode ? ` (${orderCode})` : ""}`,
     body: `պատվեր է ձևակերպվել${orderCode ? ` (${orderCode})` : ""}`,
+  });
+}
+
+// A check-in recorded which brands the shop has (the "products at this shop" chips or the available products): closes the
+// customer's open "check products" task. (No automatic kind behind it: the type exists only as a person's task.)
+export async function autoCompleteProductCheckTasks({ customerId, actorId }) {
+  return closeTasks(null, "check_products", {
+    customerId,
+    actorId,
+    note: "Ավտոմատ՝ այցի ժամանակ ապրանքները ստուգվել են",
+    body: "այցի ժամանակ ապրանքները ստուգվել են",
   });
 }

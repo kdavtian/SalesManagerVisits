@@ -122,6 +122,62 @@ const asOfBalanceJoin = `
   ) cashflow_asof ON true`;
 const asOfBalanceExpr = "(COALESCE(ecd.balance0_amd, 0) + COALESCE(orders_asof.amount, 0) - COALESCE(cashflow_asof.amount, 0))";
 
+// App payments (pending or approved, not rejected) of the last 60 days that the Excel cashflow does not show yet: the
+// accountant has not entered them. Matched the same way the customer card's "Payments received" sheet does it: same
+// amount, within 5 days, one ERP line per payment. A payment the ERP sync already settled ("From ERP") is recorded.
+// A sales manager only counts their own collections.
+const UNRECORDED_DAYS = 60;
+const MATCH_DAYS = 5;
+export async function loadUnrecordedPayments(rows, user, db = pool) {
+  const result = new Map();
+  const internalIds = rows.map((r) => r.internal_customer_id);
+  const erpIds = rows.map((r) => r.customer_id).filter(Boolean);
+  if (!internalIds.length) return result;
+  const params = [internalIds, UNRECORDED_DAYS];
+  let scope = "";
+  if (user?.role === "sales_manager") {
+    params.push(user.id);
+    scope = `AND p.sales_manager_id = $${params.length}`;
+  }
+  const { rows: appRows } = await db.query(
+    `SELECT p.id, p.customer_id, p.amount_amd,
+            to_char(p.payment_date AT TIME ZONE 'Asia/Yerevan', 'YYYY-MM-DD') AS date
+       FROM payments p
+      WHERE p.customer_id = ANY($1) AND p.status IN ('pending', 'approved') AND NOT COALESCE(p.approved_from_erp, false)
+        AND p.payment_date >= now() - ($2 || ' days')::interval ${scope}
+      ORDER BY p.payment_date, p.id`,
+    params
+  );
+  if (!appRows.length) return result;
+  const { rows: erpRows } = await db.query(
+    `SELECT erp_customer_id, amount_amd, to_char(cashflow_date, 'YYYY-MM-DD') AS date
+       FROM erp_cashflow_lines
+      WHERE erp_customer_id = ANY($1) AND amount_amd > 0 AND cashflow_date >= (now() AT TIME ZONE 'Asia/Yerevan')::date - ($2::int + $3::int)`,
+    [erpIds, UNRECORDED_DAYS, MATCH_DAYS]
+  );
+  const erpByCustomer = new Map();
+  for (const l of erpRows) {
+    if (!erpByCustomer.has(l.erp_customer_id)) erpByCustomer.set(l.erp_customer_id, []);
+    erpByCustomer.get(l.erp_customer_id).push({ ts: new Date(l.date).getTime(), amount: Number(l.amount_amd), used: false });
+  }
+  const erpIdOf = new Map(rows.map((r) => [r.internal_customer_id, r.customer_id]));
+  const DAY = 24 * 3600 * 1000;
+  for (const p of appRows) {
+    const lines = erpByCustomer.get(erpIdOf.get(p.customer_id)) ?? [];
+    const ts = new Date(p.date).getTime();
+    const hit = lines.find((l) => !l.used && l.amount === Number(p.amount_amd) && Math.abs(l.ts - ts) <= MATCH_DAYS * DAY);
+    if (hit) {
+      hit.used = true;
+      continue;
+    }
+    const cur = result.get(p.customer_id) ?? { amount: 0, count: 0 };
+    cur.amount += Number(p.amount_amd);
+    cur.count += 1;
+    result.set(p.customer_id, cur);
+  }
+  return result;
+}
+
 debtBalancesRouter.get("/", async (req, res) => {
   const { date } = req.query;
   const asOfDate = typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
@@ -190,9 +246,12 @@ debtBalancesRouter.get("/", async (req, res) => {
   // debtAging.js): the oldest unpaid invoice's days past due and the overdue part of the balance.
   const today = asOfDate ?? yerevanToday();
   const orders = await loadOrdersNewestFirst(pool, rows.filter((r) => Number(r.remaining_balance) > 0).map((r) => r.customer_id), { asOf: asOfDate });
+  // Money the reps collected in the app that the Excel (ERP) does not hold yet (live view only -- a past date has no "yet").
+  const unrecorded = asOfDate ? new Map() : await loadUnrecordedPayments(rows, req.user);
   const withAging = rows.map(({ credit_term_days, ...r }) => {
     const a = allocateFifo({ orders: orders.get(r.customer_id) ?? [], debt: Number(r.remaining_balance), today, termDays: credit_term_days ?? 45 });
-    return { ...r, oldest_due_days: a.oldest_due_days, overdue_amd: a.overdue_amd };
+    const u = unrecorded.get(r.internal_customer_id);
+    return { ...r, oldest_due_days: a.oldest_due_days, overdue_amd: a.overdue_amd, unrecorded_amd: u?.amount ?? 0, unrecorded_count: u?.count ?? 0 };
   });
   res.json({ rows: withAging, as_of_date: asOfDate, sync: await erpSyncFreshness("erp_customer_data") });
 });
