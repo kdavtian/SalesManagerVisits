@@ -5,6 +5,7 @@ import { pool } from "./db/pool.js";
 import { NOT_NO_VISIT_CHANNEL_SQL } from "./routes/customers.js";
 import { batchExpandAreas } from "./routes/visitPlans.js";
 import { planRep, pathKm, hasLocation } from "./routePlanner.js";
+import { MAIN_SCOPE, SEPARATE_PLAN_CHANNELS, parseScope, scopeOfChannel, loadChannelMap, mergeScopeIds } from "./planScopes.js";
 
 // Week is shown Monday-first; day_of_week stays 0 = Sunday .. 6 = Saturday.
 export const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
@@ -31,7 +32,7 @@ export function parseFrequency(raw) {
 async function loadRepsWithCustomers(db) {
   const { rows: reps } = await db.query("SELECT id, name, position FROM users WHERE role = 'sales_manager' ORDER BY name");
   const { rows: customers } = await db.query(
-    `SELECT c.id, c.name, c.lat, c.lng, c.region, c.subregion, c.assigned_manager_id, c.visit_frequency_days
+    `SELECT c.id, c.name, c.lat, c.lng, c.region, c.subregion, c.assigned_manager_id, c.visit_frequency_days, c.sales_channel
        FROM customers c
       WHERE c.assigned_manager_id IS NOT NULL AND ${NOT_NO_VISIT_CHANNEL_SQL}
       ORDER BY c.id`
@@ -46,6 +47,18 @@ async function insertRules(db, setId, userId, daysMap) {
   for (const [dow, ids] of daysMap) {
     await db.query("INSERT INTO route_plan_set_rules (set_id, user_id, day_of_week, customer_ids) VALUES ($1, $2, $3, $4)", [setId, userId, dow, ids]);
   }
+}
+
+// A person's customers are planned PLAN BY PLAN (main plan, SM B2B ...): each plan spreads over the working days on its
+// own, then the plans' lists of a weekday are joined into the one rule the app reads.
+export function planRepByScope(customers, days) {
+  const merged = new Map(days.map((d) => [d.dow, []]));
+  for (const scope of [MAIN_SCOPE, ...SEPARATE_PLAN_CHANNELS]) {
+    const group = customers.filter((c) => scopeOfChannel(c.sales_channel) === scope);
+    if (!group.length) continue;
+    for (const [dow, ids] of planRep(group, days)) merged.set(dow, [...(merged.get(dow) ?? []), ...ids]);
+  }
+  return merged;
 }
 
 // New automatic set: every rep's own customers spread over the chosen working days, all at one visit frequency.
@@ -63,7 +76,7 @@ export async function createAutoSet({ name, frequencyDays, days, createdBy }) {
     for (const rep of reps) {
       const mine = byRep.get(rep.id);
       if (!mine.length) continue;
-      await insertRules(client, setId, rep.id, planRep(mine, days));
+      await insertRules(client, setId, rep.id, planRepByScope(mine, days));
       await client.query(
         "INSERT INTO route_plan_set_frequencies (set_id, customer_id, days) SELECT $1::int, unnest($2::int[]), $3::int",
         [setId, mine.map((c) => c.id), frequencyDays]
@@ -219,7 +232,7 @@ export async function getSet(id) {
   const freqOf = new Map(freqRows.map((r) => [r.customer_id, r.days]));
   const ruleIds = [...new Set(rules.flatMap((r) => r.customer_ids))];
   const { rows: custRows } = ruleIds.length
-    ? await pool.query("SELECT id, name, lat, lng, region, subregion, assigned_manager_id FROM customers WHERE id = ANY($1)", [ruleIds])
+    ? await pool.query("SELECT id, name, lat, lng, region, subregion, assigned_manager_id, sales_channel FROM customers WHERE id = ANY($1)", [ruleIds])
     : { rows: [] };
   const customerById = new Map(custRows.map((c) => [c.id, c]));
   const rulesByRep = new Map();
@@ -228,25 +241,33 @@ export async function getSet(id) {
     rulesByRep.get(r.user_id).set(r.day_of_week, r.customer_ids);
   }
   const slim = (c) => ({ id: c.id, name: c.name, region: c.region, subregion: c.subregion, lat: c.lat, lng: c.lng, frequency_days: freqOf.get(c.id) ?? c.visit_frequency_days ?? null });
-  const outReps = reps.map((rep) => {
-    const mine = byRep.get(rep.id);
-    const planned = new Set();
-    const days = WEEK_ORDER.map((dow) => {
-      const ids = rulesByRep.get(rep.id)?.get(dow) ?? [];
-      const customers = ids.map((cid) => customerById.get(cid)).filter(Boolean);
-      customers.forEach((c) => planned.add(c.id));
-      const pts = customers.filter(hasLocation);
-      return { day_of_week: dow, customers: customers.map(slim), km: Math.round(pathKm(pts) * 10) / 10 };
-    });
-    return {
-      user_id: rep.id,
-      user_name: rep.name,
-      position: rep.position,
-      days,
-      unplanned: mine.filter((c) => !planned.has(c.id)).map(slim),
-      customer_total: mine.length,
-    };
-  });
+  // One entry per PLAN of a person: the main plan, plus a separate one for every specially planned channel (SM B2B) the
+  // person has customers in -- each shows only its own customers.
+  const outReps = [];
+  for (const rep of reps) {
+    const allMine = byRep.get(rep.id);
+    for (const scope of [MAIN_SCOPE, ...SEPARATE_PLAN_CHANNELS]) {
+      const mine = allMine.filter((c) => scopeOfChannel(c.sales_channel) === scope);
+      const planned = new Set();
+      const days = WEEK_ORDER.map((dow) => {
+        const ids = rulesByRep.get(rep.id)?.get(dow) ?? [];
+        const customers = ids.map((cid) => customerById.get(cid)).filter((c) => c && scopeOfChannel(c.sales_channel) === scope);
+        customers.forEach((c) => planned.add(c.id));
+        const pts = customers.filter(hasLocation);
+        return { day_of_week: dow, customers: customers.map(slim), km: Math.round(pathKm(pts) * 10) / 10 };
+      });
+      outReps.push({
+        user_id: rep.id,
+        user_name: rep.name,
+        position: rep.position,
+        scope,
+        key: `${rep.id}:${scope}`,
+        days,
+        unplanned: mine.filter((c) => !planned.has(c.id)).map(slim),
+        customer_total: mine.length,
+      });
+    }
+  }
   return {
     id: set.id,
     name: set.name,
@@ -261,7 +282,10 @@ export async function getSet(id) {
 }
 
 // Replaces one rep's weekdays in a set. days: { dow: [customer ids in visiting order] }. A customer appears on one day only.
-export async function setRepDays(setId, userId, daysObj) {
+//
+// With `scope` (parseScope: "" = main plan, "SM B2B" = that channel's plan) only that plan's customers are replaced; the
+// person's other plans in the set stay exactly as they are.
+export async function setRepDays(setId, userId, daysObj, scope) {
   const seen = new Set();
   const map = new Map();
   for (const dow of WEEK_ORDER) {
@@ -272,6 +296,14 @@ export async function setRepDays(setId, userId, daysObj) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    if (scope !== undefined) {
+      const channelOf = await loadChannelMap(client);
+      const { rows: existingRows } = await client.query("SELECT day_of_week, customer_ids FROM route_plan_set_rules WHERE set_id = $1 AND user_id = $2", [setId, userId]);
+      const existingByDay = new Map(existingRows.map((r) => [r.day_of_week, r.customer_ids]));
+      for (const dow of WEEK_ORDER) {
+        map.set(dow, mergeScopeIds({ existing: existingByDay.get(dow) ?? [], submitted: map.get(dow), scope, channelOf }));
+      }
+    }
     await client.query("DELETE FROM route_plan_set_rules WHERE set_id = $1 AND user_id = $2", [setId, userId]);
     await insertRules(client, setId, userId, map);
     // customers newly placed on a day take the set's frequency, so the set stays one coherent plan

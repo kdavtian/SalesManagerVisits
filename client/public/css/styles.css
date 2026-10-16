@@ -13709,3 +13709,6 @@ html[data-text-size="xlarge"] { font-size: 130%; }
 .ttf-count { margin-left: 2px; padding: 1px 7px; border-radius: 999px; background: rgba(127, 127, 127, 0.16); font-size: 0.75rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .category-btn.category-none.category-btn-active { background: rgba(152, 152, 157, 0.18); border-color: var(--text-dim); color: var(--text); }
 .type-tier-sheet .map-tier-filter-title { padding: 0; margin-top: 14px; }
+
+/* A person's separate plan (SM B2B) under their own week row on "my route plan". */
+.route-plan-scope-title { margin: 16px 4px 6px; font-size: 1rem; }

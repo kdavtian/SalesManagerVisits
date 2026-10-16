@@ -14,6 +14,7 @@ import {
   setRepDays,
   setSetFrequency,
 } from "../routePlanSets.js";
+import { parseScope } from "../planScopes.js";
 
 // Route plan sets: several whole route plans, one of them active. Reading is for everyone who may see all route
 // plans (the accountant read-only); creating, editing and switching is for the planning roles.
@@ -89,7 +90,10 @@ routePlanSetsRouter.put("/:id/reps/:userId", canWrite, async (req, res) => {
   if (id === null || !Number.isInteger(userId)) return res.status(400).json({ error: "Invalid id" });
   const { rows } = await pool.query("SELECT id FROM route_plan_sets WHERE id = $1", [id]);
   if (!rows[0]) return res.status(404).json({ error: "Plan not found" });
-  await setRepDays(id, userId, req.body?.days);
+  // scope: which plan of this person is being saved ("" = main, "SM B2B" = that channel's own plan); absent = the whole person
+  const scope = req.body?.scope === undefined ? undefined : parseScope(req.body.scope);
+  if (scope === null) return res.status(400).json({ error: "scope is not a separately planned channel" });
+  await setRepDays(id, userId, req.body?.days, scope);
   res.json(await getSet(id));
 });
 

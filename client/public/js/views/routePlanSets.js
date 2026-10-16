@@ -6,7 +6,7 @@
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { escapeHtml, activateDialog, openInfoPopup, formatDateDMY } from "../util.js";
+import { escapeHtml, activateDialog, openInfoPopup, formatDateDMY, planTitle } from "../util.js";
 import { canPlanForOthers } from "../state.js";
 import { routePlansPage } from "./routePlans.js";
 
@@ -215,7 +215,7 @@ export async function renderRoutePlanSet(root, navigate, id) {
   async function saveRep(rep, days) {
     errorEl.hidden = true;
     try {
-      set = await api.setRoutePlanSetRep(set.id, rep.user_id, days);
+      set = await api.setRoutePlanSetRep(set.id, rep.user_id, days, rep.scope ?? "");
       changed();
       paint();
     } catch (err) {
@@ -235,11 +235,11 @@ export async function renderRoutePlanSet(root, navigate, id) {
   };
 
   function repHtml(rep) {
-    const open = openDay.get(rep.user_id);
+    const open = openDay.get(rep.key);
     const planned = rep.days.reduce((n, d) => n + d.customers.length, 0);
     const day = open !== undefined ? rep.days.find((d) => d.day_of_week === open) : null;
-    return `<div class="card rps-rep" data-user="${rep.user_id}">
-      <div class="rps-rep-head"><strong>${escapeHtml(rep.user_name)}</strong><span class="muted">${t("rps_customers_n").replace("{n}", String(planned))}</span></div>
+    return `<div class="card rps-rep" data-key="${escapeHtml(rep.key)}">
+      <div class="rps-rep-head"><strong>${escapeHtml(planTitle(rep.user_name, rep.scope))}</strong><span class="muted">${t("rps_customers_n").replace("{n}", String(planned))}</span></div>
       <div class="route-plan-week-row">
         ${rep.days
           .map(
@@ -277,7 +277,7 @@ export async function renderRoutePlanSet(root, navigate, id) {
         </div>
         <div class="rps-head-stats">
           <span><strong>${sum.customers}</strong><span class="muted">${t("rps_customers_label")}</span></span>
-          <span><strong>${set.reps.length}</strong><span class="muted">${t("rps_reps_label")}</span></span>
+          <span><strong>${new Set(set.reps.map((r) => r.user_id)).size}</strong><span class="muted">${t("rps_reps_label")}</span></span>
           <span><strong>≈ ${sum.km}</strong><span class="muted">${t("rps_km_week")}</span></span>
         </div>
         ${sum.unplanned ? `<p class="rps-warn">${t("rps_unplanned_total").replace("{n}", String(sum.unplanned))}</p>` : ""}
@@ -297,17 +297,17 @@ export async function renderRoutePlanSet(root, navigate, id) {
     const body = $("#rps-body");
     $("#rps-info").addEventListener("click", () => openInfoPopup(`<p>${t("rps_info_edit_1")}</p><p>${t("rps_info_edit_2")}</p><p>${t("rps_info_edit_3")}</p>`));
     body.querySelectorAll(".rps-rep").forEach((card) => {
-      const rep = set.reps.find((r) => r.user_id === Number(card.dataset.user));
+      const rep = set.reps.find((r) => r.key === card.dataset.key);
       card.querySelectorAll(".route-plan-day-chip").forEach((b) =>
         b.addEventListener("click", () => {
           const dow = Number(b.dataset.day);
-          if (openDay.get(rep.user_id) === dow) openDay.delete(rep.user_id);
-          else openDay.set(rep.user_id, dow);
+          if (openDay.get(rep.key) === dow) openDay.delete(rep.key);
+          else openDay.set(rep.key, dow);
           paint();
         })
       );
       card.querySelector("[data-unplanned]")?.addEventListener("click", () => openUnplannedSheet(rep));
-      card.querySelector("[data-swap]")?.addEventListener("click", () => openSwapSheet(rep, openDay.get(rep.user_id)));
+      card.querySelector("[data-swap]")?.addEventListener("click", () => openSwapSheet(rep, openDay.get(rep.key)));
       card.querySelectorAll(".rps-cust").forEach((b) => b.addEventListener("click", () => canManage && openMoveSheet(rep, Number(b.dataset.cid))));
     });
     if (!canManage) return;
@@ -359,7 +359,7 @@ export async function renderRoutePlanSet(root, navigate, id) {
         days[day.day_of_week] = days[day.day_of_week].filter((x) => x !== customerId);
         if (b.dataset.pick !== "none") {
           days[b.dataset.pick].push(customerId);
-          openDay.set(rep.user_id, Number(b.dataset.pick));
+          openDay.set(rep.key, Number(b.dataset.pick));
         }
         saveRep(rep, days);
       })
@@ -367,14 +367,14 @@ export async function renderRoutePlanSet(root, navigate, id) {
   }
 
   function openUnplannedSheet(rep) {
-    const { overlay, close } = openSheet(`<h2>${escapeHtml(rep.user_name)}</h2><p class="muted">${t("rps_unplanned_title")}</p>
+    const { overlay, close } = openSheet(`<h2>${escapeHtml(planTitle(rep.user_name, rep.scope))}</h2><p class="muted">${t("rps_unplanned_title")}</p>
       <div class="rps-unplanned-list">${rep.unplanned.map((c) => `<div class="rps-unplanned-item"><strong>${escapeHtml(c.name)}</strong><span class="muted">${escapeHtml([c.region, c.subregion].filter(Boolean).join(" · "))}</span>${canManage ? `<div class="rps-chips">${rep.days.filter((d) => d.day_of_week !== 0 || d.customers.length).map((d) => `<button type="button" class="map-filter-chip" data-add="${c.id}" data-dow="${d.day_of_week}">${dayName(d.day_of_week)}</button>`).join("")}</div>` : ""}</div>`).join("")}</div>`);
     overlay.querySelectorAll("[data-add]").forEach((b) =>
       b.addEventListener("click", () => {
         close();
         const days = repDays(rep);
         days[b.dataset.dow].push(Number(b.dataset.add));
-        openDay.set(rep.user_id, Number(b.dataset.dow));
+        openDay.set(rep.key, Number(b.dataset.dow));
         saveRep(rep, days);
       })
     );
@@ -388,7 +388,7 @@ export async function renderRoutePlanSet(root, navigate, id) {
         const days = repDays(rep);
         const to = Number(b.dataset.pick);
         [days[from], days[to]] = [days[to], days[from]];
-        openDay.set(rep.user_id, to);
+        openDay.set(rep.key, to);
         saveRep(rep, days);
       })
     );
