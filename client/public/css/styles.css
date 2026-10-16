@@ -1098,6 +1098,14 @@ form [aria-invalid="true"] {
   margin-bottom: 0;
 }
 
+/* Side-by-side fields always the same height: a native <select> (iOS) renders shorter than an <input> with the same
+   padding, which made "Region" look smaller than "Subregion" on the new customer sheet. */
+.form-row-2 input:not([type="checkbox"]):not([type="radio"]),
+.form-row-2 select {
+  height: 46px;
+  box-sizing: border-box;
+}
+
 .field-error {
   display: block;
   color: var(--danger);
@@ -13702,11 +13710,19 @@ html[data-text-size="xlarge"] { font-size: 130%; }
 .map-search-row { position: relative; }
 
 /* Customer type & tier chips (typeTierSheet.js): big tap-to-toggle pills, several on at once, with a count each. */
-.ttf-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 0 6px; }
-.ttf-chips .tier-btn, .ttf-chips .category-btn { flex: 0 0 auto; flex-direction: row; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; border-radius: 999px; }
-.ttf-chips .tier-label, .ttf-chips .category-label { font-size: 0.9rem; font-weight: 600; max-width: none; text-overflow: clip; }
-.ttf-chips .tier-icon svg, .ttf-chips .category-icon svg, .ttf-chips .category-icon .category-img { width: 18px; height: 18px; }
-.ttf-count { margin-left: 2px; padding: 1px 7px; border-radius: 999px; background: rgba(127, 127, 127, 0.16); font-size: 0.75rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ttf-tiers { display: flex; flex-direction: column; gap: 8px; padding: 2px 0 8px; }
+.ttf-row { display: grid; gap: 8px; }
+.ttf-row-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ttf-row-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ttf-types { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 2px 0 6px; }
+.ttf-types .category-btn { flex-direction: row; justify-content: center; align-items: center; gap: 6px; min-height: 48px; min-width: 0; padding: 0 10px; border-radius: 14px; }
+.ttf-tiers .tier-btn { flex-direction: column; justify-content: center; align-items: center; gap: 1px; min-height: 60px; min-width: 0; padding: 6px 6px 7px; border-radius: 14px; }
+.ttf-tier-top { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.ttf-tiers .tier-label, .ttf-types .category-label { font-size: 0.9rem; font-weight: 600; max-width: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ttf-tiers .tier-icon svg, .ttf-types .category-icon svg, .ttf-types .category-icon .category-img { width: 18px; height: 18px; flex: none; }
+.ttf-count { margin-left: auto; padding: 1px 7px; border-radius: 999px; background: rgba(127, 127, 127, 0.16); font-size: 0.78rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ttf-tiers .ttf-count { margin-left: 0; font-size: 0.95rem; padding: 0 9px; }
+.ttf-empty { opacity: 0.45; }
 .category-btn.category-none.category-btn-active { background: rgba(152, 152, 157, 0.18); border-color: var(--text-dim); color: var(--text); }
 .type-tier-sheet .map-tier-filter-title { padding: 0; margin-top: 14px; }
 
@@ -13833,3 +13849,28 @@ html[data-text-size="xlarge"] { font-size: 130%; }
 .map-sr-count { min-width: 22px; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, currentColor 18%, transparent); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
 #map-address-results .map-sr-list, .map-address-results .map-sr-list { max-height: 56vh; max-height: 56dvh; }
 .list-more { height: 1px; flex: none; }
+
+/* ===== Debt balances card v3 (1.353.0): "ID • name" + total on top; under it visit / payment on the left, due info on the right ===== */
+.debt-balance-card.card { gap: 6px; text-align: left; }
+.debt-top, .debt-bottom { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; width: 100%; }
+.debt-name-line { flex: 1 1 0; min-width: 0; line-height: 1.25; overflow-wrap: break-word; }
+.debt-balance-card .debt-balance-amount { flex: 0 0 auto; margin-left: 0; font-size: 1rem; text-align: right; }
+.debt-card-left { flex: 0 0 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.debt-card-right { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; }
+.debt-name { overflow-wrap: break-word; }
+.debt-id { color: var(--text-dim); font-size: 0.82rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.debt-dot { color: var(--text-dim); }
+.debt-date-line { font-size: 0.75rem; line-height: 1.3; white-space: nowrap; }
+.debt-date-value { color: var(--text); font-variant-numeric: tabular-nums; }
+.debt-due-line { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.debt-due-head { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.debt-due-small { font-size: 0.7rem; font-weight: 400; color: var(--text-dim); }
+.debt-due-amount { font-size: 0.88rem; font-weight: 800; color: var(--danger, #b3261e); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.due-chip-ok { background: color-mix(in srgb, var(--success, #2e9e5b) 18%, var(--bg-card)); color: var(--success, #2e9e5b); }
+.debt-unrecorded-line { font-size: 0.7rem; color: var(--warning-text, var(--warning)); }
+.debt-unrecorded-line strong { font-weight: 700; white-space: nowrap; }
+
+/* Icon-only "special date range" tab/chip (calendar icon instead of the word) -- Activity tabs and the volume report. */
+.activity-tab.activity-tab-icon { flex: 0 0 56px; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.activity-tab-icon svg, .vol-chips .map-filter-chip[data-period="custom"] svg { width: 20px; height: 20px; }
+.vol-chips .map-filter-chip[data-period="custom"] { display: inline-flex; align-items: center; justify-content: center; min-width: 48px; }

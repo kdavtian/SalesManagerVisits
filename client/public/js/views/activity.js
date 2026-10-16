@@ -5,6 +5,7 @@ import { seesAllActivity } from "../state.js";
 import { openVisitDetailSheet } from "../visitDetail.js";
 import { loadWithCache } from "../listCache.js";
 import { FILTER_ICONS } from "../filterIcons.js";
+import { icons } from "../icons.js";
 
 const OUTCOMES = [
   "order_placed",
@@ -230,9 +231,11 @@ export async function renderActivity(root, navigate) {
     return list;
   }
 
-  function activityTabHtml(key, label) {
+  // The special date range is an icon-only tab (calendar) -- shorter than the word and the same icon as every other
+  // date filter in the app; the name stays for screen readers / long-press tooltip.
+  function activityTabHtml(key, label, icon = "") {
     const active = range === key;
-    return `<button role="tab" aria-selected="${active}" class="activity-tab ${active ? "activity-tab-active" : ""}" data-range="${key}">${label}</button>`;
+    return `<button role="tab" aria-selected="${active}" class="activity-tab ${icon ? "activity-tab-icon" : ""} ${active ? "activity-tab-active" : ""}" data-range="${key}"${icon ? ` aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}"` : ""}>${icon || label}</button>`;
   }
 
   function renderShell() {
@@ -249,7 +252,7 @@ export async function renderActivity(root, navigate) {
         ${activityTabHtml("today", t("tab_today"))}
         ${activityTabHtml("week", t("tab_week"))}
         ${activityTabHtml("month", t("tab_month"))}
-        ${activityTabHtml("custom", t("tab_custom"))}
+        ${activityTabHtml("custom", t("tab_custom"), icons.calendar)}
       </div>
 
       ${range === "custom" ? `<div class="activity-custom-range">

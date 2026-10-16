@@ -11,7 +11,6 @@ import { state } from "../state.js";
 import { t, getLang } from "../i18n.js";
 import { loadWithCache } from "../listCache.js";
 import { icons } from "../icons.js";
-import { dueChipHtml } from "../debtChip.js";
 
 // For last_visit_at, a real timestamp (checkins.timestamp) -- correctly
 // converted to the viewer's local calendar date, since it names an
@@ -202,38 +201,51 @@ export async function renderDebtBalances(root, navigate) {
     });
   }
 
-  // Card: ID + amount, the full customer name (wraps, never cut) + due chip, who owns it (channel / rep), then the facts as
-  // label-over-value cells in two fixed columns -- a long Armenian label can never push a date onto a second line.
-  const cell = (label, valueHtml, cls = "") => `<div class="debt-cell ${cls}"><span class="debt-cell-label">${label}</span><span class="debt-cell-value">${valueHtml}</span></div>`;
+  // Card (compact): first line "ID: 10123 • customer name" (the name never repeats the ID, wraps, never cut) with the
+  // total on the right; under it, on the left who owns it, last visit and last payment, on the right (aligned with the
+  // total) either "Of which [14d] overdue: 300,000" (red chip + red bold amount) or a green "left: 7d" chip.
+  const dayChip = (days, cls, text) => `<span class="due-chip ${cls}">${text ?? `${days}${t("debt_days_short")}`}</span>`;
+  // The ERP name usually starts with the customer's own ID ("10123 Shirak Garage"); the card already shows the ID.
+  function nameWithoutId(name, id) {
+    const raw = String(name || "").trim();
+    const key = String(id || "").trim();
+    if (!key) return raw;
+    const escaped = key.replace(/[^\w]/g, "\\$&");
+    const stripped = raw.replace(new RegExp(`^(?:ID\\s*)?#?${escaped}(?!\\w)\\s*[-–—•:.)]*\\s*`, "i"), "");
+    return stripped || raw;
+  }
+  const dateLine = (label, value) => `<div class="debt-date-line"><span class="muted">${label}${labelColon()}</span><span class="debt-date-value">${value}</span></div>`;
   function rowHtml(r) {
     const owner = canGroup
       ? [mode === "flat" ? escapeHtml(r.assigned_manager_name || t("unassigned")) : "", r.sales_channel ? escapeHtml(channelDisplayLabel(r.sales_channel)) : ""].filter(Boolean).join(" · ")
       : "";
-    const hasOverdue = Number(r.overdue_amd) > 0;
-    const hasUnrecorded = Number(r.unrecorded_amd) > 0;
+    const owes = Number(r.remaining_balance) > 0;
+    const overdueAmount = Number(r.overdue_amd) || 0;
+    const days = r.oldest_due_days;
+    let dueHtml = "";
+    if (owes && days != null) {
+      if (days > 0) {
+        dueHtml = `<div class="debt-due-line"><span class="debt-due-head"><span class="debt-due-small">${t("debt_of_which")}</span>${dayChip(days, "due-chip-overdue")}${
+          overdueAmount > 0 ? `<span class="debt-due-small">${t("debt_overdue_word")}</span>` : ""
+        }</span>${overdueAmount > 0 ? `<strong class="debt-due-amount">${formatAmd(overdueAmount)}</strong>` : ""}</div>`;
+      } else {
+        dueHtml = `<div class="debt-due-line">${days === 0 ? dayChip(0, "due-chip-soon", t("debt_due_today")) : dayChip(-days, "due-chip-ok", `${t("debt_left_word")}${-days}${t("debt_days_short")}`)}</div>`;
+      }
+    }
+    const unrecorded = Number(r.unrecorded_amd) || 0;
     return `
-      <button type="button" class="card debt-balance-card ${Number(r.remaining_balance) > 0 && r.oldest_due_days != null ? (r.oldest_due_days > 0 ? "unpaid-row-overdue" : "unpaid-row-due") : ""}" data-customer-id="${r.internal_customer_id}">
-        <div class="debt-balance-row">
-          <span class="muted">${t("customer_id_label")}${labelColon()}${escapeHtml(r.customer_id || "")}</span>
-          <span class="text-amount debt-balance-amount">${formatAmd(Number(r.remaining_balance))}</span>
+      <button type="button" class="card debt-balance-card ${owes && days != null ? (days > 0 ? "unpaid-row-overdue" : "unpaid-row-due") : ""}" data-customer-id="${r.internal_customer_id}">
+        <div class="debt-top"><div class="debt-name-line"><span class="debt-id">ID: ${escapeHtml(r.customer_id || "")}</span> <span class="debt-dot">•</span> <strong class="debt-name">${escapeHtml(nameWithoutId(r.customer_name, r.customer_id))}</strong></div>
+        <span class="text-amount debt-balance-amount">${formatAmd(Number(r.remaining_balance))}</span></div>
+        <div class="debt-bottom"><div class="debt-card-left">
+          ${owner ? `<div class="muted debt-owner-line">${owner}</div>` : ""}
+          ${dateLine(t("debt_balances_last_visit"), formatDate(r.last_visit_at))}
+          ${dateLine(t("debt_balances_last_payment"), formatDateOnly(r.last_payment_date))}
         </div>
-        <div class="debt-name-row">
-          <strong class="debt-name">${escapeHtml(r.customer_name || "")}</strong>
-          ${Number(r.remaining_balance) > 0 ? dueChipHtml(r.oldest_due_days) : ""}
-        </div>
-        ${owner ? `<div class="muted debt-owner-line">${owner}</div>` : ""}
-        ${
-          Number(r.remaining_balance) > 0 && (hasOverdue || hasUnrecorded)
-            ? `<div class="debt-cells">
-                ${hasOverdue ? cell(t("debt_balances_overdue_row"), formatAmd(Number(r.overdue_amd)), "debt-extra-overdue") : "<span></span>"}
-                ${hasUnrecorded ? cell(t("debt_balances_unrecorded_row"), formatAmd(Number(r.unrecorded_amd)), "debt-extra-unrecorded") : "<span></span>"}
-              </div>`
-            : ""
-        }
-        <div class="debt-cells debt-cells-dates">
-          ${cell(t("debt_balances_last_payment"), formatDateOnly(r.last_payment_date))}
-          ${cell(t("debt_balances_last_visit"), formatDate(r.last_visit_at))}
-        </div>
+        <div class="debt-card-right">
+          ${dueHtml}
+          ${owes && unrecorded > 0 ? `<div class="debt-unrecorded-line"><span class="muted">${t("debt_balances_unrecorded_row")}</span> <strong>${formatAmd(unrecorded)}</strong></div>` : ""}
+        </div></div>
       </button>`;
   }
 
