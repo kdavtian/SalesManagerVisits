@@ -174,19 +174,78 @@ export function formatPhoneInput(raw) {
   return `+374 ${groups.join(" ")}`.trimEnd();
 }
 
+// Local digits (after +374) of whatever is in the field; same rules as formatPhoneInput.
+function phoneLocalDigits(raw) {
+  let d = String(raw ?? "").replace(/\D/g, "");
+  if (d.startsWith("00374")) d = d.slice(2);
+  if (d.startsWith("374")) d = d.slice(3);
+  else if (d === "3" || d === "37") d = "";
+  else if (d.startsWith("0")) d = d.slice(1);
+  return d.slice(0, 8);
+}
+// The mask text for a list of local digits ("+374 91 007 019").
+function phoneFromLocalDigits(d) {
+  const groups = [d.slice(0, 2), d.slice(2, 5), d.slice(5)].filter(Boolean);
+  return `+374 ${groups.join(" ")}`.trimEnd();
+}
+// Caret position in the masked text right after the first `count` local digits ("+374 " when 0).
+function phoneCaretAfter(masked, count) {
+  if (count <= 0) return Math.min(5, masked.length);
+  let seen = 0;
+  for (let i = 5; i < masked.length; i++) {
+    if (/\d/.test(masked[i]) && ++seen === count) return i + 1;
+  }
+  return masked.length;
+}
+
 // One delegated listener masks every <input name="phone"> in the app, present and future.
+// Editing keeps the caret where the person is working (it used to jump to the end after every key, so fixing a digit
+// in the middle of a saved number put the next digits at the END, where a full number swallowed them), backspace over
+// a space removes the digit before it instead of doing nothing, and typing a digit inside a full number overtypes the
+// digit after the caret instead of pushing the last digit off the end.
 let phoneMaskInstalled = false;
 export function installPhoneMask() {
   if (phoneMaskInstalled) return;
   phoneMaskInstalled = true;
   const isPhone = (el) => el instanceof HTMLInputElement && el.name === "phone";
+  let before = null; // value + selection just before the browser applies the edit
+  document.addEventListener("beforeinput", (e) => {
+    if (!isPhone(e.target)) return;
+    before = { value: e.target.value, start: e.target.selectionStart ?? 0, end: e.target.selectionEnd ?? 0, type: e.inputType };
+  });
   document.addEventListener("input", (e) => {
     if (!isPhone(e.target)) return;
-    const masked = formatPhoneInput(e.target.value);
-    if (masked !== e.target.value) {
-      e.target.value = masked;
+    const el = e.target;
+    const prev = before;
+    before = null;
+    const caret = el.selectionStart ?? el.value.length;
+    const digitsBeforeCaret = (el.value.slice(0, caret).replace(/\D/g, "") || "").length;
+    let digits = el.value.replace(/\D/g, "");
+    let caretDigits = digitsBeforeCaret;
+    if (prev && prev.start === prev.end) {
+      const oldDigits = prev.value.replace(/\D/g, "");
+      // Backspace right after a space / the "+": nothing visible changed -> remove the digit before it.
+      if (prev.type === "deleteContentBackward" && digits === oldDigits && prev.start > 5) {
+        const k = prev.value.slice(0, prev.start).replace(/\D/g, "").length;
+        if (k > 3) {
+          digits = oldDigits.slice(0, k - 1) + oldDigits.slice(k);
+          caretDigits = k - 1;
+        }
+      }
+      // A digit typed inside a FULL number overtypes the next digit (the mask would otherwise cut the last one off).
+      if (prev.type === "insertText" && digits.length > oldDigits.length && phoneLocalDigits(prev.value).length >= 8 && digitsBeforeCaret < digits.length) {
+        digits = digits.slice(0, digitsBeforeCaret) + digits.slice(digitsBeforeCaret + 1);
+      }
+    }
+    const local = phoneLocalDigits(digits);
+    const masked = digits ? formatPhoneInput(digits) : "";
+    if (masked !== el.value) {
+      el.value = masked;
+      // digits of the country code count too when the old text had them before the caret
+      const localCaret = Math.max(0, Math.min(local.length, caretDigits - (digits.startsWith("374") ? 3 : digits.startsWith("00374") ? 5 : 0)));
+      const pos = phoneCaretAfter(masked, localCaret);
       try {
-        e.target.setSelectionRange(masked.length, masked.length);
+        el.setSelectionRange(pos, pos);
       } catch {
         // some input types refuse selection ranges; the value is already right
       }
@@ -625,7 +684,29 @@ export function bindAmdInput(input, onInput = null) {
   input.classList.add("amd-input");
   const reformat = () => {
     const digits = input.value.replace(/\D/g, "");
-    input.value = digits ? Number(digits).toLocaleString("en-US") : "";
+    const formatted = digits ? Number(digits).toLocaleString("en-US") : "";
+    if (formatted === input.value) return;
+    // Keep the caret where the person is typing (re-assigning the value throws it to the end, so fixing a digit in the
+    // middle of 57,000 put the next digits at the end).
+    const caret = input.selectionStart ?? input.value.length;
+    const digitsBefore = input.value.slice(0, caret).replace(/\D/g, "").length;
+    input.value = formatted;
+    let pos = formatted.length;
+    if (digitsBefore === 0) pos = 0;
+    else {
+      let seen = 0;
+      for (let i = 0; i < formatted.length; i++) {
+        if (/\d/.test(formatted[i]) && ++seen === digitsBefore) {
+          pos = i + 1;
+          break;
+        }
+      }
+    }
+    try {
+      if (document.activeElement === input) input.setSelectionRange(pos, pos);
+    } catch {
+      /* non-text input types refuse selection ranges */
+    }
   };
   reformat();
   input.addEventListener("input", () => {

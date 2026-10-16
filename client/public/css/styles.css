@@ -13878,3 +13878,6 @@ html[data-text-size="xlarge"] { font-size: 130%; }
 /* Debt balances search (1.354.0): same width as the cards below it */
 .debt-search.activity-search-combined { margin: 10px 0 6px; }
 .debt-search input[type="search"] { width: 100%; }
+
+/* Number field that was just tapped: the old number stays visible as a faint ghost until something is typed (app.js) */
+input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
