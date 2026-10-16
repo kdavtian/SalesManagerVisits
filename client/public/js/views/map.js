@@ -1590,7 +1590,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       if (brandChipIds.size && !matchesSelectedChips(brandSummary.get(c.id), brandChipIds)) continue;
       if (searchQuery) {
         const haystack = `${c.name} ${c.address ?? ""} ${c.category ?? ""} ${c.erp_customer_id ?? ""} ${brandSearchText(brandSummary.get(c.id))}`.toLowerCase();
-        if (!haystack.includes(searchQuery)) continue;
+        if (!haystack.includes(searchQuery) && !phoneMatches(c, searchQuery)) continue;
       }
       searchMatchCount += 1;
       if (activeFilter === "brands") {
@@ -1945,14 +1945,26 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   let addressSearchDebounceTimer;
   let addressSearchToken = 0;
 
+  // "091 007 019", "+374 91 007019", "91007" all find the customer with phone +37491007019 (3+ digits; the country code and
+  // leading zeros are ignored on both sides).
+  const phoneTailDigits = (v) => String(v ?? "").replace(/\D/g, "").replace(/^374/, "").replace(/^0+/, "");
+  function phoneMatches(c, q) {
+    const query = phoneTailDigits(q);
+    return query.length >= 3 && phoneTailDigits(c.phone).includes(query);
+  }
+
+  // Which tab of the search panel is open: "customers" | "addresses". Follows the results until the person taps a tab.
+  let searchTab = "customers";
+  let searchTabChosen = false;
+
   function hideAddressResults() {
     searchPanelOpen = false;
     addressResultsEl.hidden = true;
     addressResultsEl.innerHTML = "";
   }
 
-  // One panel under the search field with two independently scrolling groups: the customers on the map that match (nearest
-  // first, with the distance) and the street addresses the geocoder found. Tap a customer -> the map flies to the pin and
+  // One panel under the search field with two tabs, each with its count: the customers on the map that match (nearest
+  // first, with the distance; name, ID, address, phone and brands match) and the street addresses the geocoder found. Tap a customer -> the map flies to the pin and
   // opens its card; tap an address -> a search pin is dropped there.
   const SEARCH_PANEL_CUSTOMER_CAP = 60;
   function renderSearchPanel() {
@@ -1968,7 +1980,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     const shown = customers.slice(0, SEARCH_PANEL_CUSTOMER_CAP);
     const customerRows = shown
       .map(({ c, d }) => {
-        const sub = [c.erp_customer_id ? `ID ${c.erp_customer_id}` : "", c.sales_channel ? channelDisplayLabel(c.sales_channel) : "", c.address || ""].filter(Boolean).join(" · ");
+        const byPhone = phoneMatches(c, q);
+        const sub = [byPhone ? c.phone : "", c.erp_customer_id ? `ID ${c.erp_customer_id}` : "", c.sales_channel ? channelDisplayLabel(c.sales_channel) : "", c.address || ""].filter(Boolean).join(" · ");
         return `<button type="button" class="map-sr-row" data-cid="${c.id}">
           <span class="map-sr-main"><strong>${escapeHtml(c.name)}</strong>${sub ? `<span class="muted">${escapeHtml(sub)}</span>` : ""}</span>
           <span class="map-sr-dist">${formatDistance(d)}</span>
@@ -1981,13 +1994,28 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       : addressResults.length
         ? addressResults.map((r, i) => `<button type="button" class="map-sr-row map-sr-address" data-aidx="${i}"><span class="map-sr-main"><strong>${escapeHtml(r.address)}</strong></span></button>`).join("")
         : `<p class="map-sr-empty muted">${t("map_search_no_addresses")}</p>`;
+    // Tabs: nothing found among customers but addresses found -> show the addresses until the person picks a tab.
+    if (!searchTabChosen) searchTab = !customers.length && showAddresses && addressResults.length ? "addresses" : "customers";
+    if (!showAddresses) searchTab = "customers";
+    const addrCount = addressLoading ? "…" : addressResults.length;
     addressResultsEl.innerHTML = `
-      <section class="map-sr-section">
-        <p class="map-address-results-label">${t("map_search_customers")} · ${customers.length}</p>
-        <div class="map-sr-list">${customerRows || `<p class="map-sr-empty muted">${t("map_search_no_results")}</p>`}</div>
-      </section>
-      ${showAddresses ? `<section class="map-sr-section"><p class="map-address-results-label">${t("map_search_address_matches")}</p><div class="map-sr-list">${addressBody}</div></section>` : ""}
+      ${
+        showAddresses
+          ? `<div class="map-sr-tabs" role="tablist">
+              <button type="button" role="tab" class="map-sr-tab ${searchTab === "customers" ? "map-sr-tab-active" : ""}" aria-selected="${searchTab === "customers"}" data-sr-tab="customers">${t("map_search_customers")} <span class="map-sr-count">${customers.length}</span></button>
+              <button type="button" role="tab" class="map-sr-tab ${searchTab === "addresses" ? "map-sr-tab-active" : ""}" aria-selected="${searchTab === "addresses"}" data-sr-tab="addresses">${t("map_search_address_matches")} <span class="map-sr-count">${addrCount}</span></button>
+            </div>`
+          : `<p class="map-address-results-label">${t("map_search_customers")} · ${customers.length}</p>`
+      }
+      <div class="map-sr-list">${searchTab === "addresses" ? addressBody : customerRows || `<p class="map-sr-empty muted">${t("map_search_no_results")}</p>`}</div>
     `;
+    addressResultsEl.querySelectorAll("[data-sr-tab]").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        searchTab = btn.dataset.srTab;
+        searchTabChosen = true;
+        renderSearchPanel();
+      })
+    );
     searchPanelOpen = true;
     addressResultsEl.hidden = false;
     addressResultsEl.querySelectorAll("[data-cid]").forEach((btn) => {
@@ -2045,6 +2073,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
   mapSearchInput?.addEventListener("input", () => {
     const raw = mapSearchInput.value.trim();
+    searchTabChosen = false;
     clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(() => {
       searchQuery = raw.toLowerCase();
@@ -2068,7 +2097,10 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // lightweight popover in this app -- it isn't a modal sheet, so nothing
   // else should block interacting with the rest of the map while it's open.
   function dismissAddressResultsOutside(e) {
-    if (addressResultsEl && !addressResultsEl.hidden && !e.target.closest(".map-search-row")) hideAddressResults();
+    // composedPath is fixed when the click starts: a tap on a panel button that re-renders the panel (a tab) has already
+    // detached e.target by the time this runs, and closest() on a detached node would wrongly count it as "outside".
+    const inside = (e.composedPath?.() ?? []).some((n) => n.classList?.contains("map-search-row")) || e.target.closest(".map-search-row");
+    if (addressResultsEl && !addressResultsEl.hidden && !inside) hideAddressResults();
   }
   document.addEventListener("click", dismissAddressResultsOutside);
 
@@ -3308,7 +3340,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     document.body.appendChild(overlay);
     activateDialog(overlay);
     activateTierSelector(overlay);
-    activateCategorySelector(overlay);
+    activateCategorySelector(overlay, () => refreshNameSuggestion());
 
     // Keep the dropped pin visible above the sheet -- measured against the
     // sheet's actual rendered height (it varies with content/keyboard),
@@ -3354,27 +3386,41 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     const regionSelect = overlay.querySelector("#new-customer-region");
     const subregionWrap = overlay.querySelector("#new-customer-subregion-wrap");
 
-    // Suggest a default name of "{subregion} / Yuxman ket" once a subregion
-    // is known -- only when the rep hasn't already typed their own name, so
-    // this never clobbers manual entry (same "fill, don't lock" pattern as
-    // address/region/subregion/channel/manager below). Customer names are
-    // always Latin script: inside Yerevan, subregionField.value is already
-    // English (matched against the fixed YEREVAN_DISTRICTS list -- see
-    // matchSubregion in util.js). Outside Yerevan there's no fixed list, so
-    // that same field starts pre-filled with the geocoder's own raw guess,
-    // which is in Armenian (accept-language=hy) -- using it here would leak
-    // Armenian text into the name. The selected region code itself is
-    // always English (REGION_LIST), and for a non-Yerevan customer the
-    // "subregion" is usually just that region's own city anyway (per
-    // matchSubregion's comment), so it stands in as the English default.
+    // Suggest a default name "{subregion} / {type word}{number}" -- e.g. "Ajapnyak / Yuxman ket1", "Ajapnyak /
+    // Avtopahestamaser2" -- once a subregion is known. The number is the next free one among the customers already
+    // named that way (server: GET /customers/name-suggestion), so same-type customers of one subregion can be told
+    // apart. Only a name the rep has not typed themselves is (re)filled: empty, or still equal to our last
+    // suggestion (so changing the type or the subregion updates it); manual entry is never clobbered (same "fill,
+    // don't lock" pattern as address/region/subregion/channel/manager below). Customer names are always Latin
+    // script: inside Yerevan, subregionField.value is already English (matched against the fixed YEREVAN_DISTRICTS
+    // list -- see matchSubregion in util.js). Outside Yerevan there's no fixed list, so that same field starts
+    // pre-filled with the geocoder's own raw guess, which is in Armenian (accept-language=hy) -- using it here would
+    // leak Armenian text into the name. The selected region code itself is always English (REGION_LIST), and for a
+    // non-Yerevan customer the "subregion" is usually just that region's own city anyway (per matchSubregion's
+    // comment), so it stands in as the English default.
+    let lastSuggestedName = "";
+    let nameSeq = 0;
     function refreshNameSuggestion() {
-      if (nameInput.value) return;
+      if (nameInput.value && nameInput.value !== lastSuggestedName) return;
       const region = regionSelect.value;
       if (!region) return;
       const location =
         region === "Yerevan" ? overlay.querySelector("#new-customer-subregion")?.value || "" : region;
       if (!location) return;
-      nameInput.value = `${location} / Yuxman ket`;
+      const category = overlay.querySelector('input[name="category"]')?.value;
+      const word = CATEGORY_LIST.find((c) => c.value === category)?.nameWord || CATEGORY_LIST[0].nameWord;
+      const base = `${location} / ${word}`;
+      const mine = ++nameSeq;
+      const apply = (name) => {
+        // a newer request, or the rep typing in the meantime, wins
+        if (mine !== nameSeq || (nameInput.value && nameInput.value !== lastSuggestedName)) return;
+        nameInput.value = name;
+        lastSuggestedName = name;
+      };
+      api
+        .suggestCustomerNameNumber(base)
+        .then((r) => apply(`${base}${r?.next ?? ""}`))
+        .catch(() => apply(base));
     }
 
     function renderSubregionField(region, guess) {

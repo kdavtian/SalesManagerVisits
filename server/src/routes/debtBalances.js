@@ -233,7 +233,7 @@ debtBalancesRouter.get("/", async (req, res) => {
             ${balanceExpr} AS remaining_balance,
             ${lastPaymentExpr} AS last_payment_date,
             ${LAST_VISIT_SUBQUERY} AS last_visit_at,
-            c.assigned_manager_id, c.credit_term_days,
+            c.assigned_manager_id, c.credit_term_days, c.sales_channel,
             am.name AS assigned_manager_name
      ${fromClause}
      LEFT JOIN users am ON am.id = c.assigned_manager_id

@@ -2,6 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml, formatAmd, activateDialog, saveBlob, downloadFromUrl } from "../util.js";
 import { t } from "../i18n.js";
 import { state, canManageProducts, seesProductCosts, canPrintCostColumns } from "../state.js";
+import { openCostCalculator } from "../costCalculator.js";
 import { icons } from "../icons.js";
 import { compareProducts, sortedBrands } from "../productSort.js";
 import { NO_GROUP_KEY, openTriStateTreeSheet } from "../regionTree.js";
@@ -173,6 +174,7 @@ export async function renderPricelist(root, navigate) {
         <h1>${t("products_page_title")}</h1>
       </div>
       <div class="detail-header-actions">
+        ${seesProductCosts() ? `<button type="button" class="icon-btn" id="calc-btn" aria-label="${t("cc_title")}" title="${t("cc_title")}">${icons.calculator}</button>` : ""}
         <button type="button" class="icon-btn" id="select-mode-btn" aria-label="${t("select_products")}">${icons.checkCircle}</button>
         <button type="button" class="icon-btn" id="export-btn" aria-label="${t("export")}">${icons.send}</button>
       </div>
@@ -199,6 +201,7 @@ export async function renderPricelist(root, navigate) {
 
   container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
   container.querySelector("#export-btn").addEventListener("click", () => openExportSheet());
+  container.querySelector("#calc-btn")?.addEventListener("click", () => openCostCalculator({ products }));
 
   const sortBtn = container.querySelector("#pricelist-sort-btn");
   const sortMenu = container.querySelector("#pricelist-sort-menu");
