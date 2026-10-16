@@ -258,8 +258,13 @@ export const api = {
   getMySalesPerformance: () => request("/sales-performance/me"),
   getSalesPerformanceLeaderboard: (period = "ytd") => request(`/sales-performance/?period=${period}`),
 
-  createEditRequest: (customerId, changes, note) =>
-    json("/edit-requests", "POST", { customer_id: customerId, changes, note }),
+  createEditRequest: async (customerId, changes, note) => {
+    const created = await json("/edit-requests", "POST", { customer_id: customerId, changes, note });
+    // A pin correction by the rep (or management) is applied at once on the server and comes back "approved": the
+    // cached customer lists (Customers, Map) must show the new spot right away, not the old one until a refetch.
+    if (created?.status === "approved") await patchCachedCustomer(customerId, changes);
+    return created;
+  },
   listEditRequests: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/edit-requests${qs ? `?${qs}` : ""}`);
