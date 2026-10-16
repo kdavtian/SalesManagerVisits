@@ -181,7 +181,7 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
        AND (${SKIPPED_CHANNELS_SQL} OR fc.force_collect)
        AND NOT EXISTS (SELECT 1 FROM debt_decisions dd WHERE dd.customer_id = c.id AND dd.decision IN ('dispute', 'legal', 'write_off'))
        AND NOT EXISTS (
-         SELECT 1 FROM tasks t WHERE t.customer_id = c.id AND t.auto_kind = 'debt_collection'
+         SELECT 1 FROM tasks t WHERE t.customer_id = c.id AND (t.auto_kind = 'debt_collection' OR t.task_kind = 'collect_debt')
            AND (t.status = 'open'
                 OR t.promise_date >= $2::date
                 OR (t.promise_date IS NULL AND t.created_at > now() - ($1 || ' days')::interval)))
@@ -269,7 +269,7 @@ export async function createReorderFollowupTasks(now = new Date(), { notify = tr
        AND (c.credit_limit_amd IS NULL OR COALESCE(erp.debt_amd, 0) <= c.credit_limit_amd)
        AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.id AND o.created_at::date > st.last_order AND o.status <> 'draft')
        AND NOT EXISTS (
-         SELECT 1 FROM tasks t WHERE t.customer_id = c.id AND t.auto_kind = 'reorder_followup'
+         SELECT 1 FROM tasks t WHERE t.customer_id = c.id AND (t.auto_kind = 'reorder_followup' OR t.task_kind = 'make_order')
            AND (t.status = 'open' OR t.created_at > now() - ($2 || ' days')::interval))
      ORDER BY ($1::date - st.last_order) - st.median_gap DESC`,
     [today, REORDER_COOLDOWN_DAYS]

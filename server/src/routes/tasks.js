@@ -12,6 +12,8 @@ export const tasksRouter = Router();
 tasksRouter.use(requireAuth);
 
 const MAX_ITEMS = 30;
+// Types a person can give (migration 125): each needs a customer and closes itself when the rep does what it asks.
+export const TASK_KINDS = ["collect_debt", "make_order", "check_products"];
 const DEBT_OUTCOMES = ["paid", "partial", "promised", "no_answer", "refused"];
 const MAX_PROMISE_DAYS = 60;
 const isDate = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
@@ -135,6 +137,11 @@ tasksRouter.get("/:id", async (req, res, next) => {
 tasksRouter.post("/", async (req, res) => {
   if (!canCreateTasks(req.user.role)) return res.status(403).json({ error: "Only management can create tasks" });
   const { title, assignee_id, customer_id, due_date, due_is_next_visit } = req.body ?? {};
+  const taskKind = req.body?.task_kind === undefined || req.body.task_kind === null || req.body.task_kind === "" ? null : String(req.body.task_kind);
+  if (taskKind !== null && !TASK_KINDS.includes(taskKind)) return res.status(400).json({ error: "Unknown task type" });
+  if (taskKind !== null && (customer_id === undefined || customer_id === null || customer_id === "")) {
+    return res.status(400).json({ error: "This type of task needs a customer" });
+  }
   const items = cleanItems(req.body?.items);
   const text = String(title ?? "").trim().slice(0, 160);
   if (!text) return res.status(400).json({ error: "A task title is required" });
@@ -159,9 +166,9 @@ tasksRouter.post("/", async (req, res) => {
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
-      `INSERT INTO tasks (title, creator_id, assignee_id, customer_id, due_date, due_is_next_visit)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-      [text, req.user.id, Number(assignee_id), customerId, due_date, due_is_next_visit === true]
+      `INSERT INTO tasks (title, creator_id, assignee_id, customer_id, due_date, due_is_next_visit, task_kind)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+      [text, req.user.id, Number(assignee_id), customerId, due_date, due_is_next_visit === true, taskKind]
     );
     taskId = rows[0].id;
     let order = 0;
@@ -302,7 +309,7 @@ tasksRouter.post("/:id/complete", async (req, res) => {
   // keeps new tasks away until it passes -- see debtCollectionTasks.js).
   let outcome = null;
   let promiseDate = null;
-  if (task.auto_kind === "debt_collection") {
+  if (task.auto_kind === "debt_collection" || task.task_kind === "collect_debt") {
     outcome = String(req.body?.outcome ?? "");
     if (!DEBT_OUTCOMES.includes(outcome)) return res.status(400).json({ error: "Choose how the collection went" });
     if (outcome === "promised") {

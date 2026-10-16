@@ -491,6 +491,8 @@ async function refreshOrderBadge() {
 }
 
 window.addEventListener("orders-changed", refreshOrderBadge);
+// A screen that just refreshed its own list (Orders) asks for the nav counts to be refreshed with it.
+window.addEventListener("badges-refresh", () => refreshAllBadgesFromServer());
 
 // Same pattern as the Orders badge above, on the Payments quick action --
 // pending count is role-aware server-side (Accountant/CEO/admin get every
@@ -1120,7 +1122,7 @@ async function renderRoute() {
   } else if (orderCreateMatch) {
     (await import("./views/orderCreate.js")).renderOrderCreate(app, navigate, orderCreateMatch[1], query.get("checkin"), { from: query.get("from"), usual: query.get("usual") === "1" });
   } else if (path === "#/orders") {
-    (await import("./views/orders.js")).renderOrders(app, navigate);
+    currentCleanup = (await import("./views/orders.js")).renderOrders(app, navigate);
   } else if (paymentDetailMatch) {
     (await import("./views/payments.js")).renderPayments(app, navigate, paymentDetailMatch[1]);
   } else if (path === "#/payments") {
@@ -1578,10 +1580,19 @@ async function init() {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") refreshAllBadgesFromServer();
   });
+  // iOS home-screen apps do not always report "visible" when they wake from the lock screen or come back online.
+  window.addEventListener("focus", () => refreshAllBadgesFromServer());
+  window.addEventListener("pageshow", () => refreshAllBadgesFromServer());
+  window.addEventListener("online", () => refreshAllBadgesFromServer());
 }
 
+// Not more often than every few seconds, however many triggers (focus, visibility, pageshow, online, a screen refresh)
+// fire together.
+let lastBadgeFetchAt = 0;
 async function refreshAllBadgesFromServer() {
   if (!state.user) return;
+  if (Date.now() - lastBadgeFetchAt < 4000) return;
+  lastBadgeFetchAt = Date.now();
   let counts;
   try {
     counts = await api.getBadgeCounts();

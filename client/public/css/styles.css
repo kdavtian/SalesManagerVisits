@@ -13712,3 +13712,23 @@ html[data-text-size="xlarge"] { font-size: 130%; }
 
 /* A person's separate plan (SM B2B) under their own week row on "my route plan". */
 .route-plan-scope-title { margin: 16px 4px 6px; font-size: 1rem; }
+
+/* ===== Debt balances: total / overdue / not-yet-in-Excel (1.349.0) ===== */
+.debt-total-card { flex-direction: column; align-items: stretch; gap: 6px; }
+.debt-total-line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.debt-total-line + .debt-total-line { padding-top: 6px; border-top: 1px solid var(--border); }
+.debt-total-line-overdue .debt-total-amount { font-size: 0.98rem; }
+.debt-amount-overdue { color: var(--danger); }
+.debt-total-line-unrecorded .debt-total-amount { color: var(--warning-text, var(--warning)); font-size: 0.98rem; }
+.debt-total-label .settings-hint-icon { margin-left: 6px; text-transform: none; vertical-align: middle; }
+.debt-balance-extra { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; font-size: 0.82rem; }
+.debt-extra-overdue strong { color: var(--danger); }
+.debt-extra-unrecorded strong { color: var(--warning-text, var(--warning)); }
+.debt-total-label { text-transform: none; letter-spacing: 0; font-size: 0.8rem; }
+
+/* Typed tasks: type picker in the editor */
+.task-editor .task-type-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.task-editor .task-type-btn { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 8px; }
+.task-editor .task-type-btn svg { width: 18px; height: 18px; flex: 0 0 auto; }
+.task-editor .task-type-badge { display: inline-flex; align-items: center; gap: 6px; }
+.task-editor .task-type-badge svg { width: 16px; height: 16px; }

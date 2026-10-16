@@ -87,8 +87,18 @@ export async function renderDebtBalances(root, navigate) {
       </div>
       <div id="debt-sync-badge"></div>
       <div class="debt-total-card" id="debt-total-card" hidden>
-        <span class="debt-total-label">${t("debt_balances_subtotal")}</span>
-        <span class="debt-total-amount" id="debt-total-amount"></span>
+        <div class="debt-total-line">
+          <span class="debt-total-label">${t("debt_balances_total_debt")}</span>
+          <span class="debt-total-amount" id="debt-total-amount"></span>
+        </div>
+        <div class="debt-total-line debt-total-line-overdue" id="debt-overdue-line">
+          <span class="debt-total-label">${t("debt_balances_overdue_total")}</span>
+          <span class="debt-total-amount" id="debt-overdue-amount"></span>
+        </div>
+        <div class="debt-total-line debt-total-line-unrecorded" id="debt-unrecorded-line" hidden>
+          <span class="debt-total-label">${t("debt_balances_unrecorded_total")}<button type="button" class="settings-hint-icon" id="debt-unrecorded-hint-btn" aria-label="${t("more_info")}">!</button></span>
+          <span class="debt-total-amount" id="debt-unrecorded-amount"></span>
+        </div>
       </div>
       ${
         canGroup
@@ -121,6 +131,10 @@ export async function renderDebtBalances(root, navigate) {
   const errorEl = container.querySelector("#debt-error");
   const totalCardEl = container.querySelector("#debt-total-card");
   const totalAmountEl = container.querySelector("#debt-total-amount");
+  const overdueAmountEl = container.querySelector("#debt-overdue-amount");
+  const unrecordedLineEl = container.querySelector("#debt-unrecorded-line");
+  const unrecordedAmountEl = container.querySelector("#debt-unrecorded-amount");
+  container.querySelector("#debt-unrecorded-hint-btn").addEventListener("click", () => openInfoPopup(`<p>${t("debt_balances_unrecorded_hint")}</p>`));
   const syncBadgeEl = container.querySelector("#debt-sync-badge");
   const syncHintBtn = container.querySelector("#debt-sync-hint-btn");
   let syncInfoHtml = "";
@@ -224,6 +238,14 @@ export async function renderDebtBalances(root, navigate) {
           <strong>${escapeHtml(r.customer_name || "")}</strong>
           ${Number(r.remaining_balance) > 0 ? dueChipHtml(r.oldest_due_days) : ""}
         </div>
+        ${
+          Number(r.remaining_balance) > 0 && (Number(r.overdue_amd) > 0 || Number(r.unrecorded_amd) > 0)
+            ? `<div class="debt-balance-extra">
+                ${Number(r.overdue_amd) > 0 ? `<span class="debt-extra-overdue">${t("debt_balances_overdue_row")}${labelColon()}<strong>${formatAmd(Number(r.overdue_amd))}</strong></span>` : ""}
+                ${Number(r.unrecorded_amd) > 0 ? `<span class="debt-extra-unrecorded">${t("debt_balances_unrecorded_row")}${labelColon()}<strong>${formatAmd(Number(r.unrecorded_amd))}</strong></span>` : ""}
+              </div>`
+            : ""
+        }
         <div class="debt-balance-row debt-balance-row-dates muted">
           <span>${t("debt_balances_last_payment")}${labelColon()}${formatDateOnly(r.last_payment_date)}</span>
           <span>${t("debt_balances_last_visit")}${labelColon()}${formatDate(r.last_visit_at)}</span>
@@ -245,8 +267,15 @@ export async function renderDebtBalances(root, navigate) {
     // mode) narrows this the same way it narrows the list below, so the
     // headline total always matches what's actually visible.
     const subtotal = visible.reduce((sum, r) => sum + Number(r.remaining_balance || 0), 0);
+    // How much of that is already past its due date, and what the reps collected that the Excel does not hold yet.
+    const overdue = visible.reduce((sum, r) => sum + Math.max(0, Number(r.overdue_amd || 0)), 0);
+    const unrecorded = visible.reduce((sum, r) => sum + Number(r.unrecorded_amd || 0), 0);
     totalCardEl.hidden = !visible.length;
     totalAmountEl.textContent = formatAmd(subtotal);
+    overdueAmountEl.textContent = formatAmd(overdue);
+    overdueAmountEl.classList.toggle("debt-amount-overdue", overdue > 0);
+    unrecordedLineEl.hidden = !(unrecorded > 0);
+    unrecordedAmountEl.textContent = formatAmd(unrecorded);
 
     if (!visible.length) {
       listEl.innerHTML = `<p class="empty-state">${t("debt_balances_empty")}</p>`;

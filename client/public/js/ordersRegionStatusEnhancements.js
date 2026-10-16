@@ -8,7 +8,11 @@ const COUNTED_STATUSES = ["submitted", "confirmed", "packed"];
 
 let activeRegion = "";
 let cachedSummary = null;
+let cachedSummaryAt = 0;
 let summaryPromise = null;
+// The status counts on the chips ("Submitted 33") are other people's work too: a cached answer is good for this long,
+// then the next look fetches again (it used to be kept for the whole session, so the numbers froze).
+const SUMMARY_MAX_AGE_MS = 15000;
 let scheduled = false;
 
 const originalListOrders = api.listOrders.bind(api);
@@ -23,8 +27,8 @@ async function requestJson(path) {
   return body;
 }
 
-api.listOrders = (params = {}) => {
-  if (!activeRegion) return originalListOrders(params);
+api.listOrders = (params = {}, options = {}) => {
+  if (!activeRegion) return originalListOrders(params, options);
   const qs = new URLSearchParams({ ...params, region: activeRegion }).toString();
   return requestJson(`/order-meta/list${qs ? `?${qs}` : ""}`);
 };
@@ -99,11 +103,12 @@ function renderRegionMenu(menu, button, regions) {
 }
 
 async function getSummary(force = false) {
-  if (!force && cachedSummary) return cachedSummary;
+  if (!force && cachedSummary && Date.now() - cachedSummaryAt < SUMMARY_MAX_AGE_MS) return cachedSummary;
   if (!force && summaryPromise) return summaryPromise;
   summaryPromise = requestJson("/order-meta/summary")
     .then((result) => {
       cachedSummary = result;
+      cachedSummaryAt = Date.now();
       return result;
     })
     .finally(() => {

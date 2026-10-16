@@ -133,7 +133,7 @@ export async function renderAccounting(root, navigate) {
   async function load() {
     listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     try {
-      const result = await api.listOrders(params());
+      const result = await api.listOrders(params(), { fresh: true });
       rows = result.rows;
       hasMore = result.has_more;
       paint();
@@ -147,7 +147,7 @@ export async function renderAccounting(root, navigate) {
     if (loadingMore || !hasMore) return;
     loadingMore = true;
     try {
-      const result = await api.listOrders({ ...params(), offset: rows.length });
+      const result = await api.listOrders({ ...params(), offset: rows.length }, { fresh: true });
       rows = rows.concat(result.rows);
       hasMore = result.has_more;
       paint();
