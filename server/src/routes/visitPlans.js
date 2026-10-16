@@ -6,6 +6,7 @@ import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { notifyUser } from "../notifications.js";
 import { APPROVER_ROLES } from "../notificationPreferences.js";
 import { repVisitSql } from "../visitCount.js";
+import { MAIN_SCOPE, parseScope, loadChannelMap, inScope, mergeScopeIds, scopesFor } from "../planScopes.js";
 
 export const visitPlansRouter = Router();
 
@@ -332,6 +333,22 @@ visitPlansRouter.put("/rules/:dayOfWeek", async (req, res) => {
     ? [...new Set(req.body.customer_ids.map(Number).filter(Number.isInteger))]
     : [];
 
+  // One PLAN of a person (the main one, or a separately planned channel such as SM B2B): only that plan's customers are
+  // replaced, the person's other plans on this weekday stay exactly as they are. Areas of the stored rule are turned
+  // into plain customer ids first, so nothing of the other plans is lost. Without plan_channel the whole rule is
+  // replaced (the Map's quick planner).
+  let finalAreas = areas;
+  let finalIds = customerIds;
+  if (req.body?.plan_channel !== undefined) {
+    const scope = parseScope(req.body.plan_channel);
+    if (scope === null) return res.status(400).json({ error: "plan_channel is not a separately planned channel" });
+    const { rows: existingRows } = await pool.query("SELECT areas, customer_ids FROM visit_plan_rules WHERE user_id = $1 AND day_of_week = $2", [targetId, dayOfWeek]);
+    const existing = existingRows[0];
+    const existingIds = existing ? [...new Set([...(await expandAreas(existing.areas)), ...(existing.customer_ids ?? [])])] : [];
+    finalAreas = [];
+    finalIds = mergeScopeIds({ existing: existingIds, submitted: customerIds, scope, channelOf: await loadChannelMap(pool) });
+  }
+
   const { rows } = await pool.query(
     `INSERT INTO visit_plan_rules (user_id, day_of_week, areas, customer_ids, created_by, active)
      VALUES ($1, $2, $3, $4, $5, $6)
@@ -339,7 +356,7 @@ visitPlansRouter.put("/rules/:dayOfWeek", async (req, res) => {
        SET areas = EXCLUDED.areas, customer_ids = EXCLUDED.customer_ids,
            active = EXCLUDED.active, created_by = EXCLUDED.created_by, updated_at = now()
      RETURNING *`,
-    [targetId, dayOfWeek, JSON.stringify(areas), customerIds, req.user.id, areas.length > 0 || customerIds.length > 0]
+    [targetId, dayOfWeek, JSON.stringify(finalAreas), finalIds, req.user.id, finalAreas.length > 0 || finalIds.length > 0]
   );
   res.status(201).json(rows[0]);
 });
@@ -349,44 +366,70 @@ visitPlansRouter.put("/rules/:dayOfWeek", async (req, res) => {
 // route-planned targets (matches /users/plannable); customer_count is
 // precomputed here so the overview grid doesn't need to expand areas for
 // every cell just to show a number.
-visitPlansRouter.get("/rules/overview", requireCanViewAllRoutePlans, async (req, res) => {
-  const { rows: reps } = await pool.query(
-    "SELECT id, name, position FROM users WHERE role = 'sales_manager' ORDER BY name"
-  );
-  const { rows: rules } = await pool.query(
-    "SELECT * FROM visit_plan_rules WHERE active ORDER BY day_of_week"
-  );
-
+// Each person's recurring plans: the main plan, plus a separate plan for every specially planned channel (SM B2B) the
+// person owns customers in. Rules stay one row per person and weekday; a plan's day shows only ITS customers.
+async function buildRepPlans(repIds) {
+  const { rows: rules } = await pool.query("SELECT * FROM visit_plan_rules WHERE active AND user_id = ANY($1) ORDER BY day_of_week", [repIds]);
   const areaIdsByRule = await batchExpandAreas(rules);
   // The grid badge counts only customers that are CURRENTLY assigned to that
   // rep: a rule can still list a customer who was reassigned to someone else
   // (or an area covering other reps' customers), and counting those left a
   // rep with a "1" on a weekday although no customer of his is on it.
-  const { rows: assignedRows } = await pool.query("SELECT id, assigned_manager_id FROM customers WHERE assigned_manager_id IS NOT NULL");
+  const { rows: assignedRows } = await pool.query("SELECT id, assigned_manager_id, sales_channel FROM customers WHERE assigned_manager_id = ANY($1)", [repIds]);
   const managerByCustomer = new Map(assignedRows.map((r) => [r.id, r.assigned_manager_id]));
+  const channelOf = new Map(assignedRows.map((r) => [r.id, r.sales_channel]));
+  const assignedByRep = new Map(repIds.map((id) => [id, []]));
+  for (const r of assignedRows) assignedByRep.get(r.assigned_manager_id)?.push(r.id);
+  const rulesByUser = new Map(repIds.map((id) => [id, []]));
+  for (const rule of rules) rulesByUser.get(rule.user_id)?.push(rule);
 
-  const rulesByUser = new Map();
-  for (const rule of rules) {
-    if (!rulesByUser.has(rule.user_id)) rulesByUser.set(rule.user_id, []);
-    const areaIds = areaIdsByRule.get(rule.id);
-    const customerIds = new Set([...areaIds, ...(rule.customer_ids ?? [])]);
-    const ownCount = [...customerIds].filter((id) => managerByCustomer.get(id) === rule.user_id).length;
-    rulesByUser.get(rule.user_id).push({
-      day_of_week: rule.day_of_week,
-      customer_ids: rule.customer_ids ?? [],
-      areas: rule.areas ?? [],
-      customer_count: ownCount,
-    });
+  const result = new Map();
+  for (const repId of repIds) {
+    const scopes = scopesFor(assignedByRep.get(repId), channelOf);
+    result.set(
+      repId,
+      scopes.map((scope) => ({
+        scope,
+        days: rulesByUser.get(repId).map((rule) => {
+          const all = new Set([...(areaIdsByRule.get(rule.id) ?? []), ...(rule.customer_ids ?? [])]);
+          const own = [...all].filter((id) => managerByCustomer.get(id) === rule.user_id && inScope(id, scope, channelOf));
+          return {
+            day_of_week: rule.day_of_week,
+            customer_ids: (rule.customer_ids ?? []).filter((id) => inScope(id, scope, channelOf)),
+            areas: scope === MAIN_SCOPE ? rule.areas ?? [] : [],
+            customer_count: own.length,
+          };
+        }),
+      }))
+    );
   }
+  return result;
+}
 
-  res.json(
-    reps.map((rep) => ({
-      user_id: rep.id,
-      user_name: rep.name,
-      position: rep.position,
-      days: rulesByUser.get(rep.id) ?? [],
-    }))
+// Full weekday x rep grid for the Route Plans overview page -- one request
+// instead of N+1 per sales manager. Only sales_manager-role users are
+// route-planned targets (matches /users/plannable); customer_count is
+// precomputed here so the overview grid doesn't need to expand areas for
+// every cell just to show a number. `days` is the main plan (kept for older
+// clients), `plans` lists every plan of the person (main + separate channels).
+visitPlansRouter.get("/rules/overview", requireCanViewAllRoutePlans, async (req, res) => {
+  const { rows: reps } = await pool.query(
+    "SELECT id, name, position FROM users WHERE role = 'sales_manager' ORDER BY name"
   );
+  const plansByRep = await buildRepPlans(reps.map((r) => r.id));
+  res.json(
+    reps.map((rep) => {
+      const plans = plansByRep.get(rep.id);
+      return { user_id: rep.id, user_name: rep.name, position: rep.position, days: plans[0].days, plans };
+    })
+  );
+});
+
+// One person's own plans (the "my week" view of a rep who is not allowed to see everybody's).
+visitPlansRouter.get("/rules/plans", async (req, res) => {
+  const targetId = resolveTargetUserId(req, res, req.query.user_id, { readOnly: true });
+  if (targetId === null) return;
+  res.json({ plans: (await buildRepPlans([targetId])).get(targetId) });
 });
 
 // Every customer assigned to one rep, each annotated with which weekday(s)
@@ -402,10 +445,15 @@ visitPlansRouter.get("/rules/customers", async (req, res) => {
   const targetId = resolveTargetUserId(req, res, req.query.user_id, { readOnly: true });
   if (targetId === null) return;
 
-  const { rows: customers } = await pool.query(
-    "SELECT id, name, region, subregion FROM customers WHERE assigned_manager_id = $1 ORDER BY name",
+  // ?scope= (empty = main plan, "SM B2B" = that channel's separate plan) limits the list to one plan's customers.
+  const scope = req.query.scope === undefined ? undefined : parseScope(req.query.scope);
+  if (scope === null) return res.status(400).json({ error: "scope is not a separately planned channel" });
+  const { rows: allCustomers } = await pool.query(
+    "SELECT id, name, region, subregion, sales_channel FROM customers WHERE assigned_manager_id = $1 ORDER BY name",
     [targetId]
   );
+  const channelOf = new Map(allCustomers.map((c) => [c.id, c.sales_channel]));
+  const customers = (scope === undefined ? allCustomers : allCustomers.filter((c) => inScope(c.id, scope, channelOf))).map(({ sales_channel, ...rest }) => rest);
 
   const { rows: rules } = await pool.query(
     "SELECT * FROM visit_plan_rules WHERE user_id = $1 AND active",

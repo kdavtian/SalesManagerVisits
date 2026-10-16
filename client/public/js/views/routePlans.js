@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, activateDialog } from "../util.js";
+import { escapeHtml, activateDialog, planTitle } from "../util.js";
 import { t } from "../i18n.js";
 import { state, canPlanForOthers, canViewAllRoutePlans } from "../state.js";
 import { buildCustomerTree, renderTriStateTree } from "../regionTree.js";
@@ -70,26 +70,30 @@ export async function renderRoutePlans(root, navigate) {
       bodyEl.innerHTML = `<p class="empty-state">${t("no_sales_reps_yet")}</p>`;
       return;
     }
+    // One card per PLAN: a person who also owns a separately planned channel (SM B2B) has a second card for it.
     bodyEl.innerHTML = overview
-      .map((rep) => {
-        const byDay = new Map(rep.days.map((d) => [d.day_of_week, d]));
+      .flatMap((rep) => (rep.plans?.length ? rep.plans : [{ scope: "", days: rep.days }]).map((plan) => ({ rep, plan })))
+      .map(({ rep, plan }) => {
+        const byDay = new Map(plan.days.map((d) => [d.day_of_week, d]));
+        const planName = planTitle(rep.user_name, plan.scope);
+        const attrs = `data-user-id="${rep.user_id}" data-user-name="${escapeHtml(planName)}" data-scope="${escapeHtml(plan.scope)}"`;
         return `
       <div class="card route-plan-rep-card">
         <div class="route-plan-rep-header">
-          <strong>${escapeHtml(rep.user_name)}</strong>
-          ${rep.position ? `<span class="muted">${escapeHtml(rep.position)}</span>` : ""}
+          <strong>${escapeHtml(planName)}</strong>
+          ${plan.scope ? "" : rep.position ? `<span class="muted">${escapeHtml(rep.position)}</span>` : ""}
         </div>
         <div class="route-plan-week-row">
           ${WEEKDAY_ORDER.map((i) => {
             const day = byDay.get(i);
             const count = day?.customer_count ?? 0;
-            return `<button type="button" class="route-plan-day-chip ${count ? "route-plan-day-chip-active" : ""}" data-user-id="${rep.user_id}" data-user-name="${escapeHtml(rep.user_name)}" data-day="${i}">
+            return `<button type="button" class="route-plan-day-chip ${count ? "route-plan-day-chip-active" : ""}" ${attrs} data-day="${i}">
               <span class="route-plan-day-label">${t(WEEKDAY_KEYS[i])}</span>
               <span class="route-plan-day-count">${count || "–"}</span>
             </button>`;
           }).join("")}
         </div>
-        <button type="button" class="btn route-plan-view-customers-btn" data-user-id="${rep.user_id}" data-user-name="${escapeHtml(rep.user_name)}">${t("view_customers")}</button>
+        <button type="button" class="btn route-plan-view-customers-btn" ${attrs}>${t("view_customers")}</button>
       </div>`;
       })
       .join("");
@@ -97,43 +101,50 @@ export async function renderRoutePlans(root, navigate) {
     bodyEl.querySelectorAll(".route-plan-day-chip").forEach((btn) => {
       btn.addEventListener("click", () => {
         if (!canManage) {
-          openCustomersByDaySheet(Number(btn.dataset.userId), btn.dataset.userName);
+          openCustomersByDaySheet(Number(btn.dataset.userId), btn.dataset.userName, btn.dataset.scope);
           return;
         }
-        openEditSheet(Number(btn.dataset.userId), btn.dataset.userName, Number(btn.dataset.day), load);
+        openEditSheet(Number(btn.dataset.userId), btn.dataset.userName, Number(btn.dataset.day), load, btn.dataset.scope);
       });
     });
     bodyEl.querySelectorAll(".route-plan-view-customers-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
-        openCustomersByDaySheet(Number(btn.dataset.userId), btn.dataset.userName);
+        openCustomersByDaySheet(Number(btn.dataset.userId), btn.dataset.userName, btn.dataset.scope);
       });
     });
   }
 
   async function paintOwnWeek() {
-    const rules = await api.getVisitPlanRules();
-    const byDay = new Map(rules.map((r) => [r.day_of_week, r]));
+    const { plans } = await api.getMyRoutePlans();
     bodyEl.innerHTML = `
       <p class="muted" style="margin: 0 4px 10px;">${t("route_plan_own_hint")}</p>
+      ${plans
+        .map((plan) => {
+          const byDay = new Map(plan.days.map((d) => [d.day_of_week, d]));
+          return `
+      ${plan.scope ? `<h2 class="route-plan-scope-title">${escapeHtml(planTitle(state.user.name, plan.scope))}</h2>` : ""}
       <div class="route-plan-week-row route-plan-week-row-standalone">
         ${WEEKDAY_ORDER.map((i) => {
-          const rule = byDay.get(i);
-          const count = rule ? new Set([...(rule.customer_ids || [])]).size : 0;
-          return `<button type="button" class="route-plan-day-chip ${count ? "route-plan-day-chip-active" : ""}" data-day="${i}">
+          const count = byDay.get(i)?.customer_count ?? 0;
+          return `<button type="button" class="route-plan-day-chip ${count ? "route-plan-day-chip-active" : ""}" data-scope="${escapeHtml(plan.scope)}" data-day="${i}">
             <span class="route-plan-day-label">${t(WEEKDAY_KEYS[i])}</span>
             <span class="route-plan-day-count">${count || "–"}</span>
           </button>`;
         }).join("")}
       </div>
-      <button type="button" class="btn route-plan-view-customers-btn" id="own-view-customers-btn">${t("view_customers")}</button>
+      <button type="button" class="btn route-plan-view-customers-btn" data-scope="${escapeHtml(plan.scope)}">${t("view_customers")}</button>`;
+        })
+        .join("")}
     `;
     bodyEl.querySelectorAll(".route-plan-day-chip").forEach((btn) => {
       btn.addEventListener("click", () => {
-        openEditSheet(state.user.id, state.user.name, Number(btn.dataset.day), load);
+        openEditSheet(state.user.id, planTitle(state.user.name, btn.dataset.scope), Number(btn.dataset.day), load, btn.dataset.scope);
       });
     });
-    bodyEl.querySelector("#own-view-customers-btn").addEventListener("click", () => {
-      openCustomersByDaySheet(state.user.id, state.user.name);
+    bodyEl.querySelectorAll(".route-plan-view-customers-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        openCustomersByDaySheet(state.user.id, planTitle(state.user.name, btn.dataset.scope), btn.dataset.scope);
+      });
     });
   }
 
@@ -162,7 +173,7 @@ export async function renderRoutePlans(root, navigate) {
 // scoped to that rep's assigned customers (assigned_manager_id) -- not the
 // whole customer book, since a route plan is about who this rep already
 // owns, not a general-purpose customer browser.
-async function openCustomerPickSheet({ userId, userName, days, existingCustomerIds = [], existingIdsPromise = null, onSaved }) {
+async function openCustomerPickSheet({ userId, userName, days, existingCustomerIds = [], existingIdsPromise = null, onSaved, scope = "" }) {
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay sheet-overlay-light";
   overlay.innerHTML = `
@@ -197,8 +208,10 @@ async function openCustomerPickSheet({ userId, userName, days, existingCustomerI
     // light route-plan customer list (id, name, region, subregion) replaces
     // the full customer list, which carried ~700 bytes and several computed
     // visit-status columns per customer that this picker never shows.
-    const [existing, { customers }] = await Promise.all([existingIdsPromise ?? existingCustomerIds, api.getRoutePlanCustomers(userId)]);
-    selectedIds = new Set(existing);
+    const [existing, { customers }] = await Promise.all([existingIdsPromise ?? existingCustomerIds, api.getRoutePlanCustomers(userId, scope)]);
+    // only this plan's customers can be ticked (the person's other plan keeps its own)
+    const listed = new Set(customers.map((c) => c.id));
+    selectedIds = new Set(existing.filter((id) => listed.has(Number(id))));
     if (!customers.length) {
       listEl.innerHTML = `<p class="empty-state">${t("no_assigned_customers")}</p>`;
       saveBtn.disabled = true;
@@ -227,7 +240,7 @@ async function openCustomerPickSheet({ userId, userName, days, existingCustomerI
       // once instead of waiting on each day's round trip before starting
       // the next, which serialized up to 7 sequential requests on what's
       // often a slow field connection.
-      await Promise.all(days.map((day) => api.saveVisitPlanRule(day, [], userId, ids)));
+      await Promise.all(days.map((day) => api.saveVisitPlanRule(day, [], userId, ids, scope)));
       close();
       onSaved();
     } catch (err) {
@@ -239,14 +252,14 @@ async function openCustomerPickSheet({ userId, userName, days, existingCustomerI
 }
 
 
-async function openEditSheet(userId, userName, dayOfWeek, onSaved) {
+async function openEditSheet(userId, userName, dayOfWeek, onSaved, scope = "") {
   // Open the sheet at once (with its loading state) and fetch inside it, so a
   // tap always gives immediate feedback instead of waiting on a request first.
   const existingIdsPromise = api
     .getVisitPlanRules(userId)
     .then((rules) => rules.find((r) => r.day_of_week === dayOfWeek)?.customer_ids ?? [])
     .catch(() => []);
-  await openCustomerPickSheet({ userId, userName, days: [dayOfWeek], existingIdsPromise, onSaved });
+  await openCustomerPickSheet({ userId, userName, days: [dayOfWeek], existingIdsPromise, onSaved, scope });
 }
 
 // Read-only Region -> Subregion -> Customer accordion for the "View
@@ -348,7 +361,7 @@ function renderCustomersByDayTree(listEl, tree, daysById) {
 // "Unplanned" badge if it's on none, sorted first within its group so the
 // gaps in the week are the first thing a manager sees, not something they
 // have to hunt for by checking each day's chip one at a time.
-async function openCustomersByDaySheet(userId, userName) {
+async function openCustomersByDaySheet(userId, userName, scope = "") {
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay sheet-overlay-light";
   overlay.innerHTML = `
@@ -376,7 +389,7 @@ async function openCustomersByDaySheet(userId, userName) {
   const errorEl = overlay.querySelector("#route-plan-customers-error");
 
   try {
-    const { customers } = await api.getRoutePlanCustomers(userId);
+    const { customers } = await api.getRoutePlanCustomers(userId, scope);
     if (!customers.length) {
       treeEl.innerHTML = `<p class="empty-state">${t("no_assigned_customers")}</p>`;
       return;
@@ -428,18 +441,27 @@ async function openNewRoutePlanFlow(onSaved) {
   let step = 1;
   let selectedUserId = null;
   let selectedUserName = "";
+  let selectedScope = "";
   let selectedDays = [];
 
   async function renderStep1() {
     nextBtn.textContent = t("next");
     errorEl.hidden = true;
     stepBody.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+    // One row per PLAN: a person with a separately planned channel (SM B2B) is listed twice.
     let reps = [];
     try {
-      reps = await api.listPlannableUsers();
-    } catch (err) {
-      errorEl.textContent = err.message;
-      errorEl.hidden = false;
+      const overview = await api.getRoutePlansOverview();
+      reps = overview.flatMap((rep) =>
+        (rep.plans?.length ? rep.plans : [{ scope: "" }]).map((plan) => ({ id: rep.user_id, name: planTitle(rep.user_name, plan.scope), scope: plan.scope, position: plan.scope ? "" : rep.position }))
+      );
+    } catch {
+      try {
+        reps = (await api.listPlannableUsers()).map((u) => ({ id: u.id, name: u.name, scope: "", position: u.position }));
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+      }
     }
     stepBody.innerHTML = `
       <p class="muted">${t("choose_sales_rep_hint")}</p>
@@ -450,7 +472,7 @@ async function openNewRoutePlanFlow(onSaved) {
                 .map(
                   (u) => `
           <label class="plan-day-row plan-day-row-radio">
-            <input type="radio" name="rep-pick" value="${u.id}" data-name="${escapeHtml(u.name)}" />
+            <input type="radio" name="rep-pick" value="${u.id}" data-name="${escapeHtml(u.name)}" data-scope="${escapeHtml(u.scope)}" />
             <span>${escapeHtml(u.name)}${u.position ? ` <span class="muted">(${escapeHtml(u.position)})</span>` : ""}</span>
           </label>`
                 )
@@ -496,6 +518,7 @@ async function openNewRoutePlanFlow(onSaved) {
       days: selectedDays,
       existingCustomerIds: [],
       onSaved,
+      scope: selectedScope,
     });
   }
 
@@ -510,6 +533,7 @@ async function openNewRoutePlanFlow(onSaved) {
       }
       selectedUserId = Number(picked.value);
       selectedUserName = picked.dataset.name;
+      selectedScope = picked.dataset.scope || "";
       step = 2;
       renderStep2();
     } else if (step === 2) {

@@ -44,6 +44,7 @@ if (!api.__kadCompetitorPolicyInstalled) {
     originalSaveVisitPlan(date, stripCompetitorIds(customerIds), userId);
 
   const originalSaveVisitPlanRule = api.saveVisitPlanRule.bind(api);
-  api.saveVisitPlanRule = (dayOfWeek, areas, userId, customerIds) =>
-    originalSaveVisitPlanRule(dayOfWeek, areas, userId, stripCompetitorIds(customerIds));
+  // ...rest: the plan channel (separate SM B2B plan) travels through too -- dropping it would replace the whole day
+  api.saveVisitPlanRule = (dayOfWeek, areas, userId, customerIds, ...rest) =>
+    originalSaveVisitPlanRule(dayOfWeek, areas, userId, stripCompetitorIds(customerIds), ...rest);
 }

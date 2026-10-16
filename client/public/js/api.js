@@ -306,19 +306,26 @@ export const api = {
   getTeamTodayVisitPlans: () => request("/visit-plans/team-today"),
   reviewVisitPlan: (id, action) => json(`/visit-plans/${id}`, "PATCH", { action }),
   getVisitPlanRules: (userId) => request(`/visit-plans/rules${userId ? `?user_id=${userId}` : ""}`),
-  saveVisitPlanRule: (dayOfWeek, areas, userId, customerIds) =>
-    json(`/visit-plans/rules/${dayOfWeek}`, "PUT", { areas, user_id: userId, customer_ids: customerIds }),
+  // planChannel: "" = save the main plan, "SM B2B" = that channel's own plan (the person's other plans stay as they are);
+  // undefined = replace the whole day (the Map's quick planner)
+  saveVisitPlanRule: (dayOfWeek, areas, userId, customerIds, planChannel) =>
+    json(`/visit-plans/rules/${dayOfWeek}`, "PUT", { areas, user_id: userId, customer_ids: customerIds, ...(planChannel === undefined ? {} : { plan_channel: planChannel }) }),
   listRoutePlanSets: () => request("/route-plan-sets"),
   autoRoutePlanSet: (data) => json("/route-plan-sets/auto", "POST", data),
   snapshotRoutePlanSet: (name) => json("/route-plan-sets/snapshot", "POST", { name }),
   getRoutePlanSet: (id) => request(`/route-plan-sets/${id}`),
   updateRoutePlanSet: (id, data) => json(`/route-plan-sets/${id}`, "PATCH", data),
-  setRoutePlanSetRep: (id, userId, days) => json(`/route-plan-sets/${id}/reps/${userId}`, "PUT", { days }),
+  setRoutePlanSetRep: (id, userId, days, scope) => json(`/route-plan-sets/${id}/reps/${userId}`, "PUT", scope === undefined ? { days } : { days, scope }),
   duplicateRoutePlanSet: (id, name) => json(`/route-plan-sets/${id}/duplicate`, "POST", { name }),
   activateRoutePlanSet: (id, previousName) => json(`/route-plan-sets/${id}/activate`, "POST", { previous_name: previousName }),
   deleteRoutePlanSet: (id) => request(`/route-plan-sets/${id}`, { method: "DELETE" }),
   getRoutePlansOverview: () => request("/visit-plans/rules/overview"),
-  getRoutePlanCustomers: (userId) => request(`/visit-plans/rules/customers${userId ? `?user_id=${userId}` : ""}`),
+  // scope: "" = the main plan, "SM B2B" = that channel's separate plan; undefined = every customer of the person
+  getRoutePlanCustomers: (userId, scope) => {
+    const qs = [userId ? `user_id=${userId}` : "", scope === undefined ? "" : `scope=${encodeURIComponent(scope)}`].filter(Boolean).join("&");
+    return request(`/visit-plans/rules/customers${qs ? `?${qs}` : ""}`);
+  },
+  getMyRoutePlans: (userId) => request(`/visit-plans/rules/plans${userId ? `?user_id=${userId}` : ""}`),
 
   listProducts: (q = "") => request(`/products${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   listAllProducts: () => request("/products/all"),

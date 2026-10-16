@@ -429,6 +429,11 @@ export const SALES_CHANNELS = ["SM YVN", "SM Davtashen", "SM Shirak", "SM B2B", 
 // text to a user it should read as a normal word, not shouting, same as
 // every other channel label. Purely a display-layer translation: the
 // stored value is untouched.
+// Title of a route plan: the person, plus the channel when it is that person's separate plan ("Artak · SM B2B").
+export function planTitle(name, scope) {
+  return scope ? `${name} · ${channelDisplayLabel(scope)}` : name;
+}
+
 export function channelDisplayLabel(channel) {
   if (channel === "POTENTIAL") return t("tier_potential");
   if (channel === "COMPETITORS") return t("brand_group_competitors");
