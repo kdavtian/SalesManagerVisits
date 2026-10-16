@@ -13874,3 +13874,7 @@ html[data-text-size="xlarge"] { font-size: 130%; }
 .activity-tab.activity-tab-icon { flex: 0 0 56px; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
 .activity-tab-icon svg, .vol-chips .map-filter-chip[data-period="custom"] svg { width: 20px; height: 20px; }
 .vol-chips .map-filter-chip[data-period="custom"] { display: inline-flex; align-items: center; justify-content: center; min-width: 48px; }
+
+/* Debt balances search (1.354.0): same width as the cards below it */
+.debt-search.activity-search-combined { margin: 10px 0 6px; }
+.debt-search input[type="search"] { width: 100%; }

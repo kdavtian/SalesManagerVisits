@@ -64,6 +64,7 @@ export async function renderDebtBalances(root, navigate) {
   let assignmentKeys = new Set();
   // "" = all, "overdue" = the oldest unpaid invoice is past its due date, "not_due" = unpaid but within the term.
   let dueFilter = "";
+  let searchQuery = "";
   // Empty string = live erp_customer_data.debt_amd snapshot (the default,
   // and the only mode before this feature). A chosen date instead computes
   // a running balance from full order/cashflow history as of that date
@@ -114,6 +115,9 @@ export async function renderDebtBalances(root, navigate) {
              </div>`
           : ""
       }
+      <div class="activity-search-combined debt-search" id="debt-search-wrap">
+        <input type="search" id="debt-search" placeholder="${t("debt_search_placeholder")}" aria-label="${t("debt_search_placeholder")}" autocomplete="off" />
+      </div>
       <div class="debt-filter-row" id="debt-due-tabs">
         ${[["", "debt_filter_all"], ["overdue", "debt_filter_overdue"], ["not_due", "debt_filter_not_due"]].map(([v, k]) => `<button type="button" class="chip ${v === "" ? "chip-active" : ""}" data-due="${v}">${t(k)}</button>`).join("")}
       </div>
@@ -181,6 +185,15 @@ export async function renderDebtBalances(root, navigate) {
       })
     );
   }
+
+  let searchTimer = null;
+  container.querySelector("#debt-search").addEventListener("input", (e) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      searchQuery = e.target.value.trim().toLowerCase();
+      render();
+    }, 150);
+  });
 
   container.querySelectorAll("#debt-due-tabs [data-due]").forEach((btn) =>
     btn.addEventListener("click", () => {
@@ -255,6 +268,14 @@ export async function renderDebtBalances(root, navigate) {
     let visible = rows;
     if (dueFilter === "overdue") visible = visible.filter((r) => Number(r.remaining_balance) > 0 && r.oldest_due_days != null && r.oldest_due_days > 0);
     else if (dueFilter === "not_due") visible = visible.filter((r) => Number(r.remaining_balance) > 0 && r.oldest_due_days != null && r.oldest_due_days <= 0);
+    if (searchQuery) {
+      // Every typed word must appear in the ID, the name, the channel or the rep (so "10123 shirak" works).
+      const words = searchQuery.split(/\s+/).filter(Boolean);
+      visible = visible.filter((r) => {
+        const hay = `${r.customer_id || ""} ${r.customer_name || ""} ${r.sales_channel || ""} ${r.assigned_manager_name || ""}`.toLowerCase();
+        return words.every((w) => hay.includes(w));
+      });
+    }
     if (canGroup && assignmentKeys.size) {
       visible = visible.filter((r) => assignmentKeys.has(`${r.sales_channel || NO_GROUP_KEY}::${r.assigned_manager_id ?? NO_GROUP_KEY}`));
     }
