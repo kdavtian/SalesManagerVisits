@@ -32,6 +32,15 @@ export const STATUS_META = {
   delivered: { key: "order_status_delivered", cls: "badge-success", iconTint: "success" },
 };
 
+// "Invoice · 45 days" / "Cash · on delivery": the terms a reviewer approves, spelled out (the small chips under the
+// customer name are easy to miss).
+export function termsLabel(order) {
+  const method = order.payment_method ? t(order.payment_method === "cash" ? "payment_method_cash" : "payment_method_invoice") : "";
+  const days = order.payment_term_days;
+  const due = days == null ? "" : Number(days) === 0 ? t("oc_due_on_delivery") : `${days} ${t("oc_days_unit")}`;
+  return escapeHtml([method, due].filter(Boolean).join(" · "));
+}
+
 // Payment-method chip: cash = yellow, invoice = blue (same everywhere).
 export function paymentMethodBadgeHtml(method) {
   if (!method) return "";
@@ -220,6 +229,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     const canApproveCredit = CREDIT_APPROVER_ROLES.has(state.user.role) && order.credit_status === "pending";
 
     overlay.querySelector(".sheet").classList.add("order-detail-sheet");
+    overlay.querySelector(".sheet").classList.remove("sheet-adding");
     overlay.querySelector(".sheet").innerHTML = `
       <div class="sheet-head-actions">
         <button type="button" class="icon-btn" data-action="print-blank" aria-label="${t("print_blank")}" title="${t("print_blank")}">${icons.printer}</button>
@@ -249,6 +259,11 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       ${
         hasDiscount
           ? `<p class="muted">${t("price_change_label")}${labelColon()}${discountAmd > 0 ? formatAmd(discountAmd) : `${discountPct}%`}</p>`
+          : ""
+      }
+      ${
+        order.payment_method || order.payment_term_days != null
+          ? `<p class="order-terms-line"><span class="muted">${t("oc_payment_due")}${labelColon()}</span> <strong>${termsLabel(order)}</strong></p>`
           : ""
       }
       ${
@@ -326,8 +341,11 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
         buttons.push({ label: t("mark_delivered_no_route"), action: "mark-delivered", cls: "btn btn-primary" });
       }
     }
-    // One tap to order the same lines again (opens Create order pre-filled at today's prices).
-    buttons.push({ label: t("reorder_btn"), action: "reorder-order", cls: buttons.some((b) => b.cls.includes("btn-primary")) ? "btn" : "btn btn-primary" });
+    // One tap to order the same lines again -- only for an order that was actually delivered. An order still on its way
+    // is never ordered twice, and the extra button only confused reps and reviewers (owner, 2026-10-16).
+    if (order.status === "delivered") {
+      buttons.push({ label: t("reorder_btn"), action: "reorder-order", cls: buttons.some((b) => b.cls.includes("btn-primary")) ? "btn" : "btn btn-primary" });
+    }
     // Print-ready delivery-acceptance act: the printer icon next to the close button (any order the viewer can open).
     if (canEditThisOrder) {
       buttons.push({ label: t("edit_order"), action: "edit-order", cls: "btn" });
@@ -337,7 +355,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     // duplicate or mistaken order.
     // A sales manager may also delete their OWN order until management confirms it (draft / submitted).
     if (state.user.role === "admin" || (state.user.role === "sales_manager" && order.user_id === state.user.id && ["draft", "submitted"].includes(order.status))) {
-      buttons.push({ label: t("delete_order"), action: "delete-order", cls: "btn btn-danger" });
+      buttons.push({ label: `${icons.trash}${t("delete_order")}`, action: "delete-order", cls: "btn btn-danger btn-has-icon" });
     }
 
     actionsEl.innerHTML = buttons
@@ -521,6 +539,11 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     let productCatalog = null;
     let catalogLoading = false;
     let addProductQuery = "";
+    // Payment terms (cash / invoice + payment due days) are editable too while the order is still waiting for review.
+    let paymentMethod = order.payment_method === "cash" ? "cash" : "invoice";
+    let dueDays = order.payment_term_days != null ? Number(order.payment_term_days) : paymentMethod === "cash" ? 0 : 30;
+    const minDue = () => (paymentMethod === "cash" ? 0 : 1);
+    const dueValid = () => Number.isInteger(dueDays) && dueDays >= minDue() && dueDays <= 365;
 
     const subtotal = () => lines.reduce((sum, l) => sum + Number(l.unit_price_amd) * Number(l.quantity), 0);
     const total = () => {
@@ -537,6 +560,19 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       <div class="edit-sheet-scroll">
       <div class="card-list" id="edit-order-lines" style="margin:12px 0;"></div>
       <button type="button" class="btn btn-block" id="edit-add-product-btn" aria-expanded="false">${t("add_product_to_order")}</button>
+      <div class="oc-terms edit-terms" id="edit-terms">
+        <div class="oc-terms-row">
+          <span class="oc-terms-label">${t("order_payment_method_label")}</span>
+          <div class="oc-seg oc-seg-wide" id="edit-method" role="group" aria-label="${t("order_payment_method_label")}">
+            <button type="button" class="${paymentMethod === "cash" ? "is-on" : ""}" data-method="cash">${t("payment_method_cash")}</button>
+            <button type="button" class="${paymentMethod === "invoice" ? "is-on" : ""}" data-method="invoice">${t("payment_method_invoice")}</button>
+          </div>
+        </div>
+        <div class="oc-terms-row">
+          <label class="oc-terms-label" for="edit-due-days">${t("oc_payment_due")}</label>
+          <span class="oc-due"><input id="edit-due-days" class="oc-field oc-field-days" inputmode="numeric" value="${dueDays}" /> <span class="muted" id="edit-due-unit"></span></span>
+        </div>
+      </div>
       <div id="edit-add-product-panel" hidden>
         <div class="edit-add-toolbar">
           <input type="search" id="edit-add-product-search" placeholder="${t("add_product_search_placeholder")}" aria-label="${t("add_product_search_placeholder")}" autocomplete="off" />
@@ -712,6 +748,9 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     addBtn.addEventListener("click", async () => {
       panelEl.hidden = !panelEl.hidden;
       sheetEl.classList.toggle("adding", !panelEl.hidden);
+      // The sheet gets a definite height while picking products (a class on the sheet itself, not only :has()), so the
+      // list always has room -- Safari collapsed it to just the header and the buttons.
+      overlay.querySelector(".sheet").classList.toggle("sheet-adding", !panelEl.hidden);
       // While picking products the order lines fold away (the list gets the
       // room); the button turns into "Done" to bring them back.
       addBtn.textContent = panelEl.hidden ? t("add_product_to_order") : t("done");
@@ -730,6 +769,32 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       }
       renderResults();
       searchEl.focus({ preventScroll: true });
+    });
+
+    // --- payment terms ---------------------------------------------------
+    const dueUnitEl = overlay.querySelector("#edit-due-unit");
+    const dueInputEl = overlay.querySelector("#edit-due-days");
+    const paintDueUnit = () => {
+      dueUnitEl.textContent = paymentMethod === "cash" && dueDays === 0 ? t("oc_due_on_delivery") : t("oc_days_unit");
+    };
+    paintDueUnit();
+    overlay.querySelectorAll("#edit-method [data-method]").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        paymentMethod = btn.dataset.method;
+        overlay.querySelectorAll("#edit-method [data-method]").forEach((b) => b.classList.toggle("is-on", b === btn));
+        // An invoice needs at least 1 day; switching to it from "0 = on delivery" proposes a normal term.
+        if (paymentMethod === "invoice" && dueDays < 1) {
+          dueDays = 30;
+          dueInputEl.value = "30";
+        }
+        paintDueUnit();
+      })
+    );
+    dueInputEl.addEventListener("input", (e) => {
+      const digits = e.target.value.replace(/\D/g, "").slice(0, 3);
+      e.target.value = digits;
+      dueDays = digits === "" ? 0 : Number(digits);
+      paintDueUnit();
     });
 
     // --- price change ----------------------------------------------------
@@ -753,6 +818,13 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
         errorEl.hidden = false;
         return;
       }
+      if (!dueValid()) {
+        errorEl.textContent = t("oc_due_invalid");
+        errorEl.hidden = false;
+        dueInputEl.focus();
+        return;
+      }
+      errorEl.hidden = true;
       const saveBtn = overlay.querySelector("#edit-order-save");
       saveBtn.disabled = true;
       saveBtn.textContent = t("saving");
@@ -767,6 +839,8 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
           })),
           discount_pct: discountType === "pct" ? discountValue : 0,
           discount_amd: discountType === "amd" ? discountValue : 0,
+          payment_method: paymentMethod,
+          payment_term_days: dueDays,
         });
         notifyOrdersChanged();
         renderView(updated);

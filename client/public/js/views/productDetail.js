@@ -80,7 +80,7 @@ export async function renderProductDetail(root, navigate, productId) {
             ? `<div class="pd-photo-actions">
                 <span class="badge badge-neutral">${t(KIND_LABEL[active.kind])}</span>
                 ${active.is_main ? "" : `<button type="button" class="btn btn-sm" id="pd-make-main">${t("set_main_photo")}</button>`}
-                <button type="button" class="btn btn-sm btn-danger" id="pd-delete-photo">${t("delete_photo")}</button>
+                <button type="button" class="btn btn-sm btn-danger btn-has-icon" id="pd-delete-photo">${icons.trash}${t("delete_photo")}</button>
               </div>`
             : ""
         }

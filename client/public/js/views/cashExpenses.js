@@ -1,6 +1,7 @@
 import { api } from "../api.js";
 import { escapeHtml, formatAmd, activateDialog, parseDateOnly, monthShort, formatDateTime } from "../util.js";
 import { t, getLang } from "../i18n.js";
+import { icons } from "../icons.js";
 import { state, seesFinancialExports } from "../state.js";
 
 // "15 Sep 2026" style, same short-date convention as sales.js's own
@@ -163,7 +164,7 @@ function openExpenseSheet(expense, onDone) {
           <button type="submit" class="btn btn-primary">${t("save")}</button>
         </div>
       </form>
-      ${expense ? `<button type="button" class="btn-link btn-link-danger" id="delete-expense-btn" style="margin-top:14px;">${t("delete_expense")}</button>` : ""}
+      ${expense ? `<button type="button" class="btn-link btn-link-danger btn-has-icon" id="delete-expense-btn" style="margin-top:14px;">${icons.trash}${t("delete_expense")}</button>` : ""}
     </div>
   `;
   document.body.appendChild(overlay);

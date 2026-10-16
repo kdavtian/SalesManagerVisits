@@ -784,9 +784,9 @@ ordersRouter.patch("/:id", async (req, res) => {
   const order = rows[0];
   if (!order) return res.status(404).json({ error: "Order not found" });
 
-  const { status, items, note, discount_pct, discount_amd } = req.body ?? {};
-  if (status === undefined && items === undefined && note === undefined && discount_pct === undefined && discount_amd === undefined) {
-    return res.status(400).json({ error: "status, items, note, discount_pct, or discount_amd is required" });
+  const { status, items, note, discount_pct, discount_amd, payment_method, payment_term_days } = req.body ?? {};
+  if (status === undefined && items === undefined && note === undefined && discount_pct === undefined && discount_amd === undefined && payment_method === undefined && payment_term_days === undefined) {
+    return res.status(400).json({ error: "status, items, note, discount_pct, discount_amd, payment_method, or payment_term_days is required" });
   }
 
   const isOwnerOrAdmin = order.user_id === req.user.id || req.user.role === "admin";
@@ -802,6 +802,30 @@ ordersRouter.patch("/:id", async (req, res) => {
   // regardless of ownership. Same ownership rule as items/discount edits.
   if (note !== undefined && !canEditSubmitted) {
     return res.status(403).json({ error: "Not allowed to edit this order" });
+  }
+
+  // Payment terms (cash / invoice, payment due days) can be corrected while the order still waits for review -- same
+  // who-and-when rule as items and discount. Same bounds as at creation: invoice 1-365 days, cash 0-365.
+  let nextPaymentMethod = order.payment_method;
+  let nextTermDays = order.payment_term_days;
+  if (payment_method !== undefined || payment_term_days !== undefined) {
+    if (!canEditSubmitted) return res.status(403).json({ error: "Not allowed to edit this order" });
+    if (order.status !== "submitted" && order.status !== "draft") {
+      return res.status(409).json({ error: "Only a draft or submitted order's payment terms can still be changed" });
+    }
+    if (payment_method !== undefined) {
+      if (payment_method !== "cash" && payment_method !== "invoice") {
+        return res.status(400).json({ error: "payment_method must be 'cash' or 'invoice'" });
+      }
+      nextPaymentMethod = payment_method;
+    }
+    if (payment_term_days !== undefined) {
+      nextTermDays = payment_term_days === null || payment_term_days === "" ? null : Number(payment_term_days);
+    }
+    const minDays = nextPaymentMethod === "invoice" ? 1 : 0;
+    if (nextTermDays !== null && (!Number.isInteger(nextTermDays) || nextTermDays < minDays || nextTermDays > 365)) {
+      return res.status(400).json({ error: `payment_term_days must be a whole number of days between ${minDays} and 365` });
+    }
   }
 
   let nextLines = null;
@@ -993,10 +1017,11 @@ ordersRouter.patch("/:id", async (req, res) => {
        SET status = $1, total_amd = $2, note = COALESCE($3, note),
            discount_pct = $4, discount_amd = $7, approval_status = $5, updated_at = now(),
            credit_status = $10, credit_exposure_amd = $11, credit_limit_snapshot_amd = $12,
+           payment_method = $13, payment_term_days = $14,
            -- the downpayment keeps its percentage when the lines (and so the total) change
            downpayment_amd = CASE WHEN downpayment_pct IS NULL THEN downpayment_amd ELSE ROUND($2::numeric * downpayment_pct / 100) END
        WHERE id = $6 AND status = $8 AND approval_status = $9 RETURNING *`,
-      [nextStatus, nextTotal, note ?? null, nextDiscountPct, nextApprovalStatus, order.id, nextDiscountAmd, order.status, order.approval_status, nextCreditStatus, nextCreditExposure, nextCreditLimit]
+      [nextStatus, nextTotal, note ?? null, nextDiscountPct, nextApprovalStatus, order.id, nextDiscountAmd, order.status, order.approval_status, nextCreditStatus, nextCreditExposure, nextCreditLimit, nextPaymentMethod, nextTermDays]
     );
     updated = updatedRows[0];
     if (!updated) {

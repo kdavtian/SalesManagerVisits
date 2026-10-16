@@ -10591,7 +10591,7 @@ form select,
 .edit-sheet-header { flex: none; margin: 0 0 8px; padding-right: 52px; }
 /* Picking products needs the room: the sheet grows and the footer shrinks to
    total + buttons (the price-change row comes back when the list closes). */
-.edit-sheet.adding { height: calc(92vh - 20px); height: calc(92dvh - 20px); }
+.edit-sheet.adding { min-height: 0; }
 .edit-sheet.adding .edit-price-change,
 .edit-sheet.adding .price-change-hint { display: none; }
 
@@ -13032,7 +13032,7 @@ form select,
   cursor: pointer;
 }
 .oc-seg button.is-on {
-  background: var(--accent);
+  background: var(--accent-fill);
   color: var(--on-accent, #fff);
 }
 .oc-terms {
@@ -13671,3 +13671,41 @@ html[data-text-size="xlarge"] { font-size: 130%; }
 #push-notifications-row .settings-row-value { grid-column: 2; grid-row: 2; max-width: none; white-space: normal; font-size: 0.78rem; }
 #push-notifications-row .toggle-switch { grid-column: 3; grid-row: 1 / span 2; }
 #push-notifications-row .settings-row-chevron { grid-column: 4; grid-row: 1 / span 2; }
+
+/* ===== Orders round (1.347.0) ===== */
+/* Delete buttons carry a bin icon everywhere, so they are told apart from every other red button at a glance. */
+.btn-has-icon, .btn-link.btn-has-icon { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.btn-has-icon svg { width: 18px; height: 18px; flex: none; }
+/* Edit order: picking products gives the sheet itself a definite height (Safari collapsed the list to nothing when
+   the height was only on the inner box), and the terms block steps aside while the product list is open. */
+.sheet.sheet-adding { height: 92vh; height: 92dvh; max-height: 95vh; max-height: 95dvh; }
+.edit-sheet.adding .edit-terms { display: none; }
+.edit-sheet.adding .edit-sheet-scroll { min-height: 40vh; }
+.edit-terms { margin: 12px 0 4px; }
+.order-terms-line { margin: 6px 0; }
+
+/* Map search panel: Customers and Addresses, each its own scrolling group. */
+.map-search-panel { display: flex; flex-direction: column; max-height: 70vh; max-height: 70dvh; overflow: hidden; }
+.map-sr-section { display: flex; flex-direction: column; min-height: 0; }
+.map-sr-section + .map-sr-section { border-top: 1px solid var(--border); }
+.map-sr-section .map-address-results-label { flex: none; padding-top: 10px; background: var(--bg-card); }
+.map-sr-list { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; max-height: 30vh; max-height: 30dvh; }
+.map-sr-section:only-child .map-sr-list { max-height: 56vh; max-height: 56dvh; }
+.map-sr-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 48px; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.map-sr-row:last-child { border-bottom: 0; }
+.map-sr-row:active { background: var(--bg-card-pressed); }
+.map-sr-main { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.map-sr-main strong { font-size: 0.92rem; overflow-wrap: anywhere; }
+.map-sr-main .muted { font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-sr-dist { flex: none; font-size: 0.8rem; font-weight: 600; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.map-sr-empty { margin: 0; padding: 12px; font-size: 0.85rem; text-align: center; }
+.map-search-row { position: relative; }
+
+/* Customer type & tier chips (typeTierSheet.js): big tap-to-toggle pills, several on at once, with a count each. */
+.ttf-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 0 6px; }
+.ttf-chips .tier-btn, .ttf-chips .category-btn { flex: 0 0 auto; flex-direction: row; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; border-radius: 999px; }
+.ttf-chips .tier-label, .ttf-chips .category-label { font-size: 0.9rem; font-weight: 600; max-width: none; text-overflow: clip; }
+.ttf-chips .tier-icon svg, .ttf-chips .category-icon svg, .ttf-chips .category-icon .category-img { width: 18px; height: 18px; }
+.ttf-count { margin-left: 2px; padding: 1px 7px; border-radius: 999px; background: rgba(127, 127, 127, 0.16); font-size: 0.75rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.category-btn.category-none.category-btn-active { background: rgba(152, 152, 157, 0.18); border-color: var(--text-dim); color: var(--text); }
+.type-tier-sheet .map-tier-filter-title { padding: 0; margin-top: 14px; }

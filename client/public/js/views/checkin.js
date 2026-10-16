@@ -442,6 +442,7 @@ export async function renderCheckin(root, navigate, customerId) {
     submitBtn.disabled = true;
     submitBtn.textContent = t("locating");
     verifyBanner.hidden = true;
+    gpsStatus.hidden = false;
     gpsStatus.className = "gps-status";
     gpsStatus.textContent = t("getting_location");
     gpsStatus.setAttribute("aria-busy", "true");
@@ -451,6 +452,9 @@ export async function renderCheckin(root, navigate, customerId) {
       const unit = getLang() === "hy" ? "մ" : "m";
       gpsStatus.textContent = `${t("location_captured")} (±${accuracy}${unit} ${t("accuracy")})`;
       gpsStatus.classList.add("gps-ok");
+      // One banner, not two: the result card below carries the accuracy, so the "location captured" line steps aside
+      // (it stays for "getting location" and for errors).
+      gpsStatus.hidden = true;
       submitBtn.disabled = false;
       submitBtn.textContent = submitLabel();
 
@@ -462,7 +466,7 @@ export async function renderCheckin(root, navigate, customerId) {
         <span class="verify-banner-icon">${withinRange ? "✓" : "!"}</span>
         <div>
           <strong>${withinRange ? t("location_verified") : t("location_mismatch_away")}</strong>
-          <span class="muted">${t("you_are")} ${formatDistance(distance)} ${t("from_customer")}</span>
+          <span class="muted">${t("you_are")} ${formatDistance(distance)} ${t("from_customer")} · ±${accuracy}${unit} ${t("accuracy")}</span>
         </div>
       `;
       // Check-in allowance: a sales manager too far from the pin cannot check in (management can). The pin

@@ -5,6 +5,7 @@
 //   renderRoutePlanSet()         - the editor (#/route-plan-sets/:id): week per rep, move customers between days, activate
 import { api } from "../api.js";
 import { t } from "../i18n.js";
+import { icons } from "../icons.js";
 import { escapeHtml, activateDialog, openInfoPopup, formatDateDMY } from "../util.js";
 import { canPlanForOthers } from "../state.js";
 import { routePlansPage } from "./routePlans.js";
@@ -284,7 +285,7 @@ export async function renderRoutePlanSet(root, navigate, id) {
         ${canManage ? `<div class="rps-actions">
           ${set.is_active ? "" : `<button type="button" class="btn btn-primary btn-block" id="rps-activate">${t("rps_activate")}</button>`}
           <div class="rps-actions-row"><button type="button" class="btn" id="rps-rename">${t("rps_rename")}</button><button type="button" class="btn" id="rps-dup">${t("rps_save_as_new")}</button></div>
-          ${set.is_active ? "" : `<button type="button" class="rps-link rps-delete" id="rps-delete">${t("delete")}</button>`}
+          ${set.is_active ? "" : `<button type="button" class="rps-link rps-delete btn-has-icon" id="rps-delete">${icons.trash}${t("delete")}</button>`}
         </div>` : ""}
         <p class="form-success" id="rps-ok" role="status" hidden></p>
       </div>

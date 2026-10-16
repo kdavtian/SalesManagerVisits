@@ -1085,7 +1085,7 @@ async function openEditSheet(customer, navigate, onDone) {
         <button type="button" class="btn-link" id="change-location-btn">${icons.pin}${t("change_location")}</button>
         ${
           isAdmin()
-            ? `<button type="button" class="btn-link btn-link-danger" id="delete-customer-btn">${icons.warning}${t("delete_customer")}</button>`
+            ? `<button type="button" class="btn-link btn-link-danger btn-has-icon" id="delete-customer-btn">${icons.trash}${t("delete_customer")}</button>`
             : ""
         }
       </div>
