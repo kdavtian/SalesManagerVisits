@@ -19,7 +19,7 @@ function formatLitersCompact(value) {
 // parseable container size ("208L") -- total shelf liters, not per-unit.
 function inventoryQtyLabel(p) {
   if (p.stock_qty == null) return t("warehouse_stock_unknown");
-  const qtyLabel = `${p.stock_qty}${t("warehouse_pcs_suffix")}`;
+  const qtyLabel = `${p.stock_qty} ${t("warehouse_pcs_suffix")}`;
   const perUnitLiters = parseLiters(p.unit);
   if (perUnitLiters == null) return qtyLabel;
   return `${qtyLabel} | ${formatLitersCompact(perUnitLiters * p.stock_qty)}`;
@@ -407,7 +407,7 @@ export async function renderWarehouse(root, navigate) {
         <span class="inventory-variant-pill">
           <span class="inventory-variant-pill-top">
             ${p.unit ? `<span class="inventory-variant-pill-size">${escapeHtml(normalizeUnitLabel(p.unit))}</span>` : ""}
-            <span class="inventory-variant-pill-qty ${zero ? "inventory-variant-pill-qty-zero" : ""}">${qtyKnown ? `${p.stock_qty}${t("warehouse_pcs_suffix")}` : t("warehouse_stock_unknown")}</span>
+            <span class="inventory-variant-pill-qty ${zero ? "inventory-variant-pill-qty-zero" : ""}">${qtyKnown ? `${p.stock_qty} ${t("warehouse_pcs_suffix")}` : t("warehouse_stock_unknown")}</span>
           </span>
           ${days}
           ${priceLineHtml}
@@ -458,7 +458,7 @@ export async function renderWarehouse(root, navigate) {
     // shows individually), liters only appended when at least one product
     // in the group has a parseable per-unit liter size.
     function groupQtyLabel(totals) {
-      const pcsLabel = `${totals.pcs}${t("warehouse_pcs_suffix")}`;
+      const pcsLabel = `${totals.pcs} ${t("warehouse_pcs_suffix")}`;
       return totals.liters > 0 ? `${pcsLabel} | ${formatLitersCompact(totals.liters)}` : pcsLabel;
     }
 

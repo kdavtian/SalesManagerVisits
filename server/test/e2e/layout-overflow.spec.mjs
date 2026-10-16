@@ -29,4 +29,20 @@ test.describe("Home layout at phone width", () => {
     );
     expect(spills).toEqual([]);
   });
+
+  // UI/UX audit 2026-10-16: on 360 px Androids the Customers title was cut to "Հաճախոր…" and the 4th stat pill scrolled off.
+  test("Customers header title is not clipped and the four stat pills fit at 360 px", async ({ page, fixtures }) => {
+    await page.setViewportSize({ width: 360, height: 740 });
+    const user = await fixtures.createUser("admin", { name: "Layout Admin" });
+    await loginViaUi(page, user.email);
+    await page.goto("/#/customers");
+    await expect(page.locator("#customer-stats-bar .stat-pill")).toHaveCount(4, { timeout: 15000 });
+    const m = await page.evaluate(() => {
+      const h1 = document.querySelector(".list-view .list-header h1");
+      const pills = [...document.querySelectorAll("#customer-stats-bar .stat-pill")].map((p) => p.getBoundingClientRect());
+      return { clipped: h1.scrollWidth - h1.clientWidth, lastRight: Math.max(...pills.map((r) => r.right)), vw: window.innerWidth };
+    });
+    expect(m.clipped).toBeLessThanOrEqual(1);
+    expect(m.lastRight).toBeLessThanOrEqual(m.vw);
+  });
 });
