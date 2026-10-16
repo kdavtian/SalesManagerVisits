@@ -835,6 +835,34 @@ export function parseUserAgent(ua) {
   return [os, browser].filter(Boolean).join(" · ");
 }
 
+// Home tiles are only ~107px wide at 390px. A long Armenian word ("Հաշվապահություն") at the normal 13px spills past the
+// tile border, so only the tiles whose longest word does not fit get a slightly smaller label (never below 10.5px);
+// short labels keep the normal, more readable size. Call after the grid is in the DOM.
+export function fitTileLabels(root) {
+  if (!root) return;
+  root.querySelectorAll(".quick-action").forEach((tile) => {
+    const label = [...tile.children].find((c) => !c.classList.contains("quick-action-icon"));
+    if (!label) return;
+    label.style.fontSize = "";
+    const room = tile.clientWidth - 6;
+    if (room <= 0) return;
+    const words = (label.textContent || "").split(/\s+/).filter(Boolean);
+    const probe = document.createElement("span");
+    probe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;pointer-events:none";
+    label.appendChild(probe);
+    let widest = 0;
+    for (const word of words) {
+      probe.textContent = word;
+      widest = Math.max(widest, probe.offsetWidth);
+    }
+    label.removeChild(probe);
+    if (widest > room) {
+      const base = parseFloat(getComputedStyle(label).fontSize) || 13;
+      label.style.fontSize = `${Math.max(10.5, (base * room) / widest).toFixed(1)}px`;
+    }
+  });
+}
+
 // 200 minutes -> "3h 20m" (hours and minutes, never a bare minute count)
 export function formatDuration(totalMinutes) {
   const m = Math.max(0, Math.round(Number(totalMinutes) || 0));

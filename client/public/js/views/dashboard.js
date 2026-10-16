@@ -1,6 +1,6 @@
 import { renderVisitFirst } from "../visitFirstCard.js";
 import { api } from "../api.js";
-import { escapeHtml, formatDistance, formatRelative, formatAmd, getCurrentPosition, haversineMeters, categoryLabel, formatDayMonth, labelColon } from "../util.js";
+import { fitTileLabels, escapeHtml, formatDistance, formatRelative, formatAmd, getCurrentPosition, haversineMeters, categoryLabel, formatDayMonth, labelColon } from "../util.js";
 import { state, canViewTeamLocations, seesAllActivity } from "../state.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
@@ -418,6 +418,7 @@ export async function renderDashboard(root, navigate) {
     </div>
   `;
 
+  fitTileLabels(container.querySelector(".quick-actions-grid"));
   container.querySelector("#view-all-activity")?.addEventListener("click", () => navigate("#/activity"));
   container.querySelector("#company-dashboard-preview-card")?.addEventListener("click", () => navigate("#/company-dashboard"));
   // Every tile is optional now (an admin can hide any of them for any role),

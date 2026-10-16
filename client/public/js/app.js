@@ -1548,7 +1548,14 @@ async function init() {
   // on the others). The recurring 60s poll after that uses the combined
   // /badges endpoint instead -- one request updating all the counts,
   // rather than separate fetches landing back to back every minute.
-  setInterval(refreshAllBadgesFromServer, 60000);
+  // Not while the app is in the background (no one sees the numbers, and it costs battery and data); the badges are
+  // refreshed the moment the app comes back to the front.
+  setInterval(() => {
+    if (document.visibilityState !== "hidden") refreshAllBadgesFromServer();
+  }, 60000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") refreshAllBadgesFromServer();
+  });
 }
 
 async function refreshAllBadgesFromServer() {
