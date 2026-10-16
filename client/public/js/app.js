@@ -7,18 +7,56 @@ import { icons } from "./icons.js";
 // it a tap shows no pressed state at all. A passive no-op listener on the document is enough.
 document.addEventListener("touchstart", () => {}, { passive: true });
 
-// Number fields (amounts, days, percentages, quantities) select their whole content when tapped, so the user types
-// the new number straight away without deleting the old one first. A second tap places the cursor as usual.
+// Number fields (amounts, days, percentages, quantities): tapping one EMPTIES it and keeps the old number visible as a
+// faint "ghost" (the placeholder), so the person types the new number straight away and still sees what it was.
+// Nothing is lost by accident: if they type nothing, the old number comes back when they leave the field -- and
+// BEFORE anything else reacts to a tap or Enter elsewhere (iOS does not blur a field when a button is tapped, so the
+// value is restored on the pointer-down, not only on blur). No `input` event is fired for the clearing, so totals
+// and previews keep showing the old number until something is really typed.
+let ghosted = null; // { el, value, placeholder, touched }
+function restoreGhost() {
+  if (!ghosted) return;
+  const { el, value, placeholder, touched } = ghosted;
+  ghosted = null;
+  el.classList.remove("ghost-active");
+  if (placeholder === null) el.removeAttribute("placeholder");
+  else el.setAttribute("placeholder", placeholder);
+  if (!touched && el.value === "") el.value = value;
+}
+const isGhostField = (el) =>
+  el instanceof HTMLInputElement &&
+  !el.readOnly &&
+  !el.disabled &&
+  (el.classList.contains("amd-input") || el.classList.contains("oc-field") || el.type === "number" || el.inputMode === "numeric" || el.inputMode === "decimal");
 document.addEventListener("focusin", (e) => {
   const el = e.target;
-  if (!(el instanceof HTMLInputElement) || el.readOnly || el.disabled) return;
-  if (!(el.classList.contains("amd-input") || el.classList.contains("oc-field") || el.inputMode === "numeric" || el.inputMode === "decimal")) return;
-  // after the browser has placed its caret (iOS ignores select() inside the focus event itself)
-  setTimeout(() => {
-    // type="number" fields have no selection range (setSelectionRange throws on them): select() covers both.
-    if (document.activeElement === el) el.select();
-  }, 0);
+  if (ghosted && ghosted.el !== el) restoreGhost();
+  if (!isGhostField(el) || el.value === "" || ghosted?.el === el) return;
+  ghosted = { el, value: el.value, placeholder: el.getAttribute("placeholder"), touched: false };
+  el.setAttribute("placeholder", el.value);
+  el.classList.add("ghost-active");
+  el.value = "";
 });
+document.addEventListener("focusout", (e) => {
+  if (ghosted?.el === e.target) restoreGhost();
+});
+document.addEventListener("input", (e) => {
+  if (ghosted?.el === e.target) ghosted.touched = true;
+});
+document.addEventListener(
+  "pointerdown",
+  (e) => {
+    if (ghosted && e.target !== ghosted.el) restoreGhost();
+  },
+  true
+);
+document.addEventListener(
+  "keydown",
+  (e) => {
+    if (ghosted && e.key === "Enter") restoreGhost();
+  },
+  true
+);
 // Every view module below is loaded on demand (dynamic import()) from
 // render()'s route dispatch instead of statically here -- on boot, only the
 // screen the user actually lands on needs to be fetched/parsed/evaluated,

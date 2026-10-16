@@ -60,8 +60,9 @@ test.describe("Phone typing mask", () => {
     });
     expect(result.input).toBe(true);
     const el = page.locator("#zz-amd-test");
-    await el.evaluate((i) => { i.value = "57,000"; i.focus(); });
-    await page.waitForTimeout(100); // the select-everything-on-tap handler runs after focus
+    await el.click();
+    await page.keyboard.type("57000");
+    expect(await el.inputValue()).toBe("57,000");
     await el.evaluate((i) => i.setSelectionRange(2, 2));
     await page.keyboard.type("6");
     expect(await el.evaluate((i) => [i.value, i.selectionStart])).toEqual(["576,000", 3]);
