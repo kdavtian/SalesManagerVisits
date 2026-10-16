@@ -49,7 +49,7 @@ export async function usualEstimateAmd(items, tier) {
 }
 
 // Compact row on the customer card: title + count/value, the rhythm note behind "!", and the one-tap button.
-// Hidden entirely when the customer has no usual basket.
+// Hidden entirely when the customer has no usual basket. Shows at once; the value estimate joins it later.
 export async function mountUsualSlot(slot, customer, navigate) {
   if (!slot) return;
   const profile = await loadReorderProfile(customer.id);
@@ -57,7 +57,6 @@ export async function mountUsualSlot(slot, customer, navigate) {
     slot.innerHTML = "";
     return;
   }
-  const amount = await usualEstimateAmd(profile.items, customer.customer_tier);
   const note = reorderRhythmText(profile.cadence);
   const due = profile.cadence.state === "due" || profile.cadence.state === "late";
   slot.innerHTML = `
@@ -66,10 +65,16 @@ export async function mountUsualSlot(slot, customer, navigate) {
         <div class="usual-order-title"><strong>${t("usual_order_title")}</strong>${
           note ? `<button type="button" class="settings-hint-icon" data-usual-info aria-label="${t("more_info")}">!</button>` : ""
         }</div>
-        <div class="muted usual-order-sub">${due ? `<span class="badge ${profile.cadence.state === "late" ? "badge-warning" : "badge-info"}">${t("reorder_chip")}</span> ` : ""}${profile.items.length} ${t("usual_order_items")}${amount ? ` · ~${formatAmd(amount)}` : ""}</div>
+        <div class="muted usual-order-sub">${due ? `<span class="badge ${profile.cadence.state === "late" ? "badge-warning" : "badge-info"}">${t("reorder_chip")}</span> ` : ""}<span data-usual-count>${profile.items.length} ${t("usual_order_items")}</span></div>
       </div>
       <button type="button" class="btn btn-primary" data-usual-order>${t("usual_order_btn_short")}</button>
     </div>`;
   slot.querySelector("[data-usual-order]").addEventListener("click", () => navigate(usualOrderHash(customer.id)));
+  // The strip is up as soon as the basket is known; the "~amount" (needs the product catalog, one more request) is
+  // added to the same line when it arrives -- it never holds the strip back.
+  usualEstimateAmd(profile.items, customer.customer_tier).then((amount) => {
+    const countEl = slot.querySelector("[data-usual-count]");
+    if (amount && countEl?.isConnected) countEl.textContent = `${profile.items.length} ${t("usual_order_items")} · ~${formatAmd(amount)}`;
+  });
   slot.querySelector("[data-usual-info]")?.addEventListener("click", () => openInfoPopup(`<p>${escapeHtml(note)}</p>`));
 }
