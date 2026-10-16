@@ -142,8 +142,10 @@ async function nextOrderCode(client) {
   // if the app container and the DB ever disagree on timezone, those two
   // clocks can land on different calendar days near midnight, producing a
   // code whose date doesn't match the counter it was actually assigned from.
+  // The day is the YEREVAN calendar day (the DB session runs in UTC: with CURRENT_DATE an order placed between 00:00 and
+  // 04:00 Yerevan time got yesterday's date in its code).
   const { rows } = await client.query(
-    `INSERT INTO daily_order_seq (day, seq) VALUES (CURRENT_DATE, 1)
+    `INSERT INTO daily_order_seq (day, seq) VALUES ((now() AT TIME ZONE 'Asia/Yerevan')::date, 1)
      ON CONFLICT (day) DO UPDATE SET seq = daily_order_seq.seq + 1
      RETURNING seq, day`
   );

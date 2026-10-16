@@ -116,7 +116,7 @@ export function startVaghinakWatch() {
   refreshVaghinak();
   if (watching) return;
   watching = true;
-  setInterval(refreshVaghinak, 60000);
+  setInterval(() => document.visibilityState !== "hidden" && refreshVaghinak(), 60000);
   document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && refreshVaghinak());
   window.addEventListener("vaghinak-changed", refreshVaghinak);
 }

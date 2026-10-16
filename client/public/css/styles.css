@@ -483,11 +483,17 @@ a {
   flex-direction: row;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .topbar-user {
   color: var(--text-dim);
   font-size: 0.88rem;
+  /* A long or hyphenated name (or role label) must wrap inside this width instead of pushing the bell and menu
+     buttons off the right edge and making the whole page scroll sideways (found by the 2026-10-16 role crawl). */
+  min-width: 0;
+  max-width: 42vw;
+  overflow-wrap: anywhere;
 }
 
 .topbar-menu-btn {
@@ -4578,15 +4584,22 @@ label.checkbox-row input[type="checkbox"] {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 14px 6px;
+  padding: 14px 3px;
   font-size: var(--fs-stat-label);
   font-weight: 600;
   color: var(--text);
   cursor: pointer;
   text-align: center;
   line-height: 1.2;
+  /* a long Armenian label ("Հաշվապահություն") must never spill over the tile's border */
+  min-width: 0;
 }
-
+.quick-action > span:not(.quick-action-icon) {
+  min-width: 0;
+  max-width: calc(100% + 4px);
+  margin-inline: -2px;
+  overflow-wrap: break-word;
+}
 .quick-action-icon {
   position: relative;
   width: 36px;
