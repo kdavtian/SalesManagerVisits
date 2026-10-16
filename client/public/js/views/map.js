@@ -3308,7 +3308,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     document.body.appendChild(overlay);
     activateDialog(overlay);
     activateTierSelector(overlay);
-    activateCategorySelector(overlay);
+    activateCategorySelector(overlay, () => refreshNameSuggestion());
 
     // Keep the dropped pin visible above the sheet -- measured against the
     // sheet's actual rendered height (it varies with content/keyboard),
@@ -3354,27 +3354,41 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     const regionSelect = overlay.querySelector("#new-customer-region");
     const subregionWrap = overlay.querySelector("#new-customer-subregion-wrap");
 
-    // Suggest a default name of "{subregion} / Yuxman ket" once a subregion
-    // is known -- only when the rep hasn't already typed their own name, so
-    // this never clobbers manual entry (same "fill, don't lock" pattern as
-    // address/region/subregion/channel/manager below). Customer names are
-    // always Latin script: inside Yerevan, subregionField.value is already
-    // English (matched against the fixed YEREVAN_DISTRICTS list -- see
-    // matchSubregion in util.js). Outside Yerevan there's no fixed list, so
-    // that same field starts pre-filled with the geocoder's own raw guess,
-    // which is in Armenian (accept-language=hy) -- using it here would leak
-    // Armenian text into the name. The selected region code itself is
-    // always English (REGION_LIST), and for a non-Yerevan customer the
-    // "subregion" is usually just that region's own city anyway (per
-    // matchSubregion's comment), so it stands in as the English default.
+    // Suggest a default name "{subregion} / {type word}{number}" -- e.g. "Ajapnyak / Yuxman ket1", "Ajapnyak /
+    // Avtopahestamaser2" -- once a subregion is known. The number is the next free one among the customers already
+    // named that way (server: GET /customers/name-suggestion), so same-type customers of one subregion can be told
+    // apart. Only a name the rep has not typed themselves is (re)filled: empty, or still equal to our last
+    // suggestion (so changing the type or the subregion updates it); manual entry is never clobbered (same "fill,
+    // don't lock" pattern as address/region/subregion/channel/manager below). Customer names are always Latin
+    // script: inside Yerevan, subregionField.value is already English (matched against the fixed YEREVAN_DISTRICTS
+    // list -- see matchSubregion in util.js). Outside Yerevan there's no fixed list, so that same field starts
+    // pre-filled with the geocoder's own raw guess, which is in Armenian (accept-language=hy) -- using it here would
+    // leak Armenian text into the name. The selected region code itself is always English (REGION_LIST), and for a
+    // non-Yerevan customer the "subregion" is usually just that region's own city anyway (per matchSubregion's
+    // comment), so it stands in as the English default.
+    let lastSuggestedName = "";
+    let nameSeq = 0;
     function refreshNameSuggestion() {
-      if (nameInput.value) return;
+      if (nameInput.value && nameInput.value !== lastSuggestedName) return;
       const region = regionSelect.value;
       if (!region) return;
       const location =
         region === "Yerevan" ? overlay.querySelector("#new-customer-subregion")?.value || "" : region;
       if (!location) return;
-      nameInput.value = `${location} / Yuxman ket`;
+      const category = overlay.querySelector('input[name="category"]')?.value;
+      const word = CATEGORY_LIST.find((c) => c.value === category)?.nameWord || CATEGORY_LIST[0].nameWord;
+      const base = `${location} / ${word}`;
+      const mine = ++nameSeq;
+      const apply = (name) => {
+        // a newer request, or the rep typing in the meantime, wins
+        if (mine !== nameSeq || (nameInput.value && nameInput.value !== lastSuggestedName)) return;
+        nameInput.value = name;
+        lastSuggestedName = name;
+      };
+      api
+        .suggestCustomerNameNumber(base)
+        .then((r) => apply(`${base}${r?.next ?? ""}`))
+        .catch(() => apply(base));
     }
 
     function renderSubregionField(region, guess) {

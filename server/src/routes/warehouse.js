@@ -13,6 +13,7 @@ import { notifyUser } from "../notifications.js";
 import { STOCK_ISSUE_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES } from "../notificationPreferences.js";
 import { computeStockForecast, computeReorderSuggestion } from "../stockForecast.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
+import { displayNetCost } from "../discountPolicy.js";
 
 export const warehouseRouter = Router();
 warehouseRouter.use(requireAuth);
@@ -178,6 +179,8 @@ warehouseRouter.get("/inventory", async (req, res) => {
     });
     if (bucketMatches && !bucketMatches(forecast.status)) continue;
     const { qty_30d, qty_90d, last_sale_date, ...rest } = row;
+    // Net cost per pack at the wholesale price (the workbook's own number is off for packs over 1 L): discountPolicy.js
+    if (rest.net_cost_amd != null) rest.net_cost_amd = Math.round(displayNetCost({ ...rest, unit_price_amd: rest.bronze_price_amd }));
     annotated.push({
       ...rest,
       stock_status: forecast.status,

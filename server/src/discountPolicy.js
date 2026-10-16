@@ -14,6 +14,8 @@
 // AB1, AD1) but per pack: landing + 4 % x price + 20 % VAT on (price - landing) + 18 % profit tax
 // on the rest + 790 AMD fixed cost per litre. Where landing cost or pack size is unknown the flat
 // workbook net cost is used. Keep the constants in step with the workbook.
+import { netCost, litersOfUnit } from "../../client/public/js/costModel.js";
+
 export const AUTO_APPROVE_PCT = 3;
 const UNLIMITED_APPROVER_ROLES = ["ceo", "admin"];
 
@@ -23,21 +25,22 @@ export function effectiveDiscountPct(subtotal, discountPct, discountAmd) {
   return Number(discountPct) || 0;
 }
 
-const MANAGER_PCT = 0.04; // Products!Z1
-const PROFIT_TAX_PCT = 0.18; // Products!AA1
-const VAT_ON_MARGIN_PCT = 0.2; // Products!AB1
-const FIXED_COST_PER_LITER_AMD = 790; // Products!AD1
-
-// product: { net_cost_amd, landing_cost_amd, unit } (unit like "4L"); price = selling price per pack.
+// product: { net_cost_amd, landing_cost_amd, unit } (unit like "4L"); price = selling price per pack. The model itself
+// (rates, formula) lives in client/public/js/costModel.js, shared with the Products-page calculator.
 export function netCostAtPrice({ net_cost_amd, landing_cost_amd, unit }, price) {
   const flat = Number(net_cost_amd) || 0;
   const landing = Number(landing_cost_amd) || 0;
-  const liters = parseFloat(String(unit ?? ""));
+  const liters = litersOfUnit(unit);
   const p = Number(price) || 0;
   if (!(landing > 0) || !(liters > 0) || !(p > 0)) return flat;
-  const margin = Math.max(0, p - landing);
-  const vat = VAT_ON_MARGIN_PCT * margin;
-  return landing + MANAGER_PCT * p + vat + PROFIT_TAX_PCT * (margin - vat) + FIXED_COST_PER_LITER_AMD * liters;
+  return netCost({ landing, price: p, liters }).net;
+}
+
+// The net cost SHOWN on the Products page, warehouse and price-list PDF: per pack at the product's default wholesale
+// price (silver, else bronze, else the unit price). The workbook's own number is kept as `net_cost_workbook_amd`.
+export function displayNetCost(row) {
+  const basis = Number(row.silver_price_amd) || Number(row.bronze_price_amd) || Number(row.unit_price_amd) || 0;
+  return netCostAtPrice(row, basis);
 }
 
 // lines: [{ product_id, unit_price_amd, quantity }], total = subtotal after discount.

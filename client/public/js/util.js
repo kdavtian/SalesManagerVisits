@@ -440,11 +440,12 @@ export function channelDisplayLabel(channel) {
   return channel;
 }
 
+// `nameWord` = the Latin word used in the suggested name of a new customer ("Ajapnyak / Yuxman ket1").
 export const CATEGORY_LIST = [
-  { value: "Յուղման կետ", labelKey: "category_oil_point", icon: CATEGORY_ICON.oilPoint, cls: "category-oil-point" },
-  { value: "Խանութ", labelKey: "category_shop", icon: CATEGORY_ICON.shop, cls: "category-shop" },
-  { value: "Ավտոսերվիս", labelKey: "category_workshop", icon: CATEGORY_ICON.workshop, cls: "category-workshop" },
-  { value: "Այլ", labelKey: "category_other", icon: CATEGORY_ICON.other, cls: "category-other" },
+  { value: "Յուղման կետ", labelKey: "category_oil_point", icon: CATEGORY_ICON.oilPoint, cls: "category-oil-point", nameWord: "Yuxman ket" },
+  { value: "Խանութ", labelKey: "category_shop", icon: CATEGORY_ICON.shop, cls: "category-shop", nameWord: "Avtopahestamaser" },
+  { value: "Ավտոսերվիս", labelKey: "category_workshop", icon: CATEGORY_ICON.workshop, cls: "category-workshop", nameWord: "Autoservice" },
+  { value: "Այլ", labelKey: "category_other", icon: CATEGORY_ICON.other, cls: "category-other", nameWord: "Other" },
 ];
 
 // Kept for anything that still needs the raw list of values (e.g. filters

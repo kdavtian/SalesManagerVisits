@@ -6,6 +6,7 @@ import multer from "multer";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireProductManager } from "../middleware/auth.js";
 import { seesProductCosts } from "../roles.js";
+import { displayNetCost } from "../discountPolicy.js";
 import { getEffectiveProductPricing } from "../pricingService.js";
 import { photoUpload, uploadDirPath } from "../upload.js";
 import { matchesDeclaredImageType } from "../utils/imageSniff.js";
@@ -30,6 +31,11 @@ function redactProduct(row, role) {
     delete row.gold_price_amd;
     delete row.landing_cost_amd;
     delete row.net_cost_amd;
+  } else if (row.net_cost_amd != null) {
+    // The workbook's net cost (2.1.0) is wrong for packs over 1 L: show it per pack at the wholesale price instead
+    // (discountPolicy.js, costModel.js) and keep the workbook value next to it.
+    row.net_cost_workbook_amd = Number(row.net_cost_amd);
+    row.net_cost_amd = Math.round(displayNetCost(row));
   }
   return row;
 }

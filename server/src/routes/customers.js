@@ -16,6 +16,7 @@ import { normalizePhoneForStorage } from "../phoneFormat.js";
 import { lookupCompanyByTin, isValidTin } from "../registryLookup.js";
 import { computeVisitDue, ruleWeekdaysFor } from "../utils/visitDue.js";
 import { repVisitSql } from "../visitCount.js";
+import { nextNameNumber } from "../customerNameSuggest.js";
 
 export const customersRouter = Router();
 
@@ -523,6 +524,16 @@ customersRouter.get("/tin-lookup", async (req, res) => {
   const data = await lookupCompanyByTin(tin);
   if (data.found) tinLookupCache.set(tin, { at: Date.now(), data });
   res.json(data);
+});
+
+// Next free running number for a suggested new-customer name ("Ajapnyak / Yuxman ket" -> 3). Counts every customer, not
+// only the ones the rep can see, so two reps do not both get "1". Registered before "/:id".
+customersRouter.get("/name-suggestion", async (req, res) => {
+  const base = String(req.query.base ?? "").trim().slice(0, 120);
+  if (!base) return res.status(400).json({ error: "base is required" });
+  const like = `${base.replace(/[\\%_]/g, "\\$&")}%`;
+  const { rows } = await pool.query("SELECT name FROM customers WHERE name ILIKE $1", [like]);
+  res.json({ next: nextNameNumber(base, rows.map((r) => r.name)) });
 });
 
 // Signed accounting documents (from Lily) of all this customer's orders.

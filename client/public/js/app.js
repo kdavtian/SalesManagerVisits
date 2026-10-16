@@ -15,7 +15,8 @@ document.addEventListener("focusin", (e) => {
   if (!(el.classList.contains("amd-input") || el.classList.contains("oc-field") || el.inputMode === "numeric" || el.inputMode === "decimal")) return;
   // after the browser has placed its caret (iOS ignores select() inside the focus event itself)
   setTimeout(() => {
-    if (document.activeElement === el) el.setSelectionRange(0, el.value.length);
+    // type="number" fields have no selection range (setSelectionRange throws on them): select() covers both.
+    if (document.activeElement === el) el.select();
   }, 0);
 });
 // Every view module below is loaded on demand (dynamic import()) from

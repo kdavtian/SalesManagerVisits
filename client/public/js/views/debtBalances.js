@@ -5,7 +5,8 @@
 // accountant additionally get a Flat/By-manager toggle and a manager
 // filter, grouping the same payload client-side.
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, syncNote, openInfoPopup, parseDateOnly, monthShort, formatDayMonth, labelColon } from "../util.js";
+import { escapeHtml, formatAmd, syncNote, openInfoPopup, parseDateOnly, monthShort, formatDayMonth, labelColon, channelDisplayLabel } from "../util.js";
+import { buildDirectionManagerTree, openTriStateTreeSheet, NO_GROUP_KEY } from "../regionTree.js";
 import { state } from "../state.js";
 import { t, getLang } from "../i18n.js";
 import { loadWithCache } from "../listCache.js";
@@ -59,7 +60,9 @@ function formatAsOfCaption(dateOnly) {
 export async function renderDebtBalances(root, navigate) {
   const canGroup = state.user.role !== "sales_manager";
   let mode = "flat";
-  let managerFilter = "";
+  // Set of "channel::managerId" keys (regionTree.js buildDirectionManagerTree leaf ids): sales channels with their reps inside,
+  // the same filter as the Customers page. Empty = no filter.
+  let assignmentKeys = new Set();
   // "" = all, "overdue" = the oldest unpaid invoice is past its due date, "not_due" = unpaid but within the term.
   let dueFilter = "";
   // Empty string = live erp_customer_data.debt_amd snapshot (the default,
@@ -72,13 +75,14 @@ export async function renderDebtBalances(root, navigate) {
 
   root.innerHTML = `
     <div class="detail-view">
-      <div class="detail-header">
+      <div class="detail-header debt-header">
         <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
         <div class="detail-header-title"><div class="sales-heading-with-hint"><h1>${t("debt_balances_title")}</h1><button type="button" class="settings-hint-icon" id="debt-sync-hint-btn" aria-label="${t("more_info")}" hidden>!</button></div></div>
         <div class="debt-as-of-filter-wrap" id="debt-as-of-filter-wrap">
           <button type="button" class="debt-as-of-filter-btn" tabindex="-1" aria-hidden="true">
+            ${icons.calendar}
             <span class="debt-as-of-filter-value" id="debt-as-of-value">${t("debt_balances_as_of_live")}</span>
           </button>
           <input type="date" class="debt-as-of-picker-input" id="debt-as-of-input" value="" max="${formatDateInput(new Date())}" aria-label="${t("debt_balances_as_of_date")}" />
@@ -102,18 +106,12 @@ export async function renderDebtBalances(root, navigate) {
       </div>
       ${
         canGroup
-          ? `<div class="debt-filter-row">
+          ? `<div class="debt-filter-row debt-filter-row-split">
                <div class="segmented" id="debt-mode-tabs">
                  <button type="button" class="chip chip-active" data-mode="flat">${t("debt_balances_flat")}</button>
                  <button type="button" class="chip" data-mode="by-manager">${t("debt_balances_by_manager")}</button>
                </div>
-               <div class="filter-dropdown-wrap debt-manager-filter-wrap" id="debt-manager-filter-wrap" hidden>
-                 <button type="button" class="filter-dropdown-btn" id="debt-manager-filter-btn" aria-haspopup="menu" aria-expanded="false">
-                   <span id="debt-manager-filter-label">${t("all_managers")}</span>
-                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-                 </button>
-                 <div class="filter-dropdown-menu" id="debt-manager-filter-menu" role="menu" hidden></div>
-               </div>
+               <span id="debt-assign-filter-slot"></span>
              </div>`
           : ""
       }
@@ -142,11 +140,13 @@ export async function renderDebtBalances(root, navigate) {
   const asOfInput = container.querySelector("#debt-as-of-input");
   const asOfValueEl = container.querySelector("#debt-as-of-value");
   const asOfClearBtn = container.querySelector("#debt-as-of-clear");
+  const asOfWrapEl = container.querySelector("#debt-as-of-filter-wrap");
 
   asOfInput.addEventListener("change", () => {
     asOfDate = asOfInput.value || "";
     asOfValueEl.textContent = asOfDate ? formatAsOfCaption(asOfDate) : t("debt_balances_as_of_live");
     asOfClearBtn.hidden = !asOfDate;
+    asOfWrapEl.classList.toggle("has-date", Boolean(asOfDate));
     load();
   });
   asOfClearBtn.addEventListener("click", (e) => {
@@ -155,34 +155,32 @@ export async function renderDebtBalances(root, navigate) {
     asOfInput.value = "";
     asOfValueEl.textContent = t("debt_balances_as_of_live");
     asOfClearBtn.hidden = true;
+    asOfWrapEl.classList.remove("has-date");
     load();
   });
 
-  let managerOptions = [];
-
-  function renderManagerMenu() {
-    const menu = container.querySelector("#debt-manager-filter-menu");
-    if (!menu) return;
-    menu.innerHTML = `
-      <button type="button" role="menuitemradio" aria-checked="${!managerFilter}" class="${!managerFilter ? "filter-dropdown-selected" : ""}" data-value="">${t("all_managers")}</button>
-      ${managerOptions
-        .map(
-          ([id, name]) =>
-            `<button type="button" role="menuitemradio" aria-checked="${managerFilter === id}" class="${managerFilter === id ? "filter-dropdown-selected" : ""}" data-value="${id}">${escapeHtml(name || "")}</button>`
-        )
-        .join("")}
-    `;
-    menu.querySelectorAll("button").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        managerFilter = btn.dataset.value;
-        const label = container.querySelector("#debt-manager-filter-label");
-        if (label) label.textContent = btn.textContent;
-        menu.hidden = true;
-        container.querySelector("#debt-manager-filter-btn")?.setAttribute("aria-expanded", "false");
-        render();
-      });
-    });
+  // Channel -> rep filter button (management only: a sales_manager's list is already just their own book).
+  function renderAssignFilter() {
+    const slot = container.querySelector("#debt-assign-filter-slot");
+    if (!slot) return;
+    const count = assignmentKeys.size;
+    const label = t("filter_direction_manager_title");
+    slot.innerHTML = `<button type="button" class="filter-icon-btn ${count ? "filter-icon-btn-active" : ""}" id="debt-assign-filter-btn" aria-label="${escapeHtml(count > 1 ? `${label} (${count})` : label)}" title="${escapeHtml(label)}">
+      ${icons.person}
+      ${count > 1 ? `<span class="filter-icon-count" aria-hidden="true">${count}</span>` : count ? `<span class="filter-icon-dot" aria-hidden="true"></span>` : ""}
+    </button>`;
+    slot.querySelector("button").addEventListener("click", () =>
+      openTriStateTreeSheet(label, {
+        tree: buildDirectionManagerTree(rows, { channelLabel: channelDisplayLabel, noDirectionLabel: t("no_direction"), unassignedLabel: t("unassigned") }),
+        initialSelectedIds: assignmentKeys,
+        countUnitLabel: t("perf_dq_customers_unit"),
+        onApply: (selectedIds) => {
+          assignmentKeys = selectedIds;
+          renderAssignFilter();
+          render();
+        },
+      })
+    );
   }
 
   container.querySelectorAll("#debt-due-tabs [data-due]").forEach((btn) =>
@@ -195,60 +193,46 @@ export async function renderDebtBalances(root, navigate) {
 
   if (canGroup) {
     const tabsEl = container.querySelector("#debt-mode-tabs");
-    const filterWrap = container.querySelector("#debt-manager-filter-wrap");
     tabsEl.querySelectorAll("[data-mode]").forEach((btn) => {
       btn.addEventListener("click", () => {
         mode = btn.dataset.mode;
         tabsEl.querySelectorAll("[data-mode]").forEach((b) => b.classList.toggle("chip-active", b.dataset.mode === mode));
-        filterWrap.hidden = mode !== "by-manager";
         render();
       });
     });
-    const managerBtn = container.querySelector("#debt-manager-filter-btn");
-    const managerMenu = container.querySelector("#debt-manager-filter-menu");
-    managerBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      managerMenu.hidden = !managerMenu.hidden;
-      managerBtn.setAttribute("aria-expanded", String(!managerMenu.hidden));
-    });
-    container.addEventListener("click", () => {
-      if (!managerMenu.hidden) {
-        managerMenu.hidden = true;
-        managerBtn.setAttribute("aria-expanded", "false");
-      }
-    });
   }
 
-  // Three rows, in the order the balance is actually read: identify the
-  // account and what it owes (ID + assigned manager left / amount right),
-  // then whose it is, then the two dates that explain the balance -- when
-  // they last paid and when a rep last stood in front of them. The manager
-  // name only belongs on this first row in flat mode -- by-manager mode
-  // already says whose customer it is via the group heading above, so
-  // repeating it on every card would be redundant.
+  // Card: ID + amount, the full customer name (wraps, never cut) + due chip, who owns it (channel / rep), then the facts as
+  // label-over-value cells in two fixed columns -- a long Armenian label can never push a date onto a second line.
+  const cell = (label, valueHtml, cls = "") => `<div class="debt-cell ${cls}"><span class="debt-cell-label">${label}</span><span class="debt-cell-value">${valueHtml}</span></div>`;
   function rowHtml(r) {
-    const managerLabel = canGroup && mode === "flat" ? escapeHtml(r.assigned_manager_name || t("unassigned")) : "";
+    const owner = canGroup
+      ? [mode === "flat" ? escapeHtml(r.assigned_manager_name || t("unassigned")) : "", r.sales_channel ? escapeHtml(channelDisplayLabel(r.sales_channel)) : ""].filter(Boolean).join(" · ")
+      : "";
+    const hasOverdue = Number(r.overdue_amd) > 0;
+    const hasUnrecorded = Number(r.unrecorded_amd) > 0;
     return `
       <button type="button" class="card debt-balance-card ${Number(r.remaining_balance) > 0 && r.oldest_due_days != null ? (r.oldest_due_days > 0 ? "unpaid-row-overdue" : "unpaid-row-due") : ""}" data-customer-id="${r.internal_customer_id}">
         <div class="debt-balance-row">
-          <span class="muted">${t("customer_id_label")}${labelColon()}${escapeHtml(r.customer_id || "")}${managerLabel ? ` · ${managerLabel}` : ""}</span>
+          <span class="muted">${t("customer_id_label")}${labelColon()}${escapeHtml(r.customer_id || "")}</span>
           <span class="text-amount debt-balance-amount">${formatAmd(Number(r.remaining_balance))}</span>
         </div>
-        <div class="sales-order-name-row">
-          <strong>${escapeHtml(r.customer_name || "")}</strong>
+        <div class="debt-name-row">
+          <strong class="debt-name">${escapeHtml(r.customer_name || "")}</strong>
           ${Number(r.remaining_balance) > 0 ? dueChipHtml(r.oldest_due_days) : ""}
         </div>
+        ${owner ? `<div class="muted debt-owner-line">${owner}</div>` : ""}
         ${
-          Number(r.remaining_balance) > 0 && (Number(r.overdue_amd) > 0 || Number(r.unrecorded_amd) > 0)
-            ? `<div class="debt-balance-extra">
-                ${Number(r.overdue_amd) > 0 ? `<span class="debt-extra-overdue">${t("debt_balances_overdue_row")}${labelColon()}<strong>${formatAmd(Number(r.overdue_amd))}</strong></span>` : ""}
-                ${Number(r.unrecorded_amd) > 0 ? `<span class="debt-extra-unrecorded">${t("debt_balances_unrecorded_row")}${labelColon()}<strong>${formatAmd(Number(r.unrecorded_amd))}</strong></span>` : ""}
+          Number(r.remaining_balance) > 0 && (hasOverdue || hasUnrecorded)
+            ? `<div class="debt-cells">
+                ${hasOverdue ? cell(t("debt_balances_overdue_row"), formatAmd(Number(r.overdue_amd)), "debt-extra-overdue") : "<span></span>"}
+                ${hasUnrecorded ? cell(t("debt_balances_unrecorded_row"), formatAmd(Number(r.unrecorded_amd)), "debt-extra-unrecorded") : "<span></span>"}
               </div>`
             : ""
         }
-        <div class="debt-balance-row debt-balance-row-dates muted">
-          <span>${t("debt_balances_last_payment")}${labelColon()}${formatDateOnly(r.last_payment_date)}</span>
-          <span>${t("debt_balances_last_visit")}${labelColon()}${formatDate(r.last_visit_at)}</span>
+        <div class="debt-cells debt-cells-dates">
+          ${cell(t("debt_balances_last_payment"), formatDateOnly(r.last_payment_date))}
+          ${cell(t("debt_balances_last_visit"), formatDate(r.last_visit_at))}
         </div>
       </button>`;
   }
@@ -259,13 +243,12 @@ export async function renderDebtBalances(root, navigate) {
     let visible = rows;
     if (dueFilter === "overdue") visible = visible.filter((r) => Number(r.remaining_balance) > 0 && r.oldest_due_days != null && r.oldest_due_days > 0);
     else if (dueFilter === "not_due") visible = visible.filter((r) => Number(r.remaining_balance) > 0 && r.oldest_due_days != null && r.oldest_due_days <= 0);
-    if (canGroup && mode === "by-manager" && managerFilter) {
-      visible = visible.filter((r) => String(r.assigned_manager_id || "") === managerFilter);
+    if (canGroup && assignmentKeys.size) {
+      visible = visible.filter((r) => assignmentKeys.has(`${r.sales_channel || NO_GROUP_KEY}::${r.assigned_manager_id ?? NO_GROUP_KEY}`));
     }
 
-    // Sum of exactly the rows on screen -- the manager filter (by-manager
-    // mode) narrows this the same way it narrows the list below, so the
-    // headline total always matches what's actually visible.
+    // Sum of exactly the rows on screen -- the channel/rep filter narrows this the same way it narrows the list
+    // below, so the headline total always matches what's actually visible.
     const subtotal = visible.reduce((sum, r) => sum + Number(r.remaining_balance || 0), 0);
     // How much of that is already past its due date, and what the reps collected that the Excel does not hold yet.
     const overdue = visible.reduce((sum, r) => sum + Math.max(0, Number(r.overdue_amd || 0)), 0);
@@ -314,21 +297,11 @@ export async function renderDebtBalances(root, navigate) {
     syncInfoHtml = note.info;
     syncHintBtn.hidden = !note.info;
     if (canGroup) {
-      // Preserve whatever the user already has selected -- loadWithCache
-      // can repaint this a second time (stale cache, then the real fetch
-      // landing), and resetting it back to "" mid-session would silently
-      // drop their filter choice out from under them. String-keyed since
-      // managerFilter is always a string (read off a DOM dataset) while
-      // assigned_manager_id comes back as a number from the API.
-      const managers = new Map();
-      for (const r of rows) {
-        if (r.assigned_manager_id) managers.set(String(r.assigned_manager_id), r.assigned_manager_name);
-      }
-      if (managerFilter && !managers.has(managerFilter)) managerFilter = "";
-      managerOptions = [...managers.entries()];
-      renderManagerMenu();
-      const label = container.querySelector("#debt-manager-filter-label");
-      if (label) label.textContent = managerFilter ? managers.get(managerFilter) || "" : t("all_managers");
+      // loadWithCache can repaint this a second time (stale cache, then the real fetch landing): keep the user's
+      // selection, but drop keys that no longer exist in the fresh rows.
+      const present = new Set(rows.map((r) => `${r.sales_channel || NO_GROUP_KEY}::${r.assigned_manager_id ?? NO_GROUP_KEY}`));
+      assignmentKeys = new Set([...assignmentKeys].filter((k) => present.has(k)));
+      renderAssignFilter();
     }
     render();
   }

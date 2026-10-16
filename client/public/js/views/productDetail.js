@@ -7,6 +7,7 @@ import { escapeHtml, formatAmd, activateDialog } from "../util.js";
 import { t } from "../i18n.js";
 import { state, canManageProducts, seesProductCosts } from "../state.js";
 import { icons } from "../icons.js";
+import { openCostCalculator } from "../costCalculator.js";
 
 const KIND_LABEL = { front: "photo_front", back: "photo_back", other: "photo_other" };
 
@@ -110,6 +111,7 @@ export async function renderProductDetail(root, navigate, productId) {
               ${priceRow(t("landing_cost"), p.landing_cost_amd)}
               ${priceRow(t("net_cost"), p.net_cost_amd)}
               ${margin != null ? `<div class="pd-row"><span class="muted">${t("col_silver")} / ${t("net_cost")}</span><span class="pd-amount">${margin}%</span></div>` : ""}
+              <button type="button" class="btn pd-calc-btn" id="pd-calc-btn">${icons.calculator} ${t("cc_open")}</button>
             </div>`
           : ""
       }
@@ -144,6 +146,7 @@ export async function renderProductDetail(root, navigate, productId) {
       })
     );
     container.querySelector("#pd-main-image")?.addEventListener("click", () => active && openLightbox(active.url));
+    container.querySelector("#pd-calc-btn")?.addEventListener("click", () => openCostCalculator({ product: p }));
     if (manage) {
       container.querySelector("#edit-details-btn")?.addEventListener("click", openEditSheet);
       container.querySelector("#pd-add-photo")?.addEventListener("click", openPhotoSheet);

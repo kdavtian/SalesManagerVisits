@@ -13732,3 +13732,96 @@ html[data-text-size="xlarge"] { font-size: 130%; }
 .task-editor .task-type-btn svg { width: 18px; height: 18px; flex: 0 0 auto; }
 .task-editor .task-type-badge { display: inline-flex; align-items: center; gap: 6px; }
 .task-editor .task-type-badge svg { width: 16px; height: 16px; }
+
+/* Debt balances, round 2 (owner 2026-10-17): date button in the header row (calendar icon + short "Now"), channel/rep filter
+   button, full customer names, label-over-value cells (fit an iPhone 16 Pro Max in Armenian and English). */
+.detail-header.debt-header { flex-wrap: nowrap; align-items: center; }
+.debt-header .detail-header-title { flex: 1 1 auto; min-width: 0; }
+.debt-header .detail-header-title h1 { white-space: normal; overflow: visible; text-overflow: clip; font-size: 1.2rem; line-height: 1.15; }
+.debt-header .debt-as-of-filter-wrap { margin-left: 0; }
+.debt-as-of-filter-btn { gap: 6px; min-height: 44px; padding: 0 12px; max-width: 150px; }
+.debt-as-of-filter-btn svg { width: 17px; height: 17px; flex: 0 0 auto; color: var(--text-dim); }
+.debt-as-of-filter-wrap.has-date .debt-as-of-filter-btn { padding-right: 28px; }
+.debt-as-of-picker-input { min-height: 44px; }
+.debt-filter-row-split { justify-content: space-between; }
+.debt-name-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.debt-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; line-height: 1.25; }
+.debt-name-row .due-chip, .debt-name-row [class*="chip"] { flex: 0 0 auto; white-space: nowrap; }
+.debt-owner-line { font-size: 0.8rem; margin-top: -2px; }
+.debt-cells { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
+.debt-cell { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.debt-cell-label { font-size: 0.72rem; color: var(--text-dim); line-height: 1.2; }
+.debt-cell-value { font-size: 0.9rem; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.debt-cells-dates .debt-cell-value { font-weight: 500; color: var(--text); }
+.debt-extra-overdue .debt-cell-value { color: var(--danger, #b3261e); }
+.debt-extra-unrecorded .debt-cell-value { color: var(--warning-text, var(--warning)); }
+.debt-total-label { display: inline-flex; align-items: center; flex-wrap: nowrap; min-width: 0; }
+.debt-total-label .settings-hint-icon { flex: 0 0 auto; margin-left: 6px; }
+
+/* Cost & margin calculator (Products page, management) */
+:root { --cc-1: #0b4d2c; --cc-2: #3e8e62; --cc-3: #d9a21b; --cc-4: #8a9a91; --cc-5: #a67c52; --cc-6: #6b7f99; --cc-7: #00a84f; }
+.sheet.cost-calc { max-height: 92vh; padding-bottom: calc(var(--sheet-pad-bottom, 16px) + 16px); }
+.cost-calc .cc-title { display: flex; align-items: center; gap: 8px; margin-right: 52px; }
+.cost-calc .cc-title h2 { margin: 0; font-size: 1.15rem; }
+.cost-calc .cc-modes { margin: 12px 0 8px; }
+.cost-calc .cc-field { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; min-width: 0; }
+.cost-calc .cc-field > span { font-size: 0.78rem; color: var(--text-dim); }
+.cost-calc input[type="number"], .cost-calc input[type="search"] { width: 100%; min-height: 44px; box-sizing: border-box; font-size: 1rem; font-variant-numeric: tabular-nums; }
+.cost-calc .cc-price input { font-size: 1.35rem; font-weight: 700; }
+.cost-calc .cc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+.cost-calc .cc-brands { align-self: flex-start; }
+.cost-calc .cc-picked { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 6px 10px; border: 1px solid var(--control-border, var(--border)); border-radius: var(--radius); background: var(--bg-card); overflow-wrap: anywhere; }
+.cost-calc .cc-results-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-top: 6px; max-height: 40vh; overflow-y: auto; }
+.cost-calc .cc-result { text-align: left; min-height: 44px; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--border); background: var(--bg-card); color: var(--text); font: inherit; cursor: pointer; }
+.cost-calc .cc-result:last-child { border-bottom: 0; }
+.cost-calc .cc-empty { padding: 10px 12px; margin: 0; }
+.cost-calc .cc-tiers { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.cost-calc .cc-tiers .chip { min-height: 40px; }
+.cost-calc .cc-note { margin: 6px 0 0; font-size: 0.82rem; }
+.cost-calc .cc-figs { display: grid; grid-template-columns: 1fr 1fr; margin-top: 14px; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.cost-calc .cc-fig { padding: 12px 14px; min-width: 0; }
+.cost-calc .cc-fig:nth-child(odd) { border-right: 1px solid var(--border); }
+.cost-calc .cc-fig:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
+.cost-calc .cc-k { font-size: 0.78rem; color: var(--text-dim); }
+.cost-calc .cc-v { font-size: 1.45rem; font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.cost-calc .cc-x { font-size: 0.74rem; color: var(--text-dim); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.cost-calc .cc-hero .cc-v { color: var(--success, #0a7f3f); }
+.cost-calc .cc-neg .cc-v, .cost-calc .cc-neg { color: var(--danger, #b3261e); }
+.cost-calc .cc-warn { margin: 10px 0 0; color: var(--danger, #b3261e); font-size: 0.85rem; font-weight: 600; }
+.cost-calc .cc-target { display: grid; grid-template-columns: 120px 1fr; gap: 10px; align-items: end; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 14px; }
+.cost-calc .cc-target .cc-field { margin-top: 0; }
+.cost-calc .cc-target-out { display: flex; flex-direction: column; gap: 6px; font-size: 0.85rem; }
+.cost-calc .cc-target-out > div { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; }
+.cost-calc .cc-target-out strong { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.cost-calc .cc-diff { font-size: 0.78rem; color: var(--success, #0a7f3f); }
+.cost-calc .cc-diff.cc-neg { color: var(--danger, #b3261e); }
+.cost-calc .cc-anat { margin-top: 14px; }
+.cost-calc .cc-anat-title { font-weight: 700; margin-bottom: 6px; }
+.cost-calc .cc-bar { display: flex; height: 30px; border-radius: 8px; overflow: hidden; background: var(--bg); }
+.cost-calc .cc-bar span { height: 100%; min-width: 0; }
+.cost-calc .cc-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 0.78rem; }
+.cost-calc .cc-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; }
+.cost-calc .cc-legend b { font-variant-numeric: tabular-nums; }
+.cost-calc .cc-details { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+.cost-calc .cc-details summary { cursor: pointer; font-weight: 700; min-height: 32px; display: flex; align-items: center; gap: 8px; }
+.cost-calc .cc-table { overflow-x: auto; margin-top: 8px; }
+.cost-calc .cc-table table { width: 100%; border-collapse: collapse; font-size: 0.84rem; font-variant-numeric: tabular-nums; }
+.cost-calc .cc-table td, .cost-calc .cc-table th { padding: 6px 4px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+.cost-calc .cc-table td:first-child, .cost-calc .cc-table th:first-child { text-align: left; white-space: normal; }
+.cost-calc .cc-table th { font-weight: 500; color: var(--text-dim); font-size: 0.74rem; }
+.cost-calc .cc-table tr.cc-tot td { font-weight: 800; border-bottom: 2px solid var(--text); }
+.cost-calc .cc-formula { display: block; font-size: 0.72rem; color: var(--text-dim); }
+.cost-calc .cc-check { display: flex; align-items: center; gap: 10px; min-height: 44px; margin-top: 8px; }
+.cost-calc .cc-check input { width: 22px; height: 22px; }
+.cost-calc .cc-set { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; margin-bottom: 10px; }
+.pd-calc-btn { margin-top: 10px; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; }
+.pd-calc-btn svg { width: 18px; height: 18px; }
+.cost-calc input[type="number"], .cost-calc input[type="search"] { padding: 0 12px; border: 1px solid var(--control-border, var(--border)); border-radius: var(--radius); background: var(--bg-card); color: var(--text); }
+.cost-calc .cc-tiers .chip { padding: 0 12px; border: 1px solid var(--control-border, var(--border)); border-radius: var(--radius); background: var(--bg-card); color: var(--text); font: inherit; font-size: 0.82rem; cursor: pointer; }
+.cost-calc .cc-tiers .chip b { font-variant-numeric: tabular-nums; }
+.cost-calc .cc-details summary { list-style: none; justify-content: space-between; }
+.cost-calc .cc-details summary::-webkit-details-marker { display: none; }
+.cost-calc .cc-details summary::after { content: "+"; font-size: 1.3rem; color: var(--text-dim); }
+.cost-calc .cc-details[open] summary::after { content: "\2212"; }
+.cost-calc .cc-picked .task-chip-x { flex: 0 0 auto; }
+.cost-calc .cc-caption { margin: 12px 0 -6px; font-size: 0.74rem; color: var(--text-dim); }

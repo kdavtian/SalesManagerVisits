@@ -415,6 +415,7 @@ export const api = {
   updateMyProfile: (data) => json("/me/profile", "PATCH", data),
 
   listRouteDistribution: () => request("/route-distribution"),
+  suggestCustomerNameNumber: (base) => request(`/customers/name-suggestion?${new URLSearchParams({ base })}`, { fresh: true }),
   lookupRouteDistribution: (region, subregion) => {
     const qs = new URLSearchParams({ region, ...(subregion ? { subregion } : {}) }).toString();
     return request(`/route-distribution/lookup?${qs}`);
