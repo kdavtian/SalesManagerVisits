@@ -403,7 +403,7 @@ deliveryRouter.post("/orders/:id/confirm", (req, res, next) => {
         notifyUser(recipient.id, "order_delivered", {
           title: "Պատվերն առաքվեց",
           body: `${order.customer_name}-ի պատվերն առաքվել է։`,
-          url: "/#/orders",
+          url: `/#/orders?open=${order.id}`,
         });
       }
     } catch (err) {
@@ -454,7 +454,7 @@ deliveryRouter.post("/orders/:id/fail", async (req, res) => {
         notifyUser(recipient.id, "order_returned", {
           title: "Առաքումը ձախողվեց",
           body: `${order.customer_name}-ի առաքման փորձը ձախողվել է, պատվերը մնում է «Փաթեթավորված»՝ նոր փորձի համար։`,
-          url: "/#/orders",
+          url: `/#/orders?open=${order.id}`,
         });
       }
     } catch (err) {

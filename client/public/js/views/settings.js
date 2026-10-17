@@ -89,7 +89,7 @@ function formatStorageMb(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export async function renderSettings(root, onLogout, onLanguageChange) {
+export async function renderSettings(root, onLogout, onLanguageChange, section = null) {
   // CSV exports are saved in place (see util.js downloadFromUrl), never by
   // navigating the app window to the file -- an installed PWA has no way back.
   root.addEventListener("click", async (e) => {
@@ -447,6 +447,13 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
         selectWorkspace((index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length, true);
       });
     });
+  }
+
+  // A notification about a route plan waiting for review: #/settings?section=plan-approvals opens the Administration
+  // tab and brings the plan list into view.
+  if (section === "plan-approvals" && hasAdminWorkspace) {
+    root.querySelector("#settings-admin-tab")?.click();
+    requestAnimationFrame(() => root.querySelector("#plan-approvals-slot")?.scrollIntoView({ block: "start" }));
   }
 
   // --- Admin search: hide rows that don't match, and any group left empty ---

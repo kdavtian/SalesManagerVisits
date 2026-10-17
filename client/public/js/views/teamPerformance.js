@@ -303,7 +303,7 @@ export async function renderTeamPerformance(root, navigate, query) {
   // instead of the full cross-channel comparison.
   const managerId = query?.get("manager") ? Number(query.get("manager")) : null;
   if (seesAllPerformance()) {
-    await renderManagementView(root, navigate, managerId);
+    await renderManagementView(root, navigate, managerId, query?.get("tab"));
   } else {
     await renderMyPerformanceView(root, navigate);
   }
@@ -352,9 +352,10 @@ async function renderMyPerformanceView(root, navigate) {
 
 // --- Management: Overview / Planning / Approvals -----------------------
 
-async function renderManagementView(root, navigate, managerId) {
+async function renderManagementView(root, navigate, managerId, initialTab = null) {
   let month = currentMonthStart();
-  let tab = "overview";
+  // ?tab=approvals / planning / history comes from a notification's link.
+  let tab = ["overview", "planning", "approvals", "history"].includes(initialTab) ? initialTab : "overview";
 
   const TABS = [
     { key: "overview", label: t("perf_overview") },

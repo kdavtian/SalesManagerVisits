@@ -385,7 +385,7 @@ ordersRouter.post("/", async (req, res) => {
             credit?.exceeded ? `Վարկային սահմանը գերազանցված է ${Math.round(credit.over).toLocaleString()} ԱՄԴ-ով — սպասում է հաստատման` : null,
             hold?.on_hold ? `Ժամկետանց պարտք՝ ${Math.round(hold.overdue_amd).toLocaleString()} ԱՄԴ, ամենահինը՝ ${hold.oldest_due_days} օր ուշացումով` : null,
           ])}`,
-          url: "/#/orders",
+          url: `/#/orders?open=${order.id}`,
         });
       }
     } catch (err) {
@@ -764,7 +764,7 @@ ordersRouter.post("/:id/submit", async (req, res) => {
         notifyUser(recipient.id, "order_placed", {
           title: "Նոր պատվեր",
           body: `${repName}-ը պատվեր է ուղարկել ${order.customer_name}-ի համար — ${Number(order.total_amd).toLocaleString()} ԱՄԴ։`,
-          url: "/#/orders",
+          url: `/#/orders?open=${order.id}`,
         });
       }
     } catch (err) {
@@ -1070,7 +1070,7 @@ ordersRouter.patch("/:id", async (req, res) => {
         notifyUser(order.user_id, "order_status_changed", {
           title: "Պատվերի թարմացում",
           body: `${customerRows[0]?.name || "Պատվերի"} կարգավիճակը այժմ՝ "${nextStatus}"։`,
-          url: "/#/orders",
+          url: `/#/orders?open=${order.id}`,
         });
       }
       if (enteringWarehouseQueue) {
@@ -1224,14 +1224,14 @@ ordersRouter.post("/:id/approve-discount", async (req, res) => {
         notifyUser(accountant.id, "order_placed", {
           title: "Պատվերի զեղչը հաստատվեց",
           body: `${customerName}-ի զեղչված պատվերը հաստատվել է և պատրաստ է կատարման համար։`,
-          url: "/#/orders",
+          url: `/#/orders?open=${order.id}`,
         });
       }
       if (req.user.id !== order.user_id) {
         notifyUser(order.user_id, "order_status_changed", {
           title: "Զեղչը հաստատվեց",
           body: `${customerName}-ի պատվերի զեղչը հաստատվել է։`,
-          url: "/#/orders",
+          url: `/#/orders?open=${order.id}`,
         });
       }
     } catch (err) {
@@ -1274,7 +1274,7 @@ async function decideCredit(req, res, decision) {
         notifyUser(order.user_id, "order_status_changed", {
           title: decision === "approved" ? "Վարկային սահմանի բացառությունը հաստատվեց" : "Վարկային սահմանի բացառությունը մերժվեց",
           body: `${customerName}-ի պատվերը՝ ${decision === "approved" ? "կարող է շարունակվել" : "պետք է փոքրացնել"}։`,
-          url: "/#/orders",
+          url: `/#/orders?open=${order.id}`,
         });
       }
     } catch (err) {
@@ -1311,7 +1311,7 @@ ordersRouter.post("/:id/reject-discount", async (req, res) => {
         notifyUser(order.user_id, "order_status_changed", {
           title: "Զեղչը մերժվեց",
           body: `${customerRows[0]?.name || "Պատվերի"} զեղչը մերժվել է -- խմբագրեք պատվերը կամ հեռացրեք զեղչը շարունակելու համար։`,
-          url: "/#/orders",
+          url: `/#/orders?open=${order.id}`,
         });
       }
     } catch (err) {
@@ -1358,7 +1358,7 @@ ordersRouter.post("/:id/reject", async (req, res) => {
         notifyUser(order.user_id, "order_status_changed", {
           title: "Պատվերը մերժվեց",
           body: `${order.customer_name}-ի պատվերը մերժվել է${note?.trim() ? `՝ ${note.trim()}` : ""} -- խմբագրեք և կրկին ուղարկեք։`,
-          url: "/#/orders",
+          url: `/#/orders?open=${order.id}`,
         });
       }
     } catch (err) {
@@ -1510,7 +1510,7 @@ ordersRouter.post("/:id/mark-delivered", async (req, res) => {
         notifyUser(recipient.id, "order_delivered", {
           title: "Պատվերն առաքվեց",
           body: `${order.customer_name}-ի պատվերը նշվել է որպես առաքված (առանց երթուղու)։`,
-          url: "/#/orders",
+          url: `/#/orders?open=${order.id}`,
         });
       }
     } catch (err) {

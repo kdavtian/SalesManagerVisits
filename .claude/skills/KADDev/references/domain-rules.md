@@ -418,3 +418,8 @@ Do not build or re-ask about live location (faster foreground pings, Telegram Li
 - **Customer card has no "Order usual" section any more** (it cluttered the card); the usual order lives in the New-order long-press menu, the order screen strip, check-in result and tasks. `mountUsualSlot` was deleted.
 - **Vaghinak's wording** got more natural, warmer variants with light humour (never mocking) for reps and friendlier management lines; variants are appended to the arrays so recent-variant ids stay valid.
 - NEXT (owner): the desktop version redesign -- the current desktop view is just the mobile layout; goal "ultra user friendly, learnable in one day". Ask design questions first (rule 25/7).
+
+## Notification links (1.360.0, owner 2026-10-18: "tap on a notification must connect to its subject")
+- A notification's `url` must open the SUBJECT, not a list: order notifications -> `/#/orders?open=<orderId>` (Orders view opens `openOrderDetailSheet` on top of the list; same pattern as `#/tasks?open=<id>`), tasks `?open=`, payments `/#/payments/<id>`, cash handoffs `/#/cash-handoffs/<id>`, route-plan review -> `/#/settings?section=plan-approvals` (Administration tab, plan list scrolled into view), performance plans -> `/#/team-performance?tab=planning|approvals` (old `/team-performance/<tab>` links still work via an alias in app.js, they used to fall to the dashboard).
+- The bell list: tap = straight to the subject (mark read + navigate); only a notification WITHOUT a link opens the full-text sheet. Card text shows up to 8 lines.
+- New notification type => give it a deep link and add a case to `e2e/notification-links.spec.mjs` / `integration/notificationLinks.test.js`. Old stored rows keep their old link (the list page), only new ones are precise.

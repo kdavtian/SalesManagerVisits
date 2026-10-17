@@ -1161,7 +1161,7 @@ async function renderRoute() {
   } else if (orderCreateMatch) {
     (await import("./views/orderCreate.js")).renderOrderCreate(app, navigate, orderCreateMatch[1], query.get("checkin"), { from: query.get("from"), usual: query.get("usual") === "1" });
   } else if (path === "#/orders") {
-    currentCleanup = (await import("./views/orders.js")).renderOrders(app, navigate);
+    currentCleanup = (await import("./views/orders.js")).renderOrders(app, navigate, query.get("open"));
   } else if (paymentDetailMatch) {
     (await import("./views/payments.js")).renderPayments(app, navigate, paymentDetailMatch[1]);
   } else if (path === "#/payments") {
@@ -1186,7 +1186,10 @@ async function renderRoute() {
     (await import("./views/vaghinak.js")).renderVaghinak(app, navigate);
   } else if (path === "#/team-progress") {
     (await import("./views/repProgress.js")).renderRepProgress(app, navigate);
-  } else if (path === "#/team-performance") {
+  } else if (path === "#/team-performance" || /^#\/team-performance\/(planning|approvals)$/.test(path)) {
+    // Notifications sent before 1.360.0 carry #/team-performance/<tab>; new ones use ?tab=<tab>.
+    const legacyTab = path.split("/")[2];
+    if (legacyTab) query.set("tab", legacyTab);
     (await import("./views/teamPerformance.js")).renderTeamPerformance(app, navigate, query);
   } else if (path === "#/company-dashboard") {
     (await import("./views/dashboardOverview.js")).renderDashboardOverview(app, navigate);
@@ -1211,7 +1214,7 @@ async function renderRoute() {
   } else if (checkinMatch) {
     (await import("./views/checkin.js")).renderCheckin(app, navigate, checkinMatch[1]);
   } else if (path === "#/settings") {
-    (await import("./views/settings.js")).renderSettings(app, doLogout, render);
+    (await import("./views/settings.js")).renderSettings(app, doLogout, render, query.get("section"));
   } else if (path === "#/notifications") {
     (await import("./views/notifications.js")).renderNotifications(app, navigate, refreshNotificationBadge);
   } else if (path === "#/tasks") {

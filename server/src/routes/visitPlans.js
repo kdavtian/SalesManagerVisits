@@ -288,7 +288,7 @@ visitPlansRouter.post("/", async (req, res) => {
           notifyUser(approver.id, "plan_submitted", {
             title: "Պլանը սպասում է վերանայման",
             body: `${repName}-ը ուղարկել է պլան ${date}-ի համար (${customerIds.length} կանգառ)։`,
-            url: "/#/settings",
+            url: "/#/settings?section=plan-approvals",
           });
         }
       }

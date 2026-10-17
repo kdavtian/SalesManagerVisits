@@ -43,7 +43,7 @@ const AUTO_REFRESH_MS = 30000;
 
 // Returns the view's cleanup (app.js keeps it): stops the timers, and `onRestore` refreshes the list when this screen is
 // brought back from the Back cache -- its DOM and its rows are exactly what they were when the user left.
-export function renderOrders(root, navigate) {
+export function renderOrders(root, navigate, openId = null) {
   root.innerHTML = `
     <div class="detail-view">
       <div class="list-header-row">
@@ -535,6 +535,8 @@ export function renderOrders(root, navigate) {
   }
 
   load();
+  // A notification (or any link) for ONE order: #/orders?open=<id> opens that order's sheet on top of the list.
+  if (openId && /^\d+$/.test(String(openId))) openOrderDetailSheet(Number(openId), { onChanged: load, navigate });
 
   const cleanup = () => {
     clearInterval(autoRefreshTimer);
