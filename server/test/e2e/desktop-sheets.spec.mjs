@@ -3,7 +3,7 @@ import { test, expect, loginViaUi, pool } from "./fixtures.mjs";
 // Owner, 2026-10-18: on a desktop window a bottom sheet hung at the bottom edge (cut off under the Dock). From 900 px
 // every sheet is a centred dialog; a finished task shows Close next to Reopen/Edit; Activity's person pills are wider.
 test.describe("Desktop sheets and wide pills", () => {
-  test("a task sheet is a centred dialog on a desktop window and a done task has a Close button", async ({ page, fixtures }) => {
+  test("a task sheet is a centred dialog on a desktop window and a done task has Reopen/Edit and no extra Close button", async ({ page, fixtures }) => {
     await page.setViewportSize({ width: 1400, height: 900 });
     const admin = await fixtures.createUser("admin");
     const rep = await fixtures.createUser("sales_manager");
@@ -25,8 +25,9 @@ test.describe("Desktop sheets and wide pills", () => {
     const actions = sheet.locator("#task-sheet-actions");
     await expect(actions.locator('[data-action="reopen"]')).toBeVisible();
     await expect(actions.locator('[data-action="edit"]')).toBeVisible();
-    await expect(actions.locator('[data-action="close"]')).toBeVisible();
-    await actions.locator('[data-action="close"]').click();
+    // no Close button in the action row (the X in the corner closes the sheet)
+    await expect(actions.locator('[data-action="close"]')).toHaveCount(0);
+    await sheet.locator(".sheet-close-x").click();
     await expect(page.locator(".sheet-overlay")).toHaveCount(0);
     await pool.query("DELETE FROM tasks WHERE id = $1", [rows[0].id]);
   });

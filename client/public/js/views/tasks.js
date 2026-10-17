@@ -442,7 +442,6 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
         ${isCreator && task.status !== "cancelled" ? `<button type="button" class="btn" data-action="edit">${t("edit")}</button>` : ""}
         ${isCreator && open ? `<button type="button" class="btn btn-danger" data-action="cancel">${t("task_cancel")}</button>` : ""}
         ${isCreator && task.status === "cancelled" ? `<button type="button" class="btn" data-action="restore">${t("task_restore")}</button>` : ""}
-        <button type="button" class="btn" data-action="close">${t("close")}</button>
       </div>`;
     const errorEl = sheet.querySelector("#task-sheet-error");
     const fail = (err) => {
