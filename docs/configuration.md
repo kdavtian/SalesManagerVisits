@@ -33,6 +33,7 @@ everything else.
 | Variable | Enables | If unset |
 |---|---|---|
 | `ERP_SYNC_KEY` | The three `/api/erp-sync*` endpoints (see [`erp-integration.md`](erp-integration.md)) | Endpoints reject every request. No ERP data flows in. |
+| `PLATFORM_SYNC_URL` + `PLATFORM_SYNC_KEY` | Pushing products/wholesale customers to Platform after each ERP sync (see [`erp-integration.md`](erp-integration.md#outbound-platform-sync)) | Either unset: the push is skipped, nothing else affected. |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_NOTIFY_CHAT_IDS` | Telegram alerts (order placed, plan pending review, large payment collected) | Notifications silently skipped, nothing else affected. Both must be set together (`TELEGRAM_NOTIFY_CHAT_IDS` is comma-separated chat IDs). |
 | `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` | Web Push to a rep's own device | Both unset: the push-notification toggle in Settings doesn't appear. Generate a pair with `npx web-push generate-vapid-keys` (run from `server/`). |
 | `VAPID_SUBJECT` | Push protocol requirement (a `mailto:` contact) | Defaults to a placeholder in `.env.example`; set to a real address before relying on push in production. |
@@ -60,6 +61,7 @@ everything else.
   headers, CORS-free-by-design posture.
 - `server/src/middleware/auth.js`, `csrf.js` — `JWT_SECRET`, cookie flags.
 - `server/src/routes/erpSync.js` — `ERP_SYNC_KEY`.
+- `server/src/platformSync.js` — `PLATFORM_SYNC_URL`, `PLATFORM_SYNC_KEY`.
 - `server/src/notifications.js` (Telegram/push dispatch) — the
   `TELEGRAM_*`/`VAPID_*` variables.
 - `docker-compose.yml` — `POSTGRES_*` for the `db` service.

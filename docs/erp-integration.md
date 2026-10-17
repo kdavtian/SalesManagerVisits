@@ -45,6 +45,25 @@ export. This app doesn't assume any particular frequency; it only tracks
 (`erpSyncFreshness.js`), and alerts if that gap gets too large (see
 Retries and staleness below).
 
+## Outbound: Platform sync
+
+Unlike everything else in this doc, this one direction is **this app
+pushing out**, not receiving. After `POST /api/erp-sync` commits its
+transaction, `server/src/platformSync.js` reads the current `products`
+table and the wholesale customers (`customers` joined to
+`erp_customer_data`), and pushes them to Platform (the public KAD MOTORS
+website/PWA, `kdavtian/castrolarmenia` repo) at
+`POST {PLATFORM_SYNC_URL}/api/kad-sync`, authenticated the same way this
+app authenticates the bot (`X-Sync-Key`, matched against
+`PLATFORM_SYNC_KEY` on this side). Retail customers are never part of
+that payload — they're native to Platform, not this app.
+
+It's best-effort and fire-and-forget: a Platform outage or a missing
+`PLATFORM_SYNC_URL`/`PLATFORM_SYNC_KEY` only logs an error here and never
+fails or slows down the `/api/erp-sync` response the bot is waiting on.
+Platform does its own upsert (by `erp_product_id` / `erp_customer_id`) on
+its end, so a retried or re-ordered push is safe.
+
 ## Retries and staleness
 
 - **The app does not retry pushes itself** — it's a passive receiver.
