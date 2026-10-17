@@ -319,7 +319,13 @@
   .desk-thead-orders {
     grid-template-columns: var(--desk-cols-money);
   }
-  .desk-thead-customers {
+  .desk-thead-activity {
+    grid-template-columns: var(--desk-cols-money);
+    margin-left: 16px;
+    margin-right: 16px;
+  }
+  .desk-thead-customers,
+  .desk-thead-tasks {
     grid-template-columns: var(--desk-cols-plain);
     margin-left: 16px;
     margin-right: 16px;
@@ -367,7 +373,7 @@
     font-size: 0.7rem;
   }
   /* the table body continues the heading's frame */
-  .desk-thead + :is(#orders-list, #customer-list).card-list {
+  .desk-thead + :is(#orders-list, #customer-list, #activity-list, #task-list).card-list {
     margin-top: 0;
     border-top-left-radius: 0;
     border-top-right-radius: 0;

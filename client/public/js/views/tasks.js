@@ -7,6 +7,7 @@ import { openCollectionOutcomeSheet } from "../collectionOutcomeSheet.js";
 import { isCallTask, callButtonHtml, callHistoryHtml, rememberCall, openCallResultSheet } from "../callTask.js";
 import { api } from "../api.js";
 import { dockSheet, dockedKey } from "../dockSheet.js";
+import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
 import { usualOrderHash } from "../reorder.js";
 import { bindStepperButton } from "../stepper.js";
 import { escapeHtml, activateDialog, formatDateDMY, parseDateOnly, labelColon } from "../util.js";
@@ -138,7 +139,7 @@ export async function renderTasks(root, navigate, openId) {
 
   // Managers see everything they gave or received (a task they just created for someone else
   // must show up); open tasks of any date by default.
-  const f = { tab: "open", scope: creator || sawAll ? "all" : "mine", person: "", kind: "", sort: "due", search: "" };
+  const f = { tab: "open", scope: creator || sawAll ? "all" : "mine", person: "", kind: "", sort: "due", reversed: false, search: "" };
   let rows = [];
   let today = "";
   let openDropdown = null;
@@ -162,9 +163,12 @@ export async function renderTasks(root, navigate, openId) {
       // Newest result first: when it was closed matters more than when it was due.
       return copy.sort((a, b) => String(b.updated_at || b.due_date).localeCompare(String(a.updated_at || a.due_date)) || b.id - a.id);
     }
-    if (f.sort === "newest") return copy.sort((a, b) => b.id - a.id);
-    if (f.sort === "person") return copy.sort((a, b) => String(a.assignee_name).localeCompare(String(b.assignee_name)) || byDue(a, b));
-    return copy.sort(byDue);
+    let result;
+    if (f.sort === "newest") result = copy.sort((a, b) => b.id - a.id);
+    else if (f.sort === "person") result = copy.sort((a, b) => String(a.assignee_name).localeCompare(String(b.assignee_name)) || byDue(a, b));
+    else result = copy.sort(byDue);
+    // Desktop column headings: a second click on the same heading reverses it.
+    return f.reversed ? result.reverse() : result;
   }
 
   function dropdownHtml(key, options, current, icon, label, applied) {
@@ -244,7 +248,21 @@ export async function renderTasks(root, navigate, openId) {
         </div>
       </div>
       <div class="activity-count" id="task-count"></div>
+      ${deskHeadHtml("desk-thead-tasks", [
+        { items: [{ label: t("desk_col_task") }, { label: t("desk_col_person"), key: closedTab ? undefined : "person" }, { label: t("desk_col_added"), key: closedTab ? undefined : "newest" }] },
+        { items: [{ label: t("desk_col_due"), key: closedTab ? undefined : "due" }] },
+      ])}
       <div class="card-list" id="task-list"></div>`;
+
+    // Desktop column headings (hidden on a phone): the same choices as the sort icon, plus reverse on a second click.
+    const deskHead = container.querySelector(".desk-thead-tasks");
+    paintDeskHead(deskHead, f.sort, f.reversed);
+    wireDeskHead(deskHead, (key) => {
+      f.reversed = key === f.sort ? !f.reversed : false;
+      f.sort = key;
+      openDropdown = null;
+      renderShell();
+    });
 
     const searchInput = container.querySelector("#task-search");
     searchInput.addEventListener("input", () => {
@@ -271,6 +289,7 @@ export async function renderTasks(root, navigate, openId) {
         e.stopPropagation();
         const key = opt.closest("[data-dropdown-menu]").dataset.dropdownMenu;
         f[key] = opt.dataset.value;
+        if (key === "sort") f.reversed = false;
         openDropdown = null;
         renderShell();
       })
@@ -325,7 +344,7 @@ export async function renderTasks(root, navigate, openId) {
       return;
     }
     let html;
-    if (f.tab !== "done" && f.tab !== "cancelled" && f.sort === "due") {
+    if (f.tab !== "done" && f.tab !== "cancelled" && f.sort === "due" && !f.reversed) {
       // Overdue / today / upcoming, so what needs doing first is the first thing seen.
       const groups = [
         [t("task_overdue"), list.filter((r) => r.due_date < today)],

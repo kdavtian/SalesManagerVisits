@@ -6,6 +6,7 @@ import { openVisitDetailSheet } from "../visitDetail.js";
 import { loadWithCache } from "../listCache.js";
 import { FILTER_ICONS } from "../filterIcons.js";
 import { icons } from "../icons.js";
+import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
 
 const OUTCOMES = [
   "order_placed",
@@ -280,9 +281,24 @@ export async function renderActivity(root, navigate) {
       </div>
 
       <div class="activity-count" id="activity-count"></div>
+      ${deskHeadHtml("desk-thead-activity", [
+        { items: [{ label: t("desk_col_customer") }, { label: t("desk_col_rep"), key: "manager" }, { label: t("desk_col_date"), key: "date" }] },
+        { items: [{ label: t("desk_col_result") }] },
+        { align: "end", items: [] },
+      ])}
       <div class="card-list" id="activity-list"></div>
       <button class="btn btn-block" id="activity-load-more" hidden>${t("load_more")}</button>
     `;
+
+    // Desktop column headings (hidden on a phone): the same choices as the sort icon. Date flips newest <-> oldest.
+    const deskHead = container.querySelector(".desk-thead-activity");
+    paintDeskHead(deskHead, sortMode === "manager" ? "manager" : "date", sortMode === "oldest");
+    wireDeskHead(deskHead, (key) => {
+      sortMode = key === "manager" ? "manager" : sortMode === "newest" ? "oldest" : "newest";
+      openDropdown = null;
+      visibleCount = PAGE_SIZE;
+      renderShell();
+    });
 
     container.querySelectorAll("#activity-manager-bar .stat-pill").forEach((btn) => {
       btn.addEventListener("click", () => {
