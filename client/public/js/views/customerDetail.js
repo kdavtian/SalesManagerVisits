@@ -528,8 +528,8 @@ async function openPaymentsReceivedSheet(customer) {
         ? `<div class="card erp-card payments-received-list">
             ${data.rows
               .map(
-                (r) => `<div class="payments-received-row">
-                  <span>${escapeHtml(formatDateDMY(r.date))}</span>
+                (r) => `<div class="payments-received-row${r.source === "excel" ? "" : " payments-received-row-app"}">
+                  <span class="payments-received-date">${escapeHtml(formatDateDMY(r.date))}</span>
                   ${sourceBadge(r)}
                   <strong class="text-amount">${formatAmd(r.amount_amd)}</strong>
                 </div>`

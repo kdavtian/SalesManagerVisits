@@ -10,10 +10,10 @@
 // The workbook's Net Cost (Products!AE) is computed at the Silver price and mixes a per-LITER landing
 // cost into a per-PACK price (Products!AA/AB, workbook 2.1.0), which overstates it by ~18 % for packs
 // over 1 L -- most 4 L and drum silver prices then look "below cost". So every line's net cost is
-// recomputed here at its real selling price with the workbook's own parameters (Products!Z1, AA1,
-// AB1, AD1) but per pack: landing + 4 % x price + 20 % VAT on (price - landing) + 18 % profit tax
-// on the rest + 790 AMD fixed cost per litre. Where landing cost or pack size is unknown the flat
-// workbook net cost is used. Keep the constants in step with the workbook.
+// recomputed here at its real selling price, per pack, by costModel.js: landing + commissions (4 % at
+// the dearest channel) + overhead (17.5 % of the price + vehicle running costs per litre, measured
+// from the cash ledger) + 20 % VAT on (price - landing) + 18 % profit tax on the rest. Where landing
+// cost or pack size is unknown the flat workbook net cost is used.
 import { netCost, litersOfUnit } from "../../client/public/js/costModel.js";
 
 export const AUTO_APPROVE_PCT = 3;
@@ -53,7 +53,7 @@ export async function orderCostCheck(db, lines, subtotal, total) {
   let belowCost = false;
   // Price floor (owner, 2026-10-15): a line selling BELOW LANDING COST (what the goods really cost us) needs the CEO or
   // an admin, with or without a discount -- a tier price, a special price or a discount can all cause it. Landing, not
-  // net cost: net cost carries 790 AMD/L of allocated overhead and would flag ordinary drum sales.
+  // net cost: net cost carries allocated overhead and would flag ordinary drum sales.
   let belowLanding = false;
   const belowLandingProductIds = [];
   for (const l of lines) {
