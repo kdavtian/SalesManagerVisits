@@ -9,6 +9,7 @@ import { autoDeliverOrdersFromErp, autoApprovePaymentsFromErp } from "../erpAuto
 import { runAutoTasks } from "../debtCollectionTasks.js";
 import { refreshOrderRhythm } from "../orderRhythm.js";
 import { snapshotTierPrices, logTierPriceChanges } from "../priceSyncLog.js";
+import { syncProductsAndWholesaleCustomersToPlatform } from "../platformSync.js";
 import {
   transformErpCustomers,
   transformErpCustomerLegal,
@@ -446,6 +447,15 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
   // New debt figures just landed: give reps a "collect the debt" task where due.
   if (process.env.NODE_ENV !== "test") {
     runAutoTasks(new Date(), { viaSync: true }).catch((err) => console.error("Automatic tasks failed:", err.message));
+  }
+
+  // Push the current product catalog and wholesale customers to Platform (the
+  // public website/PWA) so it stays mirrored. Best-effort: never let a
+  // Platform-side outage affect this response.
+  if (process.env.NODE_ENV !== "test") {
+    syncProductsAndWholesaleCustomersToPlatform().catch((err) =>
+      console.error("Platform sync failed:", err.message)
+    );
   }
 
   res.json({
