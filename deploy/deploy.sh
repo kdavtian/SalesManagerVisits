@@ -154,6 +154,12 @@ docker compose exec -T app npm run verify:deployment
 # claim this commit as a known-good baseline for the next run's fast path.
 echo "$NEW_SHA" > "$LAST_DEPLOY_SHA_FILE"
 
+# Housekeeping: every deploy leaves build files behind (the droplet once had 10 GB of them on a 24 GB disk). Keep the
+# newest 2 GB (so the next deploy stays fast), drop the rest. Cannot touch containers, images in use or volumes, and a
+# failure here must never fail a deploy that already succeeded.
+echo "==> Cleaning old build cache"
+docker builder prune --keep-storage 2gb -f > /dev/null 2>&1 || true
+
 echo "==> Current status"
 docker compose ps
 
