@@ -27,7 +27,7 @@ the stack running:
 ./deploy/backup.sh
 ```
 
-Writes a timestamped `db-*.sql` and `uploads-*.tar.gz` into `./backups/`
+Writes a timestamped `db-*.sql.gz` (compressed) and `uploads-*.tar.gz` into `./backups/`
 (override with `BACKUP_DIR`), prunes anything older than 35 days (five weekly backups)
 (`BACKUP_RETENTION_DAYS`), and — only if you set `BACKUP_REMOTE` to an
 rsync/scp destination (e.g. `BACKUP_REMOTE=user@backup-host:/backups/field-visits/`)
@@ -43,6 +43,29 @@ droplet's crontab once:
 crontab -e
 # then add:
 0 3 * * 0 cd /opt/field-visits && ./deploy/backup.sh >> /var/log/field-visits-backup.log 2>&1   # every Sunday at 03:00
+```
+
+**Second copy in the owner's Telegram group (automatic, database only):** after the dump, `backup.sh` calls
+`deploy/send-backup-telegram.sh`, which posts the database file to the group, **encrypted** (AES-256) with a passphrase kept
+only on the droplet and in the owner's password manager. One-time setup on the droplet, from `/opt/field-visits`:
+
+```bash
+# 1. the passphrase (never paste it into chat; copy it into your password manager from this screen)
+head -c 32 /dev/urandom | base64 > .backup-passphrase && chmod 600 .backup-passphrase && cat .backup-passphrase
+# 2. .env must contain TELEGRAM_BACKUP_BOT_TOKEN (a dedicated bot from @BotFather; falls back to TELEGRAM_BOT_TOKEN) and the
+#    group id TELEGRAM_BACKUP_CHAT_ID (falls back to the first id of TELEGRAM_NOTIFY_CHAT_IDS); the bot must be a member
+#    of the group. Check without printing secrets:
+grep -E '^TELEGRAM_(BACKUP_BOT_TOKEN|BOT_TOKEN|BACKUP_CHAT_ID|NOTIFY_CHAT_IDS)=.+' .env | sed 's/=.*/=(set)/'
+```
+
+Without the passphrase file nothing is sent (an unencrypted customer/debt database must not sit in a chat); to send
+unencrypted anyway set `BACKUP_TELEGRAM_UNENCRYPTED=1` (not recommended). Telegram bots accept files up to 50 MB; the photos
+backup (about 60 MB and growing) stays on the droplet only. **If the passphrase is lost the Telegram copies are unreadable** --
+keep it somewhere other than the droplet. To read a Telegram copy on your PC:
+
+```bash
+openssl enc -d -aes-256-cbc -pbkdf2 -in db-YYYYMMDD-HHMMSS.sql.gz.enc -out db.sql.gz   # asks for the passphrase
+gunzip db.sql.gz                                                                         # -> db.sql, restore as below
 ```
 
 **Manual (what the script above does, if you need to run one step by hand):**
@@ -69,7 +92,7 @@ and-recreate first, which is destructive; think carefully before doing
 that against a live system):
 
 ```bash
-docker compose exec -T db psql -U fieldvisits fieldvisits < backup-YYYYMMDD.sql
+docker compose exec -T db psql -U fieldvisits fieldvisits < backup-YYYYMMDD.sql   # an automated backup is db-*.sql.gz: gunzip -c db-*.sql.gz | docker compose exec -T db psql -U fieldvisits fieldvisits
 ```
 
 **Restore the uploads volume:**

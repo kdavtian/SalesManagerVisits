@@ -24,14 +24,15 @@ BACKUP_DIR="$(cd "${BACKUP_DIR:-./backups}" && pwd)"
 # 35 days = five weekly backups kept (the owner runs this once a week, see the crontab line below).
 BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-35}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
-DB_FILE="$BACKUP_DIR/db-$STAMP.sql"
+DB_FILE="$BACKUP_DIR/db-$STAMP.sql.gz"
 UPLOADS_FILE="$BACKUP_DIR/uploads-$STAMP.tar.gz"
 
 echo "[$STAMP] Backing up database..."
-docker compose exec -T db pg_dump -U fieldvisits fieldvisits > "$DB_FILE"
+docker compose exec -T db pg_dump -U fieldvisits fieldvisits | gzip > "$DB_FILE"
 
-# A failed dump must never look like a backup: an empty file is an error, not a success.
-if [ ! -s "$DB_FILE" ]; then
+# A failed dump must never look like a backup: an empty (or header-only) file is an error, not a success. pg_dump piped
+# into gzip hides pg_dump's own exit status, so the size is the check (a real dump is far above 1 KB).
+if [ ! -s "$DB_FILE" ] || [ "$(wc -c < "$DB_FILE")" -lt 1024 ]; then
   echo "[$STAMP] ERROR: the database dump is empty -- backup FAILED." >&2
   rm -f "$DB_FILE"
   exit 1
@@ -45,6 +46,12 @@ docker run --rm \
 
 echo "[$STAMP] Local backups written: $DB_FILE, $UPLOADS_FILE"
 
+# Second copy in the owner's Telegram group (database only: small; photos stay in the local backup). Encrypted when a
+# passphrase file exists -- see deploy/send-backup-telegram.sh. A failed send must not delete the local backups, but it
+# must be loud: the script ends with a non-zero exit code so the cron log shows it.
+TELEGRAM_FAILED=0
+./deploy/send-backup-telegram.sh "$DB_FILE" || TELEGRAM_FAILED=1
+
 if [ -n "${BACKUP_REMOTE:-}" ]; then
   echo "[$STAMP] Pushing to off-server destination: $BACKUP_REMOTE"
   scp "$DB_FILE" "$UPLOADS_FILE" "$BACKUP_REMOTE"
@@ -56,6 +63,10 @@ else
 fi
 
 echo "[$STAMP] Pruning local backups older than $BACKUP_RETENTION_DAYS days..."
-find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'db-*.sql' -o -name 'uploads-*.tar.gz' \) -mtime "+$BACKUP_RETENTION_DAYS" -delete
+find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'db-*.sql' -o -name 'db-*.sql.gz' -o -name 'uploads-*.tar.gz' \) -mtime "+$BACKUP_RETENTION_DAYS" -delete
 
+if [ "$TELEGRAM_FAILED" = "1" ]; then
+  echo "[$STAMP] Done, but the Telegram copy FAILED (see above); the local backups are fine." >&2
+  exit 1
+fi
 echo "[$STAMP] Done."
