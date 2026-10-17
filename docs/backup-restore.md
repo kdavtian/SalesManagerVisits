@@ -28,7 +28,7 @@ the stack running:
 ```
 
 Writes a timestamped `db-*.sql` and `uploads-*.tar.gz` into `./backups/`
-(override with `BACKUP_DIR`), prunes anything older than 14 days
+(override with `BACKUP_DIR`), prunes anything older than 35 days (five weekly backups)
 (`BACKUP_RETENTION_DAYS`), and — only if you set `BACKUP_REMOTE` to an
 rsync/scp destination (e.g. `BACKUP_REMOTE=user@backup-host:/backups/field-visits/`)
 — pushes both files there right after. Without `BACKUP_REMOTE` set, it
@@ -42,7 +42,7 @@ droplet's crontab once:
 ```bash
 crontab -e
 # then add:
-0 3 * * * cd /opt/field-visits && ./deploy/backup.sh >> /var/log/field-visits-backup.log 2>&1
+0 3 * * 0 cd /opt/field-visits && ./deploy/backup.sh >> /var/log/field-visits-backup.log 2>&1   # every Sunday at 03:00
 ```
 
 **Manual (what the script above does, if you need to run one step by hand):**
