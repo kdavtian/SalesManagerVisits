@@ -5,6 +5,7 @@
 // tab's "Order placed" outcome row, for one -- can open the exact same
 // sheet without re-implementing it.
 import { api } from "./api.js";
+import { dockSheet } from "./dockSheet.js";
 import { reorderHash } from "./reorder.js";
 import { escapeHtml, formatAmd, formatPriceOrFree, activateDialog, formatDateTime, formatDateDMY, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, labelColon } from "./util.js";
 import { t } from "./i18n.js";
@@ -191,6 +192,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
   overlay.className = "sheet-overlay";
   overlay.innerHTML = `<div class="sheet"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   document.body.appendChild(overlay);
+  dockSheet(overlay, `order:${orderId}`);
   activateDialog(overlay);
   overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
 

@@ -5,6 +5,8 @@ import { icons } from "../icons.js";
 import { ORDER_STATUS_ICONS } from "../ordersSearchEnhancements.js";
 import { loadWithCache } from "../listCache.js";
 import { STATUS_META, openOrderDetailSheet, paymentMethodBadgeHtml } from "../orderDetailSheet.js";
+import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
+import { dockedKey } from "../dockSheet.js";
 import { availableBulkActions, runBulkAction } from "../orderBulk.js";
 import { openPrintBlankSheet } from "../orderBlankPrint.js";
 import { ACCOUNTING_STATUS_BADGE, accountingStatusLabel } from "../accountingDocSheet.js";
@@ -61,6 +63,11 @@ export function renderOrders(root, navigate, openId = null) {
         <button type="button" class="icon-btn" id="order-filter-btn" aria-label="${t("filter")}" aria-haspopup="menu" aria-expanded="false" aria-controls="order-filter-menu">${icons.filter}</button>
         <div id="order-filter-menu" class="dropdown-menu" role="menu" hidden></div>
       </div>
+      ${deskHeadHtml("desk-thead-orders", [
+        { items: [{ label: t("desk_col_customer"), key: "customer" }, { label: t("desk_col_date"), key: "date" }] },
+        { items: [{ label: t("desk_col_status"), key: "status" }] },
+        { align: "end", items: [{ label: t("desk_col_amount"), key: "amount" }] },
+      ])}
       <div class="card-list" id="orders-list"><p class="loading-state" role="status">${t("loading")}</p></div>
       <div class="orders-select-bar" id="orders-select-bar" hidden>
         <div class="osb-summary">
@@ -104,6 +111,30 @@ export function renderOrders(root, navigate, openId = null) {
 
   // Select mode (long press an order, or the print button): tick orders, then run one action on all of them
   // (confirm, reject, mark delivered, approve a price change / credit) or print their blanks.
+  // Desktop column headings (hidden on a phone): click sorts the loaded rows, a second click reverses. "date" is the
+  // server's own order (newest first) and keeps the per-day headings; any other sort is one flat list.
+  const headEl = root.querySelector(".desk-thead-orders");
+  let sortKey = "date";
+  let sortReversed = false;
+  const STATUS_ORDER = ["draft", "submitted", "confirmed", "packed_stock_out", "delivered"];
+  function sortOrders(list) {
+    const flip = sortReversed ? -1 : 1;
+    const byDate = (a, b) => new Date(b.created_at) - new Date(a.created_at);
+    const compare = {
+      date: byDate,
+      customer: (a, b) => String(a.customer_name).localeCompare(String(b.customer_name)),
+      amount: (a, b) => Number(b.total_amd) - Number(a.total_amd),
+      status: (a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) || byDate(a, b),
+    }[sortKey];
+    return sortKey === "date" && !sortReversed ? list : [...list].sort((a, b) => flip * compare(a, b));
+  }
+  wireDeskHead(headEl, (key) => {
+    sortReversed = key === sortKey ? !sortReversed : false;
+    sortKey = key;
+    paintDeskHead(headEl, sortKey, sortReversed);
+    paint();
+  });
+  paintDeskHead(headEl, sortKey, sortReversed);
   let selectMode = false;
   const selected = new Map(); // id -> order_code
   const printBtn = root.querySelector("#orders-print-btn");
@@ -294,6 +325,15 @@ export function renderOrders(root, navigate, openId = null) {
   const onOrdersChanged = () => refreshIfStale(0);
   document.addEventListener("visibilitychange", onVisible);
   window.addEventListener("orders-changed", onOrdersChanged);
+  // The wide-window detail panel opened/closed/swapped: mark its row in the list (no repaint needed).
+  const onDockedChange = () => {
+    const key = dockedKey();
+    listEl.querySelectorAll("[data-order-id]").forEach((row) => {
+      const open = key === `order:${row.dataset.orderId}`;
+      if (row.classList.contains("row-open") !== open) row.classList.toggle("row-open", open);
+    });
+  };
+  window.addEventListener("docked-change", onDockedChange);
   const autoRefreshTimer = setInterval(() => refreshIfStale(AUTO_REFRESH_MS), 15000);
 
   async function loadMore() {
@@ -333,6 +373,7 @@ export function renderOrders(root, navigate, openId = null) {
       });
     }
 
+    filtered = sortOrders(filtered);
     visibleOrders = filtered;
     if (!filtered.length) {
       listEl.innerHTML = `<p class="empty-state">${t("no_orders_found")}</p>`;
@@ -363,7 +404,7 @@ export function renderOrders(root, navigate, openId = null) {
         const meta = STATUS_META[o.status] ?? STATUS_META.submitted;
         const dateKey = orderDateKey(o.created_at);
         let dateHeading = "";
-        if (dateKey !== lastDateKey) {
+        if (sortKey === "date" && dateKey !== lastDateKey) {
           lastDateKey = dateKey;
           const day = dayTotals.get(dateKey);
           dateHeading = `
@@ -373,7 +414,7 @@ export function renderOrders(root, navigate, openId = null) {
             </div>`;
         }
         return `${dateHeading}
-        <button class="card list-row${selectMode && selected.has(o.id) ? " order-row-selected" : ""}" data-order-id="${o.id}">
+        <button class="card list-row${selectMode && selected.has(o.id) ? " order-row-selected" : ""}${dockedKey() === `order:${o.id}` ? " row-open" : ""}" data-order-id="${o.id}">
           ${
             selectMode
               ? `<span class="list-row-icon order-select-slot" aria-hidden="true"><span class="order-select-check${selected.has(o.id) ? " is-on" : ""}"></span></span>`
@@ -542,6 +583,7 @@ export function renderOrders(root, navigate, openId = null) {
     clearInterval(autoRefreshTimer);
     document.removeEventListener("visibilitychange", onVisible);
     window.removeEventListener("orders-changed", onOrdersChanged);
+    window.removeEventListener("docked-change", onDockedChange);
   };
   cleanup.onRestore = () => refreshIfStale(0);
   return cleanup;

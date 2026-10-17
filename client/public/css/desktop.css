@@ -6,6 +6,11 @@
       about 12 rows visible instead of 4 stretched cards.
    3. Filter bars keep their natural width instead of stretching across the window. */
 
+/* Column heading rows exist in the markup but only a desktop window shows them. */
+.desk-thead {
+  display: none;
+}
+
 @media (min-width: 1024px) {
   /* ---------- 1. Shell ---------- */
 
@@ -92,6 +97,12 @@
 
   /* ---------- 3. Tables ---------- */
 
+  /* one column template per table shape, shared by the rows and the heading row above them */
+  :root {
+    --desk-cols-money: 36px minmax(0, 2fr) minmax(0, 1.2fr) 130px 16px;
+    --desk-cols-plain: 36px minmax(0, 1.5fr) minmax(0, 2fr) 16px;
+  }
+
   :is(#orders-list, #activity-list, #task-list, #customer-list).card-list {
     display: flex;
     flex-direction: column;
@@ -113,7 +124,7 @@
   :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row {
     display: grid;
     /* icon | name + sub line | status chips | amount / distance | arrow */
-    grid-template-columns: 36px minmax(0, 2fr) minmax(0, 1.2fr) 130px 16px;
+    grid-template-columns: var(--desk-cols-money);
     column-gap: 16px;
     row-gap: 1px;
     align-items: center;
@@ -131,7 +142,7 @@
   }
   /* Customers and Tasks have no amount column. */
   :is(#task-list, #customer-list) > .list-row {
-    grid-template-columns: 36px minmax(0, 1.5fr) minmax(0, 2fr) 16px;
+    grid-template-columns: var(--desk-cols-plain);
   }
   :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row:last-child {
     border-bottom: 0;
@@ -281,5 +292,142 @@
   .customer-detail-view .detail-actions-grid .action-btn {
     font-size: 0.8rem;
     padding: 12px 4px;
+  }
+
+  /* ---------- 5. Column headings (Orders, Customers) ---------- */
+
+  .desk-thead {
+    display: grid;
+    column-gap: 16px;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    margin: 8px 0 0;
+    padding: 0 16px;
+    min-height: 38px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-bottom: 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .desk-thead-orders {
+    grid-template-columns: var(--desk-cols-money);
+  }
+  .desk-thead-customers {
+    grid-template-columns: var(--desk-cols-plain);
+    margin-left: 16px;
+    margin-right: 16px;
+  }
+  .desk-th {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .desk-th-end {
+    justify-content: flex-end;
+  }
+  .desk-sort {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 34px;
+    padding: 0 6px;
+    margin: 0 -6px;
+    background: none;
+    border: 0;
+    border-radius: 6px;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+  .desk-sort:hover {
+    color: var(--text);
+    background: var(--bg-card-pressed);
+  }
+  .desk-sort:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .desk-sort-on {
+    color: var(--accent);
+  }
+  .desk-sort-arrow {
+    min-width: 0.8em;
+    font-size: 0.7rem;
+  }
+  /* the table body continues the heading's frame */
+  .desk-thead + :is(#orders-list, #customer-list).card-list {
+    margin-top: 0;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+}
+
+/* ---------- 6. Detail panel docked beside the list (Orders, Tasks; windows >= 1400 px) ----------
+   dockSheet.js marks the overlay .sheet-docked and sets its top edge below the top bar. The list stays clickable (the
+   overlay lets clicks through, only the panel itself takes them), and the page makes room for the panel. */
+@media (min-width: 1400px) {
+  .sheet-overlay.sheet-docked:not(.guide-overlay):not(.pd-lightbox):not(.map-dimension-popover-overlay) {
+    inset: auto 0 0 auto;
+    width: 540px;
+    padding: 0;
+    align-items: stretch;
+    justify-content: stretch;
+    background: transparent;
+    pointer-events: none;
+    animation: none;
+    z-index: 900;
+  }
+  .sheet-overlay.sheet-docked:not(.guide-overlay):not(.pd-lightbox):not(.map-dimension-popover-overlay) > .sheet {
+    pointer-events: auto;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+    border-left: 1px solid var(--border);
+    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.1);
+    overflow-y: auto;
+    animation: none;
+  }
+  .sheet-overlay.sheet-docked > .order-detail-sheet:not(:has(> .edit-sheet)) {
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    border-radius: 0;
+    padding: 22px 24px;
+  }
+  .sheet-overlay.sheet-docked .order-detail-body {
+    display: block;
+  }
+  .sheet-overlay.sheet-docked .order-detail-head .order-detail-customer {
+    font-size: 1.35rem;
+  }
+  body:has(.sheet-overlay.sheet-docked) .app-main {
+    padding-right: 556px;
+  }
+  /* the list is narrower beside the panel: tighter columns, only the status chip (the panel shows the rest) */
+  body:has(.sheet-overlay.sheet-docked) {
+    --desk-cols-money: 36px minmax(0, 1.6fr) minmax(0, 0.9fr) 110px 12px;
+  }
+  body:has(.sheet-overlay.sheet-docked) #orders-list .list-row-bottom > .badge:nth-child(n + 2) {
+    display: none;
+  }
+  /* the row whose details are open */
+  .row-open,
+  :is(#orders-list, #task-list) > .list-row.row-open {
+    background: var(--accent-soft, rgba(10, 132, 255, 0.1));
+    box-shadow: inset 0 0 0 1.5px var(--accent);
   }
 }

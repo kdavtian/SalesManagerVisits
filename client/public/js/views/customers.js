@@ -8,6 +8,7 @@ import { loadWithCache } from "../listCache.js";
 import { indexBrandSummary, brandSearchText, matchedEverEntries, matchesSelectedChips, buildBrandChipTree, chipHtml, shortDate } from "../brandChips.js";
 import { buildRegionSubregionTree, buildDirectionManagerTree, openTriStateTreeSheet, NO_GROUP_KEY } from "../regionTree.js";
 import { openTypeTierSheet } from "../typeTierSheet.js";
+import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
 
 const FILTERS = [
   { key: "", labelKey: "filter_all" },
@@ -105,6 +106,10 @@ export function renderCustomers(root, navigate, initialFilter) {
         </div>
       </div>
       <div class="customer-filter-row" id="customer-filter-row"></div>
+      ${deskHeadHtml("desk-thead-customers", [
+        { items: [{ label: t("desk_col_customer"), key: "name" }, { label: t("desk_col_added"), key: "last_added" }] },
+        { items: [{ label: t("desk_col_last_visit"), key: "last_visit" }] },
+      ])}
       <div id="customer-list" class="card-list"></div>
     </div>
   `;
@@ -174,7 +179,11 @@ export function renderCustomers(root, navigate, initialFilter) {
     sortBtn.setAttribute("aria-expanded", String(!sortMenu.hidden));
     if (!sortMenu.hidden) sortMenu.querySelector("button")?.focus();
   });
+  // Desktop column headings: a click is the same as picking that item in the sort menu.
+  const deskHead = root.querySelector(".desk-thead-customers");
+  wireDeskHead(deskHead, (key) => sortMenu.querySelector(`[data-sort="${key}"]`)?.click());
   function paintSortArrows() {
+    paintDeskHead(deskHead, sortKey, sortReversed);
     sortMenu.querySelectorAll("[data-sort]").forEach((item) => {
       const arrow = item.querySelector(".sort-menu-arrow");
       arrow.textContent = item.dataset.sort === sortKey ? (sortReversed ? "▲" : "▼") : "";

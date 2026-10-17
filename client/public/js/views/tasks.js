@@ -6,6 +6,7 @@
 import { openCollectionOutcomeSheet } from "../collectionOutcomeSheet.js";
 import { isCallTask, callButtonHtml, callHistoryHtml, rememberCall, openCallResultSheet } from "../callTask.js";
 import { api } from "../api.js";
+import { dockSheet, dockedKey } from "../dockSheet.js";
 import { usualOrderHash } from "../reorder.js";
 import { bindStepperButton } from "../stepper.js";
 import { escapeHtml, activateDialog, formatDateDMY, parseDateOnly, labelColon } from "../util.js";
@@ -337,7 +338,22 @@ export async function renderTasks(root, navigate, openId) {
     }
     listEl.innerHTML = html;
     listEl.querySelectorAll("[data-task-id]").forEach((el) => el.addEventListener("click", () => openTaskSheet(Number(el.dataset.taskId), { onChanged: load, navigate })));
+    markOpenTask();
   }
+
+  // The wide-window detail panel shows one task: mark its row in the list.
+  function markOpenTask() {
+    const key = dockedKey();
+    container.querySelectorAll("#task-list [data-task-id]").forEach((row) => {
+      const open = key === `task:${row.dataset.taskId}`;
+      if (row.classList.contains("row-open") !== open) row.classList.toggle("row-open", open);
+    });
+  }
+  const onDockedChange = () => {
+    if (!container.isConnected) return window.removeEventListener("docked-change", onDockedChange);
+    markOpenTask();
+  };
+  window.addEventListener("docked-change", onDockedChange);
 
   container.addEventListener("click", (e) => {
     if (openDropdown && !e.target.closest("[data-dropdown]") && !e.target.closest("[data-dropdown-menu]")) {
@@ -380,6 +396,7 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
   overlay.className = "sheet-overlay";
   overlay.innerHTML = `<div class="sheet"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   document.body.appendChild(overlay);
+  dockSheet(overlay, `task:${taskId}`);
   activateDialog(overlay);
   overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
   const sheet = overlay.querySelector(".sheet");
