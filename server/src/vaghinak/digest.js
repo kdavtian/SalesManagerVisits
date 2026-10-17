@@ -7,6 +7,7 @@ import { yerevanToday } from "../utils/yerevanDate.js";
 import { getVaghinakSettings } from "./settings.js";
 import { createMessage, isWorkingDay, minuteOfDay, MANAGEMENT_ROLES } from "./engine.js";
 import { durationHy } from "./phrases.js";
+import { humanDelayPassed } from "./humanDelay.js";
 import { bullets } from "../utils/bullets.js";
 
 const shiftDay = (day, delta) => new Date(new Date(`${day}T00:00:00Z`).getTime() + delta * 86400000).toISOString().slice(0, 10);
@@ -30,13 +31,14 @@ export async function weekFacts(db, monday, graceMin) {
   return rows.map((r) => ({ ...r, pct: pctOf(r.planned, r.visited) }));
 }
 
-export async function weeklyDigest(now = new Date(), db = pool, { pick } = {}) {
+export async function weeklyDigest(now = new Date(), db = pool, { pick, delayMaxMs } = {}) {
   const settings = await getVaghinakSettings(db);
   if (settings.mode === "off") return { created: 0 };
   const day = yerevanToday(now);
   const nowMin = minuteOfDay(now);
   if (nowMin < 9 * 60 || nowMin >= settings.workEndMin) return { created: 0 };
   if (!(await isWorkingDay(db, day))) return { created: 0 };
+  if (!humanDelayPassed(day, "weekly", now, { maxMs: delayMaxMs, pick })) return { created: 0 };
   const thisMonday = mondayOf(day);
   const lastMonday = shiftDay(thisMonday, -7);
   const week = await weekFacts(db, lastMonday, settings.lateGraceMin);

@@ -427,3 +427,8 @@ Do not build or re-ask about live location (faster foreground pings, Telegram Li
 ## Vaghinak page polish (1.361.0, owner 2026-10-18: "I told you several times to change this blue part-outline")
 - **No one-sided colored borders on cards, ever** (a blue left stripe on an unread Vaghinak message looked broken against the rounded corners). Unread = a small blue dot before the time (same cue as the Notifications list); "needs an answer" keeps the full orange outline. Before adding any accent to a card use a dot, a badge or a full outline -- never `border-left`/`inset` stripes. (`grep "border-left: [2-9]px"` in styles.css should stay empty.)
 - A swipeable chip row must scroll the chosen chip into view when the choice is made from somewhere else (Today card -> Questions): `selectTab` in `views/vaghinak.js` does it; reuse the same few lines for any chip row.
+
+## Vaghinak speaks at human times (owner 2026-10-18: "not at strictly 10:31 -- random between 10:30 and 10:35")
+- `server/src/vaghinak/humanDelay.js`: when a rule first turns true for a person (not started, office too long, stopped early, late start...), a random delay of 0..5 minutes is drawn once and remembered (in memory, per day/person/kind/level); the message goes out only after it. The same gate delays the end-of-day wrap-up and the Monday digest; the data/order/downpayment chasers wait a random 0..5 min on their first run and then run at an irregular 3..7 min rhythm.
+- The engine ticks every MINUTE now (was every 5 min from server start, which produced regular :01/:06 times). The admin "run now" button skips the delay (`delayMaxMs: 0`); tests pass `delayMaxMs: 0` unless they test the delay itself.
+- Server-only change: no APP_VERSION bump, fast deploy (restart picks it up).

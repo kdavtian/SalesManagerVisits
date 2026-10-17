@@ -150,7 +150,8 @@ vaghinakRouter.put("/people/:id/mute", requireSettingsRole, async (req, res) => 
 vaghinakRouter.post("/run-now", async (req, res) => {
   if (req.user.role !== "admin") return res.status(403).json({ error: "Not allowed" });
   const now = new Date();
-  const a = await tick(now);
-  const b = await wrapUp(now);
+  // an admin pressing "run now" wants the result now: no human delay
+  const a = await tick(now, undefined, { delayMaxMs: 0 });
+  const b = await wrapUp(now, undefined, { delayMaxMs: 0 });
   res.json({ created: a.created + b.created });
 });
