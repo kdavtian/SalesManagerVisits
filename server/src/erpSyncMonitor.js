@@ -62,21 +62,33 @@ export async function checkErpSyncFreshness() {
 
   const recipients = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [ALERT_ROLES]);
 
+  // One notification per check, however many sources stalled together (the
+  // bot's workbook upload feeds all five at once, so a dead bot used to
+  // produce five near-identical alerts -- owner, 2026-10-18). The alert goes
+  // out when at least one source is newly stalled and lists every source
+  // that is stalled right now as bullet lines.
+  const stale = [];
+  let newlyStale = false;
   for (const check of checks) {
     const freshness = await check.freshnessPromise;
     if (freshness.stale) {
-      if (alreadyAlerted.has(check.key)) continue;
-      alreadyAlerted.add(check.key);
-      for (const recipient of recipients.rows) {
-        await notifyUser(recipient.id, "erp_sync_stale", {
-          title: "ERP համաժամացումը կանգնած է",
-          body: `${check.label}-ը չի թարմացվել ${ERP_STALE_AFTER_HOURS} ժամից ավելի (վերջին անգամ՝ ${formatSyncedAt(freshness.synced_at)})։ Ստուգեք Castrol բոտի կապը։`,
-          url: "/#/reports",
-        });
+      stale.push({ ...check, synced_at: freshness.synced_at });
+      if (!alreadyAlerted.has(check.key)) {
+        alreadyAlerted.add(check.key);
+        newlyStale = true;
       }
     } else {
       alreadyAlerted.delete(check.key);
     }
+  }
+  if (!newlyStale) return;
+  const lines = stale.map((c) => `• ${c.label} (${formatSyncedAt(c.synced_at)})`).join("\n");
+  const body =
+    stale.length === 1
+      ? `${stale[0].label}-ը չի թարմացվել ${ERP_STALE_AFTER_HOURS} ժամից ավելի (վերջին անգամ՝ ${formatSyncedAt(stale[0].synced_at)})։ Ստուգեք Castrol բոտի կապը։`
+      : `Չեն թարմացվել ${ERP_STALE_AFTER_HOURS} ժամից ավելի (վերջին անգամ՝ փակագծերում)՝\n${lines}\nՍտուգեք Castrol բոտի կապը։`;
+  for (const recipient of recipients.rows) {
+    await notifyUser(recipient.id, "erp_sync_stale", { title: "ERP համաժամացումը կանգնած է", body, url: "/#/reports" });
   }
 }
 

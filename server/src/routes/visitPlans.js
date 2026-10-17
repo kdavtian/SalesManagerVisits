@@ -6,6 +6,7 @@ import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { notifyUser } from "../notifications.js";
 import { APPROVER_ROLES } from "../notificationPreferences.js";
 import { repVisitSql } from "../visitCount.js";
+import { dropRecentlyVisited } from "../utils/planSkipRecent.js";
 import { MAIN_SCOPE, parseScope, loadChannelMap, inScope, mergeScopeIds, scopesFor } from "../planScopes.js";
 
 export const visitPlansRouter = Router();
@@ -113,7 +114,8 @@ visitPlansRouter.get("/mine", async (req, res) => {
   if (!rule) return res.json(null);
 
   const areaIds = await expandAreas(rule.areas);
-  const customerIds = [...new Set([...areaIds, ...(rule.customer_ids ?? [])])];
+  // A customer visited 1..N days ago is left out of this rule day (see utils/planSkipRecent.js).
+  const customerIds = await dropRecentlyVisited(new Set([...areaIds, ...(rule.customer_ids ?? [])]), date);
   res.json({
     id: null,
     user_id: targetId,
@@ -170,7 +172,7 @@ visitPlansRouter.get("/team-today", async (req, res) => {
     const ids = plan
       ? (plan.customer_ids ?? [])
       : rule
-        ? [...new Set([...(expandedByRule.get(rule.id) ?? []), ...(rule.customer_ids ?? [])])]
+        ? await dropRecentlyVisited(new Set([...(expandedByRule.get(rule.id) ?? []), ...(rule.customer_ids ?? [])]), date)
         : [];
     customerIdsByManager.set(m.id, ids);
     ids.forEach((id) => allCustomerIds.add(id));

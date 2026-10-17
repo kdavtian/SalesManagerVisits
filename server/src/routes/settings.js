@@ -21,6 +21,7 @@ import { getBonusesEnabled, setBonusesEnabled } from "../bonusSettings.js";
 import { ensureCurrentRound, ensureOnceRound } from "../bonusChallengeRounds.js";
 import { ROLES } from "../roles.js";
 import { pool } from "../db/pool.js";
+import { getPlanSkipRecentVisitDays, setPlanSkipRecentVisitDays } from "../utils/planSkipRecent.js";
 
 export const settingsRouter = Router();
 
@@ -31,6 +32,7 @@ settingsRouter.get("/", async (req, res) => {
     checkinRadiusMeters,
     checkinAllowanceEnabled,
     defaultVisitFrequencyDays,
+    planSkipRecentVisitDays,
     incentiveMessage,
     quickActionVisibility,
     calculatorPinHash,
@@ -40,6 +42,7 @@ settingsRouter.get("/", async (req, res) => {
     getCheckinRadiusMeters(),
     getCheckinAllowanceEnabled(),
     getDefaultVisitFrequencyDays(),
+    getPlanSkipRecentVisitDays(),
     getIncentiveMessage(),
     getQuickActionVisibility(),
     getCalculatorPinHash(),
@@ -50,6 +53,7 @@ settingsRouter.get("/", async (req, res) => {
     checkin_radius_meters: checkinRadiusMeters,
     checkin_allowance_enabled: checkinAllowanceEnabled,
     default_visit_frequency_days: defaultVisitFrequencyDays,
+    plan_skip_recent_visit_days: planSkipRecentVisitDays,
     incentive_message: incentiveMessage,
     // Read by every role (the dashboard needs its own row to decide which
     // tiles to render); only an admin can PATCH it, same as every other
@@ -92,6 +96,14 @@ settingsRouter.patch("/", requireAdmin, async (req, res) => {
       return res.status(400).json({ error: "default_visit_frequency_days must be between 1 and 365" });
     }
     result.default_visit_frequency_days = await setDefaultVisitFrequencyDays(Math.round(days));
+  }
+
+  if (req.body?.plan_skip_recent_visit_days !== undefined) {
+    const days = Number(req.body.plan_skip_recent_visit_days);
+    if (!Number.isFinite(days) || days < 0 || days > 60) {
+      return res.status(400).json({ error: "plan_skip_recent_visit_days must be between 0 and 60" });
+    }
+    result.plan_skip_recent_visit_days = await setPlanSkipRecentVisitDays(Math.round(days));
   }
 
   if (req.body?.incentive_message !== undefined) {

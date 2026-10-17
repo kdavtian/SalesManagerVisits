@@ -10,8 +10,8 @@
 // The workbook's Net Cost (Products!AE) is computed at the Silver price and mixes a per-LITER landing
 // cost into a per-PACK price (Products!AA/AB, workbook 2.1.0), which overstates it by ~18 % for packs
 // over 1 L -- most 4 L and drum silver prices then look "below cost". So every line's net cost is
-// recomputed here at its real selling price, per pack, by costModel.js: landing + commissions (4 % at
-// the dearest channel) + overhead (17.5 % of the price + vehicle running costs per litre, measured
+// recomputed here at its real selling price, per pack, by costModel.js: landing + commissions (by the customer's
+// sales channel: SM 4 %, CVO/PCO/OEM 2 %, KF/CAS 0 %) + overhead (17.5 % of the price + vehicle running costs per litre, measured
 // from the cash ledger) + 20 % VAT on (price - landing) + 18 % profit tax on the rest. Where landing
 // cost or pack size is unknown the flat workbook net cost is used.
 import { netCost, litersOfUnit } from "../../client/public/js/costModel.js";
@@ -27,13 +27,13 @@ export function effectiveDiscountPct(subtotal, discountPct, discountAmd) {
 
 // product: { net_cost_amd, landing_cost_amd, unit } (unit like "4L"); price = selling price per pack. The model itself
 // (rates, formula) lives in client/public/js/costModel.js, shared with the Products-page calculator.
-export function netCostAtPrice({ net_cost_amd, landing_cost_amd, unit }, price) {
+export function netCostAtPrice({ net_cost_amd, landing_cost_amd, unit }, price, channel = null) {
   const flat = Number(net_cost_amd) || 0;
   const landing = Number(landing_cost_amd) || 0;
   const liters = litersOfUnit(unit);
   const p = Number(price) || 0;
   if (!(landing > 0) || !(liters > 0) || !(p > 0)) return flat;
-  return netCost({ landing, price: p, liters }).net;
+  return netCost({ landing, price: p, liters }, undefined, { channel }).net;
 }
 
 // The net cost SHOWN on the Products page, warehouse and price-list PDF: per pack at the product's default wholesale
@@ -44,7 +44,14 @@ export function displayNetCost(row) {
 }
 
 // lines: [{ product_id, unit_price_amd, quantity }], total = subtotal after discount.
-export async function orderCostCheck(db, lines, subtotal, total) {
+// customerId (optional): the customer's own sales channel decides the commission in the floor (SM 4 %, CVO/PCO/OEM 2 %,
+// KF/CAS 0 %; owner, 2026-10-18). Without it (or without a channel) the dearest 4 % is used, as before.
+export async function orderCostCheck(db, lines, subtotal, total, { customerId = null } = {}) {
+  let channel = null;
+  if (Number.isInteger(Number(customerId)) && customerId != null) {
+    const { rows: c } = await db.query("SELECT sales_channel FROM customers WHERE id = $1", [Number(customerId)]);
+    channel = c[0]?.sales_channel || null;
+  }
   const ids = [...new Set(lines.map((l) => Number(l.product_id)).filter(Number.isInteger))];
   const { rows } = ids.length ? await db.query("SELECT id, net_cost_amd, landing_cost_amd, unit FROM products WHERE id = ANY($1)", [ids]) : { rows: [] };
   const products = new Map(rows.map((r) => [r.id, r]));
@@ -66,7 +73,7 @@ export async function orderCostCheck(db, lines, subtotal, total) {
       belowLandingProductIds.push(Number(l.product_id));
     }
     if (!(Number(product.net_cost_amd) > 0)) continue;
-    const c = netCostAtPrice(product, price);
+    const c = netCostAtPrice(product, price, channel);
     netCostTotal += c * Number(l.quantity);
     if (price < c - 0.5) belowCost = true;
   }

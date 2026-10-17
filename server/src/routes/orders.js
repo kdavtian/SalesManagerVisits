@@ -291,7 +291,7 @@ ordersRouter.post("/", async (req, res) => {
   // "submitted" into fulfillment (see the approval_status gate in PATCH
   // below) -- no discount means nothing to approve.
   // Up to 3 % is approved automatically (unless a line would sell below net cost); see discountPolicy.js.
-  const costCheck = await orderCostCheck(pool, lines, subtotalAmd, totalAmd);
+  const costCheck = await orderCostCheck(pool, lines, subtotalAmd, totalAmd, { customerId });
   const approvalStatus = decideDiscountApproval({ discountPct, discountAmd, subtotal: subtotalAmd, belowCost: costCheck.belowCost, belowLanding: costCheck.belowLanding });
   // Credit limit (migration 101): an order that pushes the customer over their
   // limit also needs a director's sign-off. A draft (no ERP link yet, so no
@@ -414,7 +414,7 @@ ordersRouter.post("/price-check", async (req, res) => {
   const subtotal = lines.reduce((sum, l) => sum + l.line_total_amd, 0);
   const pct = Number(discount_amd) > 0 ? 0 : Math.min(100, Math.max(0, Number(discount_pct) || 0));
   const total = applyDiscount(subtotal, pct, Math.max(0, Number(discount_amd) || 0));
-  const check = await orderCostCheck(pool, lines, subtotal, total);
+  const check = await orderCostCheck(pool, lines, subtotal, total, { customerId });
   res.json({ below_landing: check.belowLanding, product_ids: check.belowLandingProductIds });
 });
 
@@ -685,7 +685,7 @@ ordersRouter.get("/:id", async (req, res) => {
   let pricing_check = null;
   if (seesProductCosts(req.user.role)) {
     const subtotal = items.reduce((sum, l) => sum + Number(l.unit_price_amd) * Number(l.quantity), 0);
-    const check = await orderCostCheck(pool, items, subtotal, Number(order.total_amd));
+    const check = await orderCostCheck(pool, items, subtotal, Number(order.total_amd), { customerId: order.customer_id });
     pricing_check = {
       margin_pct: check.marginPct === null ? null : Math.round(check.marginPct * 10) / 10,
       below_cost: check.belowCost,
@@ -904,7 +904,7 @@ ordersRouter.patch("/:id", async (req, res) => {
     const wasAutoApproved = order.approval_status === "approved" && order.approved_by === null;
     const discounted = nextDiscountPct > 0 || nextDiscountAmd > 0;
     const policyLines = nextLines ?? (await pool.query("SELECT product_id, unit_price_amd, quantity FROM order_items WHERE order_id = $1", [order.id])).rows;
-    const check = await orderCostCheck(pool, policyLines, Number(subtotal), nextTotal);
+    const check = await orderCostCheck(pool, policyLines, Number(subtotal), nextTotal, { customerId: order.customer_id });
     if (discounted) {
       if (discountChanged || wasAutoApproved || check.belowLanding) {
         nextApprovalStatus = decideDiscountApproval({ discountPct: nextDiscountPct, discountAmd: nextDiscountAmd, subtotal: Number(subtotal), belowCost: check.belowCost, belowLanding: check.belowLanding });
@@ -1199,7 +1199,7 @@ ordersRouter.post("/:id/approve-discount", async (req, res) => {
   // The sales director may approve only while every line stays at or above net cost; the CEO and admin may approve any.
   const { rows: costItems } = await pool.query("SELECT product_id, unit_price_amd, quantity FROM order_items WHERE order_id = $1", [order.id]);
   const subtotal = costItems.reduce((sum, l) => sum + Number(l.unit_price_amd) * Number(l.quantity), 0);
-  const check = await orderCostCheck(pool, costItems, subtotal, Number(order.total_amd));
+  const check = await orderCostCheck(pool, costItems, subtotal, Number(order.total_amd), { customerId: order.customer_id });
   if (!canApproveDiscountRole(req.user.role, check.belowCost, check.belowLanding)) {
     return res.status(403).json({ error: check.belowLanding ? "A line is sold below landing cost -- only the CEO or an admin can approve it" : "This discount takes a line below net cost -- only the CEO or an admin can approve it" });
   }

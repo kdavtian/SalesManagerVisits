@@ -6,6 +6,7 @@ import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { NOT_NO_VISIT_CHANNEL_SQL } from "./customers.js";
 import { batchExpandAreas } from "./visitPlans.js";
 import { repVisitSql } from "../visitCount.js";
+import { dropRecentlyVisited } from "../utils/planSkipRecent.js";
 import { computeRepProgress, PERIODS } from "../repProgress.js";
 
 export const dashboardRouter = Router();
@@ -72,8 +73,8 @@ async function computeWeekProgress(targetUserIds) {
       const rule = ruleByUserDay.get(`${userId}:${dayOfWeek}`);
       if (!rule) continue;
       const areaIds = areaIdsByRule.get(rule.id) ?? new Set();
-      const customerIds = new Set([...areaIds, ...(rule.customer_ids ?? [])]);
-      plannedToDate += customerIds.size;
+      const customerIds = await dropRecentlyVisited(new Set([...areaIds, ...(rule.customer_ids ?? [])]), date);
+      plannedToDate += customerIds.length;
     }
   }
 

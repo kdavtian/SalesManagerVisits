@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { mountUsualSlot, reorderHash } from "../reorder.js";
+import { reorderHash } from "../reorder.js";
 import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, SALES_CHANNELS, channelDisplayLabel, parseDateOnly, formatDateDMY, formatDayMonth, labelColon, erpLineDiscountRowHtml, leaveSheetTo, showToast, openInfoPopup } from "../util.js";
 import { currentChips, chipHtml, chipColumns } from "../brandChips.js";
 import { nextVisitRowHtml } from "../visitSchedule.js";
@@ -175,7 +175,6 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       </button>
     </div>
 
-    <div id="customer-usual-slot"></div>
     <div id="customer-tasks-slot"></div>
     <div id="customer-docs-slot"></div>
 
@@ -267,7 +266,6 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       /* private mode: no tip */
     }
   }, 1500);
-  mountUsualSlot(container.querySelector("#customer-usual-slot"), customer, navigate);
   container.querySelector("#edit-customer-btn").addEventListener("click", () => {
     openEditSheet(customer, navigate, () => renderCustomerDetail(root, navigate, customerId));
   });

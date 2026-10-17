@@ -10,7 +10,7 @@
 //
 // NET COST (landing + what the sale itself costs us), per PACK at a given selling price:
 //   method "workbook": landing (import VAT inside it) + commissions + overhead + 20 % "VAT tax" on the margin + 18 % profit
-//     tax on the rest of the margin -- the workbook's way, kept as the default so existing discount floors do not jump;
+//     tax on the rest of the margin -- the workbook's way, kept as an option;
 //   method "payer": KAD is a VAT payer, so import VAT is only advanced (it is credited against the VAT collected from
 //     customers) -- net cost = landing + VAT to the state (price/6 - import VAT) + commissions + overhead + profit tax on the
 //     real profit (revenue without VAT - landing without VAT - commissions - overhead). Prices are VAT-inclusive.
@@ -38,7 +38,7 @@ export const DEFAULT_COST_ITEMS = Object.freeze([
 ]);
 
 export const COST_RATES_DEFAULT = Object.freeze({
-  rate: 377.5, // Products!A1, USD -> AMD
+  rate: 366, // USD -> AMD: the market rate in the cash ledger (owner, 2026-10-18; the workbook's Products!A1 still says 377.5)
   // legal transport = the freight value declared on the customs invoice, USD per kg (customs value, hence duty/VAT base)
   tLegalCastrol: 2007 / 9280, // a 2,007 USD truck of 9,280 kg
   tLegalRoyal: 0.35,
@@ -57,14 +57,14 @@ export const COST_RATES_DEFAULT = Object.freeze({
   otherUsd: 0, // other costs, USD per item
   commDirector: 2, // % of the selling price: sales director, every channel except KF and CAS
   commRep: 2, // % of the selling price: the sales manager of an "SM ..." channel, own channel only
-  vatMode: "workbook", // "workbook" | "payer"
+  vatMode: "payer", // "workbook" | "payer" -- KAD is a VAT payer (owner, 2026-10-18)
   vatTax: 20, // workbook method: % of the margin
   ptax: 18, // profit tax, %
   vatShare: 0.16, // payer method with a landing cost taken from the Excel: import VAT is ~16 % of landing cost
 });
 
-// Where the owner's current USD rate sits compared with the workbook's (Products!A1 = 377.5 is the cost-model rate): the
-// ledger's USD rows ran 366-370 AMD in 2026-06..09. Shown as a one-tap hint in the settings, never applied silently.
+// The market USD rate the cash ledger shows (366-370 AMD in 2026-06..09) -- the default rate since 1.359.0 (owner's decision);
+// the workbook's Products!A1 still says 377.5, so the settings button stays for a phone that saved another rate.
 export const RATE_MARKET_HINT = Object.freeze({ value: 366, asOf: "2026-09" });
 
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);

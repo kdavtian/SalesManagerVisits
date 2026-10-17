@@ -34,19 +34,16 @@ test.describe("Debt search and usual strip", () => {
     await expect(page.locator(".debt-balance-card")).toHaveCount(2);
   });
 
-  test("the Order usual strip appears before the product catalog has arrived", async ({ page, fixtures }) => {
+  test("the customer card no longer carries an Order usual section (owner 2026-10-18)", async ({ page, fixtures }) => {
     const admin = await fixtures.createUser("admin");
     const customer = await fixtures.createCustomer({ created_by: admin.id, name: "Usual Strip Customer" });
     await page.route("**/api/customers/*/reorder-profile*", (route) =>
       route.fulfill({ json: { cadence: { median_gap_days: 10, days_since_order: 5, state: "ok" }, orders_considered: 4, items: [{ product_id: 1, name: "X", quantity: 2 }], skipped: 0, lines: null } })
     );
-    await page.route("**/api/products*", async (route) => {
-      await new Promise((r) => setTimeout(r, 3000));
-      await route.continue();
-    });
     await loginViaUi(page, admin.email);
     await page.goto(`/#/customers/${customer.id}`);
-    await expect(page.locator("[data-usual-order]")).toBeVisible({ timeout: 2000 });
-    await expect(page.locator("[data-usual-count]")).not.toContainText("~");
+    await expect(page.locator("#new-order-btn, .customer-detail-header").first()).toBeVisible({ timeout: 10000 });
+    await page.waitForTimeout(800);
+    await expect(page.locator("[data-usual-order], .usual-order-card")).toHaveCount(0);
   });
 });
