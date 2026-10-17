@@ -26,6 +26,7 @@ export const icons = {
   close: `<svg class="map-action-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><path d="M5 5l14 14M19 5 5 19"/></svg>`,
   info: `<svg class="map-action-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><circle cx="12" cy="7.75" r="0.15" fill="currentColor" stroke="currentColor" stroke-width="2.4"/></svg>`,
   chevronUp: `<svg class="map-action-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><path d="m5 15 7-7 7 7"/></svg>`,
+  chevronRight: `<svg class="map-action-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><path d="m9 6 6 6-6 6"/></svg>`,
   chevronDown: `<svg class="map-action-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><path d="m5 9 7 7 7-7"/></svg>`,
   navigation: `<svg class="map-action-svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M20.75 3.25 3.55 10.1a.9.9 0 0 0 .12 1.71l6.72 1.8 1.8 6.72a.9.9 0 0 0 1.71.12l6.85-17.2Z"/></svg>`,
   sort: `<svg viewBox="0 0 24 24" width="20" height="20" ${stroke}><path d="M6 4v16M6 4l-3 3M6 4l3 3M18 20V4M18 20l-3-3M18 20l3-3"/></svg>`,
