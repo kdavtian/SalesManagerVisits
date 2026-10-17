@@ -11,7 +11,7 @@ import { seesAllActivity } from "../roles.js";
 import { FIELD_REP_ROLE } from "../visitCount.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { insertPayment } from "./payments.js";
-import { autoCompleteCollectionTasks, autoCompleteProductCheckTasks } from "../taskAutoComplete.js";
+import { autoCompleteCollectionTasks, autoCompleteProductCheckTasks, autoCompleteVisitTasks } from "../taskAutoComplete.js";
 
 // Below this, a payment isn't worth interrupting anyone's Telegram for.
 const LARGE_PAYMENT_THRESHOLD_AMD = 100000;
@@ -311,6 +311,9 @@ checkinsRouter.post("/", (req, res, next) => {
   if (amountCollected != null) {
     autoCompleteCollectionTasks({ customerId, actorId: req.user.id, amountAmd: amountCollected }).catch((err) => console.error("Task auto-complete failed:", err.message));
   }
+
+  // The visit itself closes the "Visit" task given to this rep for this customer.
+  autoCompleteVisitTasks({ customerId, actorId: req.user.id }).catch((err) => console.error("Task auto-complete failed:", err.message));
 
   // Recording what the shop has (brand chips / available products) closes the customer's "check products" task.
   if (brandStatusValue || (Array.isArray(availableProductsValue) && availableProductsValue.length)) {

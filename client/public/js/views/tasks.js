@@ -4,6 +4,7 @@
 // tasks (server/src/roles.js canCreateTasks); everyone receives and completes
 // them. Deadline: the customer's next visit by default, or a chosen date.
 import { openCollectionOutcomeSheet } from "../collectionOutcomeSheet.js";
+import { isCallTask, callButtonHtml, callHistoryHtml, rememberCall, openCallResultSheet } from "../callTask.js";
 import { api } from "../api.js";
 import { usualOrderHash } from "../reorder.js";
 import { bindStepperButton } from "../stepper.js";
@@ -36,6 +37,8 @@ function taskKindIcon(task) {
   if (task.task_kind === "collect_debt") return icons.wallet;
   if (task.task_kind === "make_order") return icons.cart;
   if (task.task_kind === "check_products") return icons.box;
+  if (task.task_kind === "call_customer") return icons.phone;
+  if (task.task_kind === "visit_customer") return icons.mapPinCheck;
   if (task.auto_kind === "debt_collection") return icons.wallet;
   if (task.auto_kind === "reorder_followup") return icons.repeat;
   if (task.auto_kind) return icons.gauge;
@@ -74,10 +77,12 @@ export function taskCardHtml(task, today, { showCustomer = true } = {}) {
 // tap again to clear), and a search bar with icon filters (who / type / sort). Everything is
 // loaded once (open tasks always come first in the 500-row cap) and filtered on the phone, so
 // switching tabs, people and filters is instant.
-const TASK_KINDS = ["debt_collection", "reorder_followup", "check_products", "ops", "manual"];
+const TASK_KINDS = ["debt_collection", "reorder_followup", "check_products", "call", "visit", "ops", "manual"];
 // A typed task given by a person sits in the same group as its automatic twin (Collect debt = debt collection,
 // Make order = reorder follow-up); "Check products" has its own group.
 const kindOf = (r) => {
+  if (r.task_kind === "call_customer") return "call";
+  if (r.task_kind === "visit_customer") return "visit";
   if (r.task_kind === "collect_debt") return "debt_collection";
   if (r.task_kind === "make_order") return "reorder_followup";
   if (r.task_kind === "check_products") return "check_products";
@@ -91,6 +96,8 @@ const NEW_TASK_TYPES = [
   { kind: "collect_debt", icon: "wallet", label: "task_type_collect_debt", sub: "task_type_collect_debt_sub" },
   { kind: "make_order", icon: "cart", label: "task_type_make_order", sub: "task_type_make_order_sub" },
   { kind: "check_products", icon: "box", label: "task_type_check_products", sub: "task_type_check_products_sub" },
+  { kind: "call_customer", icon: "phone", label: "task_type_call_customer", sub: "task_type_call_customer_sub" },
+  { kind: "visit_customer", icon: "mapPinCheck", label: "task_type_visit_customer", sub: "task_type_visit_customer_sub" },
 ];
 
 // Long-press menu on the + button: pick the type, then the editor opens with the title and checklist pre-filled.
@@ -208,6 +215,8 @@ export async function renderTasks(root, navigate, openId) {
       { value: "debt_collection", label: t("tasks_kind_debt") },
       { value: "reorder_followup", label: t("tasks_kind_reorder") },
       { value: "check_products", label: t("tasks_kind_check_products") },
+      { value: "call", label: t("tasks_kind_call") },
+      { value: "visit", label: t("tasks_kind_visit") },
       { value: "ops", label: t("tasks_kind_ops") },
       { value: "manual", label: t("tasks_kind_manual") },
     ];
@@ -419,13 +428,16 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
              </div>`
           : ""
       }
+      ${isCallTask(task) && open ? `<div class="call-block">${callButtonHtml(task)}</div>` : ""}
+      ${isCallTask(task) ? callHistoryHtml(task.calls) : ""}
       ${task.outcome ? `<p><span class="badge badge-neutral">${t(`collect_outcome_${task.outcome}`)}${task.promise_date ? ` · ${escapeHtml(task.promise_date)}` : ""}</span></p>` : ""}
       ${task.completion_note ? `<p class="muted">${escapeHtml(task.completion_note)}</p>` : ""}
-      ${open && !task.items.length && task.auto_kind !== "debt_collection" && task.task_kind !== "collect_debt" ? `<textarea id="task-complete-note" class="task-complete-note" rows="2" maxlength="500" placeholder="${escapeHtml(t("task_note_placeholder"))}" aria-label="${escapeHtml(t("task_note_placeholder"))}"></textarea>` : ""}
+      ${open && !task.items.length && task.auto_kind !== "debt_collection" && task.task_kind !== "collect_debt" && !isCallTask(task) ? `<textarea id="task-complete-note" class="task-complete-note" rows="2" maxlength="500" placeholder="${escapeHtml(t("task_note_placeholder"))}" aria-label="${escapeHtml(t("task_note_placeholder"))}"></textarea>` : ""}
       <p class="form-error" id="task-sheet-error" hidden></p>
       <div class="sheet-actions" id="task-sheet-actions" style="flex-wrap:wrap;">
         ${open && (task.auto_kind === "reorder_followup" || task.task_kind === "make_order") && task.customer_id ? `<button type="button" class="btn btn-primary" data-action="order-usual">${t("usual_order_btn")}</button>` : ""}
-        ${open ? `<button type="button" class="btn ${task.auto_kind === "reorder_followup" || task.task_kind === "make_order" ? "" : "btn-primary"}" data-action="complete">${t("task_mark_complete")}</button>` : ""}
+        ${open && isCallTask(task) ? `<button type="button" class="btn btn-primary" data-action="call-result">${t("call_record_result")}</button>` : ""}
+        ${open && !isCallTask(task) ? `<button type="button" class="btn ${task.auto_kind === "reorder_followup" || task.task_kind === "make_order" ? "" : "btn-primary"}" data-action="complete">${t("task_mark_complete")}</button>` : ""}
         ${task.status === "done" ? `<button type="button" class="btn" data-action="reopen">${t("task_reopen")}</button>` : ""}
         ${isCreator && task.status !== "cancelled" ? `<button type="button" class="btn" data-action="edit">${t("edit")}</button>` : ""}
         ${isCreator && open ? `<button type="button" class="btn btn-danger" data-action="cancel">${t("task_cancel")}</button>` : ""}
@@ -466,6 +478,17 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
       const note = sheet.querySelector("#task-complete-note")?.value ?? "";
       refresh(api.completeTask(task.id, note.trim()));
     });
+    // Call: the tel: link dials by itself; we only remember it so the result sheet opens when the app is shown again.
+    sheet.querySelector('[data-action="call"]')?.addEventListener("click", () => rememberCall(task));
+    sheet.querySelector('[data-action="call-result"]')?.addEventListener("click", () =>
+      openCallResultSheet(task, {
+        onSaved: (updated) => {
+          task = { ...updated, calls: task.calls };
+          onChanged?.();
+          overlay.isConnected ? api.getTask(task.id).then((full) => { task = full; render(); }).catch(() => render()) : null;
+        },
+      })
+    );
     sheet.querySelector('[data-action="order-usual"]')?.addEventListener("click", () => {
       overlay.remove();
       (navigate || ((h) => (location.hash = h)))(usualOrderHash(task.customer_id));
@@ -596,7 +619,7 @@ export async function openTaskEditor({ customer = null, task = null, taskKind = 
   const kindItems = (k) => (k ? [1, 2, 3].map((n) => t(`task_type_${k}_item${n}`)).filter((x) => x && !x.startsWith("task_type_")) : []);
   const titleInput = overlay.querySelector("#task-title-input");
   const isPrefill = (value, fn) => KINDS_FOR_PREFILL.some((k) => fn(k) === value);
-  const KINDS_FOR_PREFILL = [null, "collect_debt", "make_order", "check_products"];
+  const KINDS_FOR_PREFILL = [null, "collect_debt", "make_order", "check_products", "call_customer", "visit_customer"];
   function applyKindPrefill(prevKind) {
     if (!titleInput.value.trim() || isPrefill(titleInput.value.trim(), kindTitle)) titleInput.value = kindTitle(kind);
     const texts = items.map((i) => i.text.trim()).filter(Boolean);

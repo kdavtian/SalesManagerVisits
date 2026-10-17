@@ -14,6 +14,7 @@ import { dataChase, orderChase, downpaymentChase } from "./chasers.js";
 import { clusterChase } from "./cluster.js";
 import { bullets } from "../utils/bullets.js";
 import { weeklyDigest } from "./digest.js";
+import { humanDelayPassed, jitteredDue } from "./humanDelay.js";
 
 const YEREVAN_OFFSET_MS = 4 * 60 * 60 * 1000;
 export const MANAGEMENT_ROLES = ["admin", "ceo", "operations_director", "sales_director", "accountant"];
@@ -133,7 +134,7 @@ const FLAG_CONTEXT = (f) => ({
 });
 
 // One pass over the reps. Safe to run any number of times: messages are unique per person / kind / day / level.
-export async function tick(now = new Date(), db = pool, { pick } = {}) {
+export async function tick(now = new Date(), db = pool, { pick, delayMaxMs } = {}) {
   const settings = await getVaghinakSettings(db);
   if (settings.mode === "off") return { created: 0 };
   const day = yerevanToday(now);
@@ -161,6 +162,8 @@ export async function tick(now = new Date(), db = pool, { pick } = {}) {
       throw err;
     }
     for (const action of actions) {
+      // not at the exact minute the rule turned true: a random 0..5 min later (humanDelay.js)
+      if (!humanDelayPassed(day, `${rep.id}:${action.kind}:${action.level}`, now, { maxMs: delayMaxMs, pick })) continue;
       const message = await createMessage(db, rep, { ...action, day, ctx: FLAG_CONTEXT({ ...facts, nowMin }), audience: "rep", settings, pick });
       if (message) created++;
     }
@@ -170,9 +173,11 @@ export async function tick(now = new Date(), db = pool, { pick } = {}) {
   }
   // beyond the field rules: missing customer data and orders waiting too long (chasers.js)
   if (nowMin >= settings.workStartMin + 10 && nowMin < settings.workEndMin) {
-    created += await dataChase({ db, day, settings, pick });
-    created += await orderChase({ db, day, settings, pick });
-    created += await downpaymentChase({ db, day, settings, pick, now });
+    // each chaser has its own irregular rhythm (and the first run of the day waits a random 0..5 min)
+    const chase = (name, run) => (humanDelayPassed(day, `chase:${name}`, now, { maxMs: delayMaxMs, pick }) && (delayMaxMs === 0 || jitteredDue(name, now, { pick })) ? run() : 0);
+    created += await chase("data", () => dataChase({ db, day, settings, pick }));
+    created += await chase("order", () => orderChase({ db, day, settings, pick }));
+    created += await chase("downpayment", () => downpaymentChase({ db, day, settings, pick, now }));
   }
   return { created };
 }
@@ -184,13 +189,14 @@ const lastAt = (states, id) => {
 };
 
 // End of day: a wrap-up for each rep and the management brief. Once per day (unique messages), after workEnd + 5 min.
-export async function wrapUp(now = new Date(), db = pool, { pick } = {}) {
+export async function wrapUp(now = new Date(), db = pool, { pick, delayMaxMs } = {}) {
   const settings = await getVaghinakSettings(db);
   if (settings.mode === "off") return { created: 0 };
   const day = yerevanToday(now);
   const nowMin = minuteOfDay(now);
   if (nowMin < settings.workEndMin + 5 || nowMin > 23 * 60) return { created: 0 };
   if (!(await isWorkingDay(db, day))) return { created: 0 };
+  if (!humanDelayPassed(day, "wrapup", now, { maxMs: delayMaxMs, pick })) return { created: 0 };
 
   const { rows: logs } = await db.query(
     `SELECT l.*, u.name, u.name_hy, u.role, u.vaghinak_address
@@ -263,11 +269,12 @@ export async function teamPulse(now = new Date(), db = pool) {
 let timer = null;
 export function startVaghinak() {
   if (timer) return;
+  // every minute (not every 5): the random human delay is what spreads his messages over the minutes
   timer = setInterval(() => {
     const now = new Date();
     tick(now).catch((err) => console.error("Vaghinak tick failed:", err.message));
     wrapUp(now).catch((err) => console.error("Vaghinak wrap-up failed:", err.message));
     weeklyDigest(now).catch((err) => console.error("Vaghinak weekly digest failed:", err.message));
-  }, 5 * 60 * 1000);
+  }, 60 * 1000);
   timer.unref?.();
 }

@@ -430,6 +430,7 @@ export const api = {
   getTask: (id) => request(`/tasks/${id}`),
   createTask: (data) => json("/tasks", "POST", data),
   updateTask: (id, data) => json(`/tasks/${id}`, "PATCH", data),
+  taskCallResult: (id, body) => json(`/tasks/${id}/call-result`, "POST", body),
   completeTask: (id, note, extra = {}) => json(`/tasks/${id}/complete`, "POST", { ...(note ? { note } : {}), ...extra }),
   reopenTask: (id) => json(`/tasks/${id}/reopen`, "POST", {}),
   setTaskItemDone: (id, itemId, done) => json(`/tasks/${id}/items/${itemId}`, "POST", { done }),

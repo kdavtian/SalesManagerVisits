@@ -1622,6 +1622,20 @@ async function init() {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") refreshAllBadgesFromServer();
   });
+  // A rep tapped Call in a call task: when the app is shown again, ask how the call went (callTask.js).
+  const checkPendingCall = () => {
+    if (!state.user || document.visibilityState === "hidden") return;
+    try {
+      if (!localStorage.getItem("fv_pending_call")) return;
+    } catch {
+      return;
+    }
+    import("./callTask.js").then((m) => m.resumePendingCall()).catch(() => {});
+  };
+  document.addEventListener("visibilitychange", checkPendingCall);
+  window.addEventListener("pageshow", checkPendingCall);
+  window.addEventListener("focus", checkPendingCall);
+  setTimeout(checkPendingCall, 2500);
   // iOS home-screen apps do not always report "visible" when they wake from the lock screen or come back online.
   window.addEventListener("focus", () => refreshAllBadgesFromServer());
   window.addEventListener("pageshow", () => refreshAllBadgesFromServer());

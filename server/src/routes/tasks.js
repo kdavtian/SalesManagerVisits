@@ -13,7 +13,8 @@ tasksRouter.use(requireAuth);
 
 const MAX_ITEMS = 30;
 // Types a person can give (migration 125): each needs a customer and closes itself when the rep does what it asks.
-export const TASK_KINDS = ["collect_debt", "make_order", "check_products"];
+export const TASK_KINDS = ["collect_debt", "make_order", "check_products", "call_customer", "visit_customer"];
+export const CALL_RESULTS = ["spoke", "no_answer", "call_back", "wrong_number"];
 const DEBT_OUTCOMES = ["paid", "partial", "promised", "no_answer", "refused"];
 const MAX_PROMISE_DAYS = 60;
 const isDate = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
@@ -35,7 +36,7 @@ function visibilitySql(user, params) {
 const TASK_SELECT = `
   SELECT t.*, to_char(t.due_date, 'YYYY-MM-DD') AS due_date, to_char(t.promise_date, 'YYYY-MM-DD') AS promise_date,
          -- automatic tasks are Vaghinak's (owner, 2026-10-14): they show him as the creator
-         CASE WHEN t.auto_kind IS NOT NULL THEN 'Վաղինակ' ELSE cu.name END AS creator_name, au.name AS assignee_name, au.role AS assignee_role, c.name AS customer_name,
+         CASE WHEN t.auto_kind IS NOT NULL THEN 'Վաղինակ' ELSE cu.name END AS creator_name, au.name AS assignee_name, au.role AS assignee_role, c.name AS customer_name, c.phone AS customer_phone,
          COALESCE((SELECT json_agg(json_build_object('id', i.id, 'text', i.text, 'done', i.done) ORDER BY i.sort_order, i.id)
                    FROM task_items i WHERE i.task_id = t.id), '[]'::json) AS items
   FROM tasks t
@@ -131,7 +132,16 @@ tasksRouter.get("/:id", async (req, res, next) => {
   if (!isId(req.params.id)) return next();
   const task = await loadTask(Number(req.params.id), req.user);
   if (!task) return res.status(404).json({ error: "Task not found" });
-  res.json({ ...task, today: yerevanToday() });
+  // A call task also shows how the earlier calls to this customer went.
+  let calls = [];
+  if (task.customer_id && (task.task_kind === "call_customer" || task.auto_kind)) {
+    ({ rows: calls } = await pool.query(
+      `SELECT cc.id, cc.result, cc.note, to_char(cc.callback_date, 'YYYY-MM-DD') AS callback_date, cc.created_at, u.name AS user_name
+       FROM customer_calls cc LEFT JOIN users u ON u.id = cc.user_id WHERE cc.customer_id = $1 ORDER BY cc.created_at DESC LIMIT 5`,
+      [task.customer_id]
+    ));
+  }
+  res.json({ ...task, calls, today: yerevanToday() });
 });
 
 tasksRouter.post("/", async (req, res) => {
@@ -322,6 +332,50 @@ tasksRouter.post("/:id/complete", async (req, res) => {
   }
   await pool.query("UPDATE task_items SET done = true, done_at = COALESCE(done_at, now()) WHERE task_id = $1", [task.id]);
   await finishTask(task, req.user, String(req.body?.note ?? "").trim().slice(0, 500), outcome, promiseDate);
+  res.json(await loadTask(task.id, req.user));
+});
+
+// The result of a call made from a call task (owner, 2026-10-18): spoke (closes the task; a debt task also needs how the
+// collection went), no answer / wrong number (the task stays open), call back later (the task moves to that date).
+// Every result is also a history line on the customer (customer_calls).
+tasksRouter.post("/:id/call-result", async (req, res) => {
+  if (!isId(req.params.id)) return res.status(404).json({ error: "Task not found" });
+  const task = await loadTask(Number(req.params.id), req.user);
+  if (!task) return res.status(404).json({ error: "Task not found" });
+  if (!mayWork(task, req.user)) return res.status(403).json({ error: "Not allowed" });
+  if (task.status !== "open") return res.status(409).json({ error: "This task is not open" });
+  if (!task.customer_id) return res.status(400).json({ error: "This task has no customer" });
+  const result = String(req.body?.result ?? "");
+  if (!CALL_RESULTS.includes(result)) return res.status(400).json({ error: "Choose how the call went" });
+  const note = String(req.body?.note ?? "").trim().slice(0, 500);
+  let callbackDate = null;
+  if (result === "call_back") {
+    callbackDate = String(req.body?.callback_date ?? "");
+    if (!isDate(callbackDate) || callbackDate < yerevanToday()) return res.status(400).json({ error: "A call-back date (today or later) is required" });
+  }
+  let outcome = null;
+  let promiseDate = null;
+  const isDebtTask = task.auto_kind === "debt_collection" || task.task_kind === "collect_debt";
+  if (result === "spoke" && isDebtTask) {
+    outcome = String(req.body?.outcome ?? "");
+    if (!DEBT_OUTCOMES.includes(outcome) || outcome === "no_answer") return res.status(400).json({ error: "Choose how the collection went" });
+    if (outcome === "promised") {
+      promiseDate = String(req.body?.promise_date ?? "");
+      const limit = new Date(`${yerevanToday()}T00:00:00Z`).getTime() + MAX_PROMISE_DAYS * 86400000;
+      if (!isDate(promiseDate) || promiseDate <= yerevanToday() || new Date(`${promiseDate}T00:00:00Z`).getTime() > limit) {
+        return res.status(400).json({ error: `A promised date after today (within ${MAX_PROMISE_DAYS} days) is required` });
+      }
+    }
+  }
+  await pool.query("INSERT INTO customer_calls (customer_id, task_id, user_id, result, note, callback_date) VALUES ($1, $2, $3, $4, $5, $6)", [
+    task.customer_id, task.id, req.user.id, result, note || null, callbackDate,
+  ]);
+  if (result === "spoke") {
+    await pool.query("UPDATE task_items SET done = true, done_at = COALESCE(done_at, now()) WHERE task_id = $1", [task.id]);
+    await finishTask(task, req.user, note ? `Խոսել է հաճախորդի հետ · ${note}` : "Խոսել է հաճախորդի հետ", outcome, promiseDate);
+  } else if (result === "call_back") {
+    await pool.query("UPDATE tasks SET due_date = $2, due_is_next_visit = false, deadline_reminder_sent_on = NULL, updated_at = now() WHERE id = $1", [task.id, callbackDate]);
+  }
   res.json(await loadTask(task.id, req.user));
 });
 

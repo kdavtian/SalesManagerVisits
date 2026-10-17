@@ -2,9 +2,9 @@
 // an automatic task for their next visit to each of THEIR customers that is
 // overdue with debt (Excel debt > 0 and its oldest unpaid invoice older than the
 // customer's credit term, `customers.credit_term_days`, default 45; see debtAge.js).
-//  - channels KF, CAS and OEM are skipped (owner's rule); CVO and PCO are
-//    included: the task goes to the assigned rep, or to the sales director
-//    (Martin) when the customer has no sales manager;
+//  - channels KF and CAS are skipped (owner's rule); customers nobody has to visit (SM B2B, CVO, PCO, OEM) get a CALL
+//    task (task_kind call_customer, owner 2026-10-18) instead of a visit task: it goes to the assigned rep, or to the
+//    sales director (Martin) when the customer has no sales manager;
 //  - one open automatic task per customer (unique index, migration 102);
 //  - after a rep closes one, no new one for the same customer for 14 days;
 //  - when the debt is gone the open task is closed as done; when the debt is still there but
@@ -27,6 +27,11 @@ import { DEBT_AGE_LATERAL, overdueDebtSql, debtAgeDaysSql } from "./debtAge.js";
 
 export const DEBT_TASK_TITLE = "Հավաքագրիր պարտքը";
 export const REORDER_TASK_TITLE = "Հաճախորդը վաղուց չի պատվիրել՝ զանգահարիր կամ այցելիր";
+// Customers nobody has to visit (owner, 2026-10-18): Vaghinak gives their rep a CALL task instead of a visit task.
+export const CALL_CHANNELS = ["SM B2B", "CVO", "PCO", "OEM"];
+export const isCallChannel = (channel) => CALL_CHANNELS.includes(String(channel ?? ""));
+export const DEBT_CALL_TITLE = "Զանգահարիր՝ հիշեցրու պարտքի մասին";
+export const REORDER_CALL_TITLE = "Զանգահարիր՝ հարցրու՝ պատվեր պետք է՞";
 const MAX_PER_REP = 15;
 const COOLDOWN_DAYS = 14;
 
@@ -40,7 +45,8 @@ const PAID_SINCE_TASK_SQL = `(COALESCE(erp.last_payment_date >= (t.created_at AT
   OR EXISTS (SELECT 1 FROM erp_cashflow_lines cf WHERE cf.erp_customer_id = c.erp_customer_id AND cf.amount_amd > 0
                AND cf.cashflow_date >= (t.created_at AT TIME ZONE 'Asia/Yerevan')::date))`;
 
-const SKIPPED_CHANNELS_SQL = `COALESCE(c.sales_channel, '') <> ALL(ARRAY['KF', 'CAS', 'OEM'])`;
+// KF and CAS are never chased; OEM (like CVO, PCO and SM B2B) is chased by CALL tasks only (CALL_CHANNELS).
+const SKIPPED_CHANNELS_SQL = `COALESCE(c.sales_channel, '') <> ALL(ARRAY['KF', 'CAS'])`;
 // Overdue = the oldest unpaid invoice is older than the credit term (see debtAge.js).
 
 // Who is shown as the creator of automatic tasks: a sales director, else the CEO, else an admin.
@@ -72,14 +78,14 @@ function addTo(map, repId, entry) {
 }
 
 async function insertAutoTask(kind, args, retried = false) {
-  const { title, creatorId, repId, customerId, today, itemText } = args;
+  const { title, creatorId, repId, customerId, today, itemText, taskKind = null } = args;
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
-      `INSERT INTO tasks (title, creator_id, assignee_id, customer_id, due_date, due_is_next_visit, auto_kind)
-       VALUES ($1, $2, $3, $4, $5, true, $6) ON CONFLICT DO NOTHING RETURNING id`,
-      [title, creatorId, repId, customerId, today, kind]
+      `INSERT INTO tasks (title, creator_id, assignee_id, customer_id, due_date, due_is_next_visit, auto_kind, task_kind)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT DO NOTHING RETURNING id`,
+      [title, creatorId, repId, customerId, today, taskKind !== "call_customer", kind, taskKind]
     );
     if (rows[0] && itemText) await client.query("INSERT INTO task_items (task_id, text, sort_order) VALUES ($1, $2, 0)", [rows[0].id, itemText]);
     await client.query("COMMIT");
@@ -196,9 +202,10 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
      ORDER BY erp.debt_amd DESC`,
     [COOLDOWN_DAYS, today]
   );
-  // Customers without a sales manager only get a task if they are CVO / PCO -- then it goes to the sales director.
+  // Customers without a sales manager only get a task if they are in a call channel (SM B2B / CVO / PCO / OEM) or are
+  // forced -- then it goes to the sales director.
   const candidates = found
-    .map((c) => ({ ...c, rep_id: c.rep_id ?? (["CVO", "PCO"].includes(c.sales_channel) || c.force_collect ? director : null) }))
+    .map((c) => ({ ...c, rep_id: c.rep_id ?? (isCallChannel(c.sales_channel) || c.force_collect ? director : null) }))
     .filter((c) => c.rep_id);
 
   let created = 0;
@@ -209,14 +216,15 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
     const days = cand.days_open == null ? "" : ` · ${cand.days_open} օր առանց վճարման`;
     const promiseBroken = Boolean(cand.last_promise_date) && cand.last_promise_date < today;
     // No checklist item: ticking it would close the task without recording the outcome.
-    const title = `${DEBT_TASK_TITLE}՝ ${amd(cand.debt_amd)}${days}${promiseBroken ? " · խոստումը չի կատարվել" : ""}`;
+    const call = isCallChannel(cand.sales_channel);
+    const title = `${call ? DEBT_CALL_TITLE : DEBT_TASK_TITLE}՝ ${amd(cand.debt_amd)}${days}${promiseBroken ? " · խոստումը չի կատարվել" : ""}`;
     const taskId = await insertAutoTask("debt_collection", {
-      title, creatorId, repId: cand.rep_id, customerId: cand.customer_id, today, itemText: null,
+      title, creatorId, repId: cand.rep_id, customerId: cand.customer_id, today, itemText: null, taskKind: call ? "call_customer" : null,
     });
     if (!taskId) continue;
     created++;
     counts.set(cand.rep_id, (counts.get(cand.rep_id) ?? 0) + 1);
-    addTo(perRep, cand.rep_id, { taskId, customer: cand.customer_name, label: DEBT_TASK_TITLE });
+    addTo(perRep, cand.rep_id, { taskId, customer: cand.customer_name, label: call ? DEBT_CALL_TITLE : DEBT_TASK_TITLE });
     if (promiseBroken) broken.push(cand.customer_name);
   }
 
@@ -283,20 +291,21 @@ export async function createReorderFollowupTasks(now = new Date(), { notify = tr
     [today, REORDER_COOLDOWN_DAYS]
   );
   const candidates = found
-    .map((c) => ({ ...c, rep_id: c.rep_id ?? (["CVO", "PCO"].includes(c.sales_channel) ? director : null) }))
+    .map((c) => ({ ...c, rep_id: c.rep_id ?? (isCallChannel(c.sales_channel) ? director : null) }))
     .filter((c) => c.rep_id);
   let created = 0;
   const counts = new Map();
   for (const cand of candidates) {
     if ((counts.get(cand.rep_id) ?? 0) >= REORDER_MAX_PER_REP) continue;
+    const call = isCallChannel(cand.sales_channel);
     const taskId = await insertAutoTask("reorder_followup", {
-      title: REORDER_TASK_TITLE, creatorId, repId: cand.rep_id, customerId: cand.customer_id, today,
+      title: call ? REORDER_CALL_TITLE : REORDER_TASK_TITLE, taskKind: call ? "call_customer" : null, creatorId, repId: cand.rep_id, customerId: cand.customer_id, today,
       itemText: `Սովորաբար պատվիրում է ~${cand.usual_gap} օրը մեկ, վերջին պատվերը ${cand.days_since} օր առաջ էր`,
     });
     if (!taskId) continue;
     created++;
     counts.set(cand.rep_id, (counts.get(cand.rep_id) ?? 0) + 1);
-    addTo(perRep, cand.rep_id, { taskId, customer: cand.customer_name, label: REORDER_TASK_TITLE });
+    addTo(perRep, cand.rep_id, { taskId, customer: cand.customer_name, label: call ? REORDER_CALL_TITLE : REORDER_TASK_TITLE });
   }
   if (notify) await notifyReps(perRep);
   return { created, perRep };

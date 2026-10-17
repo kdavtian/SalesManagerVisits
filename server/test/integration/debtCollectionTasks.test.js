@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { createDebtCollectionTasks, DEBT_TASK_TITLE } from "../../src/debtCollectionTasks.js";
+import { createDebtCollectionTasks, DEBT_TASK_TITLE, DEBT_CALL_TITLE } from "../../src/debtCollectionTasks.js";
 import { isQuietHours } from "../../src/quietHours.js";
 
 const stamp = Date.now();
@@ -55,7 +55,13 @@ test("an overdue debtor gets one collect-the-debt task; paid-up, in-term and no-
   assert.equal((await openTasks(paid.id)).length, 0);
   assert.equal((await openTasks(keyAccount.id)).length, 0);
   assert.equal((await openTasks(cas.id)).length, 0);
-  assert.equal((await openTasks(oem.id)).length, 0);
+  // OEM is not visited in the field: it is chased by a CALL task instead (owner, 2026-10-18)
+  const oemTasks = await openTasks(oem.id);
+  assert.equal(oemTasks.length, 1);
+  assert.equal(oemTasks[0].task_kind, "call_customer");
+  assert.equal(oemTasks[0].due_is_next_visit, false);
+  assert.ok(oemTasks[0].title.startsWith(DEBT_CALL_TITLE));
+  assert.equal(tasks[0].task_kind, null, "a visited customer still gets the visit task");
 
   // Running again does not duplicate it.
   await createDebtCollectionTasks();
@@ -79,6 +85,7 @@ test("CVO and PCO customers are included: their rep gets the task, or the sales 
   await pool.query("INSERT INTO erp_customer_data (erp_customer_id, customer_name, debt_amd, days_since_payment, synced_at) VALUES ($1, 'x', 300000, 80, now())", [erpId]);
   await createDebtCollectionTasks();
   assert.equal((await openTasks(cvo.id))[0].assignee_id, rep.id);
+  assert.equal((await openTasks(cvo.id))[0].task_kind, "call_customer");
   const pcoTasks = await openTasks(pco.id);
   assert.equal(pcoTasks.length, 1);
   assert.equal(pcoTasks[0].assignee_id, director.id);

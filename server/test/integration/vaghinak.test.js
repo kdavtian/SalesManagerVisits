@@ -47,7 +47,7 @@ const clean = async () => {
 test("shadow mode (the default): he works, but nothing reaches the rep; management sees what he would say", async () => {
   await clean();
   await checkin(rep, officeCust, at(9, 30));
-  const r = await tick(at(11, 45), pool, { pick: () => 0 });
+  const r = await tick(at(11, 45), pool, { pick: () => 0, delayMaxMs: 0 });
   assert.equal(r.created >= 1, true);
   const msgs = await messages(rep);
   assert.equal(msgs.length, 1);
@@ -64,7 +64,7 @@ test("live: reminder, then the mandatory question; the badge counts; answering c
   await clean();
   await saveVaghinakSettings({ mode: "live" });
   await checkin(rep, officeCust, at(9, 30));
-  await tick(at(11, 45), pool, { pick: () => 0 });
+  await tick(at(11, 45), pool, { pick: () => 0, delayMaxMs: 0 });
   let msgs = await messages(rep);
   assert.deepEqual(msgs.map((m) => `${m.kind}:${m.level}`), ["office_long:1"]);
   assert.ok(msgs[0].body.includes("6"), "mentions the 6 visits left");
@@ -72,10 +72,10 @@ test("live: reminder, then the mandatory question; the badge counts; answering c
   assert.equal((await apiRequest("/api/vaghinak/badge", { cookie: repCookie })).data.count, 1);
   assert.equal((await apiRequest("/api/vaghinak/pending", { cookie: repCookie })).data, null, "a reminder never blocks");
 
-  await tick(at(11, 50), pool, { pick: () => 0 });
+  await tick(at(11, 50), pool, { pick: () => 0, delayMaxMs: 0 });
   assert.equal((await messages(rep)).length, 1, "same situation: no second message");
 
-  await tick(at(12, 40), pool, { pick: () => 0 });
+  await tick(at(12, 40), pool, { pick: () => 0, delayMaxMs: 0 });
   msgs = await messages(rep);
   assert.deepEqual(msgs.map((m) => `${m.kind}:${m.level}`), ["office_long:1", "office_long:2"]);
   assert.equal(msgs[1].mandatory, true);
@@ -100,7 +100,7 @@ test("late within 30 minutes is silent but logged; later is a friendly word; the
   await clean();
   await checkin(rep, custs[0], at(9, 55)); // 25 min late
   await checkin(other, custs[1], at(10, 20)); // 50 min late
-  await tick(at(11, 0), pool, { pick: () => 0 });
+  await tick(at(11, 0), pool, { pick: () => 0, delayMaxMs: 0 });
   assert.equal((await messages(rep)).length, 0, "25 min is within the grace: quiet");
   assert.deepEqual((await messages(other)).map((m) => m.kind), ["late_start"]);
   const log = (await pool.query("SELECT user_id, late_minutes FROM vaghinak_day_log WHERE day = $1 AND user_id = ANY($2)", [DAY, [rep.id, other.id]])).rows;
@@ -112,13 +112,13 @@ test("stopped with planned visits left: reminder; a 'day off' answer mutes him f
   await clean();
   await checkin(rep, custs[0], at(9, 40));
   await checkin(rep, custs[1], at(10, 30));
-  await tick(at(12, 0), pool, { pick: () => 0 });
+  await tick(at(12, 0), pool, { pick: () => 0, delayMaxMs: 0 });
   assert.deepEqual((await messages(rep)).map((m) => `${m.kind}:${m.level}`), ["stopped_early:1"]);
   const msg = (await messages(rep))[0];
   assert.ok(msg.body.includes("4"), "4 customers are still planned");
 
   await clean();
-  await tick(at(10, 40), pool, { pick: () => 0 }); // nobody has checked in: asks
+  await tick(at(10, 40), pool, { pick: () => 0, delayMaxMs: 0 }); // nobody has checked in: asks
   const ask = (await messages(rep)).find((m) => m.kind === "not_started");
   assert.ok(ask && ask.needs_answer && !ask.mandatory);
   await apiRequest(`/api/vaghinak/messages/${ask.id}/answer`, { method: "POST", cookie: repCookie, body: { choice: "day_off" } });
@@ -126,7 +126,7 @@ test("stopped with planned visits left: reminder; a 'day off' answer mutes him f
   assert.equal(muted, new Date(Date.now() + 4 * 3600 * 1000).toISOString().slice(0, 10), "muted for today");
   await pool.query("UPDATE users SET vaghinak_muted_day = $2 WHERE id = $1", [rep.id, DAY]); // the test clock is a fixed past Monday
   const before = (await messages(rep)).length;
-  await tick(at(12, 0), pool, { pick: () => 0 });
+  await tick(at(12, 0), pool, { pick: () => 0, delayMaxMs: 0 });
   assert.equal((await messages(rep)).length, before, "muted for the day: no escalation");
 });
 
@@ -134,8 +134,8 @@ test("wrap-up: a message for the rep (praise by result) and the management brief
   await clean();
   await pool.query("UPDATE users SET vaghinak_muted_day = NULL WHERE id = ANY($1)", [[rep.id, other.id]]);
   for (let i = 0; i < 5; i++) await checkin(rep, custs[i], at(9, 40 + i * 20));
-  await tick(at(17, 25), pool, { pick: () => 0 });
-  const r = await wrapUp(at(17, 40), pool, { pick: () => 0 });
+  await tick(at(17, 25), pool, { pick: () => 0, delayMaxMs: 0 });
+  const r = await wrapUp(at(17, 40), pool, { pick: () => 0, delayMaxMs: 0 });
   assert.ok(r.created >= 2);
   const wrap = (await messages(rep)).find((m) => m.kind.startsWith("day_wrap"));
   assert.equal(wrap.kind, "day_wrap_high", "5 of 6 planned = 83%");
@@ -195,7 +195,7 @@ const chaseClean = async () => {
 test("shadow mode: only a shadow message about missing data, no task reaches the chRep", async () => {
   await chaseClean();
   await saveVaghinakSettings({ mode: "shadow" });
-  await tick(at(10, 0), pool, { pick: () => 0 });
+  await tick(at(10, 0), pool, { pick: () => 0, delayMaxMs: 0 });
   const m = (await chaseMsgs(chRep.id)).find((x) => x.kind === "data_chase");
   assert.ok(m && m.shadow);
   assert.ok(m.body.includes("No Phone Garage"));
@@ -205,7 +205,7 @@ test("shadow mode: only a shadow message about missing data, no task reaches the
 test("live: a next-visit task for the chRep's customer with missing data (not for chComplete ones), one for the chUnowned customer to the sales chDirector; closes itself when filled", async () => {
   await chaseClean();
   await saveVaghinakSettings({ mode: "live" });
-  await tick(at(10, 0), pool, { pick: () => 0 });
+  await tick(at(10, 0), pool, { pick: () => 0, delayMaxMs: 0 });
   const mine = (await pool.query("SELECT t.id, t.customer_id, t.due_is_next_visit, t.title FROM tasks t WHERE t.auto_kind = 'data_missing' AND t.assignee_id = $1 AND t.status = 'open'", [chRep.id])).rows;
   assert.equal(mine.length, 1);
   assert.equal(mine[0].customer_id, chNoPhone.id);
@@ -216,11 +216,11 @@ test("live: a next-visit task for the chRep's customer with missing data (not fo
   assert.ok(dirTasks.length >= 1, "chUnowned customers go to the sales chDirector");
   assert.ok((await chaseMsgs(chDirector.id)).some((x) => x.kind === "data_chase_owner" && !x.shadow));
   // asked once: a second pass the same day changes nothing
-  await tick(at(11, 0), pool, { pick: () => 0 });
+  await tick(at(11, 0), pool, { pick: () => 0, delayMaxMs: 0 });
   assert.equal((await pool.query("SELECT count(*)::int AS n FROM tasks WHERE auto_kind = 'data_missing' AND assignee_id = $1", [chRep.id])).rows[0].n, 1);
   // the chRep fills the data -> the task closes by itself
   await pool.query("UPDATE customers SET phone = '+37491111111', region = 'Yerevan' WHERE id = $1", [chNoPhone.id]);
-  await tick(at(12, 0), pool, { pick: () => 0 });
+  await tick(at(12, 0), pool, { pick: () => 0, delayMaxMs: 0 });
   assert.equal((await pool.query("SELECT status FROM tasks WHERE id = $1", [mine[0].id])).rows[0].status, "done");
   // mandatory customer fields are untouched: a customer can still be created without phone and region
   const created = await apiRequest("/api/customers", { method: "POST", cookie: chRepCookie, body: { name: "Bare Customer", lat: 40.18, lng: 44.51 } });
@@ -240,7 +240,7 @@ test("orders waiting over the limit: the person who holds the step is told; twic
   const a = await make();
   // 'submitted' 9 hours ago (limit 4 h, so over, but not twice over)
   await pool.query("UPDATE orders SET created_at = $2, status = 'submitted', approval_status = 'not_required' WHERE id = $1", [a, new Date(at(10, 0).getTime() - 9 * 3600 * 1000)]);
-  await tick(at(10, 0), pool, { pick: () => 0 });
+  await tick(at(10, 0), pool, { pick: () => 0, delayMaxMs: 0 });
   assert.ok((await chaseMsgs(chDirector.id)).some((x) => x.kind === "order_waiting_confirm"), "the sales chDirector holds the confirm step");
   assert.equal((await chaseMsgs(chAdmin.id)).some((x) => x.kind === "order_waiting_escalation"), true, "9 h > 2 x 4 h: the chAdmin hears about it too");
   assert.equal((await chaseMsgs(chRep.id)).some((x) => x.kind.startsWith("order_waiting")), false, "never the chRep");
@@ -248,7 +248,7 @@ test("orders waiting over the limit: the person who holds the step is told; twic
   await chaseClean();
   await pool.query("UPDATE orders SET status = 'confirmed', updated_at = $2 WHERE id = $1", [a, new Date(at(10, 0).getTime() - 30 * 3600 * 1000)]);
   await pool.query("INSERT INTO order_status_history (order_id, old_status, new_status, changed_at) VALUES ($1, 'submitted', 'confirmed', $2)", [a, new Date(at(10, 0).getTime() - 30 * 3600 * 1000)]);
-  await tick(at(10, 0), pool, { pick: () => 0 });
+  await tick(at(10, 0), pool, { pick: () => 0, delayMaxMs: 0 });
   assert.ok((await chaseMsgs(chWarehouse.id)).some((x) => x.kind === "order_waiting_pack"), "the chWarehouse manager holds the pack step");
   await pool.query("DELETE FROM order_status_history WHERE order_id = $1", [a]);
 });
@@ -264,24 +264,24 @@ test("downpayment follow-up: goods out and the downpayment missing -> a message 
   assert.ok(down > 0);
   const stamp = (daysAgo) => new Date(at(10, 0).getTime() - daysAgo * 86400000);
   // still only submitted: nothing to chase yet
-  await tick(at(10, 0), pool, { pick: () => 0 });
+  await tick(at(10, 0), pool, { pick: () => 0, delayMaxMs: 0 });
   assert.equal((await pool.query("SELECT count(*)::int AS n FROM tasks WHERE auto_kind = 'downpayment'")).rows[0].n, 0);
   // packed 1 day ago
   await pool.query("UPDATE orders SET status = 'packed_stock_out', created_at = $2, updated_at = $2, approval_status = 'not_required' WHERE id = $1", [r.data.id, stamp(1)]);
-  await tick(at(10, 0), pool, { pick: () => 0 });
+  await tick(at(10, 0), pool, { pick: () => 0, delayMaxMs: 0 });
   const task = (await pool.query("SELECT id, customer_id FROM tasks WHERE auto_kind = 'downpayment' AND assignee_id = $1 AND status = 'open'", [chRep.id])).rows;
   assert.equal(task.length, 1);
   assert.equal(task[0].customer_id, chComplete.id);
   assert.ok((await chaseMsgs(chRep.id)).some((x) => x.kind === "downpayment_due" && !x.shadow));
   assert.equal((await pool.query("SELECT downpayment_reminders AS n FROM orders WHERE id = $1", [r.data.id])).rows[0].n, 1);
   // a second pass the same day: still one reminder
-  await tick(at(11, 0), pool, { pick: () => 0 });
+  await tick(at(11, 0), pool, { pick: () => 0, delayMaxMs: 0 });
   assert.equal((await pool.query("SELECT downpayment_reminders AS n FROM orders WHERE id = $1", [r.data.id])).rows[0].n, 1);
   // management hears only once it is 3+ days late
   assert.equal((await chaseMsgs(chDirector.id)).some((x) => x.kind === "downpayment_overdue"), false);
   await pool.query("UPDATE orders SET updated_at = $2 WHERE id = $1", [r.data.id, stamp(5)]);
   await pool.query("INSERT INTO order_status_history (order_id, old_status, new_status, changed_at) VALUES ($1, 'confirmed', 'packed_stock_out', $2)", [r.data.id, stamp(5)]);
-  await tick(at(12, 0), pool, { pick: () => 0 });
+  await tick(at(12, 0), pool, { pick: () => 0, delayMaxMs: 0 });
   assert.equal((await chaseMsgs(chDirector.id)).some((x) => x.kind === "downpayment_overdue"), true);
   // the customer pays the downpayment -> the task closes by itself
   const { rows: pay } = await pool.query(
@@ -289,16 +289,16 @@ test("downpayment follow-up: goods out and the downpayment missing -> a message 
      VALUES ($1, 'x', $2, now(), $3, 'x', 'approved', $3) RETURNING id`,
     [chComplete.id, down, chRep.id]
   );
-  await tick(at(13, 0), pool, { pick: () => 0 });
+  await tick(at(13, 0), pool, { pick: () => 0, delayMaxMs: 0 });
   assert.equal((await pool.query("SELECT status FROM tasks WHERE id = $1", [task[0].id])).rows[0].status, "done");
   await pool.query("DELETE FROM payments WHERE id = $1", [pay[0].id]);
   // the same again, but the customer pays by BANK TRANSFER: it reaches the app only as a line of the workbook's cashflow
   await pool.query("UPDATE orders SET downpayment_reminders = 0, downpayment_reminded_on = NULL WHERE id = $1", [r.data.id]);
-  await tick(at(14, 0), pool, { pick: () => 0 });
+  await tick(at(14, 0), pool, { pick: () => 0, delayMaxMs: 0 });
   const again = (await pool.query("SELECT id FROM tasks WHERE auto_kind = 'downpayment' AND assignee_id = $1 AND status = 'open'", [chRep.id])).rows;
   assert.equal(again.length, 1, "missing again: a new reminder task");
   await pool.query("INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, $2::date, $3)", [chComplete.erp_customer_id, DAY, down]);
-  await tick(at(15, 0), pool, { pick: () => 0 });
+  await tick(at(15, 0), pool, { pick: () => 0, delayMaxMs: 0 });
   assert.equal((await pool.query("SELECT status FROM tasks WHERE id = $1", [again[0].id])).rows[0].status, "done", "the bank transfer closes it too");
   await pool.query("DELETE FROM erp_cashflow_lines WHERE erp_customer_id = $1", [chComplete.erp_customer_id]);
   await pool.query("DELETE FROM tasks WHERE auto_kind = 'downpayment'");
@@ -346,19 +346,19 @@ test("cluster-skip: planned customers left behind within 300 m of a visited plac
     const cluster = async () => (await pool.query("SELECT level, body, facts FROM vaghinak_messages WHERE user_id = $1 AND kind = 'cluster_skip' ORDER BY level", [cRep.id])).rows;
 
     await checkin(cRep, a, at(10, 0));
-    await tick(at(10, 30), pool, { pick: () => 0 });
+    await tick(at(10, 30), pool, { pick: () => 0, delayMaxMs: 0 });
     assert.equal((await cluster()).length, 0, "still around the anchor: nothing yet");
     await checkin(cRep, b, at(11, 0)); // 4.4 km away
-    await tick(at(11, 30), pool, { pick: () => 0 });
+    await tick(at(11, 30), pool, { pick: () => 0, delayMaxMs: 0 });
     let msgs = await cluster();
     assert.equal(msgs.length, 1);
     assert.deepEqual([...msgs[0].facts.ids].sort(), [n1.id, n2.id].sort(), "only the two within 300 m, not the one 1.1 km away");
     assert.ok(msgs[0].body.includes("• CL Next Door One\n• CL Next Door Two"), "the customers are listed as bullet lines");
-    await tick(at(11, 40), pool, { pick: () => 0 });
+    await tick(at(11, 40), pool, { pick: () => 0, delayMaxMs: 0 });
     assert.equal((await cluster()).length, 1, "the same left-behind customers are never repeated");
 
     await checkin(cRep, c, at(12, 0)); // 9 km further on
-    await tick(at(12, 30), pool, { pick: () => 0 });
+    await tick(at(12, 30), pool, { pick: () => 0, delayMaxMs: 0 });
     msgs = await cluster();
     assert.equal(msgs.length, 2, "a new group left behind -> the second (and last) reminder");
     assert.deepEqual(msgs[1].facts.ids, [d.id]);
@@ -386,8 +386,8 @@ test("Monday digest: each rep gets last week's result once; management gets one 
     await saveVaghinakSettings({ mode: "live" });
     for (const [day, v, late] of [["2026-10-05", 9, 0], ["2026-10-06", 8, 45], ["2026-10-07", 8, 50]]) await row(good, day, 10, v, late);
     for (const day of ["2026-10-05", "2026-10-06"]) await row(weak, day, 10, 3, 0);
-    assert.equal((await weeklyDigest(at(8, 0), pool, { pick: () => 0 })).created, 0, "before 09:00: nothing");
-    const r = await weeklyDigest(at(9, 30), pool, { pick: () => 0 });
+    assert.equal((await weeklyDigest(at(8, 0), pool, { pick: () => 0, delayMaxMs: 0 })).created, 0, "before 09:00: nothing");
+    const r = await weeklyDigest(at(9, 30), pool, { pick: () => 0, delayMaxMs: 0 });
     assert.ok(r.created >= 3);
     const mine = async (user) => (await pool.query("SELECT kind, body, to_char(day, 'YYYY-MM-DD') AS day FROM vaghinak_messages WHERE user_id = $1 AND kind LIKE 'week_%'", [user.id])).rows;
     const g = await mine(good);
@@ -402,7 +402,7 @@ test("Monday digest: each rep gets last week's result once; management gets one 
     assert.equal(m[0].kind, "week_mgmt_issues");
     assert.ok(m[0].body.includes("• Digest") && m[0].body.includes("30%"), "management hears who needs a talk, as bullet lines");
     assert.ok(m[0].body.includes("• Պլանի միջին կատարումը՝"), "the numbers are bullets too");
-    const again = await weeklyDigest(at(10, 0), pool, { pick: () => 0 });
+    const again = await weeklyDigest(at(10, 0), pool, { pick: () => 0, delayMaxMs: 0 });
     assert.equal(again.created, 0, "once a week");
   } finally {
     await pool.query("DELETE FROM vaghinak_messages WHERE kind LIKE 'week_%'");
@@ -417,7 +417,7 @@ test("durations in his messages are hours + minutes, never a bare minute count (
   try {
     await saveVaghinakSettings({ mode: "live" });
     await checkin(lateRep, cust, at(12, 52)); // 09:30 + 202 min
-    await tick(at(13, 0), pool, { pick: () => 0 });
+    await tick(at(13, 0), pool, { pick: () => 0, delayMaxMs: 0 });
     const msg = (await pool.query("SELECT body FROM vaghinak_messages WHERE user_id = $1 AND kind = 'late_start'", [lateRep.id])).rows[0];
     assert.ok(msg, "a late-start word was written");
     assert.ok(msg.body.includes("3 ժամ 22 րոպե"), msg.body);
@@ -428,4 +428,15 @@ test("durations in his messages are hours + minutes, never a bare minute count (
     await pool.query("DELETE FROM checkins WHERE user_id = $1", [lateRep.id]);
     await saveVaghinakSettings({ mode: "shadow" });
   }
+});
+
+test("a rule that turns true is not spoken at that exact minute: a random 0..5 minutes later (owner, 2026-10-18)", async () => {
+  await clean();
+  const notStarted = async () => (await messages(rep)).filter((m) => m.kind === "not_started").length;
+  await tick(at(10, 40), pool, { pick: () => 0.6 }); // due now; the draw is 3 minutes
+  assert.equal(await notStarted(), 0, "not at the minute it became due");
+  await tick(at(10, 42), pool, { pick: () => 0.1 });
+  assert.equal(await notStarted(), 0, "the first draw is remembered, a later tick does not redraw");
+  await tick(at(10, 44), pool, { pick: () => 0.1 });
+  assert.equal(await notStarted(), 1, "after the drawn delay he speaks");
 });
