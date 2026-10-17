@@ -20,14 +20,14 @@ test.describe("Typed tasks", () => {
     await expect(page.locator("#task-title-input")).toHaveValue("");
     await page.locator(".task-editor [data-action=close]").first().click();
 
-    // a long press opens the menu with the four choices
+    // a long press opens the menu with the six choices
     const box = await plus.boundingBox();
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
     await page.waitForTimeout(700);
     await page.mouse.up();
     const options = page.locator(".om-sheet .om-option");
-    await expect(options).toHaveCount(4);
+    await expect(options).toHaveCount(6); // plain, Collect debt, Make order, Check products, Call, Visit
     await options.nth(1).click(); // Collect debt
 
     await expect(page.locator(".task-editor")).toBeVisible();

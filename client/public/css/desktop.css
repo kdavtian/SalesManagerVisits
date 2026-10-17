@@ -1,0 +1,285 @@
+/* Desktop layout (owner, 2026-10-18: "ultra user friendly and simple to use, so that a user gets used to it in 1 day").
+   Everything here is inside a >= 1024px media query, so phones and tablets in portrait never see any of it.
+   Loaded after styles.css (see index.html); same markup and same data as the phone -- only the arrangement changes:
+   1. A calm sidebar: every menu item fits on one screen, grouped, Tasks is a main item, no second logo in the top bar.
+   2. Orders, Activity, Customers and Tasks are tables: one row per item, columns that line up, hover highlight,
+      about 12 rows visible instead of 4 stretched cards.
+   3. Filter bars keep their natural width instead of stretching across the window. */
+
+@media (min-width: 1024px) {
+  /* ---------- 1. Shell ---------- */
+
+  /* The sidebar already carries the logo -- a second one in the top bar is noise. Only user, bell and menu remain. */
+  .top-bar {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .top-bar .topbar-brand {
+    display: none;
+  }
+
+  .sidebar {
+    padding: 16px 10px 12px;
+  }
+  .sidebar-brand {
+    padding: 2px 10px 14px;
+  }
+  .sidebar-nav {
+    gap: 1px;
+  }
+  .sidebar-item {
+    gap: 10px;
+    padding: 7px 10px;
+    font-size: 0.88rem;
+    line-height: 1.25;
+  }
+  .sidebar-item-icon {
+    width: 24px;
+    height: 24px;
+    align-items: center;
+    justify-content: center;
+  }
+  .sidebar-item-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+  /* The Home screen's coloured tiles are 36px; in the menu a small tile keeps the same colour code (same action = same
+     colour everywhere) without making the list taller than the window. */
+  .sidebar-item-icon.quick-action-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 7px;
+  }
+  .sidebar-item-icon.quick-action-icon svg {
+    width: 15px;
+    height: 15px;
+  }
+  .sidebar-section-label {
+    padding: 14px 10px 4px;
+  }
+  .sidebar-item-icon .nav-badge {
+    top: -6px;
+    right: -8px;
+  }
+
+  /* ---------- 2. Filters keep a sensible width ---------- */
+
+  .list-header-row {
+    padding-top: 4px;
+  }
+  .detail-view .list-toolbar,
+  .detail-view .list-toolbar:not(.activity-search-combined) {
+    max-width: 640px;
+  }
+  /* Today / This week / This month: three compact pills, not three window-wide bars. */
+  .activity-tabs {
+    padding-top: 8px;
+  }
+  .activity-tab {
+    flex: 0 0 auto;
+    min-height: 38px;
+    padding: 8px 22px;
+  }
+  /* The count boxes (All / Active / ...) and people pills: fixed natural width. */
+  .customer-stats-bar:not(.activity-manager-bar) .stat-pill,
+  .customer-stats-bar.sales-channel-bar .stat-pill {
+    flex: 0 0 auto;
+    min-width: 132px;
+  }
+  .customer-stats-bar:not(.activity-manager-bar):not(.sales-channel-bar) .stat-pill {
+    min-width: 150px;
+  }
+
+  /* ---------- 3. Tables ---------- */
+
+  :is(#orders-list, #activity-list, #task-list, #customer-list).card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+    margin: 8px 0 24px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+
+  /* Orders sits inside .detail-view (which pads 16px); the other three lists pad themselves. */
+  :is(#activity-list, #task-list, #customer-list).card-list {
+    margin-left: 16px;
+    margin-right: 16px;
+  }
+
+  :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row {
+    display: grid;
+    /* icon | name + sub line | status chips | amount / distance | arrow */
+    grid-template-columns: 36px minmax(0, 2fr) minmax(0, 1.2fr) 130px 16px;
+    column-gap: 16px;
+    row-gap: 1px;
+    align-items: center;
+    width: 100%;
+    min-height: 56px;
+    padding: 8px 16px;
+    margin: 0;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    box-shadow: none;
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+  }
+  /* Customers and Tasks have no amount column. */
+  :is(#task-list, #customer-list) > .list-row {
+    grid-template-columns: 36px minmax(0, 1.5fr) minmax(0, 2fr) 16px;
+  }
+  :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row:last-child {
+    border-bottom: 0;
+  }
+  :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row:hover {
+    background: var(--bg-card-pressed);
+  }
+  :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  /* A long list reads as one table, so a row has no card chrome of its own. */
+  :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row.order-row-selected {
+    background: var(--accent-soft, rgba(10, 132, 255, 0.1));
+  }
+
+  /* The body/top wrappers disappear so name, sub line, chips and amount become cells of the row grid. */
+  :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row .list-row-body,
+  :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row .list-row-top {
+    display: contents;
+  }
+
+  :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row > .list-row-icon {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    align-self: center;
+  }
+  :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row .list-row-top > strong {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: end;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    overflow-wrap: normal;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+    font-size: 0.95rem;
+  }
+  :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row .list-row-body > .list-row-meta {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: start;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row .list-row-body > .list-row-bottom {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+    margin: 0;
+    align-self: center;
+  }
+  /* Customers: the sub line already says ID / type / channel; the last-visit text sits with the chips. */
+  #customer-list > .list-row .list-row-body > .list-row-bottom.product-match-row {
+    grid-column: 2 / span 2;
+    grid-row: 3;
+  }
+  /* Amount (Orders) / distance + status (Activity) / progress (Tasks). */
+  :is(#orders-list, #activity-list) > .list-row .list-row-top > .list-row-trailing-text,
+  :is(#orders-list, #activity-list) > .list-row .list-row-top > .list-row-trailing {
+    grid-column: 4;
+    grid-row: 1 / span 2;
+    justify-self: end;
+    align-self: center;
+    margin: 0;
+  }
+  #orders-list > .list-row .list-row-trailing-text.text-amount {
+    font-size: 1rem;
+  }
+  #task-list > .list-row .list-row-top > .list-row-trailing-text {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+  }
+  :is(#orders-list, #activity-list) > .list-row > .chevron {
+    grid-column: 5;
+    grid-row: 1 / span 2;
+  }
+  :is(#task-list, #customer-list) > .list-row > .chevron {
+    grid-column: 4;
+    grid-row: 1 / span 2;
+  }
+
+  /* Group headings (a day's orders, one rep's visits) are slim grey bands across the table. */
+  #orders-list > .order-date-heading,
+  #activity-list > .activity-manager-group-heading,
+  #task-list > .list-group-heading {
+    margin: 0;
+    padding: 7px 16px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  #orders-list > .order-date-heading:first-child {
+    margin-top: 0;
+  }
+  #orders-list > .order-date-heading,
+  #orders-list > .order-date-heading:first-child {
+    margin-bottom: 0;
+  }
+  #orders-list > .order-date-heading + .list-row {
+    border-top: 0;
+  }
+
+  #orders-list > .loading-state,
+  #activity-list > .loading-state,
+  #task-list > .loading-state,
+  #customer-list > .loading-state,
+  #orders-list > .empty-state,
+  #activity-list > .empty-state,
+  #task-list > .empty-state,
+  #customer-list > .empty-state {
+    padding: 28px 16px;
+    margin: 0;
+    text-align: center;
+  }
+  :is(#orders-list, #activity-list, #task-list, #customer-list) > #orders-load-more,
+  :is(#orders-list, #activity-list, #task-list, #customer-list) > .btn-block {
+    margin: 12px auto;
+    width: auto;
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+
+  /* ---------- 4. Customer page: two columns ---------- */
+
+  .customer-detail-view {
+    display: grid;
+    grid-template-columns: minmax(360px, 440px) minmax(0, 1fr);
+    column-gap: 20px;
+    align-items: start;
+  }
+  .customer-detail-view > .customer-detail-header {
+    grid-column: 1 / -1;
+  }
+  .customer-detail-view > .cd-col {
+    display: block;
+    min-width: 0;
+  }
+  .customer-detail-view > .loading-state,
+  .customer-detail-view > .form-error {
+    grid-column: 1 / -1;
+  }
+  .customer-detail-view .detail-actions-grid .action-btn {
+    font-size: 0.8rem;
+    padding: 12px 4px;
+  }
+}
