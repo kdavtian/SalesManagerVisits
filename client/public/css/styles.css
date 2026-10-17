@@ -10808,17 +10808,24 @@ form select,
 .detail-stat-tile-btn:not(:disabled):active { background: var(--bg); }
 .payments-received-row {
   display: grid;
-  /* date and source chip together on the left, the amount right-aligned */
-  grid-template-columns: auto auto minmax(0, 1fr);
-  gap: 10px;
+  /* date and source chip together on the left, the amount right-aligned; nothing may be wider than the sheet */
+  grid-template-columns: auto minmax(0, auto) minmax(0, 1fr);
+  gap: 4px 10px;
   align-items: center;
   padding: 9px 2px;
   border-bottom: 1px solid var(--border);
+  min-width: 0;
 }
-.payments-received-row > :nth-child(3) { text-align: right; }
-.payments-received-row:last-child { border-bottom: none; }
+.payments-received-date { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.payments-received-row > :nth-child(3) { text-align: right; white-space: nowrap; }
+/* A payment recorded in the app carries a long status chip ("App - Awaiting approval"): date + amount on the first line,
+   the chip on its own line under the date (it used to push the amount onto two lines and the sheet sideways). */
+.payments-received-row-app { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "date amount" "chip chip"; }
+.payments-received-row-app > :nth-child(1) { grid-area: date; }
+.payments-received-row-app > :nth-child(2) { grid-area: chip; justify-self: start; white-space: normal; max-width: 100%; }
+.payments-received-row-app > :nth-child(3) { grid-area: amount; }
 .payments-received-total { font-weight: 800; }
-.payments-received-list { max-height: 55vh; overflow-y: auto; }
+.payments-received-list { max-height: 60vh; overflow-y: auto; overflow-x: hidden; }
 
 /* Customer action buttons: 3 per row on phones so long Armenian labels
    ("Պատվերներ") fit on one line instead of breaking mid-word. */
@@ -13881,3 +13888,77 @@ html[data-text-size="xlarge"] { font-size: 130%; }
 
 /* Number field that was just tapped: the old number stays visible as a faint ghost until something is typed (app.js) */
 input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
+
+/* ===== Cost calculator v2 (1.357.0): channel + method row, price levels, sectioned settings, methodology ===== */
+.cost-calc .cc-topbar { display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; }
+.cost-calc .cc-topbar .cc-modes { flex: 1; margin: 0; min-width: 0; }
+.cost-calc .cc-gear { position: relative; flex: 0 0 auto; width: 44px; height: 44px; }
+.cost-calc .cc-gear svg { width: 22px; height: 22px; }
+.cost-calc .cc-gear-dot { position: absolute; top: 7px; right: 7px; width: 9px; height: 9px; border-radius: 50%; background: var(--warning, #c77700); border: 2px solid var(--bg-card, #fff); }
+.cost-calc .cc-opts { display: grid; grid-template-columns: 1fr; gap: 0; margin-top: 4px; }
+.cost-calc .cc-channel select { width: 100%; min-height: 44px; box-sizing: border-box; font-size: 0.95rem; }
+.cost-calc .cc-method > span { display: flex; align-items: center; gap: 6px; }
+.cost-calc .cc-method .segmented { width: 100%; }
+.cost-calc .cc-method .segmented .chip { flex: 1; }
+.cost-calc .cc-caption { margin: 12px 0 0; font-size: 0.78rem; color: var(--text-dim); }
+.cost-calc .cc-figs { margin-top: 6px; }
+.cost-calc .cc-alt { margin: 8px 2px 0; font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.cost-calc .cc-alt b { font-weight: 700; }
+.cost-calc .cc-target { display: block; }
+.cost-calc .cc-target-top { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.cost-calc .cc-presets { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.cost-calc .cc-presets .chip { min-height: 44px; padding: 0; }
+.cost-calc .cc-target-out { margin-top: 10px; }
+.cost-calc .cc-levels { margin-top: 14px; }
+.cost-calc .cc-levels table { width: 100%; border-collapse: collapse; font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.cost-calc .cc-levels th { font-weight: 500; color: var(--text-dim); font-size: 0.72rem; text-align: right; padding: 4px; }
+.cost-calc .cc-levels td { padding: 0 4px; text-align: right; border-top: 1px solid var(--border); height: 44px; }
+.cost-calc .cc-levels th:first-child, .cost-calc .cc-levels td:first-child { text-align: left; font-weight: 600; }
+.cost-calc .cc-level { cursor: pointer; }
+.cost-calc .cc-level:active { background: var(--bg); }
+.cost-calc .cc-level.cc-neg td { color: var(--danger, #b3261e); }
+/* settings sheet */
+.sheet-overlay.cc-settings-overlay { z-index: 2050; }
+.cost-calc.cc-settings .cc-set-intro { margin: 6px 0 10px; font-size: 0.82rem; }
+.cost-calc .cc-sec { border: 1px solid var(--border); border-radius: 14px; background: var(--bg-card); margin-bottom: 8px; overflow: hidden; }
+.cost-calc .cc-sec > summary { list-style: none; cursor: pointer; display: flex; flex-direction: column; gap: 1px; min-height: 52px; padding: 9px 14px; justify-content: center; }
+.cost-calc .cc-sec > summary::-webkit-details-marker { display: none; }
+.cost-calc .cc-sec > summary span { font-weight: 700; }
+.cost-calc .cc-sec > summary small { color: var(--text-dim); font-size: 0.76rem; font-variant-numeric: tabular-nums; }
+.cost-calc .cc-sec[open] > summary { border-bottom: 1px solid var(--border); }
+.cost-calc .cc-sec-body { padding: 4px 14px 12px; }
+.cost-calc .cc-set-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; }
+.cost-calc .cc-set-row > span:first-child { flex: 1; min-width: 0; font-size: 0.85rem; color: var(--text); }
+.cost-calc .cc-set-in { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.cost-calc .cc-set-in input { width: 108px; text-align: right; }
+.cost-calc .cc-set-in em { font-style: normal; font-size: 0.72rem; color: var(--text-dim); min-width: 0; max-width: 84px; line-height: 1.15; }
+.cost-calc .cc-note { font-size: 0.78rem; margin: 8px 0 0; line-height: 1.35; }
+.cost-calc .cc-hintbtn { margin-top: 8px; min-height: 44px; width: 100%; text-align: left; padding: 6px 12px; border: 1px dashed var(--border); border-radius: 12px; background: var(--bg); color: var(--accent); font: inherit; font-size: 0.82rem; cursor: pointer; }
+.cost-calc .cc-brandtbl { width: 100%; border-collapse: collapse; margin-top: 8px; }
+.cost-calc .cc-brandtbl th { font-weight: 600; font-size: 0.78rem; color: var(--text-dim); text-align: right; padding: 4px; }
+.cost-calc .cc-brandtbl th small { display: block; font-weight: 400; font-size: 0.68rem; }
+.cost-calc .cc-brandtbl td { padding: 4px; border-top: 1px solid var(--border); }
+.cost-calc .cc-brandtbl td:first-child { font-weight: 600; font-size: 0.85rem; }
+.cost-calc .cc-brandtbl input { width: 100%; text-align: right; margin-left: auto; display: block; min-height: 44px; box-sizing: border-box; padding: 0 8px; font-size: 0.92rem; }
+.cost-calc .cc-items { margin-top: 6px; }
+.cost-calc .cc-item { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 0 8px; min-height: 52px; border-top: 1px solid var(--border); }
+.cost-calc .cc-item:first-child { border-top: 0; }
+.cost-calc .cc-item-on { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; }
+.cost-calc .cc-item-on input { width: 22px; height: 22px; }
+.cost-calc .cc-item-name { display: flex; flex-direction: column; min-width: 0; font-size: 0.88rem; line-height: 1.2; overflow-wrap: anywhere; }
+.cost-calc .cc-item-name small { color: var(--text-dim); font-size: 0.7rem; }
+.cost-calc .cc-item-off .cc-item-name { opacity: 0.5; }
+.cost-calc .cc-item-val input { width: 88px; padding: 0 8px; }
+.cost-calc .cc-item-val em { max-width: 58px; }
+.cost-calc .cc-item-del { width: 44px; height: 44px; grid-column: 3; justify-self: end; }
+.cost-calc .cc-item:has(.cc-item-del) { grid-template-columns: 44px minmax(0, 1fr) auto 44px; }
+.cost-calc .cc-item:has(.cc-item-del) .cc-item-del { grid-column: 4; }
+.cost-calc .cc-add { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.cost-calc .cc-add #cc-add-name { grid-column: 1 / -1; }
+.cost-calc .cc-add input, .cost-calc .cc-add select { min-height: 44px; box-sizing: border-box; width: 100%; }
+.cost-calc .cc-add .btn { min-height: 44px; }
+.cost-calc .cc-method-doc h4 { margin: 14px 0 4px; font-size: 0.92rem; }
+.cost-calc .cc-method-doc p, .cost-calc .cc-method-doc li { font-size: 0.82rem; line-height: 1.45; margin: 4px 0; }
+.cost-calc .cc-method-doc ul { padding-left: 18px; margin: 4px 0; }
+.cost-calc.cc-settings .sheet-actions { position: sticky; bottom: 0; background: var(--bg-card, #fff); padding-top: 10px; margin-top: 10px; }
+.cost-calc .segmented .chip { min-height: 44px; }
