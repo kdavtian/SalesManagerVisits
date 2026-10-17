@@ -15,11 +15,11 @@ import { REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, CATEGORY_LIST, formatAmd
 // That silently turned "All time" into "this month" in every report that
 // uses this list.
 const PERIOD_OPTIONS = [
-  { value: "all", labelKey: "period_all_time" },
-  { value: "today", labelKey: "tab_today" },
-  { value: "week", labelKey: "tab_week" },
-  { value: "month", labelKey: "tab_month" },
-  { value: "year", labelKey: "period_year" },
+  { value: "today", labelKey: "rp_today" },
+  { value: "week", labelKey: "rp_week" },
+  { value: "month", labelKey: "rp_month" },
+  { value: "year", labelKey: "rp_year" },
+  { value: "all", labelKey: "rp_all" },
 ];
 
 const TIER_OPTIONS = ["potential", "bronze", "silver", "gold", "competitor"];
@@ -56,6 +56,41 @@ function formatDateOnly(value) {
   if (!match) return formatDate(value);
   const [, yyyy, mm, dd] = match;
   return formatDayMonth(new Date(Number(yyyy), Number(mm) - 1, Number(dd)), { year: true });
+}
+
+// Period filter as Activity-style tabs (owner pattern: tabs/chips, not a
+// native <select>). A hidden input keeps the value so every report's
+// FormData/`form.addEventListener("change")` code works unchanged; one
+// document-level click handler (below) flips it and fires "change".
+function periodTabsHtml(name, options, value) {
+  return `<div class="activity-tabs report-period-tabs" role="tablist">
+    <input type="hidden" name="${name}" value="${escapeHtml(value)}" />
+    ${options
+      .map(
+        (o) =>
+          `<button type="button" role="tab" class="activity-tab${o.value === value ? " activity-tab-active" : ""}" aria-selected="${o.value === value}" data-period-value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</button>`
+      )
+      .join("")}
+  </div>`;
+}
+
+if (typeof document !== "undefined" && !window.__reportPeriodTabs) {
+  window.__reportPeriodTabs = true;
+  document.addEventListener("click", (e) => {
+    const tab = e.target.closest?.(".report-period-tabs [data-period-value]");
+    if (!tab) return;
+    const wrap = tab.closest(".report-period-tabs");
+    const input = wrap.querySelector('input[type="hidden"]');
+    if (input.value === tab.dataset.periodValue) return;
+    input.value = tab.dataset.periodValue;
+    wrap.querySelectorAll("[data-period-value]").forEach((b) => {
+      const on = b === tab;
+      b.classList.toggle("activity-tab-active", on);
+      b.setAttribute("aria-selected", String(on));
+    });
+    tab.scrollIntoView?.({ inline: "center", block: "nearest", behavior: "smooth" });
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
 }
 
 function selectHtml(name, options, value) {
@@ -174,24 +209,63 @@ async function renderReportsList(root, navigate) {
       listEl.innerHTML = `<p class="empty-state">${t("no_reports_available")}</p>`;
       return;
     }
-    listEl.innerHTML = reports
-      .map(
-        (r) => `
-      <button type="button" class="card report-list-card" data-key="${r.key}">
-        <span class="report-list-icon">${REPORT_ICONS[r.key] || icons.chart}</span>
-        <div class="report-list-text">
-          <strong>${t(r.nameKey)}</strong>
-          <span class="muted">${t(r.descriptionKey)}</span>
-        </div>
-      </button>`
-      )
-      .join("");
+    const byKey = new Map(reports.map((r) => [r.key, r]));
+    const placed = new Set();
+    const groupsHtml = REPORT_GROUPS.map(({ id, keys }) => {
+      const items = keys.map((k) => byKey.get(k)).filter(Boolean);
+      items.forEach((r) => placed.add(r.key));
+      return reportGroupHtml(id, items);
+    });
+    const rest = reports.filter((r) => !placed.has(r.key));
+    if (rest.length) groupsHtml.push(reportGroupHtml("other", rest));
+    listEl.innerHTML = groupsHtml.join("");
     listEl.querySelectorAll(".report-list-card").forEach((el) => {
       el.addEventListener("click", () => navigate(`#/reports?r=${el.dataset.key}`));
+    });
+    // The one-line explanation of each report lives behind its own "!"
+    // instead of a 3-4 line paragraph on every row (the list was ~2,700 px
+    // tall at 390 px; now every report is one 56 px row).
+    listEl.querySelectorAll("[data-report-info]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const r = byKey.get(btn.dataset.reportInfo);
+        if (r) openInfoPopup(`<h3>${escapeHtml(t(r.nameKey))}</h3><p>${escapeHtml(t(r.descriptionKey))}</p>`);
+      });
     });
   } catch (err) {
     listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
   }
+}
+
+// The list used to be a flat run of 19 cards with a long description each.
+// Grouped by the decision they support (owner: fewer rows, less scrolling);
+// the server already hides what a role may not see, empty groups vanish.
+const REPORT_GROUPS = [
+  { id: "management", keys: ["daily_management", "weekly_scorecard", "sales_budget", "product_liters", "brand_volume"] },
+  { id: "money", keys: ["customer_debt", "unpaid_invoices", "payments", "cash_custody", "cash_reconciliation"] },
+  { id: "orders", keys: ["orders_pipeline", "delivery_speed", "customer_pipeline", "new_customers", "brand_availability"] },
+  { id: "team", keys: ["checkins", "fuel_allowance"] },
+  { id: "documents", keys: ["documents"] },
+];
+
+function reportGroupHtml(id, items) {
+  if (!items.length) return "";
+  return `
+    <h2 class="section-title report-group-title">${t(`reports_group_${id}`)}</h2>
+    <div class="report-group">
+      ${items
+        .map(
+          (r) => `
+        <div class="report-item">
+          <button type="button" class="report-list-card" data-key="${r.key}">
+            <span class="report-list-icon">${REPORT_ICONS[r.key] || icons.chart}</span>
+            <strong>${t(r.nameKey)}</strong>
+            <span class="report-item-chevron" aria-hidden="true">${icons.chevronRight}</span>
+          </button>
+          <button type="button" class="settings-hint-icon report-item-info" data-report-info="${r.key}" aria-label="${t("more_info")}">!</button>
+        </div>`
+        )
+        .join("")}
+    </div>`;
 }
 
 const REPORT_ICONS = {
@@ -250,15 +324,11 @@ async function renderNewCustomersReport(root, navigate) {
     <div class="detail-view">
       ${reportHeaderHtml("report_new_customers_name")}
       <form id="report-filters" class="report-filter-form">
-        ${selectHtml(
-          "period",
-          PERIOD_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) })),
-          "month"
-        )}
-        ${selectHtml("region", [{ value: "", label: t("all_regions") }, ...REGION_LIST.map((r) => ({ value: r, label: regionLabelHy(r) }))], "")}
+        ${periodTabsHtml("period", PERIOD_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) })), "month")}
+        ${selectHtml("region", [{ value: "", label: t("region") }, ...REGION_LIST.map((r) => ({ value: r, label: regionLabelHy(r) }))], "")}
         ${selectHtml(
           "customer_tier",
-          [{ value: "", label: t("all_tiers") }, ...TIER_OPTIONS.map((v) => ({ value: v, label: t(`tier_${v}`) }))],
+          [{ value: "", label: t("rp_f_tier") }, ...TIER_OPTIONS.map((v) => ({ value: v, label: t(`tier_${v}`) }))],
           ""
         )}
       </form>
@@ -327,25 +397,21 @@ async function renderCheckinsReport(root, navigate) {
     <div class="detail-view">
       ${reportHeaderHtml("report_checkins_name")}
       <form id="report-filters" class="report-filter-form">
-        ${selectHtml(
-          "period",
-          PERIOD_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) })),
-          "month"
-        )}
-        ${selectHtml("region", [{ value: "", label: t("all_regions") }, ...REGION_LIST.map((r) => ({ value: r, label: regionLabelHy(r) }))], "")}
+        ${periodTabsHtml("period", PERIOD_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) })), "month")}
+        ${selectHtml("region", [{ value: "", label: t("region") }, ...REGION_LIST.map((r) => ({ value: r, label: regionLabelHy(r) }))], "")}
         ${selectHtml(
           "category",
-          [{ value: "", label: t("all_categories") }, ...CATEGORY_LIST.map((c) => ({ value: c.value, label: c.value }))],
+          [{ value: "", label: t("category") }, ...CATEGORY_LIST.map((c) => ({ value: c.value, label: c.value }))],
           ""
         )}
         ${selectHtml(
           "customer_tier",
-          [{ value: "", label: t("all_tiers") }, ...TIER_OPTIONS.map((v) => ({ value: v, label: t(`tier_${v}`) }))],
+          [{ value: "", label: t("rp_f_tier") }, ...TIER_OPTIONS.map((v) => ({ value: v, label: t(`tier_${v}`) }))],
           ""
         )}
         ${selectHtml(
           "outcome",
-          [{ value: "", label: t("all_outcomes") }, ...OUTCOME_OPTIONS.map((v) => ({ value: v, label: t(`outcome_${v}`) }))],
+          [{ value: "", label: t("rp_f_outcome") }, ...OUTCOME_OPTIONS.map((v) => ({ value: v, label: t(`outcome_${v}`) }))],
           ""
         )}
       </form>
@@ -404,11 +470,7 @@ async function renderOrdersPipelineReport(root, navigate) {
     <div class="detail-view">
       ${reportHeaderHtml("report_orders_pipeline_name")}
       <form id="report-filters" class="report-filter-form">
-        ${selectHtml(
-          "period",
-          PERIOD_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) })),
-          "month"
-        )}
+        ${periodTabsHtml("period", PERIOD_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) })), "month")}
       </form>
       <div id="report-body"><p class="loading-state" role="status">${t("loading")}</p></div>
     </div>
@@ -520,11 +582,7 @@ async function renderPaymentsReport(root, navigate) {
     <div class="detail-view">
       ${reportHeaderHtml("report_payments_name")}
       <form id="report-filters" class="report-filter-form">
-        ${selectHtml(
-          "period",
-          PERIOD_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) })),
-          "month"
-        )}
+        ${periodTabsHtml("period", PERIOD_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) })), "month")}
         ${selectHtml(
           "status",
           [{ value: "", label: t("all_payment_statuses") }, ...PAYMENT_STATUS_OPTIONS.map((v) => ({ value: v, label: t(`payment_status_${v}`) }))],
@@ -1257,9 +1315,7 @@ async function renderDailyManagementReport(root, navigate) {
     <div class="detail-view">
       ${reportHeaderHtml("report_daily_management_name")}
       <form id="report-filters" class="report-filter-form">
-        <select name="period">
-          ${REPORT_PERIODS.map((p) => `<option value="${p}">${t(`report_daily_management_period_tab_${p}`)}</option>`).join("")}
-        </select>
+        ${periodTabsHtml("period", REPORT_PERIODS.map((p) => ({ value: p, label: t(`report_daily_management_period_tab_${p}`) })), "daily")}
         <select name="date"></select>
       </form>
       <div id="report-body"><p class="loading-state" role="status">${t("loading")}</p></div>
@@ -1268,7 +1324,7 @@ async function renderDailyManagementReport(root, navigate) {
   const container = root.querySelector(".detail-view");
   container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/reports"));
   const form = container.querySelector("#report-filters");
-  const periodSelect = form.querySelector('select[name="period"]');
+  const periodSelect = form.querySelector('input[name="period"]');
   const dateSelect = form.querySelector('select[name="date"]');
   const body = container.querySelector("#report-body");
 
@@ -1437,7 +1493,7 @@ async function renderBrandAvailabilityReport(root, navigate) {
     <div class="detail-view">
       ${reportHeaderHtml("report_brand_availability_name")}
       <form id="report-filters" class="report-filter-form">
-        ${selectHtml("region", [{ value: "", label: t("all_regions") }, ...REGION_LIST.map((r) => ({ value: r, label: regionLabelHy(r) }))], "")}
+        ${selectHtml("region", [{ value: "", label: t("region") }, ...REGION_LIST.map((r) => ({ value: r, label: regionLabelHy(r) }))], "")}
       </form>
       <p class="muted" style="margin: 0 4px 8px;">${t("brand_availability_map_hint")}</p>
       <div id="report-body"><p class="loading-state" role="status">${t("loading")}</p></div>

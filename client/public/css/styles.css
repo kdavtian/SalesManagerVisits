@@ -8019,17 +8019,73 @@ form select,
   border-color: var(--accent-fill);
 }
 
+/* Reports list v2 (1.358.0): grouped, one 56 px row per report, the
+   explanation behind a "!" (was a 3-4 line paragraph on each of 19 cards). */
+.report-group-title {
+  margin: 14px 4px 6px;
+}
+
+.report-group {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.report-item {
+  display: flex;
+  align-items: center;
+  border-top: 1px solid var(--border);
+}
+
+.report-item:first-child {
+  border-top: 0;
+}
+
 .report-list-card {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 12px;
+  min-height: 56px;
+  padding: 8px 4px 8px 12px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
   text-align: left;
+  cursor: pointer;
+}
+
+.report-list-card strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+
+.report-item-chevron {
+  flex: 0 0 auto;
+  color: var(--text-dim);
+  display: flex;
+}
+
+.report-item-chevron svg {
+  width: 18px;
+  height: 18px;
+}
+
+.report-item-info {
+  flex: 0 0 auto;
+  margin: 0 16px 0 10px;
 }
 
 .report-list-icon {
   flex-shrink: 0;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 10px;
   background: var(--bg);
   display: flex;
@@ -8038,11 +8094,58 @@ form select,
   color: var(--accent-fill);
 }
 
-.report-list-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
+.report-list-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Period tabs inside a report's filter form take the whole row. */
+.report-filter-form .report-period-tabs {
+  flex: 1 1 100%;
+  padding: 0;
+  margin: 0 0 2px;
+  scrollbar-width: none;
+}
+
+.report-filter-form .report-period-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.report-period-tabs .activity-tab {
+  flex: 1 0 auto;
+  padding: 9px 12px;
+}
+
+.report-filter-form select,
+.report-filter-form .map-filter-chip {
+  min-height: 44px;
+}
+
+/* "No data" inside a report is one quiet line under its heading, not a
+   tall centred block (a mostly-empty report was 3 screens of whitespace). */
+#report-body .empty-state {
+  text-align: left;
+  padding: 4px 4px 14px;
+  font-size: 0.85rem;
+}
+
+/* Long Armenian titles wrap NEXT to the back button instead of dropping
+   below it (Daily management report). */
+.report-header {
+  flex-wrap: nowrap;
+}
+
+.report-header .detail-header-title {
+  flex: 1 1 0;
+}
+
+.report-header .detail-header-title h1 {
+  font-size: 1.15rem;
+  line-height: 1.2;
+}
+
+.fuel-settings-btn {
+  min-height: 44px;
 }
 
 .report-filter-form {
@@ -8053,8 +8156,10 @@ form select,
 }
 
 .report-filter-form select {
-  flex: 1 1 auto;
-  min-width: 120px;
+  /* Two dropdowns per row (was one per row: the Visits report's four
+     filters took 240 px of height before the first result). */
+  flex: 1 1 calc(50% - 4px);
+  min-width: 0;
   /* form select's width: 100% becomes this flex item's basis when
      flex-basis is auto (the "auto" in flex: 1 1 auto), so without this
      override each select claims a full-width basis and two of them can
@@ -11301,7 +11406,8 @@ form select,
 .fuel-bar span { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
 .fuel-rep-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px 12px; min-height: 8px; }
 .fuel-rep-chips:empty { display: none; }
-.fuel-chip { border: 0; cursor: pointer; font: inherit; font-size: 0.75rem; font-weight: 700; }
+.fuel-chip { border: 0; cursor: pointer; font: inherit; font-size: 0.75rem; font-weight: 700; position: relative; }
+.fuel-chip:not(:disabled)::after { content: ""; position: absolute; inset: -11px -4px; }
 .fuel-chip:disabled { cursor: default; }
 .fuel-days { border-top: 1px solid var(--border); }
 .fuel-day { border-bottom: 1px solid var(--border); }
@@ -11931,12 +12037,19 @@ form select,
 }
 .vol-chips .map-filter-chip {
   flex: 0 0 auto;
-  min-height: 36px;
+  min-height: 44px;
   white-space: nowrap;
 }
 .vol-chips-small .map-filter-chip {
   min-height: 32px;
   font-size: 0.8rem;
+  position: relative;
+}
+/* 32 px chips keep their look; the invisible hit area reaches 44 px. */
+.vol-chips-small .map-filter-chip::after {
+  content: "";
+  position: absolute;
+  inset: -6px 0;
 }
 .vol-active {
   display: flex;
