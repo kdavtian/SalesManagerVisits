@@ -1,4 +1,4 @@
-import { test, expect, loginViaUi } from "./fixtures.mjs";
+import { test, expect, loginViaUi, pool } from "./fixtures.mjs";
 
 // Owner, 2026-10-18 (desktop v3): Orders and Customers tables have sortable column headings; on a wide window an order or a
 // task opens as a panel docked beside the list (not a dialog on top of it). A phone shows none of it.
@@ -101,5 +101,37 @@ test.describe("Desktop column headings and docked panel", () => {
     await page.goto("/#/customers");
     await expect(page.locator("#customer-list > .list-row").first()).toBeVisible({ timeout: 10000 });
     await expect(page.locator(".desk-thead-customers")).toBeHidden();
+  });
+});
+
+test.describe("Activity and Tasks column headings", () => {
+  test("Tasks: Person heading sorts, a second click reverses; Activity: Date heading flips newest/oldest", async ({ page, fixtures }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const admin = await fixtures.createUser("admin");
+    const repA = await fixtures.createUser("sales_manager", { name: "Aaa Rep" });
+    const repZ = await fixtures.createUser("sales_manager", { name: "Zzz Rep" });
+    const customer = await fixtures.createCustomer({ name: "Heading Garage", created_by: admin.id, assigned_manager_id: repA.id });
+    for (const [title, rep, due] of [["Task for Z", repZ, 1], ["Task for A", repA, 2]]) {
+      await pool.query("INSERT INTO tasks (title, creator_id, assignee_id, customer_id, due_date) VALUES ($1, $2, $3, $4, current_date + $5::int)", [title, admin.id, rep.id, customer.id, due]);
+    }
+    await loginViaUi(page, admin.email);
+    await page.goto("/#/tasks");
+    await expect(page.locator(".desk-thead-tasks")).toBeVisible({ timeout: 10000 });
+    const titles = () => page.locator("#task-list > .list-row strong").allTextContents().then((a) => a.filter((x) => /^Task for/.test(x)));
+    await page.locator('.desk-sort[data-sort-key="person"]').click();
+    expect(await titles()).toEqual(["Task for A", "Task for Z"]);
+    await page.locator('.desk-sort[data-sort-key="person"]').click();
+    expect(await titles()).toEqual(["Task for Z", "Task for A"]);
+    await page.locator('.desk-sort[data-sort-key="due"]').click();
+    expect(await titles()).toEqual(["Task for Z", "Task for A"]);
+
+    await page.goto("/#/activity");
+    await expect(page.locator(".desk-thead-activity")).toBeVisible({ timeout: 10000 });
+    await page.locator('.desk-sort[data-sort-key="date"]').click();
+    await expect(page.locator('.desk-sort[data-sort-key="date"] .desk-sort-arrow')).toHaveText("▲");
+    await page.locator('.desk-sort[data-sort-key="date"]').click();
+    await expect(page.locator('.desk-sort[data-sort-key="date"] .desk-sort-arrow')).toHaveText("▼");
+    await page.locator('.desk-sort[data-sort-key="manager"]').click();
+    await expect(page.locator('.desk-sort[data-sort-key="manager"]')).toHaveClass(/desk-sort-on/);
   });
 });
