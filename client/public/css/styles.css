@@ -6465,10 +6465,14 @@ label.checkbox-row input[type="checkbox"] {
   display: none;
 }
 
-.activity-manager-bar .stat-pill {
+/* (.customer-stats-bar .stat-pill { min-width: 0; padding: 6px } further down used to win over this and made the pills
+   tiny -- the two-class selector keeps them wide.) */
+.customer-stats-bar.activity-manager-bar .stat-pill {
   flex: 0 0 auto;
-  min-width: 92px;
-  max-width: 140px;
+  /* Wider (owner, 2026-10-18: "too narrow"): a name never truncates and the pill is an easy target. */
+  min-width: 118px;
+  max-width: 220px;
+  padding: 8px 16px;
 }
 
 .activity-manager-bar .stat-pill strong {
@@ -9627,10 +9631,11 @@ form select,
   display: none;
 }
 
-.sales-channel-bar .stat-pill {
+.customer-stats-bar.sales-channel-bar .stat-pill {
   flex: 0 0 auto;
-  min-width: 80px;
-  max-width: 120px;
+  min-width: 104px;
+  max-width: 180px;
+  padding: 8px 14px;
 }
 
 .sales-channel-bar .stat-pill strong {
@@ -14089,3 +14094,37 @@ input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
 .call-result-btn[aria-pressed="true"] { background: var(--accent-fill); color: var(--on-accent); border-color: var(--accent-fill); font-weight: 700; }
 .call-field { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
 .call-field input { width: 100%; min-height: 44px; }
+
+/* ===== Bottom sheets on a desktop window (owner, 2026-10-18) =====
+   A bottom-anchored sheet is a phone pattern: on a wide window it hung at the bottom edge (partly under the macOS Dock)
+   and its footer buttons were cut off. From 900 px up every sheet is a CENTRED dialog with rounded corners on all
+   sides, a bounded height and its own scrolling. Special overlays (the user-guide viewer, the photo lightbox, the Map's
+   anchored filter menu) keep their layout, and Order details keeps its own wide two-column dialog (above). */
+@media (min-width: 900px) {
+  .sheet-overlay:not(.guide-overlay):not(.pd-lightbox):not(.map-dimension-popover-overlay) {
+    align-items: center;
+    padding: 28px;
+    box-sizing: border-box;
+  }
+  .sheet-overlay:not(.guide-overlay):not(.pd-lightbox):not(.map-dimension-popover-overlay) > .sheet:not(.order-detail-sheet) {
+    width: min(560px, 100%);
+    max-width: 560px;
+    max-height: min(86vh, 860px);
+    border-radius: var(--radius-lg);
+    padding-bottom: 20px;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+    animation: sheet-pop-in 0.18s ease-out;
+  }
+  /* sheets whose footer bleeds to the sheet edge with negative margins keep working with the smaller bottom padding */
+  .sheet-actions-floating { bottom: -20px; margin-bottom: -20px; padding-bottom: 12px; }
+  .sheet:has(> .edit-sheet) { padding-bottom: 0; }
+  .vg-block { align-items: center; }
+  .activity-date-picker-overlay { align-items: center; }
+}
+@keyframes sheet-pop-in {
+  from { transform: scale(0.97); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@media (min-width: 900px) and (prefers-reduced-motion: reduce) {
+  .sheet-overlay > .sheet { animation: none !important; }
+}

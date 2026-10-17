@@ -442,6 +442,7 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
         ${isCreator && task.status !== "cancelled" ? `<button type="button" class="btn" data-action="edit">${t("edit")}</button>` : ""}
         ${isCreator && open ? `<button type="button" class="btn btn-danger" data-action="cancel">${t("task_cancel")}</button>` : ""}
         ${isCreator && task.status === "cancelled" ? `<button type="button" class="btn" data-action="restore">${t("task_restore")}</button>` : ""}
+        <button type="button" class="btn" data-action="close">${t("close")}</button>
       </div>`;
     const errorEl = sheet.querySelector("#task-sheet-error");
     const fail = (err) => {
@@ -458,7 +459,7 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
         fail(err);
       }
     };
-    sheet.querySelector('[data-action="close"]').addEventListener("click", () => overlay.remove());
+    sheet.querySelectorAll('[data-action="close"]').forEach((b) => b.addEventListener("click", () => overlay.remove()));
     sheet.querySelector("[data-customer-link]")?.addEventListener("click", (e) => {
       e.preventDefault();
       overlay.remove();
