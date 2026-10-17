@@ -418,8 +418,24 @@ ordersRouter.post("/price-check", async (req, res) => {
   res.json({ below_landing: check.belowLanding, product_ids: check.belowLandingProductIds });
 });
 
+// Orders list sorting (owner, 2026-10-18: the desktop column headings sort the WHOLE history, not only the loaded rows).
+// Whitelisted -- the value goes into the SQL text. Each entry is the natural order; "reverse=1" flips every term.
+// date and amount are served by indexes (orders_created_at_idx, orders_total_amd_idx), so page 1 stays ~1 ms on 60k orders.
+const ORDER_STATUS_FLOW = "CASE o.status WHEN 'draft' THEN 0 WHEN 'submitted' THEN 1 WHEN 'confirmed' THEN 2 WHEN 'packed_stock_out' THEN 3 WHEN 'delivered' THEN 4 ELSE 5 END";
+const ORDER_SORTS = {
+  date: [["o.created_at", "DESC"], ["o.id", "DESC"]],
+  amount: [["o.total_amd", "DESC"], ["o.id", "DESC"]],
+  customer: [["c.name", "ASC"], ["o.created_at", "DESC"], ["o.id", "DESC"]],
+  status: [[ORDER_STATUS_FLOW, "ASC"], ["o.created_at", "DESC"], ["o.id", "DESC"]],
+};
+function ordersOrderBy(sort, reverse) {
+  const terms = ORDER_SORTS[sort] ?? ORDER_SORTS.date;
+  const flip = (dir) => (dir === "ASC" ? "DESC" : "ASC");
+  return terms.map(([expr, dir]) => `${expr} ${reverse ? flip(dir) : dir}`).join(", ");
+}
+
 ordersRouter.get("/", async (req, res) => {
-  let { customer_id, user_id, status, offset, accounting, accounting_signed } = req.query;
+  let { customer_id, user_id, status, offset, accounting, accounting_signed, sort, reverse } = req.query;
   if (!seesAllActivity(req.user.role)) {
     user_id = req.user.id;
   }
@@ -487,7 +503,7 @@ ordersRouter.get("/", async (req, res) => {
      JOIN users u ON u.id = o.user_id
      JOIN customers c ON c.id = o.customer_id
      ${where}
-     ORDER BY o.created_at DESC
+     ORDER BY ${ordersOrderBy(sort, reverse === "1" || reverse === "true")}
      LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params
   );

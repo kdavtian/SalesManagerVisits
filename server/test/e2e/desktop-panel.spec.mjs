@@ -26,20 +26,24 @@ test.describe("Desktop column headings and docked panel", () => {
     await expect(page.locator(".desk-thead-orders")).toBeVisible();
     await expect(page.locator("#orders-list .order-date-heading").first()).toBeVisible();
 
+    // the heading asks the server for the whole history in that order, so the list refills a moment after the click
     const amounts = () => page.locator("#orders-list > .list-row .text-amount").allTextContents().then((a) => a.map((x) => Number(x.replace(/[^\d]/g, ""))));
+    const desc = (a) => a.length >= 3 && a.every((v, i) => i === 0 || a[i - 1] >= v);
+    const asc = (a) => a.length >= 3 && a.every((v, i) => i === 0 || a[i - 1] <= v);
     await page.locator('.desk-sort[data-sort-key="amount"]').click();
     await expect(page.locator("#orders-list .order-date-heading")).toHaveCount(0);
-    let list = (await amounts()).slice(0, 3);
-    expect(list).toEqual([...list].sort((a, b) => b - a));
+    await expect.poll(async () => desc(await amounts())).toBe(true);
     await page.locator('.desk-sort[data-sort-key="amount"]').click();
-    list = (await amounts()).slice(0, 3);
-    expect(list).toEqual([...list].sort((a, b) => a - b));
+    await expect.poll(async () => asc(await amounts())).toBe(true);
     await expect(page.locator('.desk-sort[data-sort-key="amount"] .desk-sort-arrow')).toHaveText("▲");
 
     await page.locator('.desk-sort[data-sort-key="customer"]').click();
-    const names = await page.locator("#orders-list > .list-row strong").allTextContents();
-    const mine = names.filter((n) => /Garage \d+$/.test(n));
-    expect(mine).toEqual([...mine].sort((a, b) => a.localeCompare(b)));
+    await expect
+      .poll(async () => {
+        const names = (await page.locator("#orders-list > .list-row strong").allTextContents()).filter((n) => /Garage \d+$/.test(n));
+        return names.length >= 3 && names.every((n, i) => i === 0 || names[i - 1].localeCompare(n) <= 0);
+      })
+      .toBe(true);
 
     await page.locator('.desk-sort[data-sort-key="date"]').click();
     await expect(page.locator("#orders-list .order-date-heading").first()).toBeVisible();
