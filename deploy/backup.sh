@@ -15,19 +15,27 @@
 #
 # One-time setup on the droplet (not done by this script):
 #   crontab -e
-#   0 3 * * * cd /opt/field-visits && ./deploy/backup.sh >> /var/log/field-visits-backup.log 2>&1
+#   0 3 * * 0 cd /opt/field-visits && ./deploy/backup.sh >> /var/log/field-visits-backup.log 2>&1   # every Sunday 03:00
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 mkdir -p "${BACKUP_DIR:-./backups}"
 BACKUP_DIR="$(cd "${BACKUP_DIR:-./backups}" && pwd)"
-BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-14}"
+# 35 days = five weekly backups kept (the owner runs this once a week, see the crontab line below).
+BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-35}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 DB_FILE="$BACKUP_DIR/db-$STAMP.sql"
 UPLOADS_FILE="$BACKUP_DIR/uploads-$STAMP.tar.gz"
 
 echo "[$STAMP] Backing up database..."
 docker compose exec -T db pg_dump -U fieldvisits fieldvisits > "$DB_FILE"
+
+# A failed dump must never look like a backup: an empty file is an error, not a success.
+if [ ! -s "$DB_FILE" ]; then
+  echo "[$STAMP] ERROR: the database dump is empty -- backup FAILED." >&2
+  rm -f "$DB_FILE"
+  exit 1
+fi
 
 echo "[$STAMP] Backing up uploads volume..."
 docker run --rm \
