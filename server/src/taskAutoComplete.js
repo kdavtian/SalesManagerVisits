@@ -11,13 +11,14 @@ import { notifyUser } from "./notifications.js";
 const amd = (n) => `${Math.round(Number(n)).toLocaleString("en-US")} դր.`;
 
 // `kind` = the automatic task kind; `taskKind` = the matching type a person can give (migration 125) -- both close.
-async function closeTasks(kind, taskKind, { customerId, actorId, note, outcome = null, body }) {
+async function closeTasks(kind, taskKind, { customerId, actorId, note, outcome = null, body, onlyAssignee = null }) {
   const { rows } = await pool.query(
     `UPDATE tasks t SET status = 'done', completed_at = now(), completed_by = $3, completion_note = $4, outcome = $5, updated_at = now()
      FROM customers c
      WHERE t.customer_id = $1 AND (t.auto_kind = $2 OR t.task_kind = $6) AND t.status = 'open' AND c.id = t.customer_id
+       AND ($7::int IS NULL OR t.assignee_id = $7)
      RETURNING t.id, t.title, t.assignee_id, t.creator_id, t.auto_kind, c.name AS customer_name`,
-    [customerId, kind, actorId, note, outcome, taskKind]
+    [customerId, kind, actorId, note, outcome, taskKind, onlyAssignee]
   );
   for (const task of rows) {
     // The person who gave the task hears that it is done (automatic tasks have no person behind them).
@@ -75,5 +76,16 @@ export async function autoCompleteProductCheckTasks({ customerId, actorId }) {
     actorId,
     note: "Ավտոմատ՝ այցի ժամանակ ապրանքները ստուգվել են",
     body: "այցի ժամանակ ապրանքները ստուգվել են",
+  });
+}
+
+// The rep checked in at the customer: closes the "Visit" task given to THAT rep.
+export async function autoCompleteVisitTasks({ customerId, actorId }) {
+  return closeTasks(null, "visit_customer", {
+    customerId,
+    actorId,
+    onlyAssignee: actorId,
+    note: "Ավտոմատ՝ այցը կատարվել է",
+    body: "այցը կատարվել է",
   });
 }

@@ -14076,3 +14076,16 @@ input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
 .cost-calc .cc-method-doc ul { padding-left: 18px; margin: 4px 0; }
 .cost-calc.cc-settings .sheet-actions { position: sticky; bottom: 0; background: var(--bg-card, #fff); padding-top: 10px; margin-top: 10px; }
 .cost-calc .segmented .chip { min-height: 44px; }
+
+/* ===== Call tasks (1.362.0): the green Call button and the result sheet ===== */
+.call-block { margin: 12px 0 4px; }
+.btn-call { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 52px; background: var(--success); color: #ffffff; border: 0; border-radius: var(--radius); font-weight: 700; font-size: 1rem; text-decoration: none; }
+.btn-call svg { width: 20px; height: 20px; flex: 0 0 auto; }
+.btn-call:disabled { background: var(--border); color: var(--text-dim); }
+.call-history { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.call-history-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 0.85rem; }
+.call-results { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.call-result-btn { min-height: 48px; text-align: left; }
+.call-result-btn[aria-pressed="true"] { background: var(--accent-fill); color: var(--on-accent); border-color: var(--accent-fill); font-weight: 700; }
+.call-field { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.call-field input { width: 100%; min-height: 44px; }
