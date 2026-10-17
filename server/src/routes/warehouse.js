@@ -368,7 +368,7 @@ warehouseRouter.post("/orders/:id/stock-issue", async (req, res) => {
         notifyUser(recipient.id, "order_stock_issue", {
           title: "Հայտնվել է պաշարի խնդիր",
           body: `${order.customer_name}-ի պատվեր. ${note.trim()}`,
-          url: "/#/orders",
+          url: `/#/orders?open=${order.id}`,
         });
       }
     } catch (err) {

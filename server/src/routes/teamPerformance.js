@@ -580,7 +580,7 @@ teamPerformanceRouter.post("/plans/:id/submit", async (req, res) => {
         notifyUser(reviewer.id, "perf_plan_submitted", {
           title: "Աշխատանքային պլանը սպասում է վերանայման",
           body: `${plan.month.toISOString?.() ?? plan.month}-ի պլանն ուղարկվել է հաստատման։`,
-          url: "/#/team-performance/approvals",
+          url: "/#/team-performance?tab=approvals",
         });
       }
     } catch (err) {
@@ -631,7 +631,7 @@ async function reviewPlan(req, res, nextStatus, reason) {
             nextStatus === "approved"
               ? `Ձեր պլանը հաստատվել է։`
               : `Ձեր պլանը մերժվել է՝ ${reason}`,
-          url: "/#/team-performance/planning",
+          url: "/#/team-performance?tab=planning",
         });
       }
     } catch (err) {
@@ -725,7 +725,7 @@ teamPerformanceRouter.post("/plans/:id/revise", async (req, res) => {
           notifyUser(recipient.id, "perf_plan_reviewed", {
             title: "Աշխատանքային պլանը վերանայվեց ԳՏ-ի կողմից",
             body: `${plan.month.toISOString?.() ?? plan.month}-ի պլանը վերանայվել է՝ ${reason.trim()}`,
-            url: "/#/team-performance/planning",
+            url: "/#/team-performance?tab=planning",
           });
         }
       } catch (err) {
@@ -781,7 +781,7 @@ teamPerformanceRouter.post("/plans/:id/reopen-as-draft", async (req, res) => {
         notifyUser(recipient.id, "perf_plan_reviewed", {
           title: "Աշխատանքային պլանը վերաբացվեց որպես սևագիր",
           body: `${plan.month.toISOString?.() ?? plan.month}-ի պլանը (եղել է՝ ${plan.status}) վերաբացվել է խմբագրման համար։`,
-          url: "/#/team-performance/planning",
+          url: "/#/team-performance?tab=planning",
         });
       }
     } catch (err) {

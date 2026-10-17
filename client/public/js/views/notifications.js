@@ -55,7 +55,16 @@ export async function renderNotifications(root, navigate, onCountChange) {
     }
     listEl.querySelectorAll(".notification-card").forEach((el) => {
       const n = items.find((i) => i.id === Number(el.dataset.id));
-      el.addEventListener("click", () => openNotificationSheet(n, navigate, markAsRead));
+      // Tap = go straight to what it is about (one tap, not tap + "Open"); a notification with no link still opens
+      // the full-text sheet.
+      el.addEventListener("click", () => {
+        if (n.url) {
+          markAsRead(n);
+          navigate(notificationHash(n.url));
+        } else {
+          openNotificationSheet(n, navigate, markAsRead);
+        }
+      });
     });
     markAllBtn.hidden = !items.some((n) => !n.read_at);
     loadMoreBtn.hidden = !hasMore;
@@ -112,6 +121,9 @@ export async function renderNotifications(root, navigate, onCountChange) {
   await load(true);
 }
 
+// "/#/orders?open=5" (as stored) -> "#/orders?open=5"
+const notificationHash = (url) => String(url).replace(/^\/?#?/, "#");
+
 function openNotificationSheet(notification, navigate, markAsRead) {
   markAsRead(notification);
 
@@ -138,6 +150,6 @@ function openNotificationSheet(notification, navigate, markAsRead) {
   overlay.querySelector("#notification-close-btn").addEventListener("click", close);
   overlay.querySelector("#notification-open-btn")?.addEventListener("click", () => {
     close();
-    navigate(notification.url.replace(/^\/?#?/, "#"));
+    navigate(notificationHash(notification.url));
   });
 }

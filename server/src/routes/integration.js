@@ -206,7 +206,7 @@ integrationRouter.get("/ping", (req, res) => {
 async function notifyRequester(order, title, body) {
   if (!order.accounting_requested_by) return;
   try {
-    await notifyUser(order.accounting_requested_by, "accounting_update", { title, body: `${order.customer_name} · ${order.order_code || `KAD-${order.id}`}: ${body}`, url: "/#/orders" });
+    await notifyUser(order.accounting_requested_by, "accounting_update", { title, body: `${order.customer_name} · ${order.order_code || `KAD-${order.id}`}: ${body}`, url: `/#/orders?open=${order.id}` });
   } catch (err) {
     console.error("Accounting notification failed:", err);
   }
