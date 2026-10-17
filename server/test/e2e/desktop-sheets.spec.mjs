@@ -4,7 +4,8 @@ import { test, expect, loginViaUi, pool } from "./fixtures.mjs";
 // every sheet is a centred dialog; a finished task shows Close next to Reopen/Edit; Activity's person pills are wider.
 test.describe("Desktop sheets and wide pills", () => {
   test("a task sheet is a centred dialog on a desktop window and a done task has Reopen/Edit and no extra Close button", async ({ page, fixtures }) => {
-    await page.setViewportSize({ width: 1400, height: 900 });
+    // 1100 px: wide enough for the desktop layout, below the 1400 px where tasks open as a docked panel (desktop-panel.spec.mjs)
+    await page.setViewportSize({ width: 1100, height: 900 });
     const admin = await fixtures.createUser("admin");
     const rep = await fixtures.createUser("sales_manager");
     const { rows } = await pool.query(
