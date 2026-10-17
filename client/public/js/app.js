@@ -1287,20 +1287,24 @@ const SIDEBAR_ITEM_ICON = {
 // param) -- they're "do a thing right now" shortcuts that make sense as
 // their own tile on a phone's home screen, not a second, redundant
 // destination next to the Map item the sidebar already has.
-const EXCLUDED_FROM_SIDEBAR = new Set(["qa_check_in", "qa_add_customer"]);
+const EXCLUDED_FROM_SIDEBAR = new Set(["qa_check_in", "qa_add_customer", "qa_tasks"]);
 
 function rebuildSidebarMarkup(hash) {
   if (!sidebar) return;
 
+  const allVisibleIds = visibleQuickActionIds(state.user.role, cachedSettings?.quick_action_visibility);
   const coreItems = [
     { hash: "#/dashboard", label: t("nav_dashboard"), icon: icons.home },
     { hash: "#/activity", label: t("nav_activity"), icon: icons.activity },
     { hash: "#/map", label: t("nav_map"), icon: icons.map },
     { hash: "#/customers", label: t("nav_customers"), icon: icons.customers },
     { hash: "#/orders", label: t("nav_orders"), icon: icons.cart, badgeId: "sidebar-orders-badge" },
+    // Tasks is one of the four screens a director lives in (owner, 2026-10-18): a main item, not buried under "More"
+    // (still hidden for a role whose Home grid hides it).
+    ...(allVisibleIds.includes("qa_tasks") ? [{ hash: "#/tasks", label: t("qa_tasks"), icon: icons.tasks }] : []),
   ];
 
-  const visibleIds = visibleQuickActionIds(state.user.role, cachedSettings?.quick_action_visibility).filter(
+  const visibleIds = allVisibleIds.filter(
     (id) => !EXCLUDED_FROM_SIDEBAR.has(id) && (id !== "qa_bonuses" || cachedSettings?.bonuses_enabled)
   );
   const moreItems = QUICK_ACTIONS.filter((a) => visibleIds.includes(a.id) && QUICK_ACTION_ROUTE[a.id]).map((a) => {

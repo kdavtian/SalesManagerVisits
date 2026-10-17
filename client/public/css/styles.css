@@ -14128,3 +14128,8 @@ input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
 @media (min-width: 900px) and (prefers-reduced-motion: reduce) {
   .sheet-overlay > .sheet { animation: none !important; }
 }
+
+/* Customer page column wrappers: transparent on a phone (a desktop window lays them side by side, see desktop.css). */
+.cd-col {
+  display: contents;
+}

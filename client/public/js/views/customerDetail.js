@@ -29,6 +29,7 @@ const EDIT_FIELDS = [
 export async function renderCustomerDetail(root, navigate, customerId) {
   root.innerHTML = `<div class="detail-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".detail-view");
+  container.classList.add("customer-detail-view");
 
   let customer, checkins, pendingRequests, erpOrders, brandSummaryRows, visitSchedule;
   try {
@@ -108,6 +109,8 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       </div>
     </div>
 
+    <!-- Two wrapper columns: invisible on a phone (display: contents), side by side on a desktop window (desktop.css). -->
+    <div class="cd-col cd-col-main">
     <div id="open-visit-slot"></div>
     <div class="card detail-facts-card">
       <!-- One toolbar row: social/contact links (Instagram/Facebook/email/
@@ -175,6 +178,8 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       </button>
     </div>
 
+    </div>
+    <div class="cd-col cd-col-side">
     <div id="customer-tasks-slot"></div>
     <div id="customer-docs-slot"></div>
 
@@ -205,6 +210,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
 
     <h2 class="section-title" id="visit-history-anchor">${t("visit_history")}</h2>
     <div id="checkin-history" class="card-list"></div>
+    </div>
   `;
 
   container.querySelector("#chips-info-btn").addEventListener("click", () => openInfoPopup(`<p>${escapeHtml(t("brand_chips_hint"))}</p>`));
