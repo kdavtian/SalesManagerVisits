@@ -78,6 +78,14 @@ export async function renderVaghinak(root, navigate) {
       const on = b.dataset.tab === k;
       b.classList.toggle("vg-chip-active", on);
       b.setAttribute("aria-selected", String(on));
+      // The chip row scrolls sideways: bring the chosen section's chip into view (it used to stay off-screen when
+      // the section was opened from the "Today" card).
+      if (on) {
+        const bar = b.parentElement;
+        const bb = bar.getBoundingClientRect();
+        const cb = b.getBoundingClientRect();
+        bar.scrollTo({ left: bar.scrollLeft + (cb.left - bb.left) - (bb.width - cb.width) / 2, behavior: "smooth" });
+      }
     });
     load();
   }
@@ -140,7 +148,7 @@ export async function renderVaghinak(root, navigate) {
         return `<div class="card vg-msg ${m.read_at ? "" : "vg-unread"} ${open ? "vg-open" : ""}" data-id="${m.id}">
           <div class="vg-msg-body">${escapeHtml(m.body)}</div>
           ${m.answered_at ? `<div class="vg-answered">${escapeHtml(answerLabel(m))}</div>` : ""}
-          <div class="vg-msg-foot"><span class="muted vg-msg-meta">${escapeHtml(formatRelative(m.created_at))}${m.answered_at ? ` · ${t("vg_answered")}` : ""}</span>${open || m.needs_answer ? "" : reactHtml(m)}</div>
+          <div class="vg-msg-foot"><span class="muted vg-msg-meta">${m.read_at ? "" : `<span class="vg-unread-dot" role="img" aria-label="${t("vg_unread")}"></span>`}${escapeHtml(formatRelative(m.created_at))}${m.answered_at ? ` · ${t("vg_answered")}` : ""}</span>${open || m.needs_answer ? "" : reactHtml(m)}</div>
           ${open ? answerFormHtml(m, `vg-m${m.id}`) : ""}
         </div>`;
       })
