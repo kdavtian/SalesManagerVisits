@@ -3,7 +3,8 @@
 # by hand: ./deploy/send-backup-telegram.sh path/to/db-....sql.gz
 #
 # Settings are read from the environment, then from the .env next to docker-compose.yml (the same file the app uses):
-#   TELEGRAM_BOT_TOKEN        the bot that posts (must be a member of the group)
+#   TELEGRAM_BACKUP_BOT_TOKEN the bot that posts (must be a member of the group); a dedicated backup bot is best.
+#                             Falls back to TELEGRAM_BOT_TOKEN (the app's notification bot) when not set.
 #   TELEGRAM_BACKUP_CHAT_ID   the group to post to; falls back to the FIRST id in TELEGRAM_NOTIFY_CHAT_IDS
 #   BACKUP_PASSPHRASE_FILE    file holding the encryption passphrase (default: ./.backup-passphrase). The file is sent
 #                             ENCRYPTED (AES-256, openssl) -- a customer + debt database must not sit readable in a chat.
@@ -24,11 +25,12 @@ env_value() {
   [ -f .env ] && grep -E "^${key}=" .env | tail -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'\$//" || true
 }
 
-TOKEN="$(env_value TELEGRAM_BOT_TOKEN)"
+TOKEN="$(env_value TELEGRAM_BACKUP_BOT_TOKEN)"
+if [ -z "$TOKEN" ]; then TOKEN="$(env_value TELEGRAM_BOT_TOKEN)"; fi
 CHAT="$(env_value TELEGRAM_BACKUP_CHAT_ID)"
 if [ -z "$CHAT" ]; then CHAT="$(env_value TELEGRAM_NOTIFY_CHAT_IDS | cut -d, -f1 | tr -d ' ')"; fi
 if [ -z "$TOKEN" ] || [ -z "$CHAT" ]; then
-  echo "Telegram copy skipped: TELEGRAM_BOT_TOKEN and TELEGRAM_BACKUP_CHAT_ID (or TELEGRAM_NOTIFY_CHAT_IDS) are not set in .env." >&2
+  echo "Telegram copy skipped: TELEGRAM_BACKUP_BOT_TOKEN and TELEGRAM_BACKUP_CHAT_ID are not set in .env." >&2
   exit 0
 fi
 

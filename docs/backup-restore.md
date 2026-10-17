@@ -52,9 +52,10 @@ only on the droplet and in the owner's password manager. One-time setup on the d
 ```bash
 # 1. the passphrase (never paste it into chat; copy it into your password manager from this screen)
 head -c 32 /dev/urandom | base64 > .backup-passphrase && chmod 600 .backup-passphrase && cat .backup-passphrase
-# 2. .env must contain TELEGRAM_BOT_TOKEN and the group id (TELEGRAM_BACKUP_CHAT_ID, or the first id of
-#    TELEGRAM_NOTIFY_CHAT_IDS); the bot must be a member of the group. Check without printing secrets:
-grep -E '^TELEGRAM_(BOT_TOKEN|BACKUP_CHAT_ID|NOTIFY_CHAT_IDS)=.+' .env | sed 's/=.*/=(set)/'
+# 2. .env must contain TELEGRAM_BACKUP_BOT_TOKEN (a dedicated bot from @BotFather; falls back to TELEGRAM_BOT_TOKEN) and the
+#    group id TELEGRAM_BACKUP_CHAT_ID (falls back to the first id of TELEGRAM_NOTIFY_CHAT_IDS); the bot must be a member
+#    of the group. Check without printing secrets:
+grep -E '^TELEGRAM_(BACKUP_BOT_TOKEN|BOT_TOKEN|BACKUP_CHAT_ID|NOTIFY_CHAT_IDS)=.+' .env | sed 's/=.*/=(set)/'
 ```
 
 Without the passphrase file nothing is sent (an unencrypted customer/debt database must not sit in a chat); to send

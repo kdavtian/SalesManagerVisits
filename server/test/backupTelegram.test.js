@@ -102,6 +102,15 @@ test("TELEGRAM_BACKUP_CHAT_ID wins over the notify chats", async () => {
   assert.equal(part(requests[0], "chat_id").text, "-777");
 });
 
+test("TELEGRAM_BACKUP_BOT_TOKEN (a dedicated backup bot) wins over the app's notification bot token", async () => {
+  const { server, requests, base } = await startFakeTelegram();
+  const { dir, file } = sandbox({ env: "TELEGRAM_BOT_TOKEN=1:notification\nTELEGRAM_BACKUP_BOT_TOKEN=2:backup\nTELEGRAM_BACKUP_CHAT_ID=-5\n", passphrase: "pw\n" });
+  const result = await run(dir, file, { TELEGRAM_API_BASE: base });
+  server.close();
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(requests[0].url, "/bot2:backup/sendDocument");
+});
+
 test("without a passphrase nothing is sent (readable customer data) unless the owner opts out explicitly", async () => {
   const { server, requests, base } = await startFakeTelegram();
   const { dir, file } = sandbox({ env: "TELEGRAM_BOT_TOKEN=1:x\nTELEGRAM_NOTIFY_CHAT_IDS=-1\n" });
