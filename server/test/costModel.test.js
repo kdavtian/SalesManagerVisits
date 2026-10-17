@@ -3,10 +3,20 @@ import assert from "node:assert/strict";
 import { landingCost, netCost, priceForNetMargin, litersOfUnit, commissionPct, brandKey, mergeSavedRates, COST_RATES_DEFAULT, DEFAULT_COST_ITEMS } from "../../client/public/js/costModel.js";
 import { displayNetCost } from "../src/discountPolicy.js";
 
+// The owner's defaults since 1.359.0 are the market USD rate (366) and the VAT-payer method; the workbook's own numbers
+// (rate 377.5, "VAT tax" on the margin) are reproduced by passing WB.
+const WB = { ...COST_RATES_DEFAULT, rate: 377.5, vatMode: "workbook" };
+
+test("defaults: market rate 366 and the VAT-payer method (owner, 2026-10-18)", () => {
+  assert.equal(COST_RATES_DEFAULT.rate, 366);
+  assert.equal(COST_RATES_DEFAULT.vatMode, "payer");
+  assert.equal(netCost({ landing: 14033, price: 31000, liters: 4 }).mode, "payer");
+});
+
 // Workbook 2.1.0 rows (Castrol, per ITEM): the defaults reproduce its Landing Cost AMD.
 test("landing cost reproduces the workbook (Edge Professional EC 0w20: 1 L = 3,862, 4 L = 14,033)", () => {
-  assert.equal(Math.round(landingCost({ brand: "Castrol", size: 1, items: 12, packKg: 10.08, packCostUsd: 74.52 }).amd), 3862);
-  assert.equal(Math.round(landingCost({ brand: "Castrol", size: 4, items: 4, packKg: 13.48, packCostUsd: 87.56 }).amd), 14033);
+  assert.equal(Math.round(landingCost({ brand: "Castrol", size: 1, items: 12, packKg: 10.08, packCostUsd: 74.52 }, WB).amd), 3862);
+  assert.equal(Math.round(landingCost({ brand: "Castrol", size: 4, items: 4, packKg: 13.48, packCostUsd: 87.56 }, WB).amd), 14033);
 });
 
 test("an empty pack gives zero, never NaN", () => {
@@ -15,7 +25,7 @@ test("an empty pack gives zero, never NaN", () => {
 });
 
 test("net cost = landing + commission + overhead items + 20 % VAT tax + 18 % profit tax, per pack", () => {
-  const n = netCost({ landing: 14033, price: 31000, liters: 4 });
+  const n = netCost({ landing: 14033, price: 31000, liters: 4 }, WB);
   const margin = 31000 - 14033;
   assert.equal(n.commissionPct, 4); // no channel = dearest case: director 2 % + rep 2 %
   assert.ok(Math.abs(n.commission - 1240) < 0.01);
@@ -41,8 +51,8 @@ test("commission by channel: SM 4 %, CVO/PCO/OEM 2 %, KF and CAS 0 %, no channel
   assert.equal(commissionPct("KF"), 0);
   assert.equal(commissionPct("CAS"), 0);
   assert.equal(commissionPct(null), 4);
-  const sm = netCost({ landing: 14033, price: 31000, liters: 4 }, COST_RATES_DEFAULT, { channel: "SM YVN" });
-  const cas = netCost({ landing: 14033, price: 31000, liters: 4 }, COST_RATES_DEFAULT, { channel: "CAS" });
+  const sm = netCost({ landing: 14033, price: 31000, liters: 4 }, WB, { channel: "SM YVN" });
+  const cas = netCost({ landing: 14033, price: 31000, liters: 4 }, WB, { channel: "CAS" });
   assert.ok(Math.abs(sm.net - cas.net - 1240) < 0.01);
 });
 
@@ -61,8 +71,8 @@ test("freight and legal transport are per factory: Royal and Lotos differ from C
 });
 
 test("without the overhead items the net cost is lower by exactly those items", () => {
-  const a = netCost({ landing: 14033, price: 31000, liters: 4 });
-  const b = netCost({ landing: 14033, price: 31000, liters: 4 }, COST_RATES_DEFAULT, { withFixed: false });
+  const a = netCost({ landing: 14033, price: 31000, liters: 4 }, WB);
+  const b = netCost({ landing: 14033, price: 31000, liters: 4 }, WB, { withFixed: false });
   assert.ok(Math.abs(a.net - b.net - a.overhead) < 0.01);
   assert.equal(b.overhead, 0);
 });
@@ -90,7 +100,7 @@ test("VAT-payer method: import VAT is credited, profit tax is on the real profit
   const loss = netCost({ landing: 14033, price: 15000, liters: 4 }, rates, { vatIn: 2000 });
   assert.equal(loss.ptax, 0);
   // the payer method is kinder than the workbook's double counting of VAT
-  const wb = netCost({ landing: 14033, price: 31000, liters: 4 }, COST_RATES_DEFAULT, { channel: "SM YVN" });
+  const wb = netCost({ landing: 14033, price: 31000, liters: 4 }, WB, { channel: "SM YVN" });
   assert.ok(n.net < wb.net);
 });
 
@@ -121,7 +131,8 @@ test("saved rates are merged into a complete current set; old calculator keys ar
   assert.equal(merged.items.find((i) => i.id === "office").on, false);
   assert.equal(merged.items.find((i) => i.id === "payroll").value, 8.22);
   assert.equal(merged.items.filter((i) => i.custom).length, 1);
-  assert.equal(mergeSavedRates(null).rate, 377.5);
+  assert.equal(mergeSavedRates(null).rate, 366);
+  assert.equal(mergeSavedRates(null).vatMode, "payer");
 });
 
 test("litersOfUnit reads 4L, 0.5L, 208 L", () => {

@@ -6,6 +6,7 @@ import { pool } from "../db/pool.js";
 import { notifyUser } from "../notifications.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
 import { batchExpandAreas } from "../routes/visitPlans.js";
+import { dropRecentlyVisited } from "../utils/planSkipRecent.js";
 import { evaluateRep, flagsOf } from "./evaluate.js";
 import { getVaghinakSettings } from "./settings.js";
 import { addressFor, clock, durationHy, pickVariant, QUESTION_CHOICES } from "./phrases.js";
@@ -41,7 +42,8 @@ export async function plannedForDay(db, userIds, day) {
   const areaIds = await batchExpandAreas(rules);
   for (const rule of rules) {
     if (persistedIds.has(rule.user_id)) continue;
-    for (const id of [...(areaIds.get(rule.id) ?? []), ...(rule.customer_ids ?? [])]) out.get(rule.user_id).add(id);
+    const ids = await dropRecentlyVisited(new Set([...(areaIds.get(rule.id) ?? []), ...(rule.customer_ids ?? [])]), day, { db });
+    for (const id of ids) out.get(rule.user_id).add(id);
   }
   return out;
 }

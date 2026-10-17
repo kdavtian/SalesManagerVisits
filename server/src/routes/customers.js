@@ -16,6 +16,7 @@ import { normalizePhoneForStorage } from "../phoneFormat.js";
 import { lookupCompanyByTin, isValidTin } from "../registryLookup.js";
 import { computeVisitDue, ruleWeekdaysFor } from "../utils/visitDue.js";
 import { repVisitSql } from "../visitCount.js";
+import { skippedForRecentVisit, getPlanSkipRecentVisitDays } from "../utils/planSkipRecent.js";
 import { nextNameNumber } from "../customerNameSuggest.js";
 
 export const customersRouter = Router();
@@ -1199,7 +1200,7 @@ async function loadScheduleContext(req) {
   // The due date is the same for everyone, so a plain manager's own-only rule
   // list is widened to every active rule for that part.
   const allRules = ownOnly ? (await pool.query(`SELECT day_of_week, customer_ids, areas FROM visit_plan_rules WHERE active`)).rows : ruleRows;
-  return { today, ruleRows, planRows, allRules, planByUserDate: new Map(planRows.map((p) => [`${p.user_id}:${p.plan_date}`, p])) };
+  return { today, ruleRows, planRows, allRules, skipRecentDays: await getPlanSkipRecentVisitDays(), planByUserDate: new Map(planRows.map((p) => [`${p.user_id}:${p.plan_date}`, p])) };
 }
 
 // customer: { id, region, subregion, sales_channel, visit_frequency_days, last_visit_at }
@@ -1240,6 +1241,8 @@ function scheduleForCustomer(customer, ctx) {
       for (const r of matchingRules) {
         if (r.day_of_week !== dow) continue;
         if (planByUserDate.has(`${r.user_id}:${date}`)) continue;
+        // Visited 1..N days before this route day: the day skips the customer (the next route day plans it).
+        if (skippedForRecentVisit({ lastVisitAt: customer.last_visit_at, date, windowDays: ctx.skipRecentDays, frequencyDays: customer.visit_frequency_days })) continue;
         planned.set(`${date}:${r.user_id}`, { date, user_id: r.user_id, user_name: r.user_name, source: "rule" });
       }
     }

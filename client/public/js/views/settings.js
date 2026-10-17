@@ -312,6 +312,15 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
             <p class="form-success" id="visit-frequency-success" role="status" hidden>${t("saved")}</p>
             <button type="submit" class="btn btn-primary">${t("save")}</button>
           </form>
+          <form id="plan-skip-form" class="settings-list-group-item">
+            <label>
+              <span class="settings-form-label">${ICON.calendar}${t("plan_skip_recent_label")}</span>
+              <input type="number" name="days" min="0" max="60" required />
+            </label>
+            <p class="muted radius-help">${t("plan_skip_recent_help")}</p>
+            <p class="form-success" id="plan-skip-success" role="status" hidden>${t("saved")}</p>
+            <button type="submit" class="btn btn-primary">${t("save")}</button>
+          </form>
         </div>
 
         <h2 class="section-title">${t("security")}</h2>
@@ -706,6 +715,9 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
     const frequencyForm = root.querySelector("#visit-frequency-form");
     const frequencyInput = frequencyForm.querySelector('input[name="days"]');
     const frequencySuccess = root.querySelector("#visit-frequency-success");
+    const planSkipForm = root.querySelector("#plan-skip-form");
+    const planSkipInput = planSkipForm.querySelector('input[name="days"]');
+    const planSkipSuccess = root.querySelector("#plan-skip-success");
     const incentiveForm = root.querySelector("#incentive-message-form");
     const incentiveInput = incentiveForm.querySelector('input[name="message"]');
     const incentiveSuccess = root.querySelector("#incentive-message-success");
@@ -737,6 +749,7 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       radiusInput.value = s.checkin_radius_meters;
       paintAllowanceToggle(s.checkin_allowance_enabled !== false);
       frequencyInput.value = s.default_visit_frequency_days;
+      planSkipInput.value = s.plan_skip_recent_visit_days ?? 4;
       incentiveInput.value = s.incentive_message || "";
       // Write-only field (see routes/settings.js) -- never pre-filled with
       // the actual code, just a status line saying whether one is set.
@@ -830,6 +843,19 @@ export async function renderSettings(root, onLogout, onLanguageChange) {
       try {
         await api.updateSettings({ default_visit_frequency_days: Number(frequencyInput.value) });
         frequencySuccess.hidden = false;
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    planSkipForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      planSkipSuccess.hidden = true;
+      const submitBtn = planSkipForm.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      try {
+        await api.updateSettings({ plan_skip_recent_visit_days: Number(planSkipInput.value) });
+        planSkipSuccess.hidden = false;
       } finally {
         submitBtn.disabled = false;
       }
