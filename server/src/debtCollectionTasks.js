@@ -71,7 +71,8 @@ function addTo(map, repId, entry) {
   map.set(repId, list);
 }
 
-async function insertAutoTask(kind, { title, creatorId, repId, customerId, today, itemText }) {
+async function insertAutoTask(kind, args, retried = false) {
+  const { title, creatorId, repId, customerId, today, itemText } = args;
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -85,11 +86,18 @@ async function insertAutoTask(kind, { title, creatorId, repId, customerId, today
     return rows[0]?.id ?? null;
   } catch (err) {
     await client.query("ROLLBACK");
-    console.error("Automatic task failed:", err.message);
-    return null;
+    // A foreign-key error: the person picked as "creator" (or the rep / customer) was deleted while the run was going
+    // (seen in CI: another test file deleted the sales director this run had just picked). Pick the creator again once;
+    // if it still fails the task is simply skipped until the next run.
+    if (err.code !== "23503" || retried) {
+      console.error("Automatic task failed:", err.message);
+      return null;
+    }
   } finally {
     client.release();
   }
+  const fresh = await systemCreatorId(pool);
+  return fresh && fresh !== creatorId ? insertAutoTask(kind, { ...args, creatorId: fresh }, true) : null;
 }
 
 // One notification per rep for everything a run created.
