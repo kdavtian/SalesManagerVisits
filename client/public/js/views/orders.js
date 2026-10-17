@@ -101,7 +101,12 @@ export function renderOrders(root, navigate, openId = null) {
   // Server query for the current tab (the Accounting group asks for orders
   // that have an accounting request instead of a fulfilment status).
   function listParams() {
-    return activeStatus ? { status: activeStatus } : {};
+    const params = activeStatus ? { status: activeStatus } : {};
+    if (sortKey !== "date" || sortReversed) {
+      params.sort = sortKey;
+      if (sortReversed) params.reverse = "1";
+    }
+    return params;
   }
 
   const listEl = root.querySelector("#orders-list");
@@ -111,28 +116,16 @@ export function renderOrders(root, navigate, openId = null) {
 
   // Select mode (long press an order, or the print button): tick orders, then run one action on all of them
   // (confirm, reject, mark delivered, approve a price change / credit) or print their blanks.
-  // Desktop column headings (hidden on a phone): click sorts the loaded rows, a second click reverses. "date" is the
-  // server's own order (newest first) and keeps the per-day headings; any other sort is one flat list.
+  // Desktop column headings (hidden on a phone): a click sorts the WHOLE history on the server (?sort=&reverse=), a
+  // second click reverses. "date" is the default and keeps the per-day headings; any other sort is one flat list.
   const headEl = root.querySelector(".desk-thead-orders");
   let sortKey = "date";
   let sortReversed = false;
-  const STATUS_ORDER = ["draft", "submitted", "confirmed", "packed_stock_out", "delivered"];
-  function sortOrders(list) {
-    const flip = sortReversed ? -1 : 1;
-    const byDate = (a, b) => new Date(b.created_at) - new Date(a.created_at);
-    const compare = {
-      date: byDate,
-      customer: (a, b) => String(a.customer_name).localeCompare(String(b.customer_name)),
-      amount: (a, b) => Number(b.total_amd) - Number(a.total_amd),
-      status: (a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) || byDate(a, b),
-    }[sortKey];
-    return sortKey === "date" && !sortReversed ? list : [...list].sort((a, b) => flip * compare(a, b));
-  }
   wireDeskHead(headEl, (key) => {
     sortReversed = key === sortKey ? !sortReversed : false;
     sortKey = key;
     paintDeskHead(headEl, sortKey, sortReversed);
-    paint();
+    load();
   });
   paintDeskHead(headEl, sortKey, sortReversed);
   let selectMode = false;
@@ -294,7 +287,7 @@ export function renderOrders(root, navigate, openId = null) {
     try {
       const params = listParams();
       await loadWithCache(
-        `orders-list:${activeStatus || "all"}`,
+        `orders-list:${activeStatus || "all"}${sortKey !== "date" || sortReversed ? `:${sortKey}${sortReversed ? ":rev" : ""}` : ""}`,
         () => api.listOrders(params, { fresh: true }),
         (result) => {
           if (mine !== loadSeq) return;
@@ -373,7 +366,6 @@ export function renderOrders(root, navigate, openId = null) {
       });
     }
 
-    filtered = sortOrders(filtered);
     visibleOrders = filtered;
     if (!filtered.length) {
       listEl.innerHTML = `<p class="empty-state">${t("no_orders_found")}</p>`;
