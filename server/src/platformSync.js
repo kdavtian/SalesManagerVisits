@@ -27,7 +27,7 @@ export async function syncProductsAndWholesaleCustomersToPlatform() {
     ),
   ]);
 
-  const res = await fetch(`${url.replace(/\/$/, "")}/api/kad-sync`, {
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Sync-Key": key },
     body: JSON.stringify({
