@@ -81,3 +81,13 @@ Dislikes: stickiness on customer cards, thick blue focus outlines (thin only), d
 ## Two repos, one data flow
 
 `Castrol Excel (updated daily in a Telegram group)` -> `CEO Telegram bot on the droplet (Python; computes reports)` -> `POST /api/erp-sync* (X-Sync-Key)` -> `Field Visits app (Node/Express/Postgres + vanilla JS PWA)`; plus the Lily accountant agent calling `/api/integration/v1` with a bearer token. The Excel file is the TRUSTED source for debt, sales, plan, prices, HC codes; the app keeps its own operational data (visits, orders, payments). Prefer computing in the bot/Excel semantics and syncing results; match by Customer ID (never by name).
+
+## Third repo: Platform (the public website), outbound only
+
+A third, SEPARATE repo and skill-less project, `kdavtian/castrolarmenia` ("KAD MOTORS" website/PWA, TanStack Start + Supabase, deployed via **Lovable.dev**, not Cloudflare directly -- the owner manages it entirely through the Lovable dashboard UI, not git/CLI). `KADDev` does not cover that repo; load it as its own fresh context, never assume these rules apply there.
+
+This app is the only thing that talks to it, and only in one direction (added 2026-10-18): after `POST /api/erp-sync` commits, `server/src/platformSync.js` reads `products` and wholesale customers (`customers` JOIN `erp_customer_data`) and `POST`s them to `${PLATFORM_SYNC_URL}/api/kad-sync` with header `X-Sync-Key: ${PLATFORM_SYNC_KEY}`. Fire-and-forget: a Platform outage or missing env vars only logs here, never fails or slows the ERP sync response. Platform does its own upsert by `erp_product_id`/`erp_customer_id`, so a retried push is safe. Retail customers are native to Platform and are never part of this payload. Full contract: `docs/erp-integration.md#outbound-platform-sync` in this repo; env vars in `docs/configuration.md`.
+
+**Before touching `platformSync.js` or anything Platform-related in this repo, still load `KADDev` first** (it's the thing calling out) -- but for changes on the `castrolarmenia` side itself, there is no equivalent skill yet; read that repo's own code/docs fresh.
+
+Lesson from standing this up: Lovable's Secrets panel rejects any secret name containing `supabase`/`SUPABASE_` (reserved for its own built-in Supabase integration) -- `castrolarmenia`'s server code therefore falls back to alternate names (e.g. `KAD_SERVICE_ROLE_KEY`) for anything that must be set there. The public `VITE_SUPABASE_URL`/anon key, by contrast, are baked in at Lovable's own build time through its Supabase *connector* (project switch), not through the generic Secrets panel at all -- don't try to override those with a secret.
