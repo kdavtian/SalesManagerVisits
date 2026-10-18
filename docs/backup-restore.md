@@ -46,8 +46,13 @@ crontab -e
 ```
 
 **Second copy in the owner's Telegram group (automatic, database only):** after the dump, `backup.sh` calls
-`deploy/send-backup-telegram.sh`, which posts the database file to the group, **encrypted** (AES-256) with a passphrase kept
-only on the droplet and in the owner's password manager. One-time setup on the droplet, from `/opt/field-visits`:
+`deploy/send-backup-telegram.sh`, which posts the database file to the group as a **password-protected `.7z` archive**
+(AES-256, file names hidden). The password is the passphrase kept only on the droplet and in the owner's password manager.
+One-time setup on the droplet, from `/opt/field-visits` (the `7zip` package gives the server the `7z` program):
+
+```bash
+apt-get install -y 7zip
+```
 
 ```bash
 # 1. the passphrase (never paste it into chat; copy it into your password manager from this screen)
@@ -61,7 +66,9 @@ grep -E '^TELEGRAM_(BACKUP_BOT_TOKEN|BOT_TOKEN|BACKUP_CHAT_ID|NOTIFY_CHAT_IDS)=.
 Without the passphrase file nothing is sent (an unencrypted customer/debt database must not sit in a chat); to send
 unencrypted anyway set `BACKUP_TELEGRAM_UNENCRYPTED=1` (not recommended). Telegram bots accept files up to 50 MB; the photos
 backup (about 60 MB and growing) stays on the droplet only. **If the passphrase is lost the Telegram copies are unreadable** --
-keep it somewhere other than the droplet. To read a Telegram copy on your PC:
+keep it somewhere other than the droplet. To read a Telegram copy on your PC: download the `.7z`, open it with **7-Zip** (Windows, free) or **Keka** (Mac, free) and type the
+passphrase; inside is `db-….sql.gz` (gunzip it, restore as below). If the server had no `7z` program the copy arrives as a raw
+`.enc` file instead (needs a command):
 
 ```bash
 openssl enc -d -aes-256-cbc -pbkdf2 -in db-YYYYMMDD-HHMMSS.sql.gz.enc -out db.sql.gz   # asks for the passphrase

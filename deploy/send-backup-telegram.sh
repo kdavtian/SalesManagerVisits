@@ -7,7 +7,11 @@
 #                             Falls back to TELEGRAM_BOT_TOKEN (the app's notification bot) when not set.
 #   TELEGRAM_BACKUP_CHAT_ID   the group to post to; falls back to the FIRST id in TELEGRAM_NOTIFY_CHAT_IDS
 #   BACKUP_PASSPHRASE_FILE    file holding the encryption passphrase (default: ./.backup-passphrase). The file is sent
-#                             ENCRYPTED (AES-256, openssl) -- a customer + debt database must not sit readable in a chat.
+#                             ENCRYPTED -- a customer + debt database must not sit readable in a chat. Format: a password-
+#                             protected .7z archive (AES-256, file names hidden) that 7-Zip (Windows) or Keka (Mac) opens by
+#                             double click and a password prompt. If no 7z program is installed (apt install 7zip) it falls
+#                             back to a raw openssl file (.enc) -- safe but needs a command to open.
+#   BACKUP_ENCRYPT_FORMAT     7z (default) or openssl
 #   BACKUP_TELEGRAM_UNENCRYPTED=1   explicit opt-out: send without encryption (not recommended)
 #   TELEGRAM_API_BASE         test hook (default https://api.telegram.org)
 # Telegram bots can upload at most 50 MB; bigger files are skipped with a warning (never silently).
@@ -37,9 +41,21 @@ fi
 SEND="$FILE"
 CLEANUP=""
 PASS_FILE="${BACKUP_PASSPHRASE_FILE:-./.backup-passphrase}"
+SEVENZ="$(command -v 7zz || command -v 7z || command -v 7za || true)"
 if [ -s "$PASS_FILE" ]; then
-  SEND="$FILE.enc"
-  openssl enc -aes-256-cbc -pbkdf2 -salt -in "$FILE" -out "$SEND" -pass "file:$PASS_FILE"
+  if [ -n "$SEVENZ" ] && [ "${BACKUP_ENCRYPT_FORMAT:-7z}" = "7z" ]; then
+    SEND="$FILE.7z"
+    rm -f "$SEND"
+    # -mhe=on also hides the file names; -mx=0 stores (the dump is already gzip-compressed). The password is on the
+    # command line for a moment (visible in `ps`): acceptable on this single-user server.
+    "$SEVENZ" a -t7z -mhe=on -mx=0 -p"$(tr -d '\n' < "$PASS_FILE")" "$SEND" "$FILE" > /dev/null
+  else
+    if [ "${BACKUP_ENCRYPT_FORMAT:-7z}" = "7z" ]; then
+      echo "NOTE: no 7z program installed (apt install 7zip) -- sending an openssl-encrypted .enc file instead." >&2
+    fi
+    SEND="$FILE.enc"
+    openssl enc -aes-256-cbc -pbkdf2 -salt -in "$FILE" -out "$SEND" -pass "file:$PASS_FILE"
+  fi
   CLEANUP="$SEND"
 elif [ "${BACKUP_TELEGRAM_UNENCRYPTED:-0}" != "1" ]; then
   echo "Telegram copy NOT sent: no encryption passphrase at $PASS_FILE (create it, or set BACKUP_TELEGRAM_UNENCRYPTED=1)." >&2
