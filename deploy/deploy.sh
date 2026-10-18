@@ -88,6 +88,17 @@ case "$MODE" in
     ;;
 esac
 
+# One-off containers (`docker compose run`: migrations, the full test run) normally remove themselves. If the SSH session
+# drops mid-run (a phone deploy), the container is orphaned and keeps running, unhealthy, for days and eats memory on this
+# small server (two of them were found after 3 days). Remove any left over from earlier deploys, only this project's.
+echo "==> Removing leftover one-off containers from earlier runs"
+LEFTOVER="$(docker ps -aq --filter "label=com.docker.compose.oneoff=True" --filter "label=com.docker.compose.project.working_dir=$PWD")"
+if [ -n "$LEFTOVER" ]; then
+  # shellcheck disable=SC2086
+  docker rm -f $LEFTOVER > /dev/null
+  echo "    removed $(echo "$LEFTOVER" | wc -l | tr -d ' ') leftover container(s)"
+fi
+
 echo "==> Building app image"
 docker compose build app
 
