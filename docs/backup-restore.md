@@ -161,3 +161,20 @@ available here). The responsible next step, still not done: run the full
 `backup.sh` → transfer → restore sequence against the actual droplet (or
 a second scratch droplet), confirm the app itself works against the
 restored data end to end, and record that timing here too.
+
+## Photos arranged by customer (for browsing on a computer)
+
+Files in `uploads/` have random names, so a plain copy of the folder tells you nothing about who a photo belongs to. To get
+one folder per customer (visit photos and delivery signatures, readable file names), run on the droplet from `/opt/field-visits`:
+
+```
+docker compose exec -T app node scripts/export-photos-by-customer.mjs /tmp/photos-by-customer
+docker compose cp app:/tmp/photos-by-customer ./photos-by-customer
+docker compose exec -T app rm -rf /tmp/photos-by-customer
+```
+
+Result: `photos-by-customer/<Customer name> [ERP id]/2026-10-17 14.45 visit - <rep> - 1.jpg` and
+`.../2026-10-17 delivery signature - order <code>.png`, plus `_report.txt` (counts and any file the database lists but that is
+missing on disk). The script only copies; nothing in `uploads/` or the database is changed. Download to a Mac with
+`rsync -avz root@<droplet>:/opt/field-visits/photos-by-customer/ ~/Documents/KAD-photos/` and delete the server copy afterwards
+(`rm -rf /opt/field-visits/photos-by-customer`), since it duplicates the uploads volume.
