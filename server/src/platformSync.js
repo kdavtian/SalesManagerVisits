@@ -14,7 +14,7 @@ export async function syncProductsAndWholesaleCustomersToPlatform() {
     pool.query(
       `SELECT erp_product_id, name, brand, unit, family, hc_code, active,
               stock_qty, landing_cost_amd, net_cost_amd,
-              unit_price_amd AS base_price_amd,
+              unit_price_amd AS base_price_amd, retail_price_amd,
               bronze_price_amd, silver_price_amd, gold_price_amd
        FROM products`
     ),
@@ -27,7 +27,7 @@ export async function syncProductsAndWholesaleCustomersToPlatform() {
     ),
   ]);
 
-  const res = await fetch(`${url.replace(/\/$/, "")}/api/kad-sync`, {
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Sync-Key": key },
     body: JSON.stringify({

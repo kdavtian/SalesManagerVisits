@@ -53,7 +53,7 @@ transaction, `server/src/platformSync.js` reads the current `products`
 table and the wholesale customers (`customers` joined to
 `erp_customer_data`), and pushes them to Platform (the public KAD MOTORS
 website/PWA, `kdavtian/castrolarmenia` repo) at
-`POST {PLATFORM_SYNC_URL}/api/kad-sync`, authenticated the same way this
+`POST {PLATFORM_SYNC_URL}` (the full endpoint, e.g. a Supabase Edge Function URL), authenticated the same way this
 app authenticates the bot (`X-Sync-Key`, matched against
 `PLATFORM_SYNC_KEY` on this side). Retail customers are never part of
 that payload — they're native to Platform, not this app.
