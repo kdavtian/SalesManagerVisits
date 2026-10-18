@@ -72,10 +72,10 @@ function part(request, name) {
   }
 }
 
-test("sends the file ENCRYPTED to the configured group, token never printed, and the passphrase decrypts it", async () => {
+test("openssl format: sends the file ENCRYPTED to the configured group, token never printed, and the passphrase decrypts it", async () => {
   const { server, requests, base } = await startFakeTelegram();
   const { dir, file } = sandbox({ env: "TELEGRAM_BOT_TOKEN=123:SECRET-TOKEN\nTELEGRAM_NOTIFY_CHAT_IDS=-1001, -1002\n", passphrase: "correct horse battery staple\n" });
-  const result = await run(dir, file, { TELEGRAM_API_BASE: base });
+  const result = await run(dir, file, { TELEGRAM_API_BASE: base, BACKUP_ENCRYPT_FORMAT: "openssl" });
   server.close();
   assert.equal(result.status, 0, result.stderr);
   assert.equal(requests.length, 1);
@@ -91,6 +91,30 @@ test("sends the file ENCRYPTED to the configured group, token never printed, and
   const decrypted = spawnSync("openssl", ["enc", "-d", "-aes-256-cbc", "-pbkdf2", "-in", encPath, "-pass", `file:${path.join(dir, ".backup-passphrase")}`]);
   assert.equal(decrypted.status, 0);
   assert.equal(decrypted.stdout.toString(), readFileSync(file, "utf8"));
+});
+
+const HAS_7Z = ["7zz", "7z", "7za"].some((c) => spawnSync("bash", ["-c", `command -v ${c}`]).status === 0);
+
+test("default format: a password-protected .7z that 7-Zip opens with the passphrase (names hidden, wrong password refused)", { skip: !HAS_7Z && "no 7z program installed" }, async () => {
+  const { server, requests, base } = await startFakeTelegram();
+  const { dir, file } = sandbox({ env: "TELEGRAM_BOT_TOKEN=1:x\nTELEGRAM_BACKUP_CHAT_ID=-5\n", passphrase: "correct horse battery staple\n" });
+  const result = await run(dir, file, { TELEGRAM_API_BASE: base });
+  server.close();
+  assert.equal(result.status, 0, result.stderr);
+  const doc = part(requests[0], "document");
+  assert.match(doc.filename, /\.7z$/);
+  assert.ok(!doc.bytes.toString("latin1").includes("PLAIN-TEXT-MARKER"));
+  const archive = path.join(dir, "got.7z");
+  writeFileSync(archive, doc.bytes);
+  const sevenZ = ["7zz", "7z", "7za"].find((c) => spawnSync("bash", ["-c", `command -v ${c}`]).status === 0);
+  const wrong = spawnSync(sevenZ, ["t", "-pwrong", archive]);
+  assert.notEqual(wrong.status, 0);
+  const right = spawnSync(sevenZ, ["x", "-pcorrect horse battery staple", `-o${dir}/out`, archive]);
+  assert.equal(right.status, 0, right.stdout?.toString());
+  assert.equal(readFileSync(path.join(dir, "out", "db-test.sql.gz"), "utf8"), readFileSync(file, "utf8"));
+  // the file names are inside the encrypted header: listing without the password does not show them
+  const listing = spawnSync(sevenZ, ["l", "-p", archive], { input: "\n", encoding: "utf8" });
+  assert.ok(!String(listing.stdout).includes("db-test"));
 });
 
 test("TELEGRAM_BACKUP_CHAT_ID wins over the notify chats", async () => {
