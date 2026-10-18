@@ -16,7 +16,8 @@ export async function syncProductsAndWholesaleCustomersToPlatform() {
               stock_qty, landing_cost_amd, net_cost_amd,
               unit_price_amd AS base_price_amd, retail_price_amd,
               bronze_price_amd, silver_price_amd, gold_price_amd
-       FROM products`
+       FROM products
+       WHERE erp_product_id IS NOT NULL AND erp_product_id <> ''`
     ),
     pool.query(
       `SELECT c.erp_customer_id, c.name, c.customer_tier AS tier, c.sales_channel AS channel,
