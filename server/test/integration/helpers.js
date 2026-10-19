@@ -76,7 +76,8 @@ async function testPasswordHash() {
 let userCounter = 0;
 export async function createUser(role, overrides = {}) {
   userCounter += 1;
-  const email = overrides.email ?? `itest-${role}-${Date.now()}-${userCounter}@kadmotors.local`;
+  // Test files run in parallel processes, each with its own counter: the pid keeps two files from drawing the same email in one millisecond.
+  const email = overrides.email ?? `itest-${role}-${Date.now()}-${process.pid}-${userCounter}@kadmotors.local`;
   const { rows } = await pool.query(
     "INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING *",
     [overrides.name ?? `Integration Test ${role}`, email, await testPasswordHash(), role]
