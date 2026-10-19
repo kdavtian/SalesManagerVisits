@@ -19,6 +19,7 @@ import {
 } from "../settings.js";
 import { getBonusesEnabled, setBonusesEnabled } from "../bonusSettings.js";
 import { getAskKadSettings, setAskKadEnabled, setAskKadMonthlyCapUsd } from "../askKad/settings.js";
+import { getLandingSettings, setLandingSetting, applyLandingCosts, applyExcelRetail, retailDifferences } from "../landingCalc.js";
 import { ensureCurrentRound, ensureOnceRound } from "../bonusChallengeRounds.js";
 import { ROLES } from "../roles.js";
 import { pool } from "../db/pool.js";
@@ -40,6 +41,7 @@ settingsRouter.get("/", async (req, res) => {
     calculatorModeEnabled,
     bonusesEnabled,
     askKad,
+    landing,
   ] = await Promise.all([
     getCheckinRadiusMeters(),
     getCheckinAllowanceEnabled(),
@@ -51,6 +53,7 @@ settingsRouter.get("/", async (req, res) => {
     getCalculatorModeEnabled(),
     getBonusesEnabled(),
     getAskKadSettings(),
+    getLandingSettings(),
   ]);
   res.json({
     checkin_radius_meters: checkinRadiusMeters,
@@ -75,8 +78,15 @@ settingsRouter.get("/", async (req, res) => {
     // Ask KAD (the admin's AI analyst): On/Off and the monthly spending cap in USD.
     ask_kad_enabled: askKad.enabled,
     ask_kad_monthly_cap_usd: askKad.capUsd,
+    // Landing cost calculated from the pack USD price (landingCalc.js) and Retail price taken from Excel.
+    landing_calc_enabled: landing.enabled,
+    landing_usd_rate: landing.rate,
+    retail_from_excel: landing.retailFromExcel,
   });
 });
+
+// What switching "Retail price from Excel" on would change: the app's retail next to the workbook's, per product.
+settingsRouter.get("/retail-differences", requireAdmin, async (req, res) => res.json({ products: await retailDifferences() }));
 
 settingsRouter.patch("/", requireAdmin, async (req, res) => {
   const result = {};
@@ -167,6 +177,30 @@ settingsRouter.patch("/", requireAdmin, async (req, res) => {
       return res.status(400).json({ error: "calculator_mode_enabled must be a boolean" });
     }
     result.calculator_mode_enabled = await setCalculatorModeEnabled(req.body.calculator_mode_enabled);
+  }
+
+  if (req.body?.landing_calc_enabled !== undefined || req.body?.landing_usd_rate !== undefined) {
+    if (req.body.landing_calc_enabled !== undefined) {
+      if (typeof req.body.landing_calc_enabled !== "boolean") return res.status(400).json({ error: "landing_calc_enabled must be a boolean" });
+      await setLandingSetting("enabled", req.body.landing_calc_enabled);
+    }
+    if (req.body.landing_usd_rate !== undefined) {
+      const rate = Number(req.body.landing_usd_rate);
+      if (!Number.isFinite(rate) || rate < 100 || rate > 1000) return res.status(400).json({ error: "landing_usd_rate must be between 100 and 1000" });
+      await setLandingSetting("rate", Math.round(rate * 100) / 100);
+    }
+    // Every landing cost follows the new rate / switch at once, no new workbook needed.
+    await applyLandingCosts(pool);
+    const landing = await getLandingSettings();
+    result.landing_calc_enabled = landing.enabled;
+    result.landing_usd_rate = landing.rate;
+  }
+
+  if (req.body?.retail_from_excel !== undefined) {
+    if (typeof req.body.retail_from_excel !== "boolean") return res.status(400).json({ error: "retail_from_excel must be a boolean" });
+    await setLandingSetting("retailFromExcel", req.body.retail_from_excel);
+    if (req.body.retail_from_excel) result.retail_changed = await applyExcelRetail(pool);
+    result.retail_from_excel = req.body.retail_from_excel;
   }
 
   if (req.body?.ask_kad_enabled !== undefined) {

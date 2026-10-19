@@ -86,7 +86,12 @@ which is upsert-only and never truncated).
       "brand": "Castrol", "unit": "L", "family": "...",
       "bronze_price_amd": 12000, "silver_price_amd": 11500, "gold_price_amd": 11000,
       "stock_qty": 240,
-      "landing_cost_amd": 9500, // from the Pricelist sheet's own "Landing Cost" column; omit/null if not sent
+      "landing_cost_amd": 9500, // the workbook's own "Landing Cost" (kept as landing_workbook_amd: the fallback and the reference); omit/null if not sent
+      // Since 1.370.0, all optional (an older bot sends none): the app calculates landing_cost_amd itself from the pack data
+      // (server/src/landingCalc.js, USD rate in App configuration) and keeps the workbook's value when pack data is missing or
+      // the result is more than 20% away from it. retail_price_amd is stored as erp_retail_price_amd and copied into the app's
+      // retail price only while Settings -> "Retail price from Excel" is on.
+      "pack_cost_usd": 87.56, "items_per_pack": 4, "pack_netto_kg": 13.48, "size_l": 4, "retail_price_amd": 44000,
       "net_cost_amd": 8700 // optional, no current source sheet column -- omit/null if not sent. Admin-editable in the app (unlike landing_cost_amd), so a sent value only ever overwrites a product nothing has manually corrected since its last sync, and a product that already has one set keeps it until a real value arrives (a sync that omits this field never clears an existing net cost)
     }
   ],

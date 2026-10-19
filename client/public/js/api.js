@@ -214,6 +214,7 @@ export const api = {
   vaghinakReact: (id, reaction) => json(`/vaghinak/messages/${id}/react`, "POST", { reaction }),
   vaghinakAnswer: (id, body) => json(`/vaghinak/messages/${id}/answer`, "POST", body),
   vaghinakPulse: () => request("/vaghinak/pulse"),
+  retailDifferences: () => request("/settings/retail-differences", { fresh: true }),
   askKadStatus: () => request("/ask-kad/status", { fresh: true }),
   askKad: (question, history) => json("/ask-kad", "POST", { question, history }),
   vaghinakQa: () => request("/vaghinak/qa"),

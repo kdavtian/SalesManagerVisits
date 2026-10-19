@@ -263,6 +263,11 @@ export function transformErpProducts(products) {
   const prodStockQtys = [];
   const prodLandingCosts = [];
   const prodNetCosts = [];
+  const prodPackCostUsd = [];
+  const prodItemsPerPack = [];
+  const prodPackNettoKg = [];
+  const prodSizeL = [];
+  const prodRetail = [];
   const prodHcCodes = [];
   const prodActives = [];
 
@@ -280,6 +285,13 @@ export function transformErpProducts(products) {
     prodStockQtys.push(Number.isFinite(p.stock_qty) ? Math.trunc(p.stock_qty) : null);
     prodLandingCosts.push(Number.isFinite(p.landing_cost_amd) ? p.landing_cost_amd : null);
     prodNetCosts.push(Number.isFinite(p.net_cost_amd) ? p.net_cost_amd : null);
+    // Pack data for the app's own landing-cost calculation and the workbook's Retail Price (all optional).
+    const positive = (v) => (Number.isFinite(v) && v > 0 ? v : null);
+    prodPackCostUsd.push(positive(p.pack_cost_usd));
+    prodItemsPerPack.push(positive(p.items_per_pack));
+    prodPackNettoKg.push(positive(p.pack_netto_kg));
+    prodSizeL.push(positive(p.size_l));
+    prodRetail.push(positive(p.retail_price_amd));
     // HC (ՀԾ-Հաշվապահ) product code, text so "000010" keeps its zeros.
     const hc = p.hc_code != null ? String(p.hc_code).trim() : "";
     prodHcCodes.push(hc || null);
@@ -300,6 +312,11 @@ export function transformErpProducts(products) {
     prodStockQtys,
     prodLandingCosts,
     prodNetCosts,
+    prodPackCostUsd,
+    prodItemsPerPack,
+    prodPackNettoKg,
+    prodSizeL,
+    prodRetail,
     prodHcCodes,
     prodActives,
   };

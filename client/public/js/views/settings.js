@@ -8,7 +8,7 @@ import { renderTeamSection, renderPlanApprovalsSection, renderEditRequestsSectio
 import { renderSystemHealthSection } from "./systemHealth.js";
 import { renderPinReviewSection } from "./pinReview.js";
 import { renderBonusChallengesSection, renderBonusRewardClaimsSection } from "./bonusChallengesAdmin.js";
-import { escapeHtml, compressImage, activateDialog, attachSwipeToDismiss, formatPhoneDisplay, normalizePhone, downloadFromUrl, formatDateTime } from "../util.js";
+import { openInfoPopup, formatAmd, escapeHtml, compressImage, activateDialog, attachSwipeToDismiss, formatPhoneDisplay, normalizePhone, downloadFromUrl, formatDateTime } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
 import { checkForUpdateManually } from "../updateBanner.js";
@@ -331,6 +331,21 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
             <p class="form-success" id="ask-kad-cap-success" role="status" hidden>${t("saved")}</p>
             <button type="submit" class="btn btn-primary">${t("save")}</button>
           </form>
+          ${settingsToggleRow({ icon: ICON.bolt, label: t("landing_calc_label"), value: "", id: "toggle-landing-calc", checked: true, color: "orange" })}
+          <form id="landing-rate-form" class="settings-list-group-item">
+            <label>
+              <span class="settings-form-label">${ICON.bolt}${t("landing_rate_label")}</span>
+              <input type="number" name="rate" min="100" max="1000" step="0.01" required />
+            </label>
+            <p class="muted radius-help">${t("landing_rate_help")}</p>
+            <p class="form-success" id="landing-rate-success" role="status" hidden>${t("saved")}</p>
+            <button type="submit" class="btn btn-primary">${t("save")}</button>
+          </form>
+          ${settingsToggleRow({ icon: ICON.bolt, label: t("retail_excel_label"), value: "", id: "toggle-retail-excel", checked: false, color: "orange" })}
+          <div class="settings-list-group-item">
+            <p class="muted radius-help">${t("retail_excel_help")}</p>
+            <button type="button" class="btn" id="retail-diff-btn">${t("retail_diff_btn")}</button>
+          </div>
         </div>
 
         <h2 class="section-title">${t("security")}</h2>
@@ -736,6 +751,11 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
     const askKadCapForm = root.querySelector("#ask-kad-cap-form");
     const askKadCapInput = askKadCapForm.querySelector('input[name="usd"]');
     const askKadCapSuccess = root.querySelector("#ask-kad-cap-success");
+    const landingToggle = root.querySelector("#toggle-landing-calc");
+    const landingRateForm = root.querySelector("#landing-rate-form");
+    const landingRateInput = landingRateForm.querySelector('input[name="rate"]');
+    const landingRateSuccess = root.querySelector("#landing-rate-success");
+    const retailToggle = root.querySelector("#toggle-retail-excel");
     const planSkipForm = root.querySelector("#plan-skip-form");
     const planSkipInput = planSkipForm.querySelector('input[name="days"]');
     const planSkipSuccess = root.querySelector("#plan-skip-success");
@@ -773,6 +793,9 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
       planSkipInput.value = s.plan_skip_recent_visit_days ?? 4;
       incentiveInput.value = s.incentive_message || "";
       askKadToggle.setAttribute("aria-checked", String(s.ask_kad_enabled !== false));
+      landingToggle.setAttribute("aria-checked", String(s.landing_calc_enabled !== false));
+      landingRateInput.value = s.landing_usd_rate ?? 366;
+      retailToggle.setAttribute("aria-checked", String(s.retail_from_excel === true));
       askKadCapInput.value = s.ask_kad_monthly_cap_usd ?? 20;
       // Write-only field (see routes/settings.js) -- never pre-filled with
       // the actual code, just a status line saying whether one is set.
@@ -882,6 +905,61 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
         alert(err.message);
       } finally {
         askKadToggle.disabled = false;
+      }
+    });
+    // Landing cost from the pack price: the switch and the USD rate recalculate every product on the server at once.
+    landingToggle.addEventListener("click", async () => {
+      const turningOn = landingToggle.getAttribute("aria-checked") !== "true";
+      landingToggle.disabled = true;
+      try {
+        const result = await api.updateSettings({ landing_calc_enabled: turningOn });
+        landingToggle.setAttribute("aria-checked", String(result.landing_calc_enabled));
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        landingToggle.disabled = false;
+      }
+    });
+    landingRateForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      landingRateSuccess.hidden = true;
+      const submitBtn = landingRateForm.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      try {
+        await api.updateSettings({ landing_usd_rate: Number(landingRateInput.value) });
+        landingRateSuccess.hidden = false;
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+    // Retail price from Excel: the switch applies Excel's prices right away; the button lists what would change first.
+    retailToggle.addEventListener("click", async () => {
+      const turningOn = retailToggle.getAttribute("aria-checked") !== "true";
+      retailToggle.disabled = true;
+      try {
+        const result = await api.updateSettings({ retail_from_excel: turningOn });
+        retailToggle.setAttribute("aria-checked", String(result.retail_from_excel));
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        retailToggle.disabled = false;
+      }
+    });
+    root.querySelector("#retail-diff-btn").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try {
+        const { products } = await api.retailDifferences();
+        const rows = products
+          .map((p) => `<li><span>${escapeHtml([p.brand, p.name, p.unit].filter(Boolean).join(" "))}</span><b>${formatAmd(p.app_retail)} → ${formatAmd(p.excel_retail)}</b></li>`)
+          .join("");
+        openInfoPopup(`<h3>${t("retail_diff_title")}</h3>${rows ? `<ul class="retail-diff">${rows}</ul>` : `<p>${t("retail_diff_none")}</p>`}`);
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        btn.disabled = false;
       }
     });
     askKadCapForm.addEventListener("submit", async (e) => {
