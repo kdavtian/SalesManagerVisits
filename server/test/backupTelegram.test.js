@@ -5,12 +5,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, mkdirSync, copyFileSync, readFileSync, chmodSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, copyFileSync, readFileSync, chmodSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+// The backup script runs on the droplet, not in the app image (the Dockerfile copies only server/ and client/): when the full-checks
+// step of deploy.sh runs the suite inside the image there is no deploy/ folder, so these tests run in CI and from a full checkout.
+const SCRIPT_MISSING = !existsSync(path.join(repo, "deploy/send-backup-telegram.sh")) && "deploy/ is not part of the app image";
 
 function startFakeTelegram(status = 200) {
   const requests = [];
@@ -72,7 +75,7 @@ function part(request, name) {
   }
 }
 
-test("openssl format: sends the file ENCRYPTED to the configured group, token never printed, and the passphrase decrypts it", async () => {
+test("openssl format: sends the file ENCRYPTED to the configured group, token never printed, and the passphrase decrypts it", { skip: SCRIPT_MISSING }, async () => {
   const { server, requests, base } = await startFakeTelegram();
   const { dir, file } = sandbox({ env: "TELEGRAM_BOT_TOKEN=123:SECRET-TOKEN\nTELEGRAM_NOTIFY_CHAT_IDS=-1001, -1002\n", passphrase: "correct horse battery staple\n" });
   const result = await run(dir, file, { TELEGRAM_API_BASE: base, BACKUP_ENCRYPT_FORMAT: "openssl" });
@@ -95,7 +98,7 @@ test("openssl format: sends the file ENCRYPTED to the configured group, token ne
 
 const HAS_7Z = ["7zz", "7z", "7za"].some((c) => spawnSync("bash", ["-c", `command -v ${c}`]).status === 0);
 
-test("default format: a password-protected .7z that 7-Zip opens with the passphrase (names hidden, wrong password refused)", { skip: !HAS_7Z && "no 7z program installed" }, async () => {
+test("default format: a password-protected .7z that 7-Zip opens with the passphrase (names hidden, wrong password refused)", { skip: SCRIPT_MISSING || (!HAS_7Z && "no 7z program installed") }, async () => {
   const { server, requests, base } = await startFakeTelegram();
   const { dir, file } = sandbox({ env: "TELEGRAM_BOT_TOKEN=1:x\nTELEGRAM_BACKUP_CHAT_ID=-5\n", passphrase: "correct horse battery staple\n" });
   const result = await run(dir, file, { TELEGRAM_API_BASE: base });
@@ -117,7 +120,7 @@ test("default format: a password-protected .7z that 7-Zip opens with the passphr
   assert.ok(!String(listing.stdout).includes("db-test"));
 });
 
-test("TELEGRAM_BACKUP_CHAT_ID wins over the notify chats", async () => {
+test("TELEGRAM_BACKUP_CHAT_ID wins over the notify chats", { skip: SCRIPT_MISSING }, async () => {
   const { server, requests, base } = await startFakeTelegram();
   const { dir, file } = sandbox({ env: "TELEGRAM_BOT_TOKEN=1:x\nTELEGRAM_NOTIFY_CHAT_IDS=-1\nTELEGRAM_BACKUP_CHAT_ID=-777\n", passphrase: "pw\n" });
   const result = await run(dir, file, { TELEGRAM_API_BASE: base });
@@ -126,7 +129,7 @@ test("TELEGRAM_BACKUP_CHAT_ID wins over the notify chats", async () => {
   assert.equal(part(requests[0], "chat_id").text, "-777");
 });
 
-test("TELEGRAM_BACKUP_BOT_TOKEN (a dedicated backup bot) wins over the app's notification bot token", async () => {
+test("TELEGRAM_BACKUP_BOT_TOKEN (a dedicated backup bot) wins over the app's notification bot token", { skip: SCRIPT_MISSING }, async () => {
   const { server, requests, base } = await startFakeTelegram();
   const { dir, file } = sandbox({ env: "TELEGRAM_BOT_TOKEN=1:notification\nTELEGRAM_BACKUP_BOT_TOKEN=2:backup\nTELEGRAM_BACKUP_CHAT_ID=-5\n", passphrase: "pw\n" });
   const result = await run(dir, file, { TELEGRAM_API_BASE: base });
@@ -135,7 +138,7 @@ test("TELEGRAM_BACKUP_BOT_TOKEN (a dedicated backup bot) wins over the app's not
   assert.equal(requests[0].url, "/bot2:backup/sendDocument");
 });
 
-test("without a passphrase nothing is sent (readable customer data) unless the owner opts out explicitly", async () => {
+test("without a passphrase nothing is sent (readable customer data) unless the owner opts out explicitly", { skip: SCRIPT_MISSING }, async () => {
   const { server, requests, base } = await startFakeTelegram();
   const { dir, file } = sandbox({ env: "TELEGRAM_BOT_TOKEN=1:x\nTELEGRAM_NOTIFY_CHAT_IDS=-1\n" });
   const refused = await run(dir, file, { TELEGRAM_API_BASE: base });
@@ -149,7 +152,7 @@ test("without a passphrase nothing is sent (readable customer data) unless the o
   assert.ok(part(requests[0], "document").bytes.toString("latin1").includes("PLAIN-TEXT-MARKER"));
 });
 
-test("a Telegram error is a loud failure, not a silent success", async () => {
+test("a Telegram error is a loud failure, not a silent success", { skip: SCRIPT_MISSING }, async () => {
   const { server, base } = await startFakeTelegram(400);
   const { dir, file } = sandbox({ env: "TELEGRAM_BOT_TOKEN=1:x\nTELEGRAM_NOTIFY_CHAT_IDS=-1\n", passphrase: "pw\n" });
   const result = await run(dir, file, { TELEGRAM_API_BASE: base });
@@ -158,14 +161,14 @@ test("a Telegram error is a loud failure, not a silent success", async () => {
   assert.match(result.stderr, /FAILED \(HTTP 400\)/);
 });
 
-test("not configured: skipped with an explanation and no error (the backup itself still works)", async () => {
+test("not configured: skipped with an explanation and no error (the backup itself still works)", { skip: SCRIPT_MISSING }, async () => {
   const { dir, file } = sandbox({ env: "" });
   const result = await run(dir, file);
   assert.equal(result.status, 0);
   assert.match(result.stderr, /skipped/);
 });
 
-test("a file over Telegram's 50 MB bot limit is refused loudly", async () => {
+test("a file over Telegram's 50 MB bot limit is refused loudly", { skip: SCRIPT_MISSING }, async () => {
   const { server, requests, base } = await startFakeTelegram();
   const { dir, file } = sandbox({ env: "TELEGRAM_BOT_TOKEN=1:x\nTELEGRAM_NOTIFY_CHAT_IDS=-1\n", passphrase: "pw\n" });
   spawnSync("bash", ["-c", `head -c 52000000 /dev/zero > "${file}"`]);
