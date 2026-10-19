@@ -379,6 +379,9 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
   }
 
   // ---- rows ------------------------------------------------------------------------------------------------------------
+  // The brand is written on a row only where nothing above it already names it: under a brand header or a brand chip it is noise
+  // (and it pushed the size off the line). Set by paintProductList.
+  let brandInRows = false;
   function renderProductRow(product) {
     const line = cart.get(product.id);
     const qty = line?.quantity ?? 0;
@@ -393,7 +396,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
         <div class="order-product-info">
           <strong>${escapeHtml(product.name)}</strong>
           <span class="oc-meta-line">
-            <span class="muted oc-meta-text">${[product.brand, product.unit].filter(Boolean).map(escapeHtml).join(" · ")}${usual ? ` × ${usual.quantity}` : ""}</span>
+            <span class="muted oc-meta-text">${[brandInRows ? product.brand : null, product.unit].filter(Boolean).map(escapeHtml).join(" · ")}${usual ? ` × ${usual.quantity}` : ""}</span>
             <span class="oc-price-line">${specialChip(product, price)}<span class="oc-price">${formatPriceOrFree(price)}</span></span>
           </span>
           ${usual?.due ? `<span class="order-due-tag">${t("usual_item_due")}</span>` : ""}
@@ -465,10 +468,12 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
   function paintProductList(list, grouped) {
     if (grouped && list.length) {
       const groups = brandGroups(list.map((product) => ({ product, name: product.name })));
+      brandInRows = groups.length === 1;
       listEl.innerHTML = groups
         .map((g) => `${groups.length > 1 ? `<div class="oc-list-group">${escapeHtml(g.label)}</div>` : ""}${g.rows.map((r) => renderProductRow(r.product)).join("")}`)
         .join("");
     } else {
+      brandInRows = view.chip === "special"; // the Special chip mixes brands; a brand chip is one brand
       listEl.innerHTML = list.length ? list.map(renderProductRow).join("") : "";
     }
     listEl.querySelectorAll("[data-product-id]").forEach((row) => wireRow(row, catalogById.get(Number(row.dataset.productId))));
