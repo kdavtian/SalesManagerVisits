@@ -198,6 +198,33 @@ function phoneCaretAfter(masked, count) {
   return masked.length;
 }
 
+// Puts the masked text into the field with the SMALLEST edit instead of replacing the whole value, and never moves the caret
+// when the person is typing at the end of the number (the usual case). iPhone Safari keeps a live text-input session with
+// its keyboard: replacing the whole value and forcing the selection inside the very event of a keystroke (what this used to
+// do at every group boundary, after the 3rd and the 6th digit) can make that session drop the NEXT key -- reported as "the 6
+// does not type" (it is the key right after "+374 33 000 9"; desktop browsers never showed it). Typing at the end now only
+// rewrites the tail after the first changed character and does not touch the selection at all; only editing in the MIDDLE of
+// a number sets the caret (needed there, and a person editing a saved number is not mid-way through a quick sequence of keys).
+function applyMask(el, masked, caretPos) {
+  const old = el.value;
+  let start = 0;
+  const max = Math.min(old.length, masked.length);
+  while (start < max && old[start] === masked[start]) start++;
+  try {
+    el.setRangeText(masked.slice(start), start, old.length, "end"); // caret ends at the end of the text
+  } catch {
+    el.value = masked;
+  }
+  if (caretPos >= masked.length) return; // typing at the end: the caret is already there, nothing to set
+  // Editing in the middle: put the caret back by digit count (right away: a deferred move would let the next fast key land
+  // at the old place).
+  try {
+    el.setSelectionRange(caretPos, caretPos);
+  } catch {
+    // some input types refuse selection ranges; the value is already right
+  }
+}
+
 // One delegated listener masks every <input name="phone"> in the app, present and future.
 // Editing keeps the caret where the person is working (it used to jump to the end after every key, so fixing a digit
 // in the middle of a saved number put the next digits at the END, where a full number swallowed them), backspace over
@@ -240,15 +267,10 @@ export function installPhoneMask() {
     const local = phoneLocalDigits(digits);
     const masked = digits ? formatPhoneInput(digits) : "";
     if (masked !== el.value) {
-      el.value = masked;
       // digits of the country code count too when the old text had them before the caret
       const localCaret = Math.max(0, Math.min(local.length, caretDigits - (digits.startsWith("374") ? 3 : digits.startsWith("00374") ? 5 : 0)));
       const pos = phoneCaretAfter(masked, localCaret);
-      try {
-        el.setSelectionRange(pos, pos);
-      } catch {
-        // some input types refuse selection ranges; the value is already right
-      }
+      applyMask(el, masked, pos);
     }
   });
   document.addEventListener("focusin", (e) => {
@@ -690,7 +712,6 @@ export function bindAmdInput(input, onInput = null) {
     // middle of 57,000 put the next digits at the end).
     const caret = input.selectionStart ?? input.value.length;
     const digitsBefore = input.value.slice(0, caret).replace(/\D/g, "").length;
-    input.value = formatted;
     let pos = formatted.length;
     if (digitsBefore === 0) pos = 0;
     else {
@@ -702,11 +723,8 @@ export function bindAmdInput(input, onInput = null) {
         }
       }
     }
-    try {
-      if (document.activeElement === input) input.setSelectionRange(pos, pos);
-    } catch {
-      /* non-text input types refuse selection ranges */
-    }
+    // Same gentle rewrite as the phone mask (applyMask): iPhone Safari can drop the next key after a whole-value rewrite.
+    applyMask(input, formatted, pos);
   };
   reformat();
   input.addEventListener("input", () => {

@@ -46,6 +46,46 @@ test.describe("Phone typing mask", () => {
     expect((await read())[0]).toBe("+374 65");
   });
 
+  // Owner, 2026-10-19 (again): "I tap on 6 and it is not typing" -- on the iPhone, right after "+374 33 000 9". The mask rewrote
+  // the whole value and forced the selection inside the keystroke at every group boundary (after the 3rd and the 6th digit);
+  // iPhone Safari can drop the NEXT key after that. Typing at the end must now only append to the text and leave the caret alone.
+  test("typing a number key by key never drops a key, every digit at every position, and the caret is not forced at the end", async ({ page, fixtures }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const admin = await fixtures.createUser("admin");
+    const customer = await fixtures.createCustomer({ created_by: admin.id, name: "Phone Typing Customer" });
+    await loginViaUi(page, admin.email);
+    await page.goto(`/#/customers/${customer.id}`);
+    await page.locator("#edit-customer-btn").click();
+    const input = page.locator('#edit-customer-form input[name="phone"]');
+    await input.click();
+    const read = () => input.inputValue();
+    for (const next of "0123456789") {
+      await input.evaluate((el) => { el.value = "+374 "; el.setSelectionRange(5, 5); });
+      for (const ch of "330009") await page.keyboard.type(ch);
+      expect(await read()).toBe("+374 33 000 9");
+      await page.keyboard.type(next);
+      expect(await read()).toBe(`+374 33 000 9${next}`);
+    }
+    // a full number typed straight through, 6s everywhere
+    await input.evaluate((el) => { el.value = "+374 "; el.setSelectionRange(5, 5); });
+    for (const ch of "66666666") await page.keyboard.type(ch);
+    expect(await read()).toBe("+374 66 666 666");
+    // typing at the end must not call setSelectionRange at all (the part iPhone Safari does not like)
+    await input.evaluate((el) => {
+      el.value = "+374 ";
+      el.setSelectionRange(5, 5);
+      window.__selCalls = 0;
+      const original = el.setSelectionRange.bind(el);
+      el.setSelectionRange = (...args) => {
+        window.__selCalls += 1;
+        return original(...args);
+      };
+    });
+    for (const ch of "91007019") await page.keyboard.type(ch);
+    expect(await read()).toBe("+374 91 007 019");
+    expect(await page.evaluate(() => window.__selCalls)).toBe(0);
+  });
+
   test("amount fields keep the caret while typing in the middle (57,000)", async ({ page, fixtures }) => {
     const admin = await fixtures.createUser("admin");
     await loginViaUi(page, admin.email);
