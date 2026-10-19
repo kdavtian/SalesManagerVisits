@@ -158,6 +158,8 @@ export async function renderSpecialPrices(root, navigate, customerId) {
     );
   }
 
+  // A brand chip lists one brand; search, Frequent and Special mix brands, so only there the brand is written on the row.
+  const mixedBrands = () => Boolean(searchQuery.trim()) || view.chip === "frequent" || view.chip === "special";
   function rowHtml(p) {
     const cur = currentSpecial(p);
     const gold = goldList(p);
@@ -165,7 +167,7 @@ export async function renderSpecialPrices(root, navigate, customerId) {
     return `<div class="order-product-row sp-row ${isDirty(p) ? "is-dirty" : ""}" data-product-id="${p.id}">
       <div class="order-product-info">
         <strong>${escapeHtml(p.name)}</strong>
-        <span class="muted">${[p.brand, p.unit].filter(Boolean).map(escapeHtml).join(" · ")}</span>
+        <span class="muted">${[mixedBrands() ? p.brand : null, p.unit].filter(Boolean).map(escapeHtml).join(" · ")}</span>
         <span class="muted sp-lists">${t("tier_silver")} ${groupDigits(silver)} · ${t("tier_gold")} ${groupDigits(gold)}</span>
       </div>
       <div class="sp-side">

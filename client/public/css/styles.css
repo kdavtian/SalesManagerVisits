@@ -10719,7 +10719,8 @@ form select,
 .pricelist-row-open { cursor: pointer; align-items: center; }
 .pricelist-row-open:active { background: var(--bg-card-pressed); }
 .pricelist-row-main strong { overflow-wrap: anywhere; }
-.pricelist-row-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The size ("1L", "4L") is what tells two cards of the same oil apart, so this line wraps instead of being cut with "...". */
+.pricelist-row-meta { overflow-wrap: anywhere; }
 .pricelist-price-label { font-size: 0.7rem; color: var(--text-dim); }
 .pricelist-row-thumb { object-fit: contain; background: #fff; border: 1px solid var(--border); }
 .pricelist-desktop-table .pricelist-row-thumb { width: 36px; height: 36px; }

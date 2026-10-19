@@ -548,7 +548,7 @@ export async function renderPricelist(root, navigate) {
         ${thumbHtml(p)}
         <div class="pricelist-row-main">
           <strong>${escapeHtml(p.name)}</strong>
-          <span class="muted pricelist-row-meta">${[p.brand, p.family, p.unit].filter(Boolean).map(escapeHtml).join(" · ")}</span>
+          <span class="muted pricelist-row-meta">${[p.family, p.unit].filter(Boolean).map(escapeHtml).join(" · ")}</span>
         </div>
         <div class="pricelist-row-prices">
           ${priceLines}
