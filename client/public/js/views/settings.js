@@ -321,6 +321,16 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
             <p class="form-success" id="plan-skip-success" role="status" hidden>${t("saved")}</p>
             <button type="submit" class="btn btn-primary">${t("save")}</button>
           </form>
+          ${settingsToggleRow({ icon: ICON.bolt, label: t("ask_kad_label"), value: "", id: "toggle-ask-kad", checked: true, color: "purple" })}
+          <form id="ask-kad-cap-form" class="settings-list-group-item">
+            <label>
+              <span class="settings-form-label">${ICON.bolt}${t("ask_kad_cap_label")}</span>
+              <input type="number" name="usd" min="1" max="5000" step="1" required />
+            </label>
+            <p class="muted radius-help">${t("ask_kad_cap_help")}</p>
+            <p class="form-success" id="ask-kad-cap-success" role="status" hidden>${t("saved")}</p>
+            <button type="submit" class="btn btn-primary">${t("save")}</button>
+          </form>
         </div>
 
         <h2 class="section-title">${t("security")}</h2>
@@ -722,6 +732,10 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
     const frequencyForm = root.querySelector("#visit-frequency-form");
     const frequencyInput = frequencyForm.querySelector('input[name="days"]');
     const frequencySuccess = root.querySelector("#visit-frequency-success");
+    const askKadToggle = root.querySelector("#toggle-ask-kad");
+    const askKadCapForm = root.querySelector("#ask-kad-cap-form");
+    const askKadCapInput = askKadCapForm.querySelector('input[name="usd"]');
+    const askKadCapSuccess = root.querySelector("#ask-kad-cap-success");
     const planSkipForm = root.querySelector("#plan-skip-form");
     const planSkipInput = planSkipForm.querySelector('input[name="days"]');
     const planSkipSuccess = root.querySelector("#plan-skip-success");
@@ -758,6 +772,8 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
       frequencyInput.value = s.default_visit_frequency_days;
       planSkipInput.value = s.plan_skip_recent_visit_days ?? 4;
       incentiveInput.value = s.incentive_message || "";
+      askKadToggle.setAttribute("aria-checked", String(s.ask_kad_enabled !== false));
+      askKadCapInput.value = s.ask_kad_monthly_cap_usd ?? 20;
       // Write-only field (see routes/settings.js) -- never pre-filled with
       // the actual code, just a status line saying whether one is set.
       pinStatus.textContent = s.calculator_pin_is_custom ? t("calculator_pin_help_custom") : t("calculator_pin_help");
@@ -850,6 +866,32 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
       try {
         await api.updateSettings({ default_visit_frequency_days: Number(frequencyInput.value) });
         frequencySuccess.hidden = false;
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    // Instant save, like the check-in allowance switch: switching it back is one tap.
+    askKadToggle.addEventListener("click", async () => {
+      const turningOn = askKadToggle.getAttribute("aria-checked") !== "true";
+      askKadToggle.disabled = true;
+      try {
+        const result = await api.updateSettings({ ask_kad_enabled: turningOn });
+        askKadToggle.setAttribute("aria-checked", String(result.ask_kad_enabled));
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        askKadToggle.disabled = false;
+      }
+    });
+    askKadCapForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      askKadCapSuccess.hidden = true;
+      const submitBtn = askKadCapForm.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      try {
+        await api.updateSettings({ ask_kad_monthly_cap_usd: Number(askKadCapInput.value) });
+        askKadCapSuccess.hidden = false;
       } finally {
         submitBtn.disabled = false;
       }

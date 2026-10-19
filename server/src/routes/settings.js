@@ -18,6 +18,7 @@ import {
   setCalculatorModeEnabled,
 } from "../settings.js";
 import { getBonusesEnabled, setBonusesEnabled } from "../bonusSettings.js";
+import { getAskKadSettings, setAskKadEnabled, setAskKadMonthlyCapUsd } from "../askKad/settings.js";
 import { ensureCurrentRound, ensureOnceRound } from "../bonusChallengeRounds.js";
 import { ROLES } from "../roles.js";
 import { pool } from "../db/pool.js";
@@ -38,6 +39,7 @@ settingsRouter.get("/", async (req, res) => {
     calculatorPinHash,
     calculatorModeEnabled,
     bonusesEnabled,
+    askKad,
   ] = await Promise.all([
     getCheckinRadiusMeters(),
     getCheckinAllowanceEnabled(),
@@ -48,6 +50,7 @@ settingsRouter.get("/", async (req, res) => {
     getCalculatorPinHash(),
     getCalculatorModeEnabled(),
     getBonusesEnabled(),
+    getAskKadSettings(),
   ]);
   res.json({
     checkin_radius_meters: checkinRadiusMeters,
@@ -69,6 +72,9 @@ settingsRouter.get("/", async (req, res) => {
     // reads it: the dashboard needs it to decide whether to show the
     // Bonuses quick action/entry point at all (docs/bonuses-design.md).
     bonuses_enabled: bonusesEnabled,
+    // Ask KAD (the admin's AI analyst): On/Off and the monthly spending cap in USD.
+    ask_kad_enabled: askKad.enabled,
+    ask_kad_monthly_cap_usd: askKad.capUsd,
   });
 });
 
@@ -161,6 +167,21 @@ settingsRouter.patch("/", requireAdmin, async (req, res) => {
       return res.status(400).json({ error: "calculator_mode_enabled must be a boolean" });
     }
     result.calculator_mode_enabled = await setCalculatorModeEnabled(req.body.calculator_mode_enabled);
+  }
+
+  if (req.body?.ask_kad_enabled !== undefined) {
+    if (typeof req.body.ask_kad_enabled !== "boolean") {
+      return res.status(400).json({ error: "ask_kad_enabled must be a boolean" });
+    }
+    result.ask_kad_enabled = await setAskKadEnabled(req.body.ask_kad_enabled);
+  }
+
+  if (req.body?.ask_kad_monthly_cap_usd !== undefined) {
+    const usd = Number(req.body.ask_kad_monthly_cap_usd);
+    if (!Number.isFinite(usd) || usd < 1 || usd > 5000) {
+      return res.status(400).json({ error: "ask_kad_monthly_cap_usd must be between 1 and 5000" });
+    }
+    result.ask_kad_monthly_cap_usd = await setAskKadMonthlyCapUsd(Math.round(usd * 100) / 100);
   }
 
   if (req.body?.bonuses_enabled !== undefined) {

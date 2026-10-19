@@ -80,5 +80,6 @@ export const icons = {
   // A wrapped gift box -- the Bonuses quick action/entry point.
   gauge: uiSvg(`<path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><path d="M12 17h.01"/>`),
   vaghinak: uiSvg(`<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.2A8 8 0 1 1 21 12Z"/><path d="M9 11.5h.01M12 11.5h.01M15 11.5h.01"/>`),
+  sparkles: uiSvg(`<path d="M10 3.5l1.7 4.8 4.8 1.7-4.8 1.7L10 16.5l-1.7-4.8L3.5 10l4.8-1.7Z"/><path d="M18 14.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8Z"/>`),
   gift: uiSvg(`<rect width="18" height="4" x="3" y="8" rx="1"/><path d="M12 8v13M5 8v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8"/><path d="M12 8H7.5a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8Z"/><path d="M12 8h4.5a2.5 2.5 0 0 0 0-5C13 3 12 8 12 8Z"/>`),
 };
