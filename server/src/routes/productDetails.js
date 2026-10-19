@@ -15,9 +15,19 @@ import { fetchPricedProducts } from "./products.js";
 import { buildPricelistPdf, PDF_COLUMN_ORDER, PDF_INTERNAL_COLUMNS, OFFICE_PHONE } from "../pricelistPdf.js";
 import { parsePricelistWorkbook, matchGroupsToProducts } from "../pricelistImport.js";
 import { applyMatchedGroups } from "../pricelistApply.js";
+import { queueProductImageSync } from "../platformImageSync.js";
 
 export const productDetailsRouter = Router();
 productDetailsRouter.use(requireAuth);
+// A photo was added, changed or removed here: mirror it to Platform.
+productDetailsRouter.use((req, res, next) => {
+  if (req.method !== "GET") {
+    res.on("finish", () => {
+      if (res.statusCode < 300 && /\/images(\/|$)/.test(req.path)) queueProductImageSync();
+    });
+  }
+  next();
+});
 
 const isId = (v) => /^\d+$/.test(String(v));
 

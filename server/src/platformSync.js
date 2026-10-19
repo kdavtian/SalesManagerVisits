@@ -4,6 +4,7 @@
 // natively on Platform's side. Best-effort: a Platform outage must never
 // fail or slow down the ERP sync itself.
 import { pool } from "./db/pool.js";
+import { queueProductImageSync } from "./platformImageSync.js";
 
 export async function syncProductsAndWholesaleCustomersToPlatform() {
   const url = process.env.PLATFORM_SYNC_URL;
@@ -40,4 +41,7 @@ export async function syncProductsAndWholesaleCustomersToPlatform() {
   if (!res.ok) {
     throw new Error(`Platform sync failed: ${res.status} ${await res.text()}`);
   }
+
+  // Products now exist on Platform: send any new or changed photos.
+  queueProductImageSync();
 }

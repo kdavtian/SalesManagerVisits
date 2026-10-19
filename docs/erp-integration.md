@@ -64,6 +64,16 @@ fails or slows down the `/api/erp-sync` response the bot is waiting on.
 Platform does its own upsert (by `erp_product_id` / `erp_customer_id`) on
 its end, so a retried or re-ordered push is safe.
 
+**Product photos.** Photos managed on the product card (`product_images`) are
+mirrored to Platform by `server/src/platformImageSync.js`: right after a
+successful product push, and whenever a photo is added, changed or removed in
+the app. It sends a manifest (sha256 per photo) to the sibling function
+`kad-sync-images` (`PLATFORM_IMAGES_URL`, default: `PLATFORM_SYNC_URL` with
+`kad-sync` replaced by `kad-sync-images`), then uploads only the photos
+Platform doesn't have. Photos removed here are removed there; photos added by
+hand in the Platform admin are never touched. Specifications are NOT synced:
+they are entered on Platform only.
+
 ## Retries and staleness
 
 - **The app does not retry pushes itself** — it's a passive receiver.
