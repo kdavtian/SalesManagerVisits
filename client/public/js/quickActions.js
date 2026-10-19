@@ -30,6 +30,8 @@ export const QUICK_ACTIONS = [
   { id: "qa_tasks", defaultRoles: ALL_ROLES },
   // Vaghinak, the AI operations deputy director: his messages, questions and (for management) the team pulse.
   { id: "qa_vaghinak", defaultRoles: ALL_ROLES },
+  // Ask KAD: the admin asks questions about the company's own data and an AI answers (server/src/askKad).
+  { id: "qa_ask_kad", defaultRoles: ["admin"] },
   { id: "qa_add_customer", defaultRoles: ALL_ROLES },
   {
     id: "qa_payments",
@@ -100,6 +102,7 @@ export const QUICK_ACTION_ROUTE = {
   qa_sales: "#/sales",
   qa_tasks: "#/tasks",
   qa_vaghinak: "#/vaghinak",
+  qa_ask_kad: "#/ask-kad",
   qa_bonuses: "#/bonuses",
 };
 

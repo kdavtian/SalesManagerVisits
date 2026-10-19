@@ -1182,6 +1182,8 @@ async function renderRoute() {
     (await import("./views/routePlans.js")).renderRoutePlans(app, navigate);
   } else if (path === "#/ops-control") {
     (await import("./views/opsControl.js")).renderOpsControl(app, navigate, query.get("tab"));
+  } else if (path === "#/ask-kad") {
+    (await import("./views/askKad.js")).renderAskKad(app, navigate);
   } else if (path === "#/vaghinak") {
     (await import("./views/vaghinak.js")).renderVaghinak(app, navigate);
   } else if (path === "#/team-progress") {
@@ -1280,6 +1282,7 @@ const SIDEBAR_ITEM_ICON = {
   qa_sales: { icon: icons.trendUp, colorClass: "quick-action-icon-sales" },
   qa_tasks: { icon: icons.tasks, colorClass: "quick-action-icon-tasks" },
   qa_vaghinak: { icon: icons.vaghinak, colorClass: "quick-action-icon-vaghinak" },
+  qa_ask_kad: { icon: icons.sparkles, colorClass: "quick-action-icon-askkad" },
   qa_bonuses: { icon: icons.gift, colorClass: "quick-action-icon-bonuses" },
 };
 

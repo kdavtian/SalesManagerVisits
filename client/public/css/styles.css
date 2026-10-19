@@ -14133,3 +14133,39 @@ input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
 .cd-col {
   display: contents;
 }
+
+/* ===== Ask KAD (admin): questions about the company's data, answered by an AI ===== */
+.quick-action-icon-askkad { background: color-mix(in srgb, var(--accent) 65%, #0f766e 35%); color: #ffffff; }
+.ak-view { display: flex; flex-direction: column; min-height: calc(100dvh - 150px); }
+.ak-banner { margin: 0 0 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); color: var(--text-dim); font-size: 0.9rem; }
+.ak-thread { flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 4px 0 12px; }
+.ak-row { display: flex; }
+.ak-row-user { justify-content: flex-end; }
+.ak-bubble { position: relative; max-width: 88%; padding: 10px 14px; border-radius: 18px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-body, 15px); }
+.ak-user { background: var(--accent-fill); color: var(--on-accent); border-bottom-right-radius: 6px; }
+.ak-assistant { background: var(--bg-card); border: 1px solid var(--border); border-bottom-left-radius: 6px; }
+.ak-assistant.ak-error { color: var(--text-dim); }
+.ak-info { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 28px; margin: -6px -12px -6px 0; padding: 0; border: 0; background: none; color: var(--text-dim); vertical-align: middle; cursor: pointer; }
+.ak-info svg { width: 16px; height: 16px; }
+.ak-thinking { display: flex; align-items: center; gap: 6px; color: var(--text-dim); white-space: normal; }
+.ak-thinking span { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: ak-dot 1.2s infinite ease-in-out; }
+.ak-thinking span:nth-child(2) { animation-delay: 0.2s; }
+.ak-thinking span:nth-child(3) { animation-delay: 0.4s; }
+.ak-thinking em { margin-left: 4px; font-style: normal; font-size: 0.9rem; }
+@keyframes ak-dot { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .ak-thinking span { animation: none; opacity: 0.6; } }
+.ak-empty { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; }
+.ak-empty-title { margin: 0 0 2px; color: var(--text-dim); font-size: 0.9rem; }
+.ak-suggest { min-height: 44px; padding: 10px 14px; border: 1px solid var(--control-border); border-radius: 14px; background: var(--bg-card); color: var(--text); font: inherit; font-size: 0.92rem; text-align: left; cursor: pointer; }
+.ak-suggest:active { background: var(--bg-card-pressed); }
+.ak-composer { position: sticky; bottom: calc(48px + var(--nav-safe-bottom)); z-index: 2; display: flex; align-items: flex-end; gap: 8px; padding: 8px 0; background: var(--bg); }
+.ak-composer textarea { flex: 1; min-height: 44px; max-height: 132px; padding: 10px 14px; border: 1px solid var(--control-border); border-radius: 22px; background: var(--bg-card); color: var(--text); font: inherit; font-size: 16px; line-height: 1.35; resize: none; }
+.ak-send { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: var(--accent-fill); color: var(--on-accent); cursor: pointer; }
+.ak-send svg { width: 20px; height: 20px; }
+.ak-send:active { filter: brightness(0.9); }
+.ak-send:disabled { opacity: 0.45; cursor: default; }
+.ak-meta { display: flex; flex-direction: column; gap: 6px; margin: 0; padding-left: 18px; }
+@media (min-width: 1024px) {
+  .ak-composer { bottom: 0; }
+  .ak-view { max-width: 820px; margin-inline: auto; }
+}

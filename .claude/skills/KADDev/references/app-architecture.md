@@ -69,3 +69,12 @@ Repo `kdavtian/SalesManagerVisits`. Production: one DigitalOcean droplet, docker
 - **Tasks view** (`views/tasks.js`): single load of `GET /api/tasks?scope=all&status=all`, client-side tabs/pills/filters (`f` state object); `taskCardHtml` is also used on Home, the customer page and the check-in page (keep its signature). `unifiedSearchEnhancements.js` gets `enhanceTasks()` for the clear (x) button.
 - **Test seams**: `test/integration/helpers.js` `apiFormRequest` for multipart check-ins (photos); `loginAs()` returns SEVERAL cookies (session + csrf_token) -- set them all in Playwright or every write fails with "Missing or invalid CSRF token".
 
+
+## KAD AI (Ask KAD), built 1.369.0 (owner decisions 2026-10-18)
+Admin-only AI analyst: Home tile "KAD AI" -> `#/ask-kad`. Code in `server/src/askKad/` (engine = Claude tool-use loop with the
+official `@anthropic-ai/sdk`, tools = five read-only SQL queries, anonymize = names <-> codes, settings), route `routes/askKad.js`,
+view `views/askKad.js`, doc `docs/kad-ai.md`. Owner choices: ask-your-data assistant FIRST, Claude for analysis/finance, **fully anonymised**
+(customers `CUST-<erp id>`, staff `REP-<user id>`; tools never select a name, phone, TIN, address or free text), monthly USD cap + On/Off in
+App configuration (`app_settings.ask_kad_*`), every call logged in `ask_kad_log`. Key = `ANTHROPIC_API_KEY` in the droplet `.env` only.
+The OpenAI oil finder and the "KAD OS" idea are for the KAD-GMM repo, not this one (plan: `docs/kad-os-plan.md`). To add a data tool: a new
+entry in `tools.js` TOOLS + RUNNERS returning codes and numbers only, plus a test asserting no name appears.

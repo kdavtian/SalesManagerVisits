@@ -19,6 +19,7 @@
     "find:orphan-uploads": "node scripts/find-orphan-uploads.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
     "bcryptjs": "^3.0.3",
     "clean-css": "^5.3.3",
     "compression": "^1.8.2",
