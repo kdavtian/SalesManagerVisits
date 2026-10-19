@@ -13,10 +13,13 @@ const ERP = "90871";
 const NAME = "Zorbak Motors Garage";
 const REP_NAME = "Vahagn Testyan";
 const TODAY = "2026-10-15";
-let admin, rep, customer, adminCookie, repCookie;
+let admin, rep, customer, adminCookie, repCookie, savedSettings;
 
 test.before(async () => {
   await startTestServer();
+  // The suite also runs against the production database on deploy: remember the real settings, restore them in test.after.
+  savedSettings = (await pool.query("SELECT ask_kad_enabled, ask_kad_monthly_cap_usd FROM app_settings WHERE id = 1")).rows[0];
+  await pool.query("UPDATE app_settings SET ask_kad_enabled = TRUE, ask_kad_monthly_cap_usd = 20 WHERE id = 1");
   admin = await createUser("admin");
   rep = await createUser("sales_manager", { name: REP_NAME });
   customer = await createCustomer({ created_by: admin.id, name: NAME, erp_customer_id: ERP });
@@ -38,7 +41,7 @@ test.after(async () => {
   await pool.query("DELETE FROM ask_kad_log WHERE user_id = $1 OR question_masked LIKE '%ZT-TEST%'", [admin.id]);
   await pool.query("DELETE FROM erp_order_lines WHERE erp_customer_id = $1", [ERP]);
   await pool.query("DELETE FROM erp_customer_data WHERE erp_customer_id = $1", [ERP]);
-  await pool.query("UPDATE app_settings SET ask_kad_enabled = TRUE, ask_kad_monthly_cap_usd = 20 WHERE id = 1");
+  await pool.query("UPDATE app_settings SET ask_kad_enabled = $1, ask_kad_monthly_cap_usd = $2 WHERE id = 1", [savedSettings.ask_kad_enabled, savedSettings.ask_kad_monthly_cap_usd]);
   await cleanupAll();
   await stopTestServer();
 });

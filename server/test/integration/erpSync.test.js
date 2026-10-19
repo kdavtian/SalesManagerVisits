@@ -397,3 +397,106 @@ test("POST /api/erp-sync/daily-report and /reports: two calls in quick successio
   assert.match(combined[0].body, /Օրական հաշվետվություն/);
   assert.match(combined[0].body, /Sales Director/);
 });
+
+// Landing cost calculated by the app from the pack data (owner, 2026-10-19) and Retail price from Excel.
+// Settings are restored afterwards: this suite also runs against the production database on deploy.
+test("POST /api/erp-sync: landing cost is calculated from the pack USD price; no pack data or an outlier keeps the workbook's value", async () => {
+  const stamp = Date.now();
+  const ids = { ok: `ITEST-LC-OK-${stamp}`, none: `ITEST-LC-NONE-${stamp}`, bad: `ITEST-LC-BAD-${stamp}` };
+  const saved = (await pool.query("SELECT landing_calc_enabled, landing_usd_rate FROM app_settings WHERE id = 1")).rows[0];
+  const admin = await createUser("admin");
+  const cookie = await loginAs(admin.email);
+  const send = (products) => syncRequest({ customers: [], products }, { "X-Sync-Key": SYNC_KEY, ...BYPASS });
+  const landing = async (id) => (await pool.query("SELECT landing_cost_amd, landing_workbook_amd, landing_source FROM products WHERE erp_product_id = $1", [id])).rows[0];
+  try {
+    await apiRequest("/api/settings", { method: "PATCH", cookie, body: { landing_calc_enabled: true, landing_usd_rate: 366 } });
+    // Edge 4L-like pack: 4 items of 1 L, 3.6 kg a pack, 24 USD a pack. The workbook (377.5) says 3,900 AMD per item.
+    const pack = { brand: "Castrol", unit: "1L", unit_price_amd: 9000, pack_cost_usd: 24, items_per_pack: 4, pack_netto_kg: 3.6, size_l: 1 };
+    const res = await send([
+      { ...pack, erp_product_id: ids.ok, name: "LC Test Ok", landing_cost_amd: 3900 },
+      { erp_product_id: ids.none, name: "LC Test No Pack", brand: "Castrol", unit: "1L", unit_price_amd: 9000, landing_cost_amd: 4100 },
+      // pack data wrong in Excel (cost 10x): the calculation is far from the workbook's number, so the workbook's value stays
+      { ...pack, erp_product_id: ids.bad, name: "LC Test Outlier", pack_cost_usd: 240, landing_cost_amd: 3900 },
+    ]);
+    assert.equal(res.status, 200);
+
+    const ok = await landing(ids.ok);
+    assert.equal(ok.landing_source, "calculated");
+    assert.equal(Number(ok.landing_workbook_amd), 3900);
+    const { landingCost, COST_RATES_DEFAULT } = await import("../../../client/public/js/costModel.js");
+    const expected = landingCost({ brand: "Castrol", size: 1, items: 4, packKg: 3.6, packCostUsd: 24 }, { ...COST_RATES_DEFAULT, rate: 366 }).amd;
+    assert.ok(Math.abs(Number(ok.landing_cost_amd) - expected) < 0.01, `expected ${expected}, got ${ok.landing_cost_amd}`);
+
+    const none = await landing(ids.none);
+    assert.equal(none.landing_source, "workbook");
+    assert.equal(Number(none.landing_cost_amd), 4100);
+    const bad = await landing(ids.bad);
+    assert.equal(bad.landing_source, "workbook", "an outlier keeps the workbook's value");
+    assert.equal(Number(bad.landing_cost_amd), 3900);
+
+    // A new rate recalculates every product at once; switching the calculation off falls back to the workbook everywhere.
+    await apiRequest("/api/settings", { method: "PATCH", cookie, body: { landing_usd_rate: 400 } });
+    const higher = await landing(ids.ok);
+    assert.ok(Number(higher.landing_cost_amd) > Number(ok.landing_cost_amd) * 1.05, "a higher rate raises the landing cost");
+    await apiRequest("/api/settings", { method: "PATCH", cookie, body: { landing_calc_enabled: false } });
+    const off = await landing(ids.ok);
+    assert.equal(off.landing_source, "workbook");
+    assert.equal(Number(off.landing_cost_amd), 3900);
+
+    // A later sync from an older bot (no pack fields) neither clears the pack data nor the calculated value.
+    await apiRequest("/api/settings", { method: "PATCH", cookie, body: { landing_calc_enabled: true, landing_usd_rate: 366 } });
+    await send([{ erp_product_id: ids.ok, name: "LC Test Ok", brand: "Castrol", unit: "1L", unit_price_amd: 9000, landing_cost_amd: 3900 }]);
+    const again = await landing(ids.ok);
+    assert.equal(again.landing_source, "calculated");
+    assert.ok(Math.abs(Number(again.landing_cost_amd) - expected) < 0.01);
+
+    const bounds = await apiRequest("/api/settings", { method: "PATCH", cookie, body: { landing_usd_rate: 5 } });
+    assert.equal(bounds.status, 400);
+  } finally {
+    await pool.query("DELETE FROM products WHERE erp_product_id = ANY($1)", [Object.values(ids)]);
+    await pool.query("UPDATE app_settings SET landing_calc_enabled = $1, landing_usd_rate = $2 WHERE id = 1", [saved.landing_calc_enabled, saved.landing_usd_rate]);
+  }
+});
+
+test("POST /api/erp-sync: Retail price from Excel is stored, listed as a difference, and only applied while the switch is on", async () => {
+  const erpId = `ITEST-RETAIL-${Date.now()}`;
+  const saved = (await pool.query("SELECT retail_from_excel FROM app_settings WHERE id = 1")).rows[0];
+  const admin = await createUser("admin");
+  const cookie = await loginAs(admin.email);
+  const send = (retail) =>
+    syncRequest({ customers: [], products: [{ erp_product_id: erpId, name: "Retail Test Oil", brand: "Castrol", unit: "1L", unit_price_amd: 9000, retail_price_amd: retail }] }, { "X-Sync-Key": SYNC_KEY, ...BYPASS });
+  const row = async () => (await pool.query("SELECT id, retail_price_amd, erp_retail_price_amd, manually_edited_at FROM products WHERE erp_product_id = $1", [erpId])).rows[0];
+  try {
+    await apiRequest("/api/settings", { method: "PATCH", cookie, body: { retail_from_excel: false } });
+    await send(12000);
+    let p = await row();
+    assert.equal(Number(p.erp_retail_price_amd), 12000, "the workbook's retail price is always stored");
+    assert.notEqual(Number(p.retail_price_amd), 12000, "but not applied while the switch is off");
+    // an admin hand-edit must not stop Excel from winning once the switch is on (the owner's rule for every Excel price)
+    await pool.query("UPDATE products SET retail_price_amd = 11000, manually_edited_at = now() WHERE id = $1", [p.id]);
+
+    const diff = await apiRequest("/api/settings/retail-differences", { cookie });
+    assert.equal(diff.status, 200);
+    const mine = diff.data.products.find((d) => d.id === p.id);
+    assert.deepEqual([mine.app_retail, mine.excel_retail], [11000, 12000]);
+
+    const on = await apiRequest("/api/settings", { method: "PATCH", cookie, body: { retail_from_excel: true } });
+    assert.equal(on.data.retail_from_excel, true);
+    p = await row();
+    assert.equal(Number(p.retail_price_amd), 12000);
+    const history = (await pool.query("SELECT old_value, new_value FROM product_price_history WHERE product_id = $1 AND price_type = 'retail' ORDER BY id DESC LIMIT 1", [p.id])).rows[0];
+    assert.deepEqual([Number(history.old_value), Number(history.new_value)], [11000, 12000]);
+
+    await send(12500); // Excel changes the price: the next upload follows
+    assert.equal(Number((await row()).retail_price_amd), 12500);
+    await send(null); // a blank Retail Price never wipes the stored one
+    assert.equal(Number((await row()).retail_price_amd), 12500);
+
+    const forRep = await apiRequest("/api/settings/retail-differences", { cookie: await loginAs((await createUser("sales_manager")).email) });
+    assert.equal(forRep.status, 403);
+  } finally {
+    await pool.query("DELETE FROM product_price_history WHERE product_id IN (SELECT id FROM products WHERE erp_product_id = $1)", [erpId]);
+    await pool.query("DELETE FROM products WHERE erp_product_id = $1", [erpId]);
+    await pool.query("UPDATE app_settings SET retail_from_excel = $1 WHERE id = 1", [saved.retail_from_excel]);
+  }
+});

@@ -9,6 +9,7 @@ import { autoDeliverOrdersFromErp, autoApprovePaymentsFromErp } from "../erpAuto
 import { runAutoTasks } from "../debtCollectionTasks.js";
 import { refreshOrderRhythm } from "../orderRhythm.js";
 import { snapshotTierPrices, logTierPriceChanges } from "../priceSyncLog.js";
+import { applyLandingCosts, applyExcelRetail, getLandingSettings } from "../landingCalc.js";
 import { syncProductsAndWholesaleCustomersToPlatform } from "../platformSync.js";
 import {
   transformErpCustomers,
@@ -139,6 +140,11 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     prodStockQtys,
     prodLandingCosts,
     prodNetCosts,
+    prodPackCostUsd,
+    prodItemsPerPack,
+    prodPackNettoKg,
+    prodSizeL,
+    prodRetail,
     prodHcCodes,
     prodActives,
   } = transformErpProducts(products);
@@ -147,6 +153,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
 
   const client = await pool.connect();
   let priceChangedProducts = 0;
+  let excelRetailChanged = 0;
   let releaseErr;
   try {
     await client.query("BEGIN");
@@ -359,12 +366,33 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
       // recount, a name typo -- silently froze that product's landing cost
       // forever, with nothing on screen to show anything was wrong. Always
       // applied, for every synced product regardless of manual-edit state.
+      // Since 1.370.0 the workbook's value is kept as landing_workbook_amd (reference + fallback) and the app's own
+      // calculation from the pack data decides landing_cost_amd (landingCalc.js). Pack data and the workbook's Retail Price are
+      // optional in the payload: an older bot sends none and the stored values stay.
       await client.query(
-        `UPDATE products SET landing_cost_amd = t.landing_cost_amd
+        `UPDATE products SET landing_workbook_amd = t.landing_cost_amd
          FROM unnest($1::text[], $2::numeric[]) AS t(erp_product_id, landing_cost_amd)
          WHERE products.erp_product_id = t.erp_product_id`,
         [prodErpIds, prodLandingCosts]
       );
+      if ([...prodPackCostUsd, ...prodItemsPerPack, ...prodPackNettoKg, ...prodSizeL].some((v) => v !== null)) {
+        await client.query(
+          `UPDATE products SET pack_cost_usd = t.pack_cost_usd, items_per_pack = t.items_per_pack, pack_netto_kg = t.pack_netto_kg, size_l = t.size_l
+           FROM unnest($1::text[], $2::numeric[], $3::numeric[], $4::numeric[], $5::numeric[]) AS t(erp_product_id, pack_cost_usd, items_per_pack, pack_netto_kg, size_l)
+           WHERE products.erp_product_id = t.erp_product_id`,
+          [prodErpIds, prodPackCostUsd, prodItemsPerPack, prodPackNettoKg, prodSizeL]
+        );
+      }
+      if (prodRetail.some((v) => v !== null)) {
+        await client.query(
+          `UPDATE products SET erp_retail_price_amd = t.retail
+           FROM unnest($1::text[], $2::numeric[]) AS t(erp_product_id, retail)
+           WHERE products.erp_product_id = t.erp_product_id`,
+          [prodErpIds, prodRetail]
+        );
+      }
+      await applyLandingCosts(client, prodErpIds);
+      if ((await getLandingSettings(client)).retailFromExcel) excelRetailChanged = await applyExcelRetail(client, prodErpIds);
       // Tier prices and net cost come straight from the workbook (the trusted
       // source), so they refresh on every sync even for a product an admin
       // touched by hand -- otherwise one unrelated manual edit freezes its
@@ -405,7 +433,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
          WHERE products.erp_product_id = t.erp_product_id AND t.hc_code IS NOT NULL AND products.hc_code IS DISTINCT FROM t.hc_code`,
         [prodErpIds, prodHcCodes]
       );
-      priceChangedProducts = await logTierPriceChanges(client, pricesBefore, prodErpIds);
+      priceChangedProducts = (await logTierPriceChanges(client, pricesBefore, prodErpIds)) + excelRetailChanged;
     }
 
     if (brand_volume !== undefined) {
