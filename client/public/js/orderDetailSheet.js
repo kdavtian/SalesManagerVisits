@@ -7,7 +7,7 @@
 import { api } from "./api.js";
 import { dockSheet } from "./dockSheet.js";
 import { reorderHash } from "./reorder.js";
-import { escapeHtml, formatAmd, formatPriceOrFree, activateDialog, formatDateTime, formatDateDMY, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, labelColon } from "./util.js";
+import { escapeHtml, formatAmd, formatPriceOrFree, activateDialog, formatDateTime, formatDateDMY, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, labelColon, tierBadgeHtml } from "./util.js";
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { state } from "./state.js";
@@ -249,6 +249,9 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       order.payment_method ? ` ${paymentMethodBadgeHtml(order.payment_method)}` : ""
     }${
       order.payment_term_days != null ? ` <span class="badge badge-neutral">${Number(order.payment_term_days) === 0 ? t("oc_due_on_delivery") : t("oc_due_days_badge").replace("{n}", String(order.payment_term_days))}</span>` : ""
+    }${
+      // The customer's tier (Silver / Gold ...) decides which price list the order was priced from: shown right after the terms.
+      order.customer_tier ? ` ${tierBadgeHtml(order.customer_tier)}` : ""
     }${
       hasDiscount && approvalMeta ? ` <span class="badge ${approvalMeta.cls}">${t(approvalMeta.key)}</span>` : ""
     }${creditMeta ? ` <span class="badge ${creditMeta[1]}">${t(creditMeta[0])}</span>` : ""}</p>
