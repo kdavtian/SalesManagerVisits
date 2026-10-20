@@ -55,6 +55,7 @@ const ITEM_UNITS = { pct: "cc_unit_pct", liter: "cc_unit_liter", pack: "cc_unit_
 export function openCostCalculator({ products: given = [], product = null } = {}) {
   let products = given;
   const store = loadStore();
+  let appRates = null; // freight / customs / excise ... from App configuration (loaded just after opening)
   let rates = mergeSavedRates(store.rates);
   let withFixed = store.withFixed !== false;
   let targetPct = Number.isFinite(store.target) ? store.target : 10;
@@ -63,7 +64,7 @@ export function openCostCalculator({ products: given = [], product = null } = {}
   let picked = product;
   let landingOverride = null; // catalog mode: typed landing cost (null = the Excel value)
   const persist = () => saveStore({ rates, withFixed, target: targetPct, channel });
-  const isCustom = () => JSON.stringify(mergeSavedRates(rates)) !== JSON.stringify(mergeSavedRates(null));
+  const isCustom = () => JSON.stringify(mergeSavedRates(rates)) !== JSON.stringify(mergeSavedRates(null, appRates));
 
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
@@ -419,6 +420,7 @@ export function openCostCalculator({ products: given = [], product = null } = {}
   $("#cc-gear").addEventListener("click", () =>
     openCostSettings({
       getRates: () => rates,
+      getBase: () => mergeSavedRates(null, appRates),
       setRates: (r) => {
         rates = r;
         persist();
@@ -435,6 +437,18 @@ export function openCostCalculator({ products: given = [], product = null } = {}
 
   paintInputs();
   paintResults();
+  // The rates set in App configuration are this calculator's starting point; a phone that saved its own rates keeps them.
+  api
+    .getSettings()
+    .then((s) => {
+      if (!s?.landing_rates) return;
+      appRates = s.landing_rates;
+      if (!store.rates) {
+        rates = mergeSavedRates(null, appRates);
+        paintResults();
+      }
+    })
+    .catch(() => {});
   // Opened from a single product: the catalog (for "pick another product") loads in the background.
   if (!products.length) {
     api
@@ -449,7 +463,7 @@ export function openCostCalculator({ products: given = [], product = null } = {}
 // ======================================================================================================================
 // Settings: a second sheet, in sections. Every change is applied (and remembered on this phone) at once.
 // ======================================================================================================================
-function openCostSettings({ getRates, setRates, getWithFixed, setWithFixed }) {
+function openCostSettings({ getRates, getBase, setRates, getWithFixed, setWithFixed }) {
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay cc-settings-overlay";
   overlay.innerHTML = `<div class="sheet cost-calc cc-settings" role="dialog" aria-modal="true"></div>`;
@@ -592,7 +606,7 @@ function openCostSettings({ getRates, setRates, getWithFixed, setWithFixed }) {
       paint();
     });
     sheet.querySelector("#cc-reset").addEventListener("click", () => {
-      setRates(mergeSavedRates(null));
+      setRates(getBase());
       setWithFixed(true);
       paint();
     });

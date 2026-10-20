@@ -89,6 +89,13 @@ function formatStorageMb(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// Landing-cost rates editable in App configuration (server/src/landingCalc.js LANDING_RATE_FIELDS): [key, label key].
+const LANDING_RATE_GROUPS = [
+  { label: "lr_freight", fields: [["tRealCastrol", "lr_brand_castrol"], ["tRealRoyal", "lr_brand_royal"], ["tRealLotos", "lr_brand_lotos"], ["tRealOther", "lr_brand_other"]] },
+  { label: "lr_legal", fields: [["tLegalCastrol", "lr_brand_castrol"], ["tLegalRoyal", "lr_brand_royal"], ["tLegalLotos", "lr_brand_lotos"], ["tLegalOther", "lr_brand_other"]] },
+  { label: "lr_taxes", fields: [["customs", "lr_customs"], ["eco", "lr_eco"], ["excise", "lr_excise"], ["vat", "lr_vat"], ["handling", "lr_handling"], ["otherUsd", "lr_other"]] },
+];
+
 export async function renderSettings(root, onLogout, onLanguageChange, section = null) {
   // CSV exports are saved in place (see util.js downloadFromUrl), never by
   // navigating the app window to the file -- an installed PWA has no way back.
@@ -341,6 +348,22 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
             <p class="form-success" id="landing-rate-success" role="status" hidden>${t("saved")}</p>
             <button type="submit" class="btn btn-primary">${t("save")}</button>
           </form>
+          <details class="settings-list-group-item lr-details" id="landing-rates-details">
+            <summary class="settings-form-label">${ICON.bolt}${t("lr_title")}</summary>
+            <form id="landing-rates-form" class="lr-form" novalidate>
+              ${LANDING_RATE_GROUPS.map(
+                (g) => `<fieldset class="lr-group"><legend>${t(g.label)}</legend><div class="lr-grid">${g.fields
+                  .map(([key, label]) => `<label class="lr-field"><span>${t(label)}</span><input type="number" inputmode="decimal" name="${key}" min="0" step="any" /></label>`)
+                  .join("")}</div></fieldset>`
+              ).join("")}
+              <p class="muted radius-help">${t("lr_help")}</p>
+              <p class="form-success" id="landing-rates-success" role="status" hidden>${t("saved")}</p>
+              <div class="lr-actions">
+                <button type="button" class="btn" id="landing-rates-reset">${t("lr_reset")}</button>
+                <button type="submit" class="btn btn-primary">${t("save")}</button>
+              </div>
+            </form>
+          </details>
           ${settingsToggleRow({ icon: ICON.bolt, label: t("retail_excel_label"), value: "", id: "toggle-retail-excel", checked: false, color: "orange" })}
           <div class="settings-list-group-item">
             <p class="muted radius-help">${t("retail_excel_help")}</p>
@@ -755,6 +778,18 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
     const landingRateForm = root.querySelector("#landing-rate-form");
     const landingRateInput = landingRateForm.querySelector('input[name="rate"]');
     const landingRateSuccess = root.querySelector("#landing-rate-success");
+    const landingRatesForm = root.querySelector("#landing-rates-form");
+    const landingRatesSuccess = root.querySelector("#landing-rates-success");
+    let landingRateDefaults = {};
+    // A field shows its value only when it differs from the built-in one; an empty field shows the built-in value as its placeholder.
+    const paintLandingRates = (rates, defaults) => {
+      landingRateDefaults = defaults || {};
+      for (const input of landingRatesForm.querySelectorAll("input[name]")) {
+        const key = input.name;
+        input.placeholder = landingRateDefaults[key] ?? "";
+        input.value = rates?.[key] !== undefined && rates[key] !== landingRateDefaults[key] ? rates[key] : "";
+      }
+    };
     const retailToggle = root.querySelector("#toggle-retail-excel");
     const planSkipForm = root.querySelector("#plan-skip-form");
     const planSkipInput = planSkipForm.querySelector('input[name="days"]');
@@ -795,6 +830,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
       askKadToggle.setAttribute("aria-checked", String(s.ask_kad_enabled !== false));
       landingToggle.setAttribute("aria-checked", String(s.landing_calc_enabled !== false));
       landingRateInput.value = s.landing_usd_rate ?? 366;
+      paintLandingRates(s.landing_rates, s.landing_rate_defaults);
       retailToggle.setAttribute("aria-checked", String(s.retail_from_excel === true));
       askKadCapInput.value = s.ask_kad_monthly_cap_usd ?? 20;
       // Write-only field (see routes/settings.js) -- never pre-filled with
@@ -933,6 +969,27 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
       } finally {
         submitBtn.disabled = false;
       }
+    });
+    landingRatesForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      landingRatesSuccess.hidden = true;
+      const submitBtn = landingRatesForm.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      try {
+        const body = {};
+        for (const input of landingRatesForm.querySelectorAll("input[name]")) body[input.name] = input.value.trim() === "" ? null : Number(input.value.replace(",", "."));
+        const result = await api.updateSettings({ landing_rates: body });
+        paintLandingRates(result.landing_rates, result.landing_rate_defaults);
+        landingRatesSuccess.hidden = false;
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+    root.querySelector("#landing-rates-reset").addEventListener("click", () => {
+      for (const input of landingRatesForm.querySelectorAll("input[name]")) input.value = "";
+      landingRatesForm.requestSubmit();
     });
     // Retail price from Excel: the switch applies Excel's prices right away; the button lists what would change first.
     retailToggle.addEventListener("click", async () => {
