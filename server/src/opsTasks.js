@@ -6,14 +6,14 @@ import { yerevanToday } from "./utils/yerevanDate.js";
 // Who is shown as the creator: a sales director, else the CEO, else an admin (same rule as debtCollectionTasks.js).
 export async function systemCreatorId(db = pool) {
   const { rows } = await db.query(
-    `SELECT id FROM users WHERE role IN ('sales_director', 'ceo', 'admin')
+    `SELECT id FROM users WHERE status = 'active' AND role IN ('sales_director', 'ceo', 'admin')
      ORDER BY CASE role WHEN 'sales_director' THEN 0 WHEN 'ceo' THEN 1 ELSE 2 END, id LIMIT 1`
   );
   return rows[0]?.id ?? null;
 }
 
 export async function usersWithRole(role, db = pool) {
-  const { rows } = await db.query("SELECT id FROM users WHERE role = $1 ORDER BY id", [role]);
+  const { rows } = await db.query("SELECT id FROM users WHERE role = $1 AND status = 'active' ORDER BY id", [role]);
   return rows.map((r) => r.id);
 }
 

@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, parseUserAgent, SALES_CHANNELS, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, parseDateOnly, formatPhoneDisplay, labelColon, groupDigits, parseAmd, bindAmdInput, showToast } from "../util.js";
+import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, parseUserAgent, SALES_CHANNELS, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, parseDateOnly, formatPhoneDisplay, labelColon, groupDigits, parseAmd, bindAmdInput, showToast, openInfoPopup } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state } from "../state.js";
@@ -221,12 +221,13 @@ export async function renderTeamSection(container) {
         // instead of doubling every row's height with contact details nobody
         // is scanning for at a glance.
         return `
-        <button type="button" class="card list-row" data-id="${u.id}">
+        <button type="button" class="card list-row ${u.status && u.status !== "active" ? "list-row-off" : ""}" data-id="${u.id}">
           <span class="list-row-icon list-row-icon-${roleBadge.tint}" aria-hidden="true">${userInitials(u.name)}</span>
           <div class="list-row-body">
             <div class="list-row-top">
               <strong>${escapeHtml(u.name)}</strong>
               <span class="badge ${roleBadge.cls}">${t(roleBadge.key)}</span>
+              ${u.status === "paused" ? `<span class="badge badge-warning">${t("team_status_paused")}</span>` : u.status === "offboarded" ? `<span class="badge badge-danger">${t("team_status_left")}</span>` : ""}
             </div>
             ${u.position ? `<div class="muted list-row-meta">${escapeHtml(u.position)}</div>` : ""}
             <div class="muted list-row-meta">${t("last_seen")}${labelColon()}${escapeHtml(lastSeenSummary(u))}</div>
@@ -277,6 +278,116 @@ export async function renderTeamSection(container) {
       try {
         await api.resetUserPassword(userId, password);
         overlay.remove();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+        submitBtn.disabled = false;
+      }
+    });
+  }
+
+  // Pause (on leave) or switch off (left the company): one guided step. The checklist shows what the person still holds; customers
+  // can be handed over region by region, open tasks follow their customer or go to one chosen colleague. See POST /users/:id/status.
+  async function openOffboardSheet(u) {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `<div class="sheet"><h2>${t("offboard_title")}</h2><p class="muted">${escapeHtml(u.name)}</p><p class="loading-state" role="status">${t("loading")}</p></div>`;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+
+    let info;
+    try {
+      info = await api.getUserOffboarding(u.id);
+    } catch (err) {
+      overlay.querySelector(".sheet").innerHTML = `<h2>${t("offboard_title")}</h2><p class="form-error">${escapeHtml(err.message)}</p><div class="sheet-actions"><button type="button" class="btn" id="offboard-close">${t("cancel")}</button></div>`;
+      overlay.querySelector("#offboard-close").addEventListener("click", () => overlay.remove());
+      return;
+    }
+
+    const who = (c) => `${escapeHtml(c.name)}${c.position ? ` · ${escapeHtml(c.position)}` : ""}`;
+    const receiverOptions = (selected) =>
+      `<option value="">${t("offboard_keep")}</option>` + info.candidates.map((c) => `<option value="${c.id}" ${String(c.id) === String(selected) ? "selected" : ""}>${who(c)}</option>`).join("");
+    const line = (text) => `<li>${text}</li>`;
+    const holds = [
+      line(t("offboard_customers").replace("{n}", info.customers_total)),
+      line(t("offboard_tasks").replace("{n}", info.open_tasks)),
+      line(t("offboard_orders").replace("{n}", info.open_orders)),
+      line(t("offboard_plans").replace("{n}", info.plan_rules)),
+      line(
+        `${t("offboard_cash").replace("{n}", info.cash_held_count).replace("{amount}", formatAmd(info.cash_held_amd))}${
+          info.cash_held_count > 0 ? ` <span class="warn-text">${t("offboard_cash_warn")}</span>` : ""
+        }`
+      ),
+    ].join("");
+
+    overlay.querySelector(".sheet").innerHTML = `
+      <h2 class="offboard-title">${t("offboard_title")} <button type="button" class="settings-hint-icon" id="offboard-info" aria-label="${t("more_info")}">!</button></h2>
+      <p class="muted">${escapeHtml(u.name)}</p>
+      <form id="offboard-form">
+        <div class="segmented offboard-mode" role="group">
+          <button type="button" class="chip chip-active" data-mode="paused">${t("offboard_mode_pause")}</button>
+          <button type="button" class="chip" data-mode="offboarded">${t("offboard_mode_left")}</button>
+        </div>
+        <div class="offboard-holds"><strong>${t("offboard_holds")}</strong><ul>${holds}</ul></div>
+        ${
+          info.customers_total > 0
+            ? `<div class="offboard-regions">
+                <label>${t("offboard_move_all")}<select id="offboard-all">${receiverOptions("")}</select></label>
+                ${info.regions
+                  .map(
+                    (r, i) => `<label class="offboard-region-row"><span>${r.region ? escapeHtml(regionLabelHy(r.region)) : t("offboard_no_region")} <span class="muted">(${r.n})</span></span>
+                      <select data-region-index="${i}">${receiverOptions("")}</select></label>`
+                  )
+                  .join("")}
+              </div>`
+            : ""
+        }
+        <label>${t("offboard_tasks_to")}<select name="tasks_to">${receiverOptions("")}</select></label>
+        <p class="muted offboard-help">${t("offboard_tasks_help")}</p>
+        <label>${t("offboard_note")}<input name="note" maxlength="300" /></label>
+        <p class="form-error" id="offboard-error" hidden></p>
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="offboard-cancel">${t("cancel")}</button>
+          <button type="submit" class="btn btn-primary" id="offboard-submit">${t("offboard_confirm_pause")}</button>
+        </div>
+      </form>`;
+
+    const form = overlay.querySelector("#offboard-form");
+    const errorEl = overlay.querySelector("#offboard-error");
+    const submitBtn = overlay.querySelector("#offboard-submit");
+    let mode = "paused";
+    overlay.querySelector("#offboard-cancel").addEventListener("click", () => overlay.remove());
+    overlay.querySelector("#offboard-info").addEventListener("click", () => openInfoPopup(`<p>${escapeHtml(t("offboard_info"))}</p>`));
+    overlay.querySelectorAll("[data-mode]").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        mode = btn.dataset.mode;
+        overlay.querySelectorAll("[data-mode]").forEach((b) => b.classList.toggle("chip-active", b === btn));
+        submitBtn.textContent = t(mode === "paused" ? "offboard_confirm_pause" : "offboard_confirm_left");
+      })
+    );
+    overlay.querySelector("#offboard-all")?.addEventListener("change", (e) => {
+      overlay.querySelectorAll("[data-region-index]").forEach((sel) => (sel.value = e.target.value));
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const moves = [];
+      overlay.querySelectorAll("[data-region-index]").forEach((sel) => {
+        if (sel.value) moves.push({ region: info.regions[Number(sel.dataset.regionIndex)].region, to_user_id: Number(sel.value) });
+      });
+      const data = new FormData(form);
+      submitBtn.disabled = true;
+      try {
+        const out = await api.setUserStatus(u.id, {
+          status: mode,
+          note: String(data.get("note") || ""),
+          moves,
+          tasks_to_user_id: data.get("tasks_to") ? Number(data.get("tasks_to")) : undefined,
+        });
+        overlay.remove();
+        showToast(t("offboard_done").replace("{c}", out.moved_customers).replace("{t}", out.moved_tasks));
+        loadUsers();
       } catch (err) {
         errorEl.textContent = err.message;
         errorEl.hidden = false;
@@ -370,6 +481,7 @@ export async function renderTeamSection(container) {
         <div class="team-edit-secondary-actions">
           <button type="button" class="btn-link" id="edit-user-reset">${t("reset_password")}</button>
           ${u.id !== state.user.id ? `<button type="button" class="btn-link" id="edit-user-change-role">${t("change_role")}</button>` : ""}
+          ${u.id !== state.user.id ? (u.status && u.status !== "active" ? `<button type="button" class="btn-link" id="edit-user-reactivate">${t("offboard_reactivate")}</button>` : `<button type="button" class="btn-link btn-link-danger" id="edit-user-offboard">${t("offboard_open")}</button>`) : ""}
           ${u.id !== state.user.id ? `<button type="button" class="btn-link btn-link-danger btn-has-icon" id="edit-user-delete">${icons.trash}${t("delete_user")}</button>` : ""}
           ${u.id !== state.user.id && looksLikeTestUser(u) ? `<button type="button" class="btn-link btn-link-danger" id="edit-user-purge">${t("purge_link")}</button>` : ""}
         </div>
@@ -393,6 +505,23 @@ export async function renderTeamSection(container) {
     overlay.querySelector("#edit-user-change-role")?.addEventListener("click", () => {
       close();
       openChangeRoleSheet(u);
+    });
+    overlay.querySelector("#edit-user-offboard")?.addEventListener("click", () => {
+      close();
+      openOffboardSheet(u);
+    });
+    overlay.querySelector("#edit-user-reactivate")?.addEventListener("click", async (e) => {
+      e.currentTarget.disabled = true;
+      try {
+        await api.setUserStatus(u.id, { status: "active" });
+        close();
+        showToast(t("offboard_reactivated"));
+        loadUsers();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+        e.currentTarget.disabled = false;
+      }
     });
     async function attemptDelete() {
       try {

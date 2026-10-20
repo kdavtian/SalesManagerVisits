@@ -43,11 +43,11 @@ export async function requireAuth(req, res, next) {
   }
 
   const { rows } = await pool.query(
-    "SELECT id, role, position, token_version, last_seen_at FROM users WHERE id = $1",
+    "SELECT id, role, position, token_version, last_seen_at, status FROM users WHERE id = $1",
     [payload.sub]
   );
   const user = rows[0];
-  if (!user || user.token_version !== payload.tokenVersion) {
+  if (!user || user.status !== "active" || user.token_version !== payload.tokenVersion) {
     return res.status(401).json({ error: "Invalid or expired session" });
   }
 

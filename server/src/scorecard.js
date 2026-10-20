@@ -44,7 +44,7 @@ export async function buildScorecard(weekDate, { userId = null } = {}) {
           AND ${D("t.completed_at")} >= $1::date AND ${D("t.completed_at")} < $2::date) AS debt_promised,
        (SELECT count(*)::int FROM tasks t WHERE t.assignee_id = u.id AND t.auto_kind = 'debt_collection' AND t.outcome IN ('no_answer', 'refused')
           AND ${D("t.completed_at")} >= $1::date AND ${D("t.completed_at")} < $2::date) AS debt_failed
-     FROM users u WHERE u.role = 'sales_manager' AND ($3::int IS NULL OR u.id = $3)
+     FROM users u WHERE u.role = 'sales_manager' AND u.status = 'active' AND ($3::int IS NULL OR u.id = $3)
      ORDER BY u.name`,
     [from, to, userId]
   );

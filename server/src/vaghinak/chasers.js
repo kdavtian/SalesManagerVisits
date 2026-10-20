@@ -29,7 +29,7 @@ export async function dataChase({ db, day, settings, pick }) {
             u.name AS rep_name, u.name_hy, u.role, u.vaghinak_address,
             COALESCE((SELECT MAX(l.order_date) FROM erp_order_lines l WHERE l.erp_customer_id = c.erp_customer_id), DATE '2000-01-01') AS last_order
      FROM customers c
-     JOIN users u ON u.id = c.assigned_manager_id AND u.role = 'sales_manager' AND u.vaghinak_muted_day IS DISTINCT FROM $1::date
+     JOIN users u ON u.id = c.assigned_manager_id AND u.role = 'sales_manager' AND u.status = 'active' AND u.vaghinak_muted_day IS DISTINCT FROM $1::date
      WHERE c.erp_customer_id IS NOT NULL AND c.erp_customer_id <> '10000' AND NOT COALESCE(c.checkin_for_all, false)
        AND (COALESCE(c.phone, '') = '' OR COALESCE(c.region, '') = '')
        AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.customer_id = c.id AND t.auto_kind = 'data_missing' AND (t.status = 'open' OR t.created_at > now() - ($2 || ' days')::interval))`,
@@ -131,7 +131,7 @@ export async function downpaymentChase({ db, day, settings, pick, now = new Date
             COALESCE((SELECT MIN(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status IN ('packed_stock_out', 'delivered')), o.updated_at) AS since
      FROM orders o
      JOIN customers c ON c.id = o.customer_id
-     JOIN users u ON u.id = o.user_id AND u.role = 'sales_manager' AND u.vaghinak_muted_day IS DISTINCT FROM $1::date
+     JOIN users u ON u.id = o.user_id AND u.role = 'sales_manager' AND u.status = 'active' AND u.vaghinak_muted_day IS DISTINCT FROM $1::date
      WHERE o.downpayment_amd > 0 AND o.status IN ('packed_stock_out', 'delivered') AND o.created_at > now() - interval '60 days'`,
     [day]
   );

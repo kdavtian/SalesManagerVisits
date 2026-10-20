@@ -182,7 +182,7 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
   const director = await martinId(pool);
   const { rows: found } = await pool.query(
     `SELECT c.id AS customer_id, c.name AS customer_name, c.sales_channel,
-            CASE WHEN u.role IN ('sales_manager', 'sales_director') THEN u.id END AS rep_id,
+            CASE WHEN u.role IN ('sales_manager', 'sales_director') AND u.status = 'active' THEN u.id END AS rep_id,
             fc.force_collect, erp.debt_amd, COALESCE(${debtAgeDaysSql("$2::date")}, erp.days_since_payment) AS days_open,
             (SELECT to_char(t.promise_date, 'YYYY-MM-DD') FROM tasks t WHERE t.customer_id = c.id AND t.auto_kind = 'debt_collection' AND t.outcome = 'promised'
              ORDER BY t.created_at DESC LIMIT 1) AS last_promise_date
@@ -270,7 +270,7 @@ export async function createReorderFollowupTasks(now = new Date(), { notify = tr
        FROM gaps WHERE gap IS NOT NULL GROUP BY erp_customer_id
      )
      SELECT c.id AS customer_id, c.name AS customer_name, c.sales_channel,
-            CASE WHEN u.role IN ('sales_manager', 'sales_director') THEN u.id END AS rep_id,
+            CASE WHEN u.role IN ('sales_manager', 'sales_director') AND u.status = 'active' THEN u.id END AS rep_id,
             ROUND(st.median_gap)::int AS usual_gap, ($1::date - st.last_order)::int AS days_since
      FROM customers c
      JOIN stats st ON st.erp_customer_id = c.erp_customer_id

@@ -46,7 +46,7 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
   }
 
   const { rows } = await pool.query(
-    "SELECT id, email, password_hash, name, role, token_version, failed_login_attempts, locked_until FROM users WHERE email = $1",
+    "SELECT id, email, password_hash, name, role, token_version, failed_login_attempts, locked_until, status FROM users WHERE email = $1",
     [String(email).toLowerCase()]
   );
   const user = rows[0];
@@ -65,6 +65,11 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
       );
     }
     return res.status(401).json({ error: "Invalid email or password" });
+  }
+
+  // Checked only after the password is right, so the message never tells a stranger which emails exist.
+  if (user.status !== "active") {
+    return res.status(403).json({ error: user.status === "paused" ? "This account is paused. Ask your manager." : "This account is switched off. Ask your manager.", code: "account_inactive" });
   }
 
   if (user.failed_login_attempts > 0 || user.locked_until) {

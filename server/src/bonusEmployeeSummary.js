@@ -105,7 +105,7 @@ async function getBonusPointsLeaderboard() {
     `SELECT u.id AS user_id, u.name AS user_name, COALESCE(SUM(l.points_delta_scaled), 0) AS total_points_scaled
      FROM users u
      LEFT JOIN bonus_point_ledger l ON l.user_id = u.id
-     WHERE u.role = 'sales_manager'
+     WHERE u.role = 'sales_manager' AND u.status = 'active'
      GROUP BY u.id, u.name
      ORDER BY total_points_scaled DESC, u.name ASC`
   );

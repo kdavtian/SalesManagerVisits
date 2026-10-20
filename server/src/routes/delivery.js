@@ -98,7 +98,7 @@ deliveryRouter.delete("/routes/:routeId/stops/:orderId", async (req, res) => {
 
 deliveryRouter.get("/drivers", async (req, res) => {
   if (!canPlanRoutes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
-  const { rows } = await pool.query("SELECT id, name FROM users WHERE role = 'delivery_manager' ORDER BY name");
+  const { rows } = await pool.query("SELECT id, name FROM users WHERE role = 'delivery_manager' AND status = 'active' ORDER BY name");
   res.json(rows);
 });
 
