@@ -119,7 +119,7 @@ reportsRouter.get("/new-customers", requireReportAccess("new_customers"), async 
     `SELECT u.id AS user_id, u.name AS user_name, count(c.id)::int AS new_customers
      FROM users u
      LEFT JOIN customers c ON c.created_by = u.id AND ${conditions.join(" AND ")}
-     WHERE u.role = 'sales_manager'${mineOnly ? ` AND u.id = $${params.length + 1}` : ""}
+     WHERE u.role = 'sales_manager' AND u.status = 'active'${mineOnly ? ` AND u.id = $${params.length + 1}` : ""}
      GROUP BY u.id, u.name
      ORDER BY new_customers DESC, u.name`,
     mineOnly ? [...params, req.user.id] : params

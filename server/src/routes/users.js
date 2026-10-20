@@ -23,7 +23,7 @@ usersRouter.get(
   },
   async (req, res) => {
     const { rows } = await pool.query(
-      "SELECT id, name, position FROM users WHERE role = 'sales_manager' ORDER BY name"
+      "SELECT id, name, position FROM users WHERE role = 'sales_manager' AND status = 'active' ORDER BY name"
     );
     res.json(rows);
   }
@@ -43,7 +43,7 @@ usersRouter.get(
   },
   async (req, res) => {
     const { rows } = await pool.query(
-      "SELECT id, name, position, role FROM users WHERE role IN ('sales_manager', 'sales_director') ORDER BY role, name"
+      "SELECT id, name, position, role FROM users WHERE role IN ('sales_manager', 'sales_director') AND status = 'active' ORDER BY role, name"
     );
     res.json(rows);
   }
@@ -54,8 +54,9 @@ usersRouter.use(requireAdmin);
 usersRouter.get("/", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT id, email, name, role, position, phone, name_hy, created_at,
-            last_seen_at, last_seen_app_version, last_seen_user_agent
-     FROM users ORDER BY created_at DESC`
+            last_seen_at, last_seen_app_version, last_seen_user_agent,
+            status, status_changed_at, status_note
+     FROM users ORDER BY (status = 'active') DESC, created_at DESC`
   );
   res.json(rows);
 });
@@ -134,6 +135,117 @@ usersRouter.post("/", async (req, res) => {
       return res.status(409).json({ error: "A user with that email already exists" });
     }
     throw err;
+  }
+});
+
+// ---- Pause / offboard a rep (migration 135) -------------------------------------------------------------------------------
+// The account stays (orders, check-ins and payments keep their history); what changes is that it can no longer log in, every open
+// session dies, push is switched off, and the person disappears from rep lists, leaderboards, plans and Vaghinak (`status = 'active'`
+// filters). Customers and open tasks can be handed over in the same step, region by region.
+const STATUSES = ["active", "paused", "offboarded"];
+const OPEN_ORDER_STATUSES = ["submitted", "confirmed", "packed_stock_out"];
+const TAKES_CUSTOMERS = ["sales_manager", "sales_director"];
+
+// What this person still holds, so the admin sees the checklist before pressing the button.
+usersRouter.get("/:id/offboarding", async (req, res) => {
+  const userId = Number(req.params.id);
+  if (!userId) return res.status(400).json({ error: "Invalid user id" });
+  const { rows: found } = await pool.query("SELECT id, name, role, position, status FROM users WHERE id = $1", [userId]);
+  if (!found[0]) return res.status(404).json({ error: "User not found" });
+  const [regions, tasks, cash, orders, rules, candidates] = await Promise.all([
+    pool.query(
+      `SELECT COALESCE(region, '') AS region, count(*)::int AS n FROM customers WHERE assigned_manager_id = $1
+       GROUP BY COALESCE(region, '') ORDER BY (COALESCE(region, '') = ''), COALESCE(region, '')`,
+      [userId]
+    ),
+    pool.query("SELECT count(*)::int AS n FROM tasks WHERE assignee_id = $1 AND status = 'open'", [userId]),
+    pool.query(
+      `SELECT COALESCE(SUM(amount_amd), 0)::float8 AS amount, count(*)::int AS n FROM payments WHERE current_holder_id = $1 AND status = 'pending'`,
+      [userId]
+    ),
+    pool.query("SELECT count(*)::int AS n FROM orders WHERE user_id = $1 AND status = ANY($2)", [userId, OPEN_ORDER_STATUSES]),
+    pool.query("SELECT count(*)::int AS n FROM visit_plan_rules WHERE user_id = $1", [userId]),
+    pool.query(
+      `SELECT id, name, position, role FROM users WHERE status = 'active' AND role = ANY($1) AND id <> $2 ORDER BY role, name`,
+      [TAKES_CUSTOMERS, userId]
+    ),
+  ]);
+  res.json({
+    user: found[0],
+    regions: regions.rows,
+    customers_total: regions.rows.reduce((sum, r) => sum + r.n, 0),
+    open_tasks: tasks.rows[0].n,
+    cash_held_amd: cash.rows[0].amount,
+    cash_held_count: cash.rows[0].n,
+    open_orders: orders.rows[0].n,
+    plan_rules: rules.rows[0].n,
+    candidates: candidates.rows,
+  });
+});
+
+// Body: { status: 'paused' | 'offboarded' | 'active', note?, moves?: [{ region, to_user_id }], tasks_to_user_id? }
+usersRouter.post("/:id/status", async (req, res) => {
+  const userId = Number(req.params.id);
+  const { status, note, moves = [], tasks_to_user_id: tasksTo } = req.body ?? {};
+  if (!userId) return res.status(400).json({ error: "Invalid user id" });
+  if (!STATUSES.includes(status)) return res.status(400).json({ error: `status must be one of: ${STATUSES.join(", ")}` });
+  if (userId === req.user.id) return res.status(400).json({ error: "You can't switch off your own account" });
+  if (!Array.isArray(moves)) return res.status(400).json({ error: "moves must be a list" });
+  const cleanNote = String(note ?? "").trim().slice(0, 300) || null;
+
+  const { rows: target } = await pool.query("SELECT id, role, status FROM users WHERE id = $1", [userId]);
+  if (!target[0]) return res.status(404).json({ error: "User not found" });
+
+  // Everyone who receives customers or tasks must be a real, active colleague.
+  const receiverIds = [...new Set([...moves.map((m) => Number(m?.to_user_id)), ...(tasksTo ? [Number(tasksTo)] : [])])];
+  if (status === "active" && receiverIds.length) return res.status(400).json({ error: "Nothing is handed over when an account is switched back on" });
+  if (receiverIds.length) {
+    const { rows: ok } = await pool.query("SELECT id FROM users WHERE id = ANY($1) AND status = 'active' AND role = ANY($2) AND id <> $3", [receiverIds, TAKES_CUSTOMERS, userId]);
+    if (ok.length !== receiverIds.length) return res.status(400).json({ error: "Customers and tasks can only go to another active sales rep or director" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    let movedCustomers = 0;
+    let movedTasks = 0;
+    if (status !== "active") {
+      for (const m of moves) {
+        const { rowCount } = await client.query(
+          "UPDATE customers SET assigned_manager_id = $1 WHERE assigned_manager_id = $2 AND COALESCE(region, '') = $3",
+          [Number(m.to_user_id), userId, String(m.region ?? "")]
+        );
+        movedCustomers += rowCount;
+      }
+      // An open task about a customer follows the customer; the rest goes to the person chosen for tasks (if any).
+      const followed = await client.query(
+        `UPDATE tasks t SET assignee_id = c.assigned_manager_id, updated_at = now()
+         FROM customers c, users nu
+         WHERE t.assignee_id = $1 AND t.status = 'open' AND c.id = t.customer_id
+           AND c.assigned_manager_id <> $1 AND nu.id = c.assigned_manager_id AND nu.status = 'active'`,
+        [userId]
+      );
+      movedTasks += followed.rowCount;
+      if (tasksTo) {
+        const rest = await client.query("UPDATE tasks SET assignee_id = $2, updated_at = now() WHERE assignee_id = $1 AND status = 'open'", [userId, Number(tasksTo)]);
+        movedTasks += rest.rowCount;
+      }
+    }
+    const { rows } = await client.query(
+      `UPDATE users SET status = $2, status_note = $3, status_changed_at = now(), status_changed_by = $4,
+              token_version = CASE WHEN $2 = 'active' THEN token_version ELSE token_version + 1 END
+       WHERE id = $1
+       RETURNING id, email, name, role, position, phone, name_hy, created_at, last_seen_at, last_seen_app_version, last_seen_user_agent, status, status_changed_at, status_note`,
+      [userId, status, status === "active" ? null : cleanNote, req.user.id]
+    );
+    if (status !== "active") await client.query("DELETE FROM push_subscriptions WHERE user_id = $1", [userId]);
+    await client.query("COMMIT");
+    res.json({ user: rows[0], moved_customers: movedCustomers, moved_tasks: movedTasks });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
   }
 });
 

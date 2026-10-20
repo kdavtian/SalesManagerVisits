@@ -197,7 +197,7 @@ dashboardRouter.get("/summary", async (req, res) => {
      -- computeMonthlyStandings() below -- a close-out that ranked a
      -- different population than the live board would be a nasty surprise
      -- on payout day.
-     WHERE u.role = 'sales_manager'
+     WHERE u.role = 'sales_manager' AND u.status = 'active'
      GROUP BY u.id, u.name, nc.customer_points
      ORDER BY total_points DESC, u.name`
   );
@@ -206,7 +206,7 @@ dashboardRouter.get("/summary", async (req, res) => {
   // GET /rep-progress for the per-rep comparison); everyone else gets just their own --
   // same population as /users/plannable (sales managers are the only role
   // that ever has a visit plan).
-  const weekProgressQuery = (seesAll ? pool.query("SELECT id FROM users WHERE role = 'sales_manager'") : Promise.resolve({ rows: [{ id: req.user.id }] }))
+  const weekProgressQuery = (seesAll ? pool.query("SELECT id FROM users WHERE role = 'sales_manager' AND status = 'active'") : Promise.resolve({ rows: [{ id: req.user.id }] }))
     .then((r) => computeWeekProgress(r.rows.map((row) => row.id)));
 
   const [totals, recentActivity, points, weekProgress] = await Promise.all([
@@ -315,7 +315,7 @@ async function computeMonthlyStandings(month) {
      LEFT JOIN daily_visits dv ON dv.user_id = u.id
      LEFT JOIN new_customers nc ON nc.user_id = u.id
      -- Same population as the live leaderboard in /summary above.
-     WHERE u.role = 'sales_manager'
+     WHERE u.role = 'sales_manager' AND u.status = 'active'
      GROUP BY u.id, u.name, nc.customer_points
      ORDER BY total_points DESC, u.name`,
     [month]

@@ -2239,8 +2239,9 @@ label.checkbox-row input[type="checkbox"] {
 
 .team-edit-secondary-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 10px;
+  gap: 4px 14px;
   margin-top: 8px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
@@ -14201,3 +14202,15 @@ input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
   .pl-lbl-full { display: none; }
   .pl-lbl-short { display: inline; }
 }
+
+/* Pause / switch off a team member (Settings -> Team -> a person) */
+.list-row-off { opacity: 0.62; }
+.offboard-title { display: flex; align-items: center; gap: 8px; }
+.offboard-mode { margin: 10px 0 12px; }
+.offboard-mode .chip { min-height: 44px; white-space: normal; }
+.offboard-holds { margin: 4px 0 12px; font-size: 0.9rem; }
+.offboard-holds ul { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
+.offboard-holds .warn-text { display: block; color: var(--warning, #b36b00); font-size: 0.82rem; }
+.offboard-regions { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.offboard-region-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); align-items: center; gap: 10px; }
+.offboard-help { margin: -6px 0 12px; font-size: 0.82rem; }

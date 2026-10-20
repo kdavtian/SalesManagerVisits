@@ -27,7 +27,7 @@ const MAX_AMOUNT = 100000000000; // matches the DB CHECK constraint
 paymentsRouter.get("/eligible-managers", async (req, res) => {
   if (!canSubmitPaymentsForOthers(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const { rows } = await pool.query(
-    "SELECT id, name, position FROM users WHERE role = 'sales_manager' ORDER BY name"
+    "SELECT id, name, position FROM users WHERE role = 'sales_manager' AND status = 'active' ORDER BY name"
   );
   res.json(rows);
 });

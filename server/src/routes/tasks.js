@@ -75,7 +75,7 @@ tasksRouter.get("/assignees", async (req, res) => {
   const roles = taskAssigneeRoles(req.user.role);
   if (roles !== null && !roles.length) return res.json([]);
   const { rows } = await pool.query(
-    `SELECT id, name, role, position FROM users ${roles === null ? "" : "WHERE role = ANY($1)"} ORDER BY name`,
+    `SELECT id, name, role, position FROM users WHERE status = 'active'${roles === null ? "" : " AND role = ANY($1)"} ORDER BY name`,
     roles === null ? [] : [roles]
   );
   res.json(rows);

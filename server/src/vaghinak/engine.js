@@ -68,7 +68,7 @@ async function todaysCheckins(db, userIds, day) {
 export async function loadRepStates(db, day, nowMin, settings, { includeMuted = false } = {}) {
   const { rows: reps } = await db.query(
     `SELECT id, name, name_hy, role, vaghinak_address, (vaghinak_muted_day = $1::date) AS muted
-     FROM users WHERE role = 'sales_manager' ORDER BY name`,
+     FROM users WHERE role = 'sales_manager' AND status = 'active' ORDER BY name`,
     [day]
   );
   const active = includeMuted ? reps : reps.filter((r) => !r.muted);
@@ -201,7 +201,7 @@ export async function wrapUp(now = new Date(), db = pool, { pick, delayMaxMs } =
   const { rows: logs } = await db.query(
     `SELECT l.*, u.name, u.name_hy, u.role, u.vaghinak_address
      FROM vaghinak_day_log l JOIN users u ON u.id = l.user_id
-     WHERE l.day = $1 AND u.role = 'sales_manager' AND NOT l.day_off ORDER BY u.name`,
+     WHERE l.day = $1 AND u.role = 'sales_manager' AND u.status = 'active' AND NOT l.day_off ORDER BY u.name`,
     [day]
   );
   let created = 0;

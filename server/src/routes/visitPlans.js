@@ -141,7 +141,7 @@ visitPlansRouter.get("/team-today", async (req, res) => {
   const date = todayDate();
 
   const { rows: managers } = await pool.query(
-    "SELECT id, name FROM users WHERE role = 'sales_manager' ORDER BY name"
+    "SELECT id, name FROM users WHERE role = 'sales_manager' AND status = 'active' ORDER BY name"
   );
   if (!managers.length) return res.json([]);
   const managerIds = managers.map((m) => m.id);
@@ -416,7 +416,7 @@ async function buildRepPlans(repIds) {
 // clients), `plans` lists every plan of the person (main + separate channels).
 visitPlansRouter.get("/rules/overview", requireCanViewAllRoutePlans, async (req, res) => {
   const { rows: reps } = await pool.query(
-    "SELECT id, name, position FROM users WHERE role = 'sales_manager' ORDER BY name"
+    "SELECT id, name, position FROM users WHERE role = 'sales_manager' AND status = 'active' ORDER BY name"
   );
   const plansByRep = await buildRepPlans(reps.map((r) => r.id));
   res.json(

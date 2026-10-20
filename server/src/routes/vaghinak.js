@@ -117,7 +117,7 @@ vaghinakRouter.get("/feed", requireManagement, async (_req, res) => {
 
 vaghinakRouter.get("/settings", requireManagement, async (_req, res) => {
   const { rows: people } = await pool.query(
-    `SELECT id, name, name_hy, role, vaghinak_address FROM users ORDER BY (role = 'sales_manager') DESC, name`
+    `SELECT id, name, name_hy, role, vaghinak_address FROM users WHERE status = 'active' ORDER BY (role = 'sales_manager') DESC, name`
   );
   res.json({ settings: await getVaghinakSettings(), people });
 });

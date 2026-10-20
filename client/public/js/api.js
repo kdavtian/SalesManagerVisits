@@ -246,6 +246,8 @@ export const api = {
   deleteUser: (id) => request(`/users/${id}`, { method: "DELETE" }),
   getUserDeletionReport: (id) => request(`/users/${id}/deletion-report`),
   purgeUser: (id) => json(`/users/${id}/purge`, "POST", { confirm: true }),
+  getUserOffboarding: (id) => request(`/users/${id}/offboarding`),
+  setUserStatus: (id, data) => json(`/users/${id}/status`, "POST", data),
   deleteUserRecords: (id) => request(`/users/${id}/records`, { method: "DELETE" }),
 
   getSettings: () => request("/settings"),

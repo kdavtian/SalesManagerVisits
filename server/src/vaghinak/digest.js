@@ -24,7 +24,7 @@ export async function weekFacts(db, monday, graceMin) {
             count(*) FILTER (WHERE l.first_checkin_at IS NOT NULL AND l.late_minutes > $2)::int AS late_days,
             COALESCE(sum(l.late_minutes) FILTER (WHERE l.first_checkin_at IS NOT NULL AND l.late_minutes > $2), 0)::int AS late_min
      FROM vaghinak_day_log l JOIN users u ON u.id = l.user_id
-     WHERE l.day >= $1::date AND l.day < ($1::date + 7) AND NOT l.day_off AND u.role = 'sales_manager'
+     WHERE l.day >= $1::date AND l.day < ($1::date + 7) AND NOT l.day_off AND u.role = 'sales_manager' AND u.status = 'active'
      GROUP BY l.user_id, u.name, u.name_hy, u.role, u.vaghinak_address ORDER BY u.name`,
     [monday, graceMin]
   );

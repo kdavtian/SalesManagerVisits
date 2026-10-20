@@ -30,7 +30,7 @@ export function parseFrequency(raw) {
 // Every active field rep with the customers the planner may route: their own customers, minus the channels that are
 // never visited (KF/CAS/CVO/PCO/OEM) and the office check-in place.
 async function loadRepsWithCustomers(db) {
-  const { rows: reps } = await db.query("SELECT id, name, position FROM users WHERE role = 'sales_manager' ORDER BY name");
+  const { rows: reps } = await db.query("SELECT id, name, position FROM users WHERE role = 'sales_manager' AND status = 'active' ORDER BY name");
   const { rows: customers } = await db.query(
     `SELECT c.id, c.name, c.lat, c.lng, c.region, c.subregion, c.assigned_manager_id, c.visit_frequency_days, c.sales_channel
        FROM customers c

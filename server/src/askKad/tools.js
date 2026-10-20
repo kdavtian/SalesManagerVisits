@@ -246,7 +246,7 @@ const RUNNERS = {
               (SELECT COALESCE(sum(o.total_amd), 0) FROM orders o WHERE o.user_id = u.id AND o.status <> 'draft' AND ${O} BETWEEN $1 AND $2) AS app_orders_amd,
               (SELECT COALESCE(sum(p.amount_amd), 0) FROM payments p WHERE p.sales_manager_id = u.id AND p.status = 'approved'
                 AND (p.approved_at AT TIME ZONE 'Asia/Yerevan')::date BETWEEN $1 AND $2) AS collected_amd
-         FROM users u WHERE u.role = 'sales_manager' ORDER BY visits DESC`,
+         FROM users u WHERE u.role = 'sales_manager' AND u.status = 'active' ORDER BY visits DESC`,
       [from, to]
     );
     return {
