@@ -19,7 +19,7 @@ import {
 } from "../settings.js";
 import { getBonusesEnabled, setBonusesEnabled } from "../bonusSettings.js";
 import { getAskKadSettings, setAskKadEnabled, setAskKadMonthlyCapUsd } from "../askKad/settings.js";
-import { getLandingSettings, setLandingSetting, applyLandingCosts, applyExcelRetail, retailDifferences } from "../landingCalc.js";
+import { getLandingSettings, setLandingSetting, setLandingRates, landingRateDefaults, displayRates, applyLandingCosts, applyExcelRetail, retailDifferences } from "../landingCalc.js";
 import { ensureCurrentRound, ensureOnceRound } from "../bonusChallengeRounds.js";
 import { ROLES } from "../roles.js";
 import { pool } from "../db/pool.js";
@@ -81,6 +81,9 @@ settingsRouter.get("/", async (req, res) => {
     // Landing cost calculated from the pack USD price (landingCalc.js) and Retail price taken from Excel.
     landing_calc_enabled: landing.enabled,
     landing_usd_rate: landing.rate,
+    // Freight, declared transport, customs, ecology, excise, import VAT, clearance: the values in use and the built-in ones.
+    landing_rates: displayRates(landing.rates),
+    landing_rate_defaults: landingRateDefaults(),
     retail_from_excel: landing.retailFromExcel,
   });
 });
@@ -194,6 +197,17 @@ settingsRouter.patch("/", requireAdmin, async (req, res) => {
     const landing = await getLandingSettings();
     result.landing_calc_enabled = landing.enabled;
     result.landing_usd_rate = landing.rate;
+  }
+
+  if (req.body?.landing_rates !== undefined) {
+    try {
+      result.landing_rates = await setLandingRates(req.body.landing_rates);
+    } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
+    // Every landing cost follows the new rates at once, like a new USD rate.
+    await applyLandingCosts(pool);
+    result.landing_rate_defaults = landingRateDefaults();
   }
 
   if (req.body?.retail_from_excel !== undefined) {

@@ -234,8 +234,16 @@ export function litersOfUnit(unit) {
 
 // Saved calculator rates (per phone) -> a complete, current rates object. Anything saved by the first calculator (before the
 // per-brand freight, commissions and cost items existed) is dropped except the plain numbers that kept their meaning.
-export function mergeSavedRates(saved) {
+// appRates = the freight / customs / excise ... values set in App configuration (settings.landing_rates): they replace the built-in
+// ones as the starting point, and a phone's own saved value still wins.
+export function mergeSavedRates(saved, appRates = null) {
   const base = { ...COST_RATES_DEFAULT, items: DEFAULT_COST_ITEMS.map((i) => ({ ...i })) };
+  if (appRates && typeof appRates === "object") {
+    for (const k of Object.keys(COST_RATES_DEFAULT)) {
+      if (k === "items" || k === "vatMode" || k === "rate") continue; // the USD rate stays the calculator's own (hand-edited per phone)
+      if (appRates[k] !== undefined && appRates[k] !== null && Number.isFinite(Number(appRates[k]))) base[k] = Number(appRates[k]);
+    }
+  }
   if (!saved || typeof saved !== "object") return base;
   for (const k of Object.keys(COST_RATES_DEFAULT)) {
     if (k === "items" || k === "vatMode") continue;

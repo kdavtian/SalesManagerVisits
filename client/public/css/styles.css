@@ -14175,3 +14175,29 @@ input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
 .retail-diff { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 0; padding: 0; list-style: none; max-height: 60vh; overflow-y: auto; }
 .retail-diff li { display: flex; justify-content: space-between; gap: 12px; }
 .retail-diff li b { flex: none; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Landing-cost rates in App configuration: a collapsed section with grouped number fields. */
+.lr-details > summary {
+  cursor: pointer;
+  min-height: 44px;
+  list-style: none;
+}
+.lr-details > summary::-webkit-details-marker { display: none; }
+.lr-details > summary::after { content: "›"; margin-left: auto; font-size: 1.4rem; line-height: 1; transform: rotate(90deg); transition: transform 0.15s; }
+.lr-details[open] > summary::after { transform: rotate(-90deg); }
+.lr-details[open] > summary { margin-bottom: 8px; }
+.lr-group { border: 0; padding: 0; margin: 0 0 12px; min-width: 0; }
+.lr-group legend { font-weight: 600; padding: 0; margin-bottom: 6px; }
+.lr-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
+.lr-field { display: flex; flex-direction: column; justify-content: space-between; gap: 3px; font-size: 0.85rem; min-width: 0; }
+.lr-field span { color: var(--text-dim); overflow-wrap: anywhere; }
+.lr-field input { width: 100%; min-width: 0; }
+.lr-actions { display: flex; gap: 8px; }
+.lr-actions .btn { flex: 1; }
+
+/* Product cards: a long label is shortened below the computer layout (1024px), kept in full above it. */
+.pl-lbl-short { display: none; }
+@media (max-width: 1023px) {
+  .pl-lbl-full { display: none; }
+  .pl-lbl-short { display: inline; }
+}

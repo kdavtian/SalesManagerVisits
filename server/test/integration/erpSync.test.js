@@ -458,6 +458,60 @@ test("POST /api/erp-sync: landing cost is calculated from the pack USD price; no
   }
 });
 
+// Freight, customs, excise, ... set in App configuration (owner, 2026-10-20) feed the same calculation.
+// Settings are restored afterwards: this suite also runs against the production database on deploy.
+test("PATCH /api/settings landing_rates: freight, customs and excise recalculate every landing cost; bad values are refused; null resets", async () => {
+  const erpId = `ITEST-LR-${Date.now()}`;
+  const saved = (await pool.query("SELECT landing_calc_enabled, landing_usd_rate, landing_cost_rates FROM app_settings WHERE id = 1")).rows[0];
+  const admin = await createUser("admin");
+  const cookie = await loginAs(admin.email);
+  const patch = (landing_rates) => apiRequest("/api/settings", { method: "PATCH", cookie, body: { landing_rates } });
+  const landing = async () => Number((await pool.query("SELECT landing_cost_amd FROM products WHERE erp_product_id = $1", [erpId])).rows[0].landing_cost_amd);
+  try {
+    await apiRequest("/api/settings", { method: "PATCH", cookie, body: { landing_calc_enabled: true, landing_usd_rate: 366 } });
+    await patch({ tRealCastrol: null, customs: null, excise: null }); // start from the built-in values
+    const sync = await syncRequest(
+      { customers: [], products: [{ erp_product_id: erpId, name: "LR Test", brand: "Castrol", unit: "1L", unit_price_amd: 9000, pack_cost_usd: 24, items_per_pack: 4, pack_netto_kg: 3.6, size_l: 1, landing_cost_amd: 3900 }] },
+      { "X-Sync-Key": SYNC_KEY, ...BYPASS }
+    );
+    assert.equal(sync.status, 200);
+    const { landingCost, COST_RATES_DEFAULT } = await import("../../../client/public/js/costModel.js");
+    const pack = { brand: "Castrol", size: 1, items: 4, packKg: 3.6, packCostUsd: 24 };
+    const base = await landing();
+    assert.ok(Math.abs(base - landingCost(pack, { ...COST_RATES_DEFAULT, rate: 366 }).amd) < 0.01);
+
+    const get = await apiRequest("/api/settings", { cookie });
+    assert.equal(get.data.landing_rates.customs, COST_RATES_DEFAULT.customs);
+    assert.equal(get.data.landing_rate_defaults.excise, COST_RATES_DEFAULT.excise);
+
+    // dearer freight, customs and excise raise the cost at once, and the response carries the rates now in use
+    const changed = await patch({ tRealCastrol: 0.4, customs: 10, excise: 900 });
+    assert.equal(changed.status, 200);
+    assert.equal(changed.data.landing_rates.customs, 10);
+    const expected = landingCost(pack, { ...COST_RATES_DEFAULT, rate: 366, tRealCastrol: 0.4, customs: 10, excise: 900 }).amd;
+    const after = await landing();
+    assert.ok(after > base, "dearer rates raise the landing cost");
+    assert.ok(Math.abs(after - expected) < 0.01, `expected ${expected}, got ${after}`);
+
+    // a value equal to the built-in one is not stored as an override
+    await patch({ customs: COST_RATES_DEFAULT.customs });
+    assert.equal(((await pool.query("SELECT landing_cost_rates FROM app_settings WHERE id = 1")).rows[0].landing_cost_rates).customs, undefined);
+
+    // refused: unknown key, outside the allowed range, not a number, not an object -- and nothing was saved
+    for (const bad of [{ nonsense: 1 }, { customs: 500 }, { excise: -1 }, { vat: "abc" }, [1, 2]]) {
+      assert.equal((await patch(bad)).status, 400, JSON.stringify(bad));
+    }
+    assert.equal((await apiRequest("/api/settings", { cookie })).data.landing_rates.excise, 900);
+
+    // null puts a rate back to the built-in value and the landing cost returns to the original
+    await patch({ tRealCastrol: null, excise: null });
+    assert.ok(Math.abs((await landing()) - base) < 0.01);
+  } finally {
+    await pool.query("DELETE FROM products WHERE erp_product_id = $1", [erpId]);
+    await pool.query("UPDATE app_settings SET landing_calc_enabled = $1, landing_usd_rate = $2, landing_cost_rates = $3 WHERE id = 1", [saved.landing_calc_enabled, saved.landing_usd_rate, saved.landing_cost_rates]);
+  }
+});
+
 test("POST /api/erp-sync: Retail price from Excel is stored, listed as a difference, and only applied while the switch is on", async () => {
   const erpId = `ITEST-RETAIL-${Date.now()}`;
   const saved = (await pool.query("SELECT retail_from_excel FROM app_settings WHERE id = 1")).rows[0];

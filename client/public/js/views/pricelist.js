@@ -63,7 +63,7 @@ const PRICE_COLUMNS = [
   { key: "bronze", label: () => t("col_bronze"), get: (p) => p.bronze_price_amd ?? p.unit_price_amd },
   { key: "silver", label: () => t("col_silver"), get: (p) => p.silver_price_amd },
   { key: "gold", label: () => t("col_gold"), get: (p) => p.gold_price_amd, costOnly: true },
-  { key: "retail", label: () => t("price_retail"), get: (p) => p.effective_retail_amd },
+  { key: "retail", label: () => t("price_retail"), short: () => t("price_retail_short"), get: (p) => p.effective_retail_amd },
   { key: "landing", label: () => t("landing_cost"), get: (p) => p.landing_cost_amd, costOnly: true },
   { key: "net", label: () => t("net_cost"), get: (p) => p.net_cost_amd, costOnly: true },
 ];
@@ -535,11 +535,19 @@ export async function renderPricelist(root, navigate) {
       .map((key, i) => {
         const value = colValue(p, key);
         if (value == null) return "";
-        const label = PRICE_COLUMNS.find((c) => c.key === key).label();
+        const column = PRICE_COLUMNS.find((c) => c.key === key);
+        const label = column.label();
+        // A long Armenian label ("Մանրածախ") is shortened on phones and tablets only; a computer keeps the full word.
+        const short = column.short?.();
+        // The abbreviation ends with its own full stop ("Մանր."), so it takes no colon after it.
+        const labelHtml =
+          short && short !== label
+            ? `<span class="pl-lbl-full">${escapeHtml(label)}:</span><span class="pl-lbl-short">${escapeHtml(short)}${short.endsWith(".") ? "" : ":"}</span>`
+            : `${escapeHtml(label)}:`;
         if (i === 0 && hasSpecial) {
-          return `<span class="pl-price-line pl-price-primary"><span class="pl-price-label">${escapeHtml(label)}:</span> <strong class="pricelist-price-special">${formatAmd(p.effective_special_amd)}</strong></span><span class="pricelist-price-standard-struck">${formatAmd(value)}</span>`;
+          return `<span class="pl-price-line pl-price-primary"><span class="pl-price-label">${labelHtml}</span> <strong class="pricelist-price-special">${formatAmd(p.effective_special_amd)}</strong></span><span class="pricelist-price-standard-struck">${formatAmd(value)}</span>`;
         }
-        return `<span class="pl-price-line ${i === 0 ? "pl-price-primary" : ""}"><span class="pl-price-label">${escapeHtml(label)}:</span> <strong>${formatAmd(value)}</strong></span>`;
+        return `<span class="pl-price-line ${i === 0 ? "pl-price-primary" : ""}"><span class="pl-price-label">${labelHtml}</span> <strong>${formatAmd(value)}</strong></span>`;
       })
       .join("");
     return `

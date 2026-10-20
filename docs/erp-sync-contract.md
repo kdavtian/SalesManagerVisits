@@ -88,7 +88,7 @@ which is upsert-only and never truncated).
       "stock_qty": 240,
       "landing_cost_amd": 9500, // the workbook's own "Landing Cost" (kept as landing_workbook_amd: the fallback and the reference); omit/null if not sent
       // Since 1.370.0, all optional (an older bot sends none): the app calculates landing_cost_amd itself from the pack data
-      // (server/src/landingCalc.js, USD rate in App configuration) and keeps the workbook's value when pack data is missing or
+      // (server/src/landingCalc.js, USD rate and, since 1.374.0, freight / customs / excise / ecology / VAT / clearance rates in App configuration) and keeps the workbook's value when pack data is missing or
       // the result is more than 20% away from it. retail_price_amd is stored as erp_retail_price_amd and copied into the app's
       // retail price only while Settings -> "Retail price from Excel" is on.
       "pack_cost_usd": 87.56, "items_per_pack": 4, "pack_netto_kg": 13.48, "size_l": 4, "retail_price_amd": 44000,
