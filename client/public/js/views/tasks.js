@@ -751,7 +751,7 @@ export async function openTaskEditor({ customer = null, task = null, taskKind = 
         }
         const mine = ++seq;
         try {
-          const found = (await api.listCustomers({ search: q })).slice(0, 8);
+          const found = (await api.listCustomers({ search: q, limit: 8 })).slice(0, 8);
           if (mine !== seq) return;
           results.hidden = false;
           results.innerHTML = found.length

@@ -686,7 +686,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
         resultsEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
         let results;
         try {
-          results = await api.listCustomers(query ? { search: query } : {});
+          results = await api.listCustomers(query ? { search: query, limit: 30 } : { limit: 30 });
         } catch (err) {
           if (mySeq === seq) resultsEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
           return;

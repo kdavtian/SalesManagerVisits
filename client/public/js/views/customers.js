@@ -10,6 +10,9 @@ import { buildRegionSubregionTree, buildDirectionManagerTree, openTriStateTreeSh
 import { openTypeTierSheet } from "../typeTierSheet.js";
 import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
 
+// The Customers list loads in pages of this size (see load()).
+const CUSTOMER_PAGE = 500;
+
 const FILTERS = [
   { key: "", labelKey: "filter_all" },
   { key: "visited", labelKey: "filter_visited" },
@@ -685,7 +688,27 @@ export function renderCustomers(root, navigate, initialFilter) {
     try {
       await loadWithCache(
         `customers-list:${showDebt ? "with-debt" : "plain"}`,
-        () => api.listCustomers(showDebt ? { include_debt: 1 } : {}),
+        async () => {
+          // Pages of 500 (about the whole customer list of the company today), so the list on screen no longer
+          // waits for the last customer to download as the company grows. With a cached list already showing it is
+          // left alone until every page is in (it would shrink to 500 for a moment otherwise); with nothing showing
+          // yet, the first page paints at once and the rest are added behind it.
+          const all = [];
+          let cursor = {};
+          for (;;) {
+            const rows = await api.listCustomers({ ...(showDebt ? { include_debt: 1 } : {}), limit: CUSTOMER_PAGE, ...cursor });
+            all.push(...rows);
+            if (rows.length < CUSTOMER_PAGE) break;
+            const last = rows[rows.length - 1];
+            cursor = { after_name: last.name, after_id: last.id };
+            if (!paintedOnce) {
+              allCustomers = all.slice();
+              render();
+              paintedOnce = true;
+            }
+          }
+          return all;
+        },
         (data) => {
           allCustomers = data;
           render();

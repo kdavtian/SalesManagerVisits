@@ -85,8 +85,24 @@ async function applyPlannedOverdue(rows) {
   }
 }
 
+// Pages of the customer list (a page is MAX_PAGE rows at most). Without `limit` the whole list comes back, as before,
+// because the Map and route planning need every customer; the Customers screen asks for pages of 500 so the first
+// 500 paint at once, and the pickers that only show 8-30 matches ask for just those.
+const MAX_PAGE = 1000;
+function pageParams(query) {
+  const limit = Number.parseInt(query.limit, 10);
+  if (!Number.isInteger(limit) || limit < 1) return null;
+  const offset = Number.parseInt(query.offset, 10);
+  const afterId = Number.parseInt(query.after_id, 10);
+  // after_name + after_id continue a list after the last customer of the previous page (a page deep into the list
+  // then costs the same as the first one); offset is kept for callers that only want "skip N".
+  const after = typeof query.after_name === "string" && Number.isInteger(afterId) ? { name: query.after_name, id: afterId } : null;
+  return { limit: Math.min(limit, MAX_PAGE), offset: Number.isInteger(offset) && offset > 0 ? offset : 0, after };
+}
+
 customersRouter.get("/", async (req, res) => {
   const { search, visited, region, subregion, include_debt, min_lat, max_lat, min_lng, max_lng } = req.query;
+  const page = pageParams(req.query);
   // A sales_manager's own book only -- always, not just when the client
   // happens to pass this filter. Every other route scoping a plain
   // manager to their own data (orders.js's GET /, checkins.js, this same
@@ -150,6 +166,11 @@ customersRouter.get("/", async (req, res) => {
     conditions.push(OVERDUE_SQL);
   }
 
+  if (page?.after) {
+    params.push(page.after.name, page.after.id);
+    conditions.push(`(c.name, c.id) > ($${params.length - 1}, $${params.length})`);
+  }
+
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   // Outstanding debt is opt-in (see task spec: "off by default, to make
   // app run faster") -- the LEFT JOIN and its per-row lookup only happen
@@ -164,7 +185,7 @@ customersRouter.get("/", async (req, res) => {
      ${REORDER_JOIN}
      ${debtJoin}
      ${where}
-     ORDER BY c.name`,
+     ORDER BY c.name, c.id${page ? ` LIMIT ${page.limit} OFFSET ${page.offset}` : ""}`,
     params
   );
   // debt_amd is ERP commercial data -- a sales_manager only sees it for
