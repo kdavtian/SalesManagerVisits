@@ -537,7 +537,7 @@ export function renderOrders(root, navigate, openId = null) {
       resultsEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
       let results;
       try {
-        results = await api.listCustomers(query ? { search: query } : {});
+        results = await api.listCustomers(query ? { search: query, limit: 30 } : { limit: 30 });
       } catch (err) {
         if (seq === searchSeq) resultsEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
         return;
