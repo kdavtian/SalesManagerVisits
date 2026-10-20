@@ -672,7 +672,7 @@ ordersRouter.get("/unrecorded-count", async (req, res) => {
 
 ordersRouter.get("/:id", async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT o.*, u.name AS user_name, c.name AS customer_name, c.erp_customer_id
+    `SELECT o.*, u.name AS user_name, c.name AS customer_name, c.erp_customer_id, c.customer_tier
      FROM orders o
      JOIN users u ON u.id = o.user_id
      JOIN customers c ON c.id = o.customer_id
