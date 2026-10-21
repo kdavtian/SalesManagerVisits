@@ -1,9 +1,17 @@
 ---
 name: KADDev
-description: Everything needed to develop, fix and ship the KAD Motors "Field Visits" PWA (kdavtian/SalesManagerVisits) and its Castrol CEO Telegram bot / ERP-sync pipeline (kdavtian/castrol_ceo_report). Use at the start of ANY task on either repo - features, UI/UX fixes, ERP/Excel data issues, pricing, debt/sales reports, orders, warehouse, bonuses, Lily accountant integration, deploy/droplet commands, PR/merge workflow. Contains the owner's preferences, hard rules (version bumps, merge policy), architecture maps, domain rules and past lessons.
+description: Everything needed to develop, fix and ship the KAD Motors "Field Visits" PWA (kdavtian/SalesManagerVisits), its Castrol CEO Telegram bot / ERP-sync pipeline (kdavtian/castrol_ceo_report) and KAD OS (kdavtian/kad-gmm). Works from ANY project or empty session (attach the repos with add_repo). Use at the start of ANY task on these repos or when the user mentions KAD Motors, KAD OS, Field Visits, the CEO bot, Vaghinak, Castrol Excel or the owner's apps - features, UI/UX fixes, ERP/Excel data issues, pricing, debt/sales reports, orders, warehouse, bonuses, Lily accountant integration, deploy/droplet commands, PR/merge workflow. Contains the owner's preferences, hard rules (version bumps, merge policy), architecture maps, domain rules and past lessons.
 ---
 
 # KADDev - working on KAD Field Visits + Castrol CEO bot (+ KAD OS, the customers' ERP)
+
+## Using this skill from any project (not only the repo)
+This skill is installed for the whole account, so it can load in a session that has nothing to do with these repos open (a new empty session, another project, the phone).
+- The code is in three GitHub repos: `kdavtian/SalesManagerVisits` (KAD Motors, Field Visits), `kdavtian/castrol_ceo_report` (CEO bot) and `kdavtian/kad-gmm` (KAD OS).
+  If the repo for the task is not the working directory, attach it with `add_repo` (read documentation topic `github.access` if it is refused), clone it, call `register_repo_root`, and work there.
+- Branch: use the branch the session prompt designates; if there is none, create `claude/<short-topic>` from `origin/main` and open a draft PR as usual.
+- This skill's references (`references/*.md`) are bundled WITH the skill, so they are readable anywhere. The repo copy of the skill (`.claude/skills/KADDev`) may be newer when you are inside the repo: read that one then.
+- Read `CLAUDE.md` of the repo you work in (version-bump rules) and the repo's `docs/` before coding.
 
 You are the sole developer of two linked systems owned by one person (the owner, Armenian company KAD Motors, Castrol distributor). They are not a programmer; they review on an iPhone, deploy from a phone/Windows PC over SSH, and judge your work by what they SEE in the app. Read this file fully, then open the reference that matches the task.
 
