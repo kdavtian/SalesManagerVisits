@@ -104,6 +104,17 @@ export async function renderKadOsPerksSection(container) {
           </div>
         </div>
         <div class="settings-list-group-item kos-row">
+          <div class="kos-row-top"><span class="settings-row-label">${t("kos_limits_label")} ${hintIcon("kos-l-hint")}</span>${toggleHtml("kos-limits-on", s.limits_enabled, t("kos_limits_label"))}</div>
+          <p class="muted settings-hint" id="kos-l-text" hidden>${t("kos_limits_help")}</p>
+          <div class="kos-row-fields" ${s.limits_enabled ? "" : "hidden"}>
+            ${Object.entries(s.limits)
+              .sort((a, b) => Number(a[0]) - Number(b[0]))
+              .map(([l, n]) => `<label class="kos-num"><span class="muted">${escapeHtml(l)} L</span><input type="number" inputmode="numeric" data-limit="${escapeHtml(l)}" value="${n}" min="1" max="9999" /><span class="muted">${t("kos_limits_unit")}</span></label>`)
+              .join("")}
+            ${numberField("limit_default", s.limit_default, { min: 1, max: 9999, unit: t("kos_limits_other") })}
+          </div>
+        </div>
+        <div class="settings-list-group-item kos-row">
           <div class="kos-row-top"><span class="settings-row-label">${t("kos_progress_label")}</span>${toggleHtml("kos-progress-on", s.progress_enabled, t("kos_progress_label"))}</div>
           <div class="kos-row-fields" ${s.progress_enabled ? "" : "hidden"}>
             <span class="muted">${t("kos_levels_label")}</span>
@@ -124,10 +135,11 @@ export async function renderKadOsPerksSection(container) {
     wireHint(container, "kos-t-hint", "kos-t-text");
     wireHint(container, "kos-c2-hint", "kos-c2-text");
     wireHint(container, "kos-e-hint", "kos-e-text");
+    wireHint(container, "kos-l-hint", "kos-l-text");
     wireHint(container, "kos-a-hint", "kos-a-text");
     const saved = container.querySelector("#kos-saved");
 
-    for (const [id, key] of [["kos-discount-on", "discount_enabled"], ["kos-priority-on", "priority_enabled"], ["kos-promise-on", "promise_enabled"], ["kos-progress-on", "progress_enabled"], ["kos-chase-on", "chase_enabled"], ["kos-edit-on", "customer_edit_enabled"]]) {
+    for (const [id, key] of [["kos-discount-on", "discount_enabled"], ["kos-priority-on", "priority_enabled"], ["kos-promise-on", "promise_enabled"], ["kos-progress-on", "progress_enabled"], ["kos-chase-on", "chase_enabled"], ["kos-edit-on", "customer_edit_enabled"], ["kos-limits-on", "limits_enabled"]]) {
       container.querySelector(`#${id}`).addEventListener("click", async (e) => {
         const btn = e.currentTarget;
         btn.disabled = true;
@@ -140,6 +152,13 @@ export async function renderKadOsPerksSection(container) {
       input.addEventListener("change", async () => {
         const ok = await save({ [input.dataset.key]: Number(input.value) }, saved);
         if (!ok) input.value = s[input.dataset.key];
+      });
+    });
+    container.querySelectorAll("input[data-limit]").forEach((input) => {
+      input.addEventListener("change", async () => {
+        const limits = Object.fromEntries([...container.querySelectorAll("input[data-limit]")].map((i) => [i.dataset.limit, Number(i.value)]));
+        const ok = await save({ limits }, saved);
+        if (!ok) container.querySelectorAll("input[data-limit]").forEach((i) => (i.value = s.limits[i.dataset.limit]));
       });
     });
     container.querySelectorAll("input[data-level]").forEach((input) => {

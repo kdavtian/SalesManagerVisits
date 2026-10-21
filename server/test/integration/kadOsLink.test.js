@@ -310,7 +310,8 @@ test("catalog: tier prices and availability, no costs", async () => {
   const cat = (await apiRequest("/api/partner/catalog", { cookie: partnerCookie })).data;
   const a = cat.products.find((p) => p.id === p1.id);
   assert.equal(a.price, 10000);
-  assert.ok(a.available === null || typeof a.available === "number");
+  assert.equal("available" in a, false, "no stock figure leaves KAD Motors");
+  assert.equal(a.max_qty, 16, "a 4 L pack: at most 16 pieces in one order");
   assert.equal(cat.products.some((p) => "net_cost_amd" in p || "landing_cost_amd" in p), false);
   assert.equal(cat.customer.id, shop.id);
 });
@@ -567,4 +568,65 @@ test("the catalog is in KAD Motors' own product order: brand, line, viscosity, t
   const mine = [c020x1, c020x4, c530, lotos, brake].map((p) => ids.indexOf(p.id));
   assert.ok(mine.every((i) => i >= 0));
   assert.deepEqual([...mine].sort((a, b) => a - b), mine, "Castrol Edge 0W-20 1L, 4L, then 5W-30, then Lotos, then the non-oil product");
+});
+
+test("KAD OS sees only what is in stock and never how many; the order limit per pack size, with the manager's phone", async () => {
+  const mk = async (name, unit, stock) => {
+    const p = await createProduct({ name: `${name} ${stamp}`, unit });
+    await pool.query("UPDATE products SET bronze_price_amd = 1000, silver_price_amd = 1000, unit_price_amd = 1000, net_cost_amd = 500, stock_qty = $2 WHERE id = $1", [p.id, stock]);
+    return p;
+  };
+  const inStock = await mk("KOS Lim 1L", "1L", 100);
+  const empty = await mk("KOS Lim 4L empty", "4L", 0);
+  const unknown = await mk("KOS Lim 5L unknown", "5L", null);
+  const odd = await mk("KOS Lim 18L", "18L", 100);
+  const drum = await mk("KOS Lim 208L", "208L", 100);
+  const cat = (await apiRequest("/api/partner/catalog", { cookie: partnerCookie })).data.products;
+  const byId = new Map(cat.map((p) => [p.id, p]));
+  assert.ok(byId.has(inStock.id));
+  assert.equal(byId.has(empty.id), false, "out of stock: not shown");
+  assert.equal(byId.has(unknown.id), false, "stock unknown: not shown");
+  assert.deepEqual([byId.get(inStock.id).max_qty, byId.get(odd.id).max_qty, byId.get(drum.id).max_qty], [48, 12, 4]);
+  assert.ok(cat.every((p) => !("available" in p) && !("stock_qty" in p)), "no stock field at all");
+
+  const manager = await pool.query("SELECT u.id FROM users u WHERE u.id = $1", [rep.id]);
+  await pool.query("UPDATE users SET phone = '+37433007020' WHERE id = $1", [manager.rows[0].id]);
+  const line = (p, q) => ({ product_id: p.id, quantity: q });
+  const ok = await order(partnerCookie, [line(inStock, 48)]);
+  assert.equal(ok.status, 201, JSON.stringify(ok.data));
+  trackOrder(ok.data.id);
+  const over = await order(partnerCookie, [line(inStock, 49)]);
+  assert.equal(over.status, 400);
+  assert.equal(over.data.code, "order_limit");
+  assert.equal(over.data.max_qty, 48);
+  assert.equal(over.data.contact.phone, "+37433007020", "the customer's own sales manager");
+  assert.equal(over.data.contact.name, rep.name);
+  // the same product in two lines counts together; another product has its own limit
+  const split = await order(partnerCookie, [line(drum, 3), line(drum, 2)]);
+  assert.equal(split.status, 400);
+  assert.equal(split.data.max_qty, 4);
+  assert.equal((await order(partnerCookie, [line(drum, 4), line(odd, 12)])).status, 201);
+  await pool.query("DELETE FROM orders WHERE customer_id = $1 AND created_at > now() - interval '1 minute' AND user_id = $2", [shop.id, partner.id]);
+  // the preview refuses it too, so the cart can say so before sending
+  const pv = await apiRequest("/api/partner/preview", { method: "POST", cookie: partnerCookie, body: { items: [line(odd, 13)] } });
+  assert.equal(pv.status, 400);
+  assert.equal(pv.data.code, "order_limit");
+  // an ordinary sales manager's order has no limit; the supplier can change the numbers or switch the limits off
+  const normal = await apiRequest("/api/orders", { method: "POST", cookie: repCookie, body: { customer_id: shop.id, items: [line(drum, 9)], payment_method: "cash" } });
+  assert.equal(normal.status, 201);
+  trackOrder(normal.data.id);
+  const put = (body) => apiRequest("/api/app-orders/settings", { method: "PUT", cookie: adminCookie, body });
+  assert.equal((await put({ limits: { 4: 0 } })).status, 400);
+  assert.equal((await put({ limits: { abc: 5 } })).status, 400);
+  try {
+    assert.equal((await put({ limits: { 18: 20 }, limit_default: 10 })).status, 200);
+    assert.equal((await apiRequest("/api/partner/catalog", { cookie: partnerCookie })).data.products.find((p) => p.id === odd.id).max_qty, 20);
+    assert.equal((await put({ limits_enabled: false })).status, 200);
+    const free = await order(partnerCookie, [line(drum, 50)]);
+    assert.equal(free.status, 201, "limits switched off");
+    trackOrder(free.data.id);
+    assert.equal((await apiRequest("/api/partner/catalog", { cookie: partnerCookie })).data.products.find((p) => p.id === drum.id).max_qty, null);
+  } finally {
+    await put({ limits_enabled: true, limit_default: 12, limits: { 1: 48, 4: 16, 5: 16, 7: 12, 60: 4, 180: 4, 205: 4, 208: 4 } });
+  }
 });

@@ -18,7 +18,7 @@ import { autoCompleteReorderTasks } from "../taskAutoComplete.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
 import { orderCostCheck, decideDiscountApproval, canApproveDiscountRole } from "../discountPolicy.js";
 import { bullets } from "../utils/bullets.js";
-import { partnerLinkFor, priceAppOrderLines, promisedDateFor, getAppOrderSettings } from "../appOrders.js";
+import { partnerLinkFor, priceAppOrderLines, promisedDateFor, getAppOrderSettings, firstOverLimit, contactFor } from "../appOrders.js";
 
 export const ordersRouter = Router();
 
@@ -271,6 +271,11 @@ export async function createOrderHandler(req, res) {
     }
   }
 
+  // KAD OS: the most pieces of one product in one order (by pack size). Above it the customer is told to call their sales manager.
+  if (partner) {
+    const over = await firstOverLimit(items, await getAppOrderSettings());
+    if (over) return res.status(400).json({ error: "This order is above the limit for one of its products", code: "order_limit", ...over, contact: await contactFor(customer.id) });
+  }
   let lines;
   try {
     lines = await buildOrderLines(items, { customerId: customer.id, tier: customer.customer_tier, canSetPrices: canConfirmOrders(req.user.role) && !partner, userId: req.user.id });

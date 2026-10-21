@@ -21,15 +21,13 @@ import { loadUnrecordedPayments } from "./debtBalances.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
 import {
   partnerLinkFor, getAppOrderSettings, activeCampaignsFor, applyCampaigns, appDiscountAmd,
-  promisedDateFor, partnerStatus, appProgress, PARTNER_STEPS,
+  promisedDateFor, partnerStatus, appProgress, PARTNER_STEPS, maxQtyFor, firstOverLimit, contactFor as contactForId,
 } from "../appOrders.js";
 import { createOrderHandler } from "./orders.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { notifyUser } from "../notifications.js";
 import { ORDER_NOTIFY_ROLES } from "../notificationPreferences.js";
 import { bullets } from "../utils/bullets.js";
-import { OFFICE_PHONE } from "../pricelistPdf.js";
-import { normalizePhoneForStorage } from "../phoneFormat.js";
 
 export const partnerRouter = Router();
 partnerRouter.use(requireAuth);
@@ -91,13 +89,7 @@ function perks(settings) {
 }
 
 // Who to call when an order can no longer be changed in the app: the customer's own sales manager, else the office.
-async function contactFor(customer) {
-  const { rows } = await pool.query(
-    "SELECT u.name, u.phone FROM customers c JOIN users u ON u.id = c.assigned_manager_id WHERE c.id = $1 AND u.status = 'active'",
-    [customer.id]
-  );
-  return { name: rows[0]?.name ?? null, phone: normalizePhoneForStorage(rows[0]?.phone) || normalizePhoneForStorage(OFFICE_PHONE) };
-}
+const contactFor = (customer) => contactForId(customer.id);
 
 partnerRouter.get("/me", async (req, res) => {
   const customer = await loadCustomer(req.partner.customerId);
@@ -124,7 +116,10 @@ partnerRouter.get("/me", async (req, res) => {
 
 partnerRouter.get("/catalog", async (req, res) => {
   const customer = await loadCustomer(req.partner.customerId);
-  const rows = await fetchPricedProducts("WHERE p.active", [], "sales_manager"); // costs and the gold price are redacted for this role
+  const settings = await getAppOrderSettings();
+  const rows = (await fetchPricedProducts("WHERE p.active", [], "sales_manager")) // costs and the gold price are redacted for this role
+    // The customer sees only what we have on the shelf, and never HOW MANY (owner, 2026-10-22): no stock figure leaves this server.
+    .filter((p) => p.available_qty !== null && p.available_qty > 0);
   const individual = new Map();
   if (customer.customer_tier === "gold") {
     const { rows: ip } = await pool.query("SELECT product_id, price_amd FROM customer_product_prices WHERE customer_id = $1", [customer.id]);
@@ -140,7 +135,7 @@ partnerRouter.get("/catalog", async (req, res) => {
     products: rows.map((p) => ({
       id: p.id, brand: p.brand ?? "", family: p.family ?? "", name: p.name, size: p.unit ?? "", sku: p.sku ?? "",
       price: individual.get(p.id) ?? tierListPrice(fullById.get(p.id), customer.customer_tier),
-      available: p.available_qty,
+      max_qty: maxQtyFor(p.unit, settings), // the most pieces of this product in one order (null = no limit)
     })),
   });
 });
@@ -219,6 +214,8 @@ partnerRouter.get("/balance", async (req, res) => {
 partnerRouter.post("/preview", async (req, res) => {
   const items = Array.isArray(req.body?.items) ? req.body.items : [];
   if (!items.length) return res.status(400).json({ error: "At least one item is required" });
+  const over = await firstOverLimit(items, await getAppOrderSettings());
+  if (over) return res.status(400).json({ error: "This order is above the limit for one of its products", code: "order_limit", ...over, contact: await contactForId(req.partner.customerId) });
   const customer = await loadCustomer(req.partner.customerId);
   const ids = items.map((i) => Number(i.product_id)).filter(Number.isInteger);
   const { rows: products } = await pool.query("SELECT * FROM products WHERE id = ANY($1) AND active", [ids]);

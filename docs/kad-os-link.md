@@ -39,6 +39,10 @@ never costs) · `GET /offers` · `GET /orders`, `GET /orders/:id` (5-step status
 `GET /balance` · `POST /preview` (price a basket: campaigns, app discount, promise date, nothing saved) · `POST /orders` (+ `replaces_order_id` to change one) · `POST /orders/:id/cancel`. `GET /me` also returns `contact` (name, phone) for "call us".
 Only the linked customer's data is reachable.
 
+## What KAD OS may see and do with stock and quantity (owner, 2026-10-22)
+- **No stock figure ever leaves KAD Motors.** `GET /api/partner/catalog` lists only products that are on the shelf (available > 0; stock unknown counts as not on the shelf) and carries no quantity field at all.
+- **Order limit per product** (Settings -> KAD OS -> "Order limit per product", On/Off + numbers): the most pieces of ONE product in one app order, by pack size in litres. Defaults: 1 L 48, 4 L and 5 L 16, 7 L 12, 60 L 4, 180 / 205 / 208 L 4, every other size 12. The catalog carries `max_qty` per product; `POST /preview` and `POST /orders` answer 400 `order_limit` (with `product_id`, `max_qty`, and `contact` = the customer's own sales manager, else the office) when a product's lines add up to more. Orders your own sales managers take have no limit. Setting keys: `limits_enabled`, `limits`, `limit_default`.
+
 ## Cancel / change until Confirmed (owner's rule, 2026-10-21)
 - The customer may cancel or change an app order **only while it is `submitted`** (KAD Motors has not confirmed it). `can_edit` on every `GET /orders` row says so; the switch is `customer_edit_enabled` (403 `edit_disabled` when off).
 - `POST /orders/:id/cancel {reason?}`: the order goes back to `draft` with `orders.cancelled_at` / `cancel_reason` (migration 137). It is a closed record: it leaves every queue, report ("stuck orders", the pipeline's draft list) and credit exposure, shows a red **Cancelled** chip, and `/submit` and PATCH refuse it (`cancelled_by_customer`). The partner API shows `status: "cancelled"`.
