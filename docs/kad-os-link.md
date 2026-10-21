@@ -12,6 +12,9 @@ KAD-GMM repo (`docs/kad-orders.md`).
 | Debt and payments | `GET /api/partner/balance`: debt (Excel), overdue part (FIFO aging, same as Debt balances), credit limit and what is left, orders not yet in Excel, the last payments (Excel cashflow). Both sides see the same numbers. |
 | App discount | Flat % (default **2**) on every line that has no campaign price, stored as an ordinary flat-AMD order discount (`discount_amd`) plus `orders.app_discount_pct`. Up to 3 % is auto-approved by the existing discount policy; a higher setting needs a director on each order. |
 | Campaigns / bundles | Supplier-created, limited-time, for **all** or **selected** customers, **app orders only**. *discount*: each listed product ordered at >= its min qty gets the %. *bundle*: the % applies only when EVERY listed product is in the order at >= its min qty. A campaign price **replaces** the app discount on that line (never stacks). Created by admin / CEO / sales director, live at once; saving is refused (409 `below_cost`) when any covered tier would sell under net cost or landing cost. Paused / ended / deleted (only while unused) from Settings -> KAD OS -> Campaigns. |
+| Who looks after the customer | The customer's own sales manager sees its app orders in Orders and on the customer card (read only: only the order's owner or an admin edits) and gets a notification "Customer ordered through KAD OS" with items, amount and the promise date. Other reps do not see them. |
+| Chasing | Vaghinak chases an app order sooner than an ordinary one: after `chase_confirm_hours` (default 2) without confirmation (pack / deliver: half the usual limit); twice as long also tells the CEO/admins. The message says how many of the late orders came from KAD OS. Switch off or change in Settings -> KAD OS. |
+| What the customer is told about a hold | `attention`: `approval` (price or credit limit still to be approved) or `returned` (sent back for a correction). The reason is never passed on. |
 | Priority | App orders are listed first in Orders (waiting statuses), Warehouse staging and Delivery packed orders, and carry the APP badge. |
 | Delivery promise | `orders.promised_date` = N working days after the order (Sunday and company holidays do not count; ordered after the cut-off hour counts from the next working day). A promise only: nothing enforced, nobody alerted. |
 | Progress | Per Yerevan month: number of app orders -> level 1-4 (thresholds editable), % to the next level, weekly streak, "saved this month" (app discount + campaign savings), app share of all orders (90 days). |
@@ -19,7 +22,7 @@ KAD-GMM repo (`docs/kad-orders.md`).
 ## Settings (Settings -> Admin workspace -> KAD OS)
 Stored in `app_settings.app_orders` (JSON); every key has an On/Off and a number: `discount_enabled`/`discount_pct`,
 `priority_enabled`, `promise_enabled`/`promise_working_days`/`promise_cutoff_hour`, `progress_enabled`/`levels` (four ascending order
-counts). Defaults = owner's choice of 2026-10-21 (flat 2 %, priority on, promise 2 working days before 15:00, progress on). Changes are
+counts), `chase_enabled`/`chase_confirm_hours`. Defaults = owner's choice of 2026-10-21 (flat 2 %, priority on, promise 2 working days before 15:00, progress on). Changes are
 logged in `app_orders_log`. Admin/CEO only; campaigns also the sales director.
 
 ## How a customer's KAD OS is connected
@@ -33,7 +36,7 @@ From then on **every order by that account is an app order for that customer**, 
 while linked (FK RESTRICT).
 
 ## API for the customer's KAD OS (`/api/partner/*`, session cookie like the app; 403 `not_partner` when the account is not linked)
-`GET /me` (customer, perks, balance summary, progress, running offers, next promise date) · `GET /catalog` (tier price + availability,
+`GET /me` (customer, its payment terms (`terms`, from the customer record), perks, balance summary, progress, running offers, next promise date) · `GET /catalog` (tier price + availability,
 never costs) · `GET /offers` · `GET /orders`, `GET /orders/:id` (5-step status + timeline, lines with list price / campaign) ·
 `GET /balance` · `POST /preview` (price a basket: campaigns, app discount, promise date, nothing saved) · `POST /orders`.
 Only the linked customer's data is reachable.

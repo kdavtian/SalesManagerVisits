@@ -93,6 +93,8 @@ partnerRouter.get("/me", async (req, res) => {
   ]);
   res.json({
     customer: { id: customer.id, name: customer.name, erp_customer_id: customer.erp_customer_id, tier: customer.customer_tier },
+    // The customer's own payment terms in KAD Motors (invoice, N days): KAD OS sends its orders with them instead of a number kept in its own settings.
+    terms: { method: "invoice", days: customer.credit_term_days ?? 45 },
     perks: perks(settings),
     promised_date: promised,
     balance: { ...balance, payments: balance.payments.slice(0, 5) },
@@ -161,8 +163,11 @@ async function loadOrders(customerId, where = "", params = [], limit = 60) {
     const timeline = PARTNER_STEPS.map((step, i) => ({ step, at: at[step] ?? null, done: reached >= 0 && i <= reached }));
     const lines = items.filter((i) => i.order_id === o.id).map(({ order_id, ...rest }) => rest);
     const saved = lines.reduce((s, l) => s + (l.list_price ? (l.list_price - l.unit_price) * l.quantity : 0), 0) + (o.discount_amd || 0);
-    const { on_route, ...rest } = o;
-    return { ...rest, status, raw_status: o.status, timeline, items: lines, saved_amd: Math.round(saved) };
+    const { on_route, approval_status, credit_status, ...rest } = o;
+    // What the customer may know about a hold: that KAD Motors still has to approve the order (price or credit limit), or that it went back
+    // for a correction. No internal reason is passed on.
+    const attention = o.status === "draft" ? "returned" : (o.status === "submitted" || o.status === "confirmed") && (approval_status === "pending" || credit_status === "pending") ? "approval" : null;
+    return { ...rest, status, raw_status: o.status, attention, timeline, items: lines, saved_amd: Math.round(saved) };
   });
 }
 

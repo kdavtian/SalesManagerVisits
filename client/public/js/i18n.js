@@ -2781,6 +2781,9 @@ const dict = {
     kos_campaign_need_customers: "Choose at least one customer, or send to all",
     kos_section: "KAD OS",
     kos_campaigns_row: "Campaigns",
+    kos_chase_label: "Chase slow app orders",
+    kos_chase_unit: "hours to confirm",
+    kos_chase_help: "Vaghinak reminds the sales director when an app order waits longer than this for confirmation (packing and delivery: half of the usual limit), and tells the CEO when it is twice as long.",
   },
   hy: {
     nav_dashboard: "Գլխավոր",
@@ -5561,6 +5564,9 @@ const dict = {
     kos_campaign_need_customers: "Ընտրեք առնվազն մեկ հաճախորդ կամ ուղարկեք բոլորին",
     kos_section: "KAD OS",
     kos_campaigns_row: "Քարոզարշավներ",
+    kos_chase_label: "Հիշեցում դանդաղող հավելվածի պատվերների մասին",
+    kos_chase_unit: "ժամ՝ հաստատման համար",
+    kos_chase_help: "Վաղինակը հիշեցնում է վաճառքի տնօրենին, երբ հավելվածի պատվերը հաստատման է սպասում նշված ժամից ավելի (փաթեթավորում և առաքում՝ սովորական սահմանի կեսը), իսկ երկու անգամ ավելի երկար լինելու դեպքում՝ գլխավոր տնօրենին։",
   },
 };
 

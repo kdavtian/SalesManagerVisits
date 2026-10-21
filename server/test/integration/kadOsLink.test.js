@@ -4,6 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, createProduct, apiRequest, loginAs, trackOrder } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
+import { orderFlow } from "../../src/opsReports.js";
 
 const stamp = Date.now();
 let admin, director, rep, partner, other, adminCookie, directorCookie, repCookie, partnerCookie;
@@ -312,4 +313,68 @@ test("catalog: tier prices and availability, no costs", async () => {
   assert.ok(a.available === null || typeof a.available === "number");
   assert.equal(cat.products.some((p) => "net_cost_amd" in p || "landing_cost_amd" in p), false);
   assert.equal(cat.customer.id, shop.id);
+});
+
+test("the sales manager of the customer sees the app order (read only) and is told about it; other reps do not see it", async () => {
+  const stranger = await createUser("sales_manager");
+  const strangerCookie = await loginAs(stranger.email);
+  const r = await order(partnerCookie, [q(p1, 1)]);
+  trackOrder(r.data.id);
+  const mine = (await apiRequest("/api/orders", { cookie: repCookie })).data.rows;
+  const row = mine.find((o) => o.id === r.data.id);
+  assert.ok(row, "the customer's own sales manager sees the app order in Orders");
+  assert.equal(row.placed_via_app, true);
+  assert.equal((await apiRequest(`/api/orders/${r.data.id}`, { cookie: repCookie })).status, 200);
+  assert.equal((await apiRequest(`/api/orders?customer_id=${shop.id}`, { cookie: repCookie })).data.rows.some((o) => o.id === r.data.id), true);
+  assert.equal((await apiRequest(`/api/orders/${r.data.id}`, { method: "PATCH", cookie: repCookie, body: { note: "x" } })).status, 403, "read only: only the owner or an admin edits");
+  assert.equal((await apiRequest("/api/orders", { cookie: strangerCookie })).data.rows.some((o) => o.id === r.data.id), false);
+  assert.equal((await apiRequest(`/api/orders/${r.data.id}`, { cookie: strangerCookie })).status, 403);
+  await new Promise((resolve) => setTimeout(resolve, 300)); // the notification is written after the response
+  const n = await pool.query("SELECT title FROM notifications WHERE user_id = $1 AND type = 'order_placed' ORDER BY id DESC LIMIT 1", [rep.id]);
+  assert.match(n.rows[0]?.title ?? "", /KAD OS/);
+  // ... and an ordinary order of the same customer is still only visible to whoever made it
+  const plain = await apiRequest("/api/orders", { method: "POST", cookie: strangerCookie, body: { customer_id: shop.id, items: [q(p1, 1)], payment_method: "cash" } });
+  trackOrder(plain.data.id);
+  assert.equal((await apiRequest("/api/orders", { cookie: repCookie })).data.rows.some((o) => o.id === plain.data.id), false);
+});
+
+test("Vaghinak's order flow chases an app order sooner than an ordinary one", async () => {
+  const app = await order(partnerCookie, [q(p1, 1)]);
+  trackOrder(app.data.id);
+  const plain = await apiRequest("/api/orders", { method: "POST", cookie: repCookie, body: { customer_id: shop.id, items: [q(p1, 1)], payment_method: "cash" } });
+  trackOrder(plain.data.id);
+  await pool.query("UPDATE orders SET created_at = now() - interval '3 hours' WHERE id = ANY($1)", [[app.data.id, plain.data.id]]);
+  let flow = await orderFlow(pool, 7, { limit: 100000 });
+  const a = flow.waiting.find((w) => w.id === app.data.id);
+  const b = flow.waiting.find((w) => w.id === plain.data.id);
+  assert.equal(a.via_app, true);
+  assert.equal(a.sla_h, 2);
+  assert.equal(a.over_sla, true, "3 h without confirmation is over the 2 h app limit");
+  assert.equal(b.via_app, false);
+  assert.equal(b.over_sla, false, "an ordinary order keeps the normal limit");
+  await apiRequest("/api/app-orders/settings", { method: "PUT", cookie: adminCookie, body: { chase_confirm_hours: 6 } });
+  flow = await orderFlow(pool, 7, { limit: 100000 });
+  assert.equal(flow.waiting.find((w) => w.id === app.data.id).over_sla, false);
+  await apiRequest("/api/app-orders/settings", { method: "PUT", cookie: adminCookie, body: { chase_enabled: false } });
+  assert.equal((await orderFlow(pool, 7, { limit: 100000 })).waiting.find((w) => w.id === app.data.id).sla_h, flow.sla.confirm, "switched off: the normal limit");
+  await apiRequest("/api/app-orders/settings", { method: "PUT", cookie: adminCookie, body: { chase_enabled: true, chase_confirm_hours: 2 } });
+  assert.equal((await apiRequest("/api/app-orders/settings", { method: "PUT", cookie: adminCookie, body: { chase_confirm_hours: 0 } })).status, 400);
+});
+
+test("the customer sees that an order waits for KAD Motors' approval (not why), and the customer's own payment terms", async () => {
+  const r = await order(partnerCookie, [q(p1, 1)]);
+  trackOrder(r.data.id);
+  const one = async () => (await apiRequest(`/api/partner/orders/${r.data.id}`, { cookie: partnerCookie })).data;
+  assert.equal((await one()).attention, null);
+  await pool.query("UPDATE orders SET credit_status = 'pending' WHERE id = $1", [r.data.id]);
+  assert.equal((await one()).attention, "approval");
+  await pool.query("UPDATE orders SET credit_status = 'not_required', status = 'draft' WHERE id = $1", [r.data.id]);
+  const back = await one();
+  assert.equal(back.attention, "returned");
+  assert.equal(back.status, "on_hold");
+  assert.equal("credit_status" in back || "approval_status" in back, false, "internal approval fields are not passed on");
+  await pool.query("UPDATE customers SET credit_term_days = 30 WHERE id = $1", [shop.id]);
+  const me = (await apiRequest("/api/partner/me", { cookie: partnerCookie })).data;
+  assert.deepEqual(me.terms, { method: "invoice", days: 30 });
+  await pool.query("UPDATE customers SET credit_term_days = 45 WHERE id = $1", [shop.id]);
 });

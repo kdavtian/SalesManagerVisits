@@ -21,6 +21,9 @@ export const APP_ORDER_DEFAULTS = Object.freeze({
   promise_cutoff_hour: 15,
   progress_enabled: true,
   levels: [1, 3, 6, 10],
+  // Vaghinak chases an app order that waits too long: after this many hours without confirmation (pack / deliver: half of the usual limit).
+  chase_enabled: true,
+  chase_confirm_hours: 2,
 });
 
 export function normalizeSettings(raw) {
@@ -50,6 +53,7 @@ export function validateSettingsPatch(patch) {
     bool("priority_enabled"),
     bool("promise_enabled"), num("promise_working_days", 0, 10, true), num("promise_cutoff_hour", 0, 23, true),
     bool("progress_enabled"),
+    bool("chase_enabled"), num("chase_confirm_hours", 1, 48, true),
   ].filter(Boolean);
   if (patch.levels !== undefined) {
     const lv = patch.levels;

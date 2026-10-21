@@ -245,7 +245,7 @@ export async function createOrderHandler(req, res) {
   // priority if a caller somehow sent both.
   if (discountAmd > 0) discountPct = 0;
 
-  const { rows: customerRows } = await pool.query("SELECT id, name, erp_customer_id, customer_tier FROM customers WHERE id = $1", [customerId]);
+  const { rows: customerRows } = await pool.query("SELECT id, name, erp_customer_id, customer_tier, assigned_manager_id FROM customers WHERE id = $1", [customerId]);
   const customer = customerRows[0];
   if (!customer) return res.status(404).json({ error: "Customer not found" });
 
@@ -404,6 +404,19 @@ export async function createOrderHandler(req, res) {
           url: `/#/orders?open=${order.id}`,
         });
       }
+      // The sales manager who looks after this customer hears that the customer ordered through the app (and when it is promised):
+      // a chance to call, thank, offer the campaign or the next product, instead of learning about it from the Excel a day later.
+      if (partner && customer.assigned_manager_id && !notifyRecipients.some((r) => r.id === customer.assigned_manager_id)) {
+        notifyUser(customer.assigned_manager_id, "order_placed", {
+          title: "Հաճախորդը պատվիրեց KAD OS-ով",
+          body: `${customer.name}\n${bullets([
+            `${lines.length} ապրանք`,
+            `Գումար՝ ${Number(totalAmd).toLocaleString()} ԱՄԴ`,
+            promisedDate ? `Առաքում՝ մինչև ${String(promisedDate).slice(0, 10).split("-").reverse().join("-")}` : null,
+          ])}`,
+          url: `/#/orders?open=${order.id}`,
+        });
+      }
     } catch (err) {
       console.error("Post-order notification failed:", err);
     }
@@ -453,12 +466,17 @@ function ordersOrderBy(sort, reverse) {
 
 ordersRouter.get("/", async (req, res) => {
   let { customer_id, user_id, status, offset, accounting, accounting_signed, sort, reverse } = req.query;
-  if (!seesAllActivity(req.user.role)) {
-    user_id = req.user.id;
-  }
+  const ownOnly = !seesAllActivity(req.user.role);
+  if (ownOnly) user_id = undefined; // the scope condition below replaces the plain "my orders" filter
 
   const conditions = [];
   const params = [];
+  // A sales manager sees their own orders AND the app orders (KAD OS) that their own customers placed: the customer ordering through the
+  // app must not make the order invisible to the person who looks after that customer.
+  if (ownOnly) {
+    params.push(req.user.id);
+    conditions.push(`(o.user_id = $${params.length} OR (o.placed_via_app AND c.assigned_manager_id = $${params.length}))`);
+  }
   if (customer_id) {
     params.push(customer_id);
     conditions.push(`o.customer_id = $${params.length}`);
@@ -551,9 +569,12 @@ ordersRouter.get("/accounting-agent", async (req, res) => {
 // Signed documents Lily stored on an order. Reps see their own orders'
 // documents, everyone with all-activity access sees all (same as the order).
 async function canSeeOrderDocs(user, orderId) {
-  const { rows } = await pool.query("SELECT user_id FROM orders WHERE id = $1", [orderId]);
+  const { rows } = await pool.query(
+    "SELECT o.user_id, o.placed_via_app, c.assigned_manager_id FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = $1",
+    [orderId]
+  );
   if (!rows[0]) return null;
-  return seesAllActivity(user.role) || rows[0].user_id === user.id;
+  return seesAllActivity(user.role) || rows[0].user_id === user.id || (rows[0].placed_via_app && rows[0].assigned_manager_id === user.id);
 }
 
 ordersRouter.get("/documents/:docId/file", async (req, res) => {
@@ -692,7 +713,7 @@ ordersRouter.get("/unrecorded-count", async (req, res) => {
 
 ordersRouter.get("/:id", async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT o.*, u.name AS user_name, c.name AS customer_name, c.erp_customer_id, c.customer_tier
+    `SELECT o.*, u.name AS user_name, c.name AS customer_name, c.erp_customer_id, c.customer_tier, c.assigned_manager_id AS customer_manager_id
      FROM orders o
      JOIN users u ON u.id = o.user_id
      JOIN customers c ON c.id = o.customer_id
@@ -701,7 +722,7 @@ ordersRouter.get("/:id", async (req, res) => {
   );
   const order = rows[0];
   if (!order) return res.status(404).json({ error: "Order not found" });
-  if (!seesAllActivity(req.user.role) && order.user_id !== req.user.id) {
+  if (!seesAllActivity(req.user.role) && order.user_id !== req.user.id && !(order.placed_via_app && order.customer_manager_id === req.user.id)) {
     return res.status(403).json({ error: "Not allowed" });
   }
 
