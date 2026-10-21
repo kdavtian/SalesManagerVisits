@@ -9,10 +9,14 @@
 //   POST /preview   the price of a basket (campaigns, app discount, delivery promise) without placing it
 //   POST /orders    place an app order (same rules as POST /api/orders for a linked account); with replaces_order_id it CHANGES a still-unconfirmed order
 //   POST /orders/:id/cancel   cancel an app order that KAD Motors has not confirmed yet
+import path from "node:path";
 import { Router } from "express";
+import { uploadDirPath } from "../upload.js";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { fetchPricedProducts } from "./products.js";
+import { orderedProductIdsOf } from "./customers.js";
+import { companyFrequentIds } from "./productShortcuts.js";
 import { tierListPrice } from "../tierPricing.js";
 import { compareProducts } from "../../../client/public/js/productSort.js";
 import { allocateFifo, loadOrdersNewestFirst } from "../debtAging.js";
@@ -130,13 +134,30 @@ partnerRouter.get("/catalog", async (req, res) => {
   const fullById = new Map(full.map((p) => [p.id, p]));
   // The same display order as every product list in KAD Motors (brand, line, viscosity, specification, size): KAD OS keeps it.
   rows.sort(compareProducts);
+  // "Frequent" (the same idea as the new-order screen here): what this customer ordered most, else what the whole company orders most.
+  const own = (await orderedProductIdsOf(customer.id, customer.erp_customer_id)).map((x) => x.product_id);
+  const frequent = (own.length ? own : await companyFrequentIds()).slice(0, 60);
   res.json({
     customer: { id: customer.id, name: customer.name, tier: customer.customer_tier },
+    frequent,
     products: rows.map((p) => ({
       id: p.id, brand: p.brand ?? "", family: p.family ?? "", name: p.name, size: p.unit ?? "", sku: p.sku ?? "",
+      image_v: fullById.get(p.id)?.image_path ?? null, // the photo (GET /products/:id/image), so KAD OS can show it
+
       price: individual.get(p.id) ?? tierListPrice(fullById.get(p.id), customer.customer_tier),
       max_qty: maxQtyFor(p.unit, settings), // the most pieces of this product in one order (null = no limit)
     })),
+  });
+});
+
+// The product photo (the main one KAD Motors shows in its own lists). Only products of the catalog; no stock or cost data in it.
+partnerRouter.get("/products/:id/image", async (req, res) => {
+  const { rows } = await pool.query("SELECT image_path FROM products WHERE id = $1 AND active", [req.params.id]);
+  const imagePath = rows[0]?.image_path;
+  if (!imagePath) return res.status(404).json({ error: "No image set" });
+  res.set("Cache-Control", "private, max-age=86400");
+  res.sendFile(path.join(uploadDirPath, imagePath), (err) => {
+    if (err && !res.headersSent) res.status(404).json({ error: "Image not found" });
   });
 });
 

@@ -1116,15 +1116,8 @@ customersRouter.get("/:id/recent-orders", async (req, res) => {
   res.json({ orders: await recentOrdersFor(customerId) });
 });
 
-// Every active catalog product this customer has EVER ordered (Excel history + app orders the Excel does not hold
-// yet), most-ordered first -- the "Frequent" list of the new order screen. A sales manager gets it for their own
-// customers only (same rule as the reorder profile).
-customersRouter.get("/:id/ordered-product-ids", async (req, res) => {
-  const customerId = Number(req.params.id);
-  if (!Number.isInteger(customerId)) return res.status(400).json({ error: "Invalid customer id" });
-  const { rows } = await pool.query("SELECT erp_customer_id, assigned_manager_id FROM customers WHERE id = $1", [customerId]);
-  if (!rows[0]) return res.status(404).json({ error: "Customer not found" });
-  if (!seesCustomerErpData(req.user.role, rows[0].assigned_manager_id, req.user.id)) return res.json([]);
+// Every active catalog product this customer has EVER ordered (Excel history + app orders the Excel does not hold yet), most-ordered first.
+export async function orderedProductIdsOf(customerId, erpCustomerId) {
   const { rows: found } = await pool.query(
     `WITH last_erp AS (SELECT max(order_date) AS d FROM erp_order_lines WHERE erp_customer_id = $2)
      SELECT product_id, sum(n)::int AS times, max(last_date)::text AS last_date FROM (
@@ -1139,9 +1132,22 @@ customersRouter.get("/:id/ordered-product-ids", async (req, res) => {
           AND ((SELECT d FROM last_erp) IS NULL OR (o.created_at AT TIME ZONE 'Asia/Yerevan')::date > (SELECT d FROM last_erp))
         GROUP BY oi.product_id
      ) x GROUP BY product_id ORDER BY times DESC, max(last_date) DESC, product_id`,
-    [customerId, rows[0].erp_customer_id]
+    [customerId, erpCustomerId]
   );
-  res.json(found.map((r) => ({ product_id: r.product_id, times: r.times, last_date: r.last_date })));
+  return found.map((r) => ({ product_id: r.product_id, times: r.times, last_date: r.last_date }));
+}
+
+// Every active catalog product this customer has EVER ordered (Excel history + app orders the Excel does not hold
+// yet), most-ordered first -- the "Frequent" list of the new order screen. A sales manager gets it for their own
+// customers only (same rule as the reorder profile).
+customersRouter.get("/:id/ordered-product-ids", async (req, res) => {
+  const customerId = Number(req.params.id);
+  if (!Number.isInteger(customerId)) return res.status(400).json({ error: "Invalid customer id" });
+  const { rows } = await pool.query("SELECT erp_customer_id, assigned_manager_id FROM customers WHERE id = $1", [customerId]);
+  if (!rows[0]) return res.status(404).json({ error: "Customer not found" });
+  if (!seesCustomerErpData(req.user.role, rows[0].assigned_manager_id, req.user.id)) return res.json([]);
+  const found = await orderedProductIdsOf(customerId, rows[0].erp_customer_id);
+  res.json(found);
 });
 
 customersRouter.get("/:id/ordered-products", async (req, res) => {

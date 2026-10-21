@@ -14,7 +14,7 @@ const FREQUENT_LIMIT = 30;
 // "Frequent": the active products ordered most often (distinct orders) over the last 90 days across the whole
 // company -- Excel order lines plus app orders the Excel does not hold yet. Only ids, no money or customer data,
 // so it is open to every order-taking role. The customer's own usual basket comes from /customers/:id/reorder-profile.
-productShortcutsRouter.get("/frequent", async (_req, res) => {
+export async function companyFrequentIds() {
   const { rows } = await pool.query(
     `SELECT product_id FROM (
        SELECT p.id AS product_id, count(DISTINCT l.order_id) AS n
@@ -30,5 +30,8 @@ productShortcutsRouter.get("/frequent", async (_req, res) => {
      ) x GROUP BY product_id ORDER BY sum(n) DESC, product_id LIMIT $2`,
     [FREQUENT_DAYS, FREQUENT_LIMIT]
   );
-  res.json(rows.map((r) => r.product_id));
+  return rows.map((r) => r.product_id);
+}
+productShortcutsRouter.get("/frequent", async (_req, res) => {
+  res.json(await companyFrequentIds());
 });
