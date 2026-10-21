@@ -1,5 +1,9 @@
 FROM node:20-alpine
 
+# The user and su-exec come first: they never change, so this layer is cached and the slow steps below do not repeat on every deploy.
+RUN apk add --no-cache su-exec \
+  && addgroup -S app && adduser -S app -G app
+
 WORKDIR /app
 
 COPY server/package*.json server/
@@ -8,10 +12,9 @@ RUN cd server && npm ci --omit=dev
 COPY server server
 COPY client client
 
-RUN apk add --no-cache su-exec \
-  && mkdir -p /app/server/uploads \
-  && addgroup -S app && adduser -S app -G app \
-  && chown -R app:app /app
+# Only the uploads folder is ever written to (docker-entrypoint.sh fixes its owner at start). The code and node_modules stay root-owned and
+# read-only for the app user: the old `chown -R /app` copied the whole of node_modules into a new image layer on every deploy.
+RUN mkdir -p /app/server/uploads && chown app:app /app/server/uploads
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh

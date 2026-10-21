@@ -3,22 +3,14 @@
 # checkout (e.g. /opt/field-visits). Pulls the latest code, rebuilds the
 # app image, runs migrations, and restarts the stack.
 #
-# Fast by default: skips the integration test suite and UI regression
-# check, since GitHub Actions CI already ran both on every commit before
-# it was mergeable -- re-running them again here is pure redundancy for
-# any commit that went through the normal PR flow. What stays every time:
-# migrations (must succeed regardless) and verify:deployment (a fast
-# health/served-assets check that catches "the deploy itself broke",
-# which CI structurally can't see).
-#
-# Auto-escalates to the full (slow) path when this deploy adds new
-# migration files -- schema changes are exactly the case where the local
-# test suite catches something CI's separate database run wouldn't (see
-# the ordering comment on the migrate/test steps below). Override either
-# way with an explicit flag:
-#   ./deploy/deploy.sh          # fast unless new migrations detected
-#   ./deploy/deploy.sh --full   # always run the full test/UI checks
-#   ./deploy/deploy.sh --fast   # always skip them, even with new migrations
+# Fast by default (owner, 2026-10-21: "deploy takes forever"): never re-runs the integration test suite or the UI regression check,
+# because GitHub Actions CI already ran both on this exact commit before it could be merged -- and a run on the droplet adds nothing
+# CI cannot see (it uses an empty throw-away database, not your real data, and the same Postgres 16). It used to switch itself to the
+# full run whenever a deploy added a migration; that cost 8-15 minutes on this small server and printed hundreds of log lines.
+# What stays every time, and is the real protection: migrations (must succeed, run BEFORE the new app starts) and verify:deployment
+# (health + served assets: catches "the deploy itself broke", which CI structurally can't see). Each step prints how long it took.
+#   ./deploy/deploy.sh          # fast (default)
+#   ./deploy/deploy.sh --full   # also run the whole test suite + UI checks here (slow; only when you want a second opinion)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 LAST_DEPLOY_SHA_FILE=".last-deploy-sha"
@@ -26,7 +18,7 @@ LAST_DEPLOY_SHA_FILE=".last-deploy-sha"
 MODE="auto"
 case "${1:-}" in
   --full) MODE="full" ;;
-  --fast) MODE="fast" ;;
+  --fast) MODE="fast" ;; # same as the default; kept so older habits and notes still work
   "") ;;
   *)
     echo "Usage: $0 [--full|--fast]" >&2
@@ -56,6 +48,10 @@ if [ -z "${POSTGRES_PASSWORD:-}" ] || [ "${POSTGRES_PASSWORD}" = "fieldvisits" ]
   exit 1
 fi
 
+# Prints "    <step> took Ns" so it is visible where the time goes.
+STEP_START=$SECONDS
+step_done() { echo "    ($1: $((SECONDS - STEP_START))s)"; STEP_START=$SECONDS; }
+
 PREV_SHA=""
 if [ -f "$LAST_DEPLOY_SHA_FILE" ]; then
   PREV_SHA="$(cat "$LAST_DEPLOY_SHA_FILE")"
@@ -66,27 +62,12 @@ git pull --ff-only
 NEW_SHA="$(git rev-parse HEAD)"
 
 RUN_FULL=false
-case "$MODE" in
-  full) RUN_FULL=true ;;
-  fast) RUN_FULL=false ;;
-  auto)
-    if [ -z "$PREV_SHA" ]; then
-      # No record of the last deployed commit (first run of this script
-      # version, or the marker file was lost) -- run full once rather than
-      # guess, so a fast path is never taken on faith.
-      echo "==> No previous-deploy marker found -- running full checks once to establish one"
-      RUN_FULL=true
-    elif ! git cat-file -e "$PREV_SHA" 2>/dev/null; then
-      echo "==> Previous-deploy marker ($PREV_SHA) not found in history -- running full checks"
-      RUN_FULL=true
-    elif [ -n "$(git diff --diff-filter=A --name-only "$PREV_SHA" "$NEW_SHA" -- server/migrations/)" ]; then
-      echo "==> New migration file(s) detected since last deploy -- running full checks"
-      RUN_FULL=true
-    else
-      echo "==> No new migrations since last deploy -- fast path (skipping tests/UI checks; CI already ran them)"
-    fi
-    ;;
-esac
+[ "$MODE" = "full" ] && RUN_FULL=true
+if [ -n "$PREV_SHA" ] && git cat-file -e "$PREV_SHA" 2>/dev/null; then
+  NEW_MIGRATIONS="$(git diff --diff-filter=A --name-only "$PREV_SHA" "$NEW_SHA" -- server/migrations/ | wc -l | tr -d ' ')"
+  echo "==> $NEW_MIGRATIONS new migration file(s) since the last deploy (applied below, before the new app starts)"
+fi
+step_done "pull"
 
 # One-off containers (`docker compose run`: migrations, the full test run) normally remove themselves. If the SSH session
 # drops mid-run (a phone deploy), the container is orphaned and keeps running, unhealthy, for days and eats memory on this
@@ -101,6 +82,7 @@ fi
 
 echo "==> Building app image"
 docker compose build app
+step_done "build"
 
 echo "==> Starting database"
 docker compose up -d db
@@ -118,6 +100,7 @@ echo "==> Running database migrations"
 # column/table the database didn't have yet, since nothing here waits for
 # that gap to close before traffic can reach the app.
 docker compose run --rm app npm run migrate
+step_done "migrations"
 
 if [ "$RUN_FULL" = true ]; then
   echo "==> Running unit tests"
@@ -151,6 +134,7 @@ fi
 
 echo "==> Starting app"
 docker compose up -d app
+step_done "start"
 
 if [ "$RUN_FULL" = true ]; then
   echo "==> Running UI regression checks"
@@ -159,6 +143,7 @@ fi
 
 echo "==> Waiting for app health and checking served assets"
 docker compose exec -T app npm run verify:deployment
+step_done "health check"
 
 # Only recorded once everything above has actually succeeded (set -e would
 # have already exited on any failure) -- a failed deploy never gets to

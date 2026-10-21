@@ -80,6 +80,7 @@ import { requireAuth } from "./middleware/auth.js";
 import { autoAssignSalesChannel } from "./salesChannelAutofill.js";
 import { normalizeCustomerPortfolio } from "./customerChannelPolicy.js";
 import { pool } from "./db/pool.js";
+import { isTestRun } from "./utils/testRun.js";
 
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
   console.error(
@@ -88,7 +89,7 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
   process.exit(1);
 }
 
-if (!process.env.ERP_SYNC_KEY) {
+if (!process.env.ERP_SYNC_KEY && !isTestRun) {
   console.warn(
     "ERP_SYNC_KEY is not set — the /api/erp-sync endpoint will reject all requests until it is."
   );

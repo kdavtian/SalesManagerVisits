@@ -6,5 +6,6 @@
 # non-root user) keeps whatever ownership it already had on disk, which
 # would leave the app user unable to write new photo/avatar uploads.
 set -e
-chown -R app:app /app/server/uploads
+# Only what is not already the app user's (a plain `chown -R` touched every photo on every start, including each one-off migration run).
+find /app/server/uploads ! -user app -exec chown app:app {} +
 exec su-exec app "$@"
