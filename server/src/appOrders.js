@@ -7,6 +7,9 @@
 // and the customer sees progress (levels, streak, savings) that rewards ordering through the app.
 // All numbers live in app_settings.app_orders (App configuration); this file holds the pure rules and the SQL helpers.
 import { pool } from "./db/pool.js";
+import { parseLiters } from "../../client/public/js/productSort.js";
+import { OFFICE_PHONE } from "./pricelistPdf.js";
+import { normalizePhoneForStorage } from "./phoneFormat.js";
 import { tierListPrice } from "./tierPricing.js";
 import { netCostAtPrice } from "./discountPolicy.js";
 import { isWorkingDayOfWeek } from "./workingDays.js";
@@ -26,11 +29,17 @@ export const APP_ORDER_DEFAULTS = Object.freeze({
   chase_confirm_hours: 2,
   // The customer may cancel or change an app order from KAD OS until KAD Motors confirms it.
   customer_edit_enabled: true,
+  // The most pieces of ONE product that fit in one app order, by pack size in litres (owner, 2026-10-22); every other size: limit_default.
+  // Above it the customer is told to call their sales manager.
+  limits_enabled: true,
+  limit_default: 12,
+  limits: Object.freeze({ 1: 48, 4: 16, 5: 16, 7: 12, 60: 4, 180: 4, 205: 4, 208: 4 }),
 });
 
 export function normalizeSettings(raw) {
   const s = { ...APP_ORDER_DEFAULTS, ...(raw && typeof raw === "object" ? raw : {}) };
   s.levels = Array.isArray(s.levels) && s.levels.length === 4 ? s.levels.map(Number) : [...APP_ORDER_DEFAULTS.levels];
+  s.limits = s.limits && typeof s.limits === "object" && !Array.isArray(s.limits) ? { ...s.limits } : { ...APP_ORDER_DEFAULTS.limits };
   return s;
 }
 
@@ -57,7 +66,15 @@ export function validateSettingsPatch(patch) {
     bool("progress_enabled"),
     bool("chase_enabled"), num("chase_confirm_hours", 1, 48, true),
     bool("customer_edit_enabled"),
+    bool("limits_enabled"), num("limit_default", 1, 9999, true),
   ].filter(Boolean);
+  if (patch.limits !== undefined) {
+    const l = patch.limits;
+    const entries = l && typeof l === "object" && !Array.isArray(l) ? Object.entries(l) : null;
+    const ok = entries && entries.length <= 30 && entries.every(([k, v]) => Number.isFinite(Number(k)) && Number(k) > 0 && Number(k) <= 1000 && Number.isInteger(v) && v >= 1 && v <= 9999);
+    if (ok) out.limits = Object.fromEntries(entries.map(([k, v]) => [String(Number(k)), v]));
+    else errors.push("limits must list a pack size in litres and a whole number of pieces (1 to 9999) for it");
+  }
   if (patch.levels !== undefined) {
     const lv = patch.levels;
     const ok = Array.isArray(lv) && lv.length === 4 && lv.every((n, i) => Number.isInteger(n) && n >= 1 && n <= 100 && (i === 0 || n > lv[i - 1]));
@@ -305,4 +322,39 @@ export async function appProgress(customerId, settings, now = new Date(), db = p
     share_90d_pct: share[0].total ? Math.round((share[0].via_app / share[0].total) * 100) : null,
     month: yerevanToday(now).slice(0, 7),
   };
+}
+
+// ---- order limits ---------------------------------------------------------------------------------------------------------
+/** The most pieces of one product an app order may hold (by its pack size in litres), or null when limits are switched off. */
+export function maxQtyFor(unit, settings) {
+  if (!settings.limits_enabled) return null;
+  const liters = parseLiters(unit);
+  const own = liters == null ? undefined : settings.limits[String(liters)];
+  return Number.isInteger(own) ? own : settings.limit_default;
+}
+
+/** The first product whose quantity (all its lines together) is above its limit, or null. `items` = [{ product_id, quantity }]. */
+export async function firstOverLimit(items, settings, db = pool) {
+  if (!settings.limits_enabled) return null;
+  const sums = new Map();
+  for (const i of items ?? []) {
+    const id = Number(i?.product_id);
+    if (Number.isInteger(id)) sums.set(id, (sums.get(id) ?? 0) + (Number(i.quantity) || 0));
+  }
+  if (!sums.size) return null;
+  const { rows } = await db.query("SELECT id, name, unit FROM products WHERE id = ANY($1)", [[...sums.keys()]]);
+  for (const p of rows) {
+    const max = maxQtyFor(p.unit, settings);
+    if (max !== null && sums.get(p.id) > max) return { product_id: p.id, name: p.name, max_qty: max, quantity: sums.get(p.id) };
+  }
+  return null;
+}
+
+/** Who the customer calls when the app cannot do something: their own sales manager at KAD Motors, else the office. */
+export async function contactFor(customerId, db = pool) {
+  const { rows } = await db.query(
+    "SELECT u.name, u.phone FROM customers c JOIN users u ON u.id = c.assigned_manager_id WHERE c.id = $1 AND u.status = 'active'",
+    [customerId]
+  );
+  return { name: rows[0]?.name ?? null, phone: normalizePhoneForStorage(rows[0]?.phone) || normalizePhoneForStorage(OFFICE_PHONE) };
 }
