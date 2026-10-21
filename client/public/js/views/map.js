@@ -1020,11 +1020,15 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     if (!taskFlags.has(c.id)) return "";
     return `<span class="pin-task ${taskFlags.get(c.id) ? "pin-task-due" : "pin-task-soon"}" aria-hidden="true">${TASK_PIN_SVG}</span>`;
   }
-  async function loadTaskFlags() {
+  // repaint:false = the caller repaints the pins right after (back from a customer card), so only the flags are refreshed here.
+  async function loadTaskFlags({ repaint = true } = {}) {
     try {
       const rows = await api.getTaskCustomerFlags();
-      taskFlags = new Map(rows.map((r) => [r.customer_id, Boolean(r.due)]));
-      if (taskFlags.size) applyFilter({ refit: false });
+      const next = new Map(rows.map((r) => [r.customer_id, Boolean(r.due)]));
+      const changed = next.size !== taskFlags.size || [...next].some(([id, due]) => taskFlags.get(id) !== due);
+      taskFlags = next;
+      // Also when the LAST open task was just completed (next.size is 0): its icon has to leave the pin.
+      if (repaint && changed) applyFilter({ refit: false });
     } catch {
       /* optional overlay */
     }
@@ -2118,12 +2122,13 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // right after creating a new customer, to land on that customer's own
   // pin instead of the fitBounds-to-everyone zoom-out applyFilter would
   // otherwise apply while add-mode is active.
-  function focusOnCustomerMarker(id) {
+  // keepView: only reopen the popup where the camera already is (coming back from a customer card).
+  function focusOnCustomerMarker(id, { keepView = false } = {}) {
     const entry = lastCustomers.find((item) => String(item.c.id) === String(id));
     if (entry) {
-      // Zoom 17 and closer draws every pin on its own (disableClusteringAtZoom): at 15 the new customer could sit inside
+      if (!keepView) // Zoom 17 and closer draws every pin on its own (disableClusteringAtZoom): at 15 the new customer could sit inside
       // a cluster bubble next to a neighbour, i.e. "the new pin is not on the map".
-      map.setView([entry.c.lat, entry.c.lng], Math.max(map.getZoom(), 17), { animate: false });
+        map.setView([entry.c.lat, entry.c.lng], Math.max(map.getZoom(), 17), { animate: false });
       // The cluster layer adds markers in chunks over the next frames, so the marker is not on the map yet: open its
       // popup as soon as it is (openPopup on a marker without a map does nothing).
       let tries = 0;
@@ -2176,6 +2181,12 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           </div>
         `, { maxWidth: 340 });
         marker.on("popupopen", async (e) => {
+          // The selected halo also follows a popup that is reopened by code (back from the customer card), not only a tap.
+          const icon = marker.getElement?.();
+          if (icon?.querySelector(".pin:not(.pin-stop):not(.pin-new)")) {
+            document.querySelectorAll("#leaflet-map .leaflet-marker-icon.kad-marker-selected").forEach((el) => { if (el !== icon) el.classList.remove("kad-marker-selected"); });
+            icon.classList.add("kad-marker-selected");
+          }
           const popupEl = e.popup.getElement();
           popupEl.querySelector('[data-action="details"]').addEventListener("click", () => {
             lastPopupCustomerId = c.id;
@@ -2244,7 +2255,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       // cached list to paint first).
       focusOnCustomerMarker(focusCustomerId);
     }
-    if (reopenCustomerId != null && focusOnCustomerMarker(reopenCustomerId)) reopenCustomerId = null;
+    if (reopenCustomerId != null && focusOnCustomerMarker(reopenCustomerId, { keepView: true })) reopenCustomerId = null;
 
     // Skipped alongside the marker loop above -- startAddCustomerFlow()
     // already runs its own getCurrentPosition() to center the map, so this
@@ -3708,7 +3719,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     // user tapped More on.
     holdView();
     reopenCustomerId = lastPopupCustomerId;
-    loadCustomers();
+    // A task completed on the customer card must leave its pin: refresh the flags BEFORE the pins are rebuilt, in the same
+    // pass (a repaint afterwards would rebuild the markers again and close the reopened popup).
+    Promise.all([api.listCustomers(), loadTaskFlags({ repaint: false })]).then(([customers]) => paintCustomers(customers)).catch(() => {});
   };
   return cleanupMapInner;
 }
