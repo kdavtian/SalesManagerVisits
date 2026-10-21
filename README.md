@@ -1,4 +1,4 @@
-# Field Visits
+# KAD Motors App - Field Visits
 
 Installable PWA for field sales managers. Managers check in at customer
 workshops/garages from a map; the server verifies GPS proximity, stores an
