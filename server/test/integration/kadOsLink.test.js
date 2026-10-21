@@ -475,3 +475,77 @@ test("the supplier can switch cancel/change off: the app is then told to call", 
     await apiRequest("/api/app-orders/settings", { method: "PUT", cookie: adminCookie, body: { customer_edit_enabled: true } });
   }
 });
+
+test("customer accounts are made from the app: role customer, one connection code, new code signs the old one out, removing switches it off", async () => {
+  const erp = `KA${String(stamp).slice(-7)}`;
+  const email = `kados-${erp.toLowerCase()}@kados.local`;
+  const cust = await createCustomer({ created_by: admin.id, assigned_manager_id: rep.id, erp_customer_id: erp, name: `KOS Acc ${stamp}` });
+  // this test logs in a lot (right and wrong): the login limiter is told to let it through, as the browser tests do
+  const prevToken = process.env.E2E_RATE_LIMIT_BYPASS_TOKEN;
+  process.env.E2E_RATE_LIMIT_BYPASS_TOKEN = "kos-accounts-test";
+  const login = (email, password) => apiRequest("/api/auth/login", { method: "POST", body: { email, password }, headers: { "x-e2e-rate-limit-bypass": "kos-accounts-test" } });
+  const decode = (code) => JSON.parse(Buffer.from(code, "base64url").toString());
+  let userId;
+  try {
+    assert.equal((await apiRequest("/api/app-orders/accounts", { method: "POST", cookie: repCookie, body: { customer_id: cust.id } })).status, 403, "only admin / CEO");
+    const noErp = await createCustomer({ created_by: admin.id, name: `KOS NoErp ${stamp}` });
+    assert.equal((await apiRequest("/api/app-orders/accounts", { method: "POST", cookie: adminCookie, body: { customer_id: noErp.id } })).status, 400);
+    await pool.query("DELETE FROM customers WHERE id = $1", [noErp.id]);
+
+    const made = await apiRequest("/api/app-orders/accounts", { method: "POST", cookie: adminCookie, body: { customer_id: cust.id } });
+    assert.equal(made.status, 201, JSON.stringify(made.data));
+    userId = made.data.account.user_id;
+    const c1 = decode(made.data.account.code);
+    assert.equal(c1.e, email);
+    assert.match(c1.u, /^https?:\/\/.+/, "this app's own address is inside the code");
+    assert.ok(c1.p.length >= 20);
+    assert.equal((await pool.query("SELECT role FROM users WHERE id = $1", [userId])).rows[0].role, "customer");
+    assert.equal((await apiRequest("/api/app-orders/accounts", { method: "POST", cookie: adminCookie, body: { customer_id: cust.id } })).status, 409, "one account per customer");
+
+    // the code signs in and reaches only the partner API
+    const cookie = (await login(c1.e, c1.p)).cookie;
+    const me = await apiRequest("/api/partner/me", { cookie });
+    assert.equal(me.status, 200);
+    assert.equal(me.data.customer.id, cust.id);
+    assert.equal((await apiRequest("/api/customers", { cookie })).data.code, "partner_only");
+    // an app order from it works like any other app order
+    const o = await apiRequest("/api/partner/orders", { method: "POST", cookie, body: { items: [{ product_id: p1.id, quantity: 1 }], payment_method: "invoice", payment_term_days: 45 } });
+    assert.equal(o.status, 201, JSON.stringify(o.data));
+    trackOrder(o.data.id);
+    assert.equal(o.data.placed_via_app, true);
+
+    // never in the Team list, and not creatable / assignable as an ordinary role
+    assert.ok(!(await apiRequest("/api/users", { cookie: adminCookie })).data.some((u) => u.id === userId));
+    assert.equal((await apiRequest("/api/users", { method: "POST", cookie: adminCookie, body: { email: `x-${stamp}@kad.test`, password: "Password-123!", name: "X", role: "customer" } })).status, 400);
+    const links = (await apiRequest("/api/app-orders/settings", { cookie: adminCookie })).data.links;
+    assert.equal(links.find((l) => l.user_id === userId).user_role, "customer");
+
+    // a new code: new password, the old one and its session stop working
+    const again = await apiRequest(`/api/app-orders/accounts/${userId}/code`, { method: "POST", cookie: adminCookie });
+    assert.equal(again.status, 200);
+    const c2 = decode(again.data.account.code);
+    assert.notEqual(c2.p, c1.p);
+    assert.equal((await login(c1.e, c1.p)).status, 401);
+    assert.equal((await apiRequest("/api/partner/me", { cookie })).status, 401, "the old session is signed out");
+    const cookie2 = (await login(c2.e, c2.p)).cookie;
+    assert.equal((await apiRequest("/api/partner/me", { cookie: cookie2 })).status, 200);
+    assert.equal((await apiRequest(`/api/app-orders/accounts/${admin.id}/code`, { method: "POST", cookie: adminCookie })).status, 404, "only a customer account");
+
+    // removing access: unlinked and switched off, the history stays
+    assert.equal((await apiRequest(`/api/app-orders/links/${userId}`, { method: "DELETE", cookie: adminCookie })).status, 200);
+    assert.equal((await login(c2.e, c2.p)).status, 403);
+    assert.equal((await pool.query("SELECT count(*)::int n FROM orders WHERE user_id = $1", [userId])).rows[0].n, 1);
+    // ... and giving access again brings the same account back with a fresh password
+    const back = await apiRequest("/api/app-orders/accounts", { method: "POST", cookie: adminCookie, body: { customer_id: cust.id } });
+    assert.equal(back.status, 201);
+    assert.equal(back.data.account.user_id, userId);
+    const c3 = decode(back.data.account.code);
+    assert.equal((await apiRequest("/api/partner/me", { cookie: (await login(c3.e, c3.p)).cookie })).status, 200);
+  } finally {
+    if (prevToken === undefined) delete process.env.E2E_RATE_LIMIT_BYPASS_TOKEN; else process.env.E2E_RATE_LIMIT_BYPASS_TOKEN = prevToken;
+    await pool.query("DELETE FROM orders WHERE customer_id = $1", [cust.id]);
+    await pool.query("DELETE FROM partner_links WHERE customer_id = $1", [cust.id]);
+    await pool.query("DELETE FROM users WHERE email = $1", [email]);
+    await pool.query("DELETE FROM customers WHERE id = $1", [cust.id]);
+  }
+});

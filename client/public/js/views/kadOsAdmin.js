@@ -150,6 +150,18 @@ export async function renderKadOsPerksSection(container) {
       });
     });
     container.querySelector("#kos-link-add").addEventListener("click", () => openLinkSheet());
+    container.querySelectorAll("[data-newcode]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        try {
+          const res = await api.newKadOsAccountCode(btn.dataset.newcode);
+          openCodeSheet(res.account);
+        } catch (err) {
+          showToast(err.message);
+        }
+        btn.disabled = false;
+      });
+    });
     container.querySelectorAll("[data-unlink]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         btn.disabled = true;
@@ -174,25 +186,62 @@ export async function renderKadOsPerksSection(container) {
       <div class="card user-row">
         <div class="user-row-top"><div><strong>${escapeHtml(l.customer_name)}</strong><span class="muted"> ${escapeHtml(l.erp_customer_id ?? "")}</span></div></div>
         <div class="user-row-meta">
-          <span class="muted">${escapeHtml(l.user_name)} · ${t("kos_app_orders_n").replace("{n}", String(l.app_orders))}</span>
-          <span class="user-row-actions"><button class="btn-link btn-link-danger" data-unlink="${l.user_id}">${t("kos_unlink")}</button></span>
+          <span class="muted">${t("kos_app_orders_n").replace("{n}", String(l.app_orders))}</span>
+          <span class="user-row-actions">
+            ${l.user_role === "customer" ? `<button class="btn-link" data-newcode="${l.user_id}">${t("kos_new_code")}</button>` : ""}
+            <button class="btn-link btn-link-danger" data-unlink="${l.user_id}">${t("kos_remove_access")}</button>
+          </span>
         </div>
       </div>`
       )
       .join("");
   }
 
-  async function openLinkSheet() {
-    const [users] = await Promise.all([api.listUsers()]);
-    const eligible = users.filter((u) => u.role !== "admin" && u.role !== "ceo" && (u.status ?? "active") === "active");
+  // The connection code holds the account's address, e-mail and password: shown only here, copied into KAD OS (Account -> KAD Motors connection).
+  function openCodeSheet(account) {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>${t("kos_code_title")}</h2>
+        <p><strong>${escapeHtml(account.customer_name)}</strong></p>
+        <textarea id="kos-code" class="kos-code" readonly rows="4" spellcheck="false">${escapeHtml(account.code)}</textarea>
+        <p class="muted settings-hint">${t("kos_code_steps")}</p>
+        <p class="form-success" id="kos-code-copied" role="status" hidden>${t("kos_code_copied")}</p>
+        <div class="sheet-actions">
+          <button type="button" class="btn" data-action="close">${t("close")}</button>
+          <button type="button" class="btn btn-primary" id="kos-code-copy">${t("kos_code_copy")}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+    overlay.querySelector('[data-action="close"]').addEventListener("click", () => overlay.remove());
+    const box = overlay.querySelector("#kos-code");
+    const copied = overlay.querySelector("#kos-code-copied");
+    box.addEventListener("focus", () => box.select());
+    overlay.querySelector("#kos-code-copy").addEventListener("click", async () => {
+      box.select();
+      try {
+        await navigator.clipboard.writeText(account.code);
+      } catch {
+        try {
+          document.execCommand("copy"); // older iPhone Safari / non-secure page: the text is selected, copy it the old way
+        } catch {
+          /* the person can still hold-and-copy the selected text */
+        }
+      }
+      copied.hidden = false;
+    });
+  }
+
+  // "+ Add customer": pick the customer; KAD Motors makes its KAD OS account (role Customer) and hands back the connection code.
+  function openLinkSheet() {
     const overlay = document.createElement("div");
     overlay.className = "sheet-overlay";
     overlay.innerHTML = `
       <div class="sheet">
         <h2>${t("kos_link_add")}</h2>
-        <label>${t("kos_link_user")}
-          <select id="kos-user"><option value="">${t("kos_link_user_pick")}</option>${eligible.map((u) => `<option value="${u.id}">${escapeHtml(u.name)} · ${escapeHtml(u.email)}</option>`).join("")}</select>
-        </label>
         <label>${t("kos_link_customer")}<input type="search" id="kos-cust-q" autocomplete="off" /></label>
         <div id="kos-cust-results" class="card-list kos-pick-list"></div>
         <p class="form-error" id="kos-link-error" hidden></p>
@@ -219,9 +268,10 @@ export async function renderKadOsPerksSection(container) {
         return;
       }
       try {
+        const taken = new Set(links.map((l) => l.customer_id));
         const rows = await api.listCustomers({ search: q.trim(), limit: 20 });
         results.innerHTML = rows
-          .filter((c) => c.erp_customer_id)
+          .filter((c) => c.erp_customer_id && !taken.has(c.id))
           .map((c) => `<button type="button" class="card list-row kos-pick${pickedId === c.id ? " is-picked" : ""}" data-pick="${c.id}"><strong>${escapeHtml(c.name)}</strong><span class="muted"> ${escapeHtml(c.erp_customer_id)}</span></button>`)
           .join("");
         results.querySelectorAll("[data-pick]").forEach((b) =>
@@ -235,18 +285,20 @@ export async function renderKadOsPerksSection(container) {
       }
     });
     overlay.querySelector("#kos-cust-q").addEventListener("input", (e) => search(e.target.value));
-    overlay.querySelector("#kos-link-save").addEventListener("click", async () => {
+    const saveBtn = overlay.querySelector("#kos-link-save");
+    saveBtn.addEventListener("click", async () => {
       errEl.hidden = true;
-      const userId = Number(overlay.querySelector("#kos-user").value);
-      if (!userId) return showErr(t("kos_link_user_pick"));
       if (!pickedId) return showErr(t("kos_link_customer_pick"));
+      saveBtn.disabled = true;
       try {
-        const res = await api.linkKadOsAccount(userId, pickedId);
+        const res = await api.createKadOsAccount(pickedId);
         links = res.links;
         overlay.remove();
         paint();
+        openCodeSheet(res.account);
       } catch (err) {
         showErr(err.message);
+        saveBtn.disabled = false;
       }
     });
   }

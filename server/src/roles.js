@@ -9,6 +9,10 @@ export const ROLES = [
   "accountant",
 ];
 
+// The role of a customer's KAD OS account (created from Settings -> KAD OS, never picked in the Team form): not in ROLES on purpose, so it never
+// shows up in role pickers, notification settings or report permissions. It can only use /api/partner/* (see partnerMayUse in appOrders.js).
+export const CUSTOMER_ROLE = "customer";
+
 // Field reps (sales managers) only see their own data; every other role
 // sees everyone's (admins can also delete/edit directly, the others cannot).
 export function seesAllActivity(role) {

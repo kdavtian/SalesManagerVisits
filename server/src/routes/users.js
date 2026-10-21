@@ -56,7 +56,7 @@ usersRouter.get("/", async (req, res) => {
     `SELECT id, email, name, role, position, phone, name_hy, created_at,
             last_seen_at, last_seen_app_version, last_seen_user_agent,
             status, status_changed_at, status_note
-     FROM users ORDER BY (status = 'active') DESC, created_at DESC`
+     FROM users WHERE role <> 'customer' ORDER BY (status = 'active') DESC, created_at DESC`
   );
   res.json(rows);
 });

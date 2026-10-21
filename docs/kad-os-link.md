@@ -25,15 +25,13 @@ Stored in `app_settings.app_orders` (JSON); every key has an On/Off and a number
 counts), `chase_enabled`/`chase_confirm_hours`, `customer_edit_enabled` (cancel / change until Confirmed). Defaults = owner's choice of 2026-10-21 (flat 2 %, priority on, promise 2 working days before 15:00, progress on). Changes are
 logged in `app_orders_log`. Admin/CEO only; campaigns also the sales director.
 
-## How a customer's KAD OS is connected
-1. Create a KAD user for the install (any non-admin role, e.g. *sales_manager*, no customers assigned), e.g. "KAD OS - Garage Masters Mall".
-2. Settings -> KAD OS -> Customer accounts -> **+ Link an account**: pick that user and the customer (must have its ERP ID).
-   This writes `partner_links (user_id, customer_id)`.
-3. In KAD OS put that user's e-mail/password in the server `.env` (`KAD_API_URL`, `KAD_EMAIL`, `KAD_PASSWORD`), as before.
-From then on **every order by that account is an app order for that customer**, whichever URL it uses (`POST /api/orders` or
-`POST /api/partner/orders`): the customer id and any discount in the request are ignored, prices come from the customer's tier.
-**A linked account can do nothing else in KAD**: every other API route answers 403 `partner_only` (the login lives on the customer's server, so a leak must not expose the price lists, customers or debts). An account without a link behaves exactly as before. Linking admin / CEO accounts is refused. The linked customer cannot be deleted
-while linked (FK RESTRICT).
+## How a customer's KAD OS is connected (no server editing)
+1. In KAD Motors: Settings -> Admin workspace -> KAD OS -> Customer accounts -> **+ Add customer** -> pick the customer (it must have its ERP ID) -> **Create account**.
+   KAD Motors creates the KAD OS account (role **Customer**, e-mail `kados-<erp id>@kados.local`, generated password, never shown) and shows ONE **connection code** (this app's address + e-mail + password, base64) with a Copy button. This also writes `partner_links (user_id, customer_id)`.
+2. In the customer's KAD OS (CEO): Account -> **KAD Motors connection** -> paste the code -> **Connect** (KAD OS signs in once to prove it works; needs KAD OS 0.40.0+).
+3. Lost the code or changed phones: **New code** on the customer's row makes a new password (the old code and its sessions stop working). **Remove access** unlinks and switches the account off; **Add customer** again brings the same account back with a fresh password.
+The role "customer" is not in the Team list and cannot be picked in the Team form; it can do nothing in KAD except `/api/partner/*` and signing in/out (every other route answers 403 `partner_only`). Older installs that signed in with a normal user (`.env` KAD_EMAIL / KAD_PASSWORD) keep working; link such a user with `POST /api/app-orders/links`.
+Every order by a linked account is an app order for that customer, whichever URL it uses (`POST /api/orders` or `POST /api/partner/orders`): the customer id and any discount in the request are ignored, prices come from the customer's tier. The linked customer cannot be deleted while linked (FK RESTRICT).
 
 ## API for the customer's KAD OS (`/api/partner/*`, session cookie like the app; 403 `not_partner` when the account is not linked)
 `GET /me` (customer, its payment terms (`terms`, from the customer record), perks, balance summary, progress, running offers, next promise date) · `GET /catalog` (tier price + availability,
@@ -49,11 +47,11 @@ Only the linked customer's data is reachable.
 - Staff are told at once: Telegram, the order-notify roles and the customer's own sales manager ("cancelled by the customer" / "order changed - replaces №...").
 
 ## Supplier-side API (`/api/app-orders/*`)
-`GET|PUT /settings` and `POST|DELETE /links` (admin/CEO) · `GET|POST /campaigns`, `PATCH /campaigns/:id` (`paused`, `end_now`),
+`GET|PUT /settings`, `POST /accounts` (create a customer's account + code), `POST /accounts/:userId/code` (new code), `POST|DELETE /links` (admin/CEO) · `GET|POST /campaigns`, `PATCH /campaigns/:id` (`paused`, `end_now`),
 `DELETE /campaigns/:id` (only while unused) (admin/CEO/sales director).
 
 ## Data
-Migration 137: `orders.cancelled_at/cancel_reason/replaced_by_order_id`. Migration 136: `partner_links`, `campaigns`, `campaign_products`, `campaign_customers`, `orders.placed_via_app/app_discount_pct/promised_date`,
+Migration 138: users.role may be `customer`. Migration 137: `orders.cancelled_at/cancel_reason/replaced_by_order_id`. Migration 136: `partner_links`, `campaigns`, `campaign_products`, `campaign_customers`, `orders.placed_via_app/app_discount_pct/promised_date`,
 `order_items.campaign_id/list_price_amd`, `app_settings.app_orders`, `app_orders_log`. Existing `product_promos` (date-ranged display
 prices on the price list) is a different, older feature and is not touched.
 
