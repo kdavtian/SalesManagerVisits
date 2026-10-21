@@ -135,8 +135,10 @@ partnerRouter.get("/catalog", async (req, res) => {
   // The same display order as every product list in KAD Motors (brand, line, viscosity, specification, size): KAD OS keeps it.
   rows.sort(compareProducts);
   // "Frequent" (the same idea as the new-order screen here): what this customer ordered most, else what the whole company orders most.
-  const own = (await orderedProductIdsOf(customer.id, customer.erp_customer_id)).map((x) => x.product_id);
-  const frequent = (own.length ? own : await companyFrequentIds()).slice(0, 60);
+  // Only products the customer can order now (on the shelf): filter BOTH rankings before choosing the fallback and before the limit.
+  const orderable = new Set(rows.map((p) => p.id));
+  const own = (await orderedProductIdsOf(customer.id, customer.erp_customer_id)).map((x) => x.product_id).filter((id) => orderable.has(id));
+  const frequent = (own.length ? own : (await companyFrequentIds()).filter((id) => orderable.has(id))).slice(0, 60);
   res.json({
     customer: { id: customer.id, name: customer.name, tier: customer.customer_tier },
     frequent,

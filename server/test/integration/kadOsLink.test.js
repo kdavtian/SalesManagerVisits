@@ -642,6 +642,7 @@ test("catalog carries the Frequent ranking and the photo name; the photo is serv
   try {
     const cat = (await apiRequest("/api/partner/catalog", { cookie: partnerCookie })).data;
     assert.ok(Array.isArray(cat.frequent));
+    assert.ok(cat.frequent.every((id) => cat.products.some((p) => p.id === id)), "frequent holds only orderable products");
     assert.equal(cat.products.find((p) => p.id === p1.id).image_v, file);
     assert.equal(cat.products.find((p) => p.id === p2.id).image_v, null);
     assert.equal((await apiRequest(`/api/partner/products/${p1.id}/image`, { cookie: partnerCookie })).status, 200);
