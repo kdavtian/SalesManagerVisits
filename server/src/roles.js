@@ -415,3 +415,13 @@ export function taskAssigneeRoles(role) {
   if (seesAllTasks(role)) return null;
   return [];
 }
+
+// KAD OS link (migration 136). Campaigns and bundles for the customers that run KAD OS: created by the owner-level roles and the sales
+// director (owner, 2026-10-21); they go live at once, the net-cost guard in appOrders.js protects the price. The app-order perks' numbers
+// and which account belongs to which customer change what every app order costs, so those stay with admin / CEO.
+export function canManageCampaigns(role) {
+  return role === "admin" || role === "ceo" || role === "sales_director";
+}
+export function canManageAppOrders(role) {
+  return role === "admin" || role === "ceo";
+}

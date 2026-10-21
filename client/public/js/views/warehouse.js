@@ -1,6 +1,7 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks, activateDialog, firstUseHintHtml, activateFirstUseHints, labelColon } from "../util.js";
+import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks, activateDialog, firstUseHintHtml, activateFirstUseHints, labelColon, formatDateDMY } from "../util.js";
 import { t } from "../i18n.js";
+import { appBadgeHtml } from "../orderDetailSheet.js";
 import { icons } from "../icons.js";
 import { FILTER_ICONS } from "../filterIcons.js";
 import { compareProducts, parseLiters, normalizeUnitLabel, normalizeProductKey } from "../productSort.js";
@@ -237,8 +238,9 @@ export async function renderWarehouse(root, navigate) {
         <div class="order-detail-ids">
           <span>${t("customer_id_label")}${labelColon()}${escapeHtml(o.erp_customer_id || "")}</span>
           ${o.order_code ? `<span>${t("order_id_label")}${labelColon()}${escapeHtml(o.order_code)}</span>` : ""}
+          ${appBadgeHtml(o)}
         </div>
-        <strong>${customerNameLinkHtml(o.customer_name, o.customer_id)}</strong>
+        <strong>${customerNameLinkHtml(o.customer_name, o.customer_id)}</strong>${o.placed_via_app && o.promised_date ? `<p class="muted">${t("kos_promise_date")}${labelColon()}${formatDateDMY(o.promised_date)}</p>` : ""}
         <p class="muted">${escapeHtml(o.address || "")}</p>
         <div class="card-list" style="margin:8px 0;">
           ${o.items.map((i) => `<div class="order-product-row"><span>${i.brand ? `${escapeHtml(i.brand)} · ` : ""}${escapeHtml(i.product_name)}${i.size ? ` · ${escapeHtml(normalizeUnitLabel(i.size))}` : ""} × ${i.quantity}</span></div>`).join("")}

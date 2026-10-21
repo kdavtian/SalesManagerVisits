@@ -15,6 +15,7 @@ import { buildMatrix, optimizeOrder } from "../osrm.js";
 import { signatureUpload, uploadDirPath } from "../upload.js";
 import { matchesDeclaredImageType } from "../utils/imageSniff.js";
 import { insertPayment } from "./payments.js";
+import { getAppOrderSettings } from "../appOrders.js";
 
 export const deliveryRouter = Router();
 deliveryRouter.use(requireAuth);
@@ -25,12 +26,12 @@ deliveryRouter.use(requireAuth);
 deliveryRouter.get("/packed-orders", async (req, res) => {
   if (!canPlanRoutes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const { rows } = await pool.query(
-    `SELECT o.id, o.order_code, o.total_amd, c.name AS customer_name, c.address, c.lat, c.lng
+    `SELECT o.id, o.order_code, o.total_amd, o.placed_via_app, o.promised_date, c.name AS customer_name, c.address, c.lat, c.lng
      FROM orders o
      JOIN customers c ON c.id = o.customer_id
      WHERE o.status = 'packed_stock_out'
        AND NOT EXISTS (SELECT 1 FROM route_stops rs WHERE rs.order_id = o.id)
-     ORDER BY o.created_at ASC`
+     ORDER BY ${(await getAppOrderSettings()).priority_enabled ? "o.placed_via_app DESC, " : ""}o.created_at ASC`
   );
   res.json(rows);
 });

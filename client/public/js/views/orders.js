@@ -4,7 +4,7 @@ import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
 import { ORDER_STATUS_ICONS } from "../ordersSearchEnhancements.js";
 import { loadWithCache } from "../listCache.js";
-import { STATUS_META, openOrderDetailSheet, paymentMethodBadgeHtml } from "../orderDetailSheet.js";
+import { STATUS_META, openOrderDetailSheet, paymentMethodBadgeHtml, appBadgeHtml } from "../orderDetailSheet.js";
 import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
 import { dockedKey } from "../dockSheet.js";
 import { availableBulkActions, runBulkAction } from "../orderBulk.js";
@@ -419,6 +419,7 @@ export function renderOrders(root, navigate, openId = null) {
             </div>
             <div class="muted list-row-meta">${o.order_code ? `${escapeHtml(o.order_code)} · ` : ""}${escapeHtml(o.user_name)} · ${formatDate(o.created_at)}</div>
             <div class="list-row-bottom">
+              ${appBadgeHtml(o)}
               <span class="badge ${meta.cls}">${t(meta.key)}</span>
               ${o.delivered_from_erp ? `<span class="badge badge-info">${t("from_erp")}</span>` : ""}
               ${paymentMethodBadgeHtml(o.payment_method)}

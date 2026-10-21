@@ -680,6 +680,16 @@ export const api = {
   reportClientError: (report) => json("/client-errors", "POST", { ...report, user_agent: navigator.userAgent }),
   getClientErrorLog: (limit = 100) => request(`/client-errors?limit=${limit}`),
 
+  // KAD OS link, supplier side (server/src/routes/appOrdersAdmin.js): app-order perks, account links, campaigns.
+  getKadOsSettings: () => request("/app-orders/settings", { fresh: true }),
+  saveKadOsSettings: (data) => json("/app-orders/settings", "PUT", data),
+  linkKadOsAccount: (user_id, customer_id) => json("/app-orders/links", "POST", { user_id, customer_id }),
+  unlinkKadOsAccount: (userId) => request(`/app-orders/links/${userId}`, { method: "DELETE" }),
+  listCampaigns: () => request("/app-orders/campaigns", { fresh: true }),
+  createCampaign: (data) => json("/app-orders/campaigns", "POST", data),
+  updateCampaign: (id, data) => json(`/app-orders/campaigns/${id}`, "PATCH", data),
+  deleteCampaign: (id) => request(`/app-orders/campaigns/${id}`, { method: "DELETE" }),
+
   // Bonuses challenge templates/rounds admin (see server/src/routes/bonusChallenges.js)
   // -- canManageBonusChallenges (admin/ceo) server-side already.
   listChallengeTemplates: (status) => request(`/bonus-challenges/templates${status ? `?status=${status}` : ""}`),

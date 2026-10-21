@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import { pool } from "../db/pool.js";
 import { canDeleteOrEditDirectly, canViewTeamLocations, canManageProducts, canManageBonusChallenges } from "../roles.js";
 import { issueCsrfToken, clearCsrfToken } from "./csrf.js";
+import { isPartnerAccount, partnerMayUse } from "../appOrders.js";
 
 const COOKIE_NAME = "session";
 
@@ -52,6 +53,10 @@ export async function requireAuth(req, res, next) {
   }
 
   req.user = { id: user.id, role: user.role, position: user.position };
+  // A KAD OS install's account (partner_links) may use only the partner API (see appOrders.js), whatever its role would otherwise allow.
+  if (!partnerMayUse(req) && (await isPartnerAccount(user.id))) {
+    return res.status(403).json({ error: "This account is for KAD OS only", code: "partner_only" });
+  }
   next();
 
   // Fire-and-forget, after next() so it never delays the actual response.
