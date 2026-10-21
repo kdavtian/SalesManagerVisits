@@ -19,7 +19,7 @@ workshop, then renamed **KAD OS** and given to wholesale clients as their ERP. T
 ## 2. What is missing for "give it to other businesses" (the real work after GMM works)
 1. **Multi-tenant**: today one company, one database. Needs a tenant id on every table (or one schema per client), per-client
    branding/settings, per-client users, and tenant-isolation tests (one row-level mistake leaks a competitor's customers).
-2. **Ordering from KAD** (the reason clients adopt it): "You have 3 Magnatec 5W-30 left - reorder 12?" creates a real order in
+2. **Ordering from KAD** (built 2026-10-21, see `docs/kad-os-link.md`: partner account per client, app-order perks, campaigns, progress) (the reason clients adopt it): "You have 3 Magnatec 5W-30 left - reorder 12?" creates a real order in
    KAD Motors' app. GMM is already ERP customer 10001; generalise this into an API key per client (the Lily integration
    pattern), using KAD's price tier for that client.
 3. **Onboarding**: import the client's Excel/1C/stock list (GMM's importer is the template), 30-minute first-day setup, a demo

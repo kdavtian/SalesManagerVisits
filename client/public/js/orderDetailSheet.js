@@ -49,6 +49,11 @@ export function paymentMethodBadgeHtml(method) {
   return `<span class="badge ${cash ? "badge-warning" : "badge-info"}">${t(cash ? "payment_method_cash" : "payment_method_invoice")}</span>`;
 }
 
+// "APP": the order came from a customer's KAD OS (it gets queue priority and a delivery promise).
+export function appBadgeHtml(order) {
+  return order?.placed_via_app ? `<span class="badge badge-accent app-badge">${t("kos_badge_app")}</span>` : "";
+}
+
 const APPROVAL_META = {
   pending: { key: "approval_status_pending", cls: "badge-warning" },
   approved: { key: "approval_status_approved", cls: "badge-success" },
@@ -243,7 +248,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
         ${order.order_code ? `<span>${t("order_id_label")}${labelColon()}${escapeHtml(order.order_code)}</span>` : ""}
       </div>
       <h2 class="order-detail-customer">${customerNameLinkHtml(order.customer_name, order.customer_id)}</h2>
-      <p><span class="badge ${meta.cls}">${t(meta.key)}</span>${
+      <p>${appBadgeHtml(order)} <span class="badge ${meta.cls}">${t(meta.key)}</span>${
       order.delivered_from_erp ? ` <span class="badge badge-info">${t("from_erp")}</span>` : ""
     }${
       order.payment_method ? ` ${paymentMethodBadgeHtml(order.payment_method)}` : ""
@@ -263,9 +268,10 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       <div class="order-detail-side">
       ${
         hasDiscount
-          ? `<p class="muted">${t("price_change_label")}${labelColon()}${discountAmd > 0 ? formatAmd(discountAmd) : `${discountPct}%`}</p>`
+          ? `<p class="muted">${order.placed_via_app && Number(order.app_discount_pct) > 0 ? `${t("kos_app_discount")} ${Number(order.app_discount_pct)}%${labelColon()}` : `${t("price_change_label")}${labelColon()}`}${discountAmd > 0 ? formatAmd(discountAmd) : `${discountPct}%`}</p>`
           : ""
       }
+      ${order.placed_via_app && order.promised_date ? `<p class="muted">${t("kos_promise_date")}${labelColon()}${formatDateDMY(order.promised_date)}</p>` : ""}
       ${
         order.payment_method || order.payment_term_days != null
           ? `<p class="order-terms-line"><span class="muted">${t("oc_payment_due")}${labelColon()}</span> <strong>${termsLabel(order)}</strong></p>`

@@ -8,6 +8,7 @@ import { renderTeamSection, renderPlanApprovalsSection, renderEditRequestsSectio
 import { renderSystemHealthSection } from "./systemHealth.js";
 import { renderPinReviewSection } from "./pinReview.js";
 import { renderBonusChallengesSection, renderBonusRewardClaimsSection } from "./bonusChallengesAdmin.js";
+import { renderKadOsPerksSection, renderKadOsCampaignsSection } from "./kadOsAdmin.js";
 import { openInfoPopup, formatAmd, escapeHtml, compressImage, activateDialog, attachSwipeToDismiss, formatPhoneDisplay, normalizePhone, downloadFromUrl, formatDateTime } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
@@ -129,7 +130,9 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
   // canManageChallenges (an accountant reviews/pays claims but never
   // designs a challenge).
   const canReviewBonusRewards = admin || canManageChallenges || state.user?.role === "accountant";
-  const hasAdminWorkspace = admin || canApprovePlans || canExportFinancials || canManageChallenges || canReviewBonusRewards;
+  // Mirrors canManageCampaigns (admin/ceo/sales_director): campaigns for the customers that order through KAD OS.
+  const canManageCampaigns = canManageChallenges || state.user?.role === "sales_director";
+  const hasAdminWorkspace = admin || canApprovePlans || canExportFinancials || canManageChallenges || canReviewBonusRewards || canManageCampaigns;
 
   root.innerHTML = `
     <div class="settings-view">
@@ -290,6 +293,18 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
           ${canManageChallenges ? settingsRow({ icon: ICON.bolt, label: t("bonuses_admin_challenges"), id: "row-bonus-challenges", color: "orange" }) : ""}
           ${canReviewBonusRewards ? settingsRow({ icon: ICON.chart, label: t("bonuses_reward_claims"), id: "row-bonus-reward-claims", color: "green" }) : ""}
           ${admin ? settingsRow({ icon: ICON.chart, label: t("points_closeout_title"), id: "row-points-closeout", color: "teal" }) : ""}
+        </div>
+      `
+          : ""
+      }
+
+      ${
+        canManageCampaigns
+          ? `
+        <h2 class="section-title">${t("kos_section")}</h2>
+        <div class="card settings-list">
+          ${canManageChallenges ? settingsRow({ icon: ICON.bolt, label: t("kos_row"), id: "row-kos-perks", color: "orange" }) : ""}
+          ${settingsRow({ icon: ICON.chart, label: t("kos_campaigns_row"), id: "row-kos-campaigns", color: "teal" })}
         </div>
       `
           : ""
@@ -1123,6 +1138,16 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
   if (canManageChallenges) {
     root.querySelector("#row-bonus-challenges").addEventListener("click", (e) => {
       openAdminSection(root, e.currentTarget, t("bonuses_admin_challenges"), renderBonusChallengesSection);
+    });
+  }
+  if (canManageChallenges) {
+    root.querySelector("#row-kos-perks").addEventListener("click", (e) => {
+      openAdminSection(root, e.currentTarget, t("kos_row"), renderKadOsPerksSection);
+    });
+  }
+  if (canManageCampaigns) {
+    root.querySelector("#row-kos-campaigns").addEventListener("click", (e) => {
+      openAdminSection(root, e.currentTarget, t("kos_campaigns_row"), renderKadOsCampaignsSection);
     });
   }
   if (canReviewBonusRewards) {

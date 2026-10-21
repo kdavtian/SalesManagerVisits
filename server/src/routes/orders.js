@@ -18,6 +18,7 @@ import { autoCompleteReorderTasks } from "../taskAutoComplete.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
 import { orderCostCheck, decideDiscountApproval, canApproveDiscountRole } from "../discountPolicy.js";
 import { bullets } from "../utils/bullets.js";
+import { partnerLinkFor, priceAppOrderLines, promisedDateFor, getAppOrderSettings } from "../appOrders.js";
 
 export const ordersRouter = Router();
 
@@ -183,9 +184,13 @@ async function loadOrderWithItems(orderId) {
   return { ...order, items };
 }
 
-ordersRouter.post("/", async (req, res) => {
+// Also mounted as POST /api/partner/orders (the KAD OS app). A KAD user account linked to a customer (partner_links) is a KAD OS
+// install: its orders are forced onto that customer, take no discount from the request, and are priced by appOrders.js
+// (campaigns, the app discount, the delivery promise) -- whichever of the two URLs it uses.
+export async function createOrderHandler(req, res) {
   const { customer_id, checkin_id, note, items, discount_pct, discount_amd, payment_method, payment_term_days, downpayment_pct, downpayment_amd, metrics, client_ref } = req.body ?? {};
-  const customerId = Number(customer_id);
+  const partner = await partnerLinkFor(req.user.id);
+  const customerId = partner ? partner.customerId : Number(customer_id);
   if (!customerId || !Array.isArray(items) || !items.length) {
     return res.status(400).json({ error: "customer_id and at least one item are required" });
   }
@@ -228,11 +233,11 @@ ordersRouter.post("/", async (req, res) => {
     seconds: Number.isInteger(metrics?.seconds) && metrics.seconds >= 0 && metrics.seconds <= 86400 ? metrics.seconds : null,
     taps: Number.isInteger(metrics?.taps) && metrics.taps >= 0 && metrics.taps <= 10000 ? metrics.taps : null,
   };
-  let discountPct = discount_pct !== undefined ? Number(discount_pct) : 0;
+  let discountPct = !partner && discount_pct !== undefined ? Number(discount_pct) : 0;
   if (!Number.isFinite(discountPct) || discountPct < 0 || discountPct > 100) {
     return res.status(400).json({ error: "discount_pct must be a number between 0 and 100" });
   }
-  let discountAmd = discount_amd !== undefined ? Number(discount_amd) : 0;
+  let discountAmd = !partner && discount_amd !== undefined ? Number(discount_amd) : 0;
   if (!Number.isFinite(discountAmd) || discountAmd < 0) {
     return res.status(400).json({ error: "discount_amd must be a non-negative number" });
   }
@@ -268,10 +273,20 @@ ordersRouter.post("/", async (req, res) => {
 
   let lines;
   try {
-    lines = await buildOrderLines(items, { customerId: customer.id, tier: customer.customer_tier, canSetPrices: canConfirmOrders(req.user.role), userId: req.user.id });
+    lines = await buildOrderLines(items, { customerId: customer.id, tier: customer.customer_tier, canSetPrices: canConfirmOrders(req.user.role) && !partner, userId: req.user.id });
   } catch (err) {
     if (err instanceof OrderValidationError) return res.status(400).json({ error: err.message });
     throw err;
+  }
+  // App order: campaigns first, then the flat app discount on the lines no campaign covers; plus the delivery promise.
+  let appPricing = null;
+  let promisedDate = null;
+  if (partner) {
+    appPricing = await priceAppOrderLines(customer.id, lines);
+    lines = appPricing.lines;
+    discountAmd = appPricing.discountAmd;
+    discountPct = 0;
+    promisedDate = await promisedDateFor(new Date(), appPricing.settings);
   }
 
   const subtotalAmd = lines.reduce((sum, l) => sum + l.line_total_amd, 0);
@@ -307,23 +322,24 @@ ordersRouter.post("/", async (req, res) => {
     const { rows } = await client.query(
       `INSERT INTO orders (customer_id, user_id, checkin_id, status, total_amd, note, discount_pct, discount_amd, approval_status, order_code, payment_method, client_ref,
                            credit_status, credit_exposure_amd, credit_limit_snapshot_amd, payment_term_days, downpayment_pct, downpayment_amd,
-                           order_source, build_seconds, build_taps)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21) RETURNING *`,
+                           order_source, build_seconds, build_taps, placed_via_app, app_discount_pct, promised_date)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24) RETURNING *`,
       [customerId, req.user.id, checkin_id || null, initialStatus, totalAmd, note || null, discountPct, discountAmd, approvalStatus, orderCode, payment_method, client_ref || null,
-       creditStatus, credit ? credit.exposure : null, credit ? credit.limit : null, paymentTermDays, downpaymentPct, downpaymentAmd, effort.source, effort.seconds, effort.taps]
+       creditStatus, credit ? credit.exposure : null, credit ? credit.limit : null, paymentTermDays, downpaymentPct, downpaymentAmd, effort.source, effort.seconds, effort.taps,
+       Boolean(partner), partner && discountAmd > 0 ? appPricing.discountPct : null, promisedDate]
     );
     order = rows[0];
     for (const line of lines) {
       await client.query(
-        `INSERT INTO order_items (order_id, product_id, product_name, brand, unit_price_amd, quantity, line_total_amd)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [order.id, line.product_id, line.product_name, line.brand, line.unit_price_amd, line.quantity, line.line_total_amd]
+        `INSERT INTO order_items (order_id, product_id, product_name, brand, unit_price_amd, quantity, line_total_amd, campaign_id, list_price_amd)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [order.id, line.product_id, line.product_name, line.brand, line.unit_price_amd, line.quantity, line.line_total_amd, line.campaign_id ?? null, line.list_price_amd ?? null]
       );
     }
     await client.query(
       `INSERT INTO order_status_history (order_id, old_status, new_status, reason, changed_by)
-       VALUES ($1, NULL, $2, 'Created', $3)`,
-      [order.id, initialStatus, req.user.id]
+       VALUES ($1, NULL, $2, $3, $4)`,
+      [order.id, initialStatus, partner ? "Created (KAD OS app)" : "Created", req.user.id]
     );
     await client.query("COMMIT");
   } catch (err) {
@@ -371,13 +387,13 @@ ordersRouter.post("/", async (req, res) => {
       const holdSuffix = hold?.on_hold ? ` (overdue debt ${Math.round(hold.overdue_amd).toLocaleString()} AMD, oldest ${hold.oldest_due_days} days past due)` : "";
       const creditSuffix = credit?.exceeded ? ` (credit limit exceeded by ${Math.round(credit.over).toLocaleString()} AMD)` : "";
       notifyTelegram(
-        `🛒 <b>New order</b>\n${escapeHtml(repName)} — ${escapeHtml(customer.name)}\n${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD${escapeHtml(discountSuffix + creditSuffix + holdSuffix)}`
+        `${partner ? "📱" : "🛒"} <b>${partner ? "New APP order" : "New order"}</b>\n${escapeHtml(repName)} — ${escapeHtml(customer.name)}\n${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD${escapeHtml(discountSuffix + creditSuffix + holdSuffix)}`
       );
 
       const { rows: notifyRecipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [ORDER_NOTIFY_ROLES]);
       for (const recipient of notifyRecipients) {
         notifyUser(recipient.id, "order_placed", {
-          title: "Նոր պատվեր",
+          title: partner ? "Նոր պատվեր (KAD OS)" : "Նոր պատվեր",
           body: `${repName}-ը պատվեր է ձևակերպել ${customer.name}-ի համար\n${bullets([
             `${lines.length} ապրանք`,
             `Գումար՝ ${Number(totalAmd).toLocaleString()} ԱՄԴ`,
@@ -392,7 +408,8 @@ ordersRouter.post("/", async (req, res) => {
       console.error("Post-order notification failed:", err);
     }
   })();
-});
+}
+ordersRouter.post("/", createOrderHandler);
 
 const PAGE_SIZE = 100;
 
@@ -483,6 +500,9 @@ ordersRouter.get("/", async (req, res) => {
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const offsetNum = Math.max(0, Number(offset) || 0);
+  // Queue priority (KAD OS): while looking at orders still waiting for a step, app orders come first (newest app order first, then the rest).
+  const waiting = status === "submitted" || status === "confirmed" || status === "packed_stock_out";
+  const appFirst = waiting && (sort === undefined || sort === "date") && reverse !== "1" && reverse !== "true" && (await getAppOrderSettings()).priority_enabled;
 
   // Fetch one extra row to know whether there's a next page, without a
   // separate COUNT(*) query -- trimmed back to PAGE_SIZE before sending.
@@ -503,7 +523,7 @@ ordersRouter.get("/", async (req, res) => {
      JOIN users u ON u.id = o.user_id
      JOIN customers c ON c.id = o.customer_id
      ${where}
-     ORDER BY ${ordersOrderBy(sort, reverse === "1" || reverse === "true")}
+     ORDER BY ${appFirst ? "o.placed_via_app DESC, " : ""}${ordersOrderBy(sort, reverse === "1" || reverse === "true")}
      LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params
   );
@@ -901,6 +921,13 @@ ordersRouter.patch("/:id", async (req, res) => {
       if (err instanceof OrderValidationError) return res.status(400).json({ error: err.message });
       throw err;
     }
+    // An app order keeps what the customer was promised: the campaigns that were running when it was placed are applied again to the
+    // new lines, and the app discount follows the new subtotal (unless this same request sets a discount itself).
+    if (order.placed_via_app) {
+      const re = await priceAppOrderLines(order.customer_id, nextLines, { at: order.created_at, settings: { discount_enabled: Number(order.app_discount_pct) > 0, discount_pct: Number(order.app_discount_pct) || 0 } });
+      nextLines = re.lines;
+      if (discount_pct === undefined && discount_amd === undefined) nextDiscountAmd = re.discountAmd;
+    }
   }
 
   if (nextLines || discount_pct !== undefined || discount_amd !== undefined) {
@@ -1049,9 +1076,9 @@ ordersRouter.patch("/:id", async (req, res) => {
       await client.query("DELETE FROM order_items WHERE order_id = $1", [order.id]);
       for (const line of nextLines) {
         await client.query(
-          `INSERT INTO order_items (order_id, product_id, product_name, brand, unit_price_amd, quantity, line_total_amd)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [order.id, line.product_id, line.product_name, line.brand, line.unit_price_amd, line.quantity, line.line_total_amd]
+          `INSERT INTO order_items (order_id, product_id, product_name, brand, unit_price_amd, quantity, line_total_amd, campaign_id, list_price_amd)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [order.id, line.product_id, line.product_name, line.brand, line.unit_price_amd, line.quantity, line.line_total_amd, line.campaign_id ?? null, line.list_price_amd ?? null]
         );
       }
     }

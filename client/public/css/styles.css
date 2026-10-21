@@ -14214,3 +14214,139 @@ input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
 .offboard-regions { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 .offboard-region-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); align-items: center; gap: 10px; }
 .offboard-help { margin: -6px 0 12px; font-size: 0.82rem; }
+
+/* ---- KAD OS orders (Settings -> KAD OS): perks, account links, campaigns ---- */
+.app-badge {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.kos-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.kos-row-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 10px;
+}
+.kos-row-fields[hidden] {
+  display: none;
+}
+.kos-num {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.kos-num input,
+.kos-levels input,
+.kos-minqty input {
+  width: 72px;
+  min-height: 44px;
+  text-align: right;
+}
+.kos-levels {
+  display: flex;
+  gap: 8px;
+}
+.kos-saved {
+  margin: 0;
+  padding: 8px 16px;
+}
+.kos-pick-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+.kos-pick {
+  width: 100%;
+  min-height: 44px;
+  text-align: left;
+}
+.kos-pick.is-picked {
+  outline: 1px solid var(--accent);
+  background: rgba(255, 106, 19, 0.1);
+}
+.kos-seg {
+  display: flex;
+  gap: 6px;
+  margin: 4px 0;
+}
+.kos-seg-btn {
+  flex: 1;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.9rem;
+}
+.kos-seg-btn.is-on {
+  border-color: var(--accent);
+  background: rgba(255, 106, 19, 0.12);
+  color: var(--accent);
+  font-weight: 600;
+}
+.kos-dates {
+  display: flex;
+  gap: 10px;
+}
+.kos-dates label {
+  flex: 1;
+  min-width: 0;
+}
+.kos-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.kos-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 4px 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 106, 19, 0.12);
+  font-size: 0.85rem;
+}
+.kos-chip button {
+  min-width: 32px;
+  min-height: 32px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 1.1rem;
+}
+.kos-prod-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+}
+.kos-prod-row > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.kos-minqty {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.kos-camp-lines > div {
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+.kos-camp-sheet {
+  max-height: 92vh;
+  overflow-y: auto;
+}
+.kos-label {
+  margin: 12px 0 4px;
+  font-weight: 600;
+}

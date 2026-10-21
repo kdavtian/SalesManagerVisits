@@ -14,6 +14,7 @@ import { STOCK_ISSUE_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES } from "../notificatio
 import { computeStockForecast, computeReorderSuggestion } from "../stockForecast.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
 import { displayNetCost } from "../discountPolicy.js";
+import { getAppOrderSettings } from "../appOrders.js";
 
 export const warehouseRouter = Router();
 warehouseRouter.use(requireAuth);
@@ -59,14 +60,14 @@ warehouseRouter.get("/pick-list", async (req, res) => {
 // against, with "Mark Packed" / "Flag stock issue" per order.
 warehouseRouter.get("/staging-list", async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT o.id, o.order_code, o.total_amd, o.created_at, o.customer_id,
+    `SELECT o.id, o.order_code, o.total_amd, o.created_at, o.customer_id, o.placed_via_app, o.promised_date,
             c.name AS customer_name, c.erp_customer_id, c.address,
             u.name AS rep_name
      FROM orders o
      JOIN customers c ON c.id = o.customer_id
      JOIN users u ON u.id = o.user_id
      WHERE o.status = 'confirmed'
-     ORDER BY o.created_at ASC`
+     ORDER BY ${(await getAppOrderSettings()).priority_enabled ? "o.placed_via_app DESC, " : ""}o.created_at ASC`
   );
   const orderIds = rows.map((r) => r.id);
   const { rows: items } = orderIds.length
