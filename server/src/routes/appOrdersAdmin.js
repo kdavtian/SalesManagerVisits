@@ -78,8 +78,11 @@ appOrdersAdminRouter.delete("/links/:userId", needSettings, async (req, res) => 
 // KAD OS (Account -> KAD Motors connection). The password is shown only inside that code; "New code" makes a new password and signs the old one out.
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 20) || "customer";
 function connectionCode(req, email, password) {
-  const proto = String(req.get("x-forwarded-proto") || req.protocol).split(",")[0].trim();
-  const origin = `${proto}://${req.get("host")}`;
+  // Behind the proxy the app sees plain http: a real (non-local) address is always https, so the code never carries an insecure address.
+  const host = req.get("host");
+  const local = /^(localhost|127\.|10\.|192\.168\.|\[?::1)/.test(host);
+  const proto = local ? String(req.get("x-forwarded-proto") || req.protocol).split(",")[0].trim() : "https";
+  const origin = `${proto}://${host}`;
   return Buffer.from(JSON.stringify({ v: 1, u: origin, e: email, p: password })).toString("base64url");
 }
 const newPassword = () => crypto.randomBytes(12).toString("hex");
