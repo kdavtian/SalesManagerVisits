@@ -104,11 +104,17 @@ function makeCanvas(doc) {
   return { hline, text, textW, right, center, fit, field };
 }
 
-function dateParts(order) {
-  // The order's Yerevan calendar date (the server runs in UTC).
-  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Yerevan", day: "2-digit", month: "2-digit", year: "numeric" }).formatToParts(new Date(order.created_at ?? Date.now()));
+// A Yerevan calendar date (the server runs in UTC) as "dd/mm/yyyy".
+export function yerevanDate(when) {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Yerevan", day: "2-digit", month: "2-digit", year: "numeric" }).formatToParts(new Date(when ?? Date.now()));
   const get = (t) => parts.find((x) => x.type === t).value;
-  return { dd: get("day"), mm: get("month"), yyyy: get("year") };
+  return `${get("day")}/${get("month")}/${get("year")}`;
+}
+
+// The two dates of the blank (owner, 2026-10-22): the day the order was made, and the DELIVERY date = the day the blank is
+// printed (a blank of an order made on 02/03/2026 and printed today carries today as its delivery date).
+export function blankDates(order, printedAt = new Date()) {
+  return { orderDate: yerevanDate(order.created_at), deliveryDate: yerevanDate(printedAt) };
 }
 
 function totals({ order, items, previousDebtAmd = null, paymentAmd = null }) {
@@ -120,9 +126,9 @@ function totals({ order, items, previousDebtAmd = null, paymentAmd = null }) {
   return { sum, orderTotal, current, liters, qty };
 }
 
-function drawHeader(c, doc, { order, customer, rep }, v) {
-  const { dd, mm, yyyy } = dateParts(order);
-  const { hline, text, center, field, fit, right } = c;
+function drawHeader(c, doc, { order, customer, rep, printedAt }, v) {
+  const { orderDate, deliveryDate } = blankDates(order, printedAt);
+  const { hline, text, center, field, fit, right, textW } = c;
   hline(v.rule1);
   text(COMPANY_NAME, 21.6, v.rule1 + 3.5, { size: v.fs });
   text(`Մենեջեր՝ ${rep?.name ?? ""}`, 21.6, v.rule1 + 3.5 + v.lh, { size: v.fs });
@@ -132,13 +138,13 @@ function drawHeader(c, doc, { order, customer, rep }, v) {
   phoneLines.forEach((line, i) => right(line, 589.6, v.rule1 + 3.5 + i * v.lh, { size: v.fs }));
   hline(v.rule2);
   field("Պատվերի No՝", order.order_code ?? "", 21.6, v.row1, 170, v.fs);
-  text("Ամսաթիվ՝", 416, v.row1, { size: v.fs });
-  center(dd, 468, 495, v.row1, { bold: true, size: v.fs });
-  hline(v.row1 + v.fs + 1, 466, 497, "#555555", 0.5);
-  text("/", 499, v.row1, { size: v.fs });
-  center(mm, 505, 532, v.row1, { bold: true, size: v.fs });
-  hline(v.row1 + v.fs + 1, 504, 534, "#555555", 0.5);
-  text(`/ ${yyyy}թ.`, 537, v.row1, { size: v.fs });
+  // Order date, then delivery date, the last one ending at the right margin.
+  const dateField = (label, value, x) => field(label, value, x, v.row1, x + textW(label, { size: v.fs }) + 4 + textW(value, { bold: true, size: v.fs }) + 12, v.fs);
+  const dateW = (label, value) => textW(label, { size: v.fs }) + 4 + textW(value, { bold: true, size: v.fs }) + 12;
+  const deliveryX = 589.6 - dateW("Առաքման ամսաթիվ՝", deliveryDate);
+  const orderX = deliveryX - 12 - dateW("Պատվերի ամսաթիվ՝", orderDate);
+  dateField("Պատվերի ամսաթիվ՝", orderDate, orderX);
+  dateField("Առաքման ամսաթիվ՝", deliveryDate, deliveryX);
   field("Գործընկերոջ անվանում՝", fit(cleanCustomerName(customer?.name), 250, v.fs), 21.6, v.row2, 400, v.fs);
   field("Կոդ՝", customer?.erp_customer_id ?? "", 500, v.row2, 589.6, v.fs);
   field("Իրավ. անվանում՝", fit(customer?.legal_name ?? "", 285, v.fs), 21.6, v.row3, 420, v.fs);
@@ -323,7 +329,9 @@ export function buildOrderBlanksPdf(orders) {
   doc.on("data", (x) => chunks.push(x));
   const done = new Promise((resolve) => doc.on("end", () => resolve(Buffer.concat(chunks))));
 
-  const withVariant = orders.map((o) => ({ ...o, variant: o.variant ?? suggestVariant(o.items) }));
+  // One print moment for the whole PDF: the delivery date on every blank is the day it was printed.
+  const printedAt = new Date();
+  const withVariant = orders.map((o) => ({ ...o, printedAt: o.printedAt ?? printedAt, variant: o.variant ?? suggestVariant(o.items) }));
   const halves = withVariant.filter((o) => o.variant === "half" && o.items.length <= HALF_MAX_ROWS);
   const fulls = withVariant.filter((o) => !(o.variant === "half" && o.items.length <= HALF_MAX_ROWS));
   let drawn = false;

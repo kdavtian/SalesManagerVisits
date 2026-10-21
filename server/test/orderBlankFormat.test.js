@@ -56,3 +56,15 @@ test("payment terms line: due days + downpayment only, nothing for an old order"
   assert.equal(paymentTermsText({ dueDays: 0 }).due, "Վճարման ժամկետ՝ առաքման պահին");
   assert.equal(paymentTermsText({ dueDays: 7, downpaymentAmd: 0, downpaymentPct: 0 }).down, "Կանխավճար՝ 0դր");
 });
+
+test("blank dates: the order date is the day the order was made, the delivery date is the day the blank is printed (Yerevan calendar)", async () => {
+  const { blankDates, yerevanDate, buildOrderBlanksPdf } = await import("../src/orderBlankPdf.js");
+  assert.deepEqual(blankDates({ created_at: "2026-03-02T09:00:00Z" }, new Date("2026-10-22T08:00:00Z")), { orderDate: "02/03/2026", deliveryDate: "22/10/2026" });
+  // 21:30 UTC is already the next day in Yerevan (UTC+4), for both dates
+  assert.equal(yerevanDate("2026-10-21T21:30:00Z"), "22/10/2026");
+  assert.equal(blankDates({ created_at: "2026-03-01T20:30:00Z" }, new Date("2026-10-21T20:30:00Z")).orderDate, "02/03/2026");
+  const order = { order_code: "26030201", created_at: "2026-03-02T09:00:00Z", total_amd: 1000 };
+  const items = [{ brand: "Castrol", product_name: "Magnatec", size_l: "4", quantity: 1, unit_price_amd: 1000, line_total_amd: 1000 }];
+  const pdf = await buildOrderBlanksPdf([{ order, items, customer: { name: "Shop" }, rep: { name: "Rep" } }]);
+  assert.equal(pdf.subarray(0, 4).toString(), "%PDF");
+});
