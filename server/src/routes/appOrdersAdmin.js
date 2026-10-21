@@ -1,9 +1,11 @@
 // KAD OS link, supplier side (owner, 2026-10-21): the app-order perks' settings, which KAD account belongs to which customer, and the
 // campaigns / bundles sent to those customers. The customer's own view is routes/partner.js; the rules are in ../appOrders.js.
 import { Router } from "express";
+import bcrypt from "bcryptjs";
+import crypto from "node:crypto";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
-import { canManageAppOrders, canManageCampaigns } from "../roles.js";
+import { canManageAppOrders, canManageCampaigns, CUSTOMER_ROLE } from "../roles.js";
 import { getAppOrderSettings, saveAppOrderSettings, validateSettingsPatch, campaignBelowCost, forgetPartnerCache } from "../appOrders.js";
 import { yerevanCustomRangeBounds } from "../utils/yerevanDate.js";
 
@@ -20,7 +22,7 @@ const needCampaigns = (req, res, next) => (canManageCampaigns(req.user.role) ? n
 // ---- settings + account links ---------------------------------------------------------------------------------------
 async function loadLinks() {
   const { rows } = await pool.query(
-    `SELECT l.user_id, u.name AS user_name, u.email, l.customer_id, c.name AS customer_name, c.erp_customer_id, l.created_at,
+    `SELECT l.user_id, u.name AS user_name, u.email, u.role AS user_role, u.status AS user_status, l.customer_id, c.name AS customer_name, c.erp_customer_id, l.created_at,
             (SELECT COUNT(*)::int FROM orders o WHERE o.customer_id = l.customer_id AND o.placed_via_app) AS app_orders
        FROM partner_links l JOIN users u ON u.id = l.user_id JOIN customers c ON c.id = l.customer_id ORDER BY c.name`
   );
@@ -63,9 +65,66 @@ appOrdersAdminRouter.delete("/links/:userId", needSettings, async (req, res) => 
   const userId = Number(req.params.userId);
   const { rowCount } = await pool.query("DELETE FROM partner_links WHERE user_id = $1", [userId]);
   if (!rowCount) return res.status(404).json({ error: "Link not found" });
+  // A customer account made for KAD OS is switched off with its link (it can sign in no more); the user row stays for the order history.
+  await pool.query("UPDATE users SET status = 'offboarded', status_changed_at = now(), status_changed_by = $2, token_version = token_version + 1 WHERE id = $1 AND role = $3", [userId, req.user.id, CUSTOMER_ROLE]);
   forgetPartnerCache();
   await audit(req, "app_orders.unlink", { user_id: userId });
   res.json({ links: await loadLinks() });
+});
+
+// ---- customer accounts: made here, connected in KAD OS with one code (owner, 2026-10-21) ------------------------------------
+// The customer's KAD OS install signs in to KAD Motors with its own account (role "customer"). The owner never edits server files: creating the
+// account here returns a CONNECTION CODE (this app's address + the account's e-mail + a generated password, base64) that is pasted once into
+// KAD OS (Account -> KAD Motors connection). The password is shown only inside that code; "New code" makes a new password and signs the old one out.
+const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 20) || "customer";
+function connectionCode(req, email, password) {
+  const proto = String(req.get("x-forwarded-proto") || req.protocol).split(",")[0].trim();
+  const origin = `${proto}://${req.get("host")}`;
+  return Buffer.from(JSON.stringify({ v: 1, u: origin, e: email, p: password })).toString("base64url");
+}
+const newPassword = () => crypto.randomBytes(12).toString("hex");
+
+appOrdersAdminRouter.post("/accounts", needSettings, async (req, res) => {
+  const customerId = Number(req.body?.customer_id);
+  if (!Number.isInteger(customerId)) return res.status(400).json({ error: "customer_id is required" });
+  const { rows: c } = await pool.query("SELECT id, name, erp_customer_id FROM customers WHERE id = $1", [customerId]);
+  if (!c[0]) return res.status(404).json({ error: "Customer not found" });
+  if (!c[0].erp_customer_id) return res.status(400).json({ error: "The customer must be linked to its ERP record first" });
+  const { rows: linked } = await pool.query("SELECT user_id FROM partner_links WHERE customer_id = $1", [customerId]);
+  if (linked[0]) return res.status(409).json({ error: "This customer already has a KAD OS account -- use \"New code\" on it" });
+
+  const email = `kados-${slug(c[0].erp_customer_id)}@kados.local`;
+  const password = newPassword();
+  const hash = await bcrypt.hash(password, 10);
+  const name = `KAD OS - ${c[0].name}`.slice(0, 120);
+  // A removed account of this customer is brought back with a new password, so its history stays together.
+  const { rows: old } = await pool.query("SELECT id FROM users WHERE email = $1 AND role = $2", [email, CUSTOMER_ROLE]);
+  let userId;
+  if (old[0]) {
+    userId = old[0].id;
+    await pool.query("UPDATE users SET password_hash = $2, name = $3, status = 'active', token_version = token_version + 1, failed_login_attempts = 0, locked_until = NULL WHERE id = $1", [userId, hash, name]);
+  } else {
+    const ins = await pool.query("INSERT INTO users (email, password_hash, name, role) VALUES ($1, $2, $3, $4) RETURNING id", [email, hash, name, CUSTOMER_ROLE]);
+    userId = ins.rows[0].id;
+  }
+  await pool.query("INSERT INTO partner_links (user_id, customer_id, created_by) VALUES ($1, $2, $3)", [userId, customerId, req.user.id]);
+  forgetPartnerCache();
+  await audit(req, "app_orders.account_create", { user_id: userId, customer_id: customerId });
+  res.status(201).json({ links: await loadLinks(), account: { user_id: userId, customer_name: c[0].name, email, code: connectionCode(req, email, password) } });
+});
+
+appOrdersAdminRouter.post("/accounts/:userId/code", needSettings, async (req, res) => {
+  const userId = Number(req.params.userId);
+  const { rows } = await pool.query(
+    `SELECT u.id, u.email, c.name AS customer_name FROM users u JOIN partner_links l ON l.user_id = u.id JOIN customers c ON c.id = l.customer_id WHERE u.id = $1 AND u.role = $2`,
+    [userId, CUSTOMER_ROLE]
+  );
+  if (!rows[0]) return res.status(404).json({ error: "Customer account not found" });
+  const password = newPassword();
+  await pool.query("UPDATE users SET password_hash = $2, status = 'active', token_version = token_version + 1, failed_login_attempts = 0, locked_until = NULL WHERE id = $1", [userId, await bcrypt.hash(password, 10)]);
+  forgetPartnerCache();
+  await audit(req, "app_orders.account_code", { user_id: userId });
+  res.json({ account: { user_id: userId, customer_name: rows[0].customer_name, email: rows[0].email, code: connectionCode(req, rows[0].email, password) } });
 });
 
 // ---- campaigns ------------------------------------------------------------------------------------------------------

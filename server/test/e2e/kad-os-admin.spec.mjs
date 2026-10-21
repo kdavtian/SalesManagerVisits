@@ -43,26 +43,36 @@ test.describe("KAD OS orders (supplier admin)", () => {
     }
   });
 
-  test("link a customer's KAD account, then start and end a campaign", async ({ page, fixtures }) => {
+  test("add a customer (its KAD OS account + connection code), then start and end a campaign", async ({ page, fixtures }) => {
     const admin = await fixtures.createUser("admin");
-    const acct = await fixtures.createUser("sales_manager", { name: "KAD OS - E2E Shop" });
     const customer = await fixtures.createCustomer({ created_by: admin.id, name: `E2E KOS Shop ${Date.now()}`, erp_customer_id: `E2E-KOS-${Date.now()}` });
     const product = await fixtures.createProduct({ unit_price_amd: 10000, name: `E2E KOS Oil ${Date.now()}` });
     await pool.query("UPDATE products SET bronze_price_amd = 10000, silver_price_amd = 10000, net_cost_amd = 6000 WHERE id = $1", [product.id]);
+    let acctId = null;
     await loginViaUi(page, admin.email);
     try {
       await openAdminRow(page, "#row-kos-perks");
       await page.locator("#kos-link-add").click();
-      await page.locator("#kos-user").selectOption(String(acct.id));
       await page.locator("#kos-cust-q").fill(customer.erp_customer_id);
       await page.locator("[data-pick]").first().click();
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/link-440.png` });
       await Promise.all([
-        page.waitForResponse((r) => r.url().includes("/api/app-orders/links") && r.request().method() === "POST"),
+        page.waitForResponse((r) => r.url().includes("/api/app-orders/accounts") && r.request().method() === "POST" && r.ok()),
         page.locator("#kos-link-save").click(),
       ]);
+      // the connection code is shown once, ready to copy
+      await expect(page.locator("#kos-code")).toHaveValue(/^[A-Za-z0-9_-]{40,}$/);
+      if (SHOTS) {
+        await page.waitForTimeout(600); // the sheet slides in
+        await page.screenshot({ path: `${SHOTS}/code-440.png` });
+      }
+      await page.locator("#kos-code-copy").click();
+      await expect(page.locator("#kos-code-copied")).toBeVisible();
+      await page.locator('.sheet-overlay [data-action="close"]').click();
       await expect(page.locator("#kos-links")).toContainText(customer.name);
-      expect((await pool.query("SELECT customer_id FROM partner_links WHERE user_id = $1", [acct.id])).rows[0].customer_id).toBe(customer.id);
+      const link = (await pool.query("SELECT l.user_id, u.role FROM partner_links l JOIN users u ON u.id = l.user_id WHERE l.customer_id = $1", [customer.id])).rows[0];
+      expect(link.role).toBe("customer");
+      acctId = link.user_id;
 
       await page.locator("#admin-section-close").click();
       await page.locator("#row-kos-campaigns").click();
@@ -92,7 +102,8 @@ test.describe("KAD OS orders (supplier admin)", () => {
       await expect(page.locator("#kos-campaign-list")).not.toContainText("E2E autumn offer");
     } finally {
       await pool.query("DELETE FROM campaigns WHERE title = 'E2E autumn offer'");
-      await pool.query("DELETE FROM partner_links WHERE user_id = $1", [acct.id]);
+      await pool.query("DELETE FROM partner_links WHERE customer_id = $1", [customer.id]);
+      if (acctId) await pool.query("DELETE FROM users WHERE id = $1", [acctId]);
     }
   });
 
