@@ -549,3 +549,22 @@ test("customer accounts are made from the app: role customer, one connection cod
     await pool.query("DELETE FROM customers WHERE id = $1", [cust.id]);
   }
 });
+
+test("the catalog is in KAD Motors' own product order: brand, line, viscosity, then size; non-oil last", async () => {
+  const mk = async (name, unit, brand, family) => {
+    const p = await createProduct({ name: `${name} ${stamp}`, unit });
+    await pool.query("UPDATE products SET brand = $2, family = $3, bronze_price_amd = 1000, silver_price_amd = 1000, stock_qty = 5 WHERE id = $1", [p.id, brand, family]);
+    return p;
+  };
+  // created in a shuffled order on purpose
+  const brake = await mk("KOS Sort Brake pad", "pcs", "Castrol", "Other");
+  const lotos = await mk("KOS Sort 0W-20", "1L", "Lotos", "Edge");
+  const c530 = await mk("KOS Sort 5W-30", "1L", "Castrol", "Edge");
+  const c020x4 = await mk("KOS Sort 0W-20", "4L", "Castrol", "Edge");
+  const c020x1 = await mk("KOS Sort 0W-20", "1L", "Castrol", "Edge");
+  const cat = (await apiRequest("/api/partner/catalog", { cookie: partnerCookie })).data;
+  const ids = cat.products.map((p) => p.id);
+  const mine = [c020x1, c020x4, c530, lotos, brake].map((p) => ids.indexOf(p.id));
+  assert.ok(mine.every((i) => i >= 0));
+  assert.deepEqual([...mine].sort((a, b) => a - b), mine, "Castrol Edge 0W-20 1L, 4L, then 5W-30, then Lotos, then the non-oil product");
+});

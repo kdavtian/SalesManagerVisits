@@ -14,6 +14,7 @@ import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { fetchPricedProducts } from "./products.js";
 import { tierListPrice } from "../tierPricing.js";
+import { compareProducts } from "../../../client/public/js/productSort.js";
 import { allocateFifo, loadOrdersNewestFirst } from "../debtAging.js";
 import { creditSnapshot } from "../creditLimit.js";
 import { loadUnrecordedPayments } from "./debtBalances.js";
@@ -132,6 +133,8 @@ partnerRouter.get("/catalog", async (req, res) => {
   // The customer's own tier price comes from the full product row, never from the redacted one.
   const { rows: full } = await pool.query("SELECT * FROM products WHERE active");
   const fullById = new Map(full.map((p) => [p.id, p]));
+  // The same display order as every product list in KAD Motors (brand, line, viscosity, specification, size): KAD OS keeps it.
+  rows.sort(compareProducts);
   res.json({
     customer: { id: customer.id, name: customer.name, tier: customer.customer_tier },
     products: rows.map((p) => ({
