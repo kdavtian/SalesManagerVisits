@@ -33,6 +33,10 @@ export const STATUS_META = {
   delivered: { key: "order_status_delivered", cls: "badge-success", iconTint: "success" },
 };
 
+// A KAD OS order the customer cancelled (it sits in "draft" on the server, marked cancelled_at): a red "Cancelled" chip instead of "Draft".
+export const CANCELLED_META = { key: "kos_cancelled_badge", cls: "badge-danger", iconTint: "danger" };
+export const orderStatusMeta = (order) => (order?.cancelled_at ? CANCELLED_META : STATUS_META[order?.status] ?? STATUS_META.submitted);
+
 // "Invoice · 45 days" / "Cash · on delivery": the terms a reviewer approves, spelled out (the small chips under the
 // customer name are easy to miss).
 export function termsLabel(order) {
@@ -146,7 +150,8 @@ function orderTimelineHtml(history, currentStatus) {
     <div class="order-timeline">
       ${history
         .map((h, idx) => {
-          const meta = STATUS_META[h.new_status];
+          // The step where the customer cancelled (or replaced) a KAD OS order is "Cancelled", not "Draft".
+          const meta = h.new_status === "draft" && /by the customer \(KAD OS\)/.test(h.reason ?? "") ? CANCELLED_META : STATUS_META[h.new_status];
           const hint = idx === lastIdx && WAITING_HINT[currentStatus] ? `<span class="order-step-hint">${t(WAITING_HINT[currentStatus])}</span>` : "";
           const label = meta ? t(meta.key) : escapeHtml(h.new_status);
           return `
@@ -212,7 +217,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
   renderView(order);
 
   function renderView(order) {
-    const meta = STATUS_META[order.status] ?? STATUS_META.submitted;
+    const meta = orderStatusMeta(order);
     const isOwnerOrAdmin = order.user_id === state.user.id || state.user.role === "admin";
     // A director/admin reviewing a fresh order gets confirm/reject/edit;
     // the rep who placed it (or an admin) can still edit it too while
@@ -223,7 +228,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     // already accepted this -- this button just never offered it), owner/
     // admin only since canReviewSubmitted is always false for a draft (a
     // director has nothing to review yet).
-    const canEditThisOrder = (order.status === "submitted" || order.status === "draft") && (isOwnerOrAdmin || canReviewSubmitted);
+    const canEditThisOrder = !order.cancelled_at && (order.status === "submitted" || order.status === "draft") && (isOwnerOrAdmin || canReviewSubmitted);
     const discountAmd = Number(order.discount_amd) || 0;
     const discountPct = Number(order.discount_pct) || 0;
     const hasDiscount = discountAmd > 0 || discountPct > 0;
@@ -308,7 +313,10 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     });
 
     const buttons = [];
-    if (order.status === "draft" && (isOwnerOrAdmin || state.user.role === "accountant")) {
+    if (order.cancelled_at) {
+      // Closed by the customer in KAD OS: nothing to submit or fix; the red chip and the timeline say it, only the customer's reason is added.
+      if (order.cancel_reason) buttons.push({ label: `${t("kos_cancel_reason")}${labelColon()}${order.cancel_reason}`, action: "noop", cls: "btn", disabledDisplay: true });
+    } else if (order.status === "draft" && (isOwnerOrAdmin || state.user.role === "accountant")) {
       if (order.draft_reason) {
         buttons.push({ label: `${t("draft_reason_label")}${labelColon()}${order.draft_reason}`, action: "noop", cls: "btn", disabledDisplay: true });
       }

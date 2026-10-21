@@ -22,7 +22,7 @@ KAD-GMM repo (`docs/kad-orders.md`).
 ## Settings (Settings -> Admin workspace -> KAD OS)
 Stored in `app_settings.app_orders` (JSON); every key has an On/Off and a number: `discount_enabled`/`discount_pct`,
 `priority_enabled`, `promise_enabled`/`promise_working_days`/`promise_cutoff_hour`, `progress_enabled`/`levels` (four ascending order
-counts), `chase_enabled`/`chase_confirm_hours`. Defaults = owner's choice of 2026-10-21 (flat 2 %, priority on, promise 2 working days before 15:00, progress on). Changes are
+counts), `chase_enabled`/`chase_confirm_hours`, `customer_edit_enabled` (cancel / change until Confirmed). Defaults = owner's choice of 2026-10-21 (flat 2 %, priority on, promise 2 working days before 15:00, progress on). Changes are
 logged in `app_orders_log`. Admin/CEO only; campaigns also the sales director.
 
 ## How a customer's KAD OS is connected
@@ -38,19 +38,26 @@ while linked (FK RESTRICT).
 ## API for the customer's KAD OS (`/api/partner/*`, session cookie like the app; 403 `not_partner` when the account is not linked)
 `GET /me` (customer, its payment terms (`terms`, from the customer record), perks, balance summary, progress, running offers, next promise date) · `GET /catalog` (tier price + availability,
 never costs) · `GET /offers` · `GET /orders`, `GET /orders/:id` (5-step status + timeline, lines with list price / campaign) ·
-`GET /balance` · `POST /preview` (price a basket: campaigns, app discount, promise date, nothing saved) · `POST /orders`.
+`GET /balance` · `POST /preview` (price a basket: campaigns, app discount, promise date, nothing saved) · `POST /orders` (+ `replaces_order_id` to change one) · `POST /orders/:id/cancel`. `GET /me` also returns `contact` (name, phone) for "call us".
 Only the linked customer's data is reachable.
+
+## Cancel / change until Confirmed (owner's rule, 2026-10-21)
+- The customer may cancel or change an app order **only while it is `submitted`** (KAD Motors has not confirmed it). `can_edit` on every `GET /orders` row says so; the switch is `customer_edit_enabled` (403 `edit_disabled` when off).
+- `POST /orders/:id/cancel {reason?}`: the order goes back to `draft` with `orders.cancelled_at` / `cancel_reason` (migration 137). It is a closed record: it leaves every queue, report ("stuck orders", the pipeline's draft list) and credit exposure, shows a red **Cancelled** chip, and `/submit` and PATCH refuse it (`cancelled_by_customer`). The partner API shows `status: "cancelled"`.
+- Change = `POST /orders` with `replaces_order_id`: the old order is cancelled first (so it cannot be confirmed in the meantime), the new one is placed by the normal order rules (campaigns, 2 %, new promise date, credit check) and linked (`replaced_by_order_id`); if placing fails the old order is restored untouched. A retry with the same `client_ref` changes nothing twice.
+- The whole thing is decided by one status-guarded UPDATE, like the office's Confirm: whoever reaches the database first wins; the other side gets 409 `too_late` (or `already_cancelled`) with `contact` (the customer's sales manager, else the office phone).
+- Staff are told at once: Telegram, the order-notify roles and the customer's own sales manager ("cancelled by the customer" / "order changed - replaces №...").
 
 ## Supplier-side API (`/api/app-orders/*`)
 `GET|PUT /settings` and `POST|DELETE /links` (admin/CEO) · `GET|POST /campaigns`, `PATCH /campaigns/:id` (`paused`, `end_now`),
 `DELETE /campaigns/:id` (only while unused) (admin/CEO/sales director).
 
 ## Data
-Migration 136: `partner_links`, `campaigns`, `campaign_products`, `campaign_customers`, `orders.placed_via_app/app_discount_pct/promised_date`,
+Migration 137: `orders.cancelled_at/cancel_reason/replaced_by_order_id`. Migration 136: `partner_links`, `campaigns`, `campaign_products`, `campaign_customers`, `orders.placed_via_app/app_discount_pct/promised_date`,
 `order_items.campaign_id/list_price_amd`, `app_settings.app_orders`, `app_orders_log`. Existing `product_promos` (date-ranged display
 prices on the price list) is a different, older feature and is not touched.
 
 ## Not built yet (ideas, owner to decide)
-Push/Telegram to the customer when a campaign starts or an order changes status (KAD OS polls today); auto-confirm of safe app orders;
-Vaghinak chasing app orders that wait too long; per-customer targeting by past purchases ("customers who bought X"); a supplier report
+Push to the customer when a campaign starts or an order changes status (KAD OS polls today; push is planned in KAD OS 0.39); auto-confirm of safe app orders (owner: NO);
+per-customer targeting by past purchases ("customers who bought X"); a supplier report
 "liters via app vs by phone".

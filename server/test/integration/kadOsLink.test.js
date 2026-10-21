@@ -378,3 +378,100 @@ test("the customer sees that an order waits for KAD Motors' approval (not why), 
   assert.deepEqual(me.terms, { method: "invoice", days: 30 });
   await pool.query("UPDATE customers SET credit_term_days = 45 WHERE id = $1", [shop.id]);
 });
+
+test("the customer cancels an order until KAD Motors confirms it; the office is told, the order cannot come back", async () => {
+  const r = await order(partnerCookie, [q(p1, 1)]);
+  trackOrder(r.data.id);
+  const one = async () => (await apiRequest(`/api/partner/orders/${r.data.id}`, { cookie: partnerCookie })).data;
+  assert.equal((await one()).can_edit, true);
+  assert.ok((await apiRequest("/api/partner/me", { cookie: partnerCookie })).data.contact.phone, "who to call when it is too late");
+  const c = await apiRequest(`/api/partner/orders/${r.data.id}/cancel`, { method: "POST", cookie: partnerCookie, body: { reason: "Ordered twice" } });
+  assert.equal(c.status, 200, JSON.stringify(c.data));
+  assert.equal(c.data.status, "cancelled");
+  assert.equal(c.data.can_edit, false);
+  assert.equal(c.data.cancel_reason, "Ordered twice");
+  assert.equal(c.data.attention, null);
+  // staff: the record stays, marked, and it can neither be edited nor sent forward again
+  const staff = (await apiRequest(`/api/orders/${r.data.id}`, { cookie: adminCookie })).data;
+  assert.ok(staff.cancelled_at);
+  assert.equal((await apiRequest(`/api/orders/${r.data.id}/submit`, { method: "POST", cookie: adminCookie })).data.code, "cancelled_by_customer");
+  assert.equal((await apiRequest(`/api/orders/${r.data.id}`, { method: "PATCH", cookie: adminCookie, body: { note: "x" } })).status, 409);
+  assert.ok(staff.history.some((h) => /Cancelled by the customer/.test(h.reason ?? "")));
+  // a second cancel is a clean refusal, not an error
+  const again = await apiRequest(`/api/partner/orders/${r.data.id}/cancel`, { method: "POST", cookie: partnerCookie, body: {} });
+  assert.equal(again.status, 409);
+  assert.equal(again.data.code, "already_cancelled");
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  const n = await pool.query("SELECT title FROM notifications WHERE user_id = $1 AND title LIKE '%չեղարկեց%' ORDER BY id DESC LIMIT 1", [rep.id]);
+  assert.equal(n.rows.length, 1, "the customer's sales manager is told");
+  // nobody else's order can be cancelled
+  const theirs = await apiRequest("/api/orders", { method: "POST", cookie: repCookie, body: { customer_id: shop.id, items: [q(p1, 1)], payment_method: "cash" } });
+  trackOrder(theirs.data.id);
+  assert.equal((await apiRequest(`/api/partner/orders/${theirs.data.id}/cancel`, { method: "POST", cookie: partnerCookie, body: {} })).status, 404, "an ordinary order is not an app order");
+  const rivals = await apiRequest("/api/partner/orders", { method: "POST", cookie: (await loginAs(other.email)), body: { items: [q(p1, 1)], payment_method: "invoice", payment_term_days: 45 } });
+  trackOrder(rivals.data.id);
+  assert.equal((await apiRequest(`/api/partner/orders/${rivals.data.id}/cancel`, { method: "POST", cookie: partnerCookie, body: {} })).status, 404, "another customer's order");
+});
+
+test("once KAD Motors has confirmed, the app can no longer cancel or change it", async () => {
+  const r = await order(partnerCookie, [q(p1, 1)]);
+  trackOrder(r.data.id);
+  const ok = await apiRequest(`/api/orders/${r.data.id}`, { method: "PATCH", cookie: directorCookie, body: { status: "confirmed" } });
+  assert.equal(ok.status, 200, JSON.stringify(ok.data));
+  const late = await apiRequest(`/api/partner/orders/${r.data.id}/cancel`, { method: "POST", cookie: partnerCookie, body: {} });
+  assert.equal(late.status, 409);
+  assert.equal(late.data.code, "too_late");
+  assert.ok(late.data.contact.phone);
+  const change = await order(partnerCookie, [q(p2, 3)], { replaces_order_id: r.data.id });
+  assert.equal(change.status, 409);
+  assert.equal(change.data.code, "too_late");
+  assert.equal((await apiRequest(`/api/partner/orders/${r.data.id}`, { cookie: partnerCookie })).data.can_edit, false);
+  // the failed change placed nothing
+  const mine = (await apiRequest("/api/partner/orders", { cookie: partnerCookie })).data.orders;
+  assert.equal(mine.filter((o) => o.items.some((i) => i.product_id === p2.id && i.quantity === 3)).length, 0);
+});
+
+test("changing an order: the new one takes its place, the old is closed and linked; a failed change leaves the old order alone", async () => {
+  const r = await order(partnerCookie, [q(p1, 1)]);
+  trackOrder(r.data.id);
+  const bad = await order(partnerCookie, [{ product_id: 999999999, quantity: 1 }], { replaces_order_id: r.data.id });
+  assert.equal(bad.status, 400, JSON.stringify(bad.data));
+  const still = (await apiRequest(`/api/partner/orders/${r.data.id}`, { cookie: partnerCookie })).data;
+  assert.equal(still.status, "received", "the old order is exactly as it was");
+  assert.equal(still.can_edit, true);
+  const ch = await order(partnerCookie, [q(p1, 2), q(p2, 1)], { replaces_order_id: r.data.id, client_ref: `chg-${stamp}` });
+  assert.equal(ch.status, 201, JSON.stringify(ch.data));
+  trackOrder(ch.data.id);
+  assert.equal(ch.data.replaces.id, r.data.id);
+  assert.equal(Number(ch.data.total_amd), Math.round(25000 * 0.98));
+  const old = (await apiRequest(`/api/partner/orders/${r.data.id}`, { cookie: partnerCookie })).data;
+  assert.equal(old.status, "cancelled");
+  assert.equal(old.replaced, true);
+  assert.equal(old.replaced_by_code, ch.data.order_code);
+  // the same request retried (lost response) neither cancels nor creates anything again
+  const retry = await order(partnerCookie, [q(p1, 2), q(p2, 1)], { replaces_order_id: r.data.id, client_ref: `chg-${stamp}` });
+  assert.equal(retry.status, 201);
+  assert.equal(retry.data.id, ch.data.id);
+  // the office hears of ONE change, with the old number
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  const n = await pool.query("SELECT title, body FROM notifications WHERE user_id = $1 AND title LIKE '%փոխվեց%' ORDER BY id DESC LIMIT 1", [director.id]);
+  assert.ok(n.rows[0]?.body.includes(r.data.order_code));
+});
+
+test("the supplier can switch cancel/change off: the app is then told to call", async () => {
+  const off = await apiRequest("/api/app-orders/settings", { method: "PUT", cookie: adminCookie, body: { customer_edit_enabled: false } });
+  assert.equal(off.status, 200, JSON.stringify(off.data));
+  try {
+    const r = await order(partnerCookie, [q(p1, 1)]);
+    trackOrder(r.data.id);
+    const one = (await apiRequest(`/api/partner/orders/${r.data.id}`, { cookie: partnerCookie })).data;
+    assert.equal(one.can_edit, false);
+    const c = await apiRequest(`/api/partner/orders/${r.data.id}/cancel`, { method: "POST", cookie: partnerCookie, body: {} });
+    assert.equal(c.status, 403);
+    assert.equal(c.data.code, "edit_disabled");
+    assert.equal((await order(partnerCookie, [q(p1, 1)], { replaces_order_id: r.data.id })).status, 403);
+    assert.equal((await apiRequest("/api/partner/me", { cookie: partnerCookie })).data.perks.customer_edit, false);
+  } finally {
+    await apiRequest("/api/app-orders/settings", { method: "PUT", cookie: adminCookie, body: { customer_edit_enabled: true } });
+  }
+});
