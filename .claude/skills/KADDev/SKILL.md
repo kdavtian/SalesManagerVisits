@@ -3,7 +3,7 @@ name: KADDev
 description: Everything needed to develop, fix and ship the KAD Motors "Field Visits" PWA (kdavtian/SalesManagerVisits) and its Castrol CEO Telegram bot / ERP-sync pipeline (kdavtian/castrol_ceo_report). Use at the start of ANY task on either repo - features, UI/UX fixes, ERP/Excel data issues, pricing, debt/sales reports, orders, warehouse, bonuses, Lily accountant integration, deploy/droplet commands, PR/merge workflow. Contains the owner's preferences, hard rules (version bumps, merge policy), architecture maps, domain rules and past lessons.
 ---
 
-# KADDev - working on KAD Field Visits + Castrol CEO bot
+# KADDev - working on KAD Field Visits + Castrol CEO bot (+ KAD OS, the customers' ERP)
 
 You are the sole developer of two linked systems owned by one person (the owner, Armenian company KAD Motors, Castrol distributor). They are not a programmer; they review on an iPhone, deploy from a phone/Windows PC over SSH, and judge your work by what they SEE in the app. Read this file fully, then open the reference that matches the task.
 
@@ -17,6 +17,7 @@ You are the sole developer of two linked systems owned by one person (the owner,
 | Deploy, droplet commands, CI, PR/merge flow, troubleshooting | `references/ops-runbook.md` |
 | **Owner's goal (No. 1 in the Armenian oil market) and the app roadmap** | `references/strategy-roadmap.md` |
 | **Vaghinak (Վաղինակ), the planned AI Operations Deputy Director: the owner's full brief, open questions, design decisions** | `references/vaghinak-spec.md` |
+| **KAD OS (the customers' free ERP, repo `kad-gmm`)**: its workflow, checks, oil finder, order limits, what data is shared | `references/kad-os-gmm.md` (+ `docs/kad-os-link.md` in this repo) |
 | The Castrol Excel workbook itself (every sheet/column/formula, cost model, data defects, snapshot numbers) | sibling skill `Castrol-file` |
 
 ## Hard rules (never skip)
@@ -77,6 +78,14 @@ You are the sole developer of two linked systems owned by one person (the owner,
 
 Likes: compact, uncluttered iOS-native-feeling UI; secondary/explanatory text (hints, "from visits..." notes) hidden under a small "!" icon ON THE SECTION HEADER (never a paragraph under the content); several facts shown as short bullet lines ("• label: value"), never one long sentence with commas (notifications, Vaghinak messages, summaries); long chip lists split into labelled parts; bottom sheets (floating/fixed action buttons); the shared tri-state accordion tree picker for all hierarchical multi-select filters; sticky/consistent controls; right-aligned amounts; AMD as whole numbers; Armenian as main language (EN supported); fast app (3GB Android + iPhone), instant tab switches via caches; reliable offline; short, scannable answers with numbered items; ready-to-copy droplet commands (Windows/phone friendly, one block, no placeholders); ALWAYS merging so they can deploy; versions reported.
 Dislikes: stickiness on customer cards, thick blue focus outlines (thin only), duplicate/redundant text or search fields, overlapping elements, loading flashes on tab switch, slow deploys (wants 30-60 s), long noisy outputs, decimals in AMD, regressions, being asked unnecessary questions, secrets/tokens handled carelessly, wrong data (Excel is the trusted source).
+
+## KAD OS (repo `kdavtian/kad-gmm`) is part of this job
+
+The owner also has you as sole developer of **KAD OS** (the free ERP for wholesale customers; KAD Motors is its supplier). Same rules, own versions
+(`APP_VERSION` 0.x + `CACHE_VERSION`), own deploy (`/opt/gmm-app`), deploy KAD Motors first. Add the repo with `add_repo` when a task touches it. Read `references/kad-os-gmm.md`.
+34. **Every summary lists the deploy commands in order (KAD Motors, then KAD OS), both APP_VERSIONs, and repeats ALL open questions in full.**
+35. **Never claim a bug is fixed from reasoning alone** ("Toyota Camry not recognised"): reproduce in the real app first; if the cause may be configuration (e.g. missing AI key), say so plainly next to the code fix.
+36. **Two copies of this skill exist** (repo `.claude/skills/KADDev` = the full, current one; the account skill `anthropic-skills:kaddev` = an older short copy synced from claude.ai). Edit the repo copy; the account copy only changes when the owner re-uploads it.
 
 ## Two repos, one data flow
 
