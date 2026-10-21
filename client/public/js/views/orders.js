@@ -4,7 +4,7 @@ import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
 import { ORDER_STATUS_ICONS } from "../ordersSearchEnhancements.js";
 import { loadWithCache } from "../listCache.js";
-import { STATUS_META, openOrderDetailSheet, paymentMethodBadgeHtml, appBadgeHtml } from "../orderDetailSheet.js";
+import { STATUS_META, orderStatusMeta, openOrderDetailSheet, paymentMethodBadgeHtml, appBadgeHtml } from "../orderDetailSheet.js";
 import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
 import { dockedKey } from "../dockSheet.js";
 import { availableBulkActions, runBulkAction } from "../orderBulk.js";
@@ -393,7 +393,7 @@ export function renderOrders(root, navigate, openId = null) {
     let lastDateKey = null;
     listEl.innerHTML = filtered
       .map((o) => {
-        const meta = STATUS_META[o.status] ?? STATUS_META.submitted;
+        const meta = orderStatusMeta(o);
         const dateKey = orderDateKey(o.created_at);
         let dateHeading = "";
         if (sortKey === "date" && dateKey !== lastDateKey) {

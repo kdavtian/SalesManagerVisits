@@ -7,7 +7,8 @@
 //   GET  /orders/:id
 //   GET  /balance   debt, overdue part, credit limit, recent payments
 //   POST /preview   the price of a basket (campaigns, app discount, delivery promise) without placing it
-//   POST /orders    place an app order (same rules as POST /api/orders for a linked account)
+//   POST /orders    place an app order (same rules as POST /api/orders for a linked account); with replaces_order_id it CHANGES a still-unconfirmed order
+//   POST /orders/:id/cancel   cancel an app order that KAD Motors has not confirmed yet
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -22,6 +23,12 @@ import {
   promisedDateFor, partnerStatus, appProgress, PARTNER_STEPS,
 } from "../appOrders.js";
 import { createOrderHandler } from "./orders.js";
+import { notifyTelegram, escapeHtml } from "../telegram.js";
+import { notifyUser } from "../notifications.js";
+import { ORDER_NOTIFY_ROLES } from "../notificationPreferences.js";
+import { bullets } from "../utils/bullets.js";
+import { OFFICE_PHONE } from "../pricelistPdf.js";
+import { normalizePhoneForStorage } from "../phoneFormat.js";
 
 export const partnerRouter = Router();
 partnerRouter.use(requireAuth);
@@ -78,7 +85,17 @@ function perks(settings) {
     promise_working_days: settings.promise_enabled ? settings.promise_working_days : null,
     promise_cutoff_hour: settings.promise_enabled ? settings.promise_cutoff_hour : null,
     progress: settings.progress_enabled,
+    customer_edit: settings.customer_edit_enabled,
   };
+}
+
+// Who to call when an order can no longer be changed in the app: the customer's own sales manager, else the office.
+async function contactFor(customer) {
+  const { rows } = await pool.query(
+    "SELECT u.name, u.phone FROM customers c JOIN users u ON u.id = c.assigned_manager_id WHERE c.id = $1 AND u.status = 'active'",
+    [customer.id]
+  );
+  return { name: rows[0]?.name ?? null, phone: normalizePhoneForStorage(rows[0]?.phone) || normalizePhoneForStorage(OFFICE_PHONE) };
 }
 
 partnerRouter.get("/me", async (req, res) => {
@@ -96,6 +113,7 @@ partnerRouter.get("/me", async (req, res) => {
     // The customer's own payment terms in KAD Motors (invoice, N days): KAD OS sends its orders with them instead of a number kept in its own settings.
     terms: { method: "invoice", days: customer.credit_term_days ?? 45 },
     perks: perks(settings),
+    contact: await contactFor(customer),
     promised_date: promised,
     balance: { ...balance, payments: balance.payments.slice(0, 5) },
     progress,
@@ -129,9 +147,12 @@ partnerRouter.get("/offers", async (req, res) => {
 });
 
 async function loadOrders(customerId, where = "", params = [], limit = 60) {
+  const editable = (await getAppOrderSettings()).customer_edit_enabled;
   const { rows } = await pool.query(
     `SELECT o.id, o.order_code, o.status, o.created_at, o.total_amd::float AS total_amd, o.discount_amd::float AS discount_amd, o.app_discount_pct::float AS app_discount_pct,
             to_char(o.promised_date, 'YYYY-MM-DD') AS promised_date, o.placed_via_app, o.note, o.payment_term_days, o.approval_status, o.credit_status,
+            o.cancelled_at, o.cancel_reason, o.replaced_by_order_id,
+            (SELECT r.order_code FROM orders r WHERE r.id = o.replaced_by_order_id) AS replaced_by_code,
             EXISTS (SELECT 1 FROM route_stops rs WHERE rs.order_id = o.id AND rs.completed_at IS NULL) AS on_route
        FROM orders o WHERE o.customer_id = $1 ${where} ORDER BY o.created_at DESC, o.id DESC LIMIT ${limit}`,
     [customerId, ...params]
@@ -151,7 +172,8 @@ async function loadOrders(customerId, where = "", params = [], limit = 60) {
   ]);
   const podAt = new Map(pods.map((p) => [p.order_id, p.at]));
   return rows.map((o) => {
-    const status = partnerStatus(o.status, o.on_route);
+    const cancelled = Boolean(o.cancelled_at);
+    const status = cancelled ? "cancelled" : partnerStatus(o.status, o.on_route);
     const at = {};
     for (const h of hist.filter((x) => x.order_id === o.id)) {
       const step = h.new_status === "submitted" ? "received" : h.new_status === "confirmed" ? "confirmed" : h.new_status === "packed_stock_out" ? "packed" : h.new_status === "delivered" ? "delivered" : null;
@@ -163,11 +185,13 @@ async function loadOrders(customerId, where = "", params = [], limit = 60) {
     const timeline = PARTNER_STEPS.map((step, i) => ({ step, at: at[step] ?? null, done: reached >= 0 && i <= reached }));
     const lines = items.filter((i) => i.order_id === o.id).map(({ order_id, ...rest }) => rest);
     const saved = lines.reduce((s, l) => s + (l.list_price ? (l.list_price - l.unit_price) * l.quantity : 0), 0) + (o.discount_amd || 0);
-    const { on_route, approval_status, credit_status, ...rest } = o;
+    const { on_route, approval_status, credit_status, replaced_by_order_id, ...rest } = o;
     // What the customer may know about a hold: that KAD Motors still has to approve the order (price or credit limit), or that it went back
     // for a correction. No internal reason is passed on.
-    const attention = o.status === "draft" ? "returned" : (o.status === "submitted" || o.status === "confirmed") && (approval_status === "pending" || credit_status === "pending") ? "approval" : null;
-    return { ...rest, status, raw_status: o.status, attention, timeline, items: lines, saved_amd: Math.round(saved) };
+    const attention = cancelled ? null : o.status === "draft" ? "returned" : (o.status === "submitted" || o.status === "confirmed") && (approval_status === "pending" || credit_status === "pending") ? "approval" : null;
+    // Until KAD Motors confirms it, the customer may still cancel or change the order (Settings -> KAD OS -> App perks can switch this off).
+    const can_edit = editable && o.status === "submitted" && !cancelled && o.placed_via_app;
+    return { ...rest, status, raw_status: o.status, attention, can_edit, replaced: replaced_by_order_id !== null, timeline, items: lines, saved_amd: Math.round(saved) };
   });
 }
 
@@ -225,4 +249,142 @@ partnerRouter.post("/preview", async (req, res) => {
   });
 });
 
-partnerRouter.post("/orders", createOrderHandler);
+// ---- cancel / change until KAD Motors confirms (owner, 2026-10-21) -------------------------------------------------------
+// "Cancelled" = the order goes back to draft with cancelled_at set (migration 137): out of every live queue, kept as a record, never submittable
+// again. The UPDATE is guarded on status = 'submitted', exactly like the confirm: whichever of the customer's cancel and the office's confirm
+// reaches the database first wins, the other gets a clean "too late". Past Confirmed the customer calls their manager (contact in GET /me).
+const logCancelled = (userId, orderId, reason) =>
+  pool.query(`INSERT INTO order_status_history (order_id, old_status, new_status, reason, changed_by) VALUES ($1, 'submitted', 'draft', $2, $3)`, [orderId, reason, userId]);
+
+async function cancelAppOrder(userId, customerId, orderId, { reason, replacing }) {
+  const { rows } = await pool.query(
+    `UPDATE orders SET status = 'draft', cancelled_at = now(), cancel_reason = $3, draft_reason = $4, updated_at = now()
+      WHERE id = $1 AND customer_id = $2 AND placed_via_app AND status = 'submitted' AND cancelled_at IS NULL
+      RETURNING id, order_code, total_amd, user_id`,
+    [orderId, customerId, reason || null, replacing ? "Changed by the customer (KAD OS)" : "Cancelled by the customer (KAD OS)"]
+  );
+  const order = rows[0];
+  if (!order) return null;
+  // A change writes its history row only once the new order exists (the log cannot be edited afterwards): see the POST /orders below.
+  if (!replacing) await logCancelled(userId, order.id, `Cancelled by the customer (KAD OS)${reason ? `: ${reason}` : ""}`);
+  return order;
+}
+
+// Put the order back exactly as it was (the change failed after the old order was already cancelled; nothing was logged for it, so nothing is lost).
+async function restoreAppOrder(orderId) {
+  await pool.query(
+    `UPDATE orders SET status = 'submitted', cancelled_at = NULL, cancel_reason = NULL, draft_reason = NULL, updated_at = now()
+      WHERE id = $1 AND status = 'draft' AND cancelled_at IS NOT NULL AND replaced_by_order_id IS NULL`,
+    [orderId]
+  );
+}
+
+// Staff hear about it at once: the order they may already be looking at, the customer's own manager, and the Telegram group.
+async function tellStaffCancelled(order, customer, reason) {
+  try {
+    notifyTelegram(`↩️ <b>APP order cancelled by the customer</b>\n${escapeHtml(customer.name)} — ${escapeHtml(order.order_code)}\n${Number(order.total_amd).toLocaleString()} AMD${reason ? `\n${escapeHtml(reason)}` : ""}`);
+    const { rows: roles } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [ORDER_NOTIFY_ROLES]);
+    const { rows: mgr } = await pool.query("SELECT assigned_manager_id AS id FROM customers WHERE id = $1", [customer.id]);
+    const ids = new Set(roles.map((r) => r.id));
+    if (mgr[0]?.id) ids.add(mgr[0].id);
+    for (const id of ids) {
+      notifyUser(id, "order_status_changed", {
+        title: "Հաճախորդը չեղարկեց պատվերը (KAD OS)",
+        body: `${customer.name}\n${bullets([`Պատվեր՝ ${order.order_code}`, `Գումար՝ ${Number(order.total_amd).toLocaleString()} ԱՄԴ`, reason ? `Պատճառ՝ ${reason}` : null])}`,
+        url: `/#/orders?open=${order.id}`,
+      });
+    }
+  } catch (err) {
+    console.error("Order-cancelled notification failed:", err);
+  }
+}
+
+function cleanReason(v) {
+  const s = typeof v === "string" ? v.trim().slice(0, 200) : "";
+  return s || null;
+}
+
+async function editNotAllowed(res, customerId) {
+  const settings = await getAppOrderSettings();
+  if (!settings.customer_edit_enabled) {
+    res.status(403).json({ error: "Orders can no longer be cancelled or changed in the app", code: "edit_disabled", contact: await contactFor({ id: customerId }) });
+    return true;
+  }
+  return false;
+}
+
+async function tooLate(res, customerId, orderId) {
+  const { rows } = await pool.query("SELECT status, cancelled_at FROM orders WHERE id = $1 AND customer_id = $2 AND placed_via_app", [orderId, customerId]);
+  if (!rows[0]) return res.status(404).json({ error: "Order not found" });
+  const code = rows[0].cancelled_at ? "already_cancelled" : "too_late";
+  return res.status(409).json({
+    error: rows[0].cancelled_at ? "This order is already cancelled" : "KAD Motors has already confirmed this order -- please call your sales manager to change it",
+    code,
+    contact: await contactFor({ id: customerId }),
+  });
+}
+
+partnerRouter.post("/orders/:id/cancel", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(404).json({ error: "Order not found" });
+  if (await editNotAllowed(res, req.partner.customerId)) return;
+  const reason = cleanReason(req.body?.reason);
+  const order = await cancelAppOrder(req.user.id, req.partner.customerId, id, { reason });
+  if (!order) return tooLate(res, req.partner.customerId, id);
+  const customer = await loadCustomer(req.partner.customerId);
+  const [out] = await loadOrders(req.partner.customerId, "AND o.id = $2", [id], 1);
+  res.json(out);
+  tellStaffCancelled(order, customer, reason);
+});
+
+// Placing an order; with replaces_order_id it is a CHANGE: the old order is cancelled first (so it can no longer be confirmed behind the
+// customer's back), the new one is placed by the normal order handler, and if that fails for any reason the old order comes back untouched.
+partnerRouter.post("/orders", async (req, res) => {
+  const replacesId = req.body?.replaces_order_id;
+  if (replacesId === undefined || replacesId === null || replacesId === "") return createOrderHandler(req, res);
+  const oldId = Number(replacesId);
+  if (!Number.isInteger(oldId)) return res.status(400).json({ error: "replaces_order_id must be an order id" });
+  const customerId = req.partner.customerId;
+  if (await editNotAllowed(res, customerId)) return;
+
+  // A retried change (same client_ref, the first attempt already went through) must not cancel anything again.
+  if (req.body?.client_ref) {
+    const { rows } = await pool.query("SELECT 1 FROM orders WHERE user_id = $1 AND client_ref = $2", [req.user.id, req.body.client_ref]);
+    if (rows[0]) return createOrderHandler(req, res);
+  }
+  const old = await cancelAppOrder(req.user.id, customerId, oldId, { replacing: true });
+  if (!old) return tooLate(res, customerId, oldId);
+  req.replacesOrder = { id: old.id, order_code: old.order_code };
+
+  const origJson = res.json.bind(res);
+  let settled = false;
+  res.json = (body) => {
+    if (settled) return res;
+    settled = true;
+    (async () => {
+      try {
+        if (res.statusCode < 300 && body?.id) {
+          await pool.query("UPDATE orders SET replaced_by_order_id = $2 WHERE id = $1", [old.id, body.id]);
+          await logCancelled(req.user.id, old.id, `Changed by the customer (KAD OS) - replaced by ${body.order_code}`);
+          origJson({ ...body, replaces: { id: old.id, order_code: old.order_code } });
+        } else {
+          await restoreAppOrder(old.id);
+          origJson(body);
+        }
+      } catch (err) {
+        console.error("Finishing an order change failed:", err);
+        origJson(body);
+      }
+    })();
+    return res;
+  };
+  try {
+    await createOrderHandler(req, res);
+  } catch (err) {
+    if (!settled) {
+      settled = true;
+      await restoreAppOrder(old.id);
+    }
+    throw err;
+  }
+});

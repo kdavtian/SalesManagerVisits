@@ -385,16 +385,18 @@ export async function createOrderHandler(req, res) {
       // Soft credit hold: the customer's oldest unpaid invoice is far past due (warning only).
       const hold = await debtHoldInfo(pool, customer.id, yerevanToday()).catch(() => null);
       const holdSuffix = hold?.on_hold ? ` (overdue debt ${Math.round(hold.overdue_amd).toLocaleString()} AMD, oldest ${hold.oldest_due_days} days past due)` : "";
+      const replaces = req.replacesOrder; // set by POST /api/partner/orders when the customer CHANGED an order: this one takes its place
       const creditSuffix = credit?.exceeded ? ` (credit limit exceeded by ${Math.round(credit.over).toLocaleString()} AMD)` : "";
       notifyTelegram(
-        `${partner ? "📱" : "🛒"} <b>${partner ? "New APP order" : "New order"}</b>\n${escapeHtml(repName)} — ${escapeHtml(customer.name)}\n${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD${escapeHtml(discountSuffix + creditSuffix + holdSuffix)}`
+        `${partner ? "📱" : "🛒"} <b>${partner ? (replaces ? "APP order CHANGED" : "New APP order") : "New order"}</b>\n${escapeHtml(repName)} — ${escapeHtml(customer.name)}\n${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD${escapeHtml(discountSuffix + creditSuffix + holdSuffix)}${replaces ? escapeHtml(` (replaces ${replaces.order_code})`) : ""}`
       );
 
       const { rows: notifyRecipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [ORDER_NOTIFY_ROLES]);
       for (const recipient of notifyRecipients) {
         notifyUser(recipient.id, "order_placed", {
-          title: partner ? "Նոր պատվեր (KAD OS)" : "Նոր պատվեր",
+          title: partner ? (replaces ? "Պատվերը փոխվեց (KAD OS)" : "Նոր պատվեր (KAD OS)") : "Նոր պատվեր",
           body: `${repName}-ը պատվեր է ձևակերպել ${customer.name}-ի համար\n${bullets([
+            replaces ? `Փոխարինում է ${replaces.order_code} պատվերին (այն չեղարկված է)` : null,
             `${lines.length} ապրանք`,
             `Գումար՝ ${Number(totalAmd).toLocaleString()} ԱՄԴ`,
             approvalStatus !== "pending" ? null : discountAmd > 0 ? `Զեղչ՝ ${discountAmd.toLocaleString()} ԱՄԴ — սպասում է տնօրենի հաստատմանը` : discountPct > 0 ? `Զեղչ՝ ${discountPct}% — սպասում է տնօրենի հաստատմանը` : null,
@@ -772,6 +774,7 @@ ordersRouter.post("/:id/submit", async (req, res) => {
   if (order.status !== "draft") {
     return res.status(409).json({ error: `Cannot submit an order that is already "${order.status}"` });
   }
+  if (order.cancelled_at) return res.status(409).json({ error: "The customer cancelled this order in KAD OS -- it cannot be submitted", code: "cancelled_by_customer" });
 
   let erpCustomerId = order.erp_customer_id;
   if (!erpCustomerId) {
@@ -840,6 +843,7 @@ ordersRouter.patch("/:id", async (req, res) => {
   const { rows } = await pool.query("SELECT * FROM orders WHERE id = $1", [req.params.id]);
   const order = rows[0];
   if (!order) return res.status(404).json({ error: "Order not found" });
+  if (order.cancelled_at) return res.status(409).json({ error: "The customer cancelled this order in KAD OS -- it can no longer be changed", code: "cancelled_by_customer" });
 
   const { status, items, note, discount_pct, discount_amd, payment_method, payment_term_days } = req.body ?? {};
   if (status === undefined && items === undefined && note === undefined && discount_pct === undefined && discount_amd === undefined && payment_method === undefined && payment_term_days === undefined) {

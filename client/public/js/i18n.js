@@ -2784,6 +2784,10 @@ const dict = {
     kos_chase_label: "Chase slow app orders",
     kos_chase_unit: "hours to confirm",
     kos_chase_help: "Vaghinak reminds the sales director when an app order waits longer than this for confirmation (packing and delivery: half of the usual limit), and tells the CEO when it is twice as long.",
+    kos_edit_label: "Customer may cancel or change an order",
+    kos_edit_help: "In KAD OS the customer can cancel an app order, or change it (the old one is closed and a new one placed), until KAD Motors confirms it. After that the app shows who to call. Switch off to make every change go through the sales manager.",
+    kos_cancelled_badge: "Cancelled",
+    kos_cancel_reason: "Customer's reason",
   },
   hy: {
     nav_dashboard: "Գլխավոր",
@@ -5567,6 +5571,10 @@ const dict = {
     kos_chase_label: "Հիշեցում դանդաղող հավելվածի պատվերների մասին",
     kos_chase_unit: "ժամ՝ հաստատման համար",
     kos_chase_help: "Վաղինակը հիշեցնում է վաճառքի տնօրենին, երբ հավելվածի պատվերը հաստատման է սպասում նշված ժամից ավելի (փաթեթավորում և առաքում՝ սովորական սահմանի կեսը), իսկ երկու անգամ ավելի երկար լինելու դեպքում՝ գլխավոր տնօրենին։",
+    kos_edit_label: "Հաճախորդը կարող է չեղարկել կամ փոխել պատվերը",
+    kos_edit_help: "KAD OS-ում հաճախորդը կարող է չեղարկել հավելվածի պատվերը կամ փոխել այն (հինը փակվում է, նորը ստեղծվում), քանի դեռ KAD Motors-ը չի հաստատել։ Դրանից հետո հավելվածը ցույց է տալիս, թե ում զանգահարել։ Անջատելու դեպքում ցանկացած փոփոխություն կատարվում է վաճառքի մենեջերի միջոցով։",
+    kos_cancelled_badge: "Չեղարկված",
+    kos_cancel_reason: "Հաճախորդի նշած պատճառը",
   },
 };
 

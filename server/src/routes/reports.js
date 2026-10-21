@@ -224,7 +224,7 @@ reportsRouter.get("/orders-pipeline", requireReportAccess("orders_pipeline"), as
   // should surface regardless of which period is selected, the same way
   // Payments' "oldest pending" ignores its own period filter for the same
   // reason.
-  const stuckConditions = ["o.status IN ('draft', 'submitted', 'confirmed', 'packed_stock_out')"];
+  const stuckConditions = ["o.status IN ('draft', 'submitted', 'confirmed', 'packed_stock_out')", "o.cancelled_at IS NULL"]; // a cancelled KAD OS order is closed, not stuck
   const stuckParams = [];
   if (manager_id) {
     stuckParams.push(manager_id);
