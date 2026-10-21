@@ -94,11 +94,12 @@ export async function orderChase({ db, day, settings, pick }) {
     const over = flow.waiting.filter((w) => w.step === step && w.over_sla);
     if (!over.length) continue;
     const oldest = over[0];
-    const ctx = { stats: bullets([`Պատվերներ՝ ${over.length}`, `Ամենաերկարը՝ ${durationHy(Math.round(oldest.waiting_h * 60))}`, `Առաջինը՝ ${oldest.customer_name}`]) };
+    const appCount = over.filter((w) => w.via_app).length;
+    const ctx = { stats: bullets([`Պատվերներ՝ ${over.length}`, appCount ? `Հավելվածից (KAD OS)՝ ${appCount}` : null, `Ամենաերկարը՝ ${durationHy(Math.round(oldest.waiting_h * 60))}`, `Առաջինը՝ ${oldest.customer_name}`]) };
     for (const u of await userRow(await holders[step]())) {
       if (await createMessage(db, u, { kind: `order_waiting_${step}`, level: 1, day, ctx, audience: "management", settings, pick })) created++;
     }
-    const worst = over.filter((w) => w.waiting_h > 2 * flow.sla[step]);
+    const worst = over.filter((w) => w.waiting_h > 2 * (w.sla_h ?? flow.sla[step]));
     if (worst.length) {
       const escalate = await userRow([...(await usersWithRole("ceo", db)), ...(await usersWithRole("admin", db))]);
       for (const u of escalate) {

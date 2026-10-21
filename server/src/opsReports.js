@@ -6,6 +6,7 @@ import { pool } from "./db/pool.js";
 import { yerevanToday } from "./utils/yerevanDate.js";
 import { getVaghinakSettings } from "./vaghinak/settings.js";
 import { createOpsTask, closeOpsTasks, usersWithRole } from "./opsTasks.js";
+import { getAppOrderSettings } from "./appOrders.js";
 
 const YEREVAN_OFFSET_MS = 4 * 60 * 60 * 1000;
 
@@ -225,7 +226,7 @@ export async function winback(db = pool, weeks = 8) {
 }
 
 // ---------- order flow ----------
-export async function orderFlow(db = pool, days = 30) {
+export async function orderFlow(db = pool, days = 30, { limit = 40 } = {}) {
   const settings = await getVaghinakSettings(db);
   const { rows: steps } = await db.query(
     `WITH t AS (
@@ -247,8 +248,13 @@ export async function orderFlow(db = pool, days = 30) {
   const round1 = (n) => (n == null ? null : Math.round(n * 10) / 10);
   const stepMap = Object.fromEntries(steps.map((s) => [s.step, { n: s.n, p50_h: round1(s.p50), p90_h: round1(s.p90) }]));
   const sla = { confirm: settings.slaConfirmH, pack: settings.slaPackH, deliver: settings.slaDeliverH };
+  // App orders (KAD OS) are chased sooner: the confirm limit is the app setting (default 2 h), the other steps wait half the usual time.
+  const app = await getAppOrderSettings(db);
+  const appSla = app.chase_enabled
+    ? { confirm: Math.min(sla.confirm, app.chase_confirm_hours), pack: Math.max(1, sla.pack / 2), deliver: Math.max(1, sla.deliver / 2) }
+    : sla;
   const { rows: waiting } = await db.query(
-    `SELECT o.id, o.order_code, o.status, o.total_amd::float8 AS total_amd, c.name AS customer_name, o.approval_status, o.credit_status,
+    `SELECT o.id, o.order_code, o.status, o.placed_via_app, o.total_amd::float8 AS total_amd, c.name AS customer_name, o.approval_status, o.credit_status,
             CASE o.status WHEN 'submitted' THEN o.created_at
                  WHEN 'confirmed' THEN COALESCE((SELECT MIN(changed_at) FROM order_status_history WHERE order_id = o.id AND new_status = 'confirmed'), o.updated_at)
                  ELSE COALESCE((SELECT MIN(changed_at) FROM order_status_history WHERE order_id = o.id AND new_status = 'packed_stock_out'), o.updated_at) END AS since
@@ -261,18 +267,21 @@ export async function orderFlow(db = pool, days = 30) {
   const list = waiting.map((w) => {
     const hours = (now - new Date(w.since).getTime()) / 3.6e6;
     const step = stepOf[w.status];
+    const limit = w.placed_via_app ? appSla[step] : sla[step];
     return {
       id: w.id,
       order_code: w.order_code,
       customer_name: w.customer_name,
       total_amd: Math.round(w.total_amd),
       step,
+      via_app: Boolean(w.placed_via_app),
+      sla_h: limit,
       waiting_h: round1(hours),
-      over_sla: hours > sla[step],
+      over_sla: hours > limit,
       blocked_by: w.approval_status === "pending" ? "price_approval" : w.credit_status === "pending" ? "credit_approval" : null,
     };
   });
-  return { days, sla, steps: stepMap, waiting: list.slice(0, 40), waiting_count: list.length, over_sla_count: list.filter((w) => w.over_sla).length, effort: await orderEffort(db, days) };
+  return { days, sla, steps: stepMap, waiting: list.slice(0, limit), waiting_count: list.length, over_sla_count: list.filter((w) => w.over_sla).length, effort: await orderEffort(db, days) };
 }
 
 // How long it takes the reps to make an order (measured on the device, migration 124): this period against the one

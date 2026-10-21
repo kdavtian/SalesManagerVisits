@@ -87,6 +87,11 @@ export async function renderKadOsPerksSection(container) {
           <p class="muted settings-hint" id="kos-p-text" hidden>${t("kos_priority_help")}</p>
         </div>
         <div class="settings-list-group-item kos-row">
+          <div class="kos-row-top"><span class="settings-row-label">${t("kos_chase_label")} ${hintIcon("kos-c2-hint")}</span>${toggleHtml("kos-chase-on", s.chase_enabled, t("kos_chase_label"))}</div>
+          <p class="muted settings-hint" id="kos-c2-text" hidden>${t("kos_chase_help")}</p>
+          <div class="kos-row-fields" ${s.chase_enabled ? "" : "hidden"}>${numberField("chase_confirm_hours", s.chase_confirm_hours, { min: 1, max: 48, unit: t("kos_chase_unit") })}</div>
+        </div>
+        <div class="settings-list-group-item kos-row">
           <div class="kos-row-top"><span class="settings-row-label">${t("kos_promise_label")} ${hintIcon("kos-t-hint")}</span>${toggleHtml("kos-promise-on", s.promise_enabled, t("kos_promise_label"))}</div>
           <p class="muted settings-hint" id="kos-t-text" hidden>${t("kos_promise_help")}</p>
           <div class="kos-row-fields" ${s.promise_enabled ? "" : "hidden"}>
@@ -113,10 +118,11 @@ export async function renderKadOsPerksSection(container) {
     wireHint(container, "kos-d-hint", "kos-d-text");
     wireHint(container, "kos-p-hint", "kos-p-text");
     wireHint(container, "kos-t-hint", "kos-t-text");
+    wireHint(container, "kos-c2-hint", "kos-c2-text");
     wireHint(container, "kos-a-hint", "kos-a-text");
     const saved = container.querySelector("#kos-saved");
 
-    for (const [id, key] of [["kos-discount-on", "discount_enabled"], ["kos-priority-on", "priority_enabled"], ["kos-promise-on", "promise_enabled"], ["kos-progress-on", "progress_enabled"]]) {
+    for (const [id, key] of [["kos-discount-on", "discount_enabled"], ["kos-priority-on", "priority_enabled"], ["kos-promise-on", "promise_enabled"], ["kos-progress-on", "progress_enabled"], ["kos-chase-on", "chase_enabled"]]) {
       container.querySelector(`#${id}`).addEventListener("click", async (e) => {
         const btn = e.currentTarget;
         btn.disabled = true;
