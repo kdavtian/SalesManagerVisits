@@ -35,9 +35,12 @@ Every order by a linked account is an app order for that customer, whichever URL
 
 ## API for the customer's KAD OS (`/api/partner/*`, session cookie like the app; 403 `not_partner` when the account is not linked)
 `GET /me` (customer, its payment terms (`terms`, from the customer record), perks, balance summary, progress, running offers, next promise date) · `GET /catalog` (tier price + availability,
-never costs) · `GET /offers` · `GET /orders`, `GET /orders/:id` (5-step status + timeline, lines with list price / campaign) ·
+never costs) · `GET /products/:id/image` (the product's main photo; only active products) · `GET /offers` · `GET /orders`, `GET /orders/:id` (5-step status + timeline, lines with list price / campaign) ·
 `GET /balance` · `POST /preview` (price a basket: campaigns, app discount, promise date, nothing saved) · `POST /orders` (+ `replaces_order_id` to change one) · `POST /orders/:id/cancel`. `GET /me` also returns `contact` (name, phone) for "call us".
 Only the linked customer's data is reachable.
+
+## Frequent and photos (owner, 2026-10-22)
+`GET /api/partner/catalog` also returns `frequent` (product ids, most ordered first: the customer's own ever-ordered products, else the company's top 90-day list) and `image_v` per product (the photo file name, null when none), so KAD OS can open on a Frequent chip and show photos. No stock or cost data is in either.
 
 ## What KAD OS may see and do with stock and quantity (owner, 2026-10-22)
 - **No stock figure ever leaves KAD Motors.** `GET /api/partner/catalog` lists only products that are on the shelf (available > 0; stock unknown counts as not on the shelf) and carries no quantity field at all.

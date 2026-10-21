@@ -630,3 +630,25 @@ test("KAD OS sees only what is in stock and never how many; the order limit per 
     await put({ limits_enabled: true, limit_default: 12, limits: { 1: 48, 4: 16, 5: 16, 7: 12, 60: 4, 180: 4, 205: 4, 208: 4 } });
   }
 });
+
+test("catalog carries the Frequent ranking and the photo name; the photo is served to the linked account only, for catalog products", async () => {
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const { uploadDirPath } = await import("../../src/upload.js");
+  fs.mkdirSync(uploadDirPath, { recursive: true });
+  const file = `kos-photo-${stamp}.png`;
+  fs.writeFileSync(path.join(uploadDirPath, file), Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64"));
+  await pool.query("UPDATE products SET image_path = $2 WHERE id = $1", [p1.id, file]);
+  try {
+    const cat = (await apiRequest("/api/partner/catalog", { cookie: partnerCookie })).data;
+    assert.ok(Array.isArray(cat.frequent));
+    assert.equal(cat.products.find((p) => p.id === p1.id).image_v, file);
+    assert.equal(cat.products.find((p) => p.id === p2.id).image_v, null);
+    assert.equal((await apiRequest(`/api/partner/products/${p1.id}/image`, { cookie: partnerCookie })).status, 200);
+    assert.equal((await apiRequest(`/api/partner/products/${p2.id}/image`, { cookie: partnerCookie })).status, 404);
+    assert.equal((await apiRequest(`/api/partner/products/${p1.id}/image`, { cookie: repCookie })).status, 403);
+  } finally {
+    await pool.query("UPDATE products SET image_path = NULL WHERE id = $1", [p1.id]);
+    fs.rmSync(path.join(uploadDirPath, file), { force: true });
+  }
+});
