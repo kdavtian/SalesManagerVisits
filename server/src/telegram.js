@@ -5,6 +5,7 @@
 // Silently disabled (logged once at boot) if unconfigured, same pattern as
 // ERP_SYNC_KEY.
 
+import { isTestRun } from "./utils/testRun.js";
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_IDS = (process.env.TELEGRAM_NOTIFY_CHAT_IDS || "")
   .split(",")
@@ -24,7 +25,7 @@ const configured = Boolean(BOT_TOKEN && CHAT_IDS.length);
 // never look the same in the logs.
 const enabled = configured && process.env.NODE_ENV !== "test";
 
-if (!configured) {
+if (!configured && !isTestRun) {
   console.warn(
     "TELEGRAM_BOT_TOKEN / TELEGRAM_NOTIFY_CHAT_IDS not set -- Telegram notifications are disabled."
   );

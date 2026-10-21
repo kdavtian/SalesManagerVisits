@@ -6,6 +6,7 @@
 import { isQuietHours } from "./quietHours.js";
 import webpush from "web-push";
 import { pool } from "./db/pool.js";
+import { isTestRun } from "./utils/testRun.js";
 
 const PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
 const PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
@@ -25,7 +26,7 @@ const configured = Boolean(PUBLIC_KEY && PRIVATE_KEY);
 export const enabled = configured && process.env.NODE_ENV !== "test";
 export const vapidPublicKey = PUBLIC_KEY || null;
 
-if (!configured) {
+if (!configured && !isTestRun) {
   console.warn(
     "VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY not set -- push notifications are disabled. " +
       "Generate a pair with `npx web-push generate-vapid-keys`."

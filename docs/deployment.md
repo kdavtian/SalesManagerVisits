@@ -20,31 +20,22 @@ then runs a **fast or full** set of pre-flight checks before restarting
 the `app` container — see below for which.
 
 ```bash
-./deploy/deploy.sh          # fast unless new migrations are detected
-./deploy/deploy.sh --full   # always run the full test/UI checks
-./deploy/deploy.sh --fast   # always skip them, even with new migrations
+./deploy/deploy.sh          # fast (default), also when the deploy has migrations
+./deploy/deploy.sh --full   # also run the whole test suite + UI checks here (slow, rarely needed)
 ```
 
 ### Fast vs. full
 
-- **Fast** (the default for most deploys): pull → build → migrate → start
-  → health check (`verify:deployment`). Skips the integration test suite
-  and UI-regression check, since GitHub Actions CI already ran both on
-  every commit before it was mergeable — re-running them again on the
-  droplet is redundant for a commit that went through the normal PR flow.
-- **Full**: adds `npm test` (276+ integration tests) and `npm run
-  verify:ui` back in. **Auto-triggered** when the deploy introduces new
-  files under `server/migrations/` — a real local run against the
-  actually-migrated database catches things CI's separate database run
-  wouldn't. Detection works via a gitignored local marker file
-  (`.last-deploy-sha`) tracking the last deployed commit; if that marker
-  is missing (first run on this droplet, or lost state), it runs full
-  once to establish a safe baseline rather than assume fast is safe.
+- **Fast** (the default, since 2026-10-21): pull -> build -> migrate -> start -> health check (`verify:deployment`). It does NOT re-run
+  the integration tests or the UI-regression check: GitHub Actions CI ran both on this exact commit before it could be merged, and a run on
+  the droplet sees nothing CI cannot (it uses an empty throw-away database and the same Postgres 16, not the real data). Every step prints how
+  many seconds it took, so a slow deploy shows where the time goes.
+- **Full** (`--full`): adds `npm test` (740+ tests, 8-15 minutes on this server, hundreds of log lines) and `npm run verify:ui`. It used to start by itself
+  whenever a deploy added a migration; that was removed because it protected nothing the CI run had not already checked. Use it only for a
+  deploy where you want a second opinion.
 
-Use `--full` yourself for a deploy you want extra confidence on even
-without a migration (a big refactor, a security-sensitive change). Use
-`--fast` to explicitly skip checks on a migration you're confident is
-trivial — rare, use with judgment.
+What really protects a migration: it runs against the real database BEFORE the new app starts, and the deploy stops (the old app keeps
+running) if it fails. Take a backup first for a migration that rewrites existing data.
 
 ### Safety checks `deploy.sh` always runs, every mode
 
