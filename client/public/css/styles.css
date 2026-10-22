@@ -14357,3 +14357,6 @@ input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
   word-break: break-all;
   resize: none;
 }
+
+/* Period buttons (periodButtons.js): the selected button that shows its PREVIOUS period (Yesterday / Last week / ...) gets a back arrow */
+.period-prev::before { content: "\2039"; margin-right: 4px; font-weight: 700; opacity: 0.8; }

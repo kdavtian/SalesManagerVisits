@@ -9,6 +9,7 @@ import { haversineMeters, creditedDistanceMeters } from "../utils/geo.js";
 import { getCheckinRadiusMeters, getCheckinAllowanceEnabled } from "../settings.js";
 import { seesAllActivity } from "../roles.js";
 import { FIELD_REP_ROLE } from "../visitCount.js";
+import { periodTimestampCondition, PERIOD_KEYS } from "../utils/periodWindows.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { insertPayment } from "./payments.js";
 import { autoCompleteCollectionTasks, autoCompleteProductCheckTasks, autoCompleteVisitTasks } from "../taskAutoComplete.js";
@@ -352,28 +353,10 @@ checkinsRouter.get("/", async (req, res) => {
   if (isValidDateString(from)) {
     params.push(from);
     conditions.push(`ch.timestamp >= $${params.length}::date`);
-  } else if (range === "today") {
-    // date_trunc('day', now()) truncates to midnight in the DATABASE
-    // SESSION's timezone (UTC), not Yerevan (UTC+4) -- a check-in logged
-    // between 00:00 and 03:59 Yerevan time falls after Yerevan's real
-    // midnight but before the UTC one, so the old cutoff excluded it from
-    // "Today" (it still showed under Yesterday) until 04:00 Yerevan caught
-    // up. AT TIME ZONE 'Asia/Yerevan' first converts now() to Yerevan wall-
-    // clock time (as a naive timestamp), THEN truncates to that day's
-    // midnight, THEN the second AT TIME ZONE converts the naive Yerevan
-    // midnight back into the correct timestamptz -- same idiom as
-    // debtBalances.js's own Yerevan-date handling. See "Fix the Activity
-    // Today date mismatch".
-    conditions.push(`ch.timestamp >= (date_trunc('day', now() AT TIME ZONE 'Asia/Yerevan') AT TIME ZONE 'Asia/Yerevan')`);
-  } else if (range === "week") {
-    // The calendar week (Monday-Sunday, matching date_trunc's default and
-    // the dashboard's own "this week" stats below), not a rolling 7 days --
-    // "This week" on a Monday should show just that one day, not carry over
-    // six days from the previous week. Same Yerevan-timezone reasoning as
-    // "today" above.
-    conditions.push(`ch.timestamp >= (date_trunc('week', now() AT TIME ZONE 'Asia/Yerevan') AT TIME ZONE 'Asia/Yerevan')`);
-  } else if (range === "month") {
-    conditions.push(`ch.timestamp >= (date_trunc('month', now() AT TIME ZONE 'Asia/Yerevan') AT TIME ZONE 'Asia/Yerevan')`);
+  } else if (PERIOD_KEYS.includes(range)) {
+    // today / week / month / quarter / year and the previous one of each, as Yerevan calendar days (a check-in logged
+    // between 00:00 and 03:59 Yerevan belongs to that day, not to the UTC day before; the week starts on Monday).
+    conditions.push(periodTimestampCondition("ch.timestamp", range, params));
   }
   if (isValidDateString(to)) {
     params.push(to);

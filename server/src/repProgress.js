@@ -5,20 +5,24 @@ import { pool } from "./db/pool.js";
 import { FIELD_REP_ROLE } from "./visitCount.js";
 
 const TZ = "Asia/Yerevan";
-export const PERIODS = ["today", "week", "last_week", "month"];
+export const PERIODS = ["today", "yesterday", "week", "last_week", "month", "last_month"];
 
 // Period start/end as timestamptz, computed in Yerevan time so "today" / "Monday" match what the reps see.
 const BOUNDS_SQL = {
   today: `date_trunc('day', ln)`,
+  yesterday: `date_trunc('day', ln) - interval '1 day'`,
   week: `date_trunc('week', ln)`,
   last_week: `date_trunc('week', ln) - interval '7 days'`,
   month: `date_trunc('month', ln)`,
+  last_month: `date_trunc('month', ln) - interval '1 month'`,
 };
 const END_SQL = {
   today: `date_trunc('day', ln) + interval '1 day'`,
+  yesterday: `date_trunc('day', ln)`,
   week: `date_trunc('week', ln) + interval '7 days'`,
   last_week: `date_trunc('week', ln)`,
   month: `date_trunc('month', ln) + interval '1 month'`,
+  last_month: `date_trunc('month', ln)`,
 };
 
 // Hours between the first and the last check-in of a day, rounded UP to the next 0.25 h (a single check-in = 0).

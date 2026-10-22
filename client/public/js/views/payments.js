@@ -1,5 +1,6 @@
 import { api } from "../api.js";
 import { escapeHtml, formatAmd, formatDateTime, activateDialog, channelDisplayLabel, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, labelColon } from "../util.js";
+import { periodDates, periodKeyLabel } from "../periodButtons.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 import { icons } from "../icons.js";
@@ -37,33 +38,13 @@ const QUICK_FILTER_KEY = {
 // today's 4. period_label/PERIOD_TO_PARAMS mirror the same period values
 // (and the same date math) reports.js's own periodBounds() uses server-
 // side, so a drilled-in list matches the count that was tapped exactly.
-const PERIOD_LABEL_KEY = {
-  today: "tab_today",
-  week: "tab_week",
-  month: "tab_month",
-  year: "period_year",
-};
+const PERIOD_KEYS = ["today", "yesterday", "week", "last_week", "month", "last_month", "quarter", "last_quarter", "year", "last_year"];
 
 function periodFilterParams(period) {
+  // Browser-local calendar day (reps are in Yerevan), same windows as the server's reports.
   const now = new Date();
-  if (period === "today") {
-    const iso = formatDateInput(now);
-    return { from: iso, to: iso };
-  }
-  if (period === "week") {
-    // Monday-start week, matching Postgres's date_trunc('week', now()).
-    const diffToMonday = (now.getDay() + 6) % 7;
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - diffToMonday);
-    return { from: formatDateInput(monday), to: formatDateInput(now) };
-  }
-  if (period === "month") {
-    return { month: now.toISOString().slice(0, 7) };
-  }
-  if (period === "year") {
-    return { from: formatDateInput(new Date(now.getFullYear(), 0, 1)), to: formatDateInput(now) };
-  }
-  return {}; // "all" (or anything unrecognized): no date constraint
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  return periodDates(period, today) ?? {}; // "all" (or anything unrecognized): no date constraint
 }
 
 function monthLabel(iso) {
@@ -138,7 +119,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
   let managerFilter = initialQuery?.get("sales_manager_id") || "";
   // Only ever arrives via a Reports drill-down (no on-page control sets
   // this) -- see PERIOD_LABEL_KEY/periodFilterParams above.
-  let periodFilter = Object.keys(PERIOD_LABEL_KEY).includes(initialQuery?.get("period")) ? initialQuery.get("period") : "";
+  let periodFilter = PERIOD_KEYS.includes(initialQuery?.get("period")) ? initialQuery.get("period") : "";
   let sort = canSeeAll ? "" : "date";
   // Tapping the already-active sort option again reverses the payment-date
   // direction (oldest-first instead of newest-first) -- same convention as
@@ -217,7 +198,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
     // without this a filtered list showing fewer rows than expected would
     // have no visible explanation and no way back except re-navigating.
     if (periodFilter && activeFilter !== "today" && activeFilter !== "this_month") {
-      chips.push({ label: t(PERIOD_LABEL_KEY[periodFilter]), clear: () => (periodFilter = "") });
+      chips.push({ label: periodKeyLabel(periodFilter), clear: () => (periodFilter = "") });
     }
     if (channelFilter) chips.push({ label: channelFilter, clear: () => (channelFilter = "") });
     if (managerFilter) {

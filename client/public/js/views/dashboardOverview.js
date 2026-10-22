@@ -1,5 +1,6 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, labelColon } from "../util.js";
+import { escapeHtml, formatAmd, labelColon, formatDateDMY } from "../util.js";
+import { periodLabel, periodKey, periodAria, tapPeriod, periodDates } from "../periodButtons.js";
 import { t } from "../i18n.js";
 
 // A dependency-free CSS bar chart, same technique as dashboard.js's
@@ -67,17 +68,18 @@ function comparisonBarHtml(label, actual, target, collected) {
   `;
 }
 
-// The plan figure is only ever tracked per calendar month
-// (sales_performance.month), so only these two periods can show an
-// actual-vs-plan comparison; the other two read from the daily-management
-// report's own day/wtd actuals instead (see loadSalesSection below), with
-// no plan figure at all.
-const PLAN_PERIODS = new Set(["mtd", "ytd"]);
-const PERIODS = ["today", "wtd", "mtd", "ytd"];
-const DEFAULT_PERIOD = "mtd";
+// The plan figure is only ever tracked per calendar month (sales_performance.month), so month / quarter / year (and the previous
+// month / quarter / year) show an actual-vs-plan comparison from the Sales-performance sheet; Today and This week read the
+// daily-management report's own day / week-to-date actuals instead (the snapshot of that day), with no plan figure at all.
+// Tapping the selected button flips to the previous period (periodButtons.js).
+const PERIODS = ["today", "week", "month", "quarter", "year"];
+// base -> [leaderboard period now, previous]
+const PLAN_CODES = { month: ["mtd", "last_month"], quarter: ["qtd", "last_quarter"], year: ["ytd", "last_year"] };
+const DEFAULT_PERIOD = "month";
 
 export async function renderDashboardOverview(root, navigate) {
-  let period = DEFAULT_PERIOD;
+  let period = DEFAULT_PERIOD; // the selected button
+  let previous = false; // showing its previous period
 
   root.innerHTML = `
     <div class="detail-view company-dashboard-view">
@@ -90,7 +92,7 @@ export async function renderDashboardOverview(root, navigate) {
       <div class="activity-tabs company-dashboard-period-tabs" role="tablist" aria-label="${t("company_dashboard_period_label")}">
         ${PERIODS.map(
           (p) =>
-            `<button type="button" role="tab" aria-selected="${p === period}" class="activity-tab ${p === period ? "activity-tab-active" : ""}" data-period="${p}">${t(`company_dashboard_period_${p}`)}</button>`
+            `<button type="button" role="tab" aria-selected="${p === period}" class="activity-tab ${p === period ? "activity-tab-active" : ""}" data-period="${p}" aria-label="${escapeHtml(p === period ? periodAria(p, false) : periodLabel(p))}">${escapeHtml(periodLabel(p))}</button>`
         ).join("")}
       </div>
       <div id="company-dashboard-sales"><p class="loading-state" role="status">${t("loading")}</p></div>
@@ -114,15 +116,28 @@ export async function renderDashboardOverview(root, navigate) {
     restEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
   }
 
+  // Today / This week: the snapshot of the day. Yesterday / Last week: the snapshot stored for that day (for last week: the last
+  // day of that week that has one, whose week-to-date IS the whole week) -- null when the bot stored none.
+  async function loadDailySnapshot() {
+    const latest = await api.getDailyManagementReport({ period: "daily" });
+    if (!previous) return latest.report;
+    const now = new Date();
+    const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const w = periodDates(periodKey(period, true), localToday);
+    const day = (latest.available_dates ?? []).filter((d) => d >= w.from && d <= w.to).sort().pop();
+    if (!day) return null;
+    return (await api.getDailyManagementReport({ period: "daily", date: day })).report;
+  }
+
   async function loadSales() {
     salesEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     try {
-      if (PLAN_PERIODS.has(period)) {
-        const leaderboard = await api.getSalesPerformanceLeaderboard(period);
+      const plan = PLAN_CODES[period];
+      if (plan) {
+        const leaderboard = await api.getSalesPerformanceLeaderboard(plan[previous ? 1 : 0]);
         salesEl.innerHTML = renderPlanSalesSection(leaderboard);
       } else {
-        const { report } = await api.getDailyManagementReport({ period: "daily" });
-        salesEl.innerHTML = renderActualsOnlySalesSection(report, period);
+        salesEl.innerHTML = renderActualsOnlySalesSection(await loadDailySnapshot(), period, previous);
       }
     } catch (err) {
       salesEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
@@ -130,11 +145,16 @@ export async function renderDashboardOverview(root, navigate) {
   }
   periodTabs.forEach((btn) => {
     btn.addEventListener("click", () => {
-      period = btn.dataset.period;
+      const next = tapPeriod({ base: period, previous }, btn.dataset.period);
+      period = next.base;
+      previous = next.previous;
       periodTabs.forEach((b) => {
         const active = b === btn;
         b.classList.toggle("activity-tab-active", active);
+        b.classList.toggle("period-prev", active && previous);
         b.setAttribute("aria-selected", String(active));
+        b.textContent = periodLabel(b.dataset.period, active && previous);
+        b.setAttribute("aria-label", active ? periodAria(b.dataset.period, previous) : periodLabel(b.dataset.period));
       });
       loadSales();
     });
@@ -236,14 +256,15 @@ function renderByChannelNumbers(salesByChannel, paymentsByChannel) {
   `;
 }
 
-function renderActualsOnlySalesSection(report, period) {
+function renderActualsOnlySalesSection(report, period, previous = false) {
   if (!report) {
     return `
       <h2 class="section-title">${t("company_dashboard_sales")}</h2>
       <p class="empty-state">${t("company_dashboard_no_data")}</p>
     `;
   }
-  const salesAmd = period === "today" ? report.sales_day_amd : report.sales_wtd_amd;
+  const day = period === "today";
+  const salesAmd = day ? report.sales_day_amd : report.sales_wtd_amd;
   const collectedAmd = period === "today" ? report.payments_day_amd : report.payments_wtd_amd;
   const salesByChannel = period === "today" ? report.sales_by_channel : report.sales_by_channel_wtd;
   const paymentsByChannel = period === "today" ? report.payments_by_channel : report.payments_by_channel_wtd;
@@ -260,6 +281,7 @@ function renderActualsOnlySalesSection(report, period) {
         <span class="stat-label">${t("company_dashboard_collected_label")}</span>
       </div>
     </div>
+    ${previous && report.report_date ? `<p class="muted" style="margin: 10px 4px 0;">${escapeHtml(t("company_dashboard_as_of").replace("{date}", formatDateDMY(report.report_date)))}</p>` : ""}
     <p class="muted" style="margin: 10px 4px 0;">${t("company_dashboard_no_plan_note")}</p>
     ${renderByChannelNumbers(salesByChannel, paymentsByChannel)}
   `;

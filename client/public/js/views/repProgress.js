@@ -6,9 +6,10 @@
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { escapeHtml, groupDigits } from "../util.js";
+import { periodLabel, periodKey, periodAria, tapPeriod } from "../periodButtons.js";
 
-const PERIODS = ["today", "week", "last_week", "month"];
-const PERIOD_KEY = { today: "rp_today", week: "rp_week", last_week: "rp_last_week", month: "rp_month" };
+// Today / This week / This month; tapping the selected one flips it to Yesterday / Last week / Last month (periodButtons.js).
+const PERIODS = ["today", "week", "month"];
 
 const hoursLabel = (h) => (h ? `${Number(h.toFixed(2))}` : "0");
 const pctLabel = (v) => (v == null ? "–" : `${v}%`);
@@ -48,7 +49,8 @@ function metricRows() {
 }
 
 export async function renderRepProgress(root, navigate) {
-  let period = "week";
+  let period = "week"; // the selected button
+  let previous = false; // showing its previous period
   root.innerHTML = `
     <div class="detail-view rp-view">
       <div class="detail-header oc-header">
@@ -58,7 +60,7 @@ export async function renderRepProgress(root, navigate) {
         <div class="detail-header-title oc-title"><h1>${t("rp_title")}</h1></div>
       </div>
       <div class="oc-chips" id="rp-periods" role="group" aria-label="${t("rp_title")}">
-        ${PERIODS.map((p) => `<button type="button" class="map-filter-chip${p === period ? " chip-active" : ""}" data-period="${p}" aria-pressed="${p === period}">${t(PERIOD_KEY[p])}</button>`).join("")}
+        ${PERIODS.map((p) => `<button type="button" class="map-filter-chip${p === period ? " chip-active" : ""}" data-period="${p}" aria-pressed="${p === period}" aria-label="${escapeHtml(p === period ? periodAria(p, false) : periodLabel(p))}">${periodLabel(p)}</button>`).join("")}
       </div>
       <p class="muted rp-range" id="rp-range"></p>
       <div id="rp-body"><p class="loading-state" role="status">${t("loading")}</p></div>
@@ -72,7 +74,7 @@ export async function renderRepProgress(root, navigate) {
     bodyEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     let data;
     try {
-      data = await api.getRepProgress(period);
+      data = await api.getRepProgress(periodKey(period, previous));
     } catch (err) {
       if (token === loadToken) bodyEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
       return;
@@ -140,10 +142,16 @@ export async function renderRepProgress(root, navigate) {
 
   root.querySelectorAll("[data-period]").forEach((btn) =>
     btn.addEventListener("click", () => {
-      period = btn.dataset.period;
+      const next = tapPeriod({ base: period, previous }, btn.dataset.period);
+      period = next.base;
+      previous = next.previous;
       root.querySelectorAll("[data-period]").forEach((b) => {
-        b.classList.toggle("chip-active", b === btn);
-        b.setAttribute("aria-pressed", String(b === btn));
+        const on = b === btn;
+        b.classList.toggle("chip-active", on);
+        b.classList.toggle("period-prev", on && previous);
+        b.setAttribute("aria-pressed", String(on));
+        b.textContent = periodLabel(b.dataset.period, on && previous);
+        b.setAttribute("aria-label", on ? periodAria(b.dataset.period, previous) : periodLabel(b.dataset.period));
       });
       load();
     })
