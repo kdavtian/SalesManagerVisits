@@ -114,7 +114,7 @@ test("filters: product text ignoring punctuation, brand, line, grade, size, chan
 test("comparison, periods card, breakdowns and trend", async () => {
   const res = await get(`period=this_month&compare=prev&group_by=family&cq=VR-${stamp}`);
   assert.ok(res.data.prev_totals);
-  assert.deepEqual(Object.keys(res.data.periods.reduce((a, p) => ({ ...a, [p.key]: 1 }), {})), ["today", "yesterday", "this_week", "last_week", "this_month", "last_month", "ytd", "last_year", "last_12m"]);
+  assert.deepEqual(Object.keys(res.data.periods.reduce((a, p) => ({ ...a, [p.key]: 1 }), {})), ["today", "yesterday", "this_week", "last_week", "this_month", "last_month", "this_quarter", "last_quarter", "ytd", "last_year", "last_12m"]);
   const todayRow = res.data.periods.find((p) => p.key === "today");
   assert.equal(todayRow.liters, 22);
   const ytd = res.data.periods.find((p) => p.key === "ytd");
