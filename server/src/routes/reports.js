@@ -6,6 +6,7 @@ import { REPORTS, findReport, canAccessReport } from "../reports.js";
 import { erpSyncFreshness } from "../erpSyncFreshness.js";
 import { AGING_BUCKETS, allocateFifo, loadOrdersNewestFirst } from "../debtAging.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
+import { periodTimestampCondition, periodDateCondition, PERIOD_KEYS } from "../utils/periodWindows.js";
 
 export const reportsRouter = Router();
 
@@ -68,14 +69,14 @@ function requireReportAccess(reportKey) {
   };
 }
 
-function periodBounds(period) {
-  if (period === "today") return "date_trunc('day', now())";
-  if (period === "week") return "date_trunc('week', now())";
-  if (period === "year") return "date_trunc('year', now())";
-  // "all" is the client's explicit All-time selection (see PERIOD_OPTIONS in
-  // client/js/views/reports.js) -- no lower bound at all, not "this month".
-  if (period === "all") return "'-infinity'::timestamptz";
-  return "date_trunc('month', now())"; // default (period omitted, or "month"): this month
+// The reports' period filter (client: PERIOD_OPTIONS in views/reports.js). Yerevan calendar days: today / week / month / quarter / year
+// and the previous one of each (yesterday, last_week, ...); "all" = no lower bound at all (the client's explicit All-time
+// selection, not "this month"). An omitted or unknown period means this month, as it always did.
+function periodCondition(column, period, params, { date = false, defaultMonth = true } = {}) {
+  const key = period || (defaultMonth ? "month" : null);
+  if (!key || key === "all") return null;
+  const make = date ? periodDateCondition : periodTimestampCondition;
+  return make(column, PERIOD_KEYS.includes(key) ? key : "month", params);
 }
 
 // Who created each new customer, when, and by which manager -- lets the
@@ -86,8 +87,10 @@ reportsRouter.get("/new-customers", requireReportAccess("new_customers"), async 
   // A sales manager only ever sees their own new customers.
   const mineOnly = req.user.role === "sales_manager";
   const manager_id = mineOnly ? req.user.id : req.query.manager_id;
-  const conditions = [`c.created_at >= ${periodBounds(period)}`];
+  const conditions = [];
   const params = [];
+  const when = periodCondition("c.created_at", period, params);
+  if (when) conditions.push(when);
   if (region) {
     params.push(region);
     conditions.push(`c.region = $${params.length}`);
@@ -138,9 +141,8 @@ reportsRouter.get("/checkins", requireReportAccess("checkins"), async (req, res)
   const manager_id = req.user.role === "sales_manager" ? req.user.id : req.query.manager_id;
   const conditions = [];
   const params = [];
-  if (period) {
-    conditions.push(`ch.timestamp >= ${periodBounds(period)}`);
-  }
+  const when = periodCondition("ch.timestamp", period, params, { defaultMonth: false });
+  if (when) conditions.push(when);
   if (region) {
     params.push(region);
     conditions.push(`c.region = $${params.length}`);
@@ -194,8 +196,10 @@ reportsRouter.get("/checkins", requireReportAccess("checkins"), async (req, res)
 // discount-approval turnaround for orders still waiting on one.
 reportsRouter.get("/orders-pipeline", requireReportAccess("orders_pipeline"), async (req, res) => {
   const { period, manager_id } = req.query;
-  const conditions = [`o.created_at >= ${periodBounds(period)}`];
+  const conditions = [];
   const params = [];
+  const when = periodCondition("o.created_at", period, params);
+  if (when) conditions.push(when);
   if (manager_id) {
     params.push(manager_id);
     conditions.push(`o.user_id = $${params.length}`);
@@ -304,8 +308,10 @@ reportsRouter.get("/brand-availability", requireReportAccess("brand_availability
 // combined) is reported separately so the two are never conflated.
 reportsRouter.get("/payments", requireReportAccess("payments"), async (req, res) => {
   const { period, sales_channel, sales_manager_id, status } = req.query;
-  const conditions = [`p.payment_date >= ${periodBounds(period)}`];
+  const conditions = [];
   const params = [];
+  const when = periodCondition("p.payment_date", period, params);
+  if (when) conditions.push(when);
   if (sales_channel) {
     params.push(sales_channel);
     conditions.push(`p.sales_channel = $${params.length}`);
@@ -397,12 +403,6 @@ reportsRouter.get("/payments", requireReportAccess("payments"), async (req, res)
 // (comma list), region::subregion keys (comma list). Capped at 2000 rows;
 // totals always cover the whole filtered set.
 const ERP_PAYMENTS_LIMIT = 2000;
-const ERP_PERIOD_SQL = {
-  today: "cf.cashflow_date = (now() AT TIME ZONE 'Asia/Yerevan')::date",
-  week: "cf.cashflow_date >= date_trunc('week', now() AT TIME ZONE 'Asia/Yerevan')::date",
-  month: "cf.cashflow_date >= date_trunc('month', now() AT TIME ZONE 'Asia/Yerevan')::date",
-  year: "cf.cashflow_date >= date_trunc('year', now() AT TIME ZONE 'Asia/Yerevan')::date",
-};
 const ERP_PAYMENTS_FROM = `
   FROM erp_cashflow_lines cf
   LEFT JOIN customers c ON c.erp_customer_id = cf.erp_customer_id
@@ -430,8 +430,9 @@ reportsRouter.get("/erp-payments", requireReportAccess("erp_payments"), async (r
       params.push(to);
       conditions.push(`cf.cashflow_date <= $${params.length}`);
     }
-  } else if (ERP_PERIOD_SQL[period]) {
-    conditions.push(ERP_PERIOD_SQL[period]);
+  } else {
+    const when = periodCondition("cf.cashflow_date", period, params, { date: true, defaultMonth: false });
+    if (when) conditions.push(when);
   }
   const text = String(q ?? "").trim();
   if (text) {

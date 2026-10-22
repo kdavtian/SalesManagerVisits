@@ -54,6 +54,10 @@ export function standardPeriods(today) {
   const dayOfMonth = +today.slice(8, 10);
   const lmSameDay = `${lm.slice(0, 7)}-${String(Math.min(dayOfMonth, +monthEnd(lm).slice(8, 10))).padStart(2, "0")}`;
   const y = +today.slice(0, 4);
+  const qs = `${y}-${String(Math.floor((+today.slice(5, 7) - 1) / 3) * 3 + 1).padStart(2, "0")}-01`; // this quarter's first day
+  const lqs = addMonths(qs, -3);
+  const lqe = monthEnd(addMonths(qs, -1));
+  const minDate = (a, b) => (a < b ? a : b);
   return [
     { key: "today", from: today, to: today, prev: { from: addDays(today, -1), to: addDays(today, -1) } },
     { key: "yesterday", from: addDays(today, -1), to: addDays(today, -1), prev: { from: addDays(today, -2), to: addDays(today, -2) } },
@@ -61,6 +65,9 @@ export function standardPeriods(today) {
     { key: "last_week", from: addDays(mon, -7), to: addDays(mon, -1), prev: { from: addDays(mon, -14), to: addDays(mon, -8) } },
     { key: "this_month", from: monthStart(today), to: today, prev: { from: monthStart(lm), to: lmSameDay } },
     { key: "last_month", from: monthStart(lm), to: monthEnd(lm), prev: { from: addMonths(lm, -1), to: monthEnd(addMonths(lm, -1)) } },
+    // quarters (owner, 2026-10-22): this quarter so far against the same number of days of the previous one; last quarter whole
+    { key: "this_quarter", from: qs, to: today, prev: { from: lqs, to: minDate(addDays(lqs, daysBetween(qs, today)), lqe) } },
+    { key: "last_quarter", from: lqs, to: lqe, prev: { from: addMonths(lqs, -3), to: monthEnd(addMonths(lqs, -1)) } },
     { key: "ytd", from: `${y}-01-01`, to: today, prev: { from: `${y - 1}-01-01`, to: addYears(today, -1) } },
     { key: "last_year", from: `${y - 1}-01-01`, to: `${y - 1}-12-31`, prev: { from: `${y - 2}-01-01`, to: `${y - 2}-12-31` } },
     { key: "last_12m", from: addDays(addYears(today, -1), 1), to: today, prev: { from: addDays(addYears(today, -2), 1), to: addYears(today, -1) } },

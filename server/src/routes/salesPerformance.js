@@ -2,6 +2,10 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { seesAllPerformance } from "../roles.js";
+import { periodWindow } from "../utils/periodWindows.js";
+
+// The dashboard's period codes -> the standard period they mean.
+const LEADERBOARD_PERIODS = { mtd: "month", last_month: "last_month", qtd: "quarter", last_quarter: "last_quarter", ytd: "year", last_year: "last_year" };
 
 export const salesPerformanceRouter = Router();
 
@@ -100,9 +104,14 @@ salesPerformanceRouter.get("/", async (req, res) => {
     return res.status(403).json({ error: "Not allowed" });
   }
 
-  const isMtd = req.query.period === "mtd";
-  const spMonthCondition = isMtd ? "sp.month = date_trunc('month', now())" : "sp.month >= date_trunc('year', now())";
-  const planMonthCondition = isMtd ? "pp.month = date_trunc('month', now())" : "pp.month >= date_trunc('year', now())";
+  // Company dashboard periods (owner, 2026-10-22): this month / quarter / year to date and the previous month / quarter / year.
+  // Everything here is per calendar month, so a period is a range of first-of-month dates.
+  const key = LEADERBOARD_PERIODS[req.query.period] ?? "year"; // "ytd" (and anything unknown) is the year to date, as before
+  const w = periodWindow(key);
+  const firstOfMonth = (d) => `${d.slice(0, 7)}-01`;
+  const monthParams = [firstOfMonth(w.from), firstOfMonth(w.to)];
+  const spMonthCondition = "sp.month >= $2::date AND sp.month <= $3::date";
+  const planMonthCondition = "pp.month >= $2::date AND pp.month <= $3::date";
   const { rows } = await pool.query(
     `SELECT sp.rep_name,
        sum(sp.sales_amd)::numeric AS sales_amd,
@@ -120,7 +129,7 @@ salesPerformanceRouter.get("/", async (req, res) => {
      WHERE ${spMonthCondition} AND sp.rep_name != $1
      GROUP BY sp.rep_name, plans.plan_amd
      ORDER BY sum(sp.sales_amd) DESC`,
-    [SALES_DIRECTOR_REP_NAME]
+    [SALES_DIRECTOR_REP_NAME, ...monthParams]
   );
   res.json(rows);
 });

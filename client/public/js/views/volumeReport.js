@@ -8,8 +8,11 @@ import { t } from "../i18n.js";
 import { escapeHtml, openInfoPopup, channelDisplayLabel, regionLabelHy, subregionLabelHy, syncBadgeHtml, saveBlob, formatDateDMY } from "../util.js";
 import { icons } from "../icons.js";
 import { openTriStateTreeSheet, buildRegionSubregionTree } from "../regionTree.js";
+import { periodLabel, periodAria } from "../periodButtons.js";
 
-const PERIODS = ["today", "yesterday", "this_week", "last_week", "this_month", "last_month", "ytd", "last_year", "last_12m"];
+// Buttons: each of the five flips between the period and the previous one when the selected button is tapped again
+// (periodButtons.js); Last 12 months and the custom range stand alone. [button base, period now, period previous]
+const PERIOD_BUTTONS = [["today", "today", "yesterday"], ["week", "this_week", "last_week"], ["month", "this_month", "last_month"], ["quarter", "this_quarter", "last_quarter"], ["year", "ytd", "last_year"]];
 // Break-down chips, grouped so twelve options are never one long hidden scroll row.
 const GROUP_CATS = [
   ["product", ["product", "family", "brand", "grade", "size"]],
@@ -118,9 +121,17 @@ export async function renderVolumeReport(root, navigate) {
 
   // ---- chips ---------------------------------------------------------------------------------------------------------
   function renderPeriodChips() {
-    $("#vol-periods").innerHTML = [...PERIODS, "custom"]
-      .map((k) => `<button type="button" class="map-filter-chip ${state.period === k ? "chip-active" : ""}" data-period="${k}" aria-pressed="${state.period === k}"${k === "custom" ? ` aria-label="${escapeHtml(t("vol_p_custom"))}" title="${escapeHtml(t("vol_p_custom"))}"` : ""}>${k === "custom" ? icons.calendar : t(`vol_p_${k}`)}</button>`)
-      .join("");
+    const chip = (attrs, active, label, aria = "") =>
+      `<button type="button" class="map-filter-chip ${active ? "chip-active" : ""} ${active && attrs.prev ? "period-prev" : ""}" data-period="${attrs.key}" aria-pressed="${active}"${aria ? ` aria-label="${escapeHtml(aria)}" title="${escapeHtml(aria)}"` : ""}>${label}</button>`;
+    $("#vol-periods").innerHTML = [
+      ...PERIOD_BUTTONS.map(([base, now, prev]) => {
+        const active = state.period === now || state.period === prev;
+        const isPrev = state.period === prev;
+        return chip({ key: active ? state.period : now, prev: isPrev }, active, periodLabel(base, isPrev), active ? periodAria(base, isPrev) : "");
+      }),
+      chip({ key: "last_12m" }, state.period === "last_12m", t("vol_p_last_12m")),
+      chip({ key: "custom" }, state.period === "custom", icons.calendar, t("vol_p_custom")),
+    ].join("");
     $("#vol-custom-row").hidden = state.period !== "custom";
     $("#vol-periods").querySelectorAll("[data-period]").forEach((b) =>
       b.addEventListener("click", () => {
@@ -129,7 +140,9 @@ export async function renderVolumeReport(root, navigate) {
           state.from = state.from || data?.from || "";
           state.to = state.to || data?.to || "";
         }
-        state.period = k;
+        const pair = PERIOD_BUTTONS.find(([, now, prev]) => k === now || k === prev);
+        // the selected button flips between its period and the previous one
+        state.period = pair && (k === state.period) ? (k === pair[1] ? pair[2] : pair[1]) : k;
         renderPeriodChips();
         $("#vol-periods").querySelector(".chip-active")?.scrollIntoView({ inline: "center", block: "nearest" });
         load();

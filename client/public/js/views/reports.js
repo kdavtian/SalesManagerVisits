@@ -2,6 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml, firstUseHintHtml, activateFirstUseHints, activateDialog, downloadFromUrl, saveBlob, monthShort, formatDateTime as formatDateTimeShared, formatDayMonth, labelColon } from "../util.js";
 import { buildRegionSubregionTree, openTriStateTreeSheet, NO_GROUP_KEY } from "../regionTree.js";
 import { t, getLang } from "../i18n.js";
+import { periodLabel, periodKey, periodAria } from "../periodButtons.js";
 import { icons } from "../icons.js";
 import { dueChipHtml } from "../debtChip.js";
 import { REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, CATEGORY_LIST, formatAmd, amdWithUnitHtml, channelDisplayLabel, syncBadgeHtml, syncNote, openInfoPopup, formatDateDMY, parseDateOnly } from "../util.js";
@@ -15,10 +16,11 @@ import { REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, CATEGORY_LIST, formatAmd
 // That silently turned "All time" into "this month" in every report that
 // uses this list.
 const PERIOD_OPTIONS = [
-  { value: "today", labelKey: "rp_today" },
-  { value: "week", labelKey: "rp_week" },
-  { value: "month", labelKey: "rp_month" },
-  { value: "year", labelKey: "rp_year" },
+  { value: "today", base: "today" },
+  { value: "week", base: "week" },
+  { value: "month", base: "month" },
+  { value: "quarter", base: "quarter" },
+  { value: "year", base: "year" },
   { value: "all", labelKey: "rp_all" },
 ];
 
@@ -66,10 +68,12 @@ function periodTabsHtml(name, options, value) {
   return `<div class="activity-tabs report-period-tabs" role="tablist">
     <input type="hidden" name="${name}" value="${escapeHtml(value)}" />
     ${options
-      .map(
-        (o) =>
-          `<button type="button" role="tab" class="activity-tab${o.value === value ? " activity-tab-active" : ""}" aria-selected="${o.value === value}" data-period-value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</button>`
-      )
+      .map((o) => {
+        // A period with a "previous" (today / week / month / quarter / year) flips to it when the selected button is tapped again.
+        const active = o.value === value;
+        const flip = o.base ? ` data-base="${o.base}" aria-label="${escapeHtml(active ? periodAria(o.base, false) : periodLabel(o.base))}"` : "";
+        return `<button type="button" role="tab" class="activity-tab${active ? " activity-tab-active" : ""}" aria-selected="${active}" data-period-value="${escapeHtml(o.value)}"${flip}>${escapeHtml(o.base ? periodLabel(o.base) : o.label)}</button>`;
+      })
       .join("")}
   </div>`;
 }
@@ -81,13 +85,26 @@ if (typeof document !== "undefined" && !window.__reportPeriodTabs) {
     if (!tab) return;
     const wrap = tab.closest(".report-period-tabs");
     const input = wrap.querySelector('input[type="hidden"]');
-    if (input.value === tab.dataset.periodValue) return;
-    input.value = tab.dataset.periodValue;
-    wrap.querySelectorAll("[data-period-value]").forEach((b) => {
-      const on = b === tab;
+    const paint = (b, on, previous) => {
       b.classList.toggle("activity-tab-active", on);
+      b.classList.toggle("period-prev", on && previous);
       b.setAttribute("aria-selected", String(on));
-    });
+      if (b.dataset.base) {
+        b.textContent = periodLabel(b.dataset.base, on && previous);
+        b.setAttribute("aria-label", on ? periodAria(b.dataset.base, previous) : periodLabel(b.dataset.base));
+      }
+    };
+    const base = tab.dataset.base;
+    if (input.value === tab.dataset.periodValue || (base && input.value === periodKey(base, true))) {
+      // the selected button: flip current <-> previous (a button without a previous, like "All", does nothing)
+      if (!base) return;
+      const previous = input.value !== base;
+      input.value = periodKey(base, !previous);
+      paint(tab, true, !previous);
+    } else {
+      wrap.querySelectorAll("[data-period-value]").forEach((b) => paint(b, b === tab, false));
+      input.value = tab.dataset.periodValue;
+    }
     tab.scrollIntoView?.({ inline: "center", block: "nearest", behavior: "smooth" });
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
@@ -324,7 +341,7 @@ async function renderNewCustomersReport(root, navigate) {
     <div class="detail-view">
       ${reportHeaderHtml("report_new_customers_name")}
       <form id="report-filters" class="report-filter-form">
-        ${periodTabsHtml("period", PERIOD_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) })), "month")}
+        ${periodTabsHtml("period", PERIOD_OPTIONS.map((o) => ({ ...o, label: o.labelKey ? t(o.labelKey) : "" })), "month")}
         ${selectHtml("region", [{ value: "", label: t("region") }, ...REGION_LIST.map((r) => ({ value: r, label: regionLabelHy(r) }))], "")}
         ${selectHtml(
           "customer_tier",
@@ -397,7 +414,7 @@ async function renderCheckinsReport(root, navigate) {
     <div class="detail-view">
       ${reportHeaderHtml("report_checkins_name")}
       <form id="report-filters" class="report-filter-form">
-        ${periodTabsHtml("period", PERIOD_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) })), "month")}
+        ${periodTabsHtml("period", PERIOD_OPTIONS.map((o) => ({ ...o, label: o.labelKey ? t(o.labelKey) : "" })), "month")}
         ${selectHtml("region", [{ value: "", label: t("region") }, ...REGION_LIST.map((r) => ({ value: r, label: regionLabelHy(r) }))], "")}
         ${selectHtml(
           "category",
@@ -470,7 +487,7 @@ async function renderOrdersPipelineReport(root, navigate) {
     <div class="detail-view">
       ${reportHeaderHtml("report_orders_pipeline_name")}
       <form id="report-filters" class="report-filter-form">
-        ${periodTabsHtml("period", PERIOD_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) })), "month")}
+        ${periodTabsHtml("period", PERIOD_OPTIONS.map((o) => ({ ...o, label: o.labelKey ? t(o.labelKey) : "" })), "month")}
       </form>
       <div id="report-body"><p class="loading-state" role="status">${t("loading")}</p></div>
     </div>
@@ -582,7 +599,7 @@ async function renderPaymentsReport(root, navigate) {
     <div class="detail-view">
       ${reportHeaderHtml("report_payments_name")}
       <form id="report-filters" class="report-filter-form">
-        ${periodTabsHtml("period", PERIOD_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) })), "month")}
+        ${periodTabsHtml("period", PERIOD_OPTIONS.map((o) => ({ ...o, label: o.labelKey ? t(o.labelKey) : "" })), "month")}
         ${selectHtml(
           "status",
           [{ value: "", label: t("all_payment_statuses") }, ...PAYMENT_STATUS_OPTIONS.map((v) => ({ value: v, label: t(`payment_status_${v}`) }))],

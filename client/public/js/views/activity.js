@@ -7,6 +7,7 @@ import { loadWithCache } from "../listCache.js";
 import { FILTER_ICONS } from "../filterIcons.js";
 import { icons } from "../icons.js";
 import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
+import { periodLabel, periodKey, periodAria, tapPeriod } from "../periodButtons.js";
 
 const OUTCOMES = [
   "order_placed",
@@ -91,7 +92,8 @@ export async function renderActivity(root, navigate) {
   const canFilterByManager = seesAllActivity();
   const isHy = getLang() === "hy";
 
-  let range = "today";
+  let range = "today"; // the selected button: today | week | month | custom
+  let rangePrev = false; // the selected button shows its PREVIOUS period (Yesterday / Last week / Last month): tap it again to flip
   let customFrom = "";
   let customTo = "";
   let allCheckins = [];
@@ -236,6 +238,11 @@ export async function renderActivity(root, navigate) {
   // date filter in the app; the name stays for screen readers / long-press tooltip.
   function activityTabHtml(key, label, icon = "") {
     const active = range === key;
+    if (key !== "custom") {
+      // today / week / month: tapping the selected one flips it to the previous period
+      const prev = active && rangePrev;
+      return `<button role="tab" aria-selected="${active}" class="activity-tab ${active ? "activity-tab-active" : ""} ${prev ? "period-prev" : ""}" data-range="${key}" aria-label="${escapeHtml(active ? periodAria(key, prev) : periodLabel(key))}">${escapeHtml(periodLabel(key, prev))}</button>`;
+    }
     return `<button role="tab" aria-selected="${active}" class="activity-tab ${icon ? "activity-tab-icon" : ""} ${active ? "activity-tab-active" : ""}" data-range="${key}"${icon ? ` aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}"` : ""}>${icon || label}</button>`;
   }
 
@@ -312,7 +319,15 @@ export async function renderActivity(root, navigate) {
 
     container.querySelectorAll(".activity-tab").forEach((btn) => {
       btn.addEventListener("click", () => {
-        range = btn.dataset.range;
+        const tapped = btn.dataset.range;
+        if (tapped === "custom") {
+          range = "custom";
+          rangePrev = false;
+        } else {
+          const next = tapPeriod({ base: range, previous: rangePrev }, tapped);
+          range = next.base;
+          rangePrev = next.previous;
+        }
         visibleCount = PAGE_SIZE;
         renderShell();
         load();
@@ -502,7 +517,7 @@ export async function renderActivity(root, navigate) {
       if (customFrom) params.from = customFrom;
       if (customTo) params.to = customTo;
     } else {
-      params.range = range;
+      params.range = periodKey(range, rangePrev);
     }
 
     if (range === "custom" && (!customFrom || !customTo)) {
@@ -514,7 +529,7 @@ export async function renderActivity(root, navigate) {
 
     // Stale-while-revalidate (see listCache.js), keyed by the exact date
     // range so switching tabs never shows another range's cached rows.
-    const cacheKey = `activity-list:${range === "custom" ? `${customFrom}..${customTo}` : range}`;
+    const cacheKey = `activity-list:${range === "custom" ? `${customFrom}..${customTo}` : periodKey(range, rangePrev)}`;
     let paintedOnce = false;
     try {
       await loadWithCache(
