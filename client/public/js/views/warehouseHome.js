@@ -67,6 +67,7 @@ function paint(box, h) {
       <button type="button" class="ops-tile" data-go="#/tasks"><span class="ops-tile-icon">${icons.tasks}</span><span>${t("qa_tasks")}</span>${h.tasks.open ? `<span class="count-badge ops-tile-badge">${h.tasks.open}</span>` : ""}</button>
       <button type="button" class="ops-tile" data-go="#/delivery"><span class="ops-tile-icon">${icons.truck}</span><span>${t("ops_shortcut_delivery")}</span></button>
       <button type="button" class="ops-tile ops-tile-wide" data-go="#/warehouse"><span class="ops-tile-icon">${icons.box}</span><span>${t("ops_shortcut_inventory")}</span></button>
+      <button type="button" class="ops-tile" data-go="#/staff"><span class="ops-tile-icon">${icons.person}</span><span>${t("qa_staff")}</span></button>
     </div>`;
 }
 

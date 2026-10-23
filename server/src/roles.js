@@ -438,3 +438,16 @@ export function canSeeCashflow(role) {
 export function canEditCashflow(role) {
   return role === "admin" || role === "ceo" || role === "accountant";
 }
+
+// Staff (owner, 2026-10-23): people, hierarchy, payroll. Everything about money is the owner's circle: admin, CEO and the accountant see and edit
+// everyone; the CEO / admin alone set the company rules. Anyone else sees only themselves and the people below them in the tree (the sales
+// director -> the reps), and a boss marks the days of those below -- scoping happens in routes/staff.js.
+export function seesAllStaff(role) {
+  return role === "admin" || role === "ceo" || role === "accountant";
+}
+export function canManageStaff(role) {
+  return role === "admin" || role === "ceo" || role === "accountant";
+}
+export function canSetStaffRules(role) {
+  return role === "admin" || role === "ceo";
+}
