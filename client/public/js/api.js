@@ -484,6 +484,14 @@ export const api = {
   markOrderDeliveredWithoutRoute: (id) => request(`/orders/${id}/mark-delivered`, { method: "POST" }),
 
   // Warehouse (see server/src/routes/warehouse.js)
+  getCashMeta: (params = {}) => request(`/cashflow/meta?${new URLSearchParams(params)}`, { fresh: true }),
+  getCashSummary: (params = {}) => request(`/cashflow/summary?${new URLSearchParams(params)}`, { fresh: true }),
+  getCashEntries: (params = {}) => request(`/cashflow/entries?${new URLSearchParams(params)}`, { fresh: true }),
+  importCashWorkbook: (file) => {
+    const form = new FormData();
+    form.set("file", file);
+    return request("/cashflow/import", { method: "POST", body: form });
+  },
   getWarehouseHome: () => request("/warehouse/home", { fresh: true }),
   getWarehousePackedList: () => request("/warehouse/packed-list", { fresh: true }),
   getDeliveryHome: () => request("/delivery/home", { fresh: true }),

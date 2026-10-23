@@ -1157,6 +1157,8 @@ async function renderRoute() {
     currentCleanup = await (await import("./views/warehouseHome.js")).renderWarehouseHome(app, navigate);
   } else if (path === "#/driver-home") {
     currentCleanup = await (await import("./views/driverHome.js")).renderDriverHome(app, navigate);
+  } else if (path === "#/cashflow") {
+    (await import("./views/cashflow.js")).renderCashflow(app, navigate);
   } else if (path === "#/wh-pack") {
     currentCleanup = await (await import("./views/warehousePack.js")).renderWarehousePack(app, navigate, query.get("tab"));
   } else if (path === "#/dashboard") {
@@ -1299,6 +1301,7 @@ const SIDEBAR_ITEM_ICON = {
   qa_cash_expense: { icon: icons.wallet, colorClass: "quick-action-icon-cash" },
   qa_pricelist: { icon: icons.tag, colorClass: "quick-action-icon-pricelist" },
   qa_warehouse: { icon: icons.box, colorClass: "quick-action-icon-warehouse" },
+  qa_cashflow: { icon: icons.wallet, colorClass: "quick-action-icon-debt" },
   qa_wh_home: { icon: icons.box, colorClass: "quick-action-icon-warehouse" },
   qa_driver_home: { icon: icons.truck, colorClass: "quick-action-icon-delivery" },
   qa_delivery: { icon: icons.truck, colorClass: "quick-action-icon-delivery" },

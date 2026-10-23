@@ -14995,3 +14995,211 @@ input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
   flex-direction: column;
   gap: 12px;
 }
+
+/* ===== Cashflow (owner, 2026-10-23) ===== */
+.cf-view {
+  padding: 12px 16px calc(24px + var(--nav-safe-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cf-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cf-head h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.cf-sum {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.cf-sum > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-width: 0;
+}
+
+.cf-sum strong {
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.cf-sum-label {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.cf-in {
+  color: var(--success);
+}
+
+.cf-out {
+  color: var(--danger);
+}
+
+.cf-note {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.cf-accounts {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scroll-snap-type: x proximity;
+}
+
+.cf-account {
+  flex: 0 0 auto;
+  min-width: 150px;
+  min-height: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  text-align: left;
+  scroll-snap-align: start;
+  cursor: pointer;
+}
+
+.cf-account-total {
+  border-color: var(--accent);
+  cursor: default;
+}
+
+.cf-account-name {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.cf-account-bal {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.cf-kind {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.cf-kind > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cf-kind-total {
+  display: inline-flex;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cf-cat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.cf-cat > span:last-child {
+  display: inline-flex;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cf-cat-active {
+  background: rgba(22, 119, 255, 0.1);
+}
+
+.cf-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.cf-filters input {
+  grid-column: 1 / -1;
+}
+
+.cf-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 6px;
+}
+
+.cf-row-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cf-row-sub {
+  flex-basis: 100%;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.cf-row-amt {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.cf-row-amt small {
+  font-weight: 400;
+}
+
+.cf-foot {
+  margin: 0;
+  font-size: 0.8rem;
+  text-align: center;
+}
