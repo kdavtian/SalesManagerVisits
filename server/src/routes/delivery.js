@@ -17,6 +17,8 @@ import { signatureUpload, uploadDirPath } from "../upload.js";
 import { matchesDeclaredImageType } from "../utils/imageSniff.js";
 import { insertPayment } from "./payments.js";
 import { getAppOrderSettings } from "../appOrders.js";
+import { orderWaiting } from "../opsReports.js";
+import { yerevanToday } from "../utils/yerevanDate.js";
 
 export const deliveryRouter = Router();
 deliveryRouter.use(requireAuth);
@@ -52,6 +54,38 @@ deliveryRouter.post("/arrival/deliver", async (req, res) => {
   const result = await deliverOnArrival(req.user, customerId);
   if (result.error) return res.status(result.status).json({ error: result.error });
   res.json(result);
+});
+
+// The driver's new Home (owner, 2026-10-23): today's route with the next stop first, and what is going wrong. Numbers + the stops only.
+deliveryRouter.get("/home", async (req, res) => {
+  if (!canDeliverOrders(req.user.role) && !canPlanRoutes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const today = yerevanToday();
+  const { rows: stops } = await pool.query(
+    `SELECT rs.id AS stop_id, rs.sequence, rs.completed_at, rs.arrived_at, o.id AS order_id, o.order_code, o.total_amd::float8 AS total_amd, o.status AS order_status,
+            c.id AS customer_id, c.name AS customer_name, c.address, c.phone, c.lat, c.lng
+     FROM route_stops rs
+     JOIN delivery_routes r ON r.id = rs.route_id
+     JOIN orders o ON o.id = rs.order_id
+     JOIN customers c ON c.id = o.customer_id
+     WHERE r.driver_id = $1 AND r.route_date = $2
+     ORDER BY rs.sequence`,
+    [req.user.id, today]
+  );
+  const [{ rows: [unrouted] }, { rows: [stale] }] = await Promise.all([
+    pool.query(`SELECT COUNT(*)::int AS n FROM orders o WHERE o.status = 'packed_stock_out' AND NOT EXISTS (SELECT 1 FROM route_stops rs WHERE rs.order_id = o.id)`),
+    pool.query(`SELECT COUNT(*)::int AS n FROM route_stops rs JOIN delivery_routes r ON r.id = rs.route_id WHERE r.driver_id = $1 AND rs.completed_at IS NULL AND r.route_date < $2`, [req.user.id, today]),
+  ]);
+  const { list } = await orderWaiting();
+  const open = stops.filter((s) => !s.completed_at);
+  res.json({
+    stops,
+    total: stops.length,
+    done: stops.length - open.length,
+    next: open[0] ?? null,
+    unrouted_packed: unrouted.n,
+    stale_stops: stale.n,
+    deliver_over_sla: list.filter((w) => w.step === "deliver" && w.over_sla).length,
+  });
 });
 
 // Every packed_stock_out order not already on an active route -- what the

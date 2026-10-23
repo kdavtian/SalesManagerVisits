@@ -52,6 +52,9 @@ export const QUICK_ACTIONS = [
   },
   { id: "qa_reports", defaultRoles: ALL_ROLES },
   { id: "qa_delivery", defaultRoles: ["delivery_manager", "admin"] },
+  // The new warehouse-manager and driver apps (owner, 2026-10-23), opened from the normal app so management can compare them with the old screens.
+  { id: "qa_wh_home", defaultRoles: ["admin", "ceo", "operations_director", "sales_director"] },
+  { id: "qa_driver_home", defaultRoles: ["admin", "ceo", "operations_director", "sales_director"] },
   // Sales Director and CEO/Operations Director included alongside
   // Warehouse Manager/admin -- the warehouse manager role isn't currently
   // using the app, so the director covers the same ground for now, and
@@ -77,6 +80,8 @@ export const QUICK_ACTIONS = [
   { id: "qa_sales", defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"] },
   { id: "qa_cash_expense", defaultRoles: ALL_ROLES },
   { id: "qa_recorded", defaultRoles: ["admin", "ceo", "operations_director", "accountant"] },
+  // Every money movement of the company (the Excel Cashflow sheet); salaries are in it, so the owner's own roles only (server: canSeeCashflow).
+  { id: "qa_cashflow", defaultRoles: ["admin", "ceo", "operations_director", "accountant"] },
   // Not in the owner's list of 15, kept (not removed) and placed last.
   { id: "qa_plan_route", defaultRoles: ALL_ROLES },
 ];
@@ -94,7 +99,10 @@ export const QUICK_ACTION_ROUTE = {
   qa_warehouse: "#/warehouse",
   qa_accounting: "#/accounting",
   qa_delivery: "#/delivery",
+  qa_wh_home: "#/wh-home",
+  qa_driver_home: "#/driver-home",
   qa_recorded: "#/recorded",
+  qa_cashflow: "#/cashflow",
   qa_team_performance: "#/team-performance",
   qa_reports: "#/reports",
   qa_debt_balances: "#/debt-balances",

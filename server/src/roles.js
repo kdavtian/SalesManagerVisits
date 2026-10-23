@@ -429,3 +429,12 @@ export function canManageCampaigns(role) {
 export function canManageAppOrders(role) {
   return role === "admin" || role === "ceo";
 }
+
+// Cashflow (owner, 2026-10-23): every money movement of the company, salaries included -- the owner's own roles only.
+// Reading: admin, CEO, operations director, accountant. Changing / importing: admin, CEO, accountant.
+export function canSeeCashflow(role) {
+  return role === "admin" || role === "ceo" || role === "operations_director" || role === "accountant";
+}
+export function canEditCashflow(role) {
+  return role === "admin" || role === "ceo" || role === "accountant";
+}

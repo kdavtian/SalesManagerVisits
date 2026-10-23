@@ -8,6 +8,7 @@ import { queueReportLabel, queueSyncNotice } from "../syncNotifier.js";
 import { autoDeliverOrdersFromErp, autoApprovePaymentsFromErp } from "../erpAutoMatch.js";
 import { runAutoTasks } from "../debtCollectionTasks.js";
 import { refreshOrderRhythm } from "../orderRhythm.js";
+import { applyCashLedger } from "../cashflow.js";
 import { snapshotTierPrices, logTierPriceChanges } from "../priceSyncLog.js";
 import { applyLandingCosts, applyExcelRetail, getLandingSettings } from "../landingCalc.js";
 import { syncProductsAndWholesaleCustomersToPlatform } from "../platformSync.js";
@@ -510,6 +511,18 @@ function isPlainArray(value) {
 // browsable in-app (see reports.js's "daily_management" report). Same
 // shared-secret auth as the main sync, since it's the same Windows PC
 // pipeline pushing it, just on its own schedule.
+// The whole Cashflow sheet (every money movement, not just the customer payments of the main sync): replaces the ledger rows that came from
+// Excel (owner, 2026-10-23). Body: { rows: [{ date, amount, currency, for, id, source, info, currency_rate, amount_amd, sales_rep, transaction_id }] }.
+erpSyncRouter.post("/cashflow-ledger", syncKeyLimiter, requireSyncKey, async (req, res) => {
+  const rows = req.body?.rows;
+  if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: "rows must be a non-empty array" });
+  try {
+    res.json(await applyCashLedger(rows.filter(isPlainObject).map((r, i) => ({ ...r, excel_row: r.excel_row ?? i + 1 })), { via: "bot", note: req.body?.note ?? null, fileName: req.body?.file_name ?? null }));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 const REPORT_PERIODS = new Set(["daily", "weekly", "monthly", "quarterly", "annual"]);
 
 erpSyncRouter.post("/daily-report", syncKeyLimiter, requireSyncKey, async (req, res) => {

@@ -226,27 +226,10 @@ export async function winback(db = pool, weeks = 8) {
 }
 
 // ---------- order flow ----------
-export async function orderFlow(db = pool, days = 30, { limit = 40 } = {}) {
+// Orders waiting at a step (confirm / pack / deliver), longest first, each with the SLA hours it is judged by (app orders are chased sooner).
+export async function orderWaiting(db = pool) {
   const settings = await getVaghinakSettings(db);
-  const { rows: steps } = await db.query(
-    `WITH t AS (
-       SELECT o.id, o.created_at AS t_sub,
-              MIN(h.changed_at) FILTER (WHERE h.new_status = 'confirmed') AS t_conf,
-              MIN(h.changed_at) FILTER (WHERE h.new_status = 'packed_stock_out') AS t_pack,
-              MIN(h.changed_at) FILTER (WHERE h.new_status = 'delivered') AS t_del
-       FROM orders o LEFT JOIN order_status_history h ON h.order_id = o.id
-       WHERE o.created_at >= now() - ($1 || ' days')::interval AND o.status <> 'draft' AND NOT COALESCE(o.delivered_from_erp, false)
-       GROUP BY o.id
-     )
-     SELECT step, count(*)::int AS n, percentile_cont(0.5) WITHIN GROUP (ORDER BY hrs)::float8 AS p50, percentile_cont(0.9) WITHIN GROUP (ORDER BY hrs)::float8 AS p90 FROM (
-       SELECT 'confirm' AS step, EXTRACT(EPOCH FROM (t_conf - t_sub)) / 3600 AS hrs FROM t WHERE t_conf IS NOT NULL
-       UNION ALL SELECT 'pack', EXTRACT(EPOCH FROM (t_pack - t_conf)) / 3600 FROM t WHERE t_pack IS NOT NULL AND t_conf IS NOT NULL
-       UNION ALL SELECT 'deliver', EXTRACT(EPOCH FROM (t_del - COALESCE(t_pack, t_conf))) / 3600 FROM t WHERE t_del IS NOT NULL AND COALESCE(t_pack, t_conf) IS NOT NULL
-     ) x WHERE hrs >= 0 GROUP BY step`,
-    [days]
-  );
   const round1 = (n) => (n == null ? null : Math.round(n * 10) / 10);
-  const stepMap = Object.fromEntries(steps.map((s) => [s.step, { n: s.n, p50_h: round1(s.p50), p90_h: round1(s.p90) }]));
   const sla = { confirm: settings.slaConfirmH, pack: settings.slaPackH, deliver: settings.slaDeliverH };
   // App orders (KAD OS) are chased sooner: the confirm limit is the app setting (default 2 h), the other steps wait half the usual time.
   const app = await getAppOrderSettings(db);
@@ -281,6 +264,30 @@ export async function orderFlow(db = pool, days = 30, { limit = 40 } = {}) {
       blocked_by: w.approval_status === "pending" ? "price_approval" : w.credit_status === "pending" ? "credit_approval" : null,
     };
   });
+  return { sla, list };
+}
+
+export async function orderFlow(db = pool, days = 30, { limit = 40 } = {}) {
+  const { rows: steps } = await db.query(
+    `WITH t AS (
+       SELECT o.id, o.created_at AS t_sub,
+              MIN(h.changed_at) FILTER (WHERE h.new_status = 'confirmed') AS t_conf,
+              MIN(h.changed_at) FILTER (WHERE h.new_status = 'packed_stock_out') AS t_pack,
+              MIN(h.changed_at) FILTER (WHERE h.new_status = 'delivered') AS t_del
+       FROM orders o LEFT JOIN order_status_history h ON h.order_id = o.id
+       WHERE o.created_at >= now() - ($1 || ' days')::interval AND o.status <> 'draft' AND NOT COALESCE(o.delivered_from_erp, false)
+       GROUP BY o.id
+     )
+     SELECT step, count(*)::int AS n, percentile_cont(0.5) WITHIN GROUP (ORDER BY hrs)::float8 AS p50, percentile_cont(0.9) WITHIN GROUP (ORDER BY hrs)::float8 AS p90 FROM (
+       SELECT 'confirm' AS step, EXTRACT(EPOCH FROM (t_conf - t_sub)) / 3600 AS hrs FROM t WHERE t_conf IS NOT NULL
+       UNION ALL SELECT 'pack', EXTRACT(EPOCH FROM (t_pack - t_conf)) / 3600 FROM t WHERE t_pack IS NOT NULL AND t_conf IS NOT NULL
+       UNION ALL SELECT 'deliver', EXTRACT(EPOCH FROM (t_del - COALESCE(t_pack, t_conf))) / 3600 FROM t WHERE t_del IS NOT NULL AND COALESCE(t_pack, t_conf) IS NOT NULL
+     ) x WHERE hrs >= 0 GROUP BY step`,
+    [days]
+  );
+  const round1 = (n) => (n == null ? null : Math.round(n * 10) / 10);
+  const stepMap = Object.fromEntries(steps.map((s) => [s.step, { n: s.n, p50_h: round1(s.p50), p90_h: round1(s.p90) }]));
+  const { sla, list } = await orderWaiting(db);
   return { days, sla, steps: stepMap, waiting: list.slice(0, limit), waiting_count: list.length, over_sla_count: list.filter((w) => w.over_sla).length, effort: await orderEffort(db, days) };
 }
 

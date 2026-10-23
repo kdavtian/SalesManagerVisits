@@ -118,7 +118,8 @@ test("order flow: step timings and orders waiting longer than the SLA", async ()
   assert.equal(o.status, 201);
   trackOrder(o.data.id);
   await pool.query("UPDATE orders SET created_at = now() - interval '10 hours', status = 'submitted', approval_status = 'not_required' WHERE id = $1", [o.data.id]);
-  const res = await apiRequest("/api/ops/flow?days=30", { cookie: directorCookie });
+  // limit=500: the list holds the 40 longest-waiting orders by default, and other test files leave older waiting orders in the shared database
+  const res = await apiRequest("/api/ops/flow?days=30&limit=500", { cookie: directorCookie });
   assert.equal(res.status, 200);
   const waiting = res.data.waiting.find((w) => w.id === o.data.id);
   assert.ok(waiting);
