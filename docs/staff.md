@@ -14,7 +14,7 @@ People, who reports to whom, payroll. It replaces the Excel sheets Tabel, Sales 
 - **A day is paid** when the boss marked it `completed`; or it is a `dayoff` inside the person's paid allowance; or nothing marks it and
   - the person is visit-based and the rep did at least the threshold % of the visits in that day's **approved plan** (check-ins of the planned customers), or
   - the person is not visit-based (every working day).
-  A day marked `unpaid`, a day off over the allowance, and a visit-based day with no approved plan are not paid (the boss can still mark it completed). Today stays open until the % is reached.
+  A visit-based day with **no approved plan is paid automatically** (owner, 2026-10-23: nothing to measure against). A day marked `unpaid` or a day off over the allowance is not paid. Today stays open until the % of an existing plan is reached.
 - **Commission**: the person's % of the money collected (Cashflow "Oil order" rows of their channel) or of sales (order lines, internal stock customer 10000 excluded), minus the channels that never count (the sales director excludes KF and CAS).
 - **Paid** = Cashflow "Salary" rows whose Info is `<position> <YYYY> <MON>` (`SM YVN 2026 OCT`). Other spellings of the position (`Sales Manager YVN`) go in the person's "other spellings".
 
