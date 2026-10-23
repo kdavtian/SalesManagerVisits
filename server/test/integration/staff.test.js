@@ -92,6 +92,16 @@ test.after(async () => {
 
 const api = (who, path, method = "GET", body) => apiRequest(`/api/staff${path}`, { method, cookie: cookies[who], body });
 
+test("an empty Staff is still open to admin / CEO / accountant (nobody has been added yet)", async () => {
+  for (const who of ["admin", "accountant"]) {
+    assert.equal((await api(who, "/people")).status, 200, who);
+    assert.equal((await api(who, "/payroll?month=2026-10")).status, 200, who);
+    assert.equal((await api(who, "/settings")).status, 200, who);
+    assert.equal((await api(who, "/access")).data.has_access, true, who);
+  }
+  assert.equal((await api("stranger", "/people")).status, 403, "a driver who is not in the list sees nothing");
+});
+
 test("only admin / CEO / accountant manage people; the structure refuses loops", async () => {
   const mk = async (body) => {
     const r = await api("admin", "/people", "POST", body);

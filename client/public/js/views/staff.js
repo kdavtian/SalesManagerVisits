@@ -322,6 +322,8 @@ async function renderMain(root, navigate, month0, access, tab0) {
     body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     return;
   }
+  // An empty company: start where the first person is added.
+  if (!people.length && tabs.includes("people") && st.tab === "pay") st.tab = "people";
   paintTabs();
   paint();
 }
