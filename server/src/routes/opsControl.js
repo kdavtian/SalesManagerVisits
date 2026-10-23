@@ -168,7 +168,9 @@ opsControlRouter.put("/stock/:productId", async (req, res) => {
 opsControlRouter.get("/customers", async (_req, res) => res.json(await winback(pool, 8)));
 
 // ---- Flow: order step timing ----
-opsControlRouter.get("/flow", async (req, res) => res.json(await orderFlow(pool, [7, 30, 90].includes(Number(req.query.days)) ? Number(req.query.days) : 30)));
+opsControlRouter.get("/flow", async (req, res) =>
+  res.json(await orderFlow(pool, [7, 30, 90].includes(Number(req.query.days)) ? Number(req.query.days) : 30, { limit: Math.min(500, Math.max(1, Number.parseInt(req.query.limit, 10) || 40)) }))
+);
 
 // ---- Data: scorecard + Excel upload ----
 opsControlRouter.get("/data", async (_req, res) => res.json(await dataScorecard(pool)));
