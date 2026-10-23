@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, getCurrentPosition, locationErrorHint, compressImage, formatDistance, haversineMeters, creditedDistanceMeters, activateDialog } from "../util.js";
+import { escapeHtml, formatDateDMY, getCurrentPosition, locationErrorHint, compressImage, formatDistance, haversineMeters, creditedDistanceMeters, activateDialog } from "../util.js";
 import { enqueueCheckin } from "../offlineQueue.js";
 import { openSyncQueueSheet } from "../syncQueueSheet.js";
 import { openOrderMenu } from "../orderMenu.js";
@@ -104,6 +104,11 @@ export async function renderCheckin(root, navigate, customerId) {
         <input type="number" name="amount_collected_amd" id="amount-collected-input" min="1" step="any" inputmode="numeric" placeholder="${t("amount_collected_placeholder")}" />
         <p class="form-error" id="amount-collected-error" hidden>${t("amount_collected_required")}</p>
       </label>
+
+      <div id="delivered-orders-field" class="delivered-orders-field" hidden>
+        <span class="delivered-orders-title">${t("delivered_orders_title")}</span>
+        <div id="delivered-orders-list" class="delivered-orders-list"></div>
+      </div>
 
       <label id="available-products-field" hidden>
         ${t("available_products_label")}
@@ -370,11 +375,52 @@ export async function renderCheckin(root, navigate, customerId) {
     }
   }
 
+  // "Products delivered": which of this customer's CONFIRMED / PACKED orders were handed over. They move to Delivered on submit.
+  const deliveredField = container.querySelector("#delivered-orders-field");
+  const deliveredList = container.querySelector("#delivered-orders-list");
+  let deliverableLoaded = false;
+
+  async function loadDeliverableOrders() {
+    deliverableLoaded = true;
+    deliveredList.innerHTML = `<p class="muted">${t("loading")}</p>`;
+    try {
+      const orders = await api.getDeliverableOrders(customerId);
+      if (!orders.length) {
+        deliveredList.innerHTML = `<p class="muted">${t("delivered_orders_none")}</p>`;
+        return;
+      }
+      deliveredList.innerHTML = orders
+        .map(
+          (o) => `
+          <label class="delivered-order-row">
+            <input type="checkbox" name="delivered_orders" value="${o.id}" ${orders.length === 1 ? "checked" : ""} />
+            <span class="delivered-order-main">
+              <strong>${escapeHtml(o.order_code || `#${o.id}`)}</strong>
+              <span class="muted">${escapeHtml(formatDateDMY(o.created_at))} · ${o.unit_count} ${t("delivered_orders_units")}</span>
+            </span>
+            <span class="delivered-order-total">${Number(o.total_amd).toLocaleString("en-US")}</span>
+            <span class="badge ${o.status === "packed_stock_out" ? "badge-success" : "badge-neutral"}">${t(o.status === "packed_stock_out" ? "delivered_orders_packed" : "delivered_orders_confirmed")}</span>
+          </label>`
+        )
+        .join("");
+    } catch {
+      deliverableLoaded = false; // offline or failed: the check-in still goes through, the office marks the delivery
+      deliveredList.innerHTML = `<p class="muted">${t("delivered_orders_offline")}</p>`;
+    }
+  }
+
+  function syncDeliveredVisibility() {
+    const on = container.querySelector('input[name="outcomes"][value="customer_unavailable"]').checked;
+    deliveredField.hidden = !on;
+    if (on && !deliverableLoaded) loadDeliverableOrders();
+  }
+
   container.querySelectorAll('input[name="outcomes"]').forEach((input) => {
     input.addEventListener("change", () => {
       outcomeError.hidden = true;
       if (!submitBtn.disabled) submitBtn.textContent = submitLabel();
       syncAmountFieldVisibility();
+      syncDeliveredVisibility();
       syncAvailableProductsVisibility();
     });
   });
@@ -567,6 +613,8 @@ export async function renderCheckin(root, navigate, customerId) {
     if (note) formData.set("note", note);
     formData.set("outcomes", JSON.stringify(outcomes));
     if (amountCollected != null) formData.set("amount_collected_amd", amountCollected);
+    const deliveredOrderIds = outcomes.includes("customer_unavailable") ? data.getAll("delivered_orders").map(Number) : [];
+    if (deliveredOrderIds.length) formData.set("delivered_order_ids", JSON.stringify(deliveredOrderIds));
     if (Object.keys(brandStatusPayload).length) formData.set("brand_status", JSON.stringify(brandStatusPayload));
     const availableProductsPayload = [...selectedAvailableProducts];
     if (availableProductsPayload.length) formData.set("available_products", JSON.stringify(availableProductsPayload));
@@ -596,6 +644,7 @@ export async function renderCheckin(root, navigate, customerId) {
           brandStatus: brandStatusPayload,
           outcomes,
           amountCollected,
+          deliveredOrderIds,
           availableProducts: availableProductsPayload,
           photos: photos.map((photo) => photo.blob),
         });
@@ -625,6 +674,7 @@ export async function renderCheckin(root, navigate, customerId) {
             : `${t("you_were")} ${formatDistance(checkin.distance_meters)} ${t("from")} ${escapeHtml(customer.name)}.`
         }</p>
         ${checkin.within_range && state.user?.role !== "sales_manager" ? `<p class="muted">${t("checkin_not_rep_visit")}</p>` : ""}
+        ${(checkin.delivered_orders ?? []).length ? `<p class="delivered-orders-done">${t("delivered_orders_moved").replace("{n}", String(checkin.delivered_orders.length))}</p>` : ""}
         ${placedOrder ? `<button class="btn btn-primary btn-block" id="create-order-btn">${t("create_order")}</button>` : ""}
         <button class="btn ${placedOrder ? "" : "btn-primary"} btn-block" id="back-to-customer">${t("done")}</button>
       </div>

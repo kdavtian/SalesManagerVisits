@@ -488,6 +488,11 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     kadPlainView: Boolean(relocateCustomerId),
   }).setView(restoredView ? restoredView.center : [20, 0], restoredView ? restoredView.zoom : 2);
   L.control.attribution({ prefix: false, position: "bottomright" }).addTo(map);
+  // "Me" lives in its own pane above every customer pin (selected, task, cluster): the rep's dot is never hidden under a customer, and
+  // it ignores taps so the pin underneath stays tappable (owner, 2026-10-23).
+  map.createPane("mePane");
+  map.getPane("mePane").style.zIndex = "620";
+  map.getPane("mePane").style.pointerEvents = "none";
   // Remember the view as it changes (not only on teardown: the back-cache can
   // keep this instance alive and evict it later, or the app can be closed).
   if (plainBrowse) map.on("moveend", () => saveMapView(map));
@@ -2378,7 +2383,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         const latlng = [latitude, longitude];
         myLocation = { lat: latitude, lng: longitude };
         if (!meMarker) {
-          meMarker = L.marker(latlng, { icon: meIcon(null), zIndexOffset: 1000 }).addTo(map);
+          meMarker = L.marker(latlng, { icon: meIcon(null), pane: "mePane", interactive: false, keyboard: false }).addTo(map);
           meAccuracyCircle = L.circle(latlng, {
             radius: accuracy,
             color: cssColor("--accent", "#0969da"),
@@ -2413,7 +2418,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     if (known && !meMarker) {
       const { latitude, longitude, accuracy } = known.coords;
       myLocation = { lat: latitude, lng: longitude };
-      meMarker = L.marker([latitude, longitude], { icon: meIcon(null), zIndexOffset: 1000 }).addTo(map);
+      meMarker = L.marker([latitude, longitude], { icon: meIcon(null), pane: "mePane", interactive: false, keyboard: false }).addTo(map);
       meAccuracyCircle = L.circle([latitude, longitude], {
         radius: accuracy,
         color: cssColor("--accent", "#0969da"),

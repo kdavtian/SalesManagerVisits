@@ -177,6 +177,7 @@ async function submitCheckin(entry) {
   if (entry.outcomes?.length) form.set("outcomes", JSON.stringify(entry.outcomes));
   if (entry.amountCollected != null) form.set("amount_collected_amd", entry.amountCollected);
   if (entry.availableProducts?.length) form.set("available_products", JSON.stringify(entry.availableProducts));
+  if (entry.deliveredOrderIds?.length) form.set("delivered_order_ids", JSON.stringify(entry.deliveredOrderIds));
   // Entries queued since this change carry real Blobs (IndexedDB stores
   // them natively -- no base64 round trip needed); an entry migrated in
   // from a pre-IndexedDB localStorage queue still carries the old
