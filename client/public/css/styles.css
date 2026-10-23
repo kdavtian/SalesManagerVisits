@@ -14422,3 +14422,90 @@ input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
 
 /* Period buttons (periodButtons.js): the selected button that shows its PREVIOUS period (Yesterday / Last week / ...) gets a back arrow */
 .period-prev::before { content: "\2039"; margin-right: 4px; font-weight: 700; opacity: 0.8; }
+
+/* ===== Driver arrival banner (the driver reached a customer of today's route) ===== */
+.arrival-banner {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(58px + var(--nav-safe-bottom));
+  width: calc(100% - 24px);
+  max-width: calc(var(--app-max-width) - 24px);
+  z-index: 1100;
+  background: var(--bg-card);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
+  padding: 12px 14px;
+}
+
+.arrival-banner[hidden] {
+  display: none;
+}
+
+.arrival-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.arrival-close {
+  min-width: 44px;
+  min-height: 44px;
+  margin: -10px -10px 0 0;
+  font-size: 1.4rem;
+}
+
+.arrival-sub {
+  margin: 2px 0 10px;
+  font-size: 0.85rem;
+  color: var(--text-muted, var(--muted));
+}
+
+.arrival-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.arrival-actions .btn {
+  flex: 1;
+  min-height: 48px;
+}
+
+.arrival-modes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.arrival-modes .btn {
+  width: 100%;
+  min-height: 48px;
+}
+
+.arrival-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  margin: 0;
+}
+
+.arrival-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.arrival-input input {
+  width: 84px;
+  text-align: right;
+}
+
+.arrival-input .muted {
+  min-width: 30px;
+}

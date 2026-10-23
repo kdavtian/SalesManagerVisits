@@ -8,7 +8,8 @@ import fs from "node:fs";
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
-import { canPlanRoutes, canDeliverOrders, seesUnrecordedBadge, canSubmitPaymentsForOthers } from "../roles.js";
+import { canPlanRoutes, canDeliverOrders, seesUnrecordedBadge, canSubmitPaymentsForOthers, canManageAppOrders } from "../roles.js";
+import { getArrivalSettings, saveArrivalSettings, validateArrivalPatch, handleArrivalPing, deliverOnArrival } from "../driverArrival.js";
 import { notifyUser } from "../notifications.js";
 import { DRIVER_NOTIFY_ROLES, DELIVERY_OUTCOME_NOTIFY_ROLES } from "../notificationPreferences.js";
 import { buildMatrix, optimizeOrder } from "../osrm.js";
@@ -19,6 +20,39 @@ import { getAppOrderSettings } from "../appOrders.js";
 
 export const deliveryRouter = Router();
 deliveryRouter.use(requireAuth);
+
+// ---- driver arrival (owner, 2026-10-23; see ../driverArrival.js) ------------------------------------------------------
+// The mode the screens follow (off / suggest / auto) -- drivers and planners read it, admin / CEO change it.
+deliveryRouter.get("/arrival-settings", async (req, res) => {
+  if (!canDeliverOrders(req.user.role) && !canPlanRoutes(req.user.role) && !canManageAppOrders(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  res.json(await getArrivalSettings());
+});
+
+deliveryRouter.put("/arrival-settings", async (req, res) => {
+  if (!canManageAppOrders(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const v = validateArrivalPatch(req.body ?? {});
+  if (v.error) return res.status(400).json({ error: v.error });
+  res.json((await saveArrivalSettings(v.value)).after);
+});
+
+// The driver's phone reports its position (every ~20 s while a route has open stops).
+deliveryRouter.post("/arrival", async (req, res) => {
+  if (!canDeliverOrders(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const lat = Number(req.body?.lat);
+  const lng = Number(req.body?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return res.status(400).json({ error: "lat and lng are required" });
+  res.json(await handleArrivalPing(req.user, { lat, lng, accuracy: req.body?.accuracy }));
+});
+
+// One tap on the arrival banner: this customer's orders on today's route are delivered.
+deliveryRouter.post("/arrival/deliver", async (req, res) => {
+  if (!canDeliverOrders(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const customerId = Number(req.body?.customer_id);
+  if (!Number.isInteger(customerId) || customerId <= 0) return res.status(400).json({ error: "customer_id is required" });
+  const result = await deliverOnArrival(req.user, customerId);
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  res.json(result);
+});
 
 // Every packed_stock_out order not already on an active route -- what the
 // planner auto-pools stops from (spec: the planner gathers these itself,
