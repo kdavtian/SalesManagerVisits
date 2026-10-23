@@ -36,10 +36,10 @@ export async function deliverableOrders(customerId, db = pool) {
   return rows.map((r) => ({ ...r, total_amd: Number(r.total_amd) }));
 }
 
-// Inside the check-in's transaction: move the picked orders to Delivered. Only orders of THIS customer that are still
-// confirmed / packed move (a stale pick -- already delivered, cancelled, another customer -- is skipped, never an error).
-// Same bookkeeping as the office's "mark delivered": close the route stop, write the status history.
-export async function deliverOrdersAtCheckin(db, { customerId, orderIds, userId, checkinId }) {
+// Moves the given orders of ONE customer to Delivered, inside the caller's transaction. Only orders that are still confirmed / packed move
+// (a stale pick -- already delivered, cancelled, another customer's -- is skipped, never an error). Same bookkeeping as the office's
+// "mark delivered": the route stop is closed and a status-history row is written with `reason`.
+export async function moveOrdersToDelivered(db, { customerId, orderIds, userId, reason }) {
   const delivered = [];
   if (!orderIds.length) return delivered;
   const { rows } = await db.query(
@@ -55,15 +55,20 @@ export async function deliverOrdersAtCheckin(db, { customerId, orderIds, userId,
     await db.query(
       `INSERT INTO order_status_history (order_id, old_status, new_status, reason, changed_by)
        VALUES ($1, $2, 'delivered', $3, $4)`,
-      [order.id, order.status, `Delivered - reported on check-in #${checkinId}`, userId]
+      [order.id, order.status, reason, userId]
     );
     delivered.push({ id: order.id, order_code: order.order_code, old_status: order.status });
   }
   return delivered;
 }
 
+// Inside the check-in's transaction: the orders the rep picked move to Delivered.
+export function deliverOrdersAtCheckin(db, { customerId, orderIds, userId, checkinId }) {
+  return moveOrdersToDelivered(db, { customerId, orderIds, userId, reason: `Delivered - reported on check-in #${checkinId}` });
+}
+
 // After the response: tell the people who follow deliveries (best effort, never blocks the check-in).
-export function notifyCheckinDelivered({ delivered, customerName, actorId }) {
+export function notifyCheckinDelivered({ delivered, customerName, actorId, how = "չեկ-ինում" }) {
   if (!delivered.length) return;
   (async () => {
     try {
@@ -74,7 +79,7 @@ export function notifyCheckinDelivered({ delivered, customerName, actorId }) {
         if (recipient.id === actorId) continue;
         notifyUser(recipient.id, "order_delivered", {
           title: "Պատվերն առաքվեց",
-          body: `${customerName}. ${actorName}-ը չեկ-ինում նշել է ${delivered.length} պատվեր որպես առաքված։`,
+          body: `${customerName}. ${actorName}-ը ${how} նշել է ${delivered.length} պատվեր որպես առաքված։`,
           url: `/#/orders?open=${delivered[0].id}`,
         });
       }

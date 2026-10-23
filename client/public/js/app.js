@@ -74,6 +74,7 @@ import { clearListCache, clearCacheIfRoleChanged } from "./listCache.js";
 import { mountInstallPrompt } from "./install.js";
 import { mountUpdateBanner, initServiceWorkerUpdates } from "./updateBanner.js";
 import { startLocationBroadcast, stopLocationBroadcast } from "./locationBroadcast.js";
+import { startDriverArrival, stopDriverArrival } from "./driverArrival.js";
 import { escapeHtml, takeParkedSheet, pruneParkedSheet, installPhoneMask } from "./util.js";
 import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds } from "./quickActions.js";
 import { startErrorMonitoring } from "./errorMonitoring.js";
@@ -867,6 +868,7 @@ async function doLogout() {
   await api.logout();
   setUser(null);
   stopLocationBroadcast();
+  stopDriverArrival();
   // Defense-in-depth alongside listCache.js's own per-user key scoping --
   // a shared device's next sign-in should never be able to see this rep's
   // cached orders/customers/activity data (reported as "another user's
@@ -974,6 +976,7 @@ async function renderRoute() {
     renderLogin(app, async () => {
       location.hash = "#/dashboard";
       startLocationBroadcast();
+      startDriverArrival(navigate);
       // A session that expired while this device had queued offline work
       // stops flushQueue() at the first 401 rather than deleting that work
       // (see offlineQueue.js) -- nothing else re-triggers a flush once the
@@ -1589,6 +1592,7 @@ async function init() {
     // role didn't change.
     await clearCacheIfRoleChanged(user);
     startLocationBroadcast();
+    startDriverArrival(navigate);
     startErrorMonitoring();
   } catch {
     setUser(null);

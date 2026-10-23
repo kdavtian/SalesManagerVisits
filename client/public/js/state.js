@@ -76,6 +76,11 @@ export function canViewTeamLocations() {
   );
 }
 
+// Mirrors server/src/roles.js canDeliverOrders: who drives a route.
+export function canDeliverOrders() {
+  return state.user?.role === "delivery_manager" || state.user?.role === "admin";
+}
+
 export function broadcastsLocation() {
   return state.user?.role !== "admin" && state.user?.role !== "ceo" && state.user?.role !== "operations_director";
 }

@@ -9,6 +9,7 @@ import { renderSystemHealthSection } from "./systemHealth.js";
 import { renderPinReviewSection } from "./pinReview.js";
 import { renderBonusChallengesSection, renderBonusRewardClaimsSection } from "./bonusChallengesAdmin.js";
 import { renderKadOsPerksSection, renderKadOsCampaignsSection } from "./kadOsAdmin.js";
+import { renderDeliveryArrivalSection } from "./deliveryArrivalAdmin.js";
 import { openInfoPopup, formatAmd, escapeHtml, compressImage, activateDialog, attachSwipeToDismiss, formatPhoneDisplay, normalizePhone, downloadFromUrl, formatDateTime } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
@@ -124,6 +125,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
   // broader than plain admin, so kept as its own flag rather than folded
   // into the admin-gated block below.
   const canManageChallenges = isPerfCeo();
+  const canManageArrival = admin || state.user?.role === "ceo"; // the server lets only admin / CEO change driver arrival
   // Mirrors canApproveBonusRewards (admin/ceo/accountant) OR
   // canRecordBonusPayouts (admin/accountant) -- the union of who needs to
   // see the reward-claims review list at all, a strictly larger set than
@@ -305,6 +307,17 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
         <div class="card settings-list">
           ${canManageChallenges ? settingsRow({ icon: ICON.bolt, label: t("kos_row"), id: "row-kos-perks", color: "orange" }) : ""}
           ${settingsRow({ icon: ICON.chart, label: t("kos_campaigns_row"), id: "row-kos-campaigns", color: "teal" })}
+        </div>
+      `
+          : ""
+      }
+
+      ${
+        canManageArrival
+          ? `
+        <h2 class="section-title">${t("arrival_section")}</h2>
+        <div class="card settings-list">
+          ${settingsRow({ icon: ICON.gps, label: t("arrival_section"), id: "row-delivery-arrival", color: "green" })}
         </div>
       `
           : ""
@@ -1143,6 +1156,11 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
   if (canManageChallenges) {
     root.querySelector("#row-kos-perks").addEventListener("click", (e) => {
       openAdminSection(root, e.currentTarget, t("kos_row"), renderKadOsPerksSection);
+    });
+  }
+  if (canManageArrival) {
+    root.querySelector("#row-delivery-arrival").addEventListener("click", (e) => {
+      openAdminSection(root, e.currentTarget, t("arrival_section"), renderDeliveryArrivalSection);
     });
   }
   if (canManageCampaigns) {

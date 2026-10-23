@@ -184,6 +184,10 @@ export const api = {
   getFrequentProducts: () => request("/products/frequent"),
   getReorderProfile: (id, from) => request(`/customers/${id}/reorder-profile${from ? `?from=${encodeURIComponent(from)}` : ""}`),
 
+  getArrivalSettings: () => request("/delivery/arrival-settings", { fresh: true }),
+  saveArrivalSettings: (data) => json("/delivery/arrival-settings", "PUT", data),
+  arrivalPing: (lat, lng, accuracy) => json("/delivery/arrival", "POST", { lat, lng, accuracy }),
+  arrivalDeliver: (customerId) => json("/delivery/arrival/deliver", "POST", { customer_id: customerId }),
   createCheckin: (formData) =>
     request("/checkins", { method: "POST", body: formData }),
   getDeliverableOrders: (customerId) => request(`/checkins/deliverable-orders?customer_id=${customerId}`),
