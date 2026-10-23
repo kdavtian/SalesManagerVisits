@@ -13,6 +13,7 @@ import { periodTimestampCondition, PERIOD_KEYS } from "../utils/periodWindows.js
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { insertPayment } from "./payments.js";
 import { autoCompleteCollectionTasks, autoCompleteProductCheckTasks, autoCompleteVisitTasks } from "../taskAutoComplete.js";
+import { parseDeliveredOrderIds, deliverableOrders, deliverOrdersAtCheckin, notifyCheckinDelivered } from "../checkinDelivery.js";
 
 // Below this, a payment isn't worth interrupting anyone's Telegram for.
 const LARGE_PAYMENT_THRESHOLD_AMD = 100000;
@@ -55,10 +56,17 @@ const VALID_OUTCOMES = new Set([
   "payment_collected",
   "follow_up_required",
   "assortment_check",
-  "customer_unavailable",
+  "customer_unavailable", // legacy value; the app shows it as "Products delivered" (truck icon)
   "complaint",
   "other",
 ]);
+
+// The customer's CONFIRMED / PACKED orders, for the "Products delivered" outcome of the check-in form.
+checkinsRouter.get("/deliverable-orders", async (req, res) => {
+  const customerId = Number(req.query.customer_id);
+  if (!Number.isInteger(customerId) || customerId <= 0) return res.status(400).json({ error: "customer_id is required" });
+  res.json(await deliverableOrders(customerId));
+});
 
 const BRAND_STATUS_OPTIONS = {
   castrol: new Set([
@@ -151,7 +159,7 @@ checkinsRouter.post("/", (req, res, next) => {
     next();
   });
 }, async (req, res) => {
-  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref, captured_at, accuracy_m } = req.body ?? {};
+  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref, captured_at, accuracy_m, delivered_order_ids } = req.body ?? {};
   const customerId = Number(customer_id);
   const latNum = Number(lat);
   const lngNum = Number(lng);
@@ -236,9 +244,14 @@ checkinsRouter.post("/", (req, res, next) => {
   const brandStatusValue = parseBrandStatus(brand_status);
   const availableProductsValue = parseAvailableProducts(available_products);
 
+  // "Products delivered" (stored as customer_unavailable): the orders the rep picked move to Delivered together with the check-in.
+  // Picking is optional -- goods can be handed over without a confirmed / packed order in the system.
+  const deliveredIds = outcomeValues.includes("customer_unavailable") ? parseDeliveredOrderIds(delivered_order_ids) : [];
+
   const client = await pool.connect();
   let checkin;
   let rep = null;
+  let deliveredOrders = [];
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
@@ -287,6 +300,8 @@ checkinsRouter.post("/", (req, res, next) => {
       }
     }
 
+    deliveredOrders = await deliverOrdersAtCheckin(client, { customerId, orderIds: deliveredIds, userId: req.user.id, checkinId: checkin.id });
+
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -306,7 +321,9 @@ checkinsRouter.post("/", (req, res, next) => {
     client.release();
   }
 
-  res.status(201).json({ ...checkin, photo_count: files.length });
+  res.status(201).json({ ...checkin, photo_count: files.length, delivered_orders: deliveredOrders });
+
+  notifyCheckinDelivered({ delivered: deliveredOrders, customerName: customer.name, actorId: req.user.id });
 
   // Money collected on this visit closes the customer's "collect the debt" task (taskAutoComplete.js).
   if (amountCollected != null) {

@@ -186,6 +186,7 @@ export const api = {
 
   createCheckin: (formData) =>
     request("/checkins", { method: "POST", body: formData }),
+  getDeliverableOrders: (customerId) => request(`/checkins/deliverable-orders?customer_id=${customerId}`),
   listCheckins: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/checkins${qs ? `?${qs}` : ""}`);

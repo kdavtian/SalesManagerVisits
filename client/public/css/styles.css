@@ -5764,6 +5764,68 @@ label.checkbox-row input[type="checkbox"] {
   font-size: 1rem;
 }
 
+/* "Products delivered": the customer's confirmed / packed orders to tick as handed over */
+.delivered-orders-field {
+  margin: 12px 0;
+}
+
+.delivered-orders-title {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.delivered-orders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.delivered-order-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 12px;
+  margin: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.delivered-order-row:has(input:checked) {
+  border-color: var(--accent);
+  background: rgba(22, 119, 255, 0.1);
+}
+
+.delivered-order-row input {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  margin: 0;
+}
+
+.delivered-order-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  font-size: 0.85rem;
+}
+
+.delivered-order-total {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.delivered-orders-done {
+  font-weight: 600;
+  color: var(--success, #1a7f37);
+}
+
 /* ===== Map redesign ===== */
 
 /* Search row + filter-chip row now stack inside one positioned wrapper,
