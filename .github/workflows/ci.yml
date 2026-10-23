@@ -88,11 +88,12 @@ jobs:
       - run: npm run migrate
 
       - name: Tests (shard ${{ matrix.shard }}/4)
-        run: node --test --test-shard=${{ matrix.shard }}/4 $(find test -name '*.test.js' -not -path 'test/integration/lockdownEngage.test.js' | sort)
+        run: node --test --test-shard=${{ matrix.shard }}/4 $(find test -name '*.test.js' -not -path 'test/integration/lockdownEngage.test.js' -not -path 'test/integration/erpSync.test.js' | sort)
 
-  # Engaging the lockdown is global state, so that one test file gets a database to itself (it used to run after the parallel suite).
-  lockdown:
-    name: tests (lockdown)
+  # Two test files change state every other test can see, so they get a database to themselves and run one after the other: engaging the
+  # lockdown locks every request, and the ERP sync TRUNCATEs erp_customer_data (the debt tests read it).
+  isolated:
+    name: tests (isolated)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
@@ -129,20 +130,20 @@ jobs:
 
       - run: npm run migrate
 
-      - run: npm run test:lockdown
+      - run: node --test --test-concurrency=1 test/integration/erpSync.test.js test/integration/lockdownEngage.test.js
 
   # The one check name the repository has always required: green only when the static checks and every test shard passed.
   test:
     name: test
-    needs: [static, unit, lockdown]
+    needs: [static, unit, isolated]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Static checks and all test shards passed
         run: |
-          echo "static: ${{ needs.static.result }}, shards: ${{ needs.unit.result }}, lockdown: ${{ needs.lockdown.result }}"
-          test "${{ needs.static.result }}" = "success" && test "${{ needs.unit.result }}" = "success" && test "${{ needs.lockdown.result }}" = "success"
+          echo "static: ${{ needs.static.result }}, shards: ${{ needs.unit.result }}, isolated: ${{ needs.isolated.result }}"
+          test "${{ needs.static.result }}" = "success" && test "${{ needs.unit.result }}" = "success" && test "${{ needs.isolated.result }}" = "success"
 
   # Fast browser-driven subset (step 4 of the stabilization plan, test/e2e) --
   # only the @smoke-tagged specs, so a real-browser run doesn't gate every PR
