@@ -5,30 +5,22 @@ on:
     branches: [main]
   pull_request:
 
+# A new push to the same branch / PR cancels the run that is still going.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  # The quick static checks run on their own runner, next to the tests instead of in front of them.
+  static:
+    name: static (version, ui, audit)
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: mirror.gcr.io/library/postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: fieldvisits_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/fieldvisits_test
-      JWT_SECRET: ci-test-secret-not-used-anywhere-real
-      NODE_ENV: test
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: server
+    env:
+      NODE_ENV: test
     steps:
       - uses: actions/checkout@v7
 
@@ -38,13 +30,9 @@ jobs:
           cache: "npm"
           cache-dependency-path: server/package-lock.json
 
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund --prefer-offline
 
       - run: npm run check:version
-
-      - run: npm run migrate
-
-      - run: npm test
 
       - run: npm run verify:ui
 
@@ -55,12 +43,16 @@ jobs:
       # that's cleared.
       - run: npm audit --audit-level=high
 
-  # Fast browser-driven subset (step 4 of the stabilization plan, test/e2e) --
-  # only the @smoke-tagged specs, so a real-browser run doesn't gate every PR
-  # on the full suite's runtime. The complete suite runs nightly instead
-  # (see e2e-nightly.yml).
-  e2e-smoke:
+  # The integration suite is split over four runners (node --test --test-shard), each with its own disposable database. The test files
+  # make their own fixtures and run in parallel against one database anyway, so they do not depend on each other.
+  unit:
+    name: tests (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     services:
       postgres:
         image: mirror.gcr.io/library/postgres:16
@@ -91,9 +83,116 @@ jobs:
           cache: "npm"
           cache-dependency-path: server/package-lock.json
 
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund --prefer-offline
 
       - run: npm run migrate
+
+      - name: Tests (shard ${{ matrix.shard }}/4)
+        run: node --test --test-shard=${{ matrix.shard }}/4 $(find test -name '*.test.js' -not -path 'test/integration/lockdownEngage.test.js' | sort)
+
+  # Engaging the lockdown is global state, so that one test file gets a database to itself (it used to run after the parallel suite).
+  lockdown:
+    name: tests (lockdown)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: mirror.gcr.io/library/postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fieldvisits_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/fieldvisits_test
+      JWT_SECRET: ci-test-secret-not-used-anywhere-real
+      NODE_ENV: test
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: server/package-lock.json
+
+      - run: npm ci --no-audit --no-fund --prefer-offline
+
+      - run: npm run migrate
+
+      - run: npm run test:lockdown
+
+  # The one check name the repository has always required: green only when the static checks and every test shard passed.
+  test:
+    name: test
+    needs: [static, unit, lockdown]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Static checks and all test shards passed
+        run: |
+          echo "static: ${{ needs.static.result }}, shards: ${{ needs.unit.result }}, lockdown: ${{ needs.lockdown.result }}"
+          test "${{ needs.static.result }}" = "success" && test "${{ needs.unit.result }}" = "success" && test "${{ needs.lockdown.result }}" = "success"
+
+  # Fast browser-driven subset (step 4 of the stabilization plan, test/e2e) --
+  # only the @smoke-tagged specs, so a real-browser run doesn't gate every PR
+  # on the full suite's runtime. The complete suite runs nightly instead
+  # (see e2e-nightly.yml).
+  e2e-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: mirror.gcr.io/library/postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fieldvisits_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/fieldvisits_test
+      JWT_SECRET: ci-test-secret-not-used-anywhere-real
+      NODE_ENV: test
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: server/package-lock.json
+
+      - run: npm ci --no-audit --no-fund --prefer-offline
+
+      - run: npm run migrate
+
+      - name: Playwright version (cache key)
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
 
       - run: npx playwright install --with-deps chromium
 
