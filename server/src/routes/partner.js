@@ -2,6 +2,7 @@
 // signed-in KAD user account is linked to in partner_links. No other customer's data is reachable, whatever the role of that account.
 //   GET  /me        customer, the app perks, balance summary, progress (levels / streak / savings), running offers
 //   GET  /catalog   the orderable products with this customer's tier price and what is available
+//   GET  /price-list   the Bronze list price of EVERY active product (also what is out of stock), for a shop that resells at the Bronze price
 //   GET  /offers    campaigns and bundles running for this customer
 //   GET  /orders    this customer's orders with the 5-step status (received, confirmed, packed, on the way, delivered)
 //   GET  /orders/:id
@@ -149,6 +150,17 @@ partnerRouter.get("/catalog", async (req, res) => {
       price: individual.get(p.id) ?? tierListPrice(fullById.get(p.id), customer.customer_tier),
       max_qty: maxQtyFor(p.unit, settings), // the most pieces of this product in one order (null = no limit)
     })),
+  });
+});
+
+// The Bronze list price of every active product (in stock or not): KAD OS uses it as the wholesale price of a shop that resells our oil.
+// Only the public list price -- never a cost, a stock figure, or another tier.
+partnerRouter.get("/price-list", async (_req, res) => {
+  const { rows } = await pool.query("SELECT id, brand, family, name, unit, sku, bronze_price_amd, silver_price_amd, unit_price_amd FROM products WHERE active ORDER BY id");
+  res.json({
+    products: rows
+      .map((p) => ({ id: p.id, brand: p.brand ?? "", family: p.family ?? "", name: p.name, size: p.unit ?? "", sku: p.sku ?? "", bronze: tierListPrice(p, "bronze") }))
+      .filter((p) => p.bronze > 0),
   });
 });
 

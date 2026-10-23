@@ -306,6 +306,20 @@ test("account links: admin links a customer-bound account; admin/CEO accounts an
   await pool.query("DELETE FROM partner_links WHERE user_id = $1", [fresh.id]);
 });
 
+test("price-list: the Bronze list price of every active product, even out of stock, and nothing else", async () => {
+  await pool.query("UPDATE products SET bronze_price_amd = 9000, silver_price_amd = 8000, stock_qty = 0 WHERE id = $1", [p1.id]);
+  try {
+    const r = await apiRequest("/api/partner/price-list", { cookie: partnerCookie });
+    assert.equal(r.status, 200);
+    const row = r.data.products.find((p) => p.id === p1.id);
+    assert.equal(row.bronze, 9000); // bronze, not the silver 8000, and listed although nothing is on the shelf
+    assert.deepEqual(Object.keys(row).sort(), ["bronze", "brand", "family", "id", "name", "size", "sku"].sort());
+    assert.equal((await apiRequest("/api/partner/price-list", { cookie: repCookie })).status, 403); // an account that is not linked
+  } finally {
+    await setPrice(p1, 10000, 6000);
+  }
+});
+
 test("catalog: tier prices and availability, no costs", async () => {
   const cat = (await apiRequest("/api/partner/catalog", { cookie: partnerCookie })).data;
   const a = cat.products.find((p) => p.id === p1.id);
