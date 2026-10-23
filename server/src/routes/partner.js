@@ -167,7 +167,7 @@ partnerRouter.get("/offers", async (req, res) => {
   res.json({ offers: (await activeCampaignsFor(req.partner.customerId)).map(presentCampaign) });
 });
 
-async function loadOrders(customerId, where = "", params = [], limit = 60) {
+async function loadOrders(customerId, where = "", params = [], limit = 60, offset = 0) {
   const editable = (await getAppOrderSettings()).customer_edit_enabled;
   const { rows } = await pool.query(
     `SELECT o.id, o.order_code, o.status, o.created_at, o.total_amd::float AS total_amd, o.discount_amd::float AS discount_amd, o.app_discount_pct::float AS app_discount_pct,
@@ -175,7 +175,7 @@ async function loadOrders(customerId, where = "", params = [], limit = 60) {
             o.cancelled_at, o.cancel_reason, o.replaced_by_order_id,
             (SELECT r.order_code FROM orders r WHERE r.id = o.replaced_by_order_id) AS replaced_by_code,
             EXISTS (SELECT 1 FROM route_stops rs WHERE rs.order_id = o.id AND rs.completed_at IS NULL) AS on_route
-       FROM orders o WHERE o.customer_id = $1 ${where} ORDER BY o.created_at DESC, o.id DESC LIMIT ${limit}`,
+       FROM orders o WHERE o.customer_id = $1 ${where} ORDER BY o.created_at DESC, o.id DESC LIMIT ${Number(limit)} OFFSET ${Number(offset)}`,
     [customerId, ...params]
   );
   if (!rows.length) return [];
@@ -216,8 +216,37 @@ async function loadOrders(customerId, where = "", params = [], limit = 60) {
   });
 }
 
+// ALL of the customer's orders, newest first, in pages: ?limit= (default 60, at most 200) and ?offset=. `total` = how many there are.
+const pageOf = (query, defLimit, maxLimit) => ({
+  limit: Math.min(maxLimit, Math.max(1, Number.parseInt(query.limit, 10) || defLimit)),
+  offset: Math.max(0, Number.parseInt(query.offset, 10) || 0),
+});
+
 partnerRouter.get("/orders", async (req, res) => {
-  res.json({ orders: await loadOrders(req.partner.customerId) });
+  const { limit, offset } = pageOf(req.query, 60, 200);
+  const [orders, { rows: cnt }] = await Promise.all([
+    loadOrders(req.partner.customerId, "", [], limit, offset),
+    pool.query("SELECT count(*)::int AS n FROM orders WHERE customer_id = $1", [req.partner.customerId]),
+  ]);
+  res.json({ orders, total: cnt[0].n, has_more: offset + orders.length < cnt[0].n });
+});
+
+// ALL of the customer's payments (the Excel cash book, every year), newest first, in pages. `total_amount` is the sum of all of them.
+partnerRouter.get("/payments", async (req, res) => {
+  const customer = await loadCustomer(req.partner.customerId);
+  const erpId = customer.erp_customer_id;
+  const { limit, offset } = pageOf(req.query, 50, 500);
+  if (!erpId) return res.json({ payments: [], total: 0, total_amount: 0, has_more: false });
+  const [{ rows: payments }, { rows: sum }] = await Promise.all([
+    pool.query(
+      `SELECT to_char(cashflow_date, 'YYYY-MM-DD') AS date, amount_amd::float AS amount
+         FROM erp_cashflow_lines WHERE erp_customer_id = $1 AND amount_amd > 0
+        ORDER BY cashflow_date DESC, id DESC LIMIT $2 OFFSET $3`,
+      [erpId, limit, offset]
+    ),
+    pool.query("SELECT count(*)::int AS n, COALESCE(sum(amount_amd), 0)::float AS total FROM erp_cashflow_lines WHERE erp_customer_id = $1 AND amount_amd > 0", [erpId]),
+  ]);
+  res.json({ payments, total: sum[0].n, total_amount: sum[0].total, has_more: offset + payments.length < sum[0].n });
 });
 
 partnerRouter.get("/orders/:id", async (req, res) => {

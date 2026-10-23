@@ -653,3 +653,40 @@ test("catalog carries the Frequent ranking and the photo name; the photo is serv
     fs.rmSync(path.join(uploadDirPath, file), { force: true });
   }
 });
+
+test("ALL orders and ALL payments (owner, 2026-10-23): paged, newest first, all years, only the own customer's", async () => {
+  const total = (await apiRequest("/api/partner/orders?limit=1", { cookie: partnerCookie })).data;
+  assert.equal(total.orders.length, 1);
+  assert.ok(total.total >= 2 && total.has_more === true, JSON.stringify({ n: total.total, more: total.has_more }));
+  const first = (await apiRequest("/api/partner/orders?limit=1&offset=0", { cookie: partnerCookie })).data.orders[0];
+  const second = (await apiRequest("/api/partner/orders?limit=1&offset=1", { cookie: partnerCookie })).data.orders[0];
+  assert.notEqual(first.id, second.id, "the next page is the next order");
+  const everything = (await apiRequest(`/api/partner/orders?limit=200`, { cookie: partnerCookie })).data;
+  assert.equal(everything.orders.length, everything.total);
+  assert.equal(everything.has_more, false);
+  assert.equal(everything.orders[0].id, first.id);
+
+  // payments: every year, not only the last 30 of the last 365 days
+  await pool.query("DELETE FROM erp_cashflow_lines WHERE erp_customer_id = $1", [shop.erp_customer_id]);
+  for (let i = 0; i < 45; i += 1) {
+    await pool.query("INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, (now() AT TIME ZONE 'Asia/Yerevan')::date - $2::int, 1000)", [shop.erp_customer_id, 30 + i * 20]); // reaches back about 2.5 years
+  }
+  try {
+    const bal = (await apiRequest("/api/partner/balance", { cookie: partnerCookie })).data;
+    assert.ok(bal.payments.length <= 30, "the balance card keeps its short list");
+    const p1 = (await apiRequest("/api/partner/payments?limit=20", { cookie: partnerCookie })).data;
+    assert.equal(p1.payments.length, 20);
+    assert.equal(p1.total, 45);
+    assert.equal(p1.total_amount, 45000);
+    assert.equal(p1.has_more, true);
+    const p3 = (await apiRequest("/api/partner/payments?limit=20&offset=40", { cookie: partnerCookie })).data;
+    assert.equal(p3.payments.length, 5);
+    assert.equal(p3.has_more, false);
+    assert.ok(p1.payments[0].date > p3.payments[4].date, "newest first");
+    // another customer's account sees none of it
+    const rival = (await apiRequest("/api/partner/payments", { cookie: await loginAs(other.email) })).data;
+    assert.equal(rival.total, 0);
+  } finally {
+    await pool.query("DELETE FROM erp_cashflow_lines WHERE erp_customer_id = $1", [shop.erp_customer_id]);
+  }
+});
