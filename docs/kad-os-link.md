@@ -66,3 +66,6 @@ prices on the price list) is a different, older feature and is not touched.
 Push to the customer when a campaign starts or an order changes status (KAD OS polls today; push is planned in KAD OS 0.39); auto-confirm of safe app orders (owner: NO);
 per-customer targeting by past purchases ("customers who bought X"); a supplier report
 "liters via app vs by phone".
+
+## All orders and all payments (owner, 2026-10-23)
+KAD OS shows the customer's WHOLE history, not the last few: `GET /api/partner/orders?limit=&offset=` (default 60, at most 200; the answer carries `total` and `has_more`) and `GET /api/partner/payments?limit=&offset=` (every payment of the Excel cash book, all years, newest first; `total`, `total_amount`, `has_more`; default 50, at most 500). `GET /api/partner/balance` keeps its short `payments` list (30, last 365 days) for the balance card.
