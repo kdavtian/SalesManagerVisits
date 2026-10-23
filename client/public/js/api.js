@@ -492,6 +492,20 @@ export const api = {
     form.set("file", file);
     return request("/cashflow/import", { method: "POST", body: form });
   },
+  // Staff (see server/src/routes/staff.js)
+  getStaffAccess: () => request("/staff/access", { fresh: true }),
+  getStaffPeople: () => request("/staff/people", { fresh: true }),
+  getStaffCandidates: () => request("/staff/candidates", { fresh: true }),
+  getStaffPayroll: (month) => request(`/staff/payroll?month=${month}`, { fresh: true }),
+  getStaffPay: (id, month) => request(`/staff/people/${id}/pay?month=${month}`, { fresh: true }),
+  getStaffSettings: () => request("/staff/settings", { fresh: true }),
+  saveStaffSettings: (data) => json("/staff/settings", "PUT", data),
+  createStaffPerson: (data) => json("/staff/people", "POST", data),
+  updateStaffPerson: (id, data) => json(`/staff/people/${id}`, "PUT", data),
+  deleteStaffPerson: (id) => request(`/staff/people/${id}`, { method: "DELETE" }),
+  markStaffDay: (id, day, data) => json(`/staff/people/${id}/days/${day}`, "PUT", data),
+  addStaffItem: (id, data) => json(`/staff/people/${id}/items`, "POST", data),
+  deleteStaffItem: (itemId) => request(`/staff/items/${itemId}`, { method: "DELETE" }),
   getWarehouseHome: () => request("/warehouse/home", { fresh: true }),
   getWarehousePackedList: () => request("/warehouse/packed-list", { fresh: true }),
   getDeliveryHome: () => request("/delivery/home", { fresh: true }),

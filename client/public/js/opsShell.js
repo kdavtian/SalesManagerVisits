@@ -13,7 +13,7 @@ export const OPS_SHELLS = {
       { hash: "#/pricelist", label: "ops_tab_products", icon: "tag" },
       { hash: "#/tasks", label: "qa_tasks", icon: "tasks" },
     ],
-    allowed: [/^#\/dashboard/, /^#\/wh-pack/, /^#\/warehouse/, /^#\/delivery/, /^#\/orders/, /^#\/pricelist/, /^#\/product\//, /^#\/tasks/, /^#\/notifications/, /^#\/settings/],
+    allowed: [/^#\/dashboard/, /^#\/wh-pack/, /^#\/warehouse/, /^#\/delivery/, /^#\/orders/, /^#\/pricelist/, /^#\/product\//, /^#\/tasks/, /^#\/staff/, /^#\/notifications/, /^#\/settings/],
   },
   delivery_manager: {
     tabs: [
@@ -22,7 +22,7 @@ export const OPS_SHELLS = {
       { hash: "#/orders", label: "nav_orders", icon: "cart" },
       { hash: "#/tasks", label: "qa_tasks", icon: "tasks" },
     ],
-    allowed: [/^#\/dashboard/, /^#\/delivery/, /^#\/orders/, /^#\/tasks/, /^#\/notifications/, /^#\/settings/],
+    allowed: [/^#\/dashboard/, /^#\/delivery/, /^#\/orders/, /^#\/tasks/, /^#\/staff/, /^#\/notifications/, /^#\/settings/],
   },
 };
 

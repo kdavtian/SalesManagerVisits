@@ -15203,3 +15203,61 @@ input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
   font-size: 0.8rem;
   text-align: center;
 }
+
+/* Staff (owner, 2026-10-23): payroll list, person month, structure tree */
+.st-view { display: flex; flex-direction: column; gap: 12px; padding: 12px 16px calc(24px + var(--nav-safe-bottom)); }
+.st-view > #st-body { display: flex; flex-direction: column; gap: 12px; }
+.st-head { display: flex; align-items: center; gap: 10px; }
+.st-head h1 { margin: 0; font-size: 1.3rem; }
+.st-back { min-width: 44px; min-height: 44px; font-size: 1.4rem; line-height: 1; }
+.st-monthbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.st-monthbar strong { text-transform: capitalize; }
+.st-month-btn { min-width: 44px; min-height: 44px; font-size: 1.4rem; line-height: 1; }
+.st-list { display: flex; flex-direction: column; gap: 6px; }
+.st-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; width: 100%; text-align: left; padding: 10px 12px; min-height: 44px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; color: inherit; font: inherit; }
+.st-row-off { opacity: 0.55; }
+.st-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.st-row-main strong, .st-row-main .st-row-sub { overflow-wrap: anywhere; }
+.st-row-sub { font-size: 0.82rem; }
+.st-row-amt { flex: none; display: flex; flex-direction: column; align-items: flex-end; font-variant-numeric: tabular-nums; }
+.st-row-amt small { font-size: 0.78rem; }
+.st-sum strong { font-size: 0.98rem; }
+.st-card { display: flex; flex-direction: column; gap: 6px; padding: 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
+.st-line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.st-line > span { min-width: 0; overflow-wrap: anywhere; }
+.st-line strong { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.st-line-total { padding-top: 6px; border-top: 1px solid var(--border); font-size: 1.05rem; }
+.st-small { margin: 0; font-size: 0.8rem; }
+.st-field { display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; }
+.st-field input, .st-field select { display: block; width: 100%; padding: 11px 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 0.95rem; }
+.st-form { display: flex; flex-direction: column; gap: 10px; }
+.st-form label:not(.checkbox-row) { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; }
+.st-x { background: none; border: 0; color: var(--danger); font-size: 1.2rem; min-width: 32px; min-height: 32px; }
+.st-cal-head, .st-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.st-cal-head span { text-align: center; font-size: 0.75rem; color: var(--text-dim); }
+.st-day { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 48px; padding: 2px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--bg-card); color: inherit; font: inherit; line-height: 1.1; }
+.st-day b { font-size: 0.95rem; }
+.st-day small { font-size: 0.68rem; min-height: 0.8em; }
+.st-day-blank { border: 0; background: none; }
+.st-day-ok { border-color: var(--success); background: color-mix(in srgb, var(--success) 14%, var(--bg-card)); }
+.st-day-bad { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, var(--bg-card)); }
+.st-day-off-paid { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg-card)); }
+.st-day-off-unpaid { border-color: var(--warning); background: color-mix(in srgb, var(--warning) 12%, var(--bg-card)); }
+.st-day-future { color: var(--text-dim); }
+.st-day-none { opacity: 0.4; }
+.st-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.78rem; color: var(--text-dim); }
+.st-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; border: 1px solid var(--border); }
+.st-dot-ok { background: var(--success); border-color: var(--success); }
+.st-dot-bad { background: var(--danger); border-color: var(--danger); }
+.st-dot-off-paid { background: var(--accent); border-color: var(--accent); }
+.st-dot-off-unpaid { background: var(--warning); border-color: var(--warning); }
+.st-day-actions { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.st-tree, .st-tree ul { list-style: none; margin: 0; padding: 0; }
+.st-tree ul { margin-left: 14px; padding-left: 12px; border-left: 2px solid var(--border); }
+.st-tree li { margin: 6px 0; position: relative; }
+.st-tree ul > li::before { content: ""; position: absolute; left: -12px; top: 22px; width: 10px; border-top: 2px solid var(--border); }
+.st-node { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-height: 44px; padding: 8px 12px; text-align: left; color: inherit; font: inherit;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; max-width: 100%; }
+.st-node span { font-size: 0.8rem; overflow-wrap: anywhere; }

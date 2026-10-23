@@ -82,6 +82,8 @@ export const QUICK_ACTIONS = [
   { id: "qa_recorded", defaultRoles: ["admin", "ceo", "operations_director", "accountant"] },
   // Every money movement of the company (the Excel Cashflow sheet); salaries are in it, so the owner's own roles only (server: canSeeCashflow).
   { id: "qa_cashflow", defaultRoles: ["admin", "ceo", "operations_director", "accountant"] },
+  // Staff: people, structure, payroll. Everybody opens it to see their own pay; a boss sees the team, the CEO / accountant everyone (server: routes/staff.js).
+  { id: "qa_staff", defaultRoles: ALL_ROLES },
   // Not in the owner's list of 15, kept (not removed) and placed last.
   { id: "qa_plan_route", defaultRoles: ALL_ROLES },
 ];
@@ -103,6 +105,7 @@ export const QUICK_ACTION_ROUTE = {
   qa_driver_home: "#/driver-home",
   qa_recorded: "#/recorded",
   qa_cashflow: "#/cashflow",
+  qa_staff: "#/staff",
   qa_team_performance: "#/team-performance",
   qa_reports: "#/reports",
   qa_debt_balances: "#/debt-balances",
