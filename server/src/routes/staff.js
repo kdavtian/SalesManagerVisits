@@ -102,7 +102,7 @@ staffRouter.get("/access", async (req, res) => {
 
 staffRouter.get("/settings", async (req, res) => {
   const scope = await scopeOf(req.user);
-  if (!scope.ids.size) return res.status(403).json({ error: "Not allowed" });
+  if (!scope.all && !scope.ids.size) return res.status(403).json({ error: "Not allowed" });
   res.json({ ...(await getStaffSettings()), can_edit: canSetStaffRules(req.user.role) });
 });
 staffRouter.put("/settings", async (req, res) => {
@@ -115,7 +115,7 @@ staffRouter.put("/settings", async (req, res) => {
 // ---- people + structure -------------------------------------------------------------------------------------------------------
 staffRouter.get("/people", async (req, res) => {
   const scope = await scopeOf(req.user);
-  if (!scope.ids.size) return res.status(403).json({ error: "Not allowed" });
+  if (!scope.all && !scope.ids.size) return res.status(403).json({ error: "Not allowed" });
   const { rows: users } = await pool.query("SELECT id, name, email, role FROM users");
   const byUser = new Map(users.map((u) => [u.id, u]));
   const people = scope.rows
@@ -183,7 +183,7 @@ staffRouter.delete("/people/:id", async (req, res) => {
 // One month for everybody the user may see: the list the Payroll tab shows.
 staffRouter.get("/payroll", async (req, res) => {
   const scope = await scopeOf(req.user);
-  if (!scope.ids.size) return res.status(403).json({ error: "Not allowed" });
+  if (!scope.all && !scope.ids.size) return res.status(403).json({ error: "Not allowed" });
   const month = monthOf(String(req.query.month ?? ""));
   const [settings, holidays] = await Promise.all([getStaffSettings(), holidaysOf(month)]);
   const today = yerevanToday();

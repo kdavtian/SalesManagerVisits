@@ -3,8 +3,9 @@
 //   daily rate = fixed salary / the month's working days (Mon-Sat, minus company holidays)
 //   a day is PAID when: the boss marked it completed; or it is a day off inside the person's paid allowance; or nothing marks it and
 //     - the person is visit-based and >= min % of that day's planned visits were done (company default 75 %), or
-//     - the person is not visit-based (a normal working day);  a day marked unpaid, a day off over the allowance, and a visit-based
-//       day without an approved plan are not paid (the boss can still mark such a day completed). Today stays open until the % is reached.
+//     - the person is not visit-based (a normal working day), or the day has no approved visit plan (owner, 2026-10-23: a forgotten plan
+//       is paid automatically; there is nothing to measure against);  a day marked unpaid, or a day off over the allowance, is not paid.
+//       Today stays open until the % of an existing plan is reached.
 //   commission = pct x (money collected | sales) of the person's channels, minus the excluded channels.
 import { pool } from "./db/pool.js";
 import { yerevanToday } from "./utils/yerevanDate.js";
@@ -91,7 +92,7 @@ export function computeMonthPay(staff, month, ctx) {
       } else state = "dayoff_unpaid";
     } else if (d > ctx.today) state = "future";
     else if (!staff.visit_based) state = "paid";
-    else if (!v || v.planned <= 0) state = d === ctx.today ? "future" : "unpaid"; // no approved plan: not paid unless a boss marks it
+    else if (!v || v.planned <= 0) state = "paid"; // no approved plan: paid automatically (owner's rule)
     else if (pct >= minPct) state = "paid";
     else state = d === ctx.today ? "future" : "unpaid"; // the day is not over yet
     const pays = state === "paid" || state === "dayoff_paid";

@@ -34,7 +34,7 @@ test("daily rate = fixed / working days; the 75 % rule pays or withholds a day",
   assert.equal(computeMonthPay({ ...REP, min_visit_pct: 50 }, OCT, { today: "2026-10-03", visits, defaultMinPct: 90 }).paid_days, 3);
 });
 
-test("a boss can mark a day completed / day off / unpaid; holidays shrink the basis; no plan = undecided", () => {
+test("a boss can mark a day completed / day off / unpaid; holidays shrink the basis; no plan = paid automatically", () => {
   const visits = new Map([["2026-10-01", { planned: 3, done: 2 }]]); // 67 % -> unpaid by rule
   const marks = new Map([["2026-10-01", "completed"], ["2026-10-02", "dayoff"], ["2026-10-03", "dayoff"], ["2026-10-05", "unpaid"]]);
   const pay = computeMonthPay({ ...REP, paid_dayoffs_per_month: 1 }, OCT, { today: "2026-10-06", holidays: new Set(["2026-10-07"]), visits, marks });
@@ -45,14 +45,13 @@ test("a boss can mark a day completed / day off / unpaid; holidays shrink the ba
   assert.equal(st("2026-10-03"), "dayoff_unpaid", "over the paid allowance");
   assert.equal(st("2026-10-04"), "off", "Sunday");
   assert.equal(st("2026-10-05"), "unpaid");
-  assert.equal(st("2026-10-06"), "future", "today without a plan stays open");
+  assert.equal(st("2026-10-06"), "paid", "no approved plan: paid automatically");
   assert.equal(st("2026-10-02"), "dayoff_paid");
   assert.equal(st("2026-10-07"), "off");
   assert.equal(st("2026-10-08"), "future");
-  assert.equal(pay.paid_days, 2);
-  const later = computeMonthPay(REP, OCT, { today: "2026-10-09", holidays: new Set(), visits: new Map() });
-  assert.equal(later.days.find((x) => x.date === "2026-10-06").state, "unpaid", "a past day without an approved plan is not paid");
-  assert.equal(later.paid_days, 0);
+  assert.equal(pay.paid_days, 3);
+  const open = computeMonthPay(REP, OCT, { today: "2026-10-09", holidays: new Set(), visits: new Map([["2026-10-09", { planned: 4, done: 1 }]]) });
+  assert.equal(open.days.find((x) => x.date === "2026-10-09").state, "future", "today with a plan below the % stays open");
 });
 
 test("people who are not visit-based are paid every working day; commission, premiums, bonuses and deductions add up; balance = total - paid", () => {
@@ -92,6 +91,16 @@ test.after(async () => {
 });
 
 const api = (who, path, method = "GET", body) => apiRequest(`/api/staff${path}`, { method, cookie: cookies[who], body });
+
+test("an empty Staff is still open to admin / CEO / accountant (nobody has been added yet)", async () => {
+  for (const who of ["admin", "accountant"]) {
+    assert.equal((await api(who, "/people")).status, 200, who);
+    assert.equal((await api(who, "/payroll?month=2026-10")).status, 200, who);
+    assert.equal((await api(who, "/settings")).status, 200, who);
+    assert.equal((await api(who, "/access")).data.has_access, true, who);
+  }
+  assert.equal((await api("stranger", "/people")).status, 403, "a driver who is not in the list sees nothing");
+});
 
 test("only admin / CEO / accountant manage people; the structure refuses loops", async () => {
   const mk = async (body) => {
