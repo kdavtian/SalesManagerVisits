@@ -52,6 +52,9 @@ export const QUICK_ACTIONS = [
   },
   { id: "qa_reports", defaultRoles: ALL_ROLES },
   { id: "qa_delivery", defaultRoles: ["delivery_manager", "admin"] },
+  // The new warehouse-manager and driver apps (owner, 2026-10-23), opened from the normal app so management can compare them with the old screens.
+  { id: "qa_wh_home", defaultRoles: ["admin", "ceo", "operations_director", "sales_director"] },
+  { id: "qa_driver_home", defaultRoles: ["admin", "ceo", "operations_director", "sales_director"] },
   // Sales Director and CEO/Operations Director included alongside
   // Warehouse Manager/admin -- the warehouse manager role isn't currently
   // using the app, so the director covers the same ground for now, and
@@ -94,6 +97,8 @@ export const QUICK_ACTION_ROUTE = {
   qa_warehouse: "#/warehouse",
   qa_accounting: "#/accounting",
   qa_delivery: "#/delivery",
+  qa_wh_home: "#/wh-home",
+  qa_driver_home: "#/driver-home",
   qa_recorded: "#/recorded",
   qa_team_performance: "#/team-performance",
   qa_reports: "#/reports",

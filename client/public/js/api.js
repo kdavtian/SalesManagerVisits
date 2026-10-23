@@ -484,6 +484,9 @@ export const api = {
   markOrderDeliveredWithoutRoute: (id) => request(`/orders/${id}/mark-delivered`, { method: "POST" }),
 
   // Warehouse (see server/src/routes/warehouse.js)
+  getWarehouseHome: () => request("/warehouse/home", { fresh: true }),
+  getWarehousePackedList: () => request("/warehouse/packed-list", { fresh: true }),
+  getDeliveryHome: () => request("/delivery/home", { fresh: true }),
   getWarehousePendingCount: () => request("/warehouse/pending-count"),
   getPickList: () => request("/warehouse/pick-list"),
   getStagingList: () => request("/warehouse/staging-list"),

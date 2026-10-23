@@ -5,7 +5,7 @@ import { test, expect, loginViaUi } from "./fixtures.mjs";
 test.describe("Home layout at phone width", () => {
   test("@smoke a very long user name does not overflow the page and Home tile labels stay inside their tiles", async ({ page, fixtures }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    const user = await fixtures.createUser("warehouse_manager", { name: "Վահագնուշ-Հակոբյանյան_ExtremelyLongSingleWordName" });
+    const user = await fixtures.createUser("ceo", { name: "Վահագնուշ-Հակոբյանյան_ExtremelyLongSingleWordName" });
     await loginViaUi(page, user.email);
     await page.goto("/#/dashboard");
     await expect(page.locator(".quick-actions-grid .quick-action").first()).toBeVisible({ timeout: 15000 });

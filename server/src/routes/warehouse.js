@@ -15,6 +15,7 @@ import { computeStockForecast, computeReorderSuggestion } from "../stockForecast
 import { yerevanToday } from "../utils/yerevanDate.js";
 import { displayNetCost } from "../discountPolicy.js";
 import { getAppOrderSettings } from "../appOrders.js";
+import { orderWaiting } from "../opsReports.js";
 
 export const warehouseRouter = Router();
 warehouseRouter.use(requireAuth);
@@ -36,6 +37,45 @@ function requireWarehouse(req, res, next) {
   next();
 }
 warehouseRouter.use(requireWarehouse);
+
+// The warehouse manager's new Home (owner, 2026-10-23): what to do now, and what is going wrong -- one request, numbers only.
+// Waiting times and limits come from the same order-flow numbers the Operations control page uses (Vaghinak's SLA settings).
+warehouseRouter.get("/home", async (req, res) => {
+  const { list } = await orderWaiting();
+  const pack = list.filter((w) => w.step === "pack");
+  const deliver = list.filter((w) => w.step === "deliver");
+  const today = yerevanToday();
+  const [{ rows: shortage }, { rows: [unrouted] }, { rows: [stops] }, { rows: [stale] }, { rows: [tasks] }] = await Promise.all([
+    pool.query(
+      `SELECT oi.product_name, oi.brand, SUM(oi.quantity)::int AS need, p.stock_qty AS have, COUNT(DISTINCT oi.order_id)::int AS orders
+       FROM order_items oi JOIN orders o ON o.id = oi.order_id JOIN products p ON p.id = oi.product_id
+       WHERE o.status = 'confirmed' AND p.stock_qty IS NOT NULL
+       GROUP BY oi.product_id, oi.product_name, oi.brand, p.stock_qty
+       HAVING SUM(oi.quantity) > p.stock_qty
+       ORDER BY SUM(oi.quantity) - p.stock_qty DESC`
+    ),
+    pool.query(`SELECT COUNT(*)::int AS n FROM orders o WHERE o.status = 'packed_stock_out' AND NOT EXISTS (SELECT 1 FROM route_stops rs WHERE rs.order_id = o.id)`),
+    pool.query(
+      `SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE rs.completed_at IS NOT NULL)::int AS done
+       FROM route_stops rs JOIN delivery_routes r ON r.id = rs.route_id WHERE r.route_date = $1`,
+      [today]
+    ),
+    pool.query(`SELECT COUNT(*)::int AS n FROM route_stops rs JOIN delivery_routes r ON r.id = rs.route_id WHERE rs.completed_at IS NULL AND r.route_date < $1`, [today]),
+    pool.query(
+      `SELECT COUNT(*)::int AS open, COUNT(*) FILTER (WHERE due_date < $2)::int AS overdue FROM tasks WHERE assignee_id = $1 AND status = 'open'`,
+      [req.user.id, today]
+    ),
+  ]);
+  const hours = (rows) => (rows.length ? Math.max(...rows.map((w) => w.waiting_h)) : 0);
+  res.json({
+    to_pack: { count: pack.length, over_sla: pack.filter((w) => w.over_sla).length, app: pack.filter((w) => w.via_app).length, oldest_h: hours(pack), blocked: pack.filter((w) => w.blocked_by).length },
+    packed: { count: deliver.length, over_sla: deliver.filter((w) => w.over_sla).length, unrouted: unrouted.n, oldest_h: hours(deliver) },
+    shortage: { products: shortage.length, orders: shortage.reduce((n, r) => Math.max(n, r.orders), 0), sample: shortage.slice(0, 3) },
+    today: { stops: stops.total, done: stops.done },
+    stale_stops: stale.n,
+    tasks: { open: tasks.open, overdue: tasks.overdue },
+  });
+});
 
 // Grouped by product, not date -- a Warehouse Manager physically walking
 // the floor needs "how many of X do I need across every order waiting
@@ -62,7 +102,8 @@ warehouseRouter.get("/staging-list", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT o.id, o.order_code, o.total_amd, o.created_at, o.customer_id, o.placed_via_app, o.promised_date,
             c.name AS customer_name, c.erp_customer_id, c.address,
-            u.name AS rep_name
+            u.name AS rep_name,
+            COALESCE((SELECT MIN(changed_at) FROM order_status_history WHERE order_id = o.id AND new_status = 'confirmed'), o.updated_at) AS confirmed_at
      FROM orders o
      JOIN customers c ON c.id = o.customer_id
      JOIN users u ON u.id = o.user_id
@@ -82,6 +123,23 @@ warehouseRouter.get("/staging-list", async (req, res) => {
     itemsByOrder.get(item.order_id).push(item);
   }
   res.json(rows.map((o) => ({ ...o, items: itemsByOrder.get(o.id) || [] })));
+});
+
+// Packed orders waiting for the driver (read-only, for the new Pack screen's "Packed" tab): when each was packed, and whether it is on a route yet.
+warehouseRouter.get("/packed-list", async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT o.id, o.order_code, o.total_amd, o.placed_via_app, c.name AS customer_name, c.address,
+            COALESCE((SELECT MIN(changed_at) FROM order_status_history WHERE order_id = o.id AND new_status = 'packed_stock_out'), o.updated_at) AS packed_at,
+            r.route_date::text AS route_date, d.name AS driver_name
+     FROM orders o
+     JOIN customers c ON c.id = o.customer_id
+     LEFT JOIN route_stops rs ON rs.order_id = o.id AND rs.completed_at IS NULL
+     LEFT JOIN delivery_routes r ON r.id = rs.route_id
+     LEFT JOIN users d ON d.id = r.driver_id
+     WHERE o.status = 'packed_stock_out'
+     ORDER BY packed_at ASC`
+  );
+  res.json(rows);
 });
 
 // Read-only live-inventory reference -- out of scope to decrement stock in

@@ -75,6 +75,7 @@ import { mountInstallPrompt } from "./install.js";
 import { mountUpdateBanner, initServiceWorkerUpdates } from "./updateBanner.js";
 import { startLocationBroadcast, stopLocationBroadcast } from "./locationBroadcast.js";
 import { startDriverArrival, stopDriverArrival } from "./driverArrival.js";
+import { opsShellFor, shellAllows } from "./opsShell.js";
 import { escapeHtml, takeParkedSheet, pruneParkedSheet, installPhoneMask } from "./util.js";
 import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds } from "./quickActions.js";
 import { startErrorMonitoring } from "./errorMonitoring.js";
@@ -414,7 +415,7 @@ let lastHomeHash = "#/dashboard";
 // before the switch as it would step back within the tab the user is
 // actually on (reported as "swipe back switches tabs instead of going to
 // the previous page on the same tab").
-const NAV_TAB_ROOT_HASHES = new Set(["#/dashboard", "#/activity", "#/map", "#/customers", "#/orders"]);
+const NAV_TAB_ROOT_HASHES = new Set(["#/dashboard", "#/activity", "#/map", "#/customers", "#/orders", "#/wh-pack", "#/pricelist", "#/tasks", "#/delivery"]);
 
 // Tapping the tab you are already on: the first tap jumps back to the top of
 // the screen, a second tap within a second RESTARTS the tab (a fresh render
@@ -607,13 +608,15 @@ window.addEventListener("recorded-changed", refreshUnrecordedBadge);
 let warehouseBadgeCount = 0;
 
 export function applyWarehouseBadge() {
-  const el = document.getElementById("qa-warehouse-badge");
-  if (!el) return;
-  if (warehouseBadgeCount > 0) {
-    el.textContent = warehouseBadgeCount > 99 ? "99+" : String(warehouseBadgeCount);
-    el.hidden = false;
-  } else {
-    el.hidden = true;
+  // the Home tile's badge and the warehouse shell's Pack tab(s)
+  for (const el of [document.getElementById("qa-warehouse-badge"), ...document.querySelectorAll('[data-shell-badge="warehouse"]')]) {
+    if (!el) continue;
+    if (warehouseBadgeCount > 0) {
+      el.textContent = warehouseBadgeCount > 99 ? "99+" : String(warehouseBadgeCount);
+      el.hidden = false;
+    } else {
+      el.hidden = true;
+    }
   }
 }
 
@@ -671,13 +674,14 @@ window.addEventListener("accounting-changed", refreshAccountingBadge);
 let deliveryBadgeCount = 0;
 
 export function applyDeliveryBadge() {
-  const el = document.getElementById("qa-delivery-badge");
-  if (!el) return;
-  if (deliveryBadgeCount > 0) {
-    el.textContent = deliveryBadgeCount > 99 ? "99+" : String(deliveryBadgeCount);
-    el.hidden = false;
-  } else {
-    el.hidden = true;
+  for (const el of [document.getElementById("qa-delivery-badge"), ...document.querySelectorAll('[data-shell-badge="delivery"]')]) {
+    if (!el) continue;
+    if (deliveryBadgeCount > 0) {
+      el.textContent = deliveryBadgeCount > 99 ? "99+" : String(deliveryBadgeCount);
+      el.hidden = false;
+    } else {
+      el.hidden = true;
+    }
   }
 }
 
@@ -1000,6 +1004,11 @@ async function renderRoute() {
   topBar.hidden = false;
   navBar.hidden = false;
   sidebar.hidden = false;
+  // Warehouse manager / driver: their own small app -- anything outside their screens goes back to their Home.
+  if (!shellAllows(state.user.role, location.hash)) {
+    location.replace("#/dashboard");
+    return;
+  }
   renderNav();
   mountInstallPrompt(installRoot);
   preloadCoreViews();
@@ -1139,7 +1148,18 @@ async function renderRoute() {
   const handoffDetailMatch = path.match(/^#\/cash-handoffs\/(\d+)$/);
   const routePlanSetMatch = path.match(/^#\/route-plan-sets\/(\d+)$/);
 
-  if (path === "#/dashboard") {
+  if (path === "#/dashboard" && state.user.role === "warehouse_manager") {
+    currentCleanup = await (await import("./views/warehouseHome.js")).renderWarehouseHome(app, navigate);
+  } else if (path === "#/dashboard" && state.user.role === "delivery_manager") {
+    currentCleanup = await (await import("./views/driverHome.js")).renderDriverHome(app, navigate);
+  } else if (path === "#/wh-home") {
+    // The same Home, opened from the normal app (admin / management compare it with the old screens).
+    currentCleanup = await (await import("./views/warehouseHome.js")).renderWarehouseHome(app, navigate);
+  } else if (path === "#/driver-home") {
+    currentCleanup = await (await import("./views/driverHome.js")).renderDriverHome(app, navigate);
+  } else if (path === "#/wh-pack") {
+    currentCleanup = await (await import("./views/warehousePack.js")).renderWarehousePack(app, navigate, query.get("tab"));
+  } else if (path === "#/dashboard") {
     (await import("./views/dashboard.js")).renderDashboard(app, navigate);
   } else if (path === "#/activity") {
     (await import("./views/activity.js")).renderActivity(app, navigate);
@@ -1259,6 +1279,10 @@ function renderNav() {
   applyOrderBadge();
   applyNotificationBadge();
   applyPlanApprovalBadge();
+  if (opsShellFor(state.user.role)) {
+    applyWarehouseBadge();
+    applyDeliveryBadge();
+  }
 }
 
 // Icons for the sidebar's role-visible quick-action items that aren't
@@ -1275,6 +1299,8 @@ const SIDEBAR_ITEM_ICON = {
   qa_cash_expense: { icon: icons.wallet, colorClass: "quick-action-icon-cash" },
   qa_pricelist: { icon: icons.tag, colorClass: "quick-action-icon-pricelist" },
   qa_warehouse: { icon: icons.box, colorClass: "quick-action-icon-warehouse" },
+  qa_wh_home: { icon: icons.box, colorClass: "quick-action-icon-warehouse" },
+  qa_driver_home: { icon: icons.truck, colorClass: "quick-action-icon-delivery" },
   qa_delivery: { icon: icons.truck, colorClass: "quick-action-icon-delivery" },
   qa_recorded: { icon: icons.clock, colorClass: "quick-action-icon-recorded" },
   qa_accounting: { icon: icons.note, colorClass: "quick-action-icon-accounting" },
@@ -1298,8 +1324,11 @@ const EXCLUDED_FROM_SIDEBAR = new Set(["qa_check_in", "qa_add_customer", "qa_tas
 function rebuildSidebarMarkup(hash) {
   if (!sidebar) return;
 
-  const allVisibleIds = visibleQuickActionIds(state.user.role, cachedSettings?.quick_action_visibility);
-  const coreItems = [
+  const shell = opsShellFor(state.user.role);
+  const allVisibleIds = shell ? [] : visibleQuickActionIds(state.user.role, cachedSettings?.quick_action_visibility);
+  const coreItems = shell
+    ? shellTabs(shell)
+    : [
     { hash: "#/dashboard", label: t("nav_dashboard"), icon: icons.home },
     { hash: "#/activity", label: t("nav_activity"), icon: icons.activity },
     { hash: "#/map", label: t("nav_map"), icon: icons.map },
@@ -1330,6 +1359,7 @@ function rebuildSidebarMarkup(hash) {
         <span class="sidebar-item-icon ${item.colorClass ? `quick-action-icon ${item.colorClass}` : ""}">
           ${item.icon}
           ${item.badgeId ? `<span class="nav-badge count-badge" id="${item.badgeId}" hidden></span>` : ""}
+          ${item.badge ? `<span class="nav-badge count-badge" data-shell-badge="${item.badge}" hidden></span>` : ""}
         </span>
         <span>${item.label}</span>
       </button>
@@ -1355,14 +1385,22 @@ function rebuildSidebarMarkup(hash) {
   });
 }
 
+// The bottom tabs of a role shell (warehouse manager / driver): their own screens, no centre map button.
+function shellTabs(shell) {
+  return shell.tabs.map((tab) => ({ hash: tab.hash, label: t(tab.label), icon: icons[tab.icon], badge: tab.badge }));
+}
+
 function rebuildNavMarkup(hash) {
-  const items = [
-    { hash: "#/dashboard", label: t("nav_dashboard"), icon: icons.home },
-    { hash: "#/activity", label: t("nav_activity"), icon: icons.activity },
-    { hash: "#/map", label: t("nav_map"), icon: icons.map, center: true },
-    { hash: "#/customers", label: t("nav_customers"), icon: icons.customers },
-    { hash: "#/orders", label: t("nav_orders"), icon: icons.cart },
-  ];
+  const shell = opsShellFor(state.user.role);
+  const items = shell
+    ? shellTabs(shell)
+    : [
+        { hash: "#/dashboard", label: t("nav_dashboard"), icon: icons.home },
+        { hash: "#/activity", label: t("nav_activity"), icon: icons.activity },
+        { hash: "#/map", label: t("nav_map"), icon: icons.map, center: true },
+        { hash: "#/customers", label: t("nav_customers"), icon: icons.customers },
+        { hash: "#/orders", label: t("nav_orders"), icon: icons.cart },
+      ];
 
   navBar.innerHTML = items
     .map((item) =>
@@ -1380,6 +1418,7 @@ function rebuildNavMarkup(hash) {
         <span class="nav-icon">
           ${item.icon}
           ${item.hash === "#/orders" ? `<span class="nav-badge count-badge" id="orders-nav-badge" hidden></span>` : ""}
+          ${item.badge ? `<span class="nav-badge count-badge" data-shell-badge="${item.badge}" hidden></span>` : ""}
         </span>
         <span>${item.label}</span>
       </button>
