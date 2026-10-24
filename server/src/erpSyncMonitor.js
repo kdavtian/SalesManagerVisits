@@ -96,7 +96,7 @@ export async function checkErpSyncFreshness() {
 
 // The Excel FILE itself getting old (owner, 2026-10-24): the bot can sync every day while the accountant posts no new workbook, so the
 // sync-age alarm above stays quiet although the numbers are days behind. Alerts admin / CEO / operations director once per file date when the
-// newest workbook the bot synced is older than WORKBOOK_STALE_AFTER_HOURS, in the daytime only (Yerevan, UTC+4). "Once per file" is
+// newest workbook the bot synced is older than WORKBOOK_STALE_AFTER_HOURS (Saturdays and Sundays not counted), in the daytime only (Yerevan, UTC+4). "Once per file" is
 // remembered in the notifications table itself (same body), so a deploy/restart does not repeat it.
 export const WORKBOOK_STALE_AFTER_HOURS = 48;
 const DAYTIME_HOURS = [8, 21]; // Yerevan: from 08:00 until 21:00
@@ -105,12 +105,27 @@ function yerevanHour(now) {
   return (now.getUTCHours() + 4) % 24;
 }
 
+// Hours between two moments WITHOUT the Saturdays and Sundays (Yerevan time): the accountant posts no file at the weekend, so a Friday file is
+// not "old" on Monday morning (owner, 2026-10-24).
+export function hoursWithoutWeekends(fromMs, toMs) {
+  if (toMs <= fromMs) return 0;
+  const DAY = 24 * 3600 * 1000;
+  const shift = 4 * 3600 * 1000; // Yerevan = UTC+4: shift so that a UTC calendar day is a Yerevan day
+  let weekend = 0;
+  for (let day = Math.floor((fromMs + shift) / DAY) * DAY; day < toMs + shift; day += DAY) {
+    const dow = new Date(day).getUTCDay(); // 0 Sunday, 6 Saturday
+    if (dow !== 0 && dow !== 6) continue;
+    weekend += Math.max(0, Math.min(day + DAY, toMs + shift) - Math.max(day, fromMs + shift));
+  }
+  return (toMs - fromMs - weekend) / 3.6e6;
+}
+
 // `only` (tests): notify just these user ids -- the tests run against the production database and must never message real admins.
 export async function checkWorkbookAge({ now = new Date(), anyHour = false, only = null } = {}) {
   const status = await getSyncStatus();
   const fileDate = status.last_success?.workbook_modified_at;
   if (!fileDate) return { alerted: false, reason: "no file date" };
-  const ageHours = (now.getTime() - new Date(fileDate).getTime()) / 3.6e6;
+  const ageHours = hoursWithoutWeekends(new Date(fileDate).getTime(), now.getTime());
   if (ageHours <= WORKBOOK_STALE_AFTER_HOURS) return { alerted: false, reason: "fresh" };
   const hour = yerevanHour(now);
   if (!anyHour && (hour < DAYTIME_HOURS[0] || hour >= DAYTIME_HOURS[1])) return { alerted: false, reason: "night" };

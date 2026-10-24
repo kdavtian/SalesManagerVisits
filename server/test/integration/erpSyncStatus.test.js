@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
 import { recordSyncRun } from "../../src/erpSyncStatus.js";
-import { checkWorkbookAge } from "../../src/erpSyncMonitor.js";
+import { checkWorkbookAge, hoursWithoutWeekends } from "../../src/erpSyncMonitor.js";
 
 const FILE = `itest-status-${process.pid}.xlsx`;
 let admin;
@@ -121,4 +121,15 @@ test("an Excel file older than 2 days alerts once per file, in the daytime, and 
   await recordSyncRun({ counts: {}, meta: { workbook_modified_at: new Date().toISOString(), workbook_name: FILE } });
   const fresh = await checkWorkbookAge({ now: noon, only: [admin.id] });
   assert.equal(fresh.reason, "fresh");
+});
+
+test("the Excel file age does not count Saturdays and Sundays (Yerevan time)", () => {
+  const at = (iso) => new Date(iso).getTime(); // all UTC; Yerevan = +4 h
+  // Friday 15:00 Yerevan -> Monday 08:00 Yerevan: 65 h on the clock, 17 h without the weekend
+  assert.equal(Math.round(hoursWithoutWeekends(at("2026-10-23T11:00:00Z"), at("2026-10-26T04:00:00Z"))), 17);
+  // Monday 12:00 -> Wednesday 14:00: no weekend inside, plain 50 h
+  assert.equal(Math.round(hoursWithoutWeekends(at("2026-10-26T08:00:00Z"), at("2026-10-28T10:00:00Z"))), 50);
+  // Thursday 15:00 -> Saturday 15:00: 33 h (the Saturday hours are not counted)
+  assert.equal(Math.round(hoursWithoutWeekends(at("2026-10-22T11:00:00Z"), at("2026-10-24T11:00:00Z"))), 33);
+  assert.equal(hoursWithoutWeekends(5, 5), 0);
 });
