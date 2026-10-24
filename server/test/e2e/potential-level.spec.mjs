@@ -15,7 +15,7 @@ test("rep sets the level and reasons in a few taps; counterfeit raises the warni
 
   // Potential level -> Reason -> Save
   await page.locator("[data-pl-edit]").click();
-  await page.locator('.pl-level-btn[data-level="4"]').click();
+  await page.locator('.pl-level-chip[data-level="4"]').click();
   await page.locator('.pl-reason-chip[data-reason="active_interest"]').click();
   await page.waitForTimeout(400);
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/pl-sheet.png` });
@@ -29,7 +29,7 @@ test("rep sets the level and reasons in a few taps; counterfeit raises the warni
   await page.locator('#pl-form button[type="submit"]').click();
   await expect(page.locator("#pl-error")).toBeVisible();
   // counterfeit: the warning shows inside the sheet at once, and on the card after saving; "Other" needs a text
-  await page.locator('.pl-level-btn[data-level="1"]').click();
+  await page.locator('.pl-level-chip[data-level="1"]').click();
   await page.locator('.pl-reason-chip[data-reason="counterfeit"]').click();
   await expect(page.locator(".pl-sheet .pl-warn-banner")).toBeVisible();
   await page.locator('.pl-reason-chip[data-reason="other"]').click();

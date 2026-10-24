@@ -452,10 +452,15 @@ visitPlansRouter.get("/rules/customers", async (req, res) => {
   const scope = req.query.scope === undefined ? undefined : parseScope(req.query.scope);
   if (scope === null) return res.status(400).json({ error: "scope is not a separately planned channel" });
   const { rows: allCustomers } = await pool.query(
-    `SELECT c.id, c.name, c.region, c.subregion, c.sales_channel, c.customer_tier,
-            (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}) AS last_visit_at,
-            ${NOT_NO_VISIT_CHANNEL_SQL} AS requires_visit
-     FROM customers c WHERE c.assigned_manager_id = $1 ORDER BY c.name`,
+    `SELECT q.*,
+            -- overdue = visited before, but longer ago than its visit rhythm (a never-visited customer is "never visited", not overdue, here)
+            (q.requires_visit AND q.last_visit_at IS NOT NULL AND q.last_visit_at < now() - (q.visit_frequency_days || ' days')::interval) AS overdue
+     FROM (
+       SELECT c.id, c.name, c.region, c.subregion, c.sales_channel, c.customer_tier, c.visit_frequency_days,
+              (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}) AS last_visit_at,
+              ${NOT_NO_VISIT_CHANNEL_SQL} AS requires_visit
+       FROM customers c WHERE c.assigned_manager_id = $1
+     ) q ORDER BY q.name`,
     [targetId]
   );
   const channelOf = new Map(allCustomers.map((c) => [c.id, c.sales_channel]));

@@ -32,7 +32,7 @@ test.describe("New customer creation", () => {
     const name = `E2E New Customer ${Date.now()}`;
     await form.locator('input[name="name"]').fill(name);
     // a potential customer needs its level + reason (owner, 2026-10-24)
-    await form.locator('.pl-level-btn[data-level="3"]').click();
+    await form.locator('.pl-level-chip[data-level="3"]').click();
     await form.locator('.pl-reason-chip[data-reason="active_interest"]').click();
     // Sales channel is deliberately hidden for a sales_manager (see
     // fieldVisitEnhancements.js's enhanceNewCustomerForm) -- it's
@@ -52,5 +52,37 @@ test.describe("New customer creation", () => {
     // .first() since the same name can also appear in a side-list card at
     // wider viewports (desktop's list+map split) -- either match proves it.
     await expect(page.getByText(name).first()).toBeVisible({ timeout: 10000 });
+  });
+  // Owner, 2026-10-24: four levels only (no "Very high"), "Real potential" preselected, ERP ID mandatory for Bronze / Silver / Gold.
+  test("level chips default to Real potential; Gold needs the ERP customer ID", async ({ page, fixtures }) => {
+    const manager = await fixtures.createUser("sales_manager");
+    await loginViaUi(page, manager.email);
+    await page.goto("/#/map");
+    const mapEl = page.locator("#leaflet-map");
+    await expect(mapEl).toBeVisible({ timeout: 10000 });
+    const box = await mapEl.boundingBox();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: "right" });
+    await page.locator("#location-panel-confirm-btn").click();
+    const form = page.locator("#new-customer-form");
+    await expect(form).toBeVisible();
+
+    await expect(form.locator(".pl-level-chip")).toHaveCount(4);
+    await expect(form.locator('.pl-level-chip[data-level="5"]')).toHaveCount(0);
+    await expect(form.locator('.pl-level-chip[data-level="3"]')).toHaveAttribute("aria-checked", "true");
+
+    await form.locator('input[name="name"]').fill(`E2E Gold Needs ERP ${Date.now()}`);
+    await form.locator('.tier-btn[data-tier="gold"]').click();
+    await expect(form.locator("#new-customer-erp-req")).toBeVisible();
+    await form.locator('button[type="submit"]').click();
+    await expect(form.locator("#new-customer-error")).toContainText("ERP customer ID is required");
+    await expect(form).toBeVisible();
+
+    await form.locator("#new-customer-erp-input").fill(`E2E-ERP-${Date.now()}`);
+    const [response] = await Promise.all([
+      page.waitForResponse((res) => res.url().includes("/api/customers") && res.request().method() === "POST"),
+      form.locator('button[type="submit"]').click(),
+    ]);
+    expect(response.status()).toBe(201);
+    fixtures.trackRow("customers", (await response.json()).id);
   });
 });

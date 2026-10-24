@@ -227,3 +227,8 @@ Response: `{ synced: true, report_type, report_date }`.
   response, or a 200 from `/daily-report`) but the report still shows no
   data in-app → that's an app bug, worth a fresh report with the actual
   response body from the sync call.
+
+## When a sync does not arrive or is only partly applied (1.396.0, migration 144)
+* The steps that only *derive* app state from the rows just stored (orders that Excel already shows become Delivered, returns recorded in Excel, payments auto-approved) run inside a savepoint: if one of them fails it is skipped, the sync still commits, the response carries `warnings: [...]` and the failure is logged.
+* Every failed call of `POST /api/erp-sync` and `POST /api/erp-sync/cashflow-ledger`, and every sync that had to skip a step, is written to `erp_sync_attempts` (kept 30 days) and sent as ONE notification (bell + push) to admin, CEO and operations director (the same error is announced at most once per 6 hours). Admin / CEO / operations director can read the latest ones, with the real error text, at `GET /api/erp-sync/attempts`.
+* Before this, a rejected sync left no trace on the app side: only the bot's own journal (`sudo journalctl -u castrol-ceo-bot -n 100 --no-pager | grep -i "field visits"`) knew.

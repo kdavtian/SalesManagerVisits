@@ -1009,6 +1009,12 @@ async function renderRoute() {
     location.replace("#/dashboard");
     return;
   }
+  // Cashflow holds salaries and every money movement: only the owner's own roles open it (server: canSeeCashflow); anyone else who types or follows the
+  // address lands on Home instead of an empty page with an error (a deep link from an old notification, a bookmark).
+  if (/^#\/cashflow(\?|$)/.test(location.hash) && !["admin", "ceo", "operations_director", "accountant"].includes(state.user.role)) {
+    location.replace("#/dashboard");
+    return;
+  }
   renderNav();
   mountInstallPrompt(installRoot);
   preloadCoreViews();

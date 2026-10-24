@@ -1535,6 +1535,16 @@ export function isNeverVisited(c) {
   return c.requires_visit !== false && c.last_visit_at === null && c.customer_tier !== "competitor"; // undefined = the list did not say: not marked
 }
 
+// Owner, 2026-10-24: overdue = "!", never visited = "!!" (the stronger signal gets the double mark).
 export function neverVisitedMarkHtml() {
-  return `<span class="never-visited-mark" role="img" aria-label="${escapeHtml(t("never_visited"))}">!</span>`;
+  return `<span class="never-visited-mark" role="img" aria-label="${escapeHtml(t("never_visited"))}">!!</span>`;
+}
+
+// Visited before, but later than its visit rhythm allows (a never-visited customer shows "!!" instead, never both).
+export function isOverdueVisit(c) {
+  return c.overdue === true && c.requires_visit !== false && c.customer_tier !== "competitor" && !isNeverVisited(c);
+}
+
+export function overdueMarkHtml() {
+  return `<span class="overdue-visit-mark" role="img" aria-label="${escapeHtml(t("filter_overdue"))}">!</span>`;
 }

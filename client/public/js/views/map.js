@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { reorderChipHtml } from "../reorder.js";
-import { cssColor, activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, rememberPosition, getLastKnownPosition, tierSelectorHtml, TIER_OPTIONS, isNeverVisited, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, regionLabelHy, subregionLabelHy, channelDisplayLabel, parseDateOnly } from "../util.js";
+import { cssColor, activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, rememberPosition, getLastKnownPosition, tierSelectorHtml, TIER_OPTIONS, isNeverVisited, isOverdueVisit, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, regionLabelHy, subregionLabelHy, channelDisplayLabel, parseDateOnly } from "../util.js";
 import { t } from "../i18n.js";
 import { potentialFormHtml, wirePotentialForm } from "../potential.js";
 import { buildCustomerTree, renderTriStateTree, buildDirectionManagerTree, NO_GROUP_KEY } from "../regionTree.js";
@@ -358,6 +358,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         <ul class="map-legend-list">
           <li><span class="map-legend-swatch map-legend-swatch-badge map-legend-swatch-visited">&#10003;</span>${t("map_legend_visited")}</li>
           <li><span class="map-legend-swatch map-legend-swatch-badge map-legend-swatch-overdue">!</span>${t("map_legend_overdue")}</li>
+          <li><span class="map-legend-swatch map-legend-swatch-badge map-legend-swatch-never">!!</span>${t("never_visited")}</li>
           <li><span class="map-legend-swatch map-legend-swatch-selected"></span>${t("map_legend_selected")}</li>
           <li><span class="map-legend-swatch map-legend-swatch-cluster">9</span>${t("map_legend_cluster")}</li>
         </ul>
@@ -1044,7 +1045,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     const tier = markerKind(c.customer_tier);
     const check = status === "today" ? '<span class="pin-check">&#10003;</span>' : "";
     const overdueClass = status === "overdue" ? "pin-status-overdue" : "";
-    const never = isNeverVisited(c) ? '<span class="pin-never" aria-hidden="true">!</span>' : "";
+    const never = isNeverVisited(c) ? '<span class="pin-never" aria-hidden="true">!!</span>' : isOverdueVisit(c) ? '<span class="pin-never pin-overdue-mark" aria-hidden="true">!</span>' : "";
     const isPinShaped = PIN_SHAPED_KINDS.has(tier);
     const anchorY = isPinShaped ? Math.round(MARKER_SIZE * PIN_TIP_RATIO) : MARKER_SIZE / 2;
     // Shape family also decides where the status badge hangs, since the two
@@ -3341,7 +3342,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
             </label>
           </div>
           <div class="form-row-2">
-            <label class="erp-suggest-wrap">${t("erp_customer_id")}
+            <label class="erp-suggest-wrap" id="new-customer-erp-label">${t("erp_customer_id")} <b class="req-mark" id="new-customer-erp-req" hidden>*</b>
               <input type="text" name="erp_customer_id" id="new-customer-erp-input" autocomplete="off" />
               <div class="erp-suggest-list" id="new-customer-erp-suggest" hidden></div>
             </label>
@@ -3361,8 +3362,14 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     // A potential customer must be given its level + reason right here (Potential level -> Reason -> Save).
     const potentialWrap = overlay.querySelector("#new-customer-potential");
     const potentialPicker = wirePotentialForm(potentialWrap);
+    // Bronze / Silver / Gold customers exist in Excel: their ERP customer ID is mandatory (owner, 2026-10-24).
+    const needsErpId = (tier) => ["bronze", "silver", "gold"].includes(tier);
     activateTierSelector(overlay, (tier) => {
       potentialWrap.hidden = tier !== "potential";
+      overlay.querySelector("#new-customer-erp-req").hidden = !needsErpId(tier);
+      overlay.querySelector("#new-customer-erp-label").classList.remove("field-invalid");
+      // the next thing a Bronze / Silver / Gold customer needs is its ERP ID: bring the field into view if it is below the fold
+      if (needsErpId(tier)) overlay.querySelector("#new-customer-erp-input")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     });
     activateCategorySelector(overlay, () => refreshNameSuggestion());
 
@@ -3582,6 +3589,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     // fires while the selector is still on its default "potential": once
     // the rep has picked Silver/Gold (or Bronze already) by hand, their
     // choice always wins and this never overrides it.
+    erpInput.addEventListener("input", () => overlay.querySelector("#new-customer-erp-label").classList.remove("field-invalid"));
     function maybeAutoUpgradeTier() {
       const tierHiddenInput = overlay.querySelector('.tier-selector input[type=hidden]');
       if (erpInput.value.trim() && tierHiddenInput?.value === "potential") {
@@ -3599,6 +3607,14 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
     async function submitNewCustomer(confirmDuplicate) {
       const data = new FormData(form);
+      if (needsErpId(data.get("customer_tier")) && !String(data.get("erp_customer_id") ?? "").trim()) {
+        errorEl.textContent = t("erp_id_required");
+        errorEl.hidden = false;
+        overlay.querySelector("#new-customer-erp-label").classList.add("field-invalid");
+        erpInput.scrollIntoView({ block: "center", behavior: "smooth" });
+        erpInput.focus();
+        return;
+      }
       const wantsPotential = (data.get("customer_tier") || "potential") === "potential" && !potentialWrap.hidden;
       if (wantsPotential) {
         const problem = potentialPicker.validate();

@@ -16,6 +16,15 @@ function runMiddleware(fn, body) {
   return req.body;
 }
 
+// For the refusal case: returns { status, body } of the response the middleware sent instead of calling next().
+function runRefusal(fn, body) {
+  const req = { body };
+  const out = {};
+  const res = { status(code) { out.status = code; return this; }, json(payload) { out.body = payload; return this; } };
+  fn(req, res, () => assert.fail("next() must not be called"));
+  return out;
+}
+
 // --- normalizeCustomerPortfolio -------------------------------------------
 
 test("normalizeCustomerPortfolio: a new customer with no ERP id and no tier defaults to potential", () => {
@@ -33,14 +42,18 @@ test("normalizeCustomerPortfolio: a competitor stays a competitor even with no E
   assert.equal(body.customer_tier, "competitor");
 });
 
-test("normalizeCustomerPortfolio: a blank/whitespace-only ERP id is treated as missing", () => {
-  const body = runMiddleware(normalizeCustomerPortfolio, { erp_customer_id: "   ", customer_tier: "gold" });
-  assert.equal(body.customer_tier, "potential");
+test("normalizeCustomerPortfolio: a blank/whitespace-only ERP id is treated as missing (Gold is refused, no tier becomes potential)", () => {
+  const refused = runRefusal(normalizeCustomerPortfolio, { erp_customer_id: "   ", customer_tier: "gold" });
+  assert.equal(refused.status, 400);
+  assert.match(refused.body.error, /ERP customer ID is required/);
+  assert.equal(runMiddleware(normalizeCustomerPortfolio, { erp_customer_id: "   " }).customer_tier, "potential");
 });
 
-test("normalizeCustomerPortfolio: any other tier without an ERP id is overwritten to potential", () => {
-  const body = runMiddleware(normalizeCustomerPortfolio, { customer_tier: "bronze" });
-  assert.equal(body.customer_tier, "potential");
+test("normalizeCustomerPortfolio: Bronze, Silver or Gold without an ERP id is refused with a clear message", () => {
+  for (const tier of ["bronze", "silver", "gold"]) {
+    const refused = runRefusal(normalizeCustomerPortfolio, { customer_tier: tier });
+    assert.equal(refused.status, 400, tier);
+  }
 });
 
 // --- channelFromPosition ----------------------------------------------------

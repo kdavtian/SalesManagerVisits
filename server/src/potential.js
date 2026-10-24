@@ -1,16 +1,16 @@
-// Potential Customer classification (owner, 2026-10-24): level 1-5 + reasons + history, and the counterfeit-products restriction.
+// Potential Customer classification (owner, 2026-10-24): level 1-4 + reasons + history, and the counterfeit-products restriction.
 // Manual levels are the primary system; a future automatic 0-100 score would sit next to them (columns on customers, see migration 142).
 import { pool } from "./db/pool.js";
 
-export const POTENTIAL_LEVELS = [1, 2, 3, 4, 5];
-// 1 No potential, 2 Low, 3 Real, 4 High, 5 Very high
+export const POTENTIAL_LEVELS = [1, 2, 3, 4];
+// 1 No potential, 2 Low, 3 Real, 4 High
 export const POTENTIAL_REASONS = [
   "counterfeit", "own_import", "competitor_loyal", "price_mismatch", "small_volume", "not_interested", "no_decision_maker", "payment_issue",
   "no_demand_now", "high_potential", "active_interest", "negotiating", "ready_first_order", "other",
 ];
 export const COUNTERFEIT_REASON = "counterfeit";
-// Follow-up priority (owner): very high first ... no potential last; "not assessed" sits after real potential.
-export const POTENTIAL_PRIORITY_SQL = `CASE c.potential_level WHEN 5 THEN 1 WHEN 4 THEN 2 WHEN 3 THEN 3 WHEN 2 THEN 5 WHEN 1 THEN 6 ELSE 4 END`;
+// Follow-up priority (owner): high first ... no potential last; "not assessed" sits after real potential.
+export const POTENTIAL_PRIORITY_SQL = `CASE c.potential_level WHEN 4 THEN 1 WHEN 3 THEN 2 WHEN 2 THEN 4 WHEN 1 THEN 5 ELSE 3 END`;
 
 export class PotentialError extends Error {
   constructor(message, status = 400) {
@@ -21,7 +21,7 @@ export class PotentialError extends Error {
 
 export function cleanPotentialInput(b = {}) {
   const level = Number(b.level);
-  if (!POTENTIAL_LEVELS.includes(level)) throw new PotentialError("Choose the potential level (1-5)");
+  if (!POTENTIAL_LEVELS.includes(level)) throw new PotentialError("Choose the potential level (1-4)");
   const reasons = [...new Set((Array.isArray(b.reasons) ? b.reasons : []).map(String))];
   if (!reasons.length) throw new PotentialError("Choose at least one reason");
   if (reasons.some((r) => !POTENTIAL_REASONS.includes(r))) throw new PotentialError("Unknown reason");

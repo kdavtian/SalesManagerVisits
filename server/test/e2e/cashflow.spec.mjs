@@ -149,3 +149,15 @@ test("accountant adds, edits and deletes an entry in the app; Excel rows are not
     await pool.query("DELETE FROM staff_members WHERE id = $1", [boss.id]);
   }
 });
+
+// 2026-10-24 audit: a role that may not see Cashflow (rep, sales director) used to get an empty page with an error when it typed or followed the address.
+test("a sales manager and a sales director who open the Cashflow address land on Home", async ({ page, fixtures }) => {
+  for (const role of ["sales_manager", "sales_director"]) {
+    const u = await fixtures.createUser(role);
+    await page.context().clearCookies();
+    await loginViaUi(page, u.email);
+    await page.goto("/#/cashflow");
+    await expect(page).toHaveURL(/#\/dashboard/, { timeout: 10000 });
+    await expect(page.locator(".cf-view")).toHaveCount(0);
+  }
+});

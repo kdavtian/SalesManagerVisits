@@ -6,7 +6,7 @@
 //  - gone quiet: no order for longer than 1.5x their usual rhythm: 20
 //  - reorder due: the usual gap between their orders has passed (not yet 1.5x): 10
 //  - never visited: 15 (+10 for a gold/silver customer)
-//  - potential customers (owner, 2026-10-24): by Potential Level, very high 25 / high 18 / real 10 / not assessed 8 / low 3 / none 0,
+//  - potential customers (owner, 2026-10-24): by Potential Level, high 20 / real 10 / not assessed 8 / low 3 / none 0,
 //    plus 15 when the agreed next follow-up date has come (the level only ranks prospects that already have a reason)
 //  - customer value: up to 10 more, by the average monthly purchases of the last 6 months
 //    (2,000,000 AMD a month and more = 10), added only when there already is a reason to go
@@ -102,7 +102,7 @@ export async function visitPriorities(userId, limit = 8, now = new Date()) {
         reasons.push({ type: "followup_due", date: r.next_followup_date });
       }
       if (score > 0) {
-        score += { 5: 25, 4: 18, 3: 10, 2: 3, 1: 0 }[r.potential_level] ?? 8;
+        score += { 4: 20, 3: 10, 2: 3, 1: 0 }[r.potential_level] ?? 8;
         if (r.potential_level >= 3 || r.potential_level === null) reasons.push({ type: "potential", level: r.potential_level });
       }
     }

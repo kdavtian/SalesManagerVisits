@@ -369,6 +369,7 @@ test("POST /api/erp-sync: TRUNCATE-and-replace -- a customer absent from the new
 // --- Combined sync notification (item 4: "I receive 4 notifications, want 1") ----
 
 test("POST /api/erp-sync/daily-report and /reports: two calls in quick succession land as ONE combined notification, not two", async () => {
+  process.env.SYNC_NOTICE_QUIET_MS = "700"; // a wide window: the two calls below are a few ms apart on a fast machine, 60+ ms on a loaded runner
   const admin = await createUser("admin");
   const cookie = await loginAs(admin.email);
 
@@ -388,7 +389,8 @@ test("POST /api/erp-sync/daily-report and /reports: two calls in quick successio
 
   // The debounce window is shortened to 50ms in tests (NODE_ENV === "test",
   // see erpSync.js) -- wait past it before checking what actually got sent.
-  await new Promise((resolve) => setTimeout(resolve, 250));
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  delete process.env.SYNC_NOTICE_QUIET_MS;
 
   const notifications = await apiRequest("/api/notifications", { cookie });
   assert.equal(notifications.status, 200);
@@ -552,5 +554,26 @@ test("POST /api/erp-sync: Retail price from Excel is stored, listed as a differe
     await pool.query("DELETE FROM product_price_history WHERE product_id IN (SELECT id FROM products WHERE erp_product_id = $1)", [erpId]);
     await pool.query("DELETE FROM products WHERE erp_product_id = $1", [erpId]);
     await pool.query("UPDATE app_settings SET retail_from_excel = $1 WHERE id = 1", [saved.retail_from_excel]);
+  }
+});
+
+// 2026-10-24: the returns step threw on a database without migration 143 and the whole sync rolled back, so nothing was updated. An optional
+// step now runs in a SAVEPOINT: its failure is reported, the rest of the transaction (the sync) goes on.
+test("optionalSyncStep: a failing derived step is skipped, the transaction stays usable and the failure is reported", async () => {
+  const { optionalSyncStep } = await import("../../src/routes/erpSync.js");
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const warnings = [];
+    const out = await optionalSyncStep(client, "match returns", () => client.query("SELECT 1 FROM table_that_does_not_exist_144"), warnings);
+    assert.equal(out, null);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /match returns/);
+    assert.equal((await client.query("SELECT 7 AS n")).rows[0].n, 7, "the transaction must still be usable");
+    assert.equal(await optionalSyncStep(client, "ok step", async () => 42, warnings), 42);
+    assert.equal(warnings.length, 1);
+  } finally {
+    await client.query("ROLLBACK");
+    client.release();
   }
 });

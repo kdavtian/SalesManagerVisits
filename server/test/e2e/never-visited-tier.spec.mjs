@@ -1,6 +1,6 @@
 import { test, expect, loginViaUi, pool } from "./fixtures.mjs";
 
-// Owner, 2026-10-24: (1) the price-tier coin says T1 / T2 / T3 (bronze / silver / gold); (2) a "!" marks places that were never visited, in the plan
+// Owner, 2026-10-24: (1) the price-tier coin says T1 / T2 / T3 (bronze / silver / gold); (2) "!!" marks places that were never visited and "!" the overdue ones, in the plan
 // customer lists and on the map pins.
 let tileNo = 0;
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
@@ -15,6 +15,8 @@ test("map pin and plan list: '!' only on the never-visited customer; the tier co
   const fresh = await fixtures.createCustomer({ created_by: rep.id, assigned_manager_id: rep.id, name: "E2E Never Visited Shop", sales_channel: "SM YVN", lat: 40.1851, lng: 44.5201, erp_customer_id: `E2E-NV-${stamp}-a` });
   const seen = await fixtures.createCustomer({ created_by: rep.id, assigned_manager_id: rep.id, name: "E2E Visited Shop", sales_channel: "SM YVN", lat: 40.1861, lng: 44.5211, erp_customer_id: `E2E-NV-${stamp}-b` });
   await pool.query("INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range) VALUES ($1, $2, 40.1861, 44.5211, 3, true)", [seen.id, rep.id]);
+  const late = await fixtures.createCustomer({ created_by: rep.id, assigned_manager_id: rep.id, name: "E2E Overdue Shop", sales_channel: "SM YVN", lat: 40.1871, lng: 44.5221, erp_customer_id: `E2E-NV-${stamp}-c` });
+  await pool.query("INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, timestamp) VALUES ($1, $2, 40.1871, 44.5221, 3, true, now() - interval '400 days')", [late.id, rep.id]);
   await pool.query("UPDATE customers SET customer_tier = 'gold' WHERE id = $1", [fresh.id]);
   await pool.query("UPDATE customers SET customer_tier = 'bronze' WHERE id = $1", [seen.id]);
   try {
@@ -22,8 +24,10 @@ test("map pin and plan list: '!' only on the never-visited customer; the tier co
     await loginViaUi(page, rep.email);
     await page.goto(`/#/map?customer=${fresh.id}`);
     await expect(page.locator("#leaflet-map .leaflet-marker-icon:not(.leaflet-cluster-icon)").first()).toBeVisible({ timeout: 20000 });
-    await expect(page.locator("#leaflet-map .pin-never")).toHaveCount(1);
-    await expect(page.locator("#leaflet-map .leaflet-marker-icon", { has: page.locator(".pin-never") })).toHaveCount(1);
+    await expect(page.locator("#leaflet-map .pin-never:not(.pin-overdue-mark)")).toHaveCount(1);
+    await expect(page.locator("#leaflet-map .pin-never:not(.pin-overdue-mark)")).toHaveText("!!");
+    await expect(page.locator("#leaflet-map .leaflet-marker-icon", { has: page.locator(".pin-never:not(.pin-overdue-mark)") })).toHaveCount(1);
+    await expect(page.locator("#leaflet-map .pin-overdue-mark")).toHaveText("!");
 
     // the tier coin on the customer card
     await page.goto(`/#/customers/${fresh.id}`);
@@ -43,8 +47,13 @@ test("map pin and plan list: '!' only on the never-visited customer; the tier co
     await list.locator(".route-plan-tree-row[data-toggle]").first().click().catch(() => {});
     const never = list.locator(".route-plan-tree-row-leaf", { hasText: "E2E Never Visited Shop" });
     const done = list.locator(".route-plan-tree-row-leaf", { hasText: /^\s*E2E Visited Shop/ });
-    await expect(never.locator(".never-visited-mark")).toHaveCount(1);
-    await expect(done.locator(".never-visited-mark")).toHaveCount(0);
+    await expect(never.locator(".never-visited-mark")).toHaveText("!!");
+    await expect(never.locator(".overdue-visit-mark")).toHaveCount(0);
+    await expect(done.locator(".never-visited-mark, .overdue-visit-mark")).toHaveCount(0);
+    // visited long ago: the single red "!"
+    const overdue = list.locator(".route-plan-tree-row-leaf", { hasText: "E2E Overdue Shop" });
+    await expect(overdue.locator(".overdue-visit-mark")).toHaveText("!");
+    await expect(overdue.locator(".never-visited-mark")).toHaveCount(0);
     await page.screenshot({ path: `${process.env.NV_SHOTS ?? "/tmp"}/nv-plan.png` });
   } finally {
     await pool.query("DELETE FROM checkins WHERE user_id = $1", [rep.id]);

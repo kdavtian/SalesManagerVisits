@@ -113,7 +113,7 @@ export async function renderDashboardOverview(root, navigate) {
     .getPotentialSummary()
     .then((s) => {
       if (!s.total) return;
-      const rows = [5, 4, 3, 2, 1, 0]
+      const rows = [4, 3, 2, 1, 0]
         .map((l) => `<button type="button" class="pd-row" data-potential="${l}"><span class="pl-chip pl-${l}"><i class="pl-dot"></i>${escapeHtml(t(`pl_level_${l}`))}</span><strong>${s.levels[l]}</strong></button>`)
         .join("");
       const extra = [
@@ -121,7 +121,7 @@ export async function renderDashboardOverview(root, navigate) {
         s.followup_due ? `<button type="button" class="pd-row" data-potential="due"><span>${escapeHtml(t("pd_followup_due"))}</span><strong>${s.followup_due}</strong></button>` : "",
       ].join("");
       const managers = (s.by_manager ?? [])
-        .map((m) => `<div class="pd-manager"><span>${escapeHtml(m.name ?? "—")}</span><span class="pd-manager-levels">${[5, 4, 3, 2, 1, 0].filter((l) => m.levels[l]).map((l) => `<span class="pl-chip pl-${l}"><i class="pl-dot"></i>${m.levels[l]}</span>`).join("")}</span></div>`)
+        .map((m) => `<div class="pd-manager"><span>${escapeHtml(m.name ?? "—")}</span><span class="pd-manager-levels">${[4, 3, 2, 1, 0].filter((l) => m.levels[l]).map((l) => `<span class="pl-chip pl-${l}"><i class="pl-dot"></i>${m.levels[l]}</span>`).join("")}</span></div>`)
         .join("");
       prospectsEl.innerHTML = `
         <h2 class="section-title">${escapeHtml(t("pd_title"))} <span class="muted">${s.total}</span></h2>

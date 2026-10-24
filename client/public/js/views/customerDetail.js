@@ -1198,6 +1198,12 @@ async function openEditSheet(customer, navigate, onDone) {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const data = new FormData(form);
+    // Bronze / Silver / Gold need the ERP customer ID (the server refuses otherwise); say it before the round trip.
+    if (["bronze", "silver", "gold"].includes(data.get("customer_tier")) && data.get("customer_tier") !== customer.customer_tier && !customer.erp_customer_id) {
+      errorEl.textContent = t("erp_id_required");
+      errorEl.hidden = false;
+      return;
+    }
     const changes = { customer_tier: data.get("customer_tier") };
     for (const f of fields) {
       const raw = data.get(f.name);
