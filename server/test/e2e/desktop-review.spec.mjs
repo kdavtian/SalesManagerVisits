@@ -76,3 +76,18 @@ test("desktop review", async ({ page, fixtures }) => {
     }
   }
 });
+
+// A sweep of the main pages on a desktop window (screenshots only): where does the layout waste space or misalign?
+test("desktop sweep", async ({ page, fixtures }) => {
+  test.skip(!SHOTS, "set DESKTOP_SHOTS to take them");
+  test.setTimeout(240000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.context().route(/tile\.openstreetmap\.org|maps\.wikimedia\.org/, (route) => route.fulfill({ status: 200, contentType: "image/png", body: Buffer.concat([PNG, Buffer.alloc(tileNo++)]) }));
+  const admin = await fixtures.createUser("admin");
+  await loginViaUi(page, admin.email);
+  for (const route of ["dashboard", "activity", "orders", "tasks", "payments", "reports", "sales", "products", "warehouse", "team-performance", "cashflow", "vaghinak", "notifications", "settings"]) {
+    await page.goto(`/#/${route}`);
+    await page.waitForTimeout(1800);
+    await page.screenshot({ path: `${SHOTS}/sweep-${route}.png` });
+  }
+});
