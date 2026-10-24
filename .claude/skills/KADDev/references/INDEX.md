@@ -117,7 +117,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L53 Logo - Orange tile (#ff8a3d) with a graphite K (reversed on 2026-10-23); icons client/public/icons/ are regenerated f
 - L56 Lessons - A model typed without its make ("Camry") used to become a make called "Camry": the make-less case needs infere
 
-## ops-runbook.md (17 KB, 100 lines)
+## ops-runbook.md (18 KB, 102 lines)
 - L3 Environment facts - One DigitalOcean droplet (Ubuntu 24.04), hostname castrol-ceo-bot, IP 164.92.171.41.
 - L9 App deploy (preferred, fast) - cd /opt/field-visits && ./deploy/deploy.sh
 - L21 Bot deploy - cd /opt/castrol-ceo-bot && sudo -u castrolbot git pull origin main && sudo systemctl restart castrol-ceo-bot &
@@ -130,7 +130,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L86 Lessons added 2026-10-10 - deploy.sh --fast still runs migrations (npm run migrate on every deploy) and verify:deployment; "fast" only sk
 - L96 Lessons added 2026-10-24 (the optimization round) - Tests that passed for months only because everything ran in one slow pass share global state; splitting CI exp
 
-## optimization-ideas.md (4 KB, 26 lines)
+## optimization-ideas.md (5 KB, 28 lines)
 - L6 How an idea is written - N. <short name> - saves <minutes / taps / seconds / KB>; stays identical: <functionality, results, experience>
 - L12 Backlog (status: Suggested unless noted) - Owner answered "1, 2, 3, 4, 5, 6, 7, 8" on 2026-10-24 = all eight approved; built in the same round (Field Vis
 - L23 Ideas from the round that built these (Suggested) - Make the isolated bonus tests independent of the global switch (give each bonus test its own scope instead of
