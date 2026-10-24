@@ -90,3 +90,13 @@ entry in `tools.js` TOOLS + RUNNERS returning codes and numbers only, plus a tes
 - `GET /api/users/:id/offboarding` = checklist (customers by region, open tasks, cash not handed over, orders in progress, plan rules, candidate heirs). `POST /api/users/:id/status {status, note, moves:[{region,to_user_id}], tasks_to_user_id}` hands customers over region by region, open tasks follow their customer, then switches the account. `status:'active'` switches back on (no hand-over in that call).
 - UI: Settings -> Team -> person -> "Pause / switch off…" (`openOffboardSheet` in `views/admin.js`), badge "Paused" / "Left" in the list. Tests: `userOffboarding.test.js`, `offboard-rep.spec.mjs`.
 - Cash held by the person stays on them until handed over in Cash handoffs (the senders list is deliberately not filtered).
+
+## Additions 2026-10-24 (returns, potential, bank statements, lists)
+- **Order returns** (migration 143): `server/src/orderReturns.js`, `routes/returns.js`, client `returnSheet.js`, `views/returns.js`; flow rep request -> management/accountant approve -> warehouse receives (good/damaged) -> accountant records; `matchReturnsToErp` runs inside the sync as an optional step. Docs: `docs/order-returns.md`.
+- **Potential levels** 1-4 (NULL = not assessed; migration 145), `potential.js` (server + client), chips with Real preselected, reasons per level; tier Bronze/Silver/Gold needs an ERP customer ID (400 in `normalizeCustomerPortfolio`, PATCH only when the tier changes).
+- **Bank statements** (migration 146): `server/src/bankStatement.js` (reader CSV/xlsx, line hashes so nothing imports twice, `matchLines` = same account + signed amount + currency within 3 days), `routes/bankStatements.js` mounted under Cashflow, client `bankStatements.js` (`openBankSheet`). Excel stays the main ledger; a line is matched / unmatched / added / ignored. Docs: `docs/cashflow.md`.
+- **ERP sync hardening**: `optionalSyncStep`, `erp_sync_attempts` (migration 144), `GET /api/erp-sync/attempts`.
+- **Customers list**: group headers (`.cl-group`, `data-gkey`) fold; the list is built from `entries` (a card with its headers, or a header alone) in batches of 100; Group by is remembered in `localStorage` `fieldvisits_customers_group_by_region`; the region sheet (`openTriStateTreeSheet`) takes `groupBy` and has floating Clear/Show buttons.
+- **Map pin badges** live in `css/map-marker-system.css` (visited 15 px green tick, overdue 16 px yellow "!", never visited 18 px red "!!", white 2 px outline); the Customers/route-plan marks and the legend are in `styles.css`.
+- **Route plans**: `unplanned_count` per plan (badge on "View customers"); `openCustomersByDaySheet(userId, name, scope, { unplannedOnly })`.
+
