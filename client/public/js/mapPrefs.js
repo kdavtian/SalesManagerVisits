@@ -17,6 +17,24 @@ export function setClusterPins(enabled) {
   localStorage.setItem(CLUSTER_KEY, enabled ? "on" : "off");
 }
 
+// "Colour pins by: Tier | Rep" (owner, 2026-10-24). Remembered per signed-in user on this device (two people sharing a phone each keep their own);
+// default Tier, which is how the map has always looked.
+const colorByKey = (userId) => `fieldvisits_map_color_by:${userId ?? "anon"}`;
+export function getColorBy(userId) {
+  try {
+    return localStorage.getItem(colorByKey(userId)) === "rep" ? "rep" : "tier";
+  } catch {
+    return "tier";
+  }
+}
+export function setColorBy(userId, value) {
+  try {
+    localStorage.setItem(colorByKey(userId), value === "rep" ? "rep" : "tier");
+  } catch {
+    /* storage blocked: the choice lasts until the map closes */
+  }
+}
+
 // Whether the locate button's third tap enters compass/heading-tracking
 // mode. Default OFF -- an install with nothing stored gets the plain
 // show/hide locate toggle; a rep can opt into the tracking step from the

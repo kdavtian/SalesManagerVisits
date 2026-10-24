@@ -26,6 +26,11 @@ The API key lives only on the server. Add one line to `/opt/field-visits/.env` (
 git): `ANTHROPIC_API_KEY=...`, then run the normal deploy (`./deploy/deploy.sh --fast` is enough: no new tables after migration 130).
 Without the key the screen says the AI is not connected; the rest of the app is unaffected.
 
+**Test it (1.404.0):** Settings -> Administration -> System health -> "KAD AI connection" shows whether the key is on the server, the model and this month's
+spend, and has a **Test connection** button: one tiny call ("say OK", a fraction of a cent, not counted against the monthly limit). The answer is plain
+words: connected (model + milliseconds), no key yet, key rejected, no credit on the Anthropic account, model name not available (set `ASK_KAD_MODEL`),
+rate limit, or the server cannot reach Anthropic. Endpoint: `POST /api/ask-kad/test` (admin).
+
 ## Known limits (v1)
 - Armenian names are inflected ("Արամին"); a name typed with a different ending may not be masked in the question. The data
   tools never carry names, so the only text that can still contain a name is the admin's own typing. The screen shows

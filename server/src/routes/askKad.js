@@ -2,7 +2,7 @@
 // See src/askKad/engine.js for how it works and what leaves the server (names never do).
 import { Router } from "express";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { askKad, isConfigured, DEFAULT_MODEL, AskError } from "../askKad/engine.js";
+import { askKad, isConfigured, pingAi, DEFAULT_MODEL, AskError } from "../askKad/engine.js";
 import { getAskKadSettings, monthSpendUsd } from "../askKad/settings.js";
 
 export const askKadRouter = Router();
@@ -21,6 +21,18 @@ askKadRouter.get("/status", async (req, res) => {
     spent_usd: Math.round(spent * 100) / 100,
     model: process.env.ASK_KAD_MODEL || DEFAULT_MODEL,
   });
+});
+
+// One tiny call to prove the key, the credit and the model name work (admin button "Test connection"). Always 200: { ok, code?, model, ms }.
+let pinging = false;
+askKadRouter.post("/test", async (req, res) => {
+  if (pinging) return res.json({ ok: false, code: "busy" });
+  pinging = true;
+  try {
+    res.json(await pingAi());
+  } finally {
+    pinging = false;
+  }
 });
 
 askKadRouter.post("/", async (req, res) => {

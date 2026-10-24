@@ -55,7 +55,7 @@ usersRouter.get("/", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT id, email, name, role, position, phone, name_hy, created_at,
             last_seen_at, last_seen_app_version, last_seen_user_agent,
-            status, status_changed_at, status_note
+            status, status_changed_at, status_note, map_color
      FROM users WHERE role <> 'customer' ORDER BY (status = 'active') DESC, created_at DESC`
   );
   res.json(rows);
@@ -85,6 +85,13 @@ usersRouter.patch("/:id", async (req, res) => {
     params.push(value);
     updates.push(`${field} = $${params.length}`);
   }
+  // The rep's colour on the map ("Colour by Rep"): #rrggbb, or null/"" to go back to the automatic colour.
+  if (req.body?.map_color !== undefined) {
+    const color = req.body.map_color ? String(req.body.map_color).toLowerCase() : null;
+    if (color !== null && !/^#[0-9a-f]{6}$/.test(color)) return res.status(400).json({ error: "map_color must look like #1a2b3c" });
+    params.push(color);
+    updates.push(`map_color = $${params.length}`);
+  }
   if (!updates.length) return res.status(400).json({ error: "No editable fields provided" });
 
   params.push(req.params.id);
@@ -92,7 +99,7 @@ usersRouter.patch("/:id", async (req, res) => {
     const { rows } = await pool.query(
       `UPDATE users SET ${updates.join(", ")} WHERE id = $${params.length}
        RETURNING id, email, name, role, position, phone, name_hy, created_at,
-                 last_seen_at, last_seen_app_version, last_seen_user_agent`,
+                 last_seen_at, last_seen_app_version, last_seen_user_agent, map_color`,
       params
     );
     if (!rows[0]) return res.status(404).json({ error: "User not found" });

@@ -5,6 +5,10 @@ import { icons } from "../icons.js";
 import { state } from "../state.js";
 import { ALL_ROLES, QUICK_ACTIONS, defaultQuickActionIds } from "../quickActions.js";
 import { compareProducts } from "../productSort.js";
+import { REP_COLORS, repColor } from "../repColors.js";
+
+// Roles whose customers show up on the map: they get a colour for "Colour by Rep".
+const COLOURED_ROLES = ["sales_manager", "sales_director"];
 
 const ROLE_BADGE = {
   admin: { key: "role_admin", cls: "badge-accent", tint: "warning" },
@@ -225,7 +229,7 @@ export async function renderTeamSection(container) {
           <span class="list-row-icon list-row-icon-${roleBadge.tint}" aria-hidden="true">${userInitials(u.name)}</span>
           <div class="list-row-body">
             <div class="list-row-top">
-              <strong>${escapeHtml(u.name)}</strong>
+              <strong>${escapeHtml(u.name)}</strong>${COLOURED_ROLES.includes(u.role) ? `<span class="team-color-dot" style="background:${repColor(u.id, u.map_color)}" aria-hidden="true"></span>` : ""}
               <span class="badge ${roleBadge.cls}">${t(roleBadge.key)}</span>
               ${u.status === "paused" ? `<span class="badge badge-warning">${t("team_status_paused")}</span>` : u.status === "offboarded" ? `<span class="badge badge-danger">${t("team_status_left")}</span>` : ""}
             </div>
@@ -472,6 +476,15 @@ export async function renderTeamSection(container) {
           </label>`
               : ""
           }
+          ${
+            COLOURED_ROLES.includes(u.role)
+              ? `<div class="team-color-field"><span class="team-color-label">${t("team_map_color")}</span>
+            <div class="team-color-swatches" role="radiogroup" aria-label="${t("team_map_color")}">
+              ${REP_COLORS.map((c) => `<button type="button" class="team-swatch ${u.map_color === c ? "team-swatch-on" : ""}" role="radio" aria-checked="${u.map_color === c}" data-color="${c}" style="--swatch:${c}" aria-label="${c}"></button>`).join("")}
+              <button type="button" class="team-swatch team-swatch-auto ${!u.map_color ? "team-swatch-on" : ""}" role="radio" aria-checked="${!u.map_color}" data-color="" aria-label="${t("team_map_color_auto")}">${t("team_map_color_auto")}</button>
+            </div></div>`
+              : ""
+          }
           <p class="form-error" id="edit-user-error" hidden></p>
           <div class="sheet-actions">
             <button type="button" class="btn" id="cancel-edit-user">${t("cancel")}</button>
@@ -563,6 +576,16 @@ export async function renderTeamSection(container) {
     });
 
     const form = overlay.querySelector("#edit-user-form");
+    let pickedColor = u.map_color ?? null;
+    form.querySelectorAll(".team-swatch").forEach((sw) =>
+      sw.addEventListener("click", () => {
+        pickedColor = sw.dataset.color || null;
+        form.querySelectorAll(".team-swatch").forEach((x) => {
+          x.classList.toggle("team-swatch-on", x === sw);
+          x.setAttribute("aria-checked", String(x === sw));
+        });
+      })
+    );
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       errorEl.hidden = true;
@@ -577,6 +600,7 @@ export async function renderTeamSection(container) {
           email: data.get("email"),
           phone: data.get("phone") || null,
           position: isSalesManager ? data.get("position") || null : u.position,
+          ...(COLOURED_ROLES.includes(u.role) ? { map_color: pickedColor } : {}),
         });
         close();
         loadUsers();

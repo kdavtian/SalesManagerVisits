@@ -146,7 +146,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L82 6. Proactive moves that always land well - After a numbered list, add "Suggestions" (numbered, with recommendation) only if you saw something real while
 - L90 7. Mistakes I made that cost them time (do not repeat) - Claiming sheets "load before showing" without reading them (Add payment and the customer pickers already paint
 
-## owner-preferences-and-history.md (50 KB, 237 lines)
+## owner-preferences-and-history.md (51 KB, 243 lines)
 - L3 How they work with you - Writes short, numbered, imperative requests (often with screenshots "image1/img2"), mixes English with Armenia
 - L11 Visual / UX preferences (apply by default) - Compact, iOS-native feel: bottom sheets, floating/fixed action bars (Cancel/Save on customer edit must be fixe
 - L24 Things that repeatedly bit us (check proactively) - Forgetting CACHEVERSION bump -> "no updates" on phones.
@@ -171,6 +171,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L219 Four of the suggested ideas built (owner said "implement ideas 1-4", 2026-10-24, - Back refreshes Activity, Debt balances and Tasks (they join Orders and Customers): each render function now re
 - L225 Excel sync status + "Sync now" (owner picked two of the suggested ideas, 2026-10 - Why: the Excel feed looked fine ("sync ran") while the Excel file behind it was 4 days old, because the owner
 - L231 Potential ("Հեռանկար") editor tidy-up, customer card order, iPhone status-bar ta - Owner's points: (1) fix the editor UI (the "Next contact" date field ran past the sheet's right edge on iPhone
+- L237 Map "Colour by Tier | Rep", rep colours, AI connection test (owner, 2026-10-24,  - Owner chose: the map's "i" panel gets a Colour by: Tier | Rep switch BETWEEN "Group nearby pins" and "Compass"
 
 ## strategy-roadmap.md (6 KB, 31 lines)
 - L5 Target (owner, 2026-10-12): 10 % of the market = ~1 million liters a year - Owner's working assumption: the Armenian market is ~10M L a year, so 10 % = 1M L.
