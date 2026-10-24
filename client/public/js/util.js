@@ -304,16 +304,17 @@ export function haversineMeters(lat1, lng1, lat2, lng2) {
 // middle -- shared by bronze/silver/gold and colored per tier via CSS
 // currentColor (see .tier-bronze/.tier-silver/.tier-gold), same as the
 // other tier icons below.
+// Owner, 2026-10-24: the coin says the price tier -- bronze T1, silver T2, gold T3 (T = tier) -- not a bare rank number.
 function coinIcon(n) {
-  return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><text x="12" y="16" text-anchor="middle" font-size="10" font-weight="700" fill="currentColor" stroke="none">${n}</text></svg>`;
+  return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="10"/><text x="12" y="15.6" text-anchor="middle" font-size="9.5" font-weight="800" fill="currentColor" stroke="none" letter-spacing="-0.3">T${n}</text></svg>`;
 }
 
 const TIER_ICON = {
   // Bullseye/target -- an unconverted lead, still "in the sights".
   potential: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.4"/><circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none"/></svg>`,
-  bronze: coinIcon(3),
+  bronze: coinIcon(1),
   silver: coinIcon(2),
-  gold: coinIcon(1),
+  gold: coinIcon(3),
   // Binoculars -- watching a competitor's account, not our own.
   competitor: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10 10h4"/><path d="M19 7V4a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v3"/><path d="M20 21a2 2 0 0 0 2-2v-3.85c0-1.39-2-2.96-2-4.83V8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v11a2 2 0 0 0 2 2z"/><path d="M22 16H2"/><path d="M4 21a2 2 0 0 1-2-2v-3.85c0-1.39 2-2.96 2-4.83V8a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2z"/><path d="M9 7V4a1 1 0 0 0-1-1H6a1 1 0 0 0-1 1v3"/></svg>`,
 };
@@ -1526,4 +1527,14 @@ export function showToast(text, { actionLabel = "", onAction = null, ms = 2600 }
   }
   document.body.appendChild(el);
   toastTimer = setTimeout(() => el.remove(), actionLabel ? Math.max(ms, 4000) : ms);
+}
+
+// A customer that should be visited in the field but has no visit yet (owner, 2026-10-24: a "!" next to never-visited places in the plan and on the map).
+// `requires_visit` is false for the channels that are never visited (KF, CAS, CVO, PCO, OEM, the Castrol Office); competitors are not visited either.
+export function isNeverVisited(c) {
+  return c.requires_visit !== false && c.last_visit_at === null && c.customer_tier !== "competitor"; // undefined = the list did not say: not marked
+}
+
+export function neverVisitedMarkHtml() {
+  return `<span class="never-visited-mark" role="img" aria-label="${escapeHtml(t("never_visited"))}">!</span>`;
 }

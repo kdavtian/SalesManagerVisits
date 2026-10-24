@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, activateDialog, planTitle } from "../util.js";
+import { escapeHtml, activateDialog, planTitle, neverVisitedMarkHtml } from "../util.js";
 import { t } from "../i18n.js";
 import { state, canPlanForOthers, canViewAllRoutePlans } from "../state.js";
 import { buildCustomerTree, renderTriStateTree } from "../regionTree.js";
@@ -291,7 +291,7 @@ function customerRowHtml(leaf, daysById) {
     : `<span class="route-plan-day-badge route-plan-day-badge-unplanned">${t("route_plan_unplanned")}</span>`;
   return `
     <div class="route-plan-customer-row">
-      <span class="route-plan-customer-name">${escapeHtml(leaf.name)}</span>
+      <span class="route-plan-customer-name">${escapeHtml(leaf.name)}</span>${leaf.never ? neverVisitedMarkHtml() : ""}
       <span class="route-plan-customer-badges">${badges}</span>
     </div>`;
 }

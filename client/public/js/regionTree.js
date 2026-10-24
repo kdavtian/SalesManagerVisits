@@ -6,7 +6,7 @@
 // list's region filter (leaf = a whole subregion, no customer level).
 // Extracted from routePlans.js so all three stay visually and behaviorally
 // identical instead of drifting apart as three separate implementations.
-import { escapeHtml, activateDialog, regionLabelHy, subregionLabelHy } from "./util.js";
+import { escapeHtml, activateDialog, regionLabelHy, subregionLabelHy, isNeverVisited, neverVisitedMarkHtml } from "./util.js";
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 
@@ -63,7 +63,7 @@ export function buildCustomerTree(customers) {
       // array -- unlike buildRegionSubregionTree below, where they don't.
       allIds: region.customers.map((c) => c.id),
       customerCount: region.customers.length,
-      leaves: hasRealSubregions ? null : [...region.customers].sort((a, b) => a.name.localeCompare(b.name)).map((c) => ({ id: c.id, name: c.name })),
+      leaves: hasRealSubregions ? null : [...region.customers].sort((a, b) => a.name.localeCompare(b.name)).map((c) => ({ id: c.id, name: c.name, never: isNeverVisited(c) })),
       children: hasRealSubregions
         ? subOrder.map((sKey, j) => {
             const sub = subMap.get(sKey);
@@ -72,7 +72,7 @@ export function buildCustomerTree(customers) {
               name: sub.name,
               allIds: sub.customers.map((c) => c.id),
               customerCount: sub.customers.length,
-              leaves: [...sub.customers].sort((a, b) => a.name.localeCompare(b.name)).map((c) => ({ id: c.id, name: c.name })),
+              leaves: [...sub.customers].sort((a, b) => a.name.localeCompare(b.name)).map((c) => ({ id: c.id, name: c.name, never: isNeverVisited(c) })),
               children: null,
             };
           })
@@ -225,7 +225,7 @@ function leafRowHtml(leaf) {
   return `
     <label class="route-plan-tree-row route-plan-tree-row-leaf">
       <input type="checkbox" class="route-plan-tree-check" data-leaf-id="${escapeHtml(String(leaf.id))}" />
-      <span class="route-plan-tree-name">${escapeHtml(leaf.name)}</span>
+      <span class="route-plan-tree-name">${escapeHtml(leaf.name)}</span>${leaf.never ? neverVisitedMarkHtml() : ""}
     </label>`;
 }
 
