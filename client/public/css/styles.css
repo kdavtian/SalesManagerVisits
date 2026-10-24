@@ -15265,3 +15265,39 @@ input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
 /* Cashflow phase 2: tappable manual rows, add button in the header */
 button.cf-row-edit { width: 100%; text-align: left; color: inherit; font: inherit; cursor: pointer; }
 .cf-head #cf-add { min-height: 44px; }
+
+/* Never-visited customers (owner, 2026-10-24): a small "!" in plan lists and on the map pin (same yellow as a not-yet-due task). */
+.never-visited-mark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: #f5c518;
+  color: #3d3000;
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.pin-never {
+  position: absolute;
+  right: -7px;
+  top: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #f5c518;
+  color: #3d3000;
+  border: 1.5px solid #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
