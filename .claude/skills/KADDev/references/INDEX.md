@@ -144,7 +144,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L82 6. Proactive moves that always land well - After a numbered list, add "Suggestions" (numbered, with recommendation) only if you saw something real while
 - L90 7. Mistakes I made that cost them time (do not repeat) - Claiming sheets "load before showing" without reading them (Add payment and the customer pickers already paint
 
-## owner-preferences-and-history.md (42 KB, 210 lines)
+## owner-preferences-and-history.md (43 KB, 214 lines)
 - L3 How they work with you - Writes short, numbered, imperative requests (often with screenshots "image1/img2"), mixes English with Armenia
 - L11 Visual / UX preferences (apply by default) - Compact, iOS-native feel: bottom sheets, floating/fixed action bars (Cancel/Save on customer edit must be fixe
 - L24 Things that repeatedly bit us (check proactively) - Forgetting CACHEVERSION bump -> "no updates" on phones.
@@ -159,11 +159,12 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L164 Warehouse manager + driver apps (owner, 2026-10-23, 1.386.0) - Role shells (client/public/js/opsShell.js): warehousemanager and deliverymanager get their own bottom tabs (wa
 - L171 Staff module (1.388.0, 2026-10-23) - Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets Tabel / Sales Team / Plan (the
 - L175 Round "before Cashflow phase 3" (owner, 2026-10-24, 1.389.0 - 1.395.0; roadmap R - Tier badge: the coin number is now T1 (bronze), T2 (silver), T3 (gold) - T = tier (the old 1/3 confused gold w
-- L183 Round "Cashflow phase 3a: bank statements" (owner, 2026-10-24, 1.398.0, migratio - Owner: "We will use excel for now" (Excel is NOT switched off) -> the bank statement is reconciled against the
-- L188 Round "route-plan badge + customer list" (owner, 2026-10-24, 1.397.0) - Route Plans: red badge with the number of customers on NO weekday on "View customers" (unplannedcount per plan
-- L193 Round "Excel sync + new customer form" (owner, 2026-10-24, 1.396.0; migrations 1 - Owner: "Fix excel sync.
-- L200 Round of 2026-10-23 / 24 - KAD OS 0.52.0 - 0.53.0 and faster CI (PRs KAD OS #65, - Owner's numbered requests (screenshot of a swiped row): (1) pen/bin buttons do not go back and stay stuck: fix
-- L207 Standing rule: optimization suggestions (owner, 2026-10-24) - "Always suggest me optimization variants, which can save time, fasten process, simplify process, while keeping
+- L183 Map badge sizes + a duplicate-badge fix (owner asked "how much is the visited-to - Pins are 38 px (MARKERSIZE); the "visited today" check, the overdue "!" and the other status badges are 15 x 1
+- L187 Round "Cashflow phase 3a: bank statements" (owner, 2026-10-24, 1.398.0, migratio - Owner: "We will use excel for now" (Excel is NOT switched off) -> the bank statement is reconciled against the
+- L192 Round "route-plan badge + customer list" (owner, 2026-10-24, 1.397.0) - Route Plans: red badge with the number of customers on NO weekday on "View customers" (unplannedcount per plan
+- L197 Round "Excel sync + new customer form" (owner, 2026-10-24, 1.396.0; migrations 1 - Owner: "Fix excel sync.
+- L204 Round of 2026-10-23 / 24 - KAD OS 0.52.0 - 0.53.0 and faster CI (PRs KAD OS #65, - Owner's numbered requests (screenshot of a swiped row): (1) pen/bin buttons do not go back and stay stuck: fix
+- L211 Standing rule: optimization suggestions (owner, 2026-10-24) - "Always suggest me optimization variants, which can save time, fasten process, simplify process, while keeping
 
 ## strategy-roadmap.md (6 KB, 31 lines)
 - L5 Target (owner, 2026-10-12): 10 % of the market = ~1 million liters a year - Owner's working assumption: the Armenian market is ~10M L a year, so 10 % = 1M L.

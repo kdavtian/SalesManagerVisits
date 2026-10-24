@@ -1044,8 +1044,10 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   function customerIcon(c, status) {
     const tier = markerKind(c.customer_tier);
     const check = status === "today" ? '<span class="pin-check">&#10003;</span>' : "";
+    // Overdue pins already carry the red "!" badge (map-marker-system.css ::after); a never-visited pin shows the yellow "!!" instead of it.
+    const neverVisited = isNeverVisited(c);
     const overdueClass = status === "overdue" ? "pin-status-overdue" : "";
-    const never = isNeverVisited(c) ? '<span class="pin-never" aria-hidden="true">!!</span>' : isOverdueVisit(c) ? '<span class="pin-never pin-overdue-mark" aria-hidden="true">!</span>' : "";
+    const never = neverVisited ? '<span class="pin-never" aria-hidden="true">!!</span>' : "";
     const isPinShaped = PIN_SHAPED_KINDS.has(tier);
     const anchorY = isPinShaped ? Math.round(MARKER_SIZE * PIN_TIP_RATIO) : MARKER_SIZE / 2;
     // Shape family also decides where the status badge hangs, since the two
@@ -1056,7 +1058,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       // .pin stays on the wrapper: marker selection (mapMarkerEnhancements)
       // and the competitor-visibility toggle (map-safe-enhancements) both
       // key off .pin / .pin-tier-* selectors.
-      html: `<div class="pin pin-img ${shapeClass} pin-tier-${tier} ${overdueClass}"><img class="pin-img-asset" src="/icons/markers/${tier}-${categoryIconSlug(c.category)}.png" alt="" width="${MARKER_SIZE}" height="${MARKER_SIZE}" draggable="false" />${check}${taskMarkerHtml(c)}${never}</div>`,
+      html: `<div class="pin pin-img ${shapeClass} pin-tier-${tier} ${overdueClass} ${neverVisited ? "pin-is-never" : ""}"><img class="pin-img-asset" src="/icons/markers/${tier}-${categoryIconSlug(c.category)}.png" alt="" width="${MARKER_SIZE}" height="${MARKER_SIZE}" draggable="false" />${check}${taskMarkerHtml(c)}${never}</div>`,
       iconSize: [MARKER_SIZE, MARKER_SIZE],
       iconAnchor: [MARKER_SIZE / 2, anchorY],
       popupAnchor: [0, -anchorY],
