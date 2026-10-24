@@ -31,3 +31,6 @@ Owner answered "1, 2, 3, 4, 5, 6, 7, 8" on 2026-10-24 = all eight approved; buil
 16. [DONE 2026-10-24, 1.401.0] **Tap the red "not in plans" number to open only the unplanned customers** (button inside switches to all).
 17. [Suggested] **"Fold all / unfold all" in the grouped Customers list**, and optionally remember folded groups.
 18. [Suggested] **Inbox of pending bank statements** that arrive from Telegram (Cashflow phase 3b).
+19. [DONE 2026-10-24] **One command builds the claude.ai upload zip** - `python3 .claude/skills/KADDev/build-zip.py` (index rebuilt first, output `dist/kaddev-skill.zip`, validated); no more hand-made zips going stale.
+20. [Suggested] **A short "what changed since your last upload" note** at the top of the zip's SKILL.md (generated from git log of `.claude/skills/`).
+
