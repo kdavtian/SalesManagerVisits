@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch: {}   # the weekly dependency-fix workflow starts CI on its own branch this way (a push by GITHUB_TOKEN does not)
 
 # A new push to the same branch / PR cancels the run that is still going.
 concurrency:
@@ -11,6 +12,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Documentation / skill-only changes (docs/, .claude/skills/, any .md) skip the slow jobs below. The cheap `static` job and the
+  # `test` summary always run, so the required check names are always reported. Anything else, or no usable base to compare with,
+  # runs everything.
+  changes:
+    name: changes (docs only?)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -eu
+          case "$EVENT" in
+            pull_request) files="$(git diff --name-only HEAD^1 HEAD)" ;;   # HEAD is the merge commit: what this PR brings to the base
+            push)
+              if git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then files="$(git diff --name-only "$BEFORE_SHA" HEAD)"; else files=""; fi ;;
+            *) files="" ;;
+          esac
+          echo "changed files:"; echo "$files"
+          if [ -z "$files" ] || echo "$files" | grep -qvE '^(docs/|\.claude/skills/)|\.md$'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"; echo "-> runs everything"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"; echo "-> documentation only: tests and browser jobs are skipped"
+          fi
+
   # The quick static checks run on their own runner, next to the tests instead of in front of them.
   static:
     name: static (version, ui, audit)
@@ -47,6 +81,8 @@ jobs:
   # make their own fixtures and run in parallel against one database anyway, so they do not depend on each other.
   unit:
     name: tests (shard ${{ matrix.shard }}/4)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -88,12 +124,19 @@ jobs:
       - run: npm run migrate
 
       - name: Tests (shard ${{ matrix.shard }}/4)
-        run: node --test --test-shard=${{ matrix.shard }}/4 $(find test -name '*.test.js' -not -path 'test/integration/lockdownEngage.test.js' -not -path 'test/integration/erpSync.test.js' | sort)
+        run: node --test --test-shard=${{ matrix.shard }}/4 $(find test -name '*.test.js' | sort | grep -vxF "$(cat test/isolated-*.txt)")
 
-  # Two test files change state every other test can see, so they get a database to themselves and run one after the other: engaging the
-  # lockdown locks every request, and the ERP sync TRUNCATEs erp_customer_data (the debt tests read it).
+  # The files listed in server/test/isolated-*.txt (see server/test/ISOLATED.md; one list for CI and scripts/local-ci.sh) change or read state every
+  # other test can see: the bonus switch (bonus group); lockdown, the ERP sync's TRUNCATE, the global route plan and Vaghinak's whole-database
+  # tick (other group). Each group gets a database to itself and runs one file after the other, in parallel with the shards and each other.
   isolated:
-    name: tests (isolated)
+    name: tests (isolated ${{ matrix.group }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [bonus, other]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
@@ -130,26 +173,38 @@ jobs:
 
       - run: npm run migrate
 
-      - run: node --test --test-concurrency=1 test/integration/erpSync.test.js test/integration/lockdownEngage.test.js
+      - run: node --test --test-concurrency=1 $(cat test/isolated-${{ matrix.group }}.txt)
 
-  # The one check name the repository has always required: green only when the static checks and every test shard passed.
+  # The one check name the repository has always required: green only when the static checks passed and every test job passed
+  # (or was skipped because only documentation changed).
   test:
     name: test
-    needs: [static, unit, isolated]
+    needs: [changes, static, unit, isolated]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Static checks and all test shards passed
+      - name: Static checks and all test jobs passed
+        env:
+          CODE: ${{ needs.changes.outputs.code }}
+          CHANGES: ${{ needs.changes.result }}
+          STATIC: ${{ needs.static.result }}
+          UNIT: ${{ needs.unit.result }}
+          ISOLATED: ${{ needs.isolated.result }}
         run: |
-          echo "static: ${{ needs.static.result }}, shards: ${{ needs.unit.result }}, isolated: ${{ needs.isolated.result }}"
-          test "${{ needs.static.result }}" = "success" && test "${{ needs.unit.result }}" = "success" && test "${{ needs.isolated.result }}" = "success"
+          echo "changes: $CHANGES (code=$CODE), static: $STATIC, shards: $UNIT, isolated: $ISOLATED"
+          [ "$CHANGES" = "success" ] && [ "$STATIC" = "success" ] || exit 1
+          for r in "$UNIT" "$ISOLATED"; do
+            [ "$r" = "success" ] || { [ "$CODE" = "false" ] && [ "$r" = "skipped" ]; } || exit 1
+          done
 
   # Fast browser-driven subset (step 4 of the stabilization plan, test/e2e) --
   # only the @smoke-tagged specs, so a real-browser run doesn't gate every PR
   # on the full suite's runtime. The complete suite runs nightly instead
   # (see e2e-nightly.yml).
   e2e-smoke:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:

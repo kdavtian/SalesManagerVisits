@@ -1,0 +1,10 @@
+test/integration/adminSettingsAndLockdown.test.js
+test/integration/bonusBadges.test.js
+test/integration/bonusChallengeEngine.test.js
+test/integration/bonusChallengesRoutes.test.js
+test/integration/bonusEmployeeSummary.test.js
+test/integration/bonusEndToEnd.test.js
+test/integration/bonusReconciliation.test.js
+test/integration/bonusRewardClaims.test.js
+test/integration/bonusRewardClaimsRoutes.test.js
+test/integration/bonusSummaryRoutes.test.js

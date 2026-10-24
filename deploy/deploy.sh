@@ -52,6 +52,10 @@ fi
 STEP_START=$SECONDS
 step_done() { echo "    ($1: $((SECONDS - STEP_START))s)"; STEP_START=$SECONDS; }
 
+# The app version a commit carries (client/public/js/version.js), for the one-line "was -> now" the owner reads.
+version_of() { git show "$1:client/public/js/version.js" 2>/dev/null | sed -n "s/.*APP_VERSION *= *['\"]\([^'\"]*\)['\"].*/\1/p" | head -1; }
+OLD_VERSION="$(version_of HEAD)"
+
 PREV_SHA=""
 if [ -f "$LAST_DEPLOY_SHA_FILE" ]; then
   PREV_SHA="$(cat "$LAST_DEPLOY_SHA_FILE")"
@@ -67,6 +71,8 @@ if [ -n "$PREV_SHA" ] && git cat-file -e "$PREV_SHA" 2>/dev/null; then
   NEW_MIGRATIONS="$(git diff --diff-filter=A --name-only "$PREV_SHA" "$NEW_SHA" -- server/migrations/ | wc -l | tr -d ' ')"
   echo "==> $NEW_MIGRATIONS new migration file(s) since the last deploy (applied below, before the new app starts)"
 fi
+NEW_VERSION="$(version_of "$NEW_SHA")"
+echo "==> Version: ${OLD_VERSION:-?} -> ${NEW_VERSION:-?}"
 step_done "pull"
 
 # One-off containers (`docker compose run`: migrations, the full test run) normally remove themselves. If the SSH session
@@ -159,6 +165,8 @@ docker builder prune --keep-storage 2gb -f > /dev/null 2>&1 || true
 echo "==> Current status"
 docker compose ps
 
+echo
+echo "OK: Field Visits ${NEW_VERSION:-?} is live and healthy (was ${OLD_VERSION:-?})."
 echo
 echo "Done. On the very first deploy, also run:"
 echo "  docker compose exec app npm run seed"

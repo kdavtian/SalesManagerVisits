@@ -1,0 +1,59 @@
+name: Weekly dependency fix
+
+# Newly published security advisories used to turn every PR red without warning (2026-10-24: body-parser and multer). Every Monday this
+# looks at the same gate CI uses (`npm audit --audit-level=high`); only when it fails does it run `npm audit fix` (no --force, so no
+# breaking upgrades), push a branch, open a PR and start CI on that branch. The PR is reviewed and merged like any other.
+# One-time repository setting needed: Settings -> Actions -> General -> "Allow GitHub Actions to create and approve pull requests".
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  audit-fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: server
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: server/package-lock.json
+
+      - run: npm ci --no-audit --no-fund --prefer-offline
+
+      - name: Is the audit gate red?
+        id: gate
+        run: |
+          if npm audit --audit-level=high > /tmp/audit.txt 2>&1; then echo "red=false" >> "$GITHUB_OUTPUT"; echo "audit gate is green: nothing to do";
+          else echo "red=true" >> "$GITHUB_OUTPUT"; cat /tmp/audit.txt; fi
+
+      - name: Fix, push, open the PR and start CI
+        if: steps.gate.outputs.red == 'true'
+        run: |
+          set -eu
+          npm audit fix || true
+          if git diff --quiet -- package.json package-lock.json; then echo "npm audit fix changed nothing: needs a manual look"; exit 1; fi
+          if npm audit --audit-level=high > /dev/null 2>&1; then left="the high-severity advisories are fixed"; else left="some high-severity advisories remain: a manual upgrade is needed"; fi
+          branch="chore/audit-fix-$(date -u +%Y%m%d)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add package.json package-lock.json
+          git commit -m "Dependencies: npm audit fix"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" --title "Dependencies: npm audit fix ($(date -u +%Y-%m-%d))" \
+            --body "Weekly automatic fix: \`npm audit fix\` (no \`--force\`). Result: $left. CI is started on this branch by the workflow; review and merge like any PR."
+          gh workflow run ci.yml --ref "$branch"
