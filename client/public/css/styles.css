@@ -15423,3 +15423,27 @@ button.cf-row-edit { width: 100%; text-align: left; color: inherit; font: inheri
 .cl-group-region { margin: 14px 4px 4px; font-size: 0.95rem; font-weight: 800; color: var(--text); text-transform: uppercase; letter-spacing: 0.03em; }
 .cl-group-sub { margin: 8px 4px 4px 12px; font-size: 0.85rem; font-weight: 700; color: var(--text-dim); }
 .cl-group-count { font-size: 0.78rem; font-weight: 700; color: var(--text-dim); }
+
+/* Bank statements (Cashflow phase 3, owner 2026-10-24) */
+.cf-head-actions { display: flex; align-items: center; gap: 8px; }
+.cf-head-actions .btn { min-height: 44px; }
+.bk-sheet { max-height: 92vh; overflow-y: auto; }
+.bk-import { margin: 10px 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); }
+.bk-import summary { min-height: 44px; display: flex; align-items: center; font-weight: 700; cursor: pointer; }
+.bk-import label { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; font-size: 0.85rem; color: var(--text-dim); }
+.bk-import select, .bk-import input[type="file"] { font: inherit; min-height: 44px; }
+.bk-sample { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; font-size: 0.85rem; }
+.bk-sample > div { display: grid; grid-template-columns: 74px 1fr auto; gap: 8px; align-items: baseline; }
+.bk-sample-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk-map { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+.bk-result { margin: 8px 0; font-weight: 700; color: var(--success, #1a7f37); }
+.bk-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 4px; }
+.bk-line { padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); }
+.bk-line-main { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.bk-line-sub { font-size: 0.82rem; overflow-wrap: anywhere; }
+.bk-line-amt { font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bk-actions { display: flex; gap: 8px; margin-top: 8px; }
+.bk-actions .btn { flex: 1; min-height: 44px; }
+.bk-extra { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.bk-extra label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--text-dim); }
+.count-badge-quiet { background: var(--text-dim); }

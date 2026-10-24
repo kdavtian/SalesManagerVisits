@@ -4,6 +4,7 @@
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { activateDialog, escapeHtml, formatDateDMY, showToast, formatDuration, bindAmdInput, parseAmd } from "../util.js";
+import { openBankSheet } from "../bankStatements.js";
 import { periodLabel, periodKey, periodAria, tapPeriod, periodDates } from "../periodButtons.js";
 
 const BASES = ["today", "week", "month", "quarter", "year"];
@@ -30,7 +31,10 @@ export async function renderCashflow(root, navigate) {
     <div class="cf-view">
       <div class="cf-head">
         <h1>${t("cf_title")} <span role="button" tabindex="0" class="settings-inline-hint-icon" id="cf-hint-btn" aria-expanded="false" aria-controls="cf-hint-text" aria-label="${t("more_info")}">!</span></h1>
-        <button type="button" class="btn btn-primary" id="cf-add" hidden>${t("cf_add")}</button>
+        <div class="cf-head-actions">
+          <button type="button" class="btn" id="cf-bank" hidden>${t("bk_btn")} <span class="count-badge" id="cf-bank-badge" hidden></span></button>
+          <button type="button" class="btn btn-primary" id="cf-add" hidden>${t("cf_add")}</button>
+        </div>
       </div>
       <p class="muted cf-note" id="cf-hint-text" hidden>${t("cf_hint_internal")}</p>
       <div class="activity-tabs" role="tablist" id="cf-periods"></div>
@@ -138,7 +142,7 @@ export async function renderCashflow(root, navigate) {
     const sub = [e.account, who, e.info || e.ref].filter(Boolean).join(" · ");
     const editable = meta?.can_edit && e.origin !== "excel";
     return `<${editable ? 'button type="button" data-entry="' + e.id + '"' : "div"} class="cf-row ${editable ? "cf-row-edit" : ""}">
-      <div class="cf-row-main"><strong>${escapeHtml(e.category || "—")}</strong>${e.category_kind === "internal" ? `<span class="badge badge-neutral">${t("cf_kind_internal_short")}</span>` : ""}${e.origin !== "excel" ? `<span class="badge badge-info">${t("cf_manual")}</span>` : ""}<span class="muted cf-row-sub">${escapeHtml(sub)}</span></div>
+      <div class="cf-row-main"><strong>${escapeHtml(e.category || "—")}</strong>${e.category_kind === "internal" ? `<span class="badge badge-neutral">${t("cf_kind_internal_short")}</span>` : ""}${e.origin !== "excel" ? `<span class="badge badge-info">${t("cf_manual")}</span>` : ""}${e.bank_ok ? `<span class="badge badge-success" title="${escapeHtml(t("bk_matched"))}">✓ ${t("bk_bank_ok")}</span>` : ""}<span class="muted cf-row-sub">${escapeHtml(sub)}</span></div>
       <div class="cf-row-amt ${neg ? "cf-out" : "cf-in"}">${neg ? "−" : "+"}${money(Math.abs(e.amount), e.currency)}${e.currency === "USD" ? `<small class="muted">${nf(Math.abs(e.amount_amd))}</small>` : ""}</div>
     </${editable ? "button" : "div"}>`;
   }
@@ -195,11 +199,27 @@ export async function renderCashflow(root, navigate) {
       paintFoot();
       $("#cf-import").hidden = !meta.can_edit;
       $("#cf-add").hidden = !meta.can_edit;
+      $("#cf-bank").hidden = !meta.can_edit;
+      refreshBankBadge();
     } catch (err) {
       errorEl.textContent = err.message;
       errorEl.hidden = false;
     }
   }
+
+  // The red number on "Bank": statement lines that have no ledger row yet.
+  async function refreshBankBadge() {
+    if (!meta?.can_edit) return;
+    try {
+      const r = await api.getBankLines({ limit: 1 });
+      const n = r.counts?.unmatched ?? 0;
+      $("#cf-bank-badge").textContent = String(n);
+      $("#cf-bank-badge").hidden = !n;
+    } catch {
+      /* the badge is a hint only */
+    }
+  }
+  $("#cf-bank").addEventListener("click", () => openBankSheet(meta, () => reload()));
 
   function paintFoot() {
     const s = meta.last_sync;
