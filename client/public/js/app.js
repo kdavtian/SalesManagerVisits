@@ -1174,7 +1174,7 @@ async function renderRoute() {
   } else if (path === "#/dashboard") {
     (await import("./views/dashboard.js")).renderDashboard(app, navigate);
   } else if (path === "#/activity") {
-    (await import("./views/activity.js")).renderActivity(app, navigate);
+    currentCleanup = (await import("./views/activity.js")).renderActivity(app, navigate);
   } else if (path === "#/map") {
     const { renderMap } = await import("./views/map.js");
     currentCleanup = renderMap(
@@ -1243,7 +1243,7 @@ async function renderRoute() {
   } else if (path === "#/recorded") {
     (await import("./views/recorded.js")).renderRecorded(app, navigate);
   } else if (path === "#/debt-balances") {
-    (await import("./views/debtBalances.js")).renderDebtBalances(app, navigate);
+    currentCleanup = (await import("./views/debtBalances.js")).renderDebtBalances(app, navigate);
   } else if (path === "#/sales") {
     (await import("./views/sales.js")).renderSales(app, navigate);
   } else if (customerMatch) {
@@ -1255,7 +1255,7 @@ async function renderRoute() {
   } else if (path === "#/notifications") {
     (await import("./views/notifications.js")).renderNotifications(app, navigate, refreshNotificationBadge);
   } else if (path === "#/tasks") {
-    (await import("./views/tasks.js")).renderTasks(app, navigate, query.get("open"));
+    currentCleanup = (await import("./views/tasks.js")).renderTasks(app, navigate, query.get("open"));
   } else if (path === "#/bonuses") {
     (await import("./views/bonuses.js")).renderBonuses(app, navigate);
   } else {

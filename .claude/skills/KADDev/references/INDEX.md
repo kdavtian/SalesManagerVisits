@@ -144,7 +144,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L82 6. Proactive moves that always land well - After a numbered list, add "Suggestions" (numbered, with recommendation) only if you saw something real while
 - L90 7. Mistakes I made that cost them time (do not repeat) - Claiming sheets "load before showing" without reading them (Add payment and the customer pickers already paint
 
-## owner-preferences-and-history.md (44 KB, 218 lines)
+## owner-preferences-and-history.md (46 KB, 225 lines)
 - L3 How they work with you - Writes short, numbered, imperative requests (often with screenshots "image1/img2"), mixes English with Armenia
 - L11 Visual / UX preferences (apply by default) - Compact, iOS-native feel: bottom sheets, floating/fixed action bars (Cancel/Save on customer edit must be fixe
 - L24 Things that repeatedly bit us (check proactively) - Forgetting CACHEVERSION bump -> "no updates" on phones.
@@ -166,6 +166,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L201 Round "Excel sync + new customer form" (owner, 2026-10-24, 1.396.0; migrations 1 - Owner: "Fix excel sync.
 - L208 Round of 2026-10-23 / 24 - KAD OS 0.52.0 - 0.53.0 and faster CI (PRs KAD OS #65, - Owner's numbered requests (screenshot of a swiped row): (1) pen/bin buttons do not go back and stay stuck: fix
 - L215 Standing rule: optimization suggestions (owner, 2026-10-24) - "Always suggest me optimization variants, which can save time, fasten process, simplify process, while keeping
+- L219 Four of the suggested ideas built (owner said "implement ideas 1-4", 2026-10-24, - Back refreshes Activity, Debt balances and Tasks (they join Orders and Customers): each render function now re
 
 ## strategy-roadmap.md (6 KB, 31 lines)
 - L5 Target (owner, 2026-10-12): 10 % of the market = ~1 million liters a year - Owner's working assumption: the Armenian market is ~10M L a year, so 10 % = 1M L.

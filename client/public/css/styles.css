@@ -15390,10 +15390,19 @@ button.cf-row-edit { width: 100%; text-align: left; color: inherit; font: inheri
 .tree-groupby-box { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border: 2px solid var(--text-dim); border-radius: 6px; font-size: 0.8rem; line-height: 1; color: #fff; }
 .tree-groupby-on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-card)); }
 .tree-groupby-on .tree-groupby-box { background: var(--accent); border-color: var(--accent); }
-.cl-group { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cl-group { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; -webkit-tap-highlight-color: transparent; user-select: none; }
+.cl-group-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cl-group-chevron { flex: none; width: 8px; height: 8px; margin: 0 4px 0 2px; border-right: 2px solid var(--text-dim); border-bottom: 2px solid var(--text-dim); transform: rotate(45deg); transition: transform 0.15s; }
+.cl-group[aria-expanded="false"] .cl-group-chevron { transform: rotate(-45deg); }
+.cl-group:focus-visible { outline: 1px solid var(--primary, #2f7bf5); outline-offset: 1px; border-radius: 6px; }
 .cl-group-region { margin: 14px 4px 4px; font-size: 0.95rem; font-weight: 800; color: var(--text); text-transform: uppercase; letter-spacing: 0.03em; }
 .cl-group-sub { margin: 8px 4px 4px 12px; font-size: 0.85rem; font-weight: 700; color: var(--text-dim); }
 .cl-group-count { font-size: 0.78rem; font-weight: 700; color: var(--text-dim); }
+
+/* Route plans: the red number on "View customers" is its own tap target (only the customers on no day); the invisible padding makes it easy to hit. */
+.route-plan-unplanned-badge { position: relative; cursor: pointer; }
+.route-plan-unplanned-badge::after { content: ""; position: absolute; inset: -12px -10px; }
+#route-plan-customers-toggle { margin: 0 0 10px; }
 
 /* Bank statements (Cashflow phase 3, owner 2026-10-24) */
 .cf-head-actions { display: flex; align-items: center; gap: 8px; }

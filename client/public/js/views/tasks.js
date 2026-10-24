@@ -131,7 +131,7 @@ function openTaskTypeMenu(onPick) {
   );
 }
 
-export async function renderTasks(root, navigate, openId) {
+export function renderTasks(root, navigate, openId) {
   const creator = canCreateTasks();
   const sawAll = SEES_ALL_ROLES.has(state.user.role);
   root.innerHTML = `<div class="activity-view tasks-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
@@ -389,23 +389,36 @@ export async function renderTasks(root, navigate, openId) {
 
   // Reloads without blanking the screen: after completing/cancelling/restoring a task the list
   // updates in place.
-  async function load() {
+  // `silent` = refresh when the screen comes back by Back: keep what is shown, repaint only if the tasks changed.
+  let lastSig = "";
+  async function load({ silent = false } = {}) {
+    if (silent && !container.isConnected) return;
     try {
       const result = await api.listTasks({ scope: "all", status: "all" });
+      const sig = JSON.stringify(result);
+      if (silent && loaded && !loadError && sig === lastSig) return;
+      lastSig = sig;
       rows = result.rows;
       today = result.today;
       loaded = true;
       loadError = "";
     } catch (err) {
+      if (silent && loaded) return;
       loadError = err.message;
     }
     renderShell();
   }
-  window.addEventListener("tasks-changed", load, { once: true });
+  const onTasksChanged = () => load({ silent: true });
+  window.addEventListener("tasks-changed", onTasksChanged);
 
   renderShell();
-  await load();
-  if (openId) openTaskSheet(Number(openId), { onChanged: load, navigate });
+  load().then(() => {
+    if (openId) openTaskSheet(Number(openId), { onChanged: load, navigate });
+  });
+
+  const cleanup = () => window.removeEventListener("tasks-changed", onTasksChanged);
+  cleanup.onRestore = () => load({ silent: true });
+  return cleanup;
 }
 
 // ---- Task sheet ------------------------------------------------------------

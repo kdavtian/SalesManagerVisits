@@ -56,7 +56,7 @@ function formatAsOfCaption(dateOnly) {
   return `${d.getDate()} ${month} ${d.getFullYear()}`;
 }
 
-export async function renderDebtBalances(root, navigate) {
+export function renderDebtBalances(root, navigate) {
   const canGroup = state.user.role !== "sales_manager";
   let mode = "flat";
   // Set of "channel::managerId" keys (regionTree.js buildDirectionManagerTree leaf ids): sales channels with their reps inside,
@@ -339,7 +339,9 @@ export async function renderDebtBalances(root, navigate) {
     render();
   }
 
-  async function load() {
+  // `silent` = refresh when the screen comes back by Back: no stale-cache repaint, and nothing repaints if the rows are unchanged.
+  let lastSig = "";
+  async function load({ silent = false } = {}) {
     let paintedOnce = false;
     try {
       await loadWithCache(
@@ -349,13 +351,17 @@ export async function renderDebtBalances(root, navigate) {
         // fetch landed.
         asOfDate ? `debt-balances:${asOfDate}` : "debt-balances",
         () => api.getDebtBalances(asOfDate ? { date: asOfDate } : {}),
-        (data) => {
+        (data, meta) => {
+          if (silent && meta?.stale) return;
+          const sig = JSON.stringify(data);
+          if (silent && sig === lastSig) return;
+          lastSig = sig;
           paintData(data);
           paintedOnce = true;
         }
       );
     } catch (err) {
-      if (!paintedOnce) {
+      if (!paintedOnce && !silent) {
         errorEl.textContent = err.message;
         errorEl.hidden = false;
         listEl.innerHTML = "";
@@ -366,4 +372,7 @@ export async function renderDebtBalances(root, navigate) {
   listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
   errorEl.hidden = true;
   load();
+  const cleanup = () => {};
+  cleanup.onRestore = () => listEl.isConnected && load({ silent: true });
+  return cleanup;
 }
