@@ -20,3 +20,9 @@ Any management role sets any customer's level; a sales manager only their own cu
 
 ## API
 `PUT /api/customers/:id/potential`, `GET /api/customers/:id/potential-history`, `POST /api/customers/:id/counterfeit-resolve`; `POST /api/customers` accepts `potential_level / potential_reasons / potential_reason_other` for a new potential customer.
+
+## Filters, priority, counts (1.394.0)
+- **Customers list -> Potential filter** (bullseye icon, only when potential customers exist): level (with live counts, incl. "not assessed"), reason, counterfeit restriction, last visit (no visit in 7 / 14 / 30 days, never), next follow-up (due or overdue, next 7 days, none), expected volume (50 / 200 / 500 L a month and more). Sales manager and region are the list's own filters. With the filter on, the list is the worklist: very high first, then high, real, not assessed, low, no potential; soonest follow-up next. Rows show the level chip (and a warning mark for the counterfeit restriction).
+- **Follow-up priority** (`visitPriorities.js`, the "Visit first" card): a prospect that already has a reason to be visited gets very high +25, high +18, real +10, not assessed +8, low +3, none 0; a follow-up date that has come adds +15 and is a reason of its own. The level never adds a customer to the card by itself, and "no potential" customers are never hidden.
+- **Company dashboard -> Prospects by potential** (admin, CEO, operations director, sales director, accountant; a rep's own numbers are on the same endpoint): count per level, counterfeit restrictions, follow-ups due, and a by-sales-manager breakdown. Each row opens the Customers list with that filter (`#/customers?potential=4`, `=counterfeit`, `=due`).
+- `GET /api/customers/potential-summary`.

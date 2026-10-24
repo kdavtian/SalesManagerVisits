@@ -107,3 +107,47 @@ test("creating a potential customer can carry its level", async () => {
   const bad = await apiRequest("/api/customers", { method: "POST", cookie: cookies.rep, body: { name: `Potential bad ${Date.now()}`, lat: 40.31, lng: 44.61, potential_level: 4, potential_reasons: [] } });
   assert.equal(bad.status, 400);
 });
+
+test("follow-up priority: higher level first among prospects, a due follow-up date is a reason of its own", async () => {
+  const { visitPriorities } = await import("../../src/visitPriorities.js");
+  const solo = await createUser("sales_manager");
+  const mk = async (level, extra = {}) => {
+    const c = await createCustomer({ created_by: solo.id, assigned_manager_id: solo.id, sales_channel: "SM YVN" });
+    if (level) await pool.query("UPDATE customers SET potential_level = $2, potential_reasons = '{active_interest}' WHERE id = $1", [c.id, level]);
+    if (extra.followup) await pool.query("UPDATE customers SET next_followup_date = $2 WHERE id = $1", [c.id, extra.followup]);
+    return c;
+  };
+  const low = await mk(2);
+  const very = await mk(5);
+  const none = await mk(1);
+  const unassessed = await mk(null);
+  const picks = await visitPriorities(solo.id, 50); // all four were never visited: each has a reason to be on the card
+  const order = picks.map((p) => p.customer_id);
+  assert.ok(order.indexOf(very.id) < order.indexOf(unassessed.id), "very high before not assessed");
+  assert.ok(order.indexOf(unassessed.id) < order.indexOf(low.id), "not assessed before low");
+  assert.ok(order.indexOf(low.id) < order.indexOf(none.id), "low before no potential");
+  assert.ok(picks.find((p) => p.customer_id === very.id).reasons.some((r) => r.type === "potential" && r.level === 5));
+  assert.ok(order.includes(none.id), "no potential stays on the list (never hidden)");
+  // a due follow-up lifts a level-3 prospect above an unassessed one
+  const dueC = await mk(3, { followup: "2020-01-01" });
+  const picks2 = await visitPriorities(solo.id, 50);
+  const due = picks2.find((p) => p.customer_id === dueC.id);
+  assert.ok(due.reasons.some((r) => r.type === "followup_due"));
+  assert.ok(picks2.map((p) => p.customer_id).indexOf(dueC.id) < picks2.map((p) => p.customer_id).indexOf(unassessed.id));
+});
+
+test("potential-summary: counts per level for management, only their own for a rep", async () => {
+  const solo = await createUser("sales_manager");
+  const soloCookie = await loginAs(solo.email);
+  for (const lvl of [5, 5, 4, null]) {
+    const c = await createCustomer({ created_by: solo.id, assigned_manager_id: solo.id });
+    if (lvl) await pool.query("UPDATE customers SET potential_level = $2, next_followup_date = '2020-01-01' WHERE id = $1", [c.id, lvl]);
+  }
+  const mine = (await apiRequest("/api/customers/potential-summary", { cookie: soloCookie })).data;
+  assert.deepEqual([mine.levels[5], mine.levels[4], mine.levels[0], mine.total, mine.followup_due], [2, 1, 1, 4, 3]);
+  assert.deepEqual(mine.by_manager, [], "a rep gets no breakdown");
+  const all = (await apiRequest("/api/customers/potential-summary", { cookie: cookies.director })).data;
+  assert.ok(all.total >= 4 && all.levels[5] >= 2);
+  const row = all.by_manager.find((m) => m.manager_id === solo.id);
+  assert.deepEqual([row.levels[5], row.levels[4], row.total], [2, 1, 4]);
+});

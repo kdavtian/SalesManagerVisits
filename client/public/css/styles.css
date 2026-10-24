@@ -15334,3 +15334,21 @@ button.cf-row-edit { width: 100%; text-align: left; color: inherit; font: inheri
 .pl-hist-date { font-size: 0.78rem; color: var(--text-dim); }
 .pl-reasons-wrap { display: flex; flex-direction: column; gap: 10px; }
 .pl-reasons-wrap[hidden] { display: none; }
+
+/* Potential: filter sheet + dashboard prospects card */
+.pl-filter-chip .pl-dot { color: inherit; }
+.pf-sheet .pl-dot.pl-0 { background: var(--text-dim); } .pf-sheet .pl-dot.pl-1 { background: var(--pl-1); } .pf-sheet .pl-dot.pl-2 { background: var(--pl-2); } .pf-sheet .pl-dot.pl-3 { background: var(--pl-3); } .pf-sheet .pl-dot.pl-4 { background: var(--pl-4); } .pf-sheet .pl-dot.pl-5 { background: var(--pl-5); }
+.pf-sheet .pl-filter-chip { display: inline-flex; align-items: center; gap: 6px; }
+.pf-sheet .pl-section-title { margin-top: 10px; }
+.pd-card { display: flex; flex-direction: column; gap: 2px; padding: 6px 12px; margin-bottom: 12px; }
+.pd-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 44px; padding: 6px 0; background: none; border: 0; border-top: 1px solid var(--border); color: inherit; font: inherit; text-align: left; }
+.pd-row:first-child { border-top: 0; }
+.pd-row strong { font-variant-numeric: tabular-nums; }
+.pd-card summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 700; }
+.pd-manager { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); }
+.pd-manager-levels { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.pd-manager-levels .pl-chip { padding: 1px 8px; font-size: 0.78rem; }
+.pd-card summary { list-style: none; }
+.pd-card summary::-webkit-details-marker { display: none; }
+.pd-card summary::after { content: "›"; margin-left: auto; font-size: 1.4rem; color: var(--text-dim); transform: rotate(90deg); }
+.pd-card[open] summary::after { transform: rotate(-90deg); }

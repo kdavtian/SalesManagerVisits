@@ -37,6 +37,8 @@ export const FILTER_ICONS = {
   special: svg('<path d="M20 13 13 20l-9-9V4h7z"/><circle cx="8" cy="8" r="1"/>'),
   filters: svg('<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>'),
   overdue: svg('<path d="M10.25 4.35 2.7 17.5a2.2 2.2 0 0 0 1.9 3.3h14.8a2.2 2.2 0 0 0 1.9-3.3L13.75 4.35a2 2 0 0 0-3.5 0Z"/><path d="M12 9v4.25M12 17h.01"/>'),
+  // Potential level: a bullseye with its arrow (prospects, how close each one is to a first order).
+  potential: svg('<circle cx="12" cy="12" r="8.75"/><circle cx="12" cy="12" r="4.75"/><circle cx="12" cy="12" r="1.1"/>'),
   recent: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>'),
   planned: svg('<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/><path d="m9 15.2 2 2 4-4.2"/>'),
   nearby: svg('<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="8" stroke-opacity=".35"/>'),

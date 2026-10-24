@@ -147,6 +147,7 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/customers${qs ? `?${qs}` : ""}`);
   },
+  getPotentialSummary: () => request("/customers/potential-summary", { fresh: true }),
   setCustomerPotential: (id, data) => json(`/customers/${id}/potential`, "PUT", data),
   getPotentialHistory: (id) => request(`/customers/${id}/potential-history`, { fresh: true }),
   resolveCounterfeit: (id, data) => json(`/customers/${id}/counterfeit-resolve`, "POST", data),
