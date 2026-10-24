@@ -178,3 +178,7 @@ Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets 
 - "Please optimize the CI checks" (KAD OS), then "Do the same for SalesManagerVisits CI", then "merge it when green", then "Update kaddev": the owner wants short waits, same required check names, and the skill kept current. Answer style that worked: one numbered answer per request, before/after timings, deploy block, APP_VERSION.
 - Owner is fine with an assumption stated in the summary for small things, but for a pricing/business rule that could be read two ways (Bronze wholesale) he expects ONE short, concrete question first; he answers in one word.
 - Versions: KAD OS 0.52.0 (CACHE 57), 0.53.0 (CACHE 58, migration 033). CI-only PRs need no version bump.
+
+## Standing rule: optimization suggestions (owner, 2026-10-24)
+- "Always suggest me optimization variants, which can save time, fasten process, simplify process, while keeping same functionality, results and experience. Update kaddev." -> SKILL rule 42 and `references/optimization-ideas.md`. It follows his earlier "Always propose the better solution" (rule 26) and "inform and ask BEFORE implementing trade-offs" (rule 25): suggestions only, he picks by number, nothing that changes what he sees or gets.
+- Why he asked: the two CI speed-ups (about 6 min -> 2-4 min, same check names) were the most welcome result of the round; he wants more of that kind, proactively, without having to ask each time.
