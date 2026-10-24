@@ -2876,6 +2876,15 @@ label.checkbox-row input[type="checkbox"] {
   background: var(--map-overdue, var(--danger));
 }
 
+.map-legend-swatch-never {
+  width: auto;
+  min-width: 15px;
+  padding: 0 3px;
+  border-radius: 8px;
+  background: #f5c518;
+  color: #3d3000;
+}
+
 .map-legend-swatch-selected {
   width: 14px;
   height: 14px;
@@ -15272,23 +15281,42 @@ button.cf-row-edit { width: 100%; text-align: left; color: inherit; font: inheri
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
+  min-width: 16px;
   height: 16px;
+  padding: 0 4px;
   margin-left: 6px;
-  border-radius: 50%;
+  border-radius: 8px;
   background: #f5c518;
   color: #3d3000;
   font-size: 0.7rem;
   font-weight: 800;
   line-height: 1;
 }
-.pin-never {
-  position: absolute;
-  right: -7px;
-  top: 0;
+/* Overdue (visited before, past its rhythm): a single red "!" */
+.overdue-visit-mark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 16px;
   height: 16px;
+  margin-left: 6px;
   border-radius: 50%;
+  background: var(--danger);
+  color: #ffffff;
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.pin-never {
+  position: absolute;
+  right: -9px;
+  top: 0;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  border-radius: 8px;
   background: #f5c518;
   color: #3d3000;
   border: 1.5px solid #ffffff;
@@ -15382,3 +15410,4 @@ button.cf-row-edit { width: 100%; text-align: left; color: inherit; font: inheri
 /* A required field the form refused to save without (ERP customer ID for Bronze / Silver / Gold) */
 .req-mark { color: var(--danger); }
 .field-invalid input { border-color: var(--danger); box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 25%, transparent); }
+.pin-never.pin-overdue-mark { background: var(--danger); color: #ffffff; width: 16px; padding: 0; right: -7px; }
