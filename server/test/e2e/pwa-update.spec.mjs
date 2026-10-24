@@ -19,7 +19,7 @@ test.describe("PWA update flow", () => {
     // check against.
     await page.waitForTimeout(1000);
 
-    await page.goto("/#/settings");
+    await page.goto("/#/settings?section=p-about");
     await page.locator("#row-check-updates").click();
     // i18n.js's up_to_date string -- "up to date" itself never appears verbatim.
     await expect(page.locator("#check-updates-value")).toHaveText(/latest version/i, { timeout: 15000 });

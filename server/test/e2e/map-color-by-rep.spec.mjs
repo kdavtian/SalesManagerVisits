@@ -59,8 +59,7 @@ test("Colour by Rep: default Tier, ring per rep colour, remembered per user; col
   // Team management: the admin picks Narek's colour
   await page.context().clearCookies();
   await loginViaUi(page, admin.email);
-  await page.goto("/#/settings");
-  await page.locator("#settings-admin-tab").click();
+  await page.goto("/#/settings?section=a-team");
   await page.locator("#row-team-management").click();
   await page.locator("#user-list .list-row", { hasText: "E2E Narek Rep" }).click();
   await page.locator('.team-swatch[data-color="#8e44ad"]').click();

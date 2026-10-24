@@ -77,8 +77,7 @@ test("admin chooses the mode in Settings", async ({ page, fixtures }) => {
   const admin = await fixtures.createUser("admin");
   try {
     await loginViaUi(page, admin.email);
-    await page.goto("/#/settings");
-    await page.getByRole("tab", { name: /admin workspace/i }).click();
+    await page.goto("/#/settings?section=a-sales");
     await page.locator("#row-delivery-arrival").click();
     const auto = page.locator('[data-mode="auto"]');
     await expect(auto).toBeVisible();

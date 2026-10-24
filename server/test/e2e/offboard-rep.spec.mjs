@@ -14,8 +14,7 @@ test.describe("Pause or switch off a rep", () => {
 
     await page.setViewportSize({ width: 440, height: 900 });
     await loginViaUi(page, admin.email);
-    await page.goto("/#/settings");
-    await page.getByRole("tab", { name: /admin/i }).click();
+    await page.goto("/#/settings?section=a-team");
     await page.locator("#row-team-management").click();
     await page.locator("#user-list .list-row", { hasText: "E2E Leaving Rep" }).first().click({ timeout: 15000 });
     await page.locator("#edit-user-offboard").click();

@@ -6,9 +6,9 @@ const SHOTS = process.env.KOS_SHOTS; // optional folder for review screenshots
 
 test.use({ viewport: { width: 440, height: 956 } });
 
+// rowId -> the Administration page that holds it (a-integrations: KAD OS perks and campaigns)
 async function openAdminRow(page, rowId) {
-  await page.goto("/#/settings");
-  await page.getByRole("tab", { name: /admin workspace/i }).click();
+  await page.goto("/#/settings?section=a-integrations");
   await page.locator(rowId).click();
 }
 

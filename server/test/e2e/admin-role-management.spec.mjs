@@ -8,8 +8,7 @@ test.describe("Administrator role management", () => {
     const admin = await fixtures.createUser("admin");
     await loginViaUi(page, admin.email);
 
-    await page.goto("/#/settings");
-    await page.getByRole("tab", { name: /admin/i }).click();
+    await page.goto("/#/settings?section=a-team");
     await page.locator("#row-team-management").click();
     await page.locator("#add-team-member-btn").click();
 
