@@ -457,6 +457,8 @@ export const api = {
   deleteRouteDistribution: (id) => request(`/route-distribution/${id}`, { method: "DELETE" }),
 
   listTaskAssignees: () => request("/tasks/assignees"),
+  getErpSyncStatus: () => request("/erp-sync/status", { fresh: true }),
+  requestErpSync: () => json("/erp-sync/request", "POST", {}),
   listTasks: (params = {}) => request(`/tasks?${new URLSearchParams(params).toString()}`),
   getTask: (id) => request(`/tasks/${id}`),
   createTask: (data) => json("/tasks", "POST", data),

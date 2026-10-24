@@ -7,6 +7,7 @@ import { APP_VERSION } from "../version.js";
 import { t } from "../i18n.js";
 import { escapeHtml, formatDateDMY } from "../util.js";
 import { checkForUpdateManually } from "../updateBanner.js";
+import { renderErpSyncCard } from "../erpSyncCard.js";
 
 function ago(iso) {
   if (!iso) return t("health_never");
@@ -59,6 +60,8 @@ export async function renderSystemHealthSection(container) {
       ${row(t("health_uptime"), uptime(h.uptime_seconds))}
     </div>
 
+    <div class="card health-card" id="erp-sync-card"></div>
+
     <div class="card health-card">
       <h3 class="health-title">${t("health_erp_feeds")} ${staleSources ? `<span class="badge badge-danger">${staleSources}</span>` : ""}</h3>
       ${h.erp.sources
@@ -81,6 +84,8 @@ export async function renderSystemHealthSection(container) {
       ${row(t("health_telegram"), badge(h.integrations.telegram, "health_on", "health_off"))}
       ${row(t("health_erp_key"), badge(h.integrations.erp_sync_key, "health_on", "health_off"))}
     </div>`;
+
+  renderErpSyncCard(container.querySelector("#erp-sync-card"));
 
   container.querySelector("#health-update-btn")?.addEventListener("click", async (e) => {
     const btn = e.currentTarget;

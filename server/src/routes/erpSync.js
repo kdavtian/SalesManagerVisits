@@ -8,6 +8,7 @@ import { queueReportLabel, queueSyncNotice } from "../syncNotifier.js";
 import { autoDeliverOrdersFromErp, autoApprovePaymentsFromErp } from "../erpAutoMatch.js";
 import { matchReturnsToErp } from "../orderReturns.js";
 import { recordSyncAttempt, latestSyncAttempts } from "../erpSyncAttempts.js";
+import { recordSyncRun, getSyncStatus, createSyncRequest, pickPendingRequest, finishRequest } from "../erpSyncStatus.js";
 import { runAutoTasks } from "../debtCollectionTasks.js";
 import { refreshOrderRhythm } from "../orderRhythm.js";
 import { applyCashLedger } from "../cashflow.js";
@@ -95,7 +96,7 @@ export async function optionalSyncStep(client, label, fn, warnings = []) {
 }
 
 erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
-  const { customers, order_lines, cashflow_lines, sales_performance, products, brand_volume, customer_legal } = req.body ?? {};
+  const { customers, order_lines, cashflow_lines, sales_performance, products, brand_volume, customer_legal, meta } = req.body ?? {};
   if (!Array.isArray(customers)) {
     return res.status(400).json({ error: "customers must be an array" });
   }
@@ -511,6 +512,16 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
   }
 
   if (syncWarnings.length) await recordSyncAttempt({ endpoint: "/api/erp-sync", ok: true, warnings: syncWarnings });
+  await recordSyncRun({
+    counts: {
+      customers: erpIds.length,
+      order_lines: order_lines !== undefined ? lineErpIds.length : null,
+      cashflow_lines: cashflow_lines !== undefined ? cashErpIds.length : null,
+      products: products !== undefined ? prodErpIds.length : null,
+    },
+    warnings: syncWarnings,
+    meta,
+  });
   res.json({
     synced: erpIds.length,
     warnings: syncWarnings.length ? syncWarnings : undefined,
@@ -733,6 +744,43 @@ erpSyncRouter.post("/reports", syncKeyLimiter, requireSyncKey, reportFileUpload.
 erpSyncRouter.get("/attempts", requireAuth, async (req, res) => {
   if (!["admin", "ceo", "operations_director"].includes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   res.json(await latestSyncAttempts());
+});
+
+// ---- Sync status and the admin's "Sync now" (owner, 2026-10-24) ----
+const SYNC_VIEW_ROLES = ["admin", "ceo", "operations_director"];
+
+// The bot polls often (every 30 s) with the sync key: its own, roomier limiter.
+const pollLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => Boolean(process.env.E2E_RATE_LIMIT_BYPASS_TOKEN) && req.get("x-e2e-rate-limit-bypass") === process.env.E2E_RATE_LIMIT_BYPASS_TOKEN,
+});
+
+erpSyncRouter.get("/status", requireAuth, async (req, res) => {
+  if (!SYNC_VIEW_ROLES.includes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  res.json(await getSyncStatus());
+});
+
+erpSyncRouter.post("/request", requireAuth, async (req, res) => {
+  if (!SYNC_VIEW_ROLES.includes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  res.status(202).json(await createSyncRequest(req.user.id));
+});
+
+// For the bot (sync key): is a "Sync now" waiting? -> { request_id } or { request_id: null }
+erpSyncRouter.get("/requests/pending", pollLimiter, requireSyncKey, async (req, res) => {
+  res.json({ request_id: await pickPendingRequest() });
+});
+
+// The bot reports what happened. A failed run also becomes a failed attempt, so the admins are notified like for any rejected sync.
+erpSyncRouter.post("/requests/:id/result", pollLimiter, requireSyncKey, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: "Invalid request id" });
+  const { ok, message } = req.body ?? {};
+  const done = await finishRequest(id, ok, message);
+  if (done && !ok) await recordSyncAttempt({ endpoint: "sync now (bot)", ok: false, error: message || "The bot could not run the sync" });
+  res.json({ finished: done });
 });
 
 erpSyncRouter.get("/unlinked", requireAuth, async (req, res) => {

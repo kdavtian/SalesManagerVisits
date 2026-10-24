@@ -33,4 +33,6 @@ Owner answered "1, 2, 3, 4, 5, 6, 7, 8" on 2026-10-24 = all eight approved; buil
 18. [Suggested] **Inbox of pending bank statements** that arrive from Telegram (Cashflow phase 3b).
 19. [DONE 2026-10-24] **One command builds the claude.ai upload zip** - `python3 .claude/skills/KADDev/build-zip.py` (index rebuilt first, output `dist/kaddev-skill.zip`, validated); no more hand-made zips going stale.
 20. [Suggested] **A short "what changed since your last upload" note** at the top of the zip's SKILL.md (generated from git log of `.claude/skills/`).
+21. [DONE 2026-10-24, 1.402.0] **"Sync now" button for admins + "last Excel sync: date, result, file age" on the admin Home.**
+22. [Suggested] **Bot tells the Telegram group when it ignores a chat or accepts a file** (one short reply "file received, synced N customers" / "this chat is not allowed, ask the CEO"): the 4-day silence would have shown the same day.
 

@@ -236,6 +236,7 @@ export async function renderDashboard(root, navigate) {
     }
 
     <div id="tasks-home-slot"></div>
+    ${state.user.role === "admin" ? `<div id="erp-sync-slot"></div>` : ""}
 
     ${
       state.user.role === "admin" || state.user.role === "ceo" || state.user.role === "operations_director"
@@ -544,6 +545,7 @@ export async function renderDashboard(root, navigate) {
 
   // Tasks given to me: today's by default, toggle to all open (loaded lazily, never blocks Home).
   import("./tasks.js").then((m) => m.renderHomeTasks(container.querySelector("#tasks-home-slot"), navigate)).catch(() => {});
+  if (container.querySelector("#erp-sync-slot")) import("../erpSyncCard.js").then((m) => m.renderErpSyncHomeLine(container.querySelector("#erp-sync-slot"), navigate)).catch(() => {});
   const nextVisitSlot = container.querySelector("#next-visit-slot");
   if (nextVisitSlot) renderNextVisit(nextVisitSlot, customers, navigate);
 
