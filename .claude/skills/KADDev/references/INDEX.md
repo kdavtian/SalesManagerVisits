@@ -146,7 +146,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L82 6. Proactive moves that always land well - After a numbered list, add "Suggestions" (numbered, with recommendation) only if you saw something real while
 - L90 7. Mistakes I made that cost them time (do not repeat) - Claiming sheets "load before showing" without reading them (Add payment and the customer pickers already paint
 
-## owner-preferences-and-history.md (60 KB, 276 lines)
+## owner-preferences-and-history.md (61 KB, 282 lines)
 - L3 How they work with you - Writes short, numbered, imperative requests (often with screenshots "image1/img2"), mixes English with Armenia
 - L11 Visual / UX preferences (apply by default) - Compact, iOS-native feel: bottom sheets, floating/fixed action bars (Cancel/Save on customer edit must be fixe
 - L24 Things that repeatedly bit us (check proactively) - Forgetting CACHEVERSION bump -> "no updates" on phones.
@@ -176,6 +176,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L251 Six small ideas implemented (owner: "Implement ideas", 2026-10-24, 1.406.0) - (1) Counts on the Administration list: GET /api/settings/admin-counts (server/src/adminCounts.js, role-aware)
 - L259 "App scrolls up constantly", channel -> rep, map key as a bottom sheet, colour-b - Scrolling to top constantly: cause = the iPhone status-bar trick of 1.403.0 (statusBarTap.js): the document re
 - L268 Owner's answers of 2026-10-24 (round 2) -> 1.408.0 - Share route on a phone: keep the share sheet.
+- L277 2026-10-24 (1.409.0): scroll-to-top came back -> the status-bar trick is now OFF - Owner, after 1.408.0: "the app scrolls up by itself on all pages".
 
 ## strategy-roadmap.md (6 KB, 31 lines)
 - L5 Target (owner, 2026-10-12): 10 % of the market = ~1 million liters a year - Owner's working assumption: the Armenian market is ~10M L a year, so 10 % = 1M L.

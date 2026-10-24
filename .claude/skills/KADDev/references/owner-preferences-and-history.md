@@ -273,3 +273,9 @@ Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets 
 - **PDF user guide: rebuilt in ARMENIAN ONLY** (owner's choice; the English PDF stays the old 1.251.0 one): new Settings section, pin key sheet, three-state planned pins, route share, Potential section; `docs/user-guide/build.py` supports `img2`/`cap2`, `render.mjs` honours `GUIDE_LANGS=hy`. Demo screenshots are made with a throwaway Playwright spec (viewport 360x612 @2x, grey tiles, demo name "Արամ Գրիգորյան", email aram@demo.local).
 - Droplet steps the owner asked to be GUIDED through: add the new Telegram group id to the bot config; add `ANTHROPIC_API_KEY` (hidden input) - see the commands in docs/kad-ai.md and the ops runbook.
 
+
+## 2026-10-24 (1.409.0): scroll-to-top came back -> the status-bar trick is now OFF by default
+- Owner, after 1.408.0: "the app scrolls up by itself on all pages". Two fixes to the 1 px document trick (`statusBarTap.js`: touch grace, typing guard) did not stop it on the real iPhone, and it cannot be reproduced in the sandbox (Chromium is not iOS). Lesson: a global hack that makes the DOCUMENT scrollable on iOS is not safe to ship ON; iOS moves the document for reasons we cannot see.
+- Now: `getStatusBarTapPref()` (localStorage `fieldvisits_statusbar_tap`, default off). Settings -> Personal -> Appearance has "Status-bar tap scrolls to top" (installed iPhone only, "!" hint). Off = no `ios-statusbar-scroll` class, no 1 px room. The top-bar tap still scrolls to top.
+- Home (admin): the "Excel sync: ..." line (`#erp-sync-slot`) moved from the top to the END of Home, below Performance and insights.
+- e2e `erp-sync-status` deletes unfinished `erp_sync_requests` first (a leftover unfinished request is reused by "Sync now" and made the test fail on a rerun).

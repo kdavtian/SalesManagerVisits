@@ -236,8 +236,6 @@ export async function renderDashboard(root, navigate) {
     }
 
     <div id="tasks-home-slot"></div>
-    ${state.user.role === "admin" ? `<div id="erp-sync-slot"></div>` : ""}
-
     ${
       state.user.role === "admin" || state.user.role === "ceo" || state.user.role === "operations_director"
         ? ""
@@ -422,6 +420,7 @@ export async function renderDashboard(root, navigate) {
       ${comparisonCardHtml(t("this_month"), trends.comparison.this_month, trends.comparison.last_month, t("vs_last_month"))}
     </div>
     </details>
+    ${state.user.role === "admin" ? `<div id="erp-sync-slot"></div>` : ""}
     </div>
   `;
 

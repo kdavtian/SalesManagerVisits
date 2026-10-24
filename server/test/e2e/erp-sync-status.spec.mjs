@@ -6,6 +6,7 @@ test("admin sees the Excel sync line and Sync now waits for the bot's answer", a
   const admin = await fixtures.createUser("admin");
   const FILE = `e2e-sync-${Date.now()}.xlsx`;
   const fileDate = new Date(Date.now() - 4 * 24 * 3600 * 1000).toISOString();
+  await pool.query("DELETE FROM erp_sync_requests WHERE finished_at IS NULL"); // an unfinished request of an earlier (failed) run would be reused instead of a new one
   await pool.query("INSERT INTO erp_sync_runs (counts, workbook_modified_at, workbook_name) VALUES ('{}', $1, $2)", [fileDate, FILE]);
   try {
     await page.setViewportSize({ width: 390, height: 844 });
@@ -16,6 +17,9 @@ test("admin sees the Excel sync line and Sync now waits for the bot's answer", a
     await expect(line).toHaveClass(/es-home-bad/);
     await expect(line).toContainText("4 days old");
     expect(await line.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(43);
+    // owner, 2026-10-24: the line sits at the END of Home, below everything else
+    expect(await line.evaluate((el) => el.closest("#erp-sync-slot").nextElementSibling === null && el.closest("#erp-sync-slot").parentElement.lastElementChild === el.closest("#erp-sync-slot"))).toBe(true);
+    await line.scrollIntoViewIfNeeded();
     await page.screenshot({ path: `${process.env.GB_SHOTS ?? "/tmp"}/es-home.png` });
 
     await line.click();
@@ -36,6 +40,6 @@ test("admin sees the Excel sync line and Sync now waits for the bot's answer", a
     await expect(card.locator("#es-sync-now")).toBeEnabled();
   } finally {
     await pool.query("DELETE FROM erp_sync_runs WHERE workbook_name = $1", [FILE]);
-    await pool.query("DELETE FROM erp_sync_requests WHERE requested_by = $1", [admin.id]);
+    await pool.query("DELETE FROM erp_sync_requests WHERE requested_by = $1 OR finished_at IS NULL", [admin.id]);
   }
 });

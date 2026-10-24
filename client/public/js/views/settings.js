@@ -13,6 +13,7 @@ import { renderDeliveryArrivalSection } from "./deliveryArrivalAdmin.js";
 import { openInfoPopup, formatAmd, escapeHtml, compressImage, activateDialog, attachSwipeToDismiss, formatPhoneDisplay, normalizePhone, downloadFromUrl, formatDateTime } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
+import { statusBarTapAvailable, getStatusBarTapPref, setStatusBarTapPref } from "../statusBarTap.js";
 import { checkForUpdateManually } from "../updateBanner.js";
 import { APP_VERSION } from "../version.js";
 import { refreshProductCatalog } from "../productCatalog.js";
@@ -246,6 +247,8 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
         ${settingsToggleRow({ icon: ICON.language, label: t("language"), value: getLang() === "hy" ? t("armenian") : t("english"), id: "toggle-language", checked: getLang() === "hy", color: "blue" })}
         ${settingsToggleRow({ icon: ICON.bolt, label: t("efficiency_mode"), value: getPerfMode() === "efficiency" ? t("toggle_on") : t("toggle_off"), id: "toggle-perf-mode", checked: getPerfMode() === "efficiency", color: "orange", hintBtnId: "efficiency-mode-hint-btn", hintTextId: "efficiency-mode-hint-text" })}
         <p class="muted settings-hint-text" id="efficiency-mode-hint-text" hidden>${t("efficiency_mode_hint")}</p>
+        ${statusBarTapAvailable() ? `${settingsToggleRow({ icon: ICON.bolt, label: t("statusbar_tap"), value: getStatusBarTapPref() ? t("toggle_on") : t("toggle_off"), id: "toggle-statusbar-tap", checked: getStatusBarTapPref(), color: "blue", hintBtnId: "statusbar-tap-hint-btn", hintTextId: "statusbar-tap-hint-text" })}
+        <p class="muted settings-hint-text" id="statusbar-tap-hint-text" hidden>${t("statusbar_tap_hint")}</p>` : ""}
       </div>
       <div class="card settings-list">
         <div class="settings-list-row"><span class="settings-row-label">${t("text_size")}</span></div>
@@ -897,6 +900,10 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
       });
     })
   );
+  root.querySelector("#toggle-statusbar-tap")?.addEventListener("click", () => {
+    setStatusBarTapPref(!getStatusBarTapPref());
+    renderSettings(root, onLogout, onLanguageChange, currentPageId(), navigateFn);
+  });
   root.querySelector("#toggle-perf-mode").addEventListener("click", () => {
     setPerfMode(getPerfMode() === "efficiency" ? "performance" : "efficiency");
     window.dispatchEvent(new Event("app-preferences-changed"));

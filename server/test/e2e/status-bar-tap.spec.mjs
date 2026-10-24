@@ -54,3 +54,33 @@ test("a document scroll to 0 scrolls the page to its top and the document return
   await page.evaluate(() => window.scrollTo(0, 0));
   await expect.poll(() => page.evaluate(() => document.getElementById("app").scrollTop)).toBe(0);
 });
+
+// Owner, 2026-10-24: "the app scrolls up by itself on all pages". The trick is OFF unless the person turns it on in Settings, and turning it off again
+// gives the document back (no 1 px of scroll room).
+test("the status-bar trick is off by default and Settings can switch it on and off", async ({ page, fixtures }) => {
+  const admin = await fixtures.createUser("admin");
+  await page.setViewportSize({ width: 390, height: 700 });
+  await loginViaUi(page, admin.email);
+  await page.goto("/#/settings");
+  await expect(page.locator("#app")).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => document.documentElement.classList.contains("ios-statusbar-scroll"))).toBe(false);
+  expect(await page.evaluate(() => document.documentElement.scrollHeight - document.documentElement.clientHeight)).toBe(0);
+  // a desktop browser is not an installed iPhone: the Settings row is not offered
+  await expect(page.locator("#toggle-statusbar-tap")).toHaveCount(0);
+
+  const result = await page.evaluate(async () => {
+    const m = await import("/js/statusBarTap.js");
+    const out = { before: m.getStatusBarTapPref() };
+    m.setStatusBarTapPref(true);
+    out.on = [m.getStatusBarTapPref(), document.documentElement.classList.contains("ios-statusbar-scroll")];
+    m.setStatusBarTapPref(false);
+    out.off = [m.getStatusBarTapPref(), document.documentElement.classList.contains("ios-statusbar-scroll")];
+    return out;
+  });
+  expect(result).toEqual({ before: false, on: [true, true], off: [false, false] });
+  // switched off: a scroll of the document to 0 no longer touches the page
+  await page.evaluate(() => { document.getElementById("app").scrollTop = 300; window.scrollTo(0, 0); });
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => document.getElementById("app").scrollTop)).toBeGreaterThan(100);
+});

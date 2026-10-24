@@ -6,6 +6,27 @@
 const isIPhone = () => /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const isInstalled = () => navigator.standalone === true || window.matchMedia?.("(display-mode: standalone)").matches;
 
+// OFF by default (owner, 2026-10-24, twice: "the app scrolls up by itself on all pages"): the 1 px trick makes the whole document scrollable, and iOS
+// moves it for reasons we cannot see from here (toolbars, rubber-band, layout changes). A person who wants the status-bar tap turns it on in Settings.
+const PREF_KEY = "fieldvisits_statusbar_tap";
+export function statusBarTapAvailable() {
+  return isIPhone() && isInstalled();
+}
+export function getStatusBarTapPref() {
+  try {
+    return localStorage.getItem(PREF_KEY) === "on";
+  } catch {
+    return false;
+  }
+}
+export function setStatusBarTapPref(on) {
+  try {
+    localStorage.setItem(PREF_KEY, on ? "on" : "off");
+  } catch {}
+  if (on) installStatusBarTap({ force: true });
+  else uninstallStatusBarTap();
+}
+
 const scrollableIn = (root) =>
   [root, ...root.querySelectorAll("*")].find((el) => {
     const o = getComputedStyle(el).overflowY;
@@ -23,10 +44,24 @@ export function scrollTargetForStatusTap() {
 }
 
 // `force` is for tests (a desktop browser is not an installed iPhone app).
+let active = false;
+let installed = false;
+export function uninstallStatusBarTap() {
+  active = false;
+  document.documentElement.classList.remove("ios-statusbar-scroll");
+  window.scrollTo(0, 0);
+}
+
 export function installStatusBarTap({ force = false } = {}) {
-  if (!force && !(isIPhone() && isInstalled())) return false;
+  if (!force && !(statusBarTapAvailable() && getStatusBarTapPref())) return false;
   const html = document.documentElement;
   html.classList.add("ios-statusbar-scroll");
+  active = true;
+  if (installed) {
+    window.scrollTo(0, 1);
+    return true;
+  }
+  installed = true;
   let quietUntil = Date.now() + 800; // the first moments, a keyboard closing, the app coming back: iOS may reset the scroll by itself
   const quiet = (ms = 800) => (quietUntil = Date.now() + ms);
   const rest = () => window.scrollTo(0, 1);
@@ -47,7 +82,7 @@ export function installStatusBarTap({ force = false } = {}) {
   window.addEventListener(
     "scroll",
     () => {
-      if (busy || window.scrollY >= 1) return;
+      if (!active || busy || window.scrollY >= 1) return;
       const typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
       if (typing || Date.now() < quietUntil || touching > 0 || Date.now() - lastTouchAt < TOUCH_GRACE_MS) {
         rest();
