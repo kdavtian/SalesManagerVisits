@@ -2,6 +2,7 @@
 // Management (admin, CEO, operations/sales director, accountant): Team pulse, the questions-and-answers log, the full
 // feed (including what he WOULD say in shadow mode). Settings and addressing: admin / CEO / operations director.
 import { Router } from "express";
+import { autoTaskDiagnostics } from "../debtCollectionTasks.js";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { MANAGEMENT_ROLES, tick, wrapUp, teamPulse } from "../vaghinak/engine.js";
@@ -89,6 +90,9 @@ vaghinakRouter.post("/messages/:id/answer", async (req, res) => {
 });
 
 // ---- management ----
+
+// Why the automatic debt / reorder tasks were or were not created (they run after every Excel sync, not on a timer).
+vaghinakRouter.get("/auto-tasks", requireManagement, async (_req, res) => res.json(await autoTaskDiagnostics()));
 
 vaghinakRouter.get("/pulse", requireManagement, async (_req, res) => res.json(await teamPulse()));
 

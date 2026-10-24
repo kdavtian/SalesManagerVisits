@@ -368,6 +368,10 @@
   .desk-sort-on {
     color: var(--accent);
   }
+  /* a right-aligned heading ends exactly where its numbers end: the (empty) sort arrow goes to the left of the label */
+  .desk-th-end .desk-sort {
+    flex-direction: row-reverse;
+  }
   .desk-sort-arrow {
     min-width: 0.8em;
     font-size: 0.7rem;
@@ -436,4 +440,184 @@
     background: var(--accent-soft, rgba(10, 132, 255, 0.1));
     box-shadow: inset 0 0 0 1.5px var(--accent);
   }
+}
+
+/* ---------- 7. Debt balances as a table (owner, 2026-10-24) ---------- */
+@media (min-width: 1024px) {
+  :root {
+    --desk-cols-debt: 8px minmax(170px, 2.2fr) 118px 126px 112px 108px 108px 84px 142px 12px;
+  }
+  .debt-desk-analysis {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+    margin: 4px 0 12px;
+  }
+  .debt-desk-buckets {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .debt-desk-bucket {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    padding: 10px 12px;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+  }
+  .debt-desk-bucket:hover { background: var(--bg-card-pressed); }
+  .debt-desk-bucket strong { font-size: 1.02rem; }
+  .debt-desk-bucket .muted { font-size: 0.78rem; }
+  .debt-desk-bucket-on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft, rgba(10, 132, 255, 0.18)); }
+  .debt-desk-facts {
+    flex: 0 0 280px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+  }
+  .debt-desk-facts > div { display: flex; align-items: baseline; gap: 10px; }
+  .debt-desk-facts strong { min-width: 3.2ch; text-align: right; font-size: 1.05rem; }
+  .debt-desk-facts .muted { font-size: 0.8rem; line-height: 1.25; }
+
+  #debt-list.debt-desk-list {
+    display: block;
+    padding: 0;
+    margin: 0 0 24px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+  .debt-desk-list > .desk-thead {
+    grid-template-columns: var(--desk-cols-debt);
+    column-gap: 12px;
+    margin: 0;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+  }
+  .debt-desk-row {
+    display: grid;
+    grid-template-columns: var(--desk-cols-debt);
+    column-gap: 12px;
+    align-items: center;
+    width: 100%;
+    min-height: 58px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+  }
+  .debt-desk-row:last-child { border-bottom: 0; }
+  .debt-desk-row:hover { background: var(--bg-card-pressed); }
+  .debt-desk-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .debt-desk-row-overdue { box-shadow: inset 3px 0 0 var(--danger, #e33b43); }
+  .debt-desk-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .debt-desk-end { align-items: flex-end; text-align: right; }
+  .debt-desk-main { font-size: 0.9rem; overflow-wrap: anywhere; }
+  .debt-desk-sub { font-size: 0.76rem; overflow-wrap: anywhere; }
+  .debt-desk-name .debt-desk-main strong { font-weight: 600; }
+  .debt-desk-warn { color: var(--warning, #b7791f); }
+  .debt-desk-unrec { color: var(--warning, #b7791f); }
+  .debt-desk-group {
+    display: flex;
+    justify-content: space-between;
+    padding: 7px 16px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .debt-desk-list > .loading-state, .debt-desk-list > .empty-state { padding: 28px 16px; text-align: center; }
+  /* the phone's card-style total / filters stay, but the table needs the width: no 12px gap above it */
+  #debt-list.debt-desk-list { margin-top: 0 !important; }
+}
+
+/* ---------- 8. Map side list: compact rows (owner, 2026-10-24: "on map page the customers cards are too big") ---------- */
+@media (min-width: 1024px) {
+  .map-side-list {
+    width: 320px;
+  }
+  .map-side-list .card-list {
+    padding: 8px;
+    gap: 4px;
+  }
+  .map-side-list .customer-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 0;
+    padding: 6px 10px;
+    border-radius: 10px;
+    box-shadow: none;
+  }
+  .map-side-list .customer-card-main {
+    flex: 1;
+    min-width: 0;
+    gap: 0;
+  }
+  .map-side-list .customer-card-main > strong {
+    display: block;
+    font-size: 0.86rem;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .map-side-list .customer-card-main > .muted {
+    display: block;
+    font-size: 0.74rem;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .map-side-list .card-trailing {
+    flex: none;
+    gap: 4px;
+  }
+  .map-side-list .card-trailing .badge {
+    font-size: 0.66rem;
+    padding: 2px 7px;
+  }
+  .map-side-list .card-trailing .chevron {
+    display: none;
+  }
+  .map-side-list .product-match-row {
+    margin-top: 2px;
+  }
+}
+
+/* ---------- 9. Customers table: debt in a column of its own (owner, 2026-10-24: "arranged and aligned, especially when debt balances are shown") ---------- */
+@media (min-width: 1024px) {
+  .customers-with-debt { --desk-cols-customers-debt: 36px minmax(0, 1.5fr) minmax(0, 2fr) 150px 16px; }
+  .customers-with-debt .desk-thead-customers { grid-template-columns: var(--desk-cols-customers-debt); }
+  .customers-with-debt .desk-thead-customers .desk-th-debt { display: flex; }
+  .customers-with-debt #customer-list > .list-row { grid-template-columns: var(--desk-cols-customers-debt); }
+  .customers-with-debt #customer-list > .list-row > .chevron { grid-column: 5; }
+  /* the debt label inside the chips row is replaced by the column */
+  .customers-with-debt #customer-list .list-row-bottom .customer-card-debt { display: none; }
+  .customers-with-debt #customer-list .customer-desk-debt {
+    display: block;
+    grid-column: 4;
+    grid-row: 1 / span 2;
+    justify-self: end;
+    align-self: center;
+    font-size: 0.95rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-dim);
+  }
+  .customers-with-debt #customer-list .customer-desk-debt-owes { color: var(--danger, #b3261e); }
 }

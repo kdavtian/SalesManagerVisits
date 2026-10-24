@@ -120,6 +120,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
       ${deskHeadHtml("desk-thead-customers", [
         { items: [{ label: t("desk_col_customer"), key: "name" }, { label: t("desk_col_added"), key: "last_added" }] },
         { items: [{ label: t("desk_col_last_visit"), key: "last_visit" }] },
+        { align: "end", items: [{ label: t("debt_col_debt") }], extraClass: "desk-th-debt" },
       ])}
       <div id="customer-list" class="card-list"></div>
     </div>
@@ -200,6 +201,8 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
     showDebt = !showDebt;
     debtToggleBtn.classList.toggle("list-header-add-btn-active", showDebt);
     debtToggleBtn.setAttribute("aria-pressed", String(showDebt));
+    // on a desktop window the debt gets a column of its own (desktop.css), on a phone it stays in the card
+    listEl.parentElement.classList.toggle("customers-with-debt", showDebt);
     load();
   });
 
@@ -736,6 +739,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
           showDebt && c.debt_amd != null && Number(c.debt_amd) > 0
             ? `<span class="customer-card-debt">${t("outstanding_debt_label")}${labelColon()}${formatAmd(Number(c.debt_amd))}</span>`
             : "";
+        const debtDue = showDebt && c.debt_amd != null && Number(c.debt_amd) > 0;
         const reorderChip = reorderChipHtml(c);
         const potentialChip = c.customer_tier === "potential" ? potentialChipHtml(c.potential_level) : "";
         const counterfeitMark = c.counterfeit_flag ? `<span class="badge badge-danger" title="${escapeHtml(t("pl_counterfeit_resolve"))}">⚠️</span>` : "";
@@ -767,6 +771,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
             ${idAndType ? `<div class="muted list-row-meta">${idAndType}</div>` : ""}
             ${bottomRow}
             ${brandRow}
+            ${showDebt ? `<span class="customer-desk-debt ${debtDue ? "customer-desk-debt-owes" : ""}">${debtDue ? formatAmd(Number(c.debt_amd)) : ""}</span>` : ""}
           </div>
           <span class="chevron">&#8250;</span>
         </button>

@@ -20,7 +20,7 @@ const STATUS_META = {
   rejected: { key: "payment_status_rejected", cls: "badge-danger" },
 };
 
-const QUICK_FILTERS = ["", "pending", "approved", "rejected", "today", "this_month"];
+const QUICK_FILTERS = ["", "pending", "approved", "rejected", "today", "this_month", "excel_missing"];
 const QUICK_FILTER_KEY = {
   "": "all_statuses",
   pending: "filter_pending",
@@ -28,6 +28,7 @@ const QUICK_FILTER_KEY = {
   rejected: "filter_rejected",
   today: "filter_today",
   this_month: "filter_this_month",
+  excel_missing: "filter_excel_missing",
 };
 
 // A drill-down link from the Payments report (see reports.js's
@@ -54,6 +55,14 @@ function monthLabel(iso) {
 function formatDateInput(date) {
   const d = date instanceof Date ? date : new Date(date);
   return d.toISOString().slice(0, 10);
+}
+
+// Does the Excel show this payment? Only said when it is worth saying: matched (green), or still missing after the grace days (amber).
+function excelBadgeHtml(p) {
+  if (p.status === "rejected" || p.approved_from_erp || !p.erp_customer_id_snapshot) return "";
+  if (p.in_excel) return ` <span class="badge badge-success">${t("pay_in_excel")}</span>`;
+  if (p.days_old >= 3) return ` <span class="badge badge-warning">${t("pay_not_in_excel").replace("{n}", p.days_old)}</span>`;
+  return "";
 }
 
 function notifyPaymentsChanged() {
@@ -110,7 +119,8 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
     : ["pending", "approved", "rejected"].includes(initialQuery?.get("status"))
       ? initialQuery.get("status")
       : "pending";
-  filterRow.innerHTML = QUICK_FILTERS.map(
+  // "Not in Excel" is for people who see everybody's payments; a rep's own list has no use for it.
+  filterRow.innerHTML = QUICK_FILTERS.filter((f) => f !== "excel_missing" || canSeeAll).map(
     (f) => `<button class="map-filter-chip ${f === initialStatusFilter ? "chip-active" : ""}" data-filter="${f}" aria-pressed="${f === initialStatusFilter ? "true" : "false"}">${t(QUICK_FILTER_KEY[f])}</button>`
   ).join("");
 
@@ -170,6 +180,8 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
       params.to = formatDateInput(new Date());
     } else if (activeFilter === "this_month") {
       params.month = new Date().toISOString().slice(0, 7);
+    } else if (activeFilter === "excel_missing") {
+      params.excel = "missing";
     }
     // The quick-filter row above already covers "today"/"this month" as a
     // status-exclusive chip; a drilled-in periodFilter only ever combines
@@ -336,7 +348,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
         </button>
         <div class="payment-row-bottom-line">
           <span class="badge payment-status-badge ${meta.cls}">${t(meta.key)}</span>
-          ${p.approved_from_erp ? `<span class="badge badge-info">${t("from_erp")}</span>` : ""}
+          ${p.approved_from_erp ? `<span class="badge badge-info">${t("from_erp")}</span>` : ""}${excelBadgeHtml(p)}
           <span class="text-amount">${formatAmd(Number(p.amount_amd))}</span>
           ${
             p.status === "pending" && canReview
@@ -458,7 +470,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
       const meta = STATUS_META[p.status] ?? STATUS_META.pending;
       overlay.querySelector(".sheet").innerHTML = `
         <h2>${t("payment_detail_title")}</h2>
-        <p><span class="badge ${meta.cls}">${t(meta.key)}</span>${p.approved_from_erp ? ` <span class="badge badge-info">${t("from_erp")}</span>` : ""}</p>
+        <p><span class="badge ${meta.cls}">${t(meta.key)}</span>${p.approved_from_erp ? ` <span class="badge badge-info">${t("from_erp")}</span>` : ""}${excelBadgeHtml(p)}</p>
         <div class="card-list" style="margin:12px 0;">
           <div class="order-line-row">
             <div class="order-line-top">${customerNameLinkHtml(p.customer_name_snapshot, p.customer_id, "span", "order-line-name")}<strong class="text-amount">${formatAmd(Number(p.amount_amd))}</strong></div>
@@ -504,6 +516,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
       } else if (p.status !== "pending" && canReview) {
         buttons.push({ label: t("return_to_pending"), action: "return", cls: "btn" });
       }
+      if (state.user.role === "admin") buttons.push({ label: t("delete_payment"), action: "delete", cls: "btn btn-danger" });
       buttons.push({ label: t("done"), action: "close", cls: "btn" });
 
       actionsEl.innerHTML = buttons
@@ -515,6 +528,30 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
           const action = btn.dataset.action;
           if (action === "close") {
             overlay.remove();
+            return;
+          }
+          if (action === "delete") {
+            // Two steps, no browser dialog: the button turns into a reason field + "Delete for good" (the payment is archived, not lost).
+            actionsEl.innerHTML = `<div class="payment-delete-box" style="width:100%;">
+                <p class="muted">${t("delete_payment_hint")}</p>
+                <input type="text" id="payment-delete-reason" maxlength="300" placeholder="${t("delete_payment_reason")}" aria-label="${t("delete_payment_reason")}" />
+                <div class="sheet-actions" style="margin-top:8px;"><button type="button" class="btn" id="payment-delete-cancel">${t("cancel")}</button><button type="button" class="btn btn-danger" id="payment-delete-go">${t("delete_payment_confirm")}</button></div>
+              </div>`;
+            actionsEl.querySelector("#payment-delete-cancel").addEventListener("click", () => renderDetail(p));
+            actionsEl.querySelector("#payment-delete-go").addEventListener("click", async (ev) => {
+              ev.currentTarget.disabled = true;
+              try {
+                await api.deletePayment(p.id, actionsEl.querySelector("#payment-delete-reason").value.trim());
+                notifyPaymentsChanged();
+                refreshPendingSummary();
+                overlay.remove();
+                load();
+              } catch (err) {
+                errorEl.textContent = err.message;
+                errorEl.hidden = false;
+                ev.currentTarget.disabled = false;
+              }
+            });
             return;
           }
           if (action === "approve") {

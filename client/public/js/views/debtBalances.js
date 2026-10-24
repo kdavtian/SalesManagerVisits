@@ -10,6 +10,7 @@ import { buildDirectionManagerTree, openTriStateTreeSheet, NO_GROUP_KEY } from "
 import { state } from "../state.js";
 import { t, getLang } from "../i18n.js";
 import { loadWithCache } from "../listCache.js";
+import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
 import { icons } from "../icons.js";
 
 // For last_visit_at, a real timestamp (checkins.timestamp) -- correctly
@@ -65,6 +66,11 @@ export function renderDebtBalances(root, navigate) {
   // "" = all, "overdue" = the oldest unpaid invoice is past its due date, "not_due" = unpaid but within the term.
   let dueFilter = "";
   let searchQuery = "";
+  // Desktop only (owner, 2026-10-24): a sortable table with the money facts side by side, and the aging categories as filters.
+  const deskQuery = window.matchMedia("(min-width: 1024px)");
+  let deskSort = "debt";
+  let deskReversed = false;
+  let bucketFilter = "";
   // Empty string = live erp_customer_data.debt_amd snapshot (the default,
   // and the only mode before this feature). A chosen date instead computes
   // a running balance from full order/cashflow history as of that date
@@ -118,6 +124,7 @@ export function renderDebtBalances(root, navigate) {
       <div class="activity-search-combined debt-search" id="debt-search-wrap">
         <input type="search" id="debt-search" placeholder="${t("debt_search_placeholder")}" aria-label="${t("debt_search_placeholder")}" autocomplete="off" />
       </div>
+      <div class="debt-desk-analysis" id="debt-desk-analysis" hidden></div>
       <div class="debt-filter-row" id="debt-due-tabs">
         ${[["", "debt_filter_all"], ["overdue", "debt_filter_overdue"], ["not_due", "debt_filter_not_due"]].map(([v, k]) => `<button type="button" class="chip ${v === "" ? "chip-active" : ""}" data-due="${v}">${t(k)}</button>`).join("")}
       </div>
@@ -262,6 +269,103 @@ export function renderDebtBalances(root, navigate) {
       </button>`;
   }
 
+
+  // ---- desktop table ----
+  const BUCKETS = [["current", "debt_bucket_not_due"], ["d1_30", "debt_bucket_d1_30"], ["d31_60", "debt_bucket_d31_60"], ["d61_90", "debt_bucket_d61_90"], ["d90p", "debt_bucket_d90_plus"]];
+  const BUCKET_CLASS = { current: "due-chip-ok", d1_30: "due-chip-soon", d31_60: "due-chip-overdue", d61_90: "due-chip-overdue", d90p: "due-chip-overdue" };
+  const dateKey = (v) => (v ? String(v).slice(0, 10) : "");
+  const deskCells = [
+    { items: [{ label: t("debt_col_customer"), key: "name" }] },
+    { align: "end", items: [{ label: t("debt_col_debt"), key: "debt" }] },
+    { align: "end", items: [{ label: t("debt_col_overdue"), key: "overdue" }] },
+    { align: "end", items: [{ label: t("debt_col_share"), key: "share" }] },
+    { items: [{ label: t("debt_col_last_payment"), key: "payment" }] },
+    { items: [{ label: t("debt_col_last_order"), key: "order" }] },
+    { items: [{ label: t("debt_col_last_visit"), key: "visit" }] },
+    { items: [{ label: t("debt_col_category"), key: "bucket" }] },
+  ];
+  const sortValue = {
+    name: (r) => nameWithoutId(r.customer_name, r.customer_id).toLowerCase(),
+    debt: (r) => Number(r.remaining_balance) || 0,
+    overdue: (r) => Number(r.overdue_amd) || 0,
+    share: (r) => (r.debt_pct_of_orders == null ? -1 : r.debt_pct_of_orders),
+    payment: (r) => dateKey(r.last_payment_date),
+    order: (r) => dateKey(r.last_order_date),
+    visit: (r) => dateKey(r.last_visit_at),
+    bucket: (r) => (Number(r.remaining_balance) > 0 && r.oldest_due_days != null ? r.oldest_due_days : -9999),
+  };
+  const twoLine = (main, sub, cls = "") => `<div class="debt-desk-cell ${cls}"><span class="debt-desk-main">${main}</span>${sub ? `<span class="debt-desk-sub muted">${sub}</span>` : ""}</div>`;
+  function deskRowHtml(r) {
+    const owes = Number(r.remaining_balance) > 0;
+    const days = r.oldest_due_days;
+    const overdueAmount = Number(r.overdue_amd) || 0;
+    const owner = [mode === "flat" || !canGroup ? escapeHtml(r.assigned_manager_name || t("unassigned")) : "", r.sales_channel ? escapeHtml(channelDisplayLabel(r.sales_channel)) : ""].filter(Boolean).join(" · ");
+    const unrecorded = Number(r.unrecorded_amd) || 0;
+    const share = r.debt_pct_of_orders;
+    const bucket = owes ? r.bucket : "current";
+    const bucketLabel = t(BUCKETS.find(([k]) => k === bucket)?.[1] ?? "debt_bucket_not_due");
+    return `<div class="list-row debt-desk-row ${owes && days != null && days > 0 ? "debt-desk-row-overdue" : ""}" role="button" tabindex="0" data-customer-id="${r.internal_customer_id}">
+      <span></span>
+      ${twoLine(`<strong>${escapeHtml(nameWithoutId(r.customer_name, r.customer_id))}</strong>`, `ID ${escapeHtml(r.customer_id || "")}${owner ? ` · ${owner}` : ""}${unrecorded > 0 ? ` · <span class="debt-desk-unrec">${t("debt_balances_unrecorded_row")} ${formatAmd(unrecorded)}</span>` : ""}`, "debt-desk-name")}
+      ${twoLine(`<strong class="text-amount">${formatAmd(Number(r.remaining_balance))}</strong>`, "", "debt-desk-end")}
+      ${twoLine(overdueAmount > 0 ? `<strong class="debt-amount-overdue">${formatAmd(overdueAmount)}</strong>` : `<span class="muted">—</span>`, owes && days != null ? (days > 0 ? dayChip(days, "due-chip-overdue") : days === 0 ? dayChip(0, "due-chip-soon", t("debt_due_today")) : dayChip(-days, "due-chip-ok", `${t("debt_left_word")}${-days}${t("debt_days_short")}`)) : "", "debt-desk-end")}
+      ${twoLine(share == null ? `<span class="muted">—</span>` : `<strong class="${share >= 100 ? "debt-amount-overdue" : share >= 50 ? "debt-desk-warn" : ""}">${share}%</strong>`, r.orders_12m_amd > 0 ? `${t("debt_of_orders_12m")} ${formatAmd(Number(r.orders_12m_amd))}` : "", "debt-desk-end")}
+      ${twoLine(formatDateOnly(r.last_payment_date), r.last_payment_amount != null ? formatAmd(Number(r.last_payment_amount)) : "")}
+      ${twoLine(formatDateOnly(r.last_order_date), r.last_order_amount != null ? formatAmd(Number(r.last_order_amount)) : "")}
+      ${twoLine(formatDate(r.last_visit_at), "")}
+      ${twoLine(owes ? `<span class="due-chip ${BUCKET_CLASS[bucket]}">${bucketLabel}</span>` : "", "")}
+      <span class="chevron" aria-hidden="true">&#8250;</span>
+    </div>`;
+  }
+  // The few numbers that answer "where is the debt and how bad is it" -- each aging category is also a filter.
+  function paintAnalysis(rowsNow) {
+    const el = container.querySelector("#debt-desk-analysis");
+    if (!deskQuery.matches || !rowsNow.length) {
+      el.hidden = true;
+      return;
+    }
+    const owing = rowsNow.filter((r) => Number(r.remaining_balance) > 0);
+    const total = owing.reduce((n, r) => n + Number(r.remaining_balance), 0);
+    const per = new Map(BUCKETS.map(([k]) => [k, { amount: 0, count: 0 }]));
+    for (const r of owing) {
+      const b = per.get(r.bucket ?? "current");
+      b.amount += Number(r.remaining_balance);
+      b.count += 1;
+    }
+    const top10 = [...owing].sort((a, b) => Number(b.remaining_balance) - Number(a.remaining_balance)).slice(0, 10).reduce((n, r) => n + Number(r.remaining_balance), 0);
+    const overdue = owing.reduce((n, r) => n + Math.max(0, Number(r.overdue_amd || 0)), 0);
+    const heavy = owing.filter((r) => (r.debt_pct_of_orders ?? 0) >= 100).length;
+    const pct = (n) => (total > 0 ? Math.round((n / total) * 100) : 0);
+    el.hidden = false;
+    el.innerHTML = `<div class="debt-desk-buckets" role="group" aria-label="${t("debt_col_category")}">${BUCKETS.map(([k, label]) => {
+      const b = per.get(k);
+      return `<button type="button" class="debt-desk-bucket ${bucketFilter === k ? "debt-desk-bucket-on" : ""}" data-bucket="${k}" aria-pressed="${bucketFilter === k}"><span class="due-chip ${BUCKET_CLASS[k]}">${t(label)}</span><strong>${formatAmd(b.amount)}</strong><span class="muted">${b.count} · ${pct(b.amount)}%</span></button>`;
+    }).join("")}</div>
+    <div class="debt-desk-facts">
+      <div><strong>${pct(top10)}%</strong><span class="muted">${t("debt_fact_top10")}</span></div>
+      <div><strong>${pct(overdue)}%</strong><span class="muted">${t("debt_fact_overdue_share")}</span></div>
+      <div><strong class="${heavy ? "debt-amount-overdue" : ""}">${heavy}</strong><span class="muted">${t("debt_fact_heavy")}</span></div>
+    </div>`;
+    el.querySelectorAll("[data-bucket]").forEach((b) =>
+      b.addEventListener("click", () => {
+        bucketFilter = bucketFilter === b.dataset.bucket ? "" : b.dataset.bucket;
+        render();
+      })
+    );
+  }
+  function sortedForDesk(list) {
+    const get = sortValue[deskSort] ?? sortValue.debt;
+    const dir = deskReversed ? -1 : 1;
+    // the natural direction is high-to-low for numbers and dates, A-to-Z for names
+    const natural = deskSort === "name" ? 1 : -1;
+    return [...list].sort((a, b) => {
+      const x = get(a);
+      const y = get(b);
+      return x < y ? -natural * dir : x > y ? natural * dir : 0;
+    });
+  }
+  deskQuery.addEventListener("change", () => render());
+
   let rows = [];
 
   function render() {
@@ -279,6 +383,9 @@ export function renderDebtBalances(root, navigate) {
     if (canGroup && assignmentKeys.size) {
       visible = visible.filter((r) => assignmentKeys.has(`${r.sales_channel || NO_GROUP_KEY}::${r.assigned_manager_id ?? NO_GROUP_KEY}`));
     }
+    // The analysis counts what the other filters leave, then the category filter narrows the list itself.
+    paintAnalysis(visible);
+    if (deskQuery.matches && bucketFilter) visible = visible.filter((r) => Number(r.remaining_balance) > 0 && r.bucket === bucketFilter);
 
     // Sum of exactly the rows on screen -- the channel/rep filter narrows this the same way it narrows the list
     // below, so the headline total always matches what's actually visible.
@@ -297,6 +404,43 @@ export function renderDebtBalances(root, navigate) {
       listEl.innerHTML = `<p class="empty-state">${t("debt_balances_empty")}</p>`;
       return;
     }
+    if (deskQuery.matches) {
+      const sorted = sortedForDesk(visible);
+      const head = deskHeadHtml("desk-thead-debt", deskCells);
+      let body;
+      if (canGroup && mode === "by-manager") {
+        const groups = new Map();
+        for (const r of sorted) {
+          const key = r.assigned_manager_id || "unassigned";
+          if (!groups.has(key)) groups.set(key, { label: r.assigned_manager_name || t("unassigned"), rows: [] });
+          groups.get(key).rows.push(r);
+        }
+        body = [...groups.values()]
+          .map((g) => `<div class="debt-desk-group"><strong>${escapeHtml(g.label)}</strong><span class="muted">${g.rows.length} · ${formatAmd(g.rows.reduce((n, r) => n + Number(r.remaining_balance || 0), 0))}</span></div>${g.rows.map(deskRowHtml).join("")}`)
+          .join("");
+      } else {
+        body = sorted.map(deskRowHtml).join("");
+      }
+      listEl.classList.add("debt-desk-list");
+      listEl.innerHTML = `${head}<div class="debt-desk-body">${body}</div>`;
+      const headEl = listEl.querySelector(".desk-thead");
+      paintDeskHead(headEl, deskSort, deskReversed);
+      wireDeskHead(headEl, (key) => {
+        if (deskSort === key) deskReversed = !deskReversed;
+        else {
+          deskSort = key;
+          deskReversed = false;
+        }
+        render();
+      });
+      listEl.querySelectorAll(".debt-desk-row").forEach((row) => {
+        const open = () => navigate(`#/customers/${row.dataset.customerId}`);
+        row.addEventListener("click", open);
+        row.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), open()));
+      });
+      return;
+    }
+    listEl.classList.remove("debt-desk-list");
     if (canGroup && mode === "by-manager") {
       const groups = new Map();
       for (const r of visible) {
@@ -372,7 +516,7 @@ export function renderDebtBalances(root, navigate) {
   listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
   errorEl.hidden = true;
   load();
-  const cleanup = () => {};
+  const cleanup = () => deskQuery.removeEventListener("change", render);
   cleanup.onRestore = () => listEl.isConnected && load({ silent: true });
   return cleanup;
 }
