@@ -532,6 +532,12 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
     requestAnimationFrame(() => root.querySelector("#plan-approvals-slot")?.scrollIntoView({ block: "start" }));
   }
 
+  // The Home "Excel sync" line: #/settings?section=system-health opens Administration > System health.
+  if (section === "system-health" && hasAdminWorkspace) {
+    root.querySelector("#settings-admin-tab")?.click();
+    requestAnimationFrame(() => root.querySelector("#row-system-health")?.click());
+  }
+
   // --- Admin search: hide rows that don't match, and any group left empty ---
   const adminSearch = root.querySelector("#admin-search");
   if (adminSearch) {

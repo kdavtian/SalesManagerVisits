@@ -15427,3 +15427,12 @@ button.cf-row-edit { width: 100%; text-align: left; color: inherit; font: inheri
 .bk-extra { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .bk-extra label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--text-dim); }
 .count-badge-quiet { background: var(--text-dim); }
+
+/* Excel sync status (owner, 2026-10-24): one line on the admin Home, a card in System health */
+.es-home { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; margin: 0 0 10px; padding: 8px 12px; text-align: left; font-size: 0.85rem; }
+.es-home-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--success, #22a45d); }
+.es-home-bad .es-home-dot { background: var(--danger, #e33b43); }
+.es-home-bad { border-color: var(--danger, #e33b43); }
+.es-home-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.es-problem { margin: 6px 0; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--danger, #e33b43) 12%, transparent); font-size: 0.85rem; overflow-wrap: anywhere; }
+
