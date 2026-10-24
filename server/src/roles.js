@@ -460,3 +460,15 @@ export function canManagePotentialAll(role) {
 export function canResolveCounterfeit(role) {
   return canManagePotentialAll(role);
 }
+
+// Order returns and cancellations (owner, 2026-10-24): the rep asks, management / the accountant approves, the warehouse manager confirms the goods
+// are back, the accountant records it in Excel.
+export function canApproveReturns(role) {
+  return role === "admin" || role === "ceo" || role === "operations_director" || role === "sales_director" || role === "accountant";
+}
+export function canReceiveReturns(role) {
+  return role === "warehouse_manager" || role === "admin";
+}
+export function canRecordReturns(role) {
+  return role === "accountant" || role === "admin";
+}

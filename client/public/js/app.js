@@ -1159,6 +1159,8 @@ async function renderRoute() {
     currentCleanup = await (await import("./views/driverHome.js")).renderDriverHome(app, navigate);
   } else if (path === "#/cashflow") {
     (await import("./views/cashflow.js")).renderCashflow(app, navigate);
+  } else if (path === "#/returns") {
+    (await import("./views/returns.js")).renderReturns(app, navigate);
   } else if (path === "#/staff" || /^#\/staff\/\d+$/.test(path)) {
     (await import("./views/staff.js")).renderStaff(app, navigate, path.split("/")[2] ?? null, query);
   } else if (path === "#/wh-pack") {
@@ -1305,6 +1307,7 @@ const SIDEBAR_ITEM_ICON = {
   qa_warehouse: { icon: icons.box, colorClass: "quick-action-icon-warehouse" },
   qa_cashflow: { icon: icons.wallet, colorClass: "quick-action-icon-debt" },
   qa_staff: { icon: icons.person, colorClass: "quick-action-icon-team" },
+  qa_returns: { icon: icons.undo, colorClass: "quick-action-icon-debt" },
   qa_wh_home: { icon: icons.box, colorClass: "quick-action-icon-warehouse" },
   qa_driver_home: { icon: icons.truck, colorClass: "quick-action-icon-delivery" },
   qa_delivery: { icon: icons.truck, colorClass: "quick-action-icon-delivery" },

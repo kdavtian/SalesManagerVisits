@@ -45,7 +45,7 @@ warehouseRouter.get("/home", async (req, res) => {
   const pack = list.filter((w) => w.step === "pack");
   const deliver = list.filter((w) => w.step === "deliver");
   const today = yerevanToday();
-  const [{ rows: shortage }, { rows: [unrouted] }, { rows: [stops] }, { rows: [stale] }, { rows: [tasks] }] = await Promise.all([
+  const [{ rows: shortage }, { rows: [unrouted] }, { rows: [stops] }, { rows: [stale] }, { rows: [tasks] }, { rows: [returns] }] = await Promise.all([
     pool.query(
       `SELECT oi.product_name, oi.brand, SUM(oi.quantity)::int AS need, p.stock_qty AS have, COUNT(DISTINCT oi.order_id)::int AS orders
        FROM order_items oi JOIN orders o ON o.id = oi.order_id JOIN products p ON p.id = oi.product_id
@@ -65,6 +65,7 @@ warehouseRouter.get("/home", async (req, res) => {
       `SELECT COUNT(*)::int AS open, COUNT(*) FILTER (WHERE due_date < $2)::int AS overdue FROM tasks WHERE assignee_id = $1 AND status = 'open'`,
       [req.user.id, today]
     ),
+    pool.query(`SELECT COUNT(*)::int AS n FROM order_returns WHERE status = 'approved'`),
   ]);
   const hours = (rows) => (rows.length ? Math.max(...rows.map((w) => w.waiting_h)) : 0);
   res.json({
@@ -74,6 +75,7 @@ warehouseRouter.get("/home", async (req, res) => {
     today: { stops: stops.total, done: stops.done },
     stale_stops: stale.n,
     tasks: { open: tasks.open, overdue: tasks.overdue },
+    returns_to_receive: returns.n,
   });
 });
 
