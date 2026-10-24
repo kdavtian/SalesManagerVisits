@@ -15410,7 +15410,8 @@ button.cf-row-edit { width: 100%; text-align: left; color: inherit; font: inheri
 /* A required field the form refused to save without (ERP customer ID for Bronze / Silver / Gold) */
 .req-mark { color: var(--danger); }
 .field-invalid input { border-color: var(--danger); box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 25%, transparent); }
-.pin-never.pin-overdue-mark { background: var(--danger); color: #ffffff; width: 16px; padding: 0; right: -7px; }
+/* a never-visited pin shows "!!" instead of the overdue "!" badge (both would sit in the same corner) */
+#leaflet-map .pin.pin-is-never.pin-status-overdue::after { display: none; }
 
 /* Region filter sheet: "Group by" toggle on the heading's right; Customers list group headers (owner, 2026-10-24) */
 .tree-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

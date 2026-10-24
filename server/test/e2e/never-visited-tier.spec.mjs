@@ -24,10 +24,15 @@ test("map pin and plan list: '!' only on the never-visited customer; the tier co
     await loginViaUi(page, rep.email);
     await page.goto(`/#/map?customer=${fresh.id}`);
     await expect(page.locator("#leaflet-map .leaflet-marker-icon:not(.leaflet-cluster-icon)").first()).toBeVisible({ timeout: 20000 });
-    await expect(page.locator("#leaflet-map .pin-never:not(.pin-overdue-mark)")).toHaveCount(1);
-    await expect(page.locator("#leaflet-map .pin-never:not(.pin-overdue-mark)")).toHaveText("!!");
-    await expect(page.locator("#leaflet-map .leaflet-marker-icon", { has: page.locator(".pin-never:not(.pin-overdue-mark)") })).toHaveCount(1);
-    await expect(page.locator("#leaflet-map .pin-overdue-mark")).toHaveText("!");
+    await expect(page.locator("#leaflet-map .pin-never")).toHaveCount(1);
+    await expect(page.locator("#leaflet-map .pin-never")).toHaveText("!!");
+    await expect(page.locator("#leaflet-map .leaflet-marker-icon", { has: page.locator(".pin-never") })).toHaveCount(1);
+    // never visited shows "!!" INSTEAD of the overdue "!" badge; a customer visited long ago keeps the overdue "!" (one badge each, never two in one corner)
+    const after = (sel) => page.locator(sel).first().evaluate((el) => { const cs = getComputedStyle(el, "::after"); return { content: cs.content, display: cs.display }; });
+    expect((await after("#leaflet-map .pin.pin-is-never")).display).toBe("none");
+    const late = await after("#leaflet-map .pin.pin-status-overdue:not(.pin-is-never)");
+    expect(late.content).toBe('"!"');
+    expect(late.display).not.toBe("none");
 
     // the tier coin on the customer card
     await page.goto(`/#/customers/${fresh.id}`);
