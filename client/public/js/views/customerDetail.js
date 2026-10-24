@@ -9,7 +9,7 @@ import { icons } from "../icons.js";
 import { state, canSetCustomerPrices, canEditDirectly, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, isAdmin, seesFinancialExports, seesAllActivity } from "../state.js";
 import { openVisitDetailSheet, openPhotoLightbox } from "../visitDetail.js";
 import { visitStatusBadge } from "./customers.js";
-import { renderPotentialCard } from "../potential.js";
+import { renderPotentialCard, potentialBadgeHtml } from "../potential.js";
 import { openFileReadySheet } from "../fileReadySheet.js";
 import { openOrderMenu } from "../orderMenu.js";
 import { bindStepperButton } from "../stepper.js";
@@ -26,6 +26,9 @@ const EDIT_FIELDS = [
   { name: "legal_name", labelKey: "legal_name", type: "text" },
   { name: "legal_address", labelKey: "legal_address", type: "text" },
 ];
+
+// A potential customer shows how likely the sale is (Likely, Very likely, ...); every other tier shows its own name.
+const headerTierBadge = (c) => (c.customer_tier === "potential" && potentialBadgeHtml(c.potential_level)) || tierBadgeHtml(c.customer_tier);
 
 export async function renderCustomerDetail(root, navigate, customerId) {
   root.innerHTML = `<div class="detail-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
@@ -103,7 +106,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
                width. -->
           <div class="detail-header-status-row">
             ${idCategoryLine ? `<span class="muted detail-header-subtitle">${idCategoryLine}</span>` : ""}
-            ${tierBadgeHtml(customer.customer_tier)}
+            <span id="cd-tier-slot" class="cd-tier-slot">${headerTierBadge(customer)}</span>
             ${statusBadge ? `<span class="badge ${statusBadge.cls}">${t(statusBadge.labelKey)}</span>` : ""}
           </div>
         </div>
@@ -113,7 +116,6 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     <!-- Two wrapper columns: invisible on a phone (display: contents), side by side on a desktop window (desktop.css). -->
     <div class="cd-col cd-col-main">
     <div id="open-visit-slot"></div>
-    <div id="potential-slot"></div>
     <div class="card detail-facts-card">
       <!-- One toolbar row: social/contact links (Instagram/Facebook/email/
            website) on the left, Account settings + Edit on the right.
@@ -210,6 +212,9 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       }
     </div>
 
+    <!-- Potential: between "Products available" and the visits (owner, 2026-10-24). -->
+    <div id="potential-slot"></div>
+
     <h2 class="section-title" id="visit-history-anchor">${t("visit_history")}</h2>
     <div id="checkin-history" class="card-list"></div>
     </div>
@@ -230,6 +235,8 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   const reloadPotential = async () => {
     try {
       customer = await api.getCustomer(customerId);
+      const tierSlot = container.querySelector("#cd-tier-slot");
+      if (tierSlot) tierSlot.innerHTML = headerTierBadge(customer);
       renderPotentialCard(potentialSlot, customer, { reload: reloadPotential });
     } catch {
       /* the card keeps showing what it had */

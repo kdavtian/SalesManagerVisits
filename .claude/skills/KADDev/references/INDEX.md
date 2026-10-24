@@ -132,7 +132,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L96 Lessons added 2026-10-24 (the optimization round) - Tests that passed for months only because everything ran in one slow pass share global state; splitting CI exp
 - L103 Lessons added 2026-10-24 (features round) - Bot deploy is separate from the app deploy: cd /opt/castrol-ceo-bot && sudo -u castrolbot git pull origin main
 
-## optimization-ideas.md (6 KB, 39 lines)
+## optimization-ideas.md (6 KB, 40 lines)
 - L6 How an idea is written - N. <short name> - saves <minutes / taps / seconds / KB>; stays identical: <functionality, results, experience>
 - L12 Backlog (status: Suggested unless noted) - Owner answered "1, 2, 3, 4, 5, 6, 7, 8" on 2026-10-24 = all eight approved; built in the same round (Field Vis
 - L23 Ideas from the round that built these (Suggested) - [DONE 2026-10-24] Make the isolated bonus tests independent of the global switch - done without touching the t
@@ -146,7 +146,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L82 6. Proactive moves that always land well - After a numbered list, add "Suggestions" (numbered, with recommendation) only if you saw something real while
 - L90 7. Mistakes I made that cost them time (do not repeat) - Claiming sheets "load before showing" without reading them (Add payment and the customer pickers already paint
 
-## owner-preferences-and-history.md (47 KB, 231 lines)
+## owner-preferences-and-history.md (50 KB, 237 lines)
 - L3 How they work with you - Writes short, numbered, imperative requests (often with screenshots "image1/img2"), mixes English with Armenia
 - L11 Visual / UX preferences (apply by default) - Compact, iOS-native feel: bottom sheets, floating/fixed action bars (Cancel/Save on customer edit must be fixe
 - L24 Things that repeatedly bit us (check proactively) - Forgetting CACHEVERSION bump -> "no updates" on phones.
@@ -170,6 +170,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L215 Standing rule: optimization suggestions (owner, 2026-10-24) - "Always suggest me optimization variants, which can save time, fasten process, simplify process, while keeping
 - L219 Four of the suggested ideas built (owner said "implement ideas 1-4", 2026-10-24, - Back refreshes Activity, Debt balances and Tasks (they join Orders and Customers): each render function now re
 - L225 Excel sync status + "Sync now" (owner picked two of the suggested ideas, 2026-10 - Why: the Excel feed looked fine ("sync ran") while the Excel file behind it was 4 days old, because the owner
+- L231 Potential ("Հեռանկար") editor tidy-up, customer card order, iPhone status-bar ta - Owner's points: (1) fix the editor UI (the "Next contact" date field ran past the sheet's right edge on iPhone
 
 ## strategy-roadmap.md (6 KB, 31 lines)
 - L5 Target (owner, 2026-10-12): 10 % of the market = ~1 million liters a year - Owner's working assumption: the Armenian market is ~10M L a year, so 10 % = 1M L.

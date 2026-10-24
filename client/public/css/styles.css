@@ -15318,18 +15318,32 @@ button.cf-row-edit { width: 100%; text-align: left; color: inherit; font: inheri
 .pl-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
 .pl-section-title { font-size: 0.82rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
 .pl-levels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-.pl-level-chip { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 46px; padding: 6px 4px; min-width: 0; text-align: center; font: inherit; font-size: 0.92rem; font-weight: 600; color: var(--text); background: var(--bg-card); border: 1px solid var(--border); border-radius: 999px; }
+.pl-level-chip { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 46px; padding: 6px 4px; min-width: 0; text-align: center; font: inherit; font-size: 0.92rem; font-weight: 400; color: var(--text); background: var(--bg-card); border: 1px solid var(--border); border-radius: 999px; }
 .pl-level-chip .pl-dot { flex: none; }
 .pl-level-chip.pl-1 .pl-dot { background: var(--pl-1); } .pl-level-chip.pl-2 .pl-dot { background: var(--pl-2); } .pl-level-chip.pl-3 .pl-dot { background: var(--pl-3); } .pl-level-chip.pl-4 .pl-dot { background: var(--pl-4); }
-.pl-level-active { font-weight: 800; border-width: 2px; padding: 5px 3px; }
+.pl-level-active { font-weight: 400; }
 .pl-level-chip span { white-space: nowrap; }
 .pl-level-chip .pl-dot { width: 8px; height: 8px; }
 @media (max-width: 400px) { .pl-level-chip { font-size: 0.84rem; gap: 4px; } .tier-selector .tier-btn { padding: 6px 1px; } .tier-selector .tier-btn .tier-label { font-size: 0.58rem; } }
 .pl-level-active.pl-1 { border-color: var(--pl-1); background: color-mix(in srgb, var(--pl-1) 12%, var(--bg-card)); } .pl-level-active.pl-2 { border-color: var(--pl-2); background: color-mix(in srgb, var(--pl-2) 12%, var(--bg-card)); } .pl-level-active.pl-3 { border-color: var(--pl-3); background: color-mix(in srgb, var(--pl-3) 12%, var(--bg-card)); } .pl-level-active.pl-4 { border-color: var(--pl-4); background: color-mix(in srgb, var(--pl-4) 12%, var(--bg-card)); }
 .pl-reasons { display: flex; flex-wrap: wrap; gap: 6px; }
 .pl-reason-chip { min-height: 40px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font: inherit; font-size: 0.88rem; text-align: left; }
-.pl-reason-on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg-card)); font-weight: 700; }
+.pl-reason-on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg-card)); font-weight: 400; }
 .pl-reason-more { border-style: dashed; color: var(--text-dim); }
+/* The reason list of the potential form: one line per reason, a check box on the left, thin dividers, same outline as the other fields. */
+.pl-reasons-list { display: flex; flex-direction: column; flex-wrap: nowrap; gap: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); overflow: hidden; }
+.pl-reasons-list .pl-reason-chip { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 7px 12px; border: 0; border-top: 1px solid var(--border); border-radius: 0; background: transparent; font-size: 0.92rem; font-weight: 400; line-height: 1.25; text-align: left; }
+.pl-reasons-list .pl-reason-chip:first-child { border-top: 0; }
+.pl-reasons-list .pl-reason-on { background: color-mix(in srgb, var(--accent) 8%, var(--bg-card)); }
+.pl-reason-box { flex: none; width: 20px; height: 20px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-card); display: grid; place-items: center; color: #fff; font-size: 13px; line-height: 1; }
+.pl-reason-on .pl-reason-box { background: var(--accent); border-color: var(--accent); }
+.pl-reason-on .pl-reason-box::after { content: "\2713"; }
+.pl-reason-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.pl-reasons-list .pl-reason-more { border-style: solid; color: var(--text-dim); }
+.pl-reason-chev { flex: none; width: 8px; height: 8px; margin-right: 6px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); }
+/* iOS gives a date field an intrinsic width that pushed it past the sheet's edge */
+.pl-sheet input, .pl-sheet .pl-more label { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+.pl-sheet input[type="date"] { -webkit-appearance: none; appearance: none; display: block; }
 .pl-more { margin: 4px 0 12px; }
 .pl-more summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--text-dim); font-size: 0.9rem; }
 .pl-hist { padding: 8px 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
@@ -15435,4 +15449,16 @@ button.cf-row-edit { width: 100%; text-align: left; color: inherit; font: inheri
 .es-home-bad { border-color: var(--danger, #e33b43); }
 .es-home-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .es-problem { margin: 6px 0; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--danger, #e33b43) 12%, transparent); font-size: 0.85rem; overflow-wrap: anywhere; }
+
+/* Customer card header: how likely a potential customer is to buy (owner, 2026-10-24) */
+.pl-badge.pl-1 { background: color-mix(in srgb, var(--pl-1) 16%, var(--bg-card)); color: var(--pl-1); }
+.pl-badge.pl-2 { background: color-mix(in srgb, var(--pl-2) 16%, var(--bg-card)); color: var(--pl-2); }
+.pl-badge.pl-3 { background: color-mix(in srgb, var(--pl-3) 16%, var(--bg-card)); color: var(--pl-3); }
+.pl-badge.pl-4 { background: color-mix(in srgb, var(--pl-4) 16%, var(--bg-card)); color: var(--pl-4); }
+.cd-tier-slot { display: contents; }
+
+/* iPhone (installed app): 1 px of scroll room for the document, so the system's "tap the status bar to scroll to top" has something to scroll
+   (statusBarTap.js turns it into a scroll of the real list). html's overflow moves to the viewport; the pseudo-element is the 1 px. */
+html.ios-statusbar-scroll { overflow-y: auto; }
+html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 

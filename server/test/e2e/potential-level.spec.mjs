@@ -22,6 +22,14 @@ test("rep sets the level and reasons in a few taps; counterfeit raises the warni
   await page.locator('#pl-form button[type="submit"]').click();
   await expect(page.locator(".pl-card .pl-chip")).toContainText("High potential", { timeout: 10000 });
   await expect(page.locator(".pl-card")).toContainText("Active interest");
+  // the header badge says how likely the sale is (instead of the plain tier name), and the Potential section sits between Products available and the visits
+  await expect(page.locator(".detail-header-status-row .pl-badge")).toHaveText("Very likely");
+  const order = await page.evaluate(() => {
+    const y = (sel) => document.querySelector(sel)?.getBoundingClientRect().top ?? -1;
+    return [y("#product-chips-card"), y("#potential-slot .pl-card"), y("#visit-history-anchor")];
+  });
+  expect(order[0]).toBeLessThan(order[1]);
+  expect(order[1]).toBeLessThan(order[2]);
 
   // nothing chosen -> a clear message, nothing saved
   await page.locator("[data-pl-edit]").click();

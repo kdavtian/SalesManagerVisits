@@ -78,6 +78,7 @@ import { startDriverArrival, stopDriverArrival } from "./driverArrival.js";
 import { opsShellFor, shellAllows } from "./opsShell.js";
 import { escapeHtml, takeParkedSheet, pruneParkedSheet, installPhoneMask } from "./util.js";
 import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds } from "./quickActions.js";
+import { installStatusBarTap } from "./statusBarTap.js";
 import { startErrorMonitoring } from "./errorMonitoring.js";
 import { installTouchPrefetch } from "./prefetch.js";
 
@@ -109,6 +110,7 @@ const baseBodyClassName = document.body.className;
 // top padding (the safe-area strip next to the camera / Dynamic Island) is
 // part of this element, so a tap there counts too whenever iOS delivers it
 // to the page.
+installStatusBarTap();
 topBar.addEventListener("click", (e) => {
   if (e.target.closest("button, a")) return;
   app.scrollTo({ top: 0, behavior: "instant" });
