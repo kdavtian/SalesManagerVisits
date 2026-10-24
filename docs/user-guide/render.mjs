@@ -10,7 +10,7 @@ const outDir = path.join(here, "../../client/public/docs");
 const exe = process.env.CHROMIUM_PATH ?? "/opt/pw-browsers/chromium";
 
 const browser = await chromium.launch({ executablePath: exe, args: ["--no-sandbox"] });
-for (const lang of ["hy", "en"]) {
+for (const lang of (process.env.GUIDE_LANGS ?? "hy,en").split(",")) {
   const page = await browser.newPage();
   await page.goto("file://" + path.join(build, `guide-${lang}.html`));
   await page.evaluate(() => document.fonts.ready);

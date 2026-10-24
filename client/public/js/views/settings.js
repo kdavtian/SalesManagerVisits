@@ -50,7 +50,7 @@ const ICON = {
 // significant enough that the screenshots/steps in the guide would mislead a
 // rep -- a new nav pattern, a changed order-creation flow, moved buttons,
 // etc. A copy-fix or color tweak doesn't need a re-export.
-const GUIDE_VERSION = "1.251.0";
+const GUIDE_VERSION = "1.408.0";
 
 // The small "!" that reveals an explanation: data-hint is the id of the hidden paragraph it toggles. A <span
 // role="button"> rather than a <button>, since it often sits inside a row that is a button itself.

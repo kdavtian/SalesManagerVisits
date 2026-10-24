@@ -344,7 +344,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
                 <span class="toggle-thumb"></span>
               </button>
             </div>
-            <div class="map-legend-pref-row">
+            <div class="map-legend-pref-row map-legend-pref-stack">
               <span>${t("map_color_by")}</span>
               <div class="segmented map-color-by" role="group" aria-label="${t("map_color_by")}">
                 <button type="button" class="chip ${getColorBy(state.user?.id) === "tier" ? "chip-active" : ""}" data-color-by="tier" aria-pressed="${getColorBy(state.user?.id) === "tier"}">${t("map_color_tier")}</button>

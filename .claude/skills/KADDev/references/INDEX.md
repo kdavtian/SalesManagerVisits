@@ -132,7 +132,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L96 Lessons added 2026-10-24 (the optimization round) - Tests that passed for months only because everything ran in one slow pass share global state; splitting CI exp
 - L103 Lessons added 2026-10-24 (features round) - Bot deploy is separate from the app deploy: cd /opt/castrol-ceo-bot && sudo -u castrolbot git pull origin main
 
-## optimization-ideas.md (8 KB, 49 lines)
+## optimization-ideas.md (8 KB, 53 lines)
 - L6 How an idea is written - N. <short name> - saves <minutes / taps / seconds / KB>; stays identical: <functionality, results, experience>
 - L12 Backlog (status: Suggested unless noted) - Owner answered "1, 2, 3, 4, 5, 6, 7, 8" on 2026-10-24 = all eight approved; built in the same round (Field Vis
 - L23 Ideas from the round that built these (Suggested) - [DONE 2026-10-24] Make the isolated bonus tests independent of the global switch - done without touching the t
@@ -146,7 +146,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L82 6. Proactive moves that always land well - After a numbered list, add "Suggestions" (numbered, with recommendation) only if you saw something real while
 - L90 7. Mistakes I made that cost them time (do not repeat) - Claiming sheets "load before showing" without reading them (Add payment and the customer pickers already paint
 
-## owner-preferences-and-history.md (58 KB, 267 lines)
+## owner-preferences-and-history.md (60 KB, 276 lines)
 - L3 How they work with you - Writes short, numbered, imperative requests (often with screenshots "image1/img2"), mixes English with Armenia
 - L11 Visual / UX preferences (apply by default) - Compact, iOS-native feel: bottom sheets, floating/fixed action bars (Cancel/Save on customer edit must be fixe
 - L24 Things that repeatedly bit us (check proactively) - Forgetting CACHEVERSION bump -> "no updates" on phones.
@@ -175,6 +175,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L243 Settings + Administration redesign (owner, 2026-10-24, 1.405.0) - Owner: "rearrange settings and admin part from 0, hyper convenient and logical, Apple iOS and macOS styles and
 - L251 Six small ideas implemented (owner: "Implement ideas", 2026-10-24, 1.406.0) - (1) Counts on the Administration list: GET /api/settings/admin-counts (server/src/adminCounts.js, role-aware)
 - L259 "App scrolls up constantly", channel -> rep, map key as a bottom sheet, colour-b - Scrolling to top constantly: cause = the iPhone status-bar trick of 1.403.0 (statusBarTap.js): the document re
+- L268 Owner's answers of 2026-10-24 (round 2) -> 1.408.0 - Share route on a phone: keep the share sheet.
 
 ## strategy-roadmap.md (6 KB, 31 lines)
 - L5 Target (owner, 2026-10-12): 10 % of the market = ~1 million liters a year - Owner's working assumption: the Armenian market is ~10M L a year, so 10 % = 1M L.
