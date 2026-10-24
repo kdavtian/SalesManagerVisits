@@ -96,6 +96,7 @@ export async function renderDashboardOverview(root, navigate) {
         ).join("")}
       </div>
       <div id="company-dashboard-sales"><p class="loading-state" role="status">${t("loading")}</p></div>
+      <div id="company-dashboard-prospects"></div>
       <div id="company-dashboard-rest"><p class="loading-state" role="status">${t("loading")}</p></div>
     </div>
   `;
@@ -105,6 +106,30 @@ export async function renderDashboardOverview(root, navigate) {
   const salesEl = container.querySelector("#company-dashboard-sales");
   const restEl = container.querySelector("#company-dashboard-rest");
   const periodTabs = container.querySelectorAll(".company-dashboard-period-tabs .activity-tab");
+
+  // Prospects by Potential Level (owner, 2026-10-24): how many potential customers sit in each category; a tap opens that list.
+  const prospectsEl = container.querySelector("#company-dashboard-prospects");
+  api
+    .getPotentialSummary()
+    .then((s) => {
+      if (!s.total) return;
+      const rows = [5, 4, 3, 2, 1, 0]
+        .map((l) => `<button type="button" class="pd-row" data-potential="${l}"><span class="pl-chip pl-${l}"><i class="pl-dot"></i>${escapeHtml(t(`pl_level_${l}`))}</span><strong>${s.levels[l]}</strong></button>`)
+        .join("");
+      const extra = [
+        s.counterfeit ? `<button type="button" class="pd-row" data-potential="counterfeit"><span>⚠️ ${escapeHtml(t("pd_counterfeit"))}</span><strong>${s.counterfeit}</strong></button>` : "",
+        s.followup_due ? `<button type="button" class="pd-row" data-potential="due"><span>${escapeHtml(t("pd_followup_due"))}</span><strong>${s.followup_due}</strong></button>` : "",
+      ].join("");
+      const managers = (s.by_manager ?? [])
+        .map((m) => `<div class="pd-manager"><span>${escapeHtml(m.name ?? "—")}</span><span class="pd-manager-levels">${[5, 4, 3, 2, 1, 0].filter((l) => m.levels[l]).map((l) => `<span class="pl-chip pl-${l}"><i class="pl-dot"></i>${m.levels[l]}</span>`).join("")}</span></div>`)
+        .join("");
+      prospectsEl.innerHTML = `
+        <h2 class="section-title">${escapeHtml(t("pd_title"))} <span class="muted">${s.total}</span></h2>
+        <div class="card pd-card">${rows}${extra}</div>
+        ${managers ? `<details class="card pd-card"><summary>${escapeHtml(t("pd_by_manager"))}</summary>${managers}</details>` : ""}`;
+      prospectsEl.querySelectorAll("[data-potential]").forEach((b) => b.addEventListener("click", () => navigate(`#/customers?potential=${b.dataset.potential}`)));
+    })
+    .catch(() => {});
 
   // Inventory and brand-volume are point-in-time/its-own-trend-chart
   // sections, not period-scoped -- fetched once, untouched by the period

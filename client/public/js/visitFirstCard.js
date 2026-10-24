@@ -9,6 +9,8 @@ function reasonText(r) {
   if (r.type === "visit_overdue") return `${t("visit_first_overdue")} ${r.days} ${t("visit_first_days")}`;
   if (r.type === "never_visited") return t("visit_first_never");
   if (r.type === "reorder_due") return `${t("visit_first_reorder_due")} ~${r.usual} ${t("visit_first_days")}`;
+  if (r.type === "potential") return t(`pl_level_${r.level ?? 0}`);
+  if (r.type === "followup_due") return t("visit_first_followup");
   if (r.type === "dormant") return `${t("visit_first_dormant")} ${r.days} ${t("visit_first_days")}`;
   return "";
 }

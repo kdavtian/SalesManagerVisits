@@ -6,6 +6,8 @@
 //  - gone quiet: no order for longer than 1.5x their usual rhythm: 20
 //  - reorder due: the usual gap between their orders has passed (not yet 1.5x): 10
 //  - never visited: 15 (+10 for a gold/silver customer)
+//  - potential customers (owner, 2026-10-24): by Potential Level, very high 25 / high 18 / real 10 / not assessed 8 / low 3 / none 0,
+//    plus 15 when the agreed next follow-up date has come (the level only ranks prospects that already have a reason)
 //  - customer value: up to 10 more, by the average monthly purchases of the last 6 months
 //    (2,000,000 AMD a month and more = 10), added only when there already is a reason to go
 // Customers already visited today and no-visit channels (KF/CAS/CVO/PCO/OEM) are left out.
@@ -18,7 +20,7 @@ import { repVisitSql } from "./visitCount.js";
 export async function visitPriorities(userId, limit = 8, now = new Date()) {
   const today = yerevanToday(now);
   const { rows } = await pool.query(
-    `SELECT c.id, c.name, c.erp_customer_id, c.customer_tier, c.visit_frequency_days, COALESCE(c.credit_term_days, 45) AS credit_term_days,
+    `SELECT c.id, c.name, c.erp_customer_id, c.customer_tier, c.potential_level, c.next_followup_date::text AS next_followup_date, c.visit_frequency_days, COALESCE(c.credit_term_days, 45) AS credit_term_days,
             (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}) AS last_visit,
             EXISTS (SELECT 1 FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}
                     AND (ch.timestamp AT TIME ZONE 'Asia/Yerevan')::date = $2::date) AS visited_today,
@@ -92,6 +94,17 @@ export async function visitPriorities(userId, limit = 8, now = new Date()) {
     } else if (overdueDays > 0) {
       score += Math.min(30, overdueDays * 2);
       reasons.push({ type: "visit_overdue", days: overdueDays });
+    }
+    if (r.customer_tier === "potential") {
+      // The agreed follow-up date is a reason of its own; the level only ranks prospects that already have one (it never adds a customer to the card).
+      if (r.next_followup_date && r.next_followup_date <= today) {
+        score += 15;
+        reasons.push({ type: "followup_due", date: r.next_followup_date });
+      }
+      if (score > 0) {
+        score += { 5: 25, 4: 18, 3: 10, 2: 3, 1: 0 }[r.potential_level] ?? 8;
+        if (r.potential_level >= 3 || r.potential_level === null) reasons.push({ type: "potential", level: r.potential_level });
+      }
     }
     const st = rhythm.get(r.erp_customer_id);
     if (st && st.n_gaps >= 3 && st.median_gap >= 7 && st.median_gap <= 90) {

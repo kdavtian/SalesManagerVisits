@@ -8,6 +8,9 @@ import { loadWithCache } from "../listCache.js";
 import { indexBrandSummary, brandSearchText, matchedEverEntries, matchesSelectedChips, buildBrandChipTree, chipHtml, shortDate } from "../brandChips.js";
 import { buildRegionSubregionTree, buildDirectionManagerTree, openTriStateTreeSheet, NO_GROUP_KEY } from "../regionTree.js";
 import { openTypeTierSheet } from "../typeTierSheet.js";
+import { FILTER_ICONS } from "../filterIcons.js";
+import { potentialChipHtml } from "../potential.js";
+import { emptyPotentialFilter, potentialFilterCount, matchesPotentialFilter, comparePotentialPriority, openPotentialFilterSheet } from "../potentialFilterSheet.js";
 import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
 
 // The Customers list loads in pages of this size (see load()).
@@ -85,7 +88,12 @@ const FILTER_STATUSES = {
   not_visited: ["never"],
 };
 
-export function renderCustomers(root, navigate, initialFilter) {
+const localToday = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+export function renderCustomers(root, navigate, initialFilter, initialPotential = "") {
   root.innerHTML = `
     <div class="list-view">
       <div class="list-header">
@@ -146,6 +154,13 @@ export function renderCustomers(root, navigate, initialFilter) {
   // Set of "group:value" chip ids (brandChips.js); empty = no filter. A shop
   // passes when ANY visit ever recorded ANY selected product.
   let brandChipIds = new Set();
+  // Potential filter (level, reason, last visit, follow-up, volume, counterfeit); a deep link from the dashboard (?potential=4,5) preselects levels.
+  let potentialFilter = emptyPotentialFilter();
+  for (const tok of String(initialPotential || "").split(",")) {
+    if (/^[0-5]$/.test(tok)) potentialFilter.levels.add(Number(tok));
+    else if (tok === "counterfeit") potentialFilter.counterfeit = true;
+    else if (tok === "due") potentialFilter.followup = "due";
+  }
   // customer id -> { current, ever } from GET /customers/brand-summary;
   // loaded after the list paints, so search/filter just ignore it until then.
   let brandSummary = new Map();
@@ -378,6 +393,15 @@ export function renderCustomers(root, navigate, initialFilter) {
             count: brandChipIds.size,
           })
         : "",
+      allCustomers.some((c) => c.customer_tier === "potential")
+        ? filterIconButton({
+            key: "potential",
+            icon: FILTER_ICONS.potential,
+            label: t("pf_title"),
+            active: potentialFilterCount(potentialFilter) > 0,
+            count: potentialFilterCount(potentialFilter),
+          })
+        : "",
       allCustomers.length
         ? filterIconButton({
             key: "channel",
@@ -440,6 +464,24 @@ export function renderCustomers(root, navigate, initialFilter) {
       });
     });
 
+    filterRow.querySelector('[data-filter-btn="potential"]')?.addEventListener("click", () => {
+      const saved = potentialFilter;
+      potentialFilter = emptyPotentialFilter();
+      const rows = applyNonStatusFilters(allCustomers).filter((c) => !filter || FILTER_STATUSES[filter]?.includes(visitStatus(c)));
+      potentialFilter = saved;
+      openPotentialFilterSheet({
+        rows,
+        filter: potentialFilter,
+        today: localToday(),
+        onApply: (next) => {
+          potentialFilter = next;
+          renderFilterRow();
+          renderStatsBar();
+          renderList();
+        },
+      });
+    });
+
     filterRow.querySelector('[data-filter-btn="channel"]')?.addEventListener("click", () => {
       // The rows the list would show with no type/tier chip on (all other filters and the status pill stay as they are).
       const saved = [typeFilters, tierFilters];
@@ -477,6 +519,10 @@ export function renderCustomers(root, navigate, initialFilter) {
     }
     if (typeFilters.size) list = list.filter((c) => typeFilters.has(c.category || NO_GROUP_KEY));
     if (tierFilters.size) list = list.filter((c) => tierFilters.has(c.customer_tier || "potential"));
+    if (potentialFilterCount(potentialFilter)) {
+      const today = localToday();
+      list = list.filter((c) => matchesPotentialFilter(c, potentialFilter, today));
+    }
     if (assignmentKeys.size) {
       list = list.filter((c) => assignmentKeys.has(`${c.sales_channel || NO_GROUP_KEY}::${c.assigned_manager_id ?? NO_GROUP_KEY}`));
     }
@@ -527,6 +573,11 @@ export function renderCustomers(root, navigate, initialFilter) {
         if (debtA !== debtB) return debtB - debtA;
         return a.name.localeCompare(b.name);
       });
+      return sorted;
+    }
+    // With a potential filter on, the list is the follow-up worklist: very high potential first, no potential last, soonest follow-up next.
+    if (potentialFilterCount(potentialFilter) && sortKey === "name" && !sortReversed) {
+      sorted.sort((a, b) => comparePotentialPriority(a, b) || a.name.localeCompare(b.name));
       return sorted;
     }
     const flip = sortReversed ? -1 : 1;
@@ -603,10 +654,13 @@ export function renderCustomers(root, navigate, initialFilter) {
             ? `<span class="customer-card-debt">${t("outstanding_debt_label")}${labelColon()}${formatAmd(Number(c.debt_amd))}</span>`
             : "";
         const reorderChip = reorderChipHtml(c);
+        const potentialChip = c.customer_tier === "potential" ? potentialChipHtml(c.potential_level) : "";
+        const counterfeitMark = c.counterfeit_flag ? `<span class="badge badge-danger" title="${escapeHtml(t("pl_counterfeit_resolve"))}">⚠️</span>` : "";
         const bottomRow =
-          badge || lastVisit || debtLabel || reorderChip
+          badge || lastVisit || debtLabel || reorderChip || potentialChip || counterfeitMark
             ? `<div class="list-row-bottom">
               ${badge ? `<span class="badge ${badge.cls}">${t(badge.labelKey)}</span>` : ""}
+              ${potentialChip}${counterfeitMark}
               ${reorderChip}
               ${lastVisit ? `<span class="muted list-row-meta">${lastVisit}</span>` : ""}
               ${debtLabel}

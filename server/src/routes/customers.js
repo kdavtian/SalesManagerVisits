@@ -547,6 +547,48 @@ customersRouter.get("/map-facts", async (req, res) => {
 // { found: false, reason } means "enter it manually" (never an HTTP error).
 // "Visit first": the caller's own customers ranked by debt / overdue visit / gone quiet (visitPriorities.js).
 // Registered before "/:id" so it is not read as a customer id.
+// Prospects by Potential Level (owner, 2026-10-24): how many potential customers sit in each category, plus the counterfeit restrictions and
+// follow-ups that are due. Management sees the whole company and a breakdown by sales manager; a sales manager their own customers.
+customersRouter.get("/potential-summary", async (req, res) => {
+  const all = canManagePotentialAll(req.user.role) || req.user.role === "accountant";
+  const params = [yerevanToday()];
+  let scope = "";
+  if (!all) {
+    params.push(req.user.id);
+    scope = `AND c.assigned_manager_id = $2`;
+  }
+  const { rows } = await pool.query(
+    `SELECT c.assigned_manager_id AS manager_id, u.name AS manager_name, COALESCE(c.potential_level, 0) AS level,
+            COUNT(*)::int AS n,
+            COUNT(*) FILTER (WHERE c.counterfeit_flag)::int AS counterfeit,
+            COUNT(*) FILTER (WHERE c.next_followup_date IS NOT NULL AND c.next_followup_date <= $1::date)::int AS followup_due
+     FROM customers c LEFT JOIN users u ON u.id = c.assigned_manager_id
+     WHERE c.customer_tier = 'potential' ${scope}
+     GROUP BY 1, 2, 3`,
+    params
+  );
+  const levels = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  let counterfeit = 0;
+  let followupDue = 0;
+  const byManager = new Map();
+  for (const r of rows) {
+    levels[r.level] += r.n;
+    counterfeit += r.counterfeit;
+    followupDue += r.followup_due;
+    if (!byManager.has(r.manager_id)) byManager.set(r.manager_id, { manager_id: r.manager_id, name: r.manager_name ?? null, levels: { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, total: 0 });
+    const m = byManager.get(r.manager_id);
+    m.levels[r.level] += r.n;
+    m.total += r.n;
+  }
+  res.json({
+    total: Object.values(levels).reduce((s, n) => s + n, 0),
+    levels,
+    counterfeit,
+    followup_due: followupDue,
+    by_manager: all ? [...byManager.values()].sort((a, b) => b.total - a.total) : [],
+  });
+});
+
 customersRouter.get("/visit-priorities", async (req, res) => {
   if (req.user.role !== "sales_manager") return res.json([]);
   res.json(await visitPriorities(req.user.id));

@@ -1178,7 +1178,7 @@ async function renderRoute() {
       query.get("customer")
     );
   } else if (path === "#/customers") {
-    (await import("./views/customers.js")).renderCustomers(app, navigate, query.get("visited"));
+    (await import("./views/customers.js")).renderCustomers(app, navigate, query.get("visited"), query.get("potential") ?? "");
   } else if (specialPricesMatch) {
     (await import("./views/specialPrices.js")).renderSpecialPrices(app, navigate, specialPricesMatch[1]);
   } else if (checkinSpotsMatch) {
