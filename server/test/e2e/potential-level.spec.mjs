@@ -67,3 +67,35 @@ test("rep sets the level and reasons in a few taps; counterfeit raises the warni
   const { rows: [r] } = await pool.query("SELECT counterfeit_flag, counterfeit_resolved_comment AS c, potential_level FROM customers WHERE id = $1", [c.id]);
   expect(r).toEqual({ counterfeit_flag: false, c: "stopped selling fakes", potential_level: 1 });
 });
+
+test("the reasons last used for a level are ticked again for the next customer (and never 'Other' / 'counterfeit')", async ({ page, fixtures }) => {
+  const rep = await fixtures.createUser("sales_manager");
+  const first = await fixtures.createCustomer({ created_by: rep.id, assigned_manager_id: rep.id, name: "E2E Remember One", sales_channel: "SM YVN" });
+  const second = await fixtures.createCustomer({ created_by: rep.id, assigned_manager_id: rep.id, name: "E2E Remember Two", sales_channel: "SM YVN" });
+  await loginViaUi(page, rep.email);
+
+  await page.goto(`/#/customers/${first.id}`);
+  await page.locator("[data-pl-edit]").click();
+  await expect(page.locator(".pl-prefill-note")).toBeHidden(); // nothing remembered yet
+  await page.locator('.pl-level-chip[data-level="4"]').click();
+  await page.locator('.pl-reason-chip[data-reason="negotiating"]').click();
+  await page.locator('.pl-reason-chip[data-reason="other"]').click();
+  await page.locator(".pl-other").fill("a typed explanation");
+  await page.locator('#pl-form button[type="submit"]').click();
+  await expect(page.locator(".pl-card .pl-chip")).toContainText("High potential", { timeout: 10000 });
+
+  await page.goto(`/#/customers/${second.id}`);
+  await page.locator("[data-pl-edit]").click();
+  await page.locator('.pl-level-chip[data-level="4"]').click();
+  await expect(page.locator('.pl-reason-chip[data-reason="negotiating"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator('.pl-reason-chip[data-reason="other"]')).toHaveAttribute("aria-pressed", "false"); // "Other" needs its own text
+  await expect(page.locator(".pl-prefill-note")).toBeVisible();
+  // another level starts clean, and coming back to level 4 brings the ticks back
+  await page.locator('.pl-level-chip[data-level="1"]').click();
+  await expect(page.locator('.pl-reason-chip[aria-pressed="true"]')).toHaveCount(0);
+  await page.locator('.pl-level-chip[data-level="4"]').click();
+  await expect(page.locator('.pl-reason-chip[data-reason="negotiating"]')).toHaveAttribute("aria-pressed", "true");
+  // touching a reason removes the "last used" label
+  await page.locator('.pl-reason-chip[data-reason="active_interest"]').click();
+  await expect(page.locator(".pl-prefill-note")).toBeHidden();
+});

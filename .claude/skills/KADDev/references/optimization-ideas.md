@@ -36,6 +36,13 @@ Owner answered "1, 2, 3, 4, 5, 6, 7, 8" on 2026-10-24 = all eight approved; buil
 21. [DONE 2026-10-24, 1.402.0] **"Sync now" button for admins + "last Excel sync: date, result, file age" on the admin Home.**
 22. [Suggested] **Bot tells the Telegram group when it ignores a chat or accepts a file** (one short reply "file received, synced N customers" / "this chat is not allowed, ask the CEO"): the 4-day silence would have shown the same day.
 23. [Suggested, owner to choose] **Map: "Colour by Tier | Rep" switch** (ring colour per rep, legend behind the "i") and **today's planned pins: halo + stop number, with the Planned-today button getting 3 states (Off / Highlight / Only today)**.
-24. [Suggested] **Counts on the Administration list** (e.g. "Sales & customers · 3 waiting" for plan approvals / edit requests) so the red work shows before opening a page.
+24. [DONE 2026-10-24, 1.406.0] **Counts on the Administration list** (e.g. "Sales & customers · 3 waiting" for plan approvals / edit requests) so the red work shows before opening a page.
 25. [Suggested] **Rebuild the PDF user guide** (Armenian + English) with the new Settings screens.
 26. [Suggested] **"Recently opened" row at the top of the Settings search** (the last 3 settings you used).
+27. [DONE 2026-10-24, 1.406.0] **Initials of the rep under map pins** when zoomed in (zoom >= 16) in "Colour by Rep" mode (CSS only shows them while the map container has `.map-zoom-high`).
+28. [DONE 2026-10-24, 1.406.0] **One-tap "share today's route" to Telegram** (planned-stops panel): phone = share sheet, computer = Telegram's t.me share page; text = stops + Google Maps link.
+29. [DONE 2026-10-24, server] **Push/in-app alert when the Excel FILE is older than 48 h** (`checkWorkbookAge` in `erpSyncMonitor.js`; once per file date, daytime Yerevan only).
+30. [DONE 2026-10-24, bot PR #45] **Bot answers in the Telegram group**: file accepted + Field Visits result; ONE explanation per unknown chat per 6 h for a file.
+31. [DONE 2026-10-24, 1.406.0] **Potential reasons remembered per level** (per user, per device; never "Other" / "counterfeit").
+32. [Suggested] **Weekend-aware Excel alert** (the accountant posts no file on Saturday/Sunday, so Monday morning alerts can be false alarms): skip Sat/Sun from the 48 h count.
+33. [Suggested] **"Last used" reasons per level shared across devices** (stored on the server per user instead of the phone).

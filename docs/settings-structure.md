@@ -28,6 +28,9 @@ A category is listed only when the user's role may use something in it (`PAGES[]
 - Explanations are never printed under a field: a small "!" on the label toggles them (`hintIcon(textId)` + hidden paragraph).
 - Old links keep working: `section=plan-approvals` -> Sales & customers (scrolled to the list), `section=system-health` -> System & health (row opened).
 
+## Counts
+`GET /api/settings/admin-counts` (`server/src/adminCounts.js`) returns what is waiting for the signed-in user, per category: `a-sales` (route plans waiting for approval + customer edit requests), `a-bonuses` (reward claims awaiting validation or payout), `a-system` (1 when the Excel sync or file is stale). The Settings list shows them as red counts beside the category and as a total on the Administration tab; they refresh when plans / edit requests change. A role gets only the keys it can act on.
+
 ## For developers
 - Every page is rendered into the DOM at once and `applyState()` only toggles `hidden`; the handlers below the template find elements by id, so **ids must not change**.
 - A new setting goes into the page whose category fits; add its label to the page so the search finds it (rows need `.settings-row-label` / `.settings-form-label`).

@@ -14,6 +14,7 @@ import { pool } from "./db/pool.js";
 import { enabled as pushEnabled } from "./push.js";
 import { notifyUser } from "./notifications.js";
 import { erpSyncFreshness, ERP_STALE_AFTER_HOURS } from "./erpSyncFreshness.js";
+import { getSyncStatus } from "./erpSyncStatus.js";
 
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // hourly -- no need to check more often than the staleness window itself
 
@@ -92,9 +93,46 @@ export async function checkErpSyncFreshness() {
   }
 }
 
+
+// The Excel FILE itself getting old (owner, 2026-10-24): the bot can sync every day while the accountant posts no new workbook, so the
+// sync-age alarm above stays quiet although the numbers are days behind. Alerts admin / CEO / operations director once per file date when the
+// newest workbook the bot synced is older than WORKBOOK_STALE_AFTER_HOURS, in the daytime only (Yerevan, UTC+4). "Once per file" is
+// remembered in the notifications table itself (same body), so a deploy/restart does not repeat it.
+export const WORKBOOK_STALE_AFTER_HOURS = 48;
+const DAYTIME_HOURS = [8, 21]; // Yerevan: from 08:00 until 21:00
+
+function yerevanHour(now) {
+  return (now.getUTCHours() + 4) % 24;
+}
+
+// `only` (tests): notify just these user ids -- the tests run against the production database and must never message real admins.
+export async function checkWorkbookAge({ now = new Date(), anyHour = false, only = null } = {}) {
+  const status = await getSyncStatus();
+  const fileDate = status.last_success?.workbook_modified_at;
+  if (!fileDate) return { alerted: false, reason: "no file date" };
+  const ageHours = (now.getTime() - new Date(fileDate).getTime()) / 3.6e6;
+  if (ageHours <= WORKBOOK_STALE_AFTER_HOURS) return { alerted: false, reason: "fresh" };
+  const hour = yerevanHour(now);
+  if (!anyHour && (hour < DAYTIME_HOURS[0] || hour >= DAYTIME_HOURS[1])) return { alerted: false, reason: "night" };
+
+  const fileLabel = new Date(fileDate).toLocaleDateString("hy-AM", { day: "numeric", month: "long", timeZone: "Asia/Yerevan" });
+  const days = Math.floor(ageHours / 24);
+  const body = `Castrol Excel ֆայլի վերջին տարբերակը ${fileLabel}-ինն է (${days} օր առաջ)։ Տվյալները հետ են մնում․ խնդրեք հաշվապահին ուղարկել նոր ֆայլը Telegram խումբ։`;
+  const seen = await pool.query("SELECT 1 FROM notifications WHERE type = 'erp_sync_stale' AND body = $1 LIMIT 1", [body]);
+  if (seen.rowCount > 0) return { alerted: false, reason: "already told" };
+  const recipients = only
+    ? { rows: only.map((id) => ({ id })), rowCount: only.length }
+    : await pool.query("SELECT id FROM users WHERE role = ANY($1) AND status = 'active'", [ALERT_ROLES]);
+  for (const recipient of recipients.rows) {
+    await notifyUser(recipient.id, "erp_sync_stale", { title: "Excel ֆայլը հնացել է", body, url: "/#/settings?section=system-health" });
+  }
+  return { alerted: true, recipients: recipients.rowCount };
+}
+
 export function startErpSyncMonitor() {
   if (!pushEnabled) return;
   setInterval(() => {
     checkErpSyncFreshness().catch((err) => console.error("ERP sync freshness check failed:", err.message));
+    checkWorkbookAge().catch((err) => console.error("Excel file age check failed:", err.message));
   }, CHECK_INTERVAL_MS);
 }

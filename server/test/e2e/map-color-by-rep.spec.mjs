@@ -39,6 +39,17 @@ test("Colour by Rep: default Tier, ring per rep colour, remembered per user; col
   const colors = await page.locator("#leaflet-map .pin-rep-ring").evaluateAll((els) => els.map((e) => getComputedStyle(e).borderTopColor));
   expect(colors.filter((c) => c === "rgb(10, 105, 218)").length).toBe(2); // Aram's chosen blue, two pins
   expect(new Set(colors).size).toBe(2); // Narek: an automatic colour, different from Aram's
+  // zoomed in (the customer link opens at street level): the rep's initials hang under each pin; zoomed out they are hidden again
+  await expect(page.locator("#leaflet-map .pin-rep-initials")).toHaveCount(3);
+  expect((await page.locator("#leaflet-map .pin-rep-initials").allInnerTexts()).sort()).toEqual(["EA", "EA", "EN"]);
+  await expect(page.locator("#leaflet-map")).toHaveClass(/map-zoom-high/);
+  await expect(page.locator("#leaflet-map .pin-rep-initials").first()).toBeVisible();
+  await page.locator("#map-legend-close").click(); // the key covers the zoom buttons
+  for (let i = 0; i < 6; i++) await page.locator("#zoom-out-btn").click();
+  await expect(page.locator("#leaflet-map")).not.toHaveClass(/map-zoom-high/, { timeout: 10000 });
+  await expect(page.locator("#leaflet-map .pin-rep-initials").first()).toBeHidden();
+  for (let i = 0; i < 6; i++) await page.locator("#zoom-in-btn").click();
+  await page.locator("#map-legend-btn").click();
   await expect(page.locator("#map-rep-legend")).toContainText("E2E Aram Rep");
   await expect(page.locator("#map-rep-legend")).toContainText("E2E Narek Rep");
   await page.screenshot({ path: `${process.env.GB_SHOTS ?? "/tmp"}/map-rep.png` });

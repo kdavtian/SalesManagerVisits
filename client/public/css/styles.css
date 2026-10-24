@@ -15571,3 +15571,43 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 .settings-view .settings-toggle-row { gap: 10px; }
 .settings-view .settings-toggle-row .settings-row-value { font-size: 0.8rem; }
 .settings-view .settings-row-label { overflow-wrap: anywhere; }
+
+/* Counts beside the Administration categories (and the total on the tab): what is waiting for this person. */
+.settings-count {
+  flex-shrink: 0;
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--cat-red);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+.settings-tab-count { margin-left: 6px; vertical-align: middle; }
+.pl-prefill-note { margin: -2px 0 6px; font-size: 0.78rem; }
+.pl-prefill-note[hidden] { display: none; }
+
+/* "Colour by Rep": the rep's initials under the pin, only when zoomed in (the map container gets .map-zoom-high from zoom 16). */
+#leaflet-map .pin-rep-initials {
+  display: none;
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translate(-50%, 1px);
+  min-width: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--rep-color, #666);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  letter-spacing: 0.02em;
+  box-shadow: 0 0 0 1.5px #fff;
+  pointer-events: none;
+  z-index: 2;
+}
+#leaflet-map.map-zoom-high .pin-rep-initials { display: block; }

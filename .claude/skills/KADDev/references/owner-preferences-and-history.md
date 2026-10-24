@@ -247,3 +247,12 @@ Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets 
 - All former always-visible help paragraphs (`radius-help`, ...) are now hidden paragraphs behind a "!" on the label (`data-hint` = paragraph id). Old deep links (`section=plan-approvals`, `section=system-health`) are aliases.
 - Tests changed: specs that used to click the Administration tab then a row now open the page by `?section=a-...`; `settings-structure.spec.mjs` covers phone / search / computer / roles.
 - Not rebuilt: the PDF user guide (docs/user-guide) still shows the old Settings screens; rebuild it when the owner wants (GUIDE_VERSION in settings.js).
+
+## Six small ideas implemented (owner: "Implement ideas", 2026-10-24, 1.406.0)
+- (1) **Counts on the Administration list**: `GET /api/settings/admin-counts` (`server/src/adminCounts.js`, role-aware) -> red count beside Sales & customers (plans waiting + customer edit requests), Bonuses & rewards (claims awaiting validation / payout), System & health (1 when the Excel sync or file is stale) and the total on the tab; refreshed when plans / edit requests change.
+- (2) **Initials under map pins** in Colour-by-Rep mode from zoom 16 (`.pin-rep-initials`, `map-zoom-high` class on the map container, set only when it changes).
+- (3) **Share today's route**: share icon in the planned-stops panel (`routeShareText` / `shareRouteToTelegram` in `routeNavigation.js`). Phone: native share sheet (Telegram is in it); computer: `t.me/share/url`; blocked pop-up: text copied. Choice not asked: if the owner wants Telegram directly even on a phone, use the t.me link there too.
+- (4) **Excel file older than 48 h** alert (`checkWorkbookAge`): uses the file date the bot sends (`workbook_modified_at`), once per file date (remembered in `notifications`), only 08:00-21:00 Yerevan, same preference toggle as the other ERP alerts (`erp_sync_stale`). Weekend false alarms are possible (idea 32 in optimization-ideas).
+- (5) **Bot replies** (repo castrol_ceo_report, PR #45): after a file the sender gets "accepted, data until D, Field Visits updated N customers" (or one failure line); a file from an unknown chat gets ONE reply per chat per 6 h with the chat id.
+- (6) **Reasons remembered per level** (`potential.js`, localStorage `fieldvisits_potential_reasons:<userId>`): picking a level ticks the reasons last used for it, with a small "Last used" label until a reason is touched. Changing the level now swaps the reasons (before, the old ticks stayed whatever the level) - this is a behaviour change to mention.
+

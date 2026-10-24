@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
 import { recordSyncRun } from "../../src/erpSyncStatus.js";
+import { checkWorkbookAge } from "../../src/erpSyncMonitor.js";
 
 const FILE = `itest-status-${process.pid}.xlsx`;
 let admin;
@@ -92,4 +93,32 @@ test("a failed Sync now becomes a failed attempt for the admins", async () => {
   const attempts = (await apiRequest("/api/erp-sync/attempts", { cookie: adminCookie })).data;
   assert.ok(attempts.some((a) => a.error === `itest-boom-${process.pid}` && a.ok === false));
   await pool.query("DELETE FROM erp_sync_attempts WHERE error = $1", [`itest-boom-${process.pid}`]);
+});
+
+test("an Excel file older than 2 days alerts once per file, in the daytime, and a fresh file does not", async () => {
+  const old = new Date(Date.now() - 400 * 24 * 3600 * 1000).toISOString(); // far away from any real file date, so the "told once" memory cannot collide
+  await recordSyncRun({ counts: {}, meta: { workbook_modified_at: old, workbook_name: FILE } });
+  const noon = new Date();
+  noon.setUTCHours(8, 0, 0, 0); // 12:00 in Yerevan
+  const night = new Date(noon);
+  night.setUTCHours(21, 0, 0, 0); // 01:00 the next night in Yerevan
+
+  const quiet = await checkWorkbookAge({ now: night, only: [admin.id] });
+  assert.equal(quiet.alerted, false);
+  assert.equal(quiet.reason, "night");
+
+  const first = await checkWorkbookAge({ now: noon, only: [admin.id] });
+  assert.equal(first.alerted, true);
+  const mine = await pool.query("SELECT title, body, url FROM notifications WHERE user_id = $1 AND type = 'erp_sync_stale' AND title = 'Excel ֆայլը հնացել է'", [admin.id]);
+  assert.equal(mine.rowCount, 1);
+  assert.match(mine.rows[0].body, /ֆայլ/);
+  assert.equal(mine.rows[0].url, "/#/settings?section=system-health");
+
+  const again = await checkWorkbookAge({ now: noon, only: [admin.id] });
+  assert.equal(again.alerted, false);
+  assert.equal(again.reason, "already told");
+
+  await recordSyncRun({ counts: {}, meta: { workbook_modified_at: new Date().toISOString(), workbook_name: FILE } });
+  const fresh = await checkWorkbookAge({ now: noon, only: [admin.id] });
+  assert.equal(fresh.reason, "fresh");
 });

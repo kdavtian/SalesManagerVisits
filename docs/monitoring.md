@@ -43,6 +43,7 @@ separate job runner exists):
 | Monitor | File | What it watches | Alerts via |
 |---|---|---|---|
 | ERP sync staleness | `server/src/erpSyncMonitor.js` | Any ERP-sourced table not synced in >72h (`ERP_STALE_AFTER_HOURS`, `erpSyncFreshness.js`) | Notifies admin/CEO in-app + Telegram if configured |
+| Excel FILE age | `server/src/erpSyncMonitor.js` (`checkWorkbookAge`) | The newest workbook the bot synced is older than 48 h (`WORKBOOK_STALE_AFTER_HOURS`; file date = `workbook_modified_at` from the bot) | Once per file date, 08:00-21:00 Yerevan: in-app + push to admin / CEO / operations director (same `erp_sync_stale` preference) |
 | Overdue visits | `server/src/overdueReminders.js` | Planned visits that passed without a check-in | Rep notification |
 | Stale packed orders | `server/src/stalePackedReminder.js` | Orders sitting in `packed_stock_out` too long without delivery | Warehouse/delivery notification |
 

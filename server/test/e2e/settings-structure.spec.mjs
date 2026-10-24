@@ -1,4 +1,4 @@
-import { test, expect, loginViaUi } from "./fixtures.mjs";
+import { test, expect, loginViaUi, pool } from "./fixtures.mjs";
 
 // Owner, 2026-10-24: "rearrange settings and admin part from 0 ... Apple iOS and macOS styles and structure". Two tabs
 // (Personal | Administration), explanations only behind "!", sidebar + page on a computer.
@@ -182,5 +182,28 @@ test.describe("Settings structure", () => {
       }
     }
     expect(errors).toEqual([]);
+  });
+
+  test("the Administration list shows what is waiting beside a category and on the tab", async ({ page, fixtures }) => {
+    await page.setViewportSize({ width: 440, height: 956 });
+    const admin = await fixtures.createUser("admin");
+    const rep = await fixtures.createUser("sales_manager");
+    const { rows } = await pool.query(
+      "INSERT INTO visit_plans (user_id, plan_date, customer_ids, status, created_by) VALUES ($1, current_date + 401, '{}', 'pending', $1) RETURNING id",
+      [rep.id]
+    );
+    try {
+      await loginViaUi(page, admin.email);
+      await page.goto("/#/settings");
+      await expect(page.locator("#settings-admin-tab-count")).toBeVisible();
+      await page.locator("#settings-admin-tab").click();
+      const count = page.locator('[data-count-for="a-sales"]');
+      await expect(count).toBeVisible();
+      expect(Number(await count.textContent())).toBeGreaterThanOrEqual(1);
+      await expect(page.locator('[data-count-for="a-security"]')).toBeHidden();
+      if (SHOTS) await page.screenshot({ path: `${SHOTS}/phone-admin-counts.png` });
+    } finally {
+      await pool.query("DELETE FROM visit_plans WHERE id = $1", [rows[0].id]);
+    }
   });
 });
