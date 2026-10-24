@@ -398,19 +398,25 @@ function applyTreeSearch(bodyEl, query) {
 // leaves/groups by name as the caller types (Pricelist's Brand > Category >
 // Product picker; every other caller so far has a short enough tree that a
 // search box would just be another tap for nothing).
-export function openTriStateTreeSheet(titleText, { tree, initialSelectedIds, countUnitLabel, totalLabel, onApply, searchPlaceholder }) {
+// groupBy (optional): { label, checked } adds a check toggle on the right of the heading; the apply callback then gets { groupBy } as its 2nd argument
+// (the Customers list uses it to group the list by region and subregion).
+export function openTriStateTreeSheet(titleText, { tree, initialSelectedIds, countUnitLabel, totalLabel, onApply, searchPlaceholder, groupBy = null }) {
+  let groupByOn = Boolean(groupBy?.checked);
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
   overlay.innerHTML = `
     <div class="sheet filter-sheet">
-      <h2>${escapeHtml(titleText)}</h2>
+      <div class="tree-sheet-head">
+        <h2>${escapeHtml(titleText)}</h2>
+        ${groupBy ? `<button type="button" class="tree-groupby-btn ${groupByOn ? "tree-groupby-on" : ""}" id="tree-sheet-groupby" role="switch" aria-checked="${groupByOn}"><span class="tree-groupby-box" aria-hidden="true">${groupByOn ? "✓" : ""}</span>${escapeHtml(groupBy.label)}</button>` : ""}
+      </div>
       ${
         searchPlaceholder
           ? `<input type="search" class="route-plan-tree-search" id="tree-sheet-search" placeholder="${escapeHtml(searchPlaceholder)}" aria-label="${escapeHtml(searchPlaceholder)}" />`
           : ""
       }
       <div id="tree-sheet-body"></div>
-      <div class="sheet-actions">
+      <div class="sheet-actions sheet-actions-floating">
         <button type="button" class="btn" id="tree-sheet-clear">${t("clear")}</button>
         <button type="button" class="btn btn-primary" id="tree-sheet-done">${t("show_results")}</button>
       </div>
@@ -429,8 +435,15 @@ export function openTriStateTreeSheet(titleText, { tree, initialSelectedIds, cou
     selectedIds = renderTriStateTree(bodyEl, { tree, initialSelectedIds: [], countUnitLabel, totalLabel });
     if (searchInput?.value) applyTreeSearch(bodyEl, searchInput.value);
   });
+  overlay.querySelector("#tree-sheet-groupby")?.addEventListener("click", (e) => {
+    groupByOn = !groupByOn;
+    const b = e.currentTarget;
+    b.classList.toggle("tree-groupby-on", groupByOn);
+    b.setAttribute("aria-checked", String(groupByOn));
+    b.querySelector(".tree-groupby-box").textContent = groupByOn ? "✓" : "";
+  });
   overlay.querySelector("#tree-sheet-done").addEventListener("click", () => {
     overlay.remove();
-    onApply(selectedIds);
+    onApply(selectedIds, { groupBy: groupByOn });
   });
 }

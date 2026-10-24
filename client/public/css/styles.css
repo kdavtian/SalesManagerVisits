@@ -15411,3 +15411,15 @@ button.cf-row-edit { width: 100%; text-align: left; color: inherit; font: inheri
 .req-mark { color: var(--danger); }
 .field-invalid input { border-color: var(--danger); box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 25%, transparent); }
 .pin-never.pin-overdue-mark { background: var(--danger); color: #ffffff; width: 16px; padding: 0; right: -7px; }
+
+/* Region filter sheet: "Group by" toggle on the heading's right; Customers list group headers (owner, 2026-10-24) */
+.tree-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.tree-sheet-head h2 { margin: 0; }
+.tree-groupby-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg-card); color: var(--text); font: inherit; font-size: 0.9rem; font-weight: 600; }
+.tree-groupby-box { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border: 2px solid var(--text-dim); border-radius: 6px; font-size: 0.8rem; line-height: 1; color: #fff; }
+.tree-groupby-on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-card)); }
+.tree-groupby-on .tree-groupby-box { background: var(--accent); border-color: var(--accent); }
+.cl-group { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cl-group-region { margin: 14px 4px 4px; font-size: 0.95rem; font-weight: 800; color: var(--text); text-transform: uppercase; letter-spacing: 0.03em; }
+.cl-group-sub { margin: 8px 4px 4px 12px; font-size: 0.85rem; font-weight: 700; color: var(--text-dim); }
+.cl-group-count { font-size: 0.78rem; font-weight: 700; color: var(--text-dim); }

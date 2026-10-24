@@ -25,6 +25,9 @@ const MAX_GROUP_DAY_BADGES = 3;
 // all weekdays at a glance) and a guided create flow (rep -> day(s) ->
 // pick straight from that rep's assigned customers) for a
 // director/ceo/admin planning on someone else's behalf.
+// Red badge on "View customers": how many of the person's customers are on no weekday of the plan (owner, 2026-10-24).
+const unplannedBadgeHtml = (n) => (n > 0 ? ` <span class="count-badge route-plan-unplanned-badge" aria-label="${escapeHtml(t("route_plan_unplanned_count").replace("{n}", n))}">${n}</span>` : "");
+
 export async function renderRoutePlans(root, navigate) {
   const canManage = canPlanForOthers();
   // The accountant sees every rep's plan but cannot change it.
@@ -93,7 +96,7 @@ export async function renderRoutePlans(root, navigate) {
             </button>`;
           }).join("")}
         </div>
-        <button type="button" class="btn route-plan-view-customers-btn" ${attrs}>${t("view_customers")}</button>
+        <button type="button" class="btn route-plan-view-customers-btn" ${attrs}>${t("view_customers")}${unplannedBadgeHtml(plan.unplanned_count)}</button>
       </div>`;
       })
       .join("");
@@ -132,7 +135,7 @@ export async function renderRoutePlans(root, navigate) {
           </button>`;
         }).join("")}
       </div>
-      <button type="button" class="btn route-plan-view-customers-btn" data-scope="${escapeHtml(plan.scope)}">${t("view_customers")}</button>`;
+      <button type="button" class="btn route-plan-view-customers-btn" data-scope="${escapeHtml(plan.scope)}">${t("view_customers")}${unplannedBadgeHtml(plan.unplanned_count)}</button>`;
         })
         .join("")}
     `;
@@ -395,7 +398,8 @@ async function openCustomersByDaySheet(userId, userName, scope = "") {
       return;
     }
     const daysById = new Map(customers.map((c) => [c.id, c.days]));
-    const unplannedCount = customers.filter((c) => !c.days.length).length;
+    // same rule as the badge: never-visited channels and competitors do not need a place in the plan
+    const unplannedCount = customers.filter((c) => !c.days.length && c.requires_visit !== false && c.customer_tier !== "competitor").length;
     summaryEl.textContent = unplannedCount ? t("route_plan_unplanned_count").replace("{n}", unplannedCount) : "";
 
     const tree = buildCustomerTree(customers);

@@ -378,7 +378,11 @@ async function buildRepPlans(repIds) {
   // rep: a rule can still list a customer who was reassigned to someone else
   // (or an area covering other reps' customers), and counting those left a
   // rep with a "1" on a weekday although no customer of his is on it.
-  const { rows: assignedRows } = await pool.query("SELECT id, assigned_manager_id, sales_channel FROM customers WHERE assigned_manager_id = ANY($1)", [repIds]);
+  const { rows: assignedRows } = await pool.query(
+    `SELECT c.id, c.assigned_manager_id, c.sales_channel, (${NOT_NO_VISIT_CHANNEL_SQL} AND COALESCE(c.customer_tier, '') <> 'competitor') AS needs_plan FROM customers c WHERE c.assigned_manager_id = ANY($1)`,
+    [repIds]
+  );
+  const needsPlan = new Set(assignedRows.filter((r) => r.needs_plan).map((r) => r.id));
   const managerByCustomer = new Map(assignedRows.map((r) => [r.id, r.assigned_manager_id]));
   const channelOf = new Map(assignedRows.map((r) => [r.id, r.sales_channel]));
   const assignedByRep = new Map(repIds.map((id) => [id, []]));
@@ -389,10 +393,15 @@ async function buildRepPlans(repIds) {
   const result = new Map();
   for (const repId of repIds) {
     const scopes = scopesFor(assignedByRep.get(repId), channelOf);
+    // Customers of the rep that are on NO weekday of any active rule (the red badge on the overview); channels that are never visited
+    // in the field and competitors do not need a place in the plan.
+    const planned = new Set();
+    for (const rule of rulesByUser.get(repId)) for (const id of [...(areaIdsByRule.get(rule.id) ?? []), ...(rule.customer_ids ?? [])]) planned.add(id);
     result.set(
       repId,
       scopes.map((scope) => ({
         scope,
+        unplanned_count: (assignedByRep.get(repId) ?? []).filter((id) => needsPlan.has(id) && inScope(id, scope, channelOf) && !planned.has(id)).length,
         days: rulesByUser.get(repId).map((rule) => {
           const all = new Set([...(areaIdsByRule.get(rule.id) ?? []), ...(rule.customer_ids ?? [])]);
           const own = [...all].filter((id) => managerByCustomer.get(id) === rule.user_id && inScope(id, scope, channelOf));
