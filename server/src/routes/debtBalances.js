@@ -178,6 +178,69 @@ export async function loadUnrecordedPayments(rows, user, db = pool) {
   return result;
 }
 
+// Aging bucket of a balance, by the days its oldest unpaid invoice is past the credit term.
+export function agingBucket(debt, oldestDueDays) {
+  if (!(debt > 0) || oldestDueDays == null || oldestDueDays <= 0) return "current";
+  if (oldestDueDays <= 30) return "d1_30";
+  if (oldestDueDays <= 60) return "d31_60";
+  if (oldestDueDays <= 90) return "d61_90";
+  return "d90p";
+}
+
+// Amount of the customer's last payment: the workbook cashflow line of that date, or the approved in-app payment when that is newer.
+function lastPaymentAmount(row, hist, app) {
+  const date = row.last_payment_date ? (row.last_payment_date instanceof Date ? row.last_payment_date.toISOString() : String(row.last_payment_date)).slice(0, 10) : null;
+  if (app && (!hist.last_erp_payment_date || app.date > hist.last_erp_payment_date) && (!date || app.date >= date)) return app.amount;
+  if (hist.last_erp_payment_date && (!date || hist.last_erp_payment_date >= date)) return hist.last_erp_payment_amount;
+  return null;
+}
+
+// One round trip per fact for ALL listed customers (never a query per row): last workbook payment, last order and its size,
+// the last 12 months of orders, and the newest approved in-app payment. `asOf` bounds everything for a past date.
+async function loadCustomerHistory(rows, today, asOf, db = pool) {
+  const result = new Map();
+  result.appPayments = new Map();
+  const erpIds = rows.map((r) => r.customer_id).filter(Boolean);
+  if (!erpIds.length) return result;
+  const bound = asOf ?? null;
+  const [pay, ord, app] = await Promise.all([
+    db.query(
+      `SELECT DISTINCT ON (erp_customer_id) erp_customer_id, to_char(cashflow_date, 'YYYY-MM-DD') AS d, amount_amd
+         FROM erp_cashflow_lines WHERE erp_customer_id = ANY($1) AND amount_amd > 0 AND ($2::date IS NULL OR cashflow_date <= $2::date)
+        ORDER BY erp_customer_id, cashflow_date DESC, id DESC`,
+      [erpIds, bound]
+    ),
+    db.query(
+      `WITH o AS (
+         SELECT erp_customer_id, order_id, MIN(order_date) AS d, SUM(COALESCE(revenue_amd, 0)) AS total
+           FROM erp_order_lines WHERE erp_customer_id = ANY($1) AND ($2::date IS NULL OR order_date <= $2::date)
+          GROUP BY erp_customer_id, order_id
+       ), last AS (
+         SELECT DISTINCT ON (erp_customer_id) erp_customer_id, to_char(d, 'YYYY-MM-DD') AS last_order_date, total AS last_order_amount
+           FROM o ORDER BY erp_customer_id, d DESC, order_id DESC
+       ), year AS (
+         SELECT erp_customer_id, SUM(total) AS orders_12m_amd FROM o WHERE d > $3::date - 365 GROUP BY erp_customer_id
+       )
+       SELECT last.*, COALESCE(year.orders_12m_amd, 0) AS orders_12m_amd FROM last LEFT JOIN year USING (erp_customer_id)`,
+      [erpIds, bound, today]
+    ),
+    db.query(
+      `SELECT DISTINCT ON (p.customer_id) p.customer_id, to_char(p.payment_date AT TIME ZONE 'Asia/Yerevan', 'YYYY-MM-DD') AS d, p.amount_amd
+         FROM payments p
+        WHERE p.customer_id = ANY($1) AND p.status = 'approved' AND ($2::date IS NULL OR (p.payment_date AT TIME ZONE 'Asia/Yerevan')::date <= $2::date)
+        ORDER BY p.customer_id, p.payment_date DESC, p.id DESC`,
+      [rows.map((r) => r.internal_customer_id), bound]
+    ),
+  ]);
+  for (const r of pay.rows) result.set(r.erp_customer_id, { last_erp_payment_date: r.d, last_erp_payment_amount: Number(r.amount_amd) });
+  for (const r of ord.rows) {
+    const cur = result.get(r.erp_customer_id) ?? {};
+    result.set(r.erp_customer_id, { ...cur, last_order_date: r.last_order_date, last_order_amount: Number(r.last_order_amount), orders_12m_amd: Number(r.orders_12m_amd) });
+  }
+  for (const r of app.rows) result.appPayments.set(r.customer_id, { date: r.d, amount: Number(r.amount_amd) });
+  return result;
+}
+
 debtBalancesRouter.get("/", async (req, res) => {
   const { date } = req.query;
   const asOfDate = typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
@@ -248,10 +311,26 @@ debtBalancesRouter.get("/", async (req, res) => {
   const orders = await loadOrdersNewestFirst(pool, rows.filter((r) => Number(r.remaining_balance) > 0).map((r) => r.customer_id), { asOf: asOfDate });
   // Money the reps collected in the app that the Excel (ERP) does not hold yet (live view only -- a past date has no "yet").
   const unrecorded = asOfDate ? new Map() : await loadUnrecordedPayments(rows, req.user);
+  const history = await loadCustomerHistory(rows, today, asOfDate);
   const withAging = rows.map(({ credit_term_days, ...r }) => {
     const a = allocateFifo({ orders: orders.get(r.customer_id) ?? [], debt: Number(r.remaining_balance), today, termDays: credit_term_days ?? 45 });
     const u = unrecorded.get(r.internal_customer_id);
-    return { ...r, oldest_due_days: a.oldest_due_days, overdue_amd: a.overdue_amd, unrecorded_amd: u?.amount ?? 0, unrecorded_count: u?.count ?? 0 };
+    const h = history.get(r.customer_id) ?? {};
+    const debt = Number(r.remaining_balance);
+    return {
+      ...r,
+      oldest_due_days: a.oldest_due_days,
+      overdue_amd: a.overdue_amd,
+      unrecorded_amd: u?.amount ?? 0,
+      unrecorded_count: u?.count ?? 0,
+      last_payment_amount: lastPaymentAmount(r, h, history.appPayments.get(r.internal_customer_id)),
+      last_order_date: h.last_order_date ?? null,
+      last_order_amount: h.last_order_amount ?? null,
+      orders_12m_amd: h.orders_12m_amd ?? 0,
+      // How big the debt is next to what the customer bought in the last 12 months: 100 % = owes a whole year of purchases.
+      debt_pct_of_orders: debt > 0 && h.orders_12m_amd > 0 ? Math.round((debt / h.orders_12m_amd) * 100) : null,
+      bucket: agingBucket(debt, a.oldest_due_days),
+    };
   });
   res.json({ rows: withAging, as_of_date: asOfDate, sync: await erpSyncFreshness("erp_customer_data") });
 });

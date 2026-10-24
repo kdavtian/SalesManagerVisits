@@ -69,6 +69,18 @@ async function martinId(db) {
 }
 
 const amd = (n) => `${Math.round(Number(n)).toLocaleString("en-US")} դր.`;
+// The task title in plain words (owner, 2026-10-24): "Հավաքագրիր 2,420,000 դր պարտքը (94 օր ուշացում), վերջին վճարումը արվել է 23.10.2026-ին"
+const amdPlain = (n) => `${Math.round(Number(n)).toLocaleString("en-US")} դր`;
+const dmy = (d) => {
+  const [y, m, day] = String(d).slice(0, 10).split("-");
+  return `${day}.${m}.${y}`;
+};
+export function debtTaskTitle({ call, debt, daysOpen, lastPayment, promiseBroken }) {
+  const late = daysOpen == null ? "" : ` (${daysOpen} օր ուշացում)`;
+  const paid = lastPayment ? `, վերջին վճարումը արվել է ${dmy(lastPayment)}-ին` : "";
+  const head = call ? `Զանգահարիր՝ հիշեցրու ${amdPlain(debt)} պարտքի մասին` : `Հավաքագրիր ${amdPlain(debt)} պարտքը`;
+  return `${head}${late}${paid}${promiseBroken ? " · խոստումը չի կատարվել" : ""}`;
+}
 
 // A task created for a rep, for the single notification a run sends per rep.
 function addTo(map, repId, entry) {
@@ -183,7 +195,7 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
   const { rows: found } = await pool.query(
     `SELECT c.id AS customer_id, c.name AS customer_name, c.sales_channel,
             CASE WHEN u.role IN ('sales_manager', 'sales_director') AND u.status = 'active' THEN u.id END AS rep_id,
-            fc.force_collect, erp.debt_amd, COALESCE(${debtAgeDaysSql("$2::date")}, erp.days_since_payment) AS days_open,
+            fc.force_collect, erp.debt_amd, to_char(erp.last_payment_date, 'YYYY-MM-DD') AS last_payment_date, COALESCE(${debtAgeDaysSql("$2::date")}, erp.days_since_payment) AS days_open,
             (SELECT to_char(t.promise_date, 'YYYY-MM-DD') FROM tasks t WHERE t.customer_id = c.id AND t.auto_kind = 'debt_collection' AND t.outcome = 'promised'
              ORDER BY t.created_at DESC LIMIT 1) AS last_promise_date
      FROM customers c
@@ -213,11 +225,10 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
   const counts = new Map();
   for (const cand of candidates) {
     if ((counts.get(cand.rep_id) ?? 0) >= MAX_PER_REP) continue;
-    const days = cand.days_open == null ? "" : ` · ${cand.days_open} օր առանց վճարման`;
     const promiseBroken = Boolean(cand.last_promise_date) && cand.last_promise_date < today;
     // No checklist item: ticking it would close the task without recording the outcome.
     const call = isCallChannel(cand.sales_channel);
-    const title = `${call ? DEBT_CALL_TITLE : DEBT_TASK_TITLE}՝ ${amd(cand.debt_amd)}${days}${promiseBroken ? " · խոստումը չի կատարվել" : ""}`;
+    const title = debtTaskTitle({ call, debt: cand.debt_amd, daysOpen: cand.days_open, lastPayment: cand.last_payment_date, promiseBroken });
     const taskId = await insertAutoTask("debt_collection", {
       title, creatorId, repId: cand.rep_id, customerId: cand.customer_id, today, itemText: null, taskKind: call ? "call_customer" : null,
     });
@@ -338,4 +349,61 @@ export async function runAutoTasks(now = new Date(), { viaSync = false } = {}) {
     await notifyReps(merged);
   }
   return { debt: debt.created, reorder: reorder.created };
+}
+
+// Why did (or did not) the automatic tasks appear? (owner, 2026-10-24: "he hasn't created any debt collection or visit tasks lately -- is it ok?")
+// Every customer with an overdue debt is put in exactly ONE bucket, in the order the creator checks them, so the numbers add up.
+export async function autoTaskDiagnostics(now = new Date()) {
+  const today = yerevanToday(now);
+  const { rows } = await pool.query(
+    `SELECT c.sales_channel,
+            CASE WHEN u.role IN ('sales_manager', 'sales_director') AND u.status = 'active' THEN u.id END AS rep_id,
+            fc.force_collect,
+            EXISTS (SELECT 1 FROM debt_decisions dd WHERE dd.customer_id = c.id AND dd.decision IN ('dispute', 'legal', 'write_off')) AS on_hold,
+            EXISTS (SELECT 1 FROM tasks t WHERE t.customer_id = c.id AND (t.auto_kind = 'debt_collection' OR t.task_kind = 'collect_debt') AND t.status = 'open') AS has_open,
+            EXISTS (SELECT 1 FROM tasks t WHERE t.customer_id = c.id AND (t.auto_kind = 'debt_collection' OR t.task_kind = 'collect_debt') AND t.promise_date >= $2::date) AS promise_running,
+            EXISTS (SELECT 1 FROM tasks t WHERE t.customer_id = c.id AND (t.auto_kind = 'debt_collection' OR t.task_kind = 'collect_debt')
+                      AND t.promise_date IS NULL AND t.created_at > now() - ($1 || ' days')::interval) AS cooling
+     FROM customers c
+     JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
+     ${DEBT_AGE_LATERAL}
+     LEFT JOIN users u ON u.id = c.assigned_manager_id
+     CROSS JOIN LATERAL (SELECT EXISTS (SELECT 1 FROM debt_decisions d WHERE d.customer_id = c.id AND d.decision = 'collect') AS force_collect) fc
+     WHERE ${overdueDebtSql("$2::date")}`,
+    [COOLDOWN_DAYS, today]
+  );
+  const buckets = { channel_skipped: 0, on_hold: 0, has_open: 0, promise_running: 0, cooling: 0, no_rep: 0, ready: 0 };
+  const perRep = new Map();
+  for (const r of rows) {
+    if (!(r.sales_channel !== "KF" && r.sales_channel !== "CAS") && !r.force_collect) buckets.channel_skipped++;
+    else if (r.on_hold) buckets.on_hold++;
+    else if (r.has_open) buckets.has_open++;
+    else if (r.promise_running) buckets.promise_running++;
+    else if (r.cooling) buckets.cooling++;
+    else if (!(r.rep_id || isCallChannel(r.sales_channel) || r.force_collect)) buckets.no_rep++;
+    else {
+      buckets.ready++;
+      const key = r.rep_id ?? "director";
+      perRep.set(key, (perRep.get(key) ?? 0) + 1);
+    }
+  }
+  const capped = [...perRep.values()].reduce((n, c) => n + Math.max(0, c - MAX_PER_REP), 0);
+  const [{ rows: last }, { rows: sync }] = await Promise.all([
+    pool.query(
+      `SELECT auto_kind, MAX(created_at) AS last_created, COUNT(*) FILTER (WHERE created_at > now() - interval '7 days')::int AS last_7_days,
+              COUNT(*) FILTER (WHERE created_at > now() - interval '30 days')::int AS last_30_days
+       FROM tasks WHERE auto_kind IN ('debt_collection', 'reorder_followup') GROUP BY auto_kind`
+    ),
+    pool.query("SELECT at, workbook_modified_at FROM erp_sync_runs ORDER BY at DESC LIMIT 1"),
+  ]);
+  return {
+    overdue_total: rows.length,
+    ...buckets,
+    capped_by_limit: capped,
+    max_per_rep: MAX_PER_REP,
+    cooldown_days: COOLDOWN_DAYS,
+    last_sync_at: sync[0]?.at ?? null,
+    workbook_modified_at: sync[0]?.workbook_modified_at ?? null,
+    tasks: Object.fromEntries(last.map((l) => [l.auto_kind, { last_created: l.last_created, last_7_days: l.last_7_days, last_30_days: l.last_30_days }])),
+  };
 }

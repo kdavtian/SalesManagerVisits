@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { createDebtCollectionTasks, DEBT_TASK_TITLE, DEBT_CALL_TITLE } from "../../src/debtCollectionTasks.js";
+import { createDebtCollectionTasks, autoTaskDiagnostics, debtTaskTitle, DEBT_TASK_TITLE, DEBT_CALL_TITLE } from "../../src/debtCollectionTasks.js";
 import { isQuietHours } from "../../src/quietHours.js";
 
 const stamp = Date.now();
@@ -47,7 +47,7 @@ test("an overdue debtor gets one collect-the-debt task; paid-up, in-term and no-
   assert.ok(first.created >= 1);
   const tasks = await openTasks(overdue.id);
   assert.equal(tasks.length, 1);
-  assert.ok(tasks[0].title.startsWith(DEBT_TASK_TITLE));
+  assert.match(tasks[0].title, /^Հավաքագրիր [\d,]+ դր պարտքը/);
   assert.match(tasks[0].title, /500,000/);
   assert.equal(tasks[0].assignee_id, rep.id);
   assert.equal(tasks[0].due_is_next_visit, true);
@@ -60,7 +60,7 @@ test("an overdue debtor gets one collect-the-debt task; paid-up, in-term and no-
   assert.equal(oemTasks.length, 1);
   assert.equal(oemTasks[0].task_kind, "call_customer");
   assert.equal(oemTasks[0].due_is_next_visit, false);
-  assert.ok(oemTasks[0].title.startsWith(DEBT_CALL_TITLE));
+  assert.match(oemTasks[0].title, /^Զանգահարիր՝ հիշեցրու [\d,]+ դր պարտքի մասին/);
   assert.equal(tasks[0].task_kind, null, "a visited customer still gets the visit task");
 
   // Running again does not duplicate it.
@@ -230,4 +230,27 @@ test("a stopped-ordering task closes when the customer orders through the workbo
   await pool.query("UPDATE erp_order_lines SET qty = 4 WHERE erp_customer_id = $1", [c.erp_customer_id]);
   await createReorderFollowupTasks(new Date(), { notify: false });
   assert.equal((await pool.query("SELECT status FROM tasks WHERE id = $1", [rows[0].id])).rows[0].status, "done");
+});
+
+test("the task title is plain words with the days late and the date of the last payment", () => {
+  assert.equal(
+    debtTaskTitle({ call: false, debt: 2420000, daysOpen: 94, lastPayment: "2026-10-23", promiseBroken: false }),
+    "Հավաքագրիր 2,420,000 դր պարտքը (94 օր ուշացում), վերջին վճարումը արվել է 23.10.2026-ին"
+  );
+  assert.equal(debtTaskTitle({ call: true, debt: 500000, daysOpen: null, lastPayment: null, promiseBroken: true }), "Զանգահարիր՝ հիշեցրու 500,000 դր պարտքի մասին · խոստումը չի կատարվել");
+});
+
+test("the diagnostics put every overdue customer in exactly one line and say who is waiting", async () => {
+  const waiting = await debtor("diag1", { debt: 700000, days: 80 });
+  const kf = await debtor("diag2", { debt: 700000, days: 80, channel: "KF" });
+  const before = await autoTaskDiagnostics();
+  const sum = before.channel_skipped + before.on_hold + before.has_open + before.promise_running + before.cooling + before.no_rep + before.ready;
+  assert.equal(sum, before.overdue_total);
+  assert.ok(before.channel_skipped >= 1);
+  assert.ok(before.ready >= 1);
+  await createDebtCollectionTasks();
+  const after = await autoTaskDiagnostics();
+  assert.ok(after.has_open >= 1);
+  assert.ok(after.tasks.debt_collection.last_7_days >= 1);
+  assert.ok(waiting.id && kf.id);
 });

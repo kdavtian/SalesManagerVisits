@@ -9,7 +9,7 @@ export function deskHeadHtml(extraClass, cells) {
     <span></span>
     ${cells
       .map(
-        (cell) => `<div class="desk-th${cell.align === "end" ? " desk-th-end" : ""}">${cell.items
+        (cell) => `<div class="desk-th${cell.align === "end" ? " desk-th-end" : ""}${cell.extraClass ? ` ${cell.extraClass}` : ""}">${cell.items
           .map((i) =>
             i.key
               ? `<button type="button" class="desk-sort" data-sort-key="${i.key}" title="${escapeHtml(t("desk_col_sort_hint"))}">${escapeHtml(i.label)}<span class="desk-sort-arrow" aria-hidden="true"></span></button>`

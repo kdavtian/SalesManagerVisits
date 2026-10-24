@@ -16,6 +16,17 @@ export const paymentsRouter = Router();
 paymentsRouter.use(requireAuth);
 
 const PAGE_SIZE = 30;
+
+// "Is this payment in the Excel?" -- the workbook's cashflow has a row for the same customer, the same amount, within 5 days of the payment
+// (the same window as the "unrecorded" figure on Debt balances). A payment younger than 3 days is not called missing yet.
+// Payments the sync approved from the workbook are in it by definition. Shown on the list so nobody has to compare by eye.
+const EXCEL_GRACE_DAYS = 3;
+const EXCEL_MATCH_DAYS = 5;
+const PAYMENT_DAY = "((p.payment_date AT TIME ZONE 'Asia/Yerevan')::date)";
+const IN_EXCEL_SQL = `(p.approved_from_erp OR (p.erp_customer_id_snapshot IS NOT NULL AND EXISTS (
+    SELECT 1 FROM erp_cashflow_lines cf WHERE cf.erp_customer_id = p.erp_customer_id_snapshot AND cf.amount_amd > 0
+      AND ROUND(cf.amount_amd) = ROUND(p.amount_amd) AND cf.cashflow_date BETWEEN ${PAYMENT_DAY} - ${EXCEL_MATCH_DAYS} AND ${PAYMENT_DAY} + ${EXCEL_MATCH_DAYS})))`;
+const DAYS_OLD_SQL = `((now() AT TIME ZONE 'Asia/Yerevan')::date - ${PAYMENT_DAY})`;
 const MAX_AMOUNT = 100000000000; // matches the DB CHECK constraint
 
 // The Add Payment form's manager picker (for roles that can submit on
@@ -38,7 +49,8 @@ async function loadPaymentRow(id) {
             ab.name AS approved_by_name, rb.name AS rejected_by_name,
             ch.name AS current_holder_name,
             pending_to.name AS pending_handoff_to_name,
-            COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot
+            COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot,
+            ${IN_EXCEL_SQL} AS in_excel, ${DAYS_OLD_SQL}::int AS days_old
      FROM payments p
      JOIN users sm ON sm.id = p.sales_manager_id
      JOIN users cb ON cb.id = p.created_by
@@ -288,7 +300,7 @@ paymentsRouter.get("/pending-count", async (req, res) => {
 });
 
 paymentsRouter.get("/", async (req, res) => {
-  const { status, sales_channel, sales_manager_id, customer_id, month, from, to, q, sort, order, offset } = req.query;
+  const { status, sales_channel, sales_manager_id, customer_id, month, from, to, q, sort, order, offset, excel } = req.query;
 
   const conditions = [];
   const params = [];
@@ -308,6 +320,10 @@ paymentsRouter.get("/", async (req, res) => {
   if (sales_channel) {
     params.push(sales_channel);
     conditions.push(`p.sales_channel = $${params.length}`);
+  }
+  // "Not in Excel": recorded in the app, older than the grace days, and the workbook still shows nothing like it.
+  if (excel === "missing") {
+    conditions.push(`p.status <> 'rejected' AND p.erp_customer_id_snapshot IS NOT NULL AND ${DAYS_OLD_SQL} >= ${EXCEL_GRACE_DAYS} AND NOT ${IN_EXCEL_SQL}`);
   }
   if (customer_id) {
     params.push(customer_id);
@@ -355,7 +371,8 @@ paymentsRouter.get("/", async (req, res) => {
 
   params.push(PAGE_SIZE + 1, offsetNum);
   const { rows } = await pool.query(
-    `SELECT p.*, ch.name AS current_holder_name, COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot
+    `SELECT p.*, ch.name AS current_holder_name, COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot,
+            ${IN_EXCEL_SQL} AS in_excel, ${DAYS_OLD_SQL}::int AS days_old
      FROM payments p
      LEFT JOIN customers c ON c.id = p.customer_id
      LEFT JOIN users ch ON ch.id = p.current_holder_id
@@ -564,4 +581,51 @@ paymentsRouter.post("/:id/return-to-pending", async (req, res) => {
     client.release();
   }
   res.json(await loadPaymentRow(req.params.id));
+});
+
+// Admin only (owner, 2026-10-24). The payment and its history are copied to deleted_payments first, so nothing is ever lost.
+// A payment inside a cash handoff cannot be deleted until the handoff is settled (the handoff list points at it).
+paymentsRouter.delete("/:id", async (req, res) => {
+  if (req.user.role !== "admin") return res.status(403).json({ error: "Only an admin can delete a payment" });
+  const reason = String(req.body?.reason ?? "").trim().slice(0, 300);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query("SELECT * FROM payments WHERE id = $1 FOR UPDATE", [req.params.id]);
+    const payment = rows[0];
+    if (!payment) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Payment not found" });
+    }
+    const { rows: inHandoff } = await client.query("SELECT handoff_id FROM cash_handoff_items WHERE payment_id = $1 LIMIT 1", [payment.id]);
+    if (inHandoff.length || payment.pending_handoff_id) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "This payment is part of a cash handoff -- settle or reject that handoff first" });
+    }
+    const { rows: history } = await client.query("SELECT * FROM payment_status_history WHERE payment_id = $1 ORDER BY changed_at", [payment.id]);
+    await client.query(
+      `INSERT INTO deleted_payments (payment_id, payment, history, reason, deleted_by, deleted_by_name) VALUES ($1, $2, $3, $4, $5, $6)`,
+      [payment.id, JSON.stringify(payment), JSON.stringify(history), reason || null, req.user.id, req.user.name ?? null]
+    );
+    await client.query("DELETE FROM payments WHERE id = $1", [payment.id]);
+    await client.query("COMMIT");
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+});
+
+// What was deleted, newest first (admin / CEO / accountant).
+paymentsRouter.get("/deleted/list", async (req, res) => {
+  if (!["admin", "ceo", "accountant"].includes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const { rows } = await pool.query(
+    `SELECT id, payment_id, payment->>'customer_name_snapshot' AS customer_name, (payment->>'amount_amd')::numeric AS amount_amd,
+            payment->>'payment_date' AS payment_date, payment->>'status' AS status, payment->>'sales_manager_name_snapshot' AS manager_name,
+            reason, deleted_by_name, deleted_at
+     FROM deleted_payments ORDER BY deleted_at DESC LIMIT 100`
+  );
+  res.json(rows);
 });

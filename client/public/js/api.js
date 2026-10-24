@@ -246,6 +246,7 @@ export const api = {
   askKad: (question, history) => json("/ask-kad", "POST", { question, history }),
   vaghinakQa: () => request("/vaghinak/qa"),
   vaghinakFeed: () => request("/vaghinak/feed"),
+  vaghinakAutoTasks: () => request("/vaghinak/auto-tasks", { fresh: true }),
   vaghinakSettings: () => request("/vaghinak/settings"),
   vaghinakSaveSettings: (patch) => json("/vaghinak/settings", "PUT", patch),
   vaghinakSetAddress: (id, address) => json(`/vaghinak/people/${id}/address`, "PUT", { address }),
@@ -605,6 +606,8 @@ export const api = {
   getPaymentsPendingCount: () => request("/payments/pending-count"),
   getEligiblePaymentManagers: () => request("/payments/eligible-managers"),
   approvePayment: (id) => request(`/payments/${id}/approve`, { method: "POST" }),
+  deletePayment: (id, reason) => json(`/payments/${id}`, "DELETE", { reason }),
+  getDeletedPayments: () => request("/payments/deleted/list", { fresh: true }),
   rejectPayment: (id, reason) => json(`/payments/${id}/reject`, "POST", { reason }),
   returnPaymentToPending: (id, reason) => json(`/payments/${id}/return-to-pending`, "POST", { reason }),
 

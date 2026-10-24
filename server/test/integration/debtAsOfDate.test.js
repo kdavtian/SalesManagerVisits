@@ -335,3 +335,17 @@ test("GET /api/reports/erp-payments: Excel cashflow rows with date/customer/chan
   const denied = await apiRequest("/api/reports/erp-payments", { cookie: await loginAs(manager.email) });
   assert.equal(denied.status, 403);
 });
+
+test("GET /api/debt-balances: each row carries the last payment amount, the last order, the 12-month orders, the debt share and the aging bucket", async () => {
+  const res = await apiRequest("/api/debt-balances", { cookie: adminCookie });
+  assert.equal(res.status, 200);
+  const row = res.data.rows.find((r) => r.customer_id === ERP_CUSTOMER_ID);
+  assert.ok(row, "the fixture customer is listed");
+  assert.equal(row.last_payment_amount, 20000);
+  assert.equal(row.last_order_date, "2026-02-10");
+  assert.equal(row.last_order_amount, 30000);
+  // the fixture orders are fixed dates in 2026: as the real clock moves on, the oldest drops out of the 12 months
+  assert.ok([80000, 30000, 0].includes(row.orders_12m_amd));
+  assert.equal(row.debt_pct_of_orders, row.orders_12m_amd > 0 ? Math.round((100000 / row.orders_12m_amd) * 100) : null);
+  assert.ok(["current", "d1_30", "d31_60", "d61_90", "d90p"].includes(row.bucket));
+});

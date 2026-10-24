@@ -5,7 +5,7 @@ import { api } from "../api.js";
 import { state } from "../state.js";
 import { icons } from "../icons.js";
 import { t } from "../i18n.js";
-import { escapeHtml, formatDateTime, formatDuration, formatRelative, showToast } from "../util.js";
+import { escapeHtml, formatDateTime, formatDuration, formatRelative, openInfoPopup, showToast } from "../util.js";
 import { answerFormHtml, wireAnswerForm, setVaghinakBadge } from "../vaghinak.js";
 
 const MANAGEMENT = new Set(["admin", "ceo", "operations_director", "sales_director", "accountant"]);
@@ -34,13 +34,13 @@ const SETTING_FIELDS = [
 
 // Operations control (cash, margin, stock, customers, order flow, data): the roles that had its Home tile.
 const OPS_ROLES = new Set(["admin", "ceo", "operations_director", "sales_director", "accountant"]);
-const TAB_ICON = { messages: "vaghinak", pulse: "team", qa: "info", feed: "history", settings: "settings" };
+const TAB_ICON = { messages: "vaghinak", pulse: "team", qa: "info", feed: "history", autotasks: "tasks", settings: "settings" };
 const OPS_QUICK = [["cash", "wallet"], ["margin", "trendUp"], ["stock", "box"], ["customers", "customers"], ["flow", "clock"], ["data", "dashboard"]];
 
 export async function renderVaghinak(root, navigate) {
   const isManagement = MANAGEMENT.has(state.user.role);
   const canSettings = SETTINGS_ROLES.has(state.user.role);
-  const tabs = [["messages", "vg_tab_messages"], ...(isManagement ? [["pulse", "vg_tab_pulse"], ["qa", "vg_tab_qa"], ["feed", "vg_tab_feed"]] : []), ...(canSettings ? [["settings", "vg_tab_settings"]] : [])];
+  const tabs = [["messages", "vg_tab_messages"], ...(isManagement ? [["pulse", "vg_tab_pulse"], ["qa", "vg_tab_qa"], ["feed", "vg_tab_feed"], ["autotasks", "vg_tab_autotasks"]] : []), ...(canSettings ? [["settings", "vg_tab_settings"]] : [])];
   let tab = "messages";
 
   root.innerHTML = `
@@ -128,6 +128,7 @@ export async function renderVaghinak(root, navigate) {
       if (tab === "pulse") return await paintPulse(mine);
       if (tab === "qa") return await paintQa(mine);
       if (tab === "feed") return await paintFeed(mine);
+      if (tab === "autotasks") return await paintAutoTasks(mine);
       if (tab === "settings") return await paintSettings(mine);
     } catch (err) {
       if (mine === token) showError(err);
@@ -263,6 +264,34 @@ export async function renderVaghinak(root, navigate) {
           )
           .join("")}</div>`
       : `<p class="empty-state">${t("vg_empty")}</p>`;
+  }
+
+  // ---- the automatic debt / reorder tasks: why they were or were not created ----
+  async function paintAutoTasks(mine) {
+    const d = await api.vaghinakAutoTasks();
+    if (mine !== token) return;
+    const when = (v) => (v ? escapeHtml(formatRelative(v)) : "—");
+    const row = (label, n, tone = "") => `<div class="health-row"><span class="health-label">${t(label)}</span><span class="health-value ${tone}">${n}</span></div>`;
+    const kinds = [["debt_collection", "vg_at_kind_debt"], ["reorder_followup", "vg_at_kind_reorder"]];
+    body.innerHTML = `
+      <div class="card health-card">
+        <h3 class="health-title">${t("vg_at_title")}<button type="button" class="settings-hint-icon" id="vg-at-hint" aria-label="${t("more_info")}">!</button></h3>
+        ${row("vg_at_last_sync", when(d.last_sync_at))}
+        ${row("vg_at_overdue", d.overdue_total)}
+        ${row("vg_at_ready", d.ready, d.ready ? "vg-warn" : "")}
+        ${row("vg_at_has_open", d.has_open)}
+        ${row("vg_at_promise", d.promise_running)}
+        ${row("vg_at_cooling", d.cooling)}
+        ${row("vg_at_hold", d.on_hold)}
+        ${row("vg_at_channel", d.channel_skipped)}
+        ${row("vg_at_no_rep", d.no_rep, d.no_rep ? "vg-warn" : "")}
+        ${d.capped_by_limit ? row("vg_at_capped", d.capped_by_limit, "vg-warn") : ""}
+      </div>
+      <div class="card health-card">
+        <h3 class="health-title">${t("vg_at_created")}</h3>
+        ${kinds.map(([k, label]) => `<div class="health-row"><span class="health-label">${t(label)}</span><span class="health-value">${t("vg_at_created_row").replace("{last}", when(d.tasks[k]?.last_created)).replace("{w}", d.tasks[k]?.last_7_days ?? 0).replace("{m}", d.tasks[k]?.last_30_days ?? 0)}</span></div>`).join("")}
+      </div>`;
+    body.querySelector("#vg-at-hint").addEventListener("click", () => openInfoPopup(`<p>${t("vg_at_hint").replace("{n}", d.cooldown_days).replace("{m}", d.max_per_rep)}</p>`));
   }
 
   // ---- settings (admin / CEO / operations director) ----
