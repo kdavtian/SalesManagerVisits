@@ -487,6 +487,11 @@ export const api = {
   getCashMeta: (params = {}) => request(`/cashflow/meta?${new URLSearchParams(params)}`, { fresh: true }),
   getCashSummary: (params = {}) => request(`/cashflow/summary?${new URLSearchParams(params)}`, { fresh: true }),
   getCashEntries: (params = {}) => request(`/cashflow/entries?${new URLSearchParams(params)}`, { fresh: true }),
+  addCashEntry: (data) => json("/cashflow/entries", "POST", data),
+  updateCashEntry: (id, data) => json(`/cashflow/entries/${id}`, "PUT", data),
+  deleteCashEntry: (id) => request(`/cashflow/entries/${id}`, { method: "DELETE" }),
+  addCashAccount: (data) => json("/cashflow/accounts", "POST", data),
+  addCashCategory: (data) => json("/cashflow/categories", "POST", data),
   importCashWorkbook: (file) => {
     const form = new FormData();
     form.set("file", file);

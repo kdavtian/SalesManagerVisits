@@ -15261,3 +15261,7 @@ input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
 .st-node { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-height: 44px; padding: 8px 12px; text-align: left; color: inherit; font: inherit;
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; max-width: 100%; }
 .st-node span { font-size: 0.8rem; overflow-wrap: anywhere; }
+
+/* Cashflow phase 2: tappable manual rows, add button in the header */
+button.cf-row-edit { width: 100%; text-align: left; color: inherit; font: inherit; cursor: pointer; }
+.cf-head #cf-add { min-height: 44px; }
