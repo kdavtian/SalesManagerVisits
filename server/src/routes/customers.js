@@ -19,7 +19,7 @@ import { repVisitSql } from "../visitCount.js";
 import { skippedForRecentVisit, getPlanSkipRecentVisitDays } from "../utils/planSkipRecent.js";
 import { nextNameNumber } from "../customerNameSuggest.js";
 import { pendingCreditFor } from "../orderReturns.js";
-import { PotentialError, cleanPotentialInput, setPotential, resolveCounterfeit, potentialHistory } from "../potential.js";
+import { PotentialError, cleanPotentialInput, setPotential, resolveCounterfeit, potentialHistory, getReasonMemory } from "../potential.js";
 
 export const customersRouter = Router();
 
@@ -550,6 +550,11 @@ customersRouter.get("/map-facts", async (req, res) => {
 // { found: false, reason } means "enter it manually" (never an HTTP error).
 // "Visit first": the caller's own customers ranked by debt / overdue visit / gone quiet (visitPriorities.js).
 // Registered before "/:id" so it is not read as a customer id.
+// The reasons the signed-in user last used per level (pre-ticked when a level is picked). Registered before "/:id".
+customersRouter.get("/potential-reason-memory", async (req, res) => {
+  res.json(await getReasonMemory(req.user.id));
+});
+
 // Prospects by Potential Level (owner, 2026-10-24): how many potential customers sit in each category, plus the counterfeit restrictions and
 // follow-ups that are due. Management sees the whole company and a breakdown by sales manager; a sales manager their own customers.
 customersRouter.get("/potential-summary", async (req, res) => {

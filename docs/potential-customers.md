@@ -32,3 +32,6 @@ Choosing Bronze, Silver or Gold makes the ERP customer ID mandatory (the field g
 
 ## Reasons remembered per level (1.406.0)
 Picking a level ticks the reasons the same user last saved for that level (browser storage `fieldvisits_potential_reasons:<userId>`, per device); a small "Last used" label shows until a reason is touched. "Other" (needs a typed explanation) and "counterfeit" (starts a restriction) are never remembered. Changing the level swaps the reasons to that level's own (they no longer carry over).
+
+## Server memory (1.408.0)
+The last used reasons per level are stored on the server (`user_potential_reason_memory`, migration 149) so they follow the person between devices; the browser keeps a copy for offline use.

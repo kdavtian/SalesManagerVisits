@@ -50,7 +50,7 @@ p{margin:0 0 2.6mm}
 ul,ol{margin:0 0 3mm;padding-left:5mm}
 li{margin-bottom:1.3mm}
 .body::after{content:'';display:block;clear:both}
-figure{float:right;margin:0 0 3mm 5mm;width:38mm;page-break-inside:avoid}
+figure{float:right;clear:right;margin:0 0 3mm 5mm;width:38mm;page-break-inside:avoid}
 figure img{width:100%%;border:.3mm solid #cdd5e4;border-radius:3mm;display:block}
 figcaption{font-size:7.6pt;color:#667089;text-align:center;margin-top:1mm}
 .box{border-radius:2mm;padding:2.2mm 3mm;margin:0 0 3mm;font-size:9pt;page-break-inside:avoid}
@@ -95,9 +95,11 @@ def build(lang):
     body = []
     for s in secs:
         fig = ""
-        if s.get("img"):
-            src = (SCREENS / f"{s['img']}.jpg").resolve().as_posix()
-            fig = f'<figure><img src="file://{src}"><figcaption>{esc(s.get("cap", ""))}</figcaption></figure>'
+        # img/cap = the first screenshot, img2/cap2 = an optional second one (stacked under it)
+        for key, capkey in (("img", "cap"), ("img2", "cap2")):
+            if s.get(key):
+                src = (SCREENS / f"{s[key]}.jpg").resolve().as_posix()
+                fig += f'<figure><img src="file://{src}"><figcaption>{esc(s.get(capkey, ""))}</figcaption></figure>'
         inner = "".join(block(k, v, ui) for k, v in s["blocks"])
         body.append(
             f'<section id="{s["id"]}"><h2 class="sec">{esc(s["title"])}</h2>'

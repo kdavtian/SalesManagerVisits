@@ -44,5 +44,9 @@ Owner answered "1, 2, 3, 4, 5, 6, 7, 8" on 2026-10-24 = all eight approved; buil
 29. [DONE 2026-10-24, server] **Push/in-app alert when the Excel FILE is older than 48 h** (`checkWorkbookAge` in `erpSyncMonitor.js`; once per file date, daytime Yerevan only).
 30. [DONE 2026-10-24, bot PR #45] **Bot answers in the Telegram group**: file accepted + Field Visits result; ONE explanation per unknown chat per 6 h for a file.
 31. [DONE 2026-10-24, 1.406.0] **Potential reasons remembered per level** (per user, per device; never "Other" / "counterfeit").
-32. [Suggested] **Weekend-aware Excel alert** (the accountant posts no file on Saturday/Sunday, so Monday morning alerts can be false alarms): skip Sat/Sun from the 48 h count.
-33. [Suggested] **"Last used" reasons per level shared across devices** (stored on the server per user instead of the phone).
+32. [DONE 2026-10-24, server] **Weekend-aware Excel alert** (the accountant posts no file on Saturday/Sunday, so Monday morning alerts can be false alarms): skip Sat/Sun from the 48 h count.
+33. [DONE 2026-10-24, 1.408.0] **"Last used" reasons per level shared across devices** (stored on the server per user instead of the phone).
+34. [DONE 2026-10-24, 1.408.0] **Rebuild the PDF user guide** (Armenian only, by the owner's choice).
+35. [Suggested] **English PDF guide** refresh (the English file is still the 1.251.0 one).
+36. [Suggested] **Bank statements from Telegram -> "pending" list in the app** with Confirm / Discard (owner agreed to confirm-first; waits for sample statements).
+

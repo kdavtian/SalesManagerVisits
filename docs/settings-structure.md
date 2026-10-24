@@ -38,3 +38,6 @@ A category is listed only when the user's role may use something in it (`PAGES[]
 
 ## Sales channel sets the rep (1.407.0)
 In Account settings on the customer card, choosing a sales channel selects that channel's owner (Sales channel owners) as the assigned rep; the rep can still be changed by hand before saving.
+
+## Today's planned visits - three states (1.408.0)
+The map button and the pin key share one state: Off, Highlight (ring in the planning rep's colour + that rep's stop number on the pin) and Only today (Highlight + the other pins hidden). Per user, default off.

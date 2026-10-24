@@ -166,3 +166,19 @@ test("a prospect cannot be moved to Bronze / Silver / Gold without an ERP custom
   // the edit sheet sends the current tier back with every save: an unchanged tier is never refused
   assert.equal((await patch({ customer_tier: "silver", notes: "again" })).status, 200);
 });
+
+test("the reasons a person last used per level are remembered on the server (never 'other' / 'counterfeit') and are private to that person", async () => {
+  const mine = await createCustomer({ created_by: rep.id, assigned_manager_id: rep.id });
+  assert.equal((await apiRequest("/api/customers/potential-reason-memory")).status, 401);
+  assert.deepEqual((await apiRequest("/api/customers/potential-reason-memory", { cookie: cookies.accountant })).data, {});
+  assert.equal((await put("rep", mine.id, { level: 4, reasons: ["negotiating", "ready_first_order", "other"], reason_other: "typed" })).status, 200);
+  assert.equal((await put("rep", mine.id, { level: 1, reasons: ["counterfeit", "price_mismatch"] })).status, 200);
+  const memory = (await apiRequest("/api/customers/potential-reason-memory", { cookie: cookies.rep })).data;
+  assert.deepEqual([...memory[4]].sort(), ["negotiating", "ready_first_order"]);
+  assert.deepEqual(memory[1], ["price_mismatch"]);
+  // the latest save for a level replaces the memory of that level
+  assert.equal((await put("rep", mine.id, { level: 4, reasons: ["high_potential"] })).status, 200);
+  assert.deepEqual((await apiRequest("/api/customers/potential-reason-memory", { cookie: cookies.rep })).data[4], ["high_potential"]);
+  // another person sees none of it
+  assert.deepEqual((await apiRequest("/api/customers/potential-reason-memory", { cookie: cookies.rep2 })).data, {});
+});

@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { reorderChipHtml } from "../reorder.js";
-import { cssColor, activateCombobox, activateDialog, openInfoPopup, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, rememberPosition, getLastKnownPosition, tierSelectorHtml, TIER_OPTIONS, isNeverVisited, isOverdueVisit, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, regionLabelHy, subregionLabelHy, channelDisplayLabel, parseDateOnly } from "../util.js";
+import { showToast, cssColor, activateCombobox, activateDialog, openInfoPopup, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, rememberPosition, getLastKnownPosition, tierSelectorHtml, TIER_OPTIONS, isNeverVisited, isOverdueVisit, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, regionLabelHy, subregionLabelHy, channelDisplayLabel, parseDateOnly } from "../util.js";
 import { t } from "../i18n.js";
 import { potentialFormHtml, wirePotentialForm } from "../potential.js";
 import { buildCustomerTree, renderTriStateTree, buildDirectionManagerTree, NO_GROUP_KEY } from "../regionTree.js";
@@ -9,7 +9,7 @@ import { icons } from "../icons.js";
 import { FILTER_ICONS } from "../filterIcons.js";
 import { nextVisitRowHtml, formatLastVisit } from "../visitSchedule.js";
 import { canViewTeamLocations, canEditDirectly, canPlanForOthers, canReassignCustomers, state } from "../state.js";
-import { getClusterPins, setClusterPins, getCompassMode, setCompassMode, getMapTileCacheEnabled, getColorBy, setColorBy, getPlannedRings, setPlannedRings } from "../mapPrefs.js";
+import { getClusterPins, setClusterPins, getCompassMode, setCompassMode, getMapTileCacheEnabled, getColorBy, setColorBy, getPlannedMode, setPlannedMode } from "../mapPrefs.js";
 import { repColor } from "../repColors.js";
 import { getPerfMode } from "../perfMode.js";
 import { ensureLeaflet } from "../leafletLoader.js";
@@ -344,7 +344,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
                 <span class="toggle-thumb"></span>
               </button>
             </div>
-            <div class="map-legend-pref-row">
+            <div class="map-legend-pref-row map-legend-pref-stack">
               <span>${t("map_color_by")}</span>
               <div class="segmented map-color-by" role="group" aria-label="${t("map_color_by")}">
                 <button type="button" class="chip ${getColorBy(state.user?.id) === "tier" ? "chip-active" : ""}" data-color-by="tier" aria-pressed="${getColorBy(state.user?.id) === "tier"}">${t("map_color_tier")}</button>
@@ -352,11 +352,11 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
               </div>
             </div>
             <ul class="map-rep-legend" id="map-rep-legend" hidden></ul>
-            <div class="map-legend-pref-row">
+            <div class="map-legend-pref-row map-legend-pref-stack">
               <span>${t("map_planned_rings")}<span role="button" tabindex="0" class="settings-inline-hint-icon" id="map-planned-rings-info" aria-label="${t("more_info")}">!</span></span>
-              <button type="button" class="toggle-switch" id="map-legend-toggle-planned" role="switch" aria-checked="${getPlannedRings(state.user?.id)}" aria-label="${t("map_planned_rings")}">
-                <span class="toggle-thumb"></span>
-              </button>
+              <div class="segmented map-planned-mode" role="group" aria-label="${t("map_planned_rings")}">
+                ${["off", "highlight", "only"].map((m) => `<button type="button" class="chip" data-planned-mode="${m}" aria-pressed="false">${t(`map_planned_${m}`)}</button>`).join("")}
+              </div>
             </div>
             <div class="map-legend-pref-row">
               <span>${t("map_compass_mode")}</span>
@@ -1077,12 +1077,15 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     const initials = repInitials(c.assigned_manager_name);
     return initials ? `<span class="pin-rep-initials" style="--rep-color:${repColorOf(c)}" aria-hidden="true">${escapeHtml(initials)}</span>` : "";
   };
-  // "Today's planned visits by rep": a ring in the colour of the rep who planned the customer for today (toggle in the pin key, default off).
-  let plannedRings = getPlannedRings(state.user?.id);
-  let plannedTodayByRep = new Map(); // customer id -> { userId, color }
+  // "Today's planned visits" in three states (owner, 2026-10-24): off / highlight (a ring in the colour of the rep who planned the customer, plus the
+  // stop number of that rep's route) / only today (highlight + every other pin hidden). One state, two controls: the map button and the pin key.
+  let plannedMode = getPlannedMode(state.user?.id);
+  let plannedTodayByRep = new Map(); // customer id -> { userId, color, order }
   const plannedRingHtml = (c) => {
-    const planned = plannedRings ? plannedTodayByRep.get(c.id) : null;
-    return planned ? `<span class="pin-rep-ring" style="--rep-color:${planned.color}" aria-hidden="true"></span>` : "";
+    const planned = plannedMode !== "off" ? plannedTodayByRep.get(c.id) : null;
+    return planned
+      ? `<span class="pin-rep-ring" style="--rep-color:${planned.color}" aria-hidden="true"></span><span class="pin-stop-no" style="--rep-color:${planned.color}" aria-hidden="true">${planned.order}</span>`
+      : "";
   };
   const HIGH_ZOOM = 16;
   let zoomHigh = null;
@@ -1363,7 +1366,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           renderIconFilterRow();
           // "Planned" follows the picked rep, so it has to re-fetch when the pick changes.
           if (activeFilter === "planned") loadPlannedFilter();
-          else if (plannedTodayOnly) loadPlannedTodayFilter();
+          else if (plannedMode !== "off") refreshPlannedToday();
           else applyFilter();
         },
       });
@@ -1674,7 +1677,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       // doesn't match whatever channels happen to be selected.
       if (!passesAssignment(c)) continue;
       if (categoryFilters.size && !categoryFilters.has(c.category)) continue;
-      if (plannedTodayOnly && !plannedTodayIdSet?.has(c.id)) continue;
+      if (plannedMode === "only" && !plannedTodayIdSet?.has(c.id)) continue;
       if (brandChipIds.size && !matchesSelectedChips(brandSummary.get(c.id), brandChipIds)) continue;
       if (searchQuery) {
         const haystack = `${c.name} ${c.address ?? ""} ${c.category ?? ""} ${c.erp_customer_id ?? ""} ${brandSearchText(brandSummary.get(c.id))}`.toLowerCase();
@@ -1937,24 +1940,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     applyFilter();
   }
 
-  // Independent of the activeFilter chip row above -- a plain icon toggle
-  // (see mapFilterIconButton) that narrows whatever's currently shown (the
-  // active chip, channel/category pickers, search) down to just today's
-  // planned customers, instead of replacing them with the chip row's
-  // dedicated numbered-stops/route view. Same per-role id resolution as
-  // the "Planned" chip (fetchTodayPlannedIds), so a sales manager sees only
-  // their own plan and management sees everyone's (or one rep's, once the
-  // manager filter is set) -- ANDed into applyFilter() below rather than
-  // gating which layer gets drawn.
-  let plannedTodayOnly = false;
+  // Today's planned customers (all reps, or the one picked in the manager filter) for the highlight / only-today modes; see plannedMode above.
   let plannedTodayIdSet = null;
-
-  async function loadPlannedTodayFilter() {
-    const ids = await fetchTodayPlannedIds();
-    await customersReady;
-    plannedTodayIdSet = new Set(ids);
-    applyFilter();
-  }
 
   root.querySelectorAll(".map-filter-chip").forEach((chip) => {
     chip.addEventListener("click", () => {
@@ -2797,7 +2784,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           await api.saveVisitPlan(undefined, ids, targetUserId);
           close();
           if (activeFilter === "planned") loadPlannedFilter();
-          if (plannedTodayOnly) loadPlannedTodayFilter();
+          if (plannedMode !== "off") refreshPlannedToday();
         } catch (err) {
           errorEl.textContent = err.message;
           errorEl.hidden = false;
@@ -2911,7 +2898,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           await api.saveVisitPlanRule(selectedWeekday, workingAreas, targetUserId);
           close();
           if (activeFilter === "planned") loadPlannedFilter();
-          if (plannedTodayOnly) loadPlannedTodayFilter();
+          if (plannedMode !== "off") refreshPlannedToday();
         } catch (err) {
           errorEl.textContent = err.message;
           errorEl.hidden = false;
@@ -2927,15 +2914,6 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     openPlanDaySheet();
   });
   if (startInPlanMode) openPlanDaySheet();
-
-  const plannedTodayFilterBtn = root.querySelector("#planned-today-filter-btn");
-  plannedTodayFilterBtn?.addEventListener("click", () => {
-    plannedTodayOnly = !plannedTodayOnly;
-    plannedTodayFilterBtn.classList.toggle("map-control-active", plannedTodayOnly);
-    plannedTodayFilterBtn.setAttribute("aria-pressed", String(plannedTodayOnly));
-    if (plannedTodayOnly) loadPlannedTodayFilter();
-    else applyFilter();
-  });
 
   const legendBtn = root.querySelector("#map-legend-btn");
   const legendPanel = root.querySelector("#map-legend-panel");
@@ -3021,44 +2999,75 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   );
   paintRepLegend();
 
-  // Today's planned visits per rep: a ring in the rep's colour round every customer planned for today (default off, remembered per user).
-  const plannedRingsToggle = root.querySelector("#map-legend-toggle-planned");
+  // Today's planned visits: three states shared by the map button and the pin key (default off, remembered per user).
+  const plannedBtn = root.querySelector("#planned-today-filter-btn");
+  const PLANNED_MODES = ["off", "highlight", "only"];
+  const plannedLabel = { off: t("map_planned_off"), highlight: t("map_planned_highlight"), only: t("map_planned_only") };
   async function loadPlannedTodayByRep() {
     plannedTodayByRep = new Map();
-    if (!plannedRings) return;
+    if (plannedMode === "off") return;
     const colorOfUser = (userId, chosen) => {
       const known = lastCustomers.find(({ c }) => Number(c.assigned_manager_id) === Number(userId) && c.assigned_manager_color);
       return repColor(userId, chosen || known?.c.assigned_manager_color);
     };
+    const add = (plan, userId, chosen) => {
+      if (plan?.status !== "approved") return;
+      const color = colorOfUser(userId, chosen);
+      (plan.customer_ids ?? []).forEach((id, i) => {
+        if (!plannedTodayByRep.has(id)) plannedTodayByRep.set(id, { userId, color, order: i + 1 });
+      });
+    };
     try {
-      if (!canViewTeamLocations()) {
-        const plan = await api.getMyVisitPlan();
-        if (plan?.status === "approved") for (const id of plan.customer_ids) plannedTodayByRep.set(id, { userId: state.user.id, color: colorOfUser(state.user.id) });
+      const picked = selectedPlanManagerId();
+      if (picked || !canViewTeamLocations()) {
+        const userId = picked ? Number(picked) : state.user.id;
+        add(await api.getMyVisitPlan(undefined, picked || undefined), userId);
       } else {
         const reps = await api.listPlannableUsers();
         const plans = await Promise.all(reps.map((u) => api.getMyVisitPlan(undefined, u.id).catch(() => null)));
-        plans.forEach((plan, i) => {
-          if (plan?.status !== "approved") return;
-          const color = colorOfUser(reps[i].id, reps[i].map_color);
-          for (const id of plan.customer_ids) plannedTodayByRep.set(id, { userId: reps[i].id, color });
-        });
+        plans.forEach((plan, i) => add(plan, reps[i].id, reps[i].map_color));
       }
     } catch {
       plannedTodayByRep = new Map();
     }
   }
-  async function refreshPlannedRings() {
+  async function refreshPlannedToday({ refit = false } = {}) {
     await customersReady;
     await loadPlannedTodayByRep();
-    applyFilter({ refit: false });
+    plannedTodayIdSet = new Set(plannedTodayByRep.keys());
+    applyFilter({ refit });
+    if (plannedMode === "only" && !plannedTodayIdSet.size) showToast(t("planned_empty"));
   }
-  plannedRingsToggle.addEventListener("click", () => {
-    plannedRings = plannedRingsToggle.getAttribute("aria-checked") !== "true";
-    plannedRingsToggle.setAttribute("aria-checked", String(plannedRings));
-    setPlannedRings(state.user?.id, plannedRings);
-    if (plannedRings) refreshPlannedRings();
-    else applyFilter({ refit: false });
-  });
+  function paintPlannedControls() {
+    if (plannedBtn) {
+      plannedBtn.dataset.mode = plannedMode;
+      plannedBtn.classList.toggle("map-control-active", plannedMode !== "off");
+      plannedBtn.setAttribute("aria-pressed", String(plannedMode !== "off"));
+      const text = `${t("filter_planned_today")}: ${plannedLabel[plannedMode]}`;
+      plannedBtn.setAttribute("aria-label", text);
+      plannedBtn.title = text;
+    }
+    root.querySelectorAll("[data-planned-mode]").forEach((b) => {
+      const on = b.dataset.plannedMode === plannedMode;
+      b.classList.toggle("chip-active", on);
+      b.setAttribute("aria-pressed", String(on));
+    });
+  }
+  function setPlannedModeTo(mode) {
+    if (mode === plannedMode) return;
+    plannedMode = mode;
+    setPlannedMode(state.user?.id, mode);
+    paintPlannedControls();
+    if (mode === "off") {
+      plannedTodayByRep = new Map();
+      plannedTodayIdSet = null;
+      applyFilter({ refit: false });
+    } else {
+      refreshPlannedToday({ refit: mode === "only" });
+    }
+  }
+  plannedBtn?.addEventListener("click", () => setPlannedModeTo(PLANNED_MODES[(PLANNED_MODES.indexOf(plannedMode) + 1) % PLANNED_MODES.length]));
+  root.querySelectorAll("[data-planned-mode]").forEach((b) => b.addEventListener("click", () => setPlannedModeTo(b.dataset.plannedMode)));
   const openRingsInfo = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -3067,8 +3076,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   const ringsInfoBtn = root.querySelector("#map-planned-rings-info");
   ringsInfoBtn.addEventListener("click", openRingsInfo);
   ringsInfoBtn.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && openRingsInfo(e));
-  window.addEventListener("plans-changed", () => root.isConnected && plannedRings && refreshPlannedRings());
-  if (plannedRings) refreshPlannedRings();
+  window.addEventListener("plans-changed", () => root.isConnected && plannedMode !== "off" && refreshPlannedToday());
+  paintPlannedControls();
+  if (plannedMode !== "off") refreshPlannedToday({ refit: false });
 
   const compassToggle = root.querySelector("#map-legend-toggle-compass");
   compassToggle.addEventListener("click", () => {

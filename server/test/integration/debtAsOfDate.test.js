@@ -17,6 +17,7 @@ import { pool } from "../../src/db/pool.js";
 const ERP_CUSTOMER_ID = `itest-debt-asof-${Date.now()}`;
 
 let adminCookie;
+let adminId;
 let customer;
 
 // balance0_amd (35000) + all-time orders (50000+30000=80000) - net all-time
@@ -29,6 +30,7 @@ let customer;
 test.before(async () => {
   await startTestServer();
   const admin = await createUser("admin");
+  adminId = admin.id; // the app payments below belong to this user, never to "some user" a parallel test file may delete
   adminCookie = await loginAs(admin.email);
   customer = await createCustomer({ created_by: admin.id, erp_customer_id: ERP_CUSTOMER_ID });
 
@@ -291,8 +293,8 @@ test("GET /api/customers/:id/payments-received: Excel cashflow rows plus app pay
   await pool.query(
     `INSERT INTO payments (customer_id, customer_name_snapshot, amount_amd, payment_date, sales_manager_id, sales_manager_name_snapshot, status, created_by)
      SELECT $1, 'x', a.amount, a.d::timestamptz, u.id, 'x', 'approved', u.id
-     FROM (VALUES (20000, '2026-01-17'), (7777, '2026-03-05')) AS a(amount, d), (SELECT id FROM users LIMIT 1) u`,
-    [customer.id]
+     FROM (VALUES (20000, '2026-01-17'), (7777, '2026-03-05')) AS a(amount, d), (SELECT id FROM users WHERE id = $2) u`,
+    [customer.id, adminId]
   );
   try {
     const res = await apiRequest(`/api/customers/${customer.id}/payments-received`, { cookie: adminCookie });

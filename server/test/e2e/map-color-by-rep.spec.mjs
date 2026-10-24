@@ -20,7 +20,7 @@ test("Colour by Rep: default Tier, ring per rep colour, remembered per user; col
     return c;
   };
   const c1 = await mk("E2E Color One", aram, 40.1851, 44.5201, "gold");
-  await mk("E2E Color Two", aram, 40.1861, 44.5211, "potential");
+  const c2 = await mk("E2E Color Two", aram, 40.1861, 44.5211, "potential");
   await mk("E2E Color Three", narek, 40.1871, 44.5221, "bronze");
   await loginViaUi(page, admin.email);
   await page.goto(`/#/map?customer=${c1.id}`);
@@ -58,23 +58,35 @@ test("Colour by Rep: default Tier, ring per rep colour, remembered per user; col
   await expect(page.locator("#leaflet-map .pin-rep-initials").first()).toBeHidden();
   for (let i = 0; i < 6; i++) await page.locator("#zoom-in-btn").click();
   await page.locator("#map-legend-btn").click();
-  // the circles are for today's planned visits per rep, behind their own switch (off by default)
+  // the circles are for today's planned visits per rep: three states (Off / Highlight / Only today), off by default
   await expect(page.locator("#leaflet-map .pin-rep-ring")).toHaveCount(0);
+  await expect(page.locator('[data-planned-mode="off"]')).toHaveClass(/chip-active/);
   const plannedToday = await page.evaluate(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   });
-  await pool.query("INSERT INTO visit_plans (user_id, plan_date, customer_ids, status, created_by) VALUES ($1, $2, $3, 'approved', $1)", [aram.id, plannedToday, [c1.id]]);
-  await page.locator("#map-legend-toggle-planned").click();
-  await expect(page.locator("#leaflet-map .pin-rep-ring")).toHaveCount(1, { timeout: 10000 });
-  expect(await page.locator("#leaflet-map .pin-rep-ring").evaluate((el) => getComputedStyle(el).borderTopColor)).toBe("rgb(10, 105, 218)"); // Aram's colour
+  await pool.query("INSERT INTO visit_plans (user_id, plan_date, customer_ids, status, created_by) VALUES ($1, $2, $3, 'approved', $1)", [aram.id, plannedToday, [c2.id, c1.id]]);
+  await page.locator('[data-planned-mode="highlight"]').click();
+  await expect(page.locator("#leaflet-map .pin-rep-ring")).toHaveCount(2, { timeout: 10000 });
+  expect(await page.locator("#leaflet-map .pin-rep-ring").first().evaluate((el) => getComputedStyle(el).borderTopColor)).toBe("rgb(10, 105, 218)"); // Aram's colour
+  // the stop number of that rep's route (c2 is stop 1, c1 is stop 2); the other pins stay on the map
+  expect((await page.locator("#leaflet-map .pin-stop-no").allInnerTexts()).sort()).toEqual(["1", "2"]);
+  await expect(page.locator("#leaflet-map .pin-tinted")).toHaveCount(3);
   await page.screenshot({ path: `${process.env.GB_SHOTS ?? "/tmp"}/map-key-planned-on.png` });
   await page.locator("#map-legend-close").click();
   await page.waitForTimeout(250);
   await page.screenshot({ path: `${process.env.GB_SHOTS ?? "/tmp"}/map-rings.png` });
-  await page.locator("#map-legend-btn").click();
-  await page.locator("#map-legend-toggle-planned").click();
+  // the map button shows and cycles the same state: Highlight -> Only today -> Off
+  await expect(page.locator("#planned-today-filter-btn")).toHaveAttribute("data-mode", "highlight");
+  await page.locator("#planned-today-filter-btn").click();
+  await expect(page.locator("#planned-today-filter-btn")).toHaveAttribute("data-mode", "only");
+  await expect(page.locator("#leaflet-map .pin-tinted")).toHaveCount(2, { timeout: 10000 }); // only today's planned customers are left
+  await page.locator("#planned-today-filter-btn").click();
+  await expect(page.locator("#planned-today-filter-btn")).toHaveAttribute("data-mode", "off");
   await expect(page.locator("#leaflet-map .pin-rep-ring")).toHaveCount(0);
+  await expect(page.locator("#leaflet-map .pin-tinted")).not.toHaveCount(0); // every pin is back (the ones in view)
+  await page.locator("#map-legend-btn").click();
+  await expect(page.locator('[data-planned-mode="off"]')).toHaveClass(/chip-active/); // the key shows the same state
   await expect(page.locator("#map-rep-legend")).toContainText("E2E Aram Rep");
   await expect(page.locator("#map-rep-legend")).toContainText("E2E Narek Rep");
   await page.screenshot({ path: `${process.env.GB_SHOTS ?? "/tmp"}/map-rep.png` });
