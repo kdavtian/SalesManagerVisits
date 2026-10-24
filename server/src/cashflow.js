@@ -172,3 +172,43 @@ export async function applyCashLedger(rawRows, { via, userId = null, fileName = 
     client.release();
   }
 }
+
+// A manual ledger row from the form's fields (shared by the entry routes and "add from a bank line"). { error } or { value }.
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+export async function cleanEntry(b) {
+  const err = (m) => ({ error: m });
+  if (!DATE_RE.test(String(b.date ?? ""))) return err("Choose the date");
+  const direction = b.direction === "in" ? 1 : b.direction === "out" ? -1 : 0;
+  if (!direction) return err("Choose money in or money out");
+  const amount = Number(b.amount);
+  if (!(amount > 0) || amount > 1e12) return err("Enter the amount");
+  const currency = b.currency === "USD" ? "USD" : "AMD";
+  let fx = null;
+  if (currency === "USD") {
+    fx = Number(b.fx_rate);
+    if (!(fx > 0)) {
+      const { rows } = await pool.query("SELECT fx_rate::float8 AS r FROM cash_entries WHERE currency = 'USD' AND fx_rate IS NOT NULL ORDER BY entry_date DESC, id DESC LIMIT 1");
+      fx = rows[0]?.r ?? null;
+    }
+    if (!(fx > 0)) return err("Enter the USD rate (AMD per USD)");
+  }
+  const accountId = Number(b.account_id);
+  const categoryId = Number(b.category_id);
+  if (!Number.isInteger(accountId)) return err("Choose the account");
+  if (!Number.isInteger(categoryId)) return err("Choose the category");
+  const [{ rowCount: hasAccount }, { rowCount: hasCategory }] = await Promise.all([
+    pool.query("SELECT 1 FROM cash_accounts WHERE id = $1", [accountId]),
+    pool.query("SELECT 1 FROM cash_categories WHERE id = $1", [categoryId]),
+  ]);
+  if (!hasAccount) return err("Choose the account");
+  if (!hasCategory) return err("Choose the category");
+  const text = (k, max) => (typeof b[k] === "string" ? b[k].trim().slice(0, max) || null : null);
+  const signed = direction * amount;
+  return {
+    value: {
+      entry_date: b.date, amount: signed, currency, fx_rate: fx, amount_amd: currency === "USD" ? Math.round(signed * fx * 100) / 100 : signed,
+      category_id: categoryId, account_id: accountId, erp_customer_id: text("erp_customer_id", 40), ref: text("ref", 100), info: text("info", 300), sales_rep: text("sales_rep", 40),
+    },
+  };
+}
+

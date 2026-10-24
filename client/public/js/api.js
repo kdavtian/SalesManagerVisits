@@ -128,6 +128,14 @@ function json(path, method, data) {
   });
 }
 
+function bankForm(file, accountId, mapping) {
+  const form = new FormData();
+  form.set("file", file);
+  form.set("account_id", String(accountId));
+  if (mapping) form.set("mapping", JSON.stringify(mapping));
+  return form;
+}
+
 export const api = {
   login: (email, password) => json("/auth/login", "POST", { email, password }),
   logout: () => request("/auth/logout", { method: "POST" }),
@@ -505,6 +513,13 @@ export const api = {
   deleteCashEntry: (id) => request(`/cashflow/entries/${id}`, { method: "DELETE" }),
   addCashAccount: (data) => json("/cashflow/accounts", "POST", data),
   addCashCategory: (data) => json("/cashflow/categories", "POST", data),
+  // Bank statements (see server/src/routes/bankStatements.js)
+  previewBankStatement: (file, accountId, mapping) => request("/cashflow/bank/preview", { method: "POST", body: bankForm(file, accountId, mapping) }),
+  importBankStatement: (file, accountId, mapping) => request("/cashflow/bank/import", { method: "POST", body: bankForm(file, accountId, mapping) }),
+  getBankLines: (params = {}) => request(`/cashflow/bank/lines?${new URLSearchParams(params)}`, { fresh: true }),
+  addBankLine: (id, data) => json(`/cashflow/bank/lines/${id}/add`, "POST", data),
+  ignoreBankLine: (id) => request(`/cashflow/bank/lines/${id}/ignore`, { method: "POST" }),
+  reopenBankLine: (id) => request(`/cashflow/bank/lines/${id}/reopen`, { method: "POST" }),
   importCashWorkbook: (file) => {
     const form = new FormData();
     form.set("file", file);

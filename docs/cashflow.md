@@ -25,3 +25,11 @@ Risk (shown behind the "!"): the same movement entered in both Excel and the app
 ## Not yet (next phases, owner's list)
 - Switching Excel off (stop the bot push / upload, Excel rows become editable) -- waits for the owner's decision, because customer debt and the CEO bot still read the workbook.
 - Bank statements (CSV / Excel) from the Telegram group -> automatic entries (`origin = 'bank'`) with matching to customers and duplicate detection.
+
+## Bank statements (phase 3a, 1.398.0, migration 146)
+Excel stays the main ledger for now, so a bank line and its Excel row are the **same money**; the statement is reconciled, never added blindly.
+* **Upload** (Cashflow -> Bank, accountant / CEO / admin): pick the bank account and the statement file (CSV with `,` `;` tab or `|`, UTF-8 / UTF-16 / Windows-1251, or `.xlsx`). The header row is found by its words (English, Armenian, Russian: Date, Amount or Debit / Credit, Description, Counterparty, Reference, Currency, Balance); when it is not recognised the sheet asks which column holds what. A preview shows the lines, the period and how many are already imported; nothing is saved until "Import".
+* **No double import**: every line keeps a hash (account, date, amount, currency, reference, text, balance, and its order inside the file); importing the same or an overlapping statement again skips the lines already kept. Lines in another currency than AMD / USD are skipped and counted.
+* **Reconciliation** (computed from the current ledger every time, because the Excel refresh replaces its rows): a line is **matched** when the ledger has a row of the same account, the same signed amount and currency within 3 days (nearest date first, every row used once). Matched ledger rows show a green "bank" mark. Lines with no row are **To check**: *Add to Cashflow* makes a manual row (origin `bank`; the category is chosen, the customer ID optional) or *Ignore* (can be reopened). If the Excel row arrives later, the line turns into a match by itself. The red number on "Bank" is the count of lines to check.
+* API: `POST /api/cashflow/bank/preview|import`, `GET /bank/lines`, `POST /bank/lines/:id/add|ignore|reopen`.
+* Phase 3b (next): the bot picks the statement up from the Telegram group and posts it to the same import (owner: "now upload in the app and then automatically to Telegram").

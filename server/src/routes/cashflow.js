@@ -5,7 +5,8 @@ import multer from "multer";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { canSeeCashflow, canEditCashflow } from "../roles.js";
-import { readCashWorkbook, applyCashLedger } from "../cashflow.js";
+import { readCashWorkbook, applyCashLedger, cleanEntry } from "../cashflow.js";
+import { bankRouter } from "./bankStatements.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
 
 export const cashflowRouter = Router();
@@ -14,6 +15,9 @@ cashflowRouter.use((req, res, next) => (canSeeCashflow(req.user.role) ? next() :
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024, files: 1 } });
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Bank statements (phase 3): upload, reconcile with the ledger.
+cashflowRouter.use("/bank", bankRouter);
 
 // Accounts with their balance (as of `asOf`, default today) in their own currencies, the categories, and the last refresh.
 cashflowRouter.get("/meta", async (req, res) => {
@@ -67,7 +71,8 @@ cashflowRouter.get("/entries", async (req, res) => {
   const [{ rows }, { rows: [tot] }] = await Promise.all([
     pool.query(
       `SELECT e.id, e.entry_date::text AS date, e.amount::float8 AS amount, e.currency, e.fx_rate::float8 AS fx_rate, e.amount_amd::float8 AS amount_amd,
-              e.account_id, e.category_id, c.name AS category, c.kind AS category_kind, a.name AS account, e.erp_customer_id, cu.name AS customer_name, e.ref, e.info, e.sales_rep, e.origin
+              e.account_id, e.category_id, c.name AS category, c.kind AS category_kind, a.name AS account, e.erp_customer_id, cu.name AS customer_name, e.ref, e.info, e.sales_rep, e.origin,
+              EXISTS (SELECT 1 FROM bank_statement_lines b WHERE b.account_id = e.account_id AND b.amount = e.amount AND b.currency = e.currency AND b.line_date BETWEEN e.entry_date - 3 AND e.entry_date + 3) AS bank_ok
        ${FROM} ${where} ORDER BY e.entry_date DESC, e.id DESC LIMIT ${limit} OFFSET ${offset}`,
       params
     ),
@@ -134,41 +139,6 @@ cashflowRouter.post("/import", (req, res, next) => {
 // ---- add / edit / delete an entry in the app (phase 2) ---------------------------------------------------------------------------------
 // Rows that came from Excel are read-only while Excel is the source (the next refresh would replace them); rows made here (origin manual / bank) are
 // never touched by a refresh. The form sends a direction (in / out) and a positive amount; the ledger stores the signed amount.
-async function cleanEntry(b) {
-  const err = (m) => ({ error: m });
-  if (!DATE.test(String(b.date ?? ""))) return err("Choose the date");
-  const direction = b.direction === "in" ? 1 : b.direction === "out" ? -1 : 0;
-  if (!direction) return err("Choose money in or money out");
-  const amount = Number(b.amount);
-  if (!(amount > 0) || amount > 1e12) return err("Enter the amount");
-  const currency = b.currency === "USD" ? "USD" : "AMD";
-  let fx = null;
-  if (currency === "USD") {
-    fx = Number(b.fx_rate);
-    if (!(fx > 0)) {
-      const { rows } = await pool.query("SELECT fx_rate::float8 AS r FROM cash_entries WHERE currency = 'USD' AND fx_rate IS NOT NULL ORDER BY entry_date DESC, id DESC LIMIT 1");
-      fx = rows[0]?.r ?? null;
-    }
-    if (!(fx > 0)) return err("Enter the USD rate (AMD per USD)");
-  }
-  const accountId = Number(b.account_id);
-  const categoryId = Number(b.category_id);
-  const [{ rowCount: hasAccount }, { rowCount: hasCategory }] = await Promise.all([
-    pool.query("SELECT 1 FROM cash_accounts WHERE id = $1", [accountId]),
-    pool.query("SELECT 1 FROM cash_categories WHERE id = $1", [categoryId]),
-  ]);
-  if (!hasAccount) return err("Choose the account");
-  if (!hasCategory) return err("Choose the category");
-  const text = (k, max) => (typeof b[k] === "string" ? b[k].trim().slice(0, max) || null : null);
-  const signed = direction * amount;
-  return {
-    value: {
-      entry_date: b.date, amount: signed, currency, fx_rate: fx, amount_amd: currency === "USD" ? Math.round(signed * fx * 100) / 100 : signed,
-      category_id: categoryId, account_id: accountId, erp_customer_id: text("erp_customer_id", 40), ref: text("ref", 100), info: text("info", 300), sales_rep: text("sales_rep", 40),
-    },
-  };
-}
-
 const ENTRY_COLS = ["entry_date", "amount", "currency", "fx_rate", "amount_amd", "category_id", "account_id", "erp_customer_id", "ref", "info", "sales_rep"];
 
 cashflowRouter.post("/entries", async (req, res) => {
