@@ -26,6 +26,7 @@ if [ -z "$PGBASE" ]; then
     psql "$c/postgres" -tAc 'select 1' >/dev/null 2>&1 && { PGBASE="$c"; break; }
   done
 fi
+export PGBASE
 if [ "$QUICK" = 0 ] && [ -z "$PGBASE" ]; then echo "LOCAL CI: FAIL - no working Postgres connection (set PGBASE=postgres://user:pass@host:5432)"; exit 1; fi
 fresh_db() { psql "$PGBASE/postgres" -qc "DROP DATABASE IF EXISTS $1" -c "CREATE DATABASE $1" >/dev/null 2>&1 && DATABASE_URL="$PGBASE/$1" npm run migrate >/dev/null 2>&1; }
 tests() { find test -name '*.test.js' | sort | grep -vxF "$(cat test/isolated-*.txt)"; }
@@ -38,13 +39,13 @@ run() {
 }
 static() { npm run check:version && npm run verify:ui && { [ "$AUDIT" = 0 ] || npm audit --audit-level=high; }; }
 shard()  { fresh_db "fieldvisits_ci_$1" && DATABASE_URL="$PGBASE/fieldvisits_ci_$1" node --test --test-reporter=tap --test-shard="$1/$SHARDS" $(tests); }
-isolated() { fresh_db "fieldvisits_ci_$1" && DATABASE_URL="$PGBASE/fieldvisits_ci_$1" node --test --test-reporter=tap --test-concurrency=1 $(cat "test/isolated-$1.txt"); }
+isolated() { bash scripts/run-isolated.sh test/isolated-tests.txt; }
 e2e()    { fresh_db fieldvisits_ci_e2e && DATABASE_URL="$PGBASE/fieldvisits_ci_e2e" npm run test:e2e:smoke; }
 
 jobs=(static); run static static &
 if [ "$QUICK" = 0 ]; then
   for i in $(seq 1 "$SHARDS"); do jobs+=("shard$i"); run "shard$i" shard "$i" & done
-  for g in bonus other; do jobs+=("isolated-$g"); run "isolated-$g" isolated "$g" & done
+  jobs+=(isolated); run isolated isolated &
   [ "$E2E" = 1 ] && { jobs+=(e2e); run e2e e2e & }
 fi
 wait
@@ -52,7 +53,7 @@ wait
 fail=()
 for j in "${jobs[@]}"; do
   st="$(cat "$LOG/$j.status" 2>/dev/null || echo 'FAIL missing')"
-  n=""; [ -f "$LOG/$j.log" ] && n=" ($(count pass "$LOG/$j.log") passed, $(count fail "$LOG/$j.log") failed)"; case "$j" in shard*|isolated*) ;; *) n="" ;; esac
+  n=""; [ -f "$LOG/$j.log" ] && n=" ($(count pass "$LOG/$j.log") passed, $(count fail "$LOG/$j.log") failed)"; case "$j" in shard*) ;; isolated) n=" ($(tail -1 "$LOG/$j.log"))" ;; *) n="" ;; esac
   echo "  $j: $st$n"
   case "$st" in FAIL*) fail+=("$j"); grep -E "^not ok|✖|Error:" "$LOG/$j.log" | head -5 | sed 's/^/      /' ;; esac
 done

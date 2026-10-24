@@ -126,19 +126,16 @@ jobs:
       - name: Tests (shard ${{ matrix.shard }}/4)
         run: node --test --test-shard=${{ matrix.shard }}/4 $(find test -name '*.test.js' | sort | grep -vxF "$(cat test/isolated-*.txt)")
 
-  # The files listed in server/test/isolated-*.txt (see server/test/ISOLATED.md; one list for CI and scripts/local-ci.sh) change or read state every
-  # other test can see: the bonus switch (bonus group); lockdown, the ERP sync's TRUNCATE, the global route plan and Vaghinak's whole-database
-  # tick (other group). Each group gets a database to itself and runs one file after the other, in parallel with the shards and each other.
+  # The files listed in server/test/isolated-tests.txt (see server/test/ISOLATED.md; one list for CI and scripts/local-ci.sh) change or read state
+  # every other test can see: the bonuses switch, lockdown, the ERP sync's TRUNCATE, the one active route plan, Vaghinak's whole-database tick.
+  # Each file runs in a database of its own (scripts/run-isolated.sh, five at a time), in parallel with the shards: the time is that of the
+  # slowest file, and the test code is unchanged.
   isolated:
-    name: tests (isolated ${{ matrix.group }})
+    name: tests (isolated, one database per file)
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        group: [bonus, other]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     services:
       postgres:
         image: mirror.gcr.io/library/postgres:16
@@ -171,9 +168,9 @@ jobs:
 
       - run: npm ci --no-audit --no-fund --prefer-offline
 
-      - run: npm run migrate
-
-      - run: node --test --test-concurrency=1 $(cat test/isolated-${{ matrix.group }}.txt)
+      - run: bash scripts/run-isolated.sh test/isolated-tests.txt
+        env:
+          PGBASE: postgres://postgres:postgres@localhost:5432
 
   # The one check name the repository has always required: green only when the static checks passed and every test job passed
   # (or was skipped because only documentation changed).
@@ -201,12 +198,17 @@ jobs:
   # Fast browser-driven subset (step 4 of the stabilization plan, test/e2e) --
   # only the @smoke-tagged specs, so a real-browser run doesn't gate every PR
   # on the full suite's runtime. The complete suite runs nightly instead
-  # (see e2e-nightly.yml).
-  e2e-smoke:
+  # (see e2e-nightly.yml). Two shards side by side, each on its own runner and database: every spec seeds and removes its own rows.
+  e2e:
+    name: e2e (smoke shard ${{ matrix.shard }}/2)
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     services:
       postgres:
         image: mirror.gcr.io/library/postgres:16
@@ -252,11 +254,30 @@ jobs:
 
       - run: npx playwright install --with-deps chromium
 
-      - run: npm run test:e2e:smoke
+      - run: npm run test:e2e:smoke -- --shard=${{ matrix.shard }}/2
 
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
-          name: playwright-smoke-report
+          name: playwright-smoke-report-${{ matrix.shard }}
           path: server/playwright-report/
           retention-days: 7
+
+  # The one check name the repository has always required for the browser tests: green when both shards passed
+  # (or were skipped because only documentation changed).
+  e2e-smoke:
+    name: e2e-smoke
+    needs: [changes, e2e]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Both browser shards passed
+        env:
+          CODE: ${{ needs.changes.outputs.code }}
+          CHANGES: ${{ needs.changes.result }}
+          E2E: ${{ needs.e2e.result }}
+        run: |
+          echo "changes: $CHANGES (code=$CODE), e2e: $E2E"
+          [ "$CHANGES" = "success" ] || exit 1
+          [ "$E2E" = "success" ] || { [ "$CODE" = "false" ] && [ "$E2E" = "skipped" ]; } || exit 1
