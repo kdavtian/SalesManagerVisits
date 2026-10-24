@@ -10,8 +10,7 @@ test.describe("Landing-cost rates and the retail label", () => {
       await pool.query("UPDATE app_settings SET landing_cost_rates = '{}'::jsonb WHERE id = 1");
       const admin = await fixtures.createUser("admin");
       await loginViaUi(page, admin.email);
-      await page.goto("/#/settings");
-      await page.locator("#settings-admin-tab").click();
+      await page.goto("/#/settings?section=a-finance");
       const details = page.locator("#landing-rates-details");
       await details.locator("summary").click();
       const customs = details.locator('input[name="customs"]');
@@ -26,7 +25,6 @@ test.describe("Landing-cost rates and the retail label", () => {
 
       // survives a reload
       await page.reload();
-      await page.locator("#settings-admin-tab").click();
       await page.locator("#landing-rates-details summary").click();
       await expect(page.locator('#landing-rates-details input[name="customs"]')).toHaveValue("10");
 

@@ -1253,7 +1253,7 @@ async function renderRoute() {
   } else if (checkinMatch) {
     (await import("./views/checkin.js")).renderCheckin(app, navigate, checkinMatch[1]);
   } else if (path === "#/settings") {
-    (await import("./views/settings.js")).renderSettings(app, doLogout, render, query.get("section"));
+    (await import("./views/settings.js")).renderSettings(app, doLogout, render, query.get("section"), navigate);
   } else if (path === "#/notifications") {
     (await import("./views/notifications.js")).renderNotifications(app, navigate, refreshNotificationBadge);
   } else if (path === "#/tasks") {
@@ -1458,7 +1458,7 @@ function rebuildNavMarkup(hash) {
         ${icons.bell}
         <span class="nav-badge count-badge" id="topbar-bell-badge" hidden></span>
       </button>
-      <button type="button" class="topbar-menu-btn" id="topbar-menu-btn" aria-label="${t("nav_settings")}" ${hash === "#/settings" ? 'aria-current="page"' : ""}>
+      <button type="button" class="topbar-menu-btn" id="topbar-menu-btn" aria-label="${t("nav_settings")}" ${hash.split("?")[0] === "#/settings" ? 'aria-current="page"' : ""}>
         ${icons.menu}
         <span class="nav-badge count-badge" id="topbar-menu-badge" hidden></span>
       </button>
@@ -1466,7 +1466,7 @@ function rebuildNavMarkup(hash) {
   `;
   topBar.querySelector("#topbar-bell-btn").addEventListener("click", () => navigate("#/notifications"));
   topBar.querySelector("#topbar-menu-btn").addEventListener("click", () => {
-    if (hash === "#/settings") {
+    if (hash.split("?")[0] === "#/settings") {
       navigate(preSettingsHash);
     } else {
       preSettingsHash = hash;

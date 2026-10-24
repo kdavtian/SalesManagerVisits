@@ -9908,45 +9908,7 @@ form select,
     padding-bottom: 24px;
   }
 
-  /* The Personal tab is just a stack of profile/toggle rows -- .settings-
-     view's own 960px cap (see above) still left each row's control (a
-     toggle switch, a value label) stranded most of a screen-width away
-     from its own icon/label, since a boolean row has no reason to fill a
-     wide container the way the Admin tab's two-pane grid below does.
-     Capped independently, tighter, so a row reads as one unit again. */
-  #settings-personal-panel {
-    max-width: 640px;
-  }
-
-  /* Settings admin workspace: section list on the left, section content
-     in a persistent pane on the right (see openAdminSection in
-     settings.js) instead of the mobile full-screen modal drill-down. */
-  .settings-admin-layout {
-    display: grid;
-    grid-template-columns: minmax(280px, 380px) 1fr;
-    gap: 24px;
-    align-items: start;
-  }
-
-  .settings-section-pane {
-    position: sticky;
-    top: 24px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 20px;
-    min-height: 240px;
-    max-height: calc(100vh - 48px);
-    overflow-y: auto;
-  }
-
-  .settings-section-pane h2 {
-    margin-top: 0;
-  }
-
-  .settings-list-row-active {
-    background: var(--bg-card-pressed);
-  }
+  /* Settings: sidebar + page layout -- see "Settings: iOS / macOS structure" below. */
 }
 
 /* ============================================================
@@ -10064,7 +10026,7 @@ form select,
    accordion anywhere in this codebase for the original spec's
    "Customer/Admin management" screen to adapt -- admin.js's sections
    already got their desktop two-pane treatment in Step 2
-   (.settings-admin-layout). What's left in scope here, kept to the
+   (the Settings sidebar layout). What's left in scope here, kept to the
    same low-risk pattern as Warehouse: the Customers list's single-
    column .card-list becomes a multi-column grid at desktop, so more
    customers are visible at once -- same #customer-list markup/data in
@@ -11426,8 +11388,7 @@ form select,
   margin: 16px 0;
 }
 .settings-list-row[hidden],
-.settings-list-group-item[hidden],
-.settings-admin-left .card[hidden] {
+.settings-list-group-item[hidden] {
   display: none;
 }
 
@@ -15478,3 +15439,135 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 .team-swatch-on { outline: 2px solid var(--text); outline-offset: 2px; }
 .team-swatch-auto { background: var(--bg-card); color: var(--text-dim); font-size: 0.72rem; }
 
+
+
+/* ===== Settings: iOS / macOS structure (1.405.0) =====
+   Phone: large title, search, Personal | Administration segmented control, inset-grouped cards. Personal is one
+   scrolling list of pages; Administration is a list of categories that open as pages (Back returns).
+   Computer: sidebar of pages (search + tabs on top) with the chosen page beside it. */
+.settings-view [hidden] { display: none !important; }
+.settings-view h1 { padding: 8px 16px 0; font-size: 2rem; letter-spacing: -0.03em; }
+.settings-search-wrap { margin: 10px 16px 0; }
+.settings-view .admin-search {
+  margin: 0;
+  min-height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--bg-card-pressed);
+  padding: 8px 14px;
+}
+.settings-view .admin-search-empty { margin: 20px 16px; }
+.settings-workspace-tabs { margin: 12px 16px 2px; }
+
+.settings-page-title {
+  margin: 22px 16px 0;
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-eyebrow);
+  letter-spacing: var(--ls-eyebrow);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.settings-page:first-child .settings-page-title { margin-top: 12px; }
+/* A phone page opened from the Administration list already shows its name in the large title. */
+.settings-view[data-wide="0"][data-tab="admin"] .settings-page-title { display: none; }
+.settings-view[data-wide="0"][data-tab="admin"] .settings-page > :first-child.card,
+.settings-view[data-wide="0"][data-tab="admin"] .settings-page > :first-child.settings-subsection-title { margin-top: 12px; }
+.settings-view .settings-subsection-title { margin: 22px 16px 6px; }
+.settings-view .settings-page > div[id$="-slot"] { margin: 0 16px; }
+
+.settings-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 44px;
+  margin: 4px 8px 0;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.settings-back svg { width: 22px; height: 22px; }
+
+.settings-nav { padding: 0; overflow: hidden; }
+.settings-view .settings-aside > .settings-nav,
+.settings-view .settings-aside > .card { margin: 14px 16px 0; }
+.settings-nav-item { min-height: 48px; }
+.settings-result-page { display: block; margin-top: 1px; font-size: 0.75rem; font-weight: 500; color: var(--text-dim); }
+.settings-list-row.settings-found,
+.settings-list-group-item.settings-found { animation: settings-found 1.6s ease-out; }
+@keyframes settings-found { 0%, 60% { background: color-mix(in srgb, var(--accent) 16%, transparent); } 100% { background: transparent; } }
+
+.settings-hint-text {
+  margin: 0;
+  padding: 2px 16px 12px 57px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+.radius-help[hidden] { display: none; }
+.settings-danger-label { color: var(--cat-red); margin-bottom: 10px; }
+.settings-logout-wrap { padding: 0 16px; }
+.settings-logout-wrap .settings-logout { width: 100%; margin: 22px 0 24px; }
+
+.settings-section-pane h2 { margin: 4px 0 12px; }
+.settings-pane-back { margin: -6px 0 0 -10px; }
+
+@media (min-width: 1024px) {
+  .settings-view {
+    display: grid;
+    grid-template-columns: 300px minmax(0, 720px);
+    gap: 40px;
+    max-width: 1100px;
+    padding: 24px 24px 40px;
+    align-items: start;
+  }
+  .settings-aside { position: sticky; top: 16px; }
+  .settings-view h1 { padding: 0; font-size: 1.9rem; }
+  .settings-view .settings-aside > .settings-nav,
+  .settings-view .settings-aside > .card,
+  .settings-search-wrap,
+  .settings-workspace-tabs,
+  .settings-view .admin-search-empty { margin-left: 0; margin-right: 0; }
+  .settings-view .settings-aside > .settings-nav,
+  .settings-view .settings-aside > .card { margin-top: 14px; }
+  .settings-page-title,
+  .settings-page:first-child .settings-page-title {
+    margin: 4px 0 4px;
+    font-size: 1.5rem;
+    letter-spacing: -0.02em;
+    text-transform: none;
+    color: var(--text);
+    font-weight: 700;
+  }
+  .settings-view[data-wide="1"][data-tab="admin"] .settings-page-title { display: block; }
+  .settings-main .card,
+  .settings-main .settings-subsection-title,
+  .settings-main .settings-hint { margin-left: 0; margin-right: 0; }
+  .settings-main .settings-page > div[id$="-slot"] { margin: 0; }
+  .settings-logout-wrap { padding: 0; }
+  .settings-logout-wrap .settings-logout { width: auto; min-width: 200px; }
+  .settings-section-pane {
+    position: static;
+    background: none;
+    border: 0;
+    padding: 0;
+    max-height: none;
+    min-height: 0;
+    overflow: visible;
+  }
+  /* Drill-down: the opened screen replaces the page; Back (named after the page) returns. */
+  .settings-view[data-drill] .settings-page { display: none !important; }
+  .settings-nav-item.settings-list-row-active { background: var(--bg-card-pressed); }
+  .settings-nav-item.settings-list-row-active .settings-row-chevron { visibility: hidden; }
+}
+
+/* The explanation paragraph is the last child while hidden: the row above it keeps its hairline, which showed as a stub. */
+.settings-list > .settings-list-row:has(+ .settings-hint-text[hidden]:last-child) { border-bottom: 0; }
+.settings-view form.settings-list-group-item > .btn-primary { width: 100%; }
+.settings-section-pane .card-list { padding-left: 0; padding-right: 0; }
+/* Armenian "Էկոնոմ ռեժիմ !" and "Հաշվիչի քողարկում !" kept the "!" on a second line at 390 px: a little more room for the label. */
+.settings-view .settings-toggle-row { gap: 10px; }
+.settings-view .settings-toggle-row .settings-row-value { font-size: 0.8rem; }
+.settings-view .settings-row-label { overflow-wrap: anywhere; }

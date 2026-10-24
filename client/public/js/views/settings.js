@@ -37,6 +37,11 @@ const ICON = {
   team: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20v-1.25A5.75 5.75 0 0 1 8.75 13h.5A5.75 5.75 0 0 1 15 18.75V20"/><circle cx="17.5" cy="8.5" r="2.5"/><path d="M15.5 13.6c.6-.25 1.25-.38 1.9-.38A4.6 4.6 0 0 1 22 17.82V20"/></svg>`,
   chart: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>`,
   phone: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7.2 3.5 10 7.8 8.2 10a15.5 15.5 0 0 0 5.8 5.8l2.2-1.8 4.3 2.8-.8 3.2c-.2.8-1 1.3-1.8 1.2A18 18 0 0 1 2.8 6.1C2.7 5.3 3.2 4.5 4 4.3z"/></svg>`,
+  user: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.5v-1A5.5 5.5 0 0 1 10 14h4a5.5 5.5 0 0 1 5.5 5.5v1"/></svg>`,
+  back: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>`,
+  coins: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M14.8 9.2c-.5-.8-1.5-1.2-2.8-1.2-1.6 0-2.6.8-2.6 1.9 0 2.7 5.4 1.2 5.4 4 0 1.1-1.1 1.9-2.8 1.9-1.4 0-2.5-.5-3-1.4M12 6v2M12 16v2"/></svg>`,
+  star: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.5 2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9l-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z"/></svg>`,
+  link: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>`,
   bolt: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 5 13.5h5.5L11 21l8-10.5h-5.5z"/></svg>`,
 };
 
@@ -47,14 +52,25 @@ const ICON = {
 // etc. A copy-fix or color tweak doesn't need a re-export.
 const GUIDE_VERSION = "1.251.0";
 
+// The small "!" that reveals an explanation: data-hint is the id of the hidden paragraph it toggles. A <span
+// role="button"> rather than a <button>, since it often sits inside a row that is a button itself.
+function hintIcon(textId, btnId = "") {
+  return `<span role="button" tabindex="0" class="settings-inline-hint-icon" ${btnId ? `id="${btnId}"` : ""} data-hint="${textId}" aria-expanded="false" aria-controls="${textId}" aria-label="${t("more_info")}">!</span>`;
+}
+
+// The router's navigate(): phones open an Administration page as its own route so Back / swipe-back returns to the list.
+let navigateFn = null;
+let currentNav = { tab: "personal", page: null };
+const currentPageId = () => currentNav.page;
+
 // `color` picks a badge tint for the row's icon, iOS-Settings style (each
 // row's icon sits in a colored rounded-square, not just a plain glyph) --
 // one of the ICON_COLORS keys below. Reused across rows freely, same as
 // iOS itself reuses a handful of system colors across many settings.
 // hintBtnId: renders a small inline "!" button right next to the label
 // (instead of a separate detached hint icon floating below the whole
-// card) -- pairs with a hidden <p> the caller places wherever makes sense
-// and toggles via wireHintToggle(hintBtnId, hintTextId).
+// card) -- pairs with a hidden <p> (hintTextId) the caller places under the row;
+// the "!" wiring is generic (data-hint), see renderSettings.
 function settingsRow({ icon, label, value, id, interactive = true, color = "gray", hintBtnId, hintTextId }) {
   const tag = interactive ? "button" : "div";
   return `
@@ -62,7 +78,7 @@ function settingsRow({ icon, label, value, id, interactive = true, color = "gray
       <span class="settings-row-icon settings-row-icon-${color}">${icon}</span>
       <span class="settings-row-label">
         ${label}
-        ${hintBtnId ? `<span role="button" tabindex="0" class="settings-inline-hint-icon" id="${hintBtnId}" aria-expanded="false" aria-controls="${hintTextId}" aria-label="${t("more_info")}">!</span>` : ""}
+        ${hintBtnId ? `${hintIcon(hintTextId, hintBtnId)}` : ""}
       </span>
       ${value !== undefined ? `<span class="settings-row-value muted">${value}</span>` : ""}
       ${interactive ? `<span class="settings-row-chevron">${ICON.chevron}</span>` : ""}
@@ -76,7 +92,7 @@ function settingsToggleRow({ icon, label, value, id, checked, resetId, color = "
       <span class="settings-row-icon settings-row-icon-${color}">${icon}</span>
       <span class="settings-row-label">
         ${label}
-        ${hintBtnId ? `<span role="button" tabindex="0" class="settings-inline-hint-icon" id="${hintBtnId}" aria-expanded="false" aria-controls="${hintTextId}" aria-label="${t("more_info")}">!</span>` : ""}
+        ${hintBtnId ? `${hintIcon(hintTextId, hintBtnId)}` : ""}
         ${resetId ? `<button type="button" class="settings-reset-link" id="${resetId}">${t("reset_to_default")}</button>` : ""}
       </span>
       <span class="settings-row-value muted">${value}</span>
@@ -98,7 +114,8 @@ const LANDING_RATE_GROUPS = [
   { label: "lr_taxes", fields: [["customs", "lr_customs"], ["eco", "lr_eco"], ["excise", "lr_excise"], ["vat", "lr_vat"], ["handling", "lr_handling"], ["otherUsd", "lr_other"]] },
 ];
 
-export async function renderSettings(root, onLogout, onLanguageChange, section = null) {
+export async function renderSettings(root, onLogout, onLanguageChange, section = null, navigate = null) {
+  navigateFn = navigate || navigateFn;
   // CSV exports are saved in place (see util.js downloadFromUrl), never by
   // navigating the app window to the file -- an installed PWA has no way back.
   root.addEventListener("click", async (e) => {
@@ -136,21 +153,65 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
   const canManageCampaigns = canManageChallenges || state.user?.role === "sales_director";
   const hasAdminWorkspace = admin || canApprovePlans || canExportFinancials || canManageChallenges || canReviewBonusRewards || canManageCampaigns;
 
+  // Pages (iOS Settings / macOS System Settings structure): every page is a
+  // group of related rows. Phone: Personal = one scrolling list of pages,
+  // Administration = a list of categories that open as pages (Back returns).
+  // Computer (>= 1024 px): a sidebar of pages and the chosen page beside it.
+  const PAGES = [
+    { id: "p-account", tab: "personal", title: t("sp_account"), icon: ICON.user, color: "blue", show: true },
+    { id: "p-appearance", tab: "personal", title: t("sp_appearance"), icon: ICON.appearance, color: "indigo", show: true },
+    { id: "p-notifications", tab: "personal", title: t("notifications_title"), icon: ICON.bell, color: "red", show: true },
+    { id: "p-data", tab: "personal", title: t("sp_data"), icon: ICON.cloud, color: "teal", show: true },
+    { id: "p-about", tab: "personal", title: t("sp_about"), icon: ICON.info, color: "gray", show: true },
+    { id: "a-team", tab: "admin", title: t("admin_group_team_roles"), icon: ICON.team, color: "blue", show: admin },
+    { id: "a-sales", tab: "admin", title: t("sa_sales"), icon: ICON.gps, color: "green", show: admin || canApprovePlans || canReassignCustomers() || canManageArrival },
+    { id: "a-finance", tab: "admin", title: t("sa_finance"), icon: ICON.coins, color: "orange", show: admin || canManageProducts() || canExportFinancials },
+    { id: "a-bonuses", tab: "admin", title: t("sa_bonuses"), icon: ICON.star, color: "purple", show: canManageChallenges || canReviewBonusRewards },
+    { id: "a-integrations", tab: "admin", title: t("sa_integrations"), icon: ICON.link, color: "indigo", show: admin || canManageCampaigns },
+    { id: "a-security", tab: "admin", title: t("security"), icon: ICON.lock, color: "gray", show: admin },
+    { id: "a-system", tab: "admin", title: t("sa_system"), icon: ICON.shield, color: "red", show: admin },
+  ].filter((p) => p.show && (p.tab === "personal" || hasAdminWorkspace));
+  const pagesOf = (tab) => PAGES.filter((p) => p.tab === tab);
+  const pageById = (id) => PAGES.find((p) => p.id === id);
+
+  const pageOpen = (p) => `<section class="settings-page" data-page="${p.id}" data-tab="${p.tab}" data-title="${escapeHtml(p.title)}" hidden><h2 class="settings-page-title">${escapeHtml(p.title)}</h2>`;
+  const navItems = (tab) =>
+    pagesOf(tab)
+      .map(
+        (p) => `<button type="button" class="settings-list-row settings-nav-item" data-nav-page="${p.id}">
+          <span class="settings-row-icon settings-row-icon-${p.color}">${p.icon}</span>
+          <span class="settings-row-label">${escapeHtml(p.title)}</span>
+          <span class="settings-row-chevron">${ICON.chevron}</span>
+        </button>`
+      )
+      .join("");
+
   root.innerHTML = `
-    <div class="settings-view">
-      <h1>${t("settings_title")}</h1>
+    <div class="settings-view" data-tab="personal" data-wide="0">
+      <div class="settings-aside">
+        <button type="button" class="settings-back" id="settings-back" hidden>${ICON.back}<span id="settings-back-label"></span></button>
+        <h1 id="settings-title">${t("settings_title")}</h1>
+        <div class="settings-search-wrap" id="settings-search-wrap">
+          <input type="search" class="admin-search" id="settings-search" placeholder="${t("admin_search_placeholder")}" aria-label="${t("admin_search_placeholder")}" autocomplete="off" />
+        </div>
+        ${
+          hasAdminWorkspace
+            ? `<div class="settings-workspace-tabs" id="settings-tabs" role="tablist" aria-label="${t("settings_title")}">
+                <button type="button" class="settings-workspace-tab settings-workspace-tab-active" id="settings-personal-tab" role="tab" aria-selected="true" aria-controls="settings-personal-panel">${t("personal_settings")}</button>
+                <button type="button" class="settings-workspace-tab" id="settings-admin-tab" role="tab" aria-selected="false" aria-controls="settings-admin-panel" tabindex="-1">${t("admin_workspace")}</button>
+              </div>`
+            : ""
+        }
+        <div class="card settings-list settings-nav" id="settings-results" hidden></div>
+        <p class="muted admin-search-empty" id="settings-search-empty" hidden>${t("admin_search_empty")}</p>
+        <nav class="card settings-list settings-nav" id="settings-nav-personal" aria-label="${t("personal_settings")}" hidden>${navItems("personal")}</nav>
+        ${hasAdminWorkspace ? `<nav class="card settings-list settings-nav" id="settings-nav-admin" aria-label="${t("admin_workspace")}" hidden>${navItems("admin")}</nav>` : ""}
+      </div>
 
-      ${
-        hasAdminWorkspace
-          ? `<div class="settings-workspace-tabs" role="tablist" aria-label="${t("settings_title")}">
-              <button type="button" class="settings-workspace-tab settings-workspace-tab-active" id="settings-personal-tab" role="tab" aria-selected="true" aria-controls="settings-personal-panel">${t("personal_settings")}</button>
-              <button type="button" class="settings-workspace-tab" id="settings-admin-tab" role="tab" aria-selected="false" aria-controls="settings-admin-panel" tabindex="-1">${t("admin_workspace")}</button>
-            </div>`
-          : ""
-      }
-
+      <div class="settings-main">
       <section id="settings-personal-panel" ${hasAdminWorkspace ? 'role="tabpanel" aria-labelledby="settings-personal-tab"' : ""}>
 
+      ${pageOpen(pageById("p-account"))}
       <div class="card profile-card">
         <div class="profile-avatar-wrap">
           <div class="profile-avatar" id="profile-avatar">${escapeHtml(state.user.name.slice(0, 1).toUpperCase())}</div>
@@ -171,22 +232,31 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
         state.user.role === "sales_director" ? `<div id="sales-performance-slot"></div>` : ""
       }
 
-      <h2 class="section-title">${t("contact_info")}</h2>
       <div class="card settings-list">
         ${settingsRow({ icon: ICON.phone, label: t("phone"), value: state.user.phone ? escapeHtml(formatPhoneDisplay(state.user.phone)) : t("not_set"), id: "row-phone", color: "green" })}
+        ${settingsRow({ icon: ICON.lock, label: t("change_password"), id: "row-change-password", color: "gray" })}
+        ${settingsRow({ icon: ICON.shield, label: t("session_management"), id: "row-sessions", color: "green" })}
       </div>
+      </section>
 
-      <h2 class="section-title">${t("preferences")}</h2>
+      ${pageOpen(pageById("p-appearance"))}
       <div class="card settings-list">
         ${settingsToggleRow({ icon: ICON.appearance, label: t("appearance"), value: getTheme() === "dark" ? t("dark") : t("light"), id: "toggle-appearance", checked: getTheme() === "dark", color: "indigo" })}
         ${settingsToggleRow({ icon: ICON.language, label: t("language"), value: getLang() === "hy" ? t("armenian") : t("english"), id: "toggle-language", checked: getLang() === "hy", color: "blue" })}
         ${settingsToggleRow({ icon: ICON.bolt, label: t("efficiency_mode"), value: getPerfMode() === "efficiency" ? t("toggle_on") : t("toggle_off"), id: "toggle-perf-mode", checked: getPerfMode() === "efficiency", color: "orange", hintBtnId: "efficiency-mode-hint-btn", hintTextId: "efficiency-mode-hint-text" })}
+        <p class="muted settings-hint-text" id="efficiency-mode-hint-text" hidden>${t("efficiency_mode_hint")}</p>
       </div>
-      <!-- The "!" icon sits right on the Efficiency mode row itself (see
-           settingsToggleRow's hintBtnId) instead of floating disconnected
-           below the whole card -- this paragraph is just where the
-           revealed text lands once tapped. -->
-      <p class="muted settings-hint" id="efficiency-mode-hint-text" hidden>${t("efficiency_mode_hint")}</p>
+      <div class="card settings-list">
+        <div class="settings-list-row"><span class="settings-row-label">${t("text_size")}</span></div>
+        <div class="settings-textsize" id="text-size-picker" role="radiogroup" aria-label="${t("text_size")}">
+          ${[["normal", "ts-a1", "text_size_normal"], ["large", "ts-a2", "text_size_large"], ["xlarge", "ts-a3", "text_size_xlarge"]]
+            .map(([v, cls, key]) => `<button type="button" role="radio" class="${cls}${getTextSize() === v ? " is-on" : ""}" aria-checked="${getTextSize() === v}" data-text-size="${v}">${t(key)}</button>`)
+            .join("")}
+        </div>
+      </div>
+      </section>
+
+      ${pageOpen(pageById("p-notifications"))}
       <div class="card settings-list">
         <div class="settings-list-row settings-toggle-row settings-expandable-row" id="push-notifications-row">
           <span class="settings-row-icon settings-row-icon-red">${ICON.bell}</span>
@@ -201,18 +271,9 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
           <p class="loading-state" role="status">${t("loading")}</p>
         </div>
       </div>
+      </section>
 
-      <h2 class="section-title">${t("accessibility")}</h2>
-      <div class="card settings-list">
-        <div class="settings-list-row"><span class="settings-row-label">${t("text_size")}</span></div>
-        <div class="settings-textsize" id="text-size-picker" role="radiogroup" aria-label="${t("text_size")}">
-          ${[["normal", "ts-a1", "text_size_normal"], ["large", "ts-a2", "text_size_large"], ["xlarge", "ts-a3", "text_size_xlarge"]]
-            .map(([v, cls, key]) => `<button type="button" role="radio" class="${cls}${getTextSize() === v ? " is-on" : ""}" aria-checked="${getTextSize() === v}" data-text-size="${v}">${t(key)}</button>`)
-            .join("")}
-        </div>
-      </div>
-
-      <h2 class="section-title">${t("data_sync")}</h2>
+      ${pageOpen(pageById("p-data"))}
       <div class="card settings-list">
         ${settingsRow({ icon: ICON.cloud, label: t("sync_status"), value: `<span id="sync-status-value"></span>`, interactive: false, color: "teal" })}
         ${settingsRow({ icon: ICON.clock, label: t("last_sync"), value: `<span id="last-sync-value"></span>`, interactive: false, color: "gray" })}
@@ -221,233 +282,115 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
         ${settingsRow({ icon: ICON.database, label: t("offline_storage"), value: `<span id="storage-value">…</span>`, interactive: false, color: "purple" })}
         ${
           isStrongDevice()
-            ? settingsToggleRow({ icon: ICON.database, label: t("map_tile_cache"), value: getMapTileCacheEnabled() ? t("toggle_on") : t("toggle_off"), id: "toggle-map-tile-cache", checked: getMapTileCacheEnabled(), color: "purple" })
+            ? `${settingsToggleRow({ icon: ICON.database, label: t("map_tile_cache"), value: getMapTileCacheEnabled() ? t("toggle_on") : t("toggle_off"), id: "toggle-map-tile-cache", checked: getMapTileCacheEnabled(), color: "purple", hintBtnId: "map-tile-hint-btn", hintTextId: "map-tile-hint-text" })}
+               <p class="muted settings-hint-text" id="map-tile-hint-text" hidden>${t("map_tile_cache_hint")}</p>`
             : ""
         }
       </div>
-      ${isStrongDevice() ? `<p class="muted settings-hint">${t("map_tile_cache_hint")}</p>` : ""}
       <p class="settings-hint sync-needs-attention-hint" id="sync-needs-attention-hint" role="status" hidden></p>
-
-      <h2 class="section-title">${t("security")}</h2>
-      <div class="card settings-list">
-        ${settingsRow({ icon: ICON.lock, label: t("change_password"), id: "row-change-password", color: "gray" })}
-        ${settingsRow({ icon: ICON.shield, label: t("session_management"), id: "row-sessions", color: "green" })}
-      </div>
-
-      <h2 class="section-title">${t("about")}</h2>
-      <div class="card settings-list">
-        ${settingsRow({ icon: ICON.info, label: t("about_app"), value: `${t("version")} ${APP_VERSION}`, interactive: false, color: "blue" })}
-        ${settingsRow({ icon: ICON.book, label: t("user_guide"), value: "PDF", id: "row-user-guide", color: "orange", hintBtnId: "user-guide-hint-btn", hintTextId: "user-guide-hint-text" })}
-        ${settingsRow({ icon: ICON.refresh, label: t("check_for_updates"), value: `<span id="check-updates-value"></span>`, id: "row-check-updates", color: "teal" })}
-      </div>
-      <!-- The "!" icon sits right on the User guide row itself (see
-           settingsRow's hintBtnId) instead of floating disconnected below
-           the whole card -- this paragraph is just where the revealed text
-           lands once tapped. -->
-      <p class="muted settings-hint" id="user-guide-hint-text" hidden>${t("user_guide_hint").replace("{v}", GUIDE_VERSION)}</p>
-
-      <button class="btn btn-block btn-danger settings-logout" id="settings-logout">${t("log_out")}</button>
       </section>
 
-      <section id="settings-admin-panel" role="tabpanel" aria-labelledby="settings-admin-tab" hidden>
-      <div class="settings-admin-layout">
-      <div class="settings-admin-left">
-      <input type="search" class="admin-search" id="admin-search" placeholder="${t("admin_search_placeholder")}" aria-label="${t("admin_search_placeholder")}" autocomplete="off" />
-      <p class="muted admin-search-empty" id="admin-search-empty" hidden>${t("admin_search_empty")}</p>
+      ${pageOpen(pageById("p-about"))}
+      <div class="card settings-list">
+        ${settingsRow({ icon: ICON.info, label: t("about_app"), value: `${t("version")} ${APP_VERSION}`, interactive: false, color: "blue" })}
+        ${settingsRow({ icon: ICON.refresh, label: t("check_for_updates"), value: `<span id="check-updates-value"></span>`, id: "row-check-updates", color: "teal" })}
+        ${settingsRow({ icon: ICON.book, label: t("user_guide"), value: "PDF", id: "row-user-guide", color: "orange", hintBtnId: "user-guide-hint-btn", hintTextId: "user-guide-hint-text" })}
+        <p class="muted settings-hint-text" id="user-guide-hint-text" hidden>${t("user_guide_hint").replace("{v}", GUIDE_VERSION)}</p>
+      </div>
+      </section>
+
+      <div class="settings-logout-wrap" id="settings-logout-wrap">
+        <button class="btn btn-block btn-danger settings-logout" id="settings-logout">${t("log_out")}</button>
+      </div>
+      </section>
+
+      ${
+        hasAdminWorkspace
+          ? `<section id="settings-admin-panel" role="tabpanel" aria-labelledby="settings-admin-tab" hidden>
 
       ${
         admin
-          ? `
-        <h2 class="section-title">${t("admin_group_team_roles")}</h2>
+          ? `${pageOpen(pageById("a-team"))}
         <div class="card settings-list">
           ${settingsRow({ icon: ICON.team, label: t("team_management"), id: "row-team-management", color: "blue" })}
           ${settingsRow({ icon: ICON.bell, label: t("notification_defaults_title"), id: "row-notification-defaults", color: "red" })}
+          ${settingsRow({ icon: ICON.chart, label: t("quick_action_visibility_title"), id: "row-quick-actions", color: "indigo" })}
         </div>
-      `
+        </section>`
           : ""
       }
 
       ${
-        canManageChallenges || canReviewBonusRewards
-          ? `
-        <h2 class="section-title">${t("bonuses_title")}</h2>
+        pageById("a-sales")
+          ? `${pageOpen(pageById("a-sales"))}
         ${
-          admin
-            ? `
-          <div class="card settings-list-group">
-            <div class="settings-list-group-item">
-              ${settingsToggleRow({ icon: ICON.bolt, label: t("bonuses_enabled_label"), value: "", id: "toggle-bonuses-enabled", checked: false, color: "orange" })}
-            </div>
-            <form id="incentive-message-form" class="settings-list-group-item">
-              <label>
-                <span class="settings-form-label">${ICON.gps}${t("incentive_message_label")}</span>
-                <input type="text" name="message" maxlength="200" placeholder="${t("points_leaderboard_prize_hint")}" />
-              </label>
-              <p class="muted radius-help">${t("incentive_message_help")}</p>
-              <p class="form-success" id="incentive-message-success" role="status" hidden>${t("saved")}</p>
-              <button type="submit" class="btn btn-primary">${t("save")}</button>
-            </form>
-          </div>
-        `
+          canApprovePlans
+            ? `<h3 class="settings-subsection-title">${t("plan_approvals")}</h3>
+          <div id="plan-approvals-slot"></div>`
             : ""
         }
-        <div class="card settings-list">
-          ${canManageChallenges ? settingsRow({ icon: ICON.bolt, label: t("bonuses_admin_challenges"), id: "row-bonus-challenges", color: "orange" }) : ""}
-          ${canReviewBonusRewards ? settingsRow({ icon: ICON.chart, label: t("bonuses_reward_claims"), id: "row-bonus-reward-claims", color: "green" }) : ""}
-          ${admin ? settingsRow({ icon: ICON.chart, label: t("points_closeout_title"), id: "row-points-closeout", color: "teal" }) : ""}
-        </div>
-      `
-          : ""
-      }
-
-      ${
-        canManageCampaigns
-          ? `
-        <h2 class="section-title">${t("kos_section")}</h2>
-        <div class="card settings-list">
-          ${canManageChallenges ? settingsRow({ icon: ICON.bolt, label: t("kos_row"), id: "row-kos-perks", color: "orange" }) : ""}
-          ${settingsRow({ icon: ICON.chart, label: t("kos_campaigns_row"), id: "row-kos-campaigns", color: "teal" })}
-        </div>
-      `
-          : ""
-      }
-
-      ${
-        canManageArrival
-          ? `
-        <h2 class="section-title">${t("arrival_section")}</h2>
-        <div class="card settings-list">
-          ${settingsRow({ icon: ICON.gps, label: t("arrival_section"), id: "row-delivery-arrival", color: "green" })}
-        </div>
-      `
-          : ""
-      }
-
-      ${
-        admin
-          ? `
-        <h2 class="section-title">${t("admin_group_app_config")}</h2>
-        <div class="card settings-list-group">
+        ${
+          admin
+            ? `<h3 class="settings-subsection-title">${t("edit_requests_title")}</h3>
+          <div id="edit-requests-slot"></div>`
+            : ""
+        }
+        ${
+          admin
+            ? `<h3 class="settings-subsection-title">${t("settings_group_visits")}</h3>
+          <div class="card settings-list-group">
           ${settingsToggleRow({ icon: ICON.gps, label: t("checkin_allowance_label"), value: "", id: "toggle-checkin-allowance", checked: true, color: "green" })}
           <form id="radius-form" class="settings-list-group-item">
             <label>
-              <span class="settings-form-label">${ICON.gps}${t("gps_verification_settings")}</span>
+              <span class="settings-form-label">${ICON.gps}${t("gps_verification_settings")}${hintIcon("radius-help-text")}</span>
               <input type="number" name="radius" min="10" max="5000" required />
             </label>
-            <p class="muted radius-help">${t("checkin_radius_help")}</p>
+            <p class="muted radius-help" id="radius-help-text" hidden>${t("checkin_radius_help")}</p>
             <p class="form-success" id="radius-success" role="status" hidden>${t("saved")}</p>
             <button type="submit" class="btn btn-primary">${t("save")}</button>
           </form>
           <form id="visit-frequency-form" class="settings-list-group-item">
             <label>
-              <span class="settings-form-label">${ICON.calendar}${t("default_visit_frequency")}</span>
+              <span class="settings-form-label">${ICON.calendar}${t("default_visit_frequency")}${hintIcon("visit-frequency-help-text")}</span>
               <input type="number" name="days" min="1" max="365" required />
             </label>
-            <p class="muted radius-help">${t("default_visit_frequency_help")}</p>
+            <p class="muted radius-help" id="visit-frequency-help-text" hidden>${t("default_visit_frequency_help")}</p>
             <p class="form-success" id="visit-frequency-success" role="status" hidden>${t("saved")}</p>
             <button type="submit" class="btn btn-primary">${t("save")}</button>
           </form>
           <form id="plan-skip-form" class="settings-list-group-item">
             <label>
-              <span class="settings-form-label">${ICON.calendar}${t("plan_skip_recent_label")}</span>
+              <span class="settings-form-label">${ICON.calendar}${t("plan_skip_recent_label")}${hintIcon("plan-skip-help-text")}</span>
               <input type="number" name="days" min="0" max="60" required />
             </label>
-            <p class="muted radius-help">${t("plan_skip_recent_help")}</p>
+            <p class="muted radius-help" id="plan-skip-help-text" hidden>${t("plan_skip_recent_help")}</p>
             <p class="form-success" id="plan-skip-success" role="status" hidden>${t("saved")}</p>
             <button type="submit" class="btn btn-primary">${t("save")}</button>
           </form>
-          ${settingsToggleRow({ icon: ICON.bolt, label: t("ask_kad_label"), value: "", id: "toggle-ask-kad", checked: true, color: "purple" })}
-          <form id="ask-kad-cap-form" class="settings-list-group-item">
-            <label>
-              <span class="settings-form-label">${ICON.bolt}${t("ask_kad_cap_label")}</span>
-              <input type="number" name="usd" min="1" max="5000" step="1" required />
-            </label>
-            <p class="muted radius-help">${t("ask_kad_cap_help")}</p>
-            <p class="form-success" id="ask-kad-cap-success" role="status" hidden>${t("saved")}</p>
-            <button type="submit" class="btn btn-primary">${t("save")}</button>
-          </form>
-          ${settingsToggleRow({ icon: ICON.bolt, label: t("landing_calc_label"), value: "", id: "toggle-landing-calc", checked: true, color: "orange" })}
-          <form id="landing-rate-form" class="settings-list-group-item">
-            <label>
-              <span class="settings-form-label">${ICON.bolt}${t("landing_rate_label")}</span>
-              <input type="number" name="rate" min="100" max="1000" step="0.01" required />
-            </label>
-            <p class="muted radius-help">${t("landing_rate_help")}</p>
-            <p class="form-success" id="landing-rate-success" role="status" hidden>${t("saved")}</p>
-            <button type="submit" class="btn btn-primary">${t("save")}</button>
-          </form>
-          <details class="settings-list-group-item lr-details" id="landing-rates-details">
-            <summary class="settings-form-label">${ICON.bolt}${t("lr_title")}</summary>
-            <form id="landing-rates-form" class="lr-form" novalidate>
-              ${LANDING_RATE_GROUPS.map(
-                (g) => `<fieldset class="lr-group"><legend>${t(g.label)}</legend><div class="lr-grid">${g.fields
-                  .map(([key, label]) => `<label class="lr-field"><span>${t(label)}</span><input type="number" inputmode="decimal" name="${key}" min="0" step="any" /></label>`)
-                  .join("")}</div></fieldset>`
-              ).join("")}
-              <p class="muted radius-help">${t("lr_help")}</p>
-              <p class="form-success" id="landing-rates-success" role="status" hidden>${t("saved")}</p>
-              <div class="lr-actions">
-                <button type="button" class="btn" id="landing-rates-reset">${t("lr_reset")}</button>
-                <button type="submit" class="btn btn-primary">${t("save")}</button>
-              </div>
-            </form>
-          </details>
-          ${settingsToggleRow({ icon: ICON.bolt, label: t("retail_excel_label"), value: "", id: "toggle-retail-excel", checked: false, color: "orange" })}
-          <div class="settings-list-group-item">
-            <p class="muted radius-help">${t("retail_excel_help")}</p>
-            <button type="button" class="btn" id="retail-diff-btn">${t("retail_diff_btn")}</button>
-          </div>
-        </div>
-
-        <h2 class="section-title">${t("security")}</h2>
-        <div class="card settings-list-group">
-          <form id="calculator-pin-form" class="settings-list-group-item">
-            <label>
-              <span class="settings-form-label">${ICON.lock}${t("calculator_pin_label")}</span>
-              <input type="text" inputmode="numeric" pattern="\\d{4,8}" name="pin" placeholder="${t("calculator_pin_placeholder")}" autocomplete="off" />
-            </label>
-            <p class="muted radius-help" id="calculator-pin-status">${t("calculator_pin_help")}</p>
-            <p class="form-success" id="calculator-pin-success" role="status" hidden>${t("saved")}</p>
-            <button type="submit" class="btn btn-primary">${t("save")}</button>
-          </form>
-          <div class="settings-list-group-item">
-            ${settingsToggleRow({ icon: ICON.lock, label: t("calculator_mode_label"), value: "", id: "toggle-calculator-mode", checked: false, color: "gray" })}
-            <p class="muted radius-help" id="calculator-mode-help">${t("calculator_mode_help_off")}</p>
-          </div>
-          <div class="settings-list-group-item">
-            <p class="muted radius-help">${t("emergency_disconnect_help")}</p>
-            <p class="form-success" id="emergency-disconnect-success" role="status" hidden>${t("emergency_disconnect_lifted")}</p>
-            <button type="button" class="btn btn-danger" id="emergency-disconnect-btn">${t("emergency_disconnect_button")}</button>
-          </div>
         </div>
         <div class="card settings-list">
-          ${settingsRow({ icon: ICON.shield, label: t("session_management"), id: "row-admin-sessions", color: "green" })}
-        </div>
-      `
+          ${settingsRow({ icon: ICON.database, label: t("sales_channel_owners_title"), id: "row-sales-channel-owners", color: "purple" })}
+          ${canReassignCustomers() ? settingsRow({ icon: ICON.gps, label: t("pin_review_title"), id: "row-pin-review", color: "red" }) : ""}
+          ${canManageArrival ? settingsRow({ icon: ICON.gps, label: t("arrival_section"), id: "row-delivery-arrival", color: "green" }) : ""}
+        </div>`
+            : canReassignCustomers() || canManageArrival
+              ? `<div class="card settings-list">
+          ${canReassignCustomers() ? settingsRow({ icon: ICON.gps, label: t("pin_review_title"), id: "row-pin-review", color: "red" }) : ""}
+          ${canManageArrival ? settingsRow({ icon: ICON.gps, label: t("arrival_section"), id: "row-delivery-arrival", color: "green" }) : ""}
+        </div>`
+              : ""
+        }
+        </section>`
           : ""
       }
 
       ${
-        admin || canManageProducts() || canApprovePlans || canExportFinancials || canReassignCustomers()
-          ? `
-        <h2 class="section-title">${t("admin_group_data_integrations")}</h2>
+        pageById("a-finance")
+          ? `${pageOpen(pageById("a-finance"))}
         ${
           admin
             ? `<div class="card settings-list">
           ${settingsRow({ icon: ICON.chart, label: t("reports_management"), id: "row-reports-management", color: "green" })}
-          ${settingsRow({ icon: ICON.database, label: t("sales_channel_owners_title"), id: "row-sales-channel-owners", color: "purple" })}
-          ${settingsRow({ icon: ICON.chart, label: t("quick_action_visibility_title"), id: "row-quick-actions", color: "indigo" })}
-          ${settingsRow({ icon: ICON.chart, label: t("data_quality_title"), id: "row-data-quality", color: "red" })}
-          ${settingsRow({ icon: ICON.shield, label: t("system_health_title"), id: "row-system-health", color: "green" })}
-          ${settingsRow({ icon: ICON.database, label: t("notification_delivery_log_title"), id: "row-notification-delivery-log", color: "teal" })}
-          ${settingsRow({ icon: ICON.database, label: t("client_error_log_title"), id: "row-client-error-log", color: "gray" })}
-        </div>`
-            : ""
-        }
-        ${
-          canReassignCustomers()
-            ? `<div class="card settings-list">
-          ${settingsRow({ icon: ICON.gps, label: t("pin_review_title"), id: "row-pin-review", color: "red" })}
         </div>`
             : ""
         }
@@ -460,15 +403,41 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
             : ""
         }
         ${
-          canApprovePlans
-            ? `<h3 class="settings-subsection-title">${t("plan_approvals")}</h3>
-          <div id="plan-approvals-slot"></div>`
-            : ""
-        }
-        ${
           admin
-            ? `<h3 class="settings-subsection-title">${t("edit_requests_title")}</h3>
-          <div id="edit-requests-slot"></div>`
+            ? `<h3 class="settings-subsection-title">${t("settings_group_pricing")}</h3>
+          <div class="card settings-list-group">
+          ${settingsToggleRow({ icon: ICON.bolt, label: t("landing_calc_label"), value: "", id: "toggle-landing-calc", checked: true, color: "orange" })}
+          <form id="landing-rate-form" class="settings-list-group-item">
+            <label>
+              <span class="settings-form-label">${ICON.bolt}${t("landing_rate_label")}${hintIcon("landing-rate-help-text")}</span>
+              <input type="number" name="rate" min="100" max="1000" step="0.01" required />
+            </label>
+            <p class="muted radius-help" id="landing-rate-help-text" hidden>${t("landing_rate_help")}</p>
+            <p class="form-success" id="landing-rate-success" role="status" hidden>${t("saved")}</p>
+            <button type="submit" class="btn btn-primary">${t("save")}</button>
+          </form>
+          <details class="settings-list-group-item lr-details" id="landing-rates-details">
+            <summary class="settings-form-label">${ICON.bolt}${t("lr_title")}</summary>
+            <form id="landing-rates-form" class="lr-form" novalidate>
+              ${LANDING_RATE_GROUPS.map(
+                (g) => `<fieldset class="lr-group"><legend>${t(g.label)}</legend><div class="lr-grid">${g.fields
+                  .map(([key, label]) => `<label class="lr-field"><span>${t(label)}</span><input type="number" inputmode="decimal" name="${key}" min="0" step="any" /></label>`)
+                  .join("")}</div></fieldset>`
+              ).join("")}
+              <p class="muted radius-help" id="lr-help-text" hidden>${t("lr_help")}</p>
+              <p class="form-success" id="landing-rates-success" role="status" hidden>${t("saved")}</p>
+              <div class="lr-actions">
+                <button type="button" class="btn" id="landing-rates-reset">${t("lr_reset")}</button>
+                <button type="submit" class="btn btn-primary">${t("save")}</button>
+              </div>
+            </form>
+          </details>
+          ${settingsToggleRow({ icon: ICON.bolt, label: t("retail_excel_label"), value: "", id: "toggle-retail-excel", checked: false, color: "orange", hintBtnId: "retail-excel-hint-btn", hintTextId: "retail-excel-help-text" })}
+          <div class="settings-list-group-item">
+            <p class="muted radius-help" id="retail-excel-help-text" hidden>${t("retail_excel_help")}</p>
+            <button type="button" class="btn" id="retail-diff-btn">${t("retail_diff_btn")}</button>
+          </div>
+        </div>`
             : ""
         }
         ${
@@ -487,77 +456,348 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
         </div>`
             : ""
         }
-      `
+        </section>`
+          : ""
+      }
+
+      ${
+        pageById("a-bonuses")
+          ? `${pageOpen(pageById("a-bonuses"))}
+        ${
+          admin
+            ? `
+          <div class="card settings-list-group">
+            ${settingsToggleRow({ icon: ICON.bolt, label: t("bonuses_enabled_label"), value: "", id: "toggle-bonuses-enabled", checked: false, color: "orange" })}
+            <form id="incentive-message-form" class="settings-list-group-item">
+              <label>
+                <span class="settings-form-label">${ICON.gps}${t("incentive_message_label")}${hintIcon("incentive-message-help-text")}</span>
+                <input type="text" name="message" maxlength="200" placeholder="${t("points_leaderboard_prize_hint")}" />
+              </label>
+              <p class="muted radius-help" id="incentive-message-help-text" hidden>${t("incentive_message_help")}</p>
+              <p class="form-success" id="incentive-message-success" role="status" hidden>${t("saved")}</p>
+              <button type="submit" class="btn btn-primary">${t("save")}</button>
+            </form>
+          </div>
+        `
+            : ""
+        }
+        <div class="card settings-list">
+          ${canManageChallenges ? settingsRow({ icon: ICON.bolt, label: t("bonuses_admin_challenges"), id: "row-bonus-challenges", color: "orange" }) : ""}
+          ${canReviewBonusRewards ? settingsRow({ icon: ICON.chart, label: t("bonuses_reward_claims"), id: "row-bonus-reward-claims", color: "green" }) : ""}
+          ${admin ? settingsRow({ icon: ICON.chart, label: t("points_closeout_title"), id: "row-points-closeout", color: "teal" }) : ""}
+        </div>
+        </section>`
+          : ""
+      }
+
+      ${
+        pageById("a-integrations")
+          ? `${pageOpen(pageById("a-integrations"))}
+        ${
+          admin
+            ? `<h3 class="settings-subsection-title">${t("ask_kad_label")}</h3>
+          <div class="card settings-list-group">
+          ${settingsToggleRow({ icon: ICON.bolt, label: t("ask_kad_label"), value: "", id: "toggle-ask-kad", checked: true, color: "purple" })}
+          <form id="ask-kad-cap-form" class="settings-list-group-item">
+            <label>
+              <span class="settings-form-label">${ICON.bolt}${t("ask_kad_cap_label")}${hintIcon("ask-kad-cap-help-text")}</span>
+              <input type="number" name="usd" min="1" max="5000" step="1" required />
+            </label>
+            <p class="muted radius-help" id="ask-kad-cap-help-text" hidden>${t("ask_kad_cap_help")}</p>
+            <p class="form-success" id="ask-kad-cap-success" role="status" hidden>${t("saved")}</p>
+            <button type="submit" class="btn btn-primary">${t("save")}</button>
+          </form>
+        </div>`
+            : ""
+        }
+        ${
+          canManageCampaigns
+            ? `<h3 class="settings-subsection-title">${t("kos_section")}</h3>
+          <div class="card settings-list">
+          ${canManageChallenges ? settingsRow({ icon: ICON.bolt, label: t("kos_row"), id: "row-kos-perks", color: "orange" }) : ""}
+          ${settingsRow({ icon: ICON.chart, label: t("kos_campaigns_row"), id: "row-kos-campaigns", color: "teal" })}
+        </div>`
+            : ""
+        }
+        </section>`
+          : ""
+      }
+
+      ${
+        admin
+          ? `${pageOpen(pageById("a-security"))}
+        <div class="card settings-list-group">
+          <form id="calculator-pin-form" class="settings-list-group-item">
+            <label>
+              <span class="settings-form-label">${ICON.lock}${t("calculator_pin_label")}${hintIcon("calculator-pin-status")}</span>
+              <input type="text" inputmode="numeric" pattern="\\d{4,8}" name="pin" placeholder="${t("calculator_pin_placeholder")}" autocomplete="off" />
+            </label>
+            <p class="muted radius-help" id="calculator-pin-status" hidden>${t("calculator_pin_help")}</p>
+            <p class="form-success" id="calculator-pin-success" role="status" hidden>${t("saved")}</p>
+            <button type="submit" class="btn btn-primary">${t("save")}</button>
+          </form>
+          ${settingsToggleRow({ icon: ICON.lock, label: t("calculator_mode_label"), value: "", id: "toggle-calculator-mode", checked: false, color: "gray", hintBtnId: "calculator-mode-hint-btn", hintTextId: "calculator-mode-help" })}
+          <p class="muted settings-hint-text" id="calculator-mode-help" hidden>${t("calculator_mode_help_off")}</p>
+        </div>
+        <div class="card settings-list">
+          ${settingsRow({ icon: ICON.shield, label: t("session_management"), id: "row-admin-sessions", color: "green" })}
+        </div>
+        <div class="card settings-list-group settings-danger-card">
+          <div class="settings-list-group-item">
+            <span class="settings-form-label settings-danger-label">${ICON.shield}${t("emergency_disconnect_title")}${hintIcon("emergency-disconnect-help-text")}</span>
+            <p class="muted radius-help" id="emergency-disconnect-help-text" hidden>${t("emergency_disconnect_help")}</p>
+            <p class="form-success" id="emergency-disconnect-success" role="status" hidden>${t("emergency_disconnect_lifted")}</p>
+            <button type="button" class="btn btn-danger" id="emergency-disconnect-btn">${t("emergency_disconnect_button")}</button>
+          </div>
+        </div>
+        </section>
+
+        ${pageOpen(pageById("a-system"))}
+        <div class="card settings-list">
+          ${settingsRow({ icon: ICON.shield, label: t("system_health_title"), id: "row-system-health", color: "green" })}
+          ${settingsRow({ icon: ICON.chart, label: t("data_quality_title"), id: "row-data-quality", color: "red" })}
+          ${settingsRow({ icon: ICON.database, label: t("notification_delivery_log_title"), id: "row-notification-delivery-log", color: "teal" })}
+          ${settingsRow({ icon: ICON.database, label: t("client_error_log_title"), id: "row-client-error-log", color: "gray" })}
+        </div>
+        </section>`
+          : ""
+      }
+
+      <!-- Computer layout: a row's own screen (Team management, ...) opens here in place of the page, with a
+           Back button -- like the System Settings drill-down. On a phone openAdminSectionOverlay is used. -->
+      <div class="settings-section-pane" id="settings-section-pane" hidden></div>
+      </section>`
           : ""
       }
       </div>
-      <!-- Desktop only (see .settings-section-pane in styles.css): the
-           right-hand pane openAdminSection() below renders a clicked
-           section's content into, instead of the full-screen modal
-           openAdminSectionOverlay opens at mobile widths. Empty/hidden
-           until a section is selected. -->
-      <div class="settings-section-pane" id="settings-section-pane" hidden></div>
-      </div>
-      </section>
     </div>
   `;
 
-  if (hasAdminWorkspace) {
-    const tabs = [root.querySelector("#settings-personal-tab"), root.querySelector("#settings-admin-tab")];
-    const panels = [root.querySelector("#settings-personal-panel"), root.querySelector("#settings-admin-panel")];
-    function selectWorkspace(index, moveFocus = false) {
-      tabs.forEach((tab, tabIndex) => {
-        const selected = tabIndex === index;
-        tab.classList.toggle("settings-workspace-tab-active", selected);
-        tab.setAttribute("aria-selected", String(selected));
-        tab.tabIndex = selected ? 0 : -1;
-        panels[tabIndex].hidden = !selected;
-      });
-      if (moveFocus) tabs[index].focus();
+  // "!" explanations: a small icon on the label toggles the paragraph it points to (data-hint = that paragraph's id).
+  // Attached to each icon (not delegated): the icon sits inside rows that are buttons themselves, and the row's own
+  // click would run first.
+  root.querySelectorAll("[data-hint]").forEach((btn) => {
+    const toggle = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const textEl = root.querySelector(`#${btn.dataset.hint}`);
+      if (!textEl) return;
+      const expanded = btn.getAttribute("aria-expanded") === "true";
+      btn.setAttribute("aria-expanded", String(!expanded));
+      textEl.hidden = expanded;
+    };
+    btn.addEventListener("click", toggle);
+    btn.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") toggle(event);
+    });
+  });
+
+  // --- Navigation state: tab + page ---
+  const view = root.querySelector(".settings-view");
+  const personalPanel = root.querySelector("#settings-personal-panel");
+  const adminPanel = root.querySelector("#settings-admin-panel");
+  const tabsEl = root.querySelector("#settings-tabs");
+  const tabButtons = { personal: root.querySelector("#settings-personal-tab"), admin: root.querySelector("#settings-admin-tab") };
+  const navLists = { personal: root.querySelector("#settings-nav-personal"), admin: root.querySelector("#settings-nav-admin") };
+  const resultsEl = root.querySelector("#settings-results");
+  const searchInput = root.querySelector("#settings-search");
+  const searchWrap = root.querySelector("#settings-search-wrap");
+  const searchEmpty = root.querySelector("#settings-search-empty");
+  const backBtn = root.querySelector("#settings-back");
+  const titleEl = root.querySelector("#settings-title");
+  const logoutWrap = root.querySelector("#settings-logout-wrap");
+  const pageEls = [...root.querySelectorAll(".settings-page")];
+  const wideQuery = window.matchMedia("(min-width: 1024px)");
+  const TAB_KEY = "settings.tab";
+
+  // A route like #/settings?section=a-team (or an old notification link) decides the starting point.
+  const SECTION_ALIASES = { "plan-approvals": "a-sales", "system-health": "a-system" };
+  const wantedPage = pageById(SECTION_ALIASES[section] || section);
+  let storedTab = null;
+  try {
+    storedTab = sessionStorage.getItem(TAB_KEY);
+  } catch {
+    // private mode: start on Personal
+  }
+  const nav = {
+    tab: wantedPage ? wantedPage.tab : hasAdminWorkspace && storedTab === "admin" ? "admin" : "personal",
+    page: wantedPage ? wantedPage.id : null,
+  };
+  // A computer keeps the page you were on across a re-render (theme, language, avatar) and when you come back to Settings.
+  if (!wantedPage && wideQuery.matches && currentNav.tab === nav.tab && pageById(currentNav.page)) nav.page = currentNav.page;
+  // Opened by a route (so Back is the browser's Back) or only changed inside the view (so Back is ours).
+  const routeDriven = !!wantedPage;
+  const remembered = {};
+  let searching = false;
+
+  function applyState() {
+    const wide = wideQuery.matches;
+    if (wide && !nav.page) nav.page = remembered[nav.tab] || pagesOf(nav.tab)[0]?.id || null;
+    if (nav.page) remembered[nav.tab] = nav.page;
+    currentNav = nav;
+    view.dataset.wide = wide ? "1" : "0";
+    view.dataset.tab = nav.tab;
+    const phoneAdminPage = !wide && nav.tab === "admin" && !!nav.page;
+    const phoneSearching = searching && !wide;
+
+    if (tabsEl) {
+      tabsEl.hidden = phoneAdminPage;
+      for (const [tab, btn] of Object.entries(tabButtons)) {
+        const selected = tab === nav.tab;
+        btn.classList.toggle("settings-workspace-tab-active", selected);
+        btn.setAttribute("aria-selected", String(selected));
+        btn.tabIndex = selected ? 0 : -1;
+      }
     }
-    tabs.forEach((tab, index) => {
-      tab.addEventListener("click", () => selectWorkspace(index));
-      tab.addEventListener("keydown", (event) => {
-        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-        event.preventDefault();
-        selectWorkspace((index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length, true);
-      });
+    searchWrap.hidden = phoneAdminPage;
+    backBtn.hidden = !phoneAdminPage;
+    const current = pageById(nav.page);
+    titleEl.textContent = phoneAdminPage && current ? current.title : t("settings_title");
+    root.querySelector("#settings-back-label").textContent = t("admin_workspace");
+
+    personalPanel.hidden = nav.tab !== "personal" || phoneSearching;
+    if (adminPanel) adminPanel.hidden = nav.tab !== "admin" || phoneSearching || !wide && !nav.page;
+    if (navLists.personal) navLists.personal.hidden = searching || !(wide && nav.tab === "personal");
+    if (navLists.admin) navLists.admin.hidden = searching || !(nav.tab === "admin" && (wide || !nav.page));
+    resultsEl.hidden = !searching;
+    for (const el of pageEls) {
+      const pageTab = el.dataset.tab;
+      const shown = pageTab === nav.tab && (pageTab === "personal" && !wide ? true : el.dataset.page === nav.page);
+      el.hidden = !shown;
+    }
+    logoutWrap.hidden = wide && nav.page !== "p-account";
+    root.querySelectorAll("[data-nav-page]").forEach((item) => item.classList.toggle("settings-list-row-active", wide && item.dataset.navPage === nav.page));
+  }
+
+  function closeDrill() {
+    view.removeAttribute("data-drill");
+    const pane = root.querySelector("#settings-section-pane");
+    if (pane) {
+      pane.hidden = true;
+      pane.innerHTML = "";
+    }
+  }
+
+  function go(tab, page) {
+    closeDrill();
+    nav.tab = tab;
+    nav.page = page;
+    try {
+      sessionStorage.setItem(TAB_KEY, tab);
+    } catch {
+      // not persisted
+    }
+    applyState();
+  }
+
+  Object.entries(tabButtons).forEach(([tab, btn]) => {
+    btn?.addEventListener("click", () => {
+      if (searching) clearSearch();
+      go(tab, wideQuery.matches ? remembered[tab] || null : null);
+    });
+    btn?.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      const other = tab === "personal" ? "admin" : "personal";
+      tabButtons[other].focus();
+      tabButtons[other].click();
+    });
+  });
+
+  root.querySelectorAll("[data-nav-page]").forEach((item) =>
+    item.addEventListener("click", () => {
+      const page = pageById(item.dataset.navPage);
+      // Phone: a category opens as its own route, so the phone's Back / swipe returns to the list.
+      if (!wideQuery.matches && page.tab === "admin" && navigateFn) navigateFn(`#/settings?section=${page.id}`);
+      else go(page.tab, page.id);
+    })
+  );
+
+  backBtn.addEventListener("click", () => {
+    if (routeDriven && navigateFn?.goBack) navigateFn.goBack("#/settings");
+    else go("admin", null);
+  });
+
+  // --- Search: one box over every page; results name the page the row lives on ---
+  const labelOf = (el) => {
+    const labelEl = el.querySelector(".settings-row-label, .settings-form-label, summary");
+    return labelEl ? labelEl.textContent.replace(/!/g, "").replace(/\s+/g, " ").trim() : "";
+  };
+  const searchIndex = [];
+  for (const pageEl of pageEls) {
+    const page = pageById(pageEl.dataset.page);
+    searchIndex.push({ page, el: pageEl, label: page.title, key: page.title.toLowerCase(), isPage: true });
+    pageEl.querySelectorAll(".settings-list-row, .settings-list-group-item").forEach((el) => {
+      if (el.closest(".settings-expandable-content") || el.querySelector(".settings-list-row")) return;
+      const label = labelOf(el);
+      if (label) searchIndex.push({ page, el, label, key: label.toLowerCase() });
     });
   }
 
-  // A notification about a route plan waiting for review: #/settings?section=plan-approvals opens the Administration
-  // tab and brings the plan list into view.
+  function clearSearch() {
+    searching = false;
+    searchInput.value = "";
+    searchEmpty.hidden = true;
+    resultsEl.innerHTML = "";
+  }
+
+  searchInput.addEventListener("input", () => {
+    const q = searchInput.value.trim().toLowerCase();
+    searching = !!q;
+    if (!q) {
+      clearSearch();
+      applyState();
+      return;
+    }
+    const hits = searchIndex.filter((entry) => entry.key.includes(q)).slice(0, 40);
+    resultsEl.innerHTML = hits
+      .map(
+        (entry, i) => `<button type="button" class="settings-list-row settings-result" data-result="${i}">
+          <span class="settings-row-icon settings-row-icon-${entry.page.color}">${entry.page.icon}</span>
+          <span class="settings-row-label">${escapeHtml(entry.label)}${entry.isPage ? "" : `<small class="settings-result-page">${escapeHtml(entry.page.title)}</small>`}</span>
+          <span class="settings-row-chevron">${ICON.chevron}</span>
+        </button>`
+      )
+      .join("");
+    resultsEl.querySelectorAll("[data-result]").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        const entry = hits[Number(btn.dataset.result)];
+        clearSearch();
+        go(entry.page.tab, entry.page.id);
+        if (!entry.isPage) {
+          requestAnimationFrame(() => {
+            entry.el.scrollIntoView({ block: "center" });
+            entry.el.classList.add("settings-found");
+            setTimeout(() => entry.el.classList.remove("settings-found"), 1600);
+          });
+        }
+      })
+    );
+    searchEmpty.hidden = hits.length > 0;
+    applyState();
+  });
+  searchInput.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && searching) {
+      clearSearch();
+      applyState();
+    }
+  });
+
+  applyState();
+  if (wantedPage?.tab === "personal") requestAnimationFrame(() => root.querySelector(`[data-page="${wantedPage.id}"]`)?.scrollIntoView({ block: "start" }));
+  const onWideChange = () => {
+    if (!view.isConnected) return wideQuery.removeEventListener("change", onWideChange);
+    closeDrill();
+    applyState();
+  };
+  wideQuery.addEventListener("change", onWideChange);
+
+  // Old notification links and the Home "Excel sync" line point at a row inside a page.
   if (section === "plan-approvals" && hasAdminWorkspace) {
-    root.querySelector("#settings-admin-tab")?.click();
     requestAnimationFrame(() => root.querySelector("#plan-approvals-slot")?.scrollIntoView({ block: "start" }));
   }
-
-  // The Home "Excel sync" line: #/settings?section=system-health opens Administration > System health.
   if (section === "system-health" && hasAdminWorkspace) {
-    root.querySelector("#settings-admin-tab")?.click();
     requestAnimationFrame(() => root.querySelector("#row-system-health")?.click());
-  }
-
-  // --- Admin search: hide rows that don't match, and any group left empty ---
-  const adminSearch = root.querySelector("#admin-search");
-  if (adminSearch) {
-    const adminLeft = adminSearch.parentElement;
-    const adminRows = [...adminLeft.querySelectorAll(".settings-list-row, .settings-list-group-item")].filter((row) => !row.closest(".settings-expandable-content"));
-    adminSearch.addEventListener("input", () => {
-      const q = adminSearch.value.trim().toLowerCase();
-      adminRows.forEach((row) => {
-        row.hidden = !!q && !row.textContent.toLowerCase().includes(q);
-      });
-      let anyVisible = false;
-      adminLeft.querySelectorAll(":scope > .card").forEach((card) => {
-        const visible = !q || adminRows.some((row) => card.contains(row) && !row.hidden);
-        card.hidden = !visible;
-        const title = card.previousElementSibling;
-        if (title?.classList.contains("section-title")) title.hidden = !visible;
-        if (visible) anyVisible = true;
-      });
-      root.querySelector("#admin-search-empty").hidden = anyVisible || !q;
-    });
   }
 
   // --- Avatar ---
@@ -591,7 +831,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
       await api.uploadMyAvatar(form);
       state.user.has_avatar = true;
       window.dispatchEvent(new Event("app-preferences-changed"));
-      renderSettings(root, onLogout, onLanguageChange);
+      renderSettings(root, onLogout, onLanguageChange, currentPageId(), navigateFn);
     } catch (err) {
       alert(err.message);
     }
@@ -602,7 +842,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
       await api.deleteMyAvatar();
       state.user.has_avatar = false;
       window.dispatchEvent(new Event("app-preferences-changed"));
-      renderSettings(root, onLogout, onLanguageChange);
+      renderSettings(root, onLogout, onLanguageChange, currentPageId(), navigateFn);
     } catch (err) {
       alert(err.message);
     }
@@ -612,7 +852,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
   root.querySelector("#toggle-appearance").addEventListener("click", () => {
     setTheme(getTheme() === "dark" ? "light" : "dark");
     window.dispatchEvent(new Event("app-preferences-changed"));
-    renderSettings(root, onLogout, onLanguageChange);
+    renderSettings(root, onLogout, onLanguageChange, currentPageId(), navigateFn);
   });
   root.querySelector("#toggle-language").addEventListener("click", () => {
     setLang(getLang() === "hy" ? "en" : "hy");
@@ -631,35 +871,9 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
   root.querySelector("#toggle-perf-mode").addEventListener("click", () => {
     setPerfMode(getPerfMode() === "efficiency" ? "performance" : "efficiency");
     window.dispatchEvent(new Event("app-preferences-changed"));
-    renderSettings(root, onLogout, onLanguageChange);
+    renderSettings(root, onLogout, onLanguageChange, currentPageId(), navigateFn);
   });
 
-  // Hint text collapsed behind a tappable inline "!" icon next to its row's
-  // own label (see styles.css's .settings-inline-hint-icon) -- toggles the
-  // paired paragraph's hidden state. A <span role="button"> rather than a
-  // real <button>, since the "User guide" row it sits inside is itself an
-  // interactive <button> and a nested button is invalid HTML -- so this
-  // wires both click and Enter/Space, and always stops the event from also
-  // triggering the row's own click handler (e.g. opening the guide PDF).
-  function wireHintToggle(btnId, textId) {
-    const btn = root.querySelector(`#${btnId}`);
-    const textEl = root.querySelector(`#${textId}`);
-    function toggle(event) {
-      event.stopPropagation();
-      const expanded = btn.getAttribute("aria-expanded") === "true";
-      btn.setAttribute("aria-expanded", String(!expanded));
-      textEl.hidden = expanded;
-    }
-    btn.addEventListener("click", toggle);
-    btn.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        toggle(event);
-      }
-    });
-  }
-  wireHintToggle("efficiency-mode-hint-btn", "efficiency-mode-hint-text");
-  wireHintToggle("user-guide-hint-btn", "user-guide-hint-text");
 
   // --- Push notifications ---
   const pushToggle = root.querySelector("#toggle-push-notifications");
@@ -1571,26 +1785,27 @@ function openGuideOverlay() {
   });
 }
 
-// Desktop shell (see the "Desktop shell" CSS section): at desktop width
-// (matches the app's single 1024px breakpoint), a section row's content
-// renders into the persistent right-hand #settings-section-pane sitting
-// beside the row list, instead of opening the same full-screen modal
-// mobile still gets -- no modal-over-modal, no full-screen takeover just to
-// glance at team management on a monitor that has the room to show both at
-// once. matchMedia is read fresh on every click (not cached/listened-to)
-// deliberately: this app has no other viewport-reactive JS behavior, and a
-// live mid-session resize retroactively converting an already-open pane/
-// modal is not a case worth the added complexity for v1.
+// Computer width (the app's single 1024px breakpoint): a row's screen (Team management, ...) opens inside the main
+// column in place of the page, with a Back button named after the page -- the macOS System Settings drill-down.
+// Phones open the same screen as a full-screen overlay (openAdminSectionOverlay). matchMedia is read on every click
+// on purpose; a resize closes any open pane (see onWideChange in renderSettings).
 function openAdminSection(root, rowEl, title, renderFn) {
   if (!window.matchMedia("(min-width: 1024px)").matches) {
     openAdminSectionOverlay(title, renderFn);
     return;
   }
+  const view = root.querySelector(".settings-view");
   const pane = root.querySelector("#settings-section-pane");
-  root.querySelectorAll(".settings-list-row-active").forEach((el) => el.classList.remove("settings-list-row-active"));
-  rowEl.classList.add("settings-list-row-active");
+  const pageTitle = rowEl.closest(".settings-page")?.dataset.title || t("settings_title");
   pane.hidden = false;
-  pane.innerHTML = `<h2>${escapeHtml(title)}</h2><div id="settings-section-pane-content"></div>`;
+  view.dataset.drill = "1";
+  pane.innerHTML = `<button type="button" class="settings-back settings-pane-back">${ICON.back}<span>${escapeHtml(pageTitle)}</span></button><h2>${escapeHtml(title)}</h2><div id="settings-section-pane-content"></div>`;
+  pane.querySelector(".settings-pane-back").addEventListener("click", () => {
+    view.removeAttribute("data-drill");
+    pane.hidden = true;
+    pane.innerHTML = "";
+  });
+  pane.scrollIntoView({ block: "start" });
   renderFn(pane.querySelector("#settings-section-pane-content"));
 }
 
@@ -1679,7 +1894,7 @@ function openPhoneSheet(root, onLogout, onLanguageChange) {
       state.user.phone = phone;
       window.dispatchEvent(new Event("app-preferences-changed"));
       close();
-      renderSettings(root, onLogout, onLanguageChange);
+      renderSettings(root, onLogout, onLanguageChange, currentPageId(), navigateFn);
     } catch (err) {
       errorEl.textContent = err.message;
       errorEl.hidden = false;
