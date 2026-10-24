@@ -187,3 +187,31 @@ test("only admin can use it; without an API key it says so", async () => {
   const tooHigh = await apiRequest("/api/settings", { method: "PATCH", cookie: adminCookie, body: { ask_kad_monthly_cap_usd: 99999 } });
   assert.equal(tooHigh.status, 400);
 });
+
+test("Test connection: only admin; says not_configured without a key; maps real failures to plain codes", async () => {
+  assert.equal((await apiRequest("/api/ask-kad/test", { method: "POST", cookie: repCookie })).status, 403);
+  const saved = process.env.ANTHROPIC_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  try {
+    const none = await apiRequest("/api/ask-kad/test", { method: "POST", cookie: adminCookie });
+    assert.equal(none.status, 200);
+    assert.equal(none.data.ok, false);
+    assert.equal(none.data.code, "not_configured");
+  } finally {
+    if (saved) process.env.ANTHROPIC_API_KEY = saved;
+  }
+  const { pingAi } = await import("../../src/askKad/engine.js");
+  const ok = await pingAi({ client: { messages: { create: async () => ({ content: [{ type: "text", text: "OK" }] }) } } });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.reply, "OK");
+  const failing = (status, message, name) => ({ messages: { create: async () => { throw Object.assign(new Error(message), { status, name }); } } });
+  assert.equal((await pingAi({ client: failing(401, "invalid x-api-key") })).code, "key_rejected");
+  assert.equal((await pingAi({ client: failing(400, "Your credit balance is too low to access the Anthropic API") })).code, "no_credit");
+  assert.equal((await pingAi({ client: failing(429, "rate limit") })).code, "rate_limit");
+  assert.equal((await pingAi({ client: failing(404, "model: nope") })).code, "model_not_found");
+  assert.equal((await pingAi({ client: failing(undefined, "timed out", "APIConnectionTimeoutError") })).code, "unreachable");
+  const other = await pingAi({ client: failing(500, "boom") });
+  assert.equal(other.code, "ai_error");
+  assert.equal(other.detail, "boom");
+});
+

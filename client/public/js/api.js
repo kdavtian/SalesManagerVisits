@@ -242,6 +242,7 @@ export const api = {
   vaghinakPulse: () => request("/vaghinak/pulse"),
   retailDifferences: () => request("/settings/retail-differences", { fresh: true }),
   askKadStatus: () => request("/ask-kad/status", { fresh: true }),
+  testAskKad: () => json("/ask-kad/test", "POST", {}),
   askKad: (question, history) => json("/ask-kad", "POST", { question, history }),
   vaghinakQa: () => request("/vaghinak/qa"),
   vaghinakFeed: () => request("/vaghinak/feed"),

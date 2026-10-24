@@ -180,7 +180,7 @@ customersRouter.get("/", async (req, res) => {
   const debtJoin = include_debt ? "LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id" : "";
   const debtColumn = include_debt ? "erp.debt_amd AS debt_amd," : "";
   const { rows } = await pool.query(
-    `SELECT c.*, ${debtColumn} am.name AS assigned_manager_name, ${STATUS_COLUMNS}, ${REORDER_COLUMNS}
+    `SELECT c.*, ${debtColumn} am.name AS assigned_manager_name, am.map_color AS assigned_manager_color, ${STATUS_COLUMNS}, ${REORDER_COLUMNS}
      FROM customers c
      LEFT JOIN users am ON am.id = c.assigned_manager_id
      ${VISIT_STATUS_JOIN}

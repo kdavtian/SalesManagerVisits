@@ -142,4 +142,31 @@ export async function askKad({ question, history = [], userId, client = null, db
   };
 }
 
+// "Test connection" for the admin: one tiny question ("say OK"), so a missing / rejected key, an empty credit balance or a wrong model name shows up
+// in plain words before anybody asks a real question. Costs a fraction of a cent and is not logged against the monthly cap.
+const classifyAiError = (err) => {
+  const status = err?.status;
+  const text = String(err?.message ?? err ?? "");
+  if (status === 401 || status === 403) return "key_rejected";
+  if (/credit balance|billing|payment/i.test(text)) return "no_credit";
+  if (status === 429) return "rate_limit";
+  if (status === 404 || /model/i.test(text) && /not.?found|does not exist|invalid/i.test(text)) return "model_not_found";
+  if (err?.name === "APIConnectionTimeoutError" || err?.name === "APIConnectionError" || err?.code === "ETIMEDOUT") return "unreachable";
+  return "ai_error";
+};
+
+export async function pingAi({ client = null } = {}) {
+  const model = process.env.ASK_KAD_MODEL || DEFAULT_MODEL;
+  if (!client && !isConfigured()) return { ok: false, code: "not_configured", model };
+  const started = Date.now();
+  try {
+    const api = client ?? new Anthropic({ timeout: 20000, maxRetries: 0 });
+    const response = await api.messages.create({ model, max_tokens: 16, messages: [{ role: "user", content: "Reply with the single word OK." }] });
+    return { ok: true, model, ms: Date.now() - started, reply: textOf(response.content).slice(0, 40) };
+  } catch (err) {
+    const code = classifyAiError(err);
+    return { ok: false, code, model, ms: Date.now() - started, ...(code === "ai_error" ? { detail: String(err?.message ?? err).slice(0, 200) } : {}) };
+  }
+}
+
 export { AskError };

@@ -15461,4 +15461,20 @@ button.cf-row-edit { width: 100%; text-align: left; color: inherit; font: inheri
    (statusBarTap.js turns it into a scroll of the real list). html's overflow moves to the viewport; the pseudo-element is the 1 px. */
 html.ios-statusbar-scroll { overflow-y: auto; }
 html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
+.ai-result-ok { color: var(--success, #1a7f37); font-size: 0.85rem; }
+.ai-result-bad { color: var(--danger, #b3151f); font-size: 0.85rem; }
+
+/* Colour by Rep (owner, 2026-10-24): a ring around the pin in the rep's colour; the switch + rep list sit in the map's "i" panel; the colour is chosen in Team management. */
+#leaflet-map .pin-rep-ring { position: absolute; inset: -4px; border-radius: 50%; border: 3px solid var(--rep-color, #888); box-sizing: border-box; pointer-events: none; z-index: 1; }
+.map-color-by { flex: none; }
+.map-color-by .chip { min-height: 32px; padding: 4px 10px; font-size: 0.78rem; }
+.map-rep-legend { margin: 2px 0 4px; max-height: 26vh; overflow-y: auto; }
+.map-rep-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: -1px; flex: none; }
+.team-color-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-left: 6px; vertical-align: 0; }
+.team-color-field { margin: 4px 0 10px; }
+.team-color-label { display: block; font-size: 0.85rem; color: var(--text-dim); margin-bottom: 6px; }
+.team-color-swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.team-swatch { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border); background: var(--swatch, var(--bg-card)); padding: 0; cursor: pointer; position: relative; }
+.team-swatch-on { outline: 2px solid var(--text); outline-offset: 2px; }
+.team-swatch-auto { background: var(--bg-card); color: var(--text-dim); font-size: 0.72rem; }
 

@@ -62,6 +62,8 @@ export async function renderSystemHealthSection(container) {
 
     <div class="card health-card" id="erp-sync-card"></div>
 
+    <div class="card health-card" id="ai-card"></div>
+
     <div class="card health-card">
       <h3 class="health-title">${t("health_erp_feeds")} ${staleSources ? `<span class="badge badge-danger">${staleSources}</span>` : ""}</h3>
       ${h.erp.sources
@@ -86,6 +88,7 @@ export async function renderSystemHealthSection(container) {
     </div>`;
 
   renderErpSyncCard(container.querySelector("#erp-sync-card"));
+  renderAiCard(container.querySelector("#ai-card"));
 
   container.querySelector("#health-update-btn")?.addEventListener("click", async (e) => {
     const btn = e.currentTarget;
@@ -98,3 +101,43 @@ export async function renderSystemHealthSection(container) {
     }
   });
 }
+
+const AI_TEST_CODES = ["not_configured", "key_rejected", "no_credit", "rate_limit", "model_not_found", "unreachable", "busy", "ai_error"];
+
+// KAD AI (Ask KAD): is the key on the server, which model, this month's spend, and a "Test connection" button that makes one tiny call and says in plain
+// words what is wrong (no key, key rejected, no credit, wrong model, slow network).
+async function renderAiCard(card) {
+  card.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+  let st;
+  try {
+    st = await api.askKadStatus();
+  } catch (err) {
+    card.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    return;
+  }
+  card.innerHTML = `
+    <h3 class="health-title">${t("ai_card_title")}</h3>
+    ${row(t("ai_key"), badge(st.configured, "health_on", "health_off"))}
+    ${row(t("ai_model"), escapeHtml(st.model ?? "?"))}
+    ${row(t("ai_spend"), `${st.spent_usd} / ${st.cap_usd} USD`, st.enabled ? "" : `<span class="badge badge-neutral">${t("health_off")}</span>`)}
+    <p class="muted health-note" id="ai-result" role="status" hidden></p>
+    <button type="button" class="btn btn-primary health-update-btn" id="ai-test-btn">${t("ai_test")}</button>`;
+  const btn = card.querySelector("#ai-test-btn");
+  const result = card.querySelector("#ai-result");
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    result.hidden = false;
+    result.className = "muted health-note";
+    result.textContent = t("ai_testing");
+    try {
+      const r = await api.testAskKad();
+      result.className = `health-note ${r.ok ? "ai-result-ok" : "ai-result-bad"}`;
+      result.textContent = r.ok ? t("ai_test_ok").replace("{model}", r.model).replace("{ms}", r.ms) : `${t(AI_TEST_CODES.includes(r.code) ? `ai_test_${r.code}` : "ai_test_ai_error")}${r.detail ? ` (${r.detail})` : ""}`;
+    } catch (err) {
+      result.className = "health-note ai-result-bad";
+      result.textContent = err.message;
+    }
+    btn.disabled = false;
+  });
+}
+
