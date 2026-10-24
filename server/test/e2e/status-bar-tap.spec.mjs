@@ -37,4 +37,20 @@ test("a document scroll to 0 scrolls the page to its top and the document return
   await page.waitForTimeout(400);
   expect(await page.evaluate(() => document.getElementById("app").scrollTop)).toBeGreaterThan(100);
   expect(await page.evaluate(() => window.scrollY)).toBe(1);
+
+  await page.evaluate(() => document.getElementById("tmp-typing").blur());
+  await page.waitForTimeout(900);
+  // a finger on the screen (dragging the top bar, a list running out of momentum at its edge) also moves the document to 0: that must NOT throw the list to its top
+  await page.evaluate(() => {
+    document.getElementById("app").scrollTop = 500;
+    document.dispatchEvent(new Event("touchend", { bubbles: true }));
+    window.scrollTo(0, 0);
+  });
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => document.getElementById("app").scrollTop)).toBeGreaterThan(100);
+  expect(await page.evaluate(() => window.scrollY)).toBe(1);
+  // ...but once the finger has been away long enough, a bare scroll to 0 is the status-bar tap again
+  await page.waitForTimeout(2300);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect.poll(() => page.evaluate(() => document.getElementById("app").scrollTop)).toBe(0);
 });

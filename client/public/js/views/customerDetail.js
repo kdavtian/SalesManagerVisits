@@ -870,6 +870,33 @@ async function openAccountSettingsSheet(customer, onDone) {
     regionSelect.addEventListener("change", () => renderSubregionField(regionSelect.value, ""));
 
     const managerSelect = overlay.querySelector("#reassign-manager");
+    // Changing the sales channel sets the rep to that channel's owner (Settings > Sales channel owners); the rep stays editable by hand
+    // afterwards (owner, 2026-10-24). A channel without an owner leaves the rep as it is.
+    const channelSelect = overlay.querySelector('select[name="sales_channel"]');
+    let channelOwners = new Map();
+    let ownerWanted = null; // chosen before the manager list arrived
+    const applyChannelOwner = () => {
+      const ownerId = channelOwners.get(channelSelect.value);
+      if (!ownerId) return;
+      if (![...managerSelect.options].some((o) => Number(o.value) === Number(ownerId))) {
+        ownerWanted = Number(ownerId);
+        return;
+      }
+      ownerWanted = null;
+      managerSelect.value = String(ownerId);
+      managerSelect.classList.remove("field-auto-set");
+      void managerSelect.offsetWidth; // restart the highlight
+      managerSelect.classList.add("field-auto-set");
+    };
+    api
+      .getPerfChannels()
+      .then((channels) => (channelOwners = new Map(channels.filter((c) => c.manager_user_id).map((c) => [c.code, c.manager_user_id]))))
+      .catch(() => {});
+    channelSelect.addEventListener("change", applyChannelOwner);
+    managerSelect.addEventListener("change", () => {
+      ownerWanted = null;
+      managerSelect.classList.remove("field-auto-set");
+    });
     api
       .listAssignableManagers()
       .then((users) => {
@@ -881,6 +908,7 @@ async function openAccountSettingsSheet(customer, onDone) {
               return `<option value="${u.id}" ${u.id === customer.assigned_manager_id ? "selected" : ""}>${escapeHtml(label)}</option>`;
             })
             .join("");
+        if (ownerWanted) applyChannelOwner();
       })
       .catch(() => {});
   }

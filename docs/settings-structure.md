@@ -35,3 +35,6 @@ A category is listed only when the user's role may use something in it (`PAGES[]
 - Every page is rendered into the DOM at once and `applyState()` only toggles `hidden`; the handlers below the template find elements by id, so **ids must not change**.
 - A new setting goes into the page whose category fits; add its label to the page so the search finds it (rows need `.settings-row-label` / `.settings-form-label`).
 - Tests: `server/test/e2e/settings-structure.spec.mjs`; other specs open an admin page with `/#/settings?section=a-...`.
+
+## Sales channel sets the rep (1.407.0)
+In Account settings on the customer card, choosing a sales channel selects that channel's owner (Sales channel owners) as the assigned rep; the rep can still be changed by hand before saving.

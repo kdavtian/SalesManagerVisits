@@ -2735,26 +2735,42 @@ label.checkbox-row input[type="checkbox"] {
 /* Discoverable pin-state key -- toggled by the "?" control, anchored to the
    same control cluster it opens from. */
 .map-legend-panel {
-  position: absolute;
-  right: 12px;
-  top: 112px;
-  z-index: 1001;
-  width: min(240px, calc(100vw - 24px));
-  padding: 10px 12px;
-  background: var(--bg-card);
+  /* A bottom sheet (owner, 2026-10-24: the floating key was too big for the screen): full width, above the tab bar, scrolls inside. */
+  position: fixed;
+  left: 0;
+  right: 0;
+  /* The map screen is its own stacking context, so the sheet cannot rise over the tab bar: it sits right above it. */
+  bottom: calc(48px + var(--nav-safe-bottom, 0px));
+  z-index: 1250;
+  width: auto;
+  max-width: 560px;
+  margin: 0 auto;
+  max-height: min(78vh, 640px);
+  max-height: min(78dvh, 640px);
+  display: flex;
+  flex-direction: column;
+  padding: 0 16px 8px;
+  background: var(--bg-elevated, var(--bg-card));
   border: 1px solid var(--border);
-  border-radius: 14px;
-  box-shadow: var(--shadow-elevated, 0 14px 36px rgba(15, 23, 42, .18));
+  border-bottom: 0;
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -10px 36px rgba(15, 23, 42, 0.22);
+  transition: transform 0.18s ease;
 }
+
+.map-legend-panel[hidden] { display: none; }
+.map-sheet-grab { display: flex; justify-content: center; padding: 8px 0 2px; touch-action: none; }
+.map-sheet-grab span { width: 38px; height: 5px; border-radius: 3px; background: var(--border-strong, var(--border)); }
+.map-legend-body { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding-bottom: 8px; }
 
 .map-legend-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  font-size: 0.82rem;
+  font-size: 1.05rem;
   font-weight: 700;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .map-legend-header .icon-btn {
@@ -2770,8 +2786,11 @@ label.checkbox-row input[type="checkbox"] {
 .map-legend-prefs {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 4px;
+  margin: 4px 0 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 .map-legend-pref-row {
@@ -2779,23 +2798,15 @@ label.checkbox-row input[type="checkbox"] {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  font-size: 0.8rem;
+  min-height: 48px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.92rem;
   font-weight: 600;
 }
+.map-legend-pref-row:last-child { border-bottom: 0; }
 
-.map-legend-pref-row .toggle-switch {
-  width: 38px;
-  height: 22px;
-}
-
-.map-legend-pref-row .toggle-thumb {
-  width: 18px;
-  height: 18px;
-}
-
-.map-legend-pref-row .toggle-switch[aria-checked="true"] .toggle-thumb {
-  transform: translateX(16px);
-}
+.map-legend-pref-row .toggle-switch { flex: none; }
 
 .map-legend-pref-hint {
   display: block;
@@ -2817,8 +2828,8 @@ label.checkbox-row input[type="checkbox"] {
 .map-legend-list li {
   display: flex;
   align-items: center;
-  gap: 9px;
-  font-size: 0.76rem;
+  gap: 10px;
+  font-size: 0.85rem;
   color: var(--text-dim);
   line-height: 1.25;
 }
@@ -2843,7 +2854,7 @@ label.checkbox-row input[type="checkbox"] {
 
 .map-legend-note {
   margin: 0 0 8px;
-  font-size: 0.7rem;
+  font-size: 0.78rem;
   line-height: 1.3;
   color: var(--text-dim);
 }
@@ -15428,9 +15439,13 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 /* Colour by Rep (owner, 2026-10-24): a ring around the pin in the rep's colour; the switch + rep list sit in the map's "i" panel; the colour is chosen in Team management. */
 #leaflet-map .pin-rep-ring { position: absolute; inset: -4px; border-radius: 50%; border: 3px solid var(--rep-color, #888); box-sizing: border-box; pointer-events: none; z-index: 1; }
 .map-color-by { flex: none; }
-.map-color-by .chip { min-height: 32px; padding: 4px 10px; font-size: 0.78rem; }
-.map-rep-legend { margin: 2px 0 4px; max-height: 26vh; overflow-y: auto; }
-.map-rep-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: -1px; flex: none; }
+.map-color-by .chip { min-height: 34px; padding: 4px 16px; font-size: 0.85rem; }
+/* The reps of the pins on screen: compact chips under the switch (a long vertical list pushed the rest of the sheet off the screen). */
+.map-rep-legend { list-style: none; margin: 0; padding: 8px 14px 10px; display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--border); max-height: 130px; overflow-y: auto; }
+.map-rep-legend[hidden] { display: none; }
+.map-rep-legend li { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border-radius: 999px; background: var(--bg-card-pressed); font-size: 0.8rem; font-weight: 600; color: var(--text); }
+.map-rep-legend .map-rep-name { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-rep-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: -1px; flex: none; }
 .team-color-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-left: 6px; vertical-align: 0; }
 .team-color-field { margin: 4px 0 10px; }
 .team-color-label { display: block; font-size: 0.85rem; color: var(--text-dim); margin-bottom: 6px; }
@@ -15611,3 +15626,17 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
   z-index: 2;
 }
 #leaflet-map.map-zoom-high .pin-rep-initials { display: block; }
+/* A field the app just filled in for you (e.g. the rep after a sales-channel change): a brief highlight, still editable. */
+.field-auto-set { animation: field-auto-set 1.6s ease-out; }
+@keyframes field-auto-set { 0%, 55% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); } 100% { box-shadow: 0 0 0 3px transparent; } }
+
+/* Colour by Rep: the pin art itself in the rep's colour (the PNG is one flat colour, used as a mask). Today's planned visits get a ring. */
+#leaflet-map .pin-img-asset.pin-tinted {
+  background-color: var(--rep-color, #888);
+  -webkit-mask: var(--pin-art) center / contain no-repeat;
+  mask: var(--pin-art) center / contain no-repeat;
+}
+#leaflet-map .pin-rep-ring { border-width: 3.5px; background: color-mix(in srgb, var(--rep-color, #888) 14%, transparent); }
+@media (min-width: 1024px) { .map-legend-panel { bottom: 0; } }
+/* While the key is open the add-customer button would float over it. */
+.map-view:has(#map-legend-panel:not([hidden])) .fab { display: none; }

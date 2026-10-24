@@ -3,7 +3,7 @@
 Read this, then open ONLY the sections the task needs: `Read file offset=<line> limit=<about 60>`. Line numbers shift when a file is edited:
 rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a reference.
 
-## app-architecture.md (21 KB, 103 lines)
+## app-architecture.md (21 KB, 105 lines)
 - L5 Stack and shape - Server server/src: Node 20+/22, Express 5, ES modules, plain pg (no ORM), plain SQL migrations server/migratio
 - L11 Domains and where they live (server route -> client view) - Customers: routes/customers.js (list is client-side filtered in views/customers.js applyNonStatusFilters; tier
 - L30 Roles (8) - admin (superset), ceo, operationsdirector (= CEO permissions), salesdirector (also has warehouse permissions +
@@ -146,7 +146,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L82 6. Proactive moves that always land well - After a numbered list, add "Suggestions" (numbered, with recommendation) only if you saw something real while
 - L90 7. Mistakes I made that cost them time (do not repeat) - Claiming sheets "load before showing" without reading them (Add payment and the customer pickers already paint
 
-## owner-preferences-and-history.md (55 KB, 259 lines)
+## owner-preferences-and-history.md (57 KB, 266 lines)
 - L3 How they work with you - Writes short, numbered, imperative requests (often with screenshots "image1/img2"), mixes English with Armenia
 - L11 Visual / UX preferences (apply by default) - Compact, iOS-native feel: bottom sheets, floating/fixed action bars (Cancel/Save on customer edit must be fixe
 - L24 Things that repeatedly bit us (check proactively) - Forgetting CACHEVERSION bump -> "no updates" on phones.
@@ -174,6 +174,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L237 Map "Colour by Tier | Rep", rep colours, AI connection test (owner, 2026-10-24,  - Owner chose: the map's "i" panel gets a Colour by: Tier | Rep switch BETWEEN "Group nearby pins" and "Compass"
 - L243 Settings + Administration redesign (owner, 2026-10-24, 1.405.0) - Owner: "rearrange settings and admin part from 0, hyper convenient and logical, Apple iOS and macOS styles and
 - L251 Six small ideas implemented (owner: "Implement ideas", 2026-10-24, 1.406.0) - (1) Counts on the Administration list: GET /api/settings/admin-counts (server/src/adminCounts.js, role-aware)
+- L259 "App scrolls up constantly", channel -> rep, map key as a bottom sheet, colour-b - Scrolling to top constantly: cause = the iPhone status-bar trick of 1.403.0 (statusBarTap.js): the document re
 
 ## strategy-roadmap.md (6 KB, 31 lines)
 - L5 Target (owner, 2026-10-12): 10 % of the market = ~1 million liters a year - Owner's working assumption: the Armenian market is ~10M L a year, so 10 % = 1M L.
