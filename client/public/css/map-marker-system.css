@@ -7,7 +7,8 @@
      deliberately no marker-color tokens here, so nothing can drift away from
      the approved files. */
   --map-visited: #22a45d;
-  --map-overdue: #e33b43;
+  --map-overdue: #f2a900; /* visit overdue: yellow "!", 16 px badge */
+  --map-never: #e33b43; /* never visited: red "!!", 18 px badge */
 }
 
 /* Customer markers are pre-approved raster artwork (icons/markers/*.png):
@@ -42,12 +43,14 @@
    raster's square bounding box -- the teardrop family leaves a wider
    transparent margin than the round (crosshair/circle) family does. */
 #leaflet-map .pin.pin-img-teardrop .pin-check,
+#leaflet-map .pin.pin-img-teardrop .pin-never,
 #leaflet-map .pin.pin-img-teardrop.pin-status-overdue::after {
   top: 0;
   right: 8%;
 }
 
 #leaflet-map .pin.pin-img-round .pin-check,
+#leaflet-map .pin.pin-img-round .pin-never,
 #leaflet-map .pin.pin-img-round.pin-status-overdue::after {
   top: -3px;
   right: -3px;
@@ -94,6 +97,7 @@
   justify-content: center;
   background: var(--map-visited);
   color: #fff;
+  box-sizing: border-box;
   border: 2px solid #fff;
   font-size: 10px;
   font-weight: 900;
@@ -110,8 +114,8 @@
   position: absolute;
   top: -7px;
   right: -8px;
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -119,11 +123,36 @@
   background: var(--map-overdue);
   color: #fff;
   border: 2px solid #fff;
-  font-size: 10px;
+  box-sizing: border-box;
+  font-size: 11px;
   font-weight: 900;
   line-height: 1;
   box-shadow: 0 1px 3px rgba(17,19,24,.22);
   z-index: 5;
+}
+
+/* Never visited: red "!!" in an 18 px badge with a white outline (shown INSTEAD of the overdue badge, see .pin-is-never in styles.css). */
+#leaflet-map .pin-never {
+  position: absolute;
+  top: -7px;
+  right: -8px;
+  width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--map-never);
+  color: #fff;
+  border: 2px solid #fff;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  box-shadow: 0 1px 3px rgba(17,19,24,.22);
+  z-index: 5;
+  pointer-events: none;
 }
 
 #leaflet-map .leaflet-marker-icon.kad-marker-selected .pin-img {

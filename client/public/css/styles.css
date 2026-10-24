@@ -2873,16 +2873,21 @@ label.checkbox-row input[type="checkbox"] {
 }
 
 .map-legend-swatch-overdue {
-  background: var(--map-overdue, var(--danger));
+  width: 16px;
+  height: 16px;
+  background: var(--map-overdue, #f2a900);
+  border: 2px solid #fff;
+  box-sizing: border-box;
 }
 
 .map-legend-swatch-never {
-  width: auto;
-  min-width: 15px;
-  padding: 0 3px;
-  border-radius: 8px;
-  background: #f5c518;
-  color: #3d3000;
+  width: 18px;
+  height: 18px;
+  background: var(--map-never, #e33b43);
+  color: #fff;
+  border: 2px solid #fff;
+  box-sizing: border-box;
+  font-size: 10px;
 }
 
 .map-legend-swatch-selected {
@@ -15275,60 +15280,25 @@ input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
 button.cf-row-edit { width: 100%; text-align: left; color: inherit; font: inherit; cursor: pointer; }
 .cf-head #cf-add { min-height: 44px; }
 
-/* Never-visited customers (owner, 2026-10-24): a small "!" in plan lists and on the map pin (same yellow as a not-yet-due task). */
-.never-visited-mark {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  margin-left: 6px;
-  border-radius: 8px;
-  background: #f5c518;
-  color: #3d3000;
-  font-size: 0.7rem;
-  font-weight: 800;
-  line-height: 1;
-}
-/* Overdue (visited before, past its rhythm): a single red "!" */
+/* Visit marks (owner, 2026-10-24): overdue = yellow "!" in a 16 px badge, never visited = red "!!" in an 18 px badge; the map pins and the plan lists use the
+   same colours (tokens --map-overdue / --map-never in map-marker-system.css). */
+.never-visited-mark,
 .overdue-visit-mark {
   flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  box-sizing: border-box;
   margin-left: 6px;
   border-radius: 50%;
-  background: var(--danger);
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1px rgba(17, 19, 24, 0.18);
   color: #ffffff;
-  font-size: 0.7rem;
-  font-weight: 800;
+  font-weight: 900;
   line-height: 1;
 }
-.pin-never {
-  position: absolute;
-  right: -9px;
-  top: 0;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 3px;
-  box-sizing: border-box;
-  border-radius: 8px;
-  background: #f5c518;
-  color: #3d3000;
-  border: 1.5px solid #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 800;
-  line-height: 1;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
-  pointer-events: none;
-}
+.never-visited-mark { width: 18px; height: 18px; background: var(--map-never, #e33b43); font-size: 0.62rem; letter-spacing: -0.02em; }
+.overdue-visit-mark { width: 16px; height: 16px; background: var(--map-overdue, #f2a900); font-size: 0.66rem; }
 
 /* Potential Customer classification (owner, 2026-10-24) */
 :root { --pl-1: #6b7280; --pl-2: #b7791f; --pl-3: #0969da; --pl-4: #1a7f37; }

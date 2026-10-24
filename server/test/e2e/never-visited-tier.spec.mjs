@@ -17,6 +17,8 @@ test("map pin and plan list: '!' only on the never-visited customer; the tier co
   await pool.query("INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range) VALUES ($1, $2, 40.1861, 44.5211, 3, true)", [seen.id, rep.id]);
   const late = await fixtures.createCustomer({ created_by: rep.id, assigned_manager_id: rep.id, name: "E2E Overdue Shop", sales_channel: "SM YVN", lat: 40.1871, lng: 44.5221, erp_customer_id: `E2E-NV-${stamp}-c` });
   await pool.query("INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, timestamp) VALUES ($1, $2, 40.1871, 44.5221, 3, true, now() - interval '400 days')", [late.id, rep.id]);
+  const today = await fixtures.createCustomer({ created_by: rep.id, assigned_manager_id: rep.id, name: "E2E Today Shop", sales_channel: "SM YVN", lat: 40.1881, lng: 44.5231, erp_customer_id: `E2E-NV-${stamp}-d` });
+  await pool.query("INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, timestamp) VALUES ($1, $2, 40.1881, 44.5231, 3, true, now())", [today.id, rep.id]);
   await pool.query("UPDATE customers SET customer_tier = 'gold' WHERE id = $1", [fresh.id]);
   await pool.query("UPDATE customers SET customer_tier = 'bronze' WHERE id = $1", [seen.id]);
   try {
@@ -33,6 +35,22 @@ test("map pin and plan list: '!' only on the never-visited customer; the tier co
     const late = await after("#leaflet-map .pin.pin-status-overdue:not(.pin-is-never)");
     expect(late.content).toBe('"!"');
     expect(late.display).not.toBe("none");
+
+    // the three badges (owner, 2026-10-24): visited today = white tick in a green 15 px circle, overdue = white "!" in a yellow 16 px circle, never visited = white "!!"
+    // in a red 18 px circle, each with a white outline
+    const badge = (sel) => page.locator(sel.replace("::after", "")).first().evaluate((el, pseudo) => {
+      const cs = getComputedStyle(el, pseudo || null);
+      return { w: pseudo ? parseFloat(cs.width) : el.offsetWidth, h: pseudo ? parseFloat(cs.height) : el.offsetHeight, bg: cs.backgroundColor, color: cs.color, border: cs.borderTopColor, bw: cs.borderTopWidth, radius: cs.borderTopLeftRadius };
+    }, sel.includes("::after") ? "::after" : null);
+    const rgb = (r, g, b) => `rgb(${r}, ${g}, ${b})`;
+    const tick = await badge("#leaflet-map .pin-check");
+    expect([tick.w, tick.h, tick.bg, tick.color, tick.border, tick.bw]).toEqual([15, 15, rgb(34, 164, 93), rgb(255, 255, 255), rgb(255, 255, 255), "2px"]);
+    const bang = await badge("#leaflet-map .pin.pin-status-overdue:not(.pin-is-never)::after");
+    expect([bang.w, bang.h, bang.bg, bang.color, bang.border]).toEqual([16, 16, rgb(242, 169, 0), rgb(255, 255, 255), rgb(255, 255, 255)]);
+    const never2 = await badge("#leaflet-map .pin-never");
+    expect([never2.w, never2.h, never2.bg, never2.color, never2.border]).toEqual([18, 18, rgb(227, 59, 67), rgb(255, 255, 255), rgb(255, 255, 255)]);
+
+    if (process.env.NV_SHOTS) await page.locator("#leaflet-map").screenshot({ path: `${process.env.NV_SHOTS}/nv-map.png` });
 
     // the tier coin on the customer card
     await page.goto(`/#/customers/${fresh.id}`);
@@ -53,11 +71,13 @@ test("map pin and plan list: '!' only on the never-visited customer; the tier co
     const never = list.locator(".route-plan-tree-row-leaf", { hasText: "E2E Never Visited Shop" });
     const done = list.locator(".route-plan-tree-row-leaf", { hasText: /^\s*E2E Visited Shop/ });
     await expect(never.locator(".never-visited-mark")).toHaveText("!!");
+    expect(await never.locator(".never-visited-mark").evaluate((el) => [el.offsetWidth, el.offsetHeight, getComputedStyle(el).backgroundColor])).toEqual([18, 18, "rgb(227, 59, 67)"]);
     await expect(never.locator(".overdue-visit-mark")).toHaveCount(0);
     await expect(done.locator(".never-visited-mark, .overdue-visit-mark")).toHaveCount(0);
     // visited long ago: the single red "!"
     const overdue = list.locator(".route-plan-tree-row-leaf", { hasText: "E2E Overdue Shop" });
     await expect(overdue.locator(".overdue-visit-mark")).toHaveText("!");
+    expect(await overdue.locator(".overdue-visit-mark").evaluate((el) => [el.offsetWidth, el.offsetHeight, getComputedStyle(el).backgroundColor])).toEqual([16, 16, "rgb(242, 169, 0)"]);
     await expect(overdue.locator(".never-visited-mark")).toHaveCount(0);
     await page.screenshot({ path: `${process.env.NV_SHOTS ?? "/tmp"}/nv-plan.png` });
   } finally {
