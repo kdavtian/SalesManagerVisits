@@ -181,6 +181,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
         (p) => `<button type="button" class="settings-list-row settings-nav-item" data-nav-page="${p.id}">
           <span class="settings-row-icon settings-row-icon-${p.color}">${p.icon}</span>
           <span class="settings-row-label">${escapeHtml(p.title)}</span>
+          <span class="settings-count" data-count-for="${p.id}" hidden></span>
           <span class="settings-row-chevron">${ICON.chevron}</span>
         </button>`
       )
@@ -198,7 +199,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
           hasAdminWorkspace
             ? `<div class="settings-workspace-tabs" id="settings-tabs" role="tablist" aria-label="${t("settings_title")}">
                 <button type="button" class="settings-workspace-tab settings-workspace-tab-active" id="settings-personal-tab" role="tab" aria-selected="true" aria-controls="settings-personal-panel">${t("personal_settings")}</button>
-                <button type="button" class="settings-workspace-tab" id="settings-admin-tab" role="tab" aria-selected="false" aria-controls="settings-admin-panel" tabindex="-1">${t("admin_workspace")}</button>
+                <button type="button" class="settings-workspace-tab" id="settings-admin-tab" role="tab" aria-selected="false" aria-controls="settings-admin-panel" tabindex="-1">${t("admin_workspace")}<span class="settings-count settings-tab-count" id="settings-admin-tab-count" hidden></span></button>
               </div>`
             : ""
         }
@@ -785,6 +786,34 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
 
   applyState();
   if (wantedPage?.tab === "personal") requestAnimationFrame(() => root.querySelector(`[data-page="${wantedPage.id}"]`)?.scrollIntoView({ block: "start" }));
+  // What is waiting, beside each category (and the total on the tab): plans to approve, edit requests, reward claims, a stale Excel file.
+  // Fetched once per render and again when plans / edit requests change (the sidebar stays on screen while you approve on a computer).
+  async function paintCounts() {
+    if (!hasAdminWorkspace) return;
+    try {
+      const counts = await api.getAdminCounts();
+      let total = 0;
+      root.querySelectorAll("[data-count-for]").forEach((el) => {
+        const n = Number(counts[el.dataset.countFor]) || 0;
+        total += n;
+        el.hidden = n === 0;
+        el.textContent = n > 99 ? "99+" : String(n);
+        el.closest("button")?.setAttribute("title", n ? `${n} ${t("settings_waiting")}` : "");
+      });
+      const tabCount = root.querySelector("#settings-admin-tab-count");
+      if (tabCount) {
+        tabCount.hidden = total === 0;
+        tabCount.textContent = total > 99 ? "99+" : String(total);
+      }
+    } catch {
+      // counts are a nicety: the list works without them
+    }
+  }
+  paintCounts();
+  const onCountsChanged = () => (view.isConnected ? paintCounts() : ["plans-changed", "edit-requests-changed"].forEach((ev) => window.removeEventListener(ev, onCountsChanged)));
+  window.addEventListener("plans-changed", onCountsChanged);
+  window.addEventListener("edit-requests-changed", onCountsChanged);
+
   const onWideChange = () => {
     if (!view.isConnected) return wideQuery.removeEventListener("change", onWideChange);
     closeDrill();

@@ -3,7 +3,7 @@
 // see util.js openNavigation): Google Maps and Yandex Maps both resolve them to the installed app.
 // The distances are straight-line x ROAD_FACTOR -- a good "about N km" for planning, not turn-by-turn.
 import { t } from "./i18n.js";
-import { activateDialog, escapeHtml, haversineMeters } from "./util.js";
+import { activateDialog, escapeHtml, haversineMeters, formatDateDMY, formatDistance, showToast } from "./util.js";
 
 export const ROAD_FACTOR = 1.3;
 // Google Maps URLs take 9 waypoints + a destination.
@@ -68,4 +68,37 @@ export function openRouteInMaps(stops, origin = null) {
     close();
     window.location.href = yandexRouteUrl(used, origin);
   });
+}
+
+// "Share today's route" (owner idea, 2026-10-24): the planned stops as plain text + one Google Maps link, sent to Telegram in one tap.
+// stops: [{ name, lat, lng, done }] in visiting order. Pure, so it is easy to test.
+export function routeShareText(stops, { repName = "", date = new Date(), totalMeters = 0, origin = null } = {}) {
+  const head = t("route_share_head").replace("{date}", formatDateDMY(date)).replace("{name}", repName).replace(/\s*·\s*$/, "");
+  const lines = stops.map((s, i) => `${i + 1}. ${s.name}${s.done ? ` ✓` : ""}`);
+  const summary = `${t("route_share_stops").replace("{n}", stops.length)}${totalMeters ? ` · ≈ ${formatDistance(totalMeters)}` : ""}`;
+  const remaining = stops.filter((s) => !s.done && Number.isFinite(s.lat) && Number.isFinite(s.lng)).slice(0, MAX_ROUTE_STOPS);
+  const link = remaining.length ? googleRouteUrl(remaining, origin) : "";
+  return [head, "", ...lines, "", summary, link].filter((x, i, a) => !(x === "" && a[i - 1] === "")).join("\n").trim();
+}
+
+// One tap: a phone opens its share sheet (Telegram is in it); a computer opens Telegram's own "send to" page.
+export async function shareRouteToTelegram(text) {
+  if (navigator.share && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+    try {
+      await navigator.share({ text });
+      return;
+    } catch (err) {
+      if (err?.name === "AbortError") return; // the person closed the sheet
+    }
+  }
+  const url = `https://t.me/share/url?url=${encodeURIComponent(" ")}&text=${encodeURIComponent(text)}`;
+  const opened = window.open(url, "_blank", "noopener");
+  if (!opened) {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(t("route_share_copied"));
+    } catch {
+      window.location.href = url;
+    }
+  }
 }

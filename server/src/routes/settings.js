@@ -23,6 +23,7 @@ import { getLandingSettings, setLandingSetting, setLandingRates, landingRateDefa
 import { ensureCurrentRound, ensureOnceRound } from "../bonusChallengeRounds.js";
 import { ROLES } from "../roles.js";
 import { pool } from "../db/pool.js";
+import { buildAdminCounts } from "../adminCounts.js";
 import { getPlanSkipRecentVisitDays, setPlanSkipRecentVisitDays } from "../utils/planSkipRecent.js";
 
 export const settingsRouter = Router();
@@ -87,6 +88,9 @@ settingsRouter.get("/", async (req, res) => {
     retail_from_excel: landing.retailFromExcel,
   });
 });
+
+// The numbers next to the Administration categories in Settings (what is waiting for this user).
+settingsRouter.get("/admin-counts", async (req, res) => res.json(await buildAdminCounts(req.user)));
 
 // What switching "Retail price from Excel" on would change: the app's retail next to the workbook's, per product.
 settingsRouter.get("/retail-differences", requireAdmin, async (req, res) => res.json({ products: await retailDifferences() }));

@@ -29,3 +29,6 @@ Any management role sets any customer's level; a sales manager only their own cu
 
 ## New customer: ERP customer ID (1.396.0)
 Choosing Bronze, Silver or Gold makes the ERP customer ID mandatory (the field gets a red star, the form refuses to save without it). The server enforces it too: `POST /api/customers` answers 400 (it used to quietly save such a customer as Potential), and `PATCH` answers 400 when the tier is *changed* to Bronze / Silver / Gold and the customer has no ERP ID (a save that sends the unchanged tier back is never refused, so older customers stay editable).
+
+## Reasons remembered per level (1.406.0)
+Picking a level ticks the reasons the same user last saved for that level (browser storage `fieldvisits_potential_reasons:<userId>`, per device); a small "Last used" label shows until a reason is touched. "Other" (needs a typed explanation) and "counterfeit" (starts a restriction) are never remembered. Changing the level swaps the reasons to that level's own (they no longer carry over).

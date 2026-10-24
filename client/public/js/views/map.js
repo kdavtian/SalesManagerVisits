@@ -14,7 +14,7 @@ import { repColor } from "../repColors.js";
 import { getPerfMode } from "../perfMode.js";
 import { ensureLeaflet } from "../leafletLoader.js";
 import { paintCheckinSpots, parseHere } from "../checkinSpotsLayer.js";
-import { routeLegs, openRouteInMaps } from "../routeNavigation.js";
+import { routeLegs, openRouteInMaps, routeShareText, shareRouteToTelegram } from "../routeNavigation.js";
 import { loadWithCache } from "../listCache.js";
 import { openTriStateTreeSheet } from "../regionTree.js";
 import { indexBrandSummary, brandSearchText, currentChips, matchedEverEntries, matchesSelectedChips, buildBrandChipTree, chipHtml, shortDate } from "../brandChips.js";
@@ -290,6 +290,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           <span class="planned-stops-title"><span>${t("route_stops")}</span><small id="planned-stops-summary"></small></span>
           <span class="nearby-panel-header-actions">
             <button type="button" class="icon-btn" id="open-route-btn" aria-label="${t("route_open_title")}" title="${t("route_open_title")}">${icons.navigation}</button>
+            <button type="button" class="icon-btn" id="share-route-btn" aria-label="${t("route_share")}" title="${t("route_share")}">${icons.share}</button>
             <button type="button" class="btn btn-sm" id="optimize-route-btn">${t("optimize_route")}</button>
             <button type="button" class="icon-btn" id="planned-stops-close" aria-label="${t("cancel")}">${icons.close}</button>
           </span>
@@ -1052,7 +1053,31 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
   // "Colour by Rep": a ring in the colour of the customer's rep around the pin (the pin itself keeps its tier look).
   let colorBy = getColorBy(state.user?.id);
-  const repRingHtml = (c) => (colorBy === "rep" && c.assigned_manager_id ? `<span class="pin-rep-ring" style="--rep-color:${repColor(c.assigned_manager_id, c.assigned_manager_color)}" aria-hidden="true"></span>` : "");
+  // The rep's initials ("AG") hang under the pin once the map is zoomed in (CSS shows them only while the map has .map-zoom-high), so close
+  // pins of different reps can be told apart by letters as well as by colour.
+  const repInitials = (name) =>
+    String(name ?? "")
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((w) => w.slice(0, 1).toUpperCase())
+      .join("");
+  const repRingHtml = (c) => {
+    if (colorBy !== "rep" || !c.assigned_manager_id) return "";
+    const color = repColor(c.assigned_manager_id, c.assigned_manager_color);
+    const initials = repInitials(c.assigned_manager_name);
+    return `<span class="pin-rep-ring" style="--rep-color:${color}" aria-hidden="true"></span>${initials ? `<span class="pin-rep-initials" style="--rep-color:${color}" aria-hidden="true">${escapeHtml(initials)}</span>` : ""}`;
+  };
+  const HIGH_ZOOM = 16;
+  let zoomHigh = null;
+  const syncZoomClass = () => {
+    const high = map.getZoom() >= HIGH_ZOOM;
+    if (high === zoomHigh) return; // an unchanged class write would still wake every DOM observer
+    zoomHigh = high;
+    map.getContainer().classList.toggle("map-zoom-high", high);
+  };
+  map.on("zoomend", syncZoomClass);
+  syncZoomClass();
 
   function customerIcon(c, status) {
     const tier = markerKind(c.customer_tier);
@@ -1528,6 +1553,17 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       .filter((entry) => entry && customerStatus(entry.c) !== "today")
       .map(({ c }) => ({ lat: c.lat, lng: c.lng }));
     openRouteInMaps(remaining, myLocation);
+  });
+
+  // One tap: today's stops (all of them, the visited ones ticked) + the Maps link for the rest, to Telegram.
+  root.querySelector("#share-route-btn").addEventListener("click", () => {
+    const stops = (plannedCustomerIds ?? [])
+      .map((id) => lastCustomers.find((entry) => entry.c.id === id))
+      .filter(Boolean)
+      .map(({ c }) => ({ name: c.name, lat: Number(c.lat), lng: Number(c.lng), done: customerStatus(c) === "today" }));
+    if (!stops.length) return;
+    const { total } = routeLegs(stops, myLocation);
+    shareRouteToTelegram(routeShareText(stops, { repName: state.user?.name ?? "", totalMeters: total, origin: myLocation }));
   });
 
   // Greedy nearest-neighbor ordering -- not a true shortest-route solver,

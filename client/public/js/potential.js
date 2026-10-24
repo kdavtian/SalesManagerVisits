@@ -41,6 +41,31 @@ export function reasonsText(c) {
     .join(", ");
 }
 
+// The reasons last used for each level, per signed-in user and device (owner idea, 2026-10-24): picking a level pre-ticks them, so the usual
+// case is "level, Save". "Other" (needs a typed explanation) and "counterfeit" (starts a restriction) are never remembered.
+const memoryKey = () => `fieldvisits_potential_reasons:${state.user?.id ?? 0}`;
+const REMEMBERABLE = (r) => r !== "other" && r !== "counterfeit";
+function readReasonMemory() {
+  try {
+    return JSON.parse(localStorage.getItem(memoryKey())) ?? {};
+  } catch {
+    return {};
+  }
+}
+function rememberedReasons(level) {
+  const list = readReasonMemory()[level];
+  return Array.isArray(list) ? list.filter((r) => typeof r === "string" && REMEMBERABLE(r) && reasonOrder(level).includes(r)) : [];
+}
+function rememberReasons(level, reasons) {
+  try {
+    const memory = readReasonMemory();
+    memory[level] = reasons.filter(REMEMBERABLE);
+    localStorage.setItem(memoryKey(), JSON.stringify(memory));
+  } catch {
+    // private mode: nothing remembered
+  }
+}
+
 // ---- the form (levels -> reasons) ---------------------------------------------------------------------------------------------------
 export function potentialFormHtml(initial = {}) {
   const level = initial.level ?? DEFAULT_POTENTIAL_LEVEL;
@@ -52,6 +77,7 @@ export function potentialFormHtml(initial = {}) {
       </div>
       <div class="pl-reasons-wrap">
         <div class="pl-section-title">${escapeHtml(t("pl_reason"))}</div>
+        <p class="pl-prefill-note muted" hidden>${escapeHtml(t("pl_prefilled"))}</p>
         <div class="pl-reasons pl-reasons-list" role="group" aria-label="${escapeHtml(t("pl_reason"))}"></div>
         <input class="pl-other" maxlength="300" placeholder="${escapeHtml(t("pl_reason_other_ph"))}" value="${escapeHtml(initial.other ?? "")}" hidden />
         <p class="pl-warn-banner" role="alert" hidden>${escapeHtml(t("pl_counterfeit_warning"))}</p>
@@ -62,7 +88,19 @@ export function potentialFormHtml(initial = {}) {
 // Wires a potentialFormHtml() block; returns { value(), validate() -> error text or "" }.
 export function wirePotentialForm(root, initial = {}) {
   let level = initial.level ?? DEFAULT_POTENTIAL_LEVEL;
-  const reasons = new Set(initial.reasons ?? []);
+  let reasons = new Set(initial.reasons ?? []);
+  // Reasons per level while the form is open: what the customer already has for its own level, then what was ticked on each level this session.
+  const byLevel = new Map();
+  if (reasons.size) byLevel.set(level, [...reasons]);
+  const prefillNote = root.querySelector(".pl-prefill-note");
+  let prefilled = false;
+  const loadLevel = () => {
+    const mine = byLevel.get(level);
+    const remembered = mine ? [] : rememberedReasons(level);
+    reasons = new Set(mine ?? remembered);
+    prefilled = !mine && remembered.length > 0;
+  };
+  if (!reasons.size) loadLevel();
   const reasonsEl = root.querySelector(".pl-reasons");
   const otherEl = root.querySelector(".pl-other");
   const warnEl = root.querySelector(".pl-warn-banner");
@@ -77,13 +115,19 @@ export function wirePotentialForm(root, initial = {}) {
     reasonsEl.innerHTML = visible.map(row).join("") + (visible.length < order.length ? `<button type="button" class="pl-reason-chip pl-reason-row pl-reason-more" data-more><span class="pl-reason-text">${escapeHtml(t("pl_more_reasons"))}</span><span class="pl-reason-chev" aria-hidden="true"></span></button>` : "");
     otherEl.hidden = !reasons.has("other");
     warnEl.hidden = !reasons.has("counterfeit");
+    prefillNote.hidden = !prefilled;
   };
   paintReasons();
   root.querySelector("[data-pl-info]")?.addEventListener("click", () => openInfoPopup(t("pl_levels_info")));
   root.querySelector(".pl-levels").addEventListener("click", (e) => {
     const b = e.target.closest("[data-level]");
     if (!b) return;
-    level = Number(b.dataset.level);
+    if (Number(b.dataset.level) !== level) {
+      byLevel.set(level, [...reasons]);
+      level = Number(b.dataset.level);
+      showAll = false;
+      loadLevel();
+    }
     root.querySelectorAll(".pl-level-chip").forEach((x) => {
       x.classList.toggle("pl-level-active", x === b);
       x.setAttribute("aria-checked", String(x === b));
@@ -101,6 +145,8 @@ export function wirePotentialForm(root, initial = {}) {
     const r = b.dataset.reason;
     if (reasons.has(r)) reasons.delete(r);
     else reasons.add(r);
+    prefilled = false;
+    prefillNote.hidden = true;
     b.classList.toggle("pl-reason-on", reasons.has(r));
     b.setAttribute("aria-pressed", String(reasons.has(r)));
     otherEl.hidden = !reasons.has("other");
@@ -112,6 +158,7 @@ export function wirePotentialForm(root, initial = {}) {
     validate: () => {
       if (!reasons.size) return t("pl_choose_reason");
       if (reasons.has("other") && !otherEl.value.trim()) return t("pl_explain_other");
+      rememberReasons(level, [...reasons]); // valid and about to be saved
       return "";
     },
   };
