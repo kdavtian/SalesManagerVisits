@@ -154,10 +154,10 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
   // Set of "group:value" chip ids (brandChips.js); empty = no filter. A shop
   // passes when ANY visit ever recorded ANY selected product.
   let brandChipIds = new Set();
-  // Potential filter (level, reason, last visit, follow-up, volume, counterfeit); a deep link from the dashboard (?potential=4,5) preselects levels.
+  // Potential filter (level, reason, last visit, follow-up, volume, counterfeit); a deep link from the dashboard (?potential=3,4) preselects levels.
   let potentialFilter = emptyPotentialFilter();
   for (const tok of String(initialPotential || "").split(",")) {
-    if (/^[0-5]$/.test(tok)) potentialFilter.levels.add(Number(tok));
+    if (/^[0-4]$/.test(tok)) potentialFilter.levels.add(Number(tok));
     else if (tok === "counterfeit") potentialFilter.counterfeit = true;
     else if (tok === "due") potentialFilter.followup = "due";
   }

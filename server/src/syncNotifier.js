@@ -9,7 +9,8 @@ import { notifyUser } from "./notifications.js";
 import { isNotificationEnabled } from "./notificationPreferences.js";
 
 // Short in tests (same NODE_ENV-gated pattern as push.js / telegram.js).
-const QUIET_PERIOD_MS = process.env.NODE_ENV === "test" ? 50 : 45_000;
+// SYNC_NOTICE_QUIET_MS lets one test widen the window (two calls 60 ms apart used to land in two notifications on a slow runner); read per call.
+const quietPeriodMs = () => Number(process.env.SYNC_NOTICE_QUIET_MS) || (process.env.NODE_ENV === "test" ? 50 : 45_000);
 const REPORT_ROLES = ["admin", "ceo", "operations_director", "sales_director", "accountant"];
 
 let notices = []; // { type, roles, userIds, text, url, order }
@@ -20,7 +21,7 @@ function schedule() {
   clearTimeout(timer);
   timer = setTimeout(() => {
     flushSyncNotices().catch((err) => console.error("Failed to send combined sync notification:", err));
-  }, QUIET_PERIOD_MS);
+  }, quietPeriodMs());
 }
 
 // A report/file that just became available (shown as "X-ը այժմ հասանելի է").

@@ -1,4 +1,4 @@
-// Potential Customer classification (owner, 2026-10-24): level 1-5 + reasons, the counterfeit-products restriction, history.
+// Potential Customer classification (owner, 2026-10-24): level 1-4 + reasons, the counterfeit-products restriction, history.
 // One form (levels, reasons, "Other" text, counterfeit warning) is shared by the editor sheet and the New customer form.
 import { api } from "./api.js";
 import { icons } from "./icons.js";
@@ -6,7 +6,9 @@ import { t } from "./i18n.js";
 import { state } from "./state.js";
 import { activateDialog, escapeHtml, showToast, openInfoPopup, formatDateTime, formatDateDMY, labelColon } from "./util.js";
 
-export const POTENTIAL_LEVELS = [1, 2, 3, 4, 5];
+export const POTENTIAL_LEVELS = [1, 2, 3, 4];
+// A new classification starts on "Real potential": most prospects are, so the common case needs one tap less (owner, 2026-10-24).
+export const DEFAULT_POTENTIAL_LEVEL = 3;
 const NEGATIVE = ["counterfeit", "own_import", "competitor_loyal", "price_mismatch", "small_volume", "not_interested", "no_decision_maker", "payment_issue", "no_demand_now"];
 const POSITIVE = ["high_potential", "active_interest", "negotiating", "ready_first_order"];
 const MANAGEMENT = ["admin", "ceo", "operations_director", "sales_director"];
@@ -19,7 +21,7 @@ export function canManagePotential(customer) {
 }
 export const canResolveCounterfeit = () => MANAGEMENT.includes(state.user?.role);
 
-// Reasons of the level just picked: the ones that usually explain a low level first for levels 1-2, the positive ones first for 3-5.
+// Reasons of the level just picked: the ones that usually explain a low level first for levels 1-2, the positive ones first for 3-4.
 const reasonOrder = (level) => (level && level <= 2 ? [...NEGATIVE, ...POSITIVE, "other"] : [...POSITIVE, ...NEGATIVE, "other"]);
 
 export function potentialChipHtml(level) {
@@ -35,15 +37,14 @@ export function reasonsText(c) {
 
 // ---- the form (levels -> reasons) ---------------------------------------------------------------------------------------------------
 export function potentialFormHtml(initial = {}) {
-  const level = initial.level ?? null;
-  const reasons = new Set(initial.reasons ?? []);
+  const level = initial.level ?? DEFAULT_POTENTIAL_LEVEL;
   return `
     <div class="pl-form">
       <div class="pl-section-title">${escapeHtml(t("pl_level_label"))} <span role="button" tabindex="0" class="settings-inline-hint-icon" data-pl-info aria-label="${escapeHtml(t("more_info"))}">!</span></div>
       <div class="pl-levels" role="radiogroup" aria-label="${escapeHtml(t("pl_level_label"))}">
-        ${POTENTIAL_LEVELS.map((l) => `<button type="button" class="pl-level-btn pl-${l} ${level === l ? "pl-level-active" : ""}" role="radio" aria-checked="${level === l}" data-level="${l}"><i class="pl-dot"></i><span>${escapeHtml(t(`pl_level_${l}`))}</span></button>`).join("")}
+        ${POTENTIAL_LEVELS.map((l) => `<button type="button" class="pl-level-chip pl-${l} ${level === l ? "pl-level-active" : ""}" role="radio" aria-checked="${level === l}" aria-label="${escapeHtml(t(`pl_level_${l}`))}" data-level="${l}"><i class="pl-dot"></i><span>${escapeHtml(t(`pl_level_short_${l}`))}</span></button>`).join("")}
       </div>
-      <div class="pl-reasons-wrap" ${level ? "" : "hidden"}>
+      <div class="pl-reasons-wrap">
         <div class="pl-section-title">${escapeHtml(t("pl_reason"))}</div>
         <div class="pl-reasons" role="group" aria-label="${escapeHtml(t("pl_reason"))}"></div>
         <input class="pl-other" maxlength="300" placeholder="${escapeHtml(t("pl_reason_other_ph"))}" value="${escapeHtml(initial.other ?? "")}" hidden />
@@ -54,15 +55,19 @@ export function potentialFormHtml(initial = {}) {
 
 // Wires a potentialFormHtml() block; returns { value(), validate() -> error text or "" }.
 export function wirePotentialForm(root, initial = {}) {
-  let level = initial.level ?? null;
+  let level = initial.level ?? DEFAULT_POTENTIAL_LEVEL;
   const reasons = new Set(initial.reasons ?? []);
   const reasonsEl = root.querySelector(".pl-reasons");
   const otherEl = root.querySelector(".pl-other");
   const warnEl = root.querySelector(".pl-warn-banner");
+  let showAll = false;
+  // The six reasons that usually fit the level + "Other" are shown; the rest sit behind "More reasons" (a reason already picked is never hidden).
   const paintReasons = () => {
-    reasonsEl.innerHTML = reasonOrder(level)
-      .map((r) => `<button type="button" class="pl-reason-chip ${reasons.has(r) ? "pl-reason-on" : ""}" data-reason="${r}" aria-pressed="${reasons.has(r)}">${escapeHtml(t(`pl_reason_${r}`))}</button>`)
-      .join("");
+    const order = reasonOrder(level);
+    const common = new Set([...order.filter((r) => r !== "other").slice(0, 6), "other"]);
+    const visible = showAll ? order : order.filter((r) => common.has(r) || reasons.has(r));
+    const chip = (r) => `<button type="button" class="pl-reason-chip ${reasons.has(r) ? "pl-reason-on" : ""}" data-reason="${r}" aria-pressed="${reasons.has(r)}">${escapeHtml(t(`pl_reason_${r}`))}</button>`;
+    reasonsEl.innerHTML = visible.map(chip).join("") + (visible.length < order.length ? `<button type="button" class="pl-reason-chip pl-reason-more" data-more>${escapeHtml(t("pl_more_reasons"))}</button>` : "");
     otherEl.hidden = !reasons.has("other");
     warnEl.hidden = !reasons.has("counterfeit");
   };
@@ -72,14 +77,18 @@ export function wirePotentialForm(root, initial = {}) {
     const b = e.target.closest("[data-level]");
     if (!b) return;
     level = Number(b.dataset.level);
-    root.querySelectorAll(".pl-level-btn").forEach((x) => {
+    root.querySelectorAll(".pl-level-chip").forEach((x) => {
       x.classList.toggle("pl-level-active", x === b);
       x.setAttribute("aria-checked", String(x === b));
     });
-    root.querySelector(".pl-reasons-wrap").hidden = false;
     paintReasons();
   });
   reasonsEl.addEventListener("click", (e) => {
+    if (e.target.closest("[data-more]")) {
+      showAll = true;
+      paintReasons();
+      return;
+    }
     const b = e.target.closest("[data-reason]");
     if (!b) return;
     const r = b.dataset.reason;
@@ -94,7 +103,6 @@ export function wirePotentialForm(root, initial = {}) {
   return {
     value: () => ({ level, reasons: [...reasons], reason_other: reasons.has("other") ? otherEl.value.trim() : "" }),
     validate: () => {
-      if (!level) return t("pl_choose_level");
       if (!reasons.size) return t("pl_choose_reason");
       if (reasons.has("other") && !otherEl.value.trim()) return t("pl_explain_other");
       return "";

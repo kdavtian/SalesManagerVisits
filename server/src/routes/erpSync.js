@@ -7,6 +7,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { queueReportLabel, queueSyncNotice } from "../syncNotifier.js";
 import { autoDeliverOrdersFromErp, autoApprovePaymentsFromErp } from "../erpAutoMatch.js";
 import { matchReturnsToErp } from "../orderReturns.js";
+import { recordSyncAttempt, latestSyncAttempts } from "../erpSyncAttempts.js";
 import { runAutoTasks } from "../debtCollectionTasks.js";
 import { refreshOrderRhythm } from "../orderRhythm.js";
 import { applyCashLedger } from "../cashflow.js";
@@ -78,6 +79,21 @@ function isPlainObject(value) {
 // The whole erp_customer_data table is replaced on every sync (rather than
 // merged row by row) so a customer that drops out of the extract -- debt
 // fully paid, no recent orders -- doesn't keep showing stale data forever.
+// Runs a step inside a SAVEPOINT: if it throws, only that step is undone, the transaction (and the sync) goes on, and the failure is reported.
+export async function optionalSyncStep(client, label, fn, warnings = []) {
+  await client.query("SAVEPOINT optional_step");
+  try {
+    const result = await fn();
+    await client.query("RELEASE SAVEPOINT optional_step");
+    return result;
+  } catch (err) {
+    await client.query("ROLLBACK TO SAVEPOINT optional_step");
+    warnings.push(`${label}: ${err.message}`);
+    console.error(`[erp-sync] optional step "${label}" failed and was skipped:`, err.message);
+    return null;
+  }
+}
+
 erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
   const { customers, order_lines, cashflow_lines, sales_performance, products, brand_volume, customer_legal } = req.body ?? {};
   if (!Array.isArray(customers)) {
@@ -157,6 +173,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
   let priceChangedProducts = 0;
   let excelRetailChanged = 0;
   let releaseErr;
+  const syncWarnings = [];
   try {
     await client.query("BEGIN");
     await client.query("TRUNCATE erp_customer_data");
@@ -288,10 +305,12 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     // Anything the workbook already shows is settled in KAD too: matching
     // orders become Delivered, matching pending cash payments become
     // Approved (both marked "from ERP"; see erpAutoMatch.js).
-    if (order_lines !== undefined) await autoDeliverOrdersFromErp(client);
+    // These three only DERIVE app state from the rows just stored: a failure in one of them must never roll the whole sync back (Excel is the
+    // truth; 2026-10-24 the returns step threw on a database that had not got migration 143 yet and nothing was updated).
+    if (order_lines !== undefined) await optionalSyncStep(client, "auto-deliver orders", () => autoDeliverOrdersFromErp(client), syncWarnings);
     // Returns the accountant typed into Excel (negative lines) are marked "recorded in ERP" here.
-    if (order_lines !== undefined) await matchReturnsToErp(client);
-    if (cashflow_lines !== undefined) await autoApprovePaymentsFromErp(client);
+    if (order_lines !== undefined) await optionalSyncStep(client, "match returns", () => matchReturnsToErp(client), syncWarnings);
+    if (cashflow_lines !== undefined) await optionalSyncStep(client, "auto-approve payments", () => autoApprovePaymentsFromErp(client), syncWarnings);
     // Upsert-only, never TRUNCATE: unlike the other tables above, products
     // can also be created directly in the app (no erp_product_id), and a
     // manual price/name correction here must survive later syncs -- so a
@@ -459,6 +478,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
   } catch (err) {
     releaseErr = err;
     await client.query("ROLLBACK");
+    await recordSyncAttempt({ endpoint: "/api/erp-sync", ok: false, error: err.message });
     throw err;
   } finally {
     client.release(releaseErr);
@@ -490,8 +510,10 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     );
   }
 
+  if (syncWarnings.length) await recordSyncAttempt({ endpoint: "/api/erp-sync", ok: true, warnings: syncWarnings });
   res.json({
     synced: erpIds.length,
+    warnings: syncWarnings.length ? syncWarnings : undefined,
     order_lines_synced: order_lines !== undefined ? lineErpIds.length : undefined,
     cashflow_lines_synced: cashflow_lines !== undefined ? cashErpIds.length : undefined,
     sales_performance_synced: sales_performance !== undefined ? perfRepNames.length : undefined,
@@ -522,6 +544,7 @@ erpSyncRouter.post("/cashflow-ledger", syncKeyLimiter, requireSyncKey, async (re
   try {
     res.json(await applyCashLedger(rows.filter(isPlainObject).map((r, i) => ({ ...r, excel_row: r.excel_row ?? i + 1 })), { via: "bot", note: req.body?.note ?? null, fileName: req.body?.file_name ?? null }));
   } catch (err) {
+    await recordSyncAttempt({ endpoint: "/api/erp-sync/cashflow-ledger", ok: false, error: err.message });
     res.status(400).json({ error: err.message });
   }
 });
@@ -706,6 +729,12 @@ erpSyncRouter.post("/reports", syncKeyLimiter, requireSyncKey, reportFileUpload.
 // guessing at raw Customer IDs when creating/linking a customer -- normal
 // cookie/JWT auth (not the sync key). Open to all roles (not admin-only)
 // because managers do the initial bulk customer onboarding themselves.
+// The latest failed (or partly skipped) sync calls, with the real error text: admin / CEO / operations director.
+erpSyncRouter.get("/attempts", requireAuth, async (req, res) => {
+  if (!["admin", "ceo", "operations_director"].includes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  res.json(await latestSyncAttempts());
+});
+
 erpSyncRouter.get("/unlinked", requireAuth, async (req, res) => {
   const { search } = req.query;
   const params = [];

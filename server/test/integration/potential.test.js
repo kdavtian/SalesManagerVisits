@@ -1,4 +1,4 @@
-// Potential Customer classification: level 1-5 + reasons + history, the counterfeit restriction on genuine Castrol, access by role.
+// Potential Customer classification: level 1-4 + reasons + history, the counterfeit restriction on genuine Castrol, access by role.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, createProduct, apiRequest, loginAs, trackOrder } from "./helpers.js";
@@ -28,6 +28,7 @@ const row = async (id) => (await pool.query("SELECT potential_level, potential_r
 
 test("a sales manager sets the level + reasons of their own customer; validation; history keeps every change", async () => {
   assert.equal((await put("rep", customer.id, { level: 9, reasons: ["high_potential"] })).status, 400);
+  assert.equal((await put("rep", customer.id, { level: 5, reasons: ["high_potential"] })).status, 400, "there is no Very high level any more");
   assert.equal((await put("rep", customer.id, { level: 4, reasons: [] })).status, 400, "a reason is required");
   assert.equal((await put("rep", customer.id, { level: 4, reasons: ["nope"] })).status, 400);
   assert.equal((await put("rep", customer.id, { level: 4, reasons: ["other"] })).status, 400, "Other needs an explanation");
@@ -40,14 +41,14 @@ test("a sales manager sets the level + reasons of their own customer; validation
   let r = await row(customer.id);
   assert.deepEqual([r.potential_level, r.potential_reasons, r.next_followup_date, r.expected_volume_l], [3, ["active_interest"], "2026-11-03", 120]);
 
-  const up = await put("rep", customer.id, { level: 5, reasons: ["negotiating", "other"], reason_other: "asked for the price list", note: "met the owner" });
+  const up = await put("rep", customer.id, { level: 4, reasons: ["negotiating", "other"], reason_other: "asked for the price list", note: "met the owner" });
   assert.equal(up.status, 200);
-  const same = await put("rep", customer.id, { level: 5, reasons: ["other", "negotiating"], reason_other: "asked for the price list" });
+  const same = await put("rep", customer.id, { level: 4, reasons: ["other", "negotiating"], reason_other: "asked for the price list" });
   assert.equal(same.data.changed, false, "the same level and reasons again writes no history");
-  assert.equal((await put("director", customer.id, { level: 4, reasons: ["active_interest"], note: "cooled down" })).status, 200, "management can change any customer");
+  assert.equal((await put("director", customer.id, { level: 2, reasons: ["not_interested"], note: "cooled down" })).status, 200, "management can change any customer");
 
   const hist = (await apiRequest(`/api/customers/${customer.id}/potential-history`, { cookie: cookies.director })).data;
-  assert.deepEqual(hist.filter((h) => h.kind === "level").map((h) => [h.old_level, h.new_level]), [[5, 4], [3, 5], [null, 3]]);
+  assert.deepEqual(hist.filter((h) => h.kind === "level").map((h) => [h.old_level, h.new_level]), [[4, 2], [3, 4], [null, 3]]);
   assert.equal(hist[1].note, "met the owner");
   assert.equal(hist[1].reason_other, "asked for the price list");
   assert.ok(hist[0].changed_by_name);
@@ -118,15 +119,15 @@ test("follow-up priority: higher level first among prospects, a due follow-up da
     return c;
   };
   const low = await mk(2);
-  const very = await mk(5);
+  const very = await mk(4);
   const none = await mk(1);
   const unassessed = await mk(null);
   const picks = await visitPriorities(solo.id, 50); // all four were never visited: each has a reason to be on the card
   const order = picks.map((p) => p.customer_id);
-  assert.ok(order.indexOf(very.id) < order.indexOf(unassessed.id), "very high before not assessed");
+  assert.ok(order.indexOf(very.id) < order.indexOf(unassessed.id), "high before not assessed");
   assert.ok(order.indexOf(unassessed.id) < order.indexOf(low.id), "not assessed before low");
   assert.ok(order.indexOf(low.id) < order.indexOf(none.id), "low before no potential");
-  assert.ok(picks.find((p) => p.customer_id === very.id).reasons.some((r) => r.type === "potential" && r.level === 5));
+  assert.ok(picks.find((p) => p.customer_id === very.id).reasons.some((r) => r.type === "potential" && r.level === 4));
   assert.ok(order.includes(none.id), "no potential stays on the list (never hidden)");
   // a due follow-up lifts a level-3 prospect above an unassessed one
   const dueC = await mk(3, { followup: "2020-01-01" });
@@ -139,15 +140,29 @@ test("follow-up priority: higher level first among prospects, a due follow-up da
 test("potential-summary: counts per level for management, only their own for a rep", async () => {
   const solo = await createUser("sales_manager");
   const soloCookie = await loginAs(solo.email);
-  for (const lvl of [5, 5, 4, null]) {
+  for (const lvl of [4, 4, 3, null]) {
     const c = await createCustomer({ created_by: solo.id, assigned_manager_id: solo.id });
     if (lvl) await pool.query("UPDATE customers SET potential_level = $2, next_followup_date = '2020-01-01' WHERE id = $1", [c.id, lvl]);
   }
   const mine = (await apiRequest("/api/customers/potential-summary", { cookie: soloCookie })).data;
-  assert.deepEqual([mine.levels[5], mine.levels[4], mine.levels[0], mine.total, mine.followup_due], [2, 1, 1, 4, 3]);
+  assert.deepEqual([mine.levels[4], mine.levels[3], mine.levels[0], mine.total, mine.followup_due], [2, 1, 1, 4, 3]);
   assert.deepEqual(mine.by_manager, [], "a rep gets no breakdown");
   const all = (await apiRequest("/api/customers/potential-summary", { cookie: cookies.director })).data;
-  assert.ok(all.total >= 4 && all.levels[5] >= 2);
+  assert.ok(all.total >= 4 && all.levels[4] >= 2);
   const row = all.by_manager.find((m) => m.manager_id === solo.id);
-  assert.deepEqual([row.levels[5], row.levels[4], row.total], [2, 1, 4]);
+  assert.deepEqual([row.levels[4], row.levels[3], row.total], [2, 1, 4]);
+});
+
+test("a prospect cannot be moved to Bronze / Silver / Gold without an ERP customer ID; with one it can", async () => {
+  const c = await createCustomer({ created_by: rep.id, assigned_manager_id: rep.id });
+  const admin = await createUser("admin");
+  const adminCookie = await loginAs(admin.email);
+  const patch = (body) => apiRequest(`/api/customers/${c.id}`, { method: "PATCH", cookie: adminCookie, body });
+  const refused = await patch({ customer_tier: "gold" });
+  assert.equal(refused.status, 400);
+  assert.match(refused.data.error, /ERP customer ID is required/);
+  const ok = await patch({ customer_tier: "silver", erp_customer_id: `ITEST-TIER-${Date.now()}` });
+  assert.equal(ok.status, 200, JSON.stringify(ok.data));
+  // the edit sheet sends the current tier back with every save: an unchanged tier is never refused
+  assert.equal((await patch({ customer_tier: "silver", notes: "again" })).status, 200);
 });

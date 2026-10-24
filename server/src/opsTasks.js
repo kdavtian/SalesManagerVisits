@@ -26,11 +26,27 @@ export async function createOpsTask({ kind, title, assigneeId, customerId = null
     [kind, assigneeId, customerId]
   );
   if (existing.length) return null;
-  const { rows } = await db.query(
-    `INSERT INTO tasks (title, creator_id, assignee_id, customer_id, due_date, due_is_next_visit, auto_kind)
-     VALUES ($1, $2, $3, $4, $5, $7, $6) ON CONFLICT DO NOTHING RETURNING id`,
-    [title, creatorId, assigneeId, customerId, dueDate, kind, dueIsNextVisit]
-  );
+  const insert = (creator) =>
+    db.query(
+      `INSERT INTO tasks (title, creator_id, assignee_id, customer_id, due_date, due_is_next_visit, auto_kind)
+       VALUES ($1, $2, $3, $4, $5, $7, $6) ON CONFLICT DO NOTHING RETURNING id`,
+      [title, creator, assigneeId, customerId, dueDate, kind, dueIsNextVisit]
+    );
+  let rows;
+  try {
+    ({ rows } = await insert(creatorId));
+  } catch (err) {
+    // The person picked as creator (or the assignee) was deleted between the pick and the insert (a team change at the same moment): pick again once.
+    if (err.code !== "23503") throw err;
+    const again = await systemCreatorId(db);
+    if (!again || again === creatorId) return null;
+    try {
+      ({ rows } = await insert(again));
+    } catch (err2) {
+      if (err2.code === "23503") return null; // the assignee itself is gone: nothing to assign
+      throw err2;
+    }
+  }
   const id = rows[0]?.id ?? null;
   if (!id) return null;
   for (const [i, text] of items.entries()) await db.query("INSERT INTO task_items (task_id, text, sort_order) VALUES ($1, $2, $3)", [id, String(text).slice(0, 300), i]);

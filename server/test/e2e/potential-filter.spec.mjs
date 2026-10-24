@@ -13,30 +13,30 @@ test("customers list: potential filter + priority order; the company dashboard c
     return c;
   };
   await mk("E2E PF Low Shop", 2, ["small_volume"]);
-  await mk("E2E PF Very High Garage", 5, ["ready_first_order"], ", next_followup_date = current_date");
+  await mk("E2E PF High Garage", 4, ["ready_first_order"], ", next_followup_date = current_date");
   await mk("E2E PF Fake Seller", 1, ["counterfeit"], ", counterfeit_flag = true");
   await mk("E2E PF Unassessed", null, []);
-  await mk("E2E PF High Workshop", 4, ["active_interest"]);
+  await mk("E2E PF Real Workshop", 3, ["active_interest"]);
 
   await loginViaUi(page, rep.email);
   await page.goto("/#/customers");
   await expect(page.locator(".list-row", { hasText: "E2E PF Low Shop" })).toBeVisible({ timeout: 15000 });
   // chips on the rows
-  await expect(page.locator(".list-row", { hasText: "E2E PF Very High Garage" })).toContainText("Very high potential");
+  await expect(page.locator(".list-row", { hasText: "E2E PF High Garage" })).toContainText("High potential");
   await expect(page.locator(".list-row", { hasText: "E2E PF Fake Seller" })).toContainText("⚠️");
 
-  // the filter sheet: level 5 + 4 -> the worklist, very high first
+  // the filter sheet: level 4 + 3 -> the worklist, high first
   await page.locator('[data-filter-btn="potential"]').click();
+  await page.locator('.pf-sheet [data-level="3"]').click();
   await page.locator('.pf-sheet [data-level="4"]').click();
-  await page.locator('.pf-sheet [data-level="5"]').click();
   await expect(page.locator("#pf-done")).toContainText("Show 2");
   await page.waitForTimeout(400);
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/pf-sheet.png` });
   await page.locator("#pf-done").click();
   const rows = page.locator(".list-row");
   await expect(rows).toHaveCount(2);
-  await expect(rows.nth(0)).toContainText("E2E PF Very High Garage");
-  await expect(rows.nth(1)).toContainText("E2E PF High Workshop");
+  await expect(rows.nth(0)).toContainText("E2E PF High Garage");
+  await expect(rows.nth(1)).toContainText("E2E PF Real Workshop");
 
   // counterfeit only
   await page.locator('[data-filter-btn="potential"]').click();
@@ -48,7 +48,7 @@ test("customers list: potential filter + priority order; the company dashboard c
 
   // follow-up due + the deep link from the dashboard
   await page.goto("/#/customers?potential=due");
-  await expect(rows.filter({ hasText: "E2E PF Very High Garage" })).toHaveCount(1, { timeout: 10000 });
+  await expect(rows.filter({ hasText: "E2E PF High Garage" })).toHaveCount(1, { timeout: 10000 });
   await expect(rows.filter({ hasText: "E2E PF Low Shop" })).toHaveCount(0);
 
   // the director's company dashboard
@@ -56,11 +56,11 @@ test("customers list: potential filter + priority order; the company dashboard c
   await loginViaUi(page, director.email);
   await page.goto("/#/company-dashboard");
   const card = page.locator("#company-dashboard-prospects");
-  await expect(card.locator('[data-potential="5"]')).toContainText("Very high potential", { timeout: 15000 });
+  await expect(card.locator('[data-potential="4"]')).toContainText("High potential", { timeout: 15000 });
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/pf-dashboard.png`, fullPage: true });
-  expect(Number((await card.locator('[data-potential="5"] strong').innerText()).trim())).toBeGreaterThanOrEqual(1);
+  expect(Number((await card.locator('[data-potential="4"] strong').innerText()).trim())).toBeGreaterThanOrEqual(1);
   await expect(card.locator('[data-potential="counterfeit"]')).toBeVisible();
-  await card.locator('[data-potential="4"]').click();
-  await expect(page.locator(".list-row", { hasText: "E2E PF High Workshop" })).toBeVisible({ timeout: 15000 });
+  await card.locator('[data-potential="3"]').click();
+  await expect(page.locator(".list-row", { hasText: "E2E PF Real Workshop" })).toBeVisible({ timeout: 15000 });
   await expect(page.locator(".list-row", { hasText: "E2E PF Low Shop" })).toHaveCount(0);
 });

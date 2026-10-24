@@ -203,6 +203,8 @@ customersRouter.get("/", async (req, res) => {
   res.json(rows);
 });
 
+// Bronze / Silver / Gold are tiers of customers that exist in Excel: the ERP customer ID is mandatory (owner, 2026-10-24; POST: customerChannelPolicy.js).
+const ERP_TIERS = new Set(["bronze", "silver", "gold"]);
 const CUSTOMER_TIERS = new Set(["potential", "bronze", "silver", "gold", "competitor"]);
 
 // A generous bounding box around Armenia (not a precise border polygon --
@@ -568,7 +570,7 @@ customersRouter.get("/potential-summary", async (req, res) => {
      GROUP BY 1, 2, 3`,
     params
   );
-  const levels = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  const levels = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
   let counterfeit = 0;
   let followupDue = 0;
   const byManager = new Map();
@@ -576,7 +578,7 @@ customersRouter.get("/potential-summary", async (req, res) => {
     levels[r.level] += r.n;
     counterfeit += r.counterfeit;
     followupDue += r.followup_due;
-    if (!byManager.has(r.manager_id)) byManager.set(r.manager_id, { manager_id: r.manager_id, name: r.manager_name ?? null, levels: { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, total: 0 });
+    if (!byManager.has(r.manager_id)) byManager.set(r.manager_id, { manager_id: r.manager_id, name: r.manager_name ?? null, levels: { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 }, total: 0 });
     const m = byManager.get(r.manager_id);
     m.levels[r.level] += r.n;
     m.total += r.n;
@@ -821,6 +823,10 @@ customersRouter.patch("/:id", async (req, res) => {
 
   if (req.body?.customer_tier !== undefined && !CUSTOMER_TIERS.has(req.body.customer_tier)) {
     return res.status(400).json({ error: "Invalid customer_tier" });
+  }
+  // (only when the tier actually changes: the edit sheet always sends the current tier back, and legacy customers must stay editable)
+  if (ERP_TIERS.has(req.body?.customer_tier) && req.body.customer_tier !== current.customer_tier && !String((req.body.erp_customer_id !== undefined ? req.body.erp_customer_id : current.erp_customer_id) ?? "").trim()) {
+    return res.status(400).json({ error: "ERP customer ID is required for Bronze, Silver and Gold customers" });
   }
   if (
     req.body?.payment_method !== undefined &&

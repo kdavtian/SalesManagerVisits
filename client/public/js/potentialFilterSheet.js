@@ -31,11 +31,11 @@ export function matchesPotentialFilter(c, f, today) {
   return true;
 }
 
-// Very high first ... no potential last, not assessed after real potential (same order as the server's follow-up priority); soonest follow-up next.
-const RANK = { 5: 1, 4: 2, 3: 3, 0: 4, 2: 5, 1: 6 };
+// High first ... no potential last, not assessed after real potential (same order as the server's follow-up priority); soonest follow-up next.
+const RANK = { 4: 1, 3: 2, 0: 3, 2: 4, 1: 5 };
 export function comparePotentialPriority(a, b) {
-  const ra = RANK[a.potential_level ?? 0] ?? 4;
-  const rb = RANK[b.potential_level ?? 0] ?? 4;
+  const ra = RANK[a.potential_level ?? 0] ?? 3;
+  const rb = RANK[b.potential_level ?? 0] ?? 3;
   if (ra !== rb) return ra - rb;
   const da = a.next_followup_date ? String(a.next_followup_date).slice(0, 10) : "9999-12-31";
   const db = b.next_followup_date ? String(b.next_followup_date).slice(0, 10) : "9999-12-31";
@@ -54,7 +54,7 @@ export function openPotentialFilterSheet({ rows, filter, today, onApply }) {
     <div class="sheet filter-sheet pf-sheet">
       <h2>${escapeHtml(t("pf_title"))}</h2>
       <div class="pl-section-title">${escapeHtml(t("pl_level_label"))}</div>
-      <div class="pl-reasons" id="pf-levels">${[5, 4, 3, 2, 1, 0].map((l) => chip(`data-level="${l}"`, f.levels.has(l), `<i class="pl-dot pl-${l}"></i>${escapeHtml(t(`pl_level_${l}`))} <span class="ttf-count" data-count="${l}"></span>`)).join("")}</div>
+      <div class="pl-reasons" id="pf-levels">${[4, 3, 2, 1, 0].map((l) => chip(`data-level="${l}"`, f.levels.has(l), `<i class="pl-dot pl-${l}"></i>${escapeHtml(t(`pl_level_${l}`))} <span class="ttf-count" data-count="${l}"></span>`)).join("")}</div>
       <div class="pl-section-title">${escapeHtml(t("pl_reason"))}</div>
       <div class="pl-reasons" id="pf-reasons">${REASONS.map((r) => chip(`data-reason="${r}"`, f.reasons.has(r), escapeHtml(t(`pl_reason_${r}`)))).join("")}</div>
       <div class="pl-section-title">${escapeHtml(t("pf_counterfeit"))}</div>
@@ -95,7 +95,7 @@ export function openPotentialFilterSheet({ rows, filter, today, onApply }) {
       b.setAttribute("aria-pressed", String(on));
     });
     // each level chip: how many prospects it holds with the OTHER chips applied
-    for (const l of [5, 4, 3, 2, 1, 0]) {
+    for (const l of [4, 3, 2, 1, 0]) {
       const without = { ...f, levels: new Set() };
       overlay.querySelector(`[data-count="${l}"]`).textContent = rows.filter((c) => matchesPotentialFilter(c, { ...without, levels: new Set([l]) }, today)).length;
     }
