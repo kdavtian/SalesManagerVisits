@@ -60,6 +60,11 @@ async function buildOrderLines(items, { customerId, tier, canSetPrices = false, 
     ? await pool.query("SELECT * FROM products WHERE id = ANY($1)", [productIds])
     : { rows: [] };
   const productById = new Map(products.map((p) => [p.id, p]));
+  // A customer flagged for selling counterfeit Castrol gets no genuine Castrol until management resolves it (owner, 2026-10-24).
+  if (customerId && products.some((p) => /castrol/i.test(p.brand ?? ""))) {
+    const { rows: [flag] } = await pool.query("SELECT counterfeit_flag FROM customers WHERE id = $1", [customerId]);
+    if (flag?.counterfeit_flag) throw new OrderValidationError("This customer is restricted from genuine Castrol until the counterfeit-product issue is resolved");
+  }
 
   const isGold = tier === "gold" && customerId;
   const individual = new Map();

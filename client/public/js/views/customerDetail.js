@@ -9,6 +9,7 @@ import { icons } from "../icons.js";
 import { state, canSetCustomerPrices, canEditDirectly, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, isAdmin, seesFinancialExports, seesAllActivity } from "../state.js";
 import { openVisitDetailSheet, openPhotoLightbox } from "../visitDetail.js";
 import { visitStatusBadge } from "./customers.js";
+import { renderPotentialCard } from "../potential.js";
 import { openFileReadySheet } from "../fileReadySheet.js";
 import { openOrderMenu } from "../orderMenu.js";
 import { bindStepperButton } from "../stepper.js";
@@ -112,6 +113,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     <!-- Two wrapper columns: invisible on a phone (display: contents), side by side on a desktop window (desktop.css). -->
     <div class="cd-col cd-col-main">
     <div id="open-visit-slot"></div>
+    <div id="potential-slot"></div>
     <div class="card detail-facts-card">
       <!-- One toolbar row: social/contact links (Instagram/Facebook/email/
            website) on the left, Account settings + Edit on the right.
@@ -223,6 +225,17 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     });
   });
   container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/customers"));
+  // Potential level + reasons (potential customers) and the counterfeit-products restriction; a change reloads only this card.
+  const potentialSlot = container.querySelector("#potential-slot");
+  const reloadPotential = async () => {
+    try {
+      customer = await api.getCustomer(customerId);
+      renderPotentialCard(potentialSlot, customer, { reload: reloadPotential });
+    } catch {
+      /* the card keeps showing what it had */
+    }
+  };
+  renderPotentialCard(potentialSlot, customer, { reload: reloadPotential });
   // Long names truncate with an ellipsis by default (see .detail-header-title
   // h1); tapping reveals the full name by letting it wrap instead of adding
   // a tooltip/sheet nobody would think to open.

@@ -451,3 +451,12 @@ export function canManageStaff(role) {
 export function canSetStaffRules(role) {
   return role === "admin" || role === "ceo";
 }
+
+// Potential Customer classification (owner, 2026-10-24). Management sets any customer's level; a sales manager only their own customers.
+// Resolving the "counterfeit products" restriction is a management decision.
+export function canManagePotentialAll(role) {
+  return role === "admin" || role === "ceo" || role === "operations_director" || role === "sales_director";
+}
+export function canResolveCounterfeit(role) {
+  return canManagePotentialAll(role);
+}

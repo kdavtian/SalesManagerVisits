@@ -31,6 +31,9 @@ test.describe("New customer creation", () => {
 
     const name = `E2E New Customer ${Date.now()}`;
     await form.locator('input[name="name"]').fill(name);
+    // a potential customer needs its level + reason (owner, 2026-10-24)
+    await form.locator('.pl-level-btn[data-level="3"]').click();
+    await form.locator('.pl-reason-chip[data-reason="active_interest"]').click();
     // Sales channel is deliberately hidden for a sales_manager (see
     // fieldVisitEnhancements.js's enhanceNewCustomerForm) -- it's
     // auto-guessed from the manager's own profile and the server
