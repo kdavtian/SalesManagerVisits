@@ -130,10 +130,10 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L86 Lessons added 2026-10-10 - deploy.sh --fast still runs migrations (npm run migrate on every deploy) and verify:deployment; "fast" only sk
 - L96 Lessons added 2026-10-24 (the optimization round) - Tests that passed for months only because everything ran in one slow pass share global state; splitting CI exp
 
-## optimization-ideas.md (5 KB, 28 lines)
+## optimization-ideas.md (4 KB, 28 lines)
 - L6 How an idea is written - N. <short name> - saves <minutes / taps / seconds / KB>; stays identical: <functionality, results, experience>
 - L12 Backlog (status: Suggested unless noted) - Owner answered "1, 2, 3, 4, 5, 6, 7, 8" on 2026-10-24 = all eight approved; built in the same round (Field Vis
-- L23 Ideas from the round that built these (Suggested) - Make the isolated bonus tests independent of the global switch (give each bonus test its own scope instead of
+- L23 Ideas from the round that built these (Suggested) - [DONE 2026-10-24] Make the isolated bonus tests independent of the global switch - done without touching the t
 
 ## owner-model.md (18 KB, 97 lines)
 - L5 1. Who they are, in one paragraph - A hands-on distributor owner (Castrol/Lotos/Royal/Orlen, Armenia) who runs the company from the app on an iPho
@@ -144,7 +144,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L82 6. Proactive moves that always land well - After a numbered list, add "Suggestions" (numbered, with recommendation) only if you saw something real while
 - L90 7. Mistakes I made that cost them time (do not repeat) - Claiming sheets "load before showing" without reading them (Add payment and the customer pickers already paint
 
-## owner-preferences-and-history.md (36 KB, 185 lines)
+## owner-preferences-and-history.md (38 KB, 193 lines)
 - L3 How they work with you - Writes short, numbered, imperative requests (often with screenshots "image1/img2"), mixes English with Armenia
 - L11 Visual / UX preferences (apply by default) - Compact, iOS-native feel: bottom sheets, floating/fixed action bars (Cancel/Save on customer edit must be fixe
 - L24 Things that repeatedly bit us (check proactively) - Forgetting CACHEVERSION bump -> "no updates" on phones.
@@ -158,8 +158,9 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L158 Delivery at the check-in, driver arrival (owner, 2026-10-23, 1.384.0 - 1.385.0) - Check-in "Products delivered" (the truck chip, stored as outcome customerunavailable, legacy name): ticking it
 - L164 Warehouse manager + driver apps (owner, 2026-10-23, 1.386.0) - Role shells (client/public/js/opsShell.js): warehousemanager and deliverymanager get their own bottom tabs (wa
 - L171 Staff module (1.388.0, 2026-10-23) - Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets Tabel / Sales Team / Plan (the
-- L175 Round of 2026-10-23 / 24 - KAD OS 0.52.0 - 0.53.0 and faster CI (PRs KAD OS #65, - Owner's numbered requests (screenshot of a swiped row): (1) pen/bin buttons do not go back and stay stuck: fix
-- L182 Standing rule: optimization suggestions (owner, 2026-10-24) - "Always suggest me optimization variants, which can save time, fasten process, simplify process, while keeping
+- L175 Round "before Cashflow phase 3" (owner, 2026-10-24, 1.389.0 - 1.395.0; roadmap R - Tier badge: the coin number is now T1 (bronze), T2 (silver), T3 (gold) - T = tier (the old 1/3 confused gold w
+- L183 Round of 2026-10-23 / 24 - KAD OS 0.52.0 - 0.53.0 and faster CI (PRs KAD OS #65, - Owner's numbered requests (screenshot of a swiped row): (1) pen/bin buttons do not go back and stay stuck: fix
+- L190 Standing rule: optimization suggestions (owner, 2026-10-24) - "Always suggest me optimization variants, which can save time, fasten process, simplify process, while keeping
 
 ## strategy-roadmap.md (6 KB, 31 lines)
 - L5 Target (owner, 2026-10-12): 10 % of the market = ~1 million liters a year - Owner's working assumption: the Armenian market is ~10M L a year, so 10 % = 1M L.
