@@ -1059,24 +1059,11 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     }
   }
 
-  // "Colour by Rep": the pin ITSELF takes its rep's colour (the green customer pin and the red potential crosshair; competitors keep their dark
-  // circle). The artwork is one flat colour on a transparent background, so the same PNG is used as a mask over a coloured box -- the shape and the
-  // category glyph stay exactly the approved artwork. A customer without a rep keeps the normal pin.
+  // "Colour by Rep" (owner, 2026-10-24): the pin stays exactly as before (green customer / red potential, competitors dark) and its WHITE inside takes
+  // the rep's colour. `icons/markers/fill/<same name>.png` marks the white inside of each pin (made from the approved artwork, anti-aliasing kept);
+  // it is used as a mask over a coloured box drawn on top of the normal image. A customer without a rep keeps the normal pin.
   let colorBy = getColorBy(state.user?.id);
-  const repInitials = (name) =>
-    String(name ?? "")
-      .trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((w) => w.slice(0, 1).toUpperCase())
-      .join("");
   const repColorOf = (c) => repColor(c.assigned_manager_id, c.assigned_manager_color);
-  // The rep's initials hang under the pin once the map is zoomed in (CSS shows them only while the map has .map-zoom-high).
-  const repInitialsHtml = (c) => {
-    if (colorBy !== "rep" || !c.assigned_manager_id) return "";
-    const initials = repInitials(c.assigned_manager_name);
-    return initials ? `<span class="pin-rep-initials" style="--rep-color:${repColorOf(c)}" aria-hidden="true">${escapeHtml(initials)}</span>` : "";
-  };
   // "Today's planned visits" in three states (owner, 2026-10-24): off / highlight (a ring in the colour of the rep who planned the customer, plus the
   // stop number of that rep's route) / only today (highlight + every other pin hidden). One state, two controls: the map button and the pin key.
   let plannedMode = getPlannedMode(state.user?.id);
@@ -1087,23 +1074,14 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       ? `<span class="pin-rep-ring" style="--rep-color:${planned.color}" aria-hidden="true"></span><span class="pin-stop-no" style="--rep-color:${planned.color}" aria-hidden="true">${planned.order}</span>`
       : "";
   };
-  const HIGH_ZOOM = 16;
-  let zoomHigh = null;
-  const syncZoomClass = () => {
-    const high = map.getZoom() >= HIGH_ZOOM;
-    if (high === zoomHigh) return; // an unchanged class write would still wake every DOM observer
-    zoomHigh = high;
-    map.getContainer().classList.toggle("map-zoom-high", high);
-  };
-  map.on("zoomend", syncZoomClass);
-  syncZoomClass();
-
   function pinArtHtml(c, tier) {
     const src = `/icons/markers/${tier}-${categoryIconSlug(c.category)}.png`;
+    const img = `<img class="pin-img-asset" src="${src}" alt="" width="${MARKER_SIZE}" height="${MARKER_SIZE}" draggable="false" />`;
     if (colorBy === "rep" && c.assigned_manager_id && tier !== "competitor") {
-      return `<span class="pin-img-asset pin-tinted" style="--rep-color:${repColorOf(c)};--pin-art:url('${src}')" aria-hidden="true"></span>`;
+      const fill = `/icons/markers/fill/${tier}-${categoryIconSlug(c.category)}.png`;
+      return `${img}<span class="pin-fill" style="--rep-color:${repColorOf(c)};--pin-fill:url('${fill}')" aria-hidden="true"></span>`;
     }
-    return `<img class="pin-img-asset" src="${src}" alt="" width="${MARKER_SIZE}" height="${MARKER_SIZE}" draggable="false" />`;
+    return img;
   }
 
   function customerIcon(c, status) {
@@ -1123,7 +1101,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       // .pin stays on the wrapper: marker selection (mapMarkerEnhancements)
       // and the competitor-visibility toggle (map-safe-enhancements) both
       // key off .pin / .pin-tier-* selectors.
-      html: `<div class="pin pin-img ${shapeClass} pin-tier-${tier} ${overdueClass} ${neverVisited ? "pin-is-never" : ""}">${pinArtHtml(c, tier)}${plannedRingHtml(c)}${repInitialsHtml(c)}${check}${taskMarkerHtml(c)}${never}</div>`,
+      html: `<div class="pin pin-img ${shapeClass} pin-tier-${tier} ${overdueClass} ${neverVisited ? "pin-is-never" : ""}">${pinArtHtml(c, tier)}${plannedRingHtml(c)}${check}${taskMarkerHtml(c)}${never}</div>`,
       iconSize: [MARKER_SIZE, MARKER_SIZE],
       iconAnchor: [MARKER_SIZE / 2, anchorY],
       popupAnchor: [0, -anchorY],

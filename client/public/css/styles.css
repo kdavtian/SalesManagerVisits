@@ -15604,37 +15604,18 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 .pl-prefill-note { margin: -2px 0 6px; font-size: 0.78rem; }
 .pl-prefill-note[hidden] { display: none; }
 
-/* "Colour by Rep": the rep's initials under the pin, only when zoomed in (the map container gets .map-zoom-high from zoom 16). */
-#leaflet-map .pin-rep-initials {
-  display: none;
-  position: absolute;
-  left: 50%;
-  top: 100%;
-  transform: translate(-50%, 1px);
-  min-width: 18px;
-  padding: 0 4px;
-  border-radius: 9px;
-  background: var(--rep-color, #666);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 16px;
-  text-align: center;
-  letter-spacing: 0.02em;
-  box-shadow: 0 0 0 1.5px #fff;
-  pointer-events: none;
-  z-index: 2;
-}
-#leaflet-map.map-zoom-high .pin-rep-initials { display: block; }
 /* A field the app just filled in for you (e.g. the rep after a sales-channel change): a brief highlight, still editable. */
 .field-auto-set { animation: field-auto-set 1.6s ease-out; }
 @keyframes field-auto-set { 0%, 55% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); } 100% { box-shadow: 0 0 0 3px transparent; } }
 
-/* Colour by Rep: the pin art itself in the rep's colour (the PNG is one flat colour, used as a mask). Today's planned visits get a ring. */
-#leaflet-map .pin-img-asset.pin-tinted {
+/* Colour by Rep: the white inside of the pin (fill/<pin>.png says which pixels) takes the rep's colour, drawn OVER the normal (green / red) artwork. Today's planned visits get a ring. */
+#leaflet-map .pin-fill {
+  position: absolute;
+  inset: 0;
   background-color: var(--rep-color, #888);
-  -webkit-mask: var(--pin-art) center / contain no-repeat;
-  mask: var(--pin-art) center / contain no-repeat;
+  -webkit-mask: var(--pin-fill) center / contain no-repeat;
+  mask: var(--pin-fill) center / contain no-repeat;
+  pointer-events: none;
 }
 #leaflet-map .pin-rep-ring { border-width: 3.5px; background: color-mix(in srgb, var(--rep-color, #888) 14%, transparent); }
 @media (min-width: 1024px) { .map-legend-panel { bottom: 0; } }
