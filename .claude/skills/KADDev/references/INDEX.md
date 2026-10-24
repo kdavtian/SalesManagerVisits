@@ -107,7 +107,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L463 Orders: server-side column sort (1.368.0, migration 129, owner 2026-10-18 "yes w - GET /api/orders?sort=date|amount|customer|status[&reverse=1] (whitelist in ORDERSORTS, routes/orders.js; unkno
 - L468 Typing masks and iPhone Safari (1.372.0, owner 2026-10-19: "I tap on 6 and it is - Desktop Chromium never reproduced it (fuzzed 700 digit/caret combinations, all fine); the stuck spot is the ke
 
-## kad-os-gmm.md (7 KB, 61 lines)
+## kad-os-gmm.md (8 KB, 61 lines)
 - L7 Workflow differences from Field Visits - Same owner rules apply (draft PR -> subscribe -> CI test + e2e-smoke -> ready -> squash merge -> unsubscribe;
 - L22 Architecture (KAD OS side) - server/src/lib/kad.js talks to KAD Motors' /api/partner/ (link from the DB via lib/kadLink.js, AES-256-GCM; .e
 - L36 Wholesale price = KAD Bronze price (owner, 2026-10-23, 0.53.0) - The shop's wholesale price (the "Wholesale" switch of a sale line, Products page, Oil finder) is KAD Motors' B
@@ -117,21 +117,23 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L53 Logo - Orange tile (#ff8a3d) with a graphite K (reversed on 2026-10-23); icons client/public/icons/ are regenerated f
 - L56 Lessons - A model typed without its make ("Camry") used to become a make called "Camry": the make-less case needs infere
 
-## ops-runbook.md (15 KB, 91 lines)
+## ops-runbook.md (17 KB, 100 lines)
 - L3 Environment facts - One DigitalOcean droplet (Ubuntu 24.04), hostname castrol-ceo-bot, IP 164.92.171.41.
 - L9 App deploy (preferred, fast) - cd /opt/field-visits && ./deploy/deploy.sh
 - L21 Bot deploy - cd /opt/castrol-ceo-bot && sudo -u castrolbot git pull origin main && sudo systemctl restart castrol-ceo-bot &
 - L27 Handy prod SQL (always read-only first) - Version/flag: select bonusesenabled from appsettings where id=1;
 - L33 CI and PR flow - GitHub Actions: test (npm ci, check:version, migrate, npm test, verify:ui, audit) and e2e-smoke (Playwright).
-- L46 Local environment (for verification) - pgctlcluster 16 main start; DATABASEURL=postgres://postgres:postgres@localhost:5432/fieldvisitstest; JWTSECRET
-- L51 Lessons added 2026-10-05 - "dubious ownership" on the bot: git pull as castrolbot fails after any root-run git touched the repo.
-- L58 Lessons added 2026-10-08 - Deploy command to give the owner: no migration in the release -> cd /opt/field-visits && ./deploy/deploy.sh --
-- L72 Lessons added 2026-10-09 - Deploy commands: no migration -> cd /opt/field-visits && ./deploy/deploy.sh --fast; migration present (e.g.
-- L82 Lessons added 2026-10-10 - deploy.sh --fast still runs migrations (npm run migrate on every deploy) and verify:deployment; "fast" only sk
+- L50 Local environment (for verification) - pgctlcluster 16 main start; DATABASEURL=postgres://postgres:postgres@localhost:5432/fieldvisitstest; JWTSECRET
+- L55 Lessons added 2026-10-05 - "dubious ownership" on the bot: git pull as castrolbot fails after any root-run git touched the repo.
+- L62 Lessons added 2026-10-08 - Deploy command to give the owner: no migration in the release -> cd /opt/field-visits && ./deploy/deploy.sh --
+- L76 Lessons added 2026-10-09 - Deploy commands: no migration -> cd /opt/field-visits && ./deploy/deploy.sh --fast; migration present (e.g.
+- L86 Lessons added 2026-10-10 - deploy.sh --fast still runs migrations (npm run migrate on every deploy) and verify:deployment; "fast" only sk
+- L96 Lessons added 2026-10-24 (the optimization round) - Tests that passed for months only because everything ran in one slow pass share global state; splitting CI exp
 
-## optimization-ideas.md (3 KB, 21 lines)
+## optimization-ideas.md (4 KB, 26 lines)
 - L6 How an idea is written - N. <short name> - saves <minutes / taps / seconds / KB>; stays identical: <functionality, results, experience>
-- L12 Backlog (status: Suggested unless noted) - Skip the heavy CI jobs for documentation / skill-only PRs - saves about 4 min per such PR; stays identical: th
+- L12 Backlog (status: Suggested unless noted) - Owner answered "1, 2, 3, 4, 5, 6, 7, 8" on 2026-10-24 = all eight approved; built in the same round (Field Vis
+- L23 Ideas from the round that built these (Suggested) - Make the isolated bonus tests independent of the global switch (give each bonus test its own scope instead of
 
 ## owner-model.md (18 KB, 97 lines)
 - L5 1. Who they are, in one paragraph - A hands-on distributor owner (Castrol/Lotos/Royal/Orlen, Armenia) who runs the company from the app on an iPho
