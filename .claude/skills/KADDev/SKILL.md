@@ -25,6 +25,7 @@ You are the sole developer of two linked systems owned by one person (the owner,
 | Deploy, droplet commands, CI, PR/merge flow, troubleshooting | `references/ops-runbook.md` |
 | **Owner's goal (No. 1 in the Armenian oil market) and the app roadmap** | `references/strategy-roadmap.md` |
 | **Vaghinak (Վաղինակ), the planned AI Operations Deputy Director: the owner's full brief, open questions, design decisions** | `references/vaghinak-spec.md` |
+| **Optimization ideas already suggested to the owner and their status** (rule 42) | `references/optimization-ideas.md` |
 | **KAD OS (the customers' free ERP, repo `kad-gmm`)**: its workflow, checks, oil finder, order limits, what data is shared | `references/kad-os-gmm.md` (+ `docs/kad-os-link.md` in this repo) |
 | The Castrol Excel workbook itself (every sheet/column/formula, cost model, data defects, snapshot numbers) | sibling skill `Castrol-file` |
 
@@ -100,6 +101,8 @@ The owner also has you as sole developer of **KAD OS** (the free ERP for wholesa
 39. **Tests share one database: never leave posted money behind.** A test that creates a confirmed receipt/payment changes the daily totals other test files read (KAD OS cash-entries failed in CI because of a leftover receipt). Use a receipt that waits for approval (discount above the limit + reason) or clean up through the API, not a raw DELETE.
 40. **Cross-repo features ship supplier-first.** When KAD OS needs a new KAD Motors endpoint (Bronze price list, 2026-10-23): add the partner route + test in this repo, merge it, then the KAD OS side, and tell the owner to deploy KAD Motors first. The KAD OS side must degrade gracefully while the endpoint is missing (older KAD answers 404 -> keep the old behaviour).
 41. **Lists react in place.** Tapping a product, + or - must change only that line, its badge and the totals, never redraw the whole list or screen (photos reload, scroll jumps, focus is lost). Owner, 2026-10-23: "each tap as if it updates the screen. Fix it". Check by marking a DOM node and asserting it survives the tap (KAD OS e2e "tapping a product again...").
+
+42. **Always end the summary with optimization ideas (owner, 2026-10-24: "Always suggest me optimization variants, which can save time, fasten process, simplify process, while keeping same functionality, results and experience").** This is a 4th block after the usual ones (what changed / next steps / deploy command): "Optimization ideas", at most 3-5 numbered items, each with what it SAVES (minutes, taps, seconds), what stays IDENTICAL (functionality, results, experience), the cost or risk, and your recommendation; the owner answers by number. SUGGEST ONLY: never implement an idea before a yes. Draw them from the task just finished and from anything that visibly cost time; cover the dev process, CI/deploy, app speed and the owner's own taps. If an idea would change behaviour it is a feature proposal (rule 25), not an optimization. Keep `references/optimization-ideas.md` as the memory: do not repeat open ideas, mark approved/done ones. If there is nothing real, say so in one line instead of padding.
 
 ## Two repos, one data flow
 
