@@ -147,6 +147,15 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/customers${qs ? `?${qs}` : ""}`);
   },
+  // Order returns and cancellations (see server/src/orderReturns.js)
+  listReturns: (params = {}) => request(`/returns?${new URLSearchParams(params)}`, { fresh: true }),
+  getReturnable: (orderId) => request(`/returns/order/${orderId}/returnable`, { fresh: true }),
+  getReturnCounts: () => request("/returns/counts", { fresh: true }),
+  requestReturn: (data) => json("/returns", "POST", data),
+  approveReturn: (id, note) => json(`/returns/${id}/approve`, "POST", { note }),
+  rejectReturn: (id, note) => json(`/returns/${id}/reject`, "POST", { note }),
+  receiveReturn: (id, items) => json(`/returns/${id}/receive`, "POST", { items }),
+  recordReturn: (id) => request(`/returns/${id}/recorded`, { method: "POST" }),
   getPotentialSummary: () => request("/customers/potential-summary", { fresh: true }),
   setCustomerPotential: (id, data) => json(`/customers/${id}/potential`, "PUT", data),
   getPotentialHistory: (id) => request(`/customers/${id}/potential-history`, { fresh: true }),

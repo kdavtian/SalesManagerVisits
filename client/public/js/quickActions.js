@@ -84,6 +84,8 @@ export const QUICK_ACTIONS = [
   { id: "qa_cashflow", defaultRoles: ["admin", "ceo", "operations_director", "accountant"] },
   // Staff: people, structure, payroll. Everybody opens it to see their own pay; a boss sees the team, the CEO / accountant everyone (server: routes/staff.js).
   { id: "qa_staff", defaultRoles: ALL_ROLES },
+  // Order returns / cancellations: the rep sees their own, management and the accountant decide, the warehouse manager receives (server: routes/returns.js).
+  { id: "qa_returns", defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant", "sales_manager"] },
   // Not in the owner's list of 15, kept (not removed) and placed last.
   { id: "qa_plan_route", defaultRoles: ALL_ROLES },
 ];
@@ -106,6 +108,7 @@ export const QUICK_ACTION_ROUTE = {
   qa_recorded: "#/recorded",
   qa_cashflow: "#/cashflow",
   qa_staff: "#/staff",
+  qa_returns: "#/returns",
   qa_team_performance: "#/team-performance",
   qa_reports: "#/reports",
   qa_debt_balances: "#/debt-balances",

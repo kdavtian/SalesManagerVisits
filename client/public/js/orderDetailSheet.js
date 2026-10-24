@@ -18,6 +18,7 @@ import { compareProducts } from "./productSort.js";
 import { documentsSectionHtml, bindDocumentRows } from "./accountingFiles.js";
 import { openPrintBlankSheet } from "./orderBlankPrint.js";
 import { openErpLinkSheet } from "./erpLinkSheet.js";
+import { openReturnSheet } from "./returnSheet.js";
 import { openAccountingDocSheet, accountingDocShort, accountingStatusLabel, ACCOUNTING_STATUS_BADGE } from "./accountingDocSheet.js";
 
 // v3 5-state machine (see migrations/051_warehouse_delivery_v3.sql):
@@ -34,6 +35,7 @@ export const STATUS_META = {
 };
 
 // A KAD OS order the customer cancelled (it sits in "draft" on the server, marked cancelled_at): a red "Cancelled" chip instead of "Draft".
+const RETURN_REQUEST_ROLES = new Set(["admin", "ceo", "operations_director", "sales_director", "accountant"]);
 export const CANCELLED_META = { key: "kos_cancelled_badge", cls: "badge-danger", iconTint: "danger" };
 export const orderStatusMeta = (order) => (order?.cancelled_at ? CANCELLED_META : STATUS_META[order?.status] ?? STATUS_META.submitted);
 
@@ -298,6 +300,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       ${order.note ? `<p class="muted">${escapeHtml(order.note)}</p>` : ""}
       ${accountingSectionHtml(order)}
       <div id="order-signed-docs"></div>
+      <div id="order-returns-slot"></div>
       ${orderTimelineHtml(order.history, order.status)}
       </div>
       </div>
@@ -373,6 +376,10 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     // the order as a record back at draft) -- admin only, for a
     // duplicate or mistaken order.
     // A sales manager may also delete their OWN order until management confirms it (draft / submitted).
+    // Return (delivered) / cancel (not delivered yet): the rep asks, management decides (views/returns.js).
+    if (!order.cancelled_at && order.status !== "draft" && (order.user_id === state.user.id || RETURN_REQUEST_ROLES.has(state.user.role))) {
+      buttons.push({ label: t(order.status === "delivered" ? "rt_btn_return" : "rt_btn_cancel"), action: "order-return", cls: "btn" });
+    }
     if (state.user.role === "admin" || (state.user.role === "sales_manager" && order.user_id === state.user.id && ["draft", "submitted"].includes(order.status))) {
       buttons.push({ label: `${icons.trash}${t("delete_order")}`, action: "delete-order", cls: "btn btn-danger btn-has-icon" });
     }
@@ -389,6 +396,22 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     actionsEl.querySelector("#order-detail-close")?.addEventListener("click", () => overlay.remove());
     overlay.querySelector('[data-action="close-sheet"]')?.addEventListener("click", () => overlay.remove());
     overlay.querySelector('.sheet-head-actions [data-action="print-blank"]')?.addEventListener("click", () => openPrintBlankSheet([{ id: order.id, order_code: order.order_code }]));
+    // Returns / cancellation requests on this order (loaded after the sheet is up).
+    api
+      .listReturns({ order_id: orderId })
+      .then((list) => {
+        const slot = overlay.querySelector("#order-returns-slot");
+        if (!slot || !list.length) return;
+        const chip = { requested: ["rt_status_requested", "badge-warning"], approved: ["rt_status_approved", "badge-info"], rejected: ["rt_status_rejected", "badge-danger"], done: ["rt_status_done", "badge-success"] };
+        slot.innerHTML = list
+          .map((r) => {
+            const [key, cls] = chip[r.status];
+            const what = r.items.map((i) => `${escapeHtml(i.product_name)} × ${Number(i.quantity)}`).join(", ");
+            return `<div class="rt-order-row"><div><strong>${escapeHtml(t(r.kind === "return" ? "rt_kind_return" : "rt_kind_cancel"))}</strong> <span class="badge ${cls}">${escapeHtml(t(key))}</span></div><div class="muted">${what}</div>${r.decision_note ? `<div class="muted">${escapeHtml(r.decision_note)}</div>` : ""}</div>`;
+          })
+          .join("");
+      })
+      .catch(() => {});
     // Signed copies Lily stored on this order (loaded after the sheet is up).
     if (order.accounting_status) {
       api
@@ -446,6 +469,13 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
         }
         if (btn.dataset.action === "edit-order") {
           renderEditMode(order);
+          return;
+        }
+        if (btn.dataset.action === "order-return") {
+          openReturnSheet(orderId, async () => {
+            renderView(await api.getOrder(orderId));
+            onChanged?.();
+          });
           return;
         }
         if (btn.dataset.action === "print-blank") {

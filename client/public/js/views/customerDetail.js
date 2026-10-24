@@ -459,8 +459,13 @@ function renderErpCard(customer, erpOrders) {
     // Red only while some unpaid invoice is past its due date (FIFO, credit term deducted -- the
     // same rule as the chip, the reports and the tasks), or the data is broken. A 0 balance is fine.
     debtDanger: isDataError || (debt > 0 && (customer.debt_summary?.oldest_due_days ?? 0) > 0),
-    debtSub:
+    // A return the customer is owed but Excel has not booked yet (migration 143): shown at once, it lowers the debt once the accountant records it.
+    debtSub: [
       !isDataError && collectedSinceSync > 0 ? `${t("estimated_remaining")}${labelColon()}${formatAmd(estimatedDebt)}` : "",
+      returnCreditText(customer),
+    ]
+      .filter(Boolean)
+      .join(" · "),
     // Days past (or until) the due date of the oldest unpaid invoice, credit term deducted.
     debtChip: !isDataError && debt > 0 ? dueChipHtml(customer.debt_summary?.oldest_due_days) : "",
     lastOrderDate,
@@ -490,6 +495,8 @@ function statTilesHtml({ customer, salesThisMonth, debtText, debtDanger, debtSub
   `;
 }
 
+const returnCreditText = (customer) => (Number(customer.pending_return_credit?.amd) > 0 ? `${t("rt_credit_pending")}${labelColon()}${formatAmd(customer.pending_return_credit.amd)}` : "");
+
 // Same four tiles as the full card. With no debt-summary row the ERP sync
 // found no current debt for this customer (its customers[] list always
 // includes anyone who owes), so the debt tile reads 0.
@@ -503,7 +510,7 @@ function renderErpOrdersOnlyCard(customer, erpOrders) {
     })
     .reduce((sum, o) => sum + Number(o.total_amd), 0);
   const lastOrderDate = parseDateOnly(customer.erp_last_order_date) ? formatDayMonth(parseDateOnly(customer.erp_last_order_date), { year: true }) : null;
-  return statTilesHtml({ customer, salesThisMonth, debtText: formatAmd(0), debtDanger: false, lastOrderDate });
+  return statTilesHtml({ customer, salesThisMonth, debtText: formatAmd(0), debtDanger: false, debtSub: returnCreditText(customer), lastOrderDate });
 }
 
 function groupLinesByBrand(lines) {

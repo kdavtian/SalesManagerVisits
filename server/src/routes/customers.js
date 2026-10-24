@@ -18,6 +18,7 @@ import { computeVisitDue, ruleWeekdaysFor } from "../utils/visitDue.js";
 import { repVisitSql } from "../visitCount.js";
 import { skippedForRecentVisit, getPlanSkipRecentVisitDays } from "../utils/planSkipRecent.js";
 import { nextNameNumber } from "../customerNameSuggest.js";
+import { pendingCreditFor } from "../orderReturns.js";
 import { PotentialError, cleanPotentialInput, setPotential, resolveCounterfeit, potentialHistory } from "../potential.js";
 
 export const customersRouter = Router();
@@ -735,6 +736,9 @@ customersRouter.get("/:id", async (req, res) => {
     customer.collected_since_sync_amd = 0;
     customer.estimated_debt_amd = null;
   }
+
+  // Credit from approved returns that Excel does not show yet (see orderReturns.js): provisional, like estimated_debt_amd.
+  customer.pending_return_credit = seesCustomerErpData(req.user.role, customer.assigned_manager_id, req.user.id) ? await pendingCreditFor(customer.id) : null;
 
   await applyPlannedOverdue([customer]);
   res.json(customer);

@@ -15352,3 +15352,25 @@ button.cf-row-edit { width: 100%; text-align: left; color: inherit; font: inheri
 .pd-card summary::-webkit-details-marker { display: none; }
 .pd-card summary::after { content: "›"; margin-left: auto; font-size: 1.4rem; color: var(--text-dim); transform: rotate(90deg); }
 .pd-card[open] summary::after { transform: rotate(-90deg); }
+
+/* Order returns / cancellations (R4) */
+.rt-sheet { max-height: 92vh; overflow-y: auto; }
+.rt-line-name small { display: block; }
+.rt-lines { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; }
+.rt-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 48px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); }
+.rt-line-on { border-color: var(--primary, #ff7a00); background: color-mix(in srgb, var(--primary, #ff7a00) 8%, var(--bg-card)); }
+.rt-line-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.rt-step { display: inline-flex; align-items: center; gap: 10px; }
+.rt-step .icon-btn { width: 44px; height: 44px; font-size: 1.3rem; }
+.rt-step b { min-width: 1.6em; text-align: center; font-variant-numeric: tabular-nums; }
+.rt-card { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.rt-card-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.rt-card-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; }
+.rt-sub { font-size: 0.82rem; }
+.rt-card-line { font-size: 0.92rem; }
+.rt-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.rt-actions .btn { flex: 1 1 140px; min-height: 44px; }
+.rt-extra { display: flex; flex-direction: column; gap: 8px; }
+.rt-grade { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rt-grade-btns { display: inline-flex; gap: 6px; }
+.rt-order-row { padding: 8px 10px; margin: 8px 0; border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; gap: 2px; font-size: 0.9rem; }

@@ -6,6 +6,7 @@ import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { queueReportLabel, queueSyncNotice } from "../syncNotifier.js";
 import { autoDeliverOrdersFromErp, autoApprovePaymentsFromErp } from "../erpAutoMatch.js";
+import { matchReturnsToErp } from "../orderReturns.js";
 import { runAutoTasks } from "../debtCollectionTasks.js";
 import { refreshOrderRhythm } from "../orderRhythm.js";
 import { applyCashLedger } from "../cashflow.js";
@@ -288,6 +289,8 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     // orders become Delivered, matching pending cash payments become
     // Approved (both marked "from ERP"; see erpAutoMatch.js).
     if (order_lines !== undefined) await autoDeliverOrdersFromErp(client);
+    // Returns the accountant typed into Excel (negative lines) are marked "recorded in ERP" here.
+    if (order_lines !== undefined) await matchReturnsToErp(client);
     if (cashflow_lines !== undefined) await autoApprovePaymentsFromErp(client);
     // Upsert-only, never TRUNCATE: unlike the other tables above, products
     // can also be created directly in the app (no erp_product_id), and a
