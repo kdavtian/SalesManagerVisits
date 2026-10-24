@@ -8,7 +8,7 @@ droplet app. The supplier-side half of the link lives in THIS repo (`docs/kad-os
 - Same owner rules apply (draft PR -> subscribe -> CI `test` + `e2e-smoke` -> ready -> squash merge -> unsubscribe; reset the branch from
   origin/main with a force-with-lease whose sha comes from `git ls-remote`; summaries end with the versions).
 - Versions: `client/public/js/version.js` (`APP_VERSION`, 0.x) AND `client/public/sw.js` (`CACHE_VERSION`, a plain number). `npm run check:version`.
-- CI now runs `test`, `e2e (desktop)` and `e2e (phone)` in parallel under the required names `test` and `e2e-smoke` (see ops-runbook). Checks before pushing (in `server/`): `npm run verify:ui` (i18n keys hy + en, `node --check client/public/js/i18n.js`), `npm run check:version`,
+- CI = `changes` (docs-only skip) + `static` + `tests (unit + integration)` -> `test`, and `e2e (desktop|phone n/2)` -> `e2e-smoke` (see ops-runbook); `bash scripts/local-ci.sh` runs it all locally in about 3 min. Checks before pushing (in `server/`): `npm run verify:ui` (i18n keys hy + en, `node --check client/public/js/i18n.js`), `npm run check:version`,
   `node scripts/test-prepare.js` THEN `npm test` (the cleanup test wipes the DB: run prepare again before every new run), and
   `npx playwright test --config e2e/playwright.config.js` (desktop + phone, port 3011). Run tests in the background and wait with Monitor.
 - **RBAC matrix**: every new route needs a row in `server/test/integration/rbac.test.js` (a missing row fails "every registered route has an RBAC matrix row").
