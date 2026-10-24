@@ -35,18 +35,23 @@ export function setColorBy(userId, value) {
   }
 }
 
-// "Today's planned visits by rep": a ring in the rep's colour round every customer planned for today (owner, 2026-10-24). Per user, default off.
-const plannedRingsKey = (userId) => `fieldvisits_map_planned_rings:${userId ?? "anon"}`;
-export function getPlannedRings(userId) {
+// "Today's planned visits" (owner, 2026-10-24): off / highlight (ring in the rep's colour + stop number) / only today. Per user, default off.
+// The first version of this setting was a plain on/off switch ("planned_rings"); "on" is read as "highlight".
+const plannedModeKey = (userId) => `fieldvisits_map_planned_mode:${userId ?? "anon"}`;
+const oldPlannedRingsKey = (userId) => `fieldvisits_map_planned_rings:${userId ?? "anon"}`;
+export function getPlannedMode(userId) {
   try {
-    return localStorage.getItem(plannedRingsKey(userId)) === "on";
+    const mode = localStorage.getItem(plannedModeKey(userId));
+    if (mode === "highlight" || mode === "only") return mode;
+    return localStorage.getItem(oldPlannedRingsKey(userId)) === "on" ? "highlight" : "off";
   } catch {
-    return false;
+    return "off";
   }
 }
-export function setPlannedRings(userId, enabled) {
+export function setPlannedMode(userId, mode) {
   try {
-    localStorage.setItem(plannedRingsKey(userId), enabled ? "on" : "off");
+    localStorage.setItem(plannedModeKey(userId), mode === "highlight" || mode === "only" ? mode : "off");
+    localStorage.removeItem(oldPlannedRingsKey(userId));
   } catch {
     /* storage blocked: the choice lasts until the map closes */
   }
