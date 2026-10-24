@@ -1570,6 +1570,7 @@ const dict = {
     back: "Back",
     no_region: "No region",
     no_subregion: "No subregion",
+    group_by_region: "Group by",
     customers_selected_count: "{n} customers selected",
 
     plan_for_date: "Plan for",
@@ -4722,6 +4723,7 @@ const dict = {
     select_day_required: "Շարունակելու համար ընտրեք առնվազն մեկ օր։",
     no_region: "Առանց մարզի",
     no_subregion: "Առանց ենթաշրջանի",
+    group_by_region: "Խմբավորել",
     customers_selected_count: "Ընտրված է {n} հաճախորդ",
     next: "Հաջորդը",
     previous: "Նախորդը",

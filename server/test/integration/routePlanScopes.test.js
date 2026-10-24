@@ -59,6 +59,14 @@ test("overview: the person has a main plan and a separate SM B2B plan; each coun
   assert.deepEqual(mondayOf(main).customer_ids, [m1.id]);
   assert.deepEqual(mondayOf(b2b).customer_ids, [b1.id]);
   assert.deepEqual(res.data.find((r) => r.user_id === rep.id).days, res.data.find((r) => r.user_id === rep.id).plans[0].days, "top-level days = main plan");
+  // the red badge: customers of the plan that are on no weekday (m2 and b2 have no day)
+  assert.equal(main.unplanned_count, 1);
+  assert.equal(b2b.unplanned_count, 1);
+  // a never-visited channel or a competitor needs no place in the plan
+  const extra = await createCustomer({ created_by: admin.id, assigned_manager_id: rep.id, sales_channel: "SM Davtashen", lat: 40.22, lng: 44.5 });
+  await pool.query("UPDATE customers SET customer_tier = 'competitor' WHERE id = $1", [extra.id]);
+  assert.equal(planOf((await apiRequest("/api/visit-plans/rules/overview", { cookie: adminCookie })).data, "").unplanned_count, 1, "competitors are not counted");
+  await pool.query("DELETE FROM customers WHERE id = $1", [extra.id]);
 });
 
 test("customers list per plan: ?scope= limits it, bad scope is refused", async () => {

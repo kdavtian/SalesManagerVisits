@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { reorderChipHtml } from "../reorder.js";
-import { customerMatchesSearch, escapeHtml, formatDateTime, formatAmd, haversineMeters, getCurrentPosition, customerListIconHtml, categoryLabel, activateDialog, channelDisplayLabel, TIER_OPTIONS, labelColon, openInfoPopup } from "../util.js";
+import { customerMatchesSearch, escapeHtml, formatDateTime, formatAmd, haversineMeters, getCurrentPosition, customerListIconHtml, categoryLabel, activateDialog, channelDisplayLabel, TIER_OPTIONS, labelColon, openInfoPopup, regionLabelHy, subregionLabelHy } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state, seesAllActivity } from "../state.js";
@@ -146,6 +146,8 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
   // contract (buildRegionSubregionTree/renderTriStateTree) -- empty means
   // no region filter is applied at all.
   let regionSubregionKeys = new Set();
+  // "Group by" on the Region sheet: the list gets a region header and a subregion header per group (owner, 2026-10-24).
+  let groupByRegion = false;
   // Set of "channel::managerId" keys (buildDirectionManagerTree leaf ids); empty = no filter.
   let assignmentKeys = new Set();
   // Customer type (category or NO_GROUP_KEY) and tier chips, several of each at once; empty = no filter.
@@ -440,8 +442,10 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
         tree: buildRegionSubregionTree(allCustomers.filter((c) => c.region)),
         initialSelectedIds: regionSubregionKeys,
         countUnitLabel: t("perf_dq_customers_unit"),
-        onApply: (selectedIds) => {
+        groupBy: { label: t("group_by_region"), checked: groupByRegion },
+        onApply: (selectedIds, opts) => {
           regionSubregionKeys = selectedIds;
+          groupByRegion = Boolean(opts?.groupBy);
           renderFilterRow();
           renderStatsBar();
           renderList();
@@ -611,6 +615,31 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
     let customers = applyNonStatusFilters(allCustomers);
     if (FILTER_STATUSES[filter]) customers = customers.filter((c) => FILTER_STATUSES[filter].includes(visitStatus(c)));
     customers = sortCustomers(customers);
+    // Grouped by region, then subregion (customers keep their usual order inside a group).
+    const regionKey = (c) => c.region || "";
+    const subKey = (c) => c.subregion || "";
+    const groupCounts = new Map();
+    if (groupByRegion) {
+      const regionName = (c) => (c.region ? regionLabelHy(c.region) : "");
+      const subName = (c) => (c.subregion ? subregionLabelHy(c.subregion) : "");
+      customers = customers.map((c, i) => [c, i]).sort((a, b) => (regionName(a[0]) ? 0 : 1) - (regionName(b[0]) ? 0 : 1) || regionName(a[0]).localeCompare(regionName(b[0])) || (subName(a[0]) ? 0 : 1) - (subName(b[0]) ? 0 : 1) || subName(a[0]).localeCompare(subName(b[0])) || a[1] - b[1]).map(([c]) => c);
+      for (const c of customers) {
+        groupCounts.set(`r:${regionKey(c)}`, (groupCounts.get(`r:${regionKey(c)}`) ?? 0) + 1);
+        groupCounts.set(`s:${regionKey(c)}::${subKey(c)}`, (groupCounts.get(`s:${regionKey(c)}::${subKey(c)}`) ?? 0) + 1);
+      }
+    }
+    // The headers that open a customer's group: a region header when the region changes, a subregion header when the subregion does.
+    const groupHeaderHtml = (c, prev) => {
+      if (!groupByRegion) return "";
+      let html = "";
+      if (!prev || regionKey(prev) !== regionKey(c)) {
+        html += `<div class="cl-group cl-group-region">${escapeHtml(c.region ? regionLabelHy(c.region) : t("no_region"))}<span class="cl-group-count">${groupCounts.get(`r:${regionKey(c)}`)}</span></div>`;
+      }
+      if (!prev || regionKey(prev) !== regionKey(c) || subKey(prev) !== subKey(c)) {
+        html += `<div class="cl-group cl-group-sub">${escapeHtml(c.subregion ? subregionLabelHy(c.subregion) : t("no_subregion"))}<span class="cl-group-count">${groupCounts.get(`s:${regionKey(c)}::${subKey(c)}`)}</span></div>`;
+      }
+      return html;
+    };
 
     if (!customers.length) {
       listEl.innerHTML = `<p class="empty-state">${t("no_customers_found")}</p>`;
@@ -620,7 +649,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
     // Only the first batch is built; the rest is appended as the list is scrolled (4,000 cards at once froze a phone for
     // seconds). A new search / filter / sort starts again from the first batch; a data refresh of the same list keeps
     // however far the person had scrolled.
-    const listKey = `${customers.length}|${customers[0]?.id}|${customers[customers.length - 1]?.id}|${filter}|${searchInput.value}`;
+    const listKey = `${customers.length}|${customers[0]?.id}|${customers[customers.length - 1]?.id}|${filter}|${searchInput.value}|${groupByRegion}`;
     if (listKey !== lastListKey) {
       lastListKey = listKey;
       listShown = CUSTOMER_BATCH;
@@ -694,7 +723,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
       listEl.querySelector("#customer-list-more")?.remove();
       const from = listEl.querySelectorAll(".list-row").length;
       const to = Math.min(customers.length, listShown);
-      if (to > from) listEl.insertAdjacentHTML("beforeend", customers.slice(from, to).map(cardHtml).join(""));
+      if (to > from) listEl.insertAdjacentHTML("beforeend", customers.slice(from, to).map((c, i) => groupHeaderHtml(c, customers[from + i - 1]) + cardHtml(c)).join(""));
       if (customers.length > to) {
         listEl.insertAdjacentHTML("beforeend", `<div id="customer-list-more" class="list-more" aria-hidden="true"></div>`);
         if (typeof IntersectionObserver === "function") {
@@ -727,7 +756,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
     renderList();
   }
 
-  async function load() {
+  async function load({ silent = false } = {}) {
     // Stale-while-revalidate (see listCache.js): show last session's list
     // instantly, then swap in the live one the moment it arrives, instead
     // of a loading spinner every single time this screen opens. Keyed by
@@ -737,7 +766,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
     // set here rather than left from before so a debt-toggle reload (which
     // calls load() again) doesn't flash a blank loading state over an
     // already-visible list while its own cache lookup resolves.
-    listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+    if (!silent) listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     let paintedOnce = false;
     try {
       await loadWithCache(
@@ -797,4 +826,16 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
 
   load();
   loadBrandSummary();
+
+  // Back from a customer card restores this screen exactly as it was left (app.js back-cache), including names that were edited in between
+  // (owner, 2026-10-24): repaint from the cached list (edits patch it, see api.js / listCache.js) and then refresh, keeping place and scroll.
+  const cleanup = () => moreObserver?.disconnect();
+  cleanup.onRestore = () => {
+    const scrollTop = root.scrollTop;
+    // listShown only resets when the list itself changes (renderList), so the rows built so far stay and the scroll position stays valid
+    load({ silent: true }).finally(() => {
+      root.scrollTop = scrollTop;
+    });
+  };
+  return cleanup;
 }
