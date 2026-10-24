@@ -25,3 +25,9 @@ Owner answered "1, 2, 3, 4, 5, 6, 7, 8" on 2026-10-24 = all eight approved; buil
 10. [DONE 2026-10-24] **Run the Playwright browser tests of Field Visits in the same sharded way as KAD OS's** - `e2e (smoke shard 1/2, 2/2)` + summary `e2e-smoke`; honest gain small (13 smoke tests; most of that job is `npm ci` and the browser install).
 11. [DONE 2026-10-24, KAD OS #71] **Add the `npm audit` gate to the KAD OS CI `static` job** - `static (version, ui, audit)`.
 12. [OWNER ACTION, open] **Switch on the repository setting "Allow GitHub Actions to create and approve pull requests"** in both repos (Settings -> Actions -> General -> Workflow permissions; the tools in a session cannot change repository settings) - then the weekly dependency PR opens by itself instead of stopping at the last step.
+13. [DONE 2026-10-24, 1.401.0] **Refresh Activity, Debt balances and Tasks when the person comes back with Back** (like Orders and Customers).
+14. [DONE 2026-10-24, 1.401.0] **Remember the Customers "Group by" choice** on the device.
+15. [DONE 2026-10-24, 1.401.0] **Collapsible region / subregion headers** in the grouped Customers list (fold state not remembered).
+16. [DONE 2026-10-24, 1.401.0] **Tap the red "not in plans" number to open only the unplanned customers** (button inside switches to all).
+17. [Suggested] **"Fold all / unfold all" in the grouped Customers list**, and optionally remember folded groups.
+18. [Suggested] **Inbox of pending bank statements** that arrive from Telegram (Cashflow phase 3b).

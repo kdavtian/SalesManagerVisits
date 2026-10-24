@@ -85,7 +85,7 @@ function formatActivityDate(iso) {
   return `${formatDayMonth(d, { year: true })}, ${time}`;
 }
 
-export async function renderActivity(root, navigate) {
+export function renderActivity(root, navigate) {
   root.innerHTML = `<div class="activity-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".activity-view");
 
@@ -511,7 +511,9 @@ export async function renderActivity(root, navigate) {
     };
   }
 
-  async function load() {
+  // `silent` = refresh when the screen comes back by Back: no stale-cache repaint, and nothing repaints if the list is unchanged.
+  let lastSig = "";
+  async function load({ silent = false } = {}) {
     const params = {};
     if (range === "custom") {
       if (customFrom) params.from = customFrom;
@@ -534,8 +536,12 @@ export async function renderActivity(root, navigate) {
     try {
       await loadWithCache(
         cacheKey,
-        () => api.listCheckins(params),
-        (result) => {
+        () => api.listCheckins(params, silent ? { fresh: true } : {}),
+        (result, meta) => {
+          if (silent && meta?.stale) return;
+          const sig = JSON.stringify([result.rows, result.has_more]);
+          if (silent && sig === lastSig) return;
+          lastSig = sig;
           allCheckins = result.rows;
           checkinsCapped = result.has_more;
           renderShell();
@@ -543,9 +549,13 @@ export async function renderActivity(root, navigate) {
         }
       );
     } catch (err) {
-      if (!paintedOnce) container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+      if (!paintedOnce && !silent) container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     }
   }
 
   load();
+  // Back to this screen (app.js back-cache): a visit or order saved on the screen in between shows up without a manual refresh.
+  const cleanup = () => {};
+  cleanup.onRestore = () => container.isConnected && load({ silent: true });
+  return cleanup;
 }

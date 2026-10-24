@@ -212,9 +212,9 @@ export const api = {
   createCheckin: (formData) =>
     request("/checkins", { method: "POST", body: formData }),
   getDeliverableOrders: (customerId) => request(`/checkins/deliverable-orders?customer_id=${customerId}`),
-  listCheckins: (params = {}) => {
+  listCheckins: (params = {}, options = {}) => {
     const qs = new URLSearchParams(params).toString();
-    return request(`/checkins${qs ? `?${qs}` : ""}`);
+    return request(`/checkins${qs ? `?${qs}` : ""}`, options);
   },
   checkinPhotoByIdUrl: (photoId) => `/api/checkins/photos/${photoId}`,
   deleteCheckinPhotoById: (photoId) => request(`/checkins/photos/${photoId}`, { method: "DELETE" }),

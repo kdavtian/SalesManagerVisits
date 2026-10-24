@@ -147,7 +147,16 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
   // no region filter is applied at all.
   let regionSubregionKeys = new Set();
   // "Group by" on the Region sheet: the list gets a region header and a subregion header per group (owner, 2026-10-24).
+  // Remembered on this device (owner, 2026-10-24); a collapsed header is not remembered -- it is a way to skim the list, not a setting.
+  const GROUP_PREF_KEY = "fieldvisits_customers_group_by_region";
   let groupByRegion = false;
+  try {
+    groupByRegion = localStorage.getItem(GROUP_PREF_KEY) === "1";
+  } catch {
+    /* storage blocked: grouping simply starts off */
+  }
+  // Keys of the group headers the person folded ("r:<region>" / "s:<region>::<subregion>"): their customers are left out of the list.
+  const collapsedGroups = new Set();
   // Set of "channel::managerId" keys (buildDirectionManagerTree leaf ids); empty = no filter.
   let assignmentKeys = new Set();
   // Customer type (category or NO_GROUP_KEY) and tier chips, several of each at once; empty = no filter.
@@ -446,6 +455,11 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
         onApply: (selectedIds, opts) => {
           regionSubregionKeys = selectedIds;
           groupByRegion = Boolean(opts?.groupBy);
+          try {
+            localStorage.setItem(GROUP_PREF_KEY, groupByRegion ? "1" : "0");
+          } catch {
+            /* storage blocked: the choice lasts until the screen closes */
+          }
           renderFilterRow();
           renderStatsBar();
           renderList();
@@ -609,6 +623,26 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
     const row = e.target.closest(".list-row[data-id]");
     if (row && listEl.contains(row)) navigate(`#/customers/${row.dataset.id}`);
   });
+  // A group header folds / unfolds its group (customers of the group, and the subregion headers of a region).
+  function toggleGroup(head) {
+    const key = head.dataset.gkey;
+    if (collapsedGroups.has(key)) collapsedGroups.delete(key);
+    else collapsedGroups.add(key);
+    renderList();
+    // The list is rebuilt: keep the header the person tapped where they can see it.
+    [...listEl.querySelectorAll(".cl-group[data-gkey]")].find((h) => h.dataset.gkey === key)?.scrollIntoView({ block: "nearest" });
+  }
+  listEl.addEventListener("click", (e) => {
+    const head = e.target.closest(".cl-group[data-gkey]");
+    if (head && listEl.contains(head)) toggleGroup(head);
+  });
+  listEl.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const head = e.target.closest?.(".cl-group[data-gkey]");
+    if (!head || !listEl.contains(head)) return;
+    e.preventDefault();
+    toggleGroup(head);
+  });
 
   function renderList() {
     moreObserver?.disconnect();
@@ -629,17 +663,37 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
       }
     }
     // The headers that open a customer's group: a region header when the region changes, a subregion header when the subregion does.
-    const groupHeaderHtml = (c, prev) => {
-      if (!groupByRegion) return "";
-      let html = "";
-      if (!prev || regionKey(prev) !== regionKey(c)) {
-        html += `<div class="cl-group cl-group-region">${escapeHtml(c.region ? regionLabelHy(c.region) : t("no_region"))}<span class="cl-group-count">${groupCounts.get(`r:${regionKey(c)}`)}</span></div>`;
-      }
-      if (!prev || regionKey(prev) !== regionKey(c) || subKey(prev) !== subKey(c)) {
-        html += `<div class="cl-group cl-group-sub">${escapeHtml(c.subregion ? subregionLabelHy(c.subregion) : t("no_subregion"))}<span class="cl-group-count">${groupCounts.get(`s:${regionKey(c)}::${subKey(c)}`)}</span></div>`;
-      }
-      return html;
+    // Tapping a header folds the group: its customers (and, for a region, its subregion headers) are left out of the list.
+    const groupHeader = (cls, key, label, count) => {
+      const open = !collapsedGroups.has(key);
+      return `<div class="cl-group ${cls}" role="button" tabindex="0" data-gkey="${escapeHtml(key)}" aria-expanded="${open}"><span class="cl-group-chevron" aria-hidden="true"></span><span class="cl-group-label">${escapeHtml(label)}</span><span class="cl-group-count">${count}</span></div>`;
     };
+    // `entries` is what the list shows: a customer card (with its group headers in front) or, for a folded group, just the header.
+    const entries = [];
+    if (groupByRegion) {
+      let prev = null;
+      for (const c of customers) {
+        const rKey = `r:${regionKey(c)}`;
+        const sKey = `s:${regionKey(c)}::${subKey(c)}`;
+        const newRegion = !prev || regionKey(prev) !== regionKey(c);
+        const newSub = newRegion || subKey(prev) !== subKey(c);
+        prev = c;
+        let head = "";
+        if (newRegion) head += groupHeader("cl-group-region", rKey, c.region ? regionLabelHy(c.region) : t("no_region"), groupCounts.get(rKey));
+        if (collapsedGroups.has(rKey)) {
+          if (head) entries.push({ head });
+          continue;
+        }
+        if (newSub) head += groupHeader("cl-group-sub", sKey, c.subregion ? subregionLabelHy(c.subregion) : t("no_subregion"), groupCounts.get(sKey));
+        if (collapsedGroups.has(sKey)) {
+          if (newSub) entries.push({ head });
+          continue;
+        }
+        entries.push({ head, c });
+      }
+    } else {
+      for (const c of customers) entries.push({ head: "", c });
+    }
 
     if (!customers.length) {
       listEl.innerHTML = `<p class="empty-state">${t("no_customers_found")}</p>`;
@@ -721,10 +775,11 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
     const paintMore = () => {
       moreObserver?.disconnect();
       listEl.querySelector("#customer-list-more")?.remove();
-      const from = listEl.querySelectorAll(".list-row").length;
-      const to = Math.min(customers.length, listShown);
-      if (to > from) listEl.insertAdjacentHTML("beforeend", customers.slice(from, to).map((c, i) => groupHeaderHtml(c, customers[from + i - 1]) + cardHtml(c)).join(""));
-      if (customers.length > to) {
+      const from = painted;
+      const to = Math.min(entries.length, listShown);
+      if (to > from) listEl.insertAdjacentHTML("beforeend", entries.slice(from, to).map((e) => e.head + (e.c ? cardHtml(e.c) : "")).join(""));
+      painted = Math.max(painted, to);
+      if (entries.length > to) {
         listEl.insertAdjacentHTML("beforeend", `<div id="customer-list-more" class="list-more" aria-hidden="true"></div>`);
         if (typeof IntersectionObserver === "function") {
           // The page scrolls inside <main id="app">, not the window: observe relative to that scroller so the margin counts
@@ -741,12 +796,13 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
           );
           moreObserver.observe(listEl.querySelector("#customer-list-more"));
         } else {
-          listShown = customers.length;
+          listShown = entries.length;
           paintMore();
         }
       }
     };
     listEl.innerHTML = "";
+    let painted = 0;
     paintMore();
   }
 

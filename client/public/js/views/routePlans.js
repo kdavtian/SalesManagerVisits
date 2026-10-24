@@ -110,9 +110,10 @@ export async function renderRoutePlans(root, navigate) {
         openEditSheet(Number(btn.dataset.userId), btn.dataset.userName, Number(btn.dataset.day), load, btn.dataset.scope);
       });
     });
+    // Tapping the red number inside the button opens the list of only the customers that are on no plan day.
     bodyEl.querySelectorAll(".route-plan-view-customers-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        openCustomersByDaySheet(Number(btn.dataset.userId), btn.dataset.userName, btn.dataset.scope);
+      btn.addEventListener("click", (e) => {
+        openCustomersByDaySheet(Number(btn.dataset.userId), btn.dataset.userName, btn.dataset.scope, { unplannedOnly: Boolean(e.target.closest(".route-plan-unplanned-badge")) });
       });
     });
   }
@@ -145,8 +146,8 @@ export async function renderRoutePlans(root, navigate) {
       });
     });
     bodyEl.querySelectorAll(".route-plan-view-customers-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        openCustomersByDaySheet(state.user.id, planTitle(state.user.name, btn.dataset.scope), btn.dataset.scope);
+      btn.addEventListener("click", (e) => {
+        openCustomersByDaySheet(state.user.id, planTitle(state.user.name, btn.dataset.scope), btn.dataset.scope, { unplannedOnly: Boolean(e.target.closest(".route-plan-unplanned-badge")) });
       });
     });
   }
@@ -339,8 +340,12 @@ function customerGroupNodeHtml(node, daysById, nested) {
     </div>`;
 }
 
-function renderCustomersByDayTree(listEl, tree, daysById) {
+function renderCustomersByDayTree(listEl, tree, daysById, { expandAll = false } = {}) {
   listEl.innerHTML = `<div class="route-plan-tree">${tree.map((n) => customerGroupNodeHtml(n, daysById, false)).join("")}</div>`;
+  if (expandAll) {
+    listEl.querySelectorAll(".route-plan-tree-row[data-toggle]").forEach((row) => row.setAttribute("aria-expanded", "true"));
+    listEl.querySelectorAll(".route-plan-tree-children").forEach((el) => el.classList.add("expanded"));
+  }
   function toggleExpand(row) {
     const key = row.dataset.toggle;
     const childrenEl = listEl.querySelector(`.route-plan-tree-children[data-children-for="${key}"]`);
@@ -364,13 +369,16 @@ function renderCustomersByDayTree(listEl, tree, daysById) {
 // "Unplanned" badge if it's on none, sorted first within its group so the
 // gaps in the week are the first thing a manager sees, not something they
 // have to hunt for by checking each day's chip one at a time.
-async function openCustomersByDaySheet(userId, userName, scope = "") {
+// `unplannedOnly` (a tap on the red number of the button) starts with just the customers that are on no day, all groups open;
+// the button under the heading switches between that and the full list.
+async function openCustomersByDaySheet(userId, userName, scope = "", { unplannedOnly = false } = {}) {
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay sheet-overlay-light";
   overlay.innerHTML = `
     <div class="sheet">
       <h2>${escapeHtml(userName)}</h2>
       <p class="route-plan-tree-total" id="route-plan-customers-summary"></p>
+      <button type="button" class="btn" id="route-plan-customers-toggle" hidden></button>
       <div id="route-plan-customers-tree"><p class="loading-state" role="status">${t("loading")}</p></div>
       <p class="form-error" id="route-plan-customers-error" hidden></p>
       <div class="sheet-actions">
@@ -389,6 +397,7 @@ async function openCustomersByDaySheet(userId, userName, scope = "") {
 
   const treeEl = overlay.querySelector("#route-plan-customers-tree");
   const summaryEl = overlay.querySelector("#route-plan-customers-summary");
+  const toggleEl = overlay.querySelector("#route-plan-customers-toggle");
   const errorEl = overlay.querySelector("#route-plan-customers-error");
 
   try {
@@ -399,12 +408,27 @@ async function openCustomersByDaySheet(userId, userName, scope = "") {
     }
     const daysById = new Map(customers.map((c) => [c.id, c.days]));
     // same rule as the badge: never-visited channels and competitors do not need a place in the plan
-    const unplannedCount = customers.filter((c) => !c.days.length && c.requires_visit !== false && c.customer_tier !== "competitor").length;
-    summaryEl.textContent = unplannedCount ? t("route_plan_unplanned_count").replace("{n}", unplannedCount) : "";
+    const isUnplanned = (c) => !c.days.length && c.requires_visit !== false && c.customer_tier !== "competitor";
+    const unplanned = customers.filter(isUnplanned);
+    summaryEl.textContent = unplanned.length ? t("route_plan_unplanned_count").replace("{n}", unplanned.length) : "";
 
-    const tree = buildCustomerTree(customers);
-    sortLeavesUnplannedFirst(tree, daysById);
-    renderCustomersByDayTree(treeEl, tree, daysById);
+    function paint() {
+      const shown = unplannedOnly ? unplanned : customers;
+      toggleEl.hidden = !unplanned.length;
+      toggleEl.textContent = t(unplannedOnly ? "route_plan_show_all" : "route_plan_show_unplanned");
+      if (!shown.length) {
+        treeEl.innerHTML = `<p class="empty-state">${t("route_plan_all_planned")}</p>`;
+        return;
+      }
+      const tree = buildCustomerTree(shown);
+      sortLeavesUnplannedFirst(tree, daysById);
+      renderCustomersByDayTree(treeEl, tree, daysById, { expandAll: unplannedOnly });
+    }
+    toggleEl.addEventListener("click", () => {
+      unplannedOnly = !unplannedOnly;
+      paint();
+    });
+    paint();
   } catch (err) {
     errorEl.textContent = err.message;
     errorEl.hidden = false;
