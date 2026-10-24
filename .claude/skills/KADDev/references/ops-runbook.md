@@ -99,3 +99,11 @@ cd /opt/castrol-ceo-bot && sudo -u castrolbot git pull origin main && sudo syste
 - The session-start hook (`.claude/hooks/session-start.sh`, registered in `.claude/settings.json`, remote sessions only) runs synchronously: npm install, start Postgres, create/prepare the test database, export the test connection variables. If it ever slows session start too much it can be made async (`{"async": true}`), at the price of a race with the first test run.
 - Opening a PR by hand (as the owner's user) DOES start CI by itself, so starting CI again with `workflow_dispatch` on the same branch runs it twice: only dispatch when the PR was opened by the workflow's own token.
 - The docs-only skip was proven on its first real use (Field Visits #423): `changes`, `static` and the `test` summary ran, the four shards, both isolated groups and `e2e-smoke` were skipped, and the PR was green in about 20 seconds.
+
+## Lessons added 2026-10-24 (features round)
+- Bot deploy is separate from the app deploy: `cd /opt/castrol-ceo-bot && sudo -u castrolbot git pull origin main && sudo systemctl restart castrol-ceo-bot`; its log: `sudo journalctl -u castrol-ceo-bot -n 100 --no-pager | grep -i "field visits"`. Failed syncs also show in `GET /api/erp-sync/attempts` (admin / CEO / ops director).
+- A migration means the FULL deploy command, not `--fast` (last migration on main: 146). Say which one in the summary.
+- Local verification: `pg_ctlcluster 16 main start`, `cd server && set -a && . ./.env && set +a && export NODE_ENV=test` (without it the sync notification debounce is 45 s and tests look broken), `npm run migrate`, then `npx playwright test <files> --reporter=line`. `scripts/local-ci.sh` can stall under load: run the shard alone to confirm.
+- CI shared-database flakes seen: `opsHome`, `opsControlB` (foreign key race). Protocol: one PR comment + one re-run, never skip a test.
+- Merge flow that worked every time: draft PR -> `subscribe_pr_activity` -> `get_check_runs` all green (incl. `test`, `e2e-smoke`) -> `update_pull_request draft:false` -> squash merge -> unsubscribe -> `git checkout -B <branch> origin/main` + `push --force-with-lease=<branch>:<sha from git ls-remote>`.
+

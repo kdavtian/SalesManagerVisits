@@ -3,7 +3,7 @@
 Read this, then open ONLY the sections the task needs: `Read file offset=<line> limit=<about 60>`. Line numbers shift when a file is edited:
 rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a reference.
 
-## app-architecture.md (18 KB, 93 lines)
+## app-architecture.md (20 KB, 103 lines)
 - L5 Stack and shape - Server server/src: Node 20+/22, Express 5, ES modules, plain pg (no ORM), plain SQL migrations server/migratio
 - L11 Domains and where they live (server route -> client view) - Customers: routes/customers.js (list is client-side filtered in views/customers.js applyNonStatusFilters; tier
 - L30 Roles (8) - admin (superset), ceo, operationsdirector (= CEO permissions), salesdirector (also has warehouse permissions +
@@ -15,6 +15,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L73 KAD AI (Ask KAD), built 1.369.0 (owner decisions 2026-10-18) - Admin-only AI analyst: Home tile "KAD AI" -> #/ask-kad.
 - L82 Lists at scale (1.373.0, owner decision 2026-10-19: "500 per page so the app fee - GET /api/customers takes limit (max 1000) with aftername + afterid (keyset on (name, id), index customersnamei
 - L85 Pause / offboard a rep (1.376.0, migration 135) - users.status = active | paused | offboarded (+ statuschangedat/by, statusnote).
+- L94 Additions 2026-10-24 (returns, potential, bank statements, lists) - Order returns (migration 143): server/src/orderReturns.js, routes/returns.js, client returnSheet.js, views/ret
 
 ## bot-architecture.md (7 KB, 35 lines)
 - L5 Flow - Accountant posts the workbook (e.g.
@@ -117,7 +118,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L53 Logo - Orange tile (#ff8a3d) with a graphite K (reversed on 2026-10-23); icons client/public/icons/ are regenerated f
 - L56 Lessons - A model typed without its make ("Camry") used to become a make called "Camry": the make-less case needs infere
 
-## ops-runbook.md (18 KB, 102 lines)
+## ops-runbook.md (19 KB, 110 lines)
 - L3 Environment facts - One DigitalOcean droplet (Ubuntu 24.04), hostname castrol-ceo-bot, IP 164.92.171.41.
 - L9 App deploy (preferred, fast) - cd /opt/field-visits && ./deploy/deploy.sh
 - L21 Bot deploy - cd /opt/castrol-ceo-bot && sudo -u castrolbot git pull origin main && sudo systemctl restart castrol-ceo-bot &
@@ -129,8 +130,9 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L76 Lessons added 2026-10-09 - Deploy commands: no migration -> cd /opt/field-visits && ./deploy/deploy.sh --fast; migration present (e.g.
 - L86 Lessons added 2026-10-10 - deploy.sh --fast still runs migrations (npm run migrate on every deploy) and verify:deployment; "fast" only sk
 - L96 Lessons added 2026-10-24 (the optimization round) - Tests that passed for months only because everything ran in one slow pass share global state; splitting CI exp
+- L103 Lessons added 2026-10-24 (features round) - Bot deploy is separate from the app deploy: cd /opt/castrol-ceo-bot && sudo -u castrolbot git pull origin main
 
-## optimization-ideas.md (4 KB, 28 lines)
+## optimization-ideas.md (5 KB, 34 lines)
 - L6 How an idea is written - N. <short name> - saves <minutes / taps / seconds / KB>; stays identical: <functionality, results, experience>
 - L12 Backlog (status: Suggested unless noted) - Owner answered "1, 2, 3, 4, 5, 6, 7, 8" on 2026-10-24 = all eight approved; built in the same round (Field Vis
 - L23 Ideas from the round that built these (Suggested) - [DONE 2026-10-24] Make the isolated bonus tests independent of the global switch - done without touching the t
