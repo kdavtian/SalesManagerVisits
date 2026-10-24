@@ -147,6 +147,9 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/customers${qs ? `?${qs}` : ""}`);
   },
+  setCustomerPotential: (id, data) => json(`/customers/${id}/potential`, "PUT", data),
+  getPotentialHistory: (id) => request(`/customers/${id}/potential-history`, { fresh: true }),
+  resolveCounterfeit: (id, data) => json(`/customers/${id}/counterfeit-resolve`, "POST", data),
   createCustomer: async (data) => {
     const created = await json("/customers", "POST", data);
     await dropCachedCustomerLists();

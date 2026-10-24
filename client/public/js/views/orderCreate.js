@@ -148,6 +148,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
       </div>
     </div>
 
+    ${customer.counterfeit_flag ? `<p class="pl-warn-banner" role="alert">${t("pl_counterfeit_warning")}</p>` : ""}
     <p class="order-debt-hold" id="order-debt-hold" role="status" hidden></p>
     <p class="muted order-prefill-note" id="order-prefill-note" role="status" hidden></p>
 

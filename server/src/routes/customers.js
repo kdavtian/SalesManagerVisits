@@ -2,7 +2,7 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { canConfirmOrders, seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData, canSetCreditTerms } from "../roles.js";
+import { canManagePotentialAll, canResolveCounterfeit, canConfirmOrders, seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData, canSetCreditTerms } from "../roles.js";
 import { creditSnapshot } from "../creditLimit.js";
 import { loadUnpaidOrders, summarizeDebt, dueDays, debtHoldInfo } from "../debtAge.js";
 import { visitPriorities } from "../visitPriorities.js";
@@ -18,6 +18,7 @@ import { computeVisitDue, ruleWeekdaysFor } from "../utils/visitDue.js";
 import { repVisitSql } from "../visitCount.js";
 import { skippedForRecentVisit, getPlanSkipRecentVisitDays } from "../utils/planSkipRecent.js";
 import { nextNameNumber } from "../customerNameSuggest.js";
+import { PotentialError, cleanPotentialInput, setPotential, resolveCounterfeit, potentialHistory } from "../potential.js";
 
 export const customersRouter = Router();
 
@@ -360,6 +361,16 @@ customersRouter.post("/", async (req, res) => {
   // is creating it explicitly picked a tier themselves (manual selection
   // always wins -- see canAssignErpCustomerId's PATCH counterpart).
   const initialTier = customer_tier || (erp_customer_id ? "bronze" : "potential");
+  // A new potential customer can be created with its level (the form asks for it); validated before anything is saved.
+  const wantsPotential = initialTier === "potential" && req.body?.potential_level !== undefined;
+  if (wantsPotential) {
+    try {
+      cleanPotentialInput({ level: req.body.potential_level, reasons: req.body.potential_reasons, reason_other: req.body.potential_reason_other });
+    } catch (err) {
+      if (potentialFail(res, err)) return;
+      throw err;
+    }
+  }
 
   // Defaults to whoever is creating the customer, same as before this field
   // existed. A caller allowed to reassign customers (e.g. the Routes
@@ -405,6 +416,11 @@ customersRouter.post("/", async (req, res) => {
       if (conflict) return res.status(409).json(conflict);
     }
     throw err;
+  }
+  if (wantsPotential) {
+    await setPotential(rows[0].id, req.user.id, { level: req.body.potential_level, reasons: req.body.potential_reasons, reason_other: req.body.potential_reason_other, note: req.body.potential_note });
+    const { rows: fresh } = await pool.query("SELECT * FROM customers WHERE id = $1", [rows[0].id]);
+    return res.status(201).json(fresh[0]);
   }
   res.status(201).json(rows[0]);
 });
@@ -559,6 +575,44 @@ customersRouter.get("/name-suggestion", async (req, res) => {
 });
 
 // Signed accounting documents (from Lily) of all this customer's orders.
+// ---- Potential Customer classification (see ../potential.js) ----------------------------------------------------------------------
+// Management: any customer. A sales manager: only the customers assigned to them.
+async function potentialAccess(req, res) {
+  const id = Number(req.params.id);
+  const { rows: [c] } = Number.isInteger(id) ? await pool.query("SELECT id, assigned_manager_id FROM customers WHERE id = $1", [id]) : { rows: [] };
+  if (!c) return res.status(404).json({ error: "Customer not found" }), null;
+  if (canManagePotentialAll(req.user.role) || (req.user.role === "sales_manager" && c.assigned_manager_id === req.user.id)) return c;
+  return res.status(403).json({ error: "Not allowed" }), null;
+}
+const potentialFail = (res, err) => (err instanceof PotentialError ? res.status(err.status).json({ error: err.message }) : null);
+
+customersRouter.put("/:id/potential", async (req, res) => {
+  const c = await potentialAccess(req, res);
+  if (!c) return;
+  try {
+    res.json(await setPotential(c.id, req.user.id, req.body ?? {}));
+  } catch (err) {
+    if (!potentialFail(res, err)) throw err;
+  }
+});
+
+customersRouter.get("/:id/potential-history", async (req, res) => {
+  const c = await potentialAccess(req, res);
+  if (!c) return;
+  res.json(await potentialHistory(c.id));
+});
+
+customersRouter.post("/:id/counterfeit-resolve", async (req, res) => {
+  if (!canResolveCounterfeit(req.user.role)) return res.status(403).json({ error: "Only management can mark the counterfeit-product issue as solved" });
+  const id = Number(req.params.id);
+  try {
+    await resolveCounterfeit(id, req.user.id, req.body?.comment);
+    res.json({ ok: true });
+  } catch (err) {
+    if (!potentialFail(res, err)) throw err;
+  }
+});
+
 customersRouter.get("/:id/documents", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT d.id, d.order_id, d.hc_doc_number, d.filename, d.size_bytes, d.created_at, o.order_code, o.accounting_doc_type
