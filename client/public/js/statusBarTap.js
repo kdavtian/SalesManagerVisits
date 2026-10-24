@@ -31,12 +31,25 @@ export function installStatusBarTap({ force = false } = {}) {
   const quiet = (ms = 800) => (quietUntil = Date.now() + ms);
   const rest = () => window.scrollTo(0, 1);
   let busy = false;
+  // A real status-bar tap reaches the page as a bare scroll to 0 with NO finger on the screen. A finger that drags the top bar / the nav bar /
+  // a sheet backdrop, or a list whose momentum runs out at its edge, also moves the 1 px document to 0 -- and that must never throw the list
+  // back to its top (owner, 2026-10-24: "the app is scrolling up constantly"). So a scroll to 0 only counts when no touch is active and none
+  // ended in the last TOUCH_GRACE_MS (a long flick keeps scrolling for a while after the finger lifts).
+  const TOUCH_GRACE_MS = 2500;
+  let touching = 0;
+  let lastTouchAt = 0;
+  const touchNote = (e) => {
+    lastTouchAt = Date.now();
+    touching = e.touches ? e.touches.length : 0;
+  };
+  for (const type of ["touchstart", "touchmove", "touchend", "touchcancel"]) document.addEventListener(type, touchNote, { capture: true, passive: true });
+  window.addEventListener("wheel", () => (lastTouchAt = Date.now()), { capture: true, passive: true });
   window.addEventListener(
     "scroll",
     () => {
       if (busy || window.scrollY >= 1) return;
       const typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
-      if (typing || Date.now() < quietUntil) {
+      if (typing || Date.now() < quietUntil || touching > 0 || Date.now() - lastTouchAt < TOUCH_GRACE_MS) {
         rest();
         return;
       }

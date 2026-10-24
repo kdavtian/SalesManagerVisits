@@ -158,27 +158,32 @@ test.describe("Settings structure", () => {
     }
   });
 
-  test("every role opens every page it is offered without a script error", async ({ page, fixtures }) => {
-    test.setTimeout(120000);
-    await page.setViewportSize({ width: 1280, height: 860 }); // the sidebar lists every page, one click each
+  test("every role opens every page it is offered without a script error", async ({ browser, fixtures }) => {
+    test.setTimeout(150000);
     const errors = [];
-    page.on("pageerror", (err) => errors.push(err.message));
     for (const role of ["admin", "ceo", "accountant", "sales_director", "sales_manager"]) {
       const user = await fixtures.createUser(role);
-      await page.context().clearCookies();
-      await loginViaUi(page, user.email);
-      await page.goto("/#/settings");
-      await expect(page.locator("#settings-title")).toBeVisible();
-      for (const tab of ["personal", "admin"]) {
-        const tabBtn = page.locator(`#settings-${tab}-tab`);
-        if (await tabBtn.count()) await tabBtn.click();
-        else if (tab === "admin") continue;
-        const ids = await page.locator(`#settings-nav-${tab} [data-nav-page]`).evaluateAll((els) => els.map((el) => el.dataset.navPage));
-        expect(ids.length, `${role} ${tab} pages`).toBeGreaterThan(0);
-        for (const id of ids) {
-          await page.locator(`[data-nav-page="${id}"]`).click();
-          await expect(page.locator(`[data-page="${id}"]`)).toBeVisible();
+      // a fresh browser context per role (clearing cookies in one page raced with the app's cached session)
+      const context = await browser.newContext({ ...test.info().project.use, viewport: { width: 1280, height: 860 } }); // the sidebar lists every page, one click each
+      const page = await context.newPage();
+      page.on("pageerror", (err) => errors.push(`${role}: ${err.message}`));
+      try {
+        await loginViaUi(page, user.email);
+        await page.goto("/#/settings");
+        await expect(page.locator("#settings-title")).toBeVisible({ timeout: 20000 });
+        for (const tab of ["personal", "admin"]) {
+          const tabBtn = page.locator(`#settings-${tab}-tab`);
+          if (await tabBtn.count()) await tabBtn.click();
+          else if (tab === "admin") continue;
+          const ids = await page.locator(`#settings-nav-${tab} [data-nav-page]`).evaluateAll((els) => els.map((el) => el.dataset.navPage));
+          expect(ids.length, `${role} ${tab} pages`).toBeGreaterThan(0);
+          for (const id of ids) {
+            await page.locator(`[data-nav-page="${id}"]`).click();
+            await expect(page.locator(`[data-page="${id}"]`)).toBeVisible();
+          }
         }
+      } finally {
+        await context.close();
       }
     }
     expect(errors).toEqual([]);

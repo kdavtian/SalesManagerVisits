@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { reorderChipHtml } from "../reorder.js";
-import { cssColor, activateCombobox, activateDialog, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, rememberPosition, getLastKnownPosition, tierSelectorHtml, TIER_OPTIONS, isNeverVisited, isOverdueVisit, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, regionLabelHy, subregionLabelHy, channelDisplayLabel, parseDateOnly } from "../util.js";
+import { cssColor, activateCombobox, activateDialog, openInfoPopup, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, rememberPosition, getLastKnownPosition, tierSelectorHtml, TIER_OPTIONS, isNeverVisited, isOverdueVisit, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, regionLabelHy, subregionLabelHy, channelDisplayLabel, parseDateOnly } from "../util.js";
 import { t } from "../i18n.js";
 import { potentialFormHtml, wirePotentialForm } from "../potential.js";
 import { buildCustomerTree, renderTriStateTree, buildDirectionManagerTree, NO_GROUP_KEY } from "../regionTree.js";
@@ -9,7 +9,7 @@ import { icons } from "../icons.js";
 import { FILTER_ICONS } from "../filterIcons.js";
 import { nextVisitRowHtml, formatLastVisit } from "../visitSchedule.js";
 import { canViewTeamLocations, canEditDirectly, canPlanForOthers, canReassignCustomers, state } from "../state.js";
-import { getClusterPins, setClusterPins, getCompassMode, setCompassMode, getMapTileCacheEnabled, getColorBy, setColorBy } from "../mapPrefs.js";
+import { getClusterPins, setClusterPins, getCompassMode, setCompassMode, getMapTileCacheEnabled, getColorBy, setColorBy, getPlannedRings, setPlannedRings } from "../mapPrefs.js";
 import { repColor } from "../repColors.js";
 import { getPerfMode } from "../perfMode.js";
 import { ensureLeaflet } from "../leafletLoader.js";
@@ -331,48 +331,56 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       </div>
 
       <div class="map-legend-panel" id="map-legend-panel" role="dialog" aria-label="${t("map_legend_title")}" hidden>
+        <div class="map-sheet-grab" id="map-legend-grab" aria-hidden="true"><span></span></div>
         <div class="map-legend-header">
           <span>${t("map_legend_title")}</span>
           <button type="button" class="icon-btn" id="map-legend-close" aria-label="${t("close")}">${icons.close}</button>
         </div>
-        <div class="map-legend-prefs">
-          <div class="map-legend-pref-row">
-            <span>${t("map_cluster_pins")}</span>
-            <button type="button" class="toggle-switch" id="map-legend-toggle-cluster" role="switch" aria-checked="${getClusterPins()}" aria-label="${t("map_cluster_pins")}">
-              <span class="toggle-thumb"></span>
-            </button>
-          </div>
-          <div class="map-legend-pref-row">
-            <span>${t("map_color_by")}</span>
-            <div class="segmented map-color-by" role="group" aria-label="${t("map_color_by")}">
-              <button type="button" class="chip ${getColorBy(state.user?.id) === "tier" ? "chip-active" : ""}" data-color-by="tier" aria-pressed="${getColorBy(state.user?.id) === "tier"}">${t("map_color_tier")}</button>
-              <button type="button" class="chip ${getColorBy(state.user?.id) === "rep" ? "chip-active" : ""}" data-color-by="rep" aria-pressed="${getColorBy(state.user?.id) === "rep"}">${t("map_color_rep")}</button>
+        <div class="map-legend-body">
+          <div class="map-legend-prefs">
+            <div class="map-legend-pref-row">
+              <span>${t("map_cluster_pins")}</span>
+              <button type="button" class="toggle-switch" id="map-legend-toggle-cluster" role="switch" aria-checked="${getClusterPins()}" aria-label="${t("map_cluster_pins")}">
+                <span class="toggle-thumb"></span>
+              </button>
+            </div>
+            <div class="map-legend-pref-row">
+              <span>${t("map_color_by")}</span>
+              <div class="segmented map-color-by" role="group" aria-label="${t("map_color_by")}">
+                <button type="button" class="chip ${getColorBy(state.user?.id) === "tier" ? "chip-active" : ""}" data-color-by="tier" aria-pressed="${getColorBy(state.user?.id) === "tier"}">${t("map_color_tier")}</button>
+                <button type="button" class="chip ${getColorBy(state.user?.id) === "rep" ? "chip-active" : ""}" data-color-by="rep" aria-pressed="${getColorBy(state.user?.id) === "rep"}">${t("map_color_rep")}</button>
+              </div>
+            </div>
+            <ul class="map-rep-legend" id="map-rep-legend" hidden></ul>
+            <div class="map-legend-pref-row">
+              <span>${t("map_planned_rings")}<span role="button" tabindex="0" class="settings-inline-hint-icon" id="map-planned-rings-info" aria-label="${t("more_info")}">!</span></span>
+              <button type="button" class="toggle-switch" id="map-legend-toggle-planned" role="switch" aria-checked="${getPlannedRings(state.user?.id)}" aria-label="${t("map_planned_rings")}">
+                <span class="toggle-thumb"></span>
+              </button>
+            </div>
+            <div class="map-legend-pref-row">
+              <span>${t("map_compass_mode")}</span>
+              <button type="button" class="toggle-switch" id="map-legend-toggle-compass" role="switch" aria-checked="${getCompassMode()}" aria-label="${t("map_compass_mode")}">
+                <span class="toggle-thumb"></span>
+              </button>
             </div>
           </div>
-          <ul class="map-legend-list map-rep-legend" id="map-rep-legend" hidden></ul>
-          <div class="map-legend-pref-row">
-            <span>${t("map_compass_mode")}</span>
-            <button type="button" class="toggle-switch" id="map-legend-toggle-compass" role="switch" aria-checked="${getCompassMode()}" aria-label="${t("map_compass_mode")}">
-              <span class="toggle-thumb"></span>
-            </button>
-          </div>
+          <p class="map-legend-note">${t("map_legend_shape_note")}</p>
+          <ul class="map-legend-list">
+            <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/customer-other.png" alt="" width="20" height="20" />${t("map_legend_customer")}</li>
+            <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/potential-other.png" alt="" width="20" height="20" />${t("map_legend_potential")}</li>
+            <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/competitor-other.png" alt="" width="20" height="20" />${t("map_legend_competitor")}</li>
+          </ul>
+          <div class="map-legend-divider"></div>
+          <ul class="map-legend-list">
+            <li><span class="map-legend-swatch map-legend-swatch-badge map-legend-swatch-visited">&#10003;</span>${t("map_legend_visited")}</li>
+            <li><span class="map-legend-swatch map-legend-swatch-badge map-legend-swatch-overdue">!</span>${t("map_legend_overdue")}</li>
+            <li><span class="map-legend-swatch map-legend-swatch-badge map-legend-swatch-never">!!</span>${t("never_visited")}</li>
+            <li><span class="map-legend-swatch map-legend-swatch-selected"></span>${t("map_legend_selected")}</li>
+            <li><span class="map-legend-swatch map-legend-swatch-cluster">9</span>${t("map_legend_cluster")}</li>
+          </ul>
+          <p class="map-legend-note">${t("map_legend_glyph_note")}</p>
         </div>
-        <div class="map-legend-divider"></div>
-        <p class="map-legend-note">${t("map_legend_shape_note")}</p>
-        <ul class="map-legend-list">
-          <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/customer-other.png" alt="" width="20" height="20" />${t("map_legend_customer")}</li>
-          <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/potential-other.png" alt="" width="20" height="20" />${t("map_legend_potential")}</li>
-          <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/competitor-other.png" alt="" width="20" height="20" />${t("map_legend_competitor")}</li>
-        </ul>
-        <div class="map-legend-divider"></div>
-        <ul class="map-legend-list">
-          <li><span class="map-legend-swatch map-legend-swatch-badge map-legend-swatch-visited">&#10003;</span>${t("map_legend_visited")}</li>
-          <li><span class="map-legend-swatch map-legend-swatch-badge map-legend-swatch-overdue">!</span>${t("map_legend_overdue")}</li>
-          <li><span class="map-legend-swatch map-legend-swatch-badge map-legend-swatch-never">!!</span>${t("never_visited")}</li>
-          <li><span class="map-legend-swatch map-legend-swatch-selected"></span>${t("map_legend_selected")}</li>
-          <li><span class="map-legend-swatch map-legend-swatch-cluster">9</span>${t("map_legend_cluster")}</li>
-        </ul>
-        <p class="map-legend-note">${t("map_legend_glyph_note")}</p>
       </div>
 
       <button class="fab" id="add-customer-fab" title="${t("new_customer")}" aria-label="${t("new_customer")}" aria-pressed="false">${icons.mapPinPlus}</button>
@@ -1051,10 +1059,10 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     }
   }
 
-  // "Colour by Rep": a ring in the colour of the customer's rep around the pin (the pin itself keeps its tier look).
+  // "Colour by Rep": the pin ITSELF takes its rep's colour (the green customer pin and the red potential crosshair; competitors keep their dark
+  // circle). The artwork is one flat colour on a transparent background, so the same PNG is used as a mask over a coloured box -- the shape and the
+  // category glyph stay exactly the approved artwork. A customer without a rep keeps the normal pin.
   let colorBy = getColorBy(state.user?.id);
-  // The rep's initials ("AG") hang under the pin once the map is zoomed in (CSS shows them only while the map has .map-zoom-high), so close
-  // pins of different reps can be told apart by letters as well as by colour.
   const repInitials = (name) =>
     String(name ?? "")
       .trim()
@@ -1062,11 +1070,19 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       .slice(0, 2)
       .map((w) => w.slice(0, 1).toUpperCase())
       .join("");
-  const repRingHtml = (c) => {
+  const repColorOf = (c) => repColor(c.assigned_manager_id, c.assigned_manager_color);
+  // The rep's initials hang under the pin once the map is zoomed in (CSS shows them only while the map has .map-zoom-high).
+  const repInitialsHtml = (c) => {
     if (colorBy !== "rep" || !c.assigned_manager_id) return "";
-    const color = repColor(c.assigned_manager_id, c.assigned_manager_color);
     const initials = repInitials(c.assigned_manager_name);
-    return `<span class="pin-rep-ring" style="--rep-color:${color}" aria-hidden="true"></span>${initials ? `<span class="pin-rep-initials" style="--rep-color:${color}" aria-hidden="true">${escapeHtml(initials)}</span>` : ""}`;
+    return initials ? `<span class="pin-rep-initials" style="--rep-color:${repColorOf(c)}" aria-hidden="true">${escapeHtml(initials)}</span>` : "";
+  };
+  // "Today's planned visits by rep": a ring in the colour of the rep who planned the customer for today (toggle in the pin key, default off).
+  let plannedRings = getPlannedRings(state.user?.id);
+  let plannedTodayByRep = new Map(); // customer id -> { userId, color }
+  const plannedRingHtml = (c) => {
+    const planned = plannedRings ? plannedTodayByRep.get(c.id) : null;
+    return planned ? `<span class="pin-rep-ring" style="--rep-color:${planned.color}" aria-hidden="true"></span>` : "";
   };
   const HIGH_ZOOM = 16;
   let zoomHigh = null;
@@ -1078,6 +1094,14 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   };
   map.on("zoomend", syncZoomClass);
   syncZoomClass();
+
+  function pinArtHtml(c, tier) {
+    const src = `/icons/markers/${tier}-${categoryIconSlug(c.category)}.png`;
+    if (colorBy === "rep" && c.assigned_manager_id && tier !== "competitor") {
+      return `<span class="pin-img-asset pin-tinted" style="--rep-color:${repColorOf(c)};--pin-art:url('${src}')" aria-hidden="true"></span>`;
+    }
+    return `<img class="pin-img-asset" src="${src}" alt="" width="${MARKER_SIZE}" height="${MARKER_SIZE}" draggable="false" />`;
+  }
 
   function customerIcon(c, status) {
     const tier = markerKind(c.customer_tier);
@@ -1096,7 +1120,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       // .pin stays on the wrapper: marker selection (mapMarkerEnhancements)
       // and the competitor-visibility toggle (map-safe-enhancements) both
       // key off .pin / .pin-tier-* selectors.
-      html: `<div class="pin pin-img ${shapeClass} pin-tier-${tier} ${overdueClass} ${neverVisited ? "pin-is-never" : ""}"><img class="pin-img-asset" src="/icons/markers/${tier}-${categoryIconSlug(c.category)}.png" alt="" width="${MARKER_SIZE}" height="${MARKER_SIZE}" draggable="false" />${repRingHtml(c)}${check}${taskMarkerHtml(c)}${never}</div>`,
+      html: `<div class="pin pin-img ${shapeClass} pin-tier-${tier} ${overdueClass} ${neverVisited ? "pin-is-never" : ""}">${pinArtHtml(c, tier)}${plannedRingHtml(c)}${repInitialsHtml(c)}${check}${taskMarkerHtml(c)}${never}</div>`,
       iconSize: [MARKER_SIZE, MARKER_SIZE],
       iconAnchor: [MARKER_SIZE / 2, anchorY],
       popupAnchor: [0, -anchorY],
@@ -2917,8 +2941,39 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   const legendPanel = root.querySelector("#map-legend-panel");
   const closeLegend = () => {
     legendPanel.hidden = true;
+    legendPanel.style.transform = "";
     legendBtn.setAttribute("aria-expanded", "false");
   };
+  // Swipe the handle / header down to close, like any iOS sheet.
+  {
+    let startY = null;
+    const grab = root.querySelector("#map-legend-grab");
+    const header = legendPanel.querySelector(".map-legend-header");
+    const begin = (e) => {
+      if (e.target.closest("button")) return;
+      startY = e.touches[0].clientY;
+      legendPanel.style.transition = "none";
+    };
+    const move = (e) => {
+      if (startY == null) return;
+      const dy = Math.max(0, e.touches[0].clientY - startY);
+      legendPanel.style.transform = `translateY(${dy}px)`;
+    };
+    const end = (e) => {
+      if (startY == null) return;
+      const dy = (e.changedTouches?.[0]?.clientY ?? startY) - startY;
+      startY = null;
+      legendPanel.style.transition = "";
+      if (dy > 70) closeLegend();
+      else legendPanel.style.transform = "";
+    };
+    for (const el of [grab, header]) {
+      el.addEventListener("touchstart", begin, { passive: true });
+      el.addEventListener("touchmove", move, { passive: true });
+      el.addEventListener("touchend", end, { passive: true });
+      el.addEventListener("touchcancel", end, { passive: true });
+    }
+  }
   legendBtn.addEventListener("click", () => {
     const open = legendPanel.hidden;
     legendPanel.hidden = !open;
@@ -2946,7 +3001,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     for (const { c } of lastCustomers) if (c.assigned_manager_id && !reps.has(c.assigned_manager_id)) reps.set(c.assigned_manager_id, { name: c.assigned_manager_name ?? "", color: repColor(c.assigned_manager_id, c.assigned_manager_color) });
     repLegendEl.innerHTML = [...reps.values()]
       .sort((a, b) => a.name.localeCompare(b.name))
-      .map((r) => `<li><span class="map-rep-dot" style="background:${r.color}"></span>${escapeHtml(r.name)}</li>`)
+      .map((r) => `<li><span class="map-rep-dot" style="background:${r.color}"></span><span class="map-rep-name">${escapeHtml(r.name)}</span></li>`)
       .join("");
     repLegendEl.hidden = !reps.size;
   }
@@ -2965,6 +3020,55 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     })
   );
   paintRepLegend();
+
+  // Today's planned visits per rep: a ring in the rep's colour round every customer planned for today (default off, remembered per user).
+  const plannedRingsToggle = root.querySelector("#map-legend-toggle-planned");
+  async function loadPlannedTodayByRep() {
+    plannedTodayByRep = new Map();
+    if (!plannedRings) return;
+    const colorOfUser = (userId, chosen) => {
+      const known = lastCustomers.find(({ c }) => Number(c.assigned_manager_id) === Number(userId) && c.assigned_manager_color);
+      return repColor(userId, chosen || known?.c.assigned_manager_color);
+    };
+    try {
+      if (!canViewTeamLocations()) {
+        const plan = await api.getMyVisitPlan();
+        if (plan?.status === "approved") for (const id of plan.customer_ids) plannedTodayByRep.set(id, { userId: state.user.id, color: colorOfUser(state.user.id) });
+      } else {
+        const reps = await api.listPlannableUsers();
+        const plans = await Promise.all(reps.map((u) => api.getMyVisitPlan(undefined, u.id).catch(() => null)));
+        plans.forEach((plan, i) => {
+          if (plan?.status !== "approved") return;
+          const color = colorOfUser(reps[i].id, reps[i].map_color);
+          for (const id of plan.customer_ids) plannedTodayByRep.set(id, { userId: reps[i].id, color });
+        });
+      }
+    } catch {
+      plannedTodayByRep = new Map();
+    }
+  }
+  async function refreshPlannedRings() {
+    await customersReady;
+    await loadPlannedTodayByRep();
+    applyFilter({ refit: false });
+  }
+  plannedRingsToggle.addEventListener("click", () => {
+    plannedRings = plannedRingsToggle.getAttribute("aria-checked") !== "true";
+    plannedRingsToggle.setAttribute("aria-checked", String(plannedRings));
+    setPlannedRings(state.user?.id, plannedRings);
+    if (plannedRings) refreshPlannedRings();
+    else applyFilter({ refit: false });
+  });
+  const openRingsInfo = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openInfoPopup(t("map_planned_rings_info"));
+  };
+  const ringsInfoBtn = root.querySelector("#map-planned-rings-info");
+  ringsInfoBtn.addEventListener("click", openRingsInfo);
+  ringsInfoBtn.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && openRingsInfo(e));
+  window.addEventListener("plans-changed", () => root.isConnected && plannedRings && refreshPlannedRings());
+  if (plannedRings) refreshPlannedRings();
 
   const compassToggle = root.querySelector("#map-legend-toggle-compass");
   compassToggle.addEventListener("click", () => {

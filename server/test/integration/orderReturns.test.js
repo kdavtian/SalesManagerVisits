@@ -130,10 +130,10 @@ test("ERP: negative lines of the same customer and product mark the return as re
   await matchReturnsToErp(); // nothing in ERP yet
   assert.equal((await pool.query("SELECT recorded_at FROM order_returns WHERE id = $1", [made.data.id])).rows[0].recorded_at, null);
   const erpProduct = (await pool.query("SELECT erp_product_id FROM products WHERE id = $1", [product.id])).rows[0].erp_product_id;
-  await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, product_id, qty, revenue_amd) VALUES ($1, 'RET1', current_date, $2, -2, -20000)", [customer.erp_customer_id, erpProduct]);
+  await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, product_id, qty, revenue_amd) VALUES ($1, 'RET1', (now() AT TIME ZONE 'Asia/Yerevan')::date, $2, -2, -20000)", [customer.erp_customer_id, erpProduct]);
   await matchReturnsToErp();
   assert.equal((await pool.query("SELECT recorded_at FROM order_returns WHERE id = $1", [made.data.id])).rows[0].recorded_at, null, "2 of 3 is not enough");
-  await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, product_id, qty, revenue_amd) VALUES ($1, 'RET2', current_date, $2, -1, -10000)", [customer.erp_customer_id, erpProduct]);
+  await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, product_id, qty, revenue_amd) VALUES ($1, 'RET2', (now() AT TIME ZONE 'Asia/Yerevan')::date, $2, -1, -10000)", [customer.erp_customer_id, erpProduct]);
   await matchReturnsToErp();
   const r = (await pool.query("SELECT recorded_at, recorded_via FROM order_returns WHERE id = $1", [made.data.id])).rows[0];
   assert.ok(r.recorded_at);

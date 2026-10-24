@@ -35,6 +35,23 @@ export function setColorBy(userId, value) {
   }
 }
 
+// "Today's planned visits by rep": a ring in the rep's colour round every customer planned for today (owner, 2026-10-24). Per user, default off.
+const plannedRingsKey = (userId) => `fieldvisits_map_planned_rings:${userId ?? "anon"}`;
+export function getPlannedRings(userId) {
+  try {
+    return localStorage.getItem(plannedRingsKey(userId)) === "on";
+  } catch {
+    return false;
+  }
+}
+export function setPlannedRings(userId, enabled) {
+  try {
+    localStorage.setItem(plannedRingsKey(userId), enabled ? "on" : "off");
+  } catch {
+    /* storage blocked: the choice lasts until the map closes */
+  }
+}
+
 // Whether the locate button's third tap enters compass/heading-tracking
 // mode. Default OFF -- an install with nothing stored gets the plain
 // show/hide locate toggle; a rep can opt into the tracking step from the

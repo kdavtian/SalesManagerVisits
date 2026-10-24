@@ -99,4 +99,6 @@ entry in `tools.js` TOOLS + RUNNERS returning codes and numbers only, plus a tes
 - **Customers list**: group headers (`.cl-group`, `data-gkey`) fold; the list is built from `entries` (a card with its headers, or a header alone) in batches of 100; Group by is remembered in `localStorage` `fieldvisits_customers_group_by_region`; the region sheet (`openTriStateTreeSheet`) takes `groupBy` and has floating Clear/Show buttons.
 - **Map pin badges** live in `css/map-marker-system.css` (visited 15 px green tick, overdue 16 px yellow "!", never visited 18 px red "!!", white 2 px outline); the Customers/route-plan marks and the legend are in `styles.css`.
 - **Route plans**: `unplanned_count` per plan (badge on "View customers"); `openCustomersByDaySheet(userId, name, scope, { unplannedOnly })`.
+- Map pins (`views/map.js`): `pinArtHtml` = normal `<img>` or, in Colour-by-Rep mode, a `.pin-tinted` span (mask of the same PNG); `plannedRingHtml` = today's-planned ring; `repInitialsHtml` + `.map-zoom-high` = initials from zoom 16. The key sheet `#map-legend-panel` is `position:fixed` above the tab bar. When adding a map preference: row in `.map-legend-prefs`, per-user key in `mapPrefs.js`.
+- iPhone status-bar tap (`statusBarTap.js`): never act on a document scroll while a touch is active or ended < 2.5 s ago.
 

@@ -25,20 +25,28 @@ test("Colour by Rep: default Tier, ring per rep colour, remembered per user; col
   await loginViaUi(page, admin.email);
   await page.goto(`/#/map?customer=${c1.id}`);
   await expect(page.locator("#leaflet-map .leaflet-marker-icon:not(.leaflet-cluster-icon)").first()).toBeVisible({ timeout: 20000 });
-  await expect(page.locator("#leaflet-map .pin-rep-ring")).toHaveCount(0); // Tier by default
+  await expect(page.locator("#leaflet-map .pin-tinted")).toHaveCount(0); // Tier by default: the normal green / red pins
+  await expect(page.locator("#leaflet-map .pin-rep-ring")).toHaveCount(0);
   await page.locator("#map-legend-btn").click();
   await expect(page.locator('[data-color-by="tier"]')).toHaveClass(/chip-active/);
-  // the switch sits between "Group nearby pins" and "Compass"
-  const order = await page.evaluate(() => [...document.querySelectorAll(".map-legend-prefs > *")].map((el) => el.id || el.className || el.textContent.trim().slice(0, 20)));
+  // the key is a bottom sheet: full width, resting on the tab bar (48 px), and it fits the screen
+  const box = await page.locator("#map-legend-panel").boundingBox();
+  expect(844 - (box.y + box.height)).toBeLessThanOrEqual(60);
+  expect(box.width).toBeGreaterThanOrEqual(389);
+  expect(box.height).toBeLessThanOrEqual(844 * 0.8);
+  expect(box.x).toBeLessThanOrEqual(1);
+  // the rows, in order: group, colour by, today's planned visits, compass
   const labels = await page.locator(".map-legend-prefs .map-legend-pref-row > span").allInnerTexts();
   expect(labels[0]).toMatch(/Group nearby pins/i);
   expect(labels[1]).toMatch(/Colour by/i);
-  expect(labels[2]).toMatch(/Compass/i);
+  expect(labels[2]).toMatch(/planned visits/i);
+  expect(labels[3]).toMatch(/Compass/i);
   await page.locator('[data-color-by="rep"]').click();
-  await expect(page.locator("#leaflet-map .pin-rep-ring")).toHaveCount(3, { timeout: 10000 });
-  const colors = await page.locator("#leaflet-map .pin-rep-ring").evaluateAll((els) => els.map((e) => getComputedStyle(e).borderTopColor));
-  expect(colors.filter((c) => c === "rgb(10, 105, 218)").length).toBe(2); // Aram's chosen blue, two pins
-  expect(new Set(colors).size).toBe(2); // Narek: an automatic colour, different from Aram's
+  // the pins THEMSELVES take the rep's colour (no coloured circles)
+  await expect(page.locator("#leaflet-map .pin-tinted")).toHaveCount(3, { timeout: 10000 });
+  await expect(page.locator("#leaflet-map .pin-rep-ring")).toHaveCount(0);
+  const colors = await page.locator("#leaflet-map .pin-tinted").evaluateAll((els) => els.map((e) => getComputedStyle(e).backgroundColor));
+  expect(colors.filter((c) => c === "rgb(10, 105, 218)").length).toBeGreaterThanOrEqual(2); // Aram's chosen blue, two pins (Narek's automatic colour depends on his id and may coincide)
   // zoomed in (the customer link opens at street level): the rep's initials hang under each pin; zoomed out they are hidden again
   await expect(page.locator("#leaflet-map .pin-rep-initials")).toHaveCount(3);
   expect((await page.locator("#leaflet-map .pin-rep-initials").allInnerTexts()).sort()).toEqual(["EA", "EA", "EN"]);
@@ -50,6 +58,23 @@ test("Colour by Rep: default Tier, ring per rep colour, remembered per user; col
   await expect(page.locator("#leaflet-map .pin-rep-initials").first()).toBeHidden();
   for (let i = 0; i < 6; i++) await page.locator("#zoom-in-btn").click();
   await page.locator("#map-legend-btn").click();
+  // the circles are for today's planned visits per rep, behind their own switch (off by default)
+  await expect(page.locator("#leaflet-map .pin-rep-ring")).toHaveCount(0);
+  const plannedToday = await page.evaluate(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+  await pool.query("INSERT INTO visit_plans (user_id, plan_date, customer_ids, status, created_by) VALUES ($1, $2, $3, 'approved', $1)", [aram.id, plannedToday, [c1.id]]);
+  await page.locator("#map-legend-toggle-planned").click();
+  await expect(page.locator("#leaflet-map .pin-rep-ring")).toHaveCount(1, { timeout: 10000 });
+  expect(await page.locator("#leaflet-map .pin-rep-ring").evaluate((el) => getComputedStyle(el).borderTopColor)).toBe("rgb(10, 105, 218)"); // Aram's colour
+  await page.screenshot({ path: `${process.env.GB_SHOTS ?? "/tmp"}/map-key-planned-on.png` });
+  await page.locator("#map-legend-close").click();
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: `${process.env.GB_SHOTS ?? "/tmp"}/map-rings.png` });
+  await page.locator("#map-legend-btn").click();
+  await page.locator("#map-legend-toggle-planned").click();
+  await expect(page.locator("#leaflet-map .pin-rep-ring")).toHaveCount(0);
   await expect(page.locator("#map-rep-legend")).toContainText("E2E Aram Rep");
   await expect(page.locator("#map-rep-legend")).toContainText("E2E Narek Rep");
   await page.screenshot({ path: `${process.env.GB_SHOTS ?? "/tmp"}/map-rep.png` });
@@ -59,13 +84,13 @@ test("Colour by Rep: default Tier, ring per rep colour, remembered per user; col
 
   // remembered after a reload; another user starts on Tier
   await page.reload();
-  await expect(page.locator("#leaflet-map .pin-rep-ring")).toHaveCount(3, { timeout: 20000 });
+  await expect(page.locator("#leaflet-map .pin-tinted")).toHaveCount(3, { timeout: 20000 });
   await page.context().clearCookies();
   const other = await fixtures.createUser("admin");
   await loginViaUi(page, other.email);
   await page.goto(`/#/map?customer=${c1.id}`);
   await expect(page.locator("#leaflet-map .leaflet-marker-icon:not(.leaflet-cluster-icon)").first()).toBeVisible({ timeout: 20000 });
-  await expect(page.locator("#leaflet-map .pin-rep-ring")).toHaveCount(0);
+  await expect(page.locator("#leaflet-map .pin-tinted")).toHaveCount(0);
 
   // Team management: the admin picks Narek's colour
   await page.context().clearCookies();

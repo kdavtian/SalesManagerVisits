@@ -23,7 +23,7 @@ usersRouter.get(
   },
   async (req, res) => {
     const { rows } = await pool.query(
-      "SELECT id, name, position FROM users WHERE role = 'sales_manager' AND status = 'active' ORDER BY name"
+      "SELECT id, name, position, map_color FROM users WHERE role = 'sales_manager' AND status = 'active' ORDER BY name"
     );
     res.json(rows);
   }

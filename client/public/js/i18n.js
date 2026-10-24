@@ -2215,6 +2215,8 @@ const dict = {
 
     settings_title: "Settings",
     sp_account: "Account",
+    map_planned_rings: "Today's planned visits",
+    map_planned_rings_info: "A ring in the rep's colour round every customer planned for today. The pin itself keeps its colour.",
     route_share: "Share the route to Telegram",
     route_share_head: "Route {date} · {name}",
     route_share_stops: "{n} stops",
@@ -5470,6 +5472,8 @@ const dict = {
 
     settings_title: "Կարգավորումներ",
     sp_account: "Հաշիվ",
+    map_planned_rings: "Այսօրվա պլանավորված այցեր",
+    map_planned_rings_info: "Այսօր պլանավորված յուրաքանչյուր հաճախորդի շուրջ՝ պատասխանատու ներկայացուցչի գույնով օղակ։ Գնդասեղի գույնը չի փոխվում։",
     route_share: "Ուղարկել երթուղին Telegram",
     route_share_head: "Երթուղի {date} · {name}",
     route_share_stops: "{n} կանգառ",
