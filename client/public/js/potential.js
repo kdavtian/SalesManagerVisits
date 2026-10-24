@@ -29,6 +29,12 @@ export function potentialChipHtml(level) {
   return `<span class="pl-chip pl-${l}"><i class="pl-dot"></i>${escapeHtml(t(`pl_level_${l}`))}</span>`;
 }
 
+// The customer card header, for a customer of the Potential tier: how likely the sale is (owner, 2026-10-24), instead of the plain tier name.
+export function potentialBadgeHtml(level) {
+  const l = Number(level) || 0;
+  return POTENTIAL_LEVELS.includes(l) ? `<span class="badge tier-badge pl-badge pl-${l}">${escapeHtml(t(`pl_badge_${l}`))}</span>` : "";
+}
+
 export function reasonsText(c) {
   return (c.potential_reasons ?? [])
     .map((r) => (r === "other" && c.potential_reason_other ? `${t("pl_reason_other")}${labelColon()}${c.potential_reason_other}` : t(`pl_reason_${r}`)))
@@ -46,7 +52,7 @@ export function potentialFormHtml(initial = {}) {
       </div>
       <div class="pl-reasons-wrap">
         <div class="pl-section-title">${escapeHtml(t("pl_reason"))}</div>
-        <div class="pl-reasons" role="group" aria-label="${escapeHtml(t("pl_reason"))}"></div>
+        <div class="pl-reasons pl-reasons-list" role="group" aria-label="${escapeHtml(t("pl_reason"))}"></div>
         <input class="pl-other" maxlength="300" placeholder="${escapeHtml(t("pl_reason_other_ph"))}" value="${escapeHtml(initial.other ?? "")}" hidden />
         <p class="pl-warn-banner" role="alert" hidden>${escapeHtml(t("pl_counterfeit_warning"))}</p>
       </div>
@@ -61,13 +67,14 @@ export function wirePotentialForm(root, initial = {}) {
   const otherEl = root.querySelector(".pl-other");
   const warnEl = root.querySelector(".pl-warn-banner");
   let showAll = false;
-  // The six reasons that usually fit the level + "Other" are shown; the rest sit behind "More reasons" (a reason already picked is never hidden).
+  // The four reasons that usually fit the level + "Other" are shown; the rest sit behind "More reasons" (a reason already picked is never hidden).
   const paintReasons = () => {
     const order = reasonOrder(level);
-    const common = new Set([...order.filter((r) => r !== "other").slice(0, 6), "other"]);
+    const common = new Set([...order.filter((r) => r !== "other").slice(0, 4), "other"]);
     const visible = showAll ? order : order.filter((r) => common.has(r) || reasons.has(r));
-    const chip = (r) => `<button type="button" class="pl-reason-chip ${reasons.has(r) ? "pl-reason-on" : ""}" data-reason="${r}" aria-pressed="${reasons.has(r)}">${escapeHtml(t(`pl_reason_${r}`))}</button>`;
-    reasonsEl.innerHTML = visible.map(chip).join("") + (visible.length < order.length ? `<button type="button" class="pl-reason-chip pl-reason-more" data-more>${escapeHtml(t("pl_more_reasons"))}</button>` : "");
+    // A tidy checklist (one reason per line, a check box on the left) instead of a wall of chips of every width (owner, 2026-10-24).
+    const row = (r) => `<button type="button" class="pl-reason-chip pl-reason-row ${reasons.has(r) ? "pl-reason-on" : ""}" data-reason="${r}" aria-pressed="${reasons.has(r)}"><span class="pl-reason-box" aria-hidden="true"></span><span class="pl-reason-text">${escapeHtml(t(`pl_reason_${r}`))}</span></button>`;
+    reasonsEl.innerHTML = visible.map(row).join("") + (visible.length < order.length ? `<button type="button" class="pl-reason-chip pl-reason-row pl-reason-more" data-more><span class="pl-reason-text">${escapeHtml(t("pl_more_reasons"))}</span><span class="pl-reason-chev" aria-hidden="true"></span></button>` : "");
     otherEl.hidden = !reasons.has("other");
     warnEl.hidden = !reasons.has("counterfeit");
   };
