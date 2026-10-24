@@ -18,7 +18,10 @@ Per account and currency: `SUM(amount)` up to the chosen date. They match the sh
 ## Who
 Read: admin, CEO, operations director, accountant. Import / change: admin, CEO, accountant. (Salaries are in this ledger, so no sales roles.)
 
+## Add / edit in the app (phase 2, 1.391.0)
+Admin / CEO / accountant: **Add** on the Cashflow screen (direction In / Out + a positive amount, date, currency + USD rate, account, category, customer ID for "Oil order", sales channel, note; new accounts / categories can be created in the form). Tap a row made in the app to edit or delete it. Rows that came from Excel are read-only while Excel is the source (the next refresh replaces them); rows made in the app (`origin = 'manual'`) are never touched by a refresh. Salary: pick the Staff person and the month and the note becomes `<position> YYYY MON`, which is what Staff matches payments on.
+Risk (shown behind the "!"): the same movement entered in both Excel and the app is counted twice, until Excel is switched off.
+
 ## Not yet (next phases, owner's list)
-- Add / edit entries in the app and switch Excel off (rows from Excel are read-only while Excel is the source).
+- Switching Excel off (stop the bot push / upload, Excel rows become editable) -- waits for the owner's decision, because customer debt and the CEO bot still read the workbook.
 - Bank statements (CSV / Excel) from the Telegram group -> automatic entries (`origin = 'bank'`) with matching to customers and duplicate detection.
-- Salary payments linked to Staff (payroll) so the salary balance = what is due minus what the ledger paid.

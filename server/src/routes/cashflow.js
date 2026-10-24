@@ -67,7 +67,7 @@ cashflowRouter.get("/entries", async (req, res) => {
   const [{ rows }, { rows: [tot] }] = await Promise.all([
     pool.query(
       `SELECT e.id, e.entry_date::text AS date, e.amount::float8 AS amount, e.currency, e.fx_rate::float8 AS fx_rate, e.amount_amd::float8 AS amount_amd,
-              c.name AS category, c.kind AS category_kind, a.name AS account, e.erp_customer_id, cu.name AS customer_name, e.ref, e.info, e.sales_rep, e.origin
+              e.account_id, e.category_id, c.name AS category, c.kind AS category_kind, a.name AS account, e.erp_customer_id, cu.name AS customer_name, e.ref, e.info, e.sales_rep, e.origin
        ${FROM} ${where} ORDER BY e.entry_date DESC, e.id DESC LIMIT ${limit} OFFSET ${offset}`,
       params
     ),
@@ -128,5 +128,106 @@ cashflowRouter.post("/import", (req, res, next) => {
     res.json(await applyCashLedger(rows, { via: "upload", userId: req.user.id, fileName: req.file.originalname }));
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// ---- add / edit / delete an entry in the app (phase 2) ---------------------------------------------------------------------------------
+// Rows that came from Excel are read-only while Excel is the source (the next refresh would replace them); rows made here (origin manual / bank) are
+// never touched by a refresh. The form sends a direction (in / out) and a positive amount; the ledger stores the signed amount.
+async function cleanEntry(b) {
+  const err = (m) => ({ error: m });
+  if (!DATE.test(String(b.date ?? ""))) return err("Choose the date");
+  const direction = b.direction === "in" ? 1 : b.direction === "out" ? -1 : 0;
+  if (!direction) return err("Choose money in or money out");
+  const amount = Number(b.amount);
+  if (!(amount > 0) || amount > 1e12) return err("Enter the amount");
+  const currency = b.currency === "USD" ? "USD" : "AMD";
+  let fx = null;
+  if (currency === "USD") {
+    fx = Number(b.fx_rate);
+    if (!(fx > 0)) {
+      const { rows } = await pool.query("SELECT fx_rate::float8 AS r FROM cash_entries WHERE currency = 'USD' AND fx_rate IS NOT NULL ORDER BY entry_date DESC, id DESC LIMIT 1");
+      fx = rows[0]?.r ?? null;
+    }
+    if (!(fx > 0)) return err("Enter the USD rate (AMD per USD)");
+  }
+  const accountId = Number(b.account_id);
+  const categoryId = Number(b.category_id);
+  const [{ rowCount: hasAccount }, { rowCount: hasCategory }] = await Promise.all([
+    pool.query("SELECT 1 FROM cash_accounts WHERE id = $1", [accountId]),
+    pool.query("SELECT 1 FROM cash_categories WHERE id = $1", [categoryId]),
+  ]);
+  if (!hasAccount) return err("Choose the account");
+  if (!hasCategory) return err("Choose the category");
+  const text = (k, max) => (typeof b[k] === "string" ? b[k].trim().slice(0, max) || null : null);
+  const signed = direction * amount;
+  return {
+    value: {
+      entry_date: b.date, amount: signed, currency, fx_rate: fx, amount_amd: currency === "USD" ? Math.round(signed * fx * 100) / 100 : signed,
+      category_id: categoryId, account_id: accountId, erp_customer_id: text("erp_customer_id", 40), ref: text("ref", 100), info: text("info", 300), sales_rep: text("sales_rep", 40),
+    },
+  };
+}
+
+const ENTRY_COLS = ["entry_date", "amount", "currency", "fx_rate", "amount_amd", "category_id", "account_id", "erp_customer_id", "ref", "info", "sales_rep"];
+
+cashflowRouter.post("/entries", async (req, res) => {
+  if (!canEditCashflow(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const c = await cleanEntry(req.body ?? {});
+  if (c.error) return res.status(400).json({ error: c.error });
+  const { rows } = await pool.query(
+    `INSERT INTO cash_entries (${ENTRY_COLS.join(", ")}, origin, created_by) VALUES (${ENTRY_COLS.map((_, i) => `$${i + 1}`).join(", ")}, 'manual', $${ENTRY_COLS.length + 1}) RETURNING id`,
+    [...ENTRY_COLS.map((k) => c.value[k]), req.user.id]
+  );
+  res.status(201).json({ id: rows[0].id });
+});
+
+cashflowRouter.put("/entries/:id", async (req, res) => {
+  if (!canEditCashflow(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const id = Number(req.params.id);
+  const { rows: [row] } = await pool.query("SELECT origin FROM cash_entries WHERE id = $1", [id]);
+  if (!row) return res.status(404).json({ error: "Not found" });
+  if (row.origin === "excel") return res.status(409).json({ error: "This row comes from Excel and changes there" });
+  const c = await cleanEntry(req.body ?? {});
+  if (c.error) return res.status(400).json({ error: c.error });
+  await pool.query(`UPDATE cash_entries SET ${ENTRY_COLS.map((k, i) => `${k} = $${i + 1}`).join(", ")}, updated_at = now() WHERE id = $${ENTRY_COLS.length + 1}`, [...ENTRY_COLS.map((k) => c.value[k]), id]);
+  res.json({ ok: true });
+});
+
+cashflowRouter.delete("/entries/:id", async (req, res) => {
+  if (!canEditCashflow(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const id = Number(req.params.id);
+  const { rows: [row] } = await pool.query("SELECT origin FROM cash_entries WHERE id = $1", [id]);
+  if (!row) return res.status(404).json({ error: "Not found" });
+  if (row.origin === "excel") return res.status(409).json({ error: "This row comes from Excel and changes there" });
+  await pool.query("DELETE FROM cash_entries WHERE id = $1", [id]);
+  res.json({ ok: true });
+});
+
+// A new account (Source) or category (For) when the list has no fitting one.
+cashflowRouter.post("/accounts", async (req, res) => {
+  if (!canEditCashflow(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const name = String(req.body?.name ?? "").trim().slice(0, 60);
+  const kind = ["cash", "bank", "credit", "other"].includes(req.body?.kind) ? req.body.kind : "bank";
+  if (!name) return res.status(400).json({ error: "Enter the name" });
+  try {
+    const { rows } = await pool.query("INSERT INTO cash_accounts (name, kind) VALUES ($1, $2) RETURNING id", [name, kind]);
+    res.status(201).json({ id: rows[0].id });
+  } catch (err) {
+    if (err.code === "23505") return res.status(409).json({ error: "This account already exists" });
+    throw err;
+  }
+});
+cashflowRouter.post("/categories", async (req, res) => {
+  if (!canEditCashflow(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const name = String(req.body?.name ?? "").trim().slice(0, 60);
+  if (!name) return res.status(400).json({ error: "Enter the name" });
+  if (!["income", "expense", "owner", "internal"].includes(req.body?.kind)) return res.status(400).json({ error: "Choose what kind of category it is" });
+  try {
+    const { rows } = await pool.query("INSERT INTO cash_categories (name, kind) VALUES ($1, $2) RETURNING id", [name, req.body.kind]);
+    res.status(201).json({ id: rows[0].id });
+  } catch (err) {
+    if (err.code === "23505") return res.status(409).json({ error: "This category already exists" });
+    throw err;
   }
 });

@@ -3,7 +3,7 @@
 // in / out per category (moves between our own accounts are not counted), and the list of movements. Admin / CEO / accountant / operations director.
 import { api } from "../api.js";
 import { t } from "../i18n.js";
-import { escapeHtml, formatDateDMY, showToast, formatDuration } from "../util.js";
+import { activateDialog, escapeHtml, formatDateDMY, showToast, formatDuration, bindAmdInput, parseAmd } from "../util.js";
 import { periodLabel, periodKey, periodAria, tapPeriod, periodDates } from "../periodButtons.js";
 
 const BASES = ["today", "week", "month", "quarter", "year"];
@@ -30,6 +30,7 @@ export async function renderCashflow(root, navigate) {
     <div class="cf-view">
       <div class="cf-head">
         <h1>${t("cf_title")} <span role="button" tabindex="0" class="settings-inline-hint-icon" id="cf-hint-btn" aria-expanded="false" aria-controls="cf-hint-text" aria-label="${t("more_info")}">!</span></h1>
+        <button type="button" class="btn btn-primary" id="cf-add" hidden>${t("cf_add")}</button>
       </div>
       <p class="muted cf-note" id="cf-hint-text" hidden>${t("cf_hint_internal")}</p>
       <div class="activity-tabs" role="tablist" id="cf-periods"></div>
@@ -135,10 +136,11 @@ export async function renderCashflow(root, navigate) {
     const neg = e.amount < 0;
     const who = e.customer_name || (e.erp_customer_id ? `#${e.erp_customer_id}` : "");
     const sub = [e.account, who, e.info || e.ref].filter(Boolean).join(" · ");
-    return `<div class="cf-row">
+    const editable = meta?.can_edit && e.origin !== "excel";
+    return `<${editable ? 'button type="button" data-entry="' + e.id + '"' : "div"} class="cf-row ${editable ? "cf-row-edit" : ""}">
       <div class="cf-row-main"><strong>${escapeHtml(e.category || "—")}</strong>${e.category_kind === "internal" ? `<span class="badge badge-neutral">${t("cf_kind_internal_short")}</span>` : ""}${e.origin !== "excel" ? `<span class="badge badge-info">${t("cf_manual")}</span>` : ""}<span class="muted cf-row-sub">${escapeHtml(sub)}</span></div>
       <div class="cf-row-amt ${neg ? "cf-out" : "cf-in"}">${neg ? "−" : "+"}${money(Math.abs(e.amount), e.currency)}${e.currency === "USD" ? `<small class="muted">${nf(Math.abs(e.amount_amd))}</small>` : ""}</div>
-    </div>`;
+    </${editable ? "button" : "div"}>`;
   }
 
   function paintList() {
@@ -151,6 +153,7 @@ export async function renderCashflow(root, navigate) {
       ? [...byDay.entries()].map(([d, list]) => `<div class="cf-day"><div class="list-group-heading">${escapeHtml(formatDateDMY(d))}</div>${list.map(rowHtml).join("")}</div>`).join("")
       : `<p class="muted">${t("cf_none")}</p>`;
     $("#cf-more").hidden = !hasMore;
+    $("#cf-list").querySelectorAll("[data-entry]").forEach((el) => el.addEventListener("click", () => openEntrySheet(entries.find((x) => String(x.id) === el.dataset.entry))));
   }
 
   function listParams(offset = 0) {
@@ -191,6 +194,7 @@ export async function renderCashflow(root, navigate) {
       paintAccounts();
       paintFoot();
       $("#cf-import").hidden = !meta.can_edit;
+      $("#cf-add").hidden = !meta.can_edit;
     } catch (err) {
       errorEl.textContent = err.message;
       errorEl.hidden = false;
@@ -201,6 +205,132 @@ export async function renderCashflow(root, navigate) {
     const s = meta.last_sync;
     const ago = s ? formatDuration(Math.round((Date.now() - new Date(s.at).getTime()) / 60000)) : "";
     $("#cf-foot").textContent = s ? fill("cf_synced", { t: ago, n: s.rows_in }) + (meta.usd_rate ? ` · ${fill("cf_usd_note", { rate: meta.usd_rate })}` : "") : t("cf_never_synced");
+  }
+
+  // --- add / edit an entry (phase 2) ---
+  async function openEntrySheet(e = null) {
+    const kindOpt = (list, sel) => list.map((k) => `<option value="${k}" ${k === sel ? "selected" : ""}>${escapeHtml(t(`cf_kind_${k}`))}</option>`).join("");
+    const direction = e ? (e.amount < 0 ? "out" : "in") : "out";
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `<div class="sheet">
+      <h2>${e ? t("cf_edit_entry") : t("cf_add")}</h2>
+      <form id="cf-form" class="st-form">
+        <div class="activity-tabs" role="tablist" id="cf-dir">
+          <button type="button" role="tab" class="activity-tab ${direction === "in" ? "activity-tab-active" : ""}" data-dir="in" aria-selected="${direction === "in"}">${t("cf_in")}</button>
+          <button type="button" role="tab" class="activity-tab ${direction === "out" ? "activity-tab-active" : ""}" data-dir="out" aria-selected="${direction === "out"}">${t("cf_out")}</button>
+        </div>
+        <label>${t("cf_f_date")}<input name="date" type="date" required value="${e?.date ?? localToday()}" /></label>
+        <label>${t("cf_f_amount")}<input name="amount" inputmode="decimal" required value="${e ? nf(Math.abs(e.amount)) : ""}" /></label>
+        <label>${t("cf_f_currency")}<select name="currency"><option value="AMD">AMD</option><option value="USD" ${e?.currency === "USD" ? "selected" : ""}>USD</option></select></label>
+        <label id="cf-fx-row" ${e?.currency === "USD" ? "" : "hidden"}>${t("cf_f_rate")}<input name="fx_rate" inputmode="decimal" value="${e?.fx_rate ?? meta.usd_rate ?? ""}" /></label>
+        <label>${t("cf_f_account")}<select name="account_id">${meta.accounts.map((a) => `<option value="${a.id}" ${e?.account_id === a.id ? "selected" : ""}>${escapeHtml(a.name)}</option>`).join("")}<option value="__new">${t("cf_new_account")}</option></select></label>
+        <div id="cf-new-account" class="st-form" hidden>
+          <label>${t("cf_f_name")}<input name="new_account" maxlength="60" /></label>
+          <label>${t("cf_f_account_kind")}<select name="new_account_kind">${["cash", "bank", "credit", "other"].map((k) => `<option value="${k}">${t(`cf_account_kind_${k}`)}</option>`).join("")}</select></label>
+        </div>
+        <label>${t("cf_f_category")}<select name="category_id">${KINDS.map((k) => `<optgroup label="${escapeHtml(t(`cf_kind_${k}`))}">${meta.categories.filter((c) => c.kind === k).map((c) => `<option value="${c.id}" data-name="${escapeHtml(c.name)}" ${e?.category_id === c.id ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("")}</optgroup>`).join("")}<option value="__new">${t("cf_new_category")}</option></select></label>
+        <div id="cf-new-category" class="st-form" hidden>
+          <label>${t("cf_f_name")}<input name="new_category" maxlength="60" /></label>
+          <label>${t("cf_f_category_kind")}<select name="new_category_kind">${kindOpt(["expense", "income", "owner", "internal"], "expense")}</select></label>
+        </div>
+        <div id="cf-salary" class="st-form" hidden>
+          <label>${t("cf_f_staff")}<select name="staff"></select></label>
+          <label>${t("cf_f_month")}<input name="month" type="month" value="${(e?.date ?? localToday()).slice(0, 7)}" /></label>
+        </div>
+        <label id="cf-customer-row">${t("cf_f_customer")}<input name="erp_customer_id" maxlength="40" inputmode="numeric" value="${escapeHtml(e?.erp_customer_id ?? "")}" /></label>
+        <label>${t("cf_f_channel")}<input name="sales_rep" maxlength="40" value="${escapeHtml(e?.sales_rep ?? "")}" /></label>
+        <label>${t("cf_f_info")}<input name="info" maxlength="300" value="${escapeHtml(e?.info ?? "")}" /></label>
+        <p class="form-error" id="cf-form-error" hidden></p>
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="cf-cancel">${t("cancel")}</button>
+          <button type="submit" class="btn btn-primary">${t("save")}</button>
+        </div>
+        ${e ? `<button type="button" class="btn btn-block btn-danger" id="cf-del">${t("cf_delete")}</button>` : ""}
+      </form></div>`;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.addEventListener("click", (ev) => ev.target === overlay && overlay.remove());
+    const f = overlay.querySelector("#cf-form");
+    const err = overlay.querySelector("#cf-form-error");
+    const fail = (m) => ((err.textContent = m), (err.hidden = false));
+    let dir = direction;
+    overlay.querySelector("#cf-dir").addEventListener("click", (ev) => {
+      const b = ev.target.closest("[data-dir]");
+      if (!b) return;
+      dir = b.dataset.dir;
+      overlay.querySelectorAll("#cf-dir .activity-tab").forEach((x) => {
+        x.classList.toggle("activity-tab-active", x === b);
+        x.setAttribute("aria-selected", String(x === b));
+      });
+    });
+    bindAmdInput(f.elements.amount);
+    const sync = () => {
+      overlay.querySelector("#cf-fx-row").hidden = f.elements.currency.value !== "USD";
+      overlay.querySelector("#cf-new-account").hidden = f.elements.account_id.value !== "__new";
+      overlay.querySelector("#cf-new-category").hidden = f.elements.category_id.value !== "__new";
+      const catName = f.elements.category_id.selectedOptions[0]?.dataset.name ?? "";
+      overlay.querySelector("#cf-salary").hidden = catName.toLowerCase() !== "salary";
+      overlay.querySelector("#cf-customer-row").hidden = catName.toLowerCase() !== "oil order";
+    };
+    f.addEventListener("change", sync);
+    sync();
+    // salary: pick the person and the month, the note becomes "<position> YYYY MON" -- what Staff matches payments on
+    let staff = [];
+    api.getStaffPeople().then((r) => {
+      staff = r.people.filter((p) => p.active);
+      f.elements.staff.innerHTML = `<option value="">—</option>${staff.map((p) => `<option value="${p.id}">${escapeHtml(p.name)} · ${escapeHtml(p.position)}</option>`).join("")}`;
+    }).catch(() => {});
+    const MON = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+    const composeSalary = () => {
+      const p = staff.find((x) => String(x.id) === f.elements.staff.value);
+      const [y, m] = (f.elements.month.value || "").split("-");
+      if (p && y && m) f.elements.info.value = `${p.position} ${y} ${MON[Number(m) - 1]}`;
+    };
+    f.elements.staff.addEventListener("change", composeSalary);
+    f.elements.month.addEventListener("change", composeSalary);
+    overlay.querySelector("#cf-cancel").addEventListener("click", () => overlay.remove());
+    let armed = false;
+    overlay.querySelector("#cf-del")?.addEventListener("click", async (ev) => {
+      if (!armed) {
+        armed = true;
+        ev.target.textContent = t("cf_delete_confirm");
+        return;
+      }
+      try {
+        await api.deleteCashEntry(e.id);
+        overlay.remove();
+        showToast(t("cf_saved"));
+        await reload();
+      } catch (er) {
+        fail(er.message);
+      }
+    });
+    f.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      err.hidden = true;
+      const btn = f.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      try {
+        let accountId = f.elements.account_id.value;
+        if (accountId === "__new") accountId = (await api.addCashAccount({ name: f.elements.new_account.value, kind: f.elements.new_account_kind.value })).id;
+        let categoryId = f.elements.category_id.value;
+        if (categoryId === "__new") categoryId = (await api.addCashCategory({ name: f.elements.new_category.value, kind: f.elements.new_category_kind.value })).id;
+        const data = {
+          date: f.elements.date.value, direction: dir, amount: parseAmd(f.elements.amount.value) || Number(String(f.elements.amount.value).replace(/,/g, "")),
+          currency: f.elements.currency.value, fx_rate: f.elements.currency.value === "USD" ? Number(f.elements.fx_rate.value) : null,
+          account_id: Number(accountId), category_id: Number(categoryId), erp_customer_id: f.elements.erp_customer_id.value, sales_rep: f.elements.sales_rep.value, info: f.elements.info.value,
+        };
+        if (e) await api.updateCashEntry(e.id, data);
+        else await api.addCashEntry(data);
+        overlay.remove();
+        showToast(t("cf_saved"));
+        await reload();
+      } catch (er) {
+        fail(er.message);
+        btn.disabled = false;
+      }
+    });
   }
 
   // --- wiring ---
@@ -253,6 +383,7 @@ export async function renderCashflow(root, navigate) {
     }
     btn.disabled = false;
   });
+  $("#cf-add").addEventListener("click", () => openEntrySheet(null));
   $("#cf-import").addEventListener("click", () => $("#cf-file").click());
   $("#cf-file").addEventListener("change", async (e) => {
     const file = e.target.files?.[0];

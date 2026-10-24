@@ -199,3 +199,54 @@ test("an uploaded workbook refreshes the ledger (accountant / CEO / admin); an o
   assert.equal(meta.last_sync.via, "upload");
   assert.equal(meta.last_sync.file_name, "Castrol_test.xlsx");
 });
+
+// ---- phase 2: add / edit / delete in the app ------------------------------------------------------------------------------------------------
+test("entries made in the app: direction + positive amount, USD with a rate, edit, delete; Excel rows are read-only; roles", async () => {
+  const send = (who, path, method, body) => apiRequest(`/api/cashflow${path}`, { method, cookie: cookies[who], body });
+  const acc = (await send("accountant", "/accounts", "POST", { name: `Cash ITest2 ${Date.now()}`, kind: "cash" })).data.id;
+  assert.ok(acc);
+  assert.equal((await send("accountant", "/accounts", "POST", { name: "" })).status, 400);
+  const cat = (await send("accountant", "/categories", "POST", { name: `ITest cat ${Date.now()}`, kind: "expense" })).data.id;
+  assert.equal((await send("accountant", "/categories", "POST", { name: "x", kind: "nope" })).status, 400);
+  const base = { date: "2026-10-20", direction: "out", amount: 12500, currency: "AMD", account_id: acc, category_id: cat, info: "ITest fuel" };
+
+  assert.equal((await send("ops", "/entries", "POST", base)).status, 403, "operations director only reads");
+  assert.equal((await send("director", "/entries", "POST", base)).status, 403);
+  assert.equal((await send("accountant", "/entries", "POST", { ...base, amount: 0 })).status, 400);
+  assert.equal((await send("accountant", "/entries", "POST", { ...base, direction: "sideways" })).status, 400);
+  assert.equal((await send("accountant", "/entries", "POST", { ...base, account_id: 999999999 })).status, 400);
+  assert.equal((await send("accountant", "/entries", "POST", { ...base, date: "20.10.2026" })).status, 400);
+
+  const made = await send("accountant", "/entries", "POST", base);
+  assert.equal(made.status, 201, JSON.stringify(made.data));
+  const row = async (id) => (await pool.query("SELECT amount::float8 AS amount, amount_amd::float8 AS amount_amd, currency, fx_rate::float8 AS fx, origin, created_by FROM cash_entries WHERE id = $1", [id])).rows[0];
+  let r = await row(made.data.id);
+  assert.deepEqual([r.amount, r.amount_amd, r.origin, r.created_by], [-12500, -12500, "manual", accountant.id]);
+
+  const usd = await send("admin", "/entries", "POST", { ...base, direction: "in", amount: 200, currency: "USD", fx_rate: 380 });
+  r = await row(usd.data.id);
+  assert.deepEqual([r.amount, r.amount_amd, r.fx], [200, 76000, 380]);
+
+  assert.equal((await send("accountant", `/entries/${made.data.id}`, "PUT", { ...base, amount: 30000, direction: "in" })).status, 200);
+  r = await row(made.data.id);
+  assert.deepEqual([r.amount, r.amount_amd], [30000, 30000]);
+  const listed = (await send("accountant", "/entries?q=ITest%20fuel&limit=50", "GET")).data.entries.find((e) => e.id === made.data.id);
+  assert.equal(listed.account_id, acc);
+  assert.equal(listed.category_id, cat);
+
+  // an Excel row cannot be changed or deleted here
+  const { rows: [ex] } = await pool.query("INSERT INTO cash_entries (entry_date, amount, amount_amd, category_id, account_id, origin) VALUES ('2026-10-01', 5, 5, $1, $2, 'excel') RETURNING id", [cat, acc]);
+  assert.equal((await send("accountant", `/entries/${ex.id}`, "PUT", base)).status, 409);
+  assert.equal((await send("accountant", `/entries/${ex.id}`, "DELETE")).status, 409);
+  assert.equal((await send("director", `/entries/${made.data.id}`, "DELETE")).status, 403);
+  assert.equal((await send("accountant", `/entries/${made.data.id}`, "DELETE")).status, 200);
+  assert.equal((await send("accountant", `/entries/${made.data.id}`, "DELETE")).status, 404);
+
+  // a refresh from Excel never touches rows made here
+  const kept = await send("accountant", "/entries", "POST", base);
+  const before = (await pool.query("SELECT COUNT(*)::int AS n FROM cash_entries WHERE origin = 'manual'")).rows[0].n;
+  const { applyCashLedger } = await import("../../src/cashflow.js");
+  await applyCashLedger([{ date: "2026-10-02", amount: 1, currency: "AMD", for: "Fuel", source: "Cash ITest2 Z", amount_amd: 1 }], { via: "bot" });
+  assert.equal((await pool.query("SELECT COUNT(*)::int AS n FROM cash_entries WHERE origin = 'manual'")).rows[0].n, before);
+  assert.ok(await row(kept.data.id));
+});
