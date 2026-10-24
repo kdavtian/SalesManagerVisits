@@ -40,6 +40,14 @@ export function cleanPotentialInput(b = {}) {
 
 // Sets level + reasons (+ optional follow-up date / expected volume) and writes history when the level or the reasons changed.
 // Ticking the counterfeit reason raises the restriction; it stays until a manager resolves it.
+// What a person last used for each level. "Other" needs its own text and "counterfeit" starts a restriction, so neither is ever pre-ticked.
+const REMEMBERABLE = (r) => r !== "other" && r !== COUNTERFEIT_REASON;
+
+export async function getReasonMemory(userId) {
+  const { rows } = await pool.query("SELECT level, reasons FROM user_potential_reason_memory WHERE user_id = $1", [userId]);
+  return Object.fromEntries(rows.map((r) => [r.level, r.reasons.filter(REMEMBERABLE)]));
+}
+
 export async function setPotential(customerId, userId, body) {
   const v = cleanPotentialInput(body);
   const client = await pool.connect();
@@ -66,6 +74,11 @@ export async function setPotential(customerId, userId, body) {
     if (raiseCounterfeit) {
       await client.query(`INSERT INTO customer_potential_history (customer_id, kind, new_level, changed_by) VALUES ($1, 'counterfeit_set', $2, $3)`, [customerId, v.level, userId]);
     }
+    await client.query(
+      `INSERT INTO user_potential_reason_memory (user_id, level, reasons) VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, level) DO UPDATE SET reasons = EXCLUDED.reasons, updated_at = now()`,
+      [userId, v.level, v.reasons.filter(REMEMBERABLE)]
+    );
     await client.query("COMMIT");
     return { changed, counterfeit_flag: raiseCounterfeit || cur.counterfeit_flag };
   } catch (err) {

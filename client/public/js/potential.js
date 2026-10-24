@@ -41,33 +41,55 @@ export function reasonsText(c) {
     .join(", ");
 }
 
-// The reasons last used for each level, per signed-in user and device (owner idea, 2026-10-24): picking a level pre-ticks them, so the usual
-// case is "level, Save". "Other" (needs a typed explanation) and "counterfeit" (starts a restriction) are never remembered.
+// The reasons last used for each level, per signed-in user (owner idea, 2026-10-24; kept on the SERVER since 1.408.0 so they follow the person between
+// devices): picking a level pre-ticks them, so the usual case is "level, Save". The server fills them whenever a classification is saved; this copy is
+// fetched once per session, mirrored in localStorage for offline, and updated at once when the form is submitted. "Other" (needs a typed explanation)
+// and "counterfeit" (starts a restriction) are never remembered.
 const memoryKey = () => `fieldvisits_potential_reasons:${state.user?.id ?? 0}`;
 const REMEMBERABLE = (r) => r !== "other" && r !== "counterfeit";
-function readReasonMemory() {
+let serverMemory = null; // { "1": [...], ... } once the server answered
+let memoryLoad = null;
+function readLocalMemory() {
   try {
     return JSON.parse(localStorage.getItem(memoryKey())) ?? {};
   } catch {
     return {};
   }
 }
+function writeLocalMemory(memory) {
+  try {
+    localStorage.setItem(memoryKey(), JSON.stringify(memory));
+  } catch {
+    // private mode: nothing remembered on this device
+  }
+}
+export function warmReasonMemory() {
+  if (!memoryLoad) {
+    memoryLoad = api
+      .getPotentialReasonMemory()
+      .then((memory) => {
+        serverMemory = memory && typeof memory === "object" ? memory : {};
+        writeLocalMemory({ ...readLocalMemory(), ...serverMemory });
+      })
+      .catch(() => {
+        memoryLoad = null; // offline: use this device's copy, try again next time
+      });
+  }
+  return memoryLoad;
+}
 function rememberedReasons(level) {
-  const list = readReasonMemory()[level];
+  const list = (serverMemory ?? readLocalMemory())[level];
   return Array.isArray(list) ? list.filter((r) => typeof r === "string" && REMEMBERABLE(r) && reasonOrder(level).includes(r)) : [];
 }
 function rememberReasons(level, reasons) {
-  try {
-    const memory = readReasonMemory();
-    memory[level] = reasons.filter(REMEMBERABLE);
-    localStorage.setItem(memoryKey(), JSON.stringify(memory));
-  } catch {
-    // private mode: nothing remembered
-  }
+  const next = { ...(serverMemory ?? readLocalMemory()), [level]: reasons.filter(REMEMBERABLE) };
+  if (serverMemory) serverMemory = next;
+  writeLocalMemory(next);
 }
 
 // ---- the form (levels -> reasons) ---------------------------------------------------------------------------------------------------
 export function potentialFormHtml(initial = {}) {
+  warmReasonMemory(); // start fetching the remembered reasons while the form is being shown
   const level = initial.level ?? DEFAULT_POTENTIAL_LEVEL;
   return `
     <div class="pl-form">
@@ -101,6 +123,7 @@ export function wirePotentialForm(root, initial = {}) {
     prefilled = !mine && remembered.length > 0;
   };
   if (!reasons.size) loadLevel();
+  let touched = false; // the person has picked a level or a reason: never overwrite their choice
   const reasonsEl = root.querySelector(".pl-reasons");
   const otherEl = root.querySelector(".pl-other");
   const warnEl = root.querySelector(".pl-warn-banner");
@@ -118,10 +141,19 @@ export function wirePotentialForm(root, initial = {}) {
     prefillNote.hidden = !prefilled;
   };
   paintReasons();
+  // The server's copy may arrive after the form opened (first use of the session): fill in the empty form then, unless the person already chose.
+  if (!serverMemory && !initial.reasons?.length) {
+    warmReasonMemory().then(() => {
+      if (touched || !root.isConnected || reasons.size) return;
+      loadLevel();
+      if (reasons.size) paintReasons();
+    });
+  }
   root.querySelector("[data-pl-info]")?.addEventListener("click", () => openInfoPopup(t("pl_levels_info")));
   root.querySelector(".pl-levels").addEventListener("click", (e) => {
     const b = e.target.closest("[data-level]");
     if (!b) return;
+    touched = true;
     if (Number(b.dataset.level) !== level) {
       byLevel.set(level, [...reasons]);
       level = Number(b.dataset.level);
@@ -145,6 +177,7 @@ export function wirePotentialForm(root, initial = {}) {
     const r = b.dataset.reason;
     if (reasons.has(r)) reasons.delete(r);
     else reasons.add(r);
+    touched = true;
     prefilled = false;
     prefillNote.hidden = true;
     b.classList.toggle("pl-reason-on", reasons.has(r));

@@ -459,6 +459,7 @@ export const api = {
 
   listTaskAssignees: () => request("/tasks/assignees"),
   getErpSyncStatus: () => request("/erp-sync/status", { fresh: true }),
+  getPotentialReasonMemory: () => request("/customers/potential-reason-memory", { fresh: true }),
   getAdminCounts: () => request("/settings/admin-counts", { fresh: true }),
   requestErpSync: () => json("/erp-sync/request", "POST", {}),
   listTasks: (params = {}) => request(`/tasks?${new URLSearchParams(params).toString()}`),

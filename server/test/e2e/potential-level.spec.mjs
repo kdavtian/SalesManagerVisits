@@ -84,10 +84,13 @@ test("the reasons last used for a level are ticked again for the next customer (
   await page.locator('#pl-form button[type="submit"]').click();
   await expect(page.locator(".pl-card .pl-chip")).toContainText("High potential", { timeout: 10000 });
 
+  // another device: nothing in this browser's storage, the server still knows the last reasons
+  await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("fieldvisits_potential_reasons")).forEach((k) => localStorage.removeItem(k)));
+  await page.reload();
   await page.goto(`/#/customers/${second.id}`);
   await page.locator("[data-pl-edit]").click();
   await page.locator('.pl-level-chip[data-level="4"]').click();
-  await expect(page.locator('.pl-reason-chip[data-reason="negotiating"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator('.pl-reason-chip[data-reason="negotiating"]')).toHaveAttribute("aria-pressed", "true", { timeout: 10000 });
   await expect(page.locator('.pl-reason-chip[data-reason="other"]')).toHaveAttribute("aria-pressed", "false"); // "Other" needs its own text
   await expect(page.locator(".pl-prefill-note")).toBeVisible();
   // another level starts clean, and coming back to level 4 brings the ticks back
