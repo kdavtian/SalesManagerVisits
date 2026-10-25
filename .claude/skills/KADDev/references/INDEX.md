@@ -146,7 +146,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L82 6. Proactive moves that always land well - After a numbered list, add "Suggestions" (numbered, with recommendation) only if you saw something real while
 - L90 7. Mistakes I made that cost them time (do not repeat) - Claiming sheets "load before showing" without reading them (Add payment and the customer pickers already paint
 
-## owner-preferences-and-history.md (67 KB, 316 lines)
+## owner-preferences-and-history.md (68 KB, 321 lines)
 - L3 How they work with you - Writes short, numbered, imperative requests (often with screenshots "image1/img2"), mixes English with Armenia
 - L11 Visual / UX preferences (apply by default) - Compact, iOS-native feel: bottom sheets, floating/fixed action bars (Cancel/Save on customer edit must be fixe
 - L24 Things that repeatedly bit us (check proactively) - Forgetting CACHEVERSION bump -> "no updates" on phones.
@@ -182,6 +182,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L297 2026-10-25 (1.412.0): Anti-fraud + debt task shows both numbers - Owner answers: debt task shows BOTH numbers (age of the oldest unpaid invoice AND days past the credit term):
 - L305 2026-10-25 (1.413.0): Expenses analysis in Vaghinak - Owner answer: analyse cash expenses with the SAME data as the Excel; weekly reports and live alerts.
 - L310 2026-10-25 (1.414.0): Armenian places + spelling autocorrect - Owner answer: collect all Armenian cities, villages, marzes, subregions, communities into a small DB and autoc
+- L316 2026-10-25: Vaghinak voice rewrite (server only, no app version bump) - Owner answer: "Mix a b" = A (plain colleague: says what he sees, asks one clear thing) + B (short and direct).
 
 ## strategy-roadmap.md (6 KB, 31 lines)
 - L5 Target (owner, 2026-10-12): 10 % of the market = ~1 million liters a year - Owner's working assumption: the Armenian market is ~10M L a year, so 10 % = 1M L.

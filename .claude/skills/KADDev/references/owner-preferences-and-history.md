@@ -313,3 +313,8 @@ Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets 
 - Stored value stays English; display is translated (`regionLabelHy` / `subregionLabelHy` now know every place). A bulk "Fix the spellings already saved" rewrites customers + route_distribution + visit_plan_rules.areas together (they store the same text).
 - Lesson: when inserting an import line with a script, never assume "the last line starting with import" ends an import block (a multi-line `import {` broke erpSync.js once).
 
+## 2026-10-25: Vaghinak voice rewrite (server only, no app version bump)
+- Owner answer: "Mix a b" = A (plain colleague: says what he sees, asks one clear thing) + B (short and direct). No jokes, no emoji, no teasing, no pet names like "Հարազատս".
+- `server/src/vaghinak/phrases.js` BANK rewritten for every kind (same keys, levels, placeholders and variant counts); `addressFor` now mostly the plain first name (sometimes "<name> ջան"). Management keeps the formal "Դուք" tone. Examples: "{addr}, արդեն {time} է, իսկ այց դեռ չեմ տեսնում։ Ամեն ինչ կարգի՞ն է։" / "{time}։ Այցեր դեռ չկան։ {addr}, ի՞նչ է կատարվում։"
+- New wording must keep the placeholder set of its kind and no emoji.
+
