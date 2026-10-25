@@ -1611,6 +1611,12 @@ async function init() {
     optimisticRenderDone = true;
   }
 
+  // Started together with the lockdown check, not after it: the two used to
+  // run back to back, so a cold open waited two full round trips before it
+  // knew whether to show the login form. Lockdown still decides first (its
+  // overlay replaces everything, and the /me result is then ignored).
+  const mePromise = api.me();
+  mePromise.catch(() => {});
   try {
     const lockdownStatus = await api.getLockdownStatus();
     if (lockdownStatus.enabled) {
@@ -1636,7 +1642,7 @@ async function init() {
   // disappearing and reappearing read as a refresh.
   let skipRedundantRender = false;
   try {
-    const user = await api.me();
+    const user = await mePromise;
     skipRedundantRender = optimisticRenderDone && cachedUser && cachedUser.id === user.id && cachedUser.role === user.role;
     setUser(user);
     // Catches a role change (e.g. sales_manager -> sales_director) an admin

@@ -16,6 +16,7 @@ import helmet from "helmet";
 import compression from "compression";
 import cookieParser from "cookie-parser";
 import fs from "node:fs";
+import { modulePreloadTags } from "./modulePreload.js";
 import { authRouter, meRouter } from "./routes/auth.js";
 import { usersRouter } from "./routes/users.js";
 import { customersRouter } from "./routes/customers.js";
@@ -281,6 +282,9 @@ app.use("/api", (req, res) => {
 
 const indexHtmlPath = path.join(clientDir, "index.html");
 const indexHtmlTemplate = fs.readFileSync(indexHtmlPath, "utf8");
+// Computed once at start-up from the client files themselves (see modulePreload.js).
+const modulePreloadHtml = modulePreloadTags(clientDir);
+const BOOT_SPLASH_HTML = '<div class="boot-splash" role="status" aria-label="Loading"><span class="boot-splash-spin"></span></div>';
 
 const CALCULATOR_BRANDING = {
   title: "Calculator",
@@ -335,7 +339,12 @@ app.get(/.*/, async (req, res) => {
   // document.querySelector instead.
   const html = indexHtmlTemplate
     .replace("<!--CALCULATOR_MODE_HEAD-->", head)
-    .replace("<!--CALCULATOR_MODE_FLAG-->", `<meta name="calc-mode" content="${calculatorModeEnabled}" />`);
+    .replace("<!--CALCULATOR_MODE_FLAG-->", `<meta name="calc-mode" content="${calculatorModeEnabled}" />`)
+    // Calculator Mode promises that nothing of the real app is fetched or
+    // shown before the unlock code is entered, so neither the preload hints
+    // nor the spinner are emitted for it.
+    .replace("<!--MODULE_PRELOAD-->", calculatorModeEnabled ? "" : modulePreloadHtml)
+    .replace("<!--BOOT_SPLASH-->", calculatorModeEnabled ? "" : BOOT_SPLASH_HTML);
   // Same reasoning as /manifest.json above -- this page's branding depends
   // on the same admin setting and must never be served stale from cache.
   res.set("Cache-Control", "no-store");

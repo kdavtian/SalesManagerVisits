@@ -41,6 +41,14 @@
     <link rel="stylesheet" href="css/map-marker-system.css" />
     <link rel="stylesheet" href="css/map-safe-enhancements.css" />
     <link rel="stylesheet" href="css/desktop.css" />
+    <!-- First-paint spinner styles, inline so they cost no request. -->
+    <style>
+      .boot-splash { display: flex; align-items: center; justify-content: center; min-height: 70vh; }
+      .boot-splash:not(:only-child) { display: none; }
+      .boot-splash-spin { width: 28px; height: 28px; border-radius: 50%; border: 3px solid rgba(128, 128, 128, 0.25); border-top-color: #34a853; animation: boot-splash-turn 0.8s linear infinite; }
+      @keyframes boot-splash-turn { to { transform: rotate(360deg); } }
+    </style>
+    <!--MODULE_PRELOAD-->
   </head>
   <body>
     <div id="sync-banner" class="sync-banner" role="status" aria-live="polite" hidden></div>
@@ -49,7 +57,7 @@
          other shell chrome; app.js fills it in once a user is logged in. -->
     <nav id="sidebar" class="sidebar" aria-label="Primary navigation" hidden></nav>
     <header id="top-bar" class="top-bar" hidden></header>
-    <main id="app" class="app-main" tabindex="-1"></main>
+    <main id="app" class="app-main" tabindex="-1"><!--BOOT_SPLASH--></main>
     <nav id="nav-bar" class="nav-bar" aria-label="Primary navigation" hidden></nav>
     <div id="install-root"></div>
     <div id="update-root"></div>
