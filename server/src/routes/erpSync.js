@@ -11,6 +11,7 @@ import { recordSyncAttempt, latestSyncAttempts } from "../erpSyncAttempts.js";
 import { recordSyncRun, getSyncStatus, createSyncRequest, pickPendingRequest, finishRequest } from "../erpSyncStatus.js";
 import { runAutoTasks } from "../debtCollectionTasks.js";
 import { runAntiFraud } from "../antiFraud.js";
+import { runExpenseWatch } from "../expenseWatch.js";
 import { refreshOrderRhythm } from "../orderRhythm.js";
 import { applyCashLedger } from "../cashflow.js";
 import { snapshotTierPrices, logTierPriceChanges } from "../priceSyncLog.js";
@@ -556,7 +557,13 @@ erpSyncRouter.post("/cashflow-ledger", syncKeyLimiter, requireSyncKey, async (re
   const rows = req.body?.rows;
   if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: "rows must be a non-empty array" });
   try {
-    res.json(await applyCashLedger(rows.filter(isPlainObject).map((r, i) => ({ ...r, excel_row: r.excel_row ?? i + 1 })), { via: "bot", note: req.body?.note ?? null, fileName: req.body?.file_name ?? null }));
+    const applied = await applyCashLedger(rows.filter(isPlainObject).map((r, i) => ({ ...r, excel_row: r.excel_row ?? i + 1 })), { via: "bot", note: req.body?.note ?? null, fileName: req.body?.file_name ?? null });
+    // the new cashflow rows are the data the expense watch (and "is it in the Excel?") reads
+    if (process.env.NODE_ENV !== "test") {
+      runExpenseWatch().catch((err) => console.error("Expense watch failed:", err.message));
+      runAntiFraud().catch((err) => console.error("Anti-fraud run failed:", err.message));
+    }
+    res.json(applied);
   } catch (err) {
     await recordSyncAttempt({ endpoint: "/api/erp-sync/cashflow-ledger", ok: false, error: err.message });
     res.status(400).json({ error: err.message });

@@ -4,13 +4,14 @@
 import { api } from "../api.js";
 import { state } from "../state.js";
 import { icons } from "../icons.js";
-import { t } from "../i18n.js";
+import { t, getLang } from "../i18n.js";
 import { escapeHtml, formatAmd, formatDateTime, formatDuration, formatRelative, openInfoPopup, showToast } from "../util.js";
 import { answerFormHtml, wireAnswerForm, setVaghinakBadge } from "../vaghinak.js";
 
 const MANAGEMENT = new Set(["admin", "ceo", "operations_director", "sales_director", "accountant"]);
 const SETTINGS_ROLES = new Set(["admin", "ceo", "operations_director"]);
 const FRAUD_ROLES = new Set(["admin", "ceo", "operations_director"]); // mirrors server/src/antiFraud.js
+const EXPENSE_ROLES = new Set(["admin", "ceo", "operations_director", "accountant"]); // mirrors server/src/expenseWatch.js
 
 const clock = (min) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 
@@ -35,13 +36,13 @@ const SETTING_FIELDS = [
 
 // Operations control (cash, margin, stock, customers, order flow, data): the roles that had its Home tile.
 const OPS_ROLES = new Set(["admin", "ceo", "operations_director", "sales_director", "accountant"]);
-const TAB_ICON = { messages: "vaghinak", pulse: "team", qa: "info", feed: "history", autotasks: "tasks", antifraud: "shield", settings: "settings" };
+const TAB_ICON = { messages: "vaghinak", pulse: "team", qa: "info", feed: "history", autotasks: "tasks", antifraud: "shield", expenses: "wallet", settings: "settings" };
 const OPS_QUICK = [["cash", "wallet"], ["margin", "trendUp"], ["stock", "box"], ["customers", "customers"], ["flow", "clock"], ["data", "dashboard"]];
 
 export async function renderVaghinak(root, navigate, query) {
   const isManagement = MANAGEMENT.has(state.user.role);
   const canSettings = SETTINGS_ROLES.has(state.user.role);
-  const tabs = [["messages", "vg_tab_messages"], ...(isManagement ? [["pulse", "vg_tab_pulse"], ["qa", "vg_tab_qa"], ["feed", "vg_tab_feed"], ["autotasks", "vg_tab_autotasks"], ...(FRAUD_ROLES.has(state.user.role) ? [["antifraud", "vg_tab_antifraud"]] : [])] : []), ...(canSettings ? [["settings", "vg_tab_settings"]] : [])];
+  const tabs = [["messages", "vg_tab_messages"], ...(isManagement ? [["pulse", "vg_tab_pulse"], ["qa", "vg_tab_qa"], ["feed", "vg_tab_feed"], ["autotasks", "vg_tab_autotasks"], ...(FRAUD_ROLES.has(state.user.role) ? [["antifraud", "vg_tab_antifraud"]] : []), ...(EXPENSE_ROLES.has(state.user.role) ? [["expenses", "vg_tab_expenses"]] : [])] : []), ...(canSettings ? [["settings", "vg_tab_settings"]] : [])];
   let tab = tabs.some(([k]) => k === query?.get("tab")) ? query.get("tab") : "messages";
 
   root.innerHTML = `
@@ -131,6 +132,7 @@ export async function renderVaghinak(root, navigate, query) {
       if (tab === "feed") return await paintFeed(mine);
       if (tab === "autotasks") return await paintAutoTasks(mine);
       if (tab === "antifraud") return await paintAntiFraud(mine);
+      if (tab === "expenses") return await paintExpenses(mine);
       if (tab === "settings") return await paintSettings(mine);
     } catch (err) {
       if (mine === token) showError(err);
@@ -420,6 +422,92 @@ export async function renderVaghinak(root, navigate, query) {
         showToast(err.message);
       }
     });
+  }
+
+  // ---- expenses (admin / CEO / operations director / accountant) ----
+  const monthLabel = (m) => new Date(`${m}-15T00:00:00`).toLocaleDateString(getLang() === "hy" ? "hy-AM" : "en-GB", { month: "short" });
+  function expenseLine(a) {
+    const d = a.details ?? {};
+    return fill(t(`exp_d_${a.kind}`), {
+      category: escapeHtml(a.category || ""), amount: a.amount_amd != null ? formatAmd(Number(a.amount_amd)) : "", projected: d.projected != null ? formatAmd(Number(d.projected)) : "",
+      avg3: d.avg3 != null ? formatAmd(Number(d.avg3)) : "", pct: d.pct, day: d.day, note: d.note ? ` · ${escapeHtml(d.note)}` : "", rep: escapeHtml(d.rep || ""),
+      purpose: escapeHtml(d.purpose || ""), days: d.days, usual: d.usual != null ? formatAmd(Number(d.usual)) : "",
+    });
+  }
+  function expenseAdvice(r) {
+    return fill(t(`exp_r_${r.code}`), {
+      category: escapeHtml(r.category || ""), pct: r.pct, projected: r.projected != null ? formatAmd(r.projected) : "", avg3: r.avg3 != null ? formatAmd(r.avg3) : "", avg: r.avg, count: r.count,
+    });
+  }
+  async function paintExpenses(mine) {
+    const d = await api.expenses();
+    if (mine !== token) return;
+    const maxSpend = Math.max(1, ...d.months.map((m) => m.spend));
+    const bars = d.months
+      .map((m, i) => `<div class="exp-bar${i === d.months.length - 1 ? " exp-bar-now" : ""}" title="${escapeHtml(formatAmd(m.spend))}"><span class="exp-bar-fill" style="height:${Math.max(3, Math.round((m.spend / maxSpend) * 100))}%"></span><span class="exp-bar-label">${monthLabel(m.month)}</span></div>`)
+      .join("");
+    const catRows = d.categories
+      .slice(0, 12)
+      .map(
+        (c) => `<div class="health-row"><span class="health-label">${escapeHtml(c.name)}</span><span class="health-value">${formatAmd(c.projected)}${c.change_pct != null ? ` <span class="badge ${c.change_pct >= 30 ? "badge-danger" : c.change_pct <= -20 ? "badge-success" : "badge-neutral"}">${c.change_pct > 0 ? "+" : ""}${c.change_pct}%</span>` : ""}</span></div>`
+      )
+      .join("");
+    const alertCards = d.alerts
+      .map(
+        (a) => `<div class="card vg-msg" data-exp-alert="${a.id}">
+          <div class="vg-rep-top"><strong>${t("exp_k_" + a.kind)}</strong><span class="badge ${a.severity >= 3 ? "badge-danger" : a.severity === 2 ? "badge-warning" : "badge-neutral"}">${"!".repeat(a.severity)}</span></div>
+          <div class="vg-msg-body">${expenseLine(a)}</div>
+          <div class="muted vg-msg-meta">${escapeHtml(formatRelative(a.created_at))}</div>
+          <div class="vg-react"><button type="button" class="vg-react-btn" data-exp-dismiss>${t("exp_dismiss")}</button></div>
+        </div>`
+      )
+      .join("");
+    const repRows = d.cash_by_rep
+      .map((r) => `<div class="health-row"><span class="health-label">${escapeHtml(r.rep)}</span><span class="health-value">${formatAmd(r.spend)}${r.not_in_excel ? ` <span class="badge badge-warning">${t("exp_not_in_excel").replace("{n}", r.not_in_excel)}</span>` : ""}</span></div>`)
+      .join("");
+    const reports = d.reports
+      .map((r) => `<div class="health-row"><span class="health-label">${escapeHtml(r.week_start)}</span><span class="health-value">${formatAmd(Number(r.summary.total))}${r.summary.previous > 0 ? ` <span class="muted">(${r.summary.total >= r.summary.previous ? "+" : ""}${Math.round(((r.summary.total - r.summary.previous) / r.summary.previous) * 100)}%)</span>` : ""}</span></div>`)
+      .join("");
+    body.innerHTML = `
+      <div class="card health-card">
+        <h3 class="health-title">${t("exp_title")}<button type="button" class="settings-hint-icon" id="exp-hint" aria-label="${t("more_info")}">!</button></h3>
+        <div class="health-row"><span class="health-label">${t("exp_this_month")}</span><span class="health-value">${formatAmd(d.this_month.mtd)}</span></div>
+        <div class="health-row"><span class="health-label">${t("exp_projected")}</span><span class="health-value">${formatAmd(d.this_month.projected)}</span></div>
+        <div class="health-row"><span class="health-label">${t("exp_last_month")}</span><span class="health-value">${formatAmd(d.last_month?.spend ?? 0)}</span></div>
+        ${d.spend_share_pct != null ? `<div class="health-row"><span class="health-label">${t("exp_share")}</span><span class="health-value">${d.spend_share_pct}%${d.avg_spend_share_pct != null ? ` <span class="muted">(${t("exp_usually")} ${d.avg_spend_share_pct}%)</span>` : ""}</span></div>` : ""}
+        <div class="exp-bars" role="img" aria-label="${t("exp_chart")}">${bars}</div>
+        <button type="button" class="btn btn-sm" id="exp-run">${t("fraud_run_now")}</button>
+      </div>
+      ${d.recommendations.length ? `<h2 class="section-title">${t("exp_advice")}</h2><div class="card-list vg-list">${d.recommendations.map((r) => `<div class="card vg-msg"><div class="vg-msg-body">${expenseAdvice(r)}</div></div>`).join("")}</div>` : ""}
+      <h2 class="section-title">${t("fraud_open")}</h2>
+      ${alertCards ? `<div class="card-list vg-list">${alertCards}</div>` : `<p class="empty-state">${t("fraud_none")}</p>`}
+      <h2 class="section-title">${t("exp_categories")}</h2>
+      <div class="card health-card">${catRows || `<p class="muted">${t("vg_empty")}</p>`}</div>
+      ${repRows ? `<h2 class="section-title">${t("exp_field")}</h2><div class="card health-card">${repRows}</div>` : ""}
+      ${reports ? `<h2 class="section-title">${t("exp_weekly")}</h2><div class="card health-card">${reports}</div>` : ""}`;
+    body.querySelector("#exp-hint").addEventListener("click", () => openInfoPopup(`<p>${t("exp_hint")}</p>`));
+    body.querySelector("#exp-run").addEventListener("click", async (e) => {
+      e.currentTarget.disabled = true;
+      try {
+        await api.expensesRunNow();
+        if (mine === token) paintExpenses(++token);
+      } catch (err) {
+        showToast(err.message);
+        e.currentTarget.disabled = false;
+      }
+    });
+    body.querySelectorAll("[data-exp-dismiss]").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        try {
+          await api.expensesDismiss(btn.closest("[data-exp-alert]").dataset.expAlert);
+          paintExpenses(++token);
+        } catch (err) {
+          showToast(err.message);
+          btn.disabled = false;
+        }
+      })
+    );
   }
 
   // ---- settings (admin / CEO / operations director) ----

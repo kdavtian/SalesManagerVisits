@@ -110,6 +110,13 @@ export async function renderCashExpenses(root, navigate) {
   searchInput.addEventListener("input", paintFiltered);
   dateInput.addEventListener("change", paintFiltered);
 
+  // The field cash expense must be in the Excel cashflow too (same amount, within 5 days): green when it is, amber when 5+ days passed and it is not.
+  function expenseExcelBadge(e) {
+    if (e.in_excel) return `<span class="badge badge-success">${t("pay_in_excel")}</span>`;
+    if (e.days_old >= 5) return `<span class="badge badge-warning">${t("pay_not_in_excel").replace("{n}", e.days_old)}</span>`;
+    return "";
+  }
+
   function paint(expenses, canLoadMore) {
     if (!expenses.length) {
       listEl.innerHTML = `<p class="empty-state">${t("no_expenses_yet")}</p>`;
@@ -124,6 +131,7 @@ export async function renderCashExpenses(root, navigate) {
         <div class="expense-card-main">
           <strong>${escapeHtml(e.purpose)}</strong>
           <span class="muted">${formatDateTime(e.created_at)}${showOwner ? ` &middot; ${escapeHtml(e.user_name)}` : ""}</span>
+          ${expenseExcelBadge(e)}
         </div>
         <span class="expense-card-amount">${formatAmd(Number(e.amount_amd))}</span>
       </button>`;
