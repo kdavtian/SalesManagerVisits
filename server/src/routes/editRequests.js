@@ -4,6 +4,7 @@ import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { EDITABLE_FIELDS, isWithinArmenia } from "./customers.js";
 import { haversineMeters } from "../utils/geo.js";
 import { normalizePhoneForStorage } from "../phoneFormat.js";
+import { normalizeIncomingPlaces, recordPlaceReviews } from "../placeReviews.js";
 
 export const editRequestsRouter = Router();
 
@@ -183,9 +184,13 @@ editRequestsRouter.patch("/:id", requireAdmin, async (req, res) => {
       const updates = [];
       const params = [];
       const changedFields = [];
+      // a proposed region / subregion is matched against the Armenian places like a direct edit (places.js)
+      const { rows: currentPlaces } = await client.query("SELECT region, subregion FROM customers WHERE id = $1", [request.customer_id]);
+      const placeOutcome = normalizeIncomingPlaces({ region: request.changes.region, subregion: request.changes.subregion }, currentPlaces[0] ?? {});
       for (const [field, value] of Object.entries(request.changes)) {
         if (!EDITABLE_FIELDS.includes(field)) continue;
-        params.push(field === "phone" ? normalizePhoneForStorage(value) : value);
+        const next = field in placeOutcome.values ? placeOutcome.values[field] : value;
+        params.push(field === "phone" ? normalizePhoneForStorage(next) : next);
         updates.push(`${field} = $${params.length}`);
         changedFields.push(field);
       }
@@ -196,6 +201,7 @@ editRequestsRouter.patch("/:id", requireAdmin, async (req, res) => {
           params
         );
 
+        await recordPlaceReviews(client, request.customer_id, req.user.id, placeOutcome);
         await supersedePending(client, request.customer_id, request.id, changedFields, req.user.id);
       }
     }

@@ -4,7 +4,7 @@ import { getTheme, setTheme } from "../theme.js";
 import { getPerfMode, setPerfMode } from "../perfMode.js";
 import { getTextSize, setTextSize } from "../textSize.js";
 import { state, isAdmin, canPlanForOthers, seesFinancialExports, canManageProducts, canReassignCustomers, isPerfCeo } from "../state.js";
-import { renderTeamSection, renderPlanApprovalsSection, renderEditRequestsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection, renderSalesChannelOwnersSection, renderQuickActionVisibilitySection, renderDataQualitySection, renderNotificationDeliveryLogSection, renderClientErrorLogSection } from "./admin.js";
+import { renderTeamSection, renderPlanApprovalsSection, renderEditRequestsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection, renderSalesChannelOwnersSection, renderQuickActionVisibilitySection, renderDataQualitySection, renderPlacesSection, renderNotificationDeliveryLogSection, renderClientErrorLogSection } from "./admin.js";
 import { renderSystemHealthSection } from "./systemHealth.js";
 import { renderPinReviewSection } from "./pinReview.js";
 import { renderBonusChallengesSection, renderBonusRewardClaimsSection } from "./bonusChallengesAdmin.js";
@@ -560,6 +560,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
         <div class="card settings-list">
           ${settingsRow({ icon: ICON.shield, label: t("system_health_title"), id: "row-system-health", color: "green" })}
           ${settingsRow({ icon: ICON.chart, label: t("data_quality_title"), id: "row-data-quality", color: "red" })}
+          ${settingsRow({ icon: ICON.cloud, label: t("places_title"), id: "row-places", color: "blue" })}
           ${settingsRow({ icon: ICON.database, label: t("notification_delivery_log_title"), id: "row-notification-delivery-log", color: "teal" })}
           ${settingsRow({ icon: ICON.database, label: t("client_error_log_title"), id: "row-client-error-log", color: "gray" })}
         </div>
@@ -1387,6 +1388,9 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
     });
     root.querySelector("#row-data-quality").addEventListener("click", (e) => {
       openAdminSection(root, e.currentTarget, t("data_quality_title"), renderDataQualitySection);
+    });
+    root.querySelector("#row-places").addEventListener("click", (e) => {
+      openAdminSection(root, e.currentTarget, t("places_title"), renderPlacesSection);
     });
     root.querySelector("#row-system-health").addEventListener("click", (e) => {
       openAdminSection(root, e.currentTarget, t("system_health_title"), renderSystemHealthSection);

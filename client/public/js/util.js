@@ -1,4 +1,5 @@
 import { getLang, t } from "./i18n.js";
+import { placeLabel, hasArmenianScript } from "./places.js";
 
 // Current value of a theme colour token for places that cannot use var()
 // (Leaflet draws SVG strokes via setAttribute).
@@ -446,13 +447,19 @@ const YEREVAN_DISTRICT_LABELS_HY = {
   Shengavit: "Շենգավիթ",
 };
 
-// Armenian names only when the UI is in Armenian; English shows the code.
+// The stored value is English; the app shows it in its own language (the Armenian lists above, then every Armenian city and village in places.js).
+// A name that was typed in Armenian letters shows in English when the app is in English.
+const REGION_LABELS_EN = Object.fromEntries(Object.entries(REGION_LABELS_HY).map(([en, hy]) => [hy, en]));
+const DISTRICT_LABELS_EN = Object.fromEntries(Object.entries(YEREVAN_DISTRICT_LABELS_HY).map(([en, hy]) => [hy, en]));
+
 export function regionLabelHy(code) {
-  return getLang() === "hy" ? REGION_LABELS_HY[code] || code : code;
+  if (getLang() === "hy") return REGION_LABELS_HY[code] || code;
+  return hasArmenianScript(code) ? REGION_LABELS_EN[code] || code : code;
 }
 
 export function subregionLabelHy(code) {
-  return getLang() === "hy" ? YEREVAN_DISTRICT_LABELS_HY[code] || code : code;
+  if (getLang() === "hy") return YEREVAN_DISTRICT_LABELS_HY[code] || placeLabel(code);
+  return hasArmenianScript(code) ? DISTRICT_LABELS_EN[code] || placeLabel(code) : code;
 }
 
 // Best-effort match of a geocoder's free-text region/subregion guess

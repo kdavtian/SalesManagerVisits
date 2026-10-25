@@ -20,6 +20,7 @@ import { skippedForRecentVisit, getPlanSkipRecentVisitDays } from "../utils/plan
 import { nextNameNumber } from "../customerNameSuggest.js";
 import { pendingCreditFor } from "../orderReturns.js";
 import { PotentialError, cleanPotentialInput, setPotential, resolveCounterfeit, potentialHistory, getReasonMemory } from "../potential.js";
+import { normalizeIncomingPlaces, recordPlaceReviews, placeNotice } from "../placeReviews.js";
 
 export const customersRouter = Router();
 
@@ -383,6 +384,9 @@ customersRouter.post("/", async (req, res) => {
   // default suggestion back is the common case.
   const resolvedManagerId = assigned_manager_id && canReassignCustomers(req.user.role) ? assigned_manager_id : req.user.id;
 
+  // region / subregion text -> the right place names (places.js); what cannot be placed stays as typed and is queued for review
+  const placeOutcome = normalizeIncomingPlaces({ region: region ?? "", subregion: subregion ?? "" });
+
   let rows;
   try {
     ({ rows } = await pool.query(
@@ -401,8 +405,8 @@ customersRouter.post("/", async (req, res) => {
         Number(visit_frequency_days) || (await getDefaultVisitFrequencyDays()),
         erp_customer_id || null,
         tin || null,
-        region || null,
-        subregion || null,
+        placeOutcome.values.region || null,
+        placeOutcome.values.subregion || null,
         initialTier,
         sales_channel || null,
         resolvedManagerId,
@@ -420,12 +424,14 @@ customersRouter.post("/", async (req, res) => {
     }
     throw err;
   }
+  await recordPlaceReviews(pool, rows[0].id, req.user.id, placeOutcome);
+  const place_notice = placeNotice(placeOutcome);
   if (wantsPotential) {
     await setPotential(rows[0].id, req.user.id, { level: req.body.potential_level, reasons: req.body.potential_reasons, reason_other: req.body.potential_reason_other, note: req.body.potential_note });
     const { rows: fresh } = await pool.query("SELECT * FROM customers WHERE id = $1", [rows[0].id]);
-    return res.status(201).json(fresh[0]);
+    return res.status(201).json({ ...fresh[0], place_notice });
   }
-  res.status(201).json(rows[0]);
+  res.status(201).json({ ...rows[0], place_notice });
 });
 
 // Distinct region/subregion values already in use, for the Customers page
@@ -685,6 +691,7 @@ customersRouter.get("/:id", async (req, res) => {
        erp.aging_bucket AS erp_aging_bucket,
        erp.recent_orders AS erp_recent_orders,
        erp.synced_at AS erp_synced_at,
+       EXISTS (SELECT 1 FROM place_reviews pr WHERE pr.customer_id = c.id AND pr.status = 'pending') AS place_review_pending,
        (SELECT COALESCE(SUM(ch.amount_collected_amd), 0)
           FROM checkins ch
           WHERE ch.customer_id = c.id
@@ -791,7 +798,7 @@ customersRouter.patch("/:id", async (req, res) => {
   const onlyChannelField = fieldsPresent.length === 1 && fieldsPresent[0] === "sales_channel";
 
   const { rows: currentRows } = await pool.query(
-    "SELECT created_by, erp_customer_id, customer_tier, name, lat, lng FROM customers WHERE id = $1",
+    "SELECT created_by, erp_customer_id, customer_tier, name, lat, lng, region, subregion FROM customers WHERE id = $1",
     [req.params.id]
   );
   const current = currentRows[0];
@@ -889,6 +896,9 @@ customersRouter.patch("/:id", async (req, res) => {
 
   const fieldsToApply = { ...req.body };
   if (autoUpgradeToBronze) fieldsToApply.customer_tier = "bronze";
+  const placeOutcome = normalizeIncomingPlaces({ region: req.body?.region, subregion: req.body?.subregion }, current);
+  if ("region" in placeOutcome.values) fieldsToApply.region = placeOutcome.values.region;
+  if ("subregion" in placeOutcome.values) fieldsToApply.subregion = placeOutcome.values.subregion;
 
   const updates = [];
   const params = [];
@@ -923,6 +933,7 @@ customersRouter.patch("/:id", async (req, res) => {
     throw err;
   }
   if (!rows[0]) return res.status(404).json({ error: "Customer not found" });
+  await recordPlaceReviews(pool, req.params.id, req.user.id, placeOutcome);
 
   if (autoUpgradeToBronze) {
     await pool.query(
@@ -973,7 +984,7 @@ customersRouter.patch("/:id", async (req, res) => {
     }
   }
 
-  res.json(rows[0]);
+  res.json({ ...rows[0], place_notice: placeNotice(placeOutcome) });
 });
 
 customersRouter.delete("/:id", requireAdmin, async (req, res) => {

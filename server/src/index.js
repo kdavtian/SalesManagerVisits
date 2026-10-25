@@ -10,6 +10,7 @@ import { startVaghinak } from "./vaghinak/engine.js";
 import { startOpsJobs } from "./opsJobs.js";
 import { startAntiFraud } from "./antiFraud.js";
 import { startExpenseWatch } from "./expenseWatch.js";
+import { loadCustomPlaces } from "./places.js";
 import { runPricelistSeedOnce } from "./pricelistSeed.js";
 
 const port = process.env.PORT || 3000;
@@ -26,5 +27,6 @@ app.listen(port, () => {
   startOpsJobs();
   startAntiFraud();
   startExpenseWatch();
+  loadCustomPlaces().catch((err) => console.error("custom places failed to load", err));
   runPricelistSeedOnce().catch((err) => console.error("Pricelist seed failed:", err.message));
 });
