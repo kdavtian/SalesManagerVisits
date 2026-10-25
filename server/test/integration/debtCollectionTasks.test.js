@@ -234,8 +234,8 @@ test("a stopped-ordering task closes when the customer orders through the workbo
 
 test("the task title is plain words with the days late and the date of the last payment", () => {
   assert.equal(
-    debtTaskTitle({ call: false, debt: 2420000, daysOpen: 94, lastPayment: "2026-10-23", promiseBroken: false }),
-    "Հավաքագրիր 2,420,000 դր պարտքը (94 օր ուշացում), վերջին վճարումը արվել է 23.10.2026-ին"
+    debtTaskTitle({ call: false, debt: 2420000, daysOpen: 94, termDays: 45, lastPayment: "2026-10-23", promiseBroken: false }),
+    "Հավաքագրիր 2,420,000 դր պարտքը (94 օրվա հաշիվ, ժամկետից 49 օր ուշացում), վերջին վճարումը արվել է 23.10.2026-ին"
   );
   assert.equal(debtTaskTitle({ call: true, debt: 500000, daysOpen: null, lastPayment: null, promiseBroken: true }), "Զանգահարիր՝ հիշեցրու 500,000 դր պարտքի մասին · խոստումը չի կատարվել");
 });

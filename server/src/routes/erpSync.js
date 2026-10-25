@@ -10,6 +10,7 @@ import { matchReturnsToErp } from "../orderReturns.js";
 import { recordSyncAttempt, latestSyncAttempts } from "../erpSyncAttempts.js";
 import { recordSyncRun, getSyncStatus, createSyncRequest, pickPendingRequest, finishRequest } from "../erpSyncStatus.js";
 import { runAutoTasks } from "../debtCollectionTasks.js";
+import { runAntiFraud } from "../antiFraud.js";
 import { refreshOrderRhythm } from "../orderRhythm.js";
 import { applyCashLedger } from "../cashflow.js";
 import { snapshotTierPrices, logTierPriceChanges } from "../priceSyncLog.js";
@@ -500,6 +501,8 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
   // New debt figures just landed: give reps a "collect the debt" task where due.
   if (process.env.NODE_ENV !== "test") {
     runAutoTasks(new Date(), { viaSync: true }).catch((err) => console.error("Automatic tasks failed:", err.message));
+    // New cashflow rows landed: payments that are still missing (or have just appeared) are re-checked at once.
+    runAntiFraud().catch((err) => console.error("Anti-fraud run failed:", err.message));
   }
 
   // Push the current product catalog and wholesale customers to Platform (the

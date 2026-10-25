@@ -54,6 +54,8 @@ export const NOTIFICATION_TYPES = [
   "accounting_update",
   // Vaghinak (the AI operations deputy director): reminders, questions and day wrap-ups (see vaghinak/engine.js).
   "vaghinak",
+  // Anti-fraud findings for management and the "hand over your cash" reminder for a rep (see antiFraud.js).
+  "fraud_alert",
 ];
 
 // Warehouse Manager: an order just entered their queue.

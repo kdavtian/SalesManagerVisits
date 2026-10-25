@@ -8,6 +8,7 @@ import { startBonusReconciliation } from "./bonusReconciliation.js";
 import { startBonusChallengeEngine } from "./bonusChallengeWorker.js";
 import { startVaghinak } from "./vaghinak/engine.js";
 import { startOpsJobs } from "./opsJobs.js";
+import { startAntiFraud } from "./antiFraud.js";
 import { runPricelistSeedOnce } from "./pricelistSeed.js";
 
 const port = process.env.PORT || 3000;
@@ -22,5 +23,6 @@ app.listen(port, () => {
   startBonusChallengeEngine();
   startVaghinak();
   startOpsJobs();
+  startAntiFraud();
   runPricelistSeedOnce().catch((err) => console.error("Pricelist seed failed:", err.message));
 });

@@ -1222,7 +1222,7 @@ async function renderRoute() {
   } else if (path === "#/ask-kad") {
     (await import("./views/askKad.js")).renderAskKad(app, navigate);
   } else if (path === "#/vaghinak") {
-    (await import("./views/vaghinak.js")).renderVaghinak(app, navigate);
+    (await import("./views/vaghinak.js")).renderVaghinak(app, navigate, query);
   } else if (path === "#/team-progress") {
     (await import("./views/repProgress.js")).renderRepProgress(app, navigate);
   } else if (path === "#/team-performance" || /^#\/team-performance\/(planning|approvals)$/.test(path)) {

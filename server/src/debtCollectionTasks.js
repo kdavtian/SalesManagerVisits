@@ -69,17 +69,23 @@ async function martinId(db) {
 }
 
 const amd = (n) => `${Math.round(Number(n)).toLocaleString("en-US")} դր.`;
-// The task title in plain words (owner, 2026-10-24): "Հավաքագրիր 2,420,000 դր պարտքը (94 օր ուշացում), վերջին վճարումը արվել է 23.10.2026-ին"
+// The task title in plain words (owner, 2026-10-24/25): the rep sees BOTH facts -- how old the oldest unpaid invoice is, and how many days the
+// customer is past the credit term -- so they can talk to the customer properly:
+// "Հավաքագրիր 2,420,000 դր պարտքը (94 օրվա հաշիվ, ժամկետից 49 օր ուշացում), վերջին վճարումը արվել է 23.10.2026-ին"
 const amdPlain = (n) => `${Math.round(Number(n)).toLocaleString("en-US")} դր`;
 const dmy = (d) => {
   const [y, m, day] = String(d).slice(0, 10).split("-");
   return `${day}.${m}.${y}`;
 };
-export function debtTaskTitle({ call, debt, daysOpen, lastPayment, promiseBroken }) {
-  const late = daysOpen == null ? "" : ` (${daysOpen} օր ուշացում)`;
+export function debtTaskTitle({ call, debt, daysOpen, termDays = 45, lastPayment, promiseBroken }) {
+  let age = "";
+  if (daysOpen != null) {
+    const late = daysOpen - termDays;
+    age = late > 0 ? ` (${daysOpen} օրվա հաշիվ, ժամկետից ${late} օր ուշացում)` : ` (${daysOpen} օրվա հաշիվ)`;
+  }
   const paid = lastPayment ? `, վերջին վճարումը արվել է ${dmy(lastPayment)}-ին` : "";
   const head = call ? `Զանգահարիր՝ հիշեցրու ${amdPlain(debt)} պարտքի մասին` : `Հավաքագրիր ${amdPlain(debt)} պարտքը`;
-  return `${head}${late}${paid}${promiseBroken ? " · խոստումը չի կատարվել" : ""}`;
+  return `${head}${age}${paid}${promiseBroken ? " · խոստումը չի կատարվել" : ""}`;
 }
 
 // A task created for a rep, for the single notification a run sends per rep.
@@ -195,7 +201,7 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
   const { rows: found } = await pool.query(
     `SELECT c.id AS customer_id, c.name AS customer_name, c.sales_channel,
             CASE WHEN u.role IN ('sales_manager', 'sales_director') AND u.status = 'active' THEN u.id END AS rep_id,
-            fc.force_collect, erp.debt_amd, to_char(erp.last_payment_date, 'YYYY-MM-DD') AS last_payment_date, COALESCE(${debtAgeDaysSql("$2::date")}, erp.days_since_payment) AS days_open,
+            fc.force_collect, erp.debt_amd, COALESCE(c.credit_term_days, 45) AS term_days, to_char(erp.last_payment_date, 'YYYY-MM-DD') AS last_payment_date, COALESCE(${debtAgeDaysSql("$2::date")}, erp.days_since_payment) AS days_open,
             (SELECT to_char(t.promise_date, 'YYYY-MM-DD') FROM tasks t WHERE t.customer_id = c.id AND t.auto_kind = 'debt_collection' AND t.outcome = 'promised'
              ORDER BY t.created_at DESC LIMIT 1) AS last_promise_date
      FROM customers c
@@ -228,7 +234,7 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
     const promiseBroken = Boolean(cand.last_promise_date) && cand.last_promise_date < today;
     // No checklist item: ticking it would close the task without recording the outcome.
     const call = isCallChannel(cand.sales_channel);
-    const title = debtTaskTitle({ call, debt: cand.debt_amd, daysOpen: cand.days_open, lastPayment: cand.last_payment_date, promiseBroken });
+    const title = debtTaskTitle({ call, debt: cand.debt_amd, daysOpen: cand.days_open, termDays: cand.term_days, lastPayment: cand.last_payment_date, promiseBroken });
     const taskId = await insertAutoTask("debt_collection", {
       title, creatorId, repId: cand.rep_id, customerId: cand.customer_id, today, itemText: null, taskKind: call ? "call_customer" : null,
     });
