@@ -11,22 +11,13 @@ import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments, PAYMENT_NOTIFY_ROLES } from "../roles.js";
 import { notifyUser } from "../notifications.js";
+import { EXCEL_GRACE_DAYS, IN_EXCEL_SQL, DAYS_OLD_SQL } from "../paymentExcelMatch.js";
 
 export const paymentsRouter = Router();
 paymentsRouter.use(requireAuth);
 
 const PAGE_SIZE = 30;
 
-// "Is this payment in the Excel?" -- the workbook's cashflow has a row for the same customer, the same amount, within 5 days of the payment
-// (the same window as the "unrecorded" figure on Debt balances). A payment younger than 3 days is not called missing yet.
-// Payments the sync approved from the workbook are in it by definition. Shown on the list so nobody has to compare by eye.
-const EXCEL_GRACE_DAYS = 3;
-const EXCEL_MATCH_DAYS = 5;
-const PAYMENT_DAY = "((p.payment_date AT TIME ZONE 'Asia/Yerevan')::date)";
-const IN_EXCEL_SQL = `(p.approved_from_erp OR (p.erp_customer_id_snapshot IS NOT NULL AND EXISTS (
-    SELECT 1 FROM erp_cashflow_lines cf WHERE cf.erp_customer_id = p.erp_customer_id_snapshot AND cf.amount_amd > 0
-      AND ROUND(cf.amount_amd) = ROUND(p.amount_amd) AND cf.cashflow_date BETWEEN ${PAYMENT_DAY} - ${EXCEL_MATCH_DAYS} AND ${PAYMENT_DAY} + ${EXCEL_MATCH_DAYS})))`;
-const DAYS_OLD_SQL = `((now() AT TIME ZONE 'Asia/Yerevan')::date - ${PAYMENT_DAY})`;
 const MAX_AMOUNT = 100000000000; // matches the DB CHECK constraint
 
 // The Add Payment form's manager picker (for roles that can submit on

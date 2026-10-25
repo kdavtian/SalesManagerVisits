@@ -5,11 +5,12 @@ import { api } from "../api.js";
 import { state } from "../state.js";
 import { icons } from "../icons.js";
 import { t } from "../i18n.js";
-import { escapeHtml, formatDateTime, formatDuration, formatRelative, openInfoPopup, showToast } from "../util.js";
+import { escapeHtml, formatAmd, formatDateTime, formatDuration, formatRelative, openInfoPopup, showToast } from "../util.js";
 import { answerFormHtml, wireAnswerForm, setVaghinakBadge } from "../vaghinak.js";
 
 const MANAGEMENT = new Set(["admin", "ceo", "operations_director", "sales_director", "accountant"]);
 const SETTINGS_ROLES = new Set(["admin", "ceo", "operations_director"]);
+const FRAUD_ROLES = new Set(["admin", "ceo", "operations_director"]); // mirrors server/src/antiFraud.js
 
 const clock = (min) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 
@@ -34,14 +35,14 @@ const SETTING_FIELDS = [
 
 // Operations control (cash, margin, stock, customers, order flow, data): the roles that had its Home tile.
 const OPS_ROLES = new Set(["admin", "ceo", "operations_director", "sales_director", "accountant"]);
-const TAB_ICON = { messages: "vaghinak", pulse: "team", qa: "info", feed: "history", autotasks: "tasks", settings: "settings" };
+const TAB_ICON = { messages: "vaghinak", pulse: "team", qa: "info", feed: "history", autotasks: "tasks", antifraud: "shield", settings: "settings" };
 const OPS_QUICK = [["cash", "wallet"], ["margin", "trendUp"], ["stock", "box"], ["customers", "customers"], ["flow", "clock"], ["data", "dashboard"]];
 
-export async function renderVaghinak(root, navigate) {
+export async function renderVaghinak(root, navigate, query) {
   const isManagement = MANAGEMENT.has(state.user.role);
   const canSettings = SETTINGS_ROLES.has(state.user.role);
-  const tabs = [["messages", "vg_tab_messages"], ...(isManagement ? [["pulse", "vg_tab_pulse"], ["qa", "vg_tab_qa"], ["feed", "vg_tab_feed"], ["autotasks", "vg_tab_autotasks"]] : []), ...(canSettings ? [["settings", "vg_tab_settings"]] : [])];
-  let tab = "messages";
+  const tabs = [["messages", "vg_tab_messages"], ...(isManagement ? [["pulse", "vg_tab_pulse"], ["qa", "vg_tab_qa"], ["feed", "vg_tab_feed"], ["autotasks", "vg_tab_autotasks"], ...(FRAUD_ROLES.has(state.user.role) ? [["antifraud", "vg_tab_antifraud"]] : [])] : []), ...(canSettings ? [["settings", "vg_tab_settings"]] : [])];
+  let tab = tabs.some(([k]) => k === query?.get("tab")) ? query.get("tab") : "messages";
 
   root.innerHTML = `
     <div class="detail-view vg-view">
@@ -129,6 +130,7 @@ export async function renderVaghinak(root, navigate) {
       if (tab === "qa") return await paintQa(mine);
       if (tab === "feed") return await paintFeed(mine);
       if (tab === "autotasks") return await paintAutoTasks(mine);
+      if (tab === "antifraud") return await paintAntiFraud(mine);
       if (tab === "settings") return await paintSettings(mine);
     } catch (err) {
       if (mine === token) showError(err);
@@ -292,6 +294,132 @@ export async function renderVaghinak(root, navigate) {
         ${kinds.map(([k, label]) => `<div class="health-row"><span class="health-label">${t(label)}</span><span class="health-value">${t("vg_at_created_row").replace("{last}", when(d.tasks[k]?.last_created)).replace("{w}", d.tasks[k]?.last_7_days ?? 0).replace("{m}", d.tasks[k]?.last_30_days ?? 0)}</span></div>`).join("")}
       </div>`;
     body.querySelector("#vg-at-hint").addEventListener("click", () => openInfoPopup(`<p>${t("vg_at_hint").replace("{n}", d.cooldown_days).replace("{m}", d.max_per_rep)}</p>`));
+  }
+
+  // ---- anti-fraud (admin / CEO / operations director) ----
+  const FRAUD_KINDS = ["customer_dispute", "spot_check_mismatch", "cash_gap", "cash_held_amount", "cash_held_long", "payment_not_in_excel", "burst", "repeated_amount", "late_recorded"];
+  const FRAUD_SETTING_KEYS = ["unmatchedDays", "custodyDays", "custodyAmountAmd", "lateRecordedDays", "burstCount", "burstMinutes", "repeatedAmountCount", "gapMinExpectedAmd", "gapPercentOfPeers", "spotChecksPerWeek"];
+  const fill = (text, map) => Object.entries(map).reduce((out, [k, v]) => out.replaceAll(`{${k}}`, v ?? ""), text);
+  function fraudLine(a) {
+    const d = a.details ?? {};
+    const amount = a.amount_amd != null ? formatAmd(Number(a.amount_amd)) : "";
+    const customer = escapeHtml(a.customer_name || d.customer || "");
+    return fill(t(`fraud_d_${a.kind}`), {
+      customer, amount, days: d.days ?? d.late_days, count: d.count, minutes: d.minutes, day: d.day,
+      percent: d.percent, peers: d.peers_percent, total: d.total != null ? formatAmd(Number(d.total)) : "",
+      note: d.note ? ` · ${escapeHtml(d.note)}` : "", repeat: d.amount != null ? formatAmd(Number(d.amount)) : "",
+    });
+  }
+  const levelClass = { high: "badge-danger", medium: "badge-warning", low: "badge-success" };
+  async function paintAntiFraud(mine) {
+    const d = await api.antiFraud();
+    if (mine !== token) return;
+    // only reps with something on them are listed; the rest is one quiet line
+    const flagged = d.reps.filter((r) => r.score > 0);
+    const riskRows =
+      flagged
+        .map(
+          (r) => `<div class="health-row"><span class="health-label">${escapeHtml(r.name)}</span><span class="health-value"><span class="badge ${levelClass[r.level]}">${t("fraud_level_" + r.level)} · ${r.score}</span>${r.open ? ` <span class="muted">${r.open}</span>` : ""}</span></div>`
+        )
+        .join("") + (d.reps.length > flagged.length ? `<p class="muted health-note">${t("fraud_clean_reps").replace("{n}", d.reps.length - flagged.length)}</p>` : "");
+    const alertCards = d.alerts
+      .map(
+        (a) => `<div class="card vg-msg" data-alert="${a.id}">
+          <div class="vg-rep-top"><strong>${t("fraud_k_" + a.kind)}</strong><span class="badge ${a.severity >= 3 ? "badge-danger" : a.severity === 2 ? "badge-warning" : "badge-neutral"}">${"!".repeat(a.severity)}</span></div>
+          <div class="vg-msg-body">${fraudLine(a)}</div>
+          <div class="muted vg-msg-meta">${a.rep_name ? escapeHtml(a.rep_name) + " · " : ""}${escapeHtml(formatRelative(a.created_at))}</div>
+          <div class="vg-react"><button type="button" class="vg-react-btn" data-verdict="confirmed">${t("fraud_confirmed")}</button><button type="button" class="vg-react-btn" data-verdict="false_alarm">${t("fraud_false_alarm")}</button></div>
+        </div>`
+      )
+      .join("");
+    const checkStatus = { todo: "badge-warning", confirmed: "badge-success", mismatch: "badge-danger", no_answer: "badge-neutral" };
+    const checkCards = d.spot_checks
+      .map(
+        (c) => `<div class="card vg-msg" data-check="${c.id}">
+          <div class="vg-rep-top"><strong>${escapeHtml(c.customer_name || "")}</strong><span class="badge ${checkStatus[c.status]}">${t("fraud_check_" + c.status)}</span></div>
+          <div class="vg-msg-body">${formatAmd(Number(c.amount_amd))} · ${escapeHtml(String(c.payment_date).slice(0, 10))}${c.rep_name ? ` · ${escapeHtml(c.rep_name)}` : ""}</div>
+          ${c.customer_phone ? `<div><a class="btn btn-sm" href="tel:${escapeHtml(c.customer_phone)}">${escapeHtml(c.customer_phone)}</a></div>` : ""}
+          ${c.note ? `<div class="muted vg-msg-meta">${escapeHtml(c.note)}</div>` : ""}
+          ${c.status === "todo" ? `<div class="vg-react"><button type="button" class="vg-react-btn" data-check-status="confirmed">${t("fraud_check_ok")}</button><button type="button" class="vg-react-btn" data-check-status="mismatch">${t("fraud_check_bad")}</button><button type="button" class="vg-react-btn" data-check-status="no_answer">${t("fraud_check_none")}</button></div>` : ""}
+        </div>`
+      )
+      .join("");
+    const settingsHtml = d.can_edit
+      ? `<h2 class="section-title">${t("fraud_limits")}</h2>
+         <form id="fraud-settings"><div class="card vg-fields">${FRAUD_SETTING_KEYS.map((k) => `<label class="vg-field"><span>${t("fraud_set_" + k)}</span><input type="number" inputmode="numeric" min="0" name="${k}" value="${d.settings[k]}" /></label>`).join("")}</div>
+         <button type="submit" class="btn btn-primary btn-block" style="margin-top:10px;">${t("save")}</button></form>`
+      : "";
+    body.innerHTML = `
+      <div class="card health-card">
+        <h3 class="health-title">${t("fraud_risk_title")}<button type="button" class="settings-hint-icon" id="fraud-hint" aria-label="${t("more_info")}">!</button></h3>
+        ${riskRows || `<p class="muted">${t("vg_empty")}</p>`}
+        <button type="button" class="btn btn-sm" id="fraud-run">${t("fraud_run_now")}</button>
+      </div>
+      <h2 class="section-title">${t("fraud_open")}</h2>
+      ${alertCards ? `<div class="card-list vg-list">${alertCards}</div>` : `<p class="empty-state">${t("fraud_none")}</p>`}
+      <h2 class="section-title">${t("fraud_checks")}</h2>
+      ${checkCards ? `<div class="card-list vg-list">${checkCards}</div>` : `<p class="empty-state">${t("fraud_checks_none")}</p>`}
+      ${settingsHtml}`;
+    body.querySelector("#fraud-hint").addEventListener("click", () =>
+      openInfoPopup(
+        `<p>${t("fraud_hint")}</p><p class="muted">${FRAUD_KINDS.map((k) => `${t("fraud_k_" + k)}: ${Math.round(d.weights[k].weight)} (${d.weights[k].confirmed} ✓ / ${d.weights[k].false_alarms} ✗)`).join("<br>")}</p>`
+      )
+    );
+    body.querySelector("#fraud-run").addEventListener("click", async (e) => {
+      e.currentTarget.disabled = true;
+      try {
+        await api.antiFraudRunNow();
+        if (mine === token) paintAntiFraud(++token);
+      } catch (err) {
+        showToast(err.message);
+        e.currentTarget.disabled = false;
+      }
+    });
+    body.querySelectorAll("[data-verdict]").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        const id = btn.closest("[data-alert]").dataset.alert;
+        btn.disabled = true;
+        try {
+          await api.antiFraudVerdict(id, btn.dataset.verdict);
+          paintAntiFraud(++token);
+        } catch (err) {
+          showToast(err.message);
+          btn.disabled = false;
+        }
+      })
+    );
+    const sendCheck = async (id, status, note, btn) => {
+      btn.disabled = true;
+      try {
+        await api.antiFraudSpotCheck(id, status, note);
+        paintAntiFraud(++token);
+      } catch (err) {
+        showToast(err.message);
+        btn.disabled = false;
+      }
+    };
+    body.querySelectorAll("[data-check-status]").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        const card = btn.closest("[data-check]");
+        const id = card.dataset.check;
+        if (btn.dataset.checkStatus !== "mismatch") return sendCheck(id, btn.dataset.checkStatus, "", btn);
+        // a mismatch needs a few words: an inline field instead of a browser dialog
+        const row = btn.closest(".vg-react");
+        row.innerHTML = `<input type="text" class="fraud-note" maxlength="300" placeholder="${t("fraud_check_note")}" aria-label="${t("fraud_check_note")}" /><button type="button" class="vg-react-btn" data-send>${t("save")}</button>`;
+        row.querySelector("[data-send]").addEventListener("click", (e) => sendCheck(id, "mismatch", row.querySelector(".fraud-note").value.trim(), e.currentTarget));
+        row.querySelector(".fraud-note").focus();
+      })
+    );
+    body.querySelector("#fraud-settings")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const patch = Object.fromEntries(new FormData(e.currentTarget).entries());
+      try {
+        await api.antiFraudSettings(patch);
+        showToast(t("saved"));
+      } catch (err) {
+        showToast(err.message);
+      }
+    });
   }
 
   // ---- settings (admin / CEO / operations director) ----

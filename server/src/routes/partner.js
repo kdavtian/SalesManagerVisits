@@ -10,6 +10,7 @@
 //   POST /preview   the price of a basket (campaigns, app discount, delivery promise) without placing it
 //   POST /orders    place an app order (same rules as POST /api/orders for a linked account); with replaces_order_id it CHANGES a still-unconfirmed order
 //   POST /orders/:id/cancel   cancel an app order that KAD Motors has not confirmed yet
+//   POST /payments/dispute    "I don't see my payments": tells management (not the rep) and returns the office number to call
 import path from "node:path";
 import { Router } from "express";
 import { uploadDirPath } from "../upload.js";
@@ -33,6 +34,9 @@ import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { notifyUser } from "../notifications.js";
 import { ORDER_NOTIFY_ROLES } from "../notificationPreferences.js";
 import { bullets } from "../utils/bullets.js";
+import { recordCustomerDispute } from "../antiFraud.js";
+import { normalizePhoneForStorage } from "../phoneFormat.js";
+import { OFFICE_PHONE } from "../pricelistPdf.js";
 
 export const partnerRouter = Router();
 partnerRouter.use(requireAuth);
@@ -42,6 +46,8 @@ partnerRouter.use(async (req, res, next) => {
   req.partner = link;
   next();
 });
+
+const officePhone = () => normalizePhoneForStorage(OFFICE_PHONE);
 
 async function loadCustomer(customerId) {
   const { rows } = await pool.query("SELECT id, name, erp_customer_id, customer_tier, credit_limit_amd, credit_term_days FROM customers WHERE id = $1", [customerId]);
@@ -248,7 +254,7 @@ partnerRouter.get("/payments", async (req, res) => {
   const customer = await loadCustomer(req.partner.customerId);
   const erpId = customer.erp_customer_id;
   const { limit, offset } = pageOf(req.query, 50, 500);
-  if (!erpId) return res.json({ payments: [], total: 0, total_amount: 0, has_more: false });
+  if (!erpId) return res.json({ payments: [], total: 0, total_amount: 0, has_more: false, office_phone: officePhone() });
   const [{ rows: payments }, { rows: sum }] = await Promise.all([
     pool.query(
       `SELECT to_char(cashflow_date, 'YYYY-MM-DD') AS date, amount_amd::float AS amount
@@ -258,7 +264,14 @@ partnerRouter.get("/payments", async (req, res) => {
     ),
     pool.query("SELECT count(*)::int AS n, COALESCE(sum(amount_amd), 0)::float AS total FROM erp_cashflow_lines WHERE erp_customer_id = $1 AND amount_amd > 0", [erpId]),
   ]);
-  res.json({ payments, total: sum[0].n, total_amount: sum[0].total, has_more: offset + payments.length < sum[0].n });
+  res.json({ payments, total: sum[0].n, total_amount: sum[0].total, has_more: offset + payments.length < sum[0].n, office_phone: officePhone() });
+});
+
+// "I don't see my payments": the customer says the payments listed here are not what they paid. Management is told (never the rep) and the app
+// gives them the office number to call right away (owner, 2026-10-25). One finding per customer per day.
+partnerRouter.post("/payments/dispute", async (req, res) => {
+  const result = await recordCustomerDispute({ customerId: req.partner.customerId, note: req.body?.note });
+  res.json({ ok: true, new: Boolean(result?.id), office_phone: officePhone() });
 });
 
 partnerRouter.get("/orders/:id", async (req, res) => {

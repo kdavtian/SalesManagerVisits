@@ -704,3 +704,24 @@ test("ALL orders and ALL payments (owner, 2026-10-23): paged, newest first, all 
     await pool.query("DELETE FROM erp_cashflow_lines WHERE erp_customer_id = $1", [shop.erp_customer_id]);
   }
 });
+
+test("POST /api/partner/payments/dispute: management is told (not the rep) and the office number comes back", async () => {
+  await pool.query("DELETE FROM notifications WHERE user_id = ANY($1)", [[admin.id, rep.id]]);
+  const pay = await apiRequest("/api/partner/payments", { cookie: partnerCookie });
+  assert.equal(pay.status, 200);
+  assert.match(pay.data.office_phone, /^\+374\d{8}$/);
+  const r = await apiRequest("/api/partner/payments/dispute", { method: "POST", cookie: partnerCookie, body: { note: "I paid 200,000 on Monday" } });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.new, true);
+  assert.match(r.data.office_phone, /^\+374\d{8}$/);
+  const alert = (await pool.query("SELECT * FROM fraud_alerts WHERE customer_id = $1 AND kind = 'customer_dispute'", [shop.id])).rows[0];
+  assert.equal(alert.severity, 3);
+  assert.equal(alert.rep_id, rep.id);
+  assert.equal((await pool.query("SELECT 1 FROM notifications WHERE user_id = $1 AND type = 'fraud_alert'", [admin.id])).rows.length, 1);
+  assert.equal((await pool.query("SELECT 1 FROM notifications WHERE user_id = $1 AND type = 'fraud_alert'", [rep.id])).rows.length, 0);
+  // the same day again: no second finding, the number still comes back
+  const again = await apiRequest("/api/partner/payments/dispute", { method: "POST", cookie: partnerCookie, body: {} });
+  assert.equal(again.data.new, false);
+  assert.equal((await apiRequest("/api/partner/payments/dispute", { method: "POST", cookie: repCookie, body: {} })).status, 403);
+  await pool.query("DELETE FROM fraud_alerts WHERE customer_id = $1", [shop.id]);
+});
