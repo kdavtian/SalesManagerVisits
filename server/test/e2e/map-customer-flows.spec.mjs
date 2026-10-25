@@ -36,8 +36,8 @@ test.describe("Map: add and relocate a customer", () => {
 
     await page.locator("#location-panel-confirm-btn").click();
     await page.locator('#new-customer-form input[name="name"]').fill("E2E Brand New Shop");
-    await page.locator('#new-customer-form .pl-level-chip[data-level="3"]').click();
-    await page.locator('#new-customer-form .pl-reason-chip[data-reason="active_interest"]').click();
+    // no potential level asked here: it is filled in at the visit (owner, 2026-10-25)
+    await expect(page.locator("#new-customer-form .pl-level-chip")).toHaveCount(0);
     const [response] = await Promise.all([
       page.waitForResponse((res) => res.url().endsWith("/api/customers") && res.request().method() === "POST"),
       page.locator('#new-customer-form button[type="submit"]').click(),

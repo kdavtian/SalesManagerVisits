@@ -10,7 +10,9 @@ export const POTENTIAL_LEVELS = [1, 2, 3, 4];
 // A new classification starts on "Real potential": most prospects are, so the common case needs one tap less (owner, 2026-10-24).
 export const DEFAULT_POTENTIAL_LEVEL = 3;
 const NEGATIVE = ["counterfeit", "own_import", "competitor_loyal", "price_mismatch", "small_volume", "not_interested", "no_decision_maker", "payment_issue", "no_demand_now"];
-const POSITIVE = ["high_potential", "active_interest", "negotiating", "ready_first_order"];
+const POSITIVE = ["high_potential", "active_interest", "negotiating", "ready_first_order", "gave_price_list", "introduced_products"];
+// What the rep did at the visit (owner, 2026-10-25): always one tap away from level 2 up, not hidden behind "More reasons".
+const VISIT_ACTIONS = ["gave_price_list", "introduced_products"];
 const MANAGEMENT = ["admin", "ceo", "operations_director", "sales_director"];
 
 // Mirrors canManagePotentialAll / the assigned-rep rule in the server's customers.js -- UI gate only.
@@ -131,7 +133,7 @@ export function wirePotentialForm(root, initial = {}) {
   // The four reasons that usually fit the level + "Other" are shown; the rest sit behind "More reasons" (a reason already picked is never hidden).
   const paintReasons = () => {
     const order = reasonOrder(level);
-    const common = new Set([...order.filter((r) => r !== "other").slice(0, 4), "other"]);
+    const common = new Set([...order.filter((r) => r !== "other" && !VISIT_ACTIONS.includes(r)).slice(0, 4), "other", ...(level >= 2 ? VISIT_ACTIONS : [])]);
     const visible = showAll ? order : order.filter((r) => common.has(r) || reasons.has(r));
     // A tidy checklist (one reason per line, a check box on the left) instead of a wall of chips of every width (owner, 2026-10-24).
     const row = (r) => `<button type="button" class="pl-reason-chip pl-reason-row ${reasons.has(r) ? "pl-reason-on" : ""}" data-reason="${r}" aria-pressed="${reasons.has(r)}"><span class="pl-reason-box" aria-hidden="true"></span><span class="pl-reason-text">${escapeHtml(t(`pl_reason_${r}`))}</span></button>`;

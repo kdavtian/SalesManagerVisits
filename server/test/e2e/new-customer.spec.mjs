@@ -31,9 +31,8 @@ test.describe("New customer creation", () => {
 
     const name = `E2E New Customer ${Date.now()}`;
     await form.locator('input[name="name"]').fill(name);
-    // a potential customer needs its level + reason (owner, 2026-10-24)
-    await form.locator('.pl-level-chip[data-level="3"]').click();
-    await form.locator('.pl-reason-chip[data-reason="active_interest"]').click();
+    // no potential level or reason is asked here: adding a customer stays fast, the level is set at the visit (owner, 2026-10-25)
+    await expect(form.locator(".pl-level-chip")).toHaveCount(0);
     // Sales channel is deliberately hidden for a sales_manager (see
     // fieldVisitEnhancements.js's enhanceNewCustomerForm) -- it's
     // auto-guessed from the manager's own profile and the server
@@ -53,8 +52,8 @@ test.describe("New customer creation", () => {
     // wider viewports (desktop's list+map split) -- either match proves it.
     await expect(page.getByText(name).first()).toBeVisible({ timeout: 10000 });
   });
-  // Owner, 2026-10-24: four levels only (no "Very high"), "Real potential" preselected, ERP ID mandatory for Bronze / Silver / Gold.
-  test("level chips default to Real potential; Gold needs the ERP customer ID", async ({ page, fixtures }) => {
+  // Owner, 2026-10-24: ERP ID mandatory for Bronze / Silver / Gold (the potential level is no longer asked here, 2026-10-25).
+  test("Gold needs the ERP customer ID", async ({ page, fixtures }) => {
     const manager = await fixtures.createUser("sales_manager");
     await loginViaUi(page, manager.email);
     await page.goto("/#/map");
@@ -65,10 +64,6 @@ test.describe("New customer creation", () => {
     await page.locator("#location-panel-confirm-btn").click();
     const form = page.locator("#new-customer-form");
     await expect(form).toBeVisible();
-
-    await expect(form.locator(".pl-level-chip")).toHaveCount(4);
-    await expect(form.locator('.pl-level-chip[data-level="5"]')).toHaveCount(0);
-    await expect(form.locator('.pl-level-chip[data-level="3"]')).toHaveAttribute("aria-checked", "true");
 
     await form.locator('input[name="name"]').fill(`E2E Gold Needs ERP ${Date.now()}`);
     await form.locator('.tier-btn[data-tier="gold"]').click();

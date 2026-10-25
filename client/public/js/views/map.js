@@ -3,7 +3,6 @@ import { reorderChipHtml } from "../reorder.js";
 import { showToast, cssColor, activateCombobox, activateDialog, openInfoPopup, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, rememberPosition, getLastKnownPosition, tierSelectorHtml, TIER_OPTIONS, isNeverVisited, isOverdueVisit, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, regionLabelHy, subregionLabelHy, channelDisplayLabel, parseDateOnly } from "../util.js";
 import { wirePlaceInput, placeNoticeText } from "../places.js";
 import { t } from "../i18n.js";
-import { potentialFormHtml, wirePotentialForm } from "../potential.js";
 import { buildCustomerTree, renderTriStateTree, buildDirectionManagerTree, NO_GROUP_KEY } from "../regionTree.js";
 import { getTheme } from "../theme.js";
 import { icons } from "../icons.js";
@@ -3491,7 +3490,6 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         <h2>${t("new_customer")}</h2>
         <form id="new-customer-form">
           ${tierSelectorHtml("potential")}
-          <div id="new-customer-potential">${potentialFormHtml()}</div>
           ${categorySelectorHtml(CATEGORY_LIST[0].value)}
           <label>${t("name")}<input name="name" required /></label>
           <label>${t("phone")}<input name="phone" type="tel" value="+374 " /></label>
@@ -3536,13 +3534,11 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     `;
     document.body.appendChild(overlay);
     activateDialog(overlay);
-    // A potential customer must be given its level + reason right here (Potential level -> Reason -> Save).
-    const potentialWrap = overlay.querySelector("#new-customer-potential");
-    const potentialPicker = wirePotentialForm(potentialWrap);
+    // The potential level is NOT asked here (owner, 2026-10-25): adding a customer must stay as fast as possible; it is filled in at the visit
+    // (the check-in screen and the customer card ask for it).
     // Bronze / Silver / Gold customers exist in Excel: their ERP customer ID is mandatory (owner, 2026-10-24).
     const needsErpId = (tier) => ["bronze", "silver", "gold"].includes(tier);
     activateTierSelector(overlay, (tier) => {
-      potentialWrap.hidden = tier !== "potential";
       overlay.querySelector("#new-customer-erp-req").hidden = !needsErpId(tier);
       overlay.querySelector("#new-customer-erp-label").classList.remove("field-invalid");
       // the next thing a Bronze / Silver / Gold customer needs is its ERP ID: bring the field into view if it is below the fold
@@ -3794,16 +3790,6 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         erpInput.focus();
         return;
       }
-      const wantsPotential = (data.get("customer_tier") || "potential") === "potential" && !potentialWrap.hidden;
-      if (wantsPotential) {
-        const problem = potentialPicker.validate();
-        if (problem) {
-          errorEl.textContent = problem;
-          errorEl.hidden = false;
-          potentialWrap.scrollIntoView({ block: "center", behavior: "smooth" });
-          return;
-        }
-      }
       const submitBtn = form.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
       submitBtn.textContent = t("saving");
@@ -3820,7 +3806,6 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           tin: data.get("tin") || null,
           erp_customer_id: data.get("erp_customer_id") || null,
           customer_tier: data.get("customer_tier") || null,
-          ...(wantsPotential ? (() => { const p = potentialPicker.value(); return { potential_level: p.level, potential_reasons: p.reasons, potential_reason_other: p.reason_other || null }; })() : {}),
           region: data.get("region") || null,
           subregion: data.get("subregion") || null,
           sales_channel: data.get("sales_channel") || null,

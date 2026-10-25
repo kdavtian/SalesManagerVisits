@@ -4,7 +4,7 @@ import { t } from "./i18n.js";
 import { escapeHtml, activateDialog } from "./util.js";
 import { POTENTIAL_LEVELS } from "./potential.js";
 
-const REASONS = ["counterfeit", "own_import", "competitor_loyal", "price_mismatch", "small_volume", "not_interested", "no_decision_maker", "payment_issue", "no_demand_now", "high_potential", "active_interest", "negotiating", "ready_first_order", "other"];
+const REASONS = ["counterfeit", "own_import", "competitor_loyal", "price_mismatch", "small_volume", "not_interested", "no_decision_maker", "payment_issue", "no_demand_now", "high_potential", "active_interest", "negotiating", "ready_first_order", "gave_price_list", "introduced_products", "other"];
 const LAST_VISIT = ["7", "14", "30", "never"];
 const FOLLOWUP = ["due", "week", "none"];
 const VOLUME = ["50", "200", "500"];
