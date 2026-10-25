@@ -266,6 +266,7 @@ export const api = {
   vaghinakMute: (id, muted) => json(`/vaghinak/people/${id}/mute`, "PUT", { muted }),
   vaghinakRunNow: () => json("/vaghinak/run-now", "POST", {}),
   dashboardSummary: () => request("/dashboard/summary"),
+  dashboardKpis: () => request("/dashboard/kpis"),
   dashboardTrends: () => request("/dashboard/trends"),
   getRepProgress: (period) => request(`/dashboard/rep-progress?period=${encodeURIComponent(period)}`),
   closeOutMonth: (month) => json("/dashboard/points/close-out", "POST", { month }),

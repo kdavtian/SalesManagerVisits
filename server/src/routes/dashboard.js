@@ -8,6 +8,7 @@ import { batchExpandAreas } from "./visitPlans.js";
 import { repVisitSql } from "../visitCount.js";
 import { dropRecentlyVisited } from "../utils/planSkipRecent.js";
 import { computeRepProgress, PERIODS } from "../repProgress.js";
+import { KPI_ROLES, kpisCached } from "../dashboardKpis.js";
 
 export const dashboardRouter = Router();
 
@@ -100,6 +101,12 @@ dashboardRouter.get("/rep-progress", async (req, res) => {
   const period = req.query.period ?? "week";
   if (!PERIODS.includes(period)) return res.status(400).json({ error: "period must be one of " + PERIODS.join(", ") });
   res.json(await computeRepProgress(period));
+});
+
+// The desktop Home's KPI tiles (management roles only; see dashboardKpis.js).
+dashboardRouter.get("/kpis", async (req, res) => {
+  if (!KPI_ROLES.includes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  res.json(await kpisCached({ force: req.query.fresh === "1" }));
 });
 
 dashboardRouter.get("/summary", async (req, res) => {

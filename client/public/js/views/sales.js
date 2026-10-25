@@ -5,11 +5,12 @@
 // sales.js: no write-back, ERP/Excel stays the source of truth, same
 // contract as Debt Balances.
 import { api } from "../api.js";
-import { escapeHtml, saveBlob, openInfoPopup, formatAmd, formatLiters, channelDisplayLabel, activateDialog, syncBadgeHtml, parseDateOnly, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, erpLineDiscountRowHtml, monthShort, labelColon } from "../util.js";
+import { escapeHtml, saveBlob, openInfoPopup, formatAmd, formatLiters, channelDisplayLabel, activateDialog, syncBadgeHtml, parseDateOnly, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, erpLineDiscountRowHtml, monthShort, labelColon, formatDateDMY } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { seesFinancialExports } from "../state.js";
 import { icons } from "../icons.js";
 import { unpaidRowClass, dueChipHtml } from "../debtChip.js";
+import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
 
 // Local calendar-date components, not toISOString() -- that converts to
 // UTC first, so a local midnight east of UTC (Yerevan is UTC+4) lands on
@@ -214,6 +215,90 @@ async function renderSalesTab(root, navigate) {
       </button>`;
   }
 
+  // Desktop (owner, 2026-10-25: Sales as a table, like Debt balances): one row per order with the facts side by side; a heading click sorts the
+  // loaded rows, the day groups stay while the table is in date order.
+  const deskQuery = window.matchMedia("(min-width: 1024px)");
+  let deskSort = "date";
+  let deskReversed = false;
+  const DESK_CELLS = [
+    { items: [{ label: t("desk_col_date"), key: "date" }] },
+    { items: [{ label: t("desk_col_customer"), key: "customer" }] },
+    { items: [{ label: t("desk_col_order"), key: "order" }] },
+    { items: [{ label: t("desk_col_channel"), key: "channel" }] },
+    { align: "end", items: [{ label: t("desk_col_liters"), key: "liters" }] },
+    { items: [{ label: t("desk_col_payment") }] },
+    { align: "end", items: [{ label: t("desk_col_amount"), key: "amount" }] },
+  ];
+  const DESK_SORTERS = {
+    date: (a, b) => String(a.order_date).localeCompare(String(b.order_date)),
+    customer: (a, b) => String(a.customer_name || "").localeCompare(String(b.customer_name || "")),
+    order: (a, b) => String(a.order_id).localeCompare(String(b.order_id)),
+    channel: (a, b) => String(a.channel || "").localeCompare(String(b.channel || "")),
+    liters: (a, b) => Number(a.total_liters || 0) - Number(b.total_liters || 0),
+    amount: (a, b) => Number(a.total_amd || 0) - Number(b.total_amd || 0),
+  };
+  const onDeskChange = () => {
+    if (!listEl.isConnected) return deskQuery.removeEventListener("change", onDeskChange);
+    if (lastRows.length) render(lastRows);
+  };
+  deskQuery.addEventListener("change", onDeskChange);
+  function deskRowHtml(o) {
+    const cell = (main, sub, cls = "") => `<div class="dtl-cell ${cls}"><span class="dtl-main">${main}</span>${sub ? `<span class="dtl-sub muted">${sub}</span>` : ""}</div>`;
+    const unpaid = Number(o.unpaid_amd) > 0;
+    return `<div class="list-row dtl-row sales-desk-row ${unpaidRowClass(o)}" role="button" tabindex="0" data-erp-customer-id="${escapeHtml(o.erp_customer_id)}" data-order-id="${escapeHtml(o.order_id)}">
+      <span></span>
+      ${cell(escapeHtml(formatDateDMY(String(o.order_date).slice(0, 10))), "")}
+      ${cell(`<strong>${escapeHtml(o.customer_name || "")}</strong>`, `ID ${escapeHtml(o.erp_customer_id || "")}`, "dtl-name")}
+      ${cell(escapeHtml(o.order_id), "")}
+      ${cell(escapeHtml(o.channel ? channelDisplayLabel(o.channel) : ""), "")}
+      ${cell(escapeHtml(formatLiters(Number(o.total_liters || 0))), "", "dtl-end")}
+      ${cell(unpaid ? dueChipHtml(o.due_days) : `<span class="muted">&mdash;</span>`, unpaid ? escapeHtml(formatAmd(Number(o.unpaid_amd))) : "")}
+      ${cell(`<strong class="text-amount">${formatAmd(Number(o.total_amd))}</strong>`, "", "dtl-end")}
+      <span></span>
+    </div>`;
+  }
+  function renderDesk(rows) {
+    const sorted = [...rows].sort(DESK_SORTERS[deskSort]);
+    // natural direction (the arrow down): newest, biggest and longest first; names, orders and channels A-Z
+    const biggestFirst = ["date", "amount", "liters"].includes(deskSort);
+    if (biggestFirst !== deskReversed) sorted.reverse();
+    const day = (rs) => ({ total: rs.reduce((n, o) => n + Number(o.total_amd || 0), 0), liters: rs.reduce((n, o) => n + Number(o.total_liters || 0), 0), count: rs.length });
+    let body;
+    if (deskSort === "date") {
+      const groups = [];
+      for (const o of sorted) {
+        const k = String(o.order_date).slice(0, 10);
+        if (groups.at(-1)?.key !== k) groups.push({ key: k, rows: [] });
+        groups.at(-1).rows.push(o);
+      }
+      body = groups
+        .map((g) => {
+          const d = day(g.rows);
+          return `<div class="dtl-group"><strong>${formatSalesDateHeading(g.key)}</strong><span class="muted">${formatAmd(d.total)} | ${formatLiters(d.liters)} | ${d.count} ${t("sales_order_count")}</span></div>${g.rows.map(deskRowHtml).join("")}`;
+        })
+        .join("");
+    } else {
+      body = sorted.map(deskRowHtml).join("");
+    }
+    listEl.classList.add("dtl-list", "sales-desk-list");
+    listEl.innerHTML = `${deskHeadHtml("desk-thead-sales", DESK_CELLS)}<div>${body}</div>`;
+    const headEl = listEl.querySelector(".desk-thead");
+    paintDeskHead(headEl, deskSort, deskReversed);
+    wireDeskHead(headEl, (key) => {
+      if (deskSort === key) deskReversed = !deskReversed;
+      else {
+        deskSort = key;
+        deskReversed = false;
+      }
+      renderDesk(rows);
+    });
+    listEl.querySelectorAll(".sales-desk-row").forEach((row) => {
+      const open = () => openSalesOrderSheet(row.dataset.erpCustomerId, row.dataset.orderId, navigate);
+      row.addEventListener("click", open);
+      row.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), open()));
+    });
+  }
+
   // Grouped by the order's own calendar day -- each day's header row totals
   // just that day's orders: amount, liters (server's total_liters, summed
   // from size_l), and order count. Same one-pass-totals-then-render shape
@@ -222,12 +307,15 @@ async function renderSalesTab(root, navigate) {
   function render(rows) {
     if (!rows.length) {
       subtotalEl.textContent = "";
+      listEl.classList.remove("dtl-list", "sales-desk-list");
       listEl.innerHTML = `<p class="empty-state">${t("sales_empty")}</p>`;
       return;
     }
     const subtotal = rows.reduce((sum, o) => sum + Number(o.total_amd || 0), 0);
     const subtotalLiters = rows.reduce((sum, o) => sum + Number(o.total_liters || 0), 0);
     subtotalEl.textContent = `${t("sales_subtotal")}${labelColon()}${formatAmd(subtotal)} (${formatLiters(subtotalLiters)} | ${rows.length} ${t("sales_order_count")})`;
+    if (deskQuery.matches) return renderDesk(rows);
+    listEl.classList.remove("dtl-list", "sales-desk-list");
 
     const dayTotals = new Map();
     for (const o of rows) {

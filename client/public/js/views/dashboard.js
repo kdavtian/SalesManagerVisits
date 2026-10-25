@@ -8,6 +8,7 @@ import { applyVaghinakBadge } from "../vaghinak.js";
 import { applyPaymentBadge, applyUnrecordedBadge, applyWarehouseBadge, applyDeliveryBadge, applyAccountingBadge } from "../app.js";
 import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds } from "../quickActions.js";
 import { loadWithCache } from "../listCache.js";
+import { renderHomeKpis, KPI_ROLES } from "./homeKpis.js";
 
 // A dependency-free CSS bar chart -- this app has no charting library, and
 // 30 bars is simple enough not to need one. Each bar's height is relative
@@ -280,7 +281,9 @@ export async function renderDashboard(root, navigate) {
       }
     </div>
 
-    <div>
+    ${KPI_ROLES.includes(state.user.role) ? `<div class="home-kpis" id="home-kpis" hidden></div>` : ""}
+
+    <div class="home-quick-actions${KPI_ROLES.includes(state.user.role) ? " home-quick-actions-kpi" : ""}">
     <h2 class="section-title section-title-tight">${t("quick_actions")}</h2>
     <div class="quick-actions-grid">
       ${quickActionsHtml(
@@ -425,6 +428,7 @@ export async function renderDashboard(root, navigate) {
   `;
 
   fitTileLabels(container.querySelector(".quick-actions-grid"));
+  renderHomeKpis(container.querySelector("#home-kpis"));
   container.querySelector("#view-all-activity")?.addEventListener("click", () => navigate("#/activity"));
   container.querySelector("#company-dashboard-preview-card")?.addEventListener("click", () => navigate("#/company-dashboard"));
   // Every tile is optional now (an admin can hide any of them for any role),

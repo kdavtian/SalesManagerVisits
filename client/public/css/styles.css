@@ -15663,3 +15663,6 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 
 /* Places to review (Settings -> Administration -> Places): the optional Armenian name for a place kept as typed. */
 .places-hy-input { width: 100%; min-height: 44px; box-sizing: border-box; margin: 8px 0 4px; border: 1px solid var(--control-border); border-radius: var(--radius); padding: 0 10px; background: var(--bg-card); color: var(--text); font: inherit; }
+
+/* Desktop Home KPI tiles (views/homeKpis.js): a phone never shows this block; desktop.css turns it on. */
+.home-kpis { display: none; }
