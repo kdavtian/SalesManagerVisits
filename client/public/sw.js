@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v433";
+const CACHE_VERSION = "field-visits-v434";
 // v5: drops tiles cached while requests went out without a Referer (OSM may have
 // answered those with placeholder images) -- see Referrer-Policy in server/src/app.js.
 const TILE_CACHE = "field-visits-tiles-v5";
@@ -186,26 +186,20 @@ const APP_SHELL = [
   "/js/views/tasks.js",
   // Pre-approved marker/category artwork -- the map pins and the blue
   // category glyphs every other screen uses (see util.js).
-  "/icons/markers/customer-drop.png",
-  "/icons/markers/customer-shop.png",
-  "/icons/markers/customer-workshop.png",
-  "/icons/markers/customer-other.png",
-  "/icons/markers/potential-drop.png",
-  "/icons/markers/potential-shop.png",
-  "/icons/markers/potential-workshop.png",
-  "/icons/markers/potential-other.png",
-  "/icons/markers/fill/customer-drop.png",
-  "/icons/markers/fill/customer-shop.png",
-  "/icons/markers/fill/customer-workshop.png",
-  "/icons/markers/fill/customer-other.png",
-  "/icons/markers/fill/potential-drop.png",
-  "/icons/markers/fill/potential-shop.png",
-  "/icons/markers/fill/potential-workshop.png",
-  "/icons/markers/fill/potential-other.png",
-  "/icons/markers/competitor-drop.png",
-  "/icons/markers/competitor-shop.png",
-  "/icons/markers/competitor-workshop.png",
-  "/icons/markers/competitor-other.png",
+  "/icons/markers/customer-drop.svg",
+  "/icons/markers/customer-shop.svg",
+  "/icons/markers/customer-workshop.svg",
+  "/icons/markers/customer-other.svg",
+  "/icons/markers/potential-drop.svg",
+  "/icons/markers/potential-shop.svg",
+  "/icons/markers/potential-workshop.svg",
+  "/icons/markers/potential-other.svg",
+  "/icons/markers/competitor-drop.svg",
+  "/icons/markers/competitor-shop.svg",
+  "/icons/markers/competitor-workshop.svg",
+  "/icons/markers/competitor-other.svg",
+  "/icons/markers/ring-customer.svg",
+  "/icons/markers/ring-potential.svg",
   "/icons/categories/blue-drop.png",
   "/icons/categories/blue-shop.png",
   "/icons/categories/blue-workshop.png",
