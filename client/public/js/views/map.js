@@ -1,6 +1,7 @@
 import { api } from "../api.js";
 import { reorderChipHtml } from "../reorder.js";
 import { showToast, cssColor, activateCombobox, activateDialog, openInfoPopup, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, rememberPosition, getLastKnownPosition, tierSelectorHtml, TIER_OPTIONS, isNeverVisited, isOverdueVisit, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, regionLabelHy, subregionLabelHy, channelDisplayLabel, parseDateOnly } from "../util.js";
+import { wirePlaceInput, placeNoticeText } from "../places.js";
 import { t } from "../i18n.js";
 import { potentialFormHtml, wirePotentialForm } from "../potential.js";
 import { buildCustomerTree, renderTriStateTree, buildDirectionManagerTree, NO_GROUP_KEY } from "../regionTree.js";
@@ -3641,8 +3642,10 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           </select>`;
       } else {
         subregionWrap.innerHTML = `${t("subregion")}<input name="subregion" id="new-customer-subregion" value="${escapeHtml(guess || "")}" />`;
+        wirePlaceInput(subregionWrap.querySelector("#new-customer-subregion"), () => regionSelect.value);
       }
     }
+    wirePlaceInput(overlay.querySelector("#new-customer-subregion"), () => regionSelect.value);
     const channelSelect = overlay.querySelector("#new-customer-channel");
     const managerSelect = overlay.querySelector("#new-customer-manager");
     let managerOptionsHtml = `<option value="">${t("unassigned")}</option>`;
@@ -3827,6 +3830,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           confirm_duplicate: confirmDuplicate || undefined,
         });
         overlay.remove();
+        const placeText = placeNoticeText(created?.place_notice);
+        if (placeText) showToast(placeText, { ms: 6500 });
         if (placingMarker) {
           map.removeLayer(placingMarker);
           placingMarker = null;

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { canReassignCustomers } from "../roles.js";
+import { resolvePlaces } from "../places.js";
 
 export const routeDistributionRouter = Router();
 
@@ -40,7 +41,10 @@ routeDistributionRouter.get("/", requireManagement, async (req, res) => {
 // Distribution's suggestion onto it instead of maintaining a second,
 // independently-admin-set manager association per region.
 routeDistributionRouter.get("/lookup", async (req, res) => {
-  const { region, subregion } = req.query;
+  // the geocoder's / rep's spelling is matched to the same place names the customers carry (places.js)
+  const placed = resolvePlaces({ region: req.query.region, subregion: req.query.subregion });
+  const region = placed.region;
+  const subregion = placed.subregion;
   if (!region) return res.json(null);
 
   // Exact region+subregion match wins; a region-only row (subregion NULL)

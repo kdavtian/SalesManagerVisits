@@ -1,6 +1,7 @@
 import { api } from "../api.js";
 import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, parseUserAgent, SALES_CHANNELS, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, parseDateOnly, formatPhoneDisplay, labelColon, groupDigits, parseAmd, bindAmdInput, showToast, openInfoPopup } from "../util.js";
 import { t } from "../i18n.js";
+import { placeLabel } from "../places.js";
 import { icons } from "../icons.js";
 import { state } from "../state.js";
 import { ALL_ROLES, QUICK_ACTIONS, defaultQuickActionIds } from "../quickActions.js";
@@ -783,6 +784,100 @@ export async function renderEditRequestsSection(container) {
   }
 
   load();
+}
+
+// Places (owner, 2026-10-25): what the spelling autocorrect could not place, and a one-tap fix of the spellings already saved (server/src/routes/places.js).
+export async function renderPlacesSection(container) {
+  container.innerHTML = `
+    <h3 class="health-title">${t("places_review_title")}<button type="button" class="settings-hint-icon" id="places-hint" aria-label="${t("more_info")}">!</button></h3>
+    <div id="places-review"><p class="loading-state" role="status">${t("loading")}</p></div>
+    <h3 class="health-title" style="margin-top:18px">${t("places_cleanup_title")}</h3>
+    <div id="places-cleanup"></div>
+  `;
+  container.querySelector("#places-hint").addEventListener("click", () => openInfoPopup(`<p>${escapeHtml(t("places_hint"))}</p>`));
+  const reviewEl = container.querySelector("#places-review");
+  const cleanupEl = container.querySelector("#places-cleanup");
+  const kindLabel = { unknown: "places_kind_unknown", corrected: "places_kind_corrected", other_region: "places_kind_other_region" };
+  const place = (name) => escapeHtml(placeLabel(name) ?? "");
+
+  async function loadReviews() {
+    const rows = await api.placeReviews();
+    if (!rows.length) {
+      reviewEl.innerHTML = `<p class="muted">${t("places_review_empty")}</p>`;
+      return;
+    }
+    reviewEl.innerHTML = rows
+      .map((r) => {
+        const sug = r.suggestions?.[0];
+        return `
+        <div class="card plan-approval-row" data-id="${r.id}">
+          <div class="pending-request-header">
+            <span class="badge badge-warning">${t(kindLabel[r.kind] || "places_kind_unknown")}</span>
+            <span class="muted">${escapeHtml(r.customer_name)} &middot; ${escapeHtml(t(r.field))}</span>
+          </div>
+          <div class="proposed-change"><strong>${t("places_typed")}</strong>: ${escapeHtml(r.typed_value)}</div>
+          ${r.kind === "corrected" ? `<div class="proposed-change"><strong>${t("places_saved_as")}</strong>: ${place(r.applied_value)}</div>` : ""}
+          ${sug ? `<div class="proposed-change"><strong>${t("places_suggestion")}</strong>: ${place(sug.en)}${sug.region ? ` &middot; ${escapeHtml(regionLabelHy(sug.region))}` : ""}</div>` : ""}
+          ${r.kind === "unknown" ? `<input type="text" class="places-hy-input" data-hy placeholder="${escapeHtml(t("places_hy_placeholder"))}" />` : ""}
+          <div class="sheet-actions">
+            <button class="btn" data-act="dismiss">${t("places_dismiss")}</button>
+            ${r.kind !== "corrected" ? `<button class="btn" data-act="keep">${t("places_keep")}</button>` : ""}
+            ${sug ? `<button class="btn btn-primary" data-act="accept" data-value="${escapeHtml(sug.en)}">${escapeHtml(t("places_use").replace("{name}", placeLabel(sug.en)))}</button>` : ""}
+          </div>
+        </div>`;
+      })
+      .join("");
+    reviewEl.querySelectorAll("[data-act]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const card = btn.closest("[data-id]");
+        card.querySelectorAll("button").forEach((b) => (b.disabled = true));
+        try {
+          await api.placeReviewResolve(card.dataset.id, {
+            action: btn.dataset.act,
+            value: btn.dataset.value || undefined,
+            name_hy: card.querySelector("[data-hy]")?.value.trim() || undefined,
+          });
+          loadReviews();
+        } catch (err) {
+          card.querySelectorAll("button").forEach((b) => (b.disabled = false));
+          alert(err.message);
+        }
+      });
+    });
+  }
+
+  async function loadCleanup() {
+    cleanupEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+    const plan = await api.placeCleanup();
+    if (!plan.changes.length) {
+      cleanupEl.innerHTML = `<p class="muted">${t("places_cleanup_none")}</p>`;
+      return;
+    }
+    const customers = plan.changes.reduce((n, c) => n + c.customers, 0);
+    const line = (c) => {
+      const f = [c.from.region, c.from.subregion].filter(Boolean).join(" / ");
+      const to = [c.to.region && regionLabelHy(c.to.region), c.to.subregion && placeLabel(c.to.subregion)].filter(Boolean).join(" / ");
+      return `<div class="proposed-change">${escapeHtml(f)} &rarr; <strong>${escapeHtml(to)}</strong> <span class="muted">(${c.customers})</span></div>`;
+    };
+    cleanupEl.innerHTML = `
+      <p class="muted">${escapeHtml(t("places_cleanup_preview").replace("{n}", plan.changes.length).replace("{c}", customers))}</p>
+      <div class="card">${plan.changes.slice(0, 40).map(line).join("")}</div>
+      <button type="button" class="btn btn-primary btn-block" id="places-cleanup-apply">${t("places_cleanup_apply")}</button>`;
+    cleanupEl.querySelector("#places-cleanup-apply").addEventListener("click", async (e) => {
+      e.currentTarget.disabled = true;
+      try {
+        const done = await api.placeCleanupApply();
+        cleanupEl.innerHTML = `<p>${escapeHtml(t("places_cleanup_done").replace("{c}", done.customers).replace("{q}", done.queued))}</p>`;
+        loadReviews();
+      } catch (err) {
+        e.currentTarget.disabled = false;
+        alert(err.message);
+      }
+    });
+  }
+
+  loadReviews();
+  loadCleanup();
 }
 
 export async function renderProductsSection(container) {

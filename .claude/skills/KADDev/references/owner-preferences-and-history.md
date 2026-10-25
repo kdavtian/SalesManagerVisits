@@ -306,3 +306,10 @@ Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets 
 - Owner answer: analyse cash expenses with the SAME data as the Excel; weekly reports and live alerts. Built `server/src/expenseWatch.js` + `routes/expenses.js` + migration 152 + Vaghinak tab "Expenses" (admin / CEO / operations director / accountant); notification type `expense_alert`. Details and limits in `docs/expense-watch.md`.
 - Reps' own cash expenses (`#/expenses`) now show "In Excel" / "Not in Excel - N d" (same wording as Payments).
 - Still to build: Armenian places gazetteer + autocorrect, Vaghinak voice rewrite (mix "plain colleague" + "short and direct"), desktop Home KPI dashboard + Payments/Sales tables.
+
+## 2026-10-25 (1.414.0): Armenian places + spelling autocorrect
+- Owner answer: collect all Armenian cities, villages, marzes, subregions, communities into a small DB and autocorrect; free text stays allowed on the customer card and shows as an edit for review. English shown when the UI is English.
+- Built: `server/src/places.js` (+ `data/armeniaPlaces.json`, GeoNames CC BY 4.0), `placeReviews.js`, `routes/places.js`, migration 153 (`place_reviews`, `custom_places`), client `places.js` + `placesData.js` (in APP_SHELL), datalist suggestions on the new-customer form and the card's Account settings, Settings -> Administration -> System -> "Places (spelling)". Details: `docs/places.md`.
+- Stored value stays English; display is translated (`regionLabelHy` / `subregionLabelHy` now know every place). A bulk "Fix the spellings already saved" rewrites customers + route_distribution + visit_plan_rules.areas together (they store the same text).
+- Lesson: when inserting an import line with a script, never assume "the last line starting with import" ends an import block (a multi-line `import {` broke erpSync.js once).
+

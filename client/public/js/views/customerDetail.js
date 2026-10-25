@@ -1,6 +1,7 @@
 import { api } from "../api.js";
 import { reorderHash } from "../reorder.js";
 import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, SALES_CHANNELS, channelDisplayLabel, parseDateOnly, formatDateDMY, formatDayMonth, labelColon, erpLineDiscountRowHtml, leaveSheetTo, showToast, openInfoPopup } from "../util.js";
+import { wirePlaceInput, placeNoticeText } from "../places.js";
 import { currentChips, chipHtml, chipColumns } from "../brandChips.js";
 import { nextVisitRowHtml } from "../visitSchedule.js";
 import { t } from "../i18n.js";
@@ -143,7 +144,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
             ]
               .filter(Boolean)
               .map(escapeHtml)
-              .join(" &middot; ")}</span></div>`
+              .join(" &middot; ")}</span>${customer.place_review_pending && ["admin", "ceo", "operations_director", "sales_director"].includes(state.user.role) ? ` <span class="badge badge-warning">${t("place_to_review")}</span>` : ""}</div>`
           : ""
       }
       ${customer.phone ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.phone}</span><a href="tel:${escapeHtml(customer.phone)}">${escapeHtml(formatPhoneDisplay(customer.phone))}</a></div>` : ""}
@@ -864,9 +865,11 @@ async function openAccountSettingsSheet(customer, onDone) {
           </select>`;
       } else {
         subregionWrap.innerHTML = `${t("subregion")}<input name="subregion" id="reassign-subregion" value="${escapeHtml(value ?? "")}" />`;
+        wirePlaceInput(subregionWrap.querySelector("#reassign-subregion"), () => regionSelect.value);
       }
     }
     if (customer.region === "Yerevan") renderSubregionField("Yerevan", customer.subregion);
+    else wirePlaceInput(overlay.querySelector("#reassign-subregion"), () => regionSelect.value);
     regionSelect.addEventListener("change", () => renderSubregionField(regionSelect.value, ""));
 
     const managerSelect = overlay.querySelector("#reassign-manager");
@@ -1039,6 +1042,9 @@ async function openAccountSettingsSheet(customer, onDone) {
     // Refresh the page underneath regardless -- some or all sections may
     // have committed even if others failed.
     onDone();
+    // what the server did with the typed region / subregion (spelling corrected, or not in the list of places and sent for review)
+    const placeText = placeNoticeText(results.map((r) => (r.status === "fulfilled" ? r.value?.place_notice : null)).find(Boolean));
+    if (placeText) showToast(placeText, { ms: 6500 });
 
     if (failures.length) {
       errorEl.textContent = failures.join(" · ");

@@ -12,6 +12,7 @@ import { recordSyncRun, getSyncStatus, createSyncRequest, pickPendingRequest, fi
 import { runAutoTasks } from "../debtCollectionTasks.js";
 import { runAntiFraud } from "../antiFraud.js";
 import { runExpenseWatch } from "../expenseWatch.js";
+import { resolvePlaces } from "../places.js";
 import { refreshOrderRhythm } from "../orderRhythm.js";
 import { applyCashLedger } from "../cashflow.js";
 import { snapshotTierPrices, logTierPriceChanges } from "../priceSyncLog.js";
@@ -215,6 +216,12 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     // still unset -- a rep's manual correction on a customer should stick,
     // not get silently overwritten by the next sync.
     if (regionErpIds.length) {
+      // the Excel's spelling goes through the Armenian places too (places.js), so a new customer never starts with a misspelt region
+      regionErpIds.forEach((_id, i) => {
+        const r = resolvePlaces({ region: regions[i], subregion: subregions[i] });
+        regions[i] = r.region;
+        subregions[i] = r.subregion;
+      });
       await client.query(
         `UPDATE customers c
          SET region = COALESCE(c.region, t.region),
