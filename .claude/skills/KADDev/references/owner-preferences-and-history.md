@@ -318,3 +318,8 @@ Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets 
 - `server/src/vaghinak/phrases.js` BANK rewritten for every kind (same keys, levels, placeholders and variant counts); `addressFor` now mostly the plain first name (sometimes "<name> ջան"). Management keeps the formal "Դուք" tone. Examples: "{addr}, արդեն {time} է, իսկ այց դեռ չեմ տեսնում։ Ամեն ինչ կարգի՞ն է։" / "{time}։ Այցեր դեռ չկան։ {addr}, ի՞նչ է կատարվում։"
 - New wording must keep the placeholder set of its kind and no emoji.
 
+## 2026-10-25 (1.415.0): desktop Home KPIs + Payments/Sales tables
+- Owner answer: desktop Home becomes a KPI dashboard instead of repeating the menu; Payments and Sales as tables; Team performance NOT touched.
+- Built: `GET /api/dashboard/kpis` (+ `dashboardKpis.js`, roles admin/ceo/operations_director/sales_director/accountant), `views/homeKpis.js` (hidden below 1024 px, menu tiles hidden on desktop for those roles), desktop tables in `payments.js` and `sales.js` with the shared `.dtl-*` CSS. Details: `docs/desktop-home-tables.md`.
+- Lesson: a `let` declared twice in one function (`lastRows` in sales.js) blanks the whole screen with "Screen failed to render" and only a real-browser run shows it; `node --check` does not catch it for module-level re-declarations inside functions that are never called.
+

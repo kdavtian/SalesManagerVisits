@@ -1,5 +1,6 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, formatDateTime, activateDialog, channelDisplayLabel, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, labelColon } from "../util.js";
+import { escapeHtml, formatAmd, formatDateTime, activateDialog, channelDisplayLabel, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, labelColon, formatDateDMY } from "../util.js";
+import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
 import { periodDates, periodKeyLabel } from "../periodButtons.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
@@ -360,13 +361,86 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
     `;
   }
 
+  // Desktop (owner, 2026-10-25: Payments as a table, like Debt balances): date, customer, who collected it, status, whether the Excel has it, amount, and
+  // Approve on the row. The list is paged by the server, so only the date heading sorts (it uses the same server sort as the phone's menu).
+  const deskQuery = window.matchMedia("(min-width: 1024px)");
+  const onDeskChange = () => {
+    if (!listEl.isConnected) return deskQuery.removeEventListener("change", onDeskChange);
+    paint();
+  };
+  deskQuery.addEventListener("change", onDeskChange);
+  const DESK_CELLS = [
+    { items: [{ label: t("desk_col_date"), key: "date" }] },
+    { items: [{ label: t("desk_col_customer") }] },
+    { items: [{ label: t("desk_col_collected") }] },
+    { items: [{ label: t("desk_col_status") }] },
+    { items: [{ label: t("desk_col_excel") }] },
+    { align: "end", items: [{ label: t("desk_col_amount") }] },
+    { items: [] },
+  ];
+  function deskRowHtml(p) {
+    const meta = STATUS_META[p.status] ?? STATUS_META.pending;
+    const cell = (main, sub, cls = "") => `<div class="dtl-cell ${cls}"><span class="dtl-main">${main}</span>${sub ? `<span class="dtl-sub muted">${sub}</span>` : ""}</div>`;
+    const excel = excelBadgeHtml(p).trim();
+    return `<div class="list-row dtl-row pay-desk-row" role="button" tabindex="0" data-payment-id="${p.id}">
+      <span></span>
+      ${cell(escapeHtml(formatDateDMY(String(p.payment_date))), "")}
+      ${cell(`<strong>${escapeHtml(p.customer_name_snapshot)}</strong>`, p.erp_customer_id_snapshot ? `ID ${escapeHtml(p.erp_customer_id_snapshot)}` : "", "dtl-name")}
+      ${cell(escapeHtml(p.sales_manager_name_snapshot || ""), p.sales_channel ? escapeHtml(channelDisplayLabel(p.sales_channel)) : "")}
+      ${cell(`<span class="badge payment-status-badge ${meta.cls}">${t(meta.key)}</span>${p.approved_from_erp ? ` <span class="badge badge-info">${t("from_erp")}</span>` : ""}`, "")}
+      ${cell(excel || `<span class="muted">&mdash;</span>`, "")}
+      ${cell(`<strong class="text-amount">${formatAmd(Number(p.amount_amd))}</strong>`, "", "dtl-end")}
+      <div class="dtl-cell dtl-end">${p.status === "pending" && canReview ? `<button type="button" class="btn btn-primary btn-sm payment-approve-btn" data-approve-id="${p.id}">${t("approve")}</button>` : ""}</div>
+      <span></span>
+    </div>`;
+  }
+  function paintDesk() {
+    const byDate = sort === "date" || !canSeeAll;
+    const groups = [];
+    for (const p of payments) {
+      const label = byDate ? monthLabel(p.payment_date) : p.sales_channel ? channelDisplayLabel(p.sales_channel) : t("all_channels");
+      if (groups.at(-1)?.label !== label) groups.push({ label, rows: [] });
+      groups.at(-1).rows.push(p);
+    }
+    const sum = (rows) => rows.reduce((n, r) => n + Number(r.amount_amd || 0), 0);
+    listEl.classList.add("dtl-list", "pay-desk-list");
+    listEl.innerHTML = `${deskHeadHtml("desk-thead-pay", DESK_CELLS)}<div>${groups
+      .map((g) => `<div class="dtl-group"><strong>${escapeHtml(g.label)}</strong><span class="muted">${g.rows.length} &middot; ${formatAmd(sum(g.rows))}</span></div>${g.rows.map(deskRowHtml).join("")}`)
+      .join("")}</div>${hasMore ? `<button type="button" class="btn btn-block" id="payments-load-more">${t("load_more")}</button>` : ""}`;
+    const headEl = listEl.querySelector(".desk-thead");
+    paintDeskHead(headEl, byDate ? "date" : "", orderReversed);
+    wireDeskHead(headEl, () => {
+      if (sort === "date") orderReversed = !orderReversed;
+      else {
+        sort = "date";
+        orderReversed = false;
+      }
+      load();
+    });
+    listEl.querySelector("#payments-load-more")?.addEventListener("click", loadMore);
+    listEl.querySelectorAll(".pay-desk-row").forEach((row) => {
+      const open = () => openPaymentDetail(Number(row.dataset.paymentId));
+      row.addEventListener("click", open);
+      row.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && e.target === row && (e.preventDefault(), open()));
+    });
+    listEl.querySelectorAll(".payment-approve-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        quickApprove(Number(btn.dataset.approveId), btn);
+      });
+    });
+  }
+
   function paint() {
     if (!payments.length) {
+      listEl.classList.remove("dtl-list", "pay-desk-list");
       listEl.innerHTML = `<p class="empty-state">${
         canReview ? t("no_payments_pending_accountant") : t("no_payments_yet_manager")
       }</p>`;
       return;
     }
+    if (deskQuery.matches) return paintDesk();
+    listEl.classList.remove("dtl-list", "pay-desk-list");
 
     if (sort === "date" || !canSeeAll) {
       // Simple newest-first grouped by month.
