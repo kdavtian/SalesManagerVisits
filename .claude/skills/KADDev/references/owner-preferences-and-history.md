@@ -328,3 +328,9 @@ Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets 
 - Two new reasons: `gave_price_list` ("Տվել եմ գնացուցակ") and `introduced_products` ("Ծանոթացրել եմ ապրանքներին"), always visible from level 2 up (not behind "More reasons"); server list `POTENTIAL_REASONS`, filter sheet, i18n en + hy.
 - The server still accepts `potential_level` on `POST /api/customers` (optional) for integrations.
 
+## 2026-10-25 (1.417.0): very slow first launch
+- Owner: "find the cause of very slow load of app on 1st launch and fix issue". Reproduced with a throttled HTTP/2 proxy (150 ms, 1.6 Mbit/s shared, CPU x4, fresh context): login form after 6.2-6.7 s, blank white until then.
+- Causes: `bootGate.js` imports 12 modules one by one and each module's imports are found only after it arrives (about 40 modules, one round trip per level); `/api/lockdown` then `/api/me` in sequence; nothing painted before JS ran.
+- Fix: `server/src/modulePreload.js` -> `<link rel="modulepreload">` for the whole boot graph in `index.html` (not emitted in Calculator Mode), `/api/me` in parallel with lockdown, inline spinner `.boot-splash`. Result 1.7-2.2 s (cold login form), warm launch 1.0-1.4 s. Details: `docs/first-launch.md`.
+- Lessons: (1) Playwright's CDP network throttling does NOT slow the service worker's own downloads, so measure through a real throttled proxy. (2) My first throttling proxy truncated small files (ended the response before the throttled writes finished) and made the app fail with "module does not provide an export" - when a measurement rig produces a weird app error, suspect the rig first. (3) `pkill -f <name>` kills the shell that mentions the name in its own command line; kill by PID.
+

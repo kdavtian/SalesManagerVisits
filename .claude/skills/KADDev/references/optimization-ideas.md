@@ -50,3 +50,8 @@ Owner answered "1, 2, 3, 4, 5, 6, 7, 8" on 2026-10-24 = all eight approved; buil
 35. [Suggested] **English PDF guide** refresh (the English file is still the 1.251.0 one).
 36. [Suggested] **Bank statements from Telegram -> "pending" list in the app** with Confirm / Discard (owner agreed to confirm-first; waits for sample statements).
 
+## Ideas from the first-launch round (2026-10-25, Suggested)
+16. **Load only the active language of the translations** - saves about 55 KB compressed (about 0.3 s at 1.6 Mbit/s) and half the parse time on first launch; stays identical: every text, the language switch; cost/risk: `i18n.js` becomes a loader with top-level await, the language file must be preloaded or a language switch needs a short wait; recommend: later (gain is smaller than the 1.417.0 fix).
+17. **Cache the rest of the app shell after the first screen** (service worker installs about 60 core files, fetches the other 130 views and sheets in idle time) - saves about 1 MB competing with the first taps on a slow link; stays identical: offline coverage a few seconds later; cost/risk: an update installed and then immediately used offline may miss a rarely used screen once; recommend: only if reps still report slow first taps.
+18. **Trim the stylesheet** (`styles.css` 438 KB raw, 51 KB compressed, render-blocking) - saves about 0.1-0.2 s of first paint; cost/risk: dead-CSS removal needs a coverage run per screen; recommend: later.
+

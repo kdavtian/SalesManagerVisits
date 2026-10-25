@@ -132,10 +132,11 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L96 Lessons added 2026-10-24 (the optimization round) - Tests that passed for months only because everything ran in one slow pass share global state; splitting CI exp
 - L103 Lessons added 2026-10-24 (features round) - Bot deploy is separate from the app deploy: cd /opt/castrol-ceo-bot && sudo -u castrolbot git pull origin main
 
-## optimization-ideas.md (8 KB, 53 lines)
+## optimization-ideas.md (9 KB, 58 lines)
 - L6 How an idea is written - N. <short name> - saves <minutes / taps / seconds / KB>; stays identical: <functionality, results, experience>
 - L12 Backlog (status: Suggested unless noted) - Owner answered "1, 2, 3, 4, 5, 6, 7, 8" on 2026-10-24 = all eight approved; built in the same round (Field Vis
 - L23 Ideas from the round that built these (Suggested) - [DONE 2026-10-24] Make the isolated bonus tests independent of the global switch - done without touching the t
+- L53 Ideas from the first-launch round (2026-10-25, Suggested) - Load only the active language of the translations - saves about 55 KB compressed (about 0.3 s at 1.6 Mbit/s) a
 
 ## owner-model.md (18 KB, 97 lines)
 - L5 1. Who they are, in one paragraph - A hands-on distributor owner (Castrol/Lotos/Royal/Orlen, Armenia) who runs the company from the app on an iPho
@@ -146,7 +147,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L82 6. Proactive moves that always land well - After a numbered list, add "Suggestions" (numbered, with recommendation) only if you saw something real while
 - L90 7. Mistakes I made that cost them time (do not repeat) - Claiming sheets "load before showing" without reading them (Add payment and the customer pickers already paint
 
-## owner-preferences-and-history.md (70 KB, 331 lines)
+## owner-preferences-and-history.md (71 KB, 337 lines)
 - L3 How they work with you - Writes short, numbered, imperative requests (often with screenshots "image1/img2"), mixes English with Armenia
 - L11 Visual / UX preferences (apply by default) - Compact, iOS-native feel: bottom sheets, floating/fixed action bars (Cancel/Save on customer edit must be fixe
 - L24 Things that repeatedly bit us (check proactively) - Forgetting CACHEVERSION bump -> "no updates" on phones.
@@ -185,6 +186,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L316 2026-10-25: Vaghinak voice rewrite (server only, no app version bump) - Owner answer: "Mix a b" = A (plain colleague: says what he sees, asks one clear thing) + B (short and direct).
 - L321 2026-10-25 (1.415.0): desktop Home KPIs + Payments/Sales tables - Owner answer: desktop Home becomes a KPI dashboard instead of repeating the menu; Payments and Sales as tables
 - L326 2026-10-25 (1.416.0): no potential level when adding a customer - Owner: adding a customer must be as fast as possible (name and fields are autofilled); the potential level ("Հ
+- L331 2026-10-25 (1.417.0): very slow first launch - Owner: "find the cause of very slow load of app on 1st launch and fix issue".
 
 ## strategy-roadmap.md (6 KB, 31 lines)
 - L5 Target (owner, 2026-10-12): 10 % of the market = ~1 million liters a year - Owner's working assumption: the Armenian market is ~10M L a year, so 10 % = 1M L.
