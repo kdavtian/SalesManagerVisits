@@ -1,4 +1,5 @@
 import { api } from "../api.js";
+import { renderPotentialCard } from "../potential.js";
 import { escapeHtml, formatDateDMY, getCurrentPosition, locationErrorHint, compressImage, formatDistance, haversineMeters, creditedDistanceMeters, activateDialog } from "../util.js";
 import { enqueueCheckin } from "../offlineQueue.js";
 import { openSyncQueueSheet } from "../syncQueueSheet.js";
@@ -79,6 +80,7 @@ export async function renderCheckin(root, navigate, customerId) {
       <button type="button" class="icon-btn" id="checkin-close-btn" aria-label="${t("close")}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     </div>
     <div id="checkin-tasks"></div>
+    <div id="checkin-potential"></div>
     <div class="gps-status" id="gps-status">${t("getting_location")}</div>
     <div class="verify-banner" id="verify-banner" hidden></div>
 
@@ -154,6 +156,16 @@ export async function renderCheckin(root, navigate, customerId) {
     </form>
     <div id="checkin-result" hidden></div>
   `;
+  // A potential customer's level is asked at the visit, not when the customer is added (owner, 2026-10-25).
+  const potentialSlot = container.querySelector("#checkin-potential");
+  const paintPotential = () =>
+    renderPotentialCard(potentialSlot, customer, {
+      reload: async () => {
+        customer = await api.getCustomer(customerId);
+        paintPotential();
+      },
+    });
+  paintPotential();
   container.querySelector("#checkin-close-btn").addEventListener("click", () => navigate.goBack(`#/customers/${customerId}`));
 
   // Open "make an order" tasks of this rep at this customer (filled by showCustomerTasks below);

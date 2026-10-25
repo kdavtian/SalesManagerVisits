@@ -182,3 +182,10 @@ test("the reasons a person last used per level are remembered on the server (nev
   // another person sees none of it
   assert.deepEqual((await apiRequest("/api/customers/potential-reason-memory", { cookie: cookies.rep2 })).data, {});
 });
+
+test("the visit reasons 'gave_price_list' and 'introduced_products' are accepted", async () => {
+  const mine = await createCustomer({ created_by: rep.id, assigned_manager_id: rep.id });
+  const r = await put("rep", mine.id, { level: 3, reasons: ["gave_price_list", "introduced_products"] });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal((await put("rep", mine.id, { level: 3, reasons: ["made_up_reason"] })).status, 400);
+});

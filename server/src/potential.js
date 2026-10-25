@@ -6,7 +6,7 @@ export const POTENTIAL_LEVELS = [1, 2, 3, 4];
 // 1 No potential, 2 Low, 3 Real, 4 High
 export const POTENTIAL_REASONS = [
   "counterfeit", "own_import", "competitor_loyal", "price_mismatch", "small_volume", "not_interested", "no_decision_maker", "payment_issue",
-  "no_demand_now", "high_potential", "active_interest", "negotiating", "ready_first_order", "other",
+  "no_demand_now", "high_potential", "active_interest", "negotiating", "ready_first_order", "gave_price_list", "introduced_products", "other",
 ];
 export const COUNTERFEIT_REASON = "counterfeit";
 // Follow-up priority (owner): high first ... no potential last; "not assessed" sits after real potential.

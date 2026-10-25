@@ -323,3 +323,8 @@ Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets 
 - Built: `GET /api/dashboard/kpis` (+ `dashboardKpis.js`, roles admin/ceo/operations_director/sales_director/accountant), `views/homeKpis.js` (hidden below 1024 px, menu tiles hidden on desktop for those roles), desktop tables in `payments.js` and `sales.js` with the shared `.dtl-*` CSS. Details: `docs/desktop-home-tables.md`.
 - Lesson: a `let` declared twice in one function (`lastRows` in sales.js) blanks the whole screen with "Screen failed to render" and only a real-browser run shows it; `node --check` does not catch it for module-level re-declarations inside functions that are never called.
 
+## 2026-10-25 (1.416.0): no potential level when adding a customer
+- Owner: adding a customer must be as fast as possible (name and fields are autofilled); the potential level ("Հեռանկարի մակարդակ") is filled at the visit. The New customer form no longer has the level/reason block; the check-in screen shows the Potential section (`#checkin-potential`, same card as the customer card) for a potential customer.
+- Two new reasons: `gave_price_list` ("Տվել եմ գնացուցակ") and `introduced_products` ("Ծանոթացրել եմ ապրանքներին"), always visible from level 2 up (not behind "More reasons"); server list `POTENTIAL_REASONS`, filter sheet, i18n en + hy.
+- The server still accepts `potential_level` on `POST /api/customers` (optional) for integrations.
+
