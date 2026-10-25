@@ -56,6 +56,8 @@ export const NOTIFICATION_TYPES = [
   "vaghinak",
   // Anti-fraud findings for management and the "hand over your cash" reminder for a rep (see antiFraud.js).
   "fraud_alert",
+  // Expense findings and the Monday report for management (see expenseWatch.js).
+  "expense_alert",
 ];
 
 // Warehouse Manager: an order just entered their queue.

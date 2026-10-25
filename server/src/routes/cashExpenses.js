@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { seesFinancialExports } from "../roles.js";
+import { APP_EXPENSE_IN_EXCEL_SQL, APP_EXPENSE_DAYS_OLD_SQL } from "../expenseWatch.js";
 
 export const cashExpensesRouter = Router();
 
@@ -25,7 +26,7 @@ cashExpensesRouter.get("/", async (req, res) => {
   const offsetNum = Math.max(0, Number(req.query.offset) || 0);
   params.push(PAGE_SIZE + 1, offsetNum);
   const { rows } = await pool.query(
-    `SELECT ce.*, u.name AS user_name
+    `SELECT ce.*, u.name AS user_name, ${APP_EXPENSE_IN_EXCEL_SQL} AS in_excel, ${APP_EXPENSE_DAYS_OLD_SQL}::int AS days_old
      FROM cash_expenses ce
      JOIN users u ON u.id = ce.user_id
      ${where}

@@ -300,3 +300,9 @@ Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets 
 - Customer side: KAD OS payments card has a solid red "I don't see my payments" `<a href="tel:office">`: the tap places the call AND POSTs (`POST /api/kad-orders/payments/dispute` -> `POST /api/partner/payments/dispute` -> finding `customer_dispute`, management notified, rep NOT). KAD OS 0.61.0.
 - Shared payment/Excel match SQL moved to `server/src/paymentExcelMatch.js` (Payments page + anti-fraud use the same rule).
 - Still to build from this batch (owner chose): expenses analysis (cash expenses in the app must equal the Excel cashflow data; weekly report + live alerts), Armenian places gazetteer + autocorrect (free text allowed on the customer card, edits flagged for review), Vaghinak voice = mix of "plain colleague" and "short and direct", desktop Home KPI dashboard + Payments/Sales tables (Team performance NOT).
+
+
+## 2026-10-25 (1.413.0): Expenses analysis in Vaghinak
+- Owner answer: analyse cash expenses with the SAME data as the Excel; weekly reports and live alerts. Built `server/src/expenseWatch.js` + `routes/expenses.js` + migration 152 + Vaghinak tab "Expenses" (admin / CEO / operations director / accountant); notification type `expense_alert`. Details and limits in `docs/expense-watch.md`.
+- Reps' own cash expenses (`#/expenses`) now show "In Excel" / "Not in Excel - N d" (same wording as Payments).
+- Still to build: Armenian places gazetteer + autocorrect, Vaghinak voice rewrite (mix "plain colleague" + "short and direct"), desktop Home KPI dashboard + Payments/Sales tables.

@@ -15652,3 +15652,11 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 
 /* the separate debt cell of the desktop Customers table is only for a desktop window */
 .customer-desk-debt, .desk-th-debt { display: none; }
+
+/* Vaghinak -> Expenses: seven month bars (this month at the end) */
+.exp-bars { display: flex; align-items: flex-end; gap: 8px; height: 96px; margin: 12px 0 8px; }
+.exp-bar { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 0; }
+.exp-bar-fill { display: block; width: 100%; max-width: 34px; border-radius: 6px 6px 2px 2px; background: color-mix(in srgb, var(--accent) 35%, transparent); }
+.exp-bar-now .exp-bar-fill { background: var(--accent); }
+.exp-bar-label { margin-top: 4px; font-size: 0.7rem; color: var(--text-dim); }
+.expense-card-main .badge { align-self: flex-start; margin-top: 2px; }
