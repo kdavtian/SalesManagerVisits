@@ -7,8 +7,8 @@
      deliberately no marker-color tokens here, so nothing can drift away from
      the approved files. */
   --map-visited: #22a45d;
-  --map-overdue: #f2a900; /* visit overdue: yellow "!", 16 px badge */
-  --map-never: #e33b43; /* never visited: red "!!", 18 px badge */
+  --map-overdue: #dc2626; /* visit overdue: red "!", 16 px badge (the only red on the map since 1.418.0) */
+  --map-never: #f59e0b; /* never visited: amber "!!", 18 px badge */
 }
 
 /* Customer markers are pre-approved raster artwork (icons/markers/*.png):
@@ -57,6 +57,9 @@
 }
 
 #leaflet-map .pin-img-asset {
+  /* Above the rep-colour ring drawn behind the pin (.pin-colour-ring in styles.css). */
+  position: relative;
+  z-index: 1;
   display: block;
   width: 100%;
   height: 100%;
@@ -131,7 +134,7 @@
   z-index: 5;
 }
 
-/* Never visited: red "!!" in an 18 px badge with a white outline (shown INSTEAD of the overdue badge, see .pin-is-never in styles.css). */
+/* Never visited: amber "!!" in an 18 px badge with a white outline (shown INSTEAD of the overdue badge, see .pin-is-never in styles.css). */
 #leaflet-map .pin-never {
   position: absolute;
   top: -7px;

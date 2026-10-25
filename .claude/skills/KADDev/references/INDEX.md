@@ -3,7 +3,7 @@
 Read this, then open ONLY the sections the task needs: `Read file offset=<line> limit=<about 60>`. Line numbers shift when a file is edited:
 rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a reference.
 
-## app-architecture.md (21 KB, 105 lines)
+## app-architecture.md (22 KB, 105 lines)
 - L5 Stack and shape - Server server/src: Node 20+/22, Express 5, ES modules, plain pg (no ORM), plain SQL migrations server/migratio
 - L11 Domains and where they live (server route -> client view) - Customers: routes/customers.js (list is client-side filtered in views/customers.js applyNonStatusFilters; tier
 - L30 Roles (8) - admin (superset), ceo, operationsdirector (= CEO permissions), salesdirector (also has warehouse permissions +
@@ -147,7 +147,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L82 6. Proactive moves that always land well - After a numbered list, add "Suggestions" (numbered, with recommendation) only if you saw something real while
 - L90 7. Mistakes I made that cost them time (do not repeat) - Claiming sheets "load before showing" without reading them (Add payment and the customer pickers already paint
 
-## owner-preferences-and-history.md (71 KB, 337 lines)
+## owner-preferences-and-history.md (72 KB, 343 lines)
 - L3 How they work with you - Writes short, numbered, imperative requests (often with screenshots "image1/img2"), mixes English with Armenia
 - L11 Visual / UX preferences (apply by default) - Compact, iOS-native feel: bottom sheets, floating/fixed action bars (Cancel/Save on customer edit must be fixe
 - L24 Things that repeatedly bit us (check proactively) - Forgetting CACHEVERSION bump -> "no updates" on phones.
@@ -187,6 +187,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L321 2026-10-25 (1.415.0): desktop Home KPIs + Payments/Sales tables - Owner answer: desktop Home becomes a KPI dashboard instead of repeating the menu; Payments and Sales as tables
 - L326 2026-10-25 (1.416.0): no potential level when adding a customer - Owner: adding a customer must be as fast as possible (name and fields are autofilled); the potential level ("Հ
 - L331 2026-10-25 (1.417.0): very slow first launch - Owner: "find the cause of very slow load of app on 1st launch and fix issue".
+- L337 2026-10-25 (1.418.0): map pins redesigned (variant B, "solid + rep ring") - Owner: "As a designer please improve colors, suggest variants" -> five variants shown -> "go with B".
 
 ## strategy-roadmap.md (6 KB, 31 lines)
 - L5 Target (owner, 2026-10-12): 10 % of the market = ~1 million liters a year - Owner's working assumption: the Armenian market is ~10M L a year, so 10 % = 1M L.

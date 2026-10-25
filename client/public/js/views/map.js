@@ -367,9 +367,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           </div>
           <p class="map-legend-note">${t("map_legend_shape_note")}</p>
           <ul class="map-legend-list">
-            <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/customer-other.png" alt="" width="20" height="20" />${t("map_legend_customer")}</li>
-            <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/potential-other.png" alt="" width="20" height="20" />${t("map_legend_potential")}</li>
-            <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/competitor-other.png" alt="" width="20" height="20" />${t("map_legend_competitor")}</li>
+            <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/customer-other.svg" alt="" width="20" height="20" />${t("map_legend_customer")}</li>
+            <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/potential-other.svg" alt="" width="20" height="20" />${t("map_legend_potential")}</li>
+            <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/competitor-other.svg" alt="" width="20" height="20" />${t("map_legend_competitor")}</li>
           </ul>
           <div class="map-legend-divider"></div>
           <ul class="map-legend-list">
@@ -1009,8 +1009,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   }
 
   // The map doesn't show a customer's tier: every active customer (bronze,
-  // silver or gold) is the same green pin, potential customers stay the red
-  // crosshair, competitors the dark circle. The tier still lives on the
+  // silver or gold) is the same green pin, potential customers the amber
+  // circle, competitors the grey square. The tier still lives on the
   // customer record and in the customer screens -- it just isn't a map
   // concept. "customer" is the marker kind for the green pin set.
   function markerKind(tier) {
@@ -1019,7 +1019,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     return "potential";
   }
 
-  // The green customer pin is a teardrop whose point sits ~5% above the
+  // The green customer pin is a teardrop whose point sits ~10% above the
   // bottom edge of its (square) source canvas; potential/competitor are
   // crosshair/circle marks with no point, so they read as centered on the
   // coordinate. Hence two anchors, but one size/anchor formula for the pin.
@@ -1029,14 +1029,13 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // from this constant rather than stored as pixel literals, so the tip/
   // center anchoring stays exact at any size.
   const MARKER_SIZE = 38;
-  const PIN_TIP_RATIO = 0.95;
+  const PIN_TIP_RATIO = 0.904;
 
   // Marker shape+color say what kind of site this is (our customer /
   // potential customer / competitor) and the glyph inside encodes the
-  // *category*. Both come from one pre-approved raster per (kind, category)
-  // in icons/markers/ -- the artwork is the source of truth and is never
-  // reconstructed from CSS shapes or inline SVG. Visit status (today's
-  // check, overdue) stays a small badge layered over that image.
+  // *category*. Both come from one SVG per (kind, category) in icons/markers/
+  // (drawn by scripts/make-pin-art.mjs -- edit that script, not the files).
+  // Visit status (today's check, overdue) stays a small badge layered over it.
   // Customers with an open task: a checklist marker on the LEFT of the pin --
   // yellow while the deadline is ahead, red when due today or overdue.
   let taskFlags = new Map(); // customer id -> due (boolean)
@@ -1059,9 +1058,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     }
   }
 
-  // "Colour by Rep" (owner, 2026-10-24): the pin stays exactly as before (green customer / red potential, competitors dark) and its WHITE inside takes
-  // the rep's colour. `icons/markers/fill/<same name>.png` marks the white inside of each pin (made from the approved artwork, anti-aliasing kept);
-  // it is used as a mask over a coloured box drawn on top of the normal image. A customer without a rep keeps the normal pin.
+  // "Colour by Rep": the pin keeps its own colour and gets a ring in the rep's colour behind it (owner, 2026-10-25, design B). `icons/markers/ring-<kind>.svg`
+  // is the pin's outline only; it is used as a mask over a box in the rep colour, so there is no artwork per rep. A customer without a rep keeps the plain pin.
   let colorBy = getColorBy(state.user?.id);
   const repColorOf = (c) => repColor(c.assigned_manager_id, c.assigned_manager_color);
   // "Today's planned visits" in three states (owner, 2026-10-24): off / highlight (a ring in the colour of the rep who planned the customer, plus the
@@ -1075,11 +1073,10 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       : "";
   };
   function pinArtHtml(c, tier) {
-    const src = `/icons/markers/${tier}-${categoryIconSlug(c.category)}.png`;
+    const src = `/icons/markers/${tier}-${categoryIconSlug(c.category)}.svg`;
     const img = `<img class="pin-img-asset" src="${src}" alt="" width="${MARKER_SIZE}" height="${MARKER_SIZE}" draggable="false" />`;
     if (colorBy === "rep" && c.assigned_manager_id && tier !== "competitor") {
-      const fill = `/icons/markers/fill/${tier}-${categoryIconSlug(c.category)}.png`;
-      return `${img}<span class="pin-fill" style="--rep-color:${repColorOf(c)};--pin-fill:url('${fill}')" aria-hidden="true"></span>`;
+      return `<span class="pin-colour-ring" style="--rep-color:${repColorOf(c)};--pin-ring:url('/icons/markers/ring-${tier}.svg')" aria-hidden="true"></span>${img}`;
     }
     return img;
   }

@@ -334,7 +334,7 @@ export const TIER_OPTIONS = [
 // Armenian labels stored on the customer record -- used directly as both
 // the stored value and the display text, matching how this field always
 // worked (no separate translation layer for these fixed business terms).
-// The map's own marker set (icons/markers/<kind>-<slug>.png -- kind is
+// The map's own marker set (icons/markers/<kind>-<slug>.svg -- kind is
 // customer (green pin), potential or competitor; shape and color are baked
 // into the image) still uses the same four slugs below and is unaffected
 // by this. The old flat "blue set" raster
