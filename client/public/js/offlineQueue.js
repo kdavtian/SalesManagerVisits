@@ -192,6 +192,10 @@ async function submitCheckin(entry) {
   }
   // The signed order blank of a delivery ("Products delivered"), when the rep photographed it.
   entry.orderBlankPhotos?.forEach((blob, i) => form.append("order_blank_photos", blob, `order-blank-${i}.jpg`));
+  // The customer's electronic signature (and the rep's own, when it was not on their profile yet): signed offline, the PDFs are made on the server
+  // as soon as the phone is online again.
+  if (entry.customerSignature) form.append("customer_signature", entry.customerSignature, "customer-signature.png");
+  if (entry.repSignature) form.append("rep_signature", entry.repSignature, "rep-signature.png");
   return api.createCheckin(form);
 }
 

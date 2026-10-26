@@ -14,6 +14,7 @@ import { notifyUser } from "../notifications.js";
 import { DRIVER_NOTIFY_ROLES, DELIVERY_OUTCOME_NOTIFY_ROLES } from "../notificationPreferences.js";
 import { buildMatrix, optimizeOrder } from "../osrm.js";
 import { signatureUpload, uploadDirPath } from "../upload.js";
+import { lockSignedOrders, createSignedActs } from "../signedActs.js";
 import { matchesDeclaredImageType } from "../utils/imageSniff.js";
 import { insertPayment } from "./payments.js";
 import { getAppOrderSettings } from "../appOrders.js";
@@ -453,6 +454,8 @@ deliveryRouter.post("/orders/:id/confirm", (req, res, next) => {
        VALUES ($1, 'packed_stock_out', 'delivered', 'Delivered (signature captured)', $2)`,
       [order.id, req.user.id]
     );
+    // The customer's signature on the driver's phone is the same electronic signature as at a visit: it locks the order and signs the act.
+    await lockSignedOrders(client, { customerId: order.customer_id, filePath: signaturePath, createdBy: req.user.id, orderIds: [order.id] });
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -466,6 +469,11 @@ deliveryRouter.post("/orders/:id/confirm", (req, res, next) => {
   res.json(updatedOrder);
 
   (async () => {
+    try {
+      await createSignedActs({ orderIds: [order.id], customerId: order.customer_id, customerSignaturePath: signaturePath, signerId: req.user.id });
+    } catch (err) {
+      console.error("Signed act PDF failed:", err);
+    }
     try {
       const { rows: recipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [DELIVERY_OUTCOME_NOTIFY_ROLES]);
       for (const recipient of recipients) {

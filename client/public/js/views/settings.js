@@ -1,3 +1,4 @@
+import { redrawOwnSignature } from "../signaturePad.js";
 import { api } from "../api.js";
 import { t, getLang, setLang } from "../i18n.js";
 import { readLaunchTimings } from "../launchTiming.js";
@@ -19,6 +20,9 @@ import { checkForUpdateManually } from "../updateBanner.js";
 import { APP_VERSION } from "../version.js";
 import { refreshProductCatalog } from "../productCatalog.js";
 import { isStrongDevice, getMapTileCacheEnabled, setMapTileCacheEnabled } from "../mapPrefs.js";
+
+// Who hands over delivery-acceptance acts and so has a signature on the profile (owner, 2026-10-26).
+const SIGNING_ROLES = ["sales_manager", "sales_director", "ceo", "admin", "operations_director", "delivery_manager"];
 
 const ICON = {
   camera: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg>`,
@@ -244,6 +248,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
           <span class="muted">${t(`role_${state.user.role}`)}${state.user.position ? ` · ${escapeHtml(state.user.position)}` : ""}</span>
           <span class="muted">${escapeHtml(state.user.email)}</span>
           ${state.user.has_avatar ? `<button type="button" class="settings-reset-link" id="avatar-remove-btn">${t("remove_avatar")}</button>` : ""}
+          ${SIGNING_ROLES.includes(state.user.role) ? `<button type="button" class="settings-reset-link" id="signature-btn">${t(state.user.has_signature ? "signature_redraw" : "signature_draw")}</button>` : ""}
         </div>
       </div>
 
@@ -885,6 +890,15 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
       state.user.has_avatar = true;
       window.dispatchEvent(new Event("app-preferences-changed"));
       renderSettings(root, onLogout, onLanguageChange, currentPageId(), navigateFn);
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  // The signature that is placed silently on every delivery-acceptance act the user hands over (owner, 2026-10-26).
+  root.querySelector("#signature-btn")?.addEventListener("click", async () => {
+    try {
+      if (await redrawOwnSignature()) renderSettings(root, onLogout, onLanguageChange, currentPageId(), navigateFn);
     } catch (err) {
       alert(err.message);
     }

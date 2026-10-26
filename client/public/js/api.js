@@ -350,6 +350,12 @@ export const api = {
   logoutOtherSessions: () => request("/me/logout-other-sessions", { method: "POST" }),
   uploadMyAvatar: (formData) => request("/me/avatar", { method: "POST", body: formData }),
   deleteMyAvatar: () => request("/me/avatar", { method: "DELETE" }),
+  saveMySignature: (blob) => {
+    const form = new FormData();
+    form.set("signature", blob, "signature.png");
+    return request("/me/signature", { method: "POST", body: form });
+  },
+  mySignatureUrl: () => `/api/me/signature?t=${Date.now()}`,
   myAvatarUrl: () => `/api/me/avatar?t=${Date.now()}`,
 
   getMyVisitPlan: (date, userId) => {

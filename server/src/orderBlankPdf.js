@@ -201,12 +201,36 @@ function drawTotal(c, doc, y, t, h, fs) {
   c.right(amd(t.sum), COLS[6] - 5, ty, { bold: true, size: fs });
 }
 
-function drawSignatures(c, data, y, fs) {
+// A Yerevan date and time as "dd/mm/yyyy hh:mm" (the stamp under an electronic signature).
+export function yerevanDateTime(when) {
+  const time = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Yerevan", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(when ?? Date.now()));
+  return `${yerevanDate(when)} ${time}`;
+}
+
+// data.signatures (the electronic signature, owner 2026-10-26): { signerName, rep: PNG Buffer | null, customer: PNG Buffer | null, signedAt }.
+// The images are drawn on the two signature lines, so the same paper that was printed for a pen is now signed on the phone.
+function drawSignatures(c, doc, data, y, fs) {
   const { field, center, textW } = c;
-  field("Հանձնեց՝", data.rep?.name ?? "", 21.6, y, 345, fs);
+  const sig = data.signatures;
+  const signer = sig?.signerName ?? data.rep?.name ?? "";
+  field("Հանձնեց՝", signer, 21.6, y, 345, fs);
   field("Ընդունեց՝", "", 379, y, 589.6, fs);
   center("ստորագրություն", 21.6 + textW("Հանձնեց՝", { size: fs }) + 4, 345, y + fs + 4, { size: 7 });
   center("ստորագրություն", 379 + textW("Ընդունեց՝", { size: fs }) + 4, 589.6, y + fs + 4, { size: 7 });
+  if (!sig) return;
+  const h = fs > 9 ? 34 : 24;
+  const place = (img, x1, x2) => {
+    if (!img || x2 - x1 < 20) return;
+    try {
+      doc.image(img, x1, y + fs + 1 - h, { fit: [x2 - x1, h], align: "center", valign: "bottom" });
+    } catch {
+      /* an unreadable image leaves the line empty */
+    }
+  };
+  const repStart = 21.6 + textW("Հանձնեց՝", { size: fs }) + 4 + 2 + textW(signer, { bold: true, size: fs }) + 8;
+  place(sig.rep, repStart, 345);
+  place(sig.customer, 379 + textW("Ընդունեց՝", { size: fs }) + 8, 589.6);
+  if (sig.signedAt) c.text(`Ստորագրվել է էլեկտրոնային եղանակով՝ ${yerevanDateTime(sig.signedAt)}`, 21.6, y + fs + 15, { size: 6.5 });
 }
 
 // Castrol, Lotos and Royal Super on one line: same height, centred on the same
@@ -266,7 +290,7 @@ function drawFull(doc, data, firstPageDrawn) {
         if (terms.down) c.right(terms.down, 580, ry + 1, { bold: true, size: 10 });
         sigY = y + 5 * 21 + 30;
       }
-      drawSignatures(c, data, sigY, 10);
+      drawSignatures(c, doc, data, sigY, 10);
     } else {
       c.text("Շարունակությունը հաջորդ էջում…", 21.6, bottom + 8, { size: 9 });
     }
@@ -311,7 +335,7 @@ function drawHalf(doc, data, slotTop, slotH) {
     if (terms.down) c.right(terms.down, 587.6, ry, { bold: true, size: 8.5 });
     sigY = y + 45 + 10;
   }
-  drawSignatures(c, data, sigY, 8.5);
+  drawSignatures(c, doc, data, sigY, 8.5);
   doc.restore();
 }
 

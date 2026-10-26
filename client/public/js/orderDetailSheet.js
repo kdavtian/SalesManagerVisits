@@ -200,6 +200,8 @@ function notifyOrdersChanged() {
 // `navigate` is the app router's own navigate(hash) (see app.js) -- tapping
 // the customer name inside the sheet closes it and routes there. Falls back
 // to setting location.hash directly for a caller that doesn't have one handy.
+const isSignedLocked = (order) => Boolean(order.signed_at) && !["admin", "ceo"].includes(state.user.role);
+
 export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}) {
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
@@ -300,6 +302,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       ${order.credit_status === "pending" ? `<p class="muted">${t("credit_status_pending_hint")}</p>` : ""}
       ${order.note ? `<p class="muted">${escapeHtml(order.note)}</p>` : ""}
       ${accountingSectionHtml(order)}
+      ${order.signed_at ? `<p class="order-signed-note">${t("signature_signed_on")} · ${escapeHtml(formatDateTime(order.signed_at))}${isSignedLocked(order) ? `<br />${t("signature_locked")}` : ""}</p>` : ""}
       <div id="order-signed-docs"></div>
       <div id="order-files-slot"></div>
       <div id="order-returns-slot"></div>
@@ -384,6 +387,12 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     }
     if (state.user.role === "admin" || (state.user.role === "sales_manager" && order.user_id === state.user.id && ["draft", "submitted"].includes(order.status))) {
       buttons.push({ label: `${icons.trash}${t("delete_order")}`, action: "delete-order", cls: "btn btn-danger btn-has-icon" });
+    }
+
+    // The customer signed the delivery-acceptance act: from then on only the admin or the CEO may edit, reject or delete the order
+    // (owner, 2026-10-26). Returns stay open: they are a request, decided by management.
+    if (isSignedLocked(order)) {
+      for (let i = buttons.length - 1; i >= 0; i--) if (["edit-order", "delete-order", "reject-order"].includes(buttons[i].action)) buttons.splice(i, 1);
     }
 
     actionsEl.innerHTML = buttons
