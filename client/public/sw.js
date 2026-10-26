@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v438";
+const CACHE_VERSION = "field-visits-v439";
 // v5: drops tiles cached while requests went out without a Referer (OSM may have
 // answered those with placeholder images) -- see Referrer-Policy in server/src/app.js.
 const TILE_CACHE = "field-visits-tiles-v5";
@@ -214,6 +214,7 @@ const APP_SHELL = [
   "/vendor/leaflet-markercluster/leaflet.markercluster.js",
   "/vendor/leaflet-markercluster/MarkerCluster.css",
   "/vendor/leaflet-markercluster/MarkerCluster.Default.css",
+  "/icons/app/icon-192.png",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/apple-touch-icon.png",
@@ -241,8 +242,9 @@ self.addEventListener("push", (event) => {
   const title = payload.title || "KAD Motors";
   event.waitUntil(self.registration.showNotification(title, {
     body: payload.body || "",
-    icon: "/icons/icon-192.png",
-    badge: "/icons/icon-192.png",
+    // The server picks the icon (K, or the calculator while Calculator Mode is on); the calculator is the safe default if one is ever missing.
+    icon: payload.icon || "/icons/icon-192.png",
+    badge: payload.badge || payload.icon || "/icons/icon-192.png",
     data: { url: payload.url || "/" },
   }));
 });

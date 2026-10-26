@@ -18,9 +18,7 @@ The demo looks different where nobody can miss it: it installs / appears as **"K
 `seed` fills an empty demo database with: a CEO (`ceo@kad.demo`), three sales reps (Aram, Artak, Lilit: channels SM YVN, SM Davtashen, SM Shirak, each with its own map colour), 16 products with made-up prices and costs, about 60 customers around Yerevan and Gyumri (gold / silver / bronze, potential customers with levels and reasons, competitors, every category, visited today / overdue / never visited), 100+ check-ins, about 90 orders in all statuses (some waiting for confirmation), payments (a few waiting for approval), tasks, debt with real aging invoices, and four months of sales and plan per channel. Everything is deterministic: the demo looks the same every time.
 
 ## One-time setup (on the server, from the repo checkout)
-1. **The address.** Suggested name: **`kadostest`**. Two ways to get it (the demo needs HTTPS so phones can install it):
-   - *Your own domain* (the one the real app uses): add one **A record**, host `kadostest`, value = the server's IP (the same IP as the real app). Result: `kadostest.yourcompany.com`.
-   - *Free, no domain needed:* make a free name at <https://www.duckdns.org> (sign in, type `kadostest`, set the server's IP). Result: `kadostest.duckdns.org`.
+1. **The address.** The demo needs HTTPS so phones can install it, and it lives on **your own domain** (owner, 2026-10-26: no free DuckDNS names). Add one **A record** at the place where the domain's DNS is managed: host `demo` (or `kadostest`), value = the server's IP (the same IP as the real app). Result: `demo.yourcompany.com`.
 2. **Start the demo:**
    ```bash
    cd /opt/field-visits

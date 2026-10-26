@@ -66,10 +66,15 @@ function render() {
   }
 }
 
+// The K, or the plain calculator while Calculator Mode is on (the page's own <meta name="calc-mode">, filled in by the server).
+function installIcon() {
+  return document.querySelector('meta[name="calc-mode"]')?.content === "true" ? "icons/icon-192.png" : "icons/app/icon-192.png";
+}
+
 function renderAndroidBanner() {
   container.innerHTML = `
     <div class="install-banner">
-      <img src="icons/icon-192.png" alt="" class="install-icon" />
+      <img src="${installIcon()}" alt="" class="install-icon" />
       <div class="install-copy">
         <strong>${t("install_title")}</strong>
         <span>${t("install_body")}</span>
@@ -91,7 +96,7 @@ function renderAndroidBanner() {
 function renderIOSBanner() {
   container.innerHTML = `
     <div class="install-banner">
-      <img src="icons/icon-192.png" alt="" class="install-icon" />
+      <img src="${installIcon()}" alt="" class="install-icon" />
       <div class="install-copy">
         <strong>${t("install_title")}</strong>
         <span>${t("install_body")}</span>

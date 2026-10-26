@@ -387,7 +387,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
             <li><span class="map-legend-swatch map-legend-swatch-badge map-legend-swatch-overdue">!</span>${t("map_legend_overdue")}</li>
             <li><span class="map-legend-swatch map-legend-swatch-badge map-legend-swatch-never">!!</span>${t("never_visited")}</li>
             <li><span class="map-legend-swatch map-legend-swatch-selected"></span>${t("map_legend_selected")}</li>
-            <li><span class="map-legend-swatch map-legend-swatch-debt" aria-hidden="true"></span>${t("map_legend_debt")}</li>
+            <li><span class="map-legend-swatch map-legend-swatch-debt map-legend-swatch-debt-s" aria-hidden="true"></span>${t("map_legend_debt_s")}</li>
+            <li><span class="map-legend-swatch map-legend-swatch-debt map-legend-swatch-debt-m" aria-hidden="true"></span>${t("map_legend_debt_m")}</li>
+            <li><span class="map-legend-swatch map-legend-swatch-debt map-legend-swatch-debt-l" aria-hidden="true"></span>${t("map_legend_debt_l")}</li>
             <li><span class="map-legend-swatch map-legend-swatch-cluster">9</span>${t("map_legend_cluster")}</li>
           </ul>
           <p class="map-legend-note">${t("map_legend_glyph_note")}</p>
@@ -1088,21 +1090,24 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     }
   }
 
-  // Optional "debt coin" (owner, 2026-10-26; Off by default): a small gold coin at the lower left of every customer pin that owes money.
-  // The set of debtors comes from one light request (ids only, same RBAC as every debt figure) and is only fetched while the switch is on.
+  // Optional "debt coin" (owner, 2026-10-26; Off by default): a coin at the lower left of every customer pin that owes money, in three sizes and colours
+  // by the amount (AMD): under 300,000 small yellow, under 1,000,000 medium orange, 1,000,000 and more large red.
+  // The debtors come from one light request (ids + amounts, same RBAC as every debt figure) and are only fetched while the switch is on.
+  const DEBT_COIN_STEPS = [300000, 1000000];
+  const debtCoinSize = (amd) => (amd < DEBT_COIN_STEPS[0] ? "s" : amd < DEBT_COIN_STEPS[1] ? "m" : "l");
   let debtCoinOn = getDebtCoin(state.user?.id);
-  let debtorIds = new Set();
-  const debtCoinHtml = (c) => (debtCoinOn && debtorIds.has(c.id) ? '<span class="pin-debt" aria-hidden="true"></span>' : "");
+  let debtors = new Map(); // customer id -> debt in AMD
+  const debtCoinHtml = (c) => (debtCoinOn && debtors.has(c.id) ? `<span class="pin-debt pin-debt-${debtCoinSize(debtors.get(c.id))}" aria-hidden="true"></span>` : "");
   async function loadDebtFlags({ repaint = true } = {}) {
     if (!debtCoinOn) {
-      debtorIds = new Set();
+      debtors = new Map();
       return;
     }
     try {
       const rows = await api.getCustomerDebtFlags();
-      const next = new Set(rows.map((r) => r.customer_id));
-      const changed = next.size !== debtorIds.size || [...next].some((id) => !debtorIds.has(id));
-      debtorIds = next;
+      const next = new Map(rows.map((r) => [r.customer_id, Number(r.debt_amd)]));
+      const changed = next.size !== debtors.size || [...next].some(([id, amd]) => !debtors.has(id) || debtCoinSize(debtors.get(id)) !== debtCoinSize(amd));
+      debtors = next;
       if (repaint && changed) applyFilter({ refit: false });
     } catch {
       /* optional overlay */
@@ -3003,7 +3008,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     setDebtCoin(state.user?.id, debtCoinOn);
     if (debtCoinOn) await loadDebtFlags();
     else {
-      debtorIds = new Set();
+      debtors = new Map();
       applyFilter({ refit: false });
     }
   });
