@@ -3,7 +3,7 @@
 //   node scripts/make-pin-art.mjs
 //
 // Design "B" (owner, 2026-10-25): solid pins, white glyph. Customer = green
-// teardrop, potential customer = amber circle, competitor = grey rounded
+// teardrop, potential customer = amber crosshair (circle + 4 ticks, 2026-10-26), competitor = grey rounded
 // square. The rep colour (Colour by rep) is a ring drawn BEHIND the pin: one
 // shape-only file per kind (ring-<kind>.svg) that map.js colours with a CSS
 // mask, so there is no per-rep artwork. Visit status badges (red "!" overdue,
@@ -27,7 +27,7 @@ const BODY = {
 };
 // Centre of the glyph for each body.
 const CENTRE = { customer: [24, 20.8], potential: [24, 24], competitor: [24, 24] };
-const GLYPH_SCALE = { customer: 0.96, potential: 0.92, competitor: 0.86 };
+const GLYPH_SCALE = { customer: 0.96, potential: 0.9, competitor: 0.86 };
 
 // 24x24 glyphs, white, centred on (12, 12).
 const GLYPHS = {
@@ -41,11 +41,20 @@ const GLYPHS = {
   other: '<circle cx="12" cy="12" r="5.2" fill="none" stroke="#fff" stroke-width="3"/>',
 };
 
+// Potential customers are a crosshair (owner, 2026-10-26): the amber circle with four tick marks, each with a white edge like the body.
+const TICK_PATH = "M24 4.2 V9.6 M24 38.4 V43.8 M4.2 24 H9.6 M38.4 24 H43.8";
+const crosshair = (kind) =>
+  kind === "potential"
+    ? `<path d="${TICK_PATH}" fill="none" stroke="#fff" stroke-width="6.6" stroke-linecap="round"/>
+<path d="${TICK_PATH}" fill="none" stroke="${COLORS.potential}" stroke-width="3.6" stroke-linecap="round"/>
+`
+    : "";
+
 function art(kind, category) {
   const [cx, cy] = CENTRE[kind];
   const s = GLYPH_SCALE[kind];
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
-<path d="${BODY[kind]}" fill="${COLORS[kind]}" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/>
+${crosshair(kind)}<path d="${BODY[kind]}" fill="${COLORS[kind]}" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/>
 <g transform="translate(${cx} ${cy}) scale(${s}) translate(-12 -12)">${GLYPHS[category]}</g>
 </svg>
 `;

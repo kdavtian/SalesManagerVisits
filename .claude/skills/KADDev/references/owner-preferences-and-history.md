@@ -345,3 +345,6 @@ Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets 
 - `DEMO_MODE=1` (set only in the demo compose): app appears as "KAD Demo" (title, manifest name, purple status bar), `noindex`; `demo-site.mjs` refuses without it, and `seed` refuses a database with any non-`@kad.demo` user.
 - Lessons: `sales_performance.rep_name` holds the CHANNEL code (SM YVN ...), and the plan on Home comes from approved `perf_plans` + `perf_plan_targets`; debt aging comes from `erp_order_lines`. Two test files that flip the same shared setting (Calculator Mode) can disturb each other when run in parallel: keep assertions independent of it.
 
+## 2026-10-26 (1.419.0): potential customer pin = crosshair again
+- Owner: "Potential customer: crosshair (keep current color)". Kept the amber of design B, added the four crosshair ticks (white-edged) around the circle; legend text "amber crosshair" / "նարնջագույն թիրախ". `scripts/make-pin-art.mjs` draws it; the rep ring stays a round ring behind it. Customer / competitor pins unchanged.
+
