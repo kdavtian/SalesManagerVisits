@@ -517,6 +517,21 @@ customersRouter.get("/brand-summary", async (req, res) => {
   res.json([...byCustomer.values()]);
 });
 
+// Map "debt coin" (optional pin overlay, off by default): which customers owe money, so the pin can carry a small coin. Ids and amounts only
+// (no names); same RBAC as every other debt figure -- a sales_manager gets their own customers only.
+customersRouter.get("/debt-flags", async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT c.id AS customer_id, c.assigned_manager_id, erp.debt_amd
+     FROM customers c JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
+     WHERE erp.debt_amd > 0`
+  );
+  res.json(
+    rows
+      .filter((r) => seesCustomerErpData(req.user.role, r.assigned_manager_id, req.user.id))
+      .map((r) => ({ customer_id: r.customer_id, debt_amd: Number(r.debt_amd) }))
+  );
+});
+
 // Map pins: the popup facts (last visit, debt, planned date) for many
 // customers in ONE request so the Map can warm the popups of the pins on
 // screen. Same shape per customer as GET /:id/map-facts; unknown ids are
