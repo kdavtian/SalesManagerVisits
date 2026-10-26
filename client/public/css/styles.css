@@ -15795,3 +15795,6 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 .files-blank { display: flex; flex-direction: column; gap: 4px; padding: 0; background: none; border: none; color: inherit; font: inherit; text-align: left; cursor: pointer; min-width: 0; }
 .files-blank img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-inset, var(--bg-card)); }
 .files-blank-cap { font-size: 0.72rem; color: var(--text-dim); overflow-wrap: anywhere; }
+/* The two new required-field messages of the check-in sit clear of the field above them. */
+#note-error { margin: 6px 0 12px; }
+.blank-photo-block .form-error { margin: 0; }
