@@ -301,7 +301,19 @@ const REAL_APP_BRANDING = {
   appleTouchIcon: "icons/app/apple-touch-icon.png",
 };
 
+// The demo site (deploy/demo.sh, docs/demo-site.md) is a separate copy of the app with made-up data. It looks different where a person cannot
+// miss it: another name on the home screen / in the app switcher / in the tab, and a purple status bar, so it is never mistaken for the real app.
+const isDemoSite = () => process.env.DEMO_MODE === "1";
+const DEMO_BRANDING = { title: "KAD Demo", themeColor: "#6d28d9" };
+
 app.get("/manifest.json", async (req, res) => {
+  if (isDemoSite()) {
+    const manifest = JSON.parse(await fs.promises.readFile(path.join(clientDir, "manifest.app.json"), "utf8"));
+    Object.assign(manifest, { name: DEMO_BRANDING.title, short_name: DEMO_BRANDING.title, theme_color: DEMO_BRANDING.themeColor });
+    res.set("Cache-Control", "no-store");
+    res.type("application/manifest+json").send(JSON.stringify(manifest));
+    return;
+  }
   const calculatorModeEnabled = await getCalculatorModeEnabled();
   // no-store: this file's content depends on an admin setting that can
   // change at any time -- a browser or intermediary cache serving a stale
@@ -326,14 +338,15 @@ app.get(/.*/, async (req, res) => {
   // Read server-side (never fetched by the client) so the calculator
   // disguise's "touches no network before unlock" property holds whether
   // the feature is on or off -- see bootGate.js.
-  const calculatorModeEnabled = await getCalculatorModeEnabled();
-  const b = calculatorModeEnabled ? CALCULATOR_BRANDING : REAL_APP_BRANDING;
+  const demoSite = isDemoSite();
+  const calculatorModeEnabled = demoSite ? false : await getCalculatorModeEnabled();
+  const b = demoSite ? { ...REAL_APP_BRANDING, ...DEMO_BRANDING, manifest: "manifest.json" } : calculatorModeEnabled ? CALCULATOR_BRANDING : REAL_APP_BRANDING;
   const head = `<title>${b.title}</title>
     <meta name="theme-color" content="${b.themeColor}" />
     <link rel="manifest" href="${b.manifest}" />
     <link rel="icon" href="${b.icon192}" />
     <link rel="apple-touch-icon" href="${b.appleTouchIcon}" />
-    <meta name="apple-mobile-web-app-title" content="${b.title}" />`;
+    <meta name="apple-mobile-web-app-title" content="${b.title}" />${demoSite ? '\n    <meta name="robots" content="noindex, nofollow" />' : ""}`;
   // A <meta> tag, not an inline <script>, because the CSP above has no
   // 'unsafe-inline' in script-src -- bootGate.js reads this via
   // document.querySelector instead.
@@ -348,6 +361,7 @@ app.get(/.*/, async (req, res) => {
   // Same reasoning as /manifest.json above -- this page's branding depends
   // on the same admin setting and must never be served stale from cache.
   res.set("Cache-Control", "no-store");
+  if (demoSite) res.set("X-Robots-Tag", "noindex, nofollow");
   res.type("html").send(html);
 });
 

@@ -1,0 +1,49 @@
+# The DEMO SITE: a second, completely separate copy of the app with made-up data (docs/demo-site.md). Manage it with deploy/demo.sh.
+#
+# Why it cannot touch the real system:
+#   - its own project name (fvdemo): own containers, own network, own volumes -- the real `db` is not even on this network;
+#   - its own Postgres with its own random password (deploy/demo.sh writes .env.demo; the real .env is never read here);
+#   - none of the integration settings are passed in: no Excel sync key, no Telegram, no web push, no AI key, no Platform sync, no KAD OS link,
+#     so every outbound feature stays switched off;
+#   - DEMO_MODE=1: the app shows up as "KAD Demo" and keeps out of search engines; demo-site.mjs refuses to run without it.
+name: fvdemo
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: ${DEMO_DB_PASSWORD:?run deploy/demo.sh up}
+      POSTGRES_DB: demo
+    volumes:
+      - demo_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://demo:${DEMO_DB_PASSWORD}@db:5432/demo
+      JWT_SECRET: ${DEMO_JWT_SECRET:?run deploy/demo.sh up}
+      DEMO_MODE: "1"
+      PORT: 3000
+      UPLOAD_DIR: /app/server/uploads
+      CHECKIN_RADIUS_METERS: 200
+      NODE_ENV: production
+    volumes:
+      - demo_uploads:/app/server/uploads
+    ports:
+      - "127.0.0.1:${DEMO_PORT:-3100}:3000"
+
+volumes:
+  demo_db:
+  demo_uploads:
