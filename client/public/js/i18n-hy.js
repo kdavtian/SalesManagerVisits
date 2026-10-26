@@ -561,6 +561,8 @@ export default {
     select_customer: "Ընտրել հաճախորդ",
     loading: "Բեռնվում է…",
     retry: "Կրկին փորձել",
+    request_timeout: "Սերվերը չի պատասխանում։ Ստուգեք կապը և փորձեք նորից։",
+    card_partial_load: "Էջի մի մասը չբեռնվեց։",
     saving: "Պահպանվում է…",
     zoom_in: "Մեծացնել",
     zoom_out: "Փոքրացնել",

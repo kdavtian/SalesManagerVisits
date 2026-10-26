@@ -91,3 +91,19 @@ test.describe("Customer card sheets", () => {
     }
   });
 });
+
+test("the customer card still opens when the visit list fails to load (it used to spin forever)", async ({ page, fixtures }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const { admin, customer, erpId } = await seedCustomer(fixtures);
+  try {
+    await page.route(`**/api/customers/${customer.id}/checkins**`, (route) => route.fulfill({ status: 500, json: { error: "boom" } }));
+    await loginViaUi(page, admin.email);
+    await page.goto(`/#/customers/${customer.id}`);
+    await expect(page.locator("#customer-detail-name")).toBeVisible();
+    await expect(page.locator(".customer-partial-error")).toBeVisible();
+    await expect(page.locator(".customer-detail-view .loading-state")).toHaveCount(0);
+  } finally {
+    await pool.query("DELETE FROM erp_order_lines WHERE erp_customer_id = $1", [erpId]);
+    await pool.query("DELETE FROM erp_customer_data WHERE erp_customer_id = $1", [erpId]);
+  }
+});
