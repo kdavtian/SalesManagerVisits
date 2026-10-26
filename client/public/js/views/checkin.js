@@ -10,15 +10,21 @@ import { state } from "../state.js";
 import { openPhotoLightbox } from "../photoLightbox.js";
 import { openOrderTaskSheet } from "../orderTaskSheet.js";
 import { loadReorderProfile, usualOrderHash } from "../reorder.js";
+import { COMPETITORS } from "../brandChips.js";
+
+// Order Placed, Revisit, Payment Collected, Assortment check, Products delivered, Other (owner, 2026-10-26: "No order" and
+// "Complaint" were removed and their old records merged into Other). "customer_unavailable" is the stored value of "Products delivered".
+const CAMERA_ICON = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/>
+  <circle cx="12" cy="13" r="3.5"/>
+</svg>`;
 
 const OUTCOME_OPTIONS = [
   { value: "order_placed", labelKey: "outcome_order_placed", icon: icons.cart },
-  { value: "no_order", labelKey: "outcome_no_order", icon: icons.noOrder },
-  { value: "payment_collected", labelKey: "outcome_payment_collected", icon: icons.payment },
   { value: "follow_up_required", labelKey: "outcome_follow_up_required", icon: icons.clock },
+  { value: "payment_collected", labelKey: "outcome_payment_collected", icon: icons.payment },
   { value: "assortment_check", labelKey: "outcome_assortment_check", icon: icons.clipboardCheck },
   { value: "customer_unavailable", labelKey: "outcome_customer_unavailable", icon: icons.truck },
-  { value: "complaint", labelKey: "outcome_complaint", icon: icons.warning },
   { value: "other", labelKey: "outcome_other", icon: icons.more },
 ];
 
@@ -52,11 +58,17 @@ const BRAND_GROUPS = [
   {
     key: "competitors",
     labelKey: "brand_group_competitors",
-    options: ["mobil", "motul", "shell", "liquimoly", "bardahl", "aral", "oscar", "zic", "russian_oil"].map((v) => ({
+    options: COMPETITORS.map((v) => ({
       value: v,
       labelKey: `competitor_${v}`,
     })),
   },
+];
+
+// The two cards of "Products found at this location": one "KAD products" card (Castrol, Lotos and Royal in one sheet) and Competitors.
+const BRAND_CARDS = [
+  { key: "kad", labelKey: "brand_group_kad", groups: ["castrol", "lotos", "royal"] },
+  { key: "competitors", labelKey: "brand_group_competitors", groups: ["competitors"] },
 ];
 
 export async function renderCheckin(root, navigate, customerId) {
@@ -110,6 +122,14 @@ export async function renderCheckin(root, navigate, customerId) {
       <div id="delivered-orders-field" class="delivered-orders-field" hidden>
         <span class="delivered-orders-title">${t("delivered_orders_title")}</span>
         <div id="delivered-orders-list" class="delivered-orders-list"></div>
+        <!-- The signed order blank: a photo is required (owner, 2026-10-26); the Electronic signature button joins it later. -->
+        <div class="blank-photo-block">
+          <span class="delivered-orders-title">${t("delivered_blank_title")}</span>
+          <div class="photo-thumb-grid" id="blank-thumb-grid"></div>
+          <input type="file" id="blank-photo-input" accept="image/*" capture="environment" class="visually-hidden" />
+          <button type="button" class="camera-btn" id="blank-photo-btn">${CAMERA_ICON}<span id="blank-photo-label">${t("take_photo")}</span></button>
+          <p class="form-error" id="blank-photo-error" hidden>${t("delivered_blank_required")}</p>
+        </div>
       </div>
 
       <label id="available-products-field" hidden>
@@ -120,27 +140,25 @@ export async function renderCheckin(root, navigate, customerId) {
       <label class="brands-label">
         ${t("products_found")}
         <div class="brand-group-grid" id="brand-group-grid">
-          ${BRAND_GROUPS.map(
-            (g) => `
-            <button type="button" class="brand-group-btn" data-brand-group="${g.key}">${t(g.labelKey)}</button>
+          ${BRAND_CARDS.map(
+            (c) => `
+            <button type="button" class="brand-group-btn" data-brand-card="${c.key}">${t(c.labelKey)}</button>
           `
           ).join("")}
         </div>
       </label>
 
-      <label>
-        ${t("note_optional")}
+      <label id="note-field">
+        <span id="note-label">${t("note_optional")}</span>
         <textarea name="note" rows="3" placeholder="${t("note_placeholder")}"></textarea>
+        <p class="form-error" id="note-error" hidden>${t("note_required_for_other")}</p>
       </label>
 
       <div class="camera-field">
         <input type="file" name="photo" accept="image/*" capture="environment" id="photo-input" class="visually-hidden" />
         <div class="photo-thumb-grid" id="photo-thumb-grid"></div>
         <button type="button" class="camera-btn" id="camera-btn" aria-label="${t("take_photo")}">
-          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/>
-            <circle cx="12" cy="13" r="3.5"/>
-          </svg>
+          ${CAMERA_ICON}
           <span id="camera-btn-label">${t("take_photo")}</span>
         </button>
         <label class="high-res-photo-toggle">
@@ -210,6 +228,19 @@ export async function renderCheckin(root, navigate, customerId) {
   const photoThumbGrid = container.querySelector("#photo-thumb-grid");
   const highResToggle = container.querySelector("#high-res-photo-toggle");
   const outcomeError = container.querySelector("#outcome-error");
+  const noteLabel = container.querySelector("#note-label");
+  const noteError = container.querySelector("#note-error");
+  const noteInput = container.querySelector('textarea[name="note"]');
+  // "Other" must be explained: the note stops being optional while Other is ticked (the office check-in has nothing to explain).
+  const noteRequired = () => container.querySelector('input[name="outcomes"][value="other"]').checked && !customer.checkin_for_all;
+  function syncNoteRequirement() {
+    const required = noteRequired();
+    noteLabel.textContent = required ? t("note_required") : t("note_optional");
+    if (!required) noteError.hidden = true;
+  }
+  noteInput.addEventListener("input", () => {
+    noteError.hidden = true;
+  });
   // With "Order placed" ticked the button says what will happen next: confirm the check-in AND open the order menu.
   const submitLabel = () => (container.querySelector('input[name="outcomes"][value="order_placed"]')?.checked ? t("submit_checkin_and_order") : t("submit_checkin"));
 
@@ -257,6 +288,7 @@ export async function renderCheckin(root, navigate, customerId) {
     overlay.className = "sheet-overlay";
     overlay.innerHTML = `
       <div class="sheet">
+        <button type="button" class="icon-btn sheet-close-x" data-action="close-sheet" aria-label="${t("close")}">${icons.close}</button>
         <h2>${t("select_available_products")}</h2>
         ${
           orderedProducts.length
@@ -281,9 +313,7 @@ export async function renderCheckin(root, navigate, customerId) {
     `;
     document.body.appendChild(overlay);
     activateDialog(overlay);
-    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
-
-    overlay.querySelector("#available-products-done").addEventListener("click", () => {
+    const apply = () => {
       selectedAvailableProducts = new Set(
         [...overlay.querySelectorAll("input[type=\"checkbox\"]:checked")].map((input) => {
           const p = orderedProducts[Number(input.dataset.index)];
@@ -292,36 +322,59 @@ export async function renderCheckin(root, navigate, customerId) {
       );
       paintAvailableProductsBtn();
       overlay.remove();
-    });
+    };
+    overlay.addEventListener("click", (e) => e.target === overlay && apply());
+    overlay.querySelector('[data-action="close-sheet"]').addEventListener("click", apply);
+    overlay.querySelector("#available-products-done").addEventListener("click", apply);
   }
 
   availableProductsBtn.addEventListener("click", openAvailableProductsSheet);
 
+  const cardGroupsHaveValues = (card) => card.groups.some((key) => brandStatus[key].length > 0);
   function paintBrandGroupButtons() {
-    container.querySelectorAll("[data-brand-group]").forEach((btn) => {
-      btn.classList.toggle("brand-group-btn-active", brandStatus[btn.dataset.brandGroup].length > 0);
+    container.querySelectorAll("[data-brand-card]").forEach((btn) => {
+      const card = BRAND_CARDS.find((c) => c.key === btn.dataset.brandCard);
+      const count = card.groups.reduce((n, key) => n + brandStatus[key].length, 0);
+      btn.classList.toggle("brand-group-btn-active", cardGroupsHaveValues(card));
+      btn.textContent = count ? `${t(card.labelKey)} (${count})` : t(card.labelKey);
     });
   }
 
-  function openBrandSheet(group) {
-    const selected = new Set(brandStatus[group.key]);
-    const overlay = document.createElement("div");
-    overlay.className = "sheet-overlay";
-    overlay.innerHTML = `
-      <div class="sheet">
-        <h2>${escapeHtml(t(group.labelKey))}</h2>
+  // One bottom sheet per card. "KAD products" shows two columns: Castrol on the left, Lotos with Royal under it on the right
+  // (owner, 2026-10-26); Competitors is one list.
+  function openBrandSheet(card) {
+    const groups = card.groups.map((key) => BRAND_GROUPS.find((g) => g.key === key));
+    const selected = Object.fromEntries(groups.map((g) => [g.key, new Set(brandStatus[g.key])]));
+    const sectionHtml = (g) => `
+      <section class="brand-sheet-section" data-sheet-group="${g.key}">
+        ${card.groups.length > 1 ? `<h3 class="brand-sheet-heading">${escapeHtml(t(g.labelKey))}</h3>` : ""}
         <div class="brand-grid">
-          ${group.options
+          ${g.options
             .map(
               (o) => `
             <label class="brand-chip">
-              <input type="checkbox" value="${o.value}" ${selected.has(o.value) ? "checked" : ""} />
+              <input type="checkbox" value="${o.value}" ${selected[g.key].has(o.value) ? "checked" : ""} />
               <span>${escapeHtml(t(o.labelKey))}</span>
             </label>
           `
             )
             .join("")}
         </div>
+      </section>`;
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet brand-sheet brand-sheet-${card.key}">
+        <button type="button" class="icon-btn sheet-close-x" data-action="close-sheet" aria-label="${t("close")}">${icons.close}</button>
+        <h2>${escapeHtml(t(card.labelKey))}</h2>
+        ${
+          card.key === "kad"
+            ? `<div class="brand-sheet-columns">
+                <div class="brand-sheet-col">${sectionHtml(groups[0])}</div>
+                <div class="brand-sheet-col">${sectionHtml(groups[1])}${sectionHtml(groups[2])}</div>
+              </div>`
+            : groups.map(sectionHtml).join("")
+        }
         <div class="sheet-actions">
           <button type="button" class="btn btn-primary btn-block" id="brand-sheet-done">${t("done")}</button>
         </div>
@@ -329,15 +382,23 @@ export async function renderCheckin(root, navigate, customerId) {
     `;
     document.body.appendChild(overlay);
     activateDialog(overlay);
-    const close = () => overlay.remove();
-    overlay.addEventListener("click", (e) => e.target === overlay && close());
+    // Every way out (Close button, X, a tap beside the sheet) keeps what was ticked: nothing the rep selected is lost by closing.
+    const apply = () => {
+      overlay.querySelectorAll("[data-sheet-group]").forEach((section) => {
+        brandStatus[section.dataset.sheetGroup] = [...section.querySelectorAll('input[type="checkbox"]:checked')].map((i) => i.value);
+      });
+      paintBrandGroupButtons();
+      overlay.remove();
+    };
+    overlay.addEventListener("click", (e) => e.target === overlay && apply());
+    overlay.querySelector('[data-action="close-sheet"]').addEventListener("click", apply);
 
     // "Available" and "Not available" are contradictory -- picking one clears
     // the other. "Full range" implies "Available": ticking it ticks Available
     // and locks Not available until Full range is unticked. Every other tag
-    // stays freely combinable.
-    const box = (value) => overlay.querySelector(`input[value="${value}"]`);
-    function syncExclusive(changed) {
+    // stays freely combinable. Each section (Castrol, Lotos, Royal) follows this on its own.
+    function syncExclusive(section, changed) {
+      const box = (value) => section.querySelector(`input[value="${value}"]`);
       const available = box("available");
       const unavailable = box("unavailable");
       const full = box("full_range");
@@ -355,22 +416,20 @@ export async function renderCheckin(root, navigate, customerId) {
       unavailable.disabled = Boolean(full?.checked);
       unavailable.closest("label")?.classList.toggle("is-disabled", unavailable.disabled);
     }
-    overlay.querySelectorAll('input[type="checkbox"]').forEach((input) => {
-      input.addEventListener("change", () => syncExclusive(input.value));
+    overlay.querySelectorAll("[data-sheet-group]").forEach((section) => {
+      section.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+        input.addEventListener("change", () => syncExclusive(section, input.value));
+      });
+      syncExclusive(section);
     });
-    syncExclusive();
 
-    overlay.querySelector("#brand-sheet-done").addEventListener("click", () => {
-      brandStatus[group.key] = [...overlay.querySelectorAll('input[type="checkbox"]:checked')].map((i) => i.value);
-      paintBrandGroupButtons();
-      close();
-    });
+    overlay.querySelector("#brand-sheet-done").addEventListener("click", apply);
   }
 
-  container.querySelectorAll("[data-brand-group]").forEach((btn) => {
+  container.querySelectorAll("[data-brand-card]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const group = BRAND_GROUPS.find((g) => g.key === btn.dataset.brandGroup);
-      if (group) openBrandSheet(group);
+      const card = BRAND_CARDS.find((c) => c.key === btn.dataset.brandCard);
+      if (card) openBrandSheet(card);
     });
   });
 
@@ -434,10 +493,59 @@ export async function renderCheckin(root, navigate, customerId) {
       syncAmountFieldVisibility();
       syncDeliveredVisibility();
       syncAvailableProductsVisibility();
+      syncNoteRequirement();
     });
   });
   amountInput.addEventListener("input", () => {
     amountError.hidden = true;
+  });
+
+  // The photo of the signed order blank ("Products delivered"): required, up to MAX_BLANK_PHOTOS pages. Always re-encoded at a size
+  // where the printed text and the signatures stay readable (documents are not price tags: no "High resolution" tick needed).
+  const MAX_BLANK_PHOTOS = 6;
+  const blankPhotos = [];
+  const blankInput = container.querySelector("#blank-photo-input");
+  const blankBtn = container.querySelector("#blank-photo-btn");
+  const blankLabel = container.querySelector("#blank-photo-label");
+  const blankGrid = container.querySelector("#blank-thumb-grid");
+  const blankError = container.querySelector("#blank-photo-error");
+  function paintBlankThumbs() {
+    blankGrid.innerHTML = blankPhotos
+      .map(
+        (photo, i) => `
+        <div class="photo-thumb">
+          <img src="${photo.url}" alt="${t("delivered_blank_title")}" />
+          <button type="button" class="photo-remove-btn" data-index="${i}" aria-label="${t("remove_photo")}">&times;</button>
+        </div>`
+      )
+      .join("");
+    blankGrid.querySelectorAll(".photo-thumb img").forEach((img, i) => {
+      img.addEventListener("click", () => openPhotoLightbox(blankPhotos.map((photo) => photo.url), i));
+    });
+    blankGrid.querySelectorAll(".photo-remove-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        URL.revokeObjectURL(blankPhotos[Number(btn.dataset.index)].url);
+        blankPhotos.splice(Number(btn.dataset.index), 1);
+        paintBlankThumbs();
+      });
+    });
+    blankLabel.textContent = blankPhotos.length ? t("add_another_photo") : t("take_photo");
+    blankBtn.hidden = blankPhotos.length >= MAX_BLANK_PHOTOS;
+  }
+  blankBtn.addEventListener("click", () => blankInput.click());
+  blankInput.addEventListener("change", async () => {
+    const file = blankInput.files[0];
+    blankInput.value = "";
+    if (!file) return;
+    try {
+      const compressed = await compressImage(file, { maxDimension: 2400, quality: 0.9 });
+      blankPhotos.push({ blob: compressed, url: URL.createObjectURL(compressed) });
+      blankError.hidden = true;
+      paintBlankThumbs();
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+    }
   });
 
   function paintPhotoThumbs() {
@@ -587,6 +695,18 @@ export async function renderCheckin(root, navigate, customerId) {
       return;
     }
 
+    if (outcomes.includes("other") && !customer.checkin_for_all && !String(data.get("note") ?? "").trim()) {
+      noteError.hidden = false;
+      noteError.scrollIntoView({ behavior: "smooth", block: "center" });
+      noteInput.focus({ preventScroll: true });
+      return;
+    }
+    if (outcomes.includes("customer_unavailable") && !blankPhotos.length) {
+      blankError.hidden = false;
+      blankError.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
     if (openOrderTasks.length && !orderTaskAnswered && !outcomes.includes("order_placed")) {
       const answer = await openOrderTaskSheet(openOrderTasks);
       if (!answer) return;
@@ -596,7 +716,6 @@ export async function renderCheckin(root, navigate, customerId) {
         const box = container.querySelector('input[name="outcomes"][value="order_placed"]');
         if (box) box.checked = true;
       } else {
-        if (!outcomes.includes("no_order")) outcomes.push("no_order");
         skippedOrderTasks = { tasks: openOrderTasks, reason: answer.reason };
       }
     }
@@ -631,6 +750,8 @@ export async function renderCheckin(root, navigate, customerId) {
     const availableProductsPayload = [...selectedAvailableProducts];
     if (availableProductsPayload.length) formData.set("available_products", JSON.stringify(availableProductsPayload));
     photos.forEach((photo, i) => formData.append("photos", photo.blob, `checkin-${i}.jpg`));
+    const orderBlankBlobs = outcomes.includes("customer_unavailable") ? blankPhotos.map((photo) => photo.blob) : [];
+    orderBlankBlobs.forEach((blob, i) => formData.append("order_blank_photos", blob, `order-blank-${i}.jpg`));
 
     try {
       const checkin = await api.createCheckin(formData);
@@ -659,6 +780,7 @@ export async function renderCheckin(root, navigate, customerId) {
           deliveredOrderIds,
           availableProducts: availableProductsPayload,
           photos: photos.map((photo) => photo.blob),
+          orderBlankPhotos: orderBlankBlobs,
         });
         showQueued();
       } else {

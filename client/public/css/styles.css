@@ -1854,7 +1854,7 @@ input[type="search"]:focus-visible {
 .camera-field {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: 14px;
   margin-bottom: 20px;
 }
@@ -1888,19 +1888,21 @@ input[type="search"]:focus-visible {
   font-size: 0.9rem;
 }
 
+/* Large full-width Take photo button (owner, 2026-10-26), used for the visit photo and for the order blank. */
 .camera-btn {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
+  gap: 10px;
+  width: 100%;
+  min-height: 64px;
+  border-radius: 14px;
   background: var(--bg-card);
   border: 2px dashed var(--border);
-  color: var(--text-dim);
-  font-size: 0.72rem;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -1919,7 +1921,7 @@ input[type="search"]:focus-visible {
   gap: 6px;
   font-size: 0.82rem;
   color: var(--text-dim);
-  /* .camera-field is a flex column with align-items:center, which sizes
+  /* Left aligned under the Take photo button (owner, 2026-10-26). .camera-field is a flex column, which sizes
      children to shrink-to-fit their content instead of the container's
      width -- without a cap here, the longer Armenian label (no shorter
      wrap point available) rendered on one line wider than the viewport,
@@ -15769,3 +15771,30 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
   .money-actions { flex-direction: row; max-width: 640px; }
   .money-action { flex: 1; }
 }
+
+/* "KAD products" sheet: Castrol on the left, Lotos with Royal under it on the right. */
+.brand-sheet-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+.brand-sheet-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.brand-sheet-heading { margin: 4px 0 0; font-size: 0.85rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
+.brand-sheet-columns .brand-grid { grid-template-columns: 1fr; margin-top: 6px; margin-bottom: 10px; }
+.brand-sheet-columns .brand-chip { padding: 10px; }
+.brand-sheet-competitors .brand-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.brand-sheet .brand-chip span { min-width: 0; overflow-wrap: anywhere; }
+
+/* Order-blank photo under "Which orders were delivered?" */
+.blank-photo-block { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+
+/* Files > Documents: photographed order blanks */
+.files-subheading { margin: 0 0 6px; font-size: 0.8rem; }
+.files-blank-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+.files-blank { display: flex; flex-direction: column; gap: 4px; padding: 0; background: none; border: none; color: inherit; font: inherit; text-align: left; cursor: pointer; min-width: 0; }
+.files-blank img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-inset, var(--bg-card)); }
+.files-blank-cap { font-size: 0.72rem; color: var(--text-dim); overflow-wrap: anywhere; }
+/* The two new required-field messages of the check-in sit clear of the field above them. */
+#note-error { margin: 6px 0 12px; }
+.blank-photo-block .form-error { margin: 0; }

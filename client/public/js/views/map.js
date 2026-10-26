@@ -17,7 +17,7 @@ import { paintCheckinSpots, parseHere } from "../checkinSpotsLayer.js";
 import { routeLegs, openRouteInMaps, routeShareText, shareRouteToTelegram } from "../routeNavigation.js";
 import { loadWithCache } from "../listCache.js";
 import { openTriStateTreeSheet } from "../regionTree.js";
-import { indexBrandSummary, brandSearchText, currentChips, matchedEverEntries, matchesSelectedChips, buildBrandChipTree, chipHtml, shortDate } from "../brandChips.js";
+import { COMPETITORS, indexBrandSummary, brandSearchText, currentChips, matchedEverEntries, matchesSelectedChips, buildBrandChipTree, chipHtml, shortDate } from "../brandChips.js";
 
 const NEARBY_RADIUS_METERS = 5000;
 
@@ -38,7 +38,7 @@ const BRAND_FILTER_OPTIONS = [
   { value: "castrol", labelKey: "brand_group_castrol" },
   { value: "lotos", labelKey: "brand_group_lotos" },
   { value: "royal", labelKey: "brand_group_royal" },
-  ...["mobil", "motul", "shell", "liquimoly", "bardahl", "aral", "oscar", "zic", "russian_oil"].map((v) => ({
+  ...COMPETITORS.map((v) => ({
     value: `competitor:${v}`,
     labelKey: `competitor_${v}`,
   })),

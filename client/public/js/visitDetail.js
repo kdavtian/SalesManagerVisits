@@ -25,12 +25,10 @@ const BRAND_GROUP_LABEL_KEY = {
 // the same visual way here as it did while the rep was picking it.
 const OUTCOME_ICON = {
   order_placed: icons.cart,
-  no_order: icons.noOrder,
   payment_collected: icons.payment,
   follow_up_required: icons.clock,
   assortment_check: icons.clipboardCheck,
   customer_unavailable: icons.truck,
-  complaint: icons.warning,
   other: icons.more,
 };
 
@@ -74,6 +72,25 @@ export function openVisitDetailSheet(ch, onPhotoDeleted, navigate) {
   const hasCustomer = Boolean(ch.customer_name);
   // Tapping the location row opens the map: the customer's pin next to where the last check-ins really were.
   const canShowSpots = Boolean(navigate && ch.customer_id);
+  // Visit photos and the signed order blank photographed at a delivery are shown as two groups.
+  const visitPhotos = (ch.photos ?? []).filter((p) => p.kind !== "order_blank");
+  const blankPhotos = (ch.photos ?? []).filter((p) => p.kind === "order_blank");
+  const photoSectionHtml = (titleKey, list, group) =>
+    list.length
+      ? `<h3 class="visit-detail-section-title">${t(titleKey)}</h3>
+         <div class="checkin-photo-grid">
+          ${list
+            .map(
+              (photo, i) => `
+            <div class="checkin-photo-wrap">
+              <img class="checkin-photo" data-photo-group="${group}" data-photo-index="${i}" src="${api.checkinPhotoThumbUrl(photo.id)}" alt="${t(titleKey)}" loading="lazy" decoding="async" />
+              ${isAdmin() ? `<button class="photo-delete-btn" data-photo-id="${photo.id}" aria-label="${t("delete_photo")}">&times;</button>` : ""}
+            </div>
+          `
+            )
+            .join("")}
+        </div>`
+      : "";
 
   overlay.innerHTML = `
     <div class="sheet visit-detail-sheet">
@@ -144,23 +161,8 @@ export function openVisitDetailSheet(ch, onPhotoDeleted, navigate) {
           : ""
       }
 
-      ${
-        ch.photos?.length
-          ? `<h3 class="visit-detail-section-title">${t("photo_optional")}</h3>
-             <div class="checkin-photo-grid">
-              ${ch.photos
-                .map(
-                  (photo, i) => `
-                <div class="checkin-photo-wrap">
-                  <img class="checkin-photo" data-photo-index="${i}" src="${api.checkinPhotoThumbUrl(photo.id)}" alt="${t("photo_optional")}" loading="lazy" decoding="async" />
-                  ${isAdmin() ? `<button class="photo-delete-btn" data-photo-id="${photo.id}" aria-label="${t("delete_photo")}">&times;</button>` : ""}
-                </div>
-              `
-                )
-                .join("")}
-            </div>`
-          : ""
-      }
+      ${photoSectionHtml("photo_optional", visitPhotos, "photo")}
+      ${photoSectionHtml("delivered_blank_title", blankPhotos, "blank")}
     </div>
   `;
   document.body.appendChild(overlay);
@@ -191,8 +193,9 @@ export function openVisitDetailSheet(ch, onPhotoDeleted, navigate) {
 
   overlay.querySelectorAll(".checkin-photo").forEach((img) => {
     img.addEventListener("click", () => {
+      const list = img.dataset.photoGroup === "blank" ? blankPhotos : visitPhotos;
       openPhotoLightbox(
-        ch.photos.map((p) => api.checkinPhotoByIdUrl(p.id)),
+        list.map((p) => api.checkinPhotoByIdUrl(p.id)),
         Number(img.dataset.photoIndex)
       );
     });

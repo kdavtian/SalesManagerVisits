@@ -10,7 +10,11 @@ import { escapeHtml, formatDayMonth } from "./util.js";
 
 export const BRAND_GROUP_ORDER = ["castrol", "lotos", "royal", "competitors"];
 
-const COMPETITORS = ["mobil", "motul", "shell", "liquimoly", "bardahl", "aral", "oscar", "zic", "russian_oil"];
+// The competitors in the order the check-in lists them (owner, 2026-10-26). Same list on the server (routes/checkins.js).
+export const COMPETITORS = [
+  "mobil", "motul", "shell", "liquimoly", "aral", "bardahl", "petronas", "fuchs", "total",
+  "ravenol", "oscar", "amsoil", "zic", "pennzoil", "addinol", "s_oil", "kixx", "russian_oil",
+];
 
 // tone -> existing badge class. `alias` holds extra English words a user may
 // type (the label itself is always searchable in the current UI language).

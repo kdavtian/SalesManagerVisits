@@ -25,7 +25,7 @@ test.describe("GPS check-in", () => {
     // see .outcome-chip input in styles.css, a custom chip-style toggle) so
     // a user always clicks the visible label/chip, never the input itself;
     // Playwright's actionability check agrees and refuses .check() on it.
-    await page.locator('label.outcome-chip:has(input[value="no_order"])').click();
+    await page.locator('label.outcome-chip:has(input[value="follow_up_required"])').click();
     const [response] = await Promise.all([
       page.waitForResponse((res) => res.url().includes("/api/checkins") && res.request().method() === "POST"),
       submitBtn.click(),

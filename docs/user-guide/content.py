@@ -168,7 +168,7 @@ SECTIONS["hy"] = [
             ("ol", [
                 "Հաճախորդի մոտ սեղմեք «Չեք-ին»։ Հավելվածը ստուգում է Ձեր GPS դիրքը (ճշգրտությունը ցույց է տրվում «±մ»)։",
                 "Եթե հեռավորությունը թույլատրելի շառավղի մեջ է, տեսնում եք կանաչ հաստատում («Դուք գտնվում եք …մ հաճախորդից»)։",
-                "Նշեք այցի արդյունքը (մեկ կամ մի քանիսը)՝ Պատվեր է կատարվել, Պատվեր չկա, Վճարում է ստացվել (մուտքագրեք գումարը), Կրկին այցելել, Տեսականու ստուգում, Առաքվել է ապրանք, Բողոք, Այլ։",
+                "Նշեք այցի արդյունքը (մեկ կամ մի քանիսը)՝ Պատվեր է կատարվել, Կրկին այցելել, Վճարում է ստացվել (մուտքագրեք գումարը), Տեսականու ստուգում, Առաքվել է ապրանք (նկարեք ստորագրված պատվերի թերթիկը), Այլ (նշումը պարտադիր է)։",
                 "Նշեք, թե որ ապրանքանիշերն են առկա կետում (Castrol, Lotos, Royal, մրցակիցներ)։",
                 "Ցանկության դեպքում ավելացրեք նշում և նկար (Բարձր որակ՝ օր.՝ գնապիտակների համար), ապա սեղմեք «Ուղարկել չեք-ինը»։",
             ]),
@@ -473,7 +473,7 @@ SECTIONS["en"] = [
             ("ol", [
                 "At the customer tap “Check in”. The app verifies your GPS position (accuracy shown as “±m”).",
                 "If you are within the allowed radius you see a green confirmation (“You are …m from the customer”).",
-                "Select the visit outcome (one or several): Order placed, No order, Payment collected (enter the amount), Revisit, Assortment check, Products delivered, Complaint, Other.",
+                "Select the visit outcome (one or several): Order placed, Revisit, Payment collected (enter the amount), Assortment check, Products delivered (take a photo of the signed order blank), Other (a note is required).",
                 "Mark which brands are available at the point (Castrol, Lotos, Royal, competitors).",
                 "Optionally add a note and a photo (High quality for price tags), then tap “Send check-in”.",
             ]),

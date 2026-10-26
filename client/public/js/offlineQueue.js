@@ -190,6 +190,8 @@ async function submitCheckin(entry) {
       form.append("photos", blob, `checkin-${i}.jpg`);
     }
   }
+  // The signed order blank of a delivery ("Products delivered"), when the rep photographed it.
+  entry.orderBlankPhotos?.forEach((blob, i) => form.append("order_blank_photos", blob, `order-blank-${i}.jpg`));
   return api.createCheckin(form);
 }
 
