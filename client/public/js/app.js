@@ -69,7 +69,6 @@ document.addEventListener(
 import { flushQueue, getQueue, onQueueChange } from "./offlineQueue.js";
 import { startVaghinakWatch } from "./vaghinak.js";
 import { openSyncQueueSheet } from "./syncQueueSheet.js";
-import { getPerfMode } from "./perfMode.js";
 import { clearListCache, clearCacheIfRoleChanged } from "./listCache.js";
 import { mountInstallPrompt } from "./install.js";
 import { mountUpdateBanner, initServiceWorkerUpdates, isUpdatePending } from "./updateBanner.js";
@@ -815,20 +814,8 @@ window.addEventListener("edit-requests-changed", refreshEditRequestBadge);
 // sensible default instead" -- see navigate.goBack below.
 let hasNavigatedInApp = false;
 
-// Back animation (owner's choice: an animation, no live preview): a sheet in the page colour that
-// covers the content area and slides off to the right, like iOS pops a screen. Purely visual
-// (pointer-events none), skipped with "reduce motion" and in efficiency mode.
-function playBackSlide() {
-  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches || getPerfMode() === "efficiency") return;
-  const rect = app.getBoundingClientRect();
-  const sheet = document.createElement("div");
-  sheet.className = "back-slide-sheet";
-  sheet.style.cssText = `top:${rect.top}px;left:${rect.left}px;width:${rect.width}px;height:${rect.height}px`;
-  document.body.appendChild(sheet);
-  const remove = () => sheet.remove();
-  sheet.addEventListener("animationend", remove, { once: true });
-  setTimeout(remove, 700); // never leave it behind
-}
+// No back animation of our own: iOS/Android already animate the edge-swipe back, and a second page-coloured sheet sliding over the
+// restored screen showed up as a "ghost" of the card just closed (owner, 2026-10-26). The restored screen simply appears, at once.
 
 function navigate(hash) {
   if (location.hash === hash) {
@@ -1094,8 +1081,6 @@ async function renderRoute() {
     document.body.className = bodyClassName ?? baseBodyClassName;
     currentCleanup = cleanup || null;
     lastRenderedHash = hash;
-    // A real Back (button or edge swipe) to a screen we left: slide the page we came from away.
-    if (isHistory) playBackSlide();
     requestAnimationFrame(() => {
       app.scrollTop = scrollTop;
     });
