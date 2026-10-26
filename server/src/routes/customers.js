@@ -1631,30 +1631,7 @@ customersRouter.get("/:id/photos", async (req, res) => {
     `SELECT cp.id, ch.timestamp
      FROM checkin_photos cp
      JOIN checkins ch ON ch.id = cp.checkin_id
-     WHERE ch.customer_id = $1 AND cp.kind = 'photo' ${userFilter}
-     ORDER BY ch.timestamp DESC, cp.id DESC`,
-    params
-  );
-  res.json(rows);
-});
-
-// The signed order blanks photographed at deliveries ("Products delivered"), newest first: the Documents of the customer's Files.
-customersRouter.get("/:id/order-blanks", async (req, res) => {
-  const customerId = Number(req.params.id);
-  if (!Number.isInteger(customerId)) return res.status(400).json({ error: "Invalid customer id" });
-  const params = [customerId];
-  let userFilter = "";
-  if (!seesAllActivity(req.user.role)) {
-    params.push(req.user.id);
-    userFilter = `AND ch.user_id = $${params.length}`;
-  }
-  const { rows } = await pool.query(
-    `SELECT cp.id, ch.timestamp, u.name AS user_name,
-       COALESCE((SELECT array_agg(COALESCE(o.order_code, '#' || o.id) ORDER BY o.id) FROM orders o WHERE o.id = ANY(cp.order_ids)), '{}') AS order_codes
-     FROM checkin_photos cp
-     JOIN checkins ch ON ch.id = cp.checkin_id
-     JOIN users u ON u.id = ch.user_id
-     WHERE ch.customer_id = $1 AND cp.kind = 'order_blank' ${userFilter}
+     WHERE ch.customer_id = $1 ${userFilter}
      ORDER BY ch.timestamp DESC, cp.id DESC`,
     params
   );
@@ -1678,9 +1655,10 @@ customersRouter.get("/:id/checkins", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT ch.*, u.name AS user_name,
        COALESCE(
-         (SELECT json_agg(json_build_object('id', cp.id, 'kind', cp.kind) ORDER BY cp.id) FROM checkin_photos cp WHERE cp.checkin_id = ch.id),
+         (SELECT json_agg(json_build_object('id', cp.id) ORDER BY cp.id) FROM checkin_photos cp WHERE cp.checkin_id = ch.id),
          '[]'
-       ) AS photos
+       ) AS photos,
+       COALESCE((SELECT json_agg(json_build_object('id', cf.id, 'kind', cf.kind, 'mime', cf.mime, 'version', cf.version) ORDER BY cf.id) FROM customer_files cf WHERE cf.checkin_id = ch.id), '[]') AS files
      FROM checkins ch
      JOIN users u ON u.id = ch.user_id
      WHERE ch.customer_id = $1 ${userFilter}

@@ -301,15 +301,13 @@ checkinsRouter.post("/", (req, res, next) => {
         file.filename,
       ]);
     }
-    // The signed order blank of a delivery: kept with the check-in, listed under the customer's Files > Documents. Only a visit
-    // that was marked "Products delivered" can carry one; order_ids = the delivered orders it covers.
-    const blankOrderIds = deliveredIds;
+    // The signed order blank of a delivery: a customer document kept with the check-in, linked to the delivered orders (Files > Documents,
+    // the order's Documents, the accountant's inbox). Only a visit marked "Products delivered" can carry one.
     for (const file of blankFiles) {
-      await client.query("INSERT INTO checkin_photos (checkin_id, photo_path, kind, order_ids) VALUES ($1, $2, 'order_blank', $3)", [
-        checkin.id,
-        file.filename,
-        blankOrderIds,
-      ]);
+      await client.query(
+        "INSERT INTO customer_files (customer_id, kind, file_path, mime, size_bytes, order_ids, checkin_id, created_by) VALUES ($1, 'order_blank', $2, $3, $4, $5, $6, $7)",
+        [customerId, file.filename, file.mimetype, file.size, deliveredIds, checkin.id, req.user.id]
+      );
     }
 
     // In the same transaction as the check-in itself, not a fire-and-forget
@@ -449,9 +447,10 @@ checkinsRouter.get("/", async (req, res) => {
        -- check-in's own columns when the row is spread client-side.
        c.region AS customer_region,
        COALESCE(
-         (SELECT json_agg(json_build_object('id', cp.id, 'kind', cp.kind) ORDER BY cp.id) FROM checkin_photos cp WHERE cp.checkin_id = ch.id),
+         (SELECT json_agg(json_build_object('id', cp.id) ORDER BY cp.id) FROM checkin_photos cp WHERE cp.checkin_id = ch.id),
          '[]'
        ) AS photos,
+       COALESCE((SELECT json_agg(json_build_object('id', cf.id, 'kind', cf.kind, 'mime', cf.mime, 'version', cf.version) ORDER BY cf.id) FROM customer_files cf WHERE cf.checkin_id = ch.id), '[]') AS files,
        -- Lets an "Order placed" outcome row link straight to the order it
        -- created (see visitDetail.js). A scalar subquery, not a join, so a
        -- checkin never fans out into multiple rows even in the unlikely

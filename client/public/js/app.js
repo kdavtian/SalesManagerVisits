@@ -1284,6 +1284,8 @@ async function renderRoute() {
     (await import("./views/deliveryRoute.js")).renderDelivery(app, navigate);
   } else if (path === "#/accounting") {
     (await import("./views/accounting.js")).renderAccounting(app, navigate);
+  } else if (path === "#/documents") {
+    (await import("./views/documents.js")).renderDocuments(app, navigate);
   } else if (path === "#/recorded") {
     (await import("./views/recorded.js")).renderRecorded(app, navigate);
   } else if (path === "#/debt-balances") {
@@ -1362,6 +1364,7 @@ const SIDEBAR_ITEM_ICON = {
   qa_delivery: { icon: icons.truck, colorClass: "quick-action-icon-delivery" },
   qa_recorded: { icon: icons.clock, colorClass: "quick-action-icon-recorded" },
   qa_accounting: { icon: icons.note, colorClass: "quick-action-icon-accounting" },
+  qa_documents: { icon: icons.folder, colorClass: "quick-action-icon-accounting" },
   qa_team_performance: { icon: icons.target, colorClass: "quick-action-icon-team" },
   qa_reports: { icon: icons.chart, colorClass: "quick-action-icon-reports" },
   qa_debt_balances: { icon: icons.wallet, colorClass: "quick-action-icon-debt" },

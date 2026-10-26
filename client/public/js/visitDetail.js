@@ -10,6 +10,7 @@ import { isAdmin } from "./state.js";
 import { icons } from "./icons.js";
 import { openOrderDetailSheet } from "./orderDetailSheet.js";
 import { openPhotoLightbox } from "./photoLightbox.js";
+import { openFileViewer, fileKindLabel } from "./fileViewer.js";
 
 // Kept exported from here: customerDetail.js imports it from this module.
 export { openPhotoLightbox };
@@ -72,10 +73,10 @@ export function openVisitDetailSheet(ch, onPhotoDeleted, navigate) {
   const hasCustomer = Boolean(ch.customer_name);
   // Tapping the location row opens the map: the customer's pin next to where the last check-ins really were.
   const canShowSpots = Boolean(navigate && ch.customer_id);
-  // Visit photos and the signed order blank photographed at a delivery are shown as two groups.
-  const visitPhotos = (ch.photos ?? []).filter((p) => p.kind !== "order_blank");
-  const blankPhotos = (ch.photos ?? []).filter((p) => p.kind === "order_blank");
-  const photoSectionHtml = (titleKey, list, group) =>
+  // The visit's photos, and the documents added at this visit (the signed order blank photographed at a delivery, the signed act).
+  const visitPhotos = ch.photos ?? [];
+  const visitFiles = ch.files ?? [];
+  const photoSectionHtml = (titleKey, list) =>
     list.length
       ? `<h3 class="visit-detail-section-title">${t(titleKey)}</h3>
          <div class="checkin-photo-grid">
@@ -83,13 +84,24 @@ export function openVisitDetailSheet(ch, onPhotoDeleted, navigate) {
             .map(
               (photo, i) => `
             <div class="checkin-photo-wrap">
-              <img class="checkin-photo" data-photo-group="${group}" data-photo-index="${i}" src="${api.checkinPhotoThumbUrl(photo.id)}" alt="${t(titleKey)}" loading="lazy" decoding="async" />
+              <img class="checkin-photo" data-photo-index="${i}" src="${api.checkinPhotoThumbUrl(photo.id)}" alt="${t(titleKey)}" loading="lazy" decoding="async" />
               ${isAdmin() ? `<button class="photo-delete-btn" data-photo-id="${photo.id}" aria-label="${t("delete_photo")}">&times;</button>` : ""}
             </div>
           `
             )
             .join("")}
         </div>`
+      : "";
+  const filesSectionHtml = () =>
+    visitFiles.length
+      ? `<h3 class="visit-detail-section-title">${t("files_documents")}</h3>
+         <div class="files-blank-grid">
+          ${visitFiles
+            .map(
+              (f, i) => `<button type="button" class="files-blank" data-visit-file="${i}">${f.mime === "application/pdf" ? `<span class="files-blank-pdf">PDF</span>` : `<img src="${api.fileUrl(f, { thumb: true })}" alt="" loading="lazy" decoding="async" />`}<span class="files-blank-cap">${escapeHtml(fileKindLabel(f.kind))}</span></button>`
+            )
+            .join("")}
+         </div>`
       : "";
 
   overlay.innerHTML = `
@@ -161,8 +173,8 @@ export function openVisitDetailSheet(ch, onPhotoDeleted, navigate) {
           : ""
       }
 
-      ${photoSectionHtml("photo_optional", visitPhotos, "photo")}
-      ${photoSectionHtml("delivered_blank_title", blankPhotos, "blank")}
+      ${photoSectionHtml("photo_optional", visitPhotos)}
+      ${filesSectionHtml()}
     </div>
   `;
   document.body.appendChild(overlay);
@@ -193,11 +205,24 @@ export function openVisitDetailSheet(ch, onPhotoDeleted, navigate) {
 
   overlay.querySelectorAll(".checkin-photo").forEach((img) => {
     img.addEventListener("click", () => {
-      const list = img.dataset.photoGroup === "blank" ? blankPhotos : visitPhotos;
       openPhotoLightbox(
-        list.map((p) => api.checkinPhotoByIdUrl(p.id)),
+        visitPhotos.map((p) => api.checkinPhotoByIdUrl(p.id)),
         Number(img.dataset.photoIndex)
       );
+    });
+  });
+  overlay.querySelectorAll("[data-visit-file]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      // The visit row only carries id / kind / version; the viewer needs who and when too.
+      let list = visitFiles;
+      try {
+        const all = await api.customerFiles(ch.customer_id);
+        const byId = new Map(all.map((f) => [f.id, f]));
+        list = visitFiles.map((f) => byId.get(f.id) ?? f);
+      } catch {
+        /* the bare rows still open */
+      }
+      openFileViewer(list, Number(btn.dataset.visitFile), { onChanged: onPhotoDeleted });
     });
   });
 

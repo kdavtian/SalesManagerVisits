@@ -15798,3 +15798,47 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 /* The two new required-field messages of the check-in sit clear of the field above them. */
 #note-error { margin: 6px 0 12px; }
 .blank-photo-block .form-error { margin: 0; }
+
+/* Documents (owner, 2026-10-26): viewer, add-document sheet, inbox. */
+.files-blank-pdf { display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 3 / 4; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); font-weight: 700; color: var(--text-dim); }
+.photo-thumb .photo-rotate-btn { position: absolute; bottom: 4px; right: 4px; width: 32px; height: 32px; border: none; border-radius: 50%; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 1.1rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.file-viewer { position: fixed; inset: 0; z-index: 3000; background: #0b0b0c; color: #fff; display: flex; flex-direction: column; padding-top: env(safe-area-inset-top); }
+.file-viewer-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px 6px 16px; flex: none; }
+.file-viewer-title { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-viewer-close { color: #fff; width: 44px; height: 44px; background: rgba(255, 255, 255, 0.14); border: none; }
+.file-viewer-stage { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 0 8px; }
+.file-viewer-img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; }
+.file-viewer-pdf { display: flex; flex-direction: column; align-items: center; gap: 16px; color: rgba(255, 255, 255, 0.8); }
+.file-viewer-info { flex: none; padding: 8px 16px 0; font-size: 0.85rem; max-height: 22vh; overflow-y: auto; }
+.file-viewer-meta { color: rgba(255, 255, 255, 0.75); overflow-wrap: anywhere; }
+.file-viewer-note { margin-top: 4px; overflow-wrap: anywhere; }
+.file-ai { margin: 8px 0 0; padding: 8px 10px; border-radius: 8px; font-size: 0.85rem; }
+.file-ai ul { margin: 4px 0 0; padding-left: 18px; }
+.file-ai-ok { background: rgba(46, 160, 67, 0.25); }
+.file-ai-bad { background: rgba(220, 53, 69, 0.28); }
+.file-viewer-bar { flex: none; display: flex; justify-content: space-around; gap: 4px; padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); }
+.file-viewer-btn { flex: 1 1 0; min-width: 0; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 4px; background: none; border: none; color: #fff; font: inherit; font-size: 0.7rem; cursor: pointer; text-align: center; }
+.file-viewer-btn span { overflow-wrap: anywhere; }
+.file-viewer-btn:disabled { opacity: 0.5; }
+.file-viewer-btn-danger { color: #ff7b86; }
+.file-viewer .photo-lightbox-nav { top: 45%; }
+.add-file-sheet { display: flex; flex-direction: column; gap: 12px; position: relative; }
+.add-file-kinds { display: flex; flex-wrap: wrap; gap: 8px; }
+.add-file-pick { display: flex; flex-direction: column; gap: 10px; }
+.add-file-preview { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.add-file-preview img { max-width: 100%; max-height: 38vh; border-radius: 8px; object-fit: contain; }
+.add-file-turn { display: flex; gap: 8px; }
+.add-file-orders-title { margin: 0 0 6px; font-size: 0.85rem; }
+.add-file-order-list { display: flex; flex-direction: column; gap: 6px; max-height: 24vh; overflow-y: auto; }
+.doc-row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; }
+.doc-row-thumb { flex: none; width: 56px; height: 72px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border); background: var(--bg-card); }
+.doc-row-pdf { display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--text-dim); }
+.doc-row .list-row-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; align-items: flex-start; }
+#doc-more { margin: 12px 0; }
+.documents-selects { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+.documents-selects select { min-width: 0; min-height: 44px; font-size: 0.9rem; }
+.documents-flags { display: flex; gap: 8px; margin-bottom: 8px; }
+.sheet.add-file-sheet > .sheet-close-x { position: absolute; top: 16px; right: 16px; float: none; margin: 0; }
+.add-file-sheet h2 { margin: 0; padding-right: 52px; }
+.add-file-sheet > p.muted { margin: -6px 0 0; }
+.add-file-sheet input[type="text"] { width: 100%; }

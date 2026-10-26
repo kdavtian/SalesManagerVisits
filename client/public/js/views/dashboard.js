@@ -65,6 +65,7 @@ const QUICK_ACTION_ICON = {
   qa_staff: () => `<span class="quick-action-icon quick-action-icon-team">${icons.person}</span>`,
   qa_wh_home: () => `<span class="quick-action-icon quick-action-icon-warehouse">${icons.box}</span>`,
   qa_driver_home: () => `<span class="quick-action-icon quick-action-icon-delivery">${icons.truck}</span>`,
+  qa_documents: () => `<span class="quick-action-icon quick-action-icon-accounting">${icons.folder}</span>`,
   qa_accounting: () =>
     `<span class="quick-action-icon quick-action-icon-accounting">${icons.note}<span class="nav-badge count-badge" id="qa-accounting-badge" hidden></span></span>`,
   qa_delivery: () =>

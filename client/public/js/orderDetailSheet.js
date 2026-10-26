@@ -16,6 +16,7 @@ import { packQty, packStepUp, packStepDown, bindStepperButton } from "./stepper.
 import { searchProducts, debounce } from "./productSearch.js";
 import { compareProducts } from "./productSort.js";
 import { documentsSectionHtml, bindDocumentRows } from "./accountingFiles.js";
+import { openFileViewer, fileKindLabel } from "./fileViewer.js";
 import { openPrintBlankSheet } from "./orderBlankPrint.js";
 import { openErpLinkSheet } from "./erpLinkSheet.js";
 import { openReturnSheet } from "./returnSheet.js";
@@ -300,6 +301,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       ${order.note ? `<p class="muted">${escapeHtml(order.note)}</p>` : ""}
       ${accountingSectionHtml(order)}
       <div id="order-signed-docs"></div>
+      <div id="order-files-slot"></div>
       <div id="order-returns-slot"></div>
       ${orderTimelineHtml(order.history, order.status)}
       </div>
@@ -424,6 +426,29 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
         })
         .catch(() => {});
     }
+    // The photographed order blanks, signed acts and payment slips linked to this order.
+    const loadOrderFiles = () =>
+      api
+        .orderFiles(orderId)
+        .then((files) => {
+          const slot = overlay.querySelector("#order-files-slot");
+          if (!slot) return;
+          if (!files.length) {
+            slot.innerHTML = "";
+            return;
+          }
+          slot.innerHTML = `<h3 class="visit-detail-section-title">${t("files_documents")}</h3><div class="files-blank-grid">${files
+            .map(
+              (f, i) =>
+                `<button type="button" class="files-blank" data-order-file="${i}">${f.mime === "application/pdf" ? `<span class="files-blank-pdf">PDF</span>` : `<img src="${api.fileUrl(f, { thumb: true })}" alt="" loading="lazy" decoding="async" />`}<span class="files-blank-cap">${escapeHtml(fileKindLabel(f.kind))}</span></button>`
+            )
+            .join("")}</div>`;
+          slot.querySelectorAll("[data-order-file]").forEach((btn) =>
+            btn.addEventListener("click", () => openFileViewer(files, Number(btn.dataset.orderFile), { onChanged: loadOrderFiles }))
+          );
+        })
+        .catch(() => {});
+    loadOrderFiles();
     actionsEl.querySelectorAll("[data-status]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));

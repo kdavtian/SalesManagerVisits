@@ -1429,6 +1429,31 @@ export function compressImage(file, { maxDimension = 1600, quality = 0.75 } = {}
   });
 }
 
+// Turns a photo by 90 / 180 / 270 degrees (a page photographed sideways) before it is sent. Resolves to a new JPEG blob.
+export function rotateImageBlob(blob, degrees, quality = 0.9) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(blob);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const quarter = degrees % 180 !== 0;
+      const canvas = document.createElement("canvas");
+      canvas.width = quarter ? img.height : img.width;
+      canvas.height = quarter ? img.width : img.height;
+      const ctx = canvas.getContext("2d");
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate((degrees * Math.PI) / 180);
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+      canvas.toBlob((out) => (out ? resolve(out) : reject(new Error("Could not rotate photo"))), "image/jpeg", quality);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Could not read photo"));
+    };
+    img.src = url;
+  });
+}
+
 // One-time dismissible hint. Remembered per key in localStorage (best
 // effort -- if storage is unavailable the hint just shows each visit).
 export function firstUseHintHtml(key, text) {

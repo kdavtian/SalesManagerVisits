@@ -22,6 +22,7 @@ import { usersRouter } from "./routes/users.js";
 import { customersRouter } from "./routes/customers.js";
 import { customerSocialRouter } from "./routes/customerSocial.js";
 import { checkinsRouter } from "./routes/checkins.js";
+import { filesRouter } from "./routes/files.js";
 import { dashboardRouter } from "./routes/dashboard.js";
 import { settingsRouter } from "./routes/settings.js";
 import { editRequestsRouter } from "./routes/editRequests.js";
@@ -188,6 +189,7 @@ app.post("/api/customers", express.json(), requireAuth, autoAssignSalesChannel, 
 app.use("/api/customers", express.json(), customersRouter);
 app.use("/api/customer-social", express.json(), customerSocialRouter);
 app.use("/api/checkins", checkinsRouter);
+app.use("/api/files", express.json(), filesRouter);
 app.use("/api/dashboard", express.json(), dashboardRouter);
 app.use("/api/settings", express.json(), settingsRouter);
 app.use("/api/edit-requests", express.json(), editRequestsRouter);

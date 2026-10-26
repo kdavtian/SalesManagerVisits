@@ -77,14 +77,17 @@ test("Products delivered: the order-blank photo is stored as an order blank for 
   assert.equal(res.status, 201);
   assert.equal(res.data.photo_count, 1);
   assert.equal(res.data.order_blank_count, 2);
-  const { rows } = await pool.query("SELECT kind, photo_path FROM checkin_photos WHERE checkin_id = $1 ORDER BY id", [res.data.id]);
-  assert.deepEqual(rows.map((r) => r.kind), ["photo", "order_blank", "order_blank"]);
+  const { rows: visitRows } = await pool.query("SELECT photo_path FROM checkin_photos WHERE checkin_id = $1", [res.data.id]);
+  assert.equal(visitRows.length, 1, "only the visit photo is a check-in photo");
+  const files = (await apiRequest(`/api/files/customer/${customer.id}`, { cookie })).data;
+  assert.equal(files.length, 2, "the two blank pages are customer documents");
+  assert.ok(files.every((f) => f.kind === "order_blank"));
   const photos = (await apiRequest(`/api/customers/${customer.id}/photos`, { cookie })).data;
-  const blanks = (await apiRequest(`/api/customers/${customer.id}/order-blanks`, { cookie })).data;
   assert.equal(photos.length, 1, "the visit photo is in Photos, the blanks are not");
-  assert.equal(blanks.length, 2, "the two blank pages are in Documents");
-  for (const r of rows) fs.rmSync(path.join(uploadDirPath, r.photo_path), { force: true });
+  const { rows: fileRows } = await pool.query("SELECT file_path FROM customer_files WHERE checkin_id = $1", [res.data.id]);
+  for (const r of [...visitRows, ...fileRows]) fs.rmSync(path.join(uploadDirPath, r.photo_path ?? r.file_path), { force: true });
   await pool.query("DELETE FROM checkin_photos WHERE checkin_id = $1", [res.data.id]);
+  await pool.query("DELETE FROM customer_files WHERE checkin_id = $1", [res.data.id]);
 });
 
 test("an order-blank photo without the Products delivered outcome is refused", async () => {
