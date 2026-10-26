@@ -1616,6 +1616,28 @@ customersRouter.put("/:id/credit-terms", async (req, res) => {
   res.json({ id: rows[0].id, credit_limit_amd: rows[0].credit_limit_amd === null ? null : Number(rows[0].credit_limit_amd) });
 });
 
+// Every photo taken at this customer's check-ins, newest first: ids and dates only (a few bytes each). The Files sheet used to load
+// the whole visit history (250 KB for 400 visits) just to find these.
+customersRouter.get("/:id/photos", async (req, res) => {
+  const customerId = Number(req.params.id);
+  if (!Number.isInteger(customerId)) return res.status(400).json({ error: "Invalid customer id" });
+  const params = [customerId];
+  let userFilter = "";
+  if (!seesAllActivity(req.user.role)) {
+    params.push(req.user.id);
+    userFilter = `AND ch.user_id = $${params.length}`;
+  }
+  const { rows } = await pool.query(
+    `SELECT cp.id, ch.timestamp
+     FROM checkin_photos cp
+     JOIN checkins ch ON ch.id = cp.checkin_id
+     WHERE ch.customer_id = $1 ${userFilter}
+     ORDER BY ch.timestamp DESC, cp.id DESC`,
+    params
+  );
+  res.json(rows);
+});
+
 customersRouter.get("/:id/checkins", async (req, res) => {
   // Plain managers only see their own visit history on a customer, same
   // restriction as GET /api/checkins.
@@ -1625,6 +1647,10 @@ customersRouter.get("/:id/checkins", async (req, res) => {
     params.push(req.user.id);
     userFilter = `AND ch.user_id = $${params.length}`;
   }
+  // The customer card asks for the latest visits only (?limit=); older ones come with ?offset= when the rep taps "Show older visits".
+  const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 0, 0), 1000);
+  const offset = Math.max(Number.parseInt(req.query.offset, 10) || 0, 0);
+  const paging = limit ? `LIMIT ${limit} OFFSET ${offset}` : "";
 
   const { rows } = await pool.query(
     `SELECT ch.*, u.name AS user_name,
@@ -1635,7 +1661,8 @@ customersRouter.get("/:id/checkins", async (req, res) => {
      FROM checkins ch
      JOIN users u ON u.id = ch.user_id
      WHERE ch.customer_id = $1 ${userFilter}
-     ORDER BY ch.timestamp DESC`,
+     ORDER BY ch.timestamp DESC
+     ${paging}`,
     params
   );
   res.json(rows);

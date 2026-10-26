@@ -74,6 +74,19 @@ export function chipColumns(chips) {
   return CHIP_COLUMNS.map((groups) => chips.filter((c) => groups.includes(c.group)));
 }
 
+// The card's three sections and how many columns each takes. A section with chips also takes the empty columns after it, so a lone
+// "Castrol (full range)" chip gets the whole row instead of a third of it (owner, 2026-10-26); an empty section in front of one
+// with chips stays as a quiet blank so the others keep their place.
+export function chipSections(chips) {
+  const sections = [];
+  for (const list of chipColumns(chips)) {
+    const prev = sections[sections.length - 1];
+    if (!list.length && prev?.chips.length) prev.span += 1;
+    else sections.push({ chips: list, span: 1 });
+  }
+  return sections;
+}
+
 export function chipHtml(def, suffix = "") {
   return `<span class="badge badge-${def.tone} product-chip">${escapeHtml(chipLabel(def))}${suffix ? ` · ${escapeHtml(suffix)}` : ""}</span>`;
 }

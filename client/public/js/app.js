@@ -1209,6 +1209,8 @@ async function renderRoute() {
     (await import("./views/cashHandoffs.js")).renderCashHandoffs(app, navigate, handoffDetailMatch[1]);
   } else if (path === "#/cash-handoffs") {
     (await import("./views/cashHandoffs.js")).renderCashHandoffs(app, navigate);
+  } else if (path === "#/money") {
+    (await import("./views/money.js")).renderMoney(app, navigate);
   } else if (path === "#/expenses") {
     (await import("./views/cashExpenses.js")).renderCashExpenses(app, navigate);
   } else if (path === "#/reports") {
@@ -1311,8 +1313,7 @@ function renderNav() {
 // appears, not two different ones.
 const SIDEBAR_ITEM_ICON = {
   qa_plan_route: { icon: icons.planDay, colorClass: "quick-action-icon-route" },
-  qa_payments: { icon: icons.payment, colorClass: "quick-action-icon-payments" },
-  qa_cash_expense: { icon: icons.wallet, colorClass: "quick-action-icon-cash" },
+  qa_money: { icon: icons.payment, colorClass: "quick-action-icon-payments" },
   qa_pricelist: { icon: icons.tag, colorClass: "quick-action-icon-pricelist" },
   qa_warehouse: { icon: icons.box, colorClass: "quick-action-icon-warehouse" },
   qa_cashflow: { icon: icons.wallet, colorClass: "quick-action-icon-debt" },

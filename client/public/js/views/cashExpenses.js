@@ -42,7 +42,7 @@ export async function renderCashExpenses(root, navigate) {
     </div>
   `;
   const container = root.querySelector(".detail-view");
-  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/money"));
 
   const listEl = container.querySelector("#expenses-list");
   const errorEl = container.querySelector("#expenses-error");

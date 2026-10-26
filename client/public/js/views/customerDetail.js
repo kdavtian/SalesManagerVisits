@@ -2,7 +2,7 @@ import { api } from "../api.js";
 import { reorderHash } from "../reorder.js";
 import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, SALES_CHANNELS, channelDisplayLabel, parseDateOnly, formatDateDMY, formatDayMonth, labelColon, erpLineDiscountRowHtml, leaveSheetTo, showToast, openInfoPopup } from "../util.js";
 import { wirePlaceInput, placeNoticeText } from "../places.js";
-import { currentChips, chipHtml, chipColumns } from "../brandChips.js";
+import { currentChips, chipHtml, chipSections } from "../brandChips.js";
 import { nextVisitRowHtml } from "../visitSchedule.js";
 import { t } from "../i18n.js";
 import { dueChipHtml } from "../debtChip.js";
@@ -14,7 +14,16 @@ import { renderPotentialCard, potentialBadgeHtml } from "../potential.js";
 import { openFileReadySheet } from "../fileReadySheet.js";
 import { openOrderMenu } from "../orderMenu.js";
 import { bindStepperButton } from "../stepper.js";
+import { loadWithCache, warmCache } from "../listCache.js";
+import { paymentsSource, allOrdersSource, orderDetailSource, photosSource } from "../customerCardData.js";
 import { fetchCustomerSocial, saveCustomerSocial, socialFieldsHtml, collectSocialPayload } from "../customerSocialProfiles.js";
+
+// The card shows this many latest visits at once; older ones load when the rep asks (a long-standing customer has hundreds).
+const VISITS_PAGE = 30;
+// Long lists (payments, orders, photos) paint this many rows first and the rest on "Show more": 1,000 rows at once froze a phone.
+const FIRST_ROWS = 40;
+// The Files sheet shows fewer photos first so the Documents section below them stays one short scroll away.
+const FIRST_PHOTOS = 12;
 
 const EDIT_FIELDS = [
   { name: "name", labelKey: "name", type: "text" },
@@ -40,7 +49,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   try {
     [customer, checkins, pendingRequests, erpOrders, brandSummaryRows, visitSchedule] = await Promise.all([
       api.getCustomer(customerId),
-      api.customerCheckins(customerId),
+      api.customerCheckins(customerId, { limit: VISITS_PAGE }),
       api.listEditRequests({ customer_id: customerId, status: "pending" }),
       api.getErpOrders(customerId, "recent"),
       // Optional extra: a failure here must not break the customer page.
@@ -179,7 +188,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
         <span>${icons.cart}</span>${t("new_order")}
       </button>
       <button type="button" class="action-btn" id="customer-photos-btn">
-        <span><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5.5-5.5a1.5 1.5 0 0 0-2.1 0L5 19"/></svg></span>${t("customer_photos")}
+        <span>${icons.folder}</span>${t("customer_files")}
       </button>
     </div>
 
@@ -206,8 +215,8 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     <div class="card product-chips-card" id="product-chips-card">
       ${
         brandChipList.length
-          ? `<div class="product-chips-columns">${chipColumns(brandChipList)
-              .map((chips) => `<div class="product-chips-col">${chips.map((d) => chipHtml(d)).join("")}</div>`)
+          ? `<div class="product-chips-columns">${chipSections(brandChipList)
+              .map((section) => `<div class="product-chips-col" style="grid-column: span ${section.span}">${section.chips.map((d) => chipHtml(d)).join("")}</div>`)
               .join("")}</div>`
           : `<p class="muted product-chips-hint">${t("brand_chips_empty")}</p>`
       }
@@ -299,12 +308,31 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   container.querySelector("#account-settings-btn")?.addEventListener("click", () => {
     openAccountSettingsSheet(customer, () => renderCustomerDetail(root, navigate, customerId));
   });
-  container.querySelector("#customer-photos-btn").addEventListener("click", () => openCustomerPhotoGallery(customerId));
+  container.querySelector("#customer-photos-btn").addEventListener("click", () => openCustomerFiles(customer));
   // Stat tiles: Sales -> orders, Outstanding debt -> payments received,
-  // Last order -> its details, Last visit -> its details.
+  // Last order -> its details (long press: all orders), Last visit -> its details.
+  const openLastOrder = async (tile) => {
+    tile.disabled = true;
+    try {
+      // The inline list only covers the last 3 months; the last order can be older.
+      const list = erpOrders?.length ? erpOrders : await api.getErpOrders(customerId, "all");
+      if (list[0]) openOrderDetailSheet(customerId, list[0].order_id, list[0]);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      tile.disabled = false;
+    }
+  };
+  // Start the data a tile opens the moment a finger lands on it; the sheet that opens a moment later shares that request.
+  const warmFor = (stat) => {
+    if (stat === "debt") warmCache(paymentsSource(customerId).key, paymentsSource(customerId).fetch);
+    else if (stat === "sales") warmCache(allOrdersSource(customerId).key, allOrdersSource(customerId).fetch);
+    else if (stat === "last-order" && erpOrders?.[0]) warmCache(orderDetailSource(customerId, erpOrders[0].order_id).key, orderDetailSource(customerId, erpOrders[0].order_id).fetch);
+  };
   container.querySelectorAll("[data-stat]").forEach((tile) => {
-    tile.addEventListener("click", async () => {
-      const stat = tile.dataset.stat;
+    const stat = tile.dataset.stat;
+    tile.addEventListener("pointerdown", () => warmFor(stat), { passive: true });
+    const onTap = () => {
       if (stat === "sales") {
         navigate(`#/customers/${customerId}/orders`);
       } else if (stat === "debt") {
@@ -312,19 +340,21 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       } else if (stat === "last-visit" && checkins[0]) {
         openVisitDetailSheet(checkins[0], () => renderCustomerDetail(root, navigate, customerId), navigate);
       } else if (stat === "last-order") {
-        tile.disabled = true;
-        try {
-          // The inline list only covers the last 3 months; the last order can be older.
-          const list = erpOrders?.length ? erpOrders : await api.getErpOrders(customerId, "all");
-          if (list[0]) openOrderDetailSheet(customerId, list[0].order_id);
-        } catch (err) {
-          alert(err.message);
-        } finally {
-          tile.disabled = false;
-        }
+        openLastOrder(tile);
       }
-    });
+    };
+    if (stat === "last-order") {
+      // A long press goes straight to the whole order list.
+      bindStepperButton(tile, { onTap, onHold: () => navigate(`#/customers/${customerId}/orders`) });
+    } else {
+      tile.addEventListener("click", onTap);
+    }
   });
+  // Quiet warm-up of the one small thing a tap would otherwise wait for: the last order's lines (about 1 KB).
+  if (erpOrders?.[0]) {
+    const warmLast = () => warmCache(orderDetailSource(customerId, erpOrders[0].order_id).key, orderDetailSource(customerId, erpOrders[0].order_id).fetch);
+    (window.requestIdleCallback || ((fn) => setTimeout(fn, 800)))(warmLast);
+  }
   container.querySelector("#order-history-btn")?.addEventListener("click", () => {
     navigate(`#/customers/${customerId}/orders`);
   });
@@ -357,7 +387,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       <div class="tasks-block">
         <div class="tasks-home-head">
           <h2 class="section-title section-title-inline">${t("tasks_customer_title")}</h2>
-          ${canAdd ? `<button type="button" class="btn btn-sm" id="customer-add-task">+ ${t("task_new")}</button>` : ""}
+          ${canAdd ? `<button type="button" class="btn btn-sm btn-has-icon" id="customer-add-task">${icons.tasks}${t("task_new")}</button>` : ""}
         </div>
         ${rows.length ? `<div class="card-list">${rows.map((r) => tasksModule.taskCardHtml(r, today, { showCustomer: false })).join("")}</div>` : ""}
       </div>`;
@@ -374,42 +404,47 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   );
 
   const historyEl = container.querySelector("#checkin-history");
-  if (!checkins.length) {
-    historyEl.innerHTML = `<p class="empty-state">${t("no_visits_yet")}</p>`;
-  } else {
-    // A compact, tappable row per visit -- the full detail (badges, brand
-    // tags, note, photos) used to be rendered inline for every single visit
-    // at once, which made a customer with a long history nearly unusable to
-    // scroll through. Tapping a row opens everything in its own sheet.
-    historyEl.innerHTML = checkins
-      .map(
-        (ch, i) => `
+  const openVisit = (index) =>
+    openVisitDetailSheet(checkins[index], () => renderCustomerDetail(root, navigate, customerId), navigate);
+  // A compact, tappable row per visit -- the full detail (badges, brand
+  // tags, note, photos) used to be rendered inline for every single visit
+  // at once, which made a customer with a long history nearly unusable to
+  // scroll through. Tapping a row opens everything in its own sheet.
+  const visitRowHtml = (ch, i) => `
         <button type="button" class="card checkin-row" data-checkin-index="${i}">
           <div class="checkin-row-main">
             <strong>${escapeHtml(ch.user_name)}</strong>
             <span class="muted">${formatDateTime(ch.timestamp)}</span>
           </div>
           <span class="card-trailing">
-            <span class="badge ${ch.within_range ? "badge-success" : "badge-danger"}">
-              ${ch.within_range ? t("location_verified") : t("location_mismatch_away")}
-            </span>
+            <span class="visit-range-icon ${ch.within_range ? "is-ok" : "is-bad"}" role="img" aria-label="${ch.within_range ? t("location_verified") : t("location_mismatch_away")}">${ch.within_range ? icons.checkCircle : icons.mapWarning}</span>
             ${ch.photos?.length ? `<span class="checkin-row-photo-count">📷 ${ch.photos.length}</span>` : ""}
             <span class="chevron">&#8250;</span>
           </span>
-        </button>
-      `
-      )
-      .join("");
-
-    historyEl.querySelectorAll("[data-checkin-index]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        openVisitDetailSheet(
-          checkins[Number(btn.dataset.checkinIndex)],
-          () => renderCustomerDetail(root, navigate, customerId),
-          navigate
-        );
+        </button>`;
+  if (!checkins.length) {
+    historyEl.innerHTML = `<p class="empty-state">${t("no_visits_yet")}</p>`;
+  } else {
+    let moreAvailable = checkins.length >= VISITS_PAGE;
+    const paint = () => {
+      historyEl.innerHTML =
+        checkins.map(visitRowHtml).join("") +
+        (moreAvailable ? `<button type="button" class="btn btn-block" id="more-visits-btn">${t("show_older_visits")}</button>` : "");
+      historyEl.querySelectorAll("[data-checkin-index]").forEach((btn) => btn.addEventListener("click", () => openVisit(Number(btn.dataset.checkinIndex))));
+      historyEl.querySelector("#more-visits-btn")?.addEventListener("click", async (e) => {
+        e.currentTarget.disabled = true;
+        try {
+          const older = await api.customerCheckins(customerId, { limit: 1000, offset: checkins.length });
+          checkins.push(...older);
+          moreAvailable = false;
+          paint();
+        } catch (err) {
+          e.currentTarget.disabled = false;
+          showToast(err.message);
+        }
       });
-    });
+    };
+    paint();
   }
 }
 
@@ -533,32 +568,34 @@ function groupLinesByBrand(lines) {
 
 // Payments received from this customer: the Excel Cashflow ("Oil order" rows)
 // plus payments recorded in the app (pending / approved), newest first.
+// Opens at once from the last copy kept on this phone and corrects itself when the fresh list lands (owner, 2026-10-26: "it loads every
+// time user taps"); only the first rows are drawn until "Show more", so a customer with hundreds of payments does not freeze the sheet.
 async function openPaymentsReceivedSheet(customer) {
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
-  overlay.innerHTML = `<div class="sheet"><p class="loading-state" role="status">${t("loading")}</p></div>`;
+  overlay.innerHTML = `<div class="sheet"><button type="button" class="icon-btn sheet-close-x" data-action="close-sheet" aria-label="${t("close")}">${icons.close}</button><p class="loading-state" role="status">${t("loading")}</p></div>`;
   document.body.appendChild(overlay);
   activateDialog(overlay);
   overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
-  let data;
-  try {
-    data = await api.getCustomerPaymentsReceived(customer.id);
-  } catch (err) {
-    overlay.querySelector(".sheet").innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
-    return;
-  }
+  overlay.querySelector('[data-action="close-sheet"]').addEventListener("click", () => overlay.remove());
+
   const sourceBadge = (r) =>
     r.source === "excel"
       ? `<span class="badge badge-neutral">${t("payments_source_excel")}</span>`
       : `<span class="badge ${r.status === "approved" ? "badge-success" : "badge-warning"}">${t("payments_source_app")} · ${t(r.status === "approved" ? "payment_status_approved" : "payment_status_pending")}</span>`;
-  overlay.querySelector(".sheet").innerHTML = `
+  let shown = FIRST_ROWS;
+  let lastJson = "";
+  const render = (data) => {
+    const visible = data.rows.slice(0, shown);
+    const hidden = data.rows.length - visible.length;
+    overlay.querySelector(".sheet").innerHTML = `
     <button type="button" class="icon-btn sheet-close-x" data-action="close-sheet" aria-label="${t("close")}">${icons.close}</button>
     <h2>${t("payments_received_title")}</h2>
     <p class="muted">${escapeHtml(customer.name)}</p>
     ${
       data.rows.length
         ? `<div class="card erp-card payments-received-list">
-            ${data.rows
+            ${visible
               .map(
                 (r) => `<div class="payments-received-row${r.source === "excel" ? "" : " payments-received-row-app"}">
                   <span class="payments-received-date">${escapeHtml(formatDateDMY(r.date))}</span>
@@ -567,6 +604,7 @@ async function openPaymentsReceivedSheet(customer) {
                 </div>`
               )
               .join("")}
+            ${hidden > 0 ? `<button type="button" class="btn btn-block" data-action="show-more-payments">${t("show_more_n").replace("{n}", hidden)}</button>` : ""}
             <div class="payments-received-row payments-received-total"><span>${t("total")}</span><span></span><strong class="text-amount">${formatAmd(data.total_amd)}</strong></div>
           </div>`
         : `<p class="empty-state">${t("payments_received_empty")}</p>`
@@ -576,47 +614,73 @@ async function openPaymentsReceivedSheet(customer) {
       ${Number(customer.erp_debt_amd) > 0 ? `<button type="button" class="btn" data-action="debt-statement">${t("debt_statement_button")}</button>` : ""}
       <button type="button" class="btn" data-action="close-sheet">${t("done")}</button>
     </div>`;
-  overlay.querySelectorAll('[data-action="close-sheet"]').forEach((b) => b.addEventListener("click", () => overlay.remove()));
-  // Debt statement: the unpaid invoices on one page, ready to send to the customer.
-  const statementBtn = overlay.querySelector('[data-action="debt-statement"]');
-  statementBtn?.addEventListener("click", async () => {
-    const errorEl = overlay.querySelector("#debt-statement-error");
-    errorEl.hidden = true;
-    statementBtn.disabled = true;
-    statementBtn.textContent = t("debt_statement_creating");
-    try {
-      const blob = await api.buildDebtStatement(customer.id);
-      openFileReadySheet(blob, `Debt-statement-${customer.erp_customer_id || customer.id}.pdf`);
-    } catch (err) {
-      errorEl.textContent = err.message || t("pdf_failed");
-      errorEl.hidden = false;
-    } finally {
-      statementBtn.disabled = false;
-      statementBtn.textContent = t("debt_statement_button");
-    }
-  });
+    overlay.querySelectorAll('[data-action="close-sheet"]').forEach((b) => b.addEventListener("click", () => overlay.remove()));
+    overlay.querySelector('[data-action="show-more-payments"]')?.addEventListener("click", () => {
+      shown = data.rows.length;
+      render(data);
+    });
+    // Debt statement: the unpaid invoices on one page, ready to send to the customer.
+    const statementBtn = overlay.querySelector('[data-action="debt-statement"]');
+    statementBtn?.addEventListener("click", async () => {
+      const errorEl = overlay.querySelector("#debt-statement-error");
+      errorEl.hidden = true;
+      statementBtn.disabled = true;
+      statementBtn.textContent = t("debt_statement_creating");
+      try {
+        const blob = await api.buildDebtStatement(customer.id);
+        openFileReadySheet(blob, `Debt-statement-${customer.erp_customer_id || customer.id}.pdf`);
+      } catch (err) {
+        errorEl.textContent = err.message || t("pdf_failed");
+        errorEl.hidden = false;
+      } finally {
+        statementBtn.disabled = false;
+        statementBtn.textContent = t("debt_statement_button");
+      }
+    });
+  };
+  const source = paymentsSource(customer.id);
+  try {
+    await loadWithCache(source.key, source.fetch, (data) => {
+      if (!overlay.isConnected) return;
+      const json = JSON.stringify(data);
+      if (json === lastJson) return;
+      lastJson = json;
+      render(data);
+    });
+  } catch (err) {
+    overlay.querySelector(".sheet").innerHTML = `<button type="button" class="icon-btn sheet-close-x" data-action="close-sheet" aria-label="${t("close")}">${icons.close}</button><p class="form-error">${escapeHtml(err.message)}</p>`;
+    overlay.querySelector('[data-action="close-sheet"]').addEventListener("click", () => overlay.remove());
+  }
 }
 
-export async function openOrderDetailSheet(customerId, orderId) {
+// preview: the order's row from the list the card already holds (id, date, total), so the sheet shows its header at once and only the
+// product lines wait for the network (or for the copy kept from last time).
+export async function openOrderDetailSheet(customerId, orderId, preview = null) {
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
-  overlay.innerHTML = `<div class="sheet"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   document.body.appendChild(overlay);
   activateDialog(overlay);
   overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+  const closeX = `<button type="button" class="icon-btn" data-action="close-order-detail" aria-label="${t("close")}">${icons.close}</button>`;
+  const headHtml = (id, date, total) => `
+    <div class="order-detail-header">
+      <h2>${escapeHtml(id)}</h2>
+      ${closeX}
+    </div>
+    <div class="order-detail-meta">
+      <span>${escapeHtml(String(date ?? "").slice(0, 10))}</span>
+      <span class="erp-debt-amount">${formatAmd(total)}</span>
+    </div>`;
+  const bindClose = () => overlay.querySelectorAll('[data-action="close-order-detail"]').forEach((b) => b.addEventListener("click", () => overlay.remove()));
+  overlay.innerHTML = `<div class="sheet">${preview ? headHtml(preview.order_id, preview.order_date, preview.total_amd) : closeX}<p class="loading-state" role="status">${t("loading")}</p></div>`;
+  bindClose();
 
-  let detail;
-  try {
-    detail = await api.getErpOrderDetail(customerId, orderId);
-  } catch (err) {
-    overlay.querySelector(".sheet").innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
-    return;
-  }
-
-  const byBrand = groupLinesByBrand(detail.lines);
-  const brandSections = [...byBrand.entries()]
-    .map(
-      ([brand, lines]) => `
+  const render = (detail) => {
+    if (!overlay.isConnected) return;
+    const byBrand = groupLinesByBrand(detail.lines);
+    const brandSections = [...byBrand.entries()]
+      .map(
+        ([brand, lines]) => `
       <p class="proposed-changes-label">${escapeHtml(brand)}</p>
       ${lines
         .map(
@@ -629,27 +693,33 @@ export async function openOrderDetailSheet(customerId, orderId) {
         ${erpLineDiscountRowHtml(l)}`
         )
         .join("")}`
-    )
-    .join("");
-
-  overlay.querySelector(".sheet").innerHTML = `
-    <div class="order-detail-header">
-      <h2>${escapeHtml(detail.order_id)}</h2>
-      <button class="icon-btn" id="close-order-detail" aria-label="${t("cancel")}">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
-    </div>
-    <div class="order-detail-meta">
-      <span>${escapeHtml(String(detail.order_date).slice(0, 10))}</span>
-      <span class="erp-debt-amount">${formatAmd(detail.total_amd)}</span>
-    </div>
+      )
+      .join("");
+    overlay.querySelector(".sheet").innerHTML = `
+    ${headHtml(detail.order_id, detail.order_date, detail.total_amd)}
     ${brandSections}
     <div class="sheet-actions"><button type="button" class="btn btn-primary" id="reorder-erp-order">${t("reorder_btn")}</button></div>
   `;
-  overlay.querySelector("#close-order-detail").addEventListener("click", () => overlay.remove());
-  overlay.querySelector("#reorder-erp-order").addEventListener("click", () => {
-    leaveSheetTo(overlay, (h) => (location.hash = h), reorderHash(customerId, `erp:${orderId}`));
-  });
+    bindClose();
+    overlay.querySelector("#reorder-erp-order").addEventListener("click", () => {
+      leaveSheetTo(overlay, (h) => (location.hash = h), reorderHash(customerId, `erp:${orderId}`));
+    });
+  };
+  const source = orderDetailSource(customerId, orderId);
+  let lastJson = "";
+  try {
+    await loadWithCache(source.key, source.fetch, (detail) => {
+      const json = JSON.stringify(detail);
+      if (json === lastJson) return;
+      lastJson = json;
+      render(detail);
+    });
+  } catch (err) {
+    if (overlay.isConnected) {
+      overlay.querySelector(".sheet").innerHTML = `${closeX}<p class="form-error">${escapeHtml(err.message)}</p>`;
+      bindClose();
+    }
+  }
 }
 
 function renderPendingRequest(slot, request, onDone) {
@@ -1057,59 +1127,87 @@ async function openAccountSettingsSheet(customer, onDone) {
   });
 }
 
-// Every photo captured at check-ins for this customer, most recent visit
-// first -- a simple grid that opens into the same full-screen lightbox the
-// per-visit detail sheet uses, rather than building a second viewer.
-async function openCustomerPhotoGallery(customerId) {
+// "Files" of one customer (owner, 2026-10-26): Photos (everything captured at check-ins, newest first) and Documents (signed accounting
+// documents today; payment slips and order blanks join them). Photos show small copies in a grid and open full size in the lightbox.
+async function openCustomerFiles(customer) {
+  const customerId = customer.id;
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
   overlay.innerHTML = `
-    <div class="sheet">
-      <h2>${t("customer_photos")}</h2>
+    <div class="sheet customer-files-sheet">
+      <button type="button" class="icon-btn sheet-close-x" data-action="close-sheet" aria-label="${t("close")}">${icons.close}</button>
+      <h2>${t("customer_files")}</h2>
+      <p class="muted">${escapeHtml(customer.name)}</p>
+      <h3 class="list-group-heading">${t("files_photos")}<span class="muted" id="files-photos-count"></span></h3>
       <div id="customer-photo-gallery-body"><p class="loading-state" role="status">${t("loading")}</p></div>
+      <h3 class="list-group-heading">${t("files_documents")}<span class="muted" id="files-docs-count"></span></h3>
+      <div id="customer-documents-body"><p class="loading-state" role="status">${t("loading")}</p></div>
     </div>
   `;
   document.body.appendChild(overlay);
   activateDialog(overlay);
   overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+  overlay.querySelector('[data-action="close-sheet"]').addEventListener("click", () => overlay.remove());
 
   const body = overlay.querySelector("#customer-photo-gallery-body");
-  let checkins;
-  try {
-    ({ rows: checkins } = await api.listCheckins({ customer_id: customerId }));
-  } catch (err) {
-    body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
-    return;
-  }
-
-  // listCheckins already returns rows newest-first, so flattening in order
-  // keeps the gallery most-recent-first without a separate sort pass.
-  const photos = [];
-  for (const ch of checkins) {
-    for (const photo of ch.photos ?? []) photos.push({ id: photo.id, timestamp: ch.timestamp });
-  }
-
-  if (!photos.length) {
-    body.innerHTML = `<p class="empty-state">${t("no_photos_yet")}</p>`;
-    return;
-  }
-
-  const urls = photos.map((p) => api.checkinPhotoByIdUrl(p.id));
-  body.innerHTML = `
-    <div class="checkin-photo-grid">
-      ${photos
-        .map(
-          (p, i) => `
+  let shown = FIRST_PHOTOS;
+  let lastJson = "";
+  const renderPhotos = (photos) => {
+    overlay.querySelector("#files-photos-count").textContent = photos.length ? ` · ${photos.length}` : "";
+    if (!photos.length) {
+      body.innerHTML = `<p class="empty-state">${t("no_photos_yet")}</p>`;
+      return;
+    }
+    const urls = photos.map((p) => api.checkinPhotoByIdUrl(p.id));
+    const visible = photos.slice(0, shown);
+    const hidden = photos.length - visible.length;
+    body.innerHTML = `
+      <div class="checkin-photo-grid">
+        ${visible
+          .map(
+            (p, i) => `
         <div class="checkin-photo-wrap">
-          <img class="checkin-photo" data-photo-index="${i}" src="${urls[i]}" alt="${t("photo_optional")}" loading="lazy" />
+          <img class="checkin-photo" data-photo-index="${i}" src="${api.checkinPhotoThumbUrl(p.id)}" alt="${t("photo_optional")}" loading="lazy" decoding="async" />
         </div>`
-        )
-        .join("")}
-    </div>
-  `;
-  body.querySelectorAll(".checkin-photo").forEach((img) => {
-    img.addEventListener("click", () => openPhotoLightbox(urls, Number(img.dataset.photoIndex)));
+          )
+          .join("")}
+      </div>
+      ${hidden > 0 ? `<button type="button" class="btn btn-block" id="more-photos-btn">${t("show_more_n").replace("{n}", hidden)}</button>` : ""}
+    `;
+    body.querySelectorAll(".checkin-photo").forEach((img) => {
+      img.addEventListener("click", () => openPhotoLightbox(urls, Number(img.dataset.photoIndex)));
+    });
+    body.querySelector("#more-photos-btn")?.addEventListener("click", () => {
+      shown = photos.length;
+      renderPhotos(photos);
+    });
+  };
+  const photoSource = photosSource(customerId);
+  loadWithCache(photoSource.key, photoSource.fetch, (photos) => {
+    if (!overlay.isConnected) return;
+    const json = JSON.stringify(photos);
+    if (json === lastJson) return;
+    lastJson = json;
+    renderPhotos(photos);
+  }).catch((err) => {
+    body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
   });
+
+  const docsBody = overlay.querySelector("#customer-documents-body");
+  try {
+    const docs = await api.listCustomerDocuments(customerId);
+    if (!overlay.isConnected) return;
+    overlay.querySelector("#files-docs-count").textContent = docs.length ? ` · ${docs.length}` : "";
+    if (!docs.length) {
+      docsBody.innerHTML = `<p class="empty-state">${t("files_documents_empty")}</p>`;
+    } else {
+      const files = await import("../accountingFiles.js");
+      docsBody.innerHTML = `<div class="acc-docs">${files.documentRowsHtml(docs)}</div>`;
+      files.bindDocumentRows(docsBody);
+    }
+  } catch (err) {
+    docsBody.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+  }
 }
 
 // Item 8 -- the core customer-fields form, merged with the "Edit contact &

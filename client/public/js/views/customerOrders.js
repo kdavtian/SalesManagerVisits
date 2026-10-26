@@ -2,18 +2,20 @@ import { api } from "../api.js";
 import { escapeHtml, formatDateDMY, formatAmd } from "../util.js";
 import { t } from "../i18n.js";
 import { dueChipHtml, unpaidRowClass, partialChipHtml } from "../debtChip.js";
+import { loadWithCache } from "../listCache.js";
+import { allOrdersSource } from "../customerCardData.js";
+
+// The first rows painted before "Show more": a customer can have 1,000+ orders and drawing them all at once froze the page.
+const FIRST_ROWS = 60;
 
 export async function renderCustomerOrders(root, navigate, customerId) {
   root.innerHTML = `<div class="detail-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".detail-view");
 
-  let customer, orders;
-  try {
-    [customer, orders] = await Promise.all([api.getCustomer(customerId), api.getErpOrders(customerId, "all")]);
-  } catch (err) {
-    container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
-    return;
-  }
+  // The page opens from the last copy kept on this phone and corrects itself when the fresh list lands; the (small) customer record
+  // is fetched alongside, so the heading never waits for the 100 KB order list.
+  const customerPromise = api.getCustomer(customerId);
+  customerPromise.catch(() => {});
 
   container.innerHTML = `
     <div class="detail-header">
@@ -22,10 +24,10 @@ export async function renderCustomerOrders(root, navigate, customerId) {
       </button>
       <div class="detail-header-title">
         <h1>${t("all_orders")}</h1>
-        <span class="badge badge-neutral">${escapeHtml(customer.name)}</span>
+        <span class="badge badge-neutral" id="orders-customer-name" hidden></span>
       </div>
     </div>
-    <div class="card-list card-list-spaced" id="orders-list"></div>
+    <div class="card-list card-list-spaced" id="orders-list"><p class="loading-state" role="status">${t("loading")}</p></div>
   `;
 
   // Back = one step back in history (the customer card, restored from the back stack), never a new
@@ -33,19 +35,39 @@ export async function renderCustomerOrders(root, navigate, customerId) {
   container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack(`#/customers/${customerId}`));
 
   const listEl = container.querySelector("#orders-list");
-  if (!orders.length) {
-    listEl.innerHTML = `<p class="empty-state">${t("no_orders_found")}</p>`;
-  } else {
+  const nameEl = container.querySelector("#orders-customer-name");
+  customerPromise.then((customer) => {
+    nameEl.textContent = customer.name;
+    nameEl.hidden = false;
+  }).catch(() => {});
+
+  let shown = FIRST_ROWS;
+  let lastJson = "";
+  const render = async (orders) => {
+    let customer;
+    try {
+      customer = await customerPromise;
+    } catch (err) {
+      listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+      return;
+    }
+    if (!listEl.isConnected) return;
+    if (!orders.length) {
+      listEl.innerHTML = `<p class="empty-state">${t("no_orders_found")}</p>`;
+      return;
+    }
     const subtotal = orders.reduce((sum, o) => sum + Number(o.total_amd || 0), 0);
     // The part of the debt older than the Excel order history: the opening balance (paper era).
     const openingUnpaid = Number(customer.debt_summary?.opening_unpaid_amd) || 0;
     const openingDueDays = customer.debt_summary?.opening_due_days ?? null;
+    const visible = orders.slice(0, shown);
+    const hidden = orders.length - visible.length;
     listEl.innerHTML = `
       <div class="card erp-card">
-        ${orders
+        ${visible
           .map(
-            (o) => `
-          <div class="erp-order-row ${unpaidRowClass(o)}" data-order-id="${escapeHtml(o.order_id)}" role="button" tabindex="0">
+            (o, i) => `
+          <div class="erp-order-row ${unpaidRowClass(o)}" data-order-index="${i}" data-order-id="${escapeHtml(o.order_id)}" role="button" tabindex="0">
             <span>${escapeHtml(formatDateDMY(o.order_date))}</span>
             <span class="erp-order-id">${escapeHtml(o.order_id)}</span>
             <span>${formatAmd(o.total_amd)}</span>
@@ -54,6 +76,7 @@ export async function renderCustomerOrders(root, navigate, customerId) {
           </div>`
           )
           .join("")}
+        ${hidden > 0 ? `<button type="button" class="btn btn-block" id="more-orders-btn">${t("show_more_n").replace("{n}", hidden)}</button>` : ""}
         ${
           openingUnpaid > 0
             ? `<div class="erp-order-row erp-order-opening unpaid-row ${openingDueDays != null && openingDueDays > 0 ? "unpaid-row-overdue" : "unpaid-row-due"}">
@@ -71,11 +94,13 @@ export async function renderCustomerOrders(root, navigate, customerId) {
         </div>
       </div>
     `;
-    listEl.querySelectorAll(".erp-order-row:not(.erp-order-subtotal-row):not(.erp-order-opening)").forEach((row) => {
-      row.addEventListener("click", async () => {
-        const { openOrderDetailSheet } = await import("./customerDetail.js");
-        openOrderDetailSheet(customerId, row.dataset.orderId);
-      });
+    listEl.querySelector("#more-orders-btn")?.addEventListener("click", () => {
+      shown = orders.length;
+      render(orders);
+    });
+    const { openOrderDetailSheet } = await import("./customerDetail.js");
+    listEl.querySelectorAll(".erp-order-row[data-order-index]").forEach((row) => {
+      row.addEventListener("click", () => openOrderDetailSheet(customerId, row.dataset.orderId, orders[Number(row.dataset.orderIndex)]));
       row.addEventListener("keydown", (e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
@@ -83,5 +108,17 @@ export async function renderCustomerOrders(root, navigate, customerId) {
         }
       });
     });
+  };
+
+  const source = allOrdersSource(customerId);
+  try {
+    await loadWithCache(source.key, source.fetch, (orders) => {
+      const json = JSON.stringify(orders);
+      if (json === lastJson) return;
+      lastJson = json;
+      render(orders);
+    });
+  } catch (err) {
+    listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
   }
 }

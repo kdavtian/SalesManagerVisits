@@ -38,6 +38,7 @@ export const icons = {
   calendar: uiSvg(`<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/>`),
   clock: uiSvg(`<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>`),
   chart: uiSvg(`<path d="M4 20V11M10 20V4M16 20v-7M22 20V8"/>`),
+  folder: uiSvg(`<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.2h7a2 2 0 0 1 2 2v7.8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>`),
   tasks: uiSvg(`<rect x="4.5" y="3.5" width="15" height="17.5" rx="2.5"/><path d="M9 3.5V5.6c0 .5.4.9.9.9h4.2c.5 0 .9-.4.9-.9V3.5"/><path d="m8 11.2 1.4 1.4 2.4-2.6M8 16.2l1.4 1.4 2.4-2.6M13.5 11.7h3M13.5 16.7h3"/>`),
   trendUp: uiSvg(`<path d="M3 17 9.5 10.5 14 15 21 7"/><path d="M15 7h6v6"/>`),
   compass: uiSvg(`<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2.1 4.9-4.9 2.1 2.1-4.9z"/>`),

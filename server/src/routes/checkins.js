@@ -5,6 +5,7 @@ import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { photoUpload, uploadDirPath } from "../upload.js";
 import { matchesDeclaredImageType } from "../utils/imageSniff.js";
+import { thumbnailPathFor, removeThumbnail } from "../utils/imageThumbs.js";
 import { haversineMeters, creditedDistanceMeters } from "../utils/geo.js";
 import { getCheckinRadiusMeters, getCheckinAllowanceEnabled } from "../settings.js";
 import { seesAllActivity } from "../roles.js";
@@ -477,6 +478,7 @@ checkinsRouter.delete("/:id/photo", requireAdmin, async (req, res) => {
   }
 
   fs.unlink(path.join(uploadDirPath, checkin.photo_path), () => {});
+  removeThumbnail(uploadDirPath, checkin.photo_path);
   await pool.query("UPDATE checkins SET photo_path = NULL WHERE id = $1", [req.params.id]);
   res.status(204).end();
 });
@@ -495,7 +497,12 @@ checkinsRouter.get("/photos/:photoId", async (req, res) => {
     return res.status(403).json({ error: "Not allowed" });
   }
 
-  res.sendFile(path.join(uploadDirPath, photo.photo_path), (err) => {
+  // A stored photo never changes (a new one gets a new id), so the phone may keep it for a year: it is downloaded once, not on every
+  // open. ?size=thumb sends a small copy for grids; the original is the fallback when none can be made.
+  const cacheHeaders = { "Cache-Control": "private, max-age=31536000, immutable" };
+  let file = path.join(uploadDirPath, photo.photo_path);
+  if (req.query.size === "thumb") file = (await thumbnailPathFor(uploadDirPath, photo.photo_path)) || file;
+  res.sendFile(file, { headers: cacheHeaders }, (err) => {
     if (err && !res.headersSent) res.status(404).json({ error: "Photo not found" });
   });
 });
@@ -508,5 +515,6 @@ checkinsRouter.delete("/photos/:photoId", requireAdmin, async (req, res) => {
   if (!photo) return res.status(404).json({ error: "Photo not found" });
 
   fs.unlink(path.join(uploadDirPath, photo.photo_path), () => {});
+  removeThumbnail(uploadDirPath, photo.photo_path);
   res.status(204).end();
 });

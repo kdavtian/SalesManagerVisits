@@ -55,9 +55,8 @@ const QUICK_ACTION_ICON = {
   qa_check_in: () => `<span class="quick-action-icon quick-action-icon-checkin">${icons.mapPinCheck}</span>`,
   qa_plan_route: () => `<span class="quick-action-icon quick-action-icon-route">${icons.planDay}</span>`,
   qa_add_customer: () => `<span class="quick-action-icon quick-action-icon-accent">${icons.mapPinPlus}</span>`,
-  qa_payments: () =>
+  qa_money: () =>
     `<span class="quick-action-icon quick-action-icon-payments">${icons.payment}<span class="nav-badge count-badge" id="qa-payments-badge" hidden></span></span>`,
-  qa_cash_expense: () => `<span class="quick-action-icon quick-action-icon-cash">${icons.wallet}</span>`,
   qa_pricelist: () => `<span class="quick-action-icon quick-action-icon-pricelist">${icons.tag}</span>`,
   qa_warehouse: () =>
     `<span class="quick-action-icon quick-action-icon-warehouse">${icons.box}<span class="nav-badge count-badge" id="qa-warehouse-badge" hidden></span></span>`,

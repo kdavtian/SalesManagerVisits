@@ -195,7 +195,15 @@ export const api = {
     await removeCachedCustomer(id);
     return result;
   },
-  customerCheckins: (id) => request(`/customers/${id}/checkins`),
+  // limit/offset: the customer card loads the latest visits first and the older ones on request.
+  customerCheckins: (id, { limit, offset } = {}) => {
+    const qs = new URLSearchParams();
+    if (limit) qs.set("limit", limit);
+    if (offset) qs.set("offset", offset);
+    return request(`/customers/${id}/checkins${qs.size ? `?${qs}` : ""}`);
+  },
+  // Ids and dates of every check-in photo of the customer (the Files sheet's Photos section).
+  customerPhotos: (id) => request(`/customers/${id}/photos`),
   customerPlannedVisits: (id) => request(`/customers/${id}/planned-visits`),
   getVisitSchedule: (id) => request(`/customers/${id}/visit-schedule`),
   getMapFacts: (id) => request(`/customers/${id}/map-facts`),
@@ -217,6 +225,7 @@ export const api = {
     return request(`/checkins${qs ? `?${qs}` : ""}`, options);
   },
   checkinPhotoByIdUrl: (photoId) => `/api/checkins/photos/${photoId}`,
+  checkinPhotoThumbUrl: (photoId) => `/api/checkins/photos/${photoId}?size=thumb`,
   deleteCheckinPhotoById: (photoId) => request(`/checkins/photos/${photoId}`, { method: "DELETE" }),
 
   // Operations control

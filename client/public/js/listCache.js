@@ -115,6 +115,30 @@ export async function clearCacheIfRoleChanged(user) {
   }
 }
 
+// One request per key at a time: a "warm it as the finger lands" fetch and the sheet that opens a moment later share the same
+// round trip instead of asking the server twice.
+const inflight = new Map();
+function sharedFetch(key, fetcher) {
+  const full = scopedKey(key);
+  if (!inflight.has(full)) {
+    inflight.set(
+      full,
+      fetcher()
+        .then((fresh) => {
+          setCached(key, fresh);
+          return fresh;
+        })
+        .finally(() => inflight.delete(full))
+    );
+  }
+  return inflight.get(full);
+}
+
+// Fetch in the background so the next loadWithCache(key) of this key opens instantly. Never throws.
+export function warmCache(key, fetcher) {
+  return sharedFetch(key, fetcher).catch(() => {});
+}
+
 // key: a string unique to this screen + whatever params it was fetched
 // with (e.g. "orders-list:status=confirmed") -- different filter/search
 // state must not show stale data from a different filter.
@@ -133,8 +157,7 @@ export async function loadWithCache(key, fetcher, onData) {
   const cached = await getCached(key);
   if (cached !== undefined) onData(cached, { stale: true });
   try {
-    const fresh = await fetcher();
-    setCached(key, fresh);
+    const fresh = await sharedFetch(key, fetcher);
     onData(fresh, { stale: false });
   } catch (err) {
     if (cached === undefined) throw err;
