@@ -3976,7 +3976,25 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // only matters if the rep left it open, which the "Details" tap that
   // sent them to the one screen that could invalidate it already implies
   // they were done with for now) and far better than silently stale data.
+  // Parked while another tab is open (app.js keeps the Map alive): stop what drains battery or data, and take it up again on return.
+  let resumeWatch = false;
+  let resumeTeamPoll = false;
+  let parkedAt = 0;
+  cleanupMapInner.onPark = () => {
+    parkedAt = Date.now();
+    resumeWatch = watchId != null;
+    resumeTeamPoll = teamPollId != null;
+    stopWatch();
+    if (teamPollId) {
+      clearInterval(teamPollId);
+      teamPollId = null;
+    }
+  };
   cleanupMapInner.onRestore = () => {
+    if (resumeWatch) startWatch();
+    if (resumeTeamPoll && !teamPollId) teamPollId = setInterval(refreshTeamLocations, 15000);
+    resumeWatch = false;
+    resumeTeamPoll = false;
     // The container was detached while parked: measure it again now that it
     // is back, then redraw the tiles (see trackResize above).
     requestAnimationFrame(() => {
@@ -3991,6 +4009,11 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     // Back from a customer card: keep the exact pan/zoom (refreshing the
     // markers must not re-fit to every customer) and reopen the pin the
     // user tapped More on.
+    // A quick hop to another tab and back changed nothing: no refetch, no repaint (the pins and any open popup just stay). After a
+    // longer stay away, or a return from a customer card (never parked), the pins are refreshed as before.
+    const justLooked = parkedAt && Date.now() - parkedAt < 45000;
+    parkedAt = 0;
+    if (justLooked) return;
     holdView();
     reopenCustomerId = lastPopupCustomerId;
     // A task completed on the customer card must leave its pin: refresh the flags BEFORE the pins are rebuilt, in the same
