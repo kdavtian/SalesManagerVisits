@@ -4366,7 +4366,8 @@ label.checkbox-row input[type="checkbox"] {
 
 .erp-line-row {
   display: grid;
-  grid-template-columns: 1fr 52px 92px;
+  /* the price column grows for an 8-digit price (80,888,000) instead of wrapping onto a second line */
+  grid-template-columns: minmax(0, 1fr) 52px minmax(92px, max-content);
   align-items: center;
   gap: 10px;
   font-size: 0.85rem;
@@ -4385,6 +4386,7 @@ label.checkbox-row input[type="checkbox"] {
 }
 
 .erp-line-row > span:last-child {
+  white-space: nowrap;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -4411,6 +4413,8 @@ label.checkbox-row input[type="checkbox"] {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  white-space: nowrap; /* an 8-digit total (80,888,000) stays on one line next to the date */
   margin-bottom: 12px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
@@ -8684,10 +8688,11 @@ form select,
   background: var(--bg-inset, var(--bg-card));
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 12px 14px;
+  /* Slim rows (owner, 2026-10-26: "Mismatch button ... slimmer: 44px"): the card has no padding of its own, every row is 44px high. */
+  padding: 0 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
   margin: 12px 0;
 }
 
@@ -8695,6 +8700,11 @@ form select,
   display: flex;
   align-items: center;
   gap: 10px;
+  min-height: 44px;
+}
+
+.visit-detail-info-row + .visit-detail-info-row {
+  border-top: 1px solid var(--border);
 }
 
 .visit-detail-info-row-btn {
@@ -10458,17 +10468,28 @@ form select,
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
+/* Three visible sections (owner, 2026-10-26): Castrol | Lotos, Royal | others, each on a soft panel. A section with chips takes the empty
+   columns after it (inline grid-column span), so one "full range" chip gets the whole row. */
 .product-chips-col {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
   min-width: 0;
+  min-height: 44px;
+  padding: 8px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  border: 1px solid var(--border);
 }
+.product-chips-col:empty { border-style: dashed; background: none; }
 .product-chips-col .product-chip {
   max-width: 100%;
   white-space: normal;
   overflow-wrap: anywhere;
+  /* a chip that wraps to 3-4 lines in a narrow section stays a rounded box, not a blob */
+  border-radius: 12px;
+  text-align: left;
 }
 /* Notification / Vaghinak bodies carry "• line" bullets separated by line breaks. */
 .vg-msg-body {
@@ -15707,3 +15728,44 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 
 /* Desktop Home KPI tiles (views/homeKpis.js): a phone never shows this block; desktop.css turns it on. */
 .home-kpis { display: none; }
+
+/* Files sheet: the section headings sit tight to their content. */
+.customer-files-sheet .list-group-heading { margin: 18px 0 8px; }
+.customer-files-sheet .checkin-photo-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 0; }
+.customer-files-sheet .checkin-photo { width: 100%; background: var(--bg-inset, var(--bg-card)); border-radius: 8px; }
+.payments-received-list > .btn-block, .erp-card > .btn-block { margin: 8px 0; }
+
+/* Visit rows on the customer card: the verified / mismatch state is an icon, so the rep's name and the date get the row
+   (the long Armenian badge text squeezed the name down to "P...", owner 2026-10-26 "detect such issues across the app"). */
+.visit-range-icon { display: inline-flex; flex: none; }
+.visit-range-icon svg { width: 22px; height: 22px; }
+.visit-range-icon.is-ok { color: var(--success); }
+.visit-range-icon.is-bad { color: var(--danger); }
+
+/* Payments & expenses page: two big buttons under a back button (owner, 2026-10-26). */
+.list-header-row .icon-btn + h1 { margin-right: auto; }
+.money-actions { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+.money-action {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 72px;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.money-action:active { background: var(--bg-card-pressed); }
+.money-action .quick-action-icon { width: 44px; height: 44px; flex: none; }
+.money-action .quick-action-icon svg { width: 24px; height: 24px; }
+.money-action-label { flex: 1; min-width: 0; font-size: 1.05rem; font-weight: 600; }
+.money-action .chevron { font-size: 1.5rem; }
+@media (min-width: 900px) {
+  .money-actions { flex-direction: row; max-width: 640px; }
+  .money-action { flex: 1; }
+}

@@ -152,7 +152,7 @@ export function openVisitDetailSheet(ch, onPhotoDeleted, navigate) {
                 .map(
                   (photo, i) => `
                 <div class="checkin-photo-wrap">
-                  <img class="checkin-photo" data-photo-index="${i}" src="${api.checkinPhotoByIdUrl(photo.id)}" alt="${t("photo_optional")}" loading="lazy" />
+                  <img class="checkin-photo" data-photo-index="${i}" src="${api.checkinPhotoThumbUrl(photo.id)}" alt="${t("photo_optional")}" loading="lazy" decoding="async" />
                   ${isAdmin() ? `<button class="photo-delete-btn" data-photo-id="${photo.id}" aria-label="${t("delete_photo")}">&times;</button>` : ""}
                 </div>
               `

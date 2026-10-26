@@ -4,7 +4,7 @@ import { t } from "../i18n.js";
 import { placeLabel } from "../places.js";
 import { icons } from "../icons.js";
 import { state } from "../state.js";
-import { ALL_ROLES, QUICK_ACTIONS, defaultQuickActionIds } from "../quickActions.js";
+import { ALL_ROLES, QUICK_ACTIONS, defaultQuickActionIds, withMergedTiles } from "../quickActions.js";
 import { compareProducts } from "../productSort.js";
 import { REP_COLORS, repColor } from "../repColors.js";
 
@@ -1722,7 +1722,7 @@ export async function renderQuickActionVisibilitySection(container) {
   const visibility = { ...(settings.quick_action_visibility ?? {}) };
 
   function effectiveIds(role) {
-    return Array.isArray(visibility[role]) ? visibility[role] : defaultQuickActionIds(role);
+    return Array.isArray(visibility[role]) ? withMergedTiles(visibility[role]) : defaultQuickActionIds(role);
   }
 
   container.innerHTML = `

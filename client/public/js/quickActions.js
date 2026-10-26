@@ -33,10 +33,8 @@ export const QUICK_ACTIONS = [
   // Ask KAD: the admin asks questions about the company's own data and an AI answers (server/src/askKad).
   { id: "qa_ask_kad", defaultRoles: ["admin"] },
   { id: "qa_add_customer", defaultRoles: ALL_ROLES },
-  {
-    id: "qa_payments",
-    defaultRoles: ALL_ROLES.filter((r) => r !== "warehouse_manager" && r !== "delivery_manager"),
-  },
+  // Payments + Cash expense are ONE tile now (owner, 2026-10-26): it opens a page with the two buttons (views/money.js).
+  { id: "qa_money", defaultRoles: ALL_ROLES },
   // Visible to every role by default -- further gated at render time on
   // app_settings.bonuses_enabled (off by default), since the tile itself
   // carries no role restriction of its own (see dashboard.js/app.js).
@@ -78,7 +76,6 @@ export const QUICK_ACTIONS = [
   // sales.js gates on too). A sales_manager already has their own
   // customers' order history via the customer detail page.
   { id: "qa_sales", defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"] },
-  { id: "qa_cash_expense", defaultRoles: ALL_ROLES },
   { id: "qa_recorded", defaultRoles: ["admin", "ceo", "operations_director", "accountant"] },
   // Every money movement of the company (the Excel Cashflow sheet); salaries are in it, so the owner's own roles only (server: canSeeCashflow).
   { id: "qa_cashflow", defaultRoles: ["admin", "ceo", "operations_director", "accountant"] },
@@ -97,8 +94,7 @@ export const QUICK_ACTION_ROUTE = {
   qa_check_in: "#/map",
   qa_plan_route: "#/route-plans",
   qa_add_customer: "#/map?add=1",
-  qa_payments: "#/payments",
-  qa_cash_expense: "#/expenses",
+  qa_money: "#/money",
   qa_pricelist: "#/pricelist",
   qa_warehouse: "#/warehouse",
   qa_accounting: "#/accounting",
@@ -132,9 +128,15 @@ export function defaultQuickActionIds(role) {
 // it means the admin never customized that role, so it keeps its defaults.
 // An explicitly-saved empty array does mean "no tiles", which is why the
 // check is on key presence, not on truthiness of the array.
+// A role whose saved list still names one of the two tiles that became "Payments & expenses" keeps that tile.
+export const MERGED_INTO_MONEY = ["qa_payments", "qa_cash_expense"];
+export function withMergedTiles(ids) {
+  return ids.some((id) => MERGED_INTO_MONEY.includes(id)) && !ids.includes("qa_money") ? [...ids, "qa_money"] : ids;
+}
+
 export function visibleQuickActionIds(role, visibility) {
   const override = visibility && Object.prototype.hasOwnProperty.call(visibility, role) ? visibility[role] : null;
-  const allowed = Array.isArray(override) ? override : defaultQuickActionIds(role);
+  const allowed = Array.isArray(override) ? withMergedTiles(override) : defaultQuickActionIds(role);
   // Filtered through QUICK_ACTION_IDS so a stale id saved before a tile was
   // renamed or removed can never resurrect a tile that no longer exists.
   return QUICK_ACTION_IDS.filter((id) => allowed.includes(id));

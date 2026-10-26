@@ -85,6 +85,9 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
   root.innerHTML = `
     <div class="detail-view">
       <div class="list-header-row">
+        <button class="icon-btn" id="payments-back-btn" aria-label="${t("back")}">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
         <h1>${t("payments_title")}</h1>
         <button type="button" class="icon-btn" id="payments-new-btn" aria-label="${t("add_payment")}">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -103,6 +106,8 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
     </div>
   `;
 
+  // Payments is a sub-page of "Payments & expenses" now: one step back, like every other page.
+  root.querySelector("#payments-back-btn").addEventListener("click", () => navigate.goBack("#/money"));
   const summaryEl = root.querySelector("#payments-pending-summary");
   const filterRow = root.querySelector("#payment-quick-filters");
   const activeFiltersRow = root.querySelector("#payment-active-filters");
