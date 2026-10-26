@@ -81,6 +81,7 @@ import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds } from "./quic
 import { installStatusBarTap } from "./statusBarTap.js";
 import { startErrorMonitoring } from "./errorMonitoring.js";
 import { installTouchPrefetch } from "./prefetch.js";
+import { markShellShown } from "./launchTiming.js";
 
 const app = document.getElementById("app");
 const navBar = document.getElementById("nav-bar");
@@ -1006,6 +1007,7 @@ async function renderRoute() {
   topBar.hidden = false;
   navBar.hidden = false;
   sidebar.hidden = false;
+  markShellShown();
   // Warehouse manager / driver: their own small app -- anything outside their screens goes back to their Home.
   if (!shellAllows(state.user.role, location.hash)) {
     location.replace("#/dashboard");

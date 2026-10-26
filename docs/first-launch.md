@@ -19,6 +19,14 @@ A throttled HTTP/2 front (like nginx on the droplet): 150 ms latency, 1.6 Mbit/s
 ## Also done in 1.420.0
 - The texts are split into `i18n-en.js` / `i18n-hy.js`; a device downloads and parses only its own language (about 0.2-0.4 s less on the rig). `theme-init.js` starts that download before `i18n.js` even runs; `setLang` is now `async` (loads the other language first). Parity of the two files is a CI test.
 
+## 1.422.0: "5 seconds, white screen" on the iPhone (every launch, not only the first)
+Found 2026-10-26 with the same rig (600 kbit/s, 250 ms, CPU 4x), service worker already installed:
+- On **every** launch the service worker re-downloaded the whole app in the background (about 110 requests, 680 KB) and wrote each file into a second cache. Those copies were never served (the precache is found first), so the work only competed with the screens' own requests and kept the worker busy while the app started.
+- It got worse with each launch in a row, because the previous launch's downloads were still running: first paint 0.5 s -> 2.1 s -> 3.4 s, header + tab bar 2.0 s -> 3.0 s -> 4.1 s.
+- Fix: files in `APP_SHELL` are served from the versioned precache and not re-fetched; only files outside it keep the cache-then-revalidate behaviour. `theme-init.js` and `kad-wordmark.png` were missing from `APP_SHELL` and are added. Per launch the worker now makes 1 request (the start page, 3 KB). Measured: first paint 0.25 s, header + tab bar 0.8-1.2 s on the same link.
+- Consequence: an app file only changes when a release ships a new `CACHE_VERSION` (CLAUDE.md rule). A deploy that forgets it would leave phones on the old files.
+- Settings > About > Launch speed (`launchTiming.js`) keeps the last 8 launches on the device: white screen (first paint), app ready, worker start, page reply. Use it to judge a slow start on the real phone.
+
 ## Not done (ideas, see `.claude/skills/KADDev/references/optimization-ideas.md`)
 - Cache the rest of the app shell after the first screen instead of in the service worker's install step (about 190 files, about 1 MB compressed) so it never competes with the first taps on a slow link.
 - Trim `styles.css` (438 KB raw, 51 KB compressed; it is render-blocking).
