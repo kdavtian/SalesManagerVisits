@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import rateLimit from "express-rate-limit";
 import { pool } from "../db/pool.js";
 import { issueSession, clearSession, requireAuth } from "../middleware/auth.js";
+import { saveOwnSignature } from "../signedActs.js";
 import { photoUpload, uploadDirPath } from "../upload.js";
 import { matchesDeclaredImageType } from "../utils/imageSniff.js";
 import { normalizePhoneForStorage } from "../phoneFormat.js";
@@ -89,7 +90,7 @@ export const meRouter = Router();
 
 meRouter.get("/", requireAuth, async (req, res) => {
   const { rows } = await pool.query(
-    "SELECT id, email, name, role, position, phone, avatar_path IS NOT NULL AS has_avatar, created_at FROM users WHERE id = $1",
+    "SELECT id, email, name, role, position, phone, avatar_path IS NOT NULL AS has_avatar, signature_path IS NOT NULL AS has_signature, created_at FROM users WHERE id = $1",
     [req.user.id]
   );
   if (!rows[0]) {
@@ -194,4 +195,30 @@ meRouter.delete("/avatar", requireAuth, async (req, res) => {
   fs.unlink(path.join(uploadDirPath, avatarPath), () => {});
   await pool.query("UPDATE users SET avatar_path = NULL WHERE id = $1", [req.user.id]);
   res.status(204).end();
+});
+
+// The user's own signature (owner, 2026-10-26): drawn once on the phone, then applied silently to every delivery-acceptance act they hand over.
+// Stored like the avatar (a file under the upload folder); only its owner can fetch it back.
+meRouter.post("/signature", requireAuth, (req, res, next) => {
+  photoUpload.single("signature")(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "signature file is required" });
+  if (!matchesDeclaredImageType(req.file.path, req.file.mimetype)) {
+    fs.unlink(req.file.path, () => {});
+    return res.status(400).json({ error: "The uploaded file is not a valid image" });
+  }
+  await saveOwnSignature(req.user.id, req.file);
+  res.status(201).json({ ok: true });
+});
+
+meRouter.get("/signature", requireAuth, async (req, res) => {
+  const { rows } = await pool.query("SELECT signature_path FROM users WHERE id = $1", [req.user.id]);
+  const signaturePath = rows[0]?.signature_path;
+  if (!signaturePath) return res.status(404).json({ error: "No signature set" });
+  res.sendFile(path.join(uploadDirPath, signaturePath), { headers: { "Cache-Control": "private, no-store" } }, (err) => {
+    if (err && !res.headersSent) res.status(404).json({ error: "Signature not found" });
+  });
 });

@@ -2,7 +2,8 @@ import { nextStatusFromDocuments, ACCOUNTING_STATUSES } from "../accountingStatu
 import { accountingQueueChanged } from "../accountingEvents.js";
 import { accountingBadgeCount } from "../accountingBadge.js";
 import { buildOrderBlanksPdf } from "../orderBlankPdf.js";
-import { OFFICE_PHONE } from "../pricelistPdf.js";
+import { loadBlankOrders } from "../orderBlankData.js";
+import { canChangeSignedOrder, SIGNED_ORDER_ERROR } from "../signedActs.js";
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -629,43 +630,12 @@ ordersRouter.post("/blank-pdf", async (req, res) => {
   if (ids.length > 40) return res.status(400).json({ error: "Too many orders at once (max 40)" });
   const variant = ["full", "half"].includes(req.body?.variant) ? req.body.variant : undefined; // undefined = automatic
 
-  const { rows: orders } = await pool.query(
-    `SELECT o.id, o.order_code, o.created_at, o.total_amd, o.user_id, o.payment_term_days, o.downpayment_amd, o.downpayment_pct,
-            c.name AS customer_name, c.erp_customer_id, c.address AS customer_address, c.phone AS customer_phone, c.tin AS customer_tin, c.legal_name AS customer_legal_name, u.name AS rep_name, u.name_hy AS rep_name_hy, u.phone AS rep_phone, erp.debt_amd
-     FROM orders o
-     JOIN customers c ON c.id = o.customer_id
-     JOIN users u ON u.id = o.user_id
-     LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
-     WHERE o.id = ANY($1)`,
-    [ids]
-  );
+  const { orders, blank } = await loadBlankOrders(ids);
   if (orders.length !== ids.length) return res.status(404).json({ error: "Order not found" });
   if (!seesAllActivity(req.user.role) && orders.some((o) => o.user_id !== req.user.id)) {
     return res.status(403).json({ error: "Not allowed" });
   }
-  const { rows: itemRows } = await pool.query(
-    `SELECT oi.order_id, oi.brand, oi.product_name, p.unit AS size_l, oi.quantity, oi.unit_price_amd, oi.line_total_amd
-     FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id
-     WHERE oi.order_id = ANY($1) ORDER BY oi.id`,
-    [ids]
-  );
-  const byOrder = new Map(orders.map((o) => [o.id, o]));
-  const pdf = await buildOrderBlanksPdf(
-    ids.map((id) => {
-      const o = byOrder.get(id);
-      return {
-        variant,
-        order: { order_code: o.order_code, created_at: o.created_at, total_amd: o.total_amd },
-        terms: { dueDays: o.payment_term_days, downpaymentAmd: o.downpayment_amd, downpaymentPct: o.downpayment_pct },
-        items: itemRows.filter((r) => r.order_id === id).map((r) => ({ ...r, quantity: Number(r.quantity), unit_price_amd: Number(r.unit_price_amd), line_total_amd: Number(r.line_total_amd) })),
-        customer: { name: o.customer_name, erp_customer_id: o.erp_customer_id, tin: o.customer_tin, legal_name: o.customer_legal_name, address: o.customer_address, phone: o.customer_phone },
-        rep: { name: o.rep_name_hy || o.rep_name, phone: o.rep_phone, officePhone: OFFICE_PHONE },
-        // The customer's balance on file (Excel) before this order; blank line when unknown.
-        previousDebtAmd: o.debt_amd != null ? Number(o.debt_amd) : null,
-        paymentAmd: null,
-      };
-    })
-  );
+  const pdf = await buildOrderBlanksPdf(ids.map((id) => blank(id, variant)));
   const name = ids.length === 1 && orders[0].order_code ? `Order-${orders[0].order_code}.pdf` : "Order-blanks.pdf";
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
@@ -854,6 +824,8 @@ ordersRouter.patch("/:id", async (req, res) => {
   const order = rows[0];
   if (!order) return res.status(404).json({ error: "Order not found" });
   if (order.cancelled_at) return res.status(409).json({ error: "The customer cancelled this order in KAD OS -- it can no longer be changed", code: "cancelled_by_customer" });
+  // The customer signed the delivery-acceptance act: from then on only the admin or the CEO may change the order.
+  if (order.signed_at && !canChangeSignedOrder(req.user.role)) return res.status(423).json(SIGNED_ORDER_ERROR);
 
   const { status, items, note, discount_pct, discount_amd, payment_method, payment_term_days } = req.body ?? {};
   if (status === undefined && items === undefined && note === undefined && discount_pct === undefined && discount_amd === undefined && payment_method === undefined && payment_term_days === undefined) {
@@ -1414,6 +1386,7 @@ ordersRouter.post("/:id/reject", async (req, res) => {
   );
   const order = rows[0];
   if (!order) return res.status(404).json({ error: "Order not found" });
+  if (order.signed_at && !canChangeSignedOrder(req.user.role)) return res.status(423).json(SIGNED_ORDER_ERROR);
   if (order.status !== "submitted") {
     return res.status(409).json({ error: `Cannot reject an order that is "${order.status}" -- only a submitted order can be rejected` });
   }
@@ -1626,12 +1599,13 @@ ordersRouter.delete("/:id", async (req, res) => {
   const orderId = Number(req.params.id);
   if (!Number.isInteger(orderId)) return res.status(400).json({ error: "Invalid order id" });
   const { rows } = await pool.query(
-    `SELECT o.id, o.order_code, o.status, o.total_amd, o.user_id, o.customer_id, c.name AS customer_name
+    `SELECT o.id, o.order_code, o.status, o.total_amd, o.user_id, o.customer_id, o.signed_at, c.name AS customer_name
      FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = $1`,
     [orderId]
   );
   const order = rows[0];
   if (!order) return res.status(404).json({ error: "Order not found" });
+  if (order.signed_at && !canChangeSignedOrder(req.user.role)) return res.status(423).json(SIGNED_ORDER_ERROR);
   const isAdmin = req.user.role === "admin";
   const repDeletesOwn = req.user.role === "sales_manager" && order.user_id === req.user.id;
   if (!isAdmin && !repDeletesOwn) return res.status(403).json({ error: "Not allowed" });

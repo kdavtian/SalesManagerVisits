@@ -2,6 +2,7 @@ import { api } from "../api.js";
 import { cssColor, escapeHtml, formatAmd, formatDateDMY, getCurrentPosition, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, labelColon } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
+import { ensureOwnSignature } from "../signaturePad.js";
 import { ensureLeaflet } from "../leafletLoader.js";
 
 const canPlan = () => state.user.role === "delivery_manager" || state.user.role === "admin";
@@ -419,6 +420,12 @@ export async function renderDelivery(root, navigate) {
       }
       overlay.querySelectorAll("button").forEach((b) => (b.disabled = true));
       try {
+        // The customer's signature below is the electronic signature of the act: the driver's own comes from their profile (drawn the first time).
+        const own = await ensureOwnSignature();
+        if (!own.ok) {
+          overlay.querySelectorAll("button").forEach((b) => (b.disabled = false));
+          return;
+        }
         const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
         const formData = new FormData();
         formData.append("signature", blob, "signature.png");

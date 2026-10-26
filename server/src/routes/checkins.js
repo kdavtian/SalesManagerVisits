@@ -14,6 +14,7 @@ import { periodTimestampCondition, PERIOD_KEYS } from "../utils/periodWindows.js
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { insertPayment } from "./payments.js";
 import { autoCompleteCollectionTasks, autoCompleteProductCheckTasks, autoCompleteVisitTasks } from "../taskAutoComplete.js";
+import { lockSignedOrders, createSignedActs, saveOwnSignature } from "../signedActs.js";
 import { parseDeliveredOrderIds, deliverableOrders, deliverOrdersAtCheckin, notifyCheckinDelivered } from "../checkinDelivery.js";
 
 // Below this, a payment isn't worth interrupting anyone's Telegram for.
@@ -170,6 +171,8 @@ checkinsRouter.post("/", (req, res, next) => {
   photoUpload.fields([
     { name: "photos", maxCount: MAX_PHOTOS_PER_CHECKIN },
     { name: "order_blank_photos", maxCount: MAX_ORDER_BLANK_PHOTOS },
+    { name: "customer_signature", maxCount: 1 },
+    { name: "rep_signature", maxCount: 1 },
   ])(req, res, (err) => {
     if (err) return res.status(400).json({ error: err.message });
     next();
@@ -183,7 +186,10 @@ checkinsRouter.post("/", (req, res, next) => {
   // Visit photos and photos of the signed order blank arrive as two upload fields; both are checked and stored.
   const visitFiles = req.files?.photos ?? [];
   const blankFiles = req.files?.order_blank_photos ?? [];
-  const files = [...visitFiles, ...blankFiles];
+  // The customer's electronic signature on the delivery-acceptance act, and the rep's own one when it is not on their profile yet.
+  const customerSignature = req.files?.customer_signature?.[0] ?? null;
+  const repSignature = req.files?.rep_signature?.[0] ?? null;
+  const files = [...visitFiles, ...blankFiles, ...[customerSignature, repSignature].filter(Boolean)];
 
   // multer's fileFilter only ever sees the client-declared Content-Type
   // (see upload.js) -- this checks the bytes actually written to disk
@@ -218,6 +224,11 @@ checkinsRouter.post("/", (req, res, next) => {
   if (blankFiles.length && !outcomeValues.includes("customer_unavailable")) {
     files.forEach((f) => fs.unlink(f.path, () => {}));
     return res.status(400).json({ error: "An order-blank photo needs the Products delivered outcome" });
+  }
+
+  if (customerSignature && !outcomeValues.includes("customer_unavailable")) {
+    files.forEach((f) => fs.unlink(f.path, () => {}));
+    return res.status(400).json({ error: "A signature needs the Products delivered outcome" });
   }
 
   // A retried submission (the offline queue's flushQueue() re-sending an
@@ -286,6 +297,7 @@ checkinsRouter.post("/", (req, res, next) => {
   let checkin;
   let rep = null;
   let deliveredOrders = [];
+  let signatureSavedPath = null;
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
@@ -344,6 +356,13 @@ checkinsRouter.post("/", (req, res, next) => {
 
     deliveredOrders = await deliverOrdersAtCheckin(client, { customerId, orderIds: deliveredIds, userId: req.user.id, checkinId: checkin.id });
 
+    // The customer signed the delivery-acceptance act on the rep's phone: one signature for every order delivered at this visit. The orders
+    // lock in the same transaction; the signed PDFs are made right after it commits.
+    if (customerSignature && deliveredOrders.length) {
+      signatureSavedPath = customerSignature.filename;
+      await lockSignedOrders(client, { customerId, checkinId: checkin.id, filePath: signatureSavedPath, createdBy: req.user.id, orderIds: deliveredOrders.map((o) => o.id) });
+    }
+
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -363,7 +382,40 @@ checkinsRouter.post("/", (req, res, next) => {
     client.release();
   }
 
-  res.status(201).json({ ...checkin, photo_count: visitFiles.length, order_blank_count: blankFiles.length, delivered_orders: deliveredOrders });
+  // The rep's own signature first (when it was not on their profile yet), so the very first signed act already carries it.
+  let repSignatureSaved = false;
+  if (repSignature) {
+    const { rows: ownRows } = await pool.query("SELECT signature_path FROM users WHERE id = $1", [req.user.id]);
+    if (!ownRows[0]?.signature_path) {
+      await saveOwnSignature(req.user.id, repSignature);
+      repSignatureSaved = true;
+    } else {
+      fs.unlink(repSignature.path, () => {});
+    }
+  }
+
+  // The signed acts: one PDF per delivered order.
+  let signedActs = [];
+  let signedActError = false;
+  if (signatureSavedPath) {
+    try {
+      signedActs = await createSignedActs({ orderIds: deliveredOrders.map((o) => o.id), customerId, checkinId: checkin.id, customerSignaturePath: signatureSavedPath, signerId: req.user.id });
+    } catch (err) {
+      signedActError = true;
+      console.error("Signed act PDF failed:", err);
+    }
+  } else if (customerSignature) {
+    fs.unlink(customerSignature.path, () => {}); // nothing was delivered with it
+  }
+  res.status(201).json({
+    ...checkin,
+    photo_count: visitFiles.length,
+    order_blank_count: blankFiles.length,
+    delivered_orders: deliveredOrders,
+    signed_acts: signedActs,
+    signed_act_error: signedActError || undefined,
+    rep_signature_saved: repSignatureSaved || undefined,
+  });
 
   notifyCheckinDelivered({ delivered: deliveredOrders, customerName: customer.name, actorId: req.user.id });
 
