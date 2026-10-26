@@ -147,7 +147,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L82 6. Proactive moves that always land well - After a numbered list, add "Suggestions" (numbered, with recommendation) only if you saw something real while
 - L90 7. Mistakes I made that cost them time (do not repeat) - Claiming sheets "load before showing" without reading them (Add payment and the customer pickers already paint
 
-## owner-preferences-and-history.md (74 KB, 348 lines)
+## owner-preferences-and-history.md (75 KB, 352 lines)
 - L3 How they work with you - Writes short, numbered, imperative requests (often with screenshots "image1/img2"), mixes English with Armenia
 - L11 Visual / UX preferences (apply by default) - Compact, iOS-native feel: bottom sheets, floating/fixed action bars (Cancel/Save on customer edit must be fixe
 - L24 Things that repeatedly bit us (check proactively) - Forgetting CACHEVERSION bump -> "no updates" on phones.
@@ -189,6 +189,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L331 2026-10-25 (1.417.0): very slow first launch - Owner: "find the cause of very slow load of app on 1st launch and fix issue".
 - L337 2026-10-25 (1.418.0): map pins redesigned (variant B, "solid + rep ring") - Owner: "As a designer please improve colors, suggest variants" -> five variants shown -> "go with B".
 - L343 2026-10-25: demo site (separate copy of the app for outside testers) - Owner: first "create a user with test data", then "I want the demo version completely not connected with our d
+- L348 2026-10-26 (1.419.0): potential customer pin = the ORIGINAL red crosshair again - Owner first wrote "Potential customer: crosshair (keep current color)" (I read it as: keep the new amber, add
 
 ## strategy-roadmap.md (6 KB, 31 lines)
 - L5 Target (owner, 2026-10-12): 10 % of the market = ~1 million liters a year - Owner's working assumption: the Armenian market is ~10M L a year, so 10 % = 1M L.

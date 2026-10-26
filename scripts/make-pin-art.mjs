@@ -3,7 +3,7 @@
 //   node scripts/make-pin-art.mjs
 //
 // Design "B" (owner, 2026-10-25): solid pins, white glyph. Customer = green
-// teardrop, potential customer = amber circle, competitor = grey rounded
+// teardrop, potential customer = the original red crosshair (restored 2026-10-26; its art is the PNG set icons/markers/potential-*.png, not drawn here), competitor = grey rounded
 // square. The rep colour (Colour by rep) is a ring drawn BEHIND the pin: one
 // shape-only file per kind (ring-<kind>.svg) that map.js colours with a CSS
 // mask, so there is no per-rep artwork. Visit status badges (red "!" overdue,
@@ -17,17 +17,16 @@ import { fileURLToPath } from "node:url";
 
 const OUT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "client", "public", "icons", "markers");
 
-const COLORS = { customer: "#1f9d63", potential: "#f5a524", competitor: "#4b5563" };
+const COLORS = { customer: "#1f9d63", competitor: "#4b5563" };
 
 // Body outlines. Teardrop: tip at (24, 43.4), circle of radius 14 centred (24, 20.8); the tip sits 4.6 above the bottom edge so the rep ring is not cut off there.
 const BODY = {
   customer: "M24 43.4 C21 36.4 10 31.4 10 20.8 A14 14 0 0 1 38 20.8 C38 31.4 27 36.4 24 43.4 Z",
-  potential: "M24 11 A13 13 0 0 1 24 37 A13 13 0 0 1 24 11 Z",
-  competitor: "M15 11 H33 A4 4 0 0 1 37 15 V33 A4 4 0 0 1 33 37 H15 A4 4 0 0 1 11 33 V15 A4 4 0 0 1 15 11 Z",
+    competitor: "M15 11 H33 A4 4 0 0 1 37 15 V33 A4 4 0 0 1 33 37 H15 A4 4 0 0 1 11 33 V15 A4 4 0 0 1 15 11 Z",
 };
 // Centre of the glyph for each body.
-const CENTRE = { customer: [24, 20.8], potential: [24, 24], competitor: [24, 24] };
-const GLYPH_SCALE = { customer: 0.96, potential: 0.92, competitor: 0.86 };
+const CENTRE = { customer: [24, 20.8], competitor: [24, 24] };
+const GLYPH_SCALE = { customer: 0.96, competitor: 0.86 };
 
 // 24x24 glyphs, white, centred on (12, 12).
 const GLYPHS = {
@@ -53,6 +52,13 @@ function art(kind, category) {
 
 // Shape-only ring: the body outline stroked wide enough to show ~3 px beyond the pin's white edge. Alpha is all that matters (CSS mask).
 function ring(kind) {
+  // The crosshair's own outline is a disc of about r 18.6 (its PNG), so its rep ring is a plain disc just beyond it.
+  if (kind === "potential") {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+<circle cx="24" cy="24" r="21.4" fill="#000"/>
+</svg>
+`;
+  }
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
 <path d="${BODY[kind]}" fill="#000" stroke="#000" stroke-width="8" stroke-linejoin="round"/>
 </svg>
@@ -64,6 +70,7 @@ for (const kind of Object.keys(BODY)) {
   for (const category of Object.keys(GLYPHS)) {
     fs.writeFileSync(path.join(OUT, `${kind}-${category}.svg`), art(kind, category));
   }
-  if (kind !== "competitor") fs.writeFileSync(path.join(OUT, `ring-${kind}.svg`), ring(kind));
 }
+fs.writeFileSync(path.join(OUT, "ring-customer.svg"), ring("customer"));
+fs.writeFileSync(path.join(OUT, "ring-potential.svg"), ring("potential"));
 console.log("pin artwork written to", OUT);
