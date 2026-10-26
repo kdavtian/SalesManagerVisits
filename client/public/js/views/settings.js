@@ -536,6 +536,20 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
             <p class="form-success" id="ask-kad-cap-success" role="status" hidden>${t("saved")}</p>
             <button type="submit" class="btn btn-primary">${t("save")}</button>
           </form>
+        </div>
+          <h3 class="settings-subsection-title">${t("ai_check_label")}${hintIcon("ai-check-help-text")}</h3>
+          <p class="muted radius-help" id="ai-check-help-text" hidden>${t("ai_check_help")}</p>
+          <div class="card settings-list-group">
+          ${settingsToggleRow({ icon: ICON.bolt, label: t("ai_check_label"), value: "", id: "toggle-ai-check", checked: false, color: "purple" })}
+          <form id="ai-check-cap-form" class="settings-list-group-item">
+            <label>
+              <span class="settings-form-label">${ICON.bolt}${t("ai_check_cap_label")}</span>
+              <input type="number" name="usd" min="1" max="5000" step="1" required />
+            </label>
+            <p class="form-error" id="ai-check-no-key" hidden>${t("ai_check_no_key")}</p>
+            <p class="form-success" id="ai-check-cap-success" role="status" hidden>${t("saved")}</p>
+            <button type="submit" class="btn btn-primary">${t("save")}</button>
+          </form>
         </div>`
             : ""
         }
@@ -1093,6 +1107,10 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
     const askKadCapForm = root.querySelector("#ask-kad-cap-form");
     const askKadCapInput = askKadCapForm.querySelector('input[name="usd"]');
     const askKadCapSuccess = root.querySelector("#ask-kad-cap-success");
+    const aiCheckToggle = root.querySelector("#toggle-ai-check");
+    const aiCheckCapForm = root.querySelector("#ai-check-cap-form");
+    const aiCheckCapInput = aiCheckCapForm.querySelector('input[name="usd"]');
+    const aiCheckCapSuccess = root.querySelector("#ai-check-cap-success");
     const landingToggle = root.querySelector("#toggle-landing-calc");
     const landingRateForm = root.querySelector("#landing-rate-form");
     const landingRateInput = landingRateForm.querySelector('input[name="rate"]');
@@ -1152,6 +1170,9 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
       paintLandingRates(s.landing_rates, s.landing_rate_defaults);
       retailToggle.setAttribute("aria-checked", String(s.retail_from_excel === true));
       askKadCapInput.value = s.ask_kad_monthly_cap_usd ?? 20;
+      aiCheckToggle.setAttribute("aria-checked", String(Boolean(s.ai_blank_check_enabled)));
+      aiCheckCapInput.value = s.ai_blank_check_monthly_cap_usd ?? 10;
+      root.querySelector("#ai-check-no-key").hidden = s.ai_blank_check_configured !== false;
       // Write-only field (see routes/settings.js) -- never pre-filled with
       // the actual code, just a status line saying whether one is set.
       pinStatus.textContent = s.calculator_pin_is_custom ? t("calculator_pin_help_custom") : t("calculator_pin_help");
@@ -1260,6 +1281,31 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
         alert(err.message);
       } finally {
         askKadToggle.disabled = false;
+      }
+    });
+    // The AI check of photographed order blanks: OFF by default, one tap each way.
+    aiCheckToggle.addEventListener("click", async () => {
+      const turningOn = aiCheckToggle.getAttribute("aria-checked") !== "true";
+      aiCheckToggle.disabled = true;
+      try {
+        const result = await api.updateSettings({ ai_blank_check_enabled: turningOn });
+        aiCheckToggle.setAttribute("aria-checked", String(result.ai_blank_check_enabled));
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        aiCheckToggle.disabled = false;
+      }
+    });
+    aiCheckCapForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      aiCheckCapSuccess.hidden = true;
+      const submitBtn = aiCheckCapForm.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      try {
+        await api.updateSettings({ ai_blank_check_monthly_cap_usd: Number(aiCheckCapInput.value) });
+        aiCheckCapSuccess.hidden = false;
+      } finally {
+        submitBtn.disabled = false;
       }
     });
     // Landing cost from the pack price: the switch and the USD rate recalculate every product on the server at once.

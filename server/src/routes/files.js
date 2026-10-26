@@ -11,6 +11,7 @@ import { matchesDeclaredImageType } from "../utils/imageSniff.js";
 import { thumbnailPathFor, removeThumbnail } from "../utils/imageThumbs.js";
 import { periodTimestampCondition, PERIOD_KEYS } from "../utils/periodWindows.js";
 import { canAddCustomerFiles, seesAllCustomerFiles } from "../roles.js";
+import { scheduleAiCheck, checkFileWithAi, getAiCheckSettings, isAiConfigured } from "../aiBlankCheck.js";
 import { FILE_KINDS, FILE_COLUMNS, visibleFilesCondition, canDeleteFile, canRotateFile, parseOrderIds } from "../customerFiles.js";
 
 export const filesRouter = Router();
@@ -135,6 +136,7 @@ filesRouter.post("/customer/:customerId", (req, res, next) => {
     [customerId, kind, file.filename, file.mimetype, file.size, orderIds, String(req.body?.note ?? "").trim().slice(0, 500) || null, req.user.id]
   );
   res.status(201).json({ id: rows[0].id });
+  scheduleAiCheck(rows[0].id); // only an order-blank photo is read, and only while the AI check is switched on
 });
 
 // Turn a photo by 90 / 180 / 270 degrees (a page that was photographed sideways). The stored file is replaced by a new one with the
@@ -162,6 +164,19 @@ filesRouter.post("/:id/rotate", async (req, res) => {
   fs.unlink(path.join(uploadDirPath, file.file_path), () => {});
   removeThumbnail(uploadDirPath, file.file_path);
   res.json({ id: file.id, version: file.version + 1 });
+  scheduleAiCheck(file.id); // a turned photo is read again
+});
+
+// Check a document with the AI again (management; the switch in App configuration must be on).
+filesRouter.post("/:id/ai-check", async (req, res) => {
+  if (!seesAllCustomerFiles(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const file = await loadFile(req, res);
+  if (!file) return;
+  if (!(await getAiCheckSettings()).enabled) return res.status(409).json({ error: "The AI check is switched off", code: "ai_check_off" });
+  if (!isAiConfigured()) return res.status(503).json({ error: "The AI key is not set on the server", code: "ai_not_configured" });
+  const verdict = await checkFileWithAi(file.id, { force: true });
+  if (!verdict) return res.status(422).json({ error: "The document could not be checked (a photo of an order blank, or the monthly cap is reached)", code: "ai_check_skipped" });
+  res.json({ ai_status: verdict.status, ai_result: verdict });
 });
 
 filesRouter.delete("/:id", async (req, res) => {

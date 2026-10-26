@@ -15,6 +15,7 @@ import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { insertPayment } from "./payments.js";
 import { autoCompleteCollectionTasks, autoCompleteProductCheckTasks, autoCompleteVisitTasks } from "../taskAutoComplete.js";
 import { lockSignedOrders, createSignedActs, saveOwnSignature } from "../signedActs.js";
+import { scheduleAiCheck } from "../aiBlankCheck.js";
 import { parseDeliveredOrderIds, deliverableOrders, deliverOrdersAtCheckin, notifyCheckinDelivered } from "../checkinDelivery.js";
 
 // Below this, a payment isn't worth interrupting anyone's Telegram for.
@@ -298,6 +299,7 @@ checkinsRouter.post("/", (req, res, next) => {
   let rep = null;
   let deliveredOrders = [];
   let signatureSavedPath = null;
+  const blankFileIds = [];
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
@@ -316,10 +318,11 @@ checkinsRouter.post("/", (req, res, next) => {
     // The signed order blank of a delivery: a customer document kept with the check-in, linked to the delivered orders (Files > Documents,
     // the order's Documents, the accountant's inbox). Only a visit marked "Products delivered" can carry one.
     for (const file of blankFiles) {
-      await client.query(
-        "INSERT INTO customer_files (customer_id, kind, file_path, mime, size_bytes, order_ids, checkin_id, created_by) VALUES ($1, 'order_blank', $2, $3, $4, $5, $6, $7)",
+      const { rows: inserted } = await client.query(
+        "INSERT INTO customer_files (customer_id, kind, file_path, mime, size_bytes, order_ids, checkin_id, created_by) VALUES ($1, 'order_blank', $2, $3, $4, $5, $6, $7) RETURNING id",
         [customerId, file.filename, file.mimetype, file.size, deliveredIds, checkin.id, req.user.id]
       );
+      blankFileIds.push(inserted[0].id);
     }
 
     // In the same transaction as the check-in itself, not a fire-and-forget
@@ -416,6 +419,9 @@ checkinsRouter.post("/", (req, res, next) => {
     signed_act_error: signedActError || undefined,
     rep_signature_saved: repSignatureSaved || undefined,
   });
+
+  // The AI check of the photographed blanks (a switch in App configuration, OFF by default) runs after the answer, never delaying it.
+  blankFileIds.forEach((id) => scheduleAiCheck(id));
 
   notifyCheckinDelivered({ delivered: deliveredOrders, customerName: customer.name, actorId: req.user.id });
 

@@ -15,14 +15,20 @@ const canDelete = () => ["admin", "ceo"].includes(state.user.role);
 const ROTATE_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v5h-5"/></svg>`;
 const SHARE_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>`;
 
-// What the AI check found, in short lines (empty until the check is on and has run).
+// What the AI check found, in short lines (empty until the check is on and has run). Each issue is a code the app words itself.
+const issueText = (issue) => t(`ai_issue_${issue.code}`).replace("{found}", escapeHtml(String(issue.found ?? ""))).replace("{expected}", escapeHtml(String(issue.expected ?? "")));
 export function aiSummaryHtml(file) {
   if (!file.ai_status || file.ai_status === "pending") return "";
   if (file.ai_status === "ok") return `<p class="file-ai file-ai-ok">${t("file_ai_ok")}</p>`;
   const issues = file.ai_result?.issues ?? [];
-  const lines = issues.length ? issues.map((i) => `<li>${escapeHtml(i)}</li>`).join("") : "";
+  const lines = issues.length ? issues.map((i) => `<li>${issueText(i)}</li>`).join("") : "";
   return `<div class="file-ai file-ai-bad"><strong>${t(file.ai_status === "unreadable" ? "file_ai_unreadable" : "file_ai_issues")}</strong>${lines ? `<ul>${lines}</ul>` : ""}</div>`;
 }
+
+// Whether the AI check is switched on (App configuration, OFF by default): read once, so the "Check again" button only exists when it can work.
+let aiCheckOn = null;
+const aiCheckSwitch = () => (aiCheckOn ??= api.getSettings().then((s) => Boolean(s.ai_blank_check_enabled)).catch(() => false));
+const MANAGEMENT_ROLES = ["admin", "ceo", "operations_director", "sales_director", "accountant"];
 
 export function openFileViewer(files, startIndex = 0, { onChanged } = {}) {
   let index = startIndex;
@@ -41,6 +47,13 @@ export function openFileViewer(files, startIndex = 0, { onChanged } = {}) {
     <div class="file-viewer-bar"></div>`;
   document.body.appendChild(overlay);
   document.body.style.overflow = "hidden";
+  let aiOn = false;
+  aiCheckSwitch().then((on) => {
+    if (on && overlay.isConnected) {
+      aiOn = true;
+      show();
+    }
+  });
   const title = overlay.querySelector(".file-viewer-title");
   const stage = overlay.querySelector(".file-viewer-stage");
   const info = overlay.querySelector(".file-viewer-info");
@@ -72,7 +85,8 @@ export function openFileViewer(files, startIndex = 0, { onChanged } = {}) {
       ${aiSummaryHtml(file)}`;
     bar.innerHTML = `
       ${!isPdf(file) && canRotate(file) ? `<button type="button" class="file-viewer-btn" data-act="rotate-left" aria-label="${t("rotate_left")}"><span style="display:inline-flex;transform:scaleX(-1)">${ROTATE_ICON}</span><span>${t("rotate_left")}</span></button><button type="button" class="file-viewer-btn" data-act="rotate-right" aria-label="${t("rotate_right")}">${ROTATE_ICON}<span>${t("rotate_right")}</span></button>` : ""}
-      <button type="button" class="file-viewer-btn" data-act="share">${SHARE_ICON}<span>${t("file_share")}</span></button>
+      <button type="button" class="file-viewer-btn" data-act="share">${SHARE_ICON}<span>${t("file_share_short")}</span></button>
+      ${aiOn && file.kind === "order_blank" && !isPdf(file) && MANAGEMENT_ROLES.includes(state.user.role) ? `<button type="button" class="file-viewer-btn" data-act="ai-check">${icons.sparkles}<span>${t("file_ai_recheck")}</span></button>` : ""}
       ${canDelete() ? `<button type="button" class="file-viewer-btn file-viewer-btn-danger" data-act="delete">${icons.trash}<span>${t("delete_document")}</span></button>` : ""}`;
     bar.querySelectorAll("button").forEach((btn) => btn.addEventListener("click", () => act(btn.dataset.act, btn)));
     stage.querySelector('[data-act="open-pdf"]')?.addEventListener("click", () => act("open-pdf"));
@@ -89,6 +103,13 @@ export function openFileViewer(files, startIndex = 0, { onChanged } = {}) {
         btn.disabled = true;
         const res = await api.rotateFile(file.id, name === "rotate-right" ? 90 : 270);
         file.version = res.version;
+        changed = true;
+        show();
+      } else if (name === "ai-check") {
+        btn.disabled = true;
+        const res = await api.recheckFile(file.id);
+        file.ai_status = res.ai_status;
+        file.ai_result = res.ai_result;
         changed = true;
         show();
       } else if (name === "delete") {
