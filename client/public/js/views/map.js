@@ -368,7 +368,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
           <p class="map-legend-note">${t("map_legend_shape_note")}</p>
           <ul class="map-legend-list">
             <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/customer-other.svg" alt="" width="20" height="20" />${t("map_legend_customer")}</li>
-            <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/potential-other.svg" alt="" width="20" height="20" />${t("map_legend_potential")}</li>
+            <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/potential-other.png" alt="" width="20" height="20" />${t("map_legend_potential")}</li>
             <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/competitor-other.svg" alt="" width="20" height="20" />${t("map_legend_competitor")}</li>
           </ul>
           <div class="map-legend-divider"></div>
@@ -1009,8 +1009,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   }
 
   // The map doesn't show a customer's tier: every active customer (bronze,
-  // silver or gold) is the same green pin, potential customers the amber
-  // circle, competitors the grey square. The tier still lives on the
+  // silver or gold) is the same green pin, potential customers the red
+  // crosshair, competitors the grey square. The tier still lives on the
   // customer record and in the customer screens -- it just isn't a map
   // concept. "customer" is the marker kind for the green pin set.
   function markerKind(tier) {
@@ -1073,7 +1073,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       : "";
   };
   function pinArtHtml(c, tier) {
-    const src = `/icons/markers/${tier}-${categoryIconSlug(c.category)}.svg`;
+    // The potential customer's crosshair is the original raster art (PNG); the other kinds are SVG (see scripts/make-pin-art.mjs).
+    const src = `/icons/markers/${tier}-${categoryIconSlug(c.category)}.${tier === "potential" ? "png" : "svg"}`;
     const img = `<img class="pin-img-asset" src="${src}" alt="" width="${MARKER_SIZE}" height="${MARKER_SIZE}" draggable="false" />`;
     if (colorBy === "rep" && c.assigned_manager_id && tier !== "competitor") {
       return `<span class="pin-colour-ring" style="--rep-color:${repColorOf(c)};--pin-ring:url('/icons/markers/ring-${tier}.svg')" aria-hidden="true"></span>${img}`;
