@@ -149,6 +149,7 @@ export async function renderDashboard(root, navigate) {
   root.innerHTML = `<div class="dashboard-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".dashboard-view");
 
+  let lastPaintedJson = null;
   // Stale-while-revalidate: a returning user has almost certainly seen
   // this exact screen recently, so paint whatever was cached from last
   // time immediately (see listCache.js) and repaint with the live network
@@ -203,7 +204,14 @@ export async function renderDashboard(root, navigate) {
         ]);
         return { summary, customers, trends, settings, planPreview, myPlan, teamTodayPlans };
       },
-      (data) => paint(data)
+      (data) => {
+        // The saved copy and the fresh answer are usually the same: repainting would rebuild the whole Home and ask for its tasks and sync
+        // status a second time for nothing.
+        const json = JSON.stringify(data);
+        if (json === lastPaintedJson || !container.isConnected) return;
+        lastPaintedJson = json;
+        paint(data);
+      }
     );
   } catch (err) {
     container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;

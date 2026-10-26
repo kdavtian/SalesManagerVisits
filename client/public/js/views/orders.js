@@ -211,6 +211,7 @@ export function renderOrders(root, navigate, openId = null) {
   // instead of painting rows of the wrong tab over the right ones.
   let loadSeq = 0;
   let lastLoadedAt = 0;
+  let lastOrdersSig = null;
   let pagesLoaded = 1;
 
   function renderFilterMenu() {
@@ -267,10 +268,13 @@ export function renderOrders(root, navigate, openId = null) {
       try {
         const result = await api.listOrders(listParams(), { fresh: true });
         if (mine !== loadSeq || selectMode || bulkBusy) return;
+        lastLoadedAt = Date.now();
+        const sig = JSON.stringify([result.rows, result.has_more]);
+        if (sig === lastOrdersSig && pagesLoaded === 1) return; // nothing new: leave the list (and the reader's place in it) alone
+        lastOrdersSig = sig;
         orders = result.rows;
         hasMore = result.has_more;
         pagesLoaded = 1;
-        lastLoadedAt = Date.now();
         paint();
       } catch {
         /* the next refresh tries again; the rows on screen stay */
@@ -291,9 +295,13 @@ export function renderOrders(root, navigate, openId = null) {
         () => api.listOrders(params, { fresh: true }),
         (result) => {
           if (mine !== loadSeq) return;
+          lastLoadedAt = Date.now();
+          // Same rows as already on screen (the saved copy, then the fresh answer; or a quiet refresh that found nothing new): no repaint.
+          const sig = JSON.stringify([result.rows, result.has_more]);
+          if (paintedOnce && sig === lastOrdersSig) return;
+          lastOrdersSig = sig;
           orders = result.rows;
           hasMore = result.has_more;
-          lastLoadedAt = Date.now();
           paint();
           paintedOnce = true;
         }

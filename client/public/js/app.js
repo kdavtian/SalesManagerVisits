@@ -209,6 +209,7 @@ function preloadCoreViews() {
       "./views/activity.js",
       "./views/map.js",
       "./views/customers.js",
+      "./views/customerDetail.js", // the first card opened in a session otherwise waits for this file (and what it imports) to download
       "./views/orders.js",
       "./views/settings.js",
     ].forEach((path) => import(path).catch(() => {}));
@@ -1311,14 +1312,36 @@ let lastNavSignature = null;
 // rather than re-fetched on every navigation.
 let cachedSettings = null;
 
+// The bars are built once per language / user (and again when settings change what they list); a route change only moves the "active" mark.
+// They used to be torn down and rebuilt on EVERY hash change, which flashed the active state of the tab being tapped and re-created every
+// button (and its listener) in the middle of a tap.
+function syncNavActive(hash) {
+  const base = hash.split("?")[0];
+  const setCurrent = (el, active) => (active ? el.setAttribute("aria-current", "page") : el.removeAttribute("aria-current"));
+  const mark = (selector, activeClass) =>
+    document.querySelectorAll(selector).forEach((el) => {
+      const active = el.dataset.hash === hash;
+      el.classList.toggle(activeClass, active);
+      setCurrent(el, active);
+    });
+  mark("#nav-bar .nav-item[data-hash]", "nav-item-active");
+  mark("#nav-bar .nav-item-center[data-hash]", "nav-item-center-active");
+  mark("#sidebar .sidebar-item[data-hash]", "sidebar-item-active");
+  const bell = topBar.querySelector("#topbar-bell-btn");
+  const menu = topBar.querySelector("#topbar-menu-btn");
+  if (bell) setCurrent(bell, hash === "#/notifications");
+  if (menu) setCurrent(menu, base === "#/settings");
+}
+
 function renderNav() {
   const hash = (location.hash || "#/dashboard").split("?")[0];
-  const signature = `${hash}|${getLang()}|${state.user.name}`;
+  const signature = `${getLang()}|${state.user.name}|${state.user.role}`;
   if (signature !== lastNavSignature) {
     lastNavSignature = signature;
     rebuildNavMarkup(hash);
     rebuildSidebarMarkup(hash);
   }
+  syncNavActive(hash);
   applyOrderBadge();
   applyNotificationBadge();
   applyPlanApprovalBadge();
@@ -1495,10 +1518,11 @@ function rebuildNavMarkup(hash) {
   `;
   topBar.querySelector("#topbar-bell-btn").addEventListener("click", () => navigate("#/notifications"));
   topBar.querySelector("#topbar-menu-btn").addEventListener("click", () => {
-    if (hash.split("?")[0] === "#/settings") {
+    const current = (location.hash || "#/dashboard").split("?")[0];
+    if (current === "#/settings") {
       navigate(preSettingsHash);
     } else {
-      preSettingsHash = hash;
+      preSettingsHash = current;
       navigate("#/settings");
     }
   });
