@@ -18,7 +18,7 @@ The demo looks different where nobody can miss it: it installs / appears as **"K
 `seed` fills an empty demo database with: a CEO (`ceo@kad.demo`), three sales reps (Aram, Artak, Lilit: channels SM YVN, SM Davtashen, SM Shirak, each with its own map colour), 16 products with made-up prices and costs, about 60 customers around Yerevan and Gyumri (gold / silver / bronze, potential customers with levels and reasons, competitors, every category, visited today / overdue / never visited), 100+ check-ins, about 90 orders in all statuses (some waiting for confirmation), payments (a few waiting for approval), tasks, debt with real aging invoices, and four months of sales and plan per channel. Everything is deterministic: the demo looks the same every time.
 
 ## One-time setup (on the server, from the repo checkout)
-1. **The address.** The demo needs HTTPS so phones can install it, and it lives on **your own domain** (owner, 2026-10-26: no free DuckDNS names). Add one **A record** at the place where the domain's DNS is managed: host `demo` (or `kadostest`), value = the server's IP (the same IP as the real app). Result: `demo.yourcompany.com`.
+1. **The address.** The demo needs HTTPS so phones can install it. The real app already lives on an `sslip.io` address (`fieldvisits.164.92.171.41.sslip.io`: the service turns any name in front of the server's IP into that IP, so there is **nothing to set up at a DNS provider**). The demo uses the same kind: **`kadostest.164.92.171.41.sslip.io`** (owner, 2026-10-26: no DuckDNS). If the owner later gets a domain of their own: add one A record (host `demo`, value = the server's IP) and use that name in step 3 instead.
 2. **Start the demo:**
    ```bash
    cd /opt/field-visits
@@ -26,9 +26,9 @@ The demo looks different where nobody can miss it: it installs / appears as **"K
    ./deploy/demo.sh up
    ```
    The first run builds the image (a few minutes), makes `.env.demo` with random secrets, migrates and fills the demo, and prints the CEO password **once**.
-3. **Web address + HTTPS certificate** (once the DNS name from step 1 answers, `dig kadostest.yourcompany.com` shows the server's IP):
+3. **Web address + HTTPS certificate:**
    ```bash
-   sudo ./deploy/demo.sh domain kadostest.yourcompany.com
+   sudo ./deploy/demo.sh domain kadostest.164.92.171.41.sslip.io
    ```
    It writes the nginx file (`deploy/nginx-demo.conf` is the template), asks Let's Encrypt for a free certificate and reloads nginx. The real app's nginx file is not touched.
 
