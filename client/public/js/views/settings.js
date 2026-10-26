@@ -1,5 +1,6 @@
 import { api } from "../api.js";
 import { t, getLang, setLang } from "../i18n.js";
+import { readLaunchTimings } from "../launchTiming.js";
 import { getTheme, setTheme } from "../theme.js";
 import { getPerfMode, setPerfMode } from "../perfMode.js";
 import { getTextSize, setTextSize } from "../textSize.js";
@@ -72,6 +73,24 @@ const currentPageId = () => currentNav.page;
 // (instead of a separate detached hint icon floating below the whole
 // card) -- pairs with a hidden <p> (hintTextId) the caller places under the row;
 // the "!" wiring is generic (data-hint), see renderSettings.
+// Launch speed (launchTiming.js): the last launch on the row, the last eight in a popup.
+const seconds = (ms) => (ms == null ? "-" : `${(ms / 1000).toFixed(1)} ${t("unit_s")}`);
+function launchSpeedValue() {
+  const last = readLaunchTimings()[0];
+  return last ? seconds(last.ready) : "-";
+}
+function openLaunchSpeedPopup() {
+  const list = readLaunchTimings();
+  const rows = list
+    .map(
+      (e) => `<p><strong>${escapeHtml(formatDateTime(new Date(e.at).toISOString()))}</strong> &middot; v${escapeHtml(e.v)}
+        <br><span class="muted">${t("launch_white")} ${seconds(e.fp)} &middot; ${t("launch_ready")} ${seconds(e.ready)}
+        <br>${t("launch_sw")} ${e.sw ? seconds(e.swStart) : t("launch_sw_off")} &middot; ${t("launch_reply")} ${seconds(e.reply)}</span></p>`
+    )
+    .join("");
+  openInfoPopup(`<h3>${t("launch_speed")}</h3>${rows || `<p>${t("launch_none")}</p>`}<p class="muted">${t("launch_hint")}</p>`);
+}
+
 function settingsRow({ icon, label, value, id, interactive = true, color = "gray", hintBtnId, hintTextId }) {
   const tag = interactive ? "button" : "div";
   return `
@@ -298,6 +317,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
       <div class="card settings-list">
         ${settingsRow({ icon: ICON.info, label: t("about_app"), value: `${t("version")} ${APP_VERSION}`, interactive: false, color: "blue" })}
         ${settingsRow({ icon: ICON.refresh, label: t("check_for_updates"), value: `<span id="check-updates-value"></span>`, id: "row-check-updates", color: "teal" })}
+        ${settingsRow({ icon: ICON.clock, label: t("launch_speed"), value: launchSpeedValue(), id: "row-launch-speed", color: "gray" })}
         ${settingsRow({ icon: ICON.book, label: t("user_guide"), value: "PDF", id: "row-user-guide", color: "orange", hintBtnId: "user-guide-hint-btn", hintTextId: "user-guide-hint-text" })}
         <p class="muted settings-hint-text" id="user-guide-hint-text" hidden>${t("user_guide_hint").replace("{v}", GUIDE_VERSION)}</p>
       </div>
@@ -1452,6 +1472,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
   }
 
   root.querySelector("#row-user-guide").addEventListener("click", openGuideOverlay);
+  root.querySelector("#row-launch-speed").addEventListener("click", openLaunchSpeedPopup);
 
   const checkUpdatesRow = root.querySelector("#row-check-updates");
   const checkUpdatesValue = root.querySelector("#check-updates-value");

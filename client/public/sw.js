@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v437";
+const CACHE_VERSION = "field-visits-v438";
 // v5: drops tiles cached while requests went out without a Referer (OSM may have
 // answered those with placeholder images) -- see Referrer-Policy in server/src/app.js.
 const TILE_CACHE = "field-visits-tiles-v5";
@@ -50,6 +50,7 @@ const APP_SHELL = [
   "/js/mapSafeUi.js",
   "/js/competitorPolicySafe.js",
   "/js/version.js",
+  "/js/launchTiming.js",
   "/js/i18n.js",
   "/js/i18n-en.js",
   "/js/i18n-hy.js",
@@ -71,6 +72,7 @@ const APP_SHELL = [
   "/js/mapPrefs.js",
   "/js/leafletLoader.js",
   "/js/perfMode.js",
+  "/js/theme-init.js",
   "/js/perf-mode-init.js",
   "/js/zoom-lock.js",
   "/js/browser-check.js",
@@ -216,6 +218,7 @@ const APP_SHELL = [
   "/icons/icon-512.png",
   "/icons/apple-touch-icon.png",
   "/brand/kad-k-mark.png",
+  "/brand/kad-wordmark.png",
 ];
 
 self.addEventListener("install", (event) => {
@@ -302,20 +305,10 @@ self.addEventListener("fetch", (event) => {
 
   if (url.origin !== self.location.origin) return;
 
-  // Cache-first, then revalidate in the background -- same shape as the
-  // CARTO tile handler above. An already-cached same-origin file (the
-  // whole precached APP_SHELL, plus anything RUNTIME_CACHE has since
-  // picked up) is now served INSTANTLY regardless of how slow or flaky the
-  // network currently is. The old network-first version waited on fetch()
-  // to actually reject before ever trying the cache -- fine on a fast
-  // connection, but on a poor one (not fully offline, just slow) fetch()
-  // typically doesn't reject quickly, it just hangs, so the "instant load
-  // from cache" the precache exists for never actually happened until
-  // that hang gave up or timed out. A fetch still runs every time in the
-  // background to keep the cache fresh for next time (and to serve a
-  // first-ever, not-yet-cached request); the existing "Check for updates"
-  // banner (updateBanner.js) is what surfaces a genuinely new deployed
-  // version to the user, not this background fetch.
+  // Cache-first for the app itself, so it opens instantly whatever the network is doing: a slow (not offline) connection never rejects fetch()
+  // quickly, it just hangs, which is why this used to be network-first-with-fallback and was not instant. The start page (index.html: branding,
+  // module preload list) is still re-fetched in the background on every launch to keep that one copy fresh; the other app files are not (see
+  // below). The "Check for updates" banner (updateBanner.js) is what surfaces a newly deployed version, not a background fetch.
   if (request.mode === "navigate") {
     event.respondWith(
       caches.match("/index.html").then((cached) => {
@@ -331,20 +324,32 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // The versioned precache (APP_SHELL) is served as it is and NOT re-fetched at launch (1.422.0). It used to be re-downloaded in full in the background on
+  // every single launch (~110 requests, ~680 KB, each response cloned and written to RUNTIME_CACHE) even though those copies were never served --
+  // caches.match() finds the precache entry first -- so on a phone it only competed with the screens' own requests and kept the worker busy while
+  // the app was starting. The files change only with a release, and a release always ships a new CACHE_VERSION (new worker -> new precache).
   event.respondWith(
-    caches.match(request).then((cached) => {
-      const network = fetch(request)
-        .then((res) => {
-          if (res.ok) {
-            caches.open(RUNTIME_CACHE).then(async (cache) => {
-              await cache.put(request, res.clone());
-              trimCache(cache, RUNTIME_CACHE_MAX_ENTRIES);
-            });
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
+    caches
+      .open(CACHE_VERSION)
+      .then((shell) => shell.match(request))
+      .then((hit) => hit || runtimeFetch(request))
   );
 });
+
+// Everything else from this origin (not in APP_SHELL): cache, then revalidate in the background.
+function runtimeFetch(request) {
+  return caches.match(request).then((cached) => {
+    const network = fetch(request)
+      .then((res) => {
+        if (res.ok) {
+          caches.open(RUNTIME_CACHE).then(async (cache) => {
+            await cache.put(request, res.clone());
+            trimCache(cache, RUNTIME_CACHE_MAX_ENTRIES);
+          });
+        }
+        return res;
+      })
+      .catch(() => cached);
+    return cached || network;
+  });
+}
