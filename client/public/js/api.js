@@ -516,6 +516,7 @@ export const api = {
   orderFiles: (orderId) => request(`/files/order/${orderId}`, { fresh: true }),
   filesInbox: (params = {}) => request(`/files?${new URLSearchParams(params)}`, { fresh: true }),
   addCustomerFile: (customerId, formData) => request(`/files/customer/${customerId}`, { method: "POST", body: formData }),
+  recheckFile: (id) => request(`/files/${id}/ai-check`, { method: "POST" }),
   rotateFile: (id, degrees) => json(`/files/${id}/rotate`, "POST", { degrees }),
   deleteFile: (id) => request(`/files/${id}`, { method: "DELETE" }),
   fileUrl: (file, { thumb = false } = {}) => `/api/files/${file.id}/content?v=${file.version ?? 1}${thumb ? "&size=thumb" : ""}`,

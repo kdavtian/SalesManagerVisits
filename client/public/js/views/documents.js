@@ -38,6 +38,14 @@ export function renderDocuments(root, navigate) {
   let hasMore = false;
   let seq = 0;
   const reps = new Map();
+  // "Problems" (found by the AI check) only exists while the AI check is switched on in App configuration.
+  let aiOn = false;
+  api.getSettings().then((s) => {
+    if (s.ai_blank_check_enabled && root.isConnected) {
+      aiOn = true;
+      paintFilters();
+    }
+  }).catch(() => {});
 
   const chip = (label, active, attrs) => `<button type="button" class="map-filter-chip ${active ? "chip-active" : ""}" aria-pressed="${active}" ${attrs}>${escapeHtml(label)}</button>`;
   const kindSelect = root.querySelector("#doc-kind");
@@ -46,9 +54,11 @@ export function renderDocuments(root, navigate) {
     root.querySelector("#doc-periods").innerHTML = PERIODS.map(
       ([key, label]) => `<button role="tab" aria-selected="${filters.period === key}" class="activity-tab ${filters.period === key ? "activity-tab-active" : ""}" data-period="${key}">${escapeHtml(t(label))}</button>`
     ).join("");
-    root.querySelector("#doc-flags").innerHTML = chip(t("docs_not_linked"), filters.linked === "0", 'data-flag="linked"');
+    root.querySelector("#doc-flags").innerHTML =
+      chip(t("docs_not_linked"), filters.linked === "0", 'data-flag="linked"') + (aiOn ? chip(t("docs_problems"), filters.issues === "1", 'data-flag="issues"') : "");
     root.querySelectorAll("[data-period]").forEach((b) => b.addEventListener("click", () => ((filters.period = b.dataset.period), reload())));
     root.querySelector('[data-flag="linked"]').addEventListener("click", () => ((filters.linked = filters.linked === "0" ? "" : "0"), reload()));
+    root.querySelector('[data-flag="issues"]')?.addEventListener("click", () => ((filters.issues = filters.issues === "1" ? "" : "1"), reload()));
   }
   kindSelect.addEventListener("change", () => ((filters.kind = kindSelect.value), reload()));
   repSelect.addEventListener("change", () => ((filters.user_id = repSelect.value), reload()));

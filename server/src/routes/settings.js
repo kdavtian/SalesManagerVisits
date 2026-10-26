@@ -19,6 +19,7 @@ import {
 } from "../settings.js";
 import { getBonusesEnabled, setBonusesEnabled } from "../bonusSettings.js";
 import { getAskKadSettings, setAskKadEnabled, setAskKadMonthlyCapUsd } from "../askKad/settings.js";
+import { getAiCheckSettings, setAiCheckEnabled, setAiCheckMonthlyCapUsd, isAiConfigured } from "../aiBlankCheck.js";
 import { getLandingSettings, setLandingSetting, setLandingRates, landingRateDefaults, displayRates, applyLandingCosts, applyExcelRetail, retailDifferences } from "../landingCalc.js";
 import { ensureCurrentRound, ensureOnceRound } from "../bonusChallengeRounds.js";
 import { ROLES } from "../roles.js";
@@ -42,6 +43,7 @@ settingsRouter.get("/", async (req, res) => {
     calculatorModeEnabled,
     bonusesEnabled,
     askKad,
+    aiCheck,
     landing,
   ] = await Promise.all([
     getCheckinRadiusMeters(),
@@ -54,6 +56,7 @@ settingsRouter.get("/", async (req, res) => {
     getCalculatorModeEnabled(),
     getBonusesEnabled(),
     getAskKadSettings(),
+    getAiCheckSettings(),
     getLandingSettings(),
   ]);
   res.json({
@@ -79,6 +82,10 @@ settingsRouter.get("/", async (req, res) => {
     // Ask KAD (the admin's AI analyst): On/Off and the monthly spending cap in USD.
     ask_kad_enabled: askKad.enabled,
     ask_kad_monthly_cap_usd: askKad.capUsd,
+    // AI check of photographed order blanks (OFF by default): the switch, the monthly spending cap in USD, and whether the server has an AI key at all.
+    ai_blank_check_enabled: aiCheck.enabled,
+    ai_blank_check_monthly_cap_usd: aiCheck.capUsd,
+    ai_blank_check_configured: isAiConfigured(),
     // Landing cost calculated from the pack USD price (landingCalc.js) and Retail price taken from Excel.
     landing_calc_enabled: landing.enabled,
     landing_usd_rate: landing.rate,
@@ -234,6 +241,21 @@ settingsRouter.patch("/", requireAdmin, async (req, res) => {
       return res.status(400).json({ error: "ask_kad_monthly_cap_usd must be between 1 and 5000" });
     }
     result.ask_kad_monthly_cap_usd = await setAskKadMonthlyCapUsd(Math.round(usd * 100) / 100);
+  }
+
+  if (req.body?.ai_blank_check_enabled !== undefined) {
+    if (typeof req.body.ai_blank_check_enabled !== "boolean") {
+      return res.status(400).json({ error: "ai_blank_check_enabled must be a boolean" });
+    }
+    result.ai_blank_check_enabled = await setAiCheckEnabled(req.body.ai_blank_check_enabled);
+  }
+
+  if (req.body?.ai_blank_check_monthly_cap_usd !== undefined) {
+    const usd = Number(req.body.ai_blank_check_monthly_cap_usd);
+    if (!Number.isFinite(usd) || usd < 1 || usd > 5000) {
+      return res.status(400).json({ error: "ai_blank_check_monthly_cap_usd must be between 1 and 5000" });
+    }
+    result.ai_blank_check_monthly_cap_usd = await setAiCheckMonthlyCapUsd(Math.round(usd * 100) / 100);
   }
 
   if (req.body?.bonuses_enabled !== undefined) {
