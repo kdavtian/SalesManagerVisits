@@ -16,7 +16,9 @@
 ## How it was measured
 A throttled HTTP/2 front (like nginx on the droplet): 150 ms latency, 1.6 Mbit/s shared by all requests (the service worker's downloads included), Chromium with CPU slowed 4x (a 3 GB Android phone), fresh browser context, `NODE_ENV=production` server. Cold launch to a usable login form: **6.2-6.7 s before, 1.7-2.2 s after**; launch to Home data painted after login: 7.8-8.5 s before, 2.9-3.4 s after.
 
+## Also done in 1.420.0
+- The texts are split into `i18n-en.js` / `i18n-hy.js`; a device downloads and parses only its own language (about 0.2-0.4 s less on the rig). `theme-init.js` starts that download before `i18n.js` even runs; `setLang` is now `async` (loads the other language first). Parity of the two files is a CI test.
+
 ## Not done (ideas, see `.claude/skills/KADDev/references/optimization-ideas.md`)
-- Load only the active language of `i18n.js` (444 KB raw, 116 KB compressed, both languages in one file).
 - Cache the rest of the app shell after the first screen instead of in the service worker's install step (about 190 files, about 1 MB compressed) so it never competes with the first taps on a slow link.
 - Trim `styles.css` (438 KB raw, 51 KB compressed; it is render-blocking).

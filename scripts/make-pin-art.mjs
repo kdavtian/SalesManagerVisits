@@ -6,8 +6,8 @@
 // teardrop, potential customer = the original red crosshair (restored 2026-10-26; its art is the PNG set icons/markers/potential-*.png, not drawn here), competitor = grey rounded
 // square. The rep colour (Colour by rep) is a ring drawn BEHIND the pin: one
 // shape-only file per kind (ring-<kind>.svg) that map.js colours with a CSS
-// mask, so there is no per-rep artwork. Visit status badges (red "!" overdue,
-// amber "!!" never visited, green tick today) are drawn by CSS, not here.
+// mask, so there is no per-rep artwork. Visit status badges (amber "!" overdue,
+// red "!!" never visited, green tick today) are drawn by CSS, not here.
 //
 // All files share a 48x48 canvas. Teardrop tip at (24, 43.4) = 90.4% of the
 // height (PIN_TIP_RATIO in map.js); the round kinds are centred on (24, 24).

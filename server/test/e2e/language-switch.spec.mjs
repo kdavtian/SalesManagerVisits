@@ -10,6 +10,7 @@ test.describe("Language switch", () => {
     const before = (await page.locator("#qa-check-in").innerText()).trim();
 
     await page.locator("#topbar-menu-btn").click();
+    await page.locator('[data-nav-page="p-appearance"]').click(); // the language switch lives on the Appearance page since the Settings redesign (1.405.0)
     await page.locator("#toggle-language").click();
     // Menu icon again returns to Home, which must now be in the other language.
     await page.locator("#topbar-menu-btn").click();
@@ -20,6 +21,7 @@ test.describe("Language switch", () => {
     await page.goto("/#/reports");
     const heading = (await page.locator("h1").first().innerText()).trim();
     await page.locator("#topbar-menu-btn").click();
+    await page.locator('[data-nav-page="p-appearance"]').click(); // the language switch lives on the Appearance page since the Settings redesign (1.405.0)
     await page.locator("#toggle-language").click();
     await page.goBack();
     await expect(page.locator("h1").first()).not.toHaveText(heading);

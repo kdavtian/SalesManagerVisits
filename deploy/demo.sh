@@ -8,6 +8,7 @@
 #   ./deploy/demo.sh remove-user <name>       take that login away
 #   ./deploy/demo.sh users                    list the logins
 #   ./deploy/demo.sh reset                    throw away ALL demo data and logins, start again from a fresh demo
+#   ./deploy/demo.sh domain <name>            give it its web address (nginx + free HTTPS certificate), e.g. kadostest.yourcompany.com; as root, after the DNS record exists
 #   ./deploy/demo.sh status                   is it running, and does it answer
 #   ./deploy/demo.sh down                     stop it (data kept)
 #   ./deploy/demo.sh destroy                  stop it and delete its database and uploads
@@ -85,6 +86,37 @@ case "${1:-}" in
     dc down -v
     up
     ;;
+  domain)
+    DOMAIN="${2:-}"
+    [ -n "$DOMAIN" ] || { echo "Usage: $0 domain <name>   e.g. $0 domain kadostest.yourcompany.com" >&2; exit 1; }
+    case "$DOMAIN" in *[!a-zA-Z0-9.-]*|.*|*.) echo "That does not look like a web address: $DOMAIN" >&2; exit 1 ;; esac
+    [ "$(id -u)" -eq 0 ] || { echo "Run this as root (sudo ./deploy/demo.sh domain $DOMAIN): it writes the nginx file and asks for the certificate." >&2; exit 1; }
+    command -v nginx >/dev/null && command -v certbot >/dev/null || { echo "nginx and certbot must be installed (they are on the real server)." >&2; exit 1; }
+    ensure_env
+    SITE="/etc/nginx/sites-available/field-visits-demo"
+    echo "==> Checking that $DOMAIN points at this server"
+    if command -v dig >/dev/null; then
+      echo "    $DOMAIN -> $(dig +short "$DOMAIN" | tr '\n' ' ')  (this server: $(curl -fsS https://api.ipify.org 2>/dev/null || echo unknown))"
+    fi
+    echo "==> Step 1/2: plain web address (for the certificate check)"
+    cat > "$SITE" <<NGINX
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $DOMAIN;
+    location /.well-known/acme-challenge/ { root /var/www/certbot; }
+    location / { proxy_pass http://127.0.0.1:$(port); proxy_set_header Host \$host; }
+}
+NGINX
+    mkdir -p /var/www/certbot
+    ln -sf "$SITE" /etc/nginx/sites-enabled/field-visits-demo
+    nginx -t && systemctl reload nginx
+    echo "==> Step 2/2: free HTTPS certificate (Let's Encrypt)"
+    certbot certonly --webroot -w /var/www/certbot -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email
+    sed "s/YOUR_DEMO_DOMAIN/$DOMAIN/g; s/127.0.0.1:3100/127.0.0.1:$(port)/g" deploy/nginx-demo.conf > "$SITE"
+    nginx -t && systemctl reload nginx
+    echo "==> Done. Open https://$DOMAIN"
+    ;;
   status)
     ensure_env
     dc ps
@@ -100,7 +132,7 @@ case "${1:-}" in
     echo "Demo containers, database and uploads deleted. (.env.demo kept; delete it too if you want new secrets.)"
     ;;
   *)
-    sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
     exit 1
     ;;
 esac

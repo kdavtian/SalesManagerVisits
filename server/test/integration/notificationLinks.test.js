@@ -32,11 +32,14 @@ test("order placed / status changed notifications link to the order, not the lis
   assert.equal(created.status, 201);
   const orderId = trackOrder(created.data.id);
 
-  const placed = await waitFor(async () => (await pool.query("SELECT url FROM notifications WHERE user_id = $1 AND type = 'order_placed' ORDER BY id DESC LIMIT 1", [director.id])).rows[0]);
-  assert.equal(placed?.url, `/#/orders?open=${orderId}`);
+  // Every sales director is notified about EVERY order placed, including the ones other test files place at the same moment: look for this
+  // order's own notification instead of "the newest one".
+  const url = `/#/orders?open=${orderId}`;
+  const placed = await waitFor(async () => (await pool.query("SELECT url FROM notifications WHERE user_id = $1 AND type = 'order_placed' AND url = $2 LIMIT 1", [director.id, url])).rows[0]);
+  assert.equal(placed?.url, url);
 
   const rejected = await apiRequest(`/api/orders/${orderId}`, { method: "PATCH", cookie: directorCookie, body: { status: "confirmed" } });
   assert.equal(rejected.status, 200);
-  const changed = await waitFor(async () => (await pool.query("SELECT url FROM notifications WHERE user_id = $1 AND type = 'order_status_changed' ORDER BY id DESC LIMIT 1", [manager.id])).rows[0]);
-  assert.equal(changed?.url, `/#/orders?open=${orderId}`);
+  const changed = await waitFor(async () => (await pool.query("SELECT url FROM notifications WHERE user_id = $1 AND type = 'order_status_changed' AND url = $2 LIMIT 1", [manager.id, url])).rows[0]);
+  assert.equal(changed?.url, url);
 });
