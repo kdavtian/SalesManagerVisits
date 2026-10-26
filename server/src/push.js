@@ -7,6 +7,7 @@ import { isQuietHours } from "./quietHours.js";
 import webpush from "web-push";
 import { pool } from "./db/pool.js";
 import { isTestRun } from "./utils/testRun.js";
+import { getCalculatorModeEnabled } from "./settings.js";
 
 const PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
 const PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
@@ -112,6 +113,13 @@ async function notifyOneSubscription(row, payload, userId, notificationId, attem
 // failure, or transient failure awaiting retry) is recorded in
 // notification_delivery_log -- see routes/notifications.js's admin-only
 // GET /delivery-log for the visible side of this.
+// The icon a notification shows (lock screen, desktop corner): the K while Calculator Mode is off, the plain calculator while it is on (owner, 2026-10-26).
+// Decided here, per message, because the service worker cannot read the setting.
+export function pushIcons(calculatorMode) {
+  const icon = calculatorMode ? "/icons/icon-192.png" : "/icons/app/icon-192.png";
+  return { icon, badge: icon };
+}
+
 export async function notifyUser(userId, payload, notificationId = null) {
   if (!enabled) return;
   // Night: keep the in-app notification, skip the phone push (see quietHours.js).
@@ -123,5 +131,6 @@ export async function notifyUser(userId, payload, notificationId = null) {
   );
   if (!rows.length) return;
 
-  await Promise.all(rows.map((row) => notifyOneSubscription(row, payload, userId, notificationId)));
+  const withIcons = { ...pushIcons(await getCalculatorModeEnabled()), ...payload };
+  await Promise.all(rows.map((row) => notifyOneSubscription(row, withIcons, userId, notificationId)));
 }

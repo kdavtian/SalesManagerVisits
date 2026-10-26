@@ -21,9 +21,10 @@ test("Debt coin: off by default, switch in the pin key puts a coin on debtors on
     return c;
   };
   try {
-    const c1 = await mk("E2E Coin One", 40.7891, 43.8471, 250000);
-    await mk("E2E Coin Two", 40.7901, 43.8481, 0);
-    await mk("E2E Coin Three", 40.7911, 43.8491, 90000);
+    const c1 = await mk("E2E Coin One", 40.7891, 43.8471, 250000); // small
+    await mk("E2E Coin Two", 40.7901, 43.8481, 0); // no coin
+    await mk("E2E Coin Three", 40.7911, 43.8491, 500000); // medium
+    await mk("E2E Coin Four", 40.7921, 43.8501, 2000000); // large
     await loginViaUi(page, admin.email);
     await page.goto(`/#/map?customer=${c1.id}`);
     await expect(page.locator("#leaflet-map .leaflet-marker-icon:not(.leaflet-cluster-icon)").first()).toBeVisible({ timeout: 20000 });
@@ -33,11 +34,16 @@ test("Debt coin: off by default, switch in the pin key puts a coin on debtors on
     await expect(page.locator("#map-legend-toggle-debt")).toHaveAttribute("aria-checked", "false");
     await page.locator("#map-legend-toggle-debt").click();
     await expect(page.locator("#map-legend-toggle-debt")).toHaveAttribute("aria-checked", "true");
-    // a coin on the two customers who owe money, none on the one at zero
-    await expect(page.locator("#leaflet-map .pin-debt")).toHaveCount(2, { timeout: 10000 });
+    // a coin on every customer who owes money, none on the one at zero; size and colour by the amount (under 300,000 / under 1,000,000 / 1,000,000 and more)
+    await expect(page.locator("#leaflet-map .pin-debt")).toHaveCount(3, { timeout: 10000 });
+    await expect(page.locator("#leaflet-map .pin-debt-s")).toHaveCount(1);
+    await expect(page.locator("#leaflet-map .pin-debt-m")).toHaveCount(1);
+    await expect(page.locator("#leaflet-map .pin-debt-l")).toHaveCount(1);
+    const sizes = await page.locator("#leaflet-map .pin-debt").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().width)).sort((a, b) => a - b));
+    expect(sizes).toEqual([14, 18, 22]);
     // the key explains it, and every other marker is listed too
     const key = await page.locator("#map-legend-panel").innerText();
-    for (const part of [/Gold coin/i, /Open task, not due yet/i, /due today or overdue/i, /Planned for today/i, /Ring in the rep/i, /Route stop \(number/i, /already visited/i, /Brand filter: available/i, /My location/i, /Teammate/i]) expect(key).toMatch(part);
+    for (const part of [/Small yellow coin/i, /Medium orange coin/i, /Large red coin/i, /Open task, not due yet/i, /due today or overdue/i, /Planned for today/i, /Ring in the rep/i, /Route stop \(number/i, /already visited/i, /Brand filter: available/i, /My location/i, /Teammate/i]) expect(key).toMatch(part);
     await page.locator("#map-legend-panel").evaluate((el) => el.querySelector(".map-legend-body")?.scrollTo(0, 99999));
     await page.screenshot({ path: `${process.env.GB_SHOTS ?? "/tmp"}/map-key-bottom.png` });
     await page.locator("#map-legend-panel").evaluate((el) => el.querySelector(".map-legend-body")?.scrollTo(0, 0));
@@ -48,7 +54,7 @@ test("Debt coin: off by default, switch in the pin key puts a coin on debtors on
 
     // remembered after a reload; switching off removes the coins
     await page.reload();
-    await expect(page.locator("#leaflet-map .pin-debt")).toHaveCount(2, { timeout: 20000 });
+    await expect(page.locator("#leaflet-map .pin-debt")).toHaveCount(3, { timeout: 20000 });
     await page.locator("#map-legend-btn").click();
     await page.locator("#map-legend-toggle-debt").click();
     await expect(page.locator("#leaflet-map .pin-debt")).toHaveCount(0);
