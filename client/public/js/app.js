@@ -72,7 +72,7 @@ import { openSyncQueueSheet } from "./syncQueueSheet.js";
 import { getPerfMode } from "./perfMode.js";
 import { clearListCache, clearCacheIfRoleChanged } from "./listCache.js";
 import { mountInstallPrompt } from "./install.js";
-import { mountUpdateBanner, initServiceWorkerUpdates } from "./updateBanner.js";
+import { mountUpdateBanner, initServiceWorkerUpdates, isUpdatePending } from "./updateBanner.js";
 import { startLocationBroadcast, stopLocationBroadcast } from "./locationBroadcast.js";
 import { startDriverArrival, stopDriverArrival } from "./driverArrival.js";
 import { opsShellFor, shellAllows } from "./opsShell.js";
@@ -338,6 +338,24 @@ function disposeBackEntry(entry) {
     // a failing cleanup must not break navigation
   }
 }
+// The Map tab is kept alive across tab switches (owner, 2026-10-26: "Map is loading each time I switch tabs"): leaving it for another
+// tab parks the same DOM / Leaflet instance here (the back stack is wiped at every tab switch), and coming back to a plain #/map puts
+// it back as it was -- pan, zoom, filters -- instead of building it again. While parked its location watch and team poll are paused.
+let parkedMap = null;
+function disposeParkedMap() {
+  if (!parkedMap) return;
+  disposeBackEntry(parkedMap);
+  parkedMap = null;
+}
+function parkMap(entry) {
+  if (parkedMap && parkedMap !== entry) disposeParkedMap();
+  parkedMap = entry;
+  try {
+    entry.cleanup?.onPark?.();
+  } catch {
+    // pausing is best effort
+  }
+}
 // Screens kept in the back stack (and a parked sheet) are DOM snapshots drawn
 // with whatever language, theme, performance mode, profile or admin settings
 // were active when they were left. After a preference change they must be
@@ -354,6 +372,7 @@ window.addEventListener("app-rerender", () => {
 window.addEventListener("app-preferences-changed", () => {
   backStack.forEach(disposeBackEntry);
   backStack = [];
+  disposeParkedMap();
   pruneParkedSheet([]);
   lastNavSignature = null; // rebuild the tab bar, top bar and sidebar
   if (!state.user) return;
@@ -898,9 +917,10 @@ function appIsBlank() {
 }
 function showRenderFailure(err) {
   console.error("Screen failed to render:", err);
-  if (!appIsBlank()) return;
   const message = String(err?.message || err || "");
-  const moduleLoadFailure = /dynamically imported module|Importing a module script failed|Failed to fetch|Load failed/i.test(message);
+  // Scripts of two versions meeting (an update arrived while the app was open) or a file that did not download: one reload fixes it,
+  // so do it by itself -- whether or not something is still on screen.
+  const moduleLoadFailure = /dynamically imported module|Importing a module script failed|Failed to fetch|Load failed|does not provide an export|Importing binding name|is not found/i.test(message);
   try {
     const last = Number(sessionStorage.getItem("fv_render_reload") || 0);
     if (moduleLoadFailure && Date.now() - last > 60000) {
@@ -911,6 +931,7 @@ function showRenderFailure(err) {
   } catch {
     // sessionStorage unavailable -- fall through to the card
   }
+  if (!appIsBlank()) return;
   app.innerHTML = `
     <div class="detail-view render-failed">
       <div class="card">
@@ -975,6 +996,7 @@ async function renderRoute() {
     // that might belong to a different account entirely on a shared device.
     backStack.forEach(disposeBackEntry);
     backStack = [];
+    disposeParkedMap();
     lastRenderedHash = null;
     topBar.hidden = true;
     navBar.hidden = true;
@@ -1025,6 +1047,13 @@ async function renderRoute() {
   preloadArmeniaTiles();
 
   const hash = location.hash || "#/dashboard";
+  // A new version is waiting and the person chose "Later": the screens already loaded are the old ones, and a screen opened for the first
+  // time now would come from the new files and clash with them ("This screen could not load", e.g. the customer card). Moving to another
+  // screen is the safe moment to switch: reload straight onto it.
+  if (isUpdatePending() && lastRenderedHash && hash.split("?")[0] !== lastRenderedHash.split("?")[0]) {
+    location.reload();
+    return;
+  }
   if (HOME_TREE_ROUTES.has(hash.split("?")[0])) lastHomeHash = hash;
 
   // Restore from the back-cache -- only on a genuine back/forward
@@ -1035,6 +1064,11 @@ async function renderRoute() {
   // to rebuild everything from scratch and lose all of it.
   const isHistory = !programmaticNav;
   programmaticNav = false;
+  // Back to the Map tab while it sits parked: it is the entry to restore (a Map link with a customer, add or plan flag builds fresh).
+  if (hash === "#/map" && parkedMap && !backStack.some((entry) => entry.hash === "#/map")) {
+    backStack.push(parkedMap);
+    parkedMap = null;
+  }
   let matchIdx = -1;
   for (let i = backStack.length - 1; i >= 0; i--) {
     if (backStack[i].hash === hash) {
@@ -1089,9 +1123,13 @@ async function renderRoute() {
   // comment above). A cached copy of the screen we are about to render fresh
   // would only be stale, so it is disposed too.
   if (NAV_TAB_ROOT_HASHES.has(hash.split("?")[0]) && !isHistory) {
-    backStack.forEach(disposeBackEntry);
+    const mapEntry = backStack.find((entry) => entry.hash === "#/map");
+    backStack.forEach((entry) => entry !== mapEntry && disposeBackEntry(entry));
     backStack = [];
+    if (mapEntry) parkMap(mapEntry);
   }
+  // A Map that is about to be built fresh (a link with a flag, a restart) replaces whatever is parked.
+  if (hash.startsWith("#/map")) disposeParkedMap();
   backStack = backStack.filter((entry) => {
     if (entry.hash !== hash) return true;
     disposeBackEntry(entry);

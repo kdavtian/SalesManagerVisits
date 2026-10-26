@@ -20,6 +20,11 @@ let registration = null;
 let updateReady = false;
 let refreshing = false;
 
+// True once a newer version has taken over the service worker but this page still runs the old scripts (the person tapped "Later").
+export function isUpdatePending() {
+  return updateReady;
+}
+
 export function mountUpdateBanner(el) {
   container = el;
 }
