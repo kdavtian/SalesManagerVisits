@@ -64,7 +64,8 @@ test("visit priorities: overdue debt first, visited-today customers left out, on
 
 test("End visit: only the own open check-in of today, once", async () => {
   const customer = await createCustomer({ created_by: users.sales_director.id, assigned_manager_id: users.sales_manager.id });
-  const id = await checkin(customer, true, "10 minutes");
+  // 2 seconds ago, not 10 minutes: a visit made just before midnight in Yerevan is not "today" any more (the test failed between 00:00 and 00:10).
+  const id = await checkin(customer, true, "2 seconds");
   const open = await apiRequest(`/api/checkins/open?customer_id=${customer.id}`, { cookie: cookies.sales_manager });
   assert.equal(open.data.id, id);
   assert.equal((await apiRequest(`/api/checkins/${id}/end`, { method: "POST", cookie: cookies.admin })).status, 404, "not someone else's visit");
