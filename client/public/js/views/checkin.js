@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { renderPotentialCard } from "../potential.js";
-import { escapeHtml, formatDateDMY, getCurrentPosition, locationErrorHint, compressImage, formatDistance, haversineMeters, creditedDistanceMeters, activateDialog } from "../util.js";
+import { escapeHtml, formatDateDMY, getCurrentPosition, locationErrorHint, compressImage, rotateImageBlob, formatDistance, haversineMeters, creditedDistanceMeters, activateDialog } from "../util.js";
 import { enqueueCheckin } from "../offlineQueue.js";
 import { openSyncQueueSheet } from "../syncQueueSheet.js";
 import { openOrderMenu } from "../orderMenu.js";
@@ -516,9 +516,25 @@ export async function renderCheckin(root, navigate, customerId) {
         <div class="photo-thumb">
           <img src="${photo.url}" alt="${t("delivered_blank_title")}" />
           <button type="button" class="photo-remove-btn" data-index="${i}" aria-label="${t("remove_photo")}">&times;</button>
+          <button type="button" class="photo-rotate-btn" data-rotate="${i}" aria-label="${t("rotate_right")}">&#8635;</button>
         </div>`
       )
       .join("");
+    blankGrid.querySelectorAll(".photo-rotate-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const photo = blankPhotos[Number(btn.dataset.rotate)];
+        btn.disabled = true;
+        try {
+          const turned = await rotateImageBlob(photo.blob, 90);
+          URL.revokeObjectURL(photo.url);
+          photo.blob = turned;
+          photo.url = URL.createObjectURL(turned);
+          paintBlankThumbs();
+        } catch {
+          btn.disabled = false;
+        }
+      });
+    });
     blankGrid.querySelectorAll(".photo-thumb img").forEach((img, i) => {
       img.addEventListener("click", () => openPhotoLightbox(blankPhotos.map((photo) => photo.url), i));
     });

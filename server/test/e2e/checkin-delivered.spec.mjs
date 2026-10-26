@@ -45,7 +45,7 @@ test("check-in: Products delivered lists confirmed + packed orders and moves the
   fixtures.trackRow("checkins", created.id);
   expect(created.delivered_orders.map((o) => o.id)).toEqual([confirmed.id]);
   expect(created.order_blank_count).toBe(1);
-  const { rows: blankRows } = await pool.query("SELECT kind, order_ids FROM checkin_photos WHERE checkin_id = $1", [created.id]);
+  const { rows: blankRows } = await pool.query("SELECT kind, order_ids FROM customer_files WHERE checkin_id = $1", [created.id]);
   expect(blankRows).toEqual([{ kind: "order_blank", order_ids: [confirmed.id] }]);
   await expect(page.locator(".delivered-orders-done")).toBeVisible();
 

@@ -69,6 +69,8 @@ export const QUICK_ACTIONS = [
   // orders (server-side), the warehouse needs the document before it hands
   // the goods to delivery.
   { id: "qa_accounting", defaultRoles: ALL_ROLES },
+  // The documents inbox (signed order blanks, signed acts, payment slips): the roles that see every customer's files (seesAllCustomerFiles).
+  { id: "qa_documents", defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"] },
   { id: "qa_pricelist", defaultRoles: ALL_ROLES },
   // Same visibility as the financial exports/Company Dashboard -- raw
   // per-order ERP revenue is the same sensitivity class (see
@@ -98,6 +100,7 @@ export const QUICK_ACTION_ROUTE = {
   qa_pricelist: "#/pricelist",
   qa_warehouse: "#/warehouse",
   qa_accounting: "#/accounting",
+  qa_documents: "#/documents",
   qa_delivery: "#/delivery",
   qa_wh_home: "#/wh-home",
   qa_driver_home: "#/driver-home",

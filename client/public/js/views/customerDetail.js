@@ -16,6 +16,8 @@ import { openOrderMenu } from "../orderMenu.js";
 import { bindStepperButton } from "../stepper.js";
 import { loadWithCache, warmCache } from "../listCache.js";
 import { paymentsSource, allOrdersSource, orderDetailSource, photosSource } from "../customerCardData.js";
+import { openFileViewer, fileKindLabel } from "../fileViewer.js";
+import { openAddFileSheet } from "../addFileSheet.js";
 import { fetchCustomerSocial, saveCustomerSocial, socialFieldsHtml, collectSocialPayload } from "../customerSocialProfiles.js";
 
 // The card shows this many latest visits at once; older ones load when the rep asks (a long-standing customer has hundreds).
@@ -24,6 +26,9 @@ const VISITS_PAGE = 30;
 const FIRST_ROWS = 40;
 // The Files sheet shows fewer photos first so the Documents section below them stays one short scroll away.
 const FIRST_PHOTOS = 12;
+
+// Everyone who works with customers can add a document; warehouse staff cannot (server: canAddCustomerFiles).
+const canAddFiles = () => state.user.role !== "warehouse_manager";
 
 const EDIT_FIELDS = [
   { name: "name", labelKey: "name", type: "text" },
@@ -1195,39 +1200,39 @@ async function openCustomerFiles(customer) {
 
   // Documents: the signed order blanks photographed at deliveries, then the signed accounting documents (from Lily).
   const docsBody = overlay.querySelector("#customer-documents-body");
-  try {
-    const [docs, blanks] = await Promise.all([api.listCustomerDocuments(customerId), api.customerOrderBlanks(customerId).catch(() => [])]);
-    if (!overlay.isConnected) return;
-    overlay.querySelector("#files-docs-count").textContent = docs.length + blanks.length ? ` · ${docs.length + blanks.length}` : "";
-    if (!docs.length && !blanks.length) {
-      docsBody.innerHTML = `<p class="empty-state">${t("files_documents_empty")}</p>`;
-    } else {
-      const files = docs.length ? await import("../accountingFiles.js") : null;
+  const loadDocuments = async () => {
+    try {
+      const [docs, files] = await Promise.all([api.listCustomerDocuments(customerId), api.customerFiles(customerId).catch(() => [])]);
+      if (!overlay.isConnected) return;
+      overlay.querySelector("#files-docs-count").textContent = docs.length + files.length ? ` · ${docs.length + files.length}` : "";
+      const acc = docs.length ? await import("../accountingFiles.js") : null;
       docsBody.innerHTML = `
         ${
-          blanks.length
-            ? `<p class="files-subheading muted">${t("files_order_blanks")}</p>
-               <div class="files-blank-grid">
-                 ${blanks
+          files.length
+            ? `<div class="files-blank-grid">
+                 ${files
                    .map(
-                     (b, i) => `
-                   <button type="button" class="files-blank" data-blank-index="${i}">
-                     <img src="${api.checkinPhotoThumbUrl(b.id)}" alt="${t("delivered_blank_title")}" loading="lazy" decoding="async" />
-                     <span class="files-blank-cap">${escapeHtml(formatDateDMY(b.timestamp))}${b.order_codes?.length ? ` · ${escapeHtml(b.order_codes.join(", "))}` : ""}</span>
+                     (f, i) => `
+                   <button type="button" class="files-blank" data-file-index="${i}">
+                     ${f.mime === "application/pdf" ? `<span class="files-blank-pdf">PDF</span>` : `<img src="${api.fileUrl(f, { thumb: true })}" alt="${escapeHtml(fileKindLabel(f.kind))}" loading="lazy" decoding="async" />`}
+                     <span class="files-blank-cap"><strong>${escapeHtml(fileKindLabel(f.kind))}</strong><br />${escapeHtml(formatDateDMY(f.created_at))}${f.order_codes?.length ? ` · ${escapeHtml(f.order_codes.join(", "))}` : ""}</span>
                    </button>`
                    )
                    .join("")}
                </div>`
             : ""
         }
-        ${docs.length ? `<div class="acc-docs">${files.documentRowsHtml(docs)}</div>` : ""}`;
-      const blankUrls = blanks.map((b) => api.checkinPhotoByIdUrl(b.id));
-      docsBody.querySelectorAll(".files-blank").forEach((btn) => btn.addEventListener("click", () => openPhotoLightbox(blankUrls, Number(btn.dataset.blankIndex))));
-      if (files) files.bindDocumentRows(docsBody);
+        ${docs.length ? `<div class="acc-docs">${acc.documentRowsHtml(docs)}</div>` : ""}
+        ${!files.length && !docs.length ? `<p class="empty-state">${t("files_documents_empty")}</p>` : ""}
+        ${canAddFiles() ? `<button type="button" class="btn btn-block btn-has-icon" id="add-document-btn">${icons.plus}${t("add_document")}</button>` : ""}`;
+      docsBody.querySelectorAll(".files-blank").forEach((btn) => btn.addEventListener("click", () => openFileViewer(files, Number(btn.dataset.fileIndex), { onChanged: loadDocuments })));
+      docsBody.querySelector("#add-document-btn")?.addEventListener("click", () => openAddFileSheet({ customer, onAdded: loadDocuments }));
+      if (acc) acc.bindDocumentRows(docsBody);
+    } catch (err) {
+      docsBody.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     }
-  } catch (err) {
-    docsBody.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
-  }
+  };
+  await loadDocuments();
 }
 
 // Item 8 -- the core customer-fields form, merged with the "Edit contact &

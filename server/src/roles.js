@@ -472,3 +472,18 @@ export function canReceiveReturns(role) {
 export function canRecordReturns(role) {
   return role === "accountant" || role === "admin";
 }
+
+// Customer documents (signed order blanks / acts, payment slips). Everyone who works with customers can add one; warehouse staff cannot.
+export function canAddCustomerFiles(role) {
+  return role !== "warehouse_manager";
+}
+
+// Who sees every customer's documents (and the accountant's inbox). A rep sees what he added and his own customers' documents, a driver what he added.
+export function seesAllCustomerFiles(role) {
+  return role === "admin" || role === "ceo" || role === "operations_director" || role === "sales_director" || role === "accountant";
+}
+
+// Delete or replace a document that somebody else added; also the only people who may change an order after the customer signed for it.
+export function canManageSignedDocuments(role) {
+  return role === "admin" || role === "ceo";
+}

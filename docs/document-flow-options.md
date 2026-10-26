@@ -1,6 +1,6 @@
 # Document flow and electronic signature: options for the owner to choose (2026-10-26)
 
-Status: **waiting for the owner's answers.** Nothing below is built yet except the starting point:
+Status: **the owner answered on 2026-10-26** (decisions below); building in three releases: 1.427.0 documents foundation, 1.428.0 electronic signature, 1.429.0 AI check. Original text kept for reference. The starting point was:
 Files (hy Նյութեր) on every customer card has a Photos part and a Documents part; a photo of the signed order blank taken at a
 "Products delivered" check-in is stored and listed under Documents (1.425.0).
 
@@ -50,3 +50,17 @@ Files (hy Նյութեր) on every customer card has a Photos part and a Documen
 8. No internet at the shop: sign anyway, the PDF is made when the phone is online again (recommended).
 9. After the customer signed, lock the order so quantities cannot be changed (recommended).
 10. Drivers: use the same flow (replaces the current signature pad)?
+
+## Owner's decisions (2026-10-26)
+Documents
+1. Folders per customer AND per order AND the accountant inbox, on one data model (`customer_files`).
+2. Rep adds documents; sales directors and the CEO can add too (everyone except the warehouse manager). Admin and CEO delete.
+3. Rotate button on the preview (and in the viewer); photos are stored upright.
+4. AI check comes after the foundation; a **settings switch to turn it on/off, OFF by default**.
+5. Keep documents forever (until an automatic archiving system exists).
+Electronic signature
+1. The delivery-acceptance act is the signed paper. 2. The rep's phone is handed to the customer now (KAD OS later).
+3. No receiver name / position field. 4. The rep's own signature is applied silently (no extra click): doing the process = agreeing.
+5. Legal check: the owner will do it. 6. One customer signature for all delivered orders of the visit; one PDF per order.
+7. No automatic sending; let the rep share it (native share sheet: WhatsApp / Telegram in one tap). 8. Signing works offline; the PDF is made when online.
+9. After the customer signed, the order is locked; only admin and CEO may change it. 10. Drivers use the same flow.

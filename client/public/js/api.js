@@ -204,8 +204,6 @@ export const api = {
   },
   // Ids and dates of every check-in photo of the customer (the Files sheet's Photos section).
   customerPhotos: (id) => request(`/customers/${id}/photos`),
-  // Signed order blanks photographed at deliveries (Files > Documents).
-  customerOrderBlanks: (id) => request(`/customers/${id}/order-blanks`),
   customerPlannedVisits: (id) => request(`/customers/${id}/planned-visits`),
   getVisitSchedule: (id) => request(`/customers/${id}/visit-schedule`),
   getMapFacts: (id) => request(`/customers/${id}/map-facts`),
@@ -507,6 +505,14 @@ export const api = {
   getOrder: (id) => request(`/orders/${id}`),
   listOrderDocuments: (id) => request(`/orders/${id}/documents`),
   listCustomerDocuments: (id) => request(`/customers/${id}/documents`),
+  // Customer documents (signed order blanks, payment slips, ...): routes/files.js
+  customerFiles: (customerId) => request(`/files/customer/${customerId}`, { fresh: true }),
+  orderFiles: (orderId) => request(`/files/order/${orderId}`, { fresh: true }),
+  filesInbox: (params = {}) => request(`/files?${new URLSearchParams(params)}`, { fresh: true }),
+  addCustomerFile: (customerId, formData) => request(`/files/customer/${customerId}`, { method: "POST", body: formData }),
+  rotateFile: (id, degrees) => json(`/files/${id}/rotate`, "POST", { degrees }),
+  deleteFile: (id) => request(`/files/${id}`, { method: "DELETE" }),
+  fileUrl: (file, { thumb = false } = {}) => `/api/files/${file.id}/content?v=${file.version ?? 1}${thumb ? "&size=thumb" : ""}`,
   getAccountingCount: () => request("/orders/accounting-count"),
   getAccountingAgent: () => request("/orders/accounting-agent"),
   // A signed PDF is binary, so it bypasses request()'s JSON handling.
