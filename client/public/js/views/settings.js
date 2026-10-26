@@ -887,8 +887,8 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
     window.dispatchEvent(new Event("app-preferences-changed"));
     renderSettings(root, onLogout, onLanguageChange, currentPageId(), navigateFn);
   });
-  root.querySelector("#toggle-language").addEventListener("click", () => {
-    setLang(getLang() === "hy" ? "en" : "hy");
+  root.querySelector("#toggle-language").addEventListener("click", async () => {
+    await setLang(getLang() === "hy" ? "en" : "hy"); // loads the other language's texts first
     window.dispatchEvent(new Event("app-preferences-changed"));
     onLanguageChange();
   });

@@ -43,7 +43,7 @@ You are the sole developer of two linked systems owned by one person (the owner,
 
 9. **"No changes, just answer" / "suggest, don't implement" means NO code, no commits.** Read code to answer accurately, then reply. Say which suggestions you would do first and wait.
 10. **Never create a file before checking the name is free** (`ls`/`git status`/`grep -rn "<name>"`): `server/src/routes/exports.js` already existed once and was overwritten by mistake (restored from git; the new code went to `tableExport.js`). New server modules: grep for an existing router/helper first.
-11. **After EVERY edit of `client/public/js/i18n.js` run `node --check client/public/js/i18n.js`** (a missing comma blanks the whole app) and keep every key in BOTH `en` and `hy` blocks (a missing hy key silently shows English - the whole Bonuses module did for months).
+11. **The texts are two files since 1.420.0: `client/public/js/i18n-en.js` and `i18n-hy.js`** (`i18n.js` is only the loader). **After EVERY edit run `node --check` on the file you edited** (a missing comma blanks the whole app) and keep every key in BOTH `en` and `hy` blocks (a missing hy key silently shows English - the whole Bonuses module did for months).
 12. **Before building a "new" request, check whether it already shipped** (`git log --oneline -30`, grep the code): the owner sometimes re-sends an earlier list (e.g. the 1.259.0 items). Verify each point in the running app, fix only what is truly wrong, and say plainly which items already existed and in which version (and ask them to check Settings -> version / "Check for updates").
 
 ## Standard workflow for a task
@@ -58,7 +58,7 @@ You are the sole developer of two linked systems owned by one person (the owner,
 
 ## Quick rules learned late (details in references)
 
-13. Every UI string in en AND hy; `node --check client/public/js/i18n.js` after i18n edits. Armenian is the main language.
+13. Every UI string in en AND hy (both files, `server/test/integration/i18nParity.test.js` enforces it: a device loads ONE language and there is no fallback); `node --check` the edited i18n file. Armenian is the main language.
 14. Tap targets >= 44 px (use an invisible hit area for small icons so only the icon, not the whole row, reacts). Same icon = same feature everywhere (`client/public/js/filterIcons.js` is the registry).
 15. Printed/PDF documents are Armenian-first: phones `+374 91 007 019` (owner 2026-10-10; stored as digits only `+37491007019`), amounts `5,700 դր`, sizes `4 L`, quantities `4 հատ`, manager Armenian full name, no customer ERP id in the name.
 16. Reports must open fast: never block a report on a slow external service (see fuel allowance background queue); show progress, not a grey skeleton forever.

@@ -136,7 +136,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L6 How an idea is written - N. <short name> - saves <minutes / taps / seconds / KB>; stays identical: <functionality, results, experience>
 - L12 Backlog (status: Suggested unless noted) - Owner answered "1, 2, 3, 4, 5, 6, 7, 8" on 2026-10-24 = all eight approved; built in the same round (Field Vis
 - L23 Ideas from the round that built these (Suggested) - [DONE 2026-10-24] Make the isolated bonus tests independent of the global switch - done without touching the t
-- L53 Ideas from the first-launch round (2026-10-25, Suggested) - Load only the active language of the translations - saves about 55 KB compressed (about 0.3 s at 1.6 Mbit/s) a
+- L53 Ideas from the first-launch round (2026-10-25, Suggested) - [DONE 2026-10-26, 1.420.0] Load only the active language of the translations - saves about 55 KB compressed (a
 
 ## owner-model.md (18 KB, 97 lines)
 - L5 1. Who they are, in one paragraph - A hands-on distributor owner (Castrol/Lotos/Royal/Orlen, Armenia) who runs the company from the app on an iPho
@@ -147,7 +147,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L82 6. Proactive moves that always land well - After a numbered list, add "Suggestions" (numbered, with recommendation) only if you saw something real while
 - L90 7. Mistakes I made that cost them time (do not repeat) - Claiming sheets "load before showing" without reading them (Add payment and the customer pickers already paint
 
-## owner-preferences-and-history.md (75 KB, 352 lines)
+## owner-preferences-and-history.md (76 KB, 358 lines)
 - L3 How they work with you - Writes short, numbered, imperative requests (often with screenshots "image1/img2"), mixes English with Armenia
 - L11 Visual / UX preferences (apply by default) - Compact, iOS-native feel: bottom sheets, floating/fixed action bars (Cancel/Save on customer edit must be fixe
 - L24 Things that repeatedly bit us (check proactively) - Forgetting CACHEVERSION bump -> "no updates" on phones.
@@ -190,6 +190,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L337 2026-10-25 (1.418.0): map pins redesigned (variant B, "solid + rep ring") - Owner: "As a designer please improve colors, suggest variants" -> five variants shown -> "go with B".
 - L343 2026-10-25: demo site (separate copy of the app for outside testers) - Owner: first "create a user with test data", then "I want the demo version completely not connected with our d
 - L348 2026-10-26 (1.419.0): potential customer pin = the ORIGINAL red crosshair again - Owner first wrote "Potential customer: crosshair (keep current color)" (I read it as: keep the new amber, add
+- L352 2026-10-26 (1.420.0): owner answers to the open questions - Demo site: same server, name kadostest (his own domain's subdomain, or free DuckDNS), NO weekly reset.
 
 ## strategy-roadmap.md (6 KB, 31 lines)
 - L5 Target (owner, 2026-10-12): 10 % of the market = ~1 million liters a year - Owner's working assumption: the Armenian market is ~10M L a year, so 10 % = 1M L.

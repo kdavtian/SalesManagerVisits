@@ -349,3 +349,9 @@ Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets 
 - Owner first wrote "Potential customer: crosshair (keep current color)" (I read it as: keep the new amber, add ticks), then "Bring back the crosshair we had" = the original red crosshair art. Lesson: "current color" meant what they SEE on their phone, which was still the pre-redesign app (they had not deployed 1.418.0 yet); when a request refers to "current"/"what we had", check which version they are actually running.
 - Done: `icons/markers/potential-<cat>.png` restored byte for byte from the old art (map.js picks `.png` for the potential kind, `.svg` for the others); `ring-potential.svg` is a plain disc just beyond the crosshair for Colour by Rep; the generator `scripts/make-pin-art.mjs` no longer draws potential pins. Legend "red crosshair" / "կարմիր թիրախ". Badges (red "!" overdue, amber "!!" never visited) left as in 1.418.0, open question whether to restore the older yellow/red pair now that red is back on potential pins.
 
+## 2026-10-26 (1.420.0): owner answers to the open questions
+- Demo site: same server, name `kadostest` (his own domain's subdomain, or free DuckDNS), NO weekly reset. Added `./deploy/demo.sh domain <name>` (nginx file + Let's Encrypt, as root).
+- Translations: yes, one language per device (`i18n-en.js` / `i18n-hy.js`, loader `i18n.js` with top-level await, `setLang` async, early `modulepreload` from `theme-init.js`, parity test). The old `language-switch` e2e spec was stale since the Settings redesign (language switch moved to the Appearance page): fixed.
+- Visit badge colours: overdue = AMBER "!", never visited = RED "!!" (back to the 2026-10-24 pair; the 1.418.0 swap is undone).
+- Background caching of the app shell: he asked for the trade-off (explained in the 1.420.0 summary), decision pending. .NET question: "just for my knowledge" (no action). Bank statements: he will say when to start.
+

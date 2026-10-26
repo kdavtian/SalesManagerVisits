@@ -2886,7 +2886,7 @@ label.checkbox-row input[type="checkbox"] {
 .map-legend-swatch-overdue {
   width: 16px;
   height: 16px;
-  background: var(--map-overdue, #dc2626);
+  background: var(--map-overdue, #f2a900);
   border: 2px solid #fff;
   box-sizing: border-box;
 }
@@ -2894,7 +2894,7 @@ label.checkbox-row input[type="checkbox"] {
 .map-legend-swatch-never {
   width: 18px;
   height: 18px;
-  background: var(--map-never, #f59e0b);
+  background: var(--map-never, #e33b43);
   color: #fff;
   border: 2px solid #fff;
   box-sizing: border-box;
@@ -15252,7 +15252,7 @@ input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
 button.cf-row-edit { width: 100%; text-align: left; color: inherit; font: inherit; cursor: pointer; }
 .cf-head #cf-add { min-height: 44px; }
 
-/* Visit marks (owner, 2026-10-24): overdue = red "!" in a 16 px badge, never visited = amber "!!" in an 18 px badge (colours swapped in 1.418.0 so red is only "overdue"); the map pins and the plan lists use the
+/* Visit marks (owner, 2026-10-24): overdue = amber "!" in a 16 px badge, never visited = red "!!" in an 18 px badge (owner, 2026-10-24; kept on 2026-10-26 after trying the swapped pair in 1.418.0); the map pins and the plan lists use the
    same colours (tokens --map-overdue / --map-never in map-marker-system.css). */
 .never-visited-mark,
 .overdue-visit-mark {
@@ -15269,8 +15269,8 @@ button.cf-row-edit { width: 100%; text-align: left; color: inherit; font: inheri
   font-weight: 900;
   line-height: 1;
 }
-.never-visited-mark { width: 18px; height: 18px; background: var(--map-never, #f59e0b); font-size: 0.62rem; letter-spacing: -0.02em; }
-.overdue-visit-mark { width: 16px; height: 16px; background: var(--map-overdue, #dc2626); font-size: 0.66rem; }
+.never-visited-mark { width: 18px; height: 18px; background: var(--map-never, #e33b43); font-size: 0.62rem; letter-spacing: -0.02em; }
+.overdue-visit-mark { width: 16px; height: 16px; background: var(--map-overdue, #f2a900); font-size: 0.66rem; }
 
 /* Potential Customer classification (owner, 2026-10-24) */
 :root { --pl-1: #6b7280; --pl-2: #b7791f; --pl-3: #0969da; --pl-4: #1a7f37; }

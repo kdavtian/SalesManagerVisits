@@ -18,7 +18,9 @@ The demo looks different where nobody can miss it: it installs / appears as **"K
 `seed` fills an empty demo database with: a CEO (`ceo@kad.demo`), three sales reps (Aram, Artak, Lilit: channels SM YVN, SM Davtashen, SM Shirak, each with its own map colour), 16 products with made-up prices and costs, about 60 customers around Yerevan and Gyumri (gold / silver / bronze, potential customers with levels and reasons, competitors, every category, visited today / overdue / never visited), 100+ check-ins, about 90 orders in all statuses (some waiting for confirmation), payments (a few waiting for approval), tasks, debt with real aging invoices, and four months of sales and plan per channel. Everything is deterministic: the demo looks the same every time.
 
 ## One-time setup (on the server, from the repo checkout)
-1. **Pick the address.** A subdomain you control (`demo.yourcompany.com`), A record to the server's IP, the same way as for the real app (`deploy/digitalocean.md`, step 1). Phones need HTTPS to install it as an app.
+1. **The address.** Suggested name: **`kadostest`**. Two ways to get it (the demo needs HTTPS so phones can install it):
+   - *Your own domain* (the one the real app uses): add one **A record**, host `kadostest`, value = the server's IP (the same IP as the real app). Result: `kadostest.yourcompany.com`.
+   - *Free, no domain needed:* make a free name at <https://www.duckdns.org> (sign in, type `kadostest`, set the server's IP). Result: `kadostest.duckdns.org`.
 2. **Start the demo:**
    ```bash
    cd /opt/field-visits
@@ -26,7 +28,11 @@ The demo looks different where nobody can miss it: it installs / appears as **"K
    ./deploy/demo.sh up
    ```
    The first run builds the image (a few minutes), makes `.env.demo` with random secrets, migrates and fills the demo, and prints the CEO password **once**.
-3. **nginx + certificate:** copy `deploy/nginx-demo.conf` to `/etc/nginx/sites-available/field-visits-demo`, replace `YOUR_DEMO_DOMAIN`, then (as in `deploy/digitalocean.md` step 5) enable only the port-80 block first, run `certbot certonly --webroot -w /var/www/certbot -d YOUR_DEMO_DOMAIN`, then enable the whole file and `nginx -t && systemctl reload nginx`.
+3. **Web address + HTTPS certificate** (once the DNS name from step 1 answers, `dig kadostest.yourcompany.com` shows the server's IP):
+   ```bash
+   sudo ./deploy/demo.sh domain kadostest.yourcompany.com
+   ```
+   It writes the nginx file (`deploy/nginx-demo.conf` is the template), asks Let's Encrypt for a free certificate and reloads nginx. The real app's nginx file is not touched.
 
 Memory: the demo adds one Postgres and one Node container (roughly 300-400 MB). Check `free -m` before you start it on the same droplet; a separate small droplet works exactly the same (copy the repo there and run the same commands), and is the strictest isolation.
 
@@ -42,7 +48,7 @@ Memory: the demo adds one Postgres and one Node container (roughly 300-400 MB). 
 ```
 The visitor opens the demo address and signs in with `gevorg@kad.demo` and the password you give them. Roles you can pass: `ceo` (default), `admin`, `operations_director`, `sales_director`, `sales_manager`, `warehouse_manager`, `delivery_manager`, `accountant`.
 
-Optional: reset it every week so it never gets messy (this also removes visitor logins, so skip it while someone is testing): `0 4 * * 1 cd /opt/field-visits && ./deploy/demo.sh reset >> /var/log/fv-demo-reset.log 2>&1`
+No automatic reset (owner, 2026-10-26): run `./deploy/demo.sh reset` yourself when you want a clean demo (it also removes every visitor login).
 
 ## Notes
 - A visitor with CEO permissions can change anything **inside the demo** (settings, users, orders, prices). That is the point; `reset` undoes it. Nothing they do can reach the real app.

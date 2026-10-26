@@ -11,3 +11,15 @@ try {
   var ts = localStorage.getItem("fieldvisits_text_size");
   if (ts === "large" || ts === "xlarge") document.documentElement.dataset.textSize = ts;
 } catch (e) {}
+// Start fetching this device's language file now (i18n.js loads exactly one of them) instead of only after i18n.js has arrived and run: one
+// network round trip less on a first launch. Not in Calculator Mode, which promises nothing of the real app is fetched before the unlock code.
+try {
+  var calcMeta = document.querySelector('meta[name="calc-mode"]');
+  if (!(calcMeta && calcMeta.content === "true")) {
+    var preload = document.createElement("link");
+    preload.rel = "modulepreload";
+    preload.href = "/js/i18n-" + (localStorage.getItem("fieldvisits_lang") === "en" ? "en" : "hy") + ".js";
+    document.head.appendChild(preload);
+  }
+} catch (e) {}
+
