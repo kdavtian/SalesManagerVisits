@@ -39,16 +39,30 @@ export function prefetchGet(path) {
   prefetched.set(path, { expires: Date.now() + PREFETCH_TTL_MS, promise });
 }
 
+// Two parts of one screen asking for the same GET at the same moment (the Home tab asked for its open tasks and the sync status twice) share
+// one round trip. Only requests that are in flight at the same time are shared -- nothing is kept after the answer arrives.
+const inflightGets = new Map();
+function sharedGet(path, options) {
+  const hit = inflightGets.get(path);
+  if (hit) return hit;
+  const promise = doRequest(path, options);
+  inflightGets.set(path, promise);
+  const done = () => inflightGets.get(path) === promise && inflightGets.delete(path);
+  promise.then(done, done);
+  return promise;
+}
+
 async function request(path, options = {}) {
   const method = (options.method || "GET").toUpperCase();
   if (method !== "GET") {
     getCache.clear();
     prefetched.clear();
+    inflightGets.clear(); // a GET sent after a change must not share an answer that left before it
     return doRequest(path, options);
   }
   // { fresh: true }: a screen that must show what is true NOW (the Orders list other people keep changing) skips both
   // short-lived caches below.
-  if (options.fresh) return doRequest(path, {});
+  if (options.fresh) return sharedGet(path, {});
   const hit = prefetched.get(path);
   if (hit) {
     prefetched.delete(path);
@@ -57,12 +71,12 @@ async function request(path, options = {}) {
   if (CACHEABLE_BASE_PATHS.has(path.split("?")[0])) {
     const cached = getCache.get(path);
     if (cached && cached.expires > Date.now()) return cached.promise;
-    const promise = doRequest(path, options);
+    const promise = sharedGet(path, options);
     getCache.set(path, { expires: Date.now() + GET_CACHE_TTL_MS, promise });
     promise.catch(() => getCache.delete(path));
     return promise;
   }
-  return doRequest(path, options);
+  return sharedGet(path, options);
 }
 
 // Double-submit-cookie CSRF token (see server/src/middleware/csrf.js) --

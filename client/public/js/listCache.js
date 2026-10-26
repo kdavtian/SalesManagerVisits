@@ -39,14 +39,47 @@ function openDb() {
   return dbPromise;
 }
 
+// The most recently used copies also live in memory: reading IndexedDB takes a few milliseconds to tens of them, long enough for a screen
+// to paint its "Loading..." line before the saved copy arrives -- the flash on a tab switch the owner dislikes. A copy found here is
+// handed over in the same task, before the next paint. Copies are cloned in and out so a screen that sorts or edits its rows in place can
+// never change what the next screen is given.
+const MEMORY_MAX = 60;
+const memory = new Map();
+function memoryGet(full) {
+  if (!memory.has(full)) return undefined;
+  const value = memory.get(full);
+  memory.delete(full); // most recently used last
+  memory.set(full, value);
+  return value;
+}
+function memorySet(full, value) {
+  memory.delete(full);
+  if (value !== undefined) memory.set(full, value);
+  while (memory.size > MEMORY_MAX) memory.delete(memory.keys().next().value);
+}
+function cloneValue(value) {
+  try {
+    return structuredClone(value);
+  } catch {
+    return undefined;
+  }
+}
+
 async function getCached(key) {
+  const inMemory = memoryGet(scopedKey(key));
+  if (inMemory !== undefined) {
+    const copy = cloneValue(inMemory);
+    if (copy !== undefined) return copy;
+  }
   try {
     const db = await openDb();
-    return await new Promise((resolve, reject) => {
+    const stored = await new Promise((resolve, reject) => {
       const req = db.transaction(STORE, "readonly").objectStore(STORE).get(scopedKey(key));
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
+    if (stored !== undefined) memorySet(scopedKey(key), stored);
+    return stored;
   } catch {
     // IndexedDB unavailable (private browsing, storage pressure) -- just
     // means no instant-open this time, not a reason to fail the screen.
@@ -55,6 +88,8 @@ async function getCached(key) {
 }
 
 async function setCached(key, value) {
+  const copy = cloneValue(value);
+  if (copy !== undefined) memorySet(scopedKey(key), copy);
   try {
     const db = await openDb();
     await new Promise((resolve, reject) => {
@@ -72,6 +107,7 @@ async function setCached(key, value) {
 // next rep who signs in, in case some key is ever cached without going
 // through getCached/setCached's own scoping.
 export async function clearListCache() {
+  memory.clear();
   try {
     const db = await openDb();
     await new Promise((resolve, reject) => {
@@ -134,6 +170,11 @@ function sharedFetch(key, fetcher) {
   return inflight.get(full);
 }
 
+// For screens that want to decide for themselves what to do with a saved copy (the customer card): the copy, or undefined.
+export const peekCache = getCached;
+// The one shared request for a key (see sharedFetch); the result is saved as the key's copy.
+export const refreshCache = sharedFetch;
+
 // Fetch in the background so the next loadWithCache(key) of this key opens instantly. Never throws.
 export function warmCache(key, fetcher) {
   return sharedFetch(key, fetcher).catch(() => {});
@@ -186,6 +227,7 @@ async function mutateCachedCustomerLists(mutate) {
       });
       if (!Array.isArray(current)) continue;
       const next = mutate(current);
+      memorySet(full, next === null ? undefined : cloneValue(next));
       await new Promise((resolve, reject) => {
         const store = db.transaction(STORE, "readwrite").objectStore(STORE);
         const req = next === null ? store.delete(full) : store.put(next, full);

@@ -817,6 +817,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
     renderList();
   }
 
+  let lastListSig = null;
   async function load({ silent = false } = {}) {
     // Stale-while-revalidate (see listCache.js): show last session's list
     // instantly, then swap in the live one the moment it arrives, instead
@@ -854,6 +855,10 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
           return all;
         },
         (data) => {
+          // The saved list and the fresh one are usually identical: rebuilding hundreds of rows for nothing made the list blink and jump.
+          const sig = JSON.stringify(data);
+          if (paintedOnce && sig === lastListSig) return;
+          lastListSig = sig;
           allCustomers = data;
           render();
           paintedOnce = true;
