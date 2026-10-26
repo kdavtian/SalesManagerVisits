@@ -169,6 +169,23 @@ export function collectSocialPayload(form) {
   };
 }
 
+// The icon row for one customer's social/contact data. Used by the customer card itself (it fetches this together with the customer so the
+// icons are there on the first paint) and by decorateCustomerDetail below (a card that did not fill them).
+export function socialLinksHtml(data) {
+  return [
+    data.instagram_username ? socialButton("instagram", data.instagram_username) : "",
+    data.facebook_url ? socialButton("facebook", data.facebook_url) : "",
+    data.email ? linkButton("email", `mailto:${data.email}`, MAIL_ICON, `${t("customer_email")}${labelColon()}${data.email}`) : "",
+    data.website ? linkButton("website", websiteHref(data.website), GLOBE_ICON, `${t("customer_website")}${labelColon()}${data.website}`) : "",
+  ].filter(Boolean).join("");
+}
+
+export function bindSocialLinks(root) {
+  root.querySelectorAll("[data-social-kind]").forEach((button) => {
+    button.addEventListener("click", () => openPlatformProfile(button.dataset.socialKind, button.dataset.socialValue));
+  });
+}
+
 let renderToken = 0;
 async function decorateCustomerDetail() {
   const customerId = customerIdFromHash();
@@ -196,20 +213,13 @@ async function decorateCustomerDetail() {
   // happens inside customerDetail.js's merged "Edit" sheet (item 8) via
   // the fetchCustomerSocial/socialFieldsHtml/collectSocialPayload/
   // saveCustomerSocial exports above, not here.
-  const links = [
-    data.instagram_username ? socialButton("instagram", data.instagram_username) : "",
-    data.facebook_url ? socialButton("facebook", data.facebook_url) : "",
-    data.email ? linkButton("email", `mailto:${data.email}`, MAIL_ICON, `${t("customer_email")}${labelColon()}${data.email}`) : "",
-    data.website ? linkButton("website", websiteHref(data.website), GLOBE_ICON, `${t("customer_website")}${labelColon()}${data.website}`) : "",
-  ].filter(Boolean).join("");
+  const links = socialLinksHtml(data);
 
   actions.innerHTML = links;
   // With links, the row goes back to its own line above the facts so the
   // icons never sit on top of the address.
   if (links) actions.closest(".detail-facts-card-actions")?.classList.remove("is-compact");
-  actions.querySelectorAll("[data-social-kind]").forEach((button) => {
-    button.addEventListener("click", () => openPlatformProfile(button.dataset.socialKind, button.dataset.socialValue));
-  });
+  bindSocialLinks(actions);
 }
 
 function boot() {

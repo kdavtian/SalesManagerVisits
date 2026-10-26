@@ -18,7 +18,7 @@ import { loadWithCache, warmCache } from "../listCache.js";
 import { paymentsSource, allOrdersSource, orderDetailSource, photosSource } from "../customerCardData.js";
 import { openFileViewer, fileKindLabel } from "../fileViewer.js";
 import { openAddFileSheet } from "../addFileSheet.js";
-import { fetchCustomerSocial, saveCustomerSocial, socialFieldsHtml, collectSocialPayload } from "../customerSocialProfiles.js";
+import { fetchCustomerSocial, saveCustomerSocial, socialFieldsHtml, collectSocialPayload, socialLinksHtml, bindSocialLinks } from "../customerSocialProfiles.js";
 
 // The card shows this many latest visits at once; older ones load when the rep asks (a long-standing customer has hundreds).
 const VISITS_PAGE = 30;
@@ -59,8 +59,20 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       partialFailure = true;
       return fallback;
     });
+  // The small parts of the card (social icons, documents, tasks, "End visit") are fetched together with the card instead of after it, so the
+  // card paints ONCE, complete, rather than growing piece by piece (owner, 2026-10-26). A part that is slower than SOON_MS does not hold the
+  // card back: it fills in when it arrives (the late path below). A failed part is null and simply shows nothing.
+  const SOON_MS = 1200;
+  const soon = (promise) => Promise.race([promise, new Promise((resolve) => setTimeout(resolve, SOON_MS))]); // undefined = not there yet
+  const socialP = fetchCustomerSocial(customerId).catch(() => null);
+  const docsP = api.listCustomerDocuments(customerId).catch(() => null);
+  const tasksP = import("./tasks.js")
+    .then(async (mod) => ({ mod, ...(await mod.loadCustomerTasks(customerId)) }))
+    .catch(() => null);
+  const openVisitP = state.user.role === "sales_manager" ? api.getOpenVisit(customerId).catch(() => null) : Promise.resolve(null);
+  let socialEarly, docsEarly, tasksEarly, openVisitEarly;
   try {
-    [customer, checkins, pendingRequests, erpOrders, brandSummaryRows, visitSchedule] = await Promise.all([
+    [customer, checkins, pendingRequests, erpOrders, brandSummaryRows, visitSchedule, socialEarly, docsEarly, tasksEarly, openVisitEarly] = await Promise.all([
       api.getCustomer(customerId),
       optional(api.customerCheckins(customerId, { limit: VISITS_PAGE }), []),
       optional(api.listEditRequests({ customer_id: customerId, status: "pending" }), []),
@@ -68,6 +80,10 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       // Optional extra: a failure here must not break the customer page.
       api.getBrandSummary({ customer_id: customerId }).catch(() => []),
       api.getVisitSchedule(customerId).catch(() => null),
+      soon(socialP),
+      soon(docsP),
+      soon(tasksP),
+      soon(openVisitP),
     ]);
   } catch (err) {
     container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p><button type="button" class="btn btn-block" id="customer-retry-btn">${t("retry")}</button>`;
@@ -255,6 +271,22 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     });
   });
   container.querySelector("#customer-reload-btn")?.addEventListener("click", () => renderCustomerDetail(root, navigate, customerId));
+  // Fills a part now when it came with the card, otherwise when it arrives (and only if this card is still the one on screen).
+  const fillPart = (early, promise, fill) => {
+    if (early !== undefined) fill(early);
+    else promise.then((data) => container.isConnected && fill(data));
+  };
+  // customerSocialProfiles.js's own decoration (a second request after the paint) leaves a slot marked like this alone.
+  const socialSlot = container.querySelector(".detail-facts-card-actions-social");
+  if (socialSlot) socialSlot.dataset.socialProfilesReady = String(customerId);
+  fillPart(socialEarly, socialP, (data) => {
+    const slot = socialSlot;
+    if (!slot || !data) return;
+    const html = socialLinksHtml(data);
+    slot.innerHTML = html;
+    if (html) slot.closest(".detail-facts-card-actions")?.classList.remove("is-compact");
+    bindSocialLinks(slot);
+  });
   container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/customers"));
   // Potential level + reasons (potential customers) and the counterfeit-products restriction; a change reloads only this card.
   const potentialSlot = container.querySelector("#potential-slot");
@@ -278,22 +310,19 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   // "End visit": a rep who checked in here today and has not ended the visit yet.
   if (state.user.role === "sales_manager") {
     const slot = container.querySelector("#open-visit-slot");
-    api
-      .getOpenVisit(customerId)
-      .then((open) => {
-        if (!open || !slot) return;
-        slot.innerHTML = `<button type="button" class="btn btn-block" id="end-visit-btn" style="min-height:44px;margin-bottom:12px">${t("end_visit")}</button>`;
-        slot.querySelector("#end-visit-btn").addEventListener("click", async (e) => {
-          e.currentTarget.disabled = true;
-          try {
-            await api.endVisit(open.id);
-            slot.innerHTML = "";
-          } catch {
-            e.currentTarget.disabled = false;
-          }
-        });
-      })
-      .catch(() => {});
+    fillPart(openVisitEarly, openVisitP, (open) => {
+      if (!open || !slot) return;
+      slot.innerHTML = `<button type="button" class="btn btn-block" id="end-visit-btn" style="min-height:44px;margin-bottom:12px">${t("end_visit")}</button>`;
+      slot.querySelector("#end-visit-btn").addEventListener("click", async (e) => {
+        e.currentTarget.disabled = true;
+        try {
+          await api.endVisit(open.id);
+          slot.innerHTML = "";
+        } catch {
+          e.currentTarget.disabled = false;
+        }
+      });
+    });
   }
   // A tap starts a new order at once; a long press opens the menu (new / usual / repeat last / repeat an order).
   bindStepperButton(container.querySelector("#new-order-btn"), {
@@ -376,25 +405,24 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   });
 
   // Signed accounting documents (from Lily) of this customer's orders.
-  api
-    .listCustomerDocuments(customerId)
-    .then(async (docs) => {
-      const slot = container.querySelector("#customer-docs-slot");
-      if (!slot || !docs.length) return;
-      const files = await import("../accountingFiles.js");
-      slot.innerHTML = files.documentsSectionHtml(docs);
-      files.bindDocumentRows(slot);
-    })
-    .catch(() => {});
+  fillPart(docsEarly, docsP, async (docs) => {
+    const slot = container.querySelector("#customer-docs-slot");
+    if (!slot || !docs?.length) return;
+    const files = await import("../accountingFiles.js");
+    slot.innerHTML = files.documentsSectionHtml(docs);
+    files.bindDocumentRows(slot);
+  });
 
   // Open tasks attached to this customer (above Next visit), plus "Add task" for management.
-  loadCustomerTaskBlock();
+  fillPart(tasksEarly, tasksP, (data) => data && paintCustomerTaskBlock(data));
   async function loadCustomerTaskBlock() {
+    const mod = await import("./tasks.js");
+    paintCustomerTaskBlock({ mod, ...(await mod.loadCustomerTasks(customerId)) });
+  }
+  function paintCustomerTaskBlock({ mod: tasksModule, rows, today }) {
     const slot = container.querySelector("#customer-tasks-slot");
     if (!slot) return;
-    const tasksModule = await import("./tasks.js");
     const canAdd = tasksModule.canCreateTasks();
-    const { rows, today } = await tasksModule.loadCustomerTasks(customerId);
     if (!rows.length && !canAdd) {
       slot.innerHTML = "";
       return;
