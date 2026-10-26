@@ -51,18 +51,27 @@ export async function renderCustomerDetail(root, navigate, customerId) {
   container.classList.add("customer-detail-view");
 
   let customer, checkins, pendingRequests, erpOrders, brandSummaryRows, visitSchedule;
+  // The card opens as soon as the customer itself is there (owner, 2026-10-26: it spun forever). The visit list, the pending edit requests and
+  // the Excel orders are parts of the page: when one of them fails the page still opens, with a "could not load everything" line and a retry.
+  let partialFailure = false;
+  const optional = (promise, fallback) =>
+    promise.catch(() => {
+      partialFailure = true;
+      return fallback;
+    });
   try {
     [customer, checkins, pendingRequests, erpOrders, brandSummaryRows, visitSchedule] = await Promise.all([
       api.getCustomer(customerId),
-      api.customerCheckins(customerId, { limit: VISITS_PAGE }),
-      api.listEditRequests({ customer_id: customerId, status: "pending" }),
-      api.getErpOrders(customerId, "recent"),
+      optional(api.customerCheckins(customerId, { limit: VISITS_PAGE }), []),
+      optional(api.listEditRequests({ customer_id: customerId, status: "pending" }), []),
+      optional(api.getErpOrders(customerId, "recent"), []),
       // Optional extra: a failure here must not break the customer page.
       api.getBrandSummary({ customer_id: customerId }).catch(() => []),
       api.getVisitSchedule(customerId).catch(() => null),
     ]);
   } catch (err) {
-    container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p><button type="button" class="btn btn-block" id="customer-retry-btn">${t("retry")}</button>`;
+    container.querySelector("#customer-retry-btn").addEventListener("click", () => renderCustomerDetail(root, navigate, customerId));
     return;
   }
 
@@ -107,6 +116,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
     canReassignCustomers() || canAssignErpCustomerId(customer) || canEditOwnSalesChannel(customer) || seesFinancialExports();
 
   container.innerHTML = `
+    ${partialFailure ? `<p class="form-error customer-partial-error">${t("card_partial_load")} <button type="button" class="btn btn-sm" id="customer-reload-btn">${t("retry")}</button></p>` : ""}
     <div class="detail-header customer-detail-header">
       <div class="customer-detail-header-main">
         <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
@@ -244,6 +254,7 @@ export async function renderCustomerDetail(root, navigate, customerId) {
       onShowOnMap: () => navigate(`#/map?customer=${customerId}`),
     });
   });
+  container.querySelector("#customer-reload-btn")?.addEventListener("click", () => renderCustomerDetail(root, navigate, customerId));
   container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/customers"));
   // Potential level + reasons (potential customers) and the counterfeit-products restriction; a change reloads only this card.
   const potentialSlot = container.querySelector("#potential-slot");

@@ -19,6 +19,7 @@ import { patchCachedCustomer, removeCachedCustomer, dropCachedCustomerLists } fr
 // endpoints this app polls for live data (team locations on the map,
 // badge counts) need to stay genuinely live, not just "fresh within 20s".
 const GET_CACHE_TTL_MS = 20000;
+const GET_TIMEOUT_MS = 30000;
 const CACHEABLE_BASE_PATHS = new Set(["/dashboard/summary", "/dashboard/trends", "/settings", "/customers", "/checkins", "/orders", "/products"]);
 const getCache = new Map();
 
@@ -80,16 +81,33 @@ async function doRequest(path, options) {
   // express.json() (req.body stays empty): the credit limit and the manual Excel order
   // link both "saved" nothing that way. Default it here so no call can forget it.
   const jsonBody = typeof options.body === "string" && !options.headers?.["Content-Type"];
-  const res = await fetch(`/api${path}`, {
-    credentials: "include",
-    ...options,
-    headers: {
-      ...(jsonBody ? { "Content-Type": "application/json" } : {}),
-      "X-App-Version": APP_VERSION,
-      ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
-      ...options.headers,
-    },
-  });
+  // A read that has not answered in 30 s is given up (owner, 2026-10-26: a customer card spun forever): the screen gets an error it can show
+  // with a Retry instead of an endless "Loading". Writes and uploads keep their own, longer patience.
+  const controller = method === "GET" && !options.signal ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), GET_TIMEOUT_MS) : null;
+  let res;
+  try {
+    res = await fetch(`/api${path}`, {
+      credentials: "include",
+      ...options,
+      ...(controller ? { signal: controller.signal } : {}),
+      headers: {
+        ...(jsonBody ? { "Content-Type": "application/json" } : {}),
+        "X-App-Version": APP_VERSION,
+        ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+        ...options.headers,
+      },
+    });
+  } catch (err) {
+    if (controller?.signal.aborted) {
+      const timeout = new Error(t("request_timeout"));
+      timeout.status = 408;
+      throw timeout;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (res.status === 204) return null;
 

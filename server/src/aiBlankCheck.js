@@ -6,7 +6,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
-import sharp from "sharp";
 import { pool } from "./db/pool.js";
 import { uploadDirPath } from "./upload.js";
 import { notifyUser } from "./notifications.js";
@@ -92,6 +91,7 @@ export function judgeBlank(read, orders) {
 // Sends the photo to the model; returns { read, usage }. `client` can be injected (tests).
 export async function readBlankPhoto(buffer, { client = null, model = AI_CHECK_MODEL } = {}) {
   // Always a modest JPEG: the model reads printed text fine at this size and the request stays cheap.
+  const sharp = (await import("sharp")).default; // on use: a server without the image library must still start
   const jpeg = await sharp(buffer, { failOn: "none" }).rotate().resize({ width: 1800, height: 1800, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
   const api = client ?? defaultClient();
   const response = await api.messages.create({

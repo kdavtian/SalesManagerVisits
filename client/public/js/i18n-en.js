@@ -561,6 +561,8 @@ export default {
     select_customer: "Select customer",
     loading: "Loading…",
     retry: "Try again",
+    request_timeout: "The server is not answering. Check the connection and try again.",
+    card_partial_load: "Some of this page could not load.",
     saving: "Saving…",
     zoom_in: "Zoom in",
     zoom_out: "Zoom out",

@@ -4,7 +4,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import sharp from "sharp";
 import { pool } from "./db/pool.js";
 import { uploadDirPath } from "./upload.js";
 import { loadBlankOrders } from "./orderBlankData.js";
@@ -34,6 +33,8 @@ export async function lockSignedOrders(db, { customerId, checkinId = null, fileP
 async function signaturePng(relativePath) {
   if (!relativePath) return null;
   try {
+    // Loaded on use, like the thumbnails: a server without the image library must still start.
+    const sharp = (await import("sharp")).default;
     return await sharp(path.join(uploadDirPath, relativePath)).png().toBuffer();
   } catch {
     return null;
