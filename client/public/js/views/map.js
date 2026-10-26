@@ -9,7 +9,7 @@ import { icons } from "../icons.js";
 import { FILTER_ICONS } from "../filterIcons.js";
 import { nextVisitRowHtml, formatLastVisit } from "../visitSchedule.js";
 import { canViewTeamLocations, canEditDirectly, canPlanForOthers, canReassignCustomers, state } from "../state.js";
-import { getClusterPins, setClusterPins, getCompassMode, setCompassMode, getMapTileCacheEnabled, getColorBy, setColorBy, getPlannedMode, setPlannedMode } from "../mapPrefs.js";
+import { getClusterPins, setClusterPins, getCompassMode, setCompassMode, getMapTileCacheEnabled, getColorBy, setColorBy, getPlannedMode, setPlannedMode, getDebtCoin, setDebtCoin } from "../mapPrefs.js";
 import { repColor } from "../repColors.js";
 import { getPerfMode } from "../perfMode.js";
 import { ensureLeaflet } from "../leafletLoader.js";
@@ -77,6 +77,10 @@ const SOFT_BLOCK_SAMPLE_SIZE = 6;
 // perceptible delay. It only shows real loading/error UI on the rare
 // path where a tap on Map/Add-customer lands before that preload has
 // finished, or the load genuinely fails (offline on first visit, e.g.).
+
+// Checklist glyph of the open-task marker on a pin (also drawn in the pin key).
+const TASK_PIN_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10a1.5 1.5 0 0 1 1.5 1.5v14A1.5 1.5 0 0 1 17 21H7a1.5 1.5 0 0 1-1.5-1.5v-14A1.5 1.5 0 0 1 7 4Z"/><path d="m8.6 10 1.2 1.2 2-2.2M8.6 15.4l1.2 1.2 2-2.2M14 10.5h2.4M14 15.9h2.4"/></svg>';
+
 export function renderMap(root, navigate, relocateCustomerId, startInAddMode = false, startInPlanMode = false, focusCustomerId = null) {
   root.innerHTML = `<div class="map-view map-view-loading"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   let cleanup = () => {};
@@ -359,6 +363,12 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
               </div>
             </div>
             <div class="map-legend-pref-row">
+              <span>${t("map_debt_coin")}</span>
+              <button type="button" class="toggle-switch" id="map-legend-toggle-debt" role="switch" aria-checked="${getDebtCoin(state.user?.id)}" aria-label="${t("map_debt_coin")}">
+                <span class="toggle-thumb"></span>
+              </button>
+            </div>
+            <div class="map-legend-pref-row">
               <span>${t("map_compass_mode")}</span>
               <button type="button" class="toggle-switch" id="map-legend-toggle-compass" role="switch" aria-checked="${getCompassMode()}" aria-label="${t("map_compass_mode")}">
                 <span class="toggle-thumb"></span>
@@ -377,9 +387,30 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
             <li><span class="map-legend-swatch map-legend-swatch-badge map-legend-swatch-overdue">!</span>${t("map_legend_overdue")}</li>
             <li><span class="map-legend-swatch map-legend-swatch-badge map-legend-swatch-never">!!</span>${t("never_visited")}</li>
             <li><span class="map-legend-swatch map-legend-swatch-selected"></span>${t("map_legend_selected")}</li>
+            <li><span class="map-legend-swatch map-legend-swatch-debt" aria-hidden="true"></span>${t("map_legend_debt")}</li>
             <li><span class="map-legend-swatch map-legend-swatch-cluster">9</span>${t("map_legend_cluster")}</li>
           </ul>
           <p class="map-legend-note">${t("map_legend_glyph_note")}</p>
+          <div class="map-legend-divider"></div>
+          <ul class="map-legend-list">
+            <li><span class="map-legend-swatch map-legend-swatch-task map-legend-swatch-task-soon" aria-hidden="true">${TASK_PIN_SVG}</span>${t("map_legend_task_soon")}</li>
+            <li><span class="map-legend-swatch map-legend-swatch-task map-legend-swatch-task-due" aria-hidden="true">${TASK_PIN_SVG}</span>${t("map_legend_task_due")}</li>
+            <li><span class="map-legend-swatch map-legend-swatch-planned" aria-hidden="true"><b>2</b></span>${t("map_legend_planned")}</li>
+            <li><span class="map-legend-swatch map-legend-swatch-repring" aria-hidden="true"></span>${t("map_legend_rep_ring")}</li>
+            <li><span class="map-legend-swatch map-legend-swatch-stop" aria-hidden="true">1</span>${t("map_legend_route_stop")}</li>
+            <li><span class="map-legend-swatch map-legend-swatch-stop map-legend-swatch-stop-done" aria-hidden="true">&#10003;</span>${t("map_legend_route_stop_done")}</li>
+          </ul>
+          <div class="map-legend-divider"></div>
+          <ul class="map-legend-list">
+            <li><span class="map-legend-swatch map-legend-swatch-dot map-legend-swatch-dot-available" aria-hidden="true"></span>${t("map_legend_brand_available")}</li>
+            <li><span class="map-legend-swatch map-legend-swatch-dot map-legend-swatch-dot-unavailable" aria-hidden="true"></span>${t("map_legend_brand_unavailable")}</li>
+            <li><span class="map-legend-swatch map-legend-swatch-dot map-legend-swatch-dot-unknown" aria-hidden="true"></span>${t("map_legend_brand_unknown")}</li>
+          </ul>
+          <div class="map-legend-divider"></div>
+          <ul class="map-legend-list">
+            <li><span class="map-legend-swatch map-legend-swatch-me" aria-hidden="true"></span>${t("map_legend_me")}</li>
+            <li><span class="map-legend-swatch map-legend-swatch-team" aria-hidden="true">A</span>${t("map_legend_team")}</li>
+          </ul>
         </div>
       </div>
 
@@ -1039,7 +1070,6 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // Customers with an open task: a checklist marker on the LEFT of the pin --
   // yellow while the deadline is ahead, red when due today or overdue.
   let taskFlags = new Map(); // customer id -> due (boolean)
-  const TASK_PIN_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10a1.5 1.5 0 0 1 1.5 1.5v14A1.5 1.5 0 0 1 17 21H7a1.5 1.5 0 0 1-1.5-1.5v-14A1.5 1.5 0 0 1 7 4Z"/><path d="m8.6 10 1.2 1.2 2-2.2M8.6 15.4l1.2 1.2 2-2.2M14 10.5h2.4M14 15.9h2.4"/></svg>';
   function taskMarkerHtml(c) {
     if (!taskFlags.has(c.id)) return "";
     return `<span class="pin-task ${taskFlags.get(c.id) ? "pin-task-due" : "pin-task-soon"}" aria-hidden="true">${TASK_PIN_SVG}</span>`;
@@ -1052,6 +1082,27 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       const changed = next.size !== taskFlags.size || [...next].some(([id, due]) => taskFlags.get(id) !== due);
       taskFlags = next;
       // Also when the LAST open task was just completed (next.size is 0): its icon has to leave the pin.
+      if (repaint && changed) applyFilter({ refit: false });
+    } catch {
+      /* optional overlay */
+    }
+  }
+
+  // Optional "debt coin" (owner, 2026-10-26; Off by default): a small gold coin at the lower left of every customer pin that owes money.
+  // The set of debtors comes from one light request (ids only, same RBAC as every debt figure) and is only fetched while the switch is on.
+  let debtCoinOn = getDebtCoin(state.user?.id);
+  let debtorIds = new Set();
+  const debtCoinHtml = (c) => (debtCoinOn && debtorIds.has(c.id) ? '<span class="pin-debt" aria-hidden="true"></span>' : "");
+  async function loadDebtFlags({ repaint = true } = {}) {
+    if (!debtCoinOn) {
+      debtorIds = new Set();
+      return;
+    }
+    try {
+      const rows = await api.getCustomerDebtFlags();
+      const next = new Set(rows.map((r) => r.customer_id));
+      const changed = next.size !== debtorIds.size || [...next].some((id) => !debtorIds.has(id));
+      debtorIds = next;
       if (repaint && changed) applyFilter({ refit: false });
     } catch {
       /* optional overlay */
@@ -1099,7 +1150,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       // .pin stays on the wrapper: marker selection (mapMarkerEnhancements)
       // and the competitor-visibility toggle (map-safe-enhancements) both
       // key off .pin / .pin-tier-* selectors.
-      html: `<div class="pin pin-img ${shapeClass} pin-tier-${tier} ${overdueClass} ${neverVisited ? "pin-is-never" : ""}">${pinArtHtml(c, tier)}${plannedRingHtml(c)}${check}${taskMarkerHtml(c)}${never}</div>`,
+      html: `<div class="pin pin-img ${shapeClass} pin-tier-${tier} ${overdueClass} ${neverVisited ? "pin-is-never" : ""}">${pinArtHtml(c, tier)}${plannedRingHtml(c)}${check}${taskMarkerHtml(c)}${debtCoinHtml(c)}${never}</div>`,
       iconSize: [MARKER_SIZE, MARKER_SIZE],
       iconAnchor: [MARKER_SIZE / 2, anchorY],
       popupAnchor: [0, -anchorY],
@@ -2334,6 +2385,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     await loadWithCache("map-customers", () => api.listCustomers(), paintCustomers);
     loadBrandSummary();
     loadTaskFlags();
+    loadDebtFlags();
   }
 
   // "My location" — blue dot + accuracy circle, kept live with watchPosition.
@@ -2941,6 +2993,19 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     clusterToggle.setAttribute("aria-checked", String(next));
     setClusterPins(next);
     setClusteringPreference(next);
+  });
+
+  // Debt coin: Off by default, remembered per user. Switching it on fetches the debtors once; off just repaints without the coins.
+  const debtCoinToggle = root.querySelector("#map-legend-toggle-debt");
+  debtCoinToggle.addEventListener("click", async () => {
+    debtCoinOn = debtCoinToggle.getAttribute("aria-checked") !== "true";
+    debtCoinToggle.setAttribute("aria-checked", String(debtCoinOn));
+    setDebtCoin(state.user?.id, debtCoinOn);
+    if (debtCoinOn) await loadDebtFlags();
+    else {
+      debtorIds = new Set();
+      applyFilter({ refit: false });
+    }
   });
 
   // Colour by Tier | Rep: remembered per user; the rep list (name + colour) shows under the switch while "Rep" is on.
@@ -3925,7 +3990,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     reopenCustomerId = lastPopupCustomerId;
     // A task completed on the customer card must leave its pin: refresh the flags BEFORE the pins are rebuilt, in the same
     // pass (a repaint afterwards would rebuild the markers again and close the reopened popup).
-    Promise.all([api.listCustomers(), loadTaskFlags({ repaint: false })]).then(([customers]) => paintCustomers(customers)).catch(() => {});
+    Promise.all([api.listCustomers(), loadTaskFlags({ repaint: false }), loadDebtFlags({ repaint: false })]).then(([customers]) => paintCustomers(customers)).catch(() => {});
   };
   return cleanupMapInner;
 }

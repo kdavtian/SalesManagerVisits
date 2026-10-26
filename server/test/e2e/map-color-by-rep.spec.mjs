@@ -35,12 +35,13 @@ test("Colour by Rep: default Tier, ring per rep colour, remembered per user; col
   expect(box.width).toBeGreaterThanOrEqual(389);
   expect(box.height).toBeLessThanOrEqual(844 * 0.8);
   expect(box.x).toBeLessThanOrEqual(1);
-  // the rows, in order: group, colour by, today's planned visits, compass
+  // the rows, in order: group, colour by, today's planned visits, debt coin, compass
   const labels = await page.locator(".map-legend-prefs .map-legend-pref-row > span").allInnerTexts();
   expect(labels[0]).toMatch(/Group nearby pins/i);
   expect(labels[1]).toMatch(/Colour by/i);
   expect(labels[2]).toMatch(/planned visits/i);
-  expect(labels[3]).toMatch(/Compass/i);
+  expect(labels[3]).toMatch(/Debt coin/i);
+  expect(labels[4]).toMatch(/Compass/i);
   await page.locator('[data-color-by="rep"]').click();
   // each pin gets a ring in its rep's colour behind it (no coloured circles)
   await expect(page.locator("#leaflet-map .pin-colour-ring")).toHaveCount(3, { timeout: 10000 });

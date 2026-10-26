@@ -486,6 +486,7 @@ export const api = {
   reopenTask: (id) => json(`/tasks/${id}/reopen`, "POST", {}),
   setTaskItemDone: (id, itemId, done) => json(`/tasks/${id}/items/${itemId}`, "POST", { done }),
   getTaskCustomerFlags: () => request("/tasks/customer-flags"),
+  getCustomerDebtFlags: () => request("/customers/debt-flags"),
   createOrder: (data) => json("/orders", "POST", data),
   submitOrder: (id, erpCustomerId) => json(`/orders/${id}/submit`, "POST", erpCustomerId ? { erp_customer_id: erpCustomerId } : {}),
   listOrders: (params = {}, options = {}) => {

@@ -57,6 +57,23 @@ export function setPlannedMode(userId, mode) {
   }
 }
 
+// "Debt coin on pins" (owner, 2026-10-26): a small coin on every customer who owes money. Per user on this device, default OFF.
+const debtCoinKey = (userId) => `fieldvisits_map_debt_coin:${userId ?? "anon"}`;
+export function getDebtCoin(userId) {
+  try {
+    return localStorage.getItem(debtCoinKey(userId)) === "on";
+  } catch {
+    return false;
+  }
+}
+export function setDebtCoin(userId, enabled) {
+  try {
+    localStorage.setItem(debtCoinKey(userId), enabled ? "on" : "off");
+  } catch {
+    /* storage blocked: the choice lasts until the map closes */
+  }
+}
+
 // Whether the locate button's third tap enters compass/heading-tracking
 // mode. Default OFF -- an install with nothing stored gets the plain
 // show/hide locate toggle; a rep can opt into the tracking step from the
