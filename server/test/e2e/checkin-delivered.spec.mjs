@@ -1,3 +1,4 @@
+import sharp from "sharp";
 import { test, expect, loginViaUi, pool } from "./fixtures.mjs";
 
 // Owner, 2026-10-23: ticking "Products delivered" on a check-in offers the customer's CONFIRMED and PACKED orders; on submit they become Delivered.
@@ -29,11 +30,23 @@ test("check-in: Products delivered lists confirmed + packed orders and moves the
   expect(overflow).toBeLessThanOrEqual(0);
 
   await rows.nth(0).click(); // tick only the confirmed one
+
+  // The signed order blank must be photographed (owner, 2026-10-26): submitting without it is refused on the spot.
+  await page.locator("#checkin-submit").click();
+  await expect(page.locator("#blank-photo-error")).toBeVisible();
+  const blank = await sharp({ create: { width: 300, height: 400, channels: 3, background: { r: 240, g: 240, b: 240 } } }).jpeg().toBuffer();
+  await page.locator("#blank-photo-input").setInputFiles({ name: "blank.jpg", mimeType: "image/jpeg", buffer: blank });
+  await expect(page.locator("#blank-thumb-grid .photo-thumb")).toHaveCount(1);
+  await expect(page.locator("#blank-photo-error")).toBeHidden();
+
   const [response] = await Promise.all([page.waitForResponse((res) => res.url().endsWith("/api/checkins") && res.request().method() === "POST"), page.locator("#checkin-submit").click()]);
   expect(response.ok()).toBeTruthy();
   const created = await response.json();
   fixtures.trackRow("checkins", created.id);
   expect(created.delivered_orders.map((o) => o.id)).toEqual([confirmed.id]);
+  expect(created.order_blank_count).toBe(1);
+  const { rows: blankRows } = await pool.query("SELECT kind, order_ids FROM checkin_photos WHERE checkin_id = $1", [created.id]);
+  expect(blankRows).toEqual([{ kind: "order_blank", order_ids: [confirmed.id] }]);
   await expect(page.locator(".delivered-orders-done")).toBeVisible();
 
   const { rows: after } = await pool.query("SELECT id, status FROM orders WHERE id = ANY($1)", [[confirmed.id, packed.id, submitted.id]]);

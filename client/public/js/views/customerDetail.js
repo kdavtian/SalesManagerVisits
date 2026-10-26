@@ -1193,17 +1193,37 @@ async function openCustomerFiles(customer) {
     body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
   });
 
+  // Documents: the signed order blanks photographed at deliveries, then the signed accounting documents (from Lily).
   const docsBody = overlay.querySelector("#customer-documents-body");
   try {
-    const docs = await api.listCustomerDocuments(customerId);
+    const [docs, blanks] = await Promise.all([api.listCustomerDocuments(customerId), api.customerOrderBlanks(customerId).catch(() => [])]);
     if (!overlay.isConnected) return;
-    overlay.querySelector("#files-docs-count").textContent = docs.length ? ` · ${docs.length}` : "";
-    if (!docs.length) {
+    overlay.querySelector("#files-docs-count").textContent = docs.length + blanks.length ? ` · ${docs.length + blanks.length}` : "";
+    if (!docs.length && !blanks.length) {
       docsBody.innerHTML = `<p class="empty-state">${t("files_documents_empty")}</p>`;
     } else {
-      const files = await import("../accountingFiles.js");
-      docsBody.innerHTML = `<div class="acc-docs">${files.documentRowsHtml(docs)}</div>`;
-      files.bindDocumentRows(docsBody);
+      const files = docs.length ? await import("../accountingFiles.js") : null;
+      docsBody.innerHTML = `
+        ${
+          blanks.length
+            ? `<p class="files-subheading muted">${t("files_order_blanks")}</p>
+               <div class="files-blank-grid">
+                 ${blanks
+                   .map(
+                     (b, i) => `
+                   <button type="button" class="files-blank" data-blank-index="${i}">
+                     <img src="${api.checkinPhotoThumbUrl(b.id)}" alt="${t("delivered_blank_title")}" loading="lazy" decoding="async" />
+                     <span class="files-blank-cap">${escapeHtml(formatDateDMY(b.timestamp))}${b.order_codes?.length ? ` · ${escapeHtml(b.order_codes.join(", "))}` : ""}</span>
+                   </button>`
+                   )
+                   .join("")}
+               </div>`
+            : ""
+        }
+        ${docs.length ? `<div class="acc-docs">${files.documentRowsHtml(docs)}</div>` : ""}`;
+      const blankUrls = blanks.map((b) => api.checkinPhotoByIdUrl(b.id));
+      docsBody.querySelectorAll(".files-blank").forEach((btn) => btn.addEventListener("click", () => openPhotoLightbox(blankUrls, Number(btn.dataset.blankIndex))));
+      if (files) files.bindDocumentRows(docsBody);
     }
   } catch (err) {
     docsBody.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;

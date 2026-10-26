@@ -28,12 +28,10 @@ const TIER_OPTIONS = ["potential", "bronze", "silver", "gold", "competitor"];
 
 const OUTCOME_OPTIONS = [
   "order_placed",
-  "no_order",
-  "payment_collected",
   "follow_up_required",
+  "payment_collected",
   "assortment_check",
   "customer_unavailable",
-  "complaint",
   "other",
 ];
 
@@ -1489,8 +1487,17 @@ const BRAND_LABELS = {
   liquimoly: "Liqui Moly",
   bardahl: "Bardahl",
   aral: "Aral",
+  petronas: "Petronas",
+  fuchs: "Fuchs",
+  total: "Total",
+  ravenol: "Ravenol",
   oscar: "Oscar",
+  amsoil: "AMSoil",
   zic: "ZIC",
+  pennzoil: "Pennzoil",
+  addinol: "Addinol",
+  s_oil: "S-Oil",
+  kixx: "Kixx",
   russian_oil: "Russian oil",
 };
 

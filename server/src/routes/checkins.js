@@ -53,14 +53,16 @@ checkinsRouter.post("/far-attempt", express.json(), async (req, res) => {
 
 const VALID_OUTCOMES = new Set([
   "order_placed",
-  "no_order",
   "payment_collected",
   "follow_up_required",
   "assortment_check",
   "customer_unavailable", // legacy value; the app shows it as "Products delivered" (truck icon)
-  "complaint",
   "other",
 ]);
+// "No order" and "Complaint" were removed (owner, 2026-10-26; migration 155 merged the old records into "other"). A check-in
+// still waiting in an old phone's offline queue may carry them: it is saved as "other" and, having been written before the
+// rule existed, is not asked for the note that "other" now needs.
+const MERGED_INTO_OTHER = new Set(["no_order", "complaint"]);
 
 // The customer's CONFIRMED / PACKED orders, for the "Products delivered" outcome of the check-in form.
 checkinsRouter.get("/deliverable-orders", async (req, res) => {
@@ -68,6 +70,12 @@ checkinsRouter.get("/deliverable-orders", async (req, res) => {
   if (!Number.isInteger(customerId) || customerId <= 0) return res.status(400).json({ error: "customer_id is required" });
   res.json(await deliverableOrders(customerId));
 });
+
+// The competitors' list, in the order the check-in shows it (owner, 2026-10-26).
+export const COMPETITOR_BRANDS = [
+  "mobil", "motul", "shell", "liquimoly", "aral", "bardahl", "petronas", "fuchs", "total",
+  "ravenol", "oscar", "amsoil", "zic", "pennzoil", "addinol", "s_oil", "kixx", "russian_oil",
+];
 
 const BRAND_STATUS_OPTIONS = {
   castrol: new Set([
@@ -82,19 +90,21 @@ const BRAND_STATUS_OPTIONS = {
   ]),
   lotos: new Set(["available", "unavailable", "full_range"]),
   royal: new Set(["available", "unavailable", "full_range"]),
-  competitors: new Set(["mobil", "motul", "shell", "liquimoly", "bardahl", "aral", "oscar", "zic", "russian_oil"]),
+  competitors: new Set(COMPETITOR_BRANDS),
 };
 
 function parseOutcomes(raw) {
-  if (!raw) return [];
+  if (!raw) return { values: [], legacy: false };
   let parsed;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return [];
+    return { values: [], legacy: false };
   }
-  if (!Array.isArray(parsed)) return [];
-  return parsed.filter((o) => VALID_OUTCOMES.has(o));
+  if (!Array.isArray(parsed)) return { values: [], legacy: false };
+  const legacy = parsed.some((o) => MERGED_INTO_OTHER.has(o));
+  const values = [...new Set(parsed.map((o) => (MERGED_INTO_OTHER.has(o) ? "other" : o)).filter((o) => VALID_OUTCOMES.has(o)))];
+  return { values, legacy };
 }
 
 // A free-text list (product names/brands from this customer's own order
@@ -154,8 +164,13 @@ export function parseCapturedAt(value, now = Date.now()) {
   return new Date(t).toISOString();
 }
 
+const MAX_ORDER_BLANK_PHOTOS = 6;
+
 checkinsRouter.post("/", (req, res, next) => {
-  photoUpload.array("photos", MAX_PHOTOS_PER_CHECKIN)(req, res, (err) => {
+  photoUpload.fields([
+    { name: "photos", maxCount: MAX_PHOTOS_PER_CHECKIN },
+    { name: "order_blank_photos", maxCount: MAX_ORDER_BLANK_PHOTOS },
+  ])(req, res, (err) => {
     if (err) return res.status(400).json({ error: err.message });
     next();
   });
@@ -164,8 +179,11 @@ checkinsRouter.post("/", (req, res, next) => {
   const customerId = Number(customer_id);
   const latNum = Number(lat);
   const lngNum = Number(lng);
-  const outcomeValues = parseOutcomes(outcomes);
-  const files = req.files ?? [];
+  const { values: outcomeValues, legacy: legacyOutcome } = parseOutcomes(outcomes);
+  // Visit photos and photos of the signed order blank arrive as two upload fields; both are checked and stored.
+  const visitFiles = req.files?.photos ?? [];
+  const blankFiles = req.files?.order_blank_photos ?? [];
+  const files = [...visitFiles, ...blankFiles];
 
   // multer's fileFilter only ever sees the client-declared Content-Type
   // (see upload.js) -- this checks the bytes actually written to disk
@@ -177,14 +195,29 @@ checkinsRouter.post("/", (req, res, next) => {
   }
 
   // Checking in at the office (customers.checkin_for_all) needs no visit outcome: it is just "I'm here".
-  if (customerId && !outcomeValues.length) {
+  let officeCheckin = false;
+  if (customerId) {
     const { rows: officeRows } = await pool.query("SELECT 1 FROM customers WHERE id = $1 AND checkin_for_all", [customerId]);
-    if (officeRows.length) outcomeValues.push("other");
+    officeCheckin = officeRows.length > 0;
+    if (officeCheckin && !outcomeValues.length) outcomeValues.push("other");
   }
 
   if (!customerId || Number.isNaN(latNum) || Number.isNaN(lngNum) || !outcomeValues.length) {
     files.forEach((f) => fs.unlink(f.path, () => {}));
     return res.status(400).json({ error: "customer_id, lat, lng and at least one outcome are required" });
+  }
+
+  // "Other" must be explained (owner, 2026-10-26) -- except the office check-in, which has nothing to explain, and a check-in an
+  // older phone queued before this rule existed.
+  if (outcomeValues.includes("other") && !officeCheckin && !legacyOutcome && !String(note ?? "").trim()) {
+    files.forEach((f) => fs.unlink(f.path, () => {}));
+    return res.status(400).json({ error: "A note is required when the outcome is Other", code: "note_required_for_other" });
+  }
+
+  // The photo of a signed order blank belongs to a delivery.
+  if (blankFiles.length && !outcomeValues.includes("customer_unavailable")) {
+    files.forEach((f) => fs.unlink(f.path, () => {}));
+    return res.status(400).json({ error: "An order-blank photo needs the Products delivered outcome" });
   }
 
   // A retried submission (the offline queue's flushQueue() re-sending an
@@ -262,10 +295,20 @@ checkinsRouter.post("/", (req, res, next) => {
       [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, brandStatusValue, outcomeValues, amountCollected, availableProductsValue, client_ref || null, parseCapturedAt(captured_at), parseAccuracy(accuracy_m)]
     );
     checkin = rows[0];
-    for (const file of files) {
+    for (const file of visitFiles) {
       await client.query("INSERT INTO checkin_photos (checkin_id, photo_path) VALUES ($1, $2)", [
         checkin.id,
         file.filename,
+      ]);
+    }
+    // The signed order blank of a delivery: kept with the check-in, listed under the customer's Files > Documents. Only a visit
+    // that was marked "Products delivered" can carry one; order_ids = the delivered orders it covers.
+    const blankOrderIds = deliveredIds;
+    for (const file of blankFiles) {
+      await client.query("INSERT INTO checkin_photos (checkin_id, photo_path, kind, order_ids) VALUES ($1, $2, 'order_blank', $3)", [
+        checkin.id,
+        file.filename,
+        blankOrderIds,
       ]);
     }
 
@@ -322,7 +365,7 @@ checkinsRouter.post("/", (req, res, next) => {
     client.release();
   }
 
-  res.status(201).json({ ...checkin, photo_count: files.length, delivered_orders: deliveredOrders });
+  res.status(201).json({ ...checkin, photo_count: visitFiles.length, order_blank_count: blankFiles.length, delivered_orders: deliveredOrders });
 
   notifyCheckinDelivered({ delivered: deliveredOrders, customerName: customer.name, actorId: req.user.id });
 
@@ -406,7 +449,7 @@ checkinsRouter.get("/", async (req, res) => {
        -- check-in's own columns when the row is spread client-side.
        c.region AS customer_region,
        COALESCE(
-         (SELECT json_agg(json_build_object('id', cp.id) ORDER BY cp.id) FROM checkin_photos cp WHERE cp.checkin_id = ch.id),
+         (SELECT json_agg(json_build_object('id', cp.id, 'kind', cp.kind) ORDER BY cp.id) FROM checkin_photos cp WHERE cp.checkin_id = ch.id),
          '[]'
        ) AS photos,
        -- Lets an "Order placed" outcome row link straight to the order it

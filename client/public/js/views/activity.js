@@ -11,12 +11,10 @@ import { periodLabel, periodKey, periodAria, tapPeriod } from "../periodButtons.
 
 const OUTCOMES = [
   "order_placed",
-  "no_order",
-  "payment_collected",
   "follow_up_required",
+  "payment_collected",
   "assortment_check",
   "customer_unavailable",
-  "complaint",
   "other",
 ];
 

@@ -219,3 +219,4 @@
 "marker.spots-spot","Map marker (CSS-drawn or composed)","Check-in spot, within range (blue number)","see PDF","","","see PDF","Map","client/public/css/map-marker-system.css + styles.css","map-marker-renders/spots-spot.png"
 "marker.spots-spot-far","Map marker (CSS-drawn or composed)","Check-in spot, out of range (red number)","see PDF","","","see PDF","Map","client/public/css/map-marker-system.css + styles.css","map-marker-renders/spots-spot-far.png"
 "marker.spots-here","Map marker (CSS-drawn or composed)","You are here (check-in spots page)","see PDF","","","see PDF","Map","client/public/css/map-marker-system.css + styles.css","map-marker-renders/spots-here.png"
+"icons.folder","General UI icons (22 px default)","folder","22","0 0 24 24","1.9","currentColor = takes the colour of the surrounding text/button","customerDetail (Files)","client/public/js/icons.js","(added in 1.424.0, not in the designer pack yet)"
