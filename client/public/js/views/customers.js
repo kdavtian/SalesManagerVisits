@@ -11,7 +11,7 @@ import { openTypeTierSheet } from "../typeTierSheet.js";
 import { FILTER_ICONS } from "../filterIcons.js";
 import { potentialChipHtml } from "../potential.js";
 import { emptyPotentialFilter, potentialFilterCount, matchesPotentialFilter, comparePotentialPriority, openPotentialFilterSheet } from "../potentialFilterSheet.js";
-import { deskHeadHtml, wireDeskHead, paintDeskHead, isDesktop, isWide, deskColumns, openDeskColumnMenu, applyDensity, deskFootHtml, downloadCsv, deskCheckHtml, paintBulkBar, wireDeskKeys } from "../deskTable.js";
+import { isDesktop, isWide, createDeskTable, renderDeskFilters } from "../deskTable.js";
 import { dockSheet, dockedKey } from "../dockSheet.js";
 
 // The Customers list loads in pages of this size (see load()).
@@ -247,66 +247,50 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
     sortBtn.setAttribute("aria-expanded", String(!sortMenu.hidden));
     if (!sortMenu.hidden) sortMenu.querySelector("button")?.focus();
   });
-  // Desktop table (deskTable.js): which optional columns are on, the heading row built from them, selection for the bulk bar.
-  const deskCols = deskColumns("customers", DESK_COLUMNS(), DESK_DEFAULT_COLUMNS);
-  const deskHeadSlot = root.querySelector("#customer-desk-head");
+  // Desktop table (deskTable.js): columns, heading row, selection + bulk bar, row count / CSV, keys.
   const deskFilters = root.querySelector("#customer-desk-filters");
-  const bulkBar = root.querySelector("#customer-bulk");
-  const deskFoot = root.querySelector("#customer-desk-foot");
-  const selected = new Set();
-  let deskHead = null;
-  // The visible columns right now: while a card is docked beside the list only the `narrow` ones fit.
-  const deskDocked = () => isWide() && dockedKey().startsWith("customer:");
-  const deskVisibleColumns = () => {
-    const docked = deskDocked();
-    return deskCols.list().filter((c) => !docked || c.narrow);
-  };
-  // the grid column of the first optional cell: checkbox | icon | customer | status | ... (no Status cell beside the card)
-  const deskFirstCell = () => (deskDocked() ? 4 : 5);
-  function renderDeskHead() {
-    if (!isDesktop()) return;
-    const columns = deskVisibleColumns();
-    const docked = deskDocked();
-    const view = root.firstElementChild;
-    view.dataset.deskCols = columns.map((c) => c.key).join(" ");
-    view.classList.toggle("customers-desk-docked", docked);
-    view.style.setProperty(
-      "--desk-cols-customers",
-      docked
-        ? `24px 36px minmax(0, 1fr) ${columns.map((c) => c.narrowWidth || c.width).join(" ")} 28px`
-        : `24px 36px minmax(0, 1.5fr) minmax(0, 1.7fr) ${columns.map((c) => c.width).join(" ")} 28px`
-    );
-    deskHeadSlot.innerHTML = deskHeadHtml(
-      "desk-thead-customers",
-      [
-        { items: [{ label: t("desk_col_customer"), key: "name" }] },
-        ...(docked ? [] : [{ items: [{ label: t("desk_col_status") }] }]),
-        ...columns.map((c) => ({ align: c.align, items: [c.sort ? { label: c.label, key: c.sort } : { label: c.label }] })),
-      ],
-      { select: true, picker: true }
-    );
-    deskHead = deskHeadSlot.firstElementChild;
-    wireDeskHead(deskHead, setSort);
-    deskHead.querySelector(".desk-col-gear").addEventListener("click", (e) => {
-      openDeskColumnMenu(e.currentTarget, DESK_COLUMNS(), deskCols, () => {
-        // the debt column is the debt fetch (see the toggle above): turning it on asks the server for the debt join
-        if (deskCols.isOn("debt") !== showDebt) {
-          debtToggleBtn.click();
-          return;
-        }
-        renderDeskHead();
-        renderList();
-      });
-    });
-    deskHead.querySelector(".desk-select-all").addEventListener("click", () => {
-      const rows = visibleCustomers();
-      const all = rows.length > 0 && rows.every((c) => selected.has(c.id));
-      if (all) selected.clear();
-      else rows.forEach((c) => selected.add(c.id));
-      paintSelection();
-    });
-    paintDeskHead(deskHead, sortKey, sortReversed);
-  }
+  const table = createDeskTable({
+    pageKey: "customers",
+    root: root.firstElementChild,
+    view: root.firstElementChild,
+    headSlot: root.querySelector("#customer-desk-head"),
+    listEl,
+    footSlot: root.querySelector("#customer-desk-foot"),
+    bulkEl: root.querySelector("#customer-bulk"),
+    columns: DESK_COLUMNS,
+    defaults: DESK_DEFAULT_COLUMNS,
+    lead: [
+      { label: t("desk_col_customer"), key: "name" },
+      { label: t("desk_col_status") },
+    ],
+    leadCols: "minmax(0, 1.5fr) minmax(0, 1.7fr)",
+    rowSelector: ".list-row[data-id]",
+    rows: () => visibleCustomers(),
+    sort: () => ({ key: sortKey, reversed: sortReversed }),
+    onSort: (key) => setSort(key),
+    dockedPrefix: "customer:",
+    csvName: "customers",
+    csvLead: {
+      header: [t("desk_col_customer"), t("desk_col_id"), t("desk_col_channel"), t("desk_col_status")],
+      row: (c) => {
+        const badge = visitStatusBadge(c);
+        return [c.name, c.erp_customer_id || "", c.sales_channel ? channelDisplayLabel(String(c.sales_channel)) : "", badge ? t(badge.labelKey) : ""];
+      },
+    },
+    bulkActions: () => (canReassignCustomers() ? [{ key: "assign", label: t("desk_assign_rep"), primary: true }] : []),
+    onBulk: (key, chosen) => key === "assign" && openAssignRepSheet(chosen.map((c) => c.id)),
+    // the debt column is the debt fetch (see the toggle above): turning it on asks the server for the debt join
+    onColumnsChange: (key) => {
+      if (key === "debt" && table.cols.isOn("debt") !== showDebt) {
+        debtToggleBtn.click();
+        return false;
+      }
+      return true;
+    },
+    onRepaint: () => renderList(),
+  });
+  const deskCols = table.cols;
+  const renderDeskHead = () => table.renderHead();
   // A heading click is the same as picking that item in the sort menu; the desktop-only columns sort here directly.
   function setSort(key) {
     const item = sortMenu.querySelector(`[data-sort="${key}"]`);
@@ -322,7 +306,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
     render();
   }
   function paintSortArrows() {
-    paintDeskHead(deskHead, sortKey, sortReversed);
+    table.paintSort();
     sortMenu.querySelectorAll("[data-sort]").forEach((item) => {
       const arrow = item.querySelector(".sort-menu-arrow");
       arrow.textContent = item.dataset.sort === sortKey ? (sortReversed ? "▲" : "▼") : "";
@@ -537,7 +521,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
       .join("");
 
     filterRow.innerHTML = buttons;
-    renderDeskFilters();
+    renderCustomerDeskFilters();
 
     filterRow.querySelector('[data-filter-btn="assignment"]')?.addEventListener("click", () => {
       openTriStateTreeSheet(t("filter_direction_manager_title"), {
@@ -635,54 +619,44 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
 
   // Desktop (>= 1024 px): the same filters as the icon buttons, but visible -- a labelled button per filter, a chip per
   // chosen value with an "x", and Clear. A button click opens the very same sheet the icon button opens.
-  function renderDeskFilters() {
+  function renderCustomerDeskFilters() {
     if (!isDesktop()) return;
-    const btn = (key, label, count) =>
-      `<button type="button" class="desk-filter-btn${count ? " desk-filter-btn-on" : ""}" data-desk-filter="${key}">${escapeHtml(label)}${count ? `<span class="desk-filter-count">${count}</span>` : ""}<span class="desk-filter-caret" aria-hidden="true">▾</span></button>`;
     const chips = [];
-    const chip = (group, id, label) => chips.push(`<span class="desk-chip">${escapeHtml(label)}<button type="button" class="desk-chip-x" data-chip-group="${group}" data-chip-id="${escapeHtml(id)}" aria-label="${escapeHtml(t("remove"))}">×</button></span>`);
     const managerName = (id) => allCustomers.find((c) => String(c.assigned_manager_id) === String(id))?.assigned_manager_name || t("unassigned");
     for (const key of assignmentKeys) {
       const [channel, manager] = key.split("::");
-      chip("assignment", key, `${channel === NO_GROUP_KEY ? t("no_direction") : channelDisplayLabel(channel)} · ${manager === NO_GROUP_KEY ? t("unassigned") : managerName(manager)}`);
+      chips.push({ label: `${channel === NO_GROUP_KEY ? t("no_direction") : channelDisplayLabel(channel)} · ${manager === NO_GROUP_KEY ? t("unassigned") : managerName(manager)}`, onRemove: () => { assignmentKeys.delete(key); render(); } });
     }
     for (const key of regionSubregionKeys) {
       const [region, sub] = key.split("::");
-      chip("region", key, sub && sub !== NO_GROUP_KEY ? `${regionLabelHy(region)} / ${subregionLabelHy(sub)}` : regionLabelHy(region));
+      chips.push({ label: sub && sub !== NO_GROUP_KEY ? `${regionLabelHy(region)} / ${subregionLabelHy(sub)}` : regionLabelHy(region), onRemove: () => { regionSubregionKeys.delete(key); render(); } });
     }
-    for (const type of typeFilters) chip("type", type, type === NO_GROUP_KEY ? t("no_customer_type") : categoryLabel(type));
-    for (const tier of tierFilters) chip("tier", tier, t(TIER_OPTIONS.find((o) => o.value === tier)?.labelKey || tier));
+    for (const type of typeFilters) chips.push({ label: type === NO_GROUP_KEY ? t("no_customer_type") : categoryLabel(type), onRemove: () => { typeFilters.delete(type); render(); } });
+    for (const tier of tierFilters) chips.push({ label: t(TIER_OPTIONS.find((o) => o.value === tier)?.labelKey || tier), onRemove: () => { tierFilters.delete(tier); render(); } });
     const potentialCount = potentialFilterCount(potentialFilter);
-    if (potentialCount) chip("potential", "all", `${t("pf_title")} (${potentialCount})`);
-    if (brandChipIds.size) chip("brands", "all", `${t("filter_brands_title")} (${brandChipIds.size})`);
-    const buttons = [...filterRow.querySelectorAll("[data-filter-btn]")].map((b) => {
-      const key = b.dataset.filterBtn;
-      const label = { assignment: t("filter_direction_manager_title"), region: t("region"), brands: t("filter_brands_title"), potential: t("pf_title"), channel: t("filter_type_tier_title") }[key] || key;
-      return btn(key, label, Number(b.dataset.filterCount || 0));
-    });
-    deskFilters.innerHTML = `${buttons.join("")}${chips.length ? `<span class="desk-chips">${chips.join("")}<button type="button" class="desk-filters-clear" data-desk-clear>${escapeHtml(t("clear"))}</button></span>` : ""}`;
-    deskFilters.querySelectorAll("[data-desk-filter]").forEach((b) => b.addEventListener("click", () => filterRow.querySelector(`[data-filter-btn="${b.dataset.deskFilter}"]`)?.click()));
-    deskFilters.querySelectorAll("[data-chip-group]").forEach((x) =>
-      x.addEventListener("click", () => {
-        const { chipGroup, chipId } = x.dataset;
-        if (chipGroup === "assignment") assignmentKeys.delete(chipId);
-        else if (chipGroup === "region") regionSubregionKeys.delete(chipId);
-        else if (chipGroup === "type") typeFilters.delete(chipId);
-        else if (chipGroup === "tier") tierFilters.delete(chipId);
-        else if (chipGroup === "potential") potentialFilter = emptyPotentialFilter();
-        else if (chipGroup === "brands") brandChipIds = new Set();
+    if (potentialCount) chips.push({ label: `${t("pf_title")} (${potentialCount})`, onRemove: () => { potentialFilter = emptyPotentialFilter(); render(); } });
+    if (brandChipIds.size) chips.push({ label: `${t("filter_brands_title")} (${brandChipIds.size})`, onRemove: () => { brandChipIds = new Set(); render(); } });
+    const labels = { assignment: t("filter_direction_manager_title"), region: t("region"), brands: t("filter_brands_title"), potential: t("pf_title"), channel: t("filter_type_tier_title") };
+    // each button opens the very same sheet the phone's icon button opens
+    const groups = [...filterRow.querySelectorAll("[data-filter-btn]")].map((b) => ({
+      key: b.dataset.filterBtn,
+      label: labels[b.dataset.filterBtn] || b.dataset.filterBtn,
+      count: Number(b.dataset.filterCount || 0),
+      onClick: () => b.click(),
+    }));
+    renderDeskFilters(deskFilters, {
+      groups,
+      chips,
+      onClear: () => {
+        assignmentKeys = new Set();
+        regionSubregionKeys = new Set();
+        typeFilters = new Set();
+        tierFilters = new Set();
+        potentialFilter = emptyPotentialFilter();
+        brandChipIds = new Set();
+        filter = "";
         render();
-      })
-    );
-    deskFilters.querySelector("[data-desk-clear]")?.addEventListener("click", () => {
-      assignmentKeys = new Set();
-      regionSubregionKeys = new Set();
-      typeFilters = new Set();
-      tierFilters = new Set();
-      potentialFilter = emptyPotentialFilter();
-      brandChipIds = new Set();
-      filter = "";
-      render();
+      },
     });
   }
 
@@ -813,73 +787,15 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
   let moreObserver = null;
   // One delegated handler for every card (cards are appended batch by batch).
   listEl.addEventListener("click", (e) => {
-    const check = e.target.closest(".desk-check[data-select]");
-    if (check && listEl.contains(check)) {
-      e.stopPropagation();
-      toggleSelected(Number(check.dataset.select));
-      return;
-    }
     const row = e.target.closest(".list-row[data-id]");
     if (!row || !listEl.contains(row)) return;
     // >= 1400 px: the card opens beside the list (the list keeps its place and scroll); a Ctrl/Cmd-click still opens the page.
     if (isWide() && !e.ctrlKey && !e.metaKey) openCustomerPanel(row.dataset.id);
     else navigate(`#/customers/${row.dataset.id}`);
   });
-  function toggleSelected(id) {
-    if (selected.has(id)) selected.delete(id);
-    else selected.add(id);
-    paintSelection();
-  }
-  // Checkboxes, the select-all box and the bulk bar follow the `selected` set (rows are repainted in place, not rebuilt).
-  function paintSelection() {
-    listEl.querySelectorAll(".desk-check[data-select]").forEach((box) => {
-      const on = selected.has(Number(box.dataset.select));
-      if (box.classList.contains("desk-check-on") !== on) box.classList.toggle("desk-check-on", on);
-      if (box.getAttribute("aria-checked") !== String(on)) box.setAttribute("aria-checked", String(on));
-      const row = box.closest(".list-row");
-      if (row && row.classList.contains("row-selected") !== on) row.classList.toggle("row-selected", on);
-    });
-    const all = deskHead?.querySelector(".desk-select-all");
-    if (all) {
-      const rows = visibleCustomers();
-      const every = rows.length > 0 && rows.every((c) => selected.has(c.id));
-      const some = rows.some((c) => selected.has(c.id));
-      all.classList.toggle("desk-check-on", every);
-      all.classList.toggle("desk-check-some", some && !every);
-      all.setAttribute("aria-checked", every ? "true" : some ? "mixed" : "false");
-    }
-    paintBulkBar(bulkBar, selected.size, [
-      ...(canReassignCustomers() ? [{ key: "assign", label: t("desk_assign_rep"), primary: true }] : []),
-      { key: "export", label: t("desk_export_csv") },
-    ]);
-  }
-  bulkBar.addEventListener("click", (e) => {
-    const action = e.target.closest("[data-bulk]")?.dataset.bulk;
-    if (!action) return;
-    if (action === "clear") {
-      selected.clear();
-      paintSelection();
-    } else if (action === "export") exportCsv(visibleCustomers().filter((c) => selected.has(c.id)));
-    else if (action === "assign") openAssignRepSheet();
-  });
-  // CSV of the rows on screen (or the selected ones): the visible columns plus the facts the Customer cell carries.
-  function exportCsv(rows) {
-    const columns = deskVisibleColumns();
-    const header = [t("desk_col_customer"), t("desk_col_id"), t("desk_col_channel"), t("desk_col_status"), ...columns.filter((c) => c.key !== "erp_id" && c.key !== "channel").map((c) => c.label)];
-    const statusText = (c) => {
-      const badge = visitStatusBadge(c);
-      return badge ? t(badge.labelKey) : "";
-    };
-    downloadCsv(
-      `customers-${localToday()}.csv`,
-      header,
-      rows.map((c) => [c.name, c.erp_customer_id || "", c.sales_channel ? channelDisplayLabel(String(c.sales_channel)) : "", statusText(c), ...columns.filter((x) => x.key !== "erp_id" && x.key !== "channel").map((x) => (x.csv || x.cell)(c))])
-    );
-  }
   // Bulk "assign rep": one sheet with the assignable managers, then one PATCH per selected customer (the server checks
   // canReassignCustomers on each). The list reloads afterwards.
-  async function openAssignRepSheet() {
-    const ids = [...selected];
+  async function openAssignRepSheet(ids) {
     if (!ids.length) return;
     let users = [];
     try {
@@ -925,10 +841,10 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
         );
       }
       close();
-      selected.clear();
+      table.selection.clear();
       showToast(failed ? `${t("desk_assign_rep_done").replace("{n}", done)} · ${t("desk_assign_rep_failed").replace("{n}", failed)}` : t("desk_assign_rep_done").replace("{n}", done));
       await load({ silent: true });
-      paintSelection();
+      table.paintSelection();
     });
   }
   // The customer card docked beside the list (dockSheet.js, >= 1400 px): the same customerDetail.js page, drawn into a panel.
@@ -951,35 +867,15 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
     if (!overlay.isConnected) return;
     renderCustomerDetail(overlay.querySelector(".customer-panel-body"), navigate, id);
   }
-  // The open row is highlighted while its panel is docked; the columns shrink to the narrow set beside it.
+  // The open row is highlighted while its panel is docked (the table itself switches to the narrow columns).
   const onDockedChange = () => {
     const key = dockedKey();
     listEl.querySelectorAll(".list-row[data-id]").forEach((row) => {
       const open = key === `customer:${row.dataset.id}`;
       if (row.classList.contains("row-open") !== open) row.classList.toggle("row-open", open);
     });
-    const docked = key.startsWith("customer:");
-    if (docked !== lastDocked) {
-      lastDocked = docked;
-      renderDeskHead();
-      renderList();
-    }
   };
-  let lastDocked = false;
   window.addEventListener("docked-change", onDockedChange);
-  // a window dragged across the desktop width gets (or loses) the table parts without a reload
-  const deskMedia = window.matchMedia?.("(min-width: 1024px)");
-  const onDeskChange = () => {
-    if (isDesktop()) renderDeskHead();
-    else deskHeadSlot.innerHTML = "";
-    render();
-  };
-  deskMedia?.addEventListener?.("change", onDeskChange);
-  wireDeskKeys(listEl, {
-    rowSelector: ".list-row[data-id]",
-    onToggle: (row) => toggleSelected(Number(row.dataset.id)),
-    onEscape: () => document.querySelector(".sheet-overlay.sheet-docked")?.remove(),
-  });
   // A group header folds / unfolds its group (customers of the group, and the subregion headers of a region).
   function toggleGroup(head) {
     const key = head.dataset.gkey;
@@ -1005,11 +901,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
     moreObserver?.disconnect();
     let customers = visibleCustomers();
     const deskOn = isDesktop();
-    const deskColumnsNow = deskOn ? deskVisibleColumns() : [];
-    const firstCell = deskFirstCell();
-    if (deskOn) deskFoot.innerHTML = deskFootHtml(customers.length);
-    else deskFoot.innerHTML = "";
-    deskFoot.querySelector("[data-desk-export]")?.addEventListener("click", () => exportCsv(selected.size ? customers.filter((c) => selected.has(c.id)) : customers));
+    table.renderFoot(customers.length);
     // Grouped by region, then subregion (customers keep their usual order inside a group).
     const regionKey = (c) => c.region || "";
     const subKey = (c) => c.subregion || "";
@@ -1119,14 +1011,10 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
           ? `<div class="list-row-bottom product-match-row">${matchedBrands.map((m) => chipHtml(m.def, shortDate(m.last_at))).join("")}</div>`
           : "";
 
-        // the desktop-only cells: one per visible column, placed on the row grid after the Status cell
-        const deskCells = deskOn
-          ? deskColumnsNow.map((col, i) => `<span class="desk-cell desk-cell-${col.key}${col.align === "end" ? " desk-cell-end" : ""}" style="grid-column:${firstCell + i}">${escapeHtml(col.cell(c))}</span>`).join("")
-          : "";
         const open = deskOn && dockedKey() === `customer:${c.id}`;
         return `
-        <button class="card list-row ${isOthers ? "customer-card-unassigned" : ""}${selected.has(c.id) ? " row-selected" : ""}${open ? " row-open" : ""}" data-id="${c.id}">
-          ${deskOn ? deskCheckHtml(c.id, selected.has(c.id)) : ""}
+        <button class="card list-row ${isOthers ? "customer-card-unassigned" : ""}${open ? " row-open" : ""}" data-id="${c.id}">
+          ${table.checkHtml(c)}
           ${customerListIconHtml(c)}
           <div class="list-row-body">
             <div class="list-row-top">
@@ -1136,7 +1024,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
             ${bottomRow}
             ${brandRow}
           </div>
-          ${deskCells}
+          ${table.cellsHtml(c)}
           <span class="chevron">&#8250;</span>
         </button>
       `;
@@ -1173,7 +1061,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
     listEl.innerHTML = "";
     let painted = 0;
     paintMore();
-    if (deskOn) paintSelection();
+    if (deskOn) table.paintSelection();
   }
 
   function render() {
@@ -1262,7 +1150,6 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
     debtToggleBtn.setAttribute("aria-pressed", "true");
     listEl.parentElement.classList.add("customers-with-debt");
   }
-  applyDensity();
   renderDeskHead();
   load();
   loadBrandSummary();
@@ -1272,7 +1159,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
   const cleanup = () => {
     moreObserver?.disconnect();
     window.removeEventListener("docked-change", onDockedChange);
-    deskMedia?.removeEventListener?.("change", onDeskChange);
+    table.destroy();
   };
   cleanup.onRestore = () => {
     const scrollTop = root.scrollTop;

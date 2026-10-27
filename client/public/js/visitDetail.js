@@ -4,6 +4,7 @@
 // check-in. Kept as its own module (not exported from customerDetail.js)
 // so neither view has to import the other's file to reuse it.
 import { api } from "./api.js";
+import { dockSheet } from "./dockSheet.js";
 import { activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, categoryIcon, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo } from "./util.js";
 import { t } from "./i18n.js";
 import { isAdmin } from "./state.js";
@@ -179,6 +180,7 @@ export function openVisitDetailSheet(ch, onPhotoDeleted, navigate) {
     </div>
   `;
   document.body.appendChild(overlay);
+  dockSheet(overlay, `visit:${ch.id}`);
   activateDialog(overlay);
 
   function close() {

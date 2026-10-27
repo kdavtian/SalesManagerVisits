@@ -150,7 +150,7 @@ export function openDeskColumnMenu(anchor, columns, cols, onChange) {
       writePref(DENSITY_KEY, input.checked ? "compact" : "comfortable");
       applyDensity();
     }
-    onChange();
+    onChange(input.dataset.col || "");
   });
   menu.querySelector("input")?.focus();
   return close;
@@ -223,4 +223,328 @@ export function wireDeskKeys(listEl, { rowSelector, onToggle, onEscape } = {}) {
       onToggle(row);
     }
   });
+}
+
+/* ---------- One table per page (step 2): head, cells, foot, selection and keys in one object ----------
+   A page keeps its phone markup and only adds `table.checkHtml(row)` before the icon and `table.cellsHtml(row)` after the
+   body of every row, calls renderHead() when its shell is built and renderFoot(n) + paintSelection() after the list is
+   painted. Elements may be given as functions when the page rebuilds its shell (Activity, Tasks). */
+const el = (x) => (typeof x === "function" ? x() : x);
+
+export function createDeskTable(opts) {
+  const {
+    pageKey,
+    columns,
+    defaults,
+    lead,
+    leadCols,
+    leadColsDocked = "minmax(0, 1fr)",
+    rowSelector,
+    idOf = (r) => r.id,
+    rows,
+    sort,
+    onSort,
+    dockedPrefix = "",
+    csvName = pageKey,
+    csvLead = { header: [], row: () => [] },
+    bulkActions = null,
+    onBulk = null,
+    onColumnsChange = null,
+    onEscape = () => document.querySelector(".sheet-overlay.sheet-docked")?.remove(),
+    root,
+  } = opts;
+  const cols = deskColumns(pageKey, columns(), defaults);
+  const internal = new Set();
+  const selection = opts.selection || {
+    isOn: (id) => internal.has(id),
+    toggle: (id) => (internal.has(id) ? internal.delete(id) : internal.add(id)),
+    selectAll: (list) => list.forEach((r) => internal.add(idOf(r))),
+    clear: () => internal.clear(),
+    size: () => internal.size,
+  };
+  const withSelection = Boolean(opts.selection || bulkActions);
+  let headEl = null;
+  let lastDocked = null;
+
+  const docked = () => Boolean(dockedPrefix) && isWide() && dockedKeyNow().startsWith(dockedPrefix);
+  const visibleColumns = () => {
+    const d = docked();
+    return cols.list().filter((c) => !d || c.narrow);
+  };
+  // grid column of the first optional cell: [checkbox] | icon | the fixed cells (only the first one beside a docked panel)
+  const firstCell = () => 2 + (withSelection ? 1 : 0) + (docked() ? 1 : lead.length);
+
+  function renderHead() {
+    const slot = el(opts.headSlot);
+    const view = el(opts.view);
+    if (!slot || !view) return;
+    if (!isDesktop()) {
+      slot.innerHTML = "";
+      view.classList.remove("desk-view", "desk-docked");
+      headEl = null;
+      return;
+    }
+    const d = docked();
+    const list = visibleColumns();
+    view.classList.add("desk-view");
+    view.classList.toggle("desk-docked", d);
+    view.classList.toggle("desk-no-select", !withSelection);
+    view.dataset.deskCols = list.map((c) => c.key).join(" ");
+    view.style.setProperty(
+      "--desk-cols",
+      `${withSelection ? "24px " : ""}36px ${d ? leadColsDocked : leadCols} ${list.map((c) => (d ? c.narrowWidth || c.width : c.width)).join(" ")} 28px`.replace(/\s+/g, " ")
+    );
+    const leadCells = (d ? lead.slice(0, 1) : lead).map((c) => ({ align: c.align, items: [c.key ? { label: c.label, key: c.key } : { label: c.label }] }));
+    slot.innerHTML = deskHeadHtml(
+      `desk-thead-${pageKey}`,
+      [...leadCells, ...list.map((c) => ({ align: c.align, items: [c.sort ? { label: c.label, key: c.sort } : { label: c.label }] }))],
+      { select: withSelection, picker: true }
+    );
+    headEl = slot.firstElementChild;
+    wireDeskHead(headEl, (key) => onSort?.(key));
+    headEl.querySelector(".desk-col-gear").addEventListener("click", (e) => {
+      openDeskColumnMenu(e.currentTarget, columns(), cols, (changedKey) => {
+        if (onColumnsChange?.(changedKey) === false) return;
+        renderHead();
+        opts.onRepaint?.();
+      });
+    });
+    headEl.querySelector(".desk-select-all")?.addEventListener("click", () => {
+      const list = rows();
+      const all = list.length > 0 && list.every((r) => selection.isOn(idOf(r)));
+      if (all) selection.clear();
+      else selection.selectAll(list);
+      paintSelection();
+    });
+    paintSort();
+  }
+
+  function paintSort() {
+    const s = sort?.();
+    if (headEl && s) paintDeskHead(headEl, s.key, s.reversed);
+  }
+
+  const cellsHtml = (row) => {
+    if (!isDesktop()) return "";
+    const first = firstCell();
+    return visibleColumns()
+      .map((c, i) => {
+        const value = c.cell(row);
+        return `<span class="desk-cell desk-cell-${c.key}${c.align === "end" ? " desk-cell-end" : ""}" style="grid-column:${first + i}">${c.html ? value : escapeHtml(value ?? "")}</span>`;
+      })
+      .join("");
+  };
+  const checkHtml = (row) => (isDesktop() && withSelection ? deskCheckHtml(idOf(row), selection.isOn(idOf(row))) : "");
+
+  function renderFoot(count) {
+    const foot = el(opts.footSlot);
+    if (!foot) return;
+    if (!isDesktop()) {
+      foot.innerHTML = "";
+      return;
+    }
+    foot.innerHTML = deskFootHtml(count);
+    foot.querySelector("[data-desk-export]").addEventListener("click", () => {
+      const list = rows();
+      const chosen = withSelection ? list.filter((r) => selection.isOn(idOf(r))) : [];
+      exportCsv(chosen.length ? chosen : list);
+    });
+  }
+
+  function exportCsv(list) {
+    const vis = visibleColumns();
+    downloadCsv(
+      `${csvName}-${new Date().toISOString().slice(0, 10)}.csv`,
+      [...csvLead.header, ...vis.map((c) => c.label)],
+      list.map((r) => [...csvLead.row(r), ...vis.map((c) => (c.csv ? c.csv(r) : c.html ? String(c.cell(r)).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : c.cell(r)))])
+    );
+  }
+
+  function paintSelection() {
+    if (!withSelection || !isDesktop()) return;
+    const listEl = el(opts.listEl);
+    listEl?.querySelectorAll(".desk-check[data-select]").forEach((box) => {
+      const on = selection.isOn(Number(box.dataset.select));
+      if (box.classList.contains("desk-check-on") !== on) box.classList.toggle("desk-check-on", on);
+      if (box.getAttribute("aria-checked") !== String(on)) box.setAttribute("aria-checked", String(on));
+      const row = box.closest(rowSelector);
+      if (row && row.classList.contains("row-selected") !== on) row.classList.toggle("row-selected", on);
+    });
+    const all = headEl?.querySelector(".desk-select-all");
+    const list = rows();
+    const chosen = list.filter((r) => selection.isOn(idOf(r)));
+    if (all) {
+      const every = list.length > 0 && chosen.length === list.length;
+      const some = chosen.length > 0;
+      all.classList.toggle("desk-check-on", every);
+      all.classList.toggle("desk-check-some", some && !every);
+      all.setAttribute("aria-checked", every ? "true" : some ? "mixed" : "false");
+    }
+    const bar = el(opts.bulkEl);
+    if (bar && bulkActions) {
+      paintBulkBar(bar, chosen.length, [...bulkActions(chosen), { key: "export", label: t("desk_export_csv") }]);
+    }
+  }
+
+  // Delegated on a stable ancestor that holds the list AND the bulk bar (`root`): the list element itself may be rebuilt with the shell.
+  const host = root || el(opts.listEl);
+  const onClick = (e) => {
+    // Inside a <button> row the browser reports the row as the target, so the box is found by where the click landed.
+    let check = e.target.closest?.(".desk-check[data-select]");
+    if (!check && e.clientX) {
+      const row = e.target.closest?.(rowSelector);
+      const box = row?.querySelector(".desk-check[data-select]");
+      const r = box?.getBoundingClientRect();
+      if (r && e.clientX >= r.left - 8 && e.clientX <= r.right + 8 && e.clientY >= r.top - 8 && e.clientY <= r.bottom + 8) check = box;
+    }
+    if (check) {
+      e.stopPropagation();
+      e.preventDefault();
+      selection.toggle(Number(check.dataset.select));
+      paintSelection();
+      return;
+    }
+    const bulk = e.target.closest?.("[data-bulk]");
+    if (bulk && el(opts.bulkEl)?.contains(bulk)) {
+      const key = bulk.dataset.bulk;
+      const chosen = rows().filter((r) => selection.isOn(idOf(r)));
+      if (key === "clear") {
+        selection.clear();
+        paintSelection();
+      } else if (key === "export") exportCsv(chosen);
+      else onBulk?.(key, chosen);
+    }
+  };
+  host.addEventListener("click", onClick, true);
+  const onKey = (e) => {
+    if (!isDesktop()) return;
+    const row = e.target.closest?.(rowSelector);
+    if (e.key === "Escape") {
+      onEscape?.();
+      return;
+    }
+    if (!row) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const all = [...host.querySelectorAll(rowSelector)];
+      const next = all[all.indexOf(row) + (e.key === "ArrowDown" ? 1 : -1)];
+      next?.focus();
+      next?.scrollIntoView({ block: "nearest" });
+    } else if (e.key === " " && withSelection) {
+      const box = row.querySelector(".desk-check[data-select]");
+      if (!box) return;
+      e.preventDefault();
+      e.stopPropagation();
+      selection.toggle(Number(box.dataset.select));
+      paintSelection();
+    }
+  };
+  host.addEventListener("keydown", onKey, true);
+  const onDocked = () => {
+    const d = docked();
+    if (d === lastDocked) return;
+    lastDocked = d;
+    renderHead();
+    opts.onRepaint?.();
+  };
+  window.addEventListener("docked-change", onDocked);
+  const media = window.matchMedia?.("(min-width: 1024px)");
+  const onMedia = () => {
+    renderHead();
+    opts.onRepaint?.();
+  };
+  media?.addEventListener?.("change", onMedia);
+  applyDensity();
+
+  return {
+    cols,
+    selection,
+    renderHead,
+    paintSort,
+    cellsHtml,
+    checkHtml,
+    renderFoot,
+    paintSelection,
+    exportCsv,
+    visibleColumns,
+    docked,
+    selectedRows: () => rows().filter((r) => selection.isOn(idOf(r))),
+    destroy() {
+      host.removeEventListener("click", onClick, true);
+      host.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("docked-change", onDocked);
+      media?.removeEventListener?.("change", onMedia);
+    },
+  };
+}
+
+const dockedKeyNow = () => document.body.dataset.docked || "";
+
+/* ---------- Visible filter bar (desktop): labelled buttons, a chip per chosen value, Clear ----------
+   groups: [{ key, label, count?, active?, onClick(buttonEl) }]; chips: [{ label, onRemove }] */
+export function renderDeskFilters(barEl, { groups, chips = [], onClear }) {
+  if (!barEl) return;
+  if (!isDesktop()) {
+    barEl.innerHTML = "";
+    return;
+  }
+  barEl.innerHTML =
+    groups
+      .map(
+        (g) =>
+          `<button type="button" class="desk-filter-btn${g.active || g.count ? " desk-filter-btn-on" : ""}" data-desk-filter="${g.key}">${escapeHtml(g.label)}${
+            g.count ? `<span class="desk-filter-count">${g.count}</span>` : ""
+          }<span class="desk-filter-caret" aria-hidden="true">▾</span></button>`
+      )
+      .join("") +
+    (chips.length
+      ? `<span class="desk-chips">${chips
+          .map((c, i) => `<span class="desk-chip">${escapeHtml(c.label)}<button type="button" class="desk-chip-x" data-chip="${i}" aria-label="${escapeHtml(t("remove"))}">×</button></span>`)
+          .join("")}<button type="button" class="desk-filters-clear" data-desk-clear>${escapeHtml(t("clear"))}</button></span>`
+      : "");
+  barEl.querySelectorAll("[data-desk-filter]").forEach((b) => b.addEventListener("click", () => groups.find((g) => g.key === b.dataset.deskFilter)?.onClick(b)));
+  barEl.querySelectorAll("[data-chip]").forEach((x) => x.addEventListener("click", () => chips[Number(x.dataset.chip)]?.onRemove()));
+  barEl.querySelector("[data-desk-clear]")?.addEventListener("click", () => onClear?.());
+}
+
+// A single-choice menu under a filter button: options [{ value, label }]; onPick(value).
+export function openDeskMenu(anchor, options, current, onPick) {
+  document.querySelector(".desk-col-menu")?.remove();
+  const menu = document.createElement("div");
+  menu.className = "desk-col-menu desk-pick-menu";
+  menu.setAttribute("role", "menu");
+  menu.innerHTML = options
+    .map(
+      (o) =>
+        `<button type="button" role="menuitemradio" class="desk-col-menu-item${String(o.value) === String(current) ? " desk-menu-on" : ""}" aria-checked="${String(o.value) === String(current)}" data-value="${escapeHtml(String(o.value))}">${escapeHtml(o.label)}</button>`
+    )
+    .join("");
+  const rect = anchor.getBoundingClientRect();
+  menu.style.top = `${Math.round(rect.bottom + 4)}px`;
+  menu.style.left = `${Math.max(8, Math.round(rect.left))}px`;
+  document.body.appendChild(menu);
+  const close = () => {
+    menu.remove();
+    document.removeEventListener("pointerdown", onOutside, true);
+    document.removeEventListener("keydown", onKeyDown, true);
+  };
+  const onOutside = (e) => {
+    if (!menu.contains(e.target) && !anchor.contains(e.target)) close();
+  };
+  const onKeyDown = (e) => {
+    if (e.key === "Escape") {
+      close();
+      anchor.focus();
+    }
+  };
+  document.addEventListener("pointerdown", onOutside, true);
+  document.addEventListener("keydown", onKeyDown, true);
+  menu.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-value]");
+    if (!b) return;
+    close();
+    onPick(b.dataset.value);
+  });
+  menu.querySelector(".desk-menu-on, button")?.focus();
+  return close;
 }

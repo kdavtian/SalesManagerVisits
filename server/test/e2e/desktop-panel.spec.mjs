@@ -121,6 +121,7 @@ test.describe("Activity and Tasks column headings", () => {
     await loginViaUi(page, admin.email);
     await page.goto("/#/tasks");
     await expect(page.locator(".desk-thead-tasks")).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("#task-list > .list-row").first()).toBeVisible({ timeout: 10000 });
     const titles = () => page.locator("#task-list > .list-row strong").allTextContents().then((a) => a.filter((x) => /^Task for/.test(x)));
     await page.locator('.desk-sort[data-sort-key="person"]').click();
     expect(await titles()).toEqual(["Task for A", "Task for Z"]);

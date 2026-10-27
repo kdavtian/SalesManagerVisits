@@ -1,16 +1,17 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, activateDialog, channelDisplayLabel, formatLiters, monthShort, formatDateTime, showToast } from "../util.js";
+import { escapeHtml, formatAmd, activateDialog, channelDisplayLabel, formatLiters, monthShort, formatDateTime, formatDayMonth, showToast } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
 import { ORDER_STATUS_ICONS } from "../ordersSearchEnhancements.js";
 import { loadWithCache } from "../listCache.js";
 import { STATUS_META, orderStatusMeta, openOrderDetailSheet, paymentMethodBadgeHtml, appBadgeHtml } from "../orderDetailSheet.js";
-import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
+import { isDesktop, createDeskTable, renderDeskFilters, openDeskMenu } from "../deskTable.js";
+import { periodDates, periodKeyLabel } from "../periodButtons.js";
 import { dockedKey } from "../dockSheet.js";
 import { availableBulkActions, runBulkAction } from "../orderBulk.js";
 import { openPrintBlankSheet } from "../orderBlankPrint.js";
 import { ACCOUNTING_STATUS_BADGE, accountingStatusLabel } from "../accountingDocSheet.js";
-import { state } from "../state.js";
+import { state, seesAllActivity } from "../state.js";
 
 // Who sees (and can filter by) the accounting-document status -- mirrors
 // canConfirmOrders in the server's roles.js.
@@ -40,6 +41,31 @@ function formatOrderDateHeading(value) {
   return `${d.getDate()} ${month}`;
 }
 
+// Desktop table columns (docs/desktop-roadmap.md, step 2); Customer and Status are the fixed cells. Sorting is the server's
+// (ORDER_SORTS in routes/orders.js), so only the columns it can sort by carry a sort key.
+const ORDER_DESK_COLUMNS = () => [
+  { key: "amount", label: t("desk_col_amount"), width: "120px", narrowWidth: "104px", sort: "amount", align: "end", narrow: true, cell: (o) => formatAmd(Number(o.total_amd)), csv: (o) => Math.round(Number(o.total_amd)) },
+  { key: "code", label: t("desk_col_code"), width: "110px", cell: (o) => o.order_code || "" },
+  { key: "rep", label: t("desk_col_rep"), width: "130px", cell: (o) => o.user_name || "" },
+  { key: "erp_id", label: t("desk_col_id"), width: "84px", cell: (o) => o.erp_customer_id || "" },
+  { key: "channel", label: t("desk_col_channel"), width: "110px", cell: (o) => (o.sales_channel ? channelDisplayLabel(String(o.sales_channel)) : "") },
+  { key: "status_text", label: t("desk_col_status"), width: "120px", sort: "status", cell: (o) => t(orderStatusMeta(o).key) },
+  { key: "payment", label: t("desk_col_payment"), width: "120px", cell: (o) => (o.payment_method ? `${t(o.payment_method === "cash" ? "payment_method_cash" : "payment_method_invoice")}${o.credit_term_days != null ? ` · ${o.credit_term_days}${t("days_short")}` : ""}` : "") },
+  { key: "liters", label: t("desk_col_liters"), width: "90px", align: "end", cell: (o) => (Number(o.total_liters) > 0 ? formatLiters(Number(o.total_liters)) : "") },
+  { key: "created", label: t("desk_col_date"), width: "130px", narrowWidth: "110px", sort: "date", narrow: true, cell: (o) => formatDateTime(o.created_at) },
+  { key: "delivered", label: t("desk_col_delivered"), width: "110px", cell: (o) => (o.status === "delivered" ? formatDayMonth(new Date(o.updated_at)) : "") },
+  { key: "documents", label: t("desk_col_documents"), width: "70px", align: "end", cell: (o) => (o.document_count > 0 ? String(o.document_count) : "") },
+];
+const ORDER_DESK_DEFAULTS = ["amount", "code", "rep", "created"];
+const SERVER_SORTS = new Set(["date", "amount", "customer", "status"]);
+const ORDER_PERIODS = ["today", "week", "month", "last_month"];
+const localToday = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+// "Needs attention": waiting for a price-change / credit approval, or sent back by accounting.
+const needsAttention = (o) => o.approval_status === "pending" || o.credit_status === "pending" || o.accounting_status === "needs_attention";
+
 // How stale the open Orders list may get before it quietly refreshes itself (only while the screen is showing).
 const AUTO_REFRESH_MS = 30000;
 
@@ -63,12 +89,10 @@ export function renderOrders(root, navigate, openId = null) {
         <button type="button" class="icon-btn" id="order-filter-btn" aria-label="${t("filter")}" aria-haspopup="menu" aria-expanded="false" aria-controls="order-filter-menu">${icons.filter}</button>
         <div id="order-filter-menu" class="dropdown-menu" role="menu" hidden></div>
       </div>
-      ${deskHeadHtml("desk-thead-orders", [
-        { items: [{ label: t("desk_col_customer"), key: "customer" }, { label: t("desk_col_date"), key: "date" }] },
-        { items: [{ label: t("desk_col_status"), key: "status" }] },
-        { align: "end", items: [{ label: t("desk_col_amount"), key: "amount" }] },
-      ])}
+      <div class="desk-filters" id="orders-desk-filters"></div>
+      <div class="desk-thead-slot" id="orders-desk-head"></div>
       <div class="card-list" id="orders-list"><p class="loading-state" role="status">${t("loading")}</p></div>
+      <div class="desk-foot-slot" id="orders-desk-foot"></div>
       <div class="orders-select-bar" id="orders-select-bar" hidden>
         <div class="osb-summary">
           <span id="orders-select-count"></span>
@@ -106,6 +130,15 @@ export function renderOrders(root, navigate, openId = null) {
       params.sort = sortKey;
       if (sortReversed) params.reverse = "1";
     }
+    // desktop filter bar: rep and period are the server's (the list is paged)
+    if (repFilter) params.user_id = repFilter;
+    if (periodFilter) {
+      const d = periodDates(periodFilter, localToday());
+      if (d) {
+        params.from = d.from;
+        params.to = d.to;
+      }
+    }
     return params;
   }
 
@@ -118,18 +151,61 @@ export function renderOrders(root, navigate, openId = null) {
   // (confirm, reject, mark delivered, approve a price change / credit) or print their blanks.
   // Desktop column headings (hidden on a phone): a click sorts the WHOLE history on the server (?sort=&reverse=), a
   // second click reverses. "date" is the default and keeps the per-day headings; any other sort is one flat list.
-  const headEl = root.querySelector(".desk-thead-orders");
   let sortKey = "date";
   let sortReversed = false;
-  wireDeskHead(headEl, (key) => {
-    sortReversed = key === sortKey ? !sortReversed : false;
-    sortKey = key;
-    paintDeskHead(headEl, sortKey, sortReversed);
-    load();
-  });
-  paintDeskHead(headEl, sortKey, sortReversed);
   let selectMode = false;
   const selected = new Map(); // id -> order_code
+  let repFilter = "";
+  let periodFilter = "";
+  let paymentFilter = "";
+  let attentionFilter = false;
+  // The desktop table (deskTable.js): its checkboxes feed the same selection the long press on a phone uses, so the
+  // floating action bar (confirm / reject / deliver / print) is the one bulk bar on every device; the foot adds CSV.
+  const table = createDeskTable({
+    pageKey: "orders",
+    root: root.querySelector(".detail-view"),
+    view: root.querySelector(".detail-view"),
+    headSlot: root.querySelector("#orders-desk-head"),
+    listEl: () => root.querySelector("#orders-list"),
+    footSlot: root.querySelector("#orders-desk-foot"),
+    columns: ORDER_DESK_COLUMNS,
+    defaults: ORDER_DESK_DEFAULTS,
+    lead: [
+      { label: t("desk_col_customer"), key: "customer" },
+      { label: t("desk_col_status"), key: "status" },
+    ],
+    leadCols: "minmax(0, 1.8fr) minmax(0, 1.2fr)",
+    rowSelector: ".list-row[data-order-id]",
+    rows: () => visibleOrders,
+    sort: () => ({ key: sortKey, reversed: sortReversed }),
+    onSort: (key) => {
+      if (!SERVER_SORTS.has(key)) return;
+      sortReversed = key === sortKey ? !sortReversed : false;
+      sortKey = key;
+      table.paintSort();
+      load();
+    },
+    dockedPrefix: "order:",
+    csvName: "orders",
+    csvLead: { header: [t("desk_col_customer"), t("desk_col_status")], row: (o) => [o.customer_name, t(orderStatusMeta(o).key)] },
+    selection: {
+      isOn: (id) => selected.has(id),
+      toggle: (id) => {
+        if (selected.has(id)) selected.delete(id);
+        else selected.set(id, orders.find((o) => o.id === id)?.order_code ?? null);
+        selectMode = selected.size > 0 || selectMode;
+        updateSelectBar();
+      },
+      selectAll: (list) => {
+        selectMode = true;
+        for (const o of list) selected.set(o.id, o.order_code ?? null);
+        updateSelectBar();
+      },
+      clear: () => setSelectMode(false),
+      size: () => selected.size,
+    },
+    onRepaint: () => paint(),
+  });
   const printBtn = root.querySelector("#orders-print-btn");
   const selectBar = root.querySelector("#orders-select-bar");
   const actionsEl = root.querySelector("#osb-actions");
@@ -168,6 +244,53 @@ export function renderOrders(root, navigate, openId = null) {
     updateSelectBar();
     paint();
   }
+  // Desktop filter bar: Rep and Period go to the server (listParams), Payment and "Needs attention" narrow the loaded rows.
+  function renderOrdersDeskFilters() {
+    const bar = root.querySelector("#orders-desk-filters");
+    if (!bar || !isDesktop()) return;
+    const reps = new Map(orders.map((o) => [String(o.user_id), o.user_name]));
+    const channels = [...new Set(orders.map((o) => o.sales_channel).filter(Boolean))].sort();
+    const chips = [];
+    if (repFilter) chips.push({ label: reps.get(repFilter) || repLabel || t("desk_col_rep"), onRemove: () => setRep("") });
+    if (channelFilter) chips.push({ label: channelDisplayLabel(channelFilter), onRemove: () => { channelFilter = ""; paint(); } });
+    if (periodFilter) chips.push({ label: periodKeyLabel(periodFilter), onRemove: () => setPeriod("") });
+    if (paymentFilter) chips.push({ label: t(paymentFilter === "cash" ? "payment_method_cash" : "payment_method_invoice"), onRemove: () => { paymentFilter = ""; paint(); } });
+    if (attentionFilter) chips.push({ label: t("desk_needs_attention"), onRemove: () => { attentionFilter = false; paint(); } });
+    if (accountingFilter) chips.push({ label: accountingFilter === "none" ? t("acc_filter_none") : accountingFilter === "waybill_created" ? t("acc_status_document_created") : t(`acc_status_${accountingFilter}`), onRemove: () => { accountingFilter = ""; paint(); } });
+    const pick = (btn, options, current, onPick) => openDeskMenu(btn, options, current, onPick);
+    const groups = [
+      ...(seesAll
+        ? [{ key: "rep", label: t("desk_col_rep"), active: Boolean(repFilter), onClick: (btn) => pick(btn, [{ value: "", label: t("filter_all") }, ...[...reps.entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([value, label]) => ({ value, label }))], repFilter, (v) => setRep(v, reps.get(v))) }]
+        : []),
+      { key: "channel", label: t("desk_col_channel"), active: Boolean(channelFilter), onClick: (btn) => pick(btn, [{ value: "", label: t("all_channels") }, ...channels.map((c) => ({ value: c, label: channelDisplayLabel(c) }))], channelFilter, (v) => { channelFilter = v; paint(); }) },
+      { key: "period", label: t("desk_period"), active: Boolean(periodFilter), onClick: (btn) => pick(btn, [{ value: "", label: t("desk_period_all") }, ...ORDER_PERIODS.map((k) => ({ value: k, label: periodKeyLabel(k) }))], periodFilter, setPeriod) },
+      { key: "payment", label: t("desk_col_payment"), active: Boolean(paymentFilter), onClick: (btn) => pick(btn, [{ value: "", label: t("filter_all") }, { value: "cash", label: t("payment_method_cash") }, { value: "invoice", label: t("payment_method_invoice") }], paymentFilter, (v) => { paymentFilter = v; paint(); }) },
+      { key: "attention", label: t("desk_needs_attention"), active: attentionFilter, onClick: () => { attentionFilter = !attentionFilter; paint(); } },
+    ];
+    renderDeskFilters(bar, {
+      groups,
+      chips,
+      onClear: () => {
+        channelFilter = "";
+        paymentFilter = "";
+        attentionFilter = false;
+        accountingFilter = "";
+        repFilter = "";
+        periodFilter = "";
+        load();
+      },
+    });
+  }
+  let repLabel = "";
+  function setRep(value, label = "") {
+    repFilter = value;
+    repLabel = label;
+    load();
+  }
+  function setPeriod(value) {
+    periodFilter = value;
+    load();
+  }
   async function startBulk(action) {
     if (bulkBusy) return;
     if (action.needsNote && !rejectPending) {
@@ -199,6 +322,7 @@ export function renderOrders(root, navigate, openId = null) {
   });
   let visibleOrders = [];
   let suppressClickUntil = 0;
+  const seesAll = seesAllActivity();
 
   let activeStatus = DEFAULT_STATUS_FILTER;
   let channelFilter = "";
@@ -364,6 +488,8 @@ export function renderOrders(root, navigate, openId = null) {
     let filtered = orders;
     if (channelFilter) filtered = filtered.filter((o) => o.sales_channel === channelFilter);
     if (accountingFilter) filtered = filtered.filter((o) => (accountingFilter === "none" ? !o.accounting_status : o.accounting_status === accountingFilter));
+    if (paymentFilter) filtered = filtered.filter((o) => o.payment_method === paymentFilter);
+    if (attentionFilter) filtered = filtered.filter(needsAttention);
     if (search) {
       filtered = filtered.filter((o) => {
         const haystack = [o.customer_name, o.order_code, o.user_name, o.sales_channel, formatDate(o.created_at)]
@@ -375,10 +501,14 @@ export function renderOrders(root, navigate, openId = null) {
     }
 
     visibleOrders = filtered;
+    renderOrdersDeskFilters();
+    table.renderFoot(filtered.length);
     if (!filtered.length) {
       listEl.innerHTML = `<p class="empty-state">${t("no_orders_found")}</p>`;
       return;
     }
+    // on a desktop window the checkbox column selects; the phone's long press swaps the icon for a check box
+    const phoneSelect = selectMode && !isDesktop();
 
     // Grouped by the order's own calendar day (not the whole filtered
     // list's range) -- each day's header row totals just that day's
@@ -415,8 +545,9 @@ export function renderOrders(root, navigate, openId = null) {
         }
         return `${dateHeading}
         <button class="card list-row${selectMode && selected.has(o.id) ? " order-row-selected" : ""}${dockedKey() === `order:${o.id}` ? " row-open" : ""}" data-order-id="${o.id}">
+          ${table.checkHtml(o)}
           ${
-            selectMode
+            phoneSelect
               ? `<span class="list-row-icon order-select-slot" aria-hidden="true"><span class="order-select-check${selected.has(o.id) ? " is-on" : ""}"></span></span>`
               : `<span class="list-row-icon order-tile order-tile-${o.status}" aria-hidden="true">${ORDER_STATUS_ICONS[o.status] ?? ""}</span>`
           }
@@ -435,17 +566,19 @@ export function renderOrders(root, navigate, openId = null) {
               ${o.document_count > 0 ? `<span class="badge badge-neutral">&#128206; ${o.document_count}</span>` : ""}
             </div>
           </div>
+          ${table.cellsHtml(o)}
           <span class="chevron">&#8250;</span>
         </button>
       `;
       })
       .join("");
+    table.paintSelection();
 
     // Loading more only makes sense against the unfiltered server order --
     // once a client-side search or channel filter narrows what's shown,
     // there's no "next page" of that search to fetch, only of the whole
     // list.
-    if (hasMore && !search && !channelFilter && !accountingFilter) {
+    if (hasMore && !search && !channelFilter && !accountingFilter && !paymentFilter && !attentionFilter) {
       listEl.insertAdjacentHTML("beforeend", `<button type="button" class="btn btn-block" id="orders-load-more">${t("load_more")}</button>`);
       listEl.querySelector("#orders-load-more").addEventListener("click", loadMore);
     }
@@ -489,7 +622,8 @@ export function renderOrders(root, navigate, openId = null) {
       row.addEventListener("contextmenu", (e) => e.preventDefault());
       row.addEventListener("click", () => {
         if (Date.now() < suppressClickUntil) return;
-        if (!selectMode) return openOrderDetailSheet(id, { onChanged: load, navigate });
+        // on a desktop window the checkbox column selects, a click on the row always opens it
+        if (!selectMode || isDesktop()) return openOrderDetailSheet(id, { onChanged: load, navigate });
         toggle();
       });
     });
@@ -576,6 +710,7 @@ export function renderOrders(root, navigate, openId = null) {
     search("");
   }
 
+  table.renderHead();
   load();
   // A notification (or any link) for ONE order: #/orders?open=<id> opens that order's sheet on top of the list.
   if (openId && /^\d+$/.test(String(openId))) openOrderDetailSheet(Number(openId), { onChanged: load, navigate });
@@ -585,6 +720,7 @@ export function renderOrders(root, navigate, openId = null) {
     document.removeEventListener("visibilitychange", onVisible);
     window.removeEventListener("orders-changed", onOrdersChanged);
     window.removeEventListener("docked-change", onDockedChange);
+    table.destroy();
   };
   cleanup.onRestore = () => refreshIfStale(0);
   return cleanup;

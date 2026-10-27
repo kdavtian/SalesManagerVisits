@@ -1,12 +1,13 @@
 import { api } from "../api.js";
-import { escapeHtml, formatDistance, formatAmd, categoryIcon, customerIconTint, formatDayMonth } from "../util.js";
+import { escapeHtml, formatDistance, formatAmd, categoryIcon, customerIconTint, formatDayMonth, formatDateTime, formatDuration, regionLabelHy } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { seesAllActivity } from "../state.js";
 import { openVisitDetailSheet } from "../visitDetail.js";
 import { loadWithCache } from "../listCache.js";
 import { FILTER_ICONS } from "../filterIcons.js";
 import { icons } from "../icons.js";
-import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
+import { isDesktop, createDeskTable, renderDeskFilters, openDeskMenu } from "../deskTable.js";
+import { dockedKey } from "../dockSheet.js";
 import { periodLabel, periodKey, periodAria, tapPeriod } from "../periodButtons.js";
 
 const OUTCOMES = [
@@ -83,6 +84,20 @@ function formatActivityDate(iso) {
   return `${formatDayMonth(d, { year: true })}, ${time}`;
 }
 
+// Desktop table columns (docs/desktop-roadmap.md, step 2); Customer and Result are the fixed cells.
+const visitDuration = (c) => (c.ended_at ? formatDuration(Math.max(0, Math.round((new Date(c.ended_at) - new Date(c.timestamp)) / 60000))) : "");
+const ACTIVITY_DESK_COLUMNS = () => [
+  { key: "date", label: t("desk_col_date"), width: "130px", narrowWidth: "110px", sort: "date", narrow: true, cell: (c) => formatDateTime(c.timestamp) },
+  { key: "rep", label: t("desk_col_rep"), width: "130px", sort: "manager", cell: (c) => c.user_name || "" },
+  { key: "status", label: t("desk_col_status"), width: "100px", cell: (c) => statusLabel(checkinStatus(c)) },
+  { key: "collected", label: t("desk_col_cash"), width: "110px", narrowWidth: "110px", align: "end", narrow: true, cell: (c) => (c.amount_collected_amd != null ? formatAmd(Number(c.amount_collected_amd)) : ""), csv: (c) => (c.amount_collected_amd != null ? Math.round(Number(c.amount_collected_amd)) : "") },
+  { key: "duration", label: t("desk_col_duration"), width: "90px", cell: visitDuration },
+  { key: "distance", label: t("desk_col_distance"), width: "90px", align: "end", cell: (c) => formatDistance(c.distance_meters) },
+  { key: "region", label: t("region"), width: "120px", cell: (c) => (c.customer_region ? regionLabelHy(c.customer_region) : "") },
+];
+const ACTIVITY_DESK_DEFAULTS = ["date", "rep", "status", "collected"];
+const statusLabel = (status) => (status === "verified" ? t("verified") : status === "pending" ? t("status_pending") : t("status_rejected"));
+
 export function renderActivity(root, navigate) {
   root.innerHTML = `<div class="activity-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".activity-view");
@@ -101,6 +116,56 @@ export function renderActivity(root, navigate) {
   let openDropdown = null;
 
   const filters = { search: "", manager: "", status: "", outcome: "" };
+
+  // The desktop table (deskTable.js): the shell is rebuilt on every filter change, so the slots are looked up each time.
+  const table = createDeskTable({
+    pageKey: "activity",
+    root: container,
+    view: container,
+    headSlot: () => container.querySelector("#activity-desk-head"),
+    listEl: () => container.querySelector("#activity-list"),
+    footSlot: () => container.querySelector("#activity-desk-foot"),
+    columns: ACTIVITY_DESK_COLUMNS,
+    defaults: ACTIVITY_DESK_DEFAULTS,
+    lead: [{ label: t("desk_col_customer") }, { label: t("desk_col_result") }],
+    leadCols: "minmax(0, 1.5fr) minmax(0, 1.8fr)",
+    rowSelector: ".list-row[data-checkin-id]",
+    rows: () => applyFilters(),
+    sort: () => ({ key: sortMode === "manager" ? "manager" : "date", reversed: sortMode === "oldest" }),
+    onSort: (key) => {
+      sortMode = key === "manager" ? "manager" : sortMode === "newest" ? "oldest" : "newest";
+      openDropdown = null;
+      visibleCount = PAGE_SIZE;
+      renderShell();
+    },
+    dockedPrefix: "visit:",
+    csvName: "visits",
+    csvLead: { header: [t("desk_col_customer"), t("desk_col_result")], row: (c) => [c.customer_name, outcomeSummary(c)] },
+    onRepaint: () => renderList(),
+  });
+  // Desktop filter bar: Status and Outcome as labelled dropdowns, chips of what is on, Clear. Reps are the pills above.
+  function renderActivityDeskFilters() {
+    const bar = container.querySelector("#activity-desk-filters");
+    if (!bar || !isDesktop()) return;
+    const chips = [];
+    if (filters.status) chips.push({ label: statusLabel(filters.status), onRemove: () => { filters.status = ""; renderShell(); } });
+    if (filters.outcome) chips.push({ label: t(`outcome_${filters.outcome}`), onRemove: () => { filters.outcome = ""; renderShell(); } });
+    if (filters.manager) chips.push({ label: managerOptions().find(([id]) => String(id) === filters.manager)?.[1] || t("desk_col_rep"), onRemove: () => { filters.manager = ""; renderShell(); } });
+    renderDeskFilters(bar, {
+      groups: [
+        { key: "status", label: t("desk_col_status"), active: Boolean(filters.status), onClick: (btn) => openDeskMenu(btn, STATUS_OPTIONS, filters.status, (v) => { filters.status = v; visibleCount = PAGE_SIZE; renderShell(); }) },
+        { key: "outcome", label: t("desk_col_result"), active: Boolean(filters.outcome), onClick: (btn) => openDeskMenu(btn, OUTCOME_OPTIONS, filters.outcome, (v) => { filters.outcome = v; visibleCount = PAGE_SIZE; renderShell(); }) },
+      ],
+      chips,
+      onClear: () => {
+        filters.status = "";
+        filters.outcome = "";
+        filters.manager = "";
+        visibleCount = PAGE_SIZE;
+        renderShell();
+      },
+    });
+  }
 
   const STATUS_OPTIONS = [
     { value: "", label: t("all_status") },
@@ -285,25 +350,16 @@ export function renderActivity(root, navigate) {
         </div>
       </div>
 
+      <div class="desk-filters" id="activity-desk-filters"></div>
       <div class="activity-count" id="activity-count"></div>
-      ${deskHeadHtml("desk-thead-activity", [
-        { items: [{ label: t("desk_col_customer") }, { label: t("desk_col_rep"), key: "manager" }, { label: t("desk_col_date"), key: "date" }] },
-        { items: [{ label: t("desk_col_result") }] },
-        { align: "end", items: [] },
-      ])}
+      <div class="desk-thead-slot" id="activity-desk-head"></div>
       <div class="card-list" id="activity-list"></div>
+      <div class="desk-foot-slot" id="activity-desk-foot"></div>
       <button class="btn btn-block" id="activity-load-more" hidden>${t("load_more")}</button>
     `;
 
-    // Desktop column headings (hidden on a phone): the same choices as the sort icon. Date flips newest <-> oldest.
-    const deskHead = container.querySelector(".desk-thead-activity");
-    paintDeskHead(deskHead, sortMode === "manager" ? "manager" : "date", sortMode === "oldest");
-    wireDeskHead(deskHead, (key) => {
-      sortMode = key === "manager" ? "manager" : sortMode === "newest" ? "oldest" : "newest";
-      openDropdown = null;
-      visibleCount = PAGE_SIZE;
-      renderShell();
-    });
+    table.renderHead();
+    renderActivityDeskFilters();
 
     container.querySelectorAll("#activity-manager-bar .stat-pill").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -425,6 +481,7 @@ export function renderActivity(root, navigate) {
     const filtered = applyFilters();
 
     countEl.textContent = `${filtered.length} ${t("visits_count")}`;
+    table.renderFoot(filtered.length);
 
     if (!filtered.length) {
       listEl.innerHTML = `<p class="empty-state">${t("no_activity_found")}</p>`;
@@ -446,7 +503,7 @@ export function renderActivity(root, navigate) {
           managerHeading = `<div class="activity-manager-group-heading">${escapeHtml(c.user_name)}</div>`;
         }
         return `${managerHeading}
-        <div class="card list-row" tabindex="0" role="button" data-checkin-id="${c.id}">
+        <div class="card list-row${dockedKey() === `visit:${c.id}` ? " row-open" : ""}" tabindex="0" role="button" data-checkin-id="${c.id}">
           <button type="button" class="list-row-icon list-row-icon-glyph-only list-row-icon-${customerIconTint(c.customer_tier)}" data-customer-id="${c.customer_id}" aria-label="${escapeHtml(c.customer_name)}" title="${escapeHtml(c.customer_name)}">
             ${categoryIcon(c.customer_category)}
           </button>
@@ -464,6 +521,7 @@ export function renderActivity(root, navigate) {
               ${c.amount_collected_amd != null ? `<span class="text-amount">${formatAmd(Number(c.amount_collected_amd))}</span>` : ""}
             </div>
           </div>
+          ${table.cellsHtml(c)}
           <span class="chevron">&#8250;</span>
         </div>`;
       })
@@ -551,9 +609,22 @@ export function renderActivity(root, navigate) {
     }
   }
 
+  // The visit docked beside the list (>= 1400 px): its row is highlighted.
+  const onDockedChange = () => {
+    const key = dockedKey();
+    container.querySelectorAll("#activity-list [data-checkin-id]").forEach((row) => {
+      const open = key === `visit:${row.dataset.checkinId}`;
+      if (row.classList.contains("row-open") !== open) row.classList.toggle("row-open", open);
+    });
+  };
+  window.addEventListener("docked-change", onDockedChange);
+
   load();
   // Back to this screen (app.js back-cache): a visit or order saved on the screen in between shows up without a manual refresh.
-  const cleanup = () => {};
+  const cleanup = () => {
+    window.removeEventListener("docked-change", onDockedChange);
+    table.destroy();
+  };
   cleanup.onRestore = () => container.isConnected && load({ silent: true });
   return cleanup;
 }
