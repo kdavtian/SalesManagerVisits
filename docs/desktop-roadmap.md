@@ -165,4 +165,4 @@ Issues found (I = issue, each has its fix in the steps below):
 - Step 1 (table engine + Customers page): 1.441.0, PR #479, 2026-10-27.
 - Step 2 (Orders + Activity + Tasks on the engine): 1.442.0, PR #480, 2026-10-27.
 - Step 3 (customer card in three columns): 1.443.0, PR #481, 2026-10-27.
-- Step 4 (top bar search + quick actions + keyboard): 1.444.0, PR #482, 2026-10-27.
+- Step 4 (top bar search + quick actions + keyboard): 1.444.0, PR #483, 2026-10-27.
