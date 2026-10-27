@@ -244,6 +244,10 @@ export async function renderDashboard(root, navigate) {
     </div>`
     }
 
+    ${
+      // desktop management: the numbers first, across the full width (hidden on phones)
+      KPI_ROLES.includes(state.user.role) ? `<div class="home-kpis" id="home-kpis" hidden></div>` : ""
+    }
     <div id="tasks-home-slot"></div>
     ${
       state.user.role === "admin" || state.user.role === "ceo" || state.user.role === "operations_director"
@@ -289,7 +293,6 @@ export async function renderDashboard(root, navigate) {
       }
     </div>
 
-    ${KPI_ROLES.includes(state.user.role) ? `<div class="home-kpis" id="home-kpis" hidden></div>` : ""}
 
     <div class="home-quick-actions${KPI_ROLES.includes(state.user.role) ? " home-quick-actions-kpi" : ""}">
     <h2 class="section-title section-title-tight">${t("quick_actions")}</h2>

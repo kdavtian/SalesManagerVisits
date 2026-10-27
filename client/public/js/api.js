@@ -310,6 +310,7 @@ export const api = {
   vaghinakRunNow: () => json("/vaghinak/run-now", "POST", {}),
   dashboardSummary: () => request("/dashboard/summary"),
   dashboardKpis: () => request("/dashboard/kpis"),
+  dashboardToday: () => request("/dashboard/today"),
   dashboardTrends: () => request("/dashboard/trends"),
   getRepProgress: (period) => request(`/dashboard/rep-progress?period=${encodeURIComponent(period)}`),
   closeOutMonth: (month) => json("/dashboard/points/close-out", "POST", { month }),

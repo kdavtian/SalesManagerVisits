@@ -409,3 +409,8 @@ Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets 
   { inPane: true })` draws the report). Lesson: the app's back-cache files a screen under `lastRenderedHash`; when a screen changes
   its own address while drawing, use `navigate.rewrite(hash)` (renames, no redraw) -- `history.replaceState` or
   `navigate.replace` mid-render leaves a stale copy filed under the old address that Back / the next visit restores.
+- **Desktop step 7 (1.447.0):** management Home on a desktop = 5 KPI tiles in one row, then "Needs attention" (link rows) beside
+  "Today" (`GET /api/dashboard/today`: plan vs visits per rep + today's visits on a small map). Team performance, Company dashboard
+  and Cashflow use 2-4 columns above 1400 px. Lesson: Home repaints twice (cache, then live) into a NEW slot each time -- keep a
+  heavy child (a Leaflet map) as one module-level element and move it into the new slot (`replaceWith`) instead of rebuilding it;
+  call `invalidateSize()` after the move.

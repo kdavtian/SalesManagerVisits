@@ -1,7 +1,7 @@
 // The desktop Home KPI tiles (owner, 2026-10-25): management-only, numbers match the data behind them.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startTestServer, stopTestServer, cleanupAll, createUser, apiRequest, loginAs } from "./helpers.js";
+import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, trackCheckin, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
 import { computeKpis } from "../../src/dashboardKpis.js";
 
@@ -42,4 +42,25 @@ test("sales of the month and of the same days of last month come from the workbo
   assert.equal(k.sales.mtd_amd - before.sales.mtd_amd, 1000000);
   assert.equal(k.sales.prev_mtd_amd - before.sales.prev_mtd_amd, 400000);
   assert.equal(k.sales.prev_month_amd - before.sales.prev_month_amd, 1300000);
+});
+
+// Desktop Home "Today" (step 7): management only; each active field rep with plan vs visits today, and today's visits for the map.
+test("Today: management only, the rep's visit today is counted and mapped", async () => {
+  assert.equal((await apiRequest("/api/dashboard/today", { cookie: repCookie })).status, 403);
+  const shop = await createCustomer({ created_by: admin.id, assigned_manager_id: rep.id, lat: 40.2, lng: 44.5 });
+  const { rows } = await pool.query(
+    "INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range) VALUES ($1, $2, 40.2, 44.5, 3, true) RETURNING id",
+    [shop.id, rep.id]
+  );
+  trackCheckin(rows[0].id);
+  const res = await apiRequest("/api/dashboard/today", { cookie: adminCookie });
+  assert.equal(res.status, 200);
+  const mine = res.data.reps.find((r) => r.user_id === rep.id);
+  assert.equal(mine.visited, 1);
+  assert.equal(mine.planned, 0);
+  assert.ok(mine.first_at);
+  assert.ok(!res.data.reps.some((r) => r.user_id === admin.id), "only field reps are listed");
+  const v = res.data.visits.find((x) => x.customer_id === shop.id);
+  assert.equal(v.user_id, rep.id);
+  assert.equal(Number(v.lat), 40.2);
 });

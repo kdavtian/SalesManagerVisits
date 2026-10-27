@@ -466,7 +466,7 @@ async function renderManagementView(root, navigate, managerId, initialTab = null
       </div>
       ${scopedNote}
       ${managerId == null && channels.length ? aggregateBarHtml(channels) : ""}
-      ${channels.map(channelCardHtml).join("")}
+      <div class="perf-channel-grid">${channels.map(channelCardHtml).join("")}</div>
     `;
     wireDrilldowns(bodyEl);
     wireNeedsAttention(bodyEl);

@@ -1082,7 +1082,7 @@
   .home-kpis:not([hidden]) { display: block; margin-top: 4px; }
   /* the sidebar already lists every action: management's Home shows numbers there instead */
   .home-quick-actions-kpi { display: none; }
-  .home-kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+  .home-kpi-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
   .home-kpi { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; text-decoration: none; color: inherit; transition: box-shadow 0.15s ease, border-color 0.15s ease; }
   .home-kpi:hover { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); border-color: var(--accent); }
   .home-kpi:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
@@ -1092,6 +1092,49 @@
   .home-kpi-warn { border-color: var(--warning, #f59e0b); }
   .home-kpi-bar { display: block; height: 4px; border-radius: 2px; background: var(--border); margin-top: 6px; overflow: hidden; }
   .home-kpi-bar > span { display: block; height: 100%; background: var(--accent); }
+  .home-kpi-value { overflow-wrap: anywhere; }
+
+  /* Step 7: numbers across the full width, then "Needs attention" | "Today" side by side; the rest of Home flows in two columns below */
+  .dashboard-grid > .home-kpis { column-span: all; margin-bottom: 16px; }
+  .home-desk-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 12px; margin-top: 12px; align-items: start; }
+  .home-col { padding: 14px 16px; margin: 0; min-width: 0; }
+  .home-col-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .home-col-title { font-size: 1rem; font-weight: 700; margin: 0 0 8px; }
+  .home-col-link { font-size: 0.85rem; white-space: nowrap; }
+  .home-att-clear { margin: 0 0 8px; font-size: 0.85rem; }
+  .home-att-list { display: flex; flex-direction: column; }
+  .home-att-row { display: grid; grid-template-columns: 56px minmax(0, 1fr) 16px; align-items: center; gap: 10px; min-height: 52px; padding: 6px 4px; border-top: 1px solid var(--border); color: inherit; text-decoration: none; border-radius: 8px; }
+  .home-att-row:first-child { border-top: 0; }
+  .home-att-row:hover { background: var(--bg-hover, rgba(0, 0, 0, 0.04)); }
+  .home-att-row:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+  .home-att-count { font-size: 1.35rem; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+  .home-att-row.is-warn .home-att-count { color: var(--danger, #d6403f); }
+  .home-att-row.is-clear { opacity: 0.55; }
+  .home-att-text { display: flex; flex-direction: column; min-width: 0; }
+  .home-att-label { font-weight: 600; font-size: 0.92rem; }
+  .home-att-sub { font-size: 0.8rem; overflow-wrap: anywhere; }
+  .home-att-chevron { color: var(--text-dim); display: flex; }
+  .home-att-chevron svg { width: 16px; height: 16px; }
+  .home-today-team { margin: 0 0 6px; font-size: 0.85rem; }
+  .home-today-reps { display: flex; flex-direction: column; max-height: 264px; overflow-y: auto; }
+  .home-rep-row { display: grid; grid-template-columns: 10px minmax(0, 1.4fr) minmax(60px, 1fr) 64px 70px; align-items: center; gap: 10px; min-height: 44px; padding: 0 4px; color: inherit; text-decoration: none; border-radius: 8px; }
+  .home-rep-row:hover { background: var(--bg-hover, rgba(0, 0, 0, 0.04)); }
+  .home-rep-row:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+  .home-rep-row.is-idle { opacity: 0.6; }
+  .home-rep-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .home-rep-name { font-weight: 600; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .home-rep-bar { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+  .home-rep-bar > span { display: block; height: 100%; background: var(--success, #1a7f37); }
+  .home-rep-num { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .home-rep-since { font-size: 0.78rem; text-align: right; white-space: nowrap; }
+  .home-today-map { margin-top: 10px; }
+  .home-today-map-canvas { height: 220px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+  .home-today-map-canvas[hidden] { display: none; }
+  .home-today-map-empty { margin: 4px 0 0; font-size: 0.85rem; }
+}
+@media (min-width: 1024px) and (max-width: 1279px) {
+  /* a narrow window: the two columns stack so the per-rep rows keep their numbers readable */
+  .home-desk-cols { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ---------- 8. Sales and Payments as tables (owner, 2026-10-25), same look as Debt balances ---------- */
@@ -1804,4 +1847,27 @@
     break-inside: avoid;
     box-shadow: none;
   }
+}
+
+/* ---------- Step 7: dashboards use the width (owner roadmap, 2026-10-27) ----------
+   Above 1400 px Team performance puts its channel cards in a grid, the Company dashboard puts sales on the left and the
+   prospects / stock / brand volume on the right, and Cashflow keeps accounts and categories in a side column beside the movements. */
+@media (min-width: 1400px) {
+  .perf-channel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 12px; align-items: start; }
+  .perf-channel-grid > .card { margin: 0; }
+  .perf-aggregate-card { margin-bottom: 12px; }
+
+  .company-dashboard-view { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); column-gap: 24px; align-items: start; }
+  .company-dashboard-view > .detail-header,
+  .company-dashboard-view > .company-dashboard-period-tabs { grid-column: 1 / -1; }
+  .company-dashboard-view > #company-dashboard-sales,
+  .company-dashboard-view > .company-dashboard-side { min-width: 0; }
+  #company-dashboard-sales .card-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); padding-left: 0; padding-right: 0; }
+  #company-dashboard-rest .card-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding-left: 0; padding-right: 0; }
+
+  .cf-body { display: grid; grid-template-columns: minmax(320px, 420px) minmax(0, 1fr); gap: 24px; align-items: start; }
+  .cf-side { min-width: 0; }
+  .cf-side .cf-accounts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+  .cf-main { min-width: 0; }
+  .cf-main .cf-search { margin-left: 0; margin-right: 0; }
 }

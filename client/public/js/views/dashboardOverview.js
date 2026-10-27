@@ -96,8 +96,10 @@ export async function renderDashboardOverview(root, navigate) {
         ).join("")}
       </div>
       <div id="company-dashboard-sales"><p class="loading-state" role="status">${t("loading")}</p></div>
-      <div id="company-dashboard-prospects"></div>
-      <div id="company-dashboard-rest"><p class="loading-state" role="status">${t("loading")}</p></div>
+      <div class="company-dashboard-side">
+        <div id="company-dashboard-prospects"></div>
+        <div id="company-dashboard-rest"><p class="loading-state" role="status">${t("loading")}</p></div>
+      </div>
     </div>
   `;
   const container = root.querySelector(".detail-view");
