@@ -64,9 +64,9 @@ test("desktop review", async ({ page, fixtures }) => {
     await page.goto("/#/customers");
     await page.waitForTimeout(1500);
     await page.screenshot({ path: `${SHOTS}/desk-customers.png` });
-    await page.locator("#toggle-debt-btn").click();
-    await page.waitForTimeout(1500);
-    await expect(page.locator(".customer-desk-debt-owes").first()).toBeVisible();
+    // the Debt column is on by default on a desktop window (deskTable.js column set), so the toggle already reads "on"
+    await expect(page.locator("#toggle-debt-btn")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".desk-cell-debt:not(:empty)").first()).toBeVisible({ timeout: 10000 });
     await page.screenshot({ path: `${SHOTS}/desk-customers-debt.png` });
   } finally {
     for (const id of made) {

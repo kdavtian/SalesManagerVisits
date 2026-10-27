@@ -15823,7 +15823,7 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 .payment-delete-box input { width: 100%; box-sizing: border-box; }
 
 /* the separate debt cell of the desktop Customers table is only for a desktop window */
-.customer-desk-debt, .desk-th-debt { display: none; }
+.desk-th-debt { display: none; }
 
 /* Vaghinak -> Expenses: seven month bars (this month at the end) */
 .exp-bars { display: flex; align-items: flex-end; gap: 8px; height: 96px; margin: 12px 0 8px; }
