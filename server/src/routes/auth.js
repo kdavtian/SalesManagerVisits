@@ -90,7 +90,7 @@ export const meRouter = Router();
 
 meRouter.get("/", requireAuth, async (req, res) => {
   const { rows } = await pool.query(
-    "SELECT id, email, name, role, position, phone, avatar_path IS NOT NULL AS has_avatar, signature_path IS NOT NULL AS has_signature, created_at FROM users WHERE id = $1",
+    "SELECT id, email, name, role, role_title, position, phone, avatar_path IS NOT NULL AS has_avatar, signature_path IS NOT NULL AS has_signature, created_at FROM users WHERE id = $1",
     [req.user.id]
   );
   if (!rows[0]) {

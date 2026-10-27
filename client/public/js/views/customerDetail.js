@@ -571,7 +571,7 @@ function statTilesHtml({ customer, salesThisMonth, debtText, debtDanger, debtSub
   return `
     <div class="detail-stat-grid">
       ${tile("sales", icons.cart, formatAmd(salesThisMonth), t("sales_this_month"))}
-      ${tile("debt", icons.payment, debtText, t("outstanding_debt"), { danger: debtDanger, sub: debtSub, chip: debtChip })}
+      ${tile("debt", icons.payment, debtText, t("outstanding_debt"), { danger: debtDanger, sub: [debtSub, lastPaymentLine(customer)].filter(Boolean).join("<br />"), chip: debtChip })}
       ${tile("last-order", icons.box, lastOrderDate ? escapeHtml(lastOrderDate) : "—", t("last_order"), { disabled: !lastOrderDate })}
       ${
         // A customer that is never visited (10001, 10002 ...: KF/CAS/CVO/PCO/OEM channels): "Last visit" means nothing there, so the tile shows
@@ -585,6 +585,16 @@ function statTilesHtml({ customer, salesThisMonth, debtText, debtDanger, debtSub
       }
     </div>
   `;
+}
+
+// "Last payment: 24 Oct 2026 · 199,700" under the debt (owner, 2026-10-27): payment habit next to the debt on every card. A customer that is
+// never visited already shows it in its own tile, so not twice.
+function lastPaymentLine(customer) {
+  if (customer.requires_visit === false) return "";
+  const date = lastPaymentDate(customer);
+  if (!date) return "";
+  const amount = customer.last_payment?.amount_amd ? ` · ${formatAmd(customer.last_payment.amount_amd)}` : "";
+  return `${t("last_payment")}${labelColon()}${escapeHtml(date)}${amount}`;
 }
 
 function lastPaymentDate(customer) {

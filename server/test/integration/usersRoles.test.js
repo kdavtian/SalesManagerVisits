@@ -186,3 +186,33 @@ test("PATCH /api/users/:id/password: an admin resetting a user's password bumps 
   const afterReset = await apiRequest("/api/me", { cookie: targetCookieBefore });
   assert.equal(afterReset.status, 401, "the old session cookie must be invalidated by the reset");
 });
+
+// Owner, 2026-10-27: "Lilit - new role, with the same permissions as the accountant".
+test("Financial director: its own role name, the accountant's permissions underneath; role change in and out", async () => {
+  const { pool } = await import("../../src/db/pool.js");
+  const email = `itest-findir-${Date.now()}@kadmotors.local`;
+  const created = await apiRequest("/api/users", {
+    method: "POST",
+    cookie: cookies.admin,
+    body: { email, password: "a-valid-password", name: "ITest Financial Director", role: "financial_director" },
+  });
+  try {
+    assert.equal(created.status, 201, JSON.stringify(created.data));
+    assert.deepEqual([created.data.role, created.data.role_title], ["accountant", "financial_director"]);
+    const listed = (await apiRequest("/api/users", { cookie: cookies.admin })).data.find((u) => u.id === created.data.id);
+    assert.equal(listed.role_title, "financial_director");
+    // the same doors as the accountant: Cashflow edits yes, admin-only no
+    const cookie = await loginAs(email, "a-valid-password");
+    assert.equal((await apiRequest("/api/cashflow/meta", { cookie })).data.can_edit, true);
+    assert.equal((await apiRequest("/api/users", { cookie })).status, 403);
+    const me = (await apiRequest("/api/me", { cookie })).data;
+    assert.deepEqual([me.role, me.role_title], ["accountant", "financial_director"]);
+    // back to a plain role clears the name; and in again
+    const plain = await apiRequest(`/api/users/${created.data.id}/role`, { method: "PATCH", cookie: cookies.admin, body: { role: "accountant" } });
+    assert.deepEqual([plain.data.role, plain.data.role_title], ["accountant", null]);
+    const again = await apiRequest(`/api/users/${created.data.id}/role`, { method: "PATCH", cookie: cookies.admin, body: { role: "financial_director" } });
+    assert.deepEqual([again.data.role, again.data.role_title], ["accountant", "financial_director"]);
+  } finally {
+    if (created.data?.id) await pool.query("DELETE FROM users WHERE id = $1", [created.data.id]);
+  }
+});

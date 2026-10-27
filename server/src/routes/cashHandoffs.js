@@ -414,8 +414,8 @@ cashHandoffsRouter.post("/:id/reject", async (req, res) => {
 });
 
 const HANDOFF_SELECT = `
-  SELECT h.*, fu.name AS from_user_name, fu.role AS from_user_role,
-         tu.name AS to_user_name, tu.role AS to_user_role,
+  SELECT h.*, fu.name AS from_user_name, COALESCE(fu.role_title, fu.role) AS from_user_role,
+         tu.name AS to_user_name, COALESCE(tu.role_title, tu.role) AS to_user_role,
          sb.name AS submitted_by_name, cb.name AS confirmed_by_name, rb.name AS rejected_by_name,
          (SELECT count(*)::int FROM cash_handoff_items i WHERE i.handoff_id = h.id) AS item_count
   FROM cash_handoffs h

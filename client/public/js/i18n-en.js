@@ -2153,6 +2153,7 @@ export default {
     role_warehouse_manager: "Warehouse Manager",
     role_delivery_manager: "Delivery Manager",
     role_accountant: "Accountant",
+    role_financial_director: "Financial Director",
     position: "Position",
     position_placeholder: "e.g. SM Davtashen",
     team_locations: "Team",

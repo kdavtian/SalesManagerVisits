@@ -20,12 +20,16 @@ const ROLE_BADGE = {
   warehouse_manager: { key: "role_warehouse_manager", cls: "badge-info", tint: "info" },
   delivery_manager: { key: "role_delivery_manager", cls: "badge-info", tint: "info" },
   accountant: { key: "role_accountant", cls: "badge-info", tint: "info" },
+  // Shown as its own role; the account carries the accountant's permissions (server roles.js ROLE_TITLES, owner 2026-10-27).
+  financial_director: { key: "role_financial_director", cls: "badge-accent", tint: "warning" },
 };
+// The role a person is shown with: their role name (Financial director) when they have one, else their role.
+const shownRole = (u) => u.role_title || u.role;
 
 // One shared option list for every role <select> in this file (new-user
 // creation, change-role) -- so adding a role (see ROLE_BADGE above) only
 // ever needs to happen in one place, not once per form.
-const ROLE_OPTIONS = ["sales_manager", "sales_director", "warehouse_manager", "delivery_manager", "accountant", "ceo", "operations_director", "admin"];
+const ROLE_OPTIONS = ["sales_manager", "sales_director", "warehouse_manager", "delivery_manager", "accountant", "financial_director", "ceo", "operations_director", "admin"];
 
 function roleOptionsHtml(selected) {
   return ROLE_OPTIONS.map((role) => `<option value="${role}" ${role === selected ? "selected" : ""}>${t(ROLE_BADGE[role].key)}</option>`).join("");
@@ -220,7 +224,7 @@ export async function renderTeamSection(container) {
     users = await api.listUsers();
     listEl.innerHTML = users
       .map((u) => {
-        const roleBadge = ROLE_BADGE[u.role] ?? { key: "role_sales_manager", cls: "badge-neutral", tint: "neutral" };
+        const roleBadge = ROLE_BADGE[shownRole(u)] ?? { key: "role_sales_manager", cls: "badge-neutral", tint: "neutral" };
         // Identity (avatar/name/role) leads; email only shows once the card
         // is opened (see openEditTeamMemberSheet) so the list stays scannable
         // instead of doubling every row's height with contact details nobody
@@ -415,7 +419,7 @@ export async function renderTeamSection(container) {
         <p class="muted">${escapeHtml(u.name)}</p>
         <form id="change-role-form">
           <label>${t("role")}
-            <select name="role">${roleOptionsHtml(u.role)}</select>
+            <select name="role">${roleOptionsHtml(shownRole(u))}</select>
           </label>
           <p class="form-error" id="change-role-error" hidden></p>
           <div class="sheet-actions">

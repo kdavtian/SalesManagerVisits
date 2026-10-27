@@ -2153,6 +2153,7 @@ export default {
     role_warehouse_manager: "Պահեստապետ",
     role_delivery_manager: "Առաքիչ",
     role_accountant: "Հաշվապահ",
+    role_financial_director: "Ֆինանսական տնօրեն",
     position: "Պաշտոն",
     position_placeholder: "օր. SM Davtashen",
     team_locations: "Թիմ",

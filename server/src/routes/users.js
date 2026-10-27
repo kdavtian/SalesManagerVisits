@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { ROLES, canPlanForOthers, canReassignCustomers } from "../roles.js";
+import { PICKABLE_ROLES, resolveRole, canPlanForOthers, canReassignCustomers } from "../roles.js";
 import { passwordChangeLimiter } from "./auth.js";
 import { normalizePhoneForStorage } from "../phoneFormat.js";
 import { isTestUser, previewPurge, purgeUser } from "../userPurge.js";
@@ -53,7 +53,7 @@ usersRouter.use(requireAdmin);
 
 usersRouter.get("/", async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT id, email, name, role, position, phone, name_hy, created_at,
+    `SELECT id, email, name, role, role_title, position, phone, name_hy, created_at,
             last_seen_at, last_seen_app_version, last_seen_user_agent,
             status, status_changed_at, status_note, map_color
      FROM users WHERE role <> 'customer' ORDER BY (status = 'active') DESC, created_at DESC`
@@ -98,7 +98,7 @@ usersRouter.patch("/:id", async (req, res) => {
   try {
     const { rows } = await pool.query(
       `UPDATE users SET ${updates.join(", ")} WHERE id = $${params.length}
-       RETURNING id, email, name, role, position, phone, name_hy, created_at,
+       RETURNING id, email, name, role, role_title, position, phone, name_hy, created_at,
                  last_seen_at, last_seen_app_version, last_seen_user_agent, map_color`,
       params
     );
@@ -120,8 +120,9 @@ usersRouter.post("/", async (req, res) => {
       .status(400)
       .json({ error: "email, password, name and role are required" });
   }
-  if (!ROLES.includes(role)) {
-    return res.status(400).json({ error: `role must be one of: ${ROLES.join(", ")}` });
+  const picked = resolveRole(role);
+  if (!picked) {
+    return res.status(400).json({ error: `role must be one of: ${PICKABLE_ROLES.join(", ")}` });
   }
   if (password.length < 8) {
     return res.status(400).json({ error: "password must be at least 8 characters" });
@@ -131,10 +132,10 @@ usersRouter.post("/", async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      `INSERT INTO users (email, password_hash, name, role, position)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, email, name, role, position, created_at`,
-      [String(email).toLowerCase(), passwordHash, name, role, position || null]
+      `INSERT INTO users (email, password_hash, name, role, role_title, position)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, email, name, role, role_title, position, created_at`,
+      [String(email).toLowerCase(), passwordHash, name, picked.role, picked.role_title, position || null]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -242,7 +243,7 @@ usersRouter.post("/:id/status", async (req, res) => {
       `UPDATE users SET status = $2, status_note = $3, status_changed_at = now(), status_changed_by = $4,
               token_version = CASE WHEN $2 = 'active' THEN token_version ELSE token_version + 1 END
        WHERE id = $1
-       RETURNING id, email, name, role, position, phone, name_hy, created_at, last_seen_at, last_seen_app_version, last_seen_user_agent, status, status_changed_at, status_note`,
+       RETURNING id, email, name, role, role_title, position, phone, name_hy, created_at, last_seen_at, last_seen_app_version, last_seen_user_agent, status, status_changed_at, status_note`,
       [userId, status, status === "active" ? null : cleanNote, req.user.id]
     );
     if (status !== "active") await client.query("DELETE FROM push_subscriptions WHERE user_id = $1", [userId]);
@@ -262,9 +263,9 @@ usersRouter.post("/:id/status", async (req, res) => {
 // approves elsewhere) mean it should be a distinct, considered admin
 // action, not a side effect of fixing a typo in someone's phone number.
 usersRouter.patch("/:id/role", async (req, res) => {
-  const { role } = req.body ?? {};
-  if (!role || !ROLES.includes(role)) {
-    return res.status(400).json({ error: `role must be one of: ${ROLES.join(", ")}` });
+  const picked = resolveRole(req.body?.role);
+  if (!picked) {
+    return res.status(400).json({ error: `role must be one of: ${PICKABLE_ROLES.join(", ")}` });
   }
   // Same self-lockout guard as DELETE /:id below -- an admin demoting
   // their own account out of admin would need another admin to undo it.
@@ -272,10 +273,10 @@ usersRouter.patch("/:id/role", async (req, res) => {
     return res.status(400).json({ error: "You can't change your own role" });
   }
   const { rows } = await pool.query(
-    `UPDATE users SET role = $1 WHERE id = $2
-     RETURNING id, email, name, role, position, phone, name_hy, created_at,
+    `UPDATE users SET role = $1, role_title = $3 WHERE id = $2
+     RETURNING id, email, name, role, role_title, position, phone, name_hy, created_at,
                last_seen_at, last_seen_app_version, last_seen_user_agent`,
-    [role, req.params.id]
+    [picked.role, req.params.id, picked.role_title]
   );
   if (!rows[0]) return res.status(404).json({ error: "User not found" });
   res.json(rows[0]);

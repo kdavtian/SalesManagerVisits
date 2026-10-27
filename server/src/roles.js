@@ -9,6 +9,17 @@ export const ROLES = [
   "accountant",
 ];
 
+// Role names that are shown as their own role but carry another role's permissions exactly (owner, 2026-10-27: the Financial director,
+// "with the same permissions as the accountant"). Stored as users.role = the permission role + users.role_title = the name.
+export const ROLE_TITLES = { financial_director: "accountant" };
+// What the Team form offers.
+export const PICKABLE_ROLES = [...ROLES, ...Object.keys(ROLE_TITLES)];
+/** "financial_director" -> { role: "accountant", role_title: "financial_director" }; a plain role -> { role, role_title: null }; unknown -> null. */
+export function resolveRole(picked) {
+  if (ROLE_TITLES[picked]) return { role: ROLE_TITLES[picked], role_title: picked };
+  return ROLES.includes(picked) ? { role: picked, role_title: null } : null;
+}
+
 // The role of a customer's KAD OS account (created from Settings -> KAD OS, never picked in the Team form): not in ROLES on purpose, so it never
 // shows up in role pickers, notification settings or report permissions. It can only use /api/partner/* (see partnerMayUse in appOrders.js).
 export const CUSTOMER_ROLE = "customer";

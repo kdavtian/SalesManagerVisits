@@ -503,7 +503,7 @@ reportsRouter.get("/erp-payments", requireReportAccess("erp_payments"), async (r
 // was never real collected cash to begin with.
 reportsRouter.get("/cash-custody", requireReportAccess("cash_custody"), async (req, res) => {
   const { rows: byHolder } = await pool.query(
-    `SELECT p.current_holder_id, u.name AS holder_name, u.role AS holder_role,
+    `SELECT p.current_holder_id, u.name AS holder_name, COALESCE(u.role_title, u.role) AS holder_role,
             count(*)::int AS payment_count,
             COALESCE(sum(p.amount_amd), 0) AS amount_amd,
             count(*) FILTER (WHERE p.pending_handoff_id IS NOT NULL)::int AS in_transit_count
