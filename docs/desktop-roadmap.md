@@ -90,10 +90,18 @@ Issues found (I = issue, each has its fix in the steps below):
   per task) and a Due filter (overdue / today / this week / this month).
 
 ### Step 3. Customer card in three columns — I5
-- [ ] >= 1400 px: left = facts + actions + products at this shop; middle = visit history (full rows, not 30 + button); right = orders
+- [x] >= 1400 px: left = facts + actions + products at this shop; middle = visit history (full rows, not 30 + button); right = orders
       (app + Excel in one list), payments, files (thumbnails), tasks. All from the bundle `customerCardLoader.js` already loads.
-- [ ] Sheets that still open (edit, payments list, files) dock to the right instead of covering the card.
-- [ ] The map of this customer (small, static, pin + nearby customers) under the facts.
+- [x] Sheets that still open (edit, payments list, files) dock to the right instead of covering the card.
+- [x] The map of this customer (small, static, pin + nearby customers) under the facts.
+- Spec: `desktop-customer-card.spec.mjs`.
+- As built (1.443.0): `customerWide.js` moves the card's existing blocks into three columns on a window of 1400 px and more and
+  puts them back below it (the phone order never changes); the right column adds Orders (app orders Excel does not have yet +
+  the Excel orders of the last 3 months, 8 rows, "View all" opens the orders page), Payments received (6 rows + total) and Files
+  (thumbnails). The middle column loads the whole visit history at once, each row with its outcomes and collected amount.
+  Payments, files, an Excel order, Edit and Account settings dock to the right and take the right column's place. The mini map
+  (Leaflet, no dragging) shows this customer and the customers within about 1 km; "Show on map" opens the Map. Inside the
+  narrow customer panel beside the Customers table nothing changes, and a sheet opened there stays a dialog on top of it.
 
 ### Step 4. Top bar: global search + quick actions + keyboard — I9 I13
 - [ ] A search box in the top bar (customer, order code, ID, phone), "/" focuses it, results in a dropdown grouped Customers / Orders /
@@ -148,3 +156,4 @@ Issues found (I = issue, each has its fix in the steps below):
 
 - Step 1 (table engine + Customers page): 1.441.0, PR #479, 2026-10-27.
 - Step 2 (Orders + Activity + Tasks on the engine): 1.442.0, PR #480, 2026-10-27.
+- Step 3 (customer card in three columns): 1.443.0, PR #481, 2026-10-27.

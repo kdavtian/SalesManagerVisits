@@ -1149,3 +1149,237 @@
   .cf-periods .cf-period, .cf-period-pair .cf-period:first-child { flex: 0 0 auto; padding: 0 18px; }
   .cf-period-pair { display: contents; }
 }
+
+/* ---------- 10. Customer card in three columns (>= 1400 px; customerWide.js; docs/desktop-roadmap.md step 3) ----------
+   left: facts, mini map, stat tiles, actions, products | middle: the whole visit history | right: tasks, next visit, orders,
+   payments, files. A sheet opened from the card docks to the right (dockSheet.js) and takes the right column's place. */
+@media (min-width: 1400px) {
+  .customer-detail-view.cd-three > .cd-col {
+    display: none;
+  }
+  .customer-detail-view.cd-three > .cd-wide {
+    grid-column: 1 / -1;
+  }
+  .cd-wide {
+    display: grid;
+    grid-template-columns: minmax(340px, 1fr) minmax(340px, 1.15fr) minmax(320px, 1fr);
+    column-gap: 20px;
+    align-items: start;
+  }
+  .cd-wcol {
+    min-width: 0;
+  }
+  .cd-wcol > .section-title:first-child,
+  .cd-wcol > .cd-panel:first-child .section-title,
+  .cd-wcol-right > :first-child .section-title {
+    margin-top: 0;
+  }
+  /* a panel docked beside the card replaces the right column; the other two share what is left */
+  body:has(.sheet-overlay.sheet-docked) .cd-wide {
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  }
+  body:has(.sheet-overlay.sheet-docked) .cd-wcol-right {
+    display: none;
+  }
+  /* the middle column: the visits as one compact list, a row per visit with what happened */
+  .cd-wcol-mid #checkin-history.card-list {
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+  }
+  .cd-wcol-mid #checkin-history > .checkin-row {
+    margin: 0;
+    min-height: 52px;
+    padding: 8px 14px;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .cd-wcol-mid #checkin-history > .checkin-row:last-child {
+    border-bottom: 0;
+  }
+  .cd-wcol-mid #checkin-history > .checkin-row:hover {
+    background: var(--bg-card-pressed);
+  }
+  .cd-wcol-mid .checkin-row-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 12px;
+    min-width: 0;
+  }
+  .cd-wcol-mid .checkin-row-main > .checkin-row-outcomes {
+    grid-column: 1 / -1;
+  }
+  .checkin-row-outcomes {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+  }
+
+  /* right-column panels */
+  .cd-panel {
+    margin-bottom: 16px;
+  }
+  .cd-panel-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 4px 0 8px;
+  }
+  .cd-panel-head .section-title {
+    margin: 0;
+  }
+  .cd-panel-link {
+    padding: 4px 2px;
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    font-size: 0.86rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .cd-panel-body {
+    padding: 4px 0;
+  }
+  .cd-panel-body > .loading-state,
+  .cd-panel-empty {
+    margin: 0;
+    padding: 12px 14px;
+  }
+  .cd-row {
+    display: grid;
+    grid-template-columns: 76px minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 10px;
+    width: 100%;
+    min-height: 40px;
+    padding: 6px 14px;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-size: 0.9rem;
+    text-align: left;
+    cursor: pointer;
+  }
+  button.cd-row:hover {
+    background: var(--bg-card-pressed);
+  }
+  .cd-row:last-child {
+    border-bottom: 0;
+  }
+  .cd-row-date {
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .cd-row-main {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .cd-row-code {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cd-row-main > .badge {
+    flex: none;
+  }
+  .cd-row-date {
+    white-space: nowrap;
+  }
+  .cd-row-amount {
+    justify-self: end;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .cd-row-total {
+    cursor: default;
+    font-weight: 700;
+  }
+  .cd-thumbs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    padding: 8px 10px 4px;
+  }
+  .cd-thumb {
+    position: relative;
+    aspect-ratio: 1;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    cursor: pointer;
+  }
+  .cd-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .cd-thumb .files-blank-pdf {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+  }
+  .cd-thumbs-count {
+    margin: 0;
+    padding: 4px 12px 8px;
+    font-size: 0.8rem;
+  }
+
+  /* small map under the facts */
+  .cd-mini-map {
+    position: relative;
+    padding: 0;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .cd-mini-map-canvas {
+    height: 190px;
+    background: var(--bg);
+  }
+  .cd-mini-map-open {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    z-index: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-card);
+    color: var(--accent);
+    font: inherit;
+    font-size: 0.84rem;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    cursor: pointer;
+  }
+  .cd-mini-map-open svg {
+    width: 16px;
+    height: 16px;
+  }
+  .cd-mini-map .leaflet-control-attribution {
+    font-size: 9px;
+  }
+}
