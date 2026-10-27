@@ -543,9 +543,16 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   L.control.attribution({ prefix: false, position: "bottomright" }).addTo(map);
   // "Me" lives in its own pane above every customer pin (selected, task, cluster): the rep's dot is never hidden under a customer, and
   // it ignores taps so the pin underneath stays tappable (owner, 2026-10-23).
-  map.createPane("mePane");
+  // It is created next to the marker and popup panes (inside the rotate plugin's "norotate" pane): created on the map itself it sat above
+  // that whole pane, popups included, and the blue dot showed through an open customer card (owner, 2026-10-27). Here: above the pins
+  // (600), below the popups (700).
+  const pinPanesParent = map.getPane("markerPane")?.parentNode;
+  map.createPane("mePane", pinPanesParent);
   map.getPane("mePane").style.zIndex = "620";
   map.getPane("mePane").style.pointerEvents = "none";
+  // Teammates above every customer pin (owner, 2026-10-27), still under my own dot and the popups.
+  map.createPane("teamPane", pinPanesParent);
+  map.getPane("teamPane").style.zIndex = "610";
   // Remember the view as it changes (not only on teardown: the back-cache can
   // keep this instance alive and evict it later, or the app can be closed).
   if (plainBrowse) map.on("moveend", () => saveMapView(map));
@@ -1063,6 +1070,10 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // center anchoring stays exact at any size.
   const MARKER_SIZE = 38;
   const PIN_TIP_RATIO = 0.904;
+  // The potential customer's crosshair fills its square, our customers' teardrop does not, so at one size the potential pins looked much
+  // bigger (owner, 2026-10-27): our customers (Bronze / Silver / Gold) a little larger, potential ones a little smaller.
+  const PIN_SIZE_BY_KIND = { customer: 44, potential: 32 };
+  const pinSize = (kind) => PIN_SIZE_BY_KIND[kind] ?? MARKER_SIZE;
 
   // Marker shape+color say what kind of site this is (our customer /
   // potential customer / competitor) and the glyph inside encodes the
@@ -1122,6 +1133,10 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // stop number of that rep's route) / only today (highlight + every other pin hidden). One state, two controls: the map button and the pin key.
   let plannedMode = getPlannedMode(state.user?.id);
   let plannedTodayByRep = new Map(); // customer id -> { userId, color, order }
+  // What is drawn on top of what, bottom to top (owner, 2026-10-27): customers (Leaflet: the pin lower on the screen in front) < today's
+  // planned visits < the pin whose card is open (.kad-marker-selected, a CSS z-index in map-marker-system.css) < teammates (teamPane 610)
+  // < my location (mePane 620) < the card itself (popups, 700).
+  const PIN_Z = { planned: 2000 };
   const plannedRingHtml = (c) => {
     const planned = plannedMode !== "off" ? plannedTodayByRep.get(c.id) : null;
     return planned
@@ -1131,7 +1146,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   function pinArtHtml(c, tier) {
     // The potential customer's crosshair is the original raster art (PNG); the other kinds are SVG (see scripts/make-pin-art.mjs).
     const src = `/icons/markers/${tier}-${categoryIconSlug(c.category)}.${tier === "potential" ? "png" : "svg"}`;
-    const img = `<img class="pin-img-asset" src="${src}" alt="" width="${MARKER_SIZE}" height="${MARKER_SIZE}" draggable="false" />`;
+    const img = `<img class="pin-img-asset" src="${src}" alt="" width="${pinSize(tier)}" height="${pinSize(tier)}" draggable="false" />`;
     if (colorBy === "rep" && c.assigned_manager_id && tier !== "competitor") {
       return `<span class="pin-colour-ring" style="--rep-color:${repColorOf(c)};--pin-ring:url('/icons/markers/ring-${tier}.svg')" aria-hidden="true"></span>${img}`;
     }
@@ -1146,7 +1161,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     const overdueClass = status === "overdue" ? "pin-status-overdue" : "";
     const never = neverVisited ? '<span class="pin-never" aria-hidden="true">!!</span>' : "";
     const isPinShaped = PIN_SHAPED_KINDS.has(tier);
-    const anchorY = isPinShaped ? Math.round(MARKER_SIZE * PIN_TIP_RATIO) : MARKER_SIZE / 2;
+    const size = pinSize(tier);
+    const anchorY = isPinShaped ? Math.round(size * PIN_TIP_RATIO) : size / 2;
     // Shape family also decides where the status badge hangs, since the two
     // families fill their square canvas differently (see the CSS).
     const shapeClass = isPinShaped ? "pin-img-teardrop" : "pin-img-round";
@@ -1156,8 +1172,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       // and the competitor-visibility toggle (map-safe-enhancements) both
       // key off .pin / .pin-tier-* selectors.
       html: `<div class="pin pin-img ${shapeClass} pin-tier-${tier} ${overdueClass} ${neverVisited ? "pin-is-never" : ""}">${pinArtHtml(c, tier)}${plannedRingHtml(c)}${check}${taskMarkerHtml(c)}${debtCoinHtml(c)}${never}</div>`,
-      iconSize: [MARKER_SIZE, MARKER_SIZE],
-      iconAnchor: [MARKER_SIZE / 2, anchorY],
+      iconSize: [size, size],
+      iconAnchor: [size / 2, anchorY],
       popupAnchor: [0, -anchorY],
     });
   }
@@ -1750,6 +1766,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         }
         marker.setIcon(customerIcon(c, status));
       }
+      // Today's planned visits above the other customers (owner, 2026-10-27); see PIN_Z for the whole order.
+      marker.setZIndexOffset(plannedTodayByRep.has(c.id) ? PIN_Z.planned : 0);
       markersToAdd.push(marker);
       bounds.push([c.lat, c.lng]);
       sideListEntries.push({ c, status });
@@ -2581,12 +2599,13 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     return TEAM_AVATAR_COLORS[Math.abs(Number(userId) || 0) % TEAM_AVATAR_COLORS.length];
   }
 
-  function teamMemberIcon(loc) {
+  function teamMemberIcon(loc, bounce = false) {
     const letter = escapeHtml((loc.name || "?").trim().charAt(0).toUpperCase() || "?");
     const color = teamAvatarColor(loc.user_id);
     return L.divIcon({
       className: "",
-      html: `<div class="team-avatar" style="--team-color:${color}">${letter}</div>`,
+      // bounce: a short hop when the team is switched on, so the eye finds them at once (owner, 2026-10-27)
+      html: `<div class="team-avatar ${bounce ? "team-avatar-bounce" : ""}" style="--team-color:${color}">${letter}</div>`,
       iconSize: [30, 30],
       iconAnchor: [15, 15],
     });
@@ -2601,7 +2620,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     }
     teamLayer.clearLayers();
     for (const loc of locations) {
-      L.marker([loc.lat, loc.lng], { icon: teamMemberIcon(loc) })
+      L.marker([loc.lat, loc.lng], { icon: teamMemberIcon(loc, fitBounds), pane: "teamPane" })
         .bindPopup(
           `<div class="map-popup"><strong>${escapeHtml(loc.name)}</strong><div class="popup-category">${escapeHtml(t(`role_${loc.role}`))} · ${formatRelative(loc.updated_at)}</div></div>`
         )

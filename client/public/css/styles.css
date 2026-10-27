@@ -11381,7 +11381,11 @@ form select,
 .sheet.task-editor > .sheet-actions { flex: 0 0 auto; }
 .sheet.task-editor > .sheet-close-x { position: absolute; top: 16px; right: 16px; float: none; margin: 0; }
 .sheet.task-editor > h2 { margin-right: 52px; }
-.task-editor input[type="date"].task-control { font-size: 0.85rem; padding: 0 8px; }
+/* The deadline date: a button, the date left-aligned and vertically centred, a calendar icon at the end (opens the wheel picker). */
+.task-editor .task-due-btn { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 10px; text-align: left; font-size: 0.9rem; font-weight: 600; cursor: pointer; font-variant-numeric: tabular-nums; }
+.task-editor .task-due-btn span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1; }
+.task-editor .task-due-btn svg { flex: none; width: 18px; height: 18px; color: var(--text-dim); }
+.task-editor .task-due-btn.task-due-next { color: var(--text-dim); font-weight: 500; }
 .sheet.task-editor { position: relative; }
 
 /* Print-ready order blanks: select mode on the Orders list and the version picker. */

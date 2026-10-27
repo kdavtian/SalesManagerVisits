@@ -111,8 +111,10 @@ export function canViewAllRoutePlans() {
 }
 
 // Who gives tasks to others (server roles.js canCreateTasks); everybody receives and completes them.
-const TASK_CREATOR_ROLES = new Set(["admin", "ceo", "operations_director", "sales_director"]);
+const TASK_CREATOR_ROLES = new Set(["admin", "ceo", "operations_director", "sales_director", "accountant"]);
 export const canCreateTasks = () => TASK_CREATOR_ROLES.has(state.user?.role);
+// The accountant / financial director sends REQUESTS (Խնդրանք) to the sales director: a task under another name (owner, 2026-10-27).
+export const sendsRequests = () => state.user?.role === "accountant";
 
 // Mirrors canReassignCustomers in the server's roles.js.
 export function canReassignCustomers() {

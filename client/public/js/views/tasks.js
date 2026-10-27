@@ -14,7 +14,8 @@ import { escapeHtml, activateDialog, formatDateDMY, parseDateOnly, labelColon } 
 import { FILTER_ICONS } from "../filterIcons.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { state, canCreateTasks } from "../state.js";
+import { state, canCreateTasks, sendsRequests } from "../state.js";
+import { pickDate } from "../activityDatePicker.js";
 
 const SEES_ALL_ROLES = new Set(["admin", "ceo", "operations_director", "sales_director"]);
 export { canCreateTasks };
@@ -65,6 +66,7 @@ export function taskCardHtml(task, today, { showCustomer = true } = {}) {
         </div>
         <div class="muted list-row-meta">${[showCustomer && task.customer_name ? escapeHtml(task.customer_name) : "", mine ? "" : escapeHtml(task.assignee_name)].filter(Boolean).join(" · ")}</div>
         <div class="list-row-bottom">
+          ${task.is_request ? `<span class="badge badge-info">${t("request_badge")}</span>` : ""}
           <span class="badge ${info.cls}">${info.label}</span>
           ${task.status === "done" ? `<span class="badge badge-success">${t("task_status_done")}</span>` : ""}
           ${task.status === "cancelled" ? `<span class="badge badge-neutral">${t("task_status_cancelled")}</span>` : ""}
@@ -108,7 +110,7 @@ function openTaskTypeMenu(onPick) {
   overlay.innerHTML = `
     <div class="sheet om-sheet" role="dialog" aria-modal="true">
       <button type="button" class="icon-btn sheet-close-x" data-close aria-label="${t("close")}">${icons.close}</button>
-      <h2>${t("task_new")}</h2>
+      <h2>${t(sendsRequests() ? "request_new" : "task_new")}</h2>
       <div class="om-options">
         ${NEW_TASK_TYPES.map(
           (ty) => `<button type="button" class="om-option" data-kind="${ty.kind ?? ""}">
@@ -233,7 +235,7 @@ export function renderTasks(root, navigate, openId) {
     container.innerHTML = `
       <div class="list-header">
         <div><h1>${t("tasks_title")}</h1></div>
-        ${creator ? `<button type="button" class="icon-btn" id="task-new-btn" aria-label="${t("task_new")}">${icons.plus}</button>` : ""}
+        ${creator ? `<button type="button" class="icon-btn" id="task-new-btn" aria-label="${t(sendsRequests() ? "request_new" : "task_new")}">${icons.plus}</button>` : ""}
       </div>
       <div class="activity-tabs" role="tablist" id="task-tabs"></div>
       <div id="task-people"></div>
@@ -451,6 +453,7 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
       <button type="button" class="icon-btn sheet-close-x" data-action="close" aria-label="${t("close")}">${icons.close}</button>
       <h2 class="task-sheet-title">${escapeHtml(task.title)}</h2>
       <p>
+        ${task.is_request ? `<span class="badge badge-info">${t("request_badge")}</span>` : ""}
         <span class="badge ${info.cls}">${info.label}</span>
         ${task.status === "done" ? `<span class="badge badge-success">${t("task_status_done")}</span>` : ""}
         ${task.status === "cancelled" ? `<span class="badge badge-neutral">${t("task_status_cancelled")}</span>` : ""}
@@ -602,7 +605,7 @@ export async function openTaskEditor({ customer = null, task = null, taskKind = 
   overlay.innerHTML = `
     <div class="sheet task-editor">
       <button type="button" class="icon-btn sheet-close-x" data-action="close" aria-label="${t("close")}">${icons.close}</button>
-      <h2>${task ? t("task_edit") : t("task_new")}</h2>
+      <h2>${task ? t(task.is_request ? "request_task_edit" : "task_edit") : t(sendsRequests() ? "request_new" : "task_new")}</h2>
       <form id="task-form">
         <div class="task-field" id="task-type-field" ${kindLocked && !kind ? "hidden" : ""}>
           <span class="task-label">${t("task_type_label")}</span>
@@ -625,7 +628,7 @@ export async function openTaskEditor({ customer = null, task = null, taskKind = 
         <div class="task-field">
           <span class="task-label">${t("task_deadline")}</span>
           <div class="task-deadline-row">
-            <input type="date" class="task-control" id="task-due" value="${dueDate}" aria-label="${t("task_deadline")}" />
+            <button type="button" class="task-control task-due-btn" id="task-due" aria-haspopup="dialog" aria-label="${t("task_deadline")}"><span id="task-due-text"></span>${icons.calendar ?? ""}</button>
             <button type="button" class="task-toggle-btn" data-mode="next">${t("task_deadline_next_visit")}</button>
             <button type="button" class="task-toggle-btn" data-mode="date">${t("task_deadline_date")}</button>
           </div>
@@ -714,10 +717,17 @@ export async function openTaskEditor({ customer = null, task = null, taskKind = 
       b.classList.toggle("task-toggle-active", b.dataset.mode === deadlineMode);
       b.setAttribute("aria-pressed", String(b.dataset.mode === deadlineMode));
     });
-    dueInput.value = dueDate;
-    dueInput.disabled = deadlineMode === "next";
-    dueHint.hidden = deadlineMode !== "next";
-    dueHint.textContent = deadlineMode === "next" ? `${t("task_deadline_next_visit")}${labelColon()}${dueDate ? formatDateDMY(dueDate) : "—"}` : "";
+    // The date itself, left-aligned in its box (owner, 2026-10-27: the native date field put the text off-centre on iPhone).
+    overlay.querySelector("#task-due-text").textContent = dueDate ? formatDateDMY(dueDate) : "—";
+    dueInput.classList.toggle("task-due-next", deadlineMode === "next");
+    dueHint.hidden = true;
+  }
+  // "Specific date" or a tap on the date: the wheel calendar opens at once (no extra step).
+  async function chooseDate() {
+    const picked = await pickDate({ value: dueDate, title: t("task_deadline") });
+    if (picked) dueDate = picked;
+    if (picked || deadlineMode !== "next") deadlineMode = "date";
+    paintDeadline();
   }
   async function applyNextVisit() {
     if (deadlineMode !== "next" || !customerId) return;
@@ -727,12 +737,13 @@ export async function openTaskEditor({ customer = null, task = null, taskKind = 
   }
   overlay.querySelectorAll("[data-mode]").forEach((b) =>
     b.addEventListener("click", () => {
+      if (b.dataset.mode === "date") return chooseDate();
       deadlineMode = b.dataset.mode;
       paintDeadline();
       applyNextVisit();
     })
   );
-  dueInput.addEventListener("change", () => (dueDate = dueInput.value || dueDate));
+  dueInput.addEventListener("click", chooseDate);
 
   function paintCustomer() {
     if (customerId) {
@@ -800,14 +811,27 @@ export async function openTaskEditor({ customer = null, task = null, taskKind = 
     itemsEl.innerHTML = items
       .map((it, idx) => {
         const isLast = idx === items.length - 1;
+        // One by one (owner, 2026-10-27): the next item can be added only once this one is filled in.
         const plus =
           isLast && items.length < MAX_TASK_ITEMS
-            ? `<button type="button" class="task-icon-btn" data-add aria-label="${t("task_add_item")}">${icons.plus}</button>`
+            ? `<button type="button" class="task-icon-btn" data-add aria-label="${t("task_add_item")}" ${it.text.trim() ? "" : "disabled"}>${icons.plus}</button>`
             : `<span class="task-icon-btn task-icon-spacer" aria-hidden="true"></span>`;
         return `<div class="task-item-row">${plus}<input class="task-control" data-idx="${idx}" value="${escapeHtml(it.text)}" maxlength="300" placeholder="${t("task_item_placeholder")}" /><button type="button" class="task-icon-btn" data-remove="${idx}" aria-label="${t("delete")}">${icons.close}</button></div>`;
       })
       .join("");
-    itemsEl.querySelectorAll("input[data-idx]").forEach((inp) => inp.addEventListener("input", () => (items[Number(inp.dataset.idx)].text = inp.value)));
+    const addBtn = () => itemsEl.querySelector("[data-add]");
+    itemsEl.querySelectorAll("input[data-idx]").forEach((inp) => {
+      inp.addEventListener("input", () => {
+        items[Number(inp.dataset.idx)].text = inp.value;
+        if (Number(inp.dataset.idx) === items.length - 1 && addBtn()) addBtn().disabled = !inp.value.trim();
+      });
+      // Enter on a filled last item adds the next one (instead of submitting the form)
+      inp.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        if (Number(inp.dataset.idx) === items.length - 1 && inp.value.trim()) addBtn()?.click();
+      });
+    });
     itemsEl.querySelectorAll("[data-remove]").forEach((b) =>
       b.addEventListener("click", () => {
         const idx = Number(b.dataset.remove);
@@ -817,6 +841,7 @@ export async function openTaskEditor({ customer = null, task = null, taskKind = 
       })
     );
     itemsEl.querySelector("[data-add]")?.addEventListener("click", () => {
+      if (!items[items.length - 1].text.trim()) return;
       items.push({ id: null, text: "" });
       paintItems();
       itemsEl.querySelector(`input[data-idx="${items.length - 1}"]`)?.focus();
