@@ -26,6 +26,7 @@ import { ROLES } from "../roles.js";
 import { pool } from "../db/pool.js";
 import { buildAdminCounts } from "../adminCounts.js";
 import { getPlanSkipRecentVisitDays, setPlanSkipRecentVisitDays } from "../utils/planSkipRecent.js";
+import { getDocumentTexts, setDocumentTexts, DOCUMENT_TEXT_DEFAULTS, getVisitFrequencyByType, setVisitFrequencyByType, recomputeDefaultVisitFrequencies } from "../documentTexts.js";
 
 export const settingsRouter = Router();
 
@@ -45,6 +46,8 @@ settingsRouter.get("/", async (req, res) => {
     askKad,
     aiCheck,
     landing,
+    documentTexts,
+    visitFrequencyByType,
   ] = await Promise.all([
     getCheckinRadiusMeters(),
     getCheckinAllowanceEnabled(),
@@ -58,6 +61,8 @@ settingsRouter.get("/", async (req, res) => {
     getAskKadSettings(),
     getAiCheckSettings(),
     getLandingSettings(),
+    getDocumentTexts(),
+    getVisitFrequencyByType(),
   ]);
   res.json({
     checkin_radius_meters: checkinRadiusMeters,
@@ -93,6 +98,11 @@ settingsRouter.get("/", async (req, res) => {
     landing_rates: displayRates(landing.rates),
     landing_rate_defaults: landingRateDefaults(),
     retail_from_excel: landing.retailFromExcel,
+    // What the customer reads before signing and the warning on every blank (documentTexts.js), and the built-in ones for "Reset".
+    document_texts: documentTexts,
+    document_text_defaults: DOCUMENT_TEXT_DEFAULTS,
+    // Default visit frequency per customer type; null = no default for that type (the general default applies).
+    visit_frequency_by_type: visitFrequencyByType,
   });
 });
 
@@ -126,6 +136,22 @@ settingsRouter.patch("/", requireAdmin, async (req, res) => {
       return res.status(400).json({ error: "default_visit_frequency_days must be between 1 and 365" });
     }
     result.default_visit_frequency_days = await setDefaultVisitFrequencyDays(Math.round(days));
+    await recomputeDefaultVisitFrequencies(); // customers that follow the defaults move with it
+  }
+
+  if (req.body?.document_texts !== undefined) {
+    if (typeof req.body.document_texts !== "object" || req.body.document_texts === null) return res.status(400).json({ error: "document_texts must be an object" });
+    result.document_texts = await setDocumentTexts(req.body.document_texts);
+  }
+
+  if (req.body?.visit_frequency_by_type !== undefined) {
+    if (typeof req.body.visit_frequency_by_type !== "object" || req.body.visit_frequency_by_type === null) return res.status(400).json({ error: "visit_frequency_by_type must be an object" });
+    try {
+      result.visit_frequency_by_type = await setVisitFrequencyByType(req.body.visit_frequency_by_type);
+    } catch (err) {
+      if (err.status === 400) return res.status(400).json({ error: err.message });
+      throw err;
+    }
   }
 
   if (req.body?.plan_skip_recent_visit_days !== undefined) {

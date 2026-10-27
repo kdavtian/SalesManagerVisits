@@ -14547,6 +14547,13 @@ input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
   min-width: 30px;
 }
 
+/* Settings > Sales & customers: signature/document texts and visit frequency by customer type (owner, 2026-10-27). */
+.doc-text-field { display: flex; flex-direction: column; gap: 6px; }
+.doc-text-field textarea { width: 100%; min-height: 72px; resize: vertical; font-size: 0.95rem; line-height: 1.4; }
+.doc-text-reset { align-self: flex-end; min-height: 44px; padding: 0 4px; }
+.visit-type-row .settings-row-label { min-width: 0; overflow-wrap: anywhere; }
+.visit-types-save { margin: 14px 0 4px; }
+
 /* ===== Warehouse manager + driver apps (owner, 2026-10-23): big buttons, few words ===== */
 .ops-view {
   padding: 14px 16px calc(24px + var(--nav-safe-bottom));
@@ -15949,6 +15956,8 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 .sig-pad-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .sig-pad-head h2 { margin: 0; font-size: 1.15rem; }
 .sig-pad-hint { margin: 0; font-size: 0.9rem; }
+/* What the customer confirms by signing (owner, 2026-10-27): large and plain, the first thing on the page. */
+.sig-pad-statement { margin: 0; padding: 12px 14px; border-radius: 12px; background: var(--bg-subtle, #f3f5f9); border: 1px solid var(--border); font-size: 1.05rem; line-height: 1.45; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
 .sig-pad-board { position: relative; height: min(46vh, 340px); border: 2px solid var(--border); border-radius: 12px; background: #fff; overflow: hidden; }
 .sig-pad-canvas { width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
 .sig-pad-line { position: absolute; left: 16px; right: 16px; bottom: 28%; border-bottom: 1px dashed #9aa3b2; pointer-events: none; }

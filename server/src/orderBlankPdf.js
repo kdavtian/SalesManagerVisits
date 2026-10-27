@@ -246,6 +246,18 @@ function drawSignatures(c, doc, data, y, fs, labels = ["Հանձնեց՝", "Ըն
   if (sig.signedAt) c.text(`Ստորագրվել է էլեկտրոնային եղանակով՝ ${yerevanDateTime(sig.signedAt)}`, 21.6, y + fs + 15, { size: 6.5 });
 }
 
+// The owner's notice at the foot of every blank (owner, 2026-10-27: "This message should be printed on all pdf's"; the text is edited in
+// Settings > Sales & customers, documentTexts.js). Bold, centred, in a thin frame, wrapped to the blank's width.
+function drawWarning(doc, text, y, size) {
+  if (!text) return;
+  const x = 21.6;
+  const w = 568;
+  doc.font("B").fontSize(size);
+  const h = doc.heightOfString(text, { width: w - 12, align: "center", lineGap: 1 });
+  doc.save().roundedRect(x, y - 3, w, h + 6, 3).lineWidth(0.6).strokeColor("#555555").stroke().restore();
+  doc.fillColor(INK).text(text, x + 6, y, { width: w - 12, align: "center", lineGap: 1 });
+}
+
 // Castrol, Lotos and Royal Super on one line: same height, centred on the same
 // horizontal axis, first flush with the left edge, last with the right edge and
 // the middle one equally spaced between them.
@@ -304,6 +316,7 @@ function drawFull(doc, data, firstPageDrawn) {
         sigY = y + 5 * 21 + 30;
       }
       drawSignatures(c, doc, data, sigY, 10);
+      drawWarning(doc, data.warning, sigY + 40, 8.5);
     } else {
       c.text("Շարունակությունը հաջորդ էջում…", 21.6, bottom + 8, { size: 9 });
     }
@@ -341,14 +354,17 @@ function drawHalf(doc, data, slotTop, slotH) {
     else c.hline(ry + 10, lx, x2, "#555555", 0.5);
   });
   const terms = paymentTermsText(data.terms);
-  let sigY = y + 30 + 16;
+  // a little tighter when the warning has to fit under the signatures (the half blank is 396 high)
+  const tight = data.warning ? 6 : 0;
+  let sigY = y + 30 + 16 - tight;
   if (terms.due || terms.down) {
     const ry = y + 30;
     if (terms.due) c.text(terms.due, 23.6, ry, { bold: true, size: 8.5 });
     if (terms.down) c.right(terms.down, 587.6, ry, { bold: true, size: 8.5 });
-    sigY = y + 45 + 10;
+    sigY = y + 45 + 10 - tight;
   }
   drawSignatures(c, doc, data, sigY, 8.5);
+  drawWarning(doc, data.warning, sigY + (data.signatures?.signedAt ? 34 : 27), 6.8);
   doc.restore();
 }
 
@@ -358,7 +374,8 @@ function drawCutLine(doc, y) {
 
 // orders: [{ variant: "full" | "half" | undefined (= suggestVariant), order, items, customer, rep, previousDebtAmd, paymentAmd }]
 // Half blanks are packed two to a sheet (a lone one takes the top half); full ones follow.
-export function buildOrderBlanksPdf(orders) {
+// options.warning: the notice printed at the foot of every blank (documentTexts.js pdf_warning).
+export function buildOrderBlanksPdf(orders, { warning = null } = {}) {
   const doc = new PDFDocument({ size: "A4", margin: 0, bufferPages: true, info: { Title: "Order blanks", Author: "KAD Motors" } });
   doc.registerFont("R", path.join(ASSET_DIR, "fonts", "DejaVuSans.ttf"));
   doc.registerFont("B", path.join(ASSET_DIR, "fonts", "DejaVuSans-Bold.ttf"));
@@ -368,7 +385,7 @@ export function buildOrderBlanksPdf(orders) {
 
   // One print moment for the whole PDF: the delivery date on every blank is the day it was printed.
   const printedAt = new Date();
-  const withVariant = orders.map((o) => ({ ...o, printedAt: o.printedAt ?? printedAt, variant: o.variant ?? suggestVariant(o.items) }));
+  const withVariant = orders.map((o) => ({ ...o, warning: o.warning ?? warning, printedAt: o.printedAt ?? printedAt, variant: o.variant ?? suggestVariant(o.items) }));
   const halves = withVariant.filter((o) => o.variant === "half" && o.items.length <= HALF_MAX_ROWS);
   const fulls = withVariant.filter((o) => !(o.variant === "half" && o.items.length <= HALF_MAX_ROWS));
   let drawn = false;
@@ -419,11 +436,13 @@ function drawPaymentSlip(doc, data, slotTop, slotH) {
     else c.hline(ry + 13, 215, 589, "#555555", 0.5);
   });
   drawSignatures(c, doc, data, y + 3 * 22 + 40, 9.5, ["Ստացավ՝", "Վճարեց՝"]);
+  drawWarning(doc, data.warning, y + 3 * 22 + 40 + 36, 8.5);
   doc.restore();
 }
 
 const HALF_A4 = [A4.w, A4.h / 2];
-export function buildPaymentSlipsPdf(slips, { twoPerPage = false } = {}) {
+export function buildPaymentSlipsPdf(input, { twoPerPage = false, warning = null } = {}) {
+  const slips = input.map((slip) => ({ ...slip, warning: slip.warning ?? warning }));
   const doc = new PDFDocument({ size: twoPerPage ? "A4" : HALF_A4, margin: 0, info: { Title: "Payment slips", Author: "KAD Motors" } });
   doc.registerFont("R", path.join(ASSET_DIR, "fonts", "DejaVuSans.ttf"));
   doc.registerFont("B", path.join(ASSET_DIR, "fonts", "DejaVuSans-Bold.ttf"));
@@ -448,6 +467,6 @@ export function buildPaymentSlipsPdf(slips, { twoPerPage = false } = {}) {
   return done;
 }
 
-export function buildOrderBlankPdf(data) {
-  return buildOrderBlanksPdf([data]);
+export function buildOrderBlankPdf(data, options) {
+  return buildOrderBlanksPdf([data], options);
 }

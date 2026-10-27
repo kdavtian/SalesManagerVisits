@@ -189,6 +189,12 @@ editRequestsRouter.patch("/:id", requireAdmin, async (req, res) => {
       const placeOutcome = normalizeIncomingPlaces({ region: request.changes.region, subregion: request.changes.subregion }, currentPlaces[0] ?? {});
       for (const [field, value] of Object.entries(request.changes)) {
         if (!EDITABLE_FIELDS.includes(field)) continue;
+        // an emptied frequency = back to the default of the customer's type (migration 162)
+        if (field === "visit_frequency_days" && (value === null || value === "" || value === 0)) {
+          updates.push("visit_frequency_manual = false");
+          changedFields.push(field);
+          continue;
+        }
         const next = field in placeOutcome.values ? placeOutcome.values[field] : value;
         params.push(field === "phone" ? normalizePhoneForStorage(next) : next);
         updates.push(`${field} = $${params.length}`);

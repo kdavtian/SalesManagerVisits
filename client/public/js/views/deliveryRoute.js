@@ -1,4 +1,5 @@
 import { api } from "../api.js";
+import { composeStatement } from "../signStatement.js";
 import { cssColor, escapeHtml, formatAmd, formatDateDMY, getCurrentPosition, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, labelColon } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
@@ -333,6 +334,7 @@ export async function renderDelivery(root, navigate) {
         </div>
         <div id="new-balance-display">${newBalanceHtml()}</div>
       </div>
+      <p class="sig-pad-statement" id="delivery-statement"></p>
       <label class="form-label">${t("delivery_signature_label")}</label>
       <canvas id="signature-canvas" width="320" height="150" style="width:100%;touch-action:none;border:1px solid var(--border-color, #ccc);border-radius:8px;background:#fff;"></canvas>
       <button type="button" class="btn" id="signature-clear-btn" style="margin-top:6px;">${t("delivery_clear_signature")}</button>
@@ -343,12 +345,27 @@ export async function renderDelivery(root, navigate) {
       </div>
     `;
 
+    // What the customer confirms by signing (owner, 2026-10-27): "I received order X [and paid Y]. My debt is Z." -- follows the amount.
+    const statementEl = overlay.querySelector("#delivery-statement");
+    const paintStatement = () => {
+      const text = snapshot.sign_texts
+        ? composeStatement(snapshot.sign_texts, {
+            orderCodes: [snapshot.order_code],
+            paymentAmd: amountCollected,
+            balanceAfterAmd: debtBefore == null ? null : debtBefore + snapshot.order_amount_amd - amountCollected,
+          })
+        : "";
+      statementEl.textContent = text;
+      statementEl.hidden = !text;
+    };
+    paintStatement();
     const amountInput = overlay.querySelector("#amount-collected-input");
     amountInput.addEventListener("input", () => {
       // AMD has no subunit in this app (see formatAmd) -- rounded on input
       // rather than left as whatever decimal was typed/pasted.
       amountCollected = Math.round(Number(amountInput.value) || 0);
       overlay.querySelector("#new-balance-display").innerHTML = newBalanceHtml();
+      paintStatement();
     });
 
     let paymentMethod = "cash";

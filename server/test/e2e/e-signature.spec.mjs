@@ -47,8 +47,10 @@ test("check-in: the customer signs once for every ticked order; one signed PDF e
   await scribble(page);
   await page.locator('.sig-pad [data-act="done"]').click();
 
-  // then the customer's
+  // then the customer's, under the sentence he confirms (owner, 2026-10-27)
   await expect(page.locator(".sig-pad-head h2")).toHaveText("Customer signature");
+  await expect(page.locator(".sig-pad-statement")).toContainText("Սույնով հաստատում եմ, որ ստացա");
+  if (process.env.SIG_SHOTS) await page.screenshot({ path: `${process.env.SIG_SHOTS}/sign-orders.png` });
   await scribble(page);
   await page.locator('.sig-pad [data-act="done"]').click();
   await expect(page.locator("#blank-sign-chip")).toBeVisible();
@@ -102,6 +104,8 @@ test("@smoke check-in: payment collected -> the customer signs the payment slip;
   await scribble(page); // the rep's own signature, the first time
   await page.locator('.sig-pad [data-act="done"]').click();
   await expect(page.locator(".sig-pad-head h2")).toContainText(/Customer/); // the customer's pad is the one open now
+  await expect(page.locator(".sig-pad-statement")).toContainText("վճարեցի 45,000 դրամ");
+  if (process.env.SIG_SHOTS) await page.screenshot({ path: `${process.env.SIG_SHOTS}/sign-payment.png` });
   await scribble(page); // the customer's
   await page.locator('.sig-pad [data-act="done"]').click();
   await expect(page.locator("#slip-sign-chip")).toBeVisible();

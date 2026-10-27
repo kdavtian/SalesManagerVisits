@@ -13,6 +13,7 @@ import { openOrderTaskSheet } from "../orderTaskSheet.js";
 import { loadReorderProfile, usualOrderHash } from "../reorder.js";
 import { COMPETITORS } from "../brandChips.js";
 import { openSignaturePad, ensureOwnSignature, clearPendingOwnSignature } from "../signaturePad.js";
+import { customerSignStatement } from "../signStatement.js";
 
 // Order Placed, Revisit, Payment Collected, Assortment check, Products delivered, Other (owner, 2026-10-26: "No order" and
 // "Complaint" were removed and their old records merged into Other). "customer_unavailable" is the stored value of "Products delivered".
@@ -615,15 +616,36 @@ export async function renderCheckin(root, navigate, customerId) {
       container.querySelector("#slip-sign-img").src = customerSignature.url;
     }
   }
+  // What the customer's signature covers right now: the ticked delivered orders and the money typed in.
+  function signingFor() {
+    const delivering = container.querySelector('input[name="outcomes"][value="customer_unavailable"]').checked;
+    const boxes = delivering ? [...deliveredList.querySelectorAll('input[name="delivered_orders"]:checked')] : [];
+    const collected = container.querySelector('input[name="outcomes"][value="payment_collected"]').checked;
+    return {
+      orderIds: boxes.map((b) => Number(b.value)),
+      orderCodes: boxes.map((b) => b.closest(".delivered-order-row")?.querySelector("strong")?.textContent.trim() || `#${b.value}`),
+      paymentAmd: collected ? Math.round(Number(amountInput.value)) || 0 : 0,
+    };
+  }
+  const signingKey = (f) => JSON.stringify([f.orderIds, f.paymentAmd]);
   async function askCustomerSignature(btn, hintKey = "signature_customer_hint") {
+    const covers = signingFor();
+    // The customer reads the amount before signing for it: it has to be typed first.
+    if (container.querySelector('input[name="outcomes"][value="payment_collected"]').checked && !(covers.paymentAmd > 0)) {
+      amountError.hidden = false;
+      amountInput.focus();
+      return;
+    }
     btn.disabled = true;
     try {
       const own = await ensureOwnSignature();
       if (!own.ok) return;
       ownSignaturePending = own.pending;
-      const blob = await openSignaturePad({ title: t("signature_customer_title"), hint: t(hintKey), doneLabel: t("signature_sign") });
+      // "I received order X [and paid Y]. My debt is Z." (owner, 2026-10-27: the customer must know what he is signing for)
+      const statement = await customerSignStatement(customerId, covers);
+      const blob = await openSignaturePad({ title: t("signature_customer_title"), hint: t(hintKey), doneLabel: t("signature_sign"), statement });
       if (!blob) return;
-      customerSignature = { blob, url: URL.createObjectURL(blob) };
+      customerSignature = { blob, url: URL.createObjectURL(blob), key: signingKey(covers) };
       container.querySelector("#slip-sign-error").hidden = true;
       paintSignature();
     } catch (err) {
@@ -648,6 +670,16 @@ export async function renderCheckin(root, navigate, customerId) {
     customerSignature = null;
     paintSignature();
   };
+  // The orders or the amount changed after the customer signed: what he signed for is no longer true, he signs again.
+  const dropStaleSignature = () => {
+    if (!customerSignature || customerSignature.key === signingKey(signingFor())) return false;
+    removeSignature();
+    showToast(t("signature_redo"));
+    return true;
+  };
+  amountInput.addEventListener("change", dropStaleSignature);
+  deliveredList.addEventListener("change", dropStaleSignature);
+  container.querySelectorAll('input[name="outcomes"]').forEach((input) => input.addEventListener("change", dropStaleSignature));
   container.querySelector("#blank-sign-remove").addEventListener("click", removeSignature);
   container.querySelector("#slip-sign-remove").addEventListener("click", removeSignature);
 
@@ -798,6 +830,7 @@ export async function renderCheckin(root, navigate, customerId) {
       return;
     }
 
+    dropStaleSignature();
     // The customer signs for the money (owner, 2026-10-27: it is also the debt balance). A photographed paper blank of a delivery carries it.
     const paperBlank = outcomes.includes("customer_unavailable") && blankPhotos.length > 0;
     if (amountCollected != null && !customerSignature && !paperBlank) {

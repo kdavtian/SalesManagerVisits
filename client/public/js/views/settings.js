@@ -12,6 +12,7 @@ import { renderPinReviewSection } from "./pinReview.js";
 import { renderBonusChallengesSection, renderBonusRewardClaimsSection } from "./bonusChallengesAdmin.js";
 import { renderKadOsPerksSection, renderKadOsCampaignsSection } from "./kadOsAdmin.js";
 import { renderDeliveryArrivalSection } from "./deliveryArrivalAdmin.js";
+import { renderDocumentTextsSection, renderVisitFrequencyTypesSection } from "./settingsDocTexts.js";
 import { openInfoPopup, formatAmd, escapeHtml, compressImage, activateDialog, attachSwipeToDismiss, formatPhoneDisplay, normalizePhone, downloadFromUrl, formatDateTime } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
@@ -398,6 +399,8 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
           </form>
         </div>
         <div class="card settings-list">
+          ${settingsRow({ icon: ICON.calendar, label: t("visit_types_title"), id: "row-visit-types", color: "green" })}
+          ${settingsRow({ icon: ICON.book, label: t("doc_texts_title"), id: "row-doc-texts", color: "orange" })}
           ${settingsRow({ icon: ICON.database, label: t("sales_channel_owners_title"), id: "row-sales-channel-owners", color: "purple" })}
           ${canReassignCustomers() ? settingsRow({ icon: ICON.gps, label: t("pin_review_title"), id: "row-pin-review", color: "red" }) : ""}
           ${canManageArrival ? settingsRow({ icon: ICON.gps, label: t("arrival_section"), id: "row-delivery-arrival", color: "green" }) : ""}
@@ -1462,6 +1465,12 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
     });
     root.querySelector("#row-quick-actions").addEventListener("click", (e) => {
       openAdminSection(root, e.currentTarget, t("quick_action_visibility_title"), renderQuickActionVisibilitySection);
+    });
+    root.querySelector("#row-visit-types").addEventListener("click", (e) => {
+      openAdminSection(root, e.currentTarget, t("visit_types_title"), renderVisitFrequencyTypesSection);
+    });
+    root.querySelector("#row-doc-texts").addEventListener("click", (e) => {
+      openAdminSection(root, e.currentTarget, t("doc_texts_title"), renderDocumentTextsSection);
     });
     root.querySelector("#row-sales-channel-owners").addEventListener("click", (e) => {
       openAdminSection(root, e.currentTarget, t("sales_channel_owners_title"), renderSalesChannelOwnersSection);

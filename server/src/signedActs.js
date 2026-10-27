@@ -10,6 +10,7 @@ import { loadBlankOrders } from "./orderBlankData.js";
 import { buildOrderBlanksPdf, buildPaymentSlipsPdf } from "./orderBlankPdf.js";
 import { OFFICE_PHONE } from "./pricelistPdf.js";
 import { warmPdfPreview } from "./pdfPreview.js";
+import { getDocumentTexts } from "./documentTexts.js";
 
 // The customer's debt before this visit: the Excel debt (the trusted source) plus what the app knows that Excel does not show yet
 // (owner, 2026-10-27: "Excel includes only ALREADY DELIVERED orders ... if the order is included, included, if no - no. Same for collected
@@ -80,6 +81,7 @@ export async function createSignedActs({ orderIds, customerId, checkinId = null,
   const { orders, blank } = await loadBlankOrders(orderIds, db);
   if (!orders.length) return [];
   let balance = await balanceBeforeVisit(db, customerId, { excludeOrderIds: orders.map((o) => o.id), checkinId });
+  const { pdf_warning: warning } = await getDocumentTexts(db);
   const { rows: signerRows } = await db.query("SELECT name, name_hy, signature_path FROM users WHERE id = $1", [signerId]);
   const signer = signerRows[0] ?? {};
   const [customerPng, repPng] = await Promise.all([signaturePng(customerSignaturePath), signaturePng(signer.signature_path)]);
@@ -93,7 +95,7 @@ export async function createSignedActs({ orderIds, customerId, checkinId = null,
         paymentAmd: payment,
         signatures: { signerName: signer.name_hy || signer.name || "", rep: repPng, customer: customerPng, signedAt },
       }),
-    ]);
+    ], { warning });
     if (balance !== null) balance = balance + Number(order.total_amd ?? 0) - (payment ?? 0);
     const fileName = `${crypto.randomUUID()}.pdf`;
     await fs.promises.writeFile(path.join(uploadDirPath, fileName), pdf);
@@ -117,6 +119,7 @@ export async function createPaymentSlip({ paymentId, customerId, checkinId = nul
   ]);
   const [customerPng, repPng] = await Promise.all([signaturePng(customerSignaturePath), signaturePng(signer?.signature_path)]);
   const signerName = signer?.name_hy || signer?.name || "";
+  const { pdf_warning: warning } = await getDocumentTexts(db);
   const pdf = await buildPaymentSlipsPdf([
     {
       number: paymentId ? `P-${paymentId}` : "",
@@ -127,7 +130,7 @@ export async function createPaymentSlip({ paymentId, customerId, checkinId = nul
       rep: { name: signerName, phone: signer?.phone, officePhone: OFFICE_PHONE },
       signatures: customerPng || repPng ? { signerName, rep: repPng, customer: customerPng, signedAt: customerPng ? paidAt : null } : null,
     },
-  ]);
+  ], { warning });
   const fileName = `${crypto.randomUUID()}.pdf`;
   await fs.promises.writeFile(path.join(uploadDirPath, fileName), pdf);
   warmPdfPreview(path.join(uploadDirPath, fileName));

@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v452";
+const CACHE_VERSION = "field-visits-v453";
 // v5: drops tiles cached while requests went out without a Referer (OSM may have
 // answered those with placeholder images) -- see Referrer-Policy in server/src/app.js.
 const TILE_CACHE = "field-visits-tiles-v5";
@@ -108,6 +108,7 @@ const APP_SHELL = [
   "/js/views/login.js",
   "/js/views/map.js",
   "/js/views/settings.js",
+  "/js/views/settingsDocTexts.js",
   "/js/views/bonuses.js",
   // The rest of app.js's routes -- all now loaded via dynamic import()
   // rather than a static import at boot (so only the screen actually
@@ -133,6 +134,7 @@ const APP_SHELL = [
   "/js/fileViewer.js",
   "/js/addFileSheet.js",
   "/js/signaturePad.js",
+  "/js/signStatement.js",
   "/js/views/reports.js",
   "/js/views/routePlans.js",
   "/js/views/routePlanSets.js",

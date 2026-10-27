@@ -545,6 +545,9 @@ export const api = {
   getOrder: (id) => request(`/orders/${id}`),
   listOrderDocuments: (id) => request(`/orders/${id}/documents`),
   listCustomerDocuments: (id) => request(`/customers/${id}/documents`),
+  // The sentence the customer reads before signing (signStatement.js); never cached: the debt changes with every visit.
+  signStatement: (id, { orderIds = [], paymentAmd = 0 } = {}) =>
+    request(`/customers/${id}/sign-statement?order_ids=${orderIds.join(",")}&payment=${Math.round(Number(paymentAmd) || 0)}`, { fresh: true }),
   // Customer documents (signed order blanks, payment slips, ...): routes/files.js
   customerFiles: (customerId) => request(`/files/customer/${customerId}`, { fresh: true }),
   orderFiles: (orderId) => request(`/files/order/${orderId}`, { fresh: true }),

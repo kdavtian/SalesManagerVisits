@@ -15,6 +15,7 @@ import { DRIVER_NOTIFY_ROLES, DELIVERY_OUTCOME_NOTIFY_ROLES } from "../notificat
 import { buildMatrix, optimizeOrder } from "../osrm.js";
 import { signatureUpload, uploadDirPath } from "../upload.js";
 import { lockSignedOrders, createSignedActs, balanceBeforeVisit } from "../signedActs.js";
+import { getDocumentTexts } from "../documentTexts.js";
 import { matchesDeclaredImageType } from "../utils/imageSniff.js";
 import { insertPayment } from "./payments.js";
 import { getAppOrderSettings } from "../appOrders.js";
@@ -351,7 +352,7 @@ deliveryRouter.post("/routes/:id/reorder", async (req, res) => {
 deliveryRouter.get("/orders/:id/debt-snapshot", async (req, res) => {
   if (!canDeliverOrders(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const { rows } = await pool.query(
-    "SELECT o.id, o.total_amd, o.customer_id FROM orders o WHERE o.id = $1",
+    "SELECT o.id, o.order_code, o.total_amd, o.customer_id FROM orders o WHERE o.id = $1",
     [req.params.id]
   );
   const row = rows[0];
@@ -360,6 +361,9 @@ deliveryRouter.get("/orders/:id/debt-snapshot", async (req, res) => {
     order_amount_amd: Number(row.total_amd),
     // the same figure the signed act will print (Excel + what Excel does not show yet)
     debt_before_amd: await balanceBeforeVisit(pool, row.customer_id, { excludeOrderIds: [row.id] }),
+    // what the customer reads above the signature box (documentTexts.js); the phone fills in the amount as the driver types it
+    order_code: row.order_code || `#${row.id}`,
+    sign_texts: await getDocumentTexts(),
   });
 });
 
