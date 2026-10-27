@@ -144,9 +144,16 @@ Issues found (I = issue, each has its fix in the steps below):
   Phones keep the list -> report pages.
 
 ### Step 7. Dashboards use the width — I12
-- [ ] Home KPIs: one row of 5 tiles, under it two columns: "Needs attention" (orders waiting, unconfirmed payments, overdue tasks,
+- [x] Home KPIs: one row of 5 tiles, under it two columns: "Needs attention" (orders waiting, unconfirmed payments, overdue tasks,
       payments not in Excel: each row a link) and "Today" (team today, planned vs done per rep, a small map of today's visits).
-- [ ] Team performance / Dashboard / Cashflow: 3-4 column grids above 1400 px, charts side by side, no page longer than two screens.
+- [x] Team performance / Dashboard / Cashflow: 3-4 column grids above 1400 px, charts side by side, no page longer than two screens.
+- As built (1.447.0): `homeKpis.js` draws the 5 tiles in one row (`repeat(5, ...)`), then "Needs attention" (4 link rows from the
+  same `/api/dashboard/kpis` answer; zero rows stay, dimmed) beside "Today" (new `GET /api/dashboard/today`, KPI roles only: every
+  active field rep's planned vs visited today, first check-in time, and today's visited customers on a Leaflet map in rep colours).
+  The planned count reuses the progress card's plan resolution (`plannedCountsByUser` in routes/dashboard.js). The Today element is
+  kept across Home's repaints so the map is drawn once. 1024-1279 px: the two columns stack. Above 1400 px: Team performance
+  channel cards in a 3-4 column grid; Company dashboard = sales left, prospects / stock / brand volume right; Cashflow = accounts
+  and categories in a side column beside the movements. Phones untouched. Test: `desktop-home.spec.mjs`.
 
 ### Step 8. Map for the desktop — I11
 - [ ] Side list as a table (customer, channel, debt, last visit, planned today) sortable, "only the visible area" toggle, click = pan +
@@ -182,4 +189,5 @@ Issues found (I = issue, each has its fix in the steps below):
 - Step 3 (customer card in three columns): 1.443.0, PR #481, 2026-10-27.
 - Step 4 (top bar search + quick actions + keyboard): 1.444.0, PR #483, 2026-10-27.
 - Step 5 (sidebar groups + icons-only mode): 1.445.0, PR #484, 2026-10-27.
-- Step 6 (reports as list + report, export, print): 1.446.0, 2026-10-27.
+- Step 6 (reports as list + report, export, print): 1.446.0, 2026-10-27, PR #485.
+- Step 7 (dashboards use the width: Home KPI row + Needs attention + Today, wide grids): 1.447.0, 2026-10-27.

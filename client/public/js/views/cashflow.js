@@ -47,10 +47,14 @@ export async function renderCashflow(root, navigate) {
         <label>${t("date_to")}<input type="date" id="cf-to" /></label>
       </div>
       <div id="cf-summary"></div>
+      <div class="cf-body">
+      <div class="cf-side">
       <h2 class="section-title">${t("cf_accounts")}</h2>
       <div id="cf-accounts" class="cf-accounts"></div>
       <h2 class="section-title">${t("cf_categories")}</h2>
       <div id="cf-categories"></div>
+      </div>
+      <div class="cf-main">
       <h2 class="section-title">${t("cf_entries")}</h2>
       <div class="activity-search-combined cf-search">
         <input type="search" id="cf-q" placeholder="${escapeHtml(t("cf_search"))}" aria-label="${escapeHtml(t("cf_search"))}" autocomplete="off" />
@@ -61,6 +65,8 @@ export async function renderCashflow(root, navigate) {
       <div id="cf-list"></div>
       <button type="button" class="btn btn-block" id="cf-more" hidden>${t("cf_more")}</button>
       <p class="muted cf-foot" id="cf-foot"></p>
+      </div>
+      </div>
       <button type="button" class="btn btn-block" id="cf-import" hidden>${t("cf_import")}</button>
       <input type="file" id="cf-file" accept=".xlsx,.xlsm" hidden />
       <p class="form-error" id="cf-error" hidden></p>
