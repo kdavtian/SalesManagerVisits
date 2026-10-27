@@ -9,6 +9,10 @@ WORKDIR /app
 COPY server/package*.json server/
 RUN cd server && npm ci --omit=dev
 
+# poppler's pdftoppm turns a document PDF into one picture (server/src/pdfPreview.js): the viewer shows it at once and "Save" stores it in the
+# phone's photos. Own layer after npm ci, so it is installed once and cached like the dependencies.
+RUN apk add --no-cache poppler-utils
+
 COPY server server
 COPY client client
 

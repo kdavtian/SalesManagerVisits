@@ -1,7 +1,8 @@
 import { api } from "../api.js";
 import { renderPotentialCard } from "../potential.js";
-import { saveBlob, showToast, escapeHtml, formatDateDMY, getCurrentPosition, locationErrorHint, compressImage, rotateImageBlob, formatDistance, haversineMeters, creditedDistanceMeters, activateDialog } from "../util.js";
+import { showToast, escapeHtml, formatDateDMY, getCurrentPosition, locationErrorHint, compressImage, rotateImageBlob, formatDistance, haversineMeters, creditedDistanceMeters, activateDialog } from "../util.js";
 import { enqueueCheckin } from "../offlineQueue.js";
+import { openFileViewer } from "../fileViewer.js";
 import { openSyncQueueSheet } from "../syncQueueSheet.js";
 import { openOrderMenu } from "../orderMenu.js";
 import { t, getLang } from "../i18n.js";
@@ -119,6 +120,17 @@ export async function renderCheckin(root, navigate, customerId) {
         <input type="number" name="amount_collected_amd" id="amount-collected-input" min="1" step="any" inputmode="numeric" placeholder="${t("amount_collected_placeholder")}" />
         <p class="form-error" id="amount-collected-error" hidden>${t("amount_collected_required")}</p>
       </label>
+      <!-- Money without a delivery: the customer signs the payment slip the app makes (owner, 2026-10-27). With delivered orders the act's
+           signature covers it (the payment is written on the act). -->
+      <div class="slip-sign-block" id="slip-sign-block" hidden>
+        <span class="delivered-orders-title">${t("slip_sign_hint")}</span>
+        <button type="button" class="camera-btn" id="slip-sign-btn">${icons.pencil}<span>${t("signature_button")}</span></button>
+        <div class="sign-chip" id="slip-sign-chip" hidden>
+          <img id="slip-sign-img" alt="" />
+          <span>${t("slip_signed")}</span>
+          <button type="button" class="photo-remove-btn sign-chip-remove" id="slip-sign-remove" aria-label="${t("remove_photo")}">&times;</button>
+        </div>
+      </div>
 
       <div id="delivered-orders-field" class="delivered-orders-field" hidden>
         <span class="delivered-orders-title">${t("delivered_orders_title")}</span>
@@ -449,6 +461,7 @@ export async function renderCheckin(root, navigate, customerId) {
   function syncAmountFieldVisibility() {
     const collected = container.querySelector('input[name="outcomes"][value="payment_collected"]').checked;
     amountField.hidden = !collected;
+    syncSlipSign();
     if (!collected) {
       amountInput.value = "";
       amountError.hidden = true;
@@ -493,7 +506,15 @@ export async function renderCheckin(root, navigate, customerId) {
     const on = container.querySelector('input[name="outcomes"][value="customer_unavailable"]').checked;
     deliveredField.hidden = !on;
     if (on && !deliverableLoaded) loadDeliverableOrders();
+    syncSlipSign();
   }
+  // The payment slip's signature button: money collected and no order ticked as delivered (then the act carries the payment instead).
+  function syncSlipSign() {
+    const collected = container.querySelector('input[name="outcomes"][value="payment_collected"]').checked;
+    const delivering = container.querySelector('input[name="outcomes"][value="customer_unavailable"]').checked && Boolean(deliveredList.querySelector('input[name="delivered_orders"]:checked'));
+    container.querySelector("#slip-sign-block").hidden = !collected || delivering;
+  }
+  deliveredList.addEventListener("change", syncSlipSign);
 
   container.querySelectorAll('input[name="outcomes"]').forEach((input) => {
     input.addEventListener("change", () => {
@@ -579,10 +600,36 @@ export async function renderCheckin(root, navigate, customerId) {
   let ownSignaturePending = null; // the rep's own signature, when it could not be uploaded yet (offline)
   const signBtn = container.querySelector("#blank-sign-btn");
   const signChip = container.querySelector("#blank-sign-chip");
+  // One customer signature for the visit: on the act when orders are delivered, otherwise on the payment slip.
+  const slipBlock = container.querySelector("#slip-sign-block");
+  const slipBtn = container.querySelector("#slip-sign-btn");
+  const slipChip = container.querySelector("#slip-sign-chip");
   function paintSignature() {
     signChip.hidden = !customerSignature;
     signBtn.hidden = Boolean(customerSignature);
-    if (customerSignature) container.querySelector("#blank-sign-img").src = customerSignature.url;
+    slipChip.hidden = !customerSignature;
+    slipBtn.hidden = Boolean(customerSignature);
+    if (customerSignature) {
+      container.querySelector("#blank-sign-img").src = customerSignature.url;
+      container.querySelector("#slip-sign-img").src = customerSignature.url;
+    }
+  }
+  async function askCustomerSignature(btn, hintKey = "signature_customer_hint") {
+    btn.disabled = true;
+    try {
+      const own = await ensureOwnSignature();
+      if (!own.ok) return;
+      ownSignaturePending = own.pending;
+      const blob = await openSignaturePad({ title: t("signature_customer_title"), hint: t(hintKey), doneLabel: t("signature_sign") });
+      if (!blob) return;
+      customerSignature = { blob, url: URL.createObjectURL(blob) };
+      paintSignature();
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+    } finally {
+      btn.disabled = false;
+    }
   }
   signBtn.addEventListener("click", async () => {
     if (!deliveredList.querySelector('input[name="delivered_orders"]:checked')) {
@@ -591,27 +638,16 @@ export async function renderCheckin(root, navigate, customerId) {
       return;
     }
     blankError.hidden = true;
-    signBtn.disabled = true;
-    try {
-      const own = await ensureOwnSignature();
-      if (!own.ok) return;
-      ownSignaturePending = own.pending;
-      const blob = await openSignaturePad({ title: t("signature_customer_title"), hint: t("signature_customer_hint"), doneLabel: t("signature_sign") });
-      if (!blob) return;
-      customerSignature = { blob, url: URL.createObjectURL(blob) };
-      paintSignature();
-    } catch (err) {
-      errorEl.textContent = err.message;
-      errorEl.hidden = false;
-    } finally {
-      signBtn.disabled = false;
-    }
+    await askCustomerSignature(signBtn);
   });
-  container.querySelector("#blank-sign-remove").addEventListener("click", () => {
+  slipBtn.addEventListener("click", () => askCustomerSignature(slipBtn, "signature_slip_hint"));
+  const removeSignature = () => {
     URL.revokeObjectURL(customerSignature?.url);
     customerSignature = null;
     paintSignature();
-  });
+  };
+  container.querySelector("#blank-sign-remove").addEventListener("click", removeSignature);
+  container.querySelector("#slip-sign-remove").addEventListener("click", removeSignature);
 
   function paintPhotoThumbs() {
     photoThumbGrid.innerHTML = photos
@@ -818,8 +854,8 @@ export async function renderCheckin(root, navigate, customerId) {
     photos.forEach((photo, i) => formData.append("photos", photo.blob, `checkin-${i}.jpg`));
     const orderBlankBlobs = outcomes.includes("customer_unavailable") ? blankPhotos.map((photo) => photo.blob) : [];
     orderBlankBlobs.forEach((blob, i) => formData.append("order_blank_photos", blob, `order-blank-${i}.jpg`));
-    // The customer signed on the phone: only worth sending when at least one order is ticked (the signature belongs to those orders).
-    const signatureBlob = outcomes.includes("customer_unavailable") && deliveredOrderIds.length && customerSignature ? customerSignature.blob : null;
+    // The customer signed on the phone: for the ticked delivered orders (the act), or for the money collected (the payment slip).
+    const signatureBlob = customerSignature && ((outcomes.includes("customer_unavailable") && deliveredOrderIds.length) || amountCollected != null) ? customerSignature.blob : null;
     if (signatureBlob) {
       formData.append("customer_signature", signatureBlob, "customer-signature.png");
       if (ownSignaturePending) formData.append("rep_signature", ownSignaturePending, "rep-signature.png");
@@ -868,6 +904,12 @@ export async function renderCheckin(root, navigate, customerId) {
   });
 
   function showResult(checkin) {
+    // The signed acts and the payment slip just made (owner, 2026-10-27): View opens the document viewer -- the page at once, Share, Save as
+    // a picture -- instead of a share button that had to download first.
+    const madeDocs = [
+      ...(checkin.signed_acts ?? []).map((a) => ({ id: a.id, kind: "signed_act", label: `${t("signature_acts_title")} · ${a.order_code ?? `#${a.order_id}`}` })),
+      ...(checkin.payment_slip ? [{ id: checkin.payment_slip.id, kind: "payment_slip", label: t("slip_title") }] : []),
+    ].map((d) => ({ ...d, mime: "application/pdf", version: 1, created_at: checkin.timestamp, customer_name: customer.name }));
     form.removeAttribute("aria-busy");
     form.hidden = true;
     resultEl.hidden = false;
@@ -884,14 +926,14 @@ export async function renderCheckin(root, navigate, customerId) {
         ${checkin.within_range && state.user?.role !== "sales_manager" ? `<p class="muted">${t("checkin_not_rep_visit")}</p>` : ""}
         ${(checkin.delivered_orders ?? []).length ? `<p class="delivered-orders-done">${t("delivered_orders_moved").replace("{n}", String(checkin.delivered_orders.length))}</p>` : ""}
         ${
-          (checkin.signed_acts ?? []).length
-            ? `<div class="signed-acts"><strong>${t("signature_acts_title")}</strong>${checkin.signed_acts
-                .map((a) => `<div class="signed-act-row"><span>${escapeHtml(a.order_code ?? `#${a.order_id}`)}</span><button type="button" class="btn btn-sm" data-share-act="${a.id}" data-act-name="${escapeHtml(a.order_code ?? a.order_id)}">${t("file_share")}</button></div>`)
+          madeDocs.length
+            ? `<div class="signed-acts">${madeDocs
+                .map((d, i) => `<div class="signed-act-row"><span>${escapeHtml(d.label)}</span><button type="button" class="btn btn-sm" data-view-doc="${i}">${t("slip_view")}</button></div>`)
                 .join("")}</div>`
-            : checkin.signed_act_error
-              ? `<p class="form-error">${t("signature_acts_failed")}</p>`
-              : ""
+            : ""
         }
+        ${checkin.signed_act_error ? `<p class="form-error">${t("signature_acts_failed")}</p>` : ""}
+        ${checkin.payment_slip_error ? `<p class="form-error">${t("slip_failed")}</p>` : ""}
         ${placedOrder ? `<button class="btn btn-primary btn-block" id="create-order-btn">${t("create_order")}</button>` : ""}
         <button class="btn ${placedOrder ? "" : "btn-primary"} btn-block" id="back-to-customer">${t("done")}</button>
       </div>
@@ -899,21 +941,7 @@ export async function renderCheckin(root, navigate, customerId) {
     resultEl.querySelector("#back-to-customer").addEventListener("click", () => {
       navigate(`#/customers/${customerId}`);
     });
-    // Sharing is a tap, not automatic (owner, 2026-10-26): the phone's share sheet offers WhatsApp, Telegram, e-mail...
-    resultEl.querySelectorAll("[data-share-act]").forEach((btn) =>
-      btn.addEventListener("click", async () => {
-        btn.disabled = true;
-        try {
-          const res = await fetch(api.fileUrl({ id: btn.dataset.shareAct, version: 1 }), { credentials: "same-origin" });
-          if (!res.ok) throw new Error(t("pdf_failed"));
-          await saveBlob(await res.blob(), `Act-${btn.dataset.actName}.pdf`);
-        } catch (err) {
-          showToast(err.message || t("pdf_failed"));
-        } finally {
-          btn.disabled = false;
-        }
-      })
-    );
+    resultEl.querySelectorAll("[data-view-doc]").forEach((btn) => btn.addEventListener("click", () => openFileViewer(madeDocs, Number(btn.dataset.viewDoc))));
     if (checkin.rep_signature_saved) {
       state.user.has_signature = true;
       clearPendingOwnSignature();

@@ -58,6 +58,8 @@ async function request(path, options = {}) {
     getCache.clear();
     prefetched.clear();
     inflightGets.clear(); // a GET sent after a change must not share an answer that left before it
+    // Screens keeping their own copies (listCache.js, the customer card) drop answers that left before this change.
+    window.dispatchEvent(new Event("fv:data-changed"));
     return doRequest(path, options);
   }
   // { fresh: true }: a screen that must show what is true NOW (the Orders list other people keep changing) skips both
@@ -552,6 +554,31 @@ export const api = {
   rotateFile: (id, degrees) => json(`/files/${id}/rotate`, "POST", { degrees }),
   deleteFile: (id) => request(`/files/${id}`, { method: "DELETE" }),
   fileUrl: (file, { thumb = false } = {}) => `/api/files/${file.id}/content?v=${file.version ?? 1}${thumb ? "&size=thumb" : ""}`,
+  // A PDF document as one JPEG (server pdfPreview.js); 501 when the server cannot render it.
+  filePreviewUrl: (file) => `/api/files/${file.id}/preview?v=${file.version ?? 1}`,
+  printPaymentSlips: async (ids) => {
+    const res = await fetch("/api/files/print-slips", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", "X-App-Version": APP_VERSION, ...(getCsrfToken() ? { "X-CSRF-Token": getCsrfToken() } : {}) },
+      body: JSON.stringify({ ids }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+    return res.blob();
+  },
+  orderDocumentUrl: (docId) => `/api/orders/documents/${docId}/file`,
+  orderDocumentPreviewUrl: (docId) => `/api/orders/documents/${docId}/preview`,
+  // Any PDF built on the phone (order blanks, a debt statement) as a JPEG, for "Save as image".
+  pdfToImage: async (pdfBlob) => {
+    const res = await fetch("/api/files/pdf-preview", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/pdf", "X-App-Version": APP_VERSION, ...(getCsrfToken() ? { "X-CSRF-Token": getCsrfToken() } : {}) },
+      body: pdfBlob,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.blob();
+  },
   getAccountingCount: () => request("/orders/accounting-count"),
   getAccountingAgent: () => request("/orders/accounting-agent"),
   // A signed PDF is binary, so it bypasses request()'s JSON handling.

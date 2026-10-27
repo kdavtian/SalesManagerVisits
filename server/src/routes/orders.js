@@ -5,6 +5,10 @@ import { buildOrderBlanksPdf } from "../orderBlankPdf.js";
 import { loadBlankOrders } from "../orderBlankData.js";
 import { canChangeSignedOrder, SIGNED_ORDER_ERROR } from "../signedActs.js";
 import { Router } from "express";
+import fs from "node:fs";
+import path from "node:path";
+import { uploadDirPath } from "../upload.js";
+import { pdfBufferPreview } from "../pdfPreview.js";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { tierListPrice } from "../tierPricing.js";
@@ -602,9 +606,22 @@ ordersRouter.get("/documents/:docId/file", async (req, res) => {
   res.send(doc.data);
 });
 
+// A signed accounting document as one JPEG (pdfPreview.js), kept in the uploads folder after the first look.
+ordersRouter.get("/documents/:docId/preview", async (req, res) => {
+  const id = Number(req.params.docId);
+  const { rows } = await pool.query("SELECT content_type, data FROM order_documents WHERE id = $1", [id]);
+  const doc = rows[0];
+  if (!doc) return res.status(404).json({ error: "Document not found" });
+  if (doc.content_type !== "application/pdf") return res.status(400).json({ error: "Not a PDF" });
+  const jpg = await pdfBufferPreview(doc.data, path.join(uploadDirPath, `accdoc-${id}.preview.jpg`));
+  if (!jpg) return res.status(501).json({ error: "Preview not available" });
+  res.set("Content-Type", "image/jpeg").set("Cache-Control", "private, max-age=3600").send(jpg);
+});
+
 ordersRouter.delete("/documents/:docId", async (req, res) => {
   if (!canRequestAccountingDocs(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const { rowCount } = await pool.query("DELETE FROM order_documents WHERE id = $1", [req.params.docId]);
+  if (rowCount) fs.unlink(path.join(uploadDirPath, `accdoc-${Number(req.params.docId)}.preview.jpg`), () => {});
   if (!rowCount) return res.status(404).json({ error: "Document not found" });
   res.json({ ok: true });
 });

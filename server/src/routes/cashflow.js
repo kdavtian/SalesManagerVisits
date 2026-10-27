@@ -201,21 +201,23 @@ cashflowRouter.post("/entries", async (req, res) => {
   }
 });
 
-// Apply an update / delete (direct, or an approved request) in one transaction, with its log line.
-async function applyChange(id, action, value, userId, logAction = action, note = null) {
+// Apply an update / delete with its log line, inside the caller's transaction. false = the row is gone.
+async function changeIn(client, id, action, value, userId, logAction = action, note = null) {
+  const before = await rowOf(client, id);
+  if (!before) return false;
+  if (action === "delete") await client.query("DELETE FROM cash_entries WHERE id = $1", [id]);
+  else await client.query(`UPDATE cash_entries SET ${ENTRY_COLS.map((k, i) => `${k} = $${i + 1}`).join(", ")}, updated_at = now() WHERE id = $${ENTRY_COLS.length + 1}`, [...ENTRY_COLS.map((k) => value[k]), id]);
+  await logEntry(client, id, logAction, userId, { before, after: action === "delete" ? null : await rowOf(client, id), note });
+  return true;
+}
+
+async function inTransaction(work) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const before = await rowOf(client, id);
-    if (!before) {
-      await client.query("ROLLBACK");
-      return false;
-    }
-    if (action === "delete") await client.query("DELETE FROM cash_entries WHERE id = $1", [id]);
-    else await client.query(`UPDATE cash_entries SET ${ENTRY_COLS.map((k, i) => `${k} = $${i + 1}`).join(", ")}, updated_at = now() WHERE id = $${ENTRY_COLS.length + 1}`, [...ENTRY_COLS.map((k) => value[k]), id]);
-    await logEntry(client, id, logAction, userId, { before, after: action === "delete" ? null : await rowOf(client, id), note });
-    await client.query("COMMIT");
-    return true;
+    const result = await work(client);
+    await client.query(result === false || result?.rollback ? "ROLLBACK" : "COMMIT");
+    return result;
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -223,6 +225,9 @@ async function applyChange(id, action, value, userId, logAction = action, note =
     client.release();
   }
 }
+
+// A direct update / delete in one transaction, with its log line.
+const applyChange = (id, action, value, userId) => inTransaction((client) => changeIn(client, id, action, value, userId));
 
 // One row in full: the row, its history (with date and time), a waiting request, and what this user may do with it.
 cashflowRouter.get("/entries/:id", async (req, res) => {
@@ -318,16 +323,26 @@ cashflowRouter.post("/requests/:id/:decision", async (req, res) => {
   if (!isCashflowManagement(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const decision = req.params.decision;
   if (!["approve", "reject"].includes(decision)) return res.status(404).json({ error: "Not found" });
-  const { rows: [r] } = await pool.query(
-    "UPDATE cash_entry_requests SET status = $2, decided_by = $3, decided_at = now() WHERE id = $1 AND status = 'pending' RETURNING *",
-    [Number(req.params.id), decision === "approve" ? "approved" : "rejected", req.user.id]
-  );
-  if (!r) return res.status(404).json({ error: "Request not found or already decided" });
-  if (decision === "approve") {
-    const ok = await applyChange(r.entry_id, r.action, r.payload, req.user.id, r.action, `approved request #${r.id}`);
-    if (!ok) return res.status(404).json({ error: "The row no longer exists" });
-    await logEntry(pool, r.entry_id, "approve", req.user.id, { note: `#${r.id}` });
-  } else await logEntry(pool, r.entry_id, "reject", req.user.id, { note: `#${r.id}` });
+  // The decision, the change and both log lines commit together: a change that fails leaves the request waiting, not "approved" with nothing done.
+  const outcome = await inTransaction(async (client) => {
+    const { rows: [r] } = await client.query(
+      "UPDATE cash_entry_requests SET status = $2, decided_by = $3, decided_at = now() WHERE id = $1 AND status = 'pending' RETURNING *",
+      [Number(req.params.id), decision === "approve" ? "approved" : "rejected", req.user.id]
+    );
+    if (!r) return { status: 404, error: "Request not found or already decided" };
+    if (decision === "reject") {
+      await logEntry(client, r.entry_id, "reject", req.user.id, { note: `#${r.id}` });
+      return { ok: true };
+    }
+    // The row was changed after the request was made: approving would silently undo that newer change.
+    const { rows: [cur] } = await client.query("SELECT updated_at > $2 AS newer FROM cash_entries WHERE id = $1", [r.entry_id, r.requested_at]);
+    if (!cur) return { status: 404, error: "The row no longer exists", rollback: true };
+    if (cur.newer && r.action === "update") return { status: 409, error: "The row was changed after this request was made; reject it and ask again", rollback: true };
+    await changeIn(client, r.entry_id, r.action, r.payload, req.user.id, r.action, `approved request #${r.id}`);
+    await logEntry(client, r.entry_id, "approve", req.user.id, { note: `#${r.id}` });
+    return { ok: true };
+  });
+  if (outcome.error) return res.status(outcome.status).json({ error: outcome.error });
   res.json({ ok: true });
 });
 

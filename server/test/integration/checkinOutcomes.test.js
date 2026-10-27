@@ -18,7 +18,9 @@ test.before(async () => {
   customer = await createCustomer({ created_by: manager.id, assigned_manager_id: manager.id, lat: 40.18, lng: 44.51 });
 });
 test.after(async () => {
-  // Collecting money on a check-in also files a payment for the customer.
+  // Collecting money on a check-in also files a payment (and its slip) for the customer.
+  const { rows: slips } = await pool.query("DELETE FROM customer_files WHERE customer_id = $1 RETURNING file_path", [customer.id]);
+  for (const r of slips) for (const f of [r.file_path, `${r.file_path}.preview.jpg`]) fs.rmSync(path.join(uploadDirPath, f), { force: true });
   await pool.query("DELETE FROM payments WHERE customer_id = $1", [customer.id]);
   await cleanupAll();
   await stopTestServer();
@@ -79,7 +81,8 @@ test("Products delivered: the order-blank photo is stored as an order blank for 
   assert.equal(res.data.order_blank_count, 2);
   const { rows: visitRows } = await pool.query("SELECT photo_path FROM checkin_photos WHERE checkin_id = $1", [res.data.id]);
   assert.equal(visitRows.length, 1, "only the visit photo is a check-in photo");
-  const files = (await apiRequest(`/api/files/customer/${customer.id}`, { cookie })).data;
+  // Money collected earlier in this file also filed a payment slip; only the blanks matter here.
+  const files = (await apiRequest(`/api/files/customer/${customer.id}`, { cookie })).data.filter((f) => f.kind !== "payment_slip");
   assert.equal(files.length, 2, "the two blank pages are customer documents");
   assert.ok(files.every((f) => f.kind === "order_blank"));
   const photos = (await apiRequest(`/api/customers/${customer.id}/photos`, { cookie })).data;

@@ -39,19 +39,27 @@ export function t(key) {
 // screen are replaced in place -- no reload, an open sheet stays open.
 const missing = new Set();
 let refresh = null;
+let refreshes = 0;
+let lastRefreshAt = 0;
 function refreshOnMiss(key) {
   missing.add(key);
-  if (refresh) return;
+  // At most 3 tries a session, 30 s apart: a failed (offline) try is retried later, and a text that is missing in the new file too
+  // does not fetch it on every call.
+  if (refresh || refreshes >= 3 || Date.now() - lastRefreshAt < 30_000) return;
+  refreshes += 1;
+  lastRefreshAt = Date.now();
   const lang = getLang();
   refresh = import(`./i18n-${lang}.js?fresh=${Date.now()}`)
     .then((m) => {
       dicts[lang] = { ...dicts[lang], ...m.default };
       replaceOnScreen(dicts[lang]);
     })
-    .catch(() => {});
+    .catch(() => {})
+    .finally(() => (refresh = null));
 }
 function replaceOnScreen(dict) {
-  const keys = [...missing].filter((k) => dict[k] !== undefined);
+  // Only names with an underscore ("add_document"): a plain word could be part of a customer's name or a note.
+  const keys = [...missing].filter((k) => dict[k] !== undefined && k.includes("_"));
   if (!keys.length || typeof document === "undefined") return;
   // whole names only ("add_document", never a part of a longer word)
   const swap = (text) => keys.reduce((s, k) => (s.includes(k) ? s.replace(new RegExp(`(?<![\\w])${k}(?![\\w])`, "g"), () => dict[k]) : s), text);
@@ -67,5 +75,5 @@ function replaceOnScreen(dict) {
       if (next !== v) el.setAttribute(attr, next);
     });
   }
-  keys.forEach((k) => missing.delete(k));
+  [...missing].filter((k) => dict[k] !== undefined).forEach((k) => missing.delete(k));
 }

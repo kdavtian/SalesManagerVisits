@@ -12,6 +12,9 @@ import { thumbnailPathFor, removeThumbnail } from "../utils/imageThumbs.js";
 import { periodTimestampCondition, PERIOD_KEYS } from "../utils/periodWindows.js";
 import { canAddCustomerFiles, seesAllCustomerFiles } from "../roles.js";
 import { scheduleAiCheck, checkFileWithAi, getAiCheckSettings, isAiConfigured } from "../aiBlankCheck.js";
+import express from "express";
+import rateLimit from "express-rate-limit";
+import { pdfPreviewPath, pdfBufferPreview } from "../pdfPreview.js";
 import { FILE_KINDS, FILE_COLUMNS, visibleFilesCondition, canDeleteFile, canRotateFile, parseOrderIds } from "../customerFiles.js";
 
 export const filesRouter = Router();
@@ -94,6 +97,76 @@ filesRouter.get("/:id/content", async (req, res) => {
   res.sendFile(target, { headers: { "Cache-Control": "private, max-age=31536000, immutable", "Content-Type": req.query.size === "thumb" && target.endsWith(".jpg") ? "image/jpeg" : file.mime } }, (err) => {
     if (err && !res.headersSent) res.status(404).json({ error: "File not found" });
   });
+});
+
+// A PDF document as one JPEG (pdfPreview.js): what the viewer shows at once, and what "Save" puts in the phone's photos. 501 = this server
+// cannot render PDFs (the viewer then opens the PDF itself). Same id + version = same picture, so the phone keeps it.
+filesRouter.get("/:id/preview", async (req, res) => {
+  const file = await loadFile(req, res);
+  if (!file) return;
+  if (file.mime !== "application/pdf") return res.status(400).json({ error: "Not a PDF" });
+  const jpg = await pdfPreviewPath(path.join(uploadDirPath, file.file_path));
+  if (!jpg) return res.status(501).json({ error: "Preview not available" });
+  res.sendFile(jpg, { headers: { "Cache-Control": "private, max-age=31536000, immutable", "Content-Type": "image/jpeg" } }, (err) => {
+    if (err && !res.headersSent) res.status(404).json({ error: "File not found" });
+  });
+});
+
+// Any PDF the app just built on the phone (order blanks, a debt statement) as one JPEG, for "Save as image" (owner, 2026-10-27).
+// Rendering is CPU work: a person saves a few documents a minute, never hundreds.
+const pdfPreviewLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => Boolean(process.env.E2E_RATE_LIMIT_BYPASS_TOKEN) && req.get("x-e2e-rate-limit-bypass") === process.env.E2E_RATE_LIMIT_BYPASS_TOKEN,
+  message: { error: "Too many documents at once -- try again in a minute" },
+});
+filesRouter.post("/pdf-preview", pdfPreviewLimiter, express.raw({ type: "application/pdf", limit: "15mb" }), async (req, res) => {
+  if (!Buffer.isBuffer(req.body) || req.body.subarray(0, 5).toString() !== "%PDF-") return res.status(400).json({ error: "Send a PDF" });
+  const jpg = await pdfBufferPreview(req.body);
+  if (!jpg) return res.status(501).json({ error: "Preview not available" });
+  res.set("Content-Type", "image/jpeg").set("Cache-Control", "no-store").send(jpg);
+});
+
+// Payment slips for printing, two to an A4 sheet (owner, 2026-10-27). Each stored slip is a half-A4 page; its picture is placed in one half,
+// so the printed sheet is exactly what was signed. ids: the slips on screen (up to 40), in that order.
+filesRouter.post("/print-slips", async (req, res) => {
+  const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).map(Number).filter(Number.isInteger).slice(0, 40);
+  if (!ids.length) return res.status(400).json({ error: "Choose the payment slips" });
+  const params = [ids];
+  const visible = visibleFilesCondition(req.user, params);
+  const { rows } = await pool.query(
+    `SELECT f.id, f.file_path FROM customer_files f JOIN customers c ON c.id = f.customer_id
+     WHERE f.id = ANY($1) AND f.kind = 'payment_slip' AND f.mime = 'application/pdf' AND ${visible}`,
+    params
+  );
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const pictures = [];
+  for (const id of ids) {
+    const row = byId.get(id);
+    const jpg = row ? await pdfPreviewPath(path.join(uploadDirPath, row.file_path)) : null;
+    if (jpg) pictures.push(jpg);
+  }
+  if (!pictures.length) return res.status(rows.length ? 501 : 404).json({ error: rows.length ? "Preview not available" : "No payment slips found" });
+  const PDFDocument = (await import("pdfkit")).default;
+  const doc = new PDFDocument({ size: "A4", margin: 0, info: { Title: "Payment slips", Author: "KAD Motors" } });
+  const chunks = [];
+  doc.on("data", (x) => chunks.push(x));
+  const done = new Promise((resolve) => doc.on("end", () => resolve(Buffer.concat(chunks))));
+  const W = 595.28;
+  const H = 841.89;
+  pictures.forEach((jpg, i) => {
+    if (i && i % 2 === 0) doc.addPage({ size: "A4", margin: 0 });
+    const top = i % 2 === 0 ? 0 : H / 2;
+    doc.image(jpg, 0, top, { fit: [W, H / 2], align: "center", valign: "center" });
+    if (i % 2 === 1 || i === pictures.length - 1) {
+      doc.save().moveTo(20, H / 2).lineTo(W - 20, H / 2).dash(4, { space: 3 }).lineWidth(0.5).strokeColor("#9A9A9A").stroke().undash().restore();
+    }
+  });
+  doc.end();
+  const pdf = await done;
+  res.set("Content-Type", "application/pdf").set("Cache-Control", "no-store").send(pdf);
 });
 
 // Add a document to a customer: one image (a photo of a signed order blank, a payment slip, ...).
@@ -185,5 +258,6 @@ filesRouter.delete("/:id", async (req, res) => {
   if (!rows[0]) return res.status(404).json({ error: "File not found" });
   fs.unlink(path.join(uploadDirPath, rows[0].file_path), () => {});
   removeThumbnail(uploadDirPath, rows[0].file_path);
+  fs.unlink(path.join(uploadDirPath, `${rows[0].file_path}.preview.jpg`), () => {}); // the picture of a PDF (pdfPreview.js)
   res.status(204).end();
 });

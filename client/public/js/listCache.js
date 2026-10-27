@@ -79,7 +79,7 @@ async function getCached(key) {
       req.onerror = () => reject(req.error);
     });
     if (stored !== undefined) memorySet(scopedKey(key), stored);
-    return stored;
+    return stored === undefined ? undefined : cloneValue(stored); // the memory copy stays untouched by a screen that sorts its rows
   } catch {
     // IndexedDB unavailable (private browsing, storage pressure) -- just
     // means no instant-open this time, not a reason to fail the screen.
@@ -87,13 +87,17 @@ async function getCached(key) {
   }
 }
 
-async function setCached(key, value) {
+function setCached(key, value) {
+  return setCachedFull(scopedKey(key), value);
+}
+// `full` is the already-scoped key: an answer that lands after a logout + another login is not filed under the new person's name.
+async function setCachedFull(full, value) {
   const copy = cloneValue(value);
-  if (copy !== undefined) memorySet(scopedKey(key), copy);
+  if (copy !== undefined) memorySet(full, copy);
   try {
     const db = await openDb();
     await new Promise((resolve, reject) => {
-      const req = db.transaction(STORE, "readwrite").objectStore(STORE).put(value, scopedKey(key));
+      const req = db.transaction(STORE, "readwrite").objectStore(STORE).put(value, full);
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
@@ -108,6 +112,8 @@ async function setCached(key, value) {
 // through getCached/setCached's own scoping.
 export async function clearListCache() {
   memory.clear();
+  inflight.clear(); // requests still on their way are not saved
+  window.dispatchEvent(new Event("fv:cache-cleared"));
   try {
     const db = await openDb();
     await new Promise((resolve, reject) => {
@@ -154,21 +160,23 @@ export async function clearCacheIfRoleChanged(user) {
 // One request per key at a time: a "warm it as the finger lands" fetch and the sheet that opens a moment later share the same
 // round trip instead of asking the server twice.
 const inflight = new Map();
-function sharedFetch(key, fetcher) {
+// { force: true } (the card right after the rep changed something) starts a new request instead of joining one that left before the change.
+// Only the newest request for a key saves its answer, so an older one landing late never overwrites it.
+function sharedFetch(key, fetcher, { force = false } = {}) {
   const full = scopedKey(key);
-  if (!inflight.has(full)) {
-    inflight.set(
-      full,
-      fetcher()
-        .then((fresh) => {
-          setCached(key, fresh);
-          return fresh;
-        })
-        .finally(() => inflight.delete(full))
-    );
+  if (force || !inflight.has(full)) {
+    const promise = fetcher()
+      .then((fresh) => {
+        if (inflight.get(full) === promise) setCachedFull(full, fresh);
+        return fresh;
+      })
+      .finally(() => inflight.get(full) === promise && inflight.delete(full));
+    inflight.set(full, promise);
   }
   return inflight.get(full);
 }
+// Any change sent to the server: answers already on their way may predate it, so they are no longer shared or saved.
+window.addEventListener("fv:data-changed", () => inflight.clear());
 
 // For screens that want to decide for themselves what to do with a saved copy (the customer card): the copy, or undefined.
 export const peekCache = getCached;

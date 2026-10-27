@@ -299,6 +299,14 @@ test("edit window, change requests, history with date and time; In / Out counts;
   d = (await send("accountant", `/entries/${old}`, "GET")).data;
   assert.deepEqual(d.log.map((l) => l.action), ["create", "request", "update", "approve"]);
 
+  // the row changed after the request was made: approving is refused (it would undo that change), the request stays waiting until rejected
+  const late = (await send("accountant", `/entries/${old}/requests`, "POST", { action: "update", data: { ...base, amount: 1, info: "ITest stale" } })).data.id;
+  assert.equal((await send("admin", `/entries/${old}`, "PUT", { ...base, amount: 7777, info: "ITest old fixed" })).status, 200);
+  const refused = await send("admin", `/requests/${late}/approve`, "POST", {});
+  assert.equal(refused.status, 409);
+  assert.equal((await pool.query("SELECT status FROM cash_entry_requests WHERE id = $1", [late])).rows[0].status, "pending", "nothing half-done");
+  assert.equal((await send("admin", `/requests/${late}/reject`, "POST", {})).status, 200);
+
   // a delete request rejected leaves the row; approved removes it, the history stays readable
   const del = (await send("accountant", `/entries/${old}/requests`, "POST", { action: "delete", reason: "duplicate" })).data.id;
   assert.equal((await send("admin", `/requests/${del}/reject`, "POST", {})).status, 200);

@@ -381,7 +381,7 @@ export async function renderCashflow(root, navigate) {
           await paint();
           reload();
         } catch (er) {
-          showToast(er.message);
+          showToast(er.status === 409 ? t("cf_request_stale") : er.message);
           decide.disabled = false;
         }
       } else if (open) openDetails(open.dataset.open);

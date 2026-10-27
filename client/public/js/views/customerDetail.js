@@ -81,7 +81,7 @@ export async function renderCustomerDetail(root, navigate, customerId, { fresh =
   container.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
   let data;
   try {
-    data = await refreshCache(source.key, source.fetch);
+    data = await refreshCache(source.key, source.fetch, { force: fresh });
   } catch (err) {
     if (container.isConnected) showError(err);
     return;
