@@ -7,6 +7,10 @@ const WIDE = "(min-width: 1400px)";
 // key: what is shown ("order:12", "task:7") -- lists use it to highlight their open row.
 export function dockSheet(overlay, key) {
   if (!window.matchMedia?.(WIDE).matches) return;
+  // The customer card docked beside the Customers table (customers.js) stays: a sheet opened from inside it is the usual
+  // centred dialog on top, not a second panel that would replace it. Another row of the table does replace it.
+  const isCustomerPanel = Boolean(overlay.querySelector(":scope > .customer-panel"));
+  if (!isCustomerPanel && document.querySelector(".sheet-overlay.sheet-docked > .customer-panel")) return;
   // one panel at a time: opening the next row replaces the previous one
   document.querySelectorAll(".sheet-overlay.sheet-docked").forEach((o) => o !== overlay && o.remove());
   overlay.classList.add("sheet-docked");

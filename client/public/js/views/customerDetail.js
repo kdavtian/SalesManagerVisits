@@ -1,4 +1,6 @@
 import { api } from "../api.js";
+import { layoutCustomerWide, wideCard } from "../customerWide.js";
+import { dockSheet } from "../dockSheet.js";
 import { reorderHash } from "../reorder.js";
 import { activateCombobox, activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, formatPhoneDisplay, normalizePhone, openNavigation, tierSelectorHtml, activateTierSelector, tierBadgeHtml, categorySelectorHtml, activateCategorySelector, categoryLabel, customerListIconHtml, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, SALES_CHANNELS, channelDisplayLabel, parseDateOnly, formatDateDMY, formatDayMonth, labelColon, erpLineDiscountRowHtml, leaveSheetTo, showToast, openInfoPopup } from "../util.js";
 import { wirePlaceInput, placeNoticeText } from "../places.js";
@@ -8,7 +10,7 @@ import { t } from "../i18n.js";
 import { dueChipHtml } from "../debtChip.js";
 import { icons } from "../icons.js";
 import { state, canCreateTasks, sendsRequests, canSetCustomerPrices, canEditDirectly, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, isAdmin, seesFinancialExports, seesAllActivity } from "../state.js";
-import { openVisitDetailSheet, openPhotoLightbox } from "../visitDetail.js";
+import { openVisitDetailSheet, openPhotoLightbox, checkinOutcomeLabels } from "../visitDetail.js";
 import { visitStatusBadge } from "./customers.js";
 import { renderPotentialCard, potentialBadgeHtml } from "../potential.js";
 import { openFileReadySheet } from "../fileReadySheet.js";
@@ -452,6 +454,16 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
 
   renderPendingRequest(container.querySelector("#pending-request-slot"), pendingRequests[0], reload);
 
+  layoutCustomerWide(container, {
+    customer,
+    erpOrders,
+    navigate,
+    openPayments: () => openPaymentsReceivedSheet(customer),
+    openFiles: () => openCustomerFiles(customer),
+    openErpOrder: (row) => openOrderDetailSheet(customerId, row.order_id, row),
+    openAppOrder: async (id) => (await import("../orderDetailSheet.js")).openOrderDetailSheet(id, { navigate }),
+  });
+
   const historyEl = container.querySelector("#checkin-history");
   const openVisit = (index) =>
     openVisitDetailSheet(checkins[index], reload, navigate);
@@ -459,11 +471,15 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
   // tags, note, photos) used to be rendered inline for every single visit
   // at once, which made a customer with a long history nearly unusable to
   // scroll through. Tapping a row opens everything in its own sheet.
+  // A wide desktop card (customerWide.js) has a whole column for the history: every visit, each with what happened.
+  const wide = wideCard(container);
+  const outcomesText = (ch) => checkinOutcomeLabels(ch).join(", ");
   const visitRowHtml = (ch, i) => `
         <button type="button" class="card checkin-row" data-checkin-index="${i}">
           <div class="checkin-row-main">
             <strong>${escapeHtml(ch.user_name)}</strong>
             <span class="muted">${formatDateTime(ch.timestamp)}</span>
+            ${wide && outcomesText(ch) ? `<span class="checkin-row-outcomes">${escapeHtml(outcomesText(ch))}${ch.amount_collected_amd != null ? ` · ${formatAmd(Number(ch.amount_collected_amd))}` : ""}</span>` : ""}
           </div>
           <span class="card-trailing">
             <span class="visit-range-icon ${ch.within_range ? "is-ok" : "is-bad"}" role="img" aria-label="${ch.within_range ? t("location_verified") : t("location_mismatch_away")}">${ch.within_range ? icons.checkCircle : icons.mapWarning}</span>
@@ -480,7 +496,9 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
         checkins.map(visitRowHtml).join("") +
         (moreAvailable ? `<button type="button" class="btn btn-block" id="more-visits-btn">${t("show_older_visits")}</button>` : "");
       historyEl.querySelectorAll("[data-checkin-index]").forEach((btn) => btn.addEventListener("click", () => openVisit(Number(btn.dataset.checkinIndex))));
-      historyEl.querySelector("#more-visits-btn")?.addEventListener("click", async (e) => {
+      const moreBtn = historyEl.querySelector("#more-visits-btn");
+      if (moreBtn && wide) queueMicrotask(() => moreBtn.click());
+      moreBtn?.addEventListener("click", async (e) => {
         e.currentTarget.disabled = true;
         try {
           const older = await api.customerCheckins(customerId, { limit: 1000, offset: checkins.length });
@@ -639,6 +657,7 @@ async function openPaymentsReceivedSheet(customer) {
   overlay.className = "sheet-overlay";
   overlay.innerHTML = `<div class="sheet"><button type="button" class="icon-btn sheet-close-x" data-action="close-sheet" aria-label="${t("close")}">${icons.close}</button><p class="loading-state" role="status">${t("loading")}</p></div>`;
   document.body.appendChild(overlay);
+  dockSheet(overlay, `customer-payments:${customer.id}`);
   activateDialog(overlay);
   overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
   overlay.querySelector('[data-action="close-sheet"]').addEventListener("click", () => overlay.remove());
@@ -723,6 +742,7 @@ export async function openOrderDetailSheet(customerId, orderId, preview = null) 
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
   document.body.appendChild(overlay);
+  dockSheet(overlay, `erp-order:${orderId}`);
   activateDialog(overlay);
   overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
   const closeX = `<button type="button" class="icon-btn" data-action="close-order-detail" aria-label="${t("close")}">${icons.close}</button>`;
@@ -954,6 +974,7 @@ async function openAccountSettingsSheet(customer, onDone) {
     </div>
   `;
   document.body.appendChild(overlay);
+  dockSheet(overlay, `customer-account:${customer.id}`);
   activateDialog(overlay);
 
   // Who changed the credit limit and when (last 3 changes).
@@ -1209,6 +1230,7 @@ async function openCustomerFiles(customer) {
     </div>
   `;
   document.body.appendChild(overlay);
+  dockSheet(overlay, `customer-files:${customerId}`);
   activateDialog(overlay);
   overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
   overlay.querySelector('[data-action="close-sheet"]').addEventListener("click", () => overlay.remove());
@@ -1348,6 +1370,7 @@ async function openEditSheet(customer, navigate, onDone) {
     </div>
   `;
   document.body.appendChild(overlay);
+  dockSheet(overlay, `customer-edit:${customer.id}`);
   activateDialog(overlay);
   activateTierSelector(overlay);
   activateCategorySelector(overlay);

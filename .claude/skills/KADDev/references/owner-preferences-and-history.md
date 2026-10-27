@@ -392,3 +392,7 @@ Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets 
   (`.desk-filters`, `.desk-thead-slot`, `.desk-foot-slot`, plus `.desk-bulk` when it has bulk actions), `table.checkHtml(row)`
   before the icon and `table.cellsHtml(row)` before the chevron, and calls renderHead() / renderFoot(n) / paintSelection().
   Rows that are <button>s report the row as the click target, so the engine finds the checkbox by the click position.
+- **Desktop step 3 (1.443.0):** customer card in three columns at >= 1400 px (`client/public/js/customerWide.js`, called at the end
+  of `paintCustomerCard`): it MOVES the existing blocks (never re-renders them) and restores them when the window narrows, so the
+  phone DOM order is untouched. Sheets opened from the card call `dockSheet()`; `body:has(.sheet-docked)` hides the right column.
+  `dockSheet()` refuses to dock while the Customers-table customer panel is docked, so a sheet opened inside it stays a dialog.
