@@ -8,7 +8,7 @@
 import { pool } from "./db/pool.js";
 import { notifyUser } from "./notifications.js";
 
-const amd = (n) => `${Math.round(Number(n)).toLocaleString("en-US")} դր.`;
+const amd = (n) => `${Math.round(Number(n)).toLocaleString("en-US")} դր`;
 
 // `kind` = the automatic task kind; `taskKind` = the matching type a person can give (migration 125) -- both close.
 async function closeTasks(kind, taskKind, { customerId, actorId, note, outcome = null, body, onlyAssignee = null }) {

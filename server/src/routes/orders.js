@@ -272,6 +272,7 @@ export async function createOrderHandler(req, res) {
   // any rep could link their order to someone else's checkin (or one for a
   // different customer entirely), which would misattribute the order in
   // the customer's visit history.
+  let linkedCheckinId = checkin_id || null;
   if (checkin_id) {
     const { rows: checkinRows } = await pool.query(
       "SELECT id FROM checkins WHERE id = $1 AND user_id = $2 AND customer_id = $3",
@@ -280,6 +281,19 @@ export async function createOrderHandler(req, res) {
     if (!checkinRows[0]) {
       return res.status(400).json({ error: "checkin_id does not match this customer and your own check-ins" });
     }
+  } else {
+    // Owner, 2026-10-27: the rep ticked "Order placed" at the visit and typed the order later from the Orders page -- link the order to
+    // that visit, so the visit's details open it. Only the rep's own "Order placed" visit of this customer today (Yerevan), the latest
+    // one, and only while no order is linked to it yet.
+    const { rows: todays } = await pool.query(
+      `SELECT ch.id FROM checkins ch
+       WHERE ch.user_id = $1 AND ch.customer_id = $2 AND 'order_placed' = ANY(ch.outcomes)
+         AND (ch.timestamp AT TIME ZONE 'Asia/Yerevan')::date = (now() AT TIME ZONE 'Asia/Yerevan')::date
+         AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.checkin_id = ch.id)
+       ORDER BY ch.timestamp DESC LIMIT 1`,
+      [req.user.id, customerId]
+    );
+    linkedCheckinId = todays[0]?.id ?? null;
   }
 
   // KAD OS: the most pieces of one product in one order (by pack size). Above it the customer is told to call their sales manager.
@@ -340,7 +354,7 @@ export async function createOrderHandler(req, res) {
                            credit_status, credit_exposure_amd, credit_limit_snapshot_amd, payment_term_days, downpayment_pct, downpayment_amd,
                            order_source, build_seconds, build_taps, placed_via_app, app_discount_pct, promised_date)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24) RETURNING *`,
-      [customerId, req.user.id, checkin_id || null, initialStatus, totalAmd, note || null, discountPct, discountAmd, approvalStatus, orderCode, payment_method, client_ref || null,
+      [customerId, req.user.id, linkedCheckinId, initialStatus, totalAmd, note || null, discountPct, discountAmd, approvalStatus, orderCode, payment_method, client_ref || null,
        creditStatus, credit ? credit.exposure : null, credit ? credit.limit : null, paymentTermDays, downpaymentPct, downpaymentAmd, effort.source, effort.seconds, effort.taps,
        Boolean(partner), partner && discountAmd > 0 ? appPricing.discountPct : null, promisedDate]
     );

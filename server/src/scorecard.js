@@ -55,7 +55,7 @@ export async function buildScorecard(weekDate, { userId = null } = {}) {
   return { from, to: iso(new Date(`${to}T00:00:00Z`).getTime() - DAY_MS), reps };
 }
 
-const amd = (n) => `${Math.round(n).toLocaleString("en-US")} դր.`;
+const amd = (n) => `${Math.round(n).toLocaleString("en-US")} դր`;
 
 // Monday 09:00+ Yerevan, once: every rep gets their own last week, management a summary.
 let lastSentWeek = null;
