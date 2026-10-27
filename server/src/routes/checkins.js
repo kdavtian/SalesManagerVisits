@@ -14,7 +14,7 @@ import { periodTimestampCondition, PERIOD_KEYS } from "../utils/periodWindows.js
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { insertPayment } from "./payments.js";
 import { autoCompleteCollectionTasks, autoCompleteProductCheckTasks, autoCompleteVisitTasks } from "../taskAutoComplete.js";
-import { lockSignedOrders, createSignedActs, saveOwnSignature } from "../signedActs.js";
+import { lockSignedOrders, createSignedActs, createPaymentSlip, saveOwnSignature } from "../signedActs.js";
 import { scheduleAiCheck } from "../aiBlankCheck.js";
 import { parseDeliveredOrderIds, deliverableOrders, deliverOrdersAtCheckin, notifyCheckinDelivered, CHECKIN_ORDER_LINKS_SQL } from "../checkinDelivery.js";
 
@@ -227,9 +227,10 @@ checkinsRouter.post("/", (req, res, next) => {
     return res.status(400).json({ error: "An order-blank photo needs the Products delivered outcome" });
   }
 
-  if (customerSignature && !outcomeValues.includes("customer_unavailable")) {
+  // The customer signs the act (Products delivered) or the payment slip (Payment collected).
+  if (customerSignature && !outcomeValues.includes("customer_unavailable") && !outcomeValues.includes("payment_collected")) {
     files.forEach((f) => fs.unlink(f.path, () => {}));
-    return res.status(400).json({ error: "A signature needs the Products delivered outcome" });
+    return res.status(400).json({ error: "A signature needs the Products delivered or Payment collected outcome" });
   }
 
   // A retried submission (the offline queue's flushQueue() re-sending an
@@ -299,6 +300,7 @@ checkinsRouter.post("/", (req, res, next) => {
   let rep = null;
   let deliveredOrders = [];
   let signatureSavedPath = null;
+  let paymentId = null;
   const blankFileIds = [];
   try {
     await client.query("BEGIN");
@@ -343,7 +345,7 @@ checkinsRouter.post("/", (req, res, next) => {
         // workflow so an accountant sees and reconciles it the same way
         // as a manually-submitted payment, instead of it sitting invisibly
         // on amount_collected_amd where only checkin/activity views show it.
-        await insertPayment({
+        paymentId = await insertPayment({
           customer,
           amount: amountCollected,
           paymentDate: checkin.timestamp,
@@ -364,6 +366,9 @@ checkinsRouter.post("/", (req, res, next) => {
     if (customerSignature && deliveredOrders.length) {
       signatureSavedPath = customerSignature.filename;
       await lockSignedOrders(client, { customerId, checkinId: checkin.id, filePath: signatureSavedPath, createdBy: req.user.id, orderIds: deliveredOrders.map((o) => o.id) });
+    } else if (customerSignature && amountCollected != null) {
+      // No delivery, only money: the customer signed the payment slip (made below, after the commit).
+      signatureSavedPath = customerSignature.filename;
     }
 
     await client.query("COMMIT");
@@ -400,15 +405,27 @@ checkinsRouter.post("/", (req, res, next) => {
   // The signed acts: one PDF per delivered order.
   let signedActs = [];
   let signedActError = false;
-  if (signatureSavedPath) {
+  let paymentSlip = null;
+  let paymentSlipError = false;
+  if (signatureSavedPath && deliveredOrders.length) {
     try {
-      signedActs = await createSignedActs({ orderIds: deliveredOrders.map((o) => o.id), customerId, checkinId: checkin.id, customerSignaturePath: signatureSavedPath, signerId: req.user.id });
+      // Money collected at the same visit goes on the act too: previous balance, order, payment, current balance (owner, 2026-10-27).
+      signedActs = await createSignedActs({ orderIds: deliveredOrders.map((o) => o.id), customerId, checkinId: checkin.id, customerSignaturePath: signatureSavedPath, signerId: req.user.id, paymentAmd: amountCollected });
     } catch (err) {
       signedActError = true;
       console.error("Signed act PDF failed:", err);
     }
-  } else if (customerSignature) {
-    fs.unlink(customerSignature.path, () => {}); // nothing was delivered with it
+  } else if (customerSignature && !signatureSavedPath) {
+    fs.unlink(customerSignature.path, () => {}); // nothing was delivered or paid with it
+  }
+  // Money without a delivery: the payment slip, signed by the customer when they signed, ready to look at, save and share (owner, 2026-10-27).
+  if (amountCollected != null && !deliveredOrders.length) {
+    try {
+      paymentSlip = await createPaymentSlip({ paymentId, customerId, checkinId: checkin.id, amountAmd: amountCollected, paidAt: new Date(checkin.timestamp), customerSignaturePath: signatureSavedPath, signerId: req.user.id });
+    } catch (err) {
+      paymentSlipError = true;
+      console.error("Payment slip PDF failed:", err);
+    }
   }
   res.status(201).json({
     ...checkin,
@@ -417,6 +434,8 @@ checkinsRouter.post("/", (req, res, next) => {
     delivered_orders: deliveredOrders,
     signed_acts: signedActs,
     signed_act_error: signedActError || undefined,
+    payment_slip: paymentSlip || undefined,
+    payment_slip_error: paymentSlipError || undefined,
     rep_signature_saved: repSignatureSaved || undefined,
   });
 

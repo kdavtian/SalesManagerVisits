@@ -126,8 +126,18 @@ function totals({ order, items, previousDebtAmd = null, paymentAmd = null }) {
   return { sum, orderTotal, current, liters, qty };
 }
 
-function drawHeader(c, doc, { order, customer, rep, printedAt }, v) {
-  const { orderDate, deliveryDate } = blankDates(order, printedAt);
+// A field whose line is exactly as long as a fixed-length value needs (owner, 2026-10-27: the ՀՎՀՀ is always 8 digits, the customer code 5),
+// ending at `right`. Returns the x where its label starts, so the field before it can end there.
+function fixedField(c, label, value, digits, right, y, fs) {
+  const lineW = c.textW("0".repeat(digits), { bold: true, size: fs }) + 10;
+  const x = right - lineW - c.textW(label, { size: fs }) - 4;
+  c.field(label, value, x, y, right, fs);
+  return x;
+}
+
+// head: { title, dateLabel } -- the delivery-acceptance act by default; the payment slip passes its own.
+function drawHeader(c, doc, { order, customer, rep, printedAt }, v, head = {}) {
+  const { deliveryDate } = blankDates(order ?? {}, printedAt);
   const { hline, text, center, field, fit, right, textW } = c;
   hline(v.rule1);
   text(COMPANY_NAME, 21.6, v.rule1 + 3.5, { size: v.fs });
@@ -137,22 +147,22 @@ function drawHeader(c, doc, { order, customer, rep, printedAt }, v) {
   const phoneLines = [rep?.phone ? `Հեռ՝ ${formatPhone(rep.phone)}` : null, `Գրասենյակ՝ ${formatPhone(rep?.officePhone || OFFICE_PHONE)}`].filter(Boolean);
   phoneLines.forEach((line, i) => right(line, 589.6, v.rule1 + 3.5 + i * v.lh, { size: v.fs }));
   hline(v.rule2);
-  field("Պատվերի No՝", order.order_code ?? "", 21.6, v.row1, 170, v.fs);
-  // Order date, then delivery date, the last one ending at the right margin.
-  const dateField = (label, value, x) => field(label, value, x, v.row1, x + textW(label, { size: v.fs }) + 4 + textW(value, { bold: true, size: v.fs }) + 12, v.fs);
-  const dateW = (label, value) => textW(label, { size: v.fs }) + 4 + textW(value, { bold: true, size: v.fs }) + 12;
-  const deliveryX = 589.6 - dateW("Առաքման ամսաթիվ՝", deliveryDate);
-  const orderX = deliveryX - 12 - dateW("Պատվերի ամսաթիվ՝", orderDate);
-  dateField("Պատվերի ամսաթիվ՝", orderDate, orderX);
-  dateField("Առաքման ամսաթիվ՝", deliveryDate, deliveryX);
-  field("Գործընկերոջ անվանում՝", fit(cleanCustomerName(customer?.name), 250, v.fs), 21.6, v.row2, 400, v.fs);
-  field("Կոդ՝", customer?.erp_customer_id ?? "", 500, v.row2, 589.6, v.fs);
-  field("Իրավ. անվանում՝", fit(customer?.legal_name ?? "", 285, v.fs), 21.6, v.row3, 420, v.fs);
-  field("ՀՎՀՀ՝", customer?.tin ?? "", 440, v.row3, 589.6, v.fs);
-  field("Առաքման հասցե՝", fit(customer?.address ?? "", 400, v.fs), 21.6, v.row4, 589.6, v.fs);
-  // The customer's phone, under the address (owner, 2026-10-16): the driver / rep calls it on arrival.
-  field("Հեռախոս՝", customer?.phone ? formatPhone(customer.phone) : "", 21.6, v.row5, 589.6, v.fs);
-  const title = "ՀԱՆՁՆՄԱՆ-ԸՆԴՈՒՆՄԱՆ ԱԿՏ";
+  // Number on the left, the one date (delivery / payment) on the right. The order date is gone (owner, 2026-10-27).
+  if (head.numberLabel !== null) field(head.numberLabel ?? "Պատվերի No՝", head.number ?? order?.order_code ?? "", 21.6, v.row1, 170, v.fs);
+  const dateLabel = head.dateLabel ?? "Առաքման ամսաթիվ՝";
+  const dateW = textW(dateLabel, { size: v.fs }) + 4 + textW(deliveryDate, { bold: true, size: v.fs }) + 12;
+  field(dateLabel, deliveryDate, 589.6 - dateW, v.row1, 589.6, v.fs);
+  const codeX = fixedField(c, "Կոդ՝", customer?.erp_customer_id ?? "", 5, 589.6, v.row2, v.fs);
+  field("Գործընկերոջ անվանում՝", fit(cleanCustomerName(customer?.name), codeX - 160, v.fs), 21.6, v.row2, codeX - 14, v.fs);
+  const tinX = fixedField(c, "ՀՎՀՀ՝", customer?.tin ?? "", 8, 589.6, v.row3, v.fs);
+  field("Իրավ. անվանում՝", fit(customer?.legal_name ?? "", tinX - 130, v.fs), 21.6, v.row3, tinX - 14, v.fs);
+  // Delivery address on the left and the customer's phone on the right, on one line (owner, 2026-10-27).
+  const phone = customer?.phone ? formatPhone(customer.phone) : "";
+  const phoneLineW = Math.max(textW("+374 00 000 000", { bold: true, size: v.fs }), textW(phone, { bold: true, size: v.fs })) + 10;
+  const phoneX = 589.6 - phoneLineW - textW("Հեռախոս՝", { size: v.fs }) - 4;
+  field("Հեռախոս՝", phone, phoneX, v.row4, 589.6, v.fs);
+  field("Առաքման հասցե՝", fit(customer?.address ?? "", phoneX - 120, v.fs), 21.6, v.row4, phoneX - 14, v.fs);
+  const title = head.title ?? "ՀԱՆՁՆՄԱՆ-ԸՆԴՈՒՆՄԱՆ ԱԿՏ";
   center(title, 21.6, 589.6, v.title, { bold: true, size: v.fs + 1 });
   const tw = c.textW(title, { bold: true, size: v.fs + 1 });
   hline(v.title + v.fs + 5, (611.2 - tw) / 2, (611.2 + tw) / 2, INK, 0.8);
@@ -209,14 +219,17 @@ export function yerevanDateTime(when) {
 
 // data.signatures (the electronic signature, owner 2026-10-26): { signerName, rep: PNG Buffer | null, customer: PNG Buffer | null, signedAt }.
 // The images are drawn on the two signature lines, so the same paper that was printed for a pen is now signed on the phone.
-function drawSignatures(c, doc, data, y, fs) {
+// labels: [rep side, customer side] -- the act: the rep hands over the goods, the customer receives them; the payment slip: the rep
+// receives the money, the customer pays it.
+function drawSignatures(c, doc, data, y, fs, labels = ["Հանձնեց՝", "Ընդունեց՝"]) {
   const { field, center, textW } = c;
   const sig = data.signatures;
   const signer = sig?.signerName ?? data.rep?.name ?? "";
-  field("Հանձնեց՝", signer, 21.6, y, 345, fs);
-  field("Ընդունեց՝", "", 379, y, 589.6, fs);
-  center("ստորագրություն", 21.6 + textW("Հանձնեց՝", { size: fs }) + 4, 345, y + fs + 4, { size: 7 });
-  center("ստորագրություն", 379 + textW("Ընդունեց՝", { size: fs }) + 4, 589.6, y + fs + 4, { size: 7 });
+  const [repLabel, customerLabel] = labels;
+  field(repLabel, signer, 21.6, y, 345, fs);
+  field(customerLabel, "", 379, y, 589.6, fs);
+  center("ստորագրություն", 21.6 + textW(repLabel, { size: fs }) + 4, 345, y + fs + 4, { size: 7 });
+  center("ստորագրություն", 379 + textW(customerLabel, { size: fs }) + 4, 589.6, y + fs + 4, { size: 7 });
   if (!sig) return;
   const h = fs > 9 ? 34 : 24;
   const place = (img, x1, x2) => {
@@ -227,9 +240,9 @@ function drawSignatures(c, doc, data, y, fs) {
       /* an unreadable image leaves the line empty */
     }
   };
-  const repStart = 21.6 + textW("Հանձնեց՝", { size: fs }) + 4 + 2 + textW(signer, { bold: true, size: fs }) + 8;
+  const repStart = 21.6 + textW(repLabel, { size: fs }) + 4 + 2 + textW(signer, { bold: true, size: fs }) + 8;
   place(sig.rep, repStart, 345);
-  place(sig.customer, 379 + textW("Ընդունեց՝", { size: fs }) + 8, 589.6);
+  place(sig.customer, 379 + textW(customerLabel, { size: fs }) + 8, 589.6);
   if (sig.signedAt) c.text(`Ստորագրվել է էլեկտրոնային եղանակով՝ ${yerevanDateTime(sig.signedAt)}`, 21.6, y + fs + 15, { size: 6.5 });
 }
 
@@ -266,7 +279,7 @@ function drawFull(doc, data, firstPageDrawn) {
     doc.scale(K);
     const c = makeCanvas(doc);
     drawLogos(doc, 43, 40);
-    const v = { rule1: 81.5, rule2: 114, row1: 136, row2: 162, row3: 188, row4: 214, row5: 240, title: 269, fs: 10, lh: 13, cs: 9, tableTop: 303, headH: 28 };
+    const v = { rule1: 81.5, rule2: 114, row1: 136, row2: 162, row3: 188, row4: 214, title: 243, fs: 10, lh: 13, cs: 9, tableTop: 277, headH: 28 };
     drawHeader(c, doc, data, v);
     const rowCount = Math.max(FULL_MIN_ROWS, chunk.length);
     v.rowH = Math.min(20.7, (last ? 612 - v.tableTop - v.headH - 22 : 700 - v.tableTop - v.headH) / rowCount);
@@ -308,7 +321,7 @@ function drawHalf(doc, data, slotTop, slotH) {
   doc.scale(K);
   const c = makeCanvas(doc);
   drawLogos(doc, 24, 25);
-  const v = { rule1: 46, rule2: 76, row1: 81, row2: 95, row3: 109, row4: 123, row5: 137, title: 156, fs: 8.5, lh: 11, cs: 8, tableTop: 175, headH: 22, rowH: 12.2 };
+  const v = { rule1: 46, rule2: 76, row1: 81, row2: 95, row3: 109, row4: 123, title: 142, fs: 8.5, lh: 11, cs: 8, tableTop: 161, headH: 22, rowH: 12.2 };
   drawHeader(c, doc, data, v);
   const bottom = drawTable(c, doc, data.items.slice(0, HALF_MAX_ROWS), 1, HALF_MAX_ROWS, v);
   drawTotal(c, doc, bottom, t, 16, 9);
@@ -372,6 +385,65 @@ export function buildOrderBlanksPdf(orders) {
     drawn = true;
   }
   if (!drawn) doc.text(" ");
+  doc.end();
+  return done;
+}
+
+// ---- PAYMENT SLIP (ՎՃԱՐՄԱՆ ԱՆԴՈՐՐԱԳԻՐ, owner 2026-10-27) ------------------------------------------------------------------
+// The order blank's header with its own title and date, no order table, three amounts (previous balance, payment, current balance)
+// and the two signatures (the rep received the money, the customer paid it). Half an A4 sheet: one slip is a half-A4 page (easy to
+// read on a phone); buildPaymentSlipsPdf(..., { twoPerPage: true }) packs two to an A4 sheet with a cut line, for printing.
+// data: { number, paidAt, amountAmd, previousDebtAmd, customer, rep, signatures }
+function drawPaymentSlip(doc, data, slotTop, slotH) {
+  doc.save();
+  doc.translate(0, slotTop + (slotH - 396 * K) / 2);
+  doc.scale(K);
+  const c = makeCanvas(doc);
+  drawLogos(doc, 24, 25);
+  const v = { rule1: 46, rule2: 76, row1: 87, row2: 107, row3: 127, row4: 147, title: 172, fs: 9.5, lh: 12 };
+  drawHeader(c, doc, { order: {}, customer: data.customer, rep: data.rep, printedAt: data.paidAt }, v, {
+    title: "ՎՃԱՐՄԱՆ ԱՆԴՈՐՐԱԳԻՐ",
+    dateLabel: "Վճարման ամսաթիվ՝",
+    numberLabel: "Անդորրագրի No՝",
+    number: data.number ?? "",
+  });
+  const prev = data.previousDebtAmd ?? null;
+  const pay = data.amountAmd;
+  const current = prev !== null ? Number(prev) - Number(pay) : null;
+  const y = 205;
+  [["Պարտքի նախկին մնացորդ՝", prev], ["Վճարում՝", pay], ["Պարտքի ներկա մնացորդ՝", current]].forEach(([label, value], i) => {
+    const ry = y + i * 22;
+    if (i !== 0) doc.save().rect(21.6, ry - 4, 568, 22).fill(SHADE).restore();
+    c.text(label, 24.6, ry + 1, { bold: true, size: 10.5 });
+    if (value !== null && value !== undefined) c.right(amd(value), 580, ry + 1, { bold: true, size: i === 1 ? 12 : 10.5 });
+    else c.hline(ry + 13, 215, 589, "#555555", 0.5);
+  });
+  drawSignatures(c, doc, data, y + 3 * 22 + 40, 9.5, ["Ստացավ՝", "Վճարեց՝"]);
+  doc.restore();
+}
+
+const HALF_A4 = [A4.w, A4.h / 2];
+export function buildPaymentSlipsPdf(slips, { twoPerPage = false } = {}) {
+  const doc = new PDFDocument({ size: twoPerPage ? "A4" : HALF_A4, margin: 0, info: { Title: "Payment slips", Author: "KAD Motors" } });
+  doc.registerFont("R", path.join(ASSET_DIR, "fonts", "DejaVuSans.ttf"));
+  doc.registerFont("B", path.join(ASSET_DIR, "fonts", "DejaVuSans-Bold.ttf"));
+  const chunks = [];
+  doc.on("data", (x) => chunks.push(x));
+  const done = new Promise((resolve) => doc.on("end", () => resolve(Buffer.concat(chunks))));
+  if (twoPerPage) {
+    for (let i = 0; i < slips.length; i += 2) {
+      if (i) doc.addPage({ size: "A4", margin: 0 });
+      drawPaymentSlip(doc, slips[i], 0, A4.h / 2);
+      if (slips[i + 1]) drawPaymentSlip(doc, slips[i + 1], A4.h / 2, A4.h / 2);
+      drawCutLine(doc, A4.h / 2);
+    }
+  } else {
+    slips.forEach((slip, i) => {
+      if (i) doc.addPage({ size: HALF_A4, margin: 0 });
+      drawPaymentSlip(doc, slip, 0, A4.h / 2);
+    });
+  }
+  if (!slips.length) doc.text(" ");
   doc.end();
   return done;
 }

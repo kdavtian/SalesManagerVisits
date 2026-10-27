@@ -23,6 +23,17 @@ export const cardSource = (id) => ({ key: `cust-card:${id}`, fetch: () => fetchC
 // customer id -> { social, docs, tasks, openVisit } promises of the parts that were not there within SOON_MS. Not saved to the phone.
 export const lateParts = new Map();
 
+// After any change sent to the server the next open revalidates (End visit, a new task, a file...), and a logout forgets everything.
+window.addEventListener("fv:data-changed", () => {
+  fetchedAt.clear();
+  warmedAt.clear();
+});
+window.addEventListener("fv:cache-cleared", () => {
+  fetchedAt.clear();
+  warmedAt.clear();
+  lateParts.clear();
+});
+
 const soon = (promise) => Promise.race([promise, new Promise((resolve) => setTimeout(resolve, SOON_MS))]);
 
 async function fetchCard(id) {

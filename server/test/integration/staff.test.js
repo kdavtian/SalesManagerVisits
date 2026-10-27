@@ -224,6 +224,28 @@ test("salary payments from Cashflow reduce the balance (position + year + month 
   await pool.query("DELETE FROM cash_accounts WHERE name LIKE 'ITest Acc%'");
 });
 
+test("a former employee with the same position does not take the new person's salary (tie broken by dates, then by active)", async () => {
+  const { rows: [cat] } = await pool.query("SELECT id FROM cash_categories WHERE lower(name) = 'salary'");
+  const { rows: [acc] } = await pool.query("INSERT INTO cash_accounts (name, kind) VALUES ($1, 'cash') RETURNING id", [`ITest Acc4 ${Date.now()}`]);
+  const { rows: [rep] } = await pool.query("SELECT position, start_date FROM staff_members WHERE id = $1", [ids.rep]);
+  await pool.query("UPDATE staff_members SET start_date = '2026-09-01' WHERE id = $1", [ids.rep]); // took the job after the former one left
+  const { rows: [old] } = await pool.query(
+    "INSERT INTO staff_members (name, position, active, start_date, end_date) VALUES ('ITest Former Rep', $1, false, '2025-01-01', '2026-08-31') RETURNING id",
+    [rep.position]
+  );
+  const put = (date, info) =>
+    pool.query("INSERT INTO cash_entries (entry_date, amount, amount_amd, category_id, account_id, info, origin) VALUES ($1, -1000, -1000, $2, $3, $4, 'manual')", [date, cat.id, acc.id, info]);
+  const paidBefore = (await api("admin", `/people/${ids.rep}/pay?month=2026-10`)).data.paid;
+  await put("2026-10-21", `${rep.position} 2026 OCT`);
+  await put("2026-08-21", `${rep.position} 2026 AUG`);
+  assert.equal((await api("admin", `/people/${ids.rep}/pay?month=2026-10`)).data.paid, paidBefore + 1000, "October goes to the current person");
+  assert.equal((await api("admin", `/people/${old.id}/pay?month=2026-08`)).data.paid, 1000, "August goes to the former one (the new person had not started yet)");
+  await pool.query("DELETE FROM cash_entries WHERE account_id = $1", [acc.id]);
+  await pool.query("DELETE FROM cash_accounts WHERE id = $1", [acc.id]);
+  await pool.query("DELETE FROM staff_members WHERE id = $1", [old.id]);
+  await pool.query("UPDATE staff_members SET start_date = $2 WHERE id = $1", [ids.rep, rep.start_date]);
+});
+
 test("a salary payment that names nobody is listed on Payroll and can be linked to a person (owner, 2026-10-27)", async () => {
   const { rows: [cat] } = await pool.query("SELECT id FROM cash_categories WHERE lower(name) = 'salary'");
   const { rows: [acc] } = await pool.query("INSERT INTO cash_accounts (name, kind) VALUES ($1, 'bank') RETURNING id", [`ITest Acc3 ${Date.now()}`]);

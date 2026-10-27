@@ -103,7 +103,7 @@ export async function salaryLines(db = pool) {
        FROM cash_entries e JOIN cash_categories c ON c.id = e.category_id LEFT JOIN cash_accounts a ON a.id = e.account_id
        WHERE lower(c.name) = 'salary'`
     ),
-    db.query("SELECT id, name, position, pay_keys FROM staff_members"),
+    db.query("SELECT id, name, position, pay_keys, active, start_date::text AS start_date, end_date::text AS end_date FROM staff_members"),
   ]);
   return rows.map((r) => {
     const p = parseSalaryInfo(r.info);
@@ -115,8 +115,26 @@ export async function salaryLines(db = pool) {
       if (score > best) [best, who] = [score, [s.id]];
       else if (score && score === best) who.push(s.id);
     }
-    return { ...r, key, month: p ? p.month : r.date.slice(0, 7), month_from_date: !p, staff_id: who.length === 1 ? who[0] : null };
+    const month = p ? p.month : r.date.slice(0, 7);
+    // A tie on the position ("SM YVN" when the old rep left and a new one took the job): the person who worked that month wins, then the
+    // one still working here. Still a tie -> nobody.
+    if (who.length > 1) {
+      const byId = new Map(staff.map((s) => [s.id, s]));
+      const narrow = (ids, keep) => {
+        const kept = ids.filter((id) => keep(byId.get(id)));
+        return kept.length ? kept : ids;
+      };
+      who = narrow(who, (s) => workedInMonth(s, month));
+      if (who.length > 1) who = narrow(who, (s) => s.active);
+    }
+    return { ...r, key, month, month_from_date: !p, staff_id: who.length === 1 ? who[0] : null };
   });
+}
+
+function workedInMonth(s, month) {
+  const first = `${month}-01`;
+  const last = `${month}-31`; // compared as text: every real date of the month is <= "YYYY-MM-31"
+  return (!s.start_date || s.start_date <= last) && (!s.end_date || s.end_date >= first);
 }
 
 // Salary rows of `month` that are linked to nobody: shown on Payroll so they can be linked to a person in one tap.

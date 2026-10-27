@@ -5,6 +5,11 @@ import { test, expect, loginViaUi, pool } from "./fixtures.mjs";
 test.use({ geolocation: { latitude: 40.18, longitude: 44.51, accuracy: 10 }, permissions: ["geolocation"] });
 
 async function scribble(page) {
+  // The pad slides in (and the second one opens only after the first one is saved): draw on the one that is open and settled.
+  const canvas = page.locator(".sig-pad-canvas");
+  await expect(canvas).toHaveCount(1);
+  await expect(canvas).toBeVisible();
+  await page.waitForTimeout(350);
   const box = await page.locator(".sig-pad-canvas").boundingBox();
   await page.mouse.move(box.x + 30, box.y + box.height * 0.6);
   await page.mouse.down();
@@ -55,8 +60,13 @@ test("check-in: the customer signs once for every ticked order; one signed PDF e
   fixtures.trackRow("checkins", created.id);
   expect(created.signed_acts).toHaveLength(2);
 
-  // one signed PDF per order, shareable from the result screen
-  await expect(page.locator("[data-share-act]")).toHaveCount(2);
+  // one signed PDF per order; View opens it in the viewer as a picture, with Share and Save (owner, 2026-10-27)
+  await expect(page.locator("[data-view-doc]")).toHaveCount(2);
+  await page.locator("[data-view-doc]").first().click();
+  await expect(page.locator(".file-viewer .file-viewer-page")).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('.file-viewer [data-act="share"]')).toBeVisible();
+  await expect(page.locator('.file-viewer [data-act="save-image"]')).toBeVisible();
+  await page.locator(".file-viewer-close").click();
   const { rows: files } = await pool.query("SELECT kind, mime, order_ids FROM customer_files WHERE checkin_id = $1 ORDER BY id", [created.id]);
   expect(files.map((f) => [f.kind, f.mime])).toEqual([["signed_act", "application/pdf"], ["signed_act", "application/pdf"]]);
   const { rows: orders } = await pool.query("SELECT status, signed_at FROM orders WHERE id = ANY($1)", [[a.id, b.id]]);
@@ -72,4 +82,43 @@ test("check-in: the customer signs once for every ticked order; one signed PDF e
   await pool.query("UPDATE orders SET signature_id = NULL WHERE id = ANY($1)", [[a.id, b.id]]);
   await pool.query("DELETE FROM customer_signatures WHERE customer_id = $1", [customer.id]);
   await pool.query("DELETE FROM customer_files WHERE checkin_id = $1", [created.id]);
+});
+
+// Owner, 2026-10-27: money collected without a delivery -> the customer signs the payment slip, which opens in the viewer with Share and Save.
+test("@smoke check-in: payment collected -> the customer signs the payment slip; View shows it with Share and Save", async ({ page, fixtures }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const rep = await fixtures.createUser("sales_manager");
+  const customer = await fixtures.createCustomer({ created_by: rep.id, assigned_manager_id: rep.id, lat: 40.18, lng: 44.51 });
+  await loginViaUi(page, rep.email);
+  await page.goto(`/#/checkin/${customer.id}`);
+  await expect(page.locator("#checkin-submit")).toBeEnabled({ timeout: 15000 });
+  await page.locator('label.outcome-chip:has(input[value="payment_collected"])').click();
+  await page.locator("#amount-collected-input").fill("45000");
+  await expect(page.locator("#slip-sign-block")).toBeVisible();
+  await page.locator("#slip-sign-btn").click();
+  await scribble(page); // the rep's own signature, the first time
+  await page.locator('.sig-pad [data-act="done"]').click();
+  await expect(page.locator(".sig-pad-head h2")).toContainText(/Customer/); // the customer's pad is the one open now
+  await scribble(page); // the customer's
+  await page.locator('.sig-pad [data-act="done"]').click();
+  await expect(page.locator("#slip-sign-chip")).toBeVisible();
+  if (process.env.SIG_SHOTS) await page.screenshot({ path: `${process.env.SIG_SHOTS}/slip-form.png`, fullPage: true });
+  const [response] = await Promise.all([page.waitForResponse((res) => res.url().endsWith("/api/checkins") && res.request().method() === "POST"), page.locator("#checkin-submit").click()]);
+  expect(response.status()).toBe(201);
+  const created = await response.json();
+  fixtures.trackRow("checkins", created.id);
+  expect(created.payment_slip?.id).toBeTruthy();
+  try {
+    if (process.env.SIG_SHOTS) await page.screenshot({ path: `${process.env.SIG_SHOTS}/slip-result.png` });
+    await page.locator("[data-view-doc]").click();
+    await expect(page.locator(".file-viewer .file-viewer-page")).toBeVisible({ timeout: 15000 });
+    if (process.env.SIG_SHOTS) await page.screenshot({ path: `${process.env.SIG_SHOTS}/slip-viewer.png` });
+    await expect(page.locator(".file-viewer-title")).toContainText(/Payment slip/);
+    const ids = await page.locator(".file-viewer-bar button").evaluateAll((els) => els.map((e) => e.dataset.act));
+    expect(ids.slice(0, 2)).toEqual(["share", "save-image"]);
+  } finally {
+    await pool.query("DELETE FROM customer_files WHERE checkin_id = $1", [created.id]);
+    await pool.query("DELETE FROM payment_status_history WHERE payment_id IN (SELECT id FROM payments WHERE customer_id = $1)", [customer.id]);
+    await pool.query("DELETE FROM payments WHERE customer_id = $1", [customer.id]);
+  }
 });

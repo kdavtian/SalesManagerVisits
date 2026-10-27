@@ -121,6 +121,9 @@ jobs:
 
       - run: npm ci --no-audit --no-fund --prefer-offline
 
+      - name: PDF renderer (pdftoppm, for the document previews)
+        run: command -v pdftoppm || (sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends poppler-utils)
+
       - run: npm run migrate
 
       - name: Tests (shard ${{ matrix.shard }}/4)
@@ -167,6 +170,9 @@ jobs:
           cache-dependency-path: server/package-lock.json
 
       - run: npm ci --no-audit --no-fund --prefer-offline
+
+      - name: PDF renderer (pdftoppm, for the document previews)
+        run: command -v pdftoppm || (sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends poppler-utils)
 
       - run: bash scripts/run-isolated.sh test/isolated-tests.txt
         env:
@@ -240,6 +246,9 @@ jobs:
           cache-dependency-path: server/package-lock.json
 
       - run: npm ci --no-audit --no-fund --prefer-offline
+
+      - name: PDF renderer (pdftoppm, for the document previews)
+        run: command -v pdftoppm || (sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends poppler-utils)
 
       - run: npm run migrate
 

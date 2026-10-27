@@ -31,6 +31,10 @@ test.after(async () => {
   await pool.query("DELETE FROM order_items WHERE order_id = ANY($1)", [orderIds]);
   await pool.query("DELETE FROM orders WHERE id = ANY($1)", [orderIds]);
   await pool.query("UPDATE users SET signature_path = NULL WHERE id = $1", [users.rep.id]);
+  // the payments the "Payment collected" visits made
+  await pool.query("DELETE FROM payment_status_history WHERE payment_id IN (SELECT id FROM payments WHERE customer_id = $1)", [customer.id]);
+  await pool.query("DELETE FROM payments WHERE customer_id = $1", [customer.id]);
+  await pool.query("DELETE FROM erp_customer_data WHERE erp_customer_id = $1", [`SIGT${customer.id}`]);
   await cleanupAll();
   await stopTestServer();
 });
@@ -124,4 +128,81 @@ test("the next visit reuses the stored rep signature; a signature without a deli
   form.append("customer_signature", new Blob([await png()], { type: "image/png" }), "s.png");
   const wrongOutcome = await apiFormRequest("/api/checkins", { form, cookie: await login("rep") });
   assert.equal(wrongOutcome.status, 400);
+});
+
+// Owner, 2026-10-27: money collected without a delivery makes a signed payment slip; with a delivery the payment is written on the act.
+test("payment collected without a delivery: a signed payment slip, its picture, and 2-per-page printing", async () => {
+  await pool.query("INSERT INTO erp_customer_data (erp_customer_id, debt_amd, synced_at) VALUES ($1, 500000, now()) ON CONFLICT (erp_customer_id) DO UPDATE SET debt_amd = 500000, synced_at = now()", [customer.erp_customer_id ?? `SIGT${customer.id}`]);
+  if (!customer.erp_customer_id) await pool.query("UPDATE customers SET erp_customer_id = $2 WHERE id = $1", [customer.id, `SIGT${customer.id}`]);
+  const pay = async (amount) => {
+    const form = new FormData();
+    form.set("customer_id", String(customer.id));
+    form.set("lat", "40.18");
+    form.set("lng", "44.51");
+    form.set("outcomes", JSON.stringify(["payment_collected"]));
+    form.set("amount_collected_amd", String(amount));
+    form.append("customer_signature", new Blob([await png()], { type: "image/png" }), "s.png");
+    const res = await apiFormRequest("/api/checkins", { form, cookie: await login("rep") });
+    if (res.status === 201) trackCheckin(res.data.id);
+    return res;
+  };
+  const first = await pay(120000);
+  assert.equal(first.status, 201, JSON.stringify(first.data));
+  assert.ok(first.data.payment_slip?.id, "a slip was made");
+  assert.equal(first.data.payment_slip_error, undefined);
+  const { rows: [slip] } = await pool.query("SELECT kind, mime, payment_id, checkin_id, file_path FROM customer_files WHERE id = $1", [first.data.payment_slip.id]);
+  assert.equal(slip.kind, "payment_slip");
+  assert.equal(slip.checkin_id, first.data.id);
+  assert.ok(slip.payment_id, "linked to the payment the visit created");
+  const { execFileSync } = await import("node:child_process");
+  const text = execFileSync("pdftotext", [path.join(uploadDirPath, slip.file_path), "-"]).toString();
+  assert.match(text, /ՎՃԱՐՄԱՆ ԱՆԴՈՐՐԱԳԻՐ/);
+  assert.match(text, /120,000/);
+  assert.match(text, /380,000/, "current balance = 500,000 - 120,000");
+  assert.doesNotMatch(text, /Պատվերի ամսաթիվ/);
+
+  // the picture of it: what the viewer shows and "Save" stores
+  const pic = await fetch(`${baseUrl}/api/files/${first.data.payment_slip.id}/preview?v=1`, { headers: { Cookie: await login("rep") } });
+  assert.equal(pic.status, 200);
+  assert.equal(pic.headers.get("content-type"), "image/jpeg");
+  assert.ok((await pic.arrayBuffer()).byteLength > 10000);
+
+  // a second payment starts from the balance the first one left
+  const second = await pay(30000);
+  const { rows: [slip2] } = await pool.query("SELECT file_path FROM customer_files WHERE id = $1", [second.data.payment_slip.id]);
+  assert.match(execFileSync("pdftotext", [path.join(uploadDirPath, slip2.file_path), "-"]).toString(), /350,000/);
+
+  // two slips, one A4 sheet
+  const printed = await fetch(`${baseUrl}/api/files/print-slips`, {
+    method: "POST",
+    headers: { Cookie: await login("admin"), "Content-Type": "application/json", "X-CSRF-Token": decodeURIComponent((await login("admin")).match(/csrf_token=([^;]+)/)?.[1] ?? "") },
+    body: JSON.stringify({ ids: [first.data.payment_slip.id, second.data.payment_slip.id] }),
+  });
+  assert.equal(printed.status, 200);
+  const pdf = Buffer.from(await printed.arrayBuffer());
+  assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
+  const pages = execFileSync("pdfinfo", ["-"], { input: pdf }).toString().match(/Pages:\s+(\d+)/)[1];
+  assert.equal(pages, "1");
+});
+
+test("payment and delivery at one visit: the payment is written on the act, no separate slip", async () => {
+  const id = await newOrder(70000);
+  const form = new FormData();
+  form.set("customer_id", String(customer.id));
+  form.set("lat", "40.18");
+  form.set("lng", "44.51");
+  form.set("outcomes", JSON.stringify(["customer_unavailable", "payment_collected"]));
+  form.set("delivered_order_ids", JSON.stringify([id]));
+  form.set("amount_collected_amd", "50000");
+  form.append("customer_signature", new Blob([await png()], { type: "image/png" }), "s.png");
+  const res = await apiFormRequest("/api/checkins", { form, cookie: await login("rep") });
+  assert.equal(res.status, 201, JSON.stringify(res.data));
+  trackCheckin(res.data.id);
+  assert.equal(res.data.signed_acts.length, 1);
+  assert.equal(res.data.payment_slip, undefined);
+  const { rows: [act] } = await pool.query("SELECT file_path FROM customer_files WHERE id = $1", [res.data.signed_acts[0].id]);
+  const { execFileSync } = await import("node:child_process");
+  const text = execFileSync("pdftotext", ["-layout", path.join(uploadDirPath, act.file_path), "-"]).toString();
+  assert.match(text, /Վճարում՝\s+50,000/);
+  assert.match(text, /Պատվեր՝\s+70,000/);
 });

@@ -4,6 +4,7 @@ import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { escapeHtml, formatDateTime } from "../util.js";
 import { openFileViewer, fileKindLabel } from "../fileViewer.js";
+import { openFileReadySheet } from "../fileReadySheet.js";
 
 const PERIODS = [
   ["today", "pb_today"],
@@ -27,6 +28,7 @@ export function renderDocuments(root, navigate) {
         <select id="doc-rep" aria-label="${t("all_managers")}"><option value="">${t("all_managers")}</option></select>
       </div>
       <div class="documents-flags" id="doc-flags"></div>
+      <button type="button" class="btn btn-block" id="doc-print-slips" hidden>${t("docs_print_slips")}</button>
       <div class="card-list" id="doc-list"><p class="loading-state" role="status">${t("loading")}</p></div>
       <button type="button" class="btn btn-block" id="doc-more" hidden>${t("load_more")}</button>
     </div>`;
@@ -34,6 +36,19 @@ export function renderDocuments(root, navigate) {
   const listEl = root.querySelector("#doc-list");
   const moreBtn = root.querySelector("#doc-more");
   const repSelect = root.querySelector("#doc-rep");
+  const printBtn = root.querySelector("#doc-print-slips");
+  printBtn.addEventListener("click", async () => {
+    printBtn.disabled = true;
+    try {
+      const ids = rows.filter((r) => r.kind === "payment_slip" && r.mime === "application/pdf").map((r) => r.id);
+      const blob = await api.printPaymentSlips(ids);
+      openFileReadySheet(blob, `Payment-slips-${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch (err) {
+      listEl.insertAdjacentHTML("afterbegin", `<p class="form-error">${escapeHtml(err.message)}</p>`);
+    } finally {
+      printBtn.disabled = false;
+    }
+  });
   let rows = [];
   let hasMore = false;
   let seq = 0;
@@ -89,6 +104,8 @@ export function renderDocuments(root, navigate) {
       listEl.querySelectorAll("[data-doc-index]").forEach((b) => b.addEventListener("click", () => openFileViewer(rows, Number(b.dataset.docIndex), { onChanged: reload })));
     }
     moreBtn.hidden = !hasMore;
+    // Payment slips on screen: print them two to an A4 sheet (owner, 2026-10-27).
+    printBtn.hidden = filters.kind !== "payment_slip" || !rows.some((r) => r.kind === "payment_slip" && r.mime === "application/pdf");
   }
 
   async function load(append) {

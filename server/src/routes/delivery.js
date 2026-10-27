@@ -470,7 +470,7 @@ deliveryRouter.post("/orders/:id/confirm", (req, res, next) => {
 
   (async () => {
     try {
-      await createSignedActs({ orderIds: [order.id], customerId: order.customer_id, customerSignaturePath: signaturePath, signerId: req.user.id });
+      await createSignedActs({ orderIds: [order.id], customerId: order.customer_id, customerSignaturePath: signaturePath, signerId: req.user.id, paymentAmd: amountCollected > 0 ? amountCollected : null });
     } catch (err) {
       console.error("Signed act PDF failed:", err);
     }
