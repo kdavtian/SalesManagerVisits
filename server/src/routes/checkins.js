@@ -179,7 +179,7 @@ checkinsRouter.post("/", (req, res, next) => {
     next();
   });
 }, async (req, res) => {
-  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref, captured_at, accuracy_m, delivered_order_ids } = req.body ?? {};
+  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref, captured_at, accuracy_m, delivered_order_ids, signature_rule } = req.body ?? {};
   const customerId = Number(customer_id);
   const latNum = Number(lat);
   const lngNum = Number(lng);
@@ -259,6 +259,14 @@ checkinsRouter.post("/", (req, res, next) => {
       files.forEach((f) => fs.unlink(f.path, () => {}));
       return res.status(400).json({ error: "amount_collected_amd must be a positive number when payment_collected is selected" });
     }
+  }
+
+  // The customer signs for the money handed over (owner, 2026-10-27: "Yes. Because it is also for debt balance"). Not needed when the photo of
+  // a signed paper blank carries the signature. Only check-ins from an app that knows the rule (signature_rule=1) are refused: an older phone's
+  // queued check-in would otherwise be dropped by the offline queue, and the payment with it.
+  if (amountCollected && signature_rule === "1" && !customerSignature && !blankFiles.length) {
+    files.forEach((f) => fs.unlink(f.path, () => {}));
+    return res.status(400).json({ error: "The customer must sign for the payment", code: "signature_required_for_payment" });
   }
 
   const { rows: customerRows } = await pool.query(

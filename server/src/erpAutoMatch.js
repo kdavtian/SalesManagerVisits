@@ -101,3 +101,67 @@ export async function autoApprovePaymentsFromErp(client) {
   }
   return approved;
 }
+
+// Which app rows Excel already holds (owner, 2026-10-27: "Excel includes only ALREADY DELIVERED orders ... if the order is included,
+// included, if no - no. Same for collected payments"). The two functions above only look at orders still on their way and payments still
+// pending; an order the app itself marked delivered, or a payment the accountant already approved, was never checked against Excel. This
+// marks those too -- only the "found in Excel" link, never the status -- with the same unique-match rule, so the previous debt on a blank
+// (signedActs.balanceBeforeVisit) adds exactly the app rows Excel does not have yet.
+export async function markAppRowsInExcel(client) {
+  const { rows: orders } = await client.query(
+    `WITH erp AS (
+       SELECT erp_customer_id, order_id, MIN(order_date) AS d, ROUND(SUM(revenue_amd)) AS total
+       FROM erp_order_lines
+       WHERE NOT EXISTS (SELECT 1 FROM orders x WHERE x.erp_matched_order_id = erp_order_lines.order_id)
+       GROUP BY erp_customer_id, order_id
+     ), cand AS (
+       SELECT o.id, c.erp_customer_id, ROUND(o.total_amd) AS total, ${YEREVAN_DAY.replace("%s", "o.created_at")} AS created_d,
+              ${YEREVAN_DAY.replace("%s", `COALESCE((SELECT MAX(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = 'delivered'), o.updated_at)`)} AS delivered_d
+       FROM orders o JOIN customers c ON c.id = o.customer_id
+       WHERE o.status = 'delivered' AND o.erp_matched_order_id IS NULL AND c.erp_customer_id IS NOT NULL
+     ), pairs AS (
+       SELECT cand.id AS order_id, erp.order_id AS erp_order_id
+       FROM cand JOIN erp ON erp.erp_customer_id = cand.erp_customer_id
+        AND ABS(erp.total - cand.total) <= 1
+        AND erp.d BETWEEN cand.created_d - 1 AND cand.delivered_d + 14
+     )
+     SELECT p.order_id, p.erp_order_id FROM pairs p
+     WHERE (SELECT COUNT(*) FROM pairs q WHERE q.order_id = p.order_id) = 1
+       AND (SELECT COUNT(*) FROM pairs q WHERE q.erp_order_id = p.erp_order_id) = 1`
+  );
+  for (const m of orders) {
+    await client.query("UPDATE orders SET erp_matched_order_id = $2 WHERE id = $1 AND erp_matched_order_id IS NULL", [m.order_id, m.erp_order_id]);
+  }
+
+  const { rows: pays } = await client.query(
+    `WITH erp AS (
+       SELECT erp_customer_id, cashflow_date AS d, ROUND(amount_amd) AS amount,
+              erp_customer_id || '|' || cashflow_date::text || '|' || ROUND(amount_amd)::text AS key, COUNT(*)::int AS n
+       FROM erp_cashflow_lines WHERE amount_amd > 0
+       GROUP BY erp_customer_id, cashflow_date, ROUND(amount_amd)
+     ), free AS (
+       SELECT erp.*, erp.n - (SELECT COUNT(*) FROM payments u WHERE u.erp_match_key = erp.key)::int AS left_n FROM erp
+     )
+     SELECT p.id AS payment_id, f.key, ABS(f.d - ${YEREVAN_DAY.replace("%s", "p.payment_date")}) AS gap, f.left_n
+     FROM payments p
+     JOIN free f ON f.erp_customer_id = p.erp_customer_id_snapshot
+      AND f.amount = ROUND(p.amount_amd)
+      AND f.d BETWEEN ${YEREVAN_DAY.replace("%s", "p.payment_date")} - 3 AND ${YEREVAN_DAY.replace("%s", "p.payment_date")} + 3
+     WHERE p.status <> 'rejected' AND p.erp_match_key IS NULL AND f.left_n > 0
+     ORDER BY gap, p.id`
+  );
+  const left = new Map();
+  const done = new Set();
+  let paymentsMarked = 0;
+  for (const m of pays) {
+    if (done.has(m.payment_id)) continue;
+    const remaining = left.has(m.key) ? left.get(m.key) : m.left_n;
+    if (remaining <= 0) continue;
+    const { rowCount } = await client.query("UPDATE payments SET erp_match_key = $2 WHERE id = $1 AND erp_match_key IS NULL", [m.payment_id, m.key]);
+    if (!rowCount) continue;
+    left.set(m.key, remaining - 1);
+    done.add(m.payment_id);
+    paymentsMarked += 1;
+  }
+  return { orders: orders.length, payments: paymentsMarked };
+}

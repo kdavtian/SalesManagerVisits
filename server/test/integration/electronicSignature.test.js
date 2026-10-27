@@ -8,6 +8,7 @@ import path from "node:path";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiFormRequest, apiRequest, loginAs, trackCheckin } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
 import { uploadDirPath } from "../../src/upload.js";
+import { balanceBeforeVisit } from "../../src/signedActs.js";
 
 let baseUrl;
 const users = {};
@@ -146,6 +147,9 @@ test("payment collected without a delivery: a signed payment slip, its picture, 
     if (res.status === 201) trackCheckin(res.data.id);
     return res;
   };
+  // 500,000 from Excel + the orders earlier tests delivered in the app (excelBalance.test.js checks that rule itself)
+  const before = await balanceBeforeVisit(pool, customer.id);
+  const amd = (v) => v.toLocaleString("en-US");
   const first = await pay(120000);
   assert.equal(first.status, 201, JSON.stringify(first.data));
   assert.ok(first.data.payment_slip?.id, "a slip was made");
@@ -158,7 +162,8 @@ test("payment collected without a delivery: a signed payment slip, its picture, 
   const text = execFileSync("pdftotext", [path.join(uploadDirPath, slip.file_path), "-"]).toString();
   assert.match(text, /ՎՃԱՐՄԱՆ ԱՆԴՈՐՐԱԳԻՐ/);
   assert.match(text, /120,000/);
-  assert.match(text, /380,000/, "current balance = 500,000 - 120,000");
+  assert.ok(text.includes(amd(before)), "previous debt");
+  assert.ok(text.includes(amd(before - 120000)), "current balance = previous - 120,000");
   assert.doesNotMatch(text, /Պատվերի ամսաթիվ/);
 
   // the picture of it: what the viewer shows and "Save" stores
@@ -170,7 +175,7 @@ test("payment collected without a delivery: a signed payment slip, its picture, 
   // a second payment starts from the balance the first one left
   const second = await pay(30000);
   const { rows: [slip2] } = await pool.query("SELECT file_path FROM customer_files WHERE id = $1", [second.data.payment_slip.id]);
-  assert.match(execFileSync("pdftotext", [path.join(uploadDirPath, slip2.file_path), "-"]).toString(), /350,000/);
+  assert.match(execFileSync("pdftotext", [path.join(uploadDirPath, slip2.file_path), "-"]).toString(), new RegExp(amd(before - 150000)));
 
   // two slips, one A4 sheet
   const printed = await fetch(`${baseUrl}/api/files/print-slips`, {
@@ -183,6 +188,27 @@ test("payment collected without a delivery: a signed payment slip, its picture, 
   assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
   const pages = execFileSync("pdfinfo", ["-"], { input: pdf }).toString().match(/Pages:\s+(\d+)/)[1];
   assert.equal(pages, "1");
+});
+
+test("money needs the customer's signature (signature_rule from this app); an older phone's queued check-in still goes through", async () => {
+  const send = async (rule) => {
+    const form = new FormData();
+    form.set("customer_id", String(customer.id));
+    form.set("lat", "40.18");
+    form.set("lng", "44.51");
+    form.set("outcomes", JSON.stringify(["payment_collected"]));
+    form.set("amount_collected_amd", "1000");
+    if (rule) form.set("signature_rule", "1");
+    const res = await apiFormRequest("/api/checkins", { form, cookie: await login("rep") });
+    if (res.status === 201) trackCheckin(res.data.id);
+    return res;
+  };
+  const refused = await send(true);
+  assert.equal(refused.status, 400);
+  assert.equal(refused.data.code, "signature_required_for_payment");
+  const legacy = await send(false);
+  assert.equal(legacy.status, 201, "an older app (no rule flag) is not refused: its offline queue would drop the payment");
+  assert.equal(legacy.data.payment_slip?.id ? true : false, true, "the slip is still made, without a customer signature");
 });
 
 test("payment and delivery at one visit: the payment is written on the act, no separate slip", async () => {

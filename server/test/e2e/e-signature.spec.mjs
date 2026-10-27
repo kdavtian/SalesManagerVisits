@@ -95,6 +95,9 @@ test("@smoke check-in: payment collected -> the customer signs the payment slip;
   await page.locator('label.outcome-chip:has(input[value="payment_collected"])').click();
   await page.locator("#amount-collected-input").fill("45000");
   await expect(page.locator("#slip-sign-block")).toBeVisible();
+  // the customer's signature is required for money (owner, 2026-10-27)
+  await page.locator("#checkin-submit").click();
+  await expect(page.locator("#slip-sign-error")).toBeVisible();
   await page.locator("#slip-sign-btn").click();
   await scribble(page); // the rep's own signature, the first time
   await page.locator('.sig-pad [data-act="done"]').click();

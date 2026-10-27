@@ -14,7 +14,7 @@ import { notifyUser } from "../notifications.js";
 import { DRIVER_NOTIFY_ROLES, DELIVERY_OUTCOME_NOTIFY_ROLES } from "../notificationPreferences.js";
 import { buildMatrix, optimizeOrder } from "../osrm.js";
 import { signatureUpload, uploadDirPath } from "../upload.js";
-import { lockSignedOrders, createSignedActs } from "../signedActs.js";
+import { lockSignedOrders, createSignedActs, balanceBeforeVisit } from "../signedActs.js";
 import { matchesDeclaredImageType } from "../utils/imageSniff.js";
 import { insertPayment } from "./payments.js";
 import { getAppOrderSettings } from "../appOrders.js";
@@ -351,18 +351,15 @@ deliveryRouter.post("/routes/:id/reorder", async (req, res) => {
 deliveryRouter.get("/orders/:id/debt-snapshot", async (req, res) => {
   if (!canDeliverOrders(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const { rows } = await pool.query(
-    `SELECT o.id, o.total_amd, o.status, c.erp_customer_id, erp.debt_amd
-     FROM orders o
-     JOIN customers c ON c.id = o.customer_id
-     LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
-     WHERE o.id = $1`,
+    "SELECT o.id, o.total_amd, o.customer_id FROM orders o WHERE o.id = $1",
     [req.params.id]
   );
   const row = rows[0];
   if (!row) return res.status(404).json({ error: "Order not found" });
   res.json({
     order_amount_amd: Number(row.total_amd),
-    debt_before_amd: row.debt_amd != null ? Number(row.debt_amd) : null,
+    // the same figure the signed act will print (Excel + what Excel does not show yet)
+    debt_before_amd: await balanceBeforeVisit(pool, row.customer_id, { excludeOrderIds: [row.id] }),
   });
 });
 
@@ -415,10 +412,8 @@ deliveryRouter.post("/orders/:id/confirm", (req, res, next) => {
 
   const amountCollected = Number(req.body.amount_collected_amd) || 0;
   const paymentMethod = amountCollected > 0 && ["cash", "other"].includes(req.body.payment_method) ? req.body.payment_method : null;
-  const { rows: erpRows } = await pool.query("SELECT debt_amd FROM erp_customer_data WHERE erp_customer_id = $1", [
-    order.erp_customer_id,
-  ]);
-  const debtBefore = erpRows[0]?.debt_amd != null ? Number(erpRows[0].debt_amd) : null;
+  // Excel debt + delivered app orders / app payments Excel does not show yet (signedActs.balanceBeforeVisit), this order left out.
+  const debtBefore = await balanceBeforeVisit(pool, order.customer_id, { excludeOrderIds: [order.id] });
   const newBalance = debtBefore != null ? debtBefore + Number(order.total_amd) - amountCollected : null;
   const signaturePath = path.join("signatures", req.file.filename);
 
