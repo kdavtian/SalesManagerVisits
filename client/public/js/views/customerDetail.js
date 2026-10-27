@@ -1322,6 +1322,11 @@ async function openEditSheet(customer, navigate, onDone) {
           if (f.type === "textarea") {
             return `<label>${t(f.labelKey)}<textarea name="${f.name}" rows="2">${value}</textarea></label>`;
           }
+          if (f.name === "visit_frequency_days") {
+            // Following the type default: shown empty with the default as the hint; typing a number makes it this customer's own.
+            const own = customer.visit_frequency_manual !== false;
+            return `<label>${t(f.labelKey)}<input type="number" min="1" max="365" name="${f.name}" value="${own ? value : ""}" placeholder="${escapeHtml(t("visit_frequency_type_default").replace("{n}", customer.visit_frequency_days ?? ""))}" /></label>`;
+          }
           return `<label>${t(f.labelKey)}<input type="${f.type}" name="${f.name}" value="${value}" /></label>`;
         }).join("")}
         <p class="muted tin-lookup-status" id="tin-lookup-status" role="status" hidden></p>
@@ -1437,7 +1442,8 @@ async function openEditSheet(customer, navigate, onDone) {
         const digits = normalizePhone(raw);
         changes.phone = digits.length > 3 ? `+${digits}` : null;
       } else {
-        changes[f.name] = f.type === "number" ? Number(raw) : raw;
+        // An empty "Visit every N days" = the default of the customer's type (Settings > Sales & customers).
+        changes[f.name] = f.name === "visit_frequency_days" && String(raw ?? "").trim() === "" ? null : f.type === "number" ? Number(raw) : raw;
       }
     }
 

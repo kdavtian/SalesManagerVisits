@@ -4,13 +4,14 @@ import { api } from "./api.js";
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { state } from "./state.js";
-import { activateDialog, showToast } from "./util.js";
+import { activateDialog, showToast, escapeHtml as escapeText } from "./util.js";
 
 const INK = "#10224a";
 const PENDING_KEY = "fv_pending_own_signature";
 
 // Resolves with a PNG Blob (transparent background, cropped to the strokes), or null when cancelled.
-export function openSignaturePad({ title, hint = "", doneLabel = "" } = {}) {
+// statement: what the customer confirms by signing (owner, 2026-10-27: "he should know what he is signing for"), shown large above the pad.
+export function openSignaturePad({ title, hint = "", doneLabel = "", statement = "" } = {}) {
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
     overlay.className = "sig-pad";
@@ -22,6 +23,7 @@ export function openSignaturePad({ title, hint = "", doneLabel = "" } = {}) {
           <h2>${title}</h2>
           <button type="button" class="icon-btn sheet-close-x" data-act="cancel" aria-label="${t("close")}">${icons.close}</button>
         </div>
+        ${statement ? `<p class="sig-pad-statement">${escapeText(statement)}</p>` : ""}
         ${hint ? `<p class="muted sig-pad-hint">${hint}</p>` : ""}
         <div class="sig-pad-board"><canvas class="sig-pad-canvas"></canvas><span class="sig-pad-line" aria-hidden="true"></span></div>
         <p class="form-error" id="sig-pad-error" hidden>${t("signature_too_short")}</p>

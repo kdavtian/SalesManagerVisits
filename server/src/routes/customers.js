@@ -22,6 +22,8 @@ import { nextNameNumber } from "../customerNameSuggest.js";
 import { pendingCreditFor } from "../orderReturns.js";
 import { PotentialError, cleanPotentialInput, setPotential, resolveCounterfeit, potentialHistory, getReasonMemory } from "../potential.js";
 import { normalizeIncomingPlaces, recordPlaceReviews, placeNotice } from "../placeReviews.js";
+import { balanceBeforeVisit } from "../signedActs.js";
+import { getDocumentTexts, signStatement } from "../documentTexts.js";
 
 export const customersRouter = Router();
 
@@ -391,8 +393,8 @@ customersRouter.post("/", async (req, res) => {
   let rows;
   try {
     ({ rows } = await pool.query(
-      `INSERT INTO customers (name, category, phone, address, notes, lat, lng, created_by, assigned_manager_id, visit_frequency_days, erp_customer_id, tin, region, subregion, customer_tier, sales_channel, credit_term_days, payment_method)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $16, $9, $10, $11, $12, $13, $14, $15, $17, $18)
+      `INSERT INTO customers (name, category, phone, address, notes, lat, lng, created_by, assigned_manager_id, visit_frequency_days, erp_customer_id, tin, region, subregion, customer_tier, sales_channel, credit_term_days, payment_method, visit_frequency_manual)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $16, $9, $10, $11, $12, $13, $14, $15, $17, $18, $19)
        RETURNING *`,
       [
         name,
@@ -413,6 +415,8 @@ customersRouter.post("/", async (req, res) => {
         resolvedManagerId,
         Number(credit_term_days) || 45,
         payment_method || "invoice",
+        // a frequency given here is this customer's own; otherwise the default of its type applies (migration 162's trigger)
+        Number(visit_frequency_days) > 0,
       ]
     ));
   } catch (err) {
@@ -685,6 +689,27 @@ customersRouter.post("/:id/counterfeit-resolve", async (req, res) => {
   }
 });
 
+// What the customer reads on the signature page before signing (owner, 2026-10-27): "I received order X [and paid Y]; my debt is Z".
+// ?order_ids=1,2 (the orders handed over at this visit) & payment=45000. Z = the debt before this visit (signedActs.balanceBeforeVisit,
+// the same figure the signed blank prints) + these orders - this payment. The texts come back too, so the phone can still show the
+// sentence (without the debt) when it is offline next time.
+customersRouter.get("/:id/sign-statement", async (req, res) => {
+  const customerId = Number(req.params.id);
+  const orderIds = String(req.query.order_ids ?? "").split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0).slice(0, 50);
+  const payment = Math.max(0, Math.round(Number(req.query.payment) || 0));
+  const { rows: orders } = orderIds.length
+    ? await pool.query("SELECT id, order_code, total_amd::float8 AS total_amd FROM orders WHERE customer_id = $1 AND id = ANY($2::int[]) ORDER BY id", [customerId, orderIds])
+    : { rows: [] };
+  const [before, texts] = await Promise.all([balanceBeforeVisit(pool, customerId, { excludeOrderIds: orders.map((o) => o.id) }), getDocumentTexts()]);
+  const after = before === null ? null : before + orders.reduce((s, o) => s + o.total_amd, 0) - payment;
+  res.json({
+    balance_before_amd: before,
+    balance_after_amd: after,
+    statement: signStatement(texts, { orderCodes: orders.map((o) => o.order_code || `#${o.id}`), paymentAmd: payment, balanceAfterAmd: after }),
+    texts,
+  });
+});
+
 customersRouter.get("/:id/documents", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT d.id, d.order_id, d.hc_doc_number, d.filename, d.size_bytes, d.created_at, o.order_code, o.accounting_doc_type
@@ -927,6 +952,12 @@ customersRouter.patch("/:id", async (req, res) => {
   const updates = [];
   const params = [];
   const changedFields = [];
+  // An emptied "Visit every N days" brings the customer back to the default of its type (Settings > Sales & customers).
+  if (fieldsToApply.visit_frequency_days === null || fieldsToApply.visit_frequency_days === "" || fieldsToApply.visit_frequency_days === 0) {
+    delete fieldsToApply.visit_frequency_days;
+    updates.push("visit_frequency_manual = false");
+    changedFields.push("visit_frequency_days");
+  }
 
   for (const field of EDITABLE_FIELDS) {
     if (fieldsToApply[field] !== undefined) {
