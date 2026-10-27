@@ -137,6 +137,7 @@ export function openDeskColumnMenu(anchor, columns, cols, onChange) {
   };
   const onKey = (e) => {
     if (e.key === "Escape") {
+      e.preventDefault();
       close();
       anchor.focus();
     }
@@ -208,6 +209,7 @@ export function wireDeskKeys(listEl, { rowSelector, onToggle, onEscape } = {}) {
     if (!isDesktop()) return;
     const row = e.target.closest?.(rowSelector);
     if (e.key === "Escape") {
+      if (document.querySelector(".sheet-overlay.sheet-docked")) e.preventDefault();
       onEscape?.();
       return;
     }
@@ -420,6 +422,7 @@ export function createDeskTable(opts) {
     if (!isDesktop()) return;
     const row = e.target.closest?.(rowSelector);
     if (e.key === "Escape") {
+      if (document.querySelector(".sheet-overlay.sheet-docked")) e.preventDefault();
       onEscape?.();
       return;
     }
@@ -533,6 +536,7 @@ export function openDeskMenu(anchor, options, current, onPick) {
   };
   const onKeyDown = (e) => {
     if (e.key === "Escape") {
+      e.preventDefault();
       close();
       anchor.focus();
     }

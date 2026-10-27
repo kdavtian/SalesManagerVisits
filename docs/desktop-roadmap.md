@@ -104,10 +104,18 @@ Issues found (I = issue, each has its fix in the steps below):
   narrow customer panel beside the Customers table nothing changes, and a sheet opened there stays a dialog on top of it.
 
 ### Step 4. Top bar: global search + quick actions + keyboard — I9 I13
-- [ ] A search box in the top bar (customer, order code, ID, phone), "/" focuses it, results in a dropdown grouped Customers / Orders /
+- [x] A search box in the top bar (customer, order code, ID, phone), "/" focuses it, results in a dropdown grouped Customers / Orders /
       Tasks; Enter opens the first.
-- [ ] Quick actions on the right: New order, New task, New customer (role-gated), with the keyboard hints (n o / n t / n c).
-- [ ] Esc closes the top-most sheet / panel everywhere (one listener in `app.js`).
+- [x] Quick actions on the right: New order, New task, New customer (role-gated), with the keyboard hints (n o / n t / n c).
+- [x] Esc closes the top-most sheet / panel everywhere (one listener in `app.js`).
+- Spec: `desktop-topbar.spec.mjs`.
+- As built (1.444.0): `deskTopBar.js` (loaded only on a desktop window; not for the warehouse / driver shells). Customers come
+  from the existing customer search (name, ID, TIN, phone digits, address...), orders from a new `q` + `limit` on
+  `GET /api/orders` (order code, customer name, customer ID), tasks from the open tasks this person sees (cached a minute). The
+  search starts at 2 letters; arrows move, Enter opens. New order opens the customer picker on the Orders page
+  (`#/orders?new=1`), New customer the Map's add mode, New task the task editor (task-creating roles only). On a desktop window
+  between 1024 and 1365 px the action buttons show icons only. Esc: one listener in `app.js` removes the top-most sheet when
+  nothing else (a sheet's own Esc, a menu, the search box) has handled the key.
 
 ### Step 5. Sidebar grouping and role cleanup — I10
 - [ ] MORE grouped: Sales (Vaghinak, Team performance, Sales, Reports), Money (Payments & expenses, Debt, Cashflow, Accounting),
@@ -157,3 +165,4 @@ Issues found (I = issue, each has its fix in the steps below):
 - Step 1 (table engine + Customers page): 1.441.0, PR #479, 2026-10-27.
 - Step 2 (Orders + Activity + Tasks on the engine): 1.442.0, PR #480, 2026-10-27.
 - Step 3 (customer card in three columns): 1.443.0, PR #481, 2026-10-27.
+- Step 4 (top bar search + quick actions + keyboard): 1.444.0, PR #483, 2026-10-27.

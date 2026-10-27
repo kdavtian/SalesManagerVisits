@@ -2036,6 +2036,8 @@ export default {
     desk_col_excel: "In the Excel",
     desk_col_collected: "Collected by",
     desk_col_sort_hint: "Click a heading to sort; click again to reverse",
+    desk_search_placeholder: "Search customers, orders, tasks",
+    desk_search_none: "Nothing found",
     desk_col_cash: "Collected",
     desk_col_code: "Order code",
     desk_col_delivered: "Delivered",
