@@ -137,15 +137,27 @@ filesRouter.post("/print-slips", async (req, res) => {
   const params = [ids];
   const visible = visibleFilesCondition(req.user, params);
   const { rows } = await pool.query(
-    `SELECT f.id, f.file_path FROM customer_files f JOIN customers c ON c.id = f.customer_id
-     WHERE f.id = ANY($1) AND f.kind = 'payment_slip' AND f.mime = 'application/pdf' AND ${visible}`,
+    `SELECT f.id, f.file_path, f.mime FROM customer_files f JOIN customers c ON c.id = f.customer_id
+     WHERE f.id = ANY($1) AND f.kind = 'payment_slip' AND ${visible}`,
     params
   );
   const byId = new Map(rows.map((r) => [r.id, r]));
   const pictures = [];
   for (const id of ids) {
     const row = byId.get(id);
-    const jpg = row ? await pdfPreviewPath(path.join(uploadDirPath, row.file_path)) : null;
+    if (!row) continue;
+    const full = path.join(uploadDirPath, row.file_path);
+    // A photographed paper slip (owner, 2026-10-27) is printed as it is (turned upright, as JPEG for pdfkit); a made one from its picture.
+    const jpg = row.mime === "application/pdf"
+      ? await pdfPreviewPath(full)
+      : await (async () => {
+          try {
+            const sharp = (await import("sharp")).default;
+            return await sharp(full).rotate().jpeg({ quality: 85 }).toBuffer();
+          } catch {
+            return null;
+          }
+        })();
     if (jpg) pictures.push(jpg);
   }
   if (!pictures.length) return res.status(rows.length ? 501 : 404).json({ error: rows.length ? "Preview not available" : "No payment slips found" });

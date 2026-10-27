@@ -3,7 +3,7 @@ import { pool } from "../db/pool.js";
 import { CHECKIN_ORDER_LINKS_SQL } from "../checkinDelivery.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { canManagePotentialAll, canResolveCounterfeit, canConfirmOrders, seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData, canSetCreditTerms } from "../roles.js";
+import { canManagePotentialAll, canResolveCounterfeit, canConfirmOrders, seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData, canSetCreditTerms, seesOnlyRecentAccountingDocs, ACCOUNTING_DOCS_RECENT_DAYS } from "../roles.js";
 import { creditSnapshot } from "../creditLimit.js";
 import { loadUnpaidOrders, summarizeDebt, dueDays, debtHoldInfo } from "../debtAge.js";
 import { visitPriorities } from "../visitPriorities.js";
@@ -711,10 +711,12 @@ customersRouter.get("/:id/sign-statement", async (req, res) => {
 });
 
 customersRouter.get("/:id/documents", async (req, res) => {
+  // the warehouse and drivers see the documents of the last two weeks' orders only (roles.js)
+  const recentOnly = seesOnlyRecentAccountingDocs(req.user.role);
   const { rows } = await pool.query(
     `SELECT d.id, d.order_id, d.hc_doc_number, d.filename, d.size_bytes, d.created_at, o.order_code, o.accounting_doc_type
      FROM order_documents d JOIN orders o ON o.id = d.order_id
-     WHERE o.customer_id = $1 ORDER BY d.created_at DESC`,
+     WHERE o.customer_id = $1 ${recentOnly ? `AND o.created_at >= now() - interval '${ACCOUNTING_DOCS_RECENT_DAYS} days'` : ""} ORDER BY d.created_at DESC`,
     [req.params.id]
   );
   res.json(rows);

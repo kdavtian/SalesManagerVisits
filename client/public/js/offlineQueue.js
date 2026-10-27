@@ -194,7 +194,7 @@ async function submitCheckin(entry) {
   entry.orderBlankPhotos?.forEach((blob, i) => form.append("order_blank_photos", blob, `order-blank-${i}.jpg`));
   // The customer's electronic signature (and the rep's own, when it was not on their profile yet): signed offline, the PDFs are made on the server
   // as soon as the phone is online again.
-  if (entry.signatureRule) form.set("signature_rule", "1");
+  entry.paymentSlipPhotos?.forEach((blob, i) => form.append("payment_slip_photos", blob, `payment-slip-${i}.jpg`));
   if (entry.customerSignature) form.append("customer_signature", entry.customerSignature, "customer-signature.png");
   if (entry.repSignature) form.append("rep_signature", entry.repSignature, "rep-signature.png");
   return api.createCheckin(form);

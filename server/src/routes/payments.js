@@ -291,7 +291,7 @@ paymentsRouter.get("/pending-count", async (req, res) => {
 });
 
 paymentsRouter.get("/", async (req, res) => {
-  const { status, sales_channel, sales_manager_id, customer_id, month, from, to, q, sort, order, offset, excel } = req.query;
+  const { status, sales_channel, sales_manager_id, customer_id, month, from, to, q, sort, order, offset, excel, confirmation } = req.query;
 
   const conditions = [];
   const params = [];
@@ -315,6 +315,11 @@ paymentsRouter.get("/", async (req, res) => {
   // "Not in Excel": recorded in the app, older than the grace days, and the workbook still shows nothing like it.
   if (excel === "missing") {
     conditions.push(`p.status <> 'rejected' AND p.erp_customer_id_snapshot IS NOT NULL AND ${DAYS_OLD_SQL} >= ${EXCEL_GRACE_DAYS} AND NOT ${IN_EXCEL_SQL}`);
+  }
+  // How the customer confirmed money collected at a visit (migration 163): signed / photo / none (saved after the warning, unconfirmed).
+  if (["signed", "photo", "none"].includes(confirmation)) {
+    params.push(confirmation);
+    conditions.push(`p.customer_confirmation = $${params.length}`);
   }
   if (customer_id) {
     params.push(customer_id);

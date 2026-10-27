@@ -66,6 +66,12 @@ function excelBadgeHtml(p) {
   return "";
 }
 
+// A payment collected at a visit that the customer neither signed nor confirmed on a photographed slip (owner, 2026-10-27).
+function confirmationBadgeHtml(p) {
+  return p.customer_confirmation === "none" ? ` <span class="badge badge-warning">${t("pay_conf_none")}</span>` : "";
+}
+const CONFIRMATIONS = ["signed", "photo", "none"];
+
 function notifyPaymentsChanged() {
   window.dispatchEvent(new Event("payments-changed"));
 }
@@ -133,6 +139,8 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
   let activeFilter = initialStatusFilter;
   let channelFilter = initialQuery?.get("sales_channel") || "";
   let managerFilter = initialQuery?.get("sales_manager_id") || "";
+  // signed / photo / none (owner, 2026-10-27: unconfirmed payments must be findable)
+  let confirmationFilter = CONFIRMATIONS.includes(initialQuery?.get("confirmation")) ? initialQuery.get("confirmation") : "";
   // Only ever arrives via a Reports drill-down (no on-page control sets
   // this) -- see PERIOD_LABEL_KEY/periodFilterParams above.
   let periodFilter = PERIOD_KEYS.includes(initialQuery?.get("period")) ? initialQuery.get("period") : "";
@@ -179,6 +187,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
     if (orderReversed) params.order = "asc";
     if (channelFilter) params.sales_channel = channelFilter;
     if (managerFilter) params.sales_manager_id = managerFilter;
+    if (confirmationFilter) params.confirmation = confirmationFilter;
     if (activeFilter === "pending" || activeFilter === "approved" || activeFilter === "rejected") {
       params.status = activeFilter;
     } else if (activeFilter === "today") {
@@ -219,6 +228,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
       chips.push({ label: periodKeyLabel(periodFilter), clear: () => (periodFilter = "") });
     }
     if (channelFilter) chips.push({ label: channelFilter, clear: () => (channelFilter = "") });
+    if (confirmationFilter) chips.push({ label: t(`pay_conf_${confirmationFilter}`), clear: () => (confirmationFilter = "") });
     if (managerFilter) {
       const managerName = payments.find((p) => String(p.sales_manager_id) === String(managerFilter))?.sales_manager_name_snapshot;
       chips.push({ label: managerName || t("payment_manager_label"), clear: () => (managerFilter = "") });
@@ -274,6 +284,10 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
     filterMenu.innerHTML = `
       <button role="menuitemradio" aria-checked="${channelFilter === ""}" data-channel="">${t("all_channels")}</button>
       ${channels.map((c) => `<button role="menuitemradio" aria-checked="${c === channelFilter}" data-channel="${escapeHtml(c)}">${escapeHtml(channelDisplayLabel(c))}</button>`).join("")}
+      <hr />
+      <span class="dropdown-menu-label muted">${t("pay_confirmation")}</span>
+      <button role="menuitemradio" aria-checked="${confirmationFilter === ""}" data-confirmation="">${t("filter_all")}</button>
+      ${CONFIRMATIONS.map((c) => `<button role="menuitemradio" aria-checked="${c === confirmationFilter}" data-confirmation="${c}">${t(`pay_conf_${c}`)}</button>`).join("")}
       ${
         canSeeAll
           ? `<hr />
@@ -285,6 +299,14 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
     filterMenu.querySelectorAll("[data-channel]").forEach((btn) => {
       btn.addEventListener("click", () => {
         channelFilter = btn.dataset.channel;
+        filterMenu.hidden = true;
+        filterBtn.setAttribute("aria-expanded", "false");
+        load();
+      });
+    });
+    filterMenu.querySelectorAll("[data-confirmation]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        confirmationFilter = btn.dataset.confirmation;
         filterMenu.hidden = true;
         filterBtn.setAttribute("aria-expanded", "false");
         load();
@@ -354,7 +376,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
         </button>
         <div class="payment-row-bottom-line">
           <span class="badge payment-status-badge ${meta.cls}">${t(meta.key)}</span>
-          ${p.approved_from_erp ? `<span class="badge badge-info">${t("from_erp")}</span>` : ""}${excelBadgeHtml(p)}
+          ${p.approved_from_erp ? `<span class="badge badge-info">${t("from_erp")}</span>` : ""}${excelBadgeHtml(p)}${confirmationBadgeHtml(p)}
           <span class="text-amount">${formatAmd(Number(p.amount_amd))}</span>
           ${
             p.status === "pending" && canReview
@@ -392,7 +414,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
       ${cell(escapeHtml(formatDateDMY(String(p.payment_date))), "")}
       ${cell(`<strong>${escapeHtml(p.customer_name_snapshot)}</strong>`, p.erp_customer_id_snapshot ? `ID ${escapeHtml(p.erp_customer_id_snapshot)}` : "", "dtl-name")}
       ${cell(escapeHtml(p.sales_manager_name_snapshot || ""), p.sales_channel ? escapeHtml(channelDisplayLabel(p.sales_channel)) : "")}
-      ${cell(`<span class="badge payment-status-badge ${meta.cls}">${t(meta.key)}</span>${p.approved_from_erp ? ` <span class="badge badge-info">${t("from_erp")}</span>` : ""}`, "")}
+      ${cell(`<span class="badge payment-status-badge ${meta.cls}">${t(meta.key)}</span>${p.approved_from_erp ? ` <span class="badge badge-info">${t("from_erp")}</span>` : ""}${confirmationBadgeHtml(p)}`, "")}
       ${cell(excel || `<span class="muted">&mdash;</span>`, "")}
       ${cell(`<strong class="text-amount">${formatAmd(Number(p.amount_amd))}</strong>`, "", "dtl-end")}
       <div class="dtl-cell dtl-end">${p.status === "pending" && canReview ? `<button type="button" class="btn btn-primary btn-sm payment-approve-btn" data-approve-id="${p.id}">${t("approve")}</button>` : ""}</div>
@@ -549,7 +571,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
       const meta = STATUS_META[p.status] ?? STATUS_META.pending;
       overlay.querySelector(".sheet").innerHTML = `
         <h2>${t("payment_detail_title")}</h2>
-        <p><span class="badge ${meta.cls}">${t(meta.key)}</span>${p.approved_from_erp ? ` <span class="badge badge-info">${t("from_erp")}</span>` : ""}${excelBadgeHtml(p)}</p>
+        <p><span class="badge ${meta.cls}">${t(meta.key)}</span>${p.approved_from_erp ? ` <span class="badge badge-info">${t("from_erp")}</span>` : ""}${excelBadgeHtml(p)}${confirmationBadgeHtml(p)}</p>
         <div class="card-list" style="margin:12px 0;">
           <div class="order-line-row">
             <div class="order-line-top">${customerNameLinkHtml(p.customer_name_snapshot, p.customer_id, "span", "order-line-name")}<strong class="text-amount">${formatAmd(Number(p.amount_amd))}</strong></div>

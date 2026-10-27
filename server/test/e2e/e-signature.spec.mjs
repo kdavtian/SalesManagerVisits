@@ -97,8 +97,11 @@ test("@smoke check-in: payment collected -> the customer signs the payment slip;
   await page.locator('label.outcome-chip:has(input[value="payment_collected"])').click();
   await page.locator("#amount-collected-input").fill("45000");
   await expect(page.locator("#slip-sign-block")).toBeVisible();
-  // the customer's signature is required for money (owner, 2026-10-27)
+  // no signature and no slip photo: a warning sheet (owner, 2026-10-27) -- "Go back" returns to the form
   await page.locator("#checkin-submit").click();
+  await expect(page.locator(".unconfirmed-payment-sheet")).toBeVisible();
+  await page.locator('.unconfirmed-payment-sheet [data-act="back"]').click();
+  await expect(page.locator(".unconfirmed-payment-sheet")).toHaveCount(0);
   await expect(page.locator("#slip-sign-error")).toBeVisible();
   await page.locator("#slip-sign-btn").click();
   await scribble(page); // the rep's own signature, the first time
@@ -125,6 +128,65 @@ test("@smoke check-in: payment collected -> the customer signs the payment slip;
     expect(ids.slice(0, 2)).toEqual(["share", "save-image"]);
   } finally {
     await pool.query("DELETE FROM customer_files WHERE checkin_id = $1", [created.id]);
+    await pool.query("DELETE FROM payment_status_history WHERE payment_id IN (SELECT id FROM payments WHERE customer_id = $1)", [customer.id]);
+    await pool.query("DELETE FROM payments WHERE customer_id = $1", [customer.id]);
+  }
+});
+
+test("payment collected: a photo of the paper slip confirms it; without anything the rep saves after the warning and Payments finds it as Not confirmed", async ({ page, fixtures }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const rep = await fixtures.createUser("sales_manager");
+  const customer = await fixtures.createCustomer({ created_by: rep.id, assigned_manager_id: rep.id, lat: 40.18, lng: 44.51 });
+  await loginViaUi(page, rep.email);
+  const checkIn = async (amount, withPhoto) => {
+    // a fresh check-in screen each time (the same address would not redraw it)
+    await page.goto(`/#/customers/${customer.id}`);
+    await expect(page.locator(".customer-detail-view")).toBeVisible();
+    await page.goto(`/#/checkin/${customer.id}`);
+    await expect(page.locator("#checkin-submit")).toBeEnabled({ timeout: 15000 });
+    await page.locator('label.outcome-chip:has(input[value="payment_collected"])').click();
+    await page.locator("#amount-collected-input").fill(String(amount));
+    if (withPhoto) {
+      const sharp = (await import("sharp")).default;
+      const jpg = await sharp({ create: { width: 400, height: 300, channels: 3, background: "#dddddd" } }).jpeg().toBuffer();
+      await page.locator("#slip-photo-input").setInputFiles({ name: "slip.jpg", mimeType: "image/jpeg", buffer: jpg });
+      await expect(page.locator("#slip-thumb-grid .photo-thumb")).toHaveCount(1);
+    }
+    const responseP = page.waitForResponse((res) => res.url().endsWith("/api/checkins") && res.request().method() === "POST");
+    await page.locator("#checkin-submit").click();
+    if (!withPhoto) {
+      await expect(page.locator(".unconfirmed-payment-sheet")).toBeVisible();
+      if (process.env.SIG_SHOTS) {
+        await page.waitForTimeout(500);
+        await page.screenshot({ path: `${process.env.SIG_SHOTS}/unconfirmed-warning.png` });
+      }
+      await page.locator('.unconfirmed-payment-sheet [data-act="save"]').click();
+    }
+    const response = await responseP;
+    expect(response.status()).toBe(201);
+    const created = await response.json();
+    fixtures.trackRow("checkins", created.id);
+    return created;
+  };
+  const ids = [];
+  try {
+    const withPhoto = await checkIn(31000, true);
+    ids.push(withPhoto.id);
+    expect(withPhoto.customer_confirmation).toBe("photo");
+    const bare = await checkIn(32000, false);
+    ids.push(bare.id);
+    expect(bare.customer_confirmation).toBe("none");
+
+    // Payments: the Not confirmed filter shows only the unconfirmed one, with its badge
+    await page.goto("/#/payments");
+    await page.locator("#payment-filter-btn").click();
+    await page.locator('[data-confirmation="none"]').click();
+    await expect(page.locator("#payment-active-filters")).toContainText("Not confirmed");
+    await expect(page.locator(".list-row", { hasText: "32,000" }).first()).toBeVisible();
+    await expect(page.locator(".list-row", { hasText: "31,000" })).toHaveCount(0);
+    if (process.env.SIG_SHOTS) await page.screenshot({ path: `${process.env.SIG_SHOTS}/payments-not-confirmed.png` });
+  } finally {
+    await pool.query("DELETE FROM customer_files WHERE checkin_id = ANY($1)", [ids]);
     await pool.query("DELETE FROM payment_status_history WHERE payment_id IN (SELECT id FROM payments WHERE customer_id = $1)", [customer.id]);
     await pool.query("DELETE FROM payments WHERE customer_id = $1", [customer.id]);
   }

@@ -125,7 +125,13 @@ export async function renderCheckin(root, navigate, customerId) {
            signature covers it (the payment is written on the act). -->
       <div class="slip-sign-block" id="slip-sign-block" hidden>
         <span class="delivered-orders-title">${t("slip_sign_hint")}</span>
-        <button type="button" class="camera-btn" id="slip-sign-btn">${icons.pencil}<span>${t("signature_button")}</span></button>
+        <!-- or a photo of the paper slip the customer signed (owner, 2026-10-27) -->
+        <div class="photo-thumb-grid" id="slip-thumb-grid"></div>
+        <input type="file" id="slip-photo-input" accept="image/*" capture="environment" class="visually-hidden" />
+        <div class="blank-actions">
+          <button type="button" class="camera-btn" id="slip-photo-btn">${CAMERA_ICON}<span id="slip-photo-label">${t("slip_photo_button")}</span></button>
+          <button type="button" class="camera-btn" id="slip-sign-btn">${icons.pencil}<span>${t("signature_button")}</span></button>
+        </div>
         <div class="sign-chip" id="slip-sign-chip" hidden>
           <img id="slip-sign-img" alt="" />
           <span>${t("slip_signed")}</span>
@@ -596,6 +602,66 @@ export async function renderCheckin(root, navigate, customerId) {
     }
   });
 
+  // Photos of the paper payment slip the customer signed (owner, 2026-10-27: "not only electronic one").
+  const slipPhotos = [];
+  const slipInput = container.querySelector("#slip-photo-input");
+  const slipPhotoBtn = container.querySelector("#slip-photo-btn");
+  const slipGrid = container.querySelector("#slip-thumb-grid");
+  function paintSlipThumbs() {
+    slipGrid.innerHTML = slipPhotos
+      .map(
+        (photo, i) => `
+        <div class="photo-thumb">
+          <img src="${photo.url}" alt="${t("slip_photo_button")}" />
+          <button type="button" class="photo-remove-btn" data-index="${i}" aria-label="${t("remove_photo")}">&times;</button>
+          <button type="button" class="photo-rotate-btn" data-rotate="${i}" aria-label="${t("rotate_right")}">&#8635;</button>
+        </div>`
+      )
+      .join("");
+    slipGrid.querySelectorAll(".photo-rotate-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const photo = slipPhotos[Number(btn.dataset.rotate)];
+        btn.disabled = true;
+        try {
+          const turned = await rotateImageBlob(photo.blob, 90);
+          URL.revokeObjectURL(photo.url);
+          photo.blob = turned;
+          photo.url = URL.createObjectURL(turned);
+          paintSlipThumbs();
+        } catch {
+          btn.disabled = false;
+        }
+      });
+    });
+    slipGrid.querySelectorAll(".photo-thumb img").forEach((img, i) => {
+      img.addEventListener("click", () => openPhotoLightbox(slipPhotos.map((photo) => photo.url), i));
+    });
+    slipGrid.querySelectorAll(".photo-remove-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        URL.revokeObjectURL(slipPhotos[Number(btn.dataset.index)].url);
+        slipPhotos.splice(Number(btn.dataset.index), 1);
+        paintSlipThumbs();
+      });
+    });
+    container.querySelector("#slip-photo-label").textContent = slipPhotos.length ? t("add_another_photo") : t("slip_photo_button");
+    slipPhotoBtn.hidden = slipPhotos.length >= MAX_BLANK_PHOTOS;
+    if (slipPhotos.length) container.querySelector("#slip-sign-error").hidden = true;
+  }
+  slipPhotoBtn.addEventListener("click", () => slipInput.click());
+  slipInput.addEventListener("change", async () => {
+    const file = slipInput.files[0];
+    slipInput.value = "";
+    if (!file) return;
+    try {
+      const compressed = await compressImage(file, { maxDimension: 2400, quality: 0.9 });
+      slipPhotos.push({ blob: compressed, url: URL.createObjectURL(compressed) });
+      paintSlipThumbs();
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+    }
+  });
+
   // The customer's electronic signature on the delivery-acceptance act (owner, 2026-10-26): the rep hands the phone over, the customer signs ONCE
   // for every ticked order, the server makes one signed PDF per order. The rep's own signature comes from their profile (drawn the first time).
   let customerSignature = null; // { blob, url }
@@ -615,6 +681,34 @@ export async function renderCheckin(root, navigate, customerId) {
       container.querySelector("#blank-sign-img").src = customerSignature.url;
       container.querySelector("#slip-sign-img").src = customerSignature.url;
     }
+  }
+  // The warning sheet before saving money nobody confirmed: "Go back" (default) or "Save anyway".
+  let unconfirmedAccepted = false;
+  function confirmUnconfirmedPayment() {
+    return new Promise((resolve) => {
+      const overlay = document.createElement("div");
+      overlay.className = "sheet-overlay";
+      overlay.innerHTML = `
+        <div class="sheet unconfirmed-payment-sheet" role="alertdialog" aria-modal="true" aria-labelledby="unconfirmed-title">
+          <h2 id="unconfirmed-title">${t("unconfirmed_payment_title")}</h2>
+          <p>${t("unconfirmed_payment_text")}</p>
+          <div class="sheet-actions">
+            <button type="button" class="btn" data-act="back">${t("unconfirmed_payment_back")}</button>
+            <button type="button" class="btn btn-danger" data-act="save">${t("unconfirmed_payment_save")}</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      activateDialog(overlay);
+      const done = (ok) => {
+        overlay.remove();
+        resolve(ok);
+      };
+      overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) return done(false);
+        const act = e.target.closest("[data-act]")?.dataset.act;
+        if (act) done(act === "save");
+      });
+    });
   }
   // What the customer's signature covers right now: the ticked delivered orders and the money typed in.
   function signingFor() {
@@ -832,12 +926,17 @@ export async function renderCheckin(root, navigate, customerId) {
 
     dropStaleSignature();
     // The customer signs for the money (owner, 2026-10-27: it is also the debt balance). A photographed paper blank of a delivery carries it.
+    // Not required (owner, 2026-10-27): a payment the customer neither signed nor confirmed on a photographed slip / blank gets a warning,
+    // and the rep may still save it -- the payment is then marked "not confirmed" and found with the Payments filter.
     const paperBlank = outcomes.includes("customer_unavailable") && blankPhotos.length > 0;
-    if (amountCollected != null && !customerSignature && !paperBlank) {
+    if (amountCollected != null && !customerSignature && !paperBlank && !slipPhotos.length && !unconfirmedAccepted) {
       const slipError = container.querySelector("#slip-sign-error");
       slipError.hidden = false;
-      slipError.scrollIntoView({ behavior: "smooth", block: "center" });
-      return;
+      if (!(await confirmUnconfirmedPayment())) {
+        slipError.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+      unconfirmedAccepted = true;
     }
 
     if (outcomes.includes("other") && !customer.checkin_for_all && !String(data.get("note") ?? "").trim()) {
@@ -890,7 +989,8 @@ export async function renderCheckin(root, navigate, customerId) {
     if (note) formData.set("note", note);
     formData.set("outcomes", JSON.stringify(outcomes));
     if (amountCollected != null) formData.set("amount_collected_amd", amountCollected);
-    formData.set("signature_rule", "1"); // this app asks the customer to sign for a payment (the server refuses one without it)
+    const slipBlobs = amountCollected != null ? slipPhotos.map((photo) => photo.blob) : [];
+    slipBlobs.forEach((blob, i) => formData.append("payment_slip_photos", blob, `payment-slip-${i}.jpg`));
     const deliveredOrderIds = outcomes.includes("customer_unavailable") ? data.getAll("delivered_orders").map(Number) : [];
     if (deliveredOrderIds.length) formData.set("delivered_order_ids", JSON.stringify(deliveredOrderIds));
     if (Object.keys(brandStatusPayload).length) formData.set("brand_status", JSON.stringify(brandStatusPayload));
@@ -936,7 +1036,7 @@ export async function renderCheckin(root, navigate, customerId) {
           orderBlankPhotos: orderBlankBlobs,
           customerSignature: signatureBlob,
           repSignature: signatureBlob ? ownSignaturePending : null,
-          signatureRule: true,
+          paymentSlipPhotos: slipBlobs,
         });
         showQueued();
       } else {
