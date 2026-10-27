@@ -9,8 +9,9 @@ test/integration/bonusRewardClaims.test.js
 test/integration/bonusRewardClaimsRoutes.test.js
 test/integration/bonusSummaryRoutes.test.js
 test/integration/erpSync.test.js
+test/integration/erpSyncStatus.test.js
+test/integration/excelBalance.test.js
 test/integration/lockdownEngage.test.js
 test/integration/routePlanScopes.test.js
 test/integration/routePlanSets.test.js
 test/integration/vaghinak.test.js
-test/integration/erpSyncStatus.test.js

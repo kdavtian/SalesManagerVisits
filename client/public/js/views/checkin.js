@@ -130,6 +130,7 @@ export async function renderCheckin(root, navigate, customerId) {
           <span>${t("slip_signed")}</span>
           <button type="button" class="photo-remove-btn sign-chip-remove" id="slip-sign-remove" aria-label="${t("remove_photo")}">&times;</button>
         </div>
+        <p class="form-error" id="slip-sign-error" hidden>${t("slip_sign_required")}</p>
       </div>
 
       <div id="delivered-orders-field" class="delivered-orders-field" hidden>
@@ -623,6 +624,7 @@ export async function renderCheckin(root, navigate, customerId) {
       const blob = await openSignaturePad({ title: t("signature_customer_title"), hint: t(hintKey), doneLabel: t("signature_sign") });
       if (!blob) return;
       customerSignature = { blob, url: URL.createObjectURL(blob) };
+      container.querySelector("#slip-sign-error").hidden = true;
       paintSignature();
     } catch (err) {
       errorEl.textContent = err.message;
@@ -796,6 +798,15 @@ export async function renderCheckin(root, navigate, customerId) {
       return;
     }
 
+    // The customer signs for the money (owner, 2026-10-27: it is also the debt balance). A photographed paper blank of a delivery carries it.
+    const paperBlank = outcomes.includes("customer_unavailable") && blankPhotos.length > 0;
+    if (amountCollected != null && !customerSignature && !paperBlank) {
+      const slipError = container.querySelector("#slip-sign-error");
+      slipError.hidden = false;
+      slipError.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
     if (outcomes.includes("other") && !customer.checkin_for_all && !String(data.get("note") ?? "").trim()) {
       noteError.hidden = false;
       noteError.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -846,6 +857,7 @@ export async function renderCheckin(root, navigate, customerId) {
     if (note) formData.set("note", note);
     formData.set("outcomes", JSON.stringify(outcomes));
     if (amountCollected != null) formData.set("amount_collected_amd", amountCollected);
+    formData.set("signature_rule", "1"); // this app asks the customer to sign for a payment (the server refuses one without it)
     const deliveredOrderIds = outcomes.includes("customer_unavailable") ? data.getAll("delivered_orders").map(Number) : [];
     if (deliveredOrderIds.length) formData.set("delivered_order_ids", JSON.stringify(deliveredOrderIds));
     if (Object.keys(brandStatusPayload).length) formData.set("brand_status", JSON.stringify(brandStatusPayload));
@@ -891,6 +903,7 @@ export async function renderCheckin(root, navigate, customerId) {
           orderBlankPhotos: orderBlankBlobs,
           customerSignature: signatureBlob,
           repSignature: signatureBlob ? ownSignaturePending : null,
+          signatureRule: true,
         });
         showQueued();
       } else {

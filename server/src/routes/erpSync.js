@@ -5,7 +5,7 @@ import multer from "multer";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { queueReportLabel, queueSyncNotice } from "../syncNotifier.js";
-import { autoDeliverOrdersFromErp, autoApprovePaymentsFromErp } from "../erpAutoMatch.js";
+import { autoDeliverOrdersFromErp, autoApprovePaymentsFromErp, markAppRowsInExcel } from "../erpAutoMatch.js";
 import { matchReturnsToErp } from "../orderReturns.js";
 import { recordSyncAttempt, latestSyncAttempts } from "../erpSyncAttempts.js";
 import { recordSyncRun, getSyncStatus, createSyncRequest, pickPendingRequest, finishRequest } from "../erpSyncStatus.js";
@@ -321,6 +321,8 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
     // Returns the accountant typed into Excel (negative lines) are marked "recorded in ERP" here.
     if (order_lines !== undefined) await optionalSyncStep(client, "match returns", () => matchReturnsToErp(client), syncWarnings);
     if (cashflow_lines !== undefined) await optionalSyncStep(client, "auto-approve payments", () => autoApprovePaymentsFromErp(client), syncWarnings);
+    // Delivered orders and collected payments Excel already holds (the previous debt on the blanks adds only the ones it does not).
+    if (order_lines !== undefined || cashflow_lines !== undefined) await optionalSyncStep(client, "mark app rows found in Excel", () => markAppRowsInExcel(client), syncWarnings);
     // Upsert-only, never TRUNCATE: unlike the other tables above, products
     // can also be created directly in the app (no erp_product_id), and a
     // manual price/name correction here must survive later syncs -- so a

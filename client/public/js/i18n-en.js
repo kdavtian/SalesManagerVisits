@@ -2373,6 +2373,7 @@ export default {
     slip_failed: "The payment was saved, but its slip could not be made",
     slip_sign_hint: "The customer signs the payment slip",
     slip_signed: "Customer signed the slip",
+    slip_sign_required: "The customer must sign for the payment.",
     add_document: "Add document",
     choose_from_library: "Choose from library",
     add_document_orders: "Which orders is it for? (optional)",
