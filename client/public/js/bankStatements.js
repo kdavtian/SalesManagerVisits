@@ -18,11 +18,11 @@ export async function openBankSheet(meta, onChanged) {
       <details class="bk-import" id="bk-import" open>
         <summary>${escapeHtml(t("bk_import"))}</summary>
         <label>${escapeHtml(t("cf_f_account"))}<select id="bk-account">${meta.accounts.filter((a) => a.active !== false).sort((a, b) => (a.kind === "bank" ? 0 : 1) - (b.kind === "bank" ? 0 : 1)).map((a) => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join("")}</select></label>
-        <label>${escapeHtml(t("bk_file"))}<input type="file" id="bk-file" accept=".csv,.txt,.xlsx" /></label>
+        <label>${escapeHtml(t("bk_file"))}<span class="bk-file-btn btn btn-block"><span id="bk-file-name">${escapeHtml(t("bk_choose_file"))}</span><input type="file" id="bk-file" accept=".csv,.txt,.xlsx" /></span></label>
         <div id="bk-preview"></div>
         <p class="form-error" id="bk-error" hidden></p>
       </details>
-      <div class="activity-tabs" role="tablist" id="bk-tabs"></div>
+      <div class="cf-periods cf-tabs-even" role="tablist" id="bk-tabs"></div>
       <div id="bk-list" class="bk-list"></div>
       <div class="sheet-actions sheet-actions-floating"><button type="button" class="btn btn-primary" id="bk-close">${escapeHtml(t("done"))}</button></div>
     </div>`;
@@ -42,7 +42,7 @@ export async function openBankSheet(meta, onChanged) {
   const tabs = [["unmatched", "bk_tab_check"], ["matched", "bk_tab_matched"], ["done", "bk_tab_done"]];
   const paintTabs = () => {
     const n = (k) => (k === "done" ? data.counts.added + data.counts.ignored : data.counts[k]);
-    $("#bk-tabs").innerHTML = tabs.map(([k, key]) => `<button role="tab" aria-selected="${k === state}" class="activity-tab ${k === state ? "activity-tab-active" : ""}" data-tab="${k}">${escapeHtml(t(key))}${n(k) ? ` <span class="count-badge ${k === "unmatched" ? "" : "count-badge-quiet"}">${n(k)}</span>` : ""}</button>`).join("");
+    $("#bk-tabs").innerHTML = tabs.map(([k, key]) => `<button role="tab" aria-selected="${k === state}" class="cf-period ${k === state ? "cf-period-active" : ""}" data-tab="${k}">${escapeHtml(t(key))}${n(k) ? ` <span class="count-badge ${k === "unmatched" ? "" : "count-badge-quiet"}">${n(k)}</span>` : ""}</button>`).join("");
   };
   $("#bk-tabs").addEventListener("click", (e) => {
     const b = e.target.closest("[data-tab]");
@@ -118,6 +118,7 @@ export async function openBankSheet(meta, onChanged) {
         const r = await api.importBankStatement(file, $("#bk-account").value, mapping);
         changed = true;
         $("#bk-file").value = "";
+        $("#bk-file-name").textContent = t("bk_choose_file");
         $("#bk-preview").innerHTML = `<p class="bk-result">${escapeHtml(t("bk_result").replace("{new}", r.new_lines).replace("{matched}", r.matched).replace("{open}", r.unmatched))}</p>`;
         state = "unmatched";
         await load();
@@ -129,6 +130,7 @@ export async function openBankSheet(meta, onChanged) {
     });
   }
   $("#bk-file").addEventListener("change", () => {
+    $("#bk-file-name").textContent = $("#bk-file").files[0]?.name || t("bk_choose_file");
     mapping = null;
     preview();
   });

@@ -140,19 +140,20 @@ export function openVisitDetailSheet(ch, onPhotoDeleted, navigate) {
           ? `<h3 class="visit-detail-section-title">${t("visit_outcome_label")}</h3>
              <div class="visit-detail-outcome-list">
                ${outcomeValues
-                 .map((o, i) => {
-                   // Only the order_placed row can link anywhere -- a
-                   // checkin's order_id (added server-side, see
-                   // checkins.js's GET /) is the order *this* outcome
-                   // created, so other outcomes have nothing to open.
-                   const linkable = o === "order_placed" && ch.order_id;
-                   const tag = linkable ? "button" : "div";
-                   return `
-                 <${tag} ${linkable ? `type="button" data-order-id="${ch.order_id}"` : ""} class="visit-detail-outcome-row${linkable ? " visit-detail-outcome-row-link" : ""}">
+                 .flatMap((o, i) => {
+                   // "Order placed" opens the order this visit created (checkins.js's order_id); "Products delivered" opens the order(s)
+                   // delivered at this visit (delivered_order_ids, owner 2026-10-27). Other outcomes have nothing to open.
+                   const ids = o === "order_placed" && ch.order_id ? [ch.order_id] : o === "customer_unavailable" && ch.delivered_order_ids?.length ? ch.delivered_order_ids : [null];
+                   return ids.map((orderId, n) => {
+                     const tag = orderId ? "button" : "div";
+                     const label = ids.length > 1 ? `${outcomeLabels[i]} · ${n + 1}/${ids.length}` : outcomeLabels[i];
+                     return `
+                 <${tag} ${orderId ? `type="button" data-order-id="${orderId}"` : ""} class="visit-detail-outcome-row${orderId ? " visit-detail-outcome-row-link" : ""}">
                    <span class="visit-detail-outcome-icon">${OUTCOME_ICON[o] || icons.more}</span>
-                   <span>${escapeHtml(outcomeLabels[i])}</span>
-                   ${linkable ? `<span class="chevron">&#8250;</span>` : ""}
+                   <span>${escapeHtml(label)}</span>
+                   ${orderId ? `<span class="chevron">&#8250;</span>` : ""}
                  </${tag}>`;
+                   });
                  })
                  .join("")}
              </div>`

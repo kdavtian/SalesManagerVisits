@@ -4,7 +4,7 @@ import { Router } from "express";
 import multer from "multer";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
-import { canSeeCashflow, canEditCashflow } from "../roles.js";
+import { canSeeCashflow, canEditCashflow, isCashflowManagement, CASH_EDIT_WINDOW_DAYS } from "../roles.js";
 import { readCashWorkbook, applyCashLedger, cleanEntry } from "../cashflow.js";
 import { bankRouter } from "./bankStatements.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
@@ -36,7 +36,12 @@ cashflowRouter.get("/meta", async (req, res) => {
     pool.query("SELECT MIN(entry_date)::text AS first, MAX(entry_date)::text AS last, COUNT(*)::int AS n, COUNT(*) FILTER (WHERE origin = 'excel')::int AS excel_rows FROM cash_entries"),
     pool.query("SELECT fx_rate::float8 AS rate FROM cash_entries WHERE currency = 'USD' AND fx_rate IS NOT NULL ORDER BY entry_date DESC, id DESC LIMIT 1"),
   ]);
-  res.json({ as_of: asOf, accounts, categories, last_sync: sync ?? null, range, usd_rate: rate?.rate ?? null, can_edit: canEditCashflow(req.user.role) });
+  const management = isCashflowManagement(req.user.role);
+  const { rows: [pending] } = await pool.query("SELECT COUNT(*)::int AS n FROM cash_entry_requests WHERE status = 'pending'" + (management ? "" : " AND requested_by = $1"), management ? [] : [req.user.id]);
+  res.json({
+    as_of: asOf, accounts, categories, last_sync: sync ?? null, range, usd_rate: rate?.rate ?? null, can_edit: canEditCashflow(req.user.role),
+    is_management: management, edit_window_days: CASH_EDIT_WINDOW_DAYS, pending_requests: pending.n,
+  });
 });
 
 // Shared filters for the list and the summary.
@@ -46,6 +51,10 @@ function filters(q, params) {
   if (DATE.test(String(q.to ?? ""))) where.push(`e.entry_date <= $${params.push(q.to)}`);
   if (q.account) where.push(`e.account_id = $${params.push(Number(q.account))}`);
   if (q.category) where.push(`e.category_id = $${params.push(Number(q.category))}`);
+  const cats = String(q.categories ?? "").split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0);
+  if (cats.length) where.push(`e.category_id = ANY($${params.push(cats)}::int[])`);
+  // In / Out cards: money that really came in or went out -- moves between our own accounts are not counted (same rule as the totals).
+  if (q.real === "1") where.push("COALESCE(c.kind, '') <> 'internal'");
   if (["income", "expense", "owner", "internal"].includes(q.kind)) where.push(`c.kind = $${params.push(q.kind)}`);
   if (q.dir === "in") where.push("e.amount > 0");
   if (q.dir === "out") where.push("e.amount < 0");
@@ -66,25 +75,31 @@ const FROM = `FROM cash_entries e
 cashflowRouter.get("/entries", async (req, res) => {
   const params = [];
   const where = filters(req.query, params);
+  // The In / Out / Net cards show the totals of everything else that is filtered, whichever of the three is tapped.
+  const totParams = [];
+  const totWhere = filters({ ...req.query, dir: undefined, real: undefined }, totParams);
   const limit = Math.min(200, Math.max(1, Number.parseInt(req.query.limit, 10) || 50));
   const offset = Math.max(0, Number.parseInt(req.query.offset, 10) || 0);
-  const [{ rows }, { rows: [tot] }] = await Promise.all([
+  const [{ rows }, { rows: [tot] }, { rows: [sums] }] = await Promise.all([
     pool.query(
       `SELECT e.id, e.entry_date::text AS date, e.amount::float8 AS amount, e.currency, e.fx_rate::float8 AS fx_rate, e.amount_amd::float8 AS amount_amd,
               e.account_id, e.category_id, c.name AS category, c.kind AS category_kind, a.name AS account, e.erp_customer_id, cu.name AS customer_name, e.ref, e.info, e.sales_rep, e.origin,
+              e.created_at, e.updated_at,
               EXISTS (SELECT 1 FROM bank_statement_lines b WHERE b.account_id = e.account_id AND b.amount = e.amount AND b.currency = e.currency AND b.line_date BETWEEN e.entry_date - 3 AND e.entry_date + 3) AS bank_ok
        ${FROM} ${where} ORDER BY e.entry_date DESC, e.id DESC LIMIT ${limit} OFFSET ${offset}`,
       params
     ),
+    pool.query(`SELECT COUNT(*)::int AS n ${FROM} ${where}`, params),
     pool.query(
-      `SELECT COUNT(*)::int AS n,
-              COALESCE(SUM(e.amount_amd) FILTER (WHERE e.amount > 0 AND COALESCE(c.kind, '') <> 'internal'), 0)::float8 AS in_amd,
-              COALESCE(-SUM(e.amount_amd) FILTER (WHERE e.amount < 0 AND COALESCE(c.kind, '') <> 'internal'), 0)::float8 AS out_amd
-       ${FROM} ${where}`,
-      params
+      `SELECT COALESCE(SUM(e.amount_amd) FILTER (WHERE e.amount > 0 AND COALESCE(c.kind, '') <> 'internal'), 0)::float8 AS in_amd,
+              COALESCE(-SUM(e.amount_amd) FILTER (WHERE e.amount < 0 AND COALESCE(c.kind, '') <> 'internal'), 0)::float8 AS out_amd,
+              COUNT(*) FILTER (WHERE e.amount > 0 AND COALESCE(c.kind, '') <> 'internal')::int AS n_in,
+              COUNT(*) FILTER (WHERE e.amount < 0 AND COALESCE(c.kind, '') <> 'internal')::int AS n_out
+       ${FROM} ${totWhere}`,
+      totParams
     ),
   ]);
-  res.json({ entries: rows, total: tot.n, in_amd: tot.in_amd, out_amd: tot.out_amd, has_more: offset + rows.length < tot.n });
+  res.json({ entries: rows, total: tot.n, in_amd: sums.in_amd, out_amd: sums.out_amd, n_in: sums.n_in, n_out: sums.n_out, has_more: offset + rows.length < tot.n });
 });
 
 // Totals for a period: money in / out (internal moves between our own accounts are NOT counted), per category, per month.
@@ -141,37 +156,192 @@ cashflowRouter.post("/import", (req, res, next) => {
 // never touched by a refresh. The form sends a direction (in / out) and a positive amount; the ledger stores the signed amount.
 const ENTRY_COLS = ["entry_date", "amount", "currency", "fx_rate", "amount_amd", "category_id", "account_id", "erp_customer_id", "ref", "info", "sales_rep"];
 
+// Every change is logged (owner, 2026-10-27: "records logs are saved with date time"); a deleted row keeps its history.
+async function logEntry(db, entryId, action, userId, { before = null, after = null, note = null } = {}) {
+  await db.query("INSERT INTO cash_entry_log (entry_id, action, user_id, before, after, note) VALUES ($1, $2, $3, $4, $5, $6)", [
+    entryId, action, userId, before ? JSON.stringify(before) : null, after ? JSON.stringify(after) : null, note,
+  ]);
+}
+const ROW_COLS = `id, entry_date::text AS date, amount::float8 AS amount, currency, fx_rate::float8 AS fx_rate, amount_amd::float8 AS amount_amd, category_id,
+  account_id, erp_customer_id, ref, info, sales_rep, origin, created_by, created_at`;
+async function rowOf(db, id) {
+  const { rows: [row] } = await db.query(`SELECT ${ROW_COLS} FROM cash_entries WHERE id = $1`, [id]);
+  return row ?? null;
+}
+
+// What this user may do with a row right now: "now" = change it directly, "request" = ask management, "none" = read only.
+function changeRight(user, row) {
+  if (!row || row.origin === "excel" || !canEditCashflow(user.role)) return "none";
+  if (isCashflowManagement(user.role)) return "now";
+  const ageDays = (Date.now() - new Date(row.created_at).getTime()) / 86400000;
+  return ageDays <= CASH_EDIT_WINDOW_DAYS ? "now" : "request";
+}
+const tooOld = (res) =>
+  res.status(409).json({ error: `Rows older than ${CASH_EDIT_WINDOW_DAYS} days change only through a request to management`, needs_request: true });
+
 cashflowRouter.post("/entries", async (req, res) => {
   if (!canEditCashflow(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const c = await cleanEntry(req.body ?? {});
   if (c.error) return res.status(400).json({ error: c.error });
-  const { rows } = await pool.query(
-    `INSERT INTO cash_entries (${ENTRY_COLS.join(", ")}, origin, created_by) VALUES (${ENTRY_COLS.map((_, i) => `$${i + 1}`).join(", ")}, 'manual', $${ENTRY_COLS.length + 1}) RETURNING id`,
-    [...ENTRY_COLS.map((k) => c.value[k]), req.user.id]
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `INSERT INTO cash_entries (${ENTRY_COLS.join(", ")}, origin, created_by) VALUES (${ENTRY_COLS.map((_, i) => `$${i + 1}`).join(", ")}, 'manual', $${ENTRY_COLS.length + 1}) RETURNING id`,
+      [...ENTRY_COLS.map((k) => c.value[k]), req.user.id]
+    );
+    await logEntry(client, rows[0].id, "create", req.user.id, { after: await rowOf(client, rows[0].id) });
+    await client.query("COMMIT");
+    res.status(201).json({ id: rows[0].id });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+});
+
+// Apply an update / delete (direct, or an approved request) in one transaction, with its log line.
+async function applyChange(id, action, value, userId, logAction = action, note = null) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const before = await rowOf(client, id);
+    if (!before) {
+      await client.query("ROLLBACK");
+      return false;
+    }
+    if (action === "delete") await client.query("DELETE FROM cash_entries WHERE id = $1", [id]);
+    else await client.query(`UPDATE cash_entries SET ${ENTRY_COLS.map((k, i) => `${k} = $${i + 1}`).join(", ")}, updated_at = now() WHERE id = $${ENTRY_COLS.length + 1}`, [...ENTRY_COLS.map((k) => value[k]), id]);
+    await logEntry(client, id, logAction, userId, { before, after: action === "delete" ? null : await rowOf(client, id), note });
+    await client.query("COMMIT");
+    return true;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// One row in full: the row, its history (with date and time), a waiting request, and what this user may do with it.
+cashflowRouter.get("/entries/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  const { rows: [row] } = await pool.query(
+    `SELECT e.id, e.entry_date::text AS date, e.amount::float8 AS amount, e.currency, e.fx_rate::float8 AS fx_rate, e.amount_amd::float8 AS amount_amd,
+            e.account_id, e.category_id, c.name AS category, c.kind AS category_kind, a.name AS account, e.erp_customer_id, cu.id AS customer_id, cu.name AS customer_name,
+            e.ref, e.info, e.sales_rep, e.origin, e.transaction_id, e.created_at, e.updated_at, u.name AS created_by_name
+     ${FROM} LEFT JOIN users u ON u.id = e.created_by WHERE e.id = $1`,
+    [id]
   );
-  res.status(201).json({ id: rows[0].id });
+  const [{ rows: log }, { rows: [pending] }] = await Promise.all([
+    pool.query(
+      `SELECT l.action, l.at, l.note, u.name AS user_name, l.before, l.after FROM cash_entry_log l LEFT JOIN users u ON u.id = l.user_id WHERE l.entry_id = $1 ORDER BY l.at, l.id`,
+      [id]
+    ),
+    pool.query(
+      `SELECT r.id, r.action, r.reason, r.requested_at, u.name AS requested_by_name FROM cash_entry_requests r LEFT JOIN users u ON u.id = r.requested_by
+       WHERE r.entry_id = $1 AND r.status = 'pending'`,
+      [id]
+    ),
+  ]);
+  if (!row) return log.length ? res.json({ entry: null, log, right: "none" }) : res.status(404).json({ error: "Not found" });
+  res.json({ entry: row, log, pending_request: pending ?? null, right: changeRight(req.user, row), is_management: isCashflowManagement(req.user.role) });
 });
 
 cashflowRouter.put("/entries/:id", async (req, res) => {
   if (!canEditCashflow(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const id = Number(req.params.id);
-  const { rows: [row] } = await pool.query("SELECT origin FROM cash_entries WHERE id = $1", [id]);
+  const row = await rowOf(pool, id);
   if (!row) return res.status(404).json({ error: "Not found" });
   if (row.origin === "excel") return res.status(409).json({ error: "This row comes from Excel and changes there" });
+  if (changeRight(req.user, row) !== "now") return tooOld(res);
   const c = await cleanEntry(req.body ?? {});
   if (c.error) return res.status(400).json({ error: c.error });
-  await pool.query(`UPDATE cash_entries SET ${ENTRY_COLS.map((k, i) => `${k} = $${i + 1}`).join(", ")}, updated_at = now() WHERE id = $${ENTRY_COLS.length + 1}`, [...ENTRY_COLS.map((k) => c.value[k]), id]);
+  await applyChange(id, "update", c.value, req.user.id);
   res.json({ ok: true });
 });
 
 cashflowRouter.delete("/entries/:id", async (req, res) => {
   if (!canEditCashflow(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const id = Number(req.params.id);
-  const { rows: [row] } = await pool.query("SELECT origin FROM cash_entries WHERE id = $1", [id]);
+  const row = await rowOf(pool, id);
   if (!row) return res.status(404).json({ error: "Not found" });
   if (row.origin === "excel") return res.status(409).json({ error: "This row comes from Excel and changes there" });
-  await pool.query("DELETE FROM cash_entries WHERE id = $1", [id]);
+  if (changeRight(req.user, row) !== "now") return tooOld(res);
+  await applyChange(id, "delete", null, req.user.id);
   res.json({ ok: true });
+});
+
+// A change of an older row: the accountant asks, management decides.
+cashflowRouter.post("/entries/:id/requests", async (req, res) => {
+  if (!canEditCashflow(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const id = Number(req.params.id);
+  const row = await rowOf(pool, id);
+  if (!row) return res.status(404).json({ error: "Not found" });
+  if (row.origin === "excel") return res.status(409).json({ error: "This row comes from Excel and changes there" });
+  const action = req.body?.action === "delete" ? "delete" : "update";
+  let payload = null;
+  if (action === "update") {
+    const c = await cleanEntry(req.body?.data ?? {});
+    if (c.error) return res.status(400).json({ error: c.error });
+    payload = c.value;
+  }
+  const reason = typeof req.body?.reason === "string" ? req.body.reason.trim().slice(0, 300) || null : null;
+  try {
+    const { rows } = await pool.query(
+      "INSERT INTO cash_entry_requests (entry_id, action, payload, reason, requested_by) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+      [id, action, payload ? JSON.stringify(payload) : null, reason, req.user.id]
+    );
+    await logEntry(pool, id, "request", req.user.id, { before: row, after: payload, note: [action, reason].filter(Boolean).join(": ") });
+    res.status(201).json({ id: rows[0].id });
+  } catch (err) {
+    if (err.code === "23505") return res.status(409).json({ error: "A request for this row is already waiting" });
+    throw err;
+  }
+});
+
+cashflowRouter.get("/requests", async (req, res) => {
+  const management = isCashflowManagement(req.user.role);
+  const { rows } = await pool.query(
+    `SELECT r.id, r.entry_id, r.action, r.payload, r.reason, r.requested_at, u.name AS requested_by_name,
+            e.entry_date::text AS date, e.amount::float8 AS amount, e.currency, c.name AS category, a.name AS account, e.info
+     FROM cash_entry_requests r LEFT JOIN users u ON u.id = r.requested_by
+     LEFT JOIN cash_entries e ON e.id = r.entry_id LEFT JOIN cash_categories c ON c.id = e.category_id LEFT JOIN cash_accounts a ON a.id = e.account_id
+     WHERE r.status = 'pending' ${management ? "" : "AND r.requested_by = $1"} ORDER BY r.requested_at`,
+    management ? [] : [req.user.id]
+  );
+  res.json({ requests: rows, can_decide: management });
+});
+
+cashflowRouter.post("/requests/:id/:decision", async (req, res) => {
+  if (!isCashflowManagement(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const decision = req.params.decision;
+  if (!["approve", "reject"].includes(decision)) return res.status(404).json({ error: "Not found" });
+  const { rows: [r] } = await pool.query(
+    "UPDATE cash_entry_requests SET status = $2, decided_by = $3, decided_at = now() WHERE id = $1 AND status = 'pending' RETURNING *",
+    [Number(req.params.id), decision === "approve" ? "approved" : "rejected", req.user.id]
+  );
+  if (!r) return res.status(404).json({ error: "Request not found or already decided" });
+  if (decision === "approve") {
+    const ok = await applyChange(r.entry_id, r.action, r.payload, req.user.id, r.action, `approved request #${r.id}`);
+    if (!ok) return res.status(404).json({ error: "The row no longer exists" });
+    await logEntry(pool, r.entry_id, "approve", req.user.id, { note: `#${r.id}` });
+  } else await logEntry(pool, r.entry_id, "reject", req.user.id, { note: `#${r.id}` });
+  res.json({ ok: true });
+});
+
+// Customers for the "Customer ID" field of the Add sheet: ERP id, name and the channel of the rep the customer is assigned to.
+cashflowRouter.get("/customers", async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT d.erp_customer_id, COALESCE(c.name, d.customer_name) AS name, COALESCE(d.assigned_sales_rep, c.sales_channel) AS channel
+     FROM erp_customer_data d LEFT JOIN customers c ON c.erp_customer_id = d.erp_customer_id
+     UNION ALL
+     SELECT c.erp_customer_id, c.name, c.sales_channel FROM customers c
+     WHERE c.erp_customer_id IS NOT NULL AND c.erp_customer_id <> '' AND NOT EXISTS (SELECT 1 FROM erp_customer_data d WHERE d.erp_customer_id = c.erp_customer_id)
+     ORDER BY 1`
+  );
+  res.json({ customers: rows });
 });
 
 // A new account (Source) or category (For) when the list has no fitting one.

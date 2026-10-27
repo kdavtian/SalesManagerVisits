@@ -42,7 +42,7 @@ test("accountant uploads a statement: matched lines, add one to Cashflow, ignore
     await expect(page.locator("#bk-preview")).toContainText("3 already imported", { timeout: 10000 });
     // the ledger row the bank confirmed carries the mark
     await page.locator("#bk-close").click();
-    await page.locator("#cf-account").selectOption(String(acc.id));
+    await page.locator(`.cf-account[data-account="${acc.id}"]`).click();
     await expect(page.locator(".cf-row", { hasText: "Fuel" }).first()).toContainText("bank", { timeout: 10000 });
   } finally {
     await pool.query("DELETE FROM cash_entries WHERE account_id = $1", [acc.id]);

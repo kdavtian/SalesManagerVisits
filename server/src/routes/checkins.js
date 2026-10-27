@@ -16,7 +16,7 @@ import { insertPayment } from "./payments.js";
 import { autoCompleteCollectionTasks, autoCompleteProductCheckTasks, autoCompleteVisitTasks } from "../taskAutoComplete.js";
 import { lockSignedOrders, createSignedActs, saveOwnSignature } from "../signedActs.js";
 import { scheduleAiCheck } from "../aiBlankCheck.js";
-import { parseDeliveredOrderIds, deliverableOrders, deliverOrdersAtCheckin, notifyCheckinDelivered } from "../checkinDelivery.js";
+import { parseDeliveredOrderIds, deliverableOrders, deliverOrdersAtCheckin, notifyCheckinDelivered, CHECKIN_ORDER_LINKS_SQL } from "../checkinDelivery.js";
 
 // Below this, a payment isn't worth interrupting anyone's Telegram for.
 const LARGE_PAYMENT_THRESHOLD_AMD = 100000;
@@ -513,7 +513,7 @@ checkinsRouter.get("/", async (req, res) => {
        -- created (see visitDetail.js). A scalar subquery, not a join, so a
        -- checkin never fans out into multiple rows even in the unlikely
        -- case of more than one order referencing the same checkin_id.
-       (SELECT o.id FROM orders o WHERE o.checkin_id = ch.id ORDER BY o.id DESC LIMIT 1) AS order_id
+       ${CHECKIN_ORDER_LINKS_SQL}
      FROM checkins ch
      JOIN users u ON u.id = ch.user_id
      JOIN customers c ON c.id = ch.customer_id

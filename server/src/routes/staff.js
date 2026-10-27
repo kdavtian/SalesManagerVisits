@@ -6,7 +6,7 @@ import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { seesAllStaff, canManageStaff, canSetStaffRules } from "../roles.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
-import { monthBounds, getStaffSettings, saveStaffSettings, payForStaff, holidaysOf } from "../payroll.js";
+import { monthBounds, getStaffSettings, saveStaffSettings, payForStaff, holidaysOf, salaryLines, unmatchedSalaryLines } from "../payroll.js";
 
 export const staffRouter = Router();
 staffRouter.use(requireAuth);
@@ -185,17 +185,36 @@ staffRouter.get("/payroll", async (req, res) => {
   const scope = await scopeOf(req.user);
   if (!scope.all && !scope.ids.size) return res.status(403).json({ error: "Not allowed" });
   const month = monthOf(String(req.query.month ?? ""));
-  const [settings, holidays] = await Promise.all([getStaffSettings(), holidaysOf(month)]);
+  const [settings, holidays, lines] = await Promise.all([getStaffSettings(), holidaysOf(month), salaryLines()]);
   const today = yerevanToday();
   const people = scope.rows.filter((r) => scope.ids.has(r.id) && r.active);
   const rows = [];
   for (const p of people) {
-    const pay = await payForStaff(p, month, { settings, holidays, today });
+    const pay = await payForStaff(p, month, { settings, holidays, today, lines });
     const { days, items, ...rest } = pay;
     rows.push({ id: p.id, name: p.name, position: p.position, kind: p.kind, reports_to: p.reports_to, ...rest });
   }
   const sum = (k) => rows.reduce((s, r) => s + r[k], 0);
-  res.json({ month, today, rows, totals: { total: sum("total"), paid: sum("paid"), balance: sum("balance") } });
+  // Salary payments of the month that name nobody on the list (the managers link them to a person in one tap).
+  const unmatched = canManageStaff(req.user.role) ? await unmatchedSalaryLines(month, pool, lines) : [];
+  res.json({ month, today, rows, unmatched, totals: { total: sum("total"), paid: sum("paid"), balance: sum("balance") } });
+});
+
+// Link a Salary payment to a person: the payment's name part (Info without the month) becomes one of the person's pay keys, so this payment
+// and every later one written the same way count for them.
+staffRouter.post("/people/:id/pay-keys", async (req, res) => {
+  if (!canManageStaff(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const id = Number(req.params.id);
+  const entryId = Number(req.body?.entry_id);
+  const line = (await salaryLines()).find((l) => l.id === entryId);
+  if (!line) return res.status(404).json({ error: "Payment not found" });
+  if (!line.key) return res.status(400).json({ error: "This payment has no text to link by: write the person's position in its Info" });
+  const { rowCount } = await pool.query(
+    "UPDATE staff_members SET pay_keys = CASE WHEN $2 = ANY(pay_keys) THEN pay_keys ELSE array_append(pay_keys, $2) END WHERE id = $1",
+    [id, line.key.slice(0, 120)]
+  );
+  if (!rowCount) return res.status(404).json({ error: "Not found" });
+  res.json({ ok: true, key: line.key });
 });
 
 // One person's month: the day-by-day table, the pay items, the numbers.

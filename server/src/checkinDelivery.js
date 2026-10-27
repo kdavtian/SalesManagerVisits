@@ -88,3 +88,14 @@ export function notifyCheckinDelivered({ delivered, customerName, actorId, how =
     }
   })();
 }
+
+// The orders a check-in placed and delivered, for the visit details (owner, 2026-10-27: "Products delivered" opens the delivered order like
+// "Order placed" opens the placed one). A delivery is written in the order's history as "Delivered - reported on check-in #<id>"
+// (deliverOrdersAtCheckin above); looked up only among that customer's orders, so the index on orders.customer_id carries it.
+// Use inside a SELECT where the check-in is aliased "ch".
+export const CHECKIN_ORDER_LINKS_SQL = `
+  (SELECT o.id FROM orders o WHERE o.checkin_id = ch.id ORDER BY o.id DESC LIMIT 1) AS order_id,
+  CASE WHEN 'customer_unavailable' = ANY(ch.outcomes) THEN
+    (SELECT array_agg(DISTINCT h.order_id ORDER BY h.order_id) FROM orders o JOIN order_status_history h ON h.order_id = o.id
+      WHERE o.customer_id = ch.customer_id AND h.new_status = 'delivered' AND h.reason = 'Delivered - reported on check-in #' || ch.id)
+  END AS delivered_order_ids`;
