@@ -11075,7 +11075,12 @@ form select,
   padding: 10px 2px;
   font-size: clamp(0.56rem, 2.45vw, 0.7rem);
 }
-.action-btn { min-width: 0; text-align: center; hyphens: none; overflow-wrap: normal; word-break: keep-all; line-height: 1.2; }
+.action-btn { min-width: 0; text-align: center; hyphens: manual; overflow-wrap: anywhere; word-break: normal; line-height: 1.2; }
+/* Rule (owner, 2026-10-27): a label never overlaps or leaves its tile. Five tiles on a 320 px phone leave ~58 px each, so the type
+   steps down with the width and a label that still does not fit breaks at its soft hyphen (&shy; in the i18n text), e.g. "Նոր առաջա-դրանք". */
+@media (max-width: 400px) {
+  .detail-actions-grid .action-btn { font-size: 0.6rem; padding-left: 1px; padding-right: 1px; }
+}
 
 /* Long Armenian words (e.g. "Հաշվետվություն", "Պատվերներ") must never touch a
    tile's edge or be cut by it: tighter side padding, a slightly smaller type

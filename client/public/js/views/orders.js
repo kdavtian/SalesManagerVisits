@@ -425,7 +425,7 @@ export function renderOrders(root, navigate, openId = null) {
               <strong>${escapeHtml(o.customer_name)}</strong>
               <span class="list-row-trailing-text text-amount">${formatAmd(Number(o.total_amd))}</span>
             </div>
-            <div class="muted list-row-meta">${o.order_code ? `${escapeHtml(o.order_code)} · ` : ""}${escapeHtml(o.user_name)} · ${formatDate(o.created_at)}</div>
+            <div class="muted list-row-meta">${o.order_code ? `${escapeHtml(o.order_code)} · ` : ""}${escapeHtml(o.user_name)} · ${formatDate(o.created_at)}${o.checkin_id ? ` · ${t("order_at_visit")}` : ""}</div>
             <div class="list-row-bottom">
               ${appBadgeHtml(o)}
               <span class="badge ${meta.cls}">${t(meta.key)}</span>

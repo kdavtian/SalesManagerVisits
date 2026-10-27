@@ -68,7 +68,7 @@ async function martinId(db) {
   return rows[0]?.id ?? null;
 }
 
-const amd = (n) => `${Math.round(Number(n)).toLocaleString("en-US")} դր.`;
+const amd = (n) => `${Math.round(Number(n)).toLocaleString("en-US")} դր`;
 // The task title in plain words (owner, 2026-10-24/25): the rep sees BOTH facts -- how old the oldest unpaid invoice is, and how many days the
 // customer is past the credit term -- so they can talk to the customer properly:
 // "Հավաքագրիր 2,420,000 դր պարտքը (94 օրվա հաշիվ, ժամկետից 49 օր ուշացում), վերջին վճարումը արվել է 23.10.2026-ին"

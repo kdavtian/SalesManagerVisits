@@ -1878,6 +1878,7 @@ export default {
     order_history_short: "Orders",
     no_orders_yet: "No orders yet",
     new_order: "New order",
+    order_at_visit: "at the visit",
     create_order: "Create order",
     oc_lists: "Product lists",
     sp_title: "Special pricelist",
