@@ -88,6 +88,8 @@ async function applyPlannedOverdue(rows) {
       today,
     });
     row.overdue = Boolean(row.requires_visit) && !row.visited_today && due.overdue;
+    // The desktop Customers table shows it as its "Next visit" column (null: never visited or not visited in the field).
+    row.next_visit_date = row.requires_visit ? (due.planned_date ?? null) : null;
   }
 }
 

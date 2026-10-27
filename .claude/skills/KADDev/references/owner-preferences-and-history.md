@@ -370,3 +370,19 @@ Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets 
 
 
 - 1.439.0 (2026-10-27) New task + Map round: (1) task editor deadline = date button + wheel picker (one tap on "Specific date" or on the date opens the wheel), (2) date text left-aligned and centred in its box, (3) checklist items one by one, (4) subordination: asked the owner (current rules: admin / CEO / operations director -> anyone, sales director -> sales managers, others none), (5) the accountant (and the financial director, same role) sends **requests (Խնդրանք)** to the sales director: the same task with `tasks.is_request` (migration 164), "New request" / "Request" badge / "Նոր խնդրանք" notification. Map: my-location pane moved inside the rotate plugin's norotate pane (it was above the popups), teammates in their own pane (610) and they hop twice when the team is switched on, our customers' pins 44 px / potential 32 px (was 38 for all), today's planned visits get a z-index offset above the other customers. Stacking order, bottom to top: customers (lower on the screen in front) < today's planned (while the rings mode is on) < the pin whose card is open < teammates < my location < the card.
+
+## 2026-10-27 (1.441.0): Vaghinak wording rules, desktop step 1
+
+- **Vaghinak wording (owner picked A1, B1, C1, D1 from the variants offered; enforced by `server/test/vaghinakWording.test.js`):**
+  A1 "խնդրում եմ" only in level-2 (escalation) lines, level 1 says "Արժե նայել / Ուշադրություն"; B1 a low-result line = the fact +
+  one short next step, no mood words ("վատ չէր", "հեշտ չէր", "միասին կլուծենք"); C1 at most 2 sentences per message, lists under
+  them; D1 the Monday greeting stays "Բարի շաբաթ". Rules sit in the header of `server/src/vaghinak/phrases.js`.
+- **Desktop roadmap** lives in `docs/desktop-roadmap.md` (audit I1-I14, 10 steps, one PR each, Done log). Step 1 shipped: the
+  table engine `client/public/js/deskTable.js` (column picker per page in localStorage `fieldvisits_desk_cols_<page>`, density
+  `fieldvisits_desk_density` on <body>.desk-compact, sticky head, "N rows" foot + CSV with BOM, checkbox column + bulk bar,
+  arrow / Space / Esc keys) and the Customers page on it: columns customer / status / last visit / next visit (server
+  `next_visit_date`) / rep / ID / direction / tier / potential / debt / phone / region / added; visible filter buttons + chips +
+  Clear (`#customer-desk-filters`, the phone's icon row is hidden on the desktop); bulk Assign rep (one PATCH per customer,
+  canReassignCustomers) and Export CSV; >= 1400 px a row opens the customer card docked (`.customer-panel`, Customer + Last
+  visit + Debt columns only beside it). Pattern for the next pages (Orders, Activity, Tasks): keep the phone markup, add
+  `.desk-cell` spans with `grid-column` set in JS, write the grid template into a CSS variable on the view.

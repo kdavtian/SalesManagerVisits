@@ -60,14 +60,18 @@ Issues found (I = issue, each has its fix in the steps below):
 ## Steps (in order; each one PR)
 
 ### Step 1. Table engine + Customers page (the template for the rest) — I1 I2 I7 I8 I13
-- [ ] `deskTable.js`: column picker (gear at the end of the heading row), density toggle, sticky header, "N rows" footer, CSV export
+- [x] `deskTable.js`: column picker (gear at the end of the heading row), density toggle, sticky header, "N rows" footer, CSV export
       (loaded rows, UTF-8 BOM so Excel opens Armenian), checkbox column + bulk bar, arrow / Enter / Esc keys.
-- [ ] Customers table columns: customer, ID, channel, rep, tier, potential level, last visit, next visit, debt (if visible to the role),
+- [x] Customers table columns: customer, ID, channel, rep, tier, potential level, last visit, next visit, debt (if visible to the role),
       phone, region, added. Default set as today + rep + debt; the rest in the picker.
-- [ ] Filter row: Rep, Channel, Tier, Visit status, Region (accordion tree), Potential level; chips of the active ones; "Clear".
-- [ ] Bulk: assign rep (canReassignCustomers), export CSV.
-- [ ] Row click opens the customer card in the right pane (>= 1400 px) instead of leaving the list; the list keeps its scroll.
+- [x] Filter row: Rep, Channel, Tier, Visit status, Region (accordion tree), Potential level; chips of the active ones; "Clear".
+- [x] Bulk: assign rep (canReassignCustomers), export CSV.
+- [x] Row click opens the customer card in the right pane (>= 1400 px) instead of leaving the list; the list keeps its scroll.
 - Spec: `desktop-customers.spec.mjs`.
+- As built (1.441.0): the filter row keeps the app's existing filter groups as labelled dropdown buttons (Direction & manager,
+  Region, Potential, Customer type & tier, Products) with a chip per chosen value and Clear; the visit-status pills above the
+  search stay the "Visit status" filter. Beside a docked card (>= 1400 px) the list keeps Customer, Last visit and Debt only.
+  Density (comfortable / compact) is one setting for every desktop table. Ctrl/Cmd-click on a row still opens the full page.
 
 ### Step 2. Orders + Activity + Tasks on the same engine — I1 I2 I3 I7
 - [ ] Orders: columns customer, ID, order code, rep, channel, status, payment method / term, liters, amount, created, delivered,
@@ -135,3 +139,5 @@ Issues found (I = issue, each has its fix in the steps below):
 ## Done log
 
 (step, version, PR, date)
+
+- Step 1 (table engine + Customers page): 1.441.0, PR #479, 2026-10-27.

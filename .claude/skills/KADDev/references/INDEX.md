@@ -147,7 +147,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L82 6. Proactive moves that always land well - After a numbered list, add "Suggestions" (numbered, with recommendation) only if you saw something real while
 - L90 7. Mistakes I made that cost them time (do not repeat) - Claiming sheets "load before showing" without reading them (Add payment and the customer pickers already paint
 
-## owner-preferences-and-history.md (88 KB, 373 lines)
+## owner-preferences-and-history.md (90 KB, 389 lines)
 - L3 How they work with you - Writes short, numbered, imperative requests (often with screenshots "image1/img2"), mixes English with Armenia
 - L11 Visual / UX preferences (apply by default) - Compact, iOS-native feel: bottom sheets, floating/fixed action bars (Cancel/Save on customer edit must be fixe
 - L25 Things that repeatedly bit us (check proactively) - Forgetting CACHEVERSION bump -> "no updates" on phones.
@@ -191,6 +191,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L344 2026-10-25: demo site (separate copy of the app for outside testers) - Owner: first "create a user with test data", then "I want the demo version completely not connected with our d
 - L349 2026-10-26 (1.419.0): potential customer pin = the ORIGINAL red crosshair again - Owner first wrote "Potential customer: crosshair (keep current color)" (I read it as: keep the new amber, add
 - L353 2026-10-26 (1.420.0): owner answers to the open questions - Demo site: same server, name kadostest (his own domain's subdomain, or free DuckDNS), NO weekly reset.
+- L374 2026-10-27 (1.441.0): Vaghinak wording rules, desktop step 1 - Vaghinak wording (owner picked A1, B1, C1, D1 from the variants offered; enforced by server/test/vaghinakWordi
 
 ## strategy-roadmap.md (6 KB, 31 lines)
 - L5 Target (owner, 2026-10-12): 10 % of the market = ~1 million liters a year - Owner's working assumption: the Armenian market is ~10M L a year, so 10 % = 1M L.
