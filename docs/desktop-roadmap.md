@@ -74,14 +74,20 @@ Issues found (I = issue, each has its fix in the steps below):
   Density (comfortable / compact) is one setting for every desktop table. Ctrl/Cmd-click on a row still opens the full page.
 
 ### Step 2. Orders + Activity + Tasks on the same engine — I1 I2 I3 I7
-- [ ] Orders: columns customer, ID, order code, rep, channel, status, payment method / term, liters, amount, created, delivered,
+- [x] Orders: columns customer, ID, order code, rep, channel, status, payment method / term, liters, amount, created, delivered,
       documents; filters Status, Rep, Channel, Period, Payment method, "needs attention"; bulk confirm (canConfirmOrders), bulk print
       blanks (exists), export.
-- [ ] Activity: columns customer, rep, date / time, duration, outcomes (icons + text), order amount, collected, distance / verified;
+- [x] Activity: columns customer, rep, date / time, duration, outcomes (icons + text), order amount, collected, distance / verified;
       filters Rep, Outcome, Period (exists), Verified; export. Visit opens in the right pane (`visitDetail.js` docked).
-- [ ] Tasks: columns task, type, customer, person, created by, due, status, progress; filters Person, Type, Status, Period; bulk
+- [x] Tasks: columns task, type, customer, person, created by, due, status, progress; filters Person, Type, Status, Period; bulk
       reassign / cancel for the creator roles.
-- Spec per page.
+- Spec per page: `desktop-orders.spec.mjs`, `desktop-activity.spec.mjs`, `desktop-tasks.spec.mjs`.
+- As built (1.442.0): one `createDeskTable()` instance per page (deskTable.js) now carries the head, cells, foot, selection and
+  keys for Customers, Orders, Activity and Tasks. Orders: the checkbox column feeds the same selection as the phone's long
+  press, so the floating action bar (confirm / reject / deliver / approve / print) is the one bulk bar; Rep and Period go to
+  the server (`user_id`, `from`, `to`), Channel / Payment / Needs attention narrow the loaded page. Activity: a visit opens
+  docked (`visit:<id>`); Duration comes from `ended_at`. Tasks: bulk Reassign / Cancel (creator or a see-all role; one PATCH
+  per task) and a Due filter (overdue / today / this week / this month).
 
 ### Step 3. Customer card in three columns — I5
 - [ ] >= 1400 px: left = facts + actions + products at this shop; middle = visit history (full rows, not 30 + button); right = orders
@@ -141,3 +147,4 @@ Issues found (I = issue, each has its fix in the steps below):
 (step, version, PR, date)
 
 - Step 1 (table engine + Customers page): 1.441.0, PR #479, 2026-10-27.
+- Step 2 (Orders + Activity + Tasks on the engine): 1.442.0, PR #480, 2026-10-27.

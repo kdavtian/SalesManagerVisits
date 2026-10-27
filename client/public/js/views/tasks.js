@@ -7,10 +7,10 @@ import { openCollectionOutcomeSheet } from "../collectionOutcomeSheet.js";
 import { isCallTask, callButtonHtml, callHistoryHtml, rememberCall, openCallResultSheet } from "../callTask.js";
 import { api } from "../api.js";
 import { dockSheet, dockedKey } from "../dockSheet.js";
-import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
+import { isDesktop, createDeskTable, renderDeskFilters, openDeskMenu } from "../deskTable.js";
 import { usualOrderHash } from "../reorder.js";
 import { bindStepperButton } from "../stepper.js";
-import { escapeHtml, activateDialog, formatDateDMY, parseDateOnly, labelColon } from "../util.js";
+import { escapeHtml, activateDialog, formatDateDMY, parseDateOnly, labelColon, showToast, formatDayMonth } from "../util.js";
 import { FILTER_ICONS } from "../filterIcons.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
@@ -53,11 +53,12 @@ function progressText(task) {
   return `${task.items.filter((i) => i.done).length}/${total}`;
 }
 
-export function taskCardHtml(task, today, { showCustomer = true } = {}) {
+export function taskCardHtml(task, today, { showCustomer = true, table = null } = {}) {
   const info = taskDueInfo(task, today);
   const mine = task.assignee_id === state.user.id;
   return `
     <button type="button" class="card list-row task-card ${task.status !== "open" ? "task-card-closed" : ""}" data-task-id="${task.id}">
+      ${table ? table.checkHtml(task) : ""}
       <span class="list-row-icon list-row-icon-${task.status === "done" ? "success" : info.due ? "danger" : "warning"}" aria-hidden="true">${taskKindIcon(task)}</span>
       <div class="list-row-body">
         <div class="list-row-top">
@@ -72,9 +73,26 @@ export function taskCardHtml(task, today, { showCustomer = true } = {}) {
           ${task.status === "cancelled" ? `<span class="badge badge-neutral">${t("task_status_cancelled")}</span>` : ""}
         </div>
       </div>
+      ${table ? table.cellsHtml(task) : ""}
       <span class="chevron">&#8250;</span>
     </button>`;
 }
+
+// Desktop table columns (docs/desktop-roadmap.md, step 2); Task and Status are the fixed cells.
+const KIND_LABEL_KEYS = { debt_collection: "tasks_kind_debt", reorder_followup: "tasks_kind_reorder", check_products: "tasks_kind_check_products", call: "tasks_kind_call", visit: "tasks_kind_visit", ops: "tasks_kind_ops", manual: "tasks_kind_manual" };
+const taskStatusText = (r) => (r.status === "done" ? t("task_status_done") : r.status === "cancelled" ? t("task_status_cancelled") : t("tasks_filter_open"));
+const TASK_DESK_COLUMNS = () => [
+  { key: "due", label: t("desk_col_due"), width: "110px", narrowWidth: "100px", sort: "due", narrow: true, cell: (r) => formatDateDMY(r.due_date) },
+  { key: "person", label: t("desk_col_person"), width: "130px", sort: "person", cell: (r) => r.assignee_name || "" },
+  { key: "kind", label: t("tasks_kind_label"), width: "130px", cell: (r) => t(KIND_LABEL_KEYS[kindOf(r)] || "tasks_kind_manual") },
+  { key: "customer", label: t("desk_col_customer"), width: "150px", cell: (r) => r.customer_name || "" },
+  { key: "creator", label: t("desk_col_creator"), width: "130px", cell: (r) => r.creator_name || "" },
+  { key: "progress", label: t("desk_col_progress"), width: "80px", align: "end", cell: (r) => progressText(r) },
+  { key: "status_text", label: t("desk_col_status"), width: "100px", cell: taskStatusText },
+  { key: "added", label: t("desk_col_added"), width: "100px", sort: "newest", cell: (r) => (r.created_at ? formatDayMonth(new Date(r.created_at)) : "") },
+];
+const TASK_DESK_DEFAULTS = ["due", "person", "kind", "customer"];
+const DUE_PERIODS = ["overdue", "today", "week", "month"];
 
 // The Tasks page follows the Activity page: status tabs, one pill per person (busiest first,
 // tap again to clear), and a search bar with icon filters (who / type / sort). Everything is
@@ -140,7 +158,7 @@ export function renderTasks(root, navigate, openId) {
 
   // Managers see everything they gave or received (a task they just created for someone else
   // must show up); open tasks of any date by default.
-  const f = { tab: "open", scope: creator || sawAll ? "all" : "mine", person: "", kind: "", sort: "due", reversed: false, search: "" };
+  const f = { tab: "open", scope: creator || sawAll ? "all" : "mine", person: "", kind: "", sort: "due", reversed: false, search: "", due: "" };
   let rows = [];
   let today = "";
   let openDropdown = null;
@@ -153,9 +171,144 @@ export function renderTasks(root, navigate, openId) {
     const q = f.search.trim().toLowerCase();
     return !q || [r.title, r.customer_name, r.assignee_name, r.creator_name].filter(Boolean).join(" ").toLowerCase().includes(q);
   };
+  // Desktop "Due" filter: overdue / today / this week / this month (calendar, Monday-start) against the deadline.
+  const inDue = (r) => {
+    if (!f.due) return true;
+    if (f.due === "overdue") return r.due_date < today;
+    if (f.due === "today") return r.due_date === today;
+    const d = parseDateOnly(today);
+    if (!d) return true;
+    if (f.due === "week") {
+      const monday = new Date(d);
+      monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      const iso = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+      return r.due_date >= iso(monday) && r.due_date <= iso(sunday);
+    }
+    return r.due_date.slice(0, 7) === today.slice(0, 7);
+  };
   // `skip` lets the tab counts and person pills ignore their own filter.
   const visible = ({ tab = f.tab, person = f.person } = {}) =>
-    rows.filter((r) => inTab(r, tab) && inScope(r) && (!f.kind || kindOf(r) === f.kind) && (!person || String(r.assignee_id) === person) && matchesSearch(r));
+    rows.filter((r) => inTab(r, tab) && inScope(r) && (!f.kind || kindOf(r) === f.kind) && (!person || String(r.assignee_id) === person) && matchesSearch(r) && inDue(r));
+
+  // The desktop table (deskTable.js): the shell is rebuilt on every filter change, so the slots are looked up each time.
+  const table = createDeskTable({
+    pageKey: "tasks",
+    root: container,
+    view: container,
+    headSlot: () => container.querySelector("#task-desk-head"),
+    listEl: () => container.querySelector("#task-list"),
+    footSlot: () => container.querySelector("#task-desk-foot"),
+    bulkEl: () => container.querySelector("#task-bulk"),
+    columns: TASK_DESK_COLUMNS,
+    defaults: TASK_DESK_DEFAULTS,
+    lead: [{ label: t("desk_col_task") }, { label: t("desk_col_status") }],
+    leadCols: "minmax(0, 1.8fr) minmax(0, 1.3fr)",
+    rowSelector: ".list-row[data-task-id]",
+    rows: () => sorted(visible()),
+    sort: () => ({ key: f.sort, reversed: f.reversed }),
+    onSort: (key) => {
+      if (f.tab === "done" || f.tab === "cancelled") return;
+      f.reversed = key === f.sort ? !f.reversed : false;
+      f.sort = key;
+      openDropdown = null;
+      renderShell();
+    },
+    dockedPrefix: "task:",
+    csvName: "tasks",
+    csvLead: { header: [t("desk_col_task"), t("desk_col_status")], row: (r) => [r.title, taskStatusText(r)] },
+    // Reassign / cancel: the creator of a task, or a role that sees every task (the server checks each PATCH).
+    bulkActions: (chosen) =>
+      creator || sawAll
+        ? [
+            { key: "reassign", label: t("desk_reassign"), primary: true },
+            ...(chosen.some((r) => r.status === "open") ? [{ key: "cancel", label: t("task_cancel"), danger: true }] : []),
+          ]
+        : [],
+    onBulk: (key, chosen) => (key === "reassign" ? openBulkReassign(chosen) : key === "cancel" ? bulkCancel(chosen) : null),
+    onRepaint: () => {
+      paintChrome();
+      paintList();
+    },
+  });
+  async function patchAll(list, data) {
+    let ok = 0;
+    let failed = 0;
+    for (let i = 0; i < list.length; i += 5) {
+      await Promise.all(list.slice(i, i + 5).map((r) => api.updateTask(r.id, data).then(() => ok++).catch(() => failed++)));
+    }
+    table.selection.clear();
+    showToast(failed ? `${t("desk_tasks_done").replace("{n}", ok)} · ${t("desk_assign_rep_failed").replace("{n}", failed)}` : t("desk_tasks_done").replace("{n}", ok));
+    notifyTasksChanged();
+    await load();
+  }
+  async function bulkCancel(chosen) {
+    const open = chosen.filter((r) => r.status === "open");
+    if (!open.length) return;
+    if (!window.confirm(t("desk_cancel_tasks_confirm").replace("{n}", open.length))) return;
+    await patchAll(open, { status: "cancelled" });
+  }
+  async function openBulkReassign(chosen) {
+    if (!chosen.length) return;
+    let people = [];
+    try {
+      people = await api.listTaskAssignees();
+    } catch (err) {
+      showToast(err.message);
+      return;
+    }
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `<div class="sheet desk-assign-sheet">
+      <button type="button" class="icon-btn sheet-close-x" data-cancel aria-label="${escapeHtml(t("close"))}">${icons.close}</button>
+      <h2>${escapeHtml(t("desk_reassign"))}</h2>
+      <p class="muted">${escapeHtml(t("desk_selected").replace("{n}", chosen.length))}</p>
+      <div class="desk-assign-list" role="radiogroup">
+        ${people.map((u) => `<label class="desk-assign-item"><input type="radio" name="person" value="${u.id}" /><span>${escapeHtml(u.name)}</span></label>`).join("")}
+      </div>
+      <div class="sheet-actions"><button type="button" class="btn" data-cancel>${escapeHtml(t("cancel"))}</button><button type="button" class="btn btn-primary" data-apply disabled>${escapeHtml(t("done"))}</button></div>
+    </div>`;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    const close = () => overlay.remove();
+    overlay.addEventListener("click", (e) => (e.target === overlay || e.target.closest("[data-cancel]")) && close());
+    const applyBtn = overlay.querySelector("[data-apply]");
+    overlay.addEventListener("change", () => (applyBtn.disabled = !overlay.querySelector("input[name=person]:checked")));
+    applyBtn.addEventListener("click", async () => {
+      const value = overlay.querySelector("input[name=person]:checked")?.value;
+      if (!value) return;
+      applyBtn.disabled = true;
+      close();
+      await patchAll(chosen, { assignee_id: Number(value) });
+    });
+  }
+  // Desktop filter bar: Whose / Type / Due as labelled dropdowns, chips of what is on, Clear. Tabs and people pills stay.
+  function renderTaskDeskFilters(scopeOptions, kindOptions) {
+    const bar = container.querySelector("#task-desk-filters");
+    if (!bar || !isDesktop()) return;
+    const dueOptions = [{ value: "", label: t("filter_all") }, ...DUE_PERIODS.map((k) => ({ value: k, label: t(`desk_due_${k}`) }))];
+    const chips = [];
+    if (f.scope !== "all") chips.push({ label: scopeOptions.find((o) => o.value === f.scope)?.label || f.scope, onRemove: () => { f.scope = "all"; renderShell(); } });
+    if (f.kind) chips.push({ label: kindOptions.find((o) => o.value === f.kind)?.label || f.kind, onRemove: () => { f.kind = ""; renderShell(); } });
+    if (f.due) chips.push({ label: t(`desk_due_${f.due}`), onRemove: () => { f.due = ""; renderShell(); } });
+    if (f.person) chips.push({ label: rows.find((r) => String(r.assignee_id) === f.person)?.assignee_name || t("desk_col_person"), onRemove: () => { f.person = ""; renderShell(); } });
+    renderDeskFilters(bar, {
+      groups: [
+        ...(creator || sawAll ? [{ key: "scope", label: t("tasks_scope_label"), active: f.scope !== "all", onClick: (btn) => openDeskMenu(btn, scopeOptions, f.scope, (v) => { f.scope = v; renderShell(); }) }] : []),
+        { key: "kind", label: t("tasks_kind_label"), active: Boolean(f.kind), onClick: (btn) => openDeskMenu(btn, kindOptions, f.kind, (v) => { f.kind = v; renderShell(); }) },
+        { key: "due", label: t("desk_col_due"), active: Boolean(f.due), onClick: (btn) => openDeskMenu(btn, dueOptions, f.due, (v) => { f.due = v; renderShell(); }) },
+      ],
+      chips,
+      onClear: () => {
+        f.scope = "all";
+        f.kind = "";
+        f.due = "";
+        f.person = "";
+        renderShell();
+      },
+    });
+  }
 
   function sorted(list) {
     const byDue = (a, b) => (a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : b.id - a.id);
@@ -248,22 +401,15 @@ export function renderTasks(root, navigate, openId) {
           ${closedTab ? "" : dropdownHtml("sort", sortOptions, f.sort, FILTER_ICONS.sort, t("sort"), f.sort !== "due")}
         </div>
       </div>
+      <div class="desk-filters" id="task-desk-filters"></div>
+      <div class="desk-bulk" id="task-bulk" hidden></div>
       <div class="activity-count" id="task-count"></div>
-      ${deskHeadHtml("desk-thead-tasks", [
-        { items: [{ label: t("desk_col_task") }, { label: t("desk_col_person"), key: closedTab ? undefined : "person" }, { label: t("desk_col_added"), key: closedTab ? undefined : "newest" }] },
-        { items: [{ label: t("desk_col_due"), key: closedTab ? undefined : "due" }] },
-      ])}
-      <div class="card-list" id="task-list"></div>`;
+      <div class="desk-thead-slot" id="task-desk-head"></div>
+      <div class="card-list" id="task-list"></div>
+      <div class="desk-foot-slot" id="task-desk-foot"></div>`;
 
-    // Desktop column headings (hidden on a phone): the same choices as the sort icon, plus reverse on a second click.
-    const deskHead = container.querySelector(".desk-thead-tasks");
-    paintDeskHead(deskHead, f.sort, f.reversed);
-    wireDeskHead(deskHead, (key) => {
-      f.reversed = key === f.sort ? !f.reversed : false;
-      f.sort = key;
-      openDropdown = null;
-      renderShell();
-    });
+    table.renderHead();
+    renderTaskDeskFilters(scopeOptions, kindOptions);
 
     const searchInput = container.querySelector("#task-search");
     searchInput.addEventListener("input", () => {
@@ -340,8 +486,10 @@ export function renderTasks(root, navigate, openId) {
     }
     const list = sorted(visible());
     countEl.textContent = `${list.length} ${t("tasks_count")}`;
+    table.renderFoot(list.length);
     if (!list.length) {
       listEl.innerHTML = `<p class="empty-state">${t("tasks_empty")}</p>`;
+      table.paintSelection();
       return;
     }
     let html;
@@ -352,13 +500,14 @@ export function renderTasks(root, navigate, openId) {
         [t("task_due_today"), list.filter((r) => r.due_date === today)],
         [t("tasks_group_upcoming"), list.filter((r) => r.due_date > today)],
       ];
-      html = groups.filter(([, g]) => g.length).map(([label, g]) => groupHeading(label, g.length) + g.map((r) => taskCardHtml(r, today)).join("")).join("");
+      html = groups.filter(([, g]) => g.length).map(([label, g]) => groupHeading(label, g.length) + g.map((r) => taskCardHtml(r, today, { table })).join("")).join("");
     } else {
-      html = list.map((r) => taskCardHtml(r, today)).join("");
+      html = list.map((r) => taskCardHtml(r, today, { table })).join("");
     }
     listEl.innerHTML = html;
     listEl.querySelectorAll("[data-task-id]").forEach((el) => el.addEventListener("click", () => openTaskSheet(Number(el.dataset.taskId), { onChanged: load, navigate })));
     markOpenTask();
+    table.paintSelection();
   }
 
   // The wide-window detail panel shows one task: mark its row in the list.
@@ -417,7 +566,10 @@ export function renderTasks(root, navigate, openId) {
     if (openId) openTaskSheet(Number(openId), { onChanged: load, navigate });
   });
 
-  const cleanup = () => window.removeEventListener("tasks-changed", onTasksChanged);
+  const cleanup = () => {
+    window.removeEventListener("tasks-changed", onTasksChanged);
+    table.destroy();
+  };
   cleanup.onRestore = () => load({ silent: true });
   return cleanup;
 }

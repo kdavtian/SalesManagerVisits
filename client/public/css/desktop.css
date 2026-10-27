@@ -447,7 +447,7 @@
   }
   /* the row whose details are open */
   .row-open,
-  :is(#orders-list, #task-list) > .list-row.row-open {
+  :is(#orders-list, #task-list, #activity-list, #customer-list) > .list-row.row-open {
     background: var(--accent-soft, rgba(10, 132, 255, 0.1));
     box-shadow: inset 0 0 0 1.5px var(--accent);
   }
@@ -610,45 +610,65 @@
   }
 }
 
-/* ---------- 9. Customers table on the desktop table engine (deskTable.js; docs/desktop-roadmap.md step 1) ----------
-   The row grid is: checkbox | icon | customer | status | one column per picked column | gear. The column list is built in
-   views/customers.js, which writes the grid template into --desk-cols-customers on the .list-view. */
+/* ---------- 9. Tables on the desktop table engine (deskTable.js createDeskTable; docs/desktop-roadmap.md steps 1-2) ----------
+   A page's list view gets .desk-view and the row grid: [checkbox] | icon | the page's fixed cells (name + sub line, chips) |
+   one cell per picked column | chevron. deskTable.js writes the grid template into --desk-cols on the view; .desk-docked
+   (a panel docked beside the list) keeps only the name cell and the narrow columns. */
 @media (min-width: 1024px) {
-  .desk-thead-customers,
-  #customer-list > .list-row {
-    grid-template-columns: var(--desk-cols-customers, var(--desk-cols-plain));
+  .desk-view .desk-thead,
+  .desk-view :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row {
+    grid-template-columns: var(--desk-cols, var(--desk-cols-plain));
   }
-  #customer-list > .list-row > .desk-check {
+  .desk-view :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row > .desk-check {
     grid-column: 1;
     grid-row: 1 / span 2;
     align-self: center;
   }
-  #customer-list > .list-row > .list-row-icon {
+  .desk-view :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row > .list-row-icon {
     grid-column: 2;
   }
-  #customer-list > .list-row .list-row-top > strong,
-  #customer-list > .list-row .list-row-body > .list-row-meta {
+  .desk-view :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row .list-row-top > strong,
+  .desk-view :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row .list-row-body > .list-row-meta {
     grid-column: 3;
   }
-  #customer-list > .list-row .list-row-body > .list-row-bottom {
+  .desk-view :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row .list-row-body > .list-row-bottom {
     grid-column: 4;
+    grid-row: 1 / span 2;
   }
-  #customer-list > .list-row .list-row-body > .list-row-bottom.product-match-row {
+  .desk-view #customer-list > .list-row .list-row-body > .list-row-bottom.product-match-row {
     grid-column: 3 / span 2;
+    grid-row: 3;
   }
-  #customer-list > .list-row > .chevron {
-    grid-column: -2;
+  /* a table without a checkbox column starts one column earlier */
+  .desk-view.desk-no-select :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row > .list-row-icon {
+    grid-column: 1;
   }
-  /* beside the docked card the list is half as wide: no Status cell (the card shows it), tighter gaps */
-  .customers-desk-docked #customer-list .list-row-body > .list-row-bottom {
+  .desk-view.desk-no-select :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row .list-row-top > strong,
+  .desk-view.desk-no-select :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row .list-row-body > .list-row-meta {
+    grid-column: 2;
+  }
+  .desk-view.desk-no-select :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row .list-row-body > .list-row-bottom {
+    grid-column: 3;
+  }
+  /* the amount / distance / progress that sat at the right end of the phone row is a column of its own now */
+  .desk-view :is(#orders-list, #activity-list, #task-list) > .list-row .list-row-top > .list-row-trailing-text,
+  .desk-view :is(#orders-list, #activity-list, #task-list) > .list-row .list-row-top > .list-row-trailing {
     display: none;
   }
-  .customers-desk-docked .desk-thead-customers,
-  .customers-desk-docked #customer-list > .list-row {
+  .desk-view :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row > .chevron {
+    grid-column: -2;
+    grid-row: 1 / span 2;
+  }
+  /* beside a docked panel the list is half as wide: no chips cell (the panel shows them), tighter gaps */
+  .desk-view.desk-docked :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row .list-row-body > .list-row-bottom {
+    display: none;
+  }
+  .desk-view.desk-docked .desk-thead,
+  .desk-view.desk-docked :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row {
     column-gap: 10px;
   }
-  /* the Last visit column replaces the date text inside the Status cell */
-  .list-view[data-desk-cols~="last_visit"] #customer-list .list-row-bottom > .list-row-meta,
+  /* a column that repeats what the sub line says: the sub line part goes */
+  .desk-view[data-desk-cols~="last_visit"] #customer-list .list-row-bottom > .list-row-meta,
   .customers-with-debt #customer-list .list-row-bottom .customer-card-debt {
     display: none;
   }
@@ -671,9 +691,20 @@
   .desk-cell-debt:not(:empty) {
     color: var(--danger, #b3261e);
   }
-  .desk-cell-rep,
-  .desk-cell-erp_id {
+  .desk-cell-amount:not(:empty),
+  .desk-cell-collected:not(:empty) {
     color: var(--text);
+    font-size: 0.95rem;
+  }
+  .desk-cell-rep,
+  .desk-cell-erp_id,
+  .desk-cell-code,
+  .desk-cell-customer,
+  .desk-cell-person {
+    color: var(--text);
+  }
+  .desk-cell .badge {
+    vertical-align: middle;
   }
 
   /* checkbox cell (a span with role=checkbox: the row is a <button>) */
@@ -718,12 +749,8 @@
     height: 2px;
     background: #fff;
   }
-  #customer-list > .list-row.row-selected {
+  :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row.row-selected {
     background: var(--accent-soft, rgba(10, 132, 255, 0.1));
-  }
-  #customer-list > .list-row.row-open {
-    background: var(--accent-soft, rgba(10, 132, 255, 0.1));
-    box-shadow: inset 0 0 0 1.5px var(--accent);
   }
 
   /* gear at the end of the heading row + its menu */
@@ -931,6 +958,26 @@
     margin-left: auto;
   }
 
+  /* Orders sits inside .detail-view (which pads 16px): its bar, filters and foot need no side margin of their own */
+  .detail-view > .desk-filters,
+  .detail-view > .desk-bulk,
+  .detail-view > .desk-foot-slot > .desk-foot {
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .detail-view > .desk-foot-slot > .desk-foot {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  /* the Orders action bar (confirm / reject / deliver / print) sits at the bottom right beside the table */
+  .orders-select-bar {
+    left: auto;
+    right: 24px;
+    bottom: 24px;
+    width: 420px;
+  }
   /* row count + export under the table */
   .desk-foot {
     display: flex;
@@ -945,7 +992,7 @@
     font-size: 0.82rem;
     color: var(--text-dim);
   }
-  #customer-list.card-list:has(> .list-row) {
+  .desk-view :is(#orders-list, #activity-list, #task-list, #customer-list).card-list:has(> .list-row) {
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
   }

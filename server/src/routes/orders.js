@@ -497,7 +497,7 @@ function ordersOrderBy(sort, reverse) {
 }
 
 ordersRouter.get("/", async (req, res) => {
-  let { customer_id, user_id, status, offset, accounting, accounting_signed, sort, reverse } = req.query;
+  let { customer_id, user_id, status, offset, accounting, accounting_signed, sort, reverse, from, to } = req.query;
   const ownOnly = !seesAllActivity(req.user.role);
   if (ownOnly) user_id = undefined; // the scope condition below replaces the plain "my orders" filter
 
@@ -516,6 +516,15 @@ ordersRouter.get("/", async (req, res) => {
   if (user_id) {
     params.push(user_id);
     conditions.push(`o.user_id = $${params.length}`);
+  }
+  // Desktop filter bar: orders placed in a calendar period (Yerevan days), YYYY-MM-DD each.
+  if (from && /^\d{4}-\d{2}-\d{2}$/.test(String(from))) {
+    params.push(from);
+    conditions.push(`(o.created_at AT TIME ZONE 'Asia/Yerevan')::date >= $${params.length}::date`);
+  }
+  if (to && /^\d{4}-\d{2}-\d{2}$/.test(String(to))) {
+    params.push(to);
+    conditions.push(`(o.created_at AT TIME ZONE 'Asia/Yerevan')::date <= $${params.length}::date`);
   }
   if (status) {
     params.push(status);
@@ -558,7 +567,7 @@ ordersRouter.get("/", async (req, res) => {
   // separate COUNT(*) query -- trimmed back to PAGE_SIZE before sending.
   params.push(PAGE_SIZE + 1, offsetNum);
   const { rows } = await pool.query(
-    `SELECT o.*, u.name AS user_name, c.name AS customer_name, c.sales_channel,
+    `SELECT o.*, u.name AS user_name, c.name AS customer_name, c.sales_channel, c.erp_customer_id,
        -- Total liters across this order's lines -- only lines linked to a
        -- real catalog product count (product_id set), since a free-text
        -- line has no unit to go by. Every current product's unit is a

@@ -386,3 +386,9 @@ Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets 
   canReassignCustomers) and Export CSV; >= 1400 px a row opens the customer card docked (`.customer-panel`, Customer + Last
   visit + Debt columns only beside it). Pattern for the next pages (Orders, Activity, Tasks): keep the phone markup, add
   `.desk-cell` spans with `grid-column` set in JS, write the grid template into a CSS variable on the view.
+- **Desktop step 2 (1.442.0):** `createDeskTable()` in deskTable.js is the one table instance per page (head slot, cells, foot,
+  selection + bulk bar, arrow / Space / Esc, docked narrow mode, column menu, CSV); `renderDeskFilters()` + `openDeskMenu()`
+  are the visible filter bar and its dropdowns. Customers, Orders, Activity and Tasks use it; a new page adds three slots
+  (`.desk-filters`, `.desk-thead-slot`, `.desk-foot-slot`, plus `.desk-bulk` when it has bulk actions), `table.checkHtml(row)`
+  before the icon and `table.cellsHtml(row)` before the chevron, and calls renderHead() / renderFoot(n) / paintSelection().
+  Rows that are <button>s report the row as the click target, so the engine finds the checkbox by the click position.
