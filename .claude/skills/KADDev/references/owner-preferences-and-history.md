@@ -401,3 +401,7 @@ Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets 
   (`#/orders?new=1`), "n t" new task, "n c" new customer (`#/map?add=1`); ignored while typing or while a non-docked sheet is
   open. Global Esc in `app.js` closes the top-most `.sheet-overlay` unless the event was already handled (preventDefault): any new
   menu or popover with its own Esc must call `e.preventDefault()`, or one press closes two things.
+- **Desktop step 5 (1.445.0):** sidebar MORE is grouped (`SIDEBAR_GROUPS` in app.js; unknown tiles fall into "More"). The sidebar
+  is only rebuilt when language / user / role change, so per-page state must be CSS on classes `syncNavActive` already toggles
+  (a folded group hides `.sidebar-item:not(.sidebar-item-active)`). Icons-only = `html.sidebar-collapsed` sets
+  `--sidebar-width: 68px`; automatic below 1280 px unless the toggle stored a choice.

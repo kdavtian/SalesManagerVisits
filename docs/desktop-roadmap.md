@@ -118,10 +118,17 @@ Issues found (I = issue, each has its fix in the steps below):
   nothing else (a sheet's own Esc, a menu, the search box) has handled the key.
 
 ### Step 5. Sidebar grouping and role cleanup — I10
-- [ ] MORE grouped: Sales (Vaghinak, Team performance, Sales, Reports), Money (Payments & expenses, Debt, Cashflow, Accounting),
+- [x] MORE grouped: Sales (Vaghinak, Team performance, Sales, Reports), Money (Payments & expenses, Debt, Cashflow, Accounting),
       Operations (Delivery, Warehouse, Documents, Products), Admin (Staff, KAD AI, Dashboard). Groups collapse, state remembered.
-- [ ] Driver app / Warehouse app entries only for the roles that use them; "Warehouse" once.
-- [ ] Collapsed sidebar (icons only) at 1024-1279 px, full from 1280 px; a toggle remembers the choice.
+- [x] Driver app / Warehouse app entries only for the roles that use them; "Warehouse" once.
+- [x] Collapsed sidebar (icons only) at 1024-1279 px, full from 1280 px; a toggle remembers the choice.
+- Spec: `desktop-sidebar.spec.mjs`.
+- As built (1.445.0): groups in `SIDEBAR_GROUPS` (app.js): Sales (Vaghinak, Team performance, Sales, Reports, Route plans,
+  Bonuses), Money (Payments & expenses, Debt balances, Cashflow, Accounting, Recorded), Operations (Delivery, Warehouse,
+  Returns, Documents, Products), Admin (Staff, KAD AI, Dashboard); a tile not named there lands in a last "More" group. A
+  folded group still shows the page that is open (CSS, no rebuild). Folded groups: `fieldvisits_sidebar_folded`; icons-only
+  mode: `fieldvisits_sidebar_mode` (auto / collapsed / full), toggle in the logo row. The "(new)" warehouse and driver apps
+  stay on the Home grid only. Role shells (warehouse, driver) keep their short full sidebar with no toggle.
 
 ### Step 6. Reports as sidebar + report — I6
 - [ ] Reports page = left list of reports (grouped as today), right the chosen report; the period row and the rep / channel filters
@@ -166,3 +173,4 @@ Issues found (I = issue, each has its fix in the steps below):
 - Step 2 (Orders + Activity + Tasks on the engine): 1.442.0, PR #480, 2026-10-27.
 - Step 3 (customer card in three columns): 1.443.0, PR #481, 2026-10-27.
 - Step 4 (top bar search + quick actions + keyboard): 1.444.0, PR #483, 2026-10-27.
+- Step 5 (sidebar groups + icons-only mode): 1.445.0, 2026-10-27.

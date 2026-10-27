@@ -1559,3 +1559,127 @@
     }
   }
 }
+
+/* ---------- 12. Sidebar groups + icons-only mode (app.js; docs/desktop-roadmap.md step 5) ---------- */
+@media (min-width: 1024px) {
+  .sidebar-group-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    font: inherit;
+    font-size: var(--fs-eyebrow);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    text-align: left;
+    cursor: pointer;
+  }
+  .sidebar-group-head:hover {
+    color: var(--text);
+  }
+  .sidebar-group-head:focus-visible {
+    outline: 1px solid var(--accent);
+    outline-offset: -1px;
+  }
+  .sidebar-group-chevron::before {
+    content: "";
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(45deg);
+    margin-bottom: 2px;
+    transition: transform 0.15s ease;
+  }
+  .sidebar-group-head[aria-expanded="false"] .sidebar-group-chevron::before {
+    transform: rotate(-45deg);
+    margin-bottom: 0;
+  }
+  .sidebar-group {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .sidebar-group.is-folded > .sidebar-item:not(.sidebar-item-active) {
+    display: none;
+  }
+
+  /* the logo keeps its size next to the toggle */
+  .sidebar-brand > img,
+  .sidebar-brand > .topbar-title {
+    flex: none;
+  }
+  /* the toggle in the logo row: icons only <-> full */
+  .sidebar-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 30px;
+    height: 30px;
+    margin-left: auto;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-card);
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .sidebar-toggle:hover {
+    color: var(--text);
+  }
+  .sidebar-toggle svg {
+    width: 18px;
+    height: 18px;
+    transition: transform 0.15s ease;
+  }
+
+  /* icons only */
+  html.sidebar-collapsed {
+    --sidebar-width: 68px;
+  }
+  html.sidebar-collapsed .sidebar {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  html.sidebar-collapsed .sidebar-brand .topbar-title,
+  html.sidebar-collapsed .sidebar-item > span:not(.sidebar-item-icon),
+  html.sidebar-collapsed .sidebar-group-head > span:first-child {
+    display: none;
+  }
+  html.sidebar-collapsed .sidebar-brand {
+    flex-direction: column;
+    justify-content: center;
+    gap: 10px;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  html.sidebar-collapsed .sidebar-brand img {
+    max-width: 44px;
+  }
+  html.sidebar-collapsed .sidebar-item {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  /* a group heading becomes a thin divider with its fold chevron */
+  html.sidebar-collapsed .sidebar-group-head {
+    justify-content: center;
+    padding: 10px 0 4px;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+    margin-top: 6px;
+  }
+  html.sidebar-collapsed .sidebar-toggle {
+    margin-left: 0;
+  }
+  html.sidebar-collapsed .sidebar-toggle svg {
+    transform: rotate(180deg);
+  }
+}

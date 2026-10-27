@@ -1399,7 +1399,48 @@ const SIDEBAR_ITEM_ICON = {
 // param) -- they're "do a thing right now" shortcuts that make sense as
 // their own tile on a phone's home screen, not a second, redundant
 // destination next to the Map item the sidebar already has.
-const EXCLUDED_FROM_SIDEBAR = new Set(["qa_check_in", "qa_add_customer", "qa_tasks"]);
+// The two "(new)" role apps are previews for management on the Home grid; in the sidebar they read as a second Warehouse
+// and a stray Driver item (owner, 2026-10-27: roadmap step 5), so the sidebar leaves them out.
+const EXCLUDED_FROM_SIDEBAR = new Set(["qa_check_in", "qa_add_customer", "qa_tasks", "qa_wh_home", "qa_driver_home"]);
+
+// The sidebar's MORE list in groups (docs/desktop-roadmap.md, step 5). A tile not named here lands in a last "More" group,
+// so a new Home tile is never lost from the sidebar. A group folds; the folded groups are remembered on this device.
+const SIDEBAR_GROUPS = [
+  { key: "sales", label: "sidebar_group_sales", ids: ["qa_vaghinak", "qa_team_performance", "qa_sales", "qa_reports", "qa_plan_route", "qa_bonuses"] },
+  { key: "money", label: "sidebar_group_money", ids: ["qa_money", "qa_debt_balances", "qa_cashflow", "qa_accounting", "qa_recorded"] },
+  { key: "operations", label: "sidebar_group_operations", ids: ["qa_delivery", "qa_warehouse", "qa_returns", "qa_documents", "qa_pricelist"] },
+  { key: "admin", label: "sidebar_group_admin", ids: ["qa_staff", "qa_ask_kad", "qa_company_dashboard"] },
+];
+const SIDEBAR_FOLD_KEY = "fieldvisits_sidebar_folded";
+const SIDEBAR_MODE_KEY = "fieldvisits_sidebar_mode"; // "auto" (icons only below 1280 px) | "collapsed" | "full"
+const readPref = (key, fallback) => {
+  try {
+    return localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+};
+const writePref = (key, value) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* storage blocked: the choice lasts until the page closes */
+  }
+};
+// Icons-only sidebar: chosen by the toggle, or automatically on a 1024-1279 px window.
+function applySidebarMode() {
+  const mode = readPref(SIDEBAR_MODE_KEY, "auto");
+  const narrow = window.matchMedia?.("(max-width: 1279px)").matches;
+  const collapsed = mode === "collapsed" || (mode === "auto" && narrow);
+  document.documentElement.classList.toggle("sidebar-collapsed", collapsed);
+  const toggle = document.querySelector("#sidebar-toggle");
+  if (toggle) {
+    toggle.setAttribute("aria-pressed", String(collapsed));
+    toggle.setAttribute("aria-label", t(collapsed ? "sidebar_expand" : "sidebar_collapse"));
+    toggle.title = t(collapsed ? "sidebar_expand" : "sidebar_collapse");
+  }
+}
+window.matchMedia?.("(max-width: 1279px)").addEventListener?.("change", applySidebarMode);
 
 function rebuildSidebarMarkup(hash) {
   if (!sidebar) return;
@@ -1425,17 +1466,30 @@ function rebuildSidebarMarkup(hash) {
   const moreItems = QUICK_ACTIONS.filter((a) => visibleIds.includes(a.id) && QUICK_ACTION_ROUTE[a.id]).map((a) => {
     const entry = SIDEBAR_ITEM_ICON[a.id];
     return {
+      id: a.id,
       hash: QUICK_ACTION_ROUTE[a.id],
       label: t(a.id),
       icon: entry?.icon || icons.chart,
       colorClass: entry?.colorClass,
     };
   });
+  // MORE in groups; a group with nothing this person may open is not shown
+  const grouped = new Set(SIDEBAR_GROUPS.flatMap((g) => g.ids));
+  const groups = [
+    ...SIDEBAR_GROUPS.map((g) => ({ key: g.key, label: t(g.label), items: g.ids.map((id) => moreItems.find((m) => m.id === id)).filter(Boolean) })),
+    { key: "more", label: t("nav_more"), items: moreItems.filter((m) => !grouped.has(m.id)) },
+  ].filter((g) => g.items.length);
+  let folded = new Set();
+  try {
+    folded = new Set(JSON.parse(readPref(SIDEBAR_FOLD_KEY, "[]")));
+  } catch {
+    folded = new Set();
+  }
 
   function itemHtml(item) {
     const active = hash === item.hash;
     return `
-      <button type="button" class="sidebar-item ${active ? "sidebar-item-active" : ""}" data-hash="${item.hash}" ${active ? 'aria-current="page"' : ""}>
+      <button type="button" class="sidebar-item ${active ? "sidebar-item-active" : ""}" data-hash="${item.hash}" ${active ? 'aria-current="page"' : ""} title="${escapeHtml(item.label)}">
         <span class="sidebar-item-icon ${item.colorClass ? `quick-action-icon ${item.colorClass}` : ""}">
           ${item.icon}
           ${item.badgeId ? `<span class="nav-badge count-badge" id="${item.badgeId}" hidden></span>` : ""}
@@ -1453,16 +1507,48 @@ function rebuildSidebarMarkup(hash) {
     </div>
     <nav class="sidebar-nav" aria-label="${t("nav_settings")}">
       ${coreItems.map(itemHtml).join("")}
-      ${
-        moreItems.length
-          ? `<div class="sidebar-section-label">${t("nav_more")}</div>${moreItems.map(itemHtml).join("")}`
-          : ""
-      }
+      ${groups
+        .map((g) => {
+          // a folded group hides its items except the page that is open now (desktop.css), so moving between pages needs no rebuild
+          const open = !folded.has(g.key);
+          return `<div class="sidebar-group${open ? "" : " is-folded"}" data-group="${g.key}">
+            <button type="button" class="sidebar-section-label sidebar-group-head" data-group-toggle="${g.key}" aria-expanded="${open}">
+              <span>${escapeHtml(g.label)}</span><span class="sidebar-group-chevron" aria-hidden="true"></span>
+            </button>
+            ${g.items.map(itemHtml).join("")}
+          </div>`;
+        })
+        .join("")}
     </nav>
   `;
+  // the icons-only toggle sits in the logo row, always in reach (a role shell has none: its sidebar is short)
+  if (!shell) {
+    sidebar
+      .querySelector(".sidebar-brand")
+      ?.insertAdjacentHTML("beforeend", `<button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-pressed="false">${icons.chevronLeft}</button>`);
+  }
   sidebar.querySelectorAll("[data-hash]").forEach((el) => {
     el.addEventListener("click", () => handleNavTap(el.dataset.hash === "#/dashboard" ? homeNavTarget() : el.dataset.hash));
   });
+  sidebar.querySelectorAll("[data-group-toggle]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const key = el.dataset.groupToggle;
+      if (folded.has(key)) folded.delete(key);
+      else folded.add(key);
+      writePref(SIDEBAR_FOLD_KEY, JSON.stringify([...folded]));
+      el.setAttribute("aria-expanded", String(!folded.has(key)));
+      el.closest(".sidebar-group")?.classList.toggle("is-folded", folded.has(key));
+    })
+  );
+  // The toggle flips between icons only and full width; the choice is remembered (auto again only after storage is cleared).
+  sidebar.querySelector("#sidebar-toggle")?.addEventListener("click", () => {
+    const collapsed = document.documentElement.classList.contains("sidebar-collapsed");
+    writePref(SIDEBAR_MODE_KEY, collapsed ? "full" : "collapsed");
+    applySidebarMode();
+  });
+  // A role shell (warehouse / driver) has no toggle: its sidebar is always full.
+  if (shell) document.documentElement.classList.remove("sidebar-collapsed");
+  else applySidebarMode();
 }
 
 // The bottom tabs of a role shell (warehouse manager / driver): their own screens, no centre map button.
