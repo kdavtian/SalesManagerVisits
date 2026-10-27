@@ -147,50 +147,50 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L82 6. Proactive moves that always land well - After a numbered list, add "Suggestions" (numbered, with recommendation) only if you saw something real while
 - L90 7. Mistakes I made that cost them time (do not repeat) - Claiming sheets "load before showing" without reading them (Add payment and the customer pickers already paint
 
-## owner-preferences-and-history.md (87 KB, 370 lines)
+## owner-preferences-and-history.md (88 KB, 373 lines)
 - L3 How they work with you - Writes short, numbered, imperative requests (often with screenshots "image1/img2"), mixes English with Armenia
 - L11 Visual / UX preferences (apply by default) - Compact, iOS-native feel: bottom sheets, floating/fixed action bars (Cancel/Save on customer edit must be fixe
-- L24 Things that repeatedly bit us (check proactively) - Forgetting CACHEVERSION bump -> "no updates" on phones.
-- L45 Timeline of what has been built (purpose in brackets) - Early: customer tiers & category selector (segmenting accounts); customer cards redesign (many rounds on icon
-- L62 Open threads (updated 2026-10-08) - Legal name/address registry lookup (registryLookup.js, migration 091) is unverified against the live e-registe
-- L68 Older open threads at the time this skill was first written - PR #230 (tier pricing, gold prices, customer type/tier filter) waiting on CI/merge; migration 087 must be run
-- L74 UI/UX vocabulary the owner asked to be taught and to use (2026-10-07) - Use these names in answers and in code comments; suggest the better pattern when one exists.
-- L85 Update 2026-10-09 (v1.277 -> v1.293.0, PRs #280-#287) - #280 notification reduction: one consolidated stale-packed reminder + one daily summary at 19:00 Yerevan.
-- L116 Update 2026-10-10 (v1.299.1 -> v1.302.0, PRs #295-#299) - #295 (1.299.1) wiring audit of the whole session: 19 client modules were missing from the service-worker preca
-- L155 Period buttons (owner, 2026-10-22, 1.383.0) - Every row of period buttons works the same way: Today / This week / This month / This quarter / This year; tap
-- L158 Delivery at the check-in, driver arrival (owner, 2026-10-23, 1.384.0 - 1.385.0) - Check-in "Products delivered" (the truck chip, stored as outcome customerunavailable, legacy name): ticking it
-- L164 Warehouse manager + driver apps (owner, 2026-10-23, 1.386.0) - Role shells (client/public/js/opsShell.js): warehousemanager and deliverymanager get their own bottom tabs (wa
-- L171 Staff module (1.388.0, 2026-10-23) - Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets Tabel / Sales Team / Plan (the
-- L175 Round "before Cashflow phase 3" (owner, 2026-10-24, 1.389.0 - 1.395.0; roadmap R - Tier badge: the coin number is now T1 (bronze), T2 (silver), T3 (gold) - T = tier (the old 1/3 confused gold w
-- L183 Map pin badges polished (owner, 2026-10-24, 1.400.0) - The three visit badges, each a round badge with a 2 px WHITE outline and a white icon, border-box so the size
-- L187 Map badge sizes + a duplicate-badge fix (owner asked "how much is the visited-to - Pins are 38 px (MARKERSIZE); the "visited today" check, the overdue "!" and the other status badges are 15 x 1
-- L191 Round "Cashflow phase 3a: bank statements" (owner, 2026-10-24, 1.398.0, migratio - Owner: "We will use excel for now" (Excel is NOT switched off) -> the bank statement is reconciled against the
-- L196 Round "route-plan badge + customer list" (owner, 2026-10-24, 1.397.0) - Route Plans: red badge with the number of customers on NO weekday on "View customers" (unplannedcount per plan
-- L201 Round "Excel sync + new customer form" (owner, 2026-10-24, 1.396.0; migrations 1 - Owner: "Fix excel sync.
-- L208 Round of 2026-10-23 / 24 - KAD OS 0.52.0 - 0.53.0 and faster CI (PRs KAD OS #65, - Owner's numbered requests (screenshot of a swiped row): (1) pen/bin buttons do not go back and stay stuck: fix
-- L215 Standing rule: optimization suggestions (owner, 2026-10-24) - "Always suggest me optimization variants, which can save time, fasten process, simplify process, while keeping
-- L219 Four of the suggested ideas built (owner said "implement ideas 1-4", 2026-10-24, - Back refreshes Activity, Debt balances and Tasks (they join Orders and Customers): each render function now re
-- L225 Excel sync status + "Sync now" (owner picked two of the suggested ideas, 2026-10 - Why: the Excel feed looked fine ("sync ran") while the Excel file behind it was 4 days old, because the owner
-- L231 Potential ("Հեռանկար") editor tidy-up, customer card order, iPhone status-bar ta - Owner's points: (1) fix the editor UI (the "Next contact" date field ran past the sheet's right edge on iPhone
-- L237 Map "Colour by Tier | Rep", rep colours, AI connection test (owner, 2026-10-24,  - Owner chose: the map's "i" panel gets a Colour by: Tier | Rep switch BETWEEN "Group nearby pins" and "Compass"
-- L243 Settings + Administration redesign (owner, 2026-10-24, 1.405.0) - Owner: "rearrange settings and admin part from 0, hyper convenient and logical, Apple iOS and macOS styles and
-- L251 Six small ideas implemented (owner: "Implement ideas", 2026-10-24, 1.406.0) - (1) Counts on the Administration list: GET /api/settings/admin-counts (server/src/adminCounts.js, role-aware)
-- L259 "App scrolls up constantly", channel -> rep, map key as a bottom sheet, colour-b - Scrolling to top constantly: cause = the iPhone status-bar trick of 1.403.0 (statusBarTap.js): the document re
-- L268 Owner's answers of 2026-10-24 (round 2) -> 1.408.0 - Share route on a phone: keep the share sheet.
-- L277 2026-10-24 (1.409.0): scroll-to-top came back -> the status-bar trick is now OFF - Owner, after 1.408.0: "the app scrolls up by itself on all pages".
-- L283 2026-10-24 (1.410.0): Colour by Rep = the normal pin with its WHITE inside in th - Owner: "remove initials of sales reps from map pins"; "pin should be the same as before (green and red), but i
-- L289 2026-10-24 (1.411.0): payments, Vaghinak tasks, desktop - Payments page: every payment now says whether the Excel shows it (inexcel: same ERP customer, same amount, wit
-- L297 2026-10-25 (1.412.0): Anti-fraud + debt task shows both numbers - Owner answers: debt task shows BOTH numbers (age of the oldest unpaid invoice AND days past the credit term):
-- L305 2026-10-25 (1.413.0): Expenses analysis in Vaghinak - Owner answer: analyse cash expenses with the SAME data as the Excel; weekly reports and live alerts.
-- L310 2026-10-25 (1.414.0): Armenian places + spelling autocorrect - Owner answer: collect all Armenian cities, villages, marzes, subregions, communities into a small DB and autoc
-- L316 2026-10-25: Vaghinak voice rewrite (server only, no app version bump) - Owner answer: "Mix a b" = A (plain colleague: says what he sees, asks one clear thing) + B (short and direct).
-- L321 2026-10-25 (1.415.0): desktop Home KPIs + Payments/Sales tables - Owner answer: desktop Home becomes a KPI dashboard instead of repeating the menu; Payments and Sales as tables
-- L326 2026-10-25 (1.416.0): no potential level when adding a customer - Owner: adding a customer must be as fast as possible (name and fields are autofilled); the potential level ("Հ
-- L331 2026-10-25 (1.417.0): very slow first launch - Owner: "find the cause of very slow load of app on 1st launch and fix issue".
-- L337 2026-10-25 (1.418.0): map pins redesigned (variant B, "solid + rep ring") - Owner: "As a designer please improve colors, suggest variants" -> five variants shown -> "go with B".
-- L343 2026-10-25: demo site (separate copy of the app for outside testers) - Owner: first "create a user with test data", then "I want the demo version completely not connected with our d
-- L348 2026-10-26 (1.419.0): potential customer pin = the ORIGINAL red crosshair again - Owner first wrote "Potential customer: crosshair (keep current color)" (I read it as: keep the new amber, add
-- L352 2026-10-26 (1.420.0): owner answers to the open questions - Demo site: same server, name kadostest (his own domain's subdomain, or free DuckDNS), NO weekly reset.
+- L25 Things that repeatedly bit us (check proactively) - Forgetting CACHEVERSION bump -> "no updates" on phones.
+- L46 Timeline of what has been built (purpose in brackets) - Early: customer tiers & category selector (segmenting accounts); customer cards redesign (many rounds on icon
+- L63 Open threads (updated 2026-10-08) - Legal name/address registry lookup (registryLookup.js, migration 091) is unverified against the live e-registe
+- L69 Older open threads at the time this skill was first written - PR #230 (tier pricing, gold prices, customer type/tier filter) waiting on CI/merge; migration 087 must be run
+- L75 UI/UX vocabulary the owner asked to be taught and to use (2026-10-07) - Use these names in answers and in code comments; suggest the better pattern when one exists.
+- L86 Update 2026-10-09 (v1.277 -> v1.293.0, PRs #280-#287) - #280 notification reduction: one consolidated stale-packed reminder + one daily summary at 19:00 Yerevan.
+- L117 Update 2026-10-10 (v1.299.1 -> v1.302.0, PRs #295-#299) - #295 (1.299.1) wiring audit of the whole session: 19 client modules were missing from the service-worker preca
+- L156 Period buttons (owner, 2026-10-22, 1.383.0) - Every row of period buttons works the same way: Today / This week / This month / This quarter / This year; tap
+- L159 Delivery at the check-in, driver arrival (owner, 2026-10-23, 1.384.0 - 1.385.0) - Check-in "Products delivered" (the truck chip, stored as outcome customerunavailable, legacy name): ticking it
+- L165 Warehouse manager + driver apps (owner, 2026-10-23, 1.386.0) - Role shells (client/public/js/opsShell.js): warehousemanager and deliverymanager get their own bottom tabs (wa
+- L172 Staff module (1.388.0, 2026-10-23) - Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets Tabel / Sales Team / Plan (the
+- L176 Round "before Cashflow phase 3" (owner, 2026-10-24, 1.389.0 - 1.395.0; roadmap R - Tier badge: the coin number is now T1 (bronze), T2 (silver), T3 (gold) - T = tier (the old 1/3 confused gold w
+- L184 Map pin badges polished (owner, 2026-10-24, 1.400.0) - The three visit badges, each a round badge with a 2 px WHITE outline and a white icon, border-box so the size
+- L188 Map badge sizes + a duplicate-badge fix (owner asked "how much is the visited-to - Pins are 38 px (MARKERSIZE); the "visited today" check, the overdue "!" and the other status badges are 15 x 1
+- L192 Round "Cashflow phase 3a: bank statements" (owner, 2026-10-24, 1.398.0, migratio - Owner: "We will use excel for now" (Excel is NOT switched off) -> the bank statement is reconciled against the
+- L197 Round "route-plan badge + customer list" (owner, 2026-10-24, 1.397.0) - Route Plans: red badge with the number of customers on NO weekday on "View customers" (unplannedcount per plan
+- L202 Round "Excel sync + new customer form" (owner, 2026-10-24, 1.396.0; migrations 1 - Owner: "Fix excel sync.
+- L209 Round of 2026-10-23 / 24 - KAD OS 0.52.0 - 0.53.0 and faster CI (PRs KAD OS #65, - Owner's numbered requests (screenshot of a swiped row): (1) pen/bin buttons do not go back and stay stuck: fix
+- L216 Standing rule: optimization suggestions (owner, 2026-10-24) - "Always suggest me optimization variants, which can save time, fasten process, simplify process, while keeping
+- L220 Four of the suggested ideas built (owner said "implement ideas 1-4", 2026-10-24, - Back refreshes Activity, Debt balances and Tasks (they join Orders and Customers): each render function now re
+- L226 Excel sync status + "Sync now" (owner picked two of the suggested ideas, 2026-10 - Why: the Excel feed looked fine ("sync ran") while the Excel file behind it was 4 days old, because the owner
+- L232 Potential ("Հեռանկար") editor tidy-up, customer card order, iPhone status-bar ta - Owner's points: (1) fix the editor UI (the "Next contact" date field ran past the sheet's right edge on iPhone
+- L238 Map "Colour by Tier | Rep", rep colours, AI connection test (owner, 2026-10-24,  - Owner chose: the map's "i" panel gets a Colour by: Tier | Rep switch BETWEEN "Group nearby pins" and "Compass"
+- L244 Settings + Administration redesign (owner, 2026-10-24, 1.405.0) - Owner: "rearrange settings and admin part from 0, hyper convenient and logical, Apple iOS and macOS styles and
+- L252 Six small ideas implemented (owner: "Implement ideas", 2026-10-24, 1.406.0) - (1) Counts on the Administration list: GET /api/settings/admin-counts (server/src/adminCounts.js, role-aware)
+- L260 "App scrolls up constantly", channel -> rep, map key as a bottom sheet, colour-b - Scrolling to top constantly: cause = the iPhone status-bar trick of 1.403.0 (statusBarTap.js): the document re
+- L269 Owner's answers of 2026-10-24 (round 2) -> 1.408.0 - Share route on a phone: keep the share sheet.
+- L278 2026-10-24 (1.409.0): scroll-to-top came back -> the status-bar trick is now OFF - Owner, after 1.408.0: "the app scrolls up by itself on all pages".
+- L284 2026-10-24 (1.410.0): Colour by Rep = the normal pin with its WHITE inside in th - Owner: "remove initials of sales reps from map pins"; "pin should be the same as before (green and red), but i
+- L290 2026-10-24 (1.411.0): payments, Vaghinak tasks, desktop - Payments page: every payment now says whether the Excel shows it (inexcel: same ERP customer, same amount, wit
+- L298 2026-10-25 (1.412.0): Anti-fraud + debt task shows both numbers - Owner answers: debt task shows BOTH numbers (age of the oldest unpaid invoice AND days past the credit term):
+- L306 2026-10-25 (1.413.0): Expenses analysis in Vaghinak - Owner answer: analyse cash expenses with the SAME data as the Excel; weekly reports and live alerts.
+- L311 2026-10-25 (1.414.0): Armenian places + spelling autocorrect - Owner answer: collect all Armenian cities, villages, marzes, subregions, communities into a small DB and autoc
+- L317 2026-10-25: Vaghinak voice rewrite (server only, no app version bump) - Owner answer: "Mix a b" = A (plain colleague: says what he sees, asks one clear thing) + B (short and direct).
+- L322 2026-10-25 (1.415.0): desktop Home KPIs + Payments/Sales tables - Owner answer: desktop Home becomes a KPI dashboard instead of repeating the menu; Payments and Sales as tables
+- L327 2026-10-25 (1.416.0): no potential level when adding a customer - Owner: adding a customer must be as fast as possible (name and fields are autofilled); the potential level ("Հ
+- L332 2026-10-25 (1.417.0): very slow first launch - Owner: "find the cause of very slow load of app on 1st launch and fix issue".
+- L338 2026-10-25 (1.418.0): map pins redesigned (variant B, "solid + rep ring") - Owner: "As a designer please improve colors, suggest variants" -> five variants shown -> "go with B".
+- L344 2026-10-25: demo site (separate copy of the app for outside testers) - Owner: first "create a user with test data", then "I want the demo version completely not connected with our d
+- L349 2026-10-26 (1.419.0): potential customer pin = the ORIGINAL red crosshair again - Owner first wrote "Potential customer: crosshair (keep current color)" (I read it as: keep the new amber, add
+- L353 2026-10-26 (1.420.0): owner answers to the open questions - Demo site: same server, name kadostest (his own domain's subdomain, or free DuckDNS), NO weekly reset.
 
 ## strategy-roadmap.md (6 KB, 31 lines)
 - L5 Target (owner, 2026-10-12): 10 % of the market = ~1 million liters a year - Owner's working assumption: the Armenian market is ~10M L a year, so 10 % = 1M L.

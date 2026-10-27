@@ -26,6 +26,21 @@ test("map: my location sits in a pane above the customer pins and the pin under 
   }));
   expect(z.me).toBeGreaterThan(z.pins);
   expect(z.pointer).toBe("none");
+  // ...but under an open customer card (owner, 2026-10-27: the dot showed through the card). Same parent pane (the rotate plugin's), so
+  // the z-indexes compare; teammates sit between the pins and me.
+  const layers = await page.evaluate(() => {
+    const pane = (n) => document.querySelector(`.leaflet-${n}-pane`);
+    return {
+      sameParent: pane("me").parentElement === pane("popup").parentElement && pane("team").parentElement === pane("marker").parentElement,
+      me: Number(getComputedStyle(pane("me")).zIndex),
+      team: Number(getComputedStyle(pane("team")).zIndex),
+      popup: Number(getComputedStyle(pane("popup")).zIndex),
+    };
+  });
+  expect(layers.sameParent).toBe(true);
+  expect(layers.popup).toBeGreaterThan(layers.me);
+  expect(layers.me).toBeGreaterThan(layers.team);
+  expect(layers.team).toBeGreaterThan(z.pins);
 
   // tapping where both stand still reaches the customer's pin
   const box = await dot.boundingBox();

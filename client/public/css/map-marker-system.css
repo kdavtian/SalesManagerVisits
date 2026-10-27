@@ -158,6 +158,12 @@
   pointer-events: none;
 }
 
+/* The tapped pin (its card is open) above every other customer pin, today's planned ones included (map.js PIN_Z). Leaflet writes the
+   pins' z-index inline, hence !important; teammates and my location live in higher panes and stay above it. */
+#leaflet-map .leaflet-marker-icon.kad-marker-selected {
+  z-index: 1000000 !important;
+}
+
 #leaflet-map .leaflet-marker-icon.kad-marker-selected .pin-img {
   transform: scale(1.18);
 }
@@ -180,6 +186,19 @@
   font-weight: 800;
   line-height: 1;
   box-shadow: 0 2px 8px rgba(17,19,24,.26), 0 0 0 2px rgba(255,255,255,.92);
+}
+
+/* Switching the team on: every teammate hops in twice, so the eye finds them at once (owner, 2026-10-27). */
+@keyframes team-avatar-bounce {
+  0% { transform: translateY(-16px) scale(0.6); opacity: 0; }
+  45% { transform: translateY(0) scale(1.12); opacity: 1; }
+  65% { transform: translateY(-7px) scale(1); }
+  85% { transform: translateY(0) scale(1.04); }
+  100% { transform: none; }
+}
+#leaflet-map .team-avatar-bounce { animation: team-avatar-bounce 0.75s ease-out 2; }
+@media (prefers-reduced-motion: reduce) {
+  #leaflet-map .team-avatar-bounce { animation: none; }
 }
 
 #leaflet-map .me-dot {

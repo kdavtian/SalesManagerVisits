@@ -4,7 +4,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
-import { canCreateTasks, seesAllTasks, taskAssigneeRoles } from "../roles.js";
+import { canCreateTasks, seesAllTasks, taskAssigneeRoles, sendsRequests } from "../roles.js";
 import { notifyUser } from "../notifications.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
 
@@ -176,9 +176,9 @@ tasksRouter.post("/", async (req, res) => {
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
-      `INSERT INTO tasks (title, creator_id, assignee_id, customer_id, due_date, due_is_next_visit, task_kind)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-      [text, req.user.id, Number(assignee_id), customerId, due_date, due_is_next_visit === true, taskKind]
+      `INSERT INTO tasks (title, creator_id, assignee_id, customer_id, due_date, due_is_next_visit, task_kind, is_request)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+      [text, req.user.id, Number(assignee_id), customerId, due_date, due_is_next_visit === true, taskKind, sendsRequests(req.user.role)]
     );
     taskId = rows[0].id;
     let order = 0;
@@ -195,7 +195,7 @@ tasksRouter.post("/", async (req, res) => {
 
   if (Number(assignee_id) !== req.user.id) {
     notifyUser(Number(assignee_id), "task_assigned", {
-      title: `Նոր առաջադրանք՝ ${text}`,
+      title: `${sendsRequests(req.user.role) ? "Նոր խնդրանք" : "Նոր առաջադրանք"}՝ ${text}`,
       body: `${req.user.name}${customerName ? ` · ${customerName}` : ""} · ժամկետ՝ ${due_date}`,
       url: `/#/tasks?open=${taskId}`,
     }).catch((err) => console.error("Task notification failed:", err.message));
@@ -281,7 +281,7 @@ tasksRouter.patch("/:id", async (req, res) => {
   }
   if (newAssignee && newAssignee !== req.user.id) {
     notifyUser(newAssignee, "task_assigned", {
-      title: `Նոր առաջադրանք՝ ${task.title}`,
+      title: `${task.is_request ? "Նոր խնդրանք" : "Նոր առաջադրանք"}՝ ${task.title}`,
       body: `${req.user.name} · ժամկետ՝ ${due_date ?? task.due_date}`,
       url: `/#/tasks?open=${task.id}`,
     }).catch(() => {});
@@ -298,7 +298,7 @@ async function finishTask(task, user, note, outcome = null, promiseDate = null) 
   );
   if (task.creator_id !== user.id && !task.auto_kind) {
     notifyUser(task.creator_id, "task_completed", {
-      title: `Առաջադրանքը կատարված է՝ ${task.title}`,
+      title: `${task.is_request ? "Խնդրանքը կատարված է" : "Առաջադրանքը կատարված է"}՝ ${task.title}`,
       body: `${user.name}${task.customer_name ? ` · ${task.customer_name}` : ""}${note ? ` · ${note}` : ""}`,
       url: `/#/tasks?open=${task.id}`,
     }).catch(() => {});

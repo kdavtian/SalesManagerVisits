@@ -61,6 +61,21 @@ test("only management creates tasks; a sales director assigns to sales managers 
   assert.equal(missing.status, 400, "a title is required");
 });
 
+test("the accountant (and the financial director) sends REQUESTS to the sales director only; same task, named Խնդրանք (owner, 2026-10-27)", async () => {
+  const body = (assignee) => ({ title: "ITest request", assignee_id: assignee.id, due_date: yerevanToday(), items: ["Check the invoice"] });
+  assert.equal((await apiRequest("/api/tasks", { method: "POST", cookie: cookies.accountant, body: body(users.sales_manager) })).status, 403);
+  const made = await apiRequest("/api/tasks", { method: "POST", cookie: cookies.accountant, body: body(users.sales_director) });
+  assert.equal(made.status, 201, JSON.stringify(made.data));
+  assert.equal(made.data.is_request, true);
+  const people = (await apiRequest("/api/tasks/assignees", { cookie: cookies.accountant })).data;
+  assert.ok(people.length && people.every((u) => u.role === "sales_director"));
+  const [note] = await waitForNotifications(users.sales_director.id, "task_assigned");
+  assert.match(note.title, /^Նոր խնդրանք՝ ITest request/);
+  // a director's own task stays a task
+  const task = await apiRequest("/api/tasks", { method: "POST", cookie: cookies.sales_director, body: body(users.sales_manager) });
+  assert.equal(task.data.is_request, false);
+});
+
 test("assignee is notified, sees the task, ticks the checklist, and completing notifies the creator", async () => {
   const created = await apiRequest("/api/tasks", {
     method: "POST",

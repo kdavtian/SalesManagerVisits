@@ -7,7 +7,7 @@ import { nextVisitRowHtml } from "../visitSchedule.js";
 import { t } from "../i18n.js";
 import { dueChipHtml } from "../debtChip.js";
 import { icons } from "../icons.js";
-import { state, canCreateTasks, canSetCustomerPrices, canEditDirectly, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, isAdmin, seesFinancialExports, seesAllActivity } from "../state.js";
+import { state, canCreateTasks, sendsRequests, canSetCustomerPrices, canEditDirectly, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, isAdmin, seesFinancialExports, seesAllActivity } from "../state.js";
 import { openVisitDetailSheet, openPhotoLightbox } from "../visitDetail.js";
 import { visitStatusBadge } from "./customers.js";
 import { renderPotentialCard, potentialBadgeHtml } from "../potential.js";
@@ -223,7 +223,7 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
       <button class="action-btn action-btn-primary" id="checkin-btn">
         <span>${icons.mapPinCheck}</span>${t("check_in")}
       </button>
-      ${canCreateTasks() ? `<button type="button" class="action-btn" id="new-task-btn"><span>${icons.tasks}</span>${t("task_new")}</button>` : ""}
+      ${canCreateTasks() ? `<button type="button" class="action-btn" id="new-task-btn"><span>${icons.tasks}</span>${t(sendsRequests() ? "request_new" : "task_new")}</button>` : ""}
       <button type="button" class="action-btn" id="new-order-btn">
         <span>${icons.cart}</span>${t("new_order")}
       </button>

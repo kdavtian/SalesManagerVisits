@@ -234,7 +234,7 @@ function wireColumn(col) {
 function renderPicker() {
   if (!overlay || !activeInput) return;
   const copy = text();
-  const targetLabel = isFromInput(activeInput) ? copy.start : copy.end;
+  const targetLabel = activeInput.dataset.pickerTitle || (isFromInput(activeInput) ? copy.start : copy.end);
 
   overlay.innerHTML = `
     <div class="activity-date-picker-backdrop" data-date-dismiss></div>
@@ -301,6 +301,8 @@ function openPicker(input) {
 }
 
 function closePicker() {
+  // pickDate(): closed without "Done" -> nothing chosen
+  if (activeInput?._pickResolve && !activeInput._picked) activeInput._pickResolve(null);
   overlay?.remove();
   overlay = null;
   activeInput = null;
@@ -313,7 +315,7 @@ function commitPicker() {
   if (!activeInput) return;
   const value = draftIso();
   const currentInput = activeInput;
-  const counterpart = [...currentInput.closest(".activity-custom-range").querySelectorAll('input[type="date"]')].find(
+  const counterpart = [...(currentInput.closest(".activity-custom-range")?.querySelectorAll('input[type="date"]') ?? [])].find(
     (el) => el !== currentInput
   );
   const isFrom = isFromInput(currentInput);
@@ -330,8 +332,27 @@ function commitPicker() {
   }
 
   updateFieldButton(currentInput);
+  if (currentInput._pickResolve) {
+    currentInput._picked = true;
+    currentInput._pickResolve(value || null);
+  }
   closePicker();
   currentInput.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+/**
+ * The same wheel date picker for any one date (owner, 2026-10-27: "tapping on specific date opens calendar to choose date right away").
+ * Resolves with "YYYY-MM-DD", or null when closed without choosing.
+ */
+export function pickDate({ value = "", title = "" } = {}) {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "date";
+    input.value = value || "";
+    if (title) input.dataset.pickerTitle = title;
+    input._pickResolve = resolve;
+    openPicker(input);
+  });
 }
 
 // Coalesced to one rAF-deferred pass per frame instead of running

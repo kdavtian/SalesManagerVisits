@@ -279,9 +279,11 @@ test("canRecordBonusPayouts: mirrors canRecordOrders", () => {
 
 test("tasks: management creates, sales director only for sales managers, CEO-level for anyone", async () => {
   const { canCreateTasks, seesAllTasks, taskAssigneeRoles } = await import("../src/roles.js");
-  for (const role of ["admin", "ceo", "operations_director", "sales_director"]) assert.equal(canCreateTasks(role), true, role);
-  for (const role of ["sales_manager", "accountant", "warehouse_manager", "delivery_manager"]) assert.equal(canCreateTasks(role), false, role);
+  for (const role of ["admin", "ceo", "operations_director", "sales_director", "accountant"]) assert.equal(canCreateTasks(role), true, role);
+  for (const role of ["sales_manager", "warehouse_manager", "delivery_manager"]) assert.equal(canCreateTasks(role), false, role);
   assert.deepEqual(taskAssigneeRoles("sales_director"), ["sales_manager"]);
+  // the accountant / financial director: requests (Խնդրանք) to the sales director only (owner, 2026-10-27)
+  assert.deepEqual(taskAssigneeRoles("accountant"), ["sales_director"]);
   assert.equal(taskAssigneeRoles("ceo"), null);
   assert.deepEqual(taskAssigneeRoles("sales_manager"), []);
   assert.equal(seesAllTasks("ceo"), true);
