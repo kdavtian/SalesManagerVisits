@@ -497,7 +497,7 @@ function ordersOrderBy(sort, reverse) {
 }
 
 ordersRouter.get("/", async (req, res) => {
-  let { customer_id, user_id, status, offset, accounting, accounting_signed, sort, reverse, from, to } = req.query;
+  let { customer_id, user_id, status, offset, accounting, accounting_signed, sort, reverse, from, to, q, limit } = req.query;
   const ownOnly = !seesAllActivity(req.user.role);
   if (ownOnly) user_id = undefined; // the scope condition below replaces the plain "my orders" filter
 
@@ -525,6 +525,11 @@ ordersRouter.get("/", async (req, res) => {
   if (to && /^\d{4}-\d{2}-\d{2}$/.test(String(to))) {
     params.push(to);
     conditions.push(`(o.created_at AT TIME ZONE 'Asia/Yerevan')::date <= $${params.length}::date`);
+  }
+  // Global search in the desktop top bar: order code, customer name or ERP customer ID (every word must match one of them).
+  for (const word of String(q ?? "").trim().split(/\s+/).filter(Boolean).slice(0, 5)) {
+    params.push(`%${word.replace(/[\\%_]/g, (m) => `\\${m}`)}%`);
+    conditions.push(`(o.order_code ILIKE $${params.length} OR c.name ILIKE $${params.length} OR c.erp_customer_id ILIKE $${params.length})`);
   }
   if (status) {
     params.push(status);
@@ -565,7 +570,9 @@ ordersRouter.get("/", async (req, res) => {
 
   // Fetch one extra row to know whether there's a next page, without a
   // separate COUNT(*) query -- trimmed back to PAGE_SIZE before sending.
-  params.push(PAGE_SIZE + 1, offsetNum);
+  // A short list (the top-bar search asks for a handful) may ask for fewer rows than a page.
+  const pageSize = Math.min(PAGE_SIZE, Math.max(1, Number(limit) || PAGE_SIZE));
+  params.push(pageSize + 1, offsetNum);
   const { rows } = await pool.query(
     `SELECT o.*, u.name AS user_name, c.name AS customer_name, c.sales_channel, c.erp_customer_id,
        -- Total liters across this order's lines -- only lines linked to a
@@ -586,7 +593,7 @@ ordersRouter.get("/", async (req, res) => {
      LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params
   );
-  res.json({ rows: rows.slice(0, PAGE_SIZE), has_more: rows.length > PAGE_SIZE });
+  res.json({ rows: rows.slice(0, pageSize), has_more: rows.length > pageSize });
 });
 
 // Badge on the Accounting quick action (see accountingBadge.js for who counts what).

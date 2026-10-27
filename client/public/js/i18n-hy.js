@@ -2036,6 +2036,8 @@ export default {
     desk_col_excel: "Excel-ում",
     desk_col_collected: "Գանձող",
     desk_col_sort_hint: "Սեղմեք վերնագրին՝ դասավորելու համար, կրկին՝ հակառակ կարգով",
+    desk_search_placeholder: "Որոնել հաճախորդ, պատվեր, առաջադրանք",
+    desk_search_none: "Ոչինչ չի գտնվել",
     desk_col_cash: "Հավաքված",
     desk_col_code: "Պատվերի կոդ",
     desk_col_delivered: "Առաքված",

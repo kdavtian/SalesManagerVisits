@@ -111,6 +111,17 @@ const baseBodyClassName = document.body.className;
 // part of this element, so a tap there counts too whenever iOS delivers it
 // to the page.
 installStatusBarTap();
+// Esc closes the top-most sheet or docked panel, wherever the focus is (docs/desktop-roadmap.md, step 4). A sheet's own Esc
+// (activateDialog), a menu or the top-bar search handle it first and mark the event, so one press closes one thing.
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || e.defaultPrevented) return;
+  if (e.target.closest?.("[role=menu], .activity-search-menu, .dropdown-menu")) return;
+  const overlays = document.querySelectorAll(".sheet-overlay");
+  const top = overlays[overlays.length - 1];
+  if (!top) return;
+  e.preventDefault();
+  top.remove();
+});
 topBar.addEventListener("click", (e) => {
   if (e.target.closest("button, a")) return;
   app.scrollTo({ top: 0, behavior: "instant" });
@@ -1224,7 +1235,7 @@ async function renderRoute() {
   } else if (orderCreateMatch) {
     (await import("./views/orderCreate.js")).renderOrderCreate(app, navigate, orderCreateMatch[1], query.get("checkin"), { from: query.get("from"), usual: query.get("usual") === "1" });
   } else if (path === "#/orders") {
-    currentCleanup = (await import("./views/orders.js")).renderOrders(app, navigate, query.get("open"));
+    currentCleanup = (await import("./views/orders.js")).renderOrders(app, navigate, query.get("open"), { startNew: query.get("new") === "1" });
   } else if (paymentDetailMatch) {
     (await import("./views/payments.js")).renderPayments(app, navigate, paymentDetailMatch[1]);
   } else if (path === "#/payments") {
@@ -1516,6 +1527,11 @@ function rebuildNavMarkup(hash) {
       </button>
     </div>
   `;
+  // Desktop: global search + quick actions + keyboard shortcuts (deskTopBar.js; fetched only on a desktop-wide window).
+  if (window.matchMedia?.("(min-width: 1024px)").matches) {
+    const allowed = !opsShellFor(state.user.role);
+    import("./deskTopBar.js").then((m) => m.installDeskTopBar(topBar, navigate, { allowed })).catch(() => {});
+  }
   topBar.querySelector("#topbar-bell-btn").addEventListener("click", () => navigate("#/notifications"));
   topBar.querySelector("#topbar-menu-btn").addEventListener("click", () => {
     const current = (location.hash || "#/dashboard").split("?")[0];

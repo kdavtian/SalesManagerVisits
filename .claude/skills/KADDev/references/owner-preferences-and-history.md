@@ -396,3 +396,8 @@ Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets 
   of `paintCustomerCard`): it MOVES the existing blocks (never re-renders them) and restores them when the window narrows, so the
   phone DOM order is untouched. Sheets opened from the card call `dockSheet()`; `body:has(.sheet-docked)` hides the right column.
   `dockSheet()` refuses to dock while the Customers-table customer panel is docked, so a sheet opened inside it stays a dialog.
+- **Desktop step 4 (1.444.0):** top bar = global search + quick actions (`client/public/js/deskTopBar.js`, dynamic import from
+  the top-bar render when the window is >= 1024 px; role shells excluded). Shortcuts: "/" search, "n o" new order
+  (`#/orders?new=1`), "n t" new task, "n c" new customer (`#/map?add=1`); ignored while typing or while a non-docked sheet is
+  open. Global Esc in `app.js` closes the top-most `.sheet-overlay` unless the event was already handled (preventDefault): any new
+  menu or popover with its own Esc must call `e.preventDefault()`, or one press closes two things.
