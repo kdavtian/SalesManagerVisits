@@ -1,9 +1,10 @@
 name: CI
 
+# Saves GitHub Actions minutes (owner, 2026-10-27): runs on ready pull requests only (a draft runs nothing; marking it ready
+# starts CI) and not again on main after a squash merge - the PR run already tested the merged result. Manual run: Actions -> Run workflow.
 on:
-  push:
-    branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch: {}   # the weekly dependency-fix workflow starts CI on its own branch this way (a push by GITHUB_TOKEN does not)
 
 # A new push to the same branch / PR cancels the run that is still going.
@@ -17,6 +18,7 @@ jobs:
   # runs everything.
   changes:
     name: changes (docs only?)
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -48,6 +50,7 @@ jobs:
   # The quick static checks run on their own runner, next to the tests instead of in front of them.
   static:
     name: static (version, ui, audit)
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -183,7 +186,7 @@ jobs:
   test:
     name: test
     needs: [changes, static, unit, isolated]
-    if: always()
+    if: ${{ always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -277,7 +280,7 @@ jobs:
   e2e-smoke:
     name: e2e-smoke
     needs: [changes, e2e]
-    if: always()
+    if: ${{ always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

@@ -109,7 +109,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L468 Typing masks and iPhone Safari (1.372.0, owner 2026-10-19: "I tap on 6 and it is - Desktop Chromium never reproduced it (fuzzed 700 digit/caret combinations, all fine); the stuck spot is the ke
 
 ## kad-os-gmm.md (8 KB, 61 lines)
-- L7 Workflow differences from Field Visits - Same owner rules apply (draft PR -> subscribe -> CI test + e2e-smoke -> ready -> squash merge -> unsubscribe;
+- L7 Workflow differences from Field Visits - Same owner rules apply (draft PR -> subscribe -> ready (starts CI) -> CI test + e2e-smoke -> squash merge -> unsubscribe;
 - L22 Architecture (KAD OS side) - server/src/lib/kad.js talks to KAD Motors' /api/partner/ (link from the DB via lib/kadLink.js, AES-256-GCM; .e
 - L36 Wholesale price = KAD Bronze price (owner, 2026-10-23, 0.53.0) - The shop's wholesale price (the "Wholesale" switch of a sale line, Products page, Oil finder) is KAD Motors' B
 - L41 Product order = KAD Motors' own comparator (owner, 2026-10-23: "Sort ALL product - KAD Motors' client/public/js/productSort.js compareProducts: oils (a viscosity grade in the name) by brand (Ca

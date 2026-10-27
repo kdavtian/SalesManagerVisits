@@ -2,9 +2,10 @@ name: E2E nightly
 
 on:
   schedule:
-    # 02:00 UTC every day -- outside business hours for this app's Yerevan
-    # (UTC+4) users, and well clear of the CI job's own PR/push traffic.
-    - cron: "0 2 * * *"
+    # 02:00 UTC on Mondays and Thursdays -- outside business hours for this app's Yerevan
+    # (UTC+4) users. Was every night; twice a week saves GitHub Actions minutes while every PR
+    # still runs the @smoke browser tests (owner, 2026-10-27). Manual run: Actions -> Run workflow.
+    - cron: "0 2 * * 1,4"
   workflow_dispatch: {}
 
 jobs:
