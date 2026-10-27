@@ -141,6 +141,14 @@ export function canSetCreditTerms(role) {
   return canConfirmSubmittedOrders(role);
 }
 
+// Signed accounting documents (invoices / waybills Lily attaches to orders): the warehouse and the drivers open only those of orders
+// placed in the last ACCOUNTING_DOCS_RECENT_DAYS days (owner, 2026-10-27: "access for only orders no older than 2 weeks"); every other
+// role sees them all, as on the customer card.
+export const ACCOUNTING_DOCS_RECENT_DAYS = 14;
+export function seesOnlyRecentAccountingDocs(role) {
+  return role === "warehouse_manager" || role === "delivery_manager";
+}
+
 // Same people: send a confirmed order to accounting (invoice / waybill).
 export function canRequestAccountingDocs(role) {
   return canConfirmSubmittedOrders(role);

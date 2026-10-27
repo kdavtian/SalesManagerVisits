@@ -190,25 +190,52 @@ test("payment collected without a delivery: a signed payment slip, its picture, 
   assert.equal(pages, "1");
 });
 
-test("money needs the customer's signature (signature_rule from this app); an older phone's queued check-in still goes through", async () => {
-  const send = async (rule) => {
+test("money without the customer's signature or a slip photo is saved after the warning, marked not confirmed and found by the filter; a photographed paper slip is the slip", async () => {
+  const send = async ({ outcome = "payment_collected", slipPhoto = false } = {}) => {
     const form = new FormData();
     form.set("customer_id", String(customer.id));
     form.set("lat", "40.18");
     form.set("lng", "44.51");
-    form.set("outcomes", JSON.stringify(["payment_collected"]));
-    form.set("amount_collected_amd", "1000");
-    if (rule) form.set("signature_rule", "1");
+    form.set("outcomes", JSON.stringify([outcome]));
+    if (outcome === "payment_collected") form.set("amount_collected_amd", "1000");
+    if (slipPhoto) form.append("payment_slip_photos", new Blob([await png("#888888")], { type: "image/png" }), "slip.png");
     const res = await apiFormRequest("/api/checkins", { form, cookie: await login("rep") });
     if (res.status === 201) trackCheckin(res.data.id);
     return res;
   };
-  const refused = await send(true);
-  assert.equal(refused.status, 400);
-  assert.equal(refused.data.code, "signature_required_for_payment");
-  const legacy = await send(false);
-  assert.equal(legacy.status, 201, "an older app (no rule flag) is not refused: its offline queue would drop the payment");
-  assert.equal(legacy.data.payment_slip?.id ? true : false, true, "the slip is still made, without a customer signature");
+  const paymentOf = async (checkinId) => (await pool.query("SELECT id, customer_confirmation FROM payments WHERE client_ref = $1", [`checkin-${checkinId}`])).rows[0];
+
+  // nothing: saved (the phone only warns), marked "none", the unsigned slip is still made
+  const bare = await send();
+  assert.equal(bare.status, 201, JSON.stringify(bare.data));
+  assert.equal(bare.data.customer_confirmation, "none");
+  const barePayment = await paymentOf(bare.data.id);
+  assert.equal(barePayment.customer_confirmation, "none");
+  assert.ok(bare.data.payment_slip?.id, "the slip is still made, without a customer signature");
+  const found = (await apiRequest("/api/payments?confirmation=none", { cookie: await login("admin") })).data.rows;
+  assert.ok(found.some((p) => p.id === barePayment.id), "found with the Not confirmed filter");
+  assert.ok(found.every((p) => p.customer_confirmation === "none"));
+
+  // a photo of the signed paper slip: stored as the payment's slip, no second (unsigned) one is made, it prints 2 per page too
+  const photo = await send({ slipPhoto: true });
+  assert.equal(photo.status, 201, JSON.stringify(photo.data));
+  assert.equal(photo.data.customer_confirmation, "photo");
+  assert.equal(photo.data.payment_slip, undefined);
+  const photoPayment = await paymentOf(photo.data.id);
+  assert.equal(photoPayment.customer_confirmation, "photo");
+  const { rows: [file] } = await pool.query("SELECT id, kind, mime, payment_id FROM customer_files WHERE checkin_id = $1", [photo.data.id]);
+  assert.deepEqual([file.kind, file.mime, file.payment_id], ["payment_slip", "image/png", photoPayment.id]);
+  const printed = await fetch(`${baseUrl}/api/files/print-slips`, {
+    method: "POST",
+    headers: { Cookie: await login("admin"), "Content-Type": "application/json", "X-CSRF-Token": decodeURIComponent((await login("admin")).match(/csrf_token=([^;]+)/)?.[1] ?? "") },
+    body: JSON.stringify({ ids: [file.id, bare.data.payment_slip.id] }),
+  });
+  assert.equal(printed.status, 200);
+  assert.equal(Buffer.from(await printed.arrayBuffer()).subarray(0, 5).toString(), "%PDF-");
+  assert.equal((await apiRequest("/api/payments?confirmation=photo", { cookie: await login("admin") })).data.rows.some((p) => p.id === photoPayment.id), true);
+
+  // a slip photo belongs to money collected
+  assert.equal((await send({ outcome: "follow_up_required", slipPhoto: true })).status, 400);
 });
 
 test("payment and delivery at one visit: the payment is written on the act, no separate slip", async () => {

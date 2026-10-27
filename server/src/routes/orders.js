@@ -13,7 +13,7 @@ import { pdfBufferPreview } from "../pdfPreview.js";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { tierListPrice } from "../tierPricing.js";
-import { seesAllActivity, canConfirmOrders, canConfirmSubmittedOrders, canRequestAccountingDocs, canSubmitOrdersForOthers, canAssignErpCustomerId, canRecordOrders, seesUnrecordedBadge, canMarkDeliveredWithoutRoute, seesProductCosts } from "../roles.js";
+import { seesAllActivity, canConfirmOrders, canConfirmSubmittedOrders, canRequestAccountingDocs, canSubmitOrdersForOthers, canAssignErpCustomerId, canRecordOrders, seesUnrecordedBadge, canMarkDeliveredWithoutRoute, seesProductCosts, seesOnlyRecentAccountingDocs, ACCOUNTING_DOCS_RECENT_DAYS } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { notifyUser } from "../notifications.js";
 import { ORDER_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES, DELIVERY_OUTCOME_NOTIFY_ROLES } from "../notificationPreferences.js";
@@ -595,10 +595,15 @@ async function canSeeOrderDocs(user, orderId) {
   return seesAllActivity(user.role) || rows[0].user_id === user.id || (rows[0].placed_via_app && rows[0].assigned_manager_id === user.id);
 }
 
+// The warehouse and drivers: only documents of orders from the last two weeks (roles.js seesOnlyRecentAccountingDocs).
+const RECENT_DOC_SQL = `(SELECT o.created_at >= now() - interval '${ACCOUNTING_DOCS_RECENT_DAYS} days' FROM orders o WHERE o.id = d.order_id)`;
+const docTooOld = (user, doc) => seesOnlyRecentAccountingDocs(user.role) && !doc.recent;
+
 ordersRouter.get("/documents/:docId/file", async (req, res) => {
-  const { rows } = await pool.query("SELECT order_id, filename, content_type, data FROM order_documents WHERE id = $1", [req.params.docId]);
+  const { rows } = await pool.query(`SELECT d.order_id, d.filename, d.content_type, d.data, ${RECENT_DOC_SQL} AS recent FROM order_documents d WHERE d.id = $1`, [req.params.docId]);
   const doc = rows[0];
   if (!doc) return res.status(404).json({ error: "Document not found" });
+  if (docTooOld(req.user, doc)) return res.status(403).json({ error: "Only documents of the last two weeks" });
   // Same access as the customer card, which lists these documents too.
   res.set("Content-Type", doc.content_type);
   res.set("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(doc.filename)}`);
@@ -610,9 +615,10 @@ ordersRouter.get("/documents/:docId/file", async (req, res) => {
 // A signed accounting document as one JPEG (pdfPreview.js), kept in the uploads folder after the first look.
 ordersRouter.get("/documents/:docId/preview", async (req, res) => {
   const id = Number(req.params.docId);
-  const { rows } = await pool.query("SELECT content_type, data FROM order_documents WHERE id = $1", [id]);
+  const { rows } = await pool.query(`SELECT d.content_type, d.data, ${RECENT_DOC_SQL} AS recent FROM order_documents d WHERE d.id = $1`, [id]);
   const doc = rows[0];
   if (!doc) return res.status(404).json({ error: "Document not found" });
+  if (docTooOld(req.user, doc)) return res.status(403).json({ error: "Only documents of the last two weeks" });
   if (doc.content_type !== "application/pdf") return res.status(400).json({ error: "Not a PDF" });
   const jpg = await pdfBufferPreview(doc.data, path.join(uploadDirPath, `accdoc-${id}.preview.jpg`));
   if (!jpg) return res.status(501).json({ error: "Preview not available" });

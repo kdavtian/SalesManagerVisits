@@ -1629,6 +1629,11 @@ input[type="search"]:focus-visible {
   color: var(--accent);
 }
 
+/* The chosen option of a filter menu reads as chosen. */
+.dropdown-menu button[role="menuitemradio"][aria-checked="true"] { color: var(--accent); font-weight: 600; }
+/* A small heading inside a menu (Payments: "Customer confirmation"). */
+.dropdown-menu-label { padding: 6px 12px 2px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; }
+
 .dropdown-menu hr {
   align-self: stretch;
   width: auto;

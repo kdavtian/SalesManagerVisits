@@ -172,6 +172,7 @@ checkinsRouter.post("/", (req, res, next) => {
   photoUpload.fields([
     { name: "photos", maxCount: MAX_PHOTOS_PER_CHECKIN },
     { name: "order_blank_photos", maxCount: MAX_ORDER_BLANK_PHOTOS },
+    { name: "payment_slip_photos", maxCount: MAX_ORDER_BLANK_PHOTOS },
     { name: "customer_signature", maxCount: 1 },
     { name: "rep_signature", maxCount: 1 },
   ])(req, res, (err) => {
@@ -179,7 +180,7 @@ checkinsRouter.post("/", (req, res, next) => {
     next();
   });
 }, async (req, res) => {
-  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref, captured_at, accuracy_m, delivered_order_ids, signature_rule } = req.body ?? {};
+  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref, captured_at, accuracy_m, delivered_order_ids } = req.body ?? {};
   const customerId = Number(customer_id);
   const latNum = Number(lat);
   const lngNum = Number(lng);
@@ -187,10 +188,12 @@ checkinsRouter.post("/", (req, res, next) => {
   // Visit photos and photos of the signed order blank arrive as two upload fields; both are checked and stored.
   const visitFiles = req.files?.photos ?? [];
   const blankFiles = req.files?.order_blank_photos ?? [];
+  // A photo of the paper payment slip the customer signed (owner, 2026-10-27: "not only electronic one").
+  const slipFiles = req.files?.payment_slip_photos ?? [];
   // The customer's electronic signature on the delivery-acceptance act, and the rep's own one when it is not on their profile yet.
   const customerSignature = req.files?.customer_signature?.[0] ?? null;
   const repSignature = req.files?.rep_signature?.[0] ?? null;
-  const files = [...visitFiles, ...blankFiles, ...[customerSignature, repSignature].filter(Boolean)];
+  const files = [...visitFiles, ...blankFiles, ...slipFiles, ...[customerSignature, repSignature].filter(Boolean)];
 
   // multer's fileFilter only ever sees the client-declared Content-Type
   // (see upload.js) -- this checks the bytes actually written to disk
@@ -227,6 +230,12 @@ checkinsRouter.post("/", (req, res, next) => {
     return res.status(400).json({ error: "An order-blank photo needs the Products delivered outcome" });
   }
 
+  // A photo of a paper payment slip belongs to money collected.
+  if (slipFiles.length && !outcomeValues.includes("payment_collected")) {
+    files.forEach((f) => fs.unlink(f.path, () => {}));
+    return res.status(400).json({ error: "A payment-slip photo needs the Payment collected outcome" });
+  }
+
   // The customer signs the act (Products delivered) or the payment slip (Payment collected).
   if (customerSignature && !outcomeValues.includes("customer_unavailable") && !outcomeValues.includes("payment_collected")) {
     files.forEach((f) => fs.unlink(f.path, () => {}));
@@ -261,13 +270,10 @@ checkinsRouter.post("/", (req, res, next) => {
     }
   }
 
-  // The customer signs for the money handed over (owner, 2026-10-27: "Yes. Because it is also for debt balance"). Not needed when the photo of
-  // a signed paper blank carries the signature. Only check-ins from an app that knows the rule (signature_rule=1) are refused: an older phone's
-  // queued check-in would otherwise be dropped by the offline queue, and the payment with it.
-  if (amountCollected && signature_rule === "1" && !customerSignature && !blankFiles.length) {
-    files.forEach((f) => fs.unlink(f.path, () => {}));
-    return res.status(400).json({ error: "The customer must sign for the payment", code: "signature_required_for_payment" });
-  }
+  // The customer confirms the money (owner, 2026-10-27): signed on the phone, or a photo of a signed paper slip / order blank. Neither is
+  // required -- the phone warns, the rep may still save -- and the payment remembers which it was (payments.customer_confirmation), so the
+  // unconfirmed ones can be found on the Payments screen.
+  const confirmation = customerSignature ? "signed" : slipFiles.length || blankFiles.length ? "photo" : "none";
 
   const { rows: customerRows } = await pool.query(
     "SELECT id, name, lat, lng, erp_customer_id FROM customers WHERE id = $1",
@@ -364,6 +370,14 @@ checkinsRouter.post("/", (req, res, next) => {
           clientRef: `checkin-${checkin.id}`,
           db: client,
         });
+        if (paymentId) await client.query("UPDATE payments SET customer_confirmation = $2 WHERE id = $1", [paymentId, confirmation]);
+        // The paper slip(s): customer documents of the payment (Files > Documents, the Payment slips filter).
+        for (const file of slipFiles) {
+          await client.query(
+            "INSERT INTO customer_files (customer_id, kind, file_path, mime, size_bytes, payment_id, checkin_id, created_by) VALUES ($1, 'payment_slip', $2, $3, $4, $5, $6, $7)",
+            [customerId, file.filename, file.mimetype, file.size, paymentId, checkin.id, req.user.id]
+          );
+        }
       }
     }
 
@@ -427,7 +441,8 @@ checkinsRouter.post("/", (req, res, next) => {
     fs.unlink(customerSignature.path, () => {}); // nothing was delivered or paid with it
   }
   // Money without a delivery: the payment slip, signed by the customer when they signed, ready to look at, save and share (owner, 2026-10-27).
-  if (amountCollected != null && !deliveredOrders.length) {
+  // (A photographed paper slip without an electronic signature is the slip itself: no second, unsigned one is made.)
+  if (amountCollected != null && !deliveredOrders.length && !(slipFiles.length && !signatureSavedPath)) {
     try {
       paymentSlip = await createPaymentSlip({ paymentId, customerId, checkinId: checkin.id, amountAmd: amountCollected, paidAt: new Date(checkin.timestamp), customerSignaturePath: signatureSavedPath, signerId: req.user.id });
     } catch (err) {
@@ -439,6 +454,8 @@ checkinsRouter.post("/", (req, res, next) => {
     ...checkin,
     photo_count: visitFiles.length,
     order_blank_count: blankFiles.length,
+    payment_slip_photo_count: slipFiles.length || undefined,
+    customer_confirmation: amountCollected != null ? confirmation : undefined,
     delivered_orders: deliveredOrders,
     signed_acts: signedActs,
     signed_act_error: signedActError || undefined,
