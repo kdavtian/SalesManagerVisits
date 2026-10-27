@@ -245,7 +245,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
         </div>
         <div class="profile-info">
           <strong>${escapeHtml(state.user.name)}</strong>
-          <span class="muted">${t(`role_${state.user.role}`)}${state.user.position ? ` · ${escapeHtml(state.user.position)}` : ""}</span>
+          <span class="muted">${t(`role_${state.user.role_title || state.user.role}`)}${state.user.position ? ` · ${escapeHtml(state.user.position)}` : ""}</span>
           <span class="muted">${escapeHtml(state.user.email)}</span>
           ${state.user.has_avatar ? `<button type="button" class="settings-reset-link" id="avatar-remove-btn">${t("remove_avatar")}</button>` : ""}
           ${SIGNING_ROLES.includes(state.user.role) ? `<button type="button" class="settings-reset-link" id="signature-btn">${t(state.user.has_signature ? "signature_redraw" : "signature_draw")}</button>` : ""}
