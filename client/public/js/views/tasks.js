@@ -14,11 +14,10 @@ import { escapeHtml, activateDialog, formatDateDMY, parseDateOnly, labelColon } 
 import { FILTER_ICONS } from "../filterIcons.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { state } from "../state.js";
+import { state, canCreateTasks } from "../state.js";
 
-const CREATOR_ROLES = new Set(["admin", "ceo", "operations_director", "sales_director"]);
 const SEES_ALL_ROLES = new Set(["admin", "ceo", "operations_director", "sales_director"]);
-export const canCreateTasks = () => CREATOR_ROLES.has(state.user?.role);
+export { canCreateTasks };
 
 function notifyTasksChanged() {
   window.dispatchEvent(new Event("tasks-changed"));

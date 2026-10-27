@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { computeMonthPay, monthBounds, parseSalaryInfo, normalizeStaffSettings } from "../../src/payroll.js";
+import { computeMonthPay, monthBounds, parseSalaryInfo, salaryKeyMatches, normalizeStaffSettings } from "../../src/payroll.js";
 
 const REP = { fixed_salary_amd: 200000, visit_based: true, min_visit_pct: null, paid_dayoffs_per_month: 0, commission_basis: "none", commission_pct: 0 };
 // October 2026: 31 days, 4 Sundays (4, 11, 18, 25) -> 27 working days (the owner's example: 200,000 / 27 = 7,407)
@@ -15,6 +15,16 @@ test("month bounds, salary info parsing, settings clamp", () => {
   assert.deepEqual(parseSalaryInfo("SM YVN 2026 OCT"), { key: "sm yvn", month: "2026-10" });
   assert.deepEqual(parseSalaryInfo("Sales Manager B2B 2026 Jan"), { key: "sales manager b2b", month: "2026-01" });
   assert.equal(parseSalaryInfo("Зарплата за октябрь"), null);
+  // the many ways people type it (owner, 2026-10-27)
+  assert.deepEqual(parseSalaryInfo("SM VDZ, 2026 Sep."), { key: "sm vdz", month: "2026-09" });
+  assert.deepEqual(parseSalaryInfo("Martin SEP 2026"), { key: "martin", month: "2026-09" });
+  assert.deepEqual(parseSalaryInfo("Director September 2026"), { key: "director", month: "2026-09" });
+  assert.deepEqual(parseSalaryInfo("Martin 2026-09"), { key: "martin", month: "2026-09" });
+  assert.deepEqual(parseSalaryInfo("Martin 09/2026"), { key: "martin", month: "2026-09" });
+  assert.equal(parseSalaryInfo("SM YVN 2026"), null);
+  assert.ok(salaryKeyMatches("martin", { name: "Martin Petrosyan", position: "SM VDZ", pay_keys: [] }), "first name");
+  assert.ok(salaryKeyMatches("sm  vdz", { name: "X", position: "SM VDZ", pay_keys: [] }), "position, spacing ignored");
+  assert.ok(!salaryKeyMatches("sm yvn", { name: "X", position: "SM VDZ", pay_keys: [] }));
   assert.equal(normalizeStaffSettings({ min_visit_pct: 500 }).min_visit_pct, 100);
   assert.equal(normalizeStaffSettings(null).min_visit_pct, 75);
 });
@@ -212,6 +222,29 @@ test("salary payments from Cashflow reduce the balance (position + year + month 
   assert.equal(pay.balance, pay.total - 150000);
   await pool.query("DELETE FROM cash_entries WHERE info LIKE 'ITest SM%'");
   await pool.query("DELETE FROM cash_accounts WHERE name LIKE 'ITest Acc%'");
+});
+
+test("a salary payment that names nobody is listed on Payroll and can be linked to a person (owner, 2026-10-27)", async () => {
+  const { rows: [cat] } = await pool.query("SELECT id FROM cash_categories WHERE lower(name) = 'salary'");
+  const { rows: [acc] } = await pool.query("INSERT INTO cash_accounts (name, kind) VALUES ($1, 'bank') RETURNING id", [`ITest Acc3 ${Date.now()}`]);
+  const { rows: [row] } = await pool.query(
+    "INSERT INTO cash_entries (entry_date, amount, amount_amd, category_id, account_id, info, origin) VALUES ('2026-10-09', -199700, -199700, $1, $2, 'ITest Unknown Spelling', 'manual') RETURNING id",
+    [cat.id, acc.id]
+  );
+  const before = (await api("admin", "/payroll?month=2026-10")).data;
+  const line = before.unmatched.find((u) => u.id === row.id);
+  assert.ok(line, "listed as not linked");
+  assert.equal(line.amount_amd, 199700);
+  assert.equal(line.month_from_date, true, "no month in the text: the month it was paid in");
+  assert.deepEqual((await api("director", "/payroll?month=2026-10")).data.unmatched, [], "only the managers see (and link) them");
+  assert.equal((await api("director", `/people/${ids.rep2}/pay-keys`, "POST", { entry_id: row.id })).status, 403);
+  const paidBefore = (await api("admin", `/people/${ids.rep2}/pay?month=2026-10`)).data.paid;
+  assert.equal((await api("admin", `/people/${ids.rep2}/pay-keys`, "POST", { entry_id: row.id })).status, 200);
+  assert.equal((await api("admin", `/people/${ids.rep2}/pay?month=2026-10`)).data.paid, paidBefore + 199700);
+  assert.ok(!(await api("admin", "/payroll?month=2026-10")).data.unmatched.some((u) => u.id === row.id));
+  await pool.query("DELETE FROM cash_entries WHERE id = $1", [row.id]);
+  await pool.query("DELETE FROM cash_accounts WHERE id = $1", [acc.id]);
+  await pool.query("UPDATE staff_members SET pay_keys = array_remove(pay_keys, 'itest unknown spelling') WHERE id = $1", [ids.rep2]);
 });
 
 test("commission: a rep gets the % of the money collected in their channel; the director's exclusions are honoured", async () => {

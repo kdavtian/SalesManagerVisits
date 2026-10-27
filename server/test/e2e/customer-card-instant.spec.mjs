@@ -16,6 +16,10 @@ test("@smoke the customer card opens whole (social icons included) and a second 
   await expect(page.locator("#customer-detail-name")).toContainText("E2E Instant Card Garage", { timeout: 15000 });
   await expect(page.locator(".customer-social-instagram")).toHaveCount(1, { timeout: 0 });
   await expect(page.locator(".customer-social-email")).toHaveCount(1, { timeout: 0 });
+  // the action row (owner, 2026-10-27): Check in, New task, New order, Navigate, Files -- no Orders button; no empty tasks block
+  const ids = await page.locator(".detail-actions-grid .action-btn").evaluateAll((els) => els.map((e) => e.id));
+  expect(ids).toEqual(["checkin-btn", "new-task-btn", "new-order-btn", "navigate-btn", "customer-photos-btn"]);
+  await expect(page.locator("#customer-tasks-slot .tasks-block")).toHaveCount(0);
 
   // Back, then open it again with the network held back: the saved copy must draw the whole card without waiting for the server.
   await page.goBack();

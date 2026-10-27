@@ -438,6 +438,12 @@ export function canSeeCashflow(role) {
 export function canEditCashflow(role) {
   return role === "admin" || role === "ceo" || role === "accountant";
 }
+// Who changes any ledger row the app made, at any age, and decides the change requests (owner, 2026-10-27: "management").
+export function isCashflowManagement(role) {
+  return role === "admin" || role === "ceo";
+}
+// The accountant edits / deletes a row up to this many days after it was made; an older row needs a request to management.
+export const CASH_EDIT_WINDOW_DAYS = 3;
 
 // Staff (owner, 2026-10-23): people, hierarchy, payroll. Everything about money is the owner's circle: admin, CEO and the accountant see and edit
 // everyone; the CEO / admin alone set the company rules. Anyone else sees only themselves and the people below them in the tree (the sales

@@ -84,70 +84,80 @@ test("sales roles cannot open it; the Home tile is for the owner's roles", async
   expect(new URL(page.url()).hash).toBe("#/cashflow");
 });
 
-test("accountant adds, edits and deletes an entry in the app; Excel rows are not tappable; a salary note is composed from the Staff person", async ({ page, fixtures }) => {
+test("accountant adds (chips sheet), opens the details with history, edits and deletes an entry; Excel rows open read-only; salary note from Staff", async ({ page, fixtures }) => {
   const acc = await fixtures.createUser("accountant");
   const { rows: [boss] } = await pool.query("INSERT INTO staff_members (name, position, kind) VALUES ('E2E Cash Anna', 'E2E SM Cash', 'rep') RETURNING id");
   try {
     await loginViaUi(page, acc.email);
     await page.goto("/#/cashflow");
     await expect(page.locator(".cf-sum")).toBeVisible({ timeout: 15000 });
-    await expect(page.locator("button.cf-row-edit")).toHaveCount(0); // everything here came from Excel
+    // an Excel row opens its details, read only (owner, 2026-10-27: tapping a movement opens it)
+    await page.locator(".cf-row", { hasText: "70KK770 fuel" }).click();
+    await expect(page.locator(".cf-d-lines")).toContainText(/Excel/);
+    await expect(page.locator("#cf-d-edit")).toHaveCount(0);
+    await page.locator(".sheet [data-close]").click();
+
     await page.locator("#cf-add").click();
     await expect(page.locator("#cf-form")).toBeVisible();
-    await page.locator('#cf-form [name="account_id"]').selectOption({ label: "Cash E2E" });
-    await page.locator('#cf-form [name="category_id"]').selectOption({ label: "Salary" });
+    // defaults: today, Cash-like first account, AMD, Oil order with the customer field active
+    await expect(page.locator("#cf-cat-text")).toHaveText("Oil order");
+    await expect(page.locator("#cf-cust-input")).toBeEnabled();
+    await page.locator("#cf-acc-chip").click();
+    await page.locator(".cf-pick", { hasText: "Cash E2E" }).click();
+    await page.locator("#cf-cat-chip").click();
+    await page.locator(".cf-pick", { hasText: /^Salary$/ }).click();
+    await expect(page.locator("#cf-cust-input")).toBeDisabled(); // a ghost when the category is not Oil order
     await expect(page.locator("#cf-salary")).toBeVisible();
+    await expect(page.locator("#cf-dir")).toBeHidden(); // an expense is money out: no In / Out buttons
     await page.locator('#cf-form [name="staff"]').selectOption({ label: "E2E Cash Anna · E2E SM Cash" });
     await page.locator('#cf-form [name="month"]').fill("2026-10");
     await page.locator('#cf-form [name="month"]').dispatchEvent("change");
     await expect(page.locator('#cf-form [name="info"]')).toHaveValue("E2E SM Cash 2026 OCT");
     await page.locator('#cf-form [name="amount"]').fill("150000");
-    if (SHOTS) {
-      await page.waitForTimeout(500);
-      await page.screenshot({ path: `${SHOTS}/cf-form.png` });
-      await page.locator("#cf-form").evaluate((el) => el.closest(".sheet").scrollTo(0, 99999));
-      await page.screenshot({ path: `${SHOTS}/cf-form-bottom.png` });
-      await page.evaluate(() => localStorage.setItem("fieldvisits_lang", "hy"));
-      await page.goto("/#/dashboard");
-      await page.goto("/#/cashflow");
-      await page.locator("#cf-add").click();
-      await page.waitForTimeout(500);
-      await page.screenshot({ path: `${SHOTS}/cf-form-hy.png` });
-      await page.locator("#cf-cancel").click();
-      await page.evaluate(() => localStorage.setItem("fieldvisits_lang", "en"));
-      await page.goto("/#/dashboard");
-      await page.goto("/#/cashflow");
-      await page.locator("#cf-add").click();
-      await page.locator('#cf-form [name="account_id"]').selectOption({ label: "Cash E2E" });
-      await page.locator('#cf-form [name="category_id"]').selectOption({ label: "Salary" });
-      await page.locator('#cf-form [name="staff"]').selectOption({ label: "E2E Cash Anna · E2E SM Cash" });
-      await page.locator('#cf-form [name="month"]').fill("2026-10");
-      await page.locator('#cf-form [name="month"]').dispatchEvent("change");
-      await page.locator('#cf-form [name="amount"]').fill("150000");
-    }
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/cf-form.png` });
     await page.locator('#cf-form button[type="submit"]').click();
-    const row = page.locator("button.cf-row-edit", { hasText: "E2E SM Cash 2026 OCT" });
+    const row = page.locator(".cf-row", { hasText: "E2E SM Cash 2026 OCT" });
     await expect(row).toBeVisible({ timeout: 10000 });
     await expect(row).toContainText("−150,000");
     const { rows: [e] } = await pool.query("SELECT amount::float8 AS a, origin FROM cash_entries WHERE info = 'E2E SM Cash 2026 OCT'");
     expect(e).toEqual({ a: -150000, origin: "manual" });
 
-    // edit: flip it to money in, 90,000
+    // details: history with date and time, then edit to 90,000
     await row.click();
-    await page.locator('#cf-dir [data-dir="in"]').click();
+    await expect(page.locator(".cf-log li")).toHaveCount(1);
+    await expect(page.locator(".cf-log")).toContainText(/Added/);
+    await page.locator("#cf-d-edit").click();
     await page.locator('#cf-form [name="amount"]').fill("90000");
     await page.locator('#cf-form button[type="submit"]').click();
-    await expect(page.locator("button.cf-row-edit", { hasText: "E2E SM Cash 2026 OCT" })).toContainText("+90,000");
+    await expect(page.locator(".cf-row", { hasText: "E2E SM Cash 2026 OCT" })).toContainText("−90,000");
 
-    // delete (second tap confirms)
-    await page.locator("button.cf-row-edit", { hasText: "E2E SM Cash 2026 OCT" }).click();
-    await page.locator("#cf-del").click();
-    await page.locator("#cf-del").click();
-    await expect(page.locator("button.cf-row-edit")).toHaveCount(0, { timeout: 10000 });
+    // delete from the details (second tap confirms); the history stays in the database
+    await page.locator(".cf-row", { hasText: "E2E SM Cash 2026 OCT" }).click();
+    await page.locator("#cf-d-del").click();
+    await page.locator("#cf-d-del").click();
+    await expect(page.locator(".cf-row", { hasText: "E2E SM Cash 2026 OCT" })).toHaveCount(0, { timeout: 10000 });
   } finally {
     await pool.query("DELETE FROM cash_entries WHERE info = 'E2E SM Cash 2026 OCT'");
     await pool.query("DELETE FROM staff_members WHERE id = $1", [boss.id]);
   }
+});
+
+test("In / Out / Net cards filter the list and show counts; the period row has a custom period", async ({ page, fixtures }) => {
+  const acc = await fixtures.createUser("accountant");
+  await loginViaUi(page, acc.email);
+  await page.goto("/#/cashflow");
+  await expect(page.locator(".cf-sum")).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('.cf-sum-card[data-dir="in"] .cf-sum-count')).toHaveText("2");
+  await expect(page.locator('.cf-sum-card[data-dir="out"] .cf-sum-count')).toHaveText("1");
+  await page.locator('.cf-sum-card[data-dir="out"]').click();
+  await expect(page.locator(".cf-row")).toHaveCount(1);
+  await expect(page.locator('.cf-sum-card[data-dir="out"]')).toHaveAttribute("aria-pressed", "true");
+  await page.locator('.cf-sum-card[data-dir=""]').click();
+  await expect(page.locator(".cf-row")).toHaveCount(5);
+  await page.locator('[data-base="custom"]').click();
+  await expect(page.locator("#cf-custom")).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
 });
 
 // 2026-10-24 audit: a role that may not see Cashflow (rep, sales director) used to get an empty page with an error when it typed or followed the address.

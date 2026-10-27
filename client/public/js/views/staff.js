@@ -114,9 +114,65 @@ async function renderMain(root, navigate, month0, access, tab0) {
         <div><span class="cf-sum-label">${t("st_paid")}</span><strong>${nf(payroll.totals.paid)}</strong></div>
         <div><span class="cf-sum-label">${t("st_balance")}</span><strong class="${payroll.totals.balance > 0 ? "cf-out" : "cf-in"}">${signed(payroll.totals.balance)}</strong></div>
       </div>` : ""}
-      <div class="st-list">${rows.length ? rows.map(payRow).join("") : `<p class="muted">${t("st_none")}</p>`}</div>`;
+      <div class="st-list">${rows.length ? rows.map(payRow).join("") : `<p class="muted">${t("st_none")}</p>`}</div>
+      ${unmatchedHtml(payroll.unmatched ?? [])}`;
     wireMonth();
+    wireUnmatched(payroll.unmatched ?? []);
     body.querySelectorAll("[data-person]").forEach((el) => el.addEventListener("click", () => goPerson(el.dataset.person)));
+  }
+  // Salary rows of Cashflow that name nobody (owner, 2026-10-27: a payment to Martin showed in Cashflow, Staff said "nothing paid").
+  const unmatchedHtml = (list) =>
+    list.length
+      ? `<h2 class="section-title">${t("st_unmatched_title")} <span role="button" tabindex="0" class="settings-inline-hint-icon" id="st-unm-hint" aria-expanded="false" aria-controls="st-unm-text" aria-label="${t("more_info")}">!</span></h2>
+        <p class="muted" id="st-unm-text" hidden>${t("st_unmatched_hint")}</p>
+        <div class="st-list">${list
+          .map(
+            (u) => `<button type="button" class="st-row" data-unmatched="${u.id}">
+              <span class="st-row-main"><strong>${escapeHtml(u.info || "—")}</strong>
+                <span class="muted st-row-sub">${escapeHtml([u.date.split("-").reverse().join("-"), u.account].filter(Boolean).join(" · "))}${u.month_from_date ? ` · ${escapeHtml(t("st_unmatched_from_date"))}` : ""}</span></span>
+              <span class="st-row-amt"><strong>${nf(u.amount_amd)}</strong></span>
+            </button>`
+          )
+          .join("")}</div>`
+      : "";
+  function wireUnmatched(list) {
+    const hint = body.querySelector("#st-unm-hint");
+    hint?.addEventListener("click", () => {
+      const open = hint.getAttribute("aria-expanded") === "true";
+      hint.setAttribute("aria-expanded", String(!open));
+      body.querySelector("#st-unm-text").hidden = open;
+    });
+    body.querySelectorAll("[data-unmatched]").forEach((el) =>
+      el.addEventListener("click", async () => {
+        const line = list.find((u) => String(u.id) === el.dataset.unmatched);
+        if (!people.length) await loadPeople().catch(() => {});
+        const overlay = openSheet(`<h2>${t("st_link_title")}</h2>
+          <p class="muted">${escapeHtml(line.info || "")} · ${nf(line.amount_amd)}</p>
+          <div class="st-list">${people
+            .filter((p) => p.active)
+            .map((p) => `<button type="button" class="st-row" data-link="${p.id}"><span class="st-row-main"><strong>${escapeHtml(p.name)}</strong><span class="muted st-row-sub">${escapeHtml(p.position)}</span></span></button>`)
+            .join("")}</div>
+          <p class="form-error" id="st-link-error" hidden></p>
+          <div class="sheet-actions"><button type="button" class="btn" data-close>${t("cancel")}</button></div>`);
+        overlay.querySelector("[data-close]").addEventListener("click", () => overlay.remove());
+        overlay.querySelectorAll("[data-link]").forEach((b) =>
+          b.addEventListener("click", async () => {
+            b.disabled = true;
+            try {
+              await api.linkSalaryPayment(b.dataset.link, line.id);
+              overlay.remove();
+              showToast(fill("st_linked", { name: people.find((p) => String(p.id) === b.dataset.link)?.name ?? "" }));
+              paint();
+            } catch (err) {
+              const e = overlay.querySelector("#st-link-error");
+              e.textContent = err.message;
+              e.hidden = false;
+              b.disabled = false;
+            }
+          })
+        );
+      })
+    );
   }
   const payRow = (r) => `
     <button type="button" class="st-row" data-person="${r.id}">

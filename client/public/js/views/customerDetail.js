@@ -7,7 +7,7 @@ import { nextVisitRowHtml } from "../visitSchedule.js";
 import { t } from "../i18n.js";
 import { dueChipHtml } from "../debtChip.js";
 import { icons } from "../icons.js";
-import { state, canSetCustomerPrices, canEditDirectly, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, isAdmin, seesFinancialExports, seesAllActivity } from "../state.js";
+import { state, canCreateTasks, canSetCustomerPrices, canEditDirectly, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, isAdmin, seesFinancialExports, seesAllActivity } from "../state.js";
 import { openVisitDetailSheet, openPhotoLightbox } from "../visitDetail.js";
 import { visitStatusBadge } from "./customers.js";
 import { renderPotentialCard, potentialBadgeHtml } from "../potential.js";
@@ -217,19 +217,18 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
 
     ${renderErpCard(customer, erpOrders)}
 
-    <div class="detail-actions-grid" style="--action-cols:${hasErpOrderHistory(customer) ? 5 : 4}">
+    <!-- Owner, 2026-10-27: Check in, New task, New order, Navigate, Files. No "Orders" button: the Sales tile above opens the same list.
+         No "Call" button either: the phone number in the facts card is already a tel: link. -->
+    <div class="detail-actions-grid" style="--action-cols:${canCreateTasks() ? 5 : 4}">
       <button class="action-btn action-btn-primary" id="checkin-btn">
         <span>${icons.mapPinCheck}</span>${t("check_in")}
       </button>
-      <!-- No "Call" button here on purpose: it pushed this row onto a second
-           line at 390px, and the phone number in the facts card above is
-           already a tel: link, so the action was a duplicate of it. -->
-      <button type="button" class="action-btn" id="navigate-btn">
-        <span>${icons.compass}</span>${t("navigate")}
-      </button>
-      ${hasErpOrderHistory(customer) ? `<button class="action-btn" id="order-history-btn"><span>${icons.box}</span>${t("order_history_short")}</button>` : ""}
+      ${canCreateTasks() ? `<button type="button" class="action-btn" id="new-task-btn"><span>${icons.tasks}</span>${t("task_new")}</button>` : ""}
       <button type="button" class="action-btn" id="new-order-btn">
         <span>${icons.cart}</span>${t("new_order")}
+      </button>
+      <button type="button" class="action-btn" id="navigate-btn">
+        <span>${icons.compass}</span>${t("navigate")}
       </button>
       <button type="button" class="action-btn" id="customer-photos-btn">
         <span>${icons.folder}</span>${t("customer_files")}
@@ -378,7 +377,7 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
   };
   // Start the data a tile opens the moment a finger lands on it; the sheet that opens a moment later shares that request.
   const warmFor = (stat) => {
-    if (stat === "debt") warmCache(paymentsSource(customerId).key, paymentsSource(customerId).fetch);
+    if (stat === "debt" || stat === "last-payment") warmCache(paymentsSource(customerId).key, paymentsSource(customerId).fetch);
     else if (stat === "sales") warmCache(allOrdersSource(customerId).key, allOrdersSource(customerId).fetch);
     else if (stat === "last-order" && erpOrders?.[0]) warmCache(orderDetailSource(customerId, erpOrders[0].order_id).key, orderDetailSource(customerId, erpOrders[0].order_id).fetch);
   };
@@ -388,7 +387,7 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
     const onTap = () => {
       if (stat === "sales") {
         navigate(`#/customers/${customerId}/orders`);
-      } else if (stat === "debt") {
+      } else if (stat === "debt" || stat === "last-payment") {
         openPaymentsReceivedSheet(customer);
       } else if (stat === "last-visit" && checkins[0]) {
         openVisitDetailSheet(checkins[0], reload, navigate);
@@ -408,8 +407,12 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
     const warmLast = () => warmCache(orderDetailSource(customerId, erpOrders[0].order_id).key, orderDetailSource(customerId, erpOrders[0].order_id).fetch);
     (window.requestIdleCallback || ((fn) => setTimeout(fn, 800)))(warmLast);
   }
-  container.querySelector("#order-history-btn")?.addEventListener("click", () => {
-    navigate(`#/customers/${customerId}/orders`);
+  container.querySelector("#new-task-btn")?.addEventListener("click", async () => {
+    const tasksModule = await import("./tasks.js");
+    tasksModule.openTaskEditor({
+      customer: { id: Number(customerId), name: customer.name, assigned_manager_id: customer.assigned_manager_id, locked: true },
+      onSaved: loadCustomerTaskBlock,
+    });
   });
 
   // Signed accounting documents (from Lily) of this customer's orders.
@@ -426,28 +429,24 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
   async function loadCustomerTaskBlock() {
     paintCustomerTaskBlock(await (await import("./tasks.js")).loadCustomerTasks(customerId));
   }
+  // No tasks -> no block at all (owner, 2026-10-27); "New task" lives in the action row.
   async function paintCustomerTaskBlock({ rows, today }) {
     const slot = container.querySelector("#customer-tasks-slot");
     if (!slot) return;
-    const tasksModule = await import("./tasks.js");
-    const canAdd = tasksModule.canCreateTasks();
-    if (!rows.length && !canAdd) {
+    if (!rows.length) {
       slot.innerHTML = "";
       return;
     }
+    const tasksModule = await import("./tasks.js");
     slot.innerHTML = `
       <div class="tasks-block">
         <div class="tasks-home-head">
           <h2 class="section-title section-title-inline">${t("tasks_customer_title")}</h2>
-          ${canAdd ? `<button type="button" class="btn btn-sm btn-has-icon" id="customer-add-task">${icons.tasks}${t("task_new")}</button>` : ""}
         </div>
-        ${rows.length ? `<div class="card-list">${rows.map((r) => tasksModule.taskCardHtml(r, today, { showCustomer: false })).join("")}</div>` : ""}
+        <div class="card-list">${rows.map((r) => tasksModule.taskCardHtml(r, today, { showCustomer: false })).join("")}</div>
       </div>`;
     slot.querySelectorAll("[data-task-id]").forEach((el) =>
       el.addEventListener("click", () => tasksModule.openTaskSheet(Number(el.dataset.taskId), { onChanged: loadCustomerTaskBlock, navigate }))
-    );
-    slot.querySelector("#customer-add-task")?.addEventListener("click", () =>
-      tasksModule.openTaskEditor({ customer: { id: Number(customerId), name: customer.name, assigned_manager_id: customer.assigned_manager_id, locked: true }, onSaved: loadCustomerTaskBlock })
     );
   }
 
@@ -496,15 +495,6 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
     };
     paint();
   }
-}
-
-// A customer can have full ERP order history (erp_order_lines) without a
-// debt-summary row (erp_customer_data) -- the sync's customers[] list is
-// narrowed to current debt or orders in the last 180 days, so a paid-off
-// customer whose last order is older than that has history but no summary
-// row. Gating everything on erp_synced_at hid that customer's orders entirely.
-function hasErpOrderHistory(customer) {
-  return Boolean(customer.erp_synced_at || (customer.erp_customer_id && customer.erp_last_order_date));
 }
 
 function renderErpCard(customer, erpOrders) {
@@ -583,9 +573,23 @@ function statTilesHtml({ customer, salesThisMonth, debtText, debtDanger, debtSub
       ${tile("sales", icons.cart, formatAmd(salesThisMonth), t("sales_this_month"))}
       ${tile("debt", icons.payment, debtText, t("outstanding_debt"), { danger: debtDanger, sub: debtSub, chip: debtChip })}
       ${tile("last-order", icons.box, lastOrderDate ? escapeHtml(lastOrderDate) : "—", t("last_order"), { disabled: !lastOrderDate })}
-      ${tile("last-visit", icons.clock, customer.last_visit_at ? formatDayMonth(new Date(customer.last_visit_at), { year: true }) : "—", t("last_visit"), { disabled: !customer.last_visit_at })}
+      ${
+        // A customer that is never visited (10001, 10002 ...: KF/CAS/CVO/PCO/OEM channels): "Last visit" means nothing there, so the tile shows
+        // the last payment, date and amount, and opens the payments (owner, 2026-10-27).
+        customer.requires_visit === false
+          ? tile("last-payment", icons.payment, lastPaymentDate(customer) ?? "—", t("last_payment"), {
+              disabled: !lastPaymentDate(customer),
+              sub: customer.last_payment?.amount_amd ? formatAmd(customer.last_payment.amount_amd) : "",
+            })
+          : tile("last-visit", icons.clock, customer.last_visit_at ? formatDayMonth(new Date(customer.last_visit_at), { year: true }) : "—", t("last_visit"), { disabled: !customer.last_visit_at })
+      }
     </div>
   `;
+}
+
+function lastPaymentDate(customer) {
+  const d = parseDateOnly(customer.last_payment?.date ?? customer.erp_last_payment_date);
+  return d ? formatDayMonth(d, { year: true }) : null;
 }
 
 const returnCreditText = (customer) => (Number(customer.pending_return_credit?.amd) > 0 ? `${t("rt_credit_pending")}${labelColon()}${formatAmd(customer.pending_return_credit.amd)}` : "");

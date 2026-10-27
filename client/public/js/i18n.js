@@ -28,5 +28,44 @@ export async function setLang(lang) {
 export function t(key) {
   // The language can be changed from another tab or window (localStorage is shared): until this page has loaded it, use what it has.
   const dict = dicts[getLang()] ?? Object.values(dicts)[0];
-  return dict[key] ?? key;
+  if (dict[key] !== undefined) return dict[key];
+  if (typeof key === "string" && /^[a-z][a-z0-9_]*$/.test(key)) refreshOnMiss(key);
+  return key;
+}
+
+// A text the loaded language file does not have yet (owner, 2026-10-27: the Files sheet showed "add_document", "file_kind_order_blank").
+// It happens right after an update: this page still holds the language file it started with, while a screen opened for the first time now
+// comes from the new release with its new texts. The current file is fetched once more, past every cache, and the raw names already on
+// screen are replaced in place -- no reload, an open sheet stays open.
+const missing = new Set();
+let refresh = null;
+function refreshOnMiss(key) {
+  missing.add(key);
+  if (refresh) return;
+  const lang = getLang();
+  refresh = import(`./i18n-${lang}.js?fresh=${Date.now()}`)
+    .then((m) => {
+      dicts[lang] = { ...dicts[lang], ...m.default };
+      replaceOnScreen(dicts[lang]);
+    })
+    .catch(() => {});
+}
+function replaceOnScreen(dict) {
+  const keys = [...missing].filter((k) => dict[k] !== undefined);
+  if (!keys.length || typeof document === "undefined") return;
+  // whole names only ("add_document", never a part of a longer word)
+  const swap = (text) => keys.reduce((s, k) => (s.includes(k) ? s.replace(new RegExp(`(?<![\\w])${k}(?![\\w])`, "g"), () => dict[k]) : s), text);
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    const next = swap(n.nodeValue);
+    if (next !== n.nodeValue) n.nodeValue = next;
+  }
+  for (const attr of ["aria-label", "placeholder", "title"]) {
+    document.querySelectorAll(`[${attr}]`).forEach((el) => {
+      const v = el.getAttribute(attr);
+      const next = swap(v);
+      if (next !== v) el.setAttribute(attr, next);
+    });
+  }
+  keys.forEach((k) => missing.delete(k));
 }

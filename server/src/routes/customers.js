@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
+import { CHECKIN_ORDER_LINKS_SQL } from "../checkinDelivery.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { canManagePotentialAll, canResolveCounterfeit, canConfirmOrders, seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData, canSetCreditTerms } from "../roles.js";
@@ -718,7 +719,14 @@ customersRouter.get("/:id", async (req, res) => {
        -- -- a customer whose last order is older than that window was
        -- showing "-" here even though they do have order history, just
        -- not within that window.
-       (SELECT MAX(eol.order_date) FROM erp_order_lines eol WHERE eol.erp_customer_id = c.erp_customer_id) AS erp_last_order_date
+       (SELECT MAX(eol.order_date) FROM erp_order_lines eol WHERE eol.erp_customer_id = c.erp_customer_id) AS erp_last_order_date,
+       -- The last day this customer paid and how much (the Cashflow ledger's "Oil order" rows, Excel's own record of every payment): the card shows it
+       -- where "Last visit" means nothing -- customers that are never visited (owner, 2026-10-27).
+       (SELECT json_build_object('date', x.d, 'amount_amd', x.amt) FROM (
+          SELECT e.entry_date::text AS d, SUM(e.amount_amd)::float8 AS amt
+          FROM cash_entries e JOIN cash_categories cc ON cc.id = e.category_id
+          WHERE e.erp_customer_id = c.erp_customer_id AND lower(cc.name) = 'oil order' AND e.amount > 0
+          GROUP BY e.entry_date ORDER BY e.entry_date DESC LIMIT 1) x) AS last_payment
      FROM customers c
      ${VISIT_STATUS_JOIN}
      LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
@@ -762,6 +770,7 @@ customersRouter.get("/:id", async (req, res) => {
     customer.erp_aging_bucket = null;
     customer.erp_recent_orders = [];
     customer.erp_last_order_date = null;
+    customer.last_payment = null;
     customer.collected_since_sync_amd = 0;
     customer.estimated_debt_amd = null;
   }
@@ -1658,7 +1667,8 @@ customersRouter.get("/:id/checkins", async (req, res) => {
          (SELECT json_agg(json_build_object('id', cp.id) ORDER BY cp.id) FROM checkin_photos cp WHERE cp.checkin_id = ch.id),
          '[]'
        ) AS photos,
-       COALESCE((SELECT json_agg(json_build_object('id', cf.id, 'kind', cf.kind, 'mime', cf.mime, 'version', cf.version) ORDER BY cf.id) FROM customer_files cf WHERE cf.checkin_id = ch.id), '[]') AS files
+       COALESCE((SELECT json_agg(json_build_object('id', cf.id, 'kind', cf.kind, 'mime', cf.mime, 'version', cf.version) ORDER BY cf.id) FROM customer_files cf WHERE cf.checkin_id = ch.id), '[]') AS files,
+       ${CHECKIN_ORDER_LINKS_SQL}
      FROM checkins ch
      JOIN users u ON u.id = ch.user_id
      WHERE ch.customer_id = $1 ${userFilter}

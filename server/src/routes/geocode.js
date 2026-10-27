@@ -41,6 +41,12 @@ function regionAndSubregionFrom(address) {
   };
 }
 
+// "Կոմիտաս 5, Երևան, 0014, Հայաստան" -> "Կոմիտաս 5, Երևան, 0014": every customer is in Armenia, the country is noise (owner, 2026-10-27).
+export function withoutCountry(address) {
+  if (typeof address !== "string") return address ?? null;
+  return address.replace(/(,\s*(Հայաստան|Armenia|Армения))+\s*$/iu, "").trim() || null;
+}
+
 geocodeRouter.get("/reverse", geocodeLimiter, async (req, res) => {
   const lat = Number(req.query.lat);
   const lng = Number(req.query.lng);
@@ -69,7 +75,7 @@ geocodeRouter.get("/reverse", geocodeLimiter, async (req, res) => {
 
   const data = await response.json();
   res.json({
-    address: data.display_name || null,
+    address: withoutCountry(data.display_name),
     ...regionAndSubregionFrom(data.address),
   });
 });
@@ -102,7 +108,7 @@ geocodeRouter.get("/search", geocodeLimiter, async (req, res) => {
   const data = await response.json();
   res.json(
     data.map((item) => ({
-      address: item.display_name,
+      address: withoutCountry(item.display_name),
       lat: Number(item.lat),
       lng: Number(item.lon),
       ...regionAndSubregionFrom(item.address),

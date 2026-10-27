@@ -85,6 +85,12 @@ test("submitting the check-in moves the picked orders to Delivered (history writ
   assert.equal(byId[foreign], "confirmed", "another customer's order is never touched");
   const detail = await apiRequest(`/api/orders/${a}`, { cookie: directorCookie });
   assert.ok(detail.data.history.some((h) => h.old_status === "confirmed" && h.new_status === "delivered" && /check-in/i.test(h.reason)));
+  // the visit details link "Products delivered" to these orders, in Activity and on the customer card (owner, 2026-10-27)
+  const sorted = [a, b].sort((x, y) => x - y);
+  const listed = (await apiRequest(`/api/checkins?customer_id=${customer.id}`, { cookie: directorCookie })).data.rows.find((c) => c.id === res.data.id);
+  assert.deepEqual(listed.delivered_order_ids, sorted);
+  const onCard = (await apiRequest(`/api/customers/${customer.id}/checkins?limit=30`, { cookie: directorCookie })).data.find((c) => c.id === res.data.id);
+  assert.deepEqual(onCard.delivered_order_ids, sorted);
 });
 
 test("a retried check-in (same client_ref) does not deliver twice; picking nothing is fine; ids are ignored without the outcome", async () => {

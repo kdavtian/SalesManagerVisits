@@ -110,6 +110,10 @@ export function canViewAllRoutePlans() {
   return canPlanForOthers() || state.user?.role === "accountant";
 }
 
+// Who gives tasks to others (server roles.js canCreateTasks); everybody receives and completes them.
+const TASK_CREATOR_ROLES = new Set(["admin", "ceo", "operations_director", "sales_director"]);
+export const canCreateTasks = () => TASK_CREATOR_ROLES.has(state.user?.role);
+
 // Mirrors canReassignCustomers in the server's roles.js.
 export function canReassignCustomers() {
   return (

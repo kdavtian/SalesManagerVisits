@@ -692,3 +692,10 @@
   .dtl-list > .loading-state, .dtl-list > .empty-state { padding: 28px 16px; text-align: center; }
   #payments-list.dtl-list > .btn-block { margin: 12px 16px; width: auto; }
 }
+
+/* Cashflow period row on a computer: one row of natural-width pills (the 3-column grid is for phones) */
+@media (min-width: 1024px) {
+  .cf-periods { display: flex; flex-wrap: wrap; }
+  .cf-periods .cf-period, .cf-period-pair .cf-period:first-child { flex: 0 0 auto; padding: 0 18px; }
+  .cf-period-pair { display: contents; }
+}

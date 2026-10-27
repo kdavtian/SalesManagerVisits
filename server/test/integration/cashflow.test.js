@@ -20,6 +20,8 @@ test.before(async () => {
     accounts: (await pool.query("SELECT id FROM cash_accounts")).rows.map((r) => r.id),
     categories: (await pool.query("SELECT id FROM cash_categories")).rows.map((r) => r.id),
     syncMax: (await pool.query("SELECT COALESCE(MAX(id), 0) AS m FROM cash_syncs")).rows[0].m,
+    logMax: (await pool.query("SELECT COALESCE(MAX(id), 0) AS m FROM cash_entry_log")).rows[0].m,
+    reqMax: (await pool.query("SELECT COALESCE(MAX(id), 0) AS m FROM cash_entry_requests")).rows[0].m,
   };
   accountant = await createUser("accountant");
   director = await createUser("sales_director");
@@ -36,6 +38,8 @@ test.after(async () => {
   await pool.query("DELETE FROM cash_accounts WHERE NOT (id = ANY($1))", [snap.accounts]);
   await pool.query("DELETE FROM cash_categories WHERE NOT (id = ANY($1))", [snap.categories]);
   await pool.query("DELETE FROM cash_syncs WHERE id > $1", [snap.syncMax]);
+  await pool.query("DELETE FROM cash_entry_log WHERE id > $1", [snap.logMax]);
+  await pool.query("DELETE FROM cash_entry_requests WHERE id > $1", [snap.reqMax]);
   await cleanupAll();
   await stopTestServer();
 });
@@ -249,4 +253,74 @@ test("entries made in the app: direction + positive amount, USD with a rate, edi
   await applyCashLedger([{ date: "2026-10-02", amount: 1, currency: "AMD", for: "Fuel", source: "Cash ITest2 Z", amount_amd: 1 }], { via: "bot" });
   assert.equal((await pool.query("SELECT COUNT(*)::int AS n FROM cash_entries WHERE origin = 'manual'")).rows[0].n, before);
   assert.ok(await row(kept.data.id));
+});
+
+test("edit window, change requests, history with date and time; In / Out counts; several categories; customers list (owner, 2026-10-27)", async () => {
+  const send = (who, path, method, body) => apiRequest(`/api/cashflow${path}`, { method, cookie: cookies[who], body });
+  const acc = (await send("admin", "/accounts", "POST", { name: `Cash ITest3 ${Date.now()}`, kind: "cash" })).data.id;
+  const { rows: [fuel] } = await pool.query("SELECT id FROM cash_categories WHERE lower(name) = 'fuel'");
+  const { rows: [oil] } = await pool.query("SELECT id FROM cash_categories WHERE lower(name) = 'oil order'");
+  const base = { date: "2032-03-10", direction: "out", amount: 1000, currency: "AMD", account_id: acc, category_id: fuel.id, info: "ITest window" };
+
+  // a fresh row: the accountant edits it directly, and every change is logged with its time and author
+  const fresh = (await send("accountant", "/entries", "POST", base)).data.id;
+  assert.equal((await send("accountant", `/entries/${fresh}`, "PUT", { ...base, amount: 1500 })).status, 200);
+  let d = (await send("accountant", `/entries/${fresh}`, "GET")).data;
+  assert.equal(d.right, "now");
+  assert.deepEqual(d.log.map((l) => l.action), ["create", "update"]);
+  assert.ok(d.log.every((l) => l.at && l.user_name), "date-time and who");
+  assert.equal(d.log[1].before.amount, -1000);
+  assert.equal(d.log[1].after.amount, -1500);
+
+  // a row older than the window: the accountant can only ask; admin still changes it at once
+  const old = (await send("accountant", "/entries", "POST", { ...base, info: "ITest old" })).data.id;
+  await pool.query("UPDATE cash_entries SET created_at = now() - interval '4 days' WHERE id = $1", [old]);
+  assert.equal((await send("accountant", `/entries/${old}`, "GET")).data.right, "request");
+  const blocked = await send("accountant", `/entries/${old}`, "PUT", { ...base, amount: 9 });
+  assert.equal(blocked.status, 409);
+  assert.equal(blocked.data.needs_request, true);
+  assert.equal((await send("accountant", `/entries/${old}`, "DELETE")).status, 409);
+  assert.equal((await send("admin", `/entries/${old}`, "GET")).data.right, "now");
+
+  // request -> one waiting at a time -> management sees it -> approve applies it
+  const asked = await send("accountant", `/entries/${old}/requests`, "POST", { action: "update", data: { ...base, amount: 7777, info: "ITest old fixed" }, reason: "typo" });
+  assert.equal(asked.status, 201);
+  assert.equal((await send("accountant", `/entries/${old}/requests`, "POST", { action: "delete" })).status, 409, "one waiting request per row");
+  assert.equal((await send("admin", "/meta", "GET")).data.pending_requests >= 1, true);
+  const list = (await send("admin", "/requests", "GET")).data;
+  assert.equal(list.can_decide, true);
+  assert.ok(list.requests.some((r) => r.id === asked.data.id && r.reason === "typo"));
+  assert.equal((await send("accountant", `/requests/${asked.data.id}/approve`, "POST", {})).status, 403, "the accountant does not approve");
+  assert.equal((await send("ops", `/requests/${asked.data.id}/approve`, "POST", {})).status, 403);
+  assert.equal((await send("admin", `/requests/${asked.data.id}/approve`, "POST", {})).status, 200);
+  assert.equal((await send("admin", `/requests/${asked.data.id}/approve`, "POST", {})).status, 404, "decided once");
+  const { rows: [after] } = await pool.query("SELECT amount::float8 AS amount, info FROM cash_entries WHERE id = $1", [old]);
+  assert.deepEqual([after.amount, after.info], [-7777, "ITest old fixed"]);
+  d = (await send("accountant", `/entries/${old}`, "GET")).data;
+  assert.deepEqual(d.log.map((l) => l.action), ["create", "request", "update", "approve"]);
+
+  // a delete request rejected leaves the row; approved removes it, the history stays readable
+  const del = (await send("accountant", `/entries/${old}/requests`, "POST", { action: "delete", reason: "duplicate" })).data.id;
+  assert.equal((await send("admin", `/requests/${del}/reject`, "POST", {})).status, 200);
+  assert.ok((await pool.query("SELECT 1 FROM cash_entries WHERE id = $1", [old])).rowCount);
+  const del2 = (await send("accountant", `/entries/${old}/requests`, "POST", { action: "delete" })).data.id;
+  assert.equal((await send("admin", `/requests/${del2}/approve`, "POST", {})).status, 200);
+  assert.equal((await pool.query("SELECT 1 FROM cash_entries WHERE id = $1", [old])).rowCount, 0);
+  const gone = (await send("admin", `/entries/${old}`, "GET")).data;
+  assert.equal(gone.entry, null);
+  assert.ok(gone.log.some((l) => l.action === "delete"));
+
+  // In / Out cards: totals and counts follow the other filters, not the card itself; several categories at once
+  await send("admin", "/entries", "POST", { ...base, direction: "in", category_id: oil.id, amount: 5000, erp_customer_id: "10001", info: "ITest in" });
+  const q = `from=2032-03-01&to=2032-03-31&account=${acc}`;
+  const all = (await send("admin", `/entries?${q}`, "GET")).data;
+  assert.deepEqual([all.n_in, all.n_out, all.in_amd, all.out_amd], [1, 1, 5000, 1500]);
+  const onlyIn = (await send("admin", `/entries?${q}&dir=in&real=1`, "GET")).data;
+  assert.equal(onlyIn.entries.length, 1);
+  assert.equal(onlyIn.n_out, 1, "the Out count stays while In is tapped");
+  assert.equal((await send("admin", `/entries?${q}&categories=${fuel.id},${oil.id}`, "GET")).data.entries.length, 2);
+  assert.equal((await send("admin", `/entries?${q}&categories=${fuel.id}`, "GET")).data.entries.length, 1);
+
+  const customers = (await send("accountant", "/customers", "GET")).data.customers;
+  assert.ok(Array.isArray(customers));
 });

@@ -47,13 +47,83 @@ export function monthBounds(month) {
 
 const isSunday = (ymd) => new Date(`${ymd}T00:00:00Z`).getUTCDay() === 0;
 
-// "SM YVN 2026 OCT" -> { key: "sm yvn", month: "2026-10" }; null when the text is not a payroll line.
+// "SM YVN 2026 OCT" -> { key: "sm yvn", month: "2026-10" }; null when the text carries no month.
+// The Excel rule is exactly "<Position> <YYYY> <MON>", but people type it many ways (owner, 2026-10-27: a salary paid to Martin showed in
+// Cashflow and Staff said "nothing paid"). Accepted too: "SEP 2026", "September 2026", "2026-09", "09/2026", "SM YVN, 2026 SEP.", extra spaces.
+const MONTH_WORDS = [
+  ["jan", "january", "հունվար"], ["feb", "february", "փետրվար"], ["mar", "march", "մարտ"], ["apr", "april", "ապրիլ"],
+  ["may", "մայիս"], ["jun", "june", "հունիս"], ["jul", "july", "հուլիս"], ["aug", "august", "օգոստոս"],
+  ["sep", "sept", "september", "սեպտեմբեր"], ["oct", "october", "հոկտեմբեր"], ["nov", "november", "նոյեմբեր"], ["dec", "december", "դեկտեմբեր"],
+];
+const monthIndex = (word) => MONTH_WORDS.findIndex((w) => w.includes(word.toLowerCase().replace(/\.$/, "")));
+const normKey = (x) => String(x ?? "").toLowerCase().replace(/[.,;:()_\-/]+/g, " ").replace(/\s+/g, " ").trim();
+
 export function parseSalaryInfo(info) {
-  const m = /^(.*?)\s+(\d{4})\s+([A-Za-z]{3})$/.exec(String(info ?? "").trim());
-  if (!m) return null;
-  const mi = MONTHS_EN.indexOf(m[3].toUpperCase());
-  if (mi < 0) return null;
-  return { key: m[1].trim().toLowerCase(), month: `${m[2]}-${String(mi + 1).padStart(2, "0")}` };
+  const text = String(info ?? "").trim();
+  const patterns = [
+    [/(\d{4})\s*[-/. ]\s*([\p{L}]{3,10}\.?)\s*$/u, (m) => [m[1], monthIndex(m[2])]],
+    [/([\p{L}]{3,10}\.?)\s*[-/. ,]\s*(\d{4})\s*\.?$/u, (m) => [m[2], monthIndex(m[1])]],
+    [/(\d{4})[-/.](\d{1,2})\s*$/, (m) => [m[1], Number(m[2]) - 1]],
+    [/(\d{1,2})[-/.](\d{4})\s*$/, (m) => [m[2], Number(m[1]) - 1]],
+  ];
+  for (const [re, pick] of patterns) {
+    const m = re.exec(text);
+    if (!m) continue;
+    const [year, mi] = pick(m);
+    if (!(mi >= 0 && mi < 12)) continue;
+    return { key: normKey(text.slice(0, m.index)), month: `${year}-${String(mi + 1).padStart(2, "0")}` };
+  }
+  return null;
+}
+
+// How strongly a payroll line's key names this person: 3 = their position or one of their pay keys, 2 = their full name, 1 = their first name
+// or a text that contains their full name, 0 = not them.
+export function salaryKeyMatches(key, staff) {
+  return salaryMatchScore(key, staff) > 0;
+}
+function salaryMatchScore(key, staff) {
+  const k = normKey(key);
+  if (!k) return 0;
+  const keys = new Set([staff.position, ...(staff.pay_keys ?? [])].map(normKey).filter(Boolean));
+  if (keys.has(k)) return 3;
+  const name = normKey(staff.name);
+  if (!name) return 0;
+  if (k === name) return 2;
+  if (k === name.split(" ")[0] || ` ${k} `.includes(` ${name} `)) return 1;
+  return 0;
+}
+
+// Every Salary row of the ledger with the month it pays (the month written in its Info, or -- when the Info has none -- the month it was paid
+// in) and the ONE person it pays: the best match wins; a tie between two people (two Armens, a first name only) links nobody, so a payment
+// is never counted twice -- it waits in the "not linked" list instead.
+export async function salaryLines(db = pool) {
+  const [{ rows }, { rows: staff }] = await Promise.all([
+    db.query(
+      `SELECT e.id, e.entry_date::text AS date, e.info, e.amount_amd::float8 AS amt, a.name AS account
+       FROM cash_entries e JOIN cash_categories c ON c.id = e.category_id LEFT JOIN cash_accounts a ON a.id = e.account_id
+       WHERE lower(c.name) = 'salary'`
+    ),
+    db.query("SELECT id, name, position, pay_keys FROM staff_members"),
+  ]);
+  return rows.map((r) => {
+    const p = parseSalaryInfo(r.info);
+    const key = p ? p.key : normKey(r.info);
+    let best = 0;
+    let who = [];
+    for (const s of staff) {
+      const score = salaryMatchScore(key, s);
+      if (score > best) [best, who] = [score, [s.id]];
+      else if (score && score === best) who.push(s.id);
+    }
+    return { ...r, key, month: p ? p.month : r.date.slice(0, 7), month_from_date: !p, staff_id: who.length === 1 ? who[0] : null };
+  });
+}
+
+// Salary rows of `month` that are linked to nobody: shown on Payroll so they can be linked to a person in one tap.
+export async function unmatchedSalaryLines(month, db = pool, lines = null) {
+  return (lines ?? (await salaryLines(db)))
+    .filter((l) => l.month === month && l.staff_id === null)
+    .map(({ id, date, info, amt, account, month_from_date }) => ({ id, date, info, amount_amd: -amt, account, month_from_date }));
 }
 
 /**
@@ -187,23 +257,17 @@ export async function commissionBaseOf(staff, month, db = pool) {
   return rows[0].base;
 }
 
-// What Cashflow already paid this person for the month: Salary rows whose Info is "<position> <YYYY> <MON>" (position or any pay key).
-export async function paidOf(staff, month, db = pool) {
-  const keys = new Set([staff.position, ...(staff.pay_keys ?? [])].map((k) => String(k).trim().toLowerCase()).filter(Boolean));
-  const { rows } = await db.query(
-    `SELECT e.info, e.amount_amd::float8 AS amt FROM cash_entries e JOIN cash_categories c ON c.id = e.category_id
-     WHERE lower(c.name) = 'salary' AND e.info IS NOT NULL AND e.info ~* ('\\d{4}\\s+[A-Za-z]{3}$')`
-  );
+// What Cashflow already paid this person for the month: Salary rows whose Info names the person (see parseSalaryInfo / salaryKeyMatches).
+export async function paidOf(staff, month, db = pool, lines = null) {
   let paid = 0;
-  const lines = [];
-  for (const r of rows) {
-    const p = parseSalaryInfo(r.info);
-    if (p && p.month === month && keys.has(p.key)) {
-      paid += -r.amt; // salary rows are negative (money out)
-      lines.push(r);
+  let count = 0;
+  for (const l of lines ?? (await salaryLines(db))) {
+    if (l.month === month && l.staff_id === staff.id) {
+      paid += -l.amt; // salary rows are negative (money out)
+      count++;
     }
   }
-  return { paid, count: lines.length };
+  return { paid, count };
 }
 
 export async function marksOf(staffId, month, db = pool) {
@@ -221,13 +285,13 @@ export async function itemsOf(staffId, month, db = pool) {
   return rows;
 }
 
-export async function payForStaff(staff, month, { settings, holidays, today = yerevanToday(), db = pool } = {}) {
+export async function payForStaff(staff, month, { settings, holidays, today = yerevanToday(), db = pool, lines = null } = {}) {
   const [marks, visits, commissionBase, items, paid] = await Promise.all([
     marksOf(staff.id, month, db),
     staff.visit_based ? visitsOf(staff.user_id, month, db) : new Map(),
     commissionBaseOf(staff, month, db),
     itemsOf(staff.id, month, db),
-    paidOf(staff, month, db),
+    paidOf(staff, month, db, lines),
   ]);
   const pay = computeMonthPay(staff, month, {
     today,
