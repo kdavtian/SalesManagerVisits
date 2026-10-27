@@ -6,9 +6,11 @@ test.describe("Report generation", () => {
     await loginViaUi(page, admin.email);
 
     await page.goto("/#/reports");
-    const firstReport = page.locator(".report-list-card").first();
+    // A desktop window shows the list beside the report (reportsDesk.js): open another report from the side list.
+    const firstReport = page.locator(".reports-side-item:not(.is-active)").first();
     await expect(firstReport).toBeVisible({ timeout: 10000 });
     await firstReport.click();
+    await expect(page.locator(".reports-side-item.is-active")).toBeVisible();
 
     // Off the reports list and into an actual report body -- not just a
     // loading spinner or an error state.

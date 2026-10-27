@@ -131,9 +131,17 @@ Issues found (I = issue, each has its fix in the steps below):
   stay on the Home grid only. Role shells (warehouse, driver) keep their short full sidebar with no toggle.
 
 ### Step 6. Reports as sidebar + report — I6
-- [ ] Reports page = left list of reports (grouped as today), right the chosen report; the period row and the rep / channel filters
+- [x] Reports page = left list of reports (grouped as today), right the chosen report; the period row and the rep / channel filters
       shared above the report; last opened report remembered.
-- [ ] Every table report gets Export (CSV / Excel) and Print.
+- [x] Every table report gets Export (CSV / Excel) and Print.
+- Spec: `desktop-reports.spec.mjs`.
+- As built (1.446.0): `reportsDesk.js` wraps the existing reports (each report is still drawn by `reports.js` / `bizReports.js` /
+  `fuelReport.js` / `volumeReport.js`, now into the right pane). `#/reports` opens the last report (or the first) and renames
+  the address to `#/reports?r=<key>` without drawing twice. The reports have no common rep filter, so the filters that travel
+  are the ones they share: period, month, region and sales channel (kept for the browser tab, applied only where the next
+  report has the same filter and the same choice). Export = a CSV (UTF-8 BOM) of what the report shows: headings as rows, each
+  card or table row as a row of its texts. Print = the browser's print with a print stylesheet that keeps the report only.
+  Phones keep the list -> report pages.
 
 ### Step 7. Dashboards use the width — I12
 - [ ] Home KPIs: one row of 5 tiles, under it two columns: "Needs attention" (orders waiting, unconfirmed payments, overdue tasks,
@@ -173,4 +181,5 @@ Issues found (I = issue, each has its fix in the steps below):
 - Step 2 (Orders + Activity + Tasks on the engine): 1.442.0, PR #480, 2026-10-27.
 - Step 3 (customer card in three columns): 1.443.0, PR #481, 2026-10-27.
 - Step 4 (top bar search + quick actions + keyboard): 1.444.0, PR #483, 2026-10-27.
-- Step 5 (sidebar groups + icons-only mode): 1.445.0, 2026-10-27.
+- Step 5 (sidebar groups + icons-only mode): 1.445.0, PR #484, 2026-10-27.
+- Step 6 (reports as list + report, export, print): 1.446.0, 2026-10-27.

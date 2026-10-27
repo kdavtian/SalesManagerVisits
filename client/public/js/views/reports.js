@@ -118,7 +118,16 @@ function selectHtml(name, options, value) {
 // page when no report is selected, or one of the three report views when
 // `r` is set in the query string. Kept in one file since the views share
 // the same header/back-button chrome and filter-building conventions.
-export async function renderReports(root, navigate, reportKey) {
+export async function renderReports(root, navigate, reportKey, { inPane = false } = {}) {
+  // Desktop: the list on the left, the report on the right (reportsDesk.js draws the report through this same function).
+  if (!inPane && window.matchMedia?.("(min-width: 1024px)").matches) {
+    const { renderReportsDesk } = await import("../reportsDesk.js");
+    return renderReportsDesk(root, navigate, reportKey, {
+      groups: REPORT_GROUPS,
+      iconFor: (key) => REPORT_ICONS[key] || icons.chart,
+      renderReport: (pane, key) => renderReports(pane, navigate, key, { inPane: true }),
+    });
+  }
   if (reportKey === "new_customers") return renderNewCustomersReport(root, navigate);
   if (reportKey === "checkins") return renderCheckinsReport(root, navigate);
   if (reportKey === "weekly_scorecard") return (await import("./bizReports.js")).renderWeeklyScorecard(root, navigate);

@@ -1683,3 +1683,125 @@
     transform: rotate(180deg);
   }
 }
+
+/* ---------- 13. Reports: list + report side by side (reportsDesk.js; docs/desktop-roadmap.md step 6) ---------- */
+@media (min-width: 1024px) {
+  .reports-split {
+    display: grid;
+    grid-template-columns: 260px minmax(0, 1fr);
+    column-gap: 20px;
+    align-items: start;
+    padding: 16px 24px 24px;
+  }
+  .reports-side {
+    position: sticky;
+    top: 0;
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .reports-side-title {
+    margin: 4px 8px 8px;
+    font-size: 1.4rem;
+  }
+  .reports-side-heading {
+    padding: 12px 8px 4px;
+    font-size: var(--fs-eyebrow, 0.72rem);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .reports-side-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 38px;
+    padding: 6px 8px;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.9rem;
+    text-align: left;
+    cursor: pointer;
+  }
+  .reports-side-item:hover {
+    background: var(--bg-card-pressed);
+  }
+  .reports-side-item.is-active {
+    background: var(--accent-soft, rgba(10, 132, 255, 0.12));
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .reports-side-icon {
+    display: flex;
+    flex: none;
+    color: var(--accent);
+  }
+  .reports-side-icon svg {
+    width: 18px;
+    height: 18px;
+  }
+  .reports-side-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* the report in the right pane: no Back (the list is beside it), no page padding of its own */
+  .reports-pane {
+    min-width: 0;
+  }
+  .reports-pane > .detail-view {
+    padding: 0;
+  }
+  .reports-pane #back-btn {
+    display: none;
+  }
+  .reports-pane .detail-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .reports-pane-tools {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+  }
+  .reports-tool {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 34px;
+    white-space: nowrap;
+  }
+  .reports-tool svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+/* Print on a desktop: the report only, no sidebar / top bar / list / buttons (Ctrl+P or the Print button). */
+@media print {
+  body:has(.reports-split) {
+    padding: 0 !important;
+  }
+  body:has(.reports-split) :is(.sidebar, .top-bar, .nav-bar, .reports-side, .reports-pane-tools, .sync-banner, .update-banner, .app-toast) {
+    display: none !important;
+  }
+  body:has(.reports-split) .reports-split {
+    display: block;
+    padding: 0;
+  }
+  body:has(.reports-split) .app-main {
+    overflow: visible !important;
+    height: auto !important;
+  }
+  body:has(.reports-split) .card {
+    break-inside: avoid;
+    box-shadow: none;
+  }
+}

@@ -405,3 +405,7 @@ Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets 
   is only rebuilt when language / user / role change, so per-page state must be CSS on classes `syncNavActive` already toggles
   (a folded group hides `.sidebar-item:not(.sidebar-item-active)`). Icons-only = `html.sidebar-collapsed` sets
   `--sidebar-width: 68px`; automatic below 1280 px unless the toggle stored a choice.
+- **Desktop step 6 (1.446.0):** Reports on a desktop = `reportsDesk.js` (list left, report right; `renderReports(pane, navigate, key,
+  { inPane: true })` draws the report). Lesson: the app's back-cache files a screen under `lastRenderedHash`; when a screen changes
+  its own address while drawing, use `navigate.rewrite(hash)` (renames, no redraw) -- `history.replaceState` or
+  `navigate.replace` mid-render leaves a stale copy filed under the old address that Back / the next visit restores.
