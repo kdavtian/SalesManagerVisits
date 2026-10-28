@@ -9,6 +9,7 @@ import { icons } from "../icons.js";
 import { isDesktop, createDeskTable, renderDeskFilters, openDeskMenu } from "../deskTable.js";
 import { dockedKey } from "../dockSheet.js";
 import { periodLabel, periodKey, periodAria, tapPeriod } from "../periodButtons.js";
+import { installClearButton } from "../searchBar.js";
 
 const OUTCOMES = [
   "order_placed",
@@ -455,6 +456,7 @@ export function renderActivity(root, navigate) {
       });
     });
 
+    enhanceActivity(); // the search bar's clear "x" (searchBar.js)
     renderList();
   }
 
@@ -627,4 +629,12 @@ export function renderActivity(root, navigate) {
   };
   cleanup.onRestore = () => container.isConnected && load({ silent: true });
   return cleanup;
+}
+
+function enhanceActivity() {
+  const input = document.querySelector("#activity-search");
+  const container = input?.closest(".activity-search-combined");
+  const actions = container?.querySelector(".activity-search-actions");
+  if (!input || !container || !actions) return;
+  installClearButton(input, container, actions);
 }

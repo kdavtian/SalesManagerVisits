@@ -1,7 +1,8 @@
 import { test, expect, loginViaUi } from "./fixtures.mjs";
 
 // Performance guard (owner, 2026-10-17: "find possible slowing causes"). The page-wide "enhancer" observers
-// (unifiedSearchEnhancements.js, ordersSearchEnhancements.js, ordersRegionStatusEnhancements.js, mapDimensionFilterPlacement.js)
+// (unifiedSearchEnhancements.js, ordersSearchEnhancements.js, ordersRegionStatusEnhancements.js, mapDimensionFilterPlacement.js;
+// the Orders / Customers / Products ones are now part of their screens, step 7a)
 // used to re-run on every frame forever on Orders, Customers, Products and the Map, because each pass rewrote
 // classes / innerHTML even when nothing changed and that write woke the observers again (60 passes a second while idle:
 // 3 s of main-thread time out of 3 on a throttled phone). An idle screen must not touch the DOM.

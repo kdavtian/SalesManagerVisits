@@ -54,7 +54,7 @@ Repo `kdavtian/SalesManagerVisits`. Production: one DigitalOcean droplet, docker
 
 
 ## Additions 2026-10-09
-- Filter bars are assembled by several enhancer scripts (`unifiedSearchEnhancements.js`, `mapDimensionFilterPlacement.js`, `ordersSearchEnhancements.js`, `ordersRegionStatusEnhancements.js`) plus extra CSS; icons come from `filterIcons.js` (`FILTER_ICONS`). Change icons there only.
+- Search / filter bars (since 1.465.0, step 7a): each screen builds its own right after it renders, with the shared pieces in `searchBar.js` (clear "x", inline "x", menu check mark, filter-button state); Orders' bar (channel + region filters, status icons and counts) is `views/orders/searchBar.js`. Only the Map's search row still comes from an enhancer (`unifiedSearchEnhancements.js` + `mapDimensionFilterPlacement.js`, step 7b). A NEW search box calls `installInlineClearButton(input)` / `installClearButton(...)` itself; never add a page-wide observer for it. Icons come from `filterIcons.js` (`FILTER_ICONS`). Change icons there only.
 - Secondary maps: `new L.Map(...)` (the `L.map` wrapper in `mapSafeRuntime.js` persists the main view).
 - Fuel allowance: `server/src/field/fuelRoute.js` (maths + background queue), `fuelReport.js`, `routes/fuel.js` (`/api/fuel`), `canManageFuel` in `roles.js`, client `views/fuelReport.js`; tables `fuel_route_cache`, `fuel_prices`, `fuel_day_overrides` (migrations 099-100).
 - Order blank PDF: `server/src/orders/orderBlankPdf.js`, `phoneFormat.js`; users have `name_hy` (migration 098); check-ins have `captured_at`.

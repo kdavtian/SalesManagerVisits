@@ -246,6 +246,12 @@ function extractTop(sourceRel, targetRel, names) {
     nodes.push([name, node]);
   }
   const moved = new Set(names);
+  // a variable the source keeps assigning cannot move: an imported binding is read-only
+  for (const [name] of nodes) {
+    const inside = (r) => nodes.some(([, n]) => r.identifier.range[0] >= n.range[0] && r.identifier.range[1] <= n.range[1]);
+    const write = moduleScope.set.get(name)?.references.find((r) => r.isWrite() && !r.init && !inside(r));
+    if (write) throw new Error(`${name} is assigned at line ${write.identifier.loc.start.line}, which stays in ${sourceRel}: move that code too, or leave ${name}`);
+  }
   // what the moved code uses from the module scope (imports, other declarations)
   const uses = new Set();
   for (const v of moduleScope.variables) {

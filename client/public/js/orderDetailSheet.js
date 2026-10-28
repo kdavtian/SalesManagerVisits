@@ -22,6 +22,7 @@ import { openPrintBlankSheet } from "./orderBlankPrint.js";
 import { openErpLinkSheet } from "./erpLinkSheet.js";
 import { openReturnSheet } from "./returnSheet.js";
 import { openAccountingDocSheet, accountingDocShort, accountingStatusLabel, ACCOUNTING_STATUS_BADGE } from "./accountingDocSheet.js";
+import { installInlineClearButton } from "./searchBar.js";
 
 // v3 5-state machine (see migrations/051_warehouse_delivery_v3.sql):
 // draft -> submitted -> confirmed -> packed_stock_out -> delivered, every
@@ -678,6 +679,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     const totalEl = overlay.querySelector("#edit-order-total");
     const panelEl = overlay.querySelector("#edit-add-product-panel");
     const searchEl = overlay.querySelector("#edit-add-product-search");
+    installInlineClearButton(searchEl);
     const sheetEl = overlay.querySelector("#edit-sheet");
     const brandChipsEl = overlay.querySelector("#edit-brand-chips");
     let activeBrand = null; // null = all brands

@@ -13,6 +13,7 @@ import { potentialChipHtml } from "../potential.js";
 import { emptyPotentialFilter, potentialFilterCount, matchesPotentialFilter, comparePotentialPriority, openPotentialFilterSheet } from "../potentialFilterSheet.js";
 import { isDesktop, isWide, createDeskTable, renderDeskFilters } from "../deskTable.js";
 import { dockSheet, dockedKey } from "../dockSheet.js";
+import { SEARCH_ICONS, addClasses, ensureSelectedCheck, installClearButton, setClass, syncDropdownButton } from "../searchBar.js";
 
 // The Customers list loads in pages of this size (see load()).
 const CUSTOMER_PAGE = 500;
@@ -212,6 +213,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
   // session rather than always fetched with the rest of the list.
   let showDebt = false;
   const filterRow = root.querySelector("#customer-filter-row");
+  enhanceCustomers(); // the combined search pill: filters and sort inside the field, clear "x" (searchBar.js)
   // "!" next to the title: what the icon colours and the chips on this list mean.
   root.querySelector("#cl-legend-btn").addEventListener("click", () => {
     const tiers = TIER_OPTIONS.map((o) => `<div class="cl-legend-row">${customerListIconHtml({ customer_tier: o.value, category: "" })}<span>${escapeHtml(t(o.labelKey))}</span></div>`).join("");
@@ -368,7 +370,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
     // (tinted icon + dot) as every single-value filter button, just with
     // an accessible-name suffix so screen readers get the count too.
     const a11yLabel = count > 1 ? `${label} (${count})` : label;
-    // data-filter-count survives unifiedSearchEnhancements.js's innerHTML
+    // data-filter-count survives syncCustomerFilterButtons's innerHTML (below)
     // rewrite of this button (it restyles these buttons for the combined
     // search bar and rebuilds their icon/dot markup from scratch on every
     // re-render) -- carrying the count as an attribute, not just as markup,
@@ -1084,4 +1086,94 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
     });
   };
   return cleanup;
+}
+
+function customerIconFor(key) {
+  if (key === "assignment") return SEARCH_ICONS.manager;
+  if (key === "region") return SEARCH_ICONS.region;
+  if (key === "subregion") return SEARCH_ICONS.subregion;
+  if (key === "channel") return SEARCH_ICONS.channel;
+  if (key === "brands") return SEARCH_ICONS.brands;
+  return SEARCH_ICONS.status;
+}
+
+function syncCustomerFilterButtons(filterRow) {
+  filterRow?.querySelectorAll("[data-filter-btn]").forEach((button) => {
+    const active = button.classList.contains("filter-icon-btn-active") || button.classList.contains("activity-search-filter-btn-active");
+    // A multi-select filter (see customers.js's channelFilters) stamps how
+    // many values are chosen onto the button as data-filter-count, which
+    // survives the innerHTML rewrite below -- carry it through as the same
+    // small count badge customers.js itself renders, instead of collapsing
+    // back to a plain dot once this script re-skins the button.
+    const count = Number(button.dataset.filterCount || 0);
+    const sig = `${button.dataset.filterBtn}|${active}|${count}`;
+    if (button._unifiedSig === sig) return; // already showing exactly this
+    for (const n of ["filter-icon-btn", "filter-icon-btn-active"]) if (button.classList.contains(n)) button.classList.remove(n);
+    addClasses(button, "activity-search-filter-btn", "unified-customer-filter-btn");
+    setClass(button, "activity-search-filter-btn-active", active);
+    const badge =
+      count > 1
+        ? `<span class="activity-search-filter-count" aria-hidden="true">${count}</span>`
+        : active
+          ? '<span class="activity-search-filter-dot" aria-hidden="true"></span>'
+          : "";
+    button.innerHTML = `${customerIconFor(button.dataset.filterBtn)}${badge}`;
+    button._unifiedSig = sig;
+  });
+}
+
+function enhanceCustomers() {
+  const input = document.querySelector("#customer-search");
+  const toolbar = input?.closest(".list-toolbar");
+  const view = input?.closest(".list-view");
+  if (!input || !toolbar || !view) return;
+
+  let actions = toolbar.querySelector(":scope > .activity-search-actions");
+  if (!toolbar.dataset.unifiedCustomersSearch) {
+    toolbar.dataset.unifiedCustomersSearch = "true";
+    toolbar.classList.add("activity-search-combined", "customers-search-combined");
+    actions = document.createElement("div");
+    actions.className = "activity-search-actions customers-search-actions";
+    toolbar.appendChild(actions);
+
+    const sortBtn = view.querySelector("#sort-btn");
+    const sortMenu = view.querySelector("#sort-menu");
+    if (sortBtn && sortMenu) {
+      const wrap = document.createElement("div");
+      wrap.className = "activity-icon-dropdown customers-sort-wrap";
+      actions.appendChild(wrap);
+      wrap.append(sortBtn, sortMenu);
+      sortBtn.classList.remove("icon-btn");
+      sortBtn.classList.add("activity-search-filter-btn");
+      sortBtn.innerHTML = SEARCH_ICONS.sort;
+      sortMenu.classList.remove("dropdown-menu");
+      sortMenu.classList.add("activity-search-menu", "customers-search-menu");
+
+      const syncSort = () => {
+        const selected = sortMenu.querySelector('[data-sort][aria-checked="true"]')?.dataset.sort || "name";
+        ensureSelectedCheck(sortMenu, "[data-sort]");
+        syncDropdownButton(sortBtn, sortMenu, selected !== "name");
+      };
+      sortBtn.addEventListener("click", () => requestAnimationFrame(syncSort));
+      sortMenu.addEventListener("click", () => requestAnimationFrame(syncSort));
+      new MutationObserver(syncSort).observe(sortMenu, { subtree: true, attributes: true, attributeFilter: ["aria-checked", "hidden"] });
+      syncSort();
+    }
+
+    const filterRow = view.querySelector("#customer-filter-row");
+    if (filterRow) {
+      filterRow.classList.add("customer-filter-inline");
+      actions.insertBefore(filterRow, actions.querySelector(".customers-sort-wrap"));
+      // renderFilterRow replaces the row's direct children whenever a
+      // filter changes. Observe only that replacement; observing subtree
+      // mutations would also see our icon markup and create a feedback loop.
+      const observer = new MutationObserver(() => syncCustomerFilterButtons(filterRow));
+      observer.observe(filterRow, { childList: true });
+      syncCustomerFilterButtons(filterRow);
+    }
+  }
+
+  actions = toolbar.querySelector(":scope > .activity-search-actions");
+  installClearButton(input, toolbar, actions);
+  syncCustomerFilterButtons(view.querySelector("#customer-filter-row"));
 }

@@ -226,3 +226,15 @@ test("wrap and extract-inner refuse a name that would shadow something the code 
   assert.equal(fs.readFileSync(file, "utf8"), text);
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test("extract-top refuses a variable the source still assigns (an imported binding is read-only)", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "refactor-"));
+  fs.writeFileSync(path.join(dir, "package.json"), '{"type":"module"}');
+  const file = path.join(dir, "src.js");
+  const text = 'let region = "";\nexport function pick(v) {\n  region = v;\n}\nexport function read() {\n  return region;\n}\n';
+  fs.writeFileSync(file, text);
+  assert.throws(() => execFileSync("node", [TOOL, "extract-top", file, path.join(dir, "part.js"), "region", "read"], { stdio: "pipe" }), /region is assigned at line 3/);
+  assert.equal(fs.readFileSync(file, "utf8"), text);
+  execFileSync("node", [TOOL, "extract-top", file, path.join(dir, "part.js"), "region", "read", "pick"]);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

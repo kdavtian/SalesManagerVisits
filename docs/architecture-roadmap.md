@@ -261,6 +261,16 @@ areas goes to `shared/`.
   its `enhanceInput` after rendering).
 - Done when: `grep -rn "new MutationObserver" client/public/js` lists only `dockSheet.js`/`util.js` uses that watch their own element,
   and `idle-dom.spec.mjs` still passes.
+- 7a as built (1.465.0): `ordersSearchEnhancements.js` and `ordersRegionStatusEnhancements.js` are gone and
+  `unifiedSearchEnhancements.js` keeps only the Map's search row (folded in 7b with the other map enhancers). The shared pieces
+  are `searchBar.js` (clear "x", inline "x", menu check mark, filter-button state); each screen (Activity, Tasks, Orders,
+  Customers, Payments, Products, and the plain search boxes of order creation, special prices, warehouse, expenses, the order
+  edit sheet and the customer pickers) calls its own bar code right after it renders. Orders' bar is `views/orders/searchBar.js`:
+  the region filter no longer replaces `api.listOrders` for the whole app (Orders asks `/order-meta/list` itself), the status
+  counts follow every repaint, and a race between two enhancers that drew a person icon on the sales-channel filter about half the
+  time is gone. Proof: the final HTML of 9 screens with their menus open, in both languages, recorded before and after, is the
+  same (`search-bars.spec.mjs` now guards it). Small observers that watch only their own menu (sort menus, filter rows) stay
+  inside the screens' bar code; no page-wide one is left for these screens.
 
 #### Step 8. Split the shared files - size 2
 - 8a `api.js` -> `api/index.js` (request, json, cache, CSRF) + one file per area (`api/orders.js`, ...), re-exported as the same `api`
@@ -338,3 +348,4 @@ the server share `roles.js`; a screen never edits another screen's DOM.
 - Step 5 phase 1 business folders: 1.461.0, PR #505, 2026-10-28.
 - Step 6a refactor tool + map split: 1.462.0, PR #506, 2026-10-28.
 - Step 6b app.js into shell/: 1.463.0, PR #507, 2026-10-28.
+- Step 6c + 6d settings, admin, reports, customer card: 1.464.0, PR #508, 2026-10-28.
