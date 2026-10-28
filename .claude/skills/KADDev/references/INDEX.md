@@ -27,7 +27,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L28 Debt-as-of-date logic (owner-specified) - debt(customer, D) = Balance0 (Debits/Customers sheet) + SUM(ORDERS revenue up to D) - SUM(Cashflow "Oil order"
 - L31 Bot dev notes - No tests dir; verify by running the builders against a sample workbook and by python -c "import ast..." syntax
 
-## domain-rules.md (124 KB, 472 lines)
+## domain-rules.md (125 KB, 472 lines)
 - L3 Company - KAD Motors (Armenia), distributes Castrol (also Lotos, Orlen, Royal) lubricants.
 - L6 Customers - Category (customers.category, stored as Armenian text, label via categoryLabel): oil change point (Յուղման կետ
 - L17 Pricing (v1.244.0) - Products carry bronzepriceamd (+unitpriceamd mirror), silverpriceamd, goldpriceamd, retailpriceamd, landingcos
@@ -147,7 +147,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L82 6. Proactive moves that always land well - After a numbered list, add "Suggestions" (numbered, with recommendation) only if you saw something real while
 - L90 7. Mistakes I made that cost them time (do not repeat) - Claiming sheets "load before showing" without reading them (Add payment and the customer pickers already paint
 
-## owner-preferences-and-history.md (94 KB, 422 lines)
+## owner-preferences-and-history.md (94 KB, 424 lines)
 - L3 How they work with you - Writes short, numbered, imperative requests (often with screenshots "image1/img2"), mixes English with Armenia
 - L11 Visual / UX preferences (apply by default) - Compact, iOS-native feel: bottom sheets, floating/fixed action bars (Cancel/Save on customer edit must be fixe
 - L25 Things that repeatedly bit us (check proactively) - Forgetting CACHEVERSION bump -> "no updates" on phones.

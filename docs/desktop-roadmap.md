@@ -199,4 +199,4 @@ Issues found (I = issue, each has its fix in the steps below):
 - Step 5 (sidebar groups + icons-only mode): 1.445.0, PR #484, 2026-10-27.
 - Step 6 (reports as list + report, export, print): 1.446.0, 2026-10-27, PR #485.
 - Step 7 (dashboards use the width: Home KPI row + Needs attention + Today, wide grids): 1.447.0, 2026-10-27, PR #487.
-- Step 8 (map for the desktop: side table, popup Last order, filter bar, key panel): 1.448.0, 2026-10-28.
+- Step 8 (map for the desktop: side table, popup Last order, filter bar, key panel): 1.448.0, 2026-10-28, PR #488.

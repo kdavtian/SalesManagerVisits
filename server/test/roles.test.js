@@ -290,6 +290,11 @@ test("tasks: management creates, sales director only for sales managers, CEO-lev
   assert.equal(seesAllTasks("sales_director"), false);
 });
 
+test("tasks: admin and CEO give tasks to anyone; the others follow Staff 'reports to' (owner, 2026-10-28)", async () => {
+  const { tasksAnyone } = await import("../src/roles.js");
+  for (const role of ROLES) assert.equal(tasksAnyone(role), role === "admin" || role === "ceo", role);
+});
+
 test("KAD OS link: campaigns for admin/ceo/sales_director, perks + account links for admin/ceo", async () => {
   const { canManageCampaigns, canManageAppOrders } = await import("../src/roles.js");
   for (const role of ROLES) {
