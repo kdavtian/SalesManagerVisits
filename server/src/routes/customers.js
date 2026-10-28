@@ -551,7 +551,8 @@ customersRouter.get("/map-facts", async (req, res) => {
     loadScheduleContext(req),
     pool.query(
       `SELECT c.id, c.region, c.subregion, c.sales_channel, c.checkin_for_all, c.visit_frequency_days, c.assigned_manager_id, erp.debt_amd, ${REORDER_COLUMNS},
-              (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}) AS last_visit_at
+              (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}) AS last_visit_at,
+              (SELECT max(eol.order_date)::text FROM erp_order_lines eol WHERE eol.erp_customer_id = c.erp_customer_id) AS last_order_date
        FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id ${REORDER_JOIN}
        WHERE c.id = ANY($1)`,
       [ids]
@@ -566,6 +567,8 @@ customersRouter.get("/map-facts", async (req, res) => {
       ...schedule,
       last_visit_at: schedule.cadence.last_visit_at,
       erp_debt_amd: sees ? row.debt_amd : null,
+      // the card's "Last order" (the workbook's latest order date), same rule as the debt
+      erp_last_order_date: sees ? row.last_order_date : null,
       reorder_state: row.reorder_state,
       reorder_gap_days: row.reorder_gap_days,
       reorder_days_since: row.reorder_days_since,
@@ -1505,7 +1508,8 @@ customersRouter.get("/:id/map-facts", async (req, res) => {
   const [schedule, { rows }] = await Promise.all([
     buildVisitSchedule(req, customerId),
     pool.query(
-      `SELECT c.assigned_manager_id, erp.debt_amd
+      `SELECT c.assigned_manager_id, erp.debt_amd,
+              (SELECT max(eol.order_date)::text FROM erp_order_lines eol WHERE eol.erp_customer_id = c.erp_customer_id) AS last_order_date
        FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
        WHERE c.id = $1`,
       [customerId]
@@ -1513,7 +1517,12 @@ customersRouter.get("/:id/map-facts", async (req, res) => {
   ]);
   if (!schedule || !rows[0]) return res.status(404).json({ error: "Customer not found" });
   const sees = seesCustomerErpData(req.user.role, rows[0].assigned_manager_id, req.user.id);
-  res.json({ ...schedule, last_visit_at: schedule.cadence.last_visit_at, erp_debt_amd: sees ? rows[0].debt_amd : null });
+  res.json({
+    ...schedule,
+    last_visit_at: schedule.cadence.last_visit_at,
+    erp_debt_amd: sees ? rows[0].debt_amd : null,
+    erp_last_order_date: sees ? rows[0].last_order_date : null,
+  });
 });
 
 // Where this customer's check-ins were REALLY made (the GPS spot saved with every check-in) next to the

@@ -414,3 +414,8 @@ Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets 
   and Cashflow use 2-4 columns above 1400 px. Lesson: Home repaints twice (cache, then live) into a NEW slot each time -- keep a
   heavy child (a Leaflet map) as one module-level element and move it into the new slot (`replaceWith`) instead of rebuilding it;
   call `invalidateSize()` after the move.
+- **Desktop step 8 (1.448.0):** Map side list = sortable table (`mapSideTable.js`; row = centre pin + open popup; "Only the visible
+  area"); popup adds Last order; >= 1400 px filters bar above the map and the pin key as a right panel. Lessons: in e2e the OSM tiles
+  are blocked -- route them to a local PNG with RANDOM padding, because map.js treats identical tile sizes as the provider's "blocked"
+  image and shows "The map couldn't load"; the status dropdown has a 260px `max-width` from unified-search.css, so reusing it as a row
+  needs `max-width: none !important`.
