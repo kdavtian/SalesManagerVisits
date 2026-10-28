@@ -230,6 +230,19 @@ areas goes to `shared/`.
 - 6c `views/settings.js` -> `views/settings/` one file per page of `PAGES`; `views/admin.js` -> `views/admin/` one file per tab.
 - 6d `views/reports.js` -> `views/reports/` one file per report group; `customerDetail.js` sections into `views/customer/`.
 - Done when: no view file over about 800 lines.
+- The tool (owner, 2026-10-28: "keep the move tool"): `server/scripts/refactor.mjs`, tested by `server/test/refactorTool.test.js`.
+  It rewrites code with the parser, never by hand: `move` (files + every import), `extract-top` (top-level declarations),
+  `extract-inner` (functions inside a big screen function; each takes the screen's state as `ctx`, getters / setters on the real
+  variables, and a one-line wrapper with the same name stays behind; `-` instead of the screen function does the same for a module's
+  top-level functions, used for app.js, which nothing may import), `wrap` (a range of statements -> an inner function called in the
+  same place, refused when that could change behaviour), `prune-imports`. Relative module paths in moved code are rebased; multi-line
+  template text is kept exactly. Each split: tool commands, then lint + architecture check + full CI with e2e + a screenshot.
+- 6a as built (1.462.0): `views/map.js` 4,043 -> 1,608 lines; `views/map/` tiles, markers, filters, planning, search, location,
+  addCustomer, template (91 functions + the markup). What is left in map.js is the screen's start-up wiring and its ctx list;
+  going lower means turning the screen's variables into one state object (a rewrite, not a move; later, if wanted).
+- 6b as built (1.463.0): `app.js` 1,538 -> 792 lines; `shell/routes.js` (renderRoute: which screen each #/hash opens),
+  `shell/nav.js` (tab bar, top bar, sidebar), `shell/preload.js` (idle warming), `shell/syncBanner.js`; `badges.js` was already out
+  (step 2). The route `if` chain stays as it was (a routes table would be a rewrite).
 
 #### Step 7. Fold the enhancers into their screens - size 2
 - 7a `unifiedSearchEnhancements.js`, `ordersSearchEnhancements.js`, `ordersRegionStatusEnhancements.js`: their markup and handlers move
@@ -313,4 +326,5 @@ the server share `roles.js`; a screen never edits another screen's DOM.
 - Step 3 one role file: 1.458.0, PR #502, 2026-10-28.
 - Step 4 one job scheduler: 1.459.0, PR #503, migration 167, 2026-10-28.
 - Notification switches (owner 1A): 1.460.0, PR #504, 2026-10-28.
-- Step 5 phase 1 business folders: 1.461.0, 2026-10-28.
+- Step 5 phase 1 business folders: 1.461.0, PR #505, 2026-10-28.
+- Step 6a refactor tool + map split: 1.462.0, PR #506, 2026-10-28.
