@@ -3,7 +3,9 @@
 `isolated-tests.txt` lists the test files that change or read state EVERY other test can see:
 - the single `app_settings.bonuses_enabled` switch (ten bonus files: search `setBonusesEnabled` / `bonuses_enabled`),
 - lockdown (locks every request), the ERP sync (TRUNCATEs `erp_customer_data`), the route-plan sets (one global active plan rewrites every
-  rep's rules), Vaghinak's engine tick (scans the whole database).
+  rep's rules), Vaghinak's engine tick (scans the whole database),
+- company-wide totals read as a before/after difference (`dashboardKpis.test.js`: the Home KPIs sum every order line of the month, so
+  another file adding a line at the same moment changed the difference; CI 2026-10-28).
 
 They never share a database with other files: `scripts/run-isolated.sh` gives EACH listed file a fresh database of its own (migrated, dropped
 again after a pass, kept after a failure) and runs five at a time, so they neither disturb nor wait for anybody; the time is that of the slowest
