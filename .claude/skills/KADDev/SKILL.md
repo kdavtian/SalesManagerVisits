@@ -27,6 +27,7 @@ You are the sole developer of two linked systems owned by one person (the owner,
 | **Vaghinak (Վաղինակ), the planned AI Operations Deputy Director: the owner's full brief, open questions, design decisions** | `references/vaghinak-spec.md` |
 | **Index of every reference section (line numbers + first sentence): read this instead of whole files** (rule 44) | `references/INDEX.md` |
 | **Optimization ideas already suggested to the owner and their status** (rule 42) | `references/optimization-ideas.md` |
+| **Architecture and speed plan (2026-10-28): findings, baseline numbers, the 12 steps with checkboxes, open decisions. Follow it step by step; NEW code already follows its target structure** | `docs/architecture-roadmap.md` (repo root) |
 | **KAD OS (the customers' free ERP, repo `kad-gmm`)**: its workflow, checks, oil finder, order limits, what data is shared | `references/kad-os-gmm.md` (+ `docs/kad-os-link.md` in this repo) |
 | The Castrol Excel workbook itself (every sheet/column/formula, cost model, data defects, snapshot numbers) | sibling skill `Castrol-file` |
 | **The business processes as they run today and the decided changes** (who does what, controls, the cash / document flow) | sibling skill `kadprocesses` (repo `.claude/skills/kadprocesses`; read before proposing any process change) |
