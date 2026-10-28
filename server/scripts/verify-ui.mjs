@@ -29,6 +29,7 @@ const files = Object.fromEntries(
 for (const [file, dir] of [
   ["js/views/map.js", "js/views/map"],
   ["js/app.js", "js/shell"],
+  ["js/views/settings.js", "js/views/settings"],
 ]) {
   const partsDir = path.join(publicDir, dir);
   for (const part of (await readdir(partsDir)).filter((f) => f.endsWith(".js")).sort()) {

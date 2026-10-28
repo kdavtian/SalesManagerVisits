@@ -285,6 +285,9 @@ function extractTop(sourceRel, targetRel, names) {
   const exported = names.filter((n) => nodes.find(([m]) => m === n)[1].type === "ExportNamedDeclaration");
   let out = applyEdits(src, [...removeEdits, ...exportEdits(ast, exportFromSource)]);
   if (stillUsed.length) out = addImportLine(out, `import { ${stillUsed.join(", ")} } from "${rel(sourceFile, targetFile)}";`);
+  // what the source exported stays available from it too: a caller may load it with import() and destructure, which cannot be
+  // rewritten safely (static imports are pointed at the target below)
+  if (exported.length) out = addImportLine(out, `export { ${exported.join(", ")} } from "${rel(sourceFile, targetFile)}";`);
   fs.writeFileSync(sourceFile, out);
   pruneImports(sourceFile);
   mergeTarget(targetFile, `// Moved out of ${path.basename(sourceFile)} (docs/architecture-roadmap.md, step 6).`, importLines, pieces.join("\n"));

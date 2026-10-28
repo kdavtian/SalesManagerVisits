@@ -243,6 +243,15 @@ areas goes to `shared/`.
 - 6b as built (1.463.0): `app.js` 1,538 -> 792 lines; `shell/routes.js` (renderRoute: which screen each #/hash opens),
   `shell/nav.js` (tab bar, top bar, sidebar), `shell/preload.js` (idle warming), `shell/syncBanner.js`; `badges.js` was already out
   (step 2). The route `if` chain stays as it was (a routes table would be a rewrite).
+- 6c + 6d as built (1.464.0, one release): `views/settings.js` 2,098 -> 785 (`views/settings/` markup, adminRows, notifications,
+  sheets, rows), `views/admin.js` 2,059 -> 636 (`views/admin/` team, products), `views/reports.js` 1,634 -> 495 (`views/reports/`
+  common, debt, sales, money), `views/customerDetail.js` 1,511 -> 510 (`views/customer/` accountSettings, editSheet, files, erpCard,
+  sheets). Checked beyond the tests: every multi-line template text and every `api.*` call of the four screens is the same before
+  and after; a screen still exports what it exported (a caller's `import()` keeps working).
+- Step 6 result: every split screen is under 800 lines except `views/map.js` (1,608, see 6a). Still over 800 and not split yet:
+  `orderCreate.js` 1,170, `checkin.js` 1,126, `tasks.js` 1,104, `customers.js` 1,087, `teamPerformance.js` 914, `payments.js` 905,
+  `warehouse.js` 847 (and outside views `util.js` 1,577, `orderDetailSheet.js` 929; `api.js` and the texts are step 8) - same
+  tool, same checks, when the owner wants them.
 
 #### Step 7. Fold the enhancers into their screens - size 2
 - 7a `unifiedSearchEnhancements.js`, `ordersSearchEnhancements.js`, `ordersRegionStatusEnhancements.js`: their markup and handlers move
@@ -328,3 +337,4 @@ the server share `roles.js`; a screen never edits another screen's DOM.
 - Notification switches (owner 1A): 1.460.0, PR #504, 2026-10-28.
 - Step 5 phase 1 business folders: 1.461.0, PR #505, 2026-10-28.
 - Step 6a refactor tool + map split: 1.462.0, PR #506, 2026-10-28.
+- Step 6b app.js into shell/: 1.463.0, PR #507, 2026-10-28.

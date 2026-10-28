@@ -127,7 +127,7 @@ test("every notifyUser type is in NOTIFICATION_TYPES and offered in Settings, na
 // instead of keeping its own list of roles (a copied list drifts from the server's: a button that answers "not allowed", or a missing one).
 // Allowed: the role pickers (their own display order) and the per-tile default roles of the Home quick actions (data the admin edits,
 // not a rule).
-const ROLE_LIST_ALLOWED = new Set(["js/views/admin.js:ROLE_OPTIONS", "js/quickActions.js:ALL_ROLES", "js/quickActions.js:defaultRoles"]);
+const ROLE_LIST_ALLOWED = new Set(["js/views/admin/team.js:ROLE_OPTIONS", "js/quickActions.js:ALL_ROLES", "js/quickActions.js:defaultRoles"]);
 test("no screen keeps its own list of roles: it asks js/shared/roles.js", async () => {
   const { ROLES, PICKABLE_ROLES } = await import(pathToFileURL(path.join(PUBLIC, "js/shared/roles.js")).href);
   const roleNames = new Set(PICKABLE_ROLES);
