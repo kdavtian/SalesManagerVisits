@@ -151,3 +151,4 @@ test("CSRF: the matching X-CSRF-Token header passes the check, and password-chan
   });
   assert.equal(res.status, 400);
 });
+

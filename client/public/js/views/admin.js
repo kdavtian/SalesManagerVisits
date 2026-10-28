@@ -237,6 +237,7 @@ export async function renderTeamSection(container) {
               <strong>${escapeHtml(u.name)}</strong>${COLOURED_ROLES.includes(u.role) ? `<span class="team-color-dot" style="background:${repColor(u.id, u.map_color)}" aria-hidden="true"></span>` : ""}
               <span class="badge ${roleBadge.cls}">${t(roleBadge.key)}</span>
               ${u.status === "paused" ? `<span class="badge badge-warning">${t("team_status_paused")}</span>` : u.status === "offboarded" ? `<span class="badge badge-danger">${t("team_status_left")}</span>` : ""}
+              ${u.login_locked ? `<span class="badge badge-danger">${t("team_login_locked")}</span>` : ""}
             </div>
             ${u.position ? `<div class="muted list-row-meta">${escapeHtml(u.position)}</div>` : ""}
             <div class="muted list-row-meta">${t("last_seen")}${labelColon()}${escapeHtml(lastSeenSummary(u))}</div>
@@ -469,6 +470,14 @@ export async function renderTeamSection(container) {
           ${t("last_seen")}${labelColon()}${escapeHtml(lastSeenSummary(u))}<br />
           ${t("device")}${labelColon()}${escapeHtml(parseUserAgent(u.last_seen_user_agent) || t("unknown"))}
         </p>
+        ${
+          u.login_locked
+            ? `<div class="team-locked-box" id="team-locked-box">
+            <span>${escapeHtml(t("team_login_locked_hint"))}</span>
+            <button type="button" class="btn btn-primary btn-sm" id="edit-user-unlock">${t("team_unlock")}</button>
+          </div>`
+            : ""
+        }
         <form id="edit-user-form">
           <label>${t("name")}<input name="name" value="${escapeHtml(u.name)}" required /></label>
           <label>${t("name_hy_label")}<input name="name_hy" value="${escapeHtml(u.name_hy || "")}" placeholder="Արտակ Հայրապետյան" /></label>
@@ -519,6 +528,19 @@ export async function renderTeamSection(container) {
     overlay.querySelector("#edit-user-reset").addEventListener("click", () => {
       close();
       openResetPasswordSheet(u.id, u.name);
+    });
+    overlay.querySelector("#edit-user-unlock")?.addEventListener("click", async (e) => {
+      e.currentTarget.disabled = true;
+      try {
+        await api.unlockUser(u.id);
+        overlay.querySelector("#team-locked-box")?.remove();
+        showToast(t("team_unlocked"));
+        loadUsers();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+        e.currentTarget.disabled = false;
+      }
     });
     overlay.querySelector("#edit-user-change-role")?.addEventListener("click", () => {
       close();

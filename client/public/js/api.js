@@ -329,6 +329,7 @@ export const api = {
   updateUser: (id, data) => json(`/users/${id}`, "PATCH", data),
   updateUserRole: (id, role) => json(`/users/${id}/role`, "PATCH", { role }),
   resetUserPassword: (id, password) => json(`/users/${id}/password`, "PATCH", { password }),
+  unlockUser: (id) => json(`/users/${id}/unlock`, "POST", {}),
   deleteUser: (id) => request(`/users/${id}`, { method: "DELETE" }),
   getUserDeletionReport: (id) => request(`/users/${id}/deletion-report`),
   purgeUser: (id) => json(`/users/${id}/purge`, "POST", { confirm: true }),
