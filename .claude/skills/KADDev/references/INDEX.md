@@ -10,7 +10,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L33 Tests and checks - cd server && npm test = node:test unit + integration (real Postgres; helpers in test/integration/helpers.js: s
 - L38 Navigation, files, performance (client) - Back stack in app.js: DOM of the last screens is kept (5; 10 on iPhone/iPad via ISIOS; only one Map).
 - L46 Conventions that matter - Money is AMD, shown with formatAmd as whole numbers (no decimals), thousands separators.
-- L56 Additions 2026-10-09 - Filter bars are assembled by several enhancer scripts (unifiedSearchEnhancements.js, mapDimensionFilterPlaceme
+- L56 Additions 2026-10-09 - Search / filter bars (since 1.465.0, step 7a): each screen builds its own right after it renders, with the sha
 - L63 Additions 2026-10-10 - api.js: json(path, method, data) is the helper for JSON bodies; doRequest also defaults Content-Type: applicat
 - L73 KAD AI (Ask KAD), built 1.369.0 (owner decisions 2026-10-18) - Admin-only AI analyst: Home tile "KAD AI" -> #/ask-kad.
 - L82 Lists at scale (1.373.0, owner decision 2026-10-19: "500 per page so the app fee - GET /api/customers takes limit (max 1000) with aftername + afterid (keyset on (name, id), index customersnamei

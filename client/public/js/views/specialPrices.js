@@ -13,6 +13,7 @@ import { tierPrice } from "../productPricing.js";
 import { loadFrequentIds } from "../productFrequent.js";
 import { NON_ENGINE_CATEGORIES, CATEGORY_LABEL_KEY, productCategory, priceDiffChipHtml } from "../productBrowse.js";
 import { canSetCustomerPrices } from "../state.js";
+import { installInlineClearButton } from "../searchBar.js";
 
 const MERCH = "__merch__";
 
@@ -81,6 +82,7 @@ export async function renderSpecialPrices(root, navigate, customerId) {
   const categoriesEl = $("#oc-categories");
   const listEl = $("#order-product-list");
   const searchInput = $("#product-search");
+  installInlineClearButton(searchInput);
   const bar = $("#sp-bar");
 
   $("#back-btn").addEventListener("click", () => navigate.goBack(`#/customers/${customerId}`));

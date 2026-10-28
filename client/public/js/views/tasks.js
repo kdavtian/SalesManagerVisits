@@ -17,6 +17,7 @@ import { icons } from "../icons.js";
 import { state, canCreateTasks, sendsRequests } from "../state.js";
 import { seesAllTasks } from "../shared/roles.js";
 import { pickDate } from "../activityDatePicker.js";
+import { installClearButton } from "../searchBar.js";
 
 export { canCreateTasks };
 
@@ -439,6 +440,7 @@ export function renderTasks(root, navigate, openId) {
         renderShell();
       })
     );
+    enhanceTasks(); // the search bar's clear "x" (searchBar.js)
     paintChrome();
     paintList();
   }
@@ -1101,4 +1103,11 @@ export async function renderHomeTasks(slot, navigate) {
     }
   }
   await load();
+}
+
+function enhanceTasks() {
+  const input = document.querySelector("#task-search");
+  const container = input?.closest(".activity-search-combined");
+  const actions = container?.querySelector(".activity-search-actions");
+  if (input && container && actions) installClearButton(input, container, actions);
 }

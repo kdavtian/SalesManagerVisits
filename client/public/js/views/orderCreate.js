@@ -16,6 +16,7 @@ import { loadReorderProfile, reorderRhythmText } from "../reorder.js";
 import { loadFrequentIds } from "../productFrequent.js";
 import { openWishSheet } from "../wishSheet.js";
 import { NON_ENGINE_CATEGORIES, CATEGORY_LABEL_KEY, productCategory, isAvailable, priceDiffChipHtml } from "../productBrowse.js";
+import { installInlineClearButton } from "../searchBar.js";
 
 // Reps often open "Create order" several times a visit (once per checkin);
 // the catalog rarely changes minute to minute, so this reads from the
@@ -192,6 +193,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
   const listHead = container.querySelector("#oc-list-head");
   const listEl = container.querySelector("#order-product-list");
   const searchInput = container.querySelector("#product-search");
+  installInlineClearButton(searchInput);
   const availToggle = container.querySelector("#order-availability-toggle");
   const cartBar = container.querySelector("#order-cart-bar");
   const cartCount = container.querySelector("#order-cart-count");

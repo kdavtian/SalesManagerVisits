@@ -5,6 +5,7 @@ import { appBadgeHtml } from "../orderDetailSheet.js";
 import { icons } from "../icons.js";
 import { FILTER_ICONS } from "../filterIcons.js";
 import { compareProducts, parseLiters, normalizeUnitLabel, normalizeProductKey } from "../productSort.js";
+import { installInlineClearButton } from "../searchBar.js";
 
 // "624" -> "624L", "4.5" -> "4.5L" -- compact, no space, matching how a WM
 // reads a shelf tag (as opposed to util.js's own formatLiters-style helpers
@@ -279,6 +280,7 @@ export async function renderWarehouse(root, navigate) {
     activateFirstUseHints(contentEl);
     const listEl = contentEl.querySelector("#inventory-list");
     const searchInput = contentEl.querySelector("#inventory-search");
+    installInlineClearButton(searchInput);
     const filterBtn = contentEl.querySelector("#inventory-filter-btn");
     const daysBtn = contentEl.querySelector("#inventory-days-btn");
     const landingBtn = contentEl.querySelector("#inventory-landing-btn");

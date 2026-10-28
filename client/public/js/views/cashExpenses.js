@@ -3,6 +3,7 @@ import { escapeHtml, formatAmd, activateDialog, parseDateOnly, monthShort, forma
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state, seesFinancialExports } from "../state.js";
+import { installInlineClearButton } from "../searchBar.js";
 
 // "15 Sep 2026" style, same short-date convention as sales.js's own
 // formatSalesDateCaption -- parseDateOnly rather than `new Date(value)`
@@ -47,6 +48,7 @@ export async function renderCashExpenses(root, navigate) {
   const listEl = container.querySelector("#expenses-list");
   const errorEl = container.querySelector("#expenses-error");
   const searchInput = container.querySelector("#expenses-search");
+  installInlineClearButton(searchInput);
   const dateInput = container.querySelector("#expenses-date");
   const dateValueEl = container.querySelector("#expenses-date-value");
   const dateClearBtn = container.querySelector("#expenses-date-clear");

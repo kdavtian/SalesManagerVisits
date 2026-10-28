@@ -2,7 +2,6 @@ import { api } from "../api.js";
 import { escapeHtml, formatAmd, activateDialog, channelDisplayLabel, formatLiters, monthShort, formatDateTime, formatDayMonth, showToast } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { ORDER_STATUS_ICONS } from "../ordersSearchEnhancements.js";
 import { loadWithCache } from "../listCache.js";
 import { STATUS_META, orderStatusMeta, openOrderDetailSheet, paymentMethodBadgeHtml, appBadgeHtml } from "../orderDetailSheet.js";
 import { isDesktop, createDeskTable, renderDeskFilters, openDeskMenu } from "../deskTable.js";
@@ -14,6 +13,8 @@ import { ACCOUNTING_STATUS_BADGE, accountingStatusLabel } from "../accountingDoc
 import { state, seesAllActivity } from "../state.js";
 // who sees (and can filter by) the accounting-document status: the people who send orders to accounting
 import { canRequestAccountingDocs } from "../shared/roles.js";
+import { installInlineClearButton } from "../searchBar.js";
+import { enhanceOrders, ORDER_STATUS_ICONS, decorateOrdersStatusUi, enhanceOrdersToolbar, enhanceOrdersRegionAndCounts, listOrdersInRegion } from "./orders/searchBar.js";
 
 const ACCOUNTING_FILTERS = ["pending", "in_progress", "waybill_created", "partially_created", "exported_unsigned", "signed", "needs_attention", "cancelled"];
 // The "Accounting" group next to Draft: every order that was sent to accounting
@@ -382,6 +383,12 @@ export function renderOrders(root, navigate, openId = null, { startNew = false }
     filterMenu.hidden = true;
     filterBtn.setAttribute("aria-expanded", "false");
   });
+  // The search bar: channel filter inside the field, region filter, clear "x", status icons and counts (orders/searchBar.js; these
+  // used to be added from outside by three page-wide "enhancer" observers, docs/architecture-roadmap.md step 7a).
+  enhanceOrdersToolbar();
+  enhanceOrders();
+  decorateOrdersStatusUi();
+  enhanceOrdersRegionAndCounts();
 
   async function load({ silent = false } = {}) {
     const mine = ++loadSeq;
@@ -389,7 +396,7 @@ export function renderOrders(root, navigate, openId = null, { startNew = false }
       // Background refresh of an open screen: no spinner, no cached (older) rows first, and the list is left alone when
       // the user is in the middle of something.
       try {
-        const result = await api.listOrders(listParams(), { fresh: true });
+        const result = await listOrdersInRegion(listParams(), { fresh: true });
         if (mine !== loadSeq || selectMode || bulkBusy) return;
         lastLoadedAt = Date.now();
         const sig = JSON.stringify([result.rows, result.has_more]);
@@ -415,7 +422,7 @@ export function renderOrders(root, navigate, openId = null, { startNew = false }
       const params = listParams();
       await loadWithCache(
         `orders-list:${activeStatus || "all"}${sortKey !== "date" || sortReversed ? `:${sortKey}${sortReversed ? ":rev" : ""}` : ""}`,
-        () => api.listOrders(params, { fresh: true }),
+        () => listOrdersInRegion(params, { fresh: true }),
         (result) => {
           if (mine !== loadSeq) return;
           lastLoadedAt = Date.now();
@@ -469,7 +476,7 @@ export function renderOrders(root, navigate, openId = null, { startNew = false }
     try {
       const params = listParams();
       params.offset = orders.length;
-      const result = await api.listOrders(params, { fresh: true });
+      const result = await listOrdersInRegion(params, { fresh: true });
       // The tab (or a refresh) changed while this page was on its way: these rows belong to an older list.
       if (mine === loadSeq) {
         orders = orders.concat(result.rows);
@@ -483,6 +490,8 @@ export function renderOrders(root, navigate, openId = null, { startNew = false }
   }
 
   function paint() {
+    // the status counts and the region button follow every repaint (cached 15 s, so this is at most one request per 15 s)
+    enhanceOrdersRegionAndCounts();
     const search = searchInput.value.trim().toLowerCase();
     let filtered = orders;
     if (channelFilter) filtered = filtered.filter((o) => o.sales_channel === channelFilter);
@@ -671,6 +680,7 @@ export function renderOrders(root, navigate, openId = null, { startNew = false }
     overlay.querySelector("#order-customer-cancel").addEventListener("click", () => overlay.remove());
 
     const searchEl = overlay.querySelector("#order-customer-search");
+    installInlineClearButton(searchEl);
     const resultsEl = overlay.querySelector("#order-customer-results");
     let searchSeq = 0;
 
@@ -726,3 +736,4 @@ export function renderOrders(root, navigate, openId = null, { startNew = false }
   cleanup.onRestore = () => refreshIfStale(0);
   return cleanup;
 }
+

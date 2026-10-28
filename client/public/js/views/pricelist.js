@@ -7,6 +7,7 @@ import { icons } from "../icons.js";
 import { compareProducts, sortedBrands } from "../productSort.js";
 import { NO_GROUP_KEY, openTriStateTreeSheet } from "../regionTree.js";
 import { searchProducts } from "../productSearch.js";
+import { SEARCH_ICONS, addClasses, ensureSelectedCheck, installClearButton, setClass, syncDropdownButton } from "../searchBar.js";
 
 // Brand -> Category (family) -> Product, for the pricelist's own filter
 // sheet (Brand>Category>product per the tree-picker's generic {key, name,
@@ -424,6 +425,7 @@ export async function renderPricelist(root, navigate) {
   renderFilters();
 
   const searchInput = container.querySelector("#pricelist-search");
+  enhancePricelist(); // the combined search pill: filters and sort inside the field, clear "x" (searchBar.js)
   searchInput.addEventListener(
     "input",
     debounce(() => {
@@ -804,4 +806,89 @@ export async function renderPricelist(root, navigate) {
     overlay.querySelector("#import-preview").addEventListener("click", () => run(false));
     applyBtn.addEventListener("click", () => run(true));
   }
+}
+
+function pricelistIconFor(key) {
+  if (key === "tree") return SEARCH_ICONS.brands;
+  if (key === "package") return SEARCH_ICONS.size;
+  if (key === "columns") return SEARCH_ICONS.columns;
+  if (key === "special") return SEARCH_ICONS.special;
+  return SEARCH_ICONS.filters;
+}
+
+function syncPricelistFilterButtons(filterRow) {
+  filterRow?.querySelectorAll("[data-filter-btn]").forEach((button) => {
+    const active = button.classList.contains("filter-icon-btn-active") || button.classList.contains("activity-search-filter-btn-active");
+    const count = Number(button.dataset.filterCount || 0);
+    const sig = `${button.dataset.filterBtn}|${active}|${count}`;
+    if (button._unifiedSig === sig) return;
+    for (const n of ["filter-icon-btn", "filter-icon-btn-active"]) if (button.classList.contains(n)) button.classList.remove(n);
+    addClasses(button, "activity-search-filter-btn", "unified-pricelist-filter-btn");
+    setClass(button, "activity-search-filter-btn-active", active);
+    const badge =
+      count > 1
+        ? `<span class="activity-search-filter-count" aria-hidden="true">${count}</span>`
+        : active
+          ? '<span class="activity-search-filter-dot" aria-hidden="true"></span>'
+          : "";
+    button.innerHTML = `${pricelistIconFor(button.dataset.filterBtn)}${badge}`;
+    button._unifiedSig = sig;
+  });
+}
+
+// Pricelist's Brand>Category>Product tree filter, package filter and
+// special-only toggle, plus its sort dropdown, folded into the same
+// combined-search pill Customers/Activity/Payments already use -- same
+// reparent-in-place approach as enhanceCustomers/enhancePayments above.
+function enhancePricelist() {
+  const input = document.querySelector("#pricelist-search");
+  const toolbar = input?.closest(".list-toolbar");
+  const view = input?.closest(".detail-view");
+  if (!input || !toolbar || !view) return;
+
+  let actions = toolbar.querySelector(":scope > .activity-search-actions");
+  if (!toolbar.dataset.unifiedPricelistSearch) {
+    toolbar.dataset.unifiedPricelistSearch = "true";
+    toolbar.classList.add("activity-search-combined", "pricelist-search-combined");
+    actions = document.createElement("div");
+    actions.className = "activity-search-actions pricelist-search-actions";
+    toolbar.appendChild(actions);
+
+    const sortBtn = view.querySelector("#pricelist-sort-btn");
+    const sortMenu = view.querySelector("#pricelist-sort-menu");
+    if (sortBtn && sortMenu) {
+      const wrap = document.createElement("div");
+      wrap.className = "activity-icon-dropdown pricelist-sort-wrap";
+      actions.appendChild(wrap);
+      wrap.append(sortBtn, sortMenu);
+      sortBtn.classList.remove("icon-btn");
+      sortBtn.classList.add("activity-search-filter-btn");
+      sortBtn.innerHTML = SEARCH_ICONS.sort;
+      sortMenu.classList.remove("dropdown-menu");
+      sortMenu.classList.add("activity-search-menu", "pricelist-search-menu");
+
+      const syncSort = () => {
+        const selected = sortMenu.querySelector('[data-sort][aria-checked="true"]')?.dataset.sort || "default";
+        ensureSelectedCheck(sortMenu, "[data-sort]");
+        syncDropdownButton(sortBtn, sortMenu, selected !== "default");
+      };
+      sortBtn.addEventListener("click", () => requestAnimationFrame(syncSort));
+      sortMenu.addEventListener("click", () => requestAnimationFrame(syncSort));
+      new MutationObserver(syncSort).observe(sortMenu, { subtree: true, attributes: true, attributeFilter: ["aria-checked", "hidden"] });
+      syncSort();
+    }
+
+    const filterRow = view.querySelector("#pricelist-filter-row");
+    if (filterRow) {
+      filterRow.classList.add("customer-filter-inline");
+      actions.insertBefore(filterRow, actions.querySelector(".pricelist-sort-wrap"));
+      const observer = new MutationObserver(() => syncPricelistFilterButtons(filterRow));
+      observer.observe(filterRow, { childList: true });
+      syncPricelistFilterButtons(filterRow);
+    }
+  }
+
+  actions = toolbar.querySelector(":scope > .activity-search-actions");
+  installClearButton(input, toolbar, actions);
+  syncPricelistFilterButtons(view.querySelector("#pricelist-filter-row"));
 }
