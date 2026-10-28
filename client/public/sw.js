@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v479";
+const CACHE_VERSION = "field-visits-v480";
 // v5: drops tiles cached while requests went out without a Referer (OSM may have
 // answered those with placeholder images) -- see Referrer-Policy in server/src/app.js.
 const TILE_CACHE = "field-visits-tiles-v5";
@@ -90,6 +90,8 @@ const APP_SHELL = [
   "/js/typeTierSheet.js",
   "/js/filterIcons.js",
   "/js/views/admin.js",
+  "/js/views/admin/products.js",
+  "/js/views/admin/team.js",
   "/js/views/systemHealth.js",
   "/js/erpSyncCard.js",
   "/js/statusBarTap.js",
@@ -101,6 +103,11 @@ const APP_SHELL = [
   "/js/views/checkin.js",
   "/js/views/fuelReport.js",
   "/js/views/customerDetail.js",
+  "/js/views/customer/accountSettings.js",
+  "/js/views/customer/editSheet.js",
+  "/js/views/customer/erpCard.js",
+  "/js/views/customer/files.js",
+  "/js/views/customer/sheets.js",
   "/js/views/customerOrders.js",
   "/js/customerCardData.js",
   "/js/views/checkinSpots.js",
@@ -123,6 +130,11 @@ const APP_SHELL = [
   "/js/views/map/template.js",
   "/js/views/map/tiles.js",
   "/js/views/settings.js",
+  "/js/views/settings/adminRows.js",
+  "/js/views/settings/markup.js",
+  "/js/views/settings/notifications.js",
+  "/js/views/settings/rows.js",
+  "/js/views/settings/sheets.js",
   "/js/views/settingsDocTexts.js",
   "/js/views/bonuses.js",
   // The rest of app.js's routes -- all now loaded via dynamic import()
@@ -151,6 +163,10 @@ const APP_SHELL = [
   "/js/signaturePad.js",
   "/js/signStatement.js",
   "/js/views/reports.js",
+  "/js/views/reports/common.js",
+  "/js/views/reports/debt.js",
+  "/js/views/reports/money.js",
+  "/js/views/reports/sales.js",
   "/js/views/routePlans.js",
   "/js/views/routePlanSets.js",
   "/js/views/routeDistribution.js",

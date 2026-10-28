@@ -84,8 +84,8 @@ export const other = 1;
   assert.match(moved, /import \{ twice \} from "\.\.\/helper\.js";/);
   const { load } = await import(pathToFileURL(path.join(dir, "shell/load.js")).href);
   assert.equal(await load(), 4 + 6 + 2);
-  // what is left of the source: no run of empty lines where the code was
-  assert.equal(fs.readFileSync(path.join(dir, "boot.js"), "utf8"), "export const other = 1;\n");
+  // what is left of the source: the re-export of what it exported, and no run of empty lines where the code was
+  assert.equal(fs.readFileSync(path.join(dir, "boot.js"), "utf8"), 'export { load } from "./shell/load.js";\n\nexport const other = 1;\n');
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -197,5 +197,32 @@ test("extract-top refuses a moved value computed at load time from something lef
   assert.equal(fs.existsSync(path.join(dir, "part.js")), false);
   // moving what it needs along is fine
   execFileSync("node", [TOOL, "extract-top", file, path.join(dir, "part.js"), "base", "derived"]);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("extract-top: names the source exported stay available from it (a caller's import() keeps working)", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "refactor-"));
+  fs.writeFileSync(path.join(dir, "package.json"), '{"type":"module"}');
+  fs.writeFileSync(path.join(dir, "screen.js"), "export function openSheet(x) {\n  return `sheet ${x}`;\n}\nexport function render() {\n  return openSheet(1);\n}\n");
+  fs.writeFileSync(path.join(dir, "caller.js"), 'export async function run() {\n  const { openSheet } = await import("./screen.js");\n  return openSheet(2);\n}\n');
+  execFileSync("node", [TOOL, "extract-top", path.join(dir, "screen.js"), path.join(dir, "screen/sheet.js"), "openSheet"]);
+  assert.match(fs.readFileSync(path.join(dir, "screen.js"), "utf8"), /^export \{ openSheet \} from "\.\/screen\/sheet\.js";$/m);
+  const { run } = await import(pathToFileURL(path.join(dir, "caller.js")).href);
+  assert.equal(await run(), "sheet 2");
+  const { render } = await import(pathToFileURL(path.join(dir, "screen.js")).href);
+  assert.equal(render(), "sheet 1");
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("wrap and extract-inner refuse a name that would shadow something the code uses (a global, a module binding)", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "refactor-"));
+  fs.writeFileSync(path.join(dir, "package.json"), '{"type":"module"}');
+  const file = path.join(dir, "screen.js");
+  const text = "const LIMIT = 2;\nexport function render() {\n  const out = [];\n  out.push(LIMIT);\n  console.log(out);\n  function part() {\n    return out.length;\n  }\n  return part();\n}\n";
+  fs.writeFileSync(file, text);
+  assert.throws(() => execFileSync("node", [TOOL, "wrap", file, "render", "4", "4", "console"], { stdio: "pipe" }), /name clash: console/);
+  assert.throws(() => execFileSync("node", [TOOL, "wrap", file, "render", "4", "4", "LIMIT"], { stdio: "pipe" }), /name clash: LIMIT/);
+  assert.throws(() => execFileSync("node", [TOOL, "extract-inner", file, "render", path.join(dir, "p.js"), "console", "part"], { stdio: "pipe" }), /name clash: console/);
+  assert.equal(fs.readFileSync(file, "utf8"), text);
   fs.rmSync(dir, { recursive: true, force: true });
 });
