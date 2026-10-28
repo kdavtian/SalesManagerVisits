@@ -1243,7 +1243,7 @@ async function renderRoute() {
   } else if (handoffDetailMatch) {
     (await import("./views/cashHandoffs.js")).renderCashHandoffs(app, navigate, handoffDetailMatch[1]);
   } else if (path === "#/cash-handoffs") {
-    (await import("./views/cashHandoffs.js")).renderCashHandoffs(app, navigate);
+    (await import("./views/cashHandoffs.js")).renderCashHandoffs(app, navigate, null, { handover: query.get("handover") === "1" });
   } else if (path === "#/money") {
     (await import("./views/money.js")).renderMoney(app, navigate);
   } else if (path === "#/expenses") {

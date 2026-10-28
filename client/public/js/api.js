@@ -736,7 +736,10 @@ export const api = {
   listCashHandoffs: (offset = 0) => request(`/cash-handoffs?offset=${offset}`),
   getCashHandoff: (id) => request(`/cash-handoffs/${id}`),
   createCashHandoff: (data) => json("/cash-handoffs", "POST", data),
-  confirmCashHandoff: (id) => request(`/cash-handoffs/${id}/confirm`, { method: "POST" }),
+  // body: { counted_amd, note } -- what the receiver counted; a different amount needs a note (document flow, 1.453.0)
+  confirmCashHandoff: (id, body = {}) => json(`/cash-handoffs/${id}/confirm`, "POST", body),
+  listCashSheets: () => request("/cash-sheets"),
+  markCashSheetRecorded: (id, recorded = true) => json(`/cash-sheets/${id}/recorded`, "POST", { recorded }),
   rejectCashHandoff: (id, reason) => json(`/cash-handoffs/${id}/reject`, "POST", { reason }),
 
   getVapidPublicKey: () => request("/push/vapid-public-key"),

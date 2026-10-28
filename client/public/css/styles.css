@@ -16103,3 +16103,66 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 .wish-item-note {
   font-style: italic;
 }
+
+/* Document flow (1.453.0): the receiver counts the cash in the sheet; daily cash sheets list */
+.handoff-decide {
+  margin: 8px 0 4px;
+}
+.handoff-decide label {
+  display: block;
+  margin-bottom: 8px;
+}
+.handoff-diff {
+  margin: 0 0 8px;
+  font-weight: 600;
+  color: var(--danger);
+}
+.handoff-diff-note {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 69, 58, 0.12);
+  color: var(--danger);
+}
+.btn.btn-warning {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+.cash-sheet-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.cash-sheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+.cash-sheet-actions .btn {
+  min-height: 40px;
+}
+.home-handover-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 12px;
+  border: 1px solid var(--accent);
+}
+.home-handover-card .muted {
+  display: block;
+  font-size: 0.85rem;
+}
+.home-handover-card .btn {
+  flex: 0 0 auto;
+  min-height: 44px;
+}
+#handoff-detail-overlay .sheet-actions .btn-warning {
+  flex: 1 1 100%;
+  order: -1;
+}

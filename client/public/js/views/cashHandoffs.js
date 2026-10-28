@@ -10,7 +10,7 @@
 //                   broken down by sales channel so they can count the
 //                   physical notes channel by channel before confirming.
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, formatDateTime, activateDialog, channelDisplayLabel, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo } from "../util.js";
+import { escapeHtml, formatAmd, formatDateTime, formatDateDMY, activateDialog, channelDisplayLabel, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, bindAmdInput, downloadFromUrl, showToast } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
 
@@ -69,7 +69,7 @@ function channelBreakdownHtml(byChannel, total) {
   `;
 }
 
-export async function renderCashHandoffs(root, navigate, focusHandoffId) {
+export async function renderCashHandoffs(root, navigate, focusHandoffId, { handover = false } = {}) {
   document.querySelectorAll(".sheet-overlay").forEach((el) => el.remove());
 
   const role = state.user.role;
@@ -91,6 +91,11 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId) {
         <div class="card-list" id="handoff-incoming"></div>
       </section>
 
+      <section id="cash-sheets-section" hidden>
+        <h2 class="list-group-heading">${t("cash_sheets_title")}</h2>
+        <div class="card-list" id="cash-sheets"></div>
+      </section>
+
       <section id="handoff-available-section" hidden>
         <h2 class="list-group-heading">${t("handoff_available_title")}</h2>
         <div id="handoff-available"></div>
@@ -110,6 +115,79 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId) {
   const availableSection = container.querySelector("#handoff-available-section");
   const availableEl = container.querySelector("#handoff-available");
   const historyEl = container.querySelector("#handoff-history");
+  const sheetsSection = container.querySelector("#cash-sheets-section");
+  const sheetsEl = container.querySelector("#cash-sheets");
+
+  // Daily cash sheets (1.453.0): made when the director confirms a rep's cash; the bot posts each to the accounting Telegram group, the
+  // accountant marks it "Recorded in Excel" (or the sync closes it when the Excel has every payment). Open ones first.
+  async function loadSheets() {
+    let data;
+    try {
+      data = await api.listCashSheets();
+    } catch {
+      sheetsSection.hidden = true;
+      return;
+    }
+    sheetsSection.hidden = !data.sheets.length;
+    sheetsEl.innerHTML = data.sheets
+      .map(
+        (s) => `
+      <div class="card cash-sheet-row" data-sheet="${s.id}">
+        <div class="list-row-top">
+          <strong>№${s.id} · ${escapeHtml(s.rep_name ?? "—")}</strong>
+          <span class="list-row-trailing-text text-amount">${formatAmd(s.total_amd)}</span>
+        </div>
+        <div class="muted list-row-meta">${formatDateDMY(s.sheet_date)} · ${t("handoff_items_n").replace("{n}", s.item_count)} · ${escapeHtml(s.director_name ?? "")}${
+          s.counted_amd !== s.total_amd ? ` · <span class="text-danger">${t("cash_sheet_counted").replace("{amount}", formatAmd(s.counted_amd))}</span>` : ""
+        }</div>
+        <div class="cash-sheet-status">
+          <span class="badge ${s.posted_at ? "badge-success" : "badge-neutral"}">${t(s.posted_at ? "cash_sheet_posted" : "cash_sheet_not_posted")}</span>
+          <span class="badge ${s.recorded_at ? "badge-success" : "badge-warning"}">${
+            s.recorded_at ? (s.recorded_auto ? t("cash_sheet_recorded_auto") : t("cash_sheet_recorded")) : t("cash_sheet_not_recorded")
+          }</span>
+        </div>
+        <div class="cash-sheet-actions">
+          <button type="button" class="btn btn-sm" data-sheet-xlsx="${s.id}">${t("cash_sheet_excel")}</button>
+          ${
+            data.can_record
+              ? `<button type="button" class="btn btn-sm ${s.recorded_at ? "" : "btn-primary"}" data-sheet-record="${s.id}" data-on="${s.recorded_at ? "0" : "1"}">${
+                  s.recorded_at ? t("cash_sheet_unmark") : t("cash_sheet_mark")
+                }</button>`
+              : ""
+          }
+        </div>
+      </div>`
+      )
+      .join("");
+    sheetsEl.querySelectorAll("[data-sheet-xlsx]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        b.disabled = true;
+        try {
+          await downloadFromUrl(`/api/cash-sheets/${b.dataset.sheetXlsx}/xlsx`, `cash-sheet-${b.dataset.sheetXlsx}.xlsx`);
+        } catch (err) {
+          showToast(err.message);
+        }
+        b.disabled = false;
+      })
+    );
+    sheetsEl.querySelectorAll("[data-sheet-record]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        b.disabled = true;
+        const on = b.dataset.on === "1";
+        try {
+          await api.markCashSheetRecorded(Number(b.dataset.sheetRecord), on);
+          showToast(on ? t("cash_sheet_recorded") : t("cash_sheet_not_recorded"), {
+            actionLabel: t("undo"),
+            onAction: () => api.markCashSheetRecorded(Number(b.dataset.sheetRecord), !on).then(loadSheets),
+          });
+          await loadSheets();
+        } catch (err) {
+          showToast(err.message);
+          b.disabled = false;
+        }
+      })
+    );
+  }
 
   // Whose cash the "Hand over" panel is showing: yourself, or (for a
   // director/CEO/accountant/admin) one of the reps who just handed you an
@@ -424,6 +502,30 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId) {
           .join("")}
       </div>
       ${handoff.rejection_reason ? `<p class="form-error" style="position:static;">${escapeHtml(handoff.rejection_reason)}</p>` : ""}
+      ${
+        handoff.status === "confirmed" && handoff.counted_amd !== null && handoff.counted_amd !== handoff.amount_amd
+          ? `<p class="handoff-diff-note">${t("cash_sheet_counted").replace("{amount}", formatAmd(handoff.counted_amd))}${
+              handoff.discrepancy_note ? ` — ${escapeHtml(handoff.discrepancy_note)}` : ""
+            }</p>`
+          : ""
+      }
+      ${
+        handoff.cash_sheet
+          ? `<p class="muted">${t("cash_sheet_line").replace("{id}", handoff.cash_sheet.id)} · ${t(handoff.cash_sheet.posted_at ? "cash_sheet_posted" : "cash_sheet_not_posted")} · ${t(
+              handoff.cash_sheet.recorded_at ? "cash_sheet_recorded" : "cash_sheet_not_recorded"
+            )}</p>`
+          : ""
+      }
+      ${
+        canDecide
+          ? `<form class="handoff-decide" id="handoff-decide" novalidate>
+              <label>${t("handoff_counted_label")}<input id="handoff-counted" value="${formatAmd(handoff.amount_amd).replace(/[^\d,]/g, "")}" /></label>
+              <p class="handoff-diff" id="handoff-diff" hidden></p>
+              <label id="handoff-note-wrap" hidden>${t("handoff_discrepancy_note")}<input id="handoff-note" maxlength="500" autocomplete="off" /></label>
+              <label id="handoff-reason-wrap" hidden>${t("handoff_reject_reason_label")}<input id="handoff-reason" maxlength="300" autocomplete="off" /></label>
+            </form>`
+          : ""
+      }
       <p class="form-error" id="handoff-detail-error" hidden></p>
       <div class="sheet-actions" style="flex-wrap:wrap;">
         ${
@@ -447,7 +549,7 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId) {
         await fn();
         overlay.remove();
         window.dispatchEvent(new Event("payments-changed"));
-        await Promise.all([loadInbox(), loadAvailable()]);
+        await Promise.all([loadInbox(), loadAvailable(), loadSheets()]);
       } catch (err) {
         errorEl.textContent = err.message;
         errorEl.hidden = false;
@@ -455,18 +557,49 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId) {
       }
     }
 
-    overlay.querySelector("#handoff-confirm-btn")?.addEventListener("click", () => {
-      if (!confirm(t("handoff_confirm_receipt_prompt").replace("{amount}", formatAmd(handoff.total_amd)))) return;
-      act(() => api.confirmCashHandoff(handoff.id));
+    // Count, then confirm (owner, 2026-10-28): the counted amount starts at the expected total; a different amount turns the button into
+    // "Confirm with discrepancy" and asks what happened. Reject asks for the reason in the sheet (no browser pop-ups).
+    const countedInput = overlay.querySelector("#handoff-counted");
+    const noteWrap = overlay.querySelector("#handoff-note-wrap");
+    const diffEl = overlay.querySelector("#handoff-diff");
+    const confirmBtn = overlay.querySelector("#handoff-confirm-btn");
+    overlay.querySelector("#handoff-decide")?.addEventListener("submit", (e) => e.preventDefault());
+    const counted = () => Number(String(countedInput?.value ?? "").replace(/\D/g, ""));
+    const paintDiff = () => {
+      if (!countedInput) return;
+      const diff = counted() - Math.round(handoff.amount_amd);
+      diffEl.hidden = noteWrap.hidden = diff === 0;
+      diffEl.textContent = diff === 0 ? "" : t("handoff_diff").replace("{amount}", `${diff > 0 ? "+" : "−"}${formatAmd(Math.abs(diff))}`);
+      confirmBtn.textContent = diff === 0 ? t("handoff_confirm") : t("handoff_confirm_with_diff");
+      confirmBtn.classList.toggle("btn-warning", diff !== 0);
+    };
+    if (countedInput) bindAmdInput(countedInput, paintDiff);
+    confirmBtn?.addEventListener("click", () => {
+      const note = overlay.querySelector("#handoff-note").value.trim();
+      if (!countedInput.value.trim()) return countedInput.focus();
+      if (counted() !== Math.round(handoff.amount_amd) && !note) {
+        errorEl.textContent = t("handoff_discrepancy_note_needed");
+        errorEl.hidden = false;
+        return overlay.querySelector("#handoff-note").focus();
+      }
+      act(() => api.confirmCashHandoff(handoff.id, { counted_amd: counted(), note: note || undefined }));
     });
     overlay.querySelector("#handoff-reject-btn")?.addEventListener("click", () => {
-      const reason = prompt(t("handoff_reject_reason_label"));
-      if (!reason || !reason.trim()) return;
-      act(() => api.rejectCashHandoff(handoff.id, reason.trim()));
+      const wrap = overlay.querySelector("#handoff-reason-wrap");
+      const input = overlay.querySelector("#handoff-reason");
+      if (wrap.hidden) {
+        wrap.hidden = false;
+        return input.focus();
+      }
+      if (!input.value.trim()) return input.focus();
+      act(() => api.rejectCashHandoff(handoff.id, input.value.trim()));
     });
   }
 
   await loadInbox();
   await loadAvailable();
+  loadSheets();
   if (focusHandoffId) openHandoffSheet(Number(focusHandoffId));
+  // From the Home card "Hand over today's cash": straight to the one confirm step when there is cash and one place to give it.
+  else if (handover) availableEl.querySelector("#handoff-submit-all:not([disabled])")?.click();
 }

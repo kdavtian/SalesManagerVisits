@@ -1,4 +1,5 @@
 import { markWishesBackInStock } from "../productWishes.js";
+import { cashSheetFilename, cashSheetText, cashSheetXlsx, closeSheetsFoundInExcel, loadCashSheet } from "../cashSheets.js";
 import crypto from "node:crypto";
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
@@ -511,6 +512,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
 
   // New stock just landed: wished products that are available again are announced to the customers' reps (and KAD OS).
   if (prodErpIds.length) markWishesBackInStock().catch((err) => console.error("Wishes back in stock failed:", err.message));
+  closeSheetsFoundInExcel().catch((err) => console.error("Cash sheets auto-close failed:", err.message));
 
   // New debt figures just landed: give reps a "collect the debt" task where due.
   if (process.env.NODE_ENV !== "test") {
@@ -581,6 +583,38 @@ erpSyncRouter.post("/cashflow-ledger", syncKeyLimiter, requireSyncKey, async (re
     await recordSyncAttempt({ endpoint: "/api/erp-sync/cashflow-ledger", ok: false, error: err.message });
     res.status(400).json({ error: err.message });
   }
+});
+
+// Daily cash sheets for the CEO bot (cashSheets.js): the bot asks what is waiting, posts each to the accounting Telegram group (the text and
+// the Excel file) and says whether it worked. A sheet that keeps failing stops being offered after 10 tries (it stays in the app's list).
+erpSyncRouter.get("/cash-sheets/pending", syncKeyLimiter, requireSyncKey, async (_req, res) => {
+  const { rows } = await pool.query("SELECT id FROM cash_sheets WHERE posted_at IS NULL AND post_attempts < 10 ORDER BY id LIMIT 20");
+  const sheets = [];
+  for (const { id } of rows) {
+    const data = await loadCashSheet(id);
+    if (data) sheets.push({ id, text: cashSheetText(data), filename: cashSheetFilename(data) });
+  }
+  res.json({ sheets });
+});
+
+erpSyncRouter.get("/cash-sheets/:id/xlsx", syncKeyLimiter, requireSyncKey, async (req, res) => {
+  const data = await loadCashSheet(Number(req.params.id));
+  if (!data) return res.status(404).json({ error: "Cash sheet not found" });
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${cashSheetFilename(data)}"`);
+  res.send(await cashSheetXlsx(data));
+});
+
+erpSyncRouter.post("/cash-sheets/:id/posted", syncKeyLimiter, requireSyncKey, async (req, res) => {
+  const ok = req.body?.ok !== false;
+  const { rows } = await pool.query(
+    ok
+      ? "UPDATE cash_sheets SET posted_at = COALESCE(posted_at, now()), post_attempts = post_attempts + 1, last_post_error = NULL WHERE id = $1 RETURNING id"
+      : "UPDATE cash_sheets SET post_attempts = post_attempts + 1, last_post_error = left($2, 500) WHERE id = $1 RETURNING id",
+    ok ? [Number(req.params.id)] : [Number(req.params.id), String(req.body?.error ?? "failed")]
+  );
+  if (!rows[0]) return res.status(404).json({ error: "Cash sheet not found" });
+  res.json({ ok: true });
 });
 
 const REPORT_PERIODS = new Set(["daily", "weekly", "monthly", "quarterly", "annual"]);
