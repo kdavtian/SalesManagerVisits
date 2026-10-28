@@ -380,7 +380,7 @@ function extractInner(sourceRel, outerName, targetRel, namespace, names) {
   const statements = moduleMode ? ast.body : outer.body.body;
   const pad = moduleMode ? "" : "  ";
   const CTX = "ctx";
-  if (moduleScope.set.has(namespace)) throw new Error(`name clash: ${namespace}`);
+  if (moduleScope.set.has(namespace) || moduleScope.through.some((r) => r.identifier.name === namespace)) throw new Error(`name clash: ${namespace}`);
   // a ctx made by an earlier run is extended; any other variable called ctx is a clash
   let ctxDecl = null;
   if (outerScope.set.has(CTX)) {
@@ -520,7 +520,8 @@ function wrap(sourceRel, outerName, from, to, name) {
   if (!top) throw new Error(`${outerName}: not a top-level function of ${sourceRel}`);
   const outer = top.declaration ?? top;
   const outerScope = sm.acquire(outer);
-  if (outerScope.set.has(name)) throw new Error(`name clash: ${name}`);
+  // the new function would shadow any binding of that name the function reaches: its own, the module's, a global (console, ...)
+  if (outerScope.set.has(name) || outerScope.through.some((r) => r.identifier.name === name)) throw new Error(`name clash: ${name}`);
   const body = outer.body.body;
   const inRange = body.filter((st) => st.loc.start.line >= from && st.loc.end.line <= to);
   const cut = body.find((st) => !inRange.includes(st) && st.loc.start.line <= to && st.loc.end.line >= from);

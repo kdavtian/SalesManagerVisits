@@ -213,3 +213,16 @@ test("extract-top: names the source exported stay available from it (a caller's 
   assert.equal(render(), "sheet 1");
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test("wrap and extract-inner refuse a name that would shadow something the code uses (a global, a module binding)", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "refactor-"));
+  fs.writeFileSync(path.join(dir, "package.json"), '{"type":"module"}');
+  const file = path.join(dir, "screen.js");
+  const text = "const LIMIT = 2;\nexport function render() {\n  const out = [];\n  out.push(LIMIT);\n  console.log(out);\n  function part() {\n    return out.length;\n  }\n  return part();\n}\n";
+  fs.writeFileSync(file, text);
+  assert.throws(() => execFileSync("node", [TOOL, "wrap", file, "render", "4", "4", "console"], { stdio: "pipe" }), /name clash: console/);
+  assert.throws(() => execFileSync("node", [TOOL, "wrap", file, "render", "4", "4", "LIMIT"], { stdio: "pipe" }), /name clash: LIMIT/);
+  assert.throws(() => execFileSync("node", [TOOL, "extract-inner", file, "render", path.join(dir, "p.js"), "console", "part"], { stdio: "pipe" }), /name clash: console/);
+  assert.equal(fs.readFileSync(file, "utf8"), text);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
