@@ -5,11 +5,11 @@ import { escapeHtml, formatAmd } from "../util.js";
 import { t, getLang } from "../i18n.js";
 import { loadWithCache } from "../listCache.js";
 import { state } from "../state.js";
+import { seesHomeKpis } from "../shared/roles.js";
 import { icons } from "../icons.js";
 import { repColor } from "../repColors.js";
 
-export const KPI_ROLES = ["admin", "ceo", "operations_director", "sales_director", "accountant"];
-export const wantsKpis = () => KPI_ROLES.includes(state.user.role) && window.matchMedia?.("(min-width: 1024px)").matches;
+export const wantsKpis = () => seesHomeKpis(state.user.role) && window.matchMedia?.("(min-width: 1024px)").matches;
 
 const fill = (text, vars) => Object.entries(vars).reduce((s, [k, v]) => s.replaceAll(`{${k}}`, v), text);
 const fmt = (n) => Number(n || 0).toLocaleString("en-US");

@@ -5,6 +5,7 @@ import { EDITABLE_FIELDS, isWithinArmenia } from "./customers.js";
 import { haversineMeters } from "../utils/geo.js";
 import { normalizePhoneForStorage } from "../phoneFormat.js";
 import { normalizeIncomingPlaces, recordPlaceReviews } from "../placeReviews.js";
+import { movesAnyPinAtOnce } from "../roles.js";
 
 export const editRequestsRouter = Router();
 
@@ -47,13 +48,12 @@ async function supersedePending(client, customerId, exceptRequestId, changedFiel
 // a wrong pin, and with the check-in allowance a wrong pin blocks a rep from checking in. A sales manager
 // may correct the pin of their OWN customers (assigned to them or created by them); management roles any
 // customer. Everything else (and a rep's request for someone else's customer) still waits for review.
-const PIN_AUTO_APPROVE_MANAGEMENT = new Set(["ceo", "operations_director", "sales_director"]);
 function canAutoApprovePin(user, customer, filtered) {
   const keys = Object.keys(filtered);
   if (keys.length !== 2 || filtered.lat === undefined || filtered.lng === undefined) return false;
   if (typeof filtered.lat !== "number" || typeof filtered.lng !== "number" || !isWithinArmenia(filtered.lat, filtered.lng)) return false;
   if (customer.checkin_for_all) return false; // the office pin is not a rep's to move
-  if (PIN_AUTO_APPROVE_MANAGEMENT.has(user.role)) return true;
+  if (movesAnyPinAtOnce(user.role)) return true;
   return user.role === "sales_manager" && (customer.assigned_manager_id === user.id || customer.created_by === user.id);
 }
 

@@ -4,6 +4,7 @@ import { api } from "./api.js";
 import { icons } from "./icons.js";
 import { t } from "./i18n.js";
 import { state } from "./state.js";
+import { canManagePotentialAll, canResolveCounterfeit as resolvesCounterfeit } from "./shared/roles.js";
 import { activateDialog, escapeHtml, showToast, openInfoPopup, formatDateTime, formatDateDMY, labelColon } from "./util.js";
 
 export const POTENTIAL_LEVELS = [1, 2, 3, 4];
@@ -13,15 +14,14 @@ const NEGATIVE = ["counterfeit", "own_import", "competitor_loyal", "price_mismat
 const POSITIVE = ["high_potential", "active_interest", "negotiating", "ready_first_order", "gave_price_list", "introduced_products"];
 // What the rep did at the visit (owner, 2026-10-25): always one tap away from level 2 up, not hidden behind "More reasons".
 const VISIT_ACTIONS = ["gave_price_list", "introduced_products"];
-const MANAGEMENT = ["admin", "ceo", "operations_director", "sales_director"];
 
 // Mirrors canManagePotentialAll / the assigned-rep rule in the server's customers.js -- UI gate only.
 export function canManagePotential(customer) {
   const role = state.user?.role;
-  if (MANAGEMENT.includes(role)) return true;
+  if (canManagePotentialAll(role)) return true;
   return role === "sales_manager" && customer.assigned_manager_id === state.user.id;
 }
-export const canResolveCounterfeit = () => MANAGEMENT.includes(state.user?.role);
+export const canResolveCounterfeit = () => resolvesCounterfeit(state.user?.role);
 
 // Reasons of the level just picked: the ones that usually explain a low level first for levels 1-2, the positive ones first for 3-4.
 const reasonOrder = (level) => (level && level <= 2 ? [...NEGATIVE, ...POSITIVE, "other"] : [...POSITIVE, ...NEGATIVE, "other"]);

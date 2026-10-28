@@ -4,12 +4,11 @@ import { t } from "../i18n.js";
 import { placeLabel } from "../places.js";
 import { icons } from "../icons.js";
 import { state } from "../state.js";
+import { ownsCustomers, ownsSalesChannels } from "../shared/roles.js";
 import { ALL_ROLES, QUICK_ACTIONS, defaultQuickActionIds, withMergedTiles } from "../quickActions.js";
 import { compareProducts } from "../productSort.js";
 import { REP_COLORS, repColor } from "../repColors.js";
 
-// Roles whose customers show up on the map: they get a colour for "Colour by Rep".
-const COLOURED_ROLES = ["sales_manager", "sales_director"];
 
 const ROLE_BADGE = {
   admin: { key: "role_admin", cls: "badge-accent", tint: "warning" },
@@ -234,7 +233,7 @@ export async function renderTeamSection(container) {
           <span class="list-row-icon list-row-icon-${roleBadge.tint}" aria-hidden="true">${userInitials(u.name)}</span>
           <div class="list-row-body">
             <div class="list-row-top">
-              <strong>${escapeHtml(u.name)}</strong>${COLOURED_ROLES.includes(u.role) ? `<span class="team-color-dot" style="background:${repColor(u.id, u.map_color)}" aria-hidden="true"></span>` : ""}
+              <strong>${escapeHtml(u.name)}</strong>${ownsCustomers(u.role) ? `<span class="team-color-dot" style="background:${repColor(u.id, u.map_color)}" aria-hidden="true"></span>` : ""}
               <span class="badge ${roleBadge.cls}">${t(roleBadge.key)}</span>
               ${u.status === "paused" ? `<span class="badge badge-warning">${t("team_status_paused")}</span>` : u.status === "offboarded" ? `<span class="badge badge-danger">${t("team_status_left")}</span>` : ""}
               ${u.login_locked ? `<span class="badge badge-danger">${t("team_login_locked")}</span>` : ""}
@@ -491,7 +490,7 @@ export async function renderTeamSection(container) {
               : ""
           }
           ${
-            COLOURED_ROLES.includes(u.role)
+            ownsCustomers(u.role)
               ? `<div class="team-color-field"><span class="team-color-label">${t("team_map_color")}</span>
             <div class="team-color-swatches" role="radiogroup" aria-label="${t("team_map_color")}">
               ${REP_COLORS.map((c) => `<button type="button" class="team-swatch ${u.map_color === c ? "team-swatch-on" : ""}" role="radio" aria-checked="${u.map_color === c}" data-color="${c}" style="--swatch:${c}" aria-label="${c}"></button>`).join("")}
@@ -627,7 +626,7 @@ export async function renderTeamSection(container) {
           email: data.get("email"),
           phone: data.get("phone") || null,
           position: isSalesManager ? data.get("position") || null : u.position,
-          ...(COLOURED_ROLES.includes(u.role) ? { map_color: pickedColor } : {}),
+          ...(ownsCustomers(u.role) ? { map_color: pickedColor } : {}),
         });
         close();
         loadUsers();
@@ -1687,9 +1686,8 @@ export async function renderSalesChannelOwnersSection(container) {
   // Sales Director (CVO/PCO/OEM) or, in principle, an Accountant (KF/CAS)
   // -- the full admin user list, filtered to the roles that actually own
   // channels, is needed so those managers are selectable too.
-  const OWNER_ROLES = new Set(["sales_manager", "sales_director", "accountant"]);
   const [channels, allUsers] = await Promise.all([api.getPerfChannels(), api.listUsers()]);
-  const managers = allUsers.filter((u) => OWNER_ROLES.has(u.role));
+  const managers = allUsers.filter((u) => ownsSalesChannels(u.role));
 
   container.innerHTML = `
     <p class="muted radius-help">${t("sales_channel_owners_hint")}</p>

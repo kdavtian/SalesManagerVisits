@@ -2,13 +2,14 @@ import { renderVisitFirst } from "../visitFirstCard.js";
 import { api } from "../api.js";
 import { fitTileLabels, escapeHtml, formatDistance, formatRelative, formatAmd, getCurrentPosition, haversineMeters, categoryLabel, formatDayMonth, labelColon } from "../util.js";
 import { state, canViewTeamLocations, seesAllActivity } from "../state.js";
+import { seesHomeKpis, homeShowsCompanyData, homeShowsCompanyDashboard } from "../shared/roles.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { applyVaghinakBadge } from "../vaghinak.js";
 import { applyPaymentBadge, applyUnrecordedBadge, applyWarehouseBadge, applyDeliveryBadge, applyAccountingBadge } from "../badges.js";
 import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds } from "../quickActions.js";
 import { loadWithCache } from "../listCache.js";
-import { renderHomeKpis, KPI_ROLES } from "./homeKpis.js";
+import { renderHomeKpis } from "./homeKpis.js";
 
 // A dependency-free CSS bar chart -- this app has no charting library, and
 // 30 bars is simple enough not to need one. Each bar's height is relative
@@ -159,8 +160,7 @@ export async function renderDashboard(root, navigate) {
     await loadWithCache(
       `dashboard-summary:${state.user.id}`,
       async () => {
-        const isCeoOrAdmin =
-          state.user.role === "admin" || state.user.role === "ceo" || state.user.role === "operations_director";
+        const isCeoOrAdmin = homeShowsCompanyDashboard(state.user.role);
         // The accountant has no field book: no "next visit" (so no customer
         // list fetch) -- the Company Dashboard glance sits there instead.
         const showsSnapshotInstead = isCeoOrAdmin || state.user.role === "accountant";
@@ -227,7 +227,7 @@ export async function renderDashboard(root, navigate) {
   // delivery_manager). Office/management roles (admin/ceo/sales_director/
   // accountant) see company-wide data here, not a plan of their own, so the
   // line read as wrong for them.
-  const isManagementRole = !["sales_manager", "delivery_manager"].includes(state.user.role);
+  const isManagementRole = homeShowsCompanyData(state.user.role);
 
   container.innerHTML = `
     <div class="dashboard-grid">
@@ -246,11 +246,11 @@ export async function renderDashboard(root, navigate) {
 
     ${
       // desktop management: the numbers first, across the full width (hidden on phones)
-      KPI_ROLES.includes(state.user.role) ? `<div class="home-kpis" id="home-kpis" hidden></div>` : ""
+      seesHomeKpis(state.user.role) ? `<div class="home-kpis" id="home-kpis" hidden></div>` : ""
     }
     <div id="tasks-home-slot"></div>
     ${
-      state.user.role === "admin" || state.user.role === "ceo" || state.user.role === "operations_director"
+      homeShowsCompanyDashboard(state.user.role)
         ? ""
         : state.user.role === "accountant"
           ? companyDashboardPreviewHtml(planPreview)
@@ -294,7 +294,7 @@ export async function renderDashboard(root, navigate) {
     </div>
 
 
-    <div class="home-quick-actions${KPI_ROLES.includes(state.user.role) ? " home-quick-actions-kpi" : ""}">
+    <div class="home-quick-actions${seesHomeKpis(state.user.role) ? " home-quick-actions-kpi" : ""}">
     <h2 class="section-title section-title-tight">${t("quick_actions")}</h2>
     <div class="quick-actions-grid">
       ${quickActionsHtml(
@@ -411,7 +411,7 @@ export async function renderDashboard(root, navigate) {
       // duplicate of a screen they already have. Every other role keeps
       // it: for them it's a quick "did my last few check-ins register OK"
       // glance, not a shrunk copy of something else on their home tab.
-      ["ceo", "operations_director", "admin"].includes(state.user.role)
+      homeShowsCompanyDashboard(state.user.role)
         ? companyDashboardPreviewHtml(planPreview)
         : `<div>
           <div class="section-heading-row">

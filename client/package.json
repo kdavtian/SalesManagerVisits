@@ -1,0 +1,5 @@
+{
+  "//": "Marks the phone app's files as ES modules for Node too: the server imports js/shared/roles.js (docs/architecture-roadmap.md, step 3).",
+  "private": true,
+  "type": "module"
+}

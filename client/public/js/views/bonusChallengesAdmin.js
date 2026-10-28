@@ -9,6 +9,7 @@ import { api } from "../api.js";
 import { activateDialog, escapeHtml, formatDateTime, formatAmd } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
+import { canApproveBonusRewards, canRecordBonusPayouts } from "../shared/roles.js";
 import { ALL_ROLES } from "../quickActions.js";
 
 const TYPE_LABELS = { single_metric: "Single metric", balanced_basket: "Balanced basket", product_sales: "Product sales" };
@@ -569,18 +570,13 @@ async function openNewChallengeWizard(onSaved) {
 // predicates for just this one screen.
 const CLAIM_STATUS_BADGE = { awaiting_validation: "badge-neutral", approved: "badge-info", on_hold: "badge-neutral", rejected: "badge-danger", paid: "badge-success" };
 
-function canApproveBonusRewardsClient() {
-  return ["admin", "ceo", "operations_director", "accountant"].includes(state.user?.role);
-}
-function canRecordBonusPayoutsClient() {
-  return ["admin", "accountant"].includes(state.user?.role);
-}
+
 
 export async function renderBonusRewardClaimsSection(container) {
   container.innerHTML = `<div id="reward-claims-list" class="card-list"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const listEl = container.querySelector("#reward-claims-list");
-  const canApprove = canApproveBonusRewardsClient();
-  const canPay = canRecordBonusPayoutsClient();
+  const canApprove = canApproveBonusRewards(state.user?.role);
+  const canPay = canRecordBonusPayouts(state.user?.role);
 
   async function loadClaims() {
     const claims = await api.listBonusRewardClaims();

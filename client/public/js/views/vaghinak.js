@@ -3,15 +3,12 @@
 // said (also what he WOULD say in test mode) and Settings (mode, thresholds, how he addresses people).
 import { api } from "../api.js";
 import { state } from "../state.js";
+import { isVaghinakManagement, editsVaghinakSettings, seesFraudAlerts, seesExpenseWatch, seesOpsControl } from "../shared/roles.js";
 import { icons } from "../icons.js";
 import { t, getLang } from "../i18n.js";
 import { escapeHtml, formatAmd, formatDateTime, formatDuration, formatRelative, openInfoPopup, showToast } from "../util.js";
 import { answerFormHtml, wireAnswerForm, setVaghinakBadge } from "../vaghinak.js";
 
-const MANAGEMENT = new Set(["admin", "ceo", "operations_director", "sales_director", "accountant"]);
-const SETTINGS_ROLES = new Set(["admin", "ceo", "operations_director"]);
-const FRAUD_ROLES = new Set(["admin", "ceo", "operations_director"]); // mirrors server/src/antiFraud.js
-const EXPENSE_ROLES = new Set(["admin", "ceo", "operations_director", "accountant"]); // mirrors server/src/expenseWatch.js
 
 const clock = (min) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 
@@ -34,15 +31,13 @@ const SETTING_FIELDS = [
   ["slaDeliverH", "vg_set_slaDeliverH", "plain"],
 ];
 
-// Operations control (cash, margin, stock, customers, order flow, data): the roles that had its Home tile.
-const OPS_ROLES = new Set(["admin", "ceo", "operations_director", "sales_director", "accountant"]);
 const TAB_ICON = { messages: "vaghinak", pulse: "team", qa: "info", feed: "history", autotasks: "tasks", antifraud: "shield", expenses: "wallet", settings: "settings" };
 const OPS_QUICK = [["cash", "wallet"], ["margin", "trendUp"], ["stock", "box"], ["customers", "customers"], ["flow", "clock"], ["data", "dashboard"]];
 
 export async function renderVaghinak(root, navigate, query) {
-  const isManagement = MANAGEMENT.has(state.user.role);
-  const canSettings = SETTINGS_ROLES.has(state.user.role);
-  const tabs = [["messages", "vg_tab_messages"], ...(isManagement ? [["pulse", "vg_tab_pulse"], ["qa", "vg_tab_qa"], ["feed", "vg_tab_feed"], ["autotasks", "vg_tab_autotasks"], ...(FRAUD_ROLES.has(state.user.role) ? [["antifraud", "vg_tab_antifraud"]] : []), ...(EXPENSE_ROLES.has(state.user.role) ? [["expenses", "vg_tab_expenses"]] : [])] : []), ...(canSettings ? [["settings", "vg_tab_settings"]] : [])];
+  const isManagement = isVaghinakManagement(state.user.role);
+  const canSettings = editsVaghinakSettings(state.user.role);
+  const tabs = [["messages", "vg_tab_messages"], ...(isManagement ? [["pulse", "vg_tab_pulse"], ["qa", "vg_tab_qa"], ["feed", "vg_tab_feed"], ["autotasks", "vg_tab_autotasks"], ...(seesFraudAlerts(state.user.role) ? [["antifraud", "vg_tab_antifraud"]] : []), ...(seesExpenseWatch(state.user.role) ? [["expenses", "vg_tab_expenses"]] : [])] : []), ...(canSettings ? [["settings", "vg_tab_settings"]] : [])];
   let tab = tabs.some(([k]) => k === query?.get("tab")) ? query.get("tab") : "messages";
 
   root.innerHTML = `
@@ -58,11 +53,11 @@ export async function renderVaghinak(root, navigate, query) {
       ${
         // His sections (they switch the tab below) as one slim swipeable row, then the Operations control quick actions
         // (each opens that tab of the Operations page) as a second row. A rep only has Messages, so no rows.
-        tabs.length > 1 || OPS_ROLES.has(state.user.role)
+        tabs.length > 1 || seesOpsControl(state.user.role)
           ? `<div class="vg-chips" id="vg-tiles" role="tablist">${tabs
               .map(([k, label]) => `<button type="button" class="vg-chip${k === tab ? " vg-chip-active" : ""}" data-tab="${k}" role="tab" aria-selected="${k === tab}"><span class="vg-chip-icon">${icons[TAB_ICON[k]]}</span>${t(label)}</button>`)
               .join("")}</div>${
-              OPS_ROLES.has(state.user.role)
+              seesOpsControl(state.user.role)
                 ? `<div class="vg-chips vg-chips-ops"><span class="vg-chips-label">${t("vg_ops_label")}</span>${OPS_QUICK.map(([k, icon]) => `<button type="button" class="vg-chip vg-chip-ops" data-ops-tab="${k}"><span class="vg-chip-icon">${icons[icon]}</span>${t("ops_tab_" + k)}</button>`).join("")}</div>`
                 : ""
             }`

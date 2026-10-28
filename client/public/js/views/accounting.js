@@ -7,10 +7,10 @@ import { api } from "../api.js";
 import { escapeHtml, formatAmd, formatDateTime } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
+import { canRequestAccountingDocs } from "../shared/roles.js";
 import { STATUS_META, openOrderDetailSheet } from "../orderDetailSheet.js";
 import { ACCOUNTING_STATUS_BADGE, accountingDocShort, accountingStatusLabel } from "../accountingDocSheet.js";
 
-const AGENT_ROLES = new Set(["admin", "sales_director", "ceo", "operations_director", "accountant"]);
 
 function formatDate(value) {
   return formatDateTime(value);
@@ -74,7 +74,7 @@ export async function renderAccounting(root, navigate) {
   });
 
   // "Lily is online / offline" -- only for the people who send requests.
-  if (AGENT_ROLES.has(state.user.role)) {
+  if (canRequestAccountingDocs(state.user.role)) {
     api
       .getAccountingAgent()
       .then((a) => {

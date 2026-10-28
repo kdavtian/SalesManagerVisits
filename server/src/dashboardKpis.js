@@ -6,8 +6,9 @@ import { pool } from "./db/pool.js";
 import { allocateFifo, loadOrdersNewestFirst } from "./debtAging.js";
 import { yerevanToday } from "./utils/yerevanDate.js";
 import { IN_EXCEL_SQL, DAYS_OLD_SQL, EXCEL_GRACE_DAYS } from "./paymentExcelMatch.js";
+import { rolesWhere, seesHomeKpis } from "./roles.js";
 
-export const KPI_ROLES = ["admin", "ceo", "operations_director", "sales_director", "accountant"];
+export const KPI_ROLES = rolesWhere(seesHomeKpis);
 
 const num = (v) => Number(v) || 0;
 let cache = { at: 0, data: null };

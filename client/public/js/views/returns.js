@@ -3,16 +3,16 @@
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
+import { canApproveReturns, canReceiveReturns, canRecordReturns } from "../shared/roles.js";
 import { escapeHtml, formatAmd, formatDateTime, showToast } from "../util.js";
 
-const APPROVERS = ["admin", "ceo", "operations_director", "sales_director", "accountant"];
 const nf = (n) => Math.round(Number(n) || 0).toLocaleString("en-US");
 
 export async function renderReturns(root, navigate) {
   const role = state.user.role;
-  const isApprover = APPROVERS.includes(role);
-  const isWarehouse = role === "warehouse_manager" || role === "admin";
-  const canRecord = role === "accountant" || role === "admin";
+  const isApprover = canApproveReturns(role);
+  const isWarehouse = canReceiveReturns(role);
+  const canRecord = canRecordReturns(role);
   const tabs = [
     ...(isApprover ? [["decide", (r) => r.status === "requested"]] : []),
     ...(isWarehouse ? [["receive", (r) => r.status === "approved"]] : []),

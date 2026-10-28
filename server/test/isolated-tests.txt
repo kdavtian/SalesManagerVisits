@@ -8,6 +8,7 @@ test/integration/bonusReconciliation.test.js
 test/integration/bonusRewardClaims.test.js
 test/integration/bonusRewardClaimsRoutes.test.js
 test/integration/bonusSummaryRoutes.test.js
+test/integration/dashboardKpis.test.js
 test/integration/docTextsVisitDefaults.test.js
 test/integration/erpSync.test.js
 test/integration/erpSyncStatus.test.js

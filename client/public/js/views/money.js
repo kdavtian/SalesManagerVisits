@@ -3,12 +3,12 @@
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state } from "../state.js";
+import { seesPaymentsOnMoney } from "../shared/roles.js";
 import { applyPaymentBadge } from "../badges.js";
 
-const NO_PAYMENTS_ROLES = ["warehouse_manager", "delivery_manager"];
 
 export function renderMoney(root, navigate) {
-  const showPayments = !NO_PAYMENTS_ROLES.includes(state.user.role);
+  const showPayments = seesPaymentsOnMoney(state.user.role);
   root.innerHTML = `
     <div class="detail-view money-view">
       <div class="detail-header">

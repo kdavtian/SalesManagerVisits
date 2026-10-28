@@ -11,6 +11,7 @@ import { escapeHtml, formatAmd, formatPriceOrFree, activateDialog, formatDateTim
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { state } from "./state.js";
+import { canConfirmOrders, canConfirmSubmittedOrders, canMarkDeliveredWithoutRoute, canSetAccountingStatus, canApproveReturns, canManageSignedDocuments, approvesOwnOrderChanges } from "./shared/roles.js";
 import { getProductCatalog } from "./productCatalog.js";
 import { packQty, packStepUp, packStepDown, bindStepperButton } from "./stepper.js";
 import { searchProducts, debounce } from "./productSearch.js";
@@ -36,7 +37,6 @@ export const STATUS_META = {
 };
 
 // A KAD OS order the customer cancelled (it sits in "draft" on the server, marked cancelled_at): a red "Cancelled" chip instead of "Draft".
-const RETURN_REQUEST_ROLES = new Set(["admin", "ceo", "operations_director", "sales_director", "accountant"]);
 export const CANCELLED_META = { key: "kos_cancelled_badge", cls: "badge-danger", iconTint: "danger" };
 export const orderStatusMeta = (order) => (order?.cancelled_at ? CANCELLED_META : STATUS_META[order?.status] ?? STATUS_META.submitted);
 
@@ -72,26 +72,11 @@ const APPROVAL_META = {
 // views/deliveryRoute.js), which collect the required extra data (pick
 // confirmation, route stop, signature). This sheet only drives confirm and
 // director-reject.
-const SELF_APPROVING_ROLES = new Set(["ceo", "operations_director", "admin"]);
 const sortProducts = (list) => [...list].sort(compareProducts);
-export const DISCOUNT_APPROVER_ROLES = new Set(["admin", "sales_director", "ceo", "operations_director"]);
-// Credit-limit exceptions: the same directors plus the accountant.
-export const CREDIT_APPROVER_ROLES = new Set([...DISCOUNT_APPROVER_ROLES, "accountant"]);
-// Who reviews a freshly-submitted order -- mirrors canConfirmOrders in the
-// server's roles.js.
-export const CONFIRM_ROLES = new Set(["admin", "sales_director", "ceo", "operations_director"]);
-// The accountant also confirms a submitted order, submits a rep's draft and
-// asks accounting for the invoice/waybill (canConfirmSubmittedOrders,
-// canSubmitOrdersForOthers, canRequestAccountingDocs in server/src/roles.js) --
-// but does not edit/reject orders or approve price changes.
-export const CONFIRM_SUBMITTED_ROLES = new Set([...CONFIRM_ROLES, "accountant"]);
-// Who can move a packed order straight to delivered without a planned
-// route -- mirrors canMarkDeliveredWithoutRoute in the server's roles.js.
-// Exists because the driver (delivery_manager) role isn't currently using
-// the app to complete routes through the normal signature-capturing flow
-// (see views/deliveryRoute.js), which otherwise leaves a routed order with
-// no way back into view.
-export const MARK_DELIVERED_ROLES = new Set(["delivery_manager", "sales_director", "accountant", "ceo", "operations_director", "admin"]);
+// Who may do what on an order comes from js/shared/roles.js (the rules the server enforces): canConfirmOrders = the directors review a
+// submitted order (edit, reject, approve a discount); canConfirmSubmittedOrders = they and the accountant confirm it, decide a credit-limit
+// exception and send it to accounting; canMarkDeliveredWithoutRoute = move a packed order to delivered without a planned route (the driver
+// role is not completing routes in the app yet, see views/deliveryRoute.js).
 
 // Full created -> submitted -> confirmed -> packed -> delivered timeline
 // (server/src/routes/orders.js's order_status_history, populated at every
@@ -100,9 +85,6 @@ export const MARK_DELIVERED_ROLES = new Set(["delivery_manager", "sales_director
 // change, not something to hide -- it's exactly the kind of thing this was
 // asked to make visible.
 const ACCOUNTING_ELIGIBLE = new Set(["confirmed", "packed_stock_out", "delivered"]);
-// Who may change a request's condition by hand -- mirrors the server's
-// POST /orders/:id/accounting-status (canConfirmOrders + accountant).
-const CAN_SET_ACCOUNTING_STATUS = new Set(["admin", "sales_director", "ceo", "operations_director", "accountant"]);
 const ACCOUNTING_STATUS_OPTIONS = ["pending", "in_progress", "waybill_created", "partially_created", "exported_unsigned", "signed", "needs_attention", "cancelled"];
 
 // Where the order stands with accounting (Lily): which document, its
@@ -127,7 +109,7 @@ function accountingSectionHtml(order) {
     ${
       // Management and the accountant can move the request to another
       // condition by hand (pending = back in the queue, cancelled, created...).
-      CAN_SET_ACCOUNTING_STATUS.has(state.user.role)
+      canSetAccountingStatus(state.user.role)
         ? `<div class="acc-status-control">
              <label for="acc-status-select">${t("acc_request_status")}</label>
              <div class="acc-status-control-row">
@@ -200,7 +182,7 @@ function notifyOrdersChanged() {
 // `navigate` is the app router's own navigate(hash) (see app.js) -- tapping
 // the customer name inside the sheet closes it and routes there. Falls back
 // to setting location.hash directly for a caller that doesn't have one handy.
-const isSignedLocked = (order) => Boolean(order.signed_at) && !["admin", "ceo"].includes(state.user.role);
+const isSignedLocked = (order) => Boolean(order.signed_at) && !canManageSignedDocuments(state.user.role);
 
 export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}) {
   const overlay = document.createElement("div");
@@ -227,8 +209,8 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     // A director/admin reviewing a fresh order gets confirm/reject/edit;
     // the rep who placed it (or an admin) can still edit it too while
     // it's waiting on that review.
-    const canReviewSubmitted = CONFIRM_ROLES.has(state.user.role) && order.status === "submitted";
-    const canConfirmSubmitted = CONFIRM_SUBMITTED_ROLES.has(state.user.role) && order.status === "submitted";
+    const canReviewSubmitted = canConfirmOrders(state.user.role) && order.status === "submitted";
+    const canConfirmSubmitted = canConfirmSubmittedOrders(state.user.role) && order.status === "submitted";
     // A draft is editable too (server/src/routes/orders.js's PATCH /:id
     // already accepted this -- this button just never offered it), owner/
     // admin only since canReviewSubmitted is always false for a draft (a
@@ -240,10 +222,10 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     const approvalMeta = APPROVAL_META[order.approval_status];
     // A pending or rejected discount blocks fulfillment server-side too --
     // don't offer a forward-status button that would just 409.
-    const canApproveDiscount = DISCOUNT_APPROVER_ROLES.has(state.user.role) && order.approval_status === "pending";
+    const canApproveDiscount = canConfirmOrders(state.user.role) && order.approval_status === "pending";
     // Credit limit exception (migration 101): directors and the accountant decide.
     const creditMeta = { pending: ["credit_status_pending", "badge-warning"], approved: ["credit_status_approved", "badge-success"], rejected: ["credit_status_rejected", "badge-danger"] }[order.credit_status];
-    const canApproveCredit = CREDIT_APPROVER_ROLES.has(state.user.role) && order.credit_status === "pending";
+    const canApproveCredit = canConfirmSubmittedOrders(state.user.role) && order.credit_status === "pending";
 
     overlay.querySelector(".sheet").classList.add("order-detail-sheet");
     overlay.querySelector(".sheet").classList.remove("sheet-adding");
@@ -349,27 +331,27 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     }
     // Back to submitted (owner, 2026-10-28): directors reopen a confirmed order to change it, then confirm it again. Not once the warehouse
     // packed it, and not while accounting works on its documents (server: POST /orders/:id/unconfirm).
-    if (order.status === "confirmed" && !order.cancelled_at && CONFIRM_ROLES.has(state.user.role) && ["pending", "needs_attention", "cancelled", null].includes(order.accounting_status ?? null)) {
+    if (order.status === "confirmed" && !order.cancelled_at && canConfirmOrders(state.user.role) && ["pending", "needs_attention", "cancelled", null].includes(order.accounting_status ?? null)) {
       buttons.push({ label: t("order_unconfirm"), action: "unconfirm-order", cls: "btn" });
     }
-    if (CONFIRM_SUBMITTED_ROLES.has(state.user.role) && ACCOUNTING_ELIGIBLE.has(order.status) && ["pending", "needs_attention", "cancelled", null].includes(order.accounting_status ?? null)) {
+    if (canConfirmSubmittedOrders(state.user.role) && ACCOUNTING_ELIGIBLE.has(order.status) && ["pending", "needs_attention", "cancelled", null].includes(order.accounting_status ?? null)) {
       buttons.push({
         label: order.accounting_status === "needs_attention" || order.accounting_status === "cancelled" ? t("acc_send_again") : order.accounting_status === "pending" ? t("acc_change_document") : t("acc_send_to_accounting"),
         action: "accounting-document",
         cls: "btn",
       });
     }
-    if (CONFIRM_SUBMITTED_ROLES.has(state.user.role) && ["waybill_created", "partially_created", "exported_unsigned"].includes(order.accounting_status)) {
+    if (canConfirmSubmittedOrders(state.user.role) && ["waybill_created", "partially_created", "exported_unsigned"].includes(order.accounting_status)) {
       buttons.push({ label: t("acc_mark_signed"), action: "accounting-signed", cls: "btn" });
     }
-    if ((order.status === "confirmed" || order.status === "packed_stock_out") && order.erp_customer_id && MARK_DELIVERED_ROLES.has(state.user.role)) {
+    if ((order.status === "confirmed" || order.status === "packed_stock_out") && order.erp_customer_id && canMarkDeliveredWithoutRoute(state.user.role)) {
       buttons.push({ label: t("erp_link_btn"), action: "link-erp", cls: "btn" });
     }
     if (order.status === "packed_stock_out" || order.status === "confirmed") {
       // No route/signature required here -- see canMarkDeliveredWithoutRoute
       // in server/src/roles.js for why this manual override exists. A CONFIRMED order can be marked delivered
       // right away too (management skips the warehouse "packed" step).
-      if (MARK_DELIVERED_ROLES.has(state.user.role)) {
+      if (canMarkDeliveredWithoutRoute(state.user.role)) {
         buttons.push({ label: t("mark_delivered_no_route"), action: "mark-delivered", cls: "btn btn-primary" });
       }
     }
@@ -387,7 +369,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     // duplicate or mistaken order.
     // A sales manager may also delete their OWN order until management confirms it (draft / submitted).
     // Return (delivered) / cancel (not delivered yet): the rep asks, management decides (views/returns.js).
-    if (!order.cancelled_at && order.status !== "draft" && (order.user_id === state.user.id || RETURN_REQUEST_ROLES.has(state.user.role))) {
+    if (!order.cancelled_at && order.status !== "draft" && (order.user_id === state.user.id || canApproveReturns(state.user.role))) {
       buttons.push({ label: t(order.status === "delivered" ? "rt_btn_return" : "rt_btn_cancel"), action: "order-return", cls: "btn" });
     }
     if (state.user.role === "admin" || (state.user.role === "sales_manager" && order.user_id === state.user.id && ["draft", "submitted"].includes(order.status))) {
@@ -624,7 +606,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     // ceo/operations director/admin approve price changes themselves, so
     // the "request ... needs director approval" wording only applies to
     // everyone else.
-    const selfApproves = SELF_APPROVING_ROLES.has(state.user.role);
+    const selfApproves = approvesOwnOrderChanges(state.user.role);
     let productCatalog = null;
     let catalogLoading = false;
     let addProductQuery = "";

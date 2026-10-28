@@ -3,7 +3,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
-import { canSetCreditTerms } from "../roles.js";
+import { canSetCreditTerms, seesOpsControl, decidesOpsControl, setsFxRate, decidesDeadStock, rolesWhere } from "../roles.js";
 import { creditLimitSuggestions } from "../creditLimitSuggest.js";
 import { DEBT_AGE_LATERAL, debtAgeDaysSql } from "../debtAge.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
@@ -12,10 +12,9 @@ import { priceRealization, fxStatus, setFxRate, fxReviewDone, deadStock, setStoc
 export const opsControlRouter = Router();
 opsControlRouter.use(requireAuth);
 
-export const OPS_VIEW_ROLES = ["admin", "ceo", "operations_director", "sales_director", "accountant"];
-const OPS_DECIDE_ROLES = ["admin", "ceo", "operations_director"];
-const requireView = (req, res, next) => (OPS_VIEW_ROLES.includes(req.user.role) ? next() : res.status(403).json({ error: "Not allowed" }));
-const requireDecide = (req, res, next) => (OPS_DECIDE_ROLES.includes(req.user.role) ? next() : res.status(403).json({ error: "Only the CEO, an operations director or an admin can decide this" }));
+export const OPS_VIEW_ROLES = rolesWhere(seesOpsControl);
+const requireView = (req, res, next) => (seesOpsControl(req.user.role) ? next() : res.status(403).json({ error: "Not allowed" }));
+const requireDecide = (req, res, next) => (decidesOpsControl(req.user.role) ? next() : res.status(403).json({ error: "Only the CEO, an operations director or an admin can decide this" }));
 opsControlRouter.use(requireView);
 
 export const DEBT_DECISIONS = ["collect", "restructure", "dispute", "legal", "write_off"];
@@ -125,17 +124,15 @@ opsControlRouter.post("/credit-limits/apply", async (req, res) => {
 });
 
 // ---- Margin: price realization + USD/AMD review ----
-const FX_ROLES = ["admin", "ceo", "operations_director", "accountant"];
-const STOCK_ROLES = ["admin", "ceo", "operations_director", "sales_director"];
 
 opsControlRouter.get("/margin", async (req, res) => {
   const days = [30, 90, 180].includes(Number(req.query.days)) ? Number(req.query.days) : 90;
   const [realization, fx] = await Promise.all([priceRealization(pool, days), fxStatus(pool)]);
-  res.json({ realization, fx, can_set_fx: FX_ROLES.includes(req.user.role) });
+  res.json({ realization, fx, can_set_fx: setsFxRate(req.user.role) });
 });
 
 opsControlRouter.post("/fx", async (req, res) => {
-  if (!FX_ROLES.includes(req.user.role)) return res.status(403).json({ error: "Only the accountant, CEO, an operations director or an admin can set the rate" });
+  if (!setsFxRate(req.user.role)) return res.status(403).json({ error: "Only the accountant, CEO, an operations director or an admin can set the rate" });
   const rate = Number(req.body?.rate);
   if (!Number.isFinite(rate) || rate < 100 || rate > 2000) return res.status(400).json({ error: "rate must be the AMD price of 1 USD (100 to 2000)" });
   const note = typeof req.body?.note === "string" ? req.body.note.trim().slice(0, 200) : null;
@@ -150,10 +147,10 @@ opsControlRouter.post("/fx/review-done", async (req, res) => {
 });
 
 // ---- Stock: dead stock and what to do with it ----
-opsControlRouter.get("/stock", async (req, res) => res.json({ ...(await deadStock(pool)), can_decide: STOCK_ROLES.includes(req.user.role) }));
+opsControlRouter.get("/stock", async (req, res) => res.json({ ...(await deadStock(pool)), can_decide: decidesDeadStock(req.user.role) }));
 
 opsControlRouter.put("/stock/:productId", async (req, res) => {
-  if (!STOCK_ROLES.includes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  if (!decidesDeadStock(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const productId = Number(req.params.productId);
   const { action, note, due_date: dueDate, assignee_id: assigneeId } = req.body ?? {};
   if (!Number.isInteger(productId)) return res.status(400).json({ error: "Invalid product id" });
