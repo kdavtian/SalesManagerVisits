@@ -347,6 +347,11 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     if (canReviewSubmitted) {
       buttons.push({ label: t("reject_order"), action: "reject-order", cls: "btn btn-danger" });
     }
+    // Back to submitted (owner, 2026-10-28): directors reopen a confirmed order to change it, then confirm it again. Not once the warehouse
+    // packed it, and not while accounting works on its documents (server: POST /orders/:id/unconfirm).
+    if (order.status === "confirmed" && !order.cancelled_at && CONFIRM_ROLES.has(state.user.role) && ["pending", "needs_attention", "cancelled", null].includes(order.accounting_status ?? null)) {
+      buttons.push({ label: t("order_unconfirm"), action: "unconfirm-order", cls: "btn" });
+    }
     if (CONFIRM_SUBMITTED_ROLES.has(state.user.role) && ACCOUNTING_ELIGIBLE.has(order.status) && ["pending", "needs_attention", "cancelled", null].includes(order.accounting_status ?? null)) {
       buttons.push({
         label: order.accounting_status === "needs_attention" || order.accounting_status === "cancelled" ? t("acc_send_again") : order.accounting_status === "pending" ? t("acc_change_document") : t("acc_send_to_accounting"),
@@ -392,7 +397,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     // The customer signed the delivery-acceptance act: from then on only the admin or the CEO may edit, reject or delete the order
     // (owner, 2026-10-26). Returns stay open: they are a request, decided by management.
     if (isSignedLocked(order)) {
-      for (let i = buttons.length - 1; i >= 0; i--) if (["edit-order", "delete-order", "reject-order"].includes(buttons[i].action)) buttons.splice(i, 1);
+      for (let i = buttons.length - 1; i >= 0; i--) if (["edit-order", "delete-order", "reject-order", "unconfirm-order"].includes(buttons[i].action)) buttons.splice(i, 1);
     }
 
     actionsEl.innerHTML = buttons
@@ -587,6 +592,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
           else if (btn.dataset.action === "approve-discount") await api.approveOrderDiscount(orderId);
           else if (btn.dataset.action === "reject-discount") await api.rejectOrderDiscount(orderId);
           else if (btn.dataset.action === "submit-order") await api.submitOrder(orderId);
+          else if (btn.dataset.action === "unconfirm-order") await api.unconfirmOrder(orderId);
           else if (btn.dataset.action === "mark-delivered") {
             await api.markOrderDeliveredWithoutRoute(orderId);
             window.dispatchEvent(new Event("delivery-changed"));

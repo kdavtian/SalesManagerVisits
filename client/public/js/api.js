@@ -700,6 +700,7 @@ export const api = {
 
   // Order rejection + accountant "Recorded" screen (see server/src/routes/orders.js)
   rejectOrder: (id, note) => json(`/orders/${id}/reject`, "POST", { note }),
+  unconfirmOrder: (id) => json(`/orders/${id}/unconfirm`, "POST", {}),
   getRecordedList: (recorded, offset = 0) =>
     request(`/orders/recorded-list?recorded=${recorded ? "true" : "false"}&offset=${offset}`),
   getUnrecordedCount: () => request("/orders/unrecorded-count"),

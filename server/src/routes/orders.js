@@ -1472,6 +1472,52 @@ ordersRouter.post("/:id/reject", async (req, res) => {
   })();
 });
 
+// Back to submitted (owner, 2026-10-28: "Let sales director and above change status back of already confirmed to submitted so that can
+// make changes"): a CONFIRMED order (not packed yet) returns to the review queue, where the directors can edit it and confirm it again.
+// Refused while accounting works on its documents or after they exist (cancel them there first); a pending accounting request is
+// cancelled so Lily does not pick it up; open delivery route stops are dropped (the warehouse queue follows the status).
+const ACCOUNTING_FREE_TO_UNCONFIRM = [null, "pending", "needs_attention", "cancelled"];
+ordersRouter.post("/:id/unconfirm", async (req, res) => {
+  if (!canConfirmOrders(req.user.role)) return res.status(403).json({ error: "Only a director can move a confirmed order back" });
+  const reason = String(req.body?.reason ?? "").trim().slice(0, 300) || null;
+  const { rows } = await pool.query("SELECT * FROM orders WHERE id = $1", [req.params.id]);
+  const order = rows[0];
+  if (!order) return res.status(404).json({ error: "Order not found" });
+  if (order.signed_at && !canChangeSignedOrder(req.user.role)) return res.status(423).json(SIGNED_ORDER_ERROR);
+  if (order.status !== "confirmed") {
+    return res.status(409).json({ error: `Only a confirmed order can go back to submitted (this one is "${order.status}")`, code: "not_confirmed" });
+  }
+  if (!ACCOUNTING_FREE_TO_UNCONFIRM.includes(order.accounting_status ?? null)) {
+    return res.status(409).json({ error: "Accounting is working on this order's documents -- cancel them there first", code: "accounting_busy" });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows: updated } = await client.query(
+      `UPDATE orders SET status = 'submitted', updated_at = now(),
+              accounting_status = CASE WHEN accounting_status IN ('pending', 'needs_attention') THEN 'cancelled' ELSE accounting_status END
+       WHERE id = $1 AND status = 'confirmed' RETURNING *`,
+      [order.id]
+    );
+    if (!updated[0]) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "This order was changed by someone else -- refresh and try again" });
+    }
+    await client.query("DELETE FROM route_stops WHERE order_id = $1 AND completed_at IS NULL", [order.id]);
+    await client.query(
+      `INSERT INTO order_status_history (order_id, old_status, new_status, reason, changed_by) VALUES ($1, 'confirmed', 'submitted', $2, $3)`,
+      [order.id, reason ?? "Back to submitted", req.user.id]
+    );
+    await client.query("COMMIT");
+    res.json(updated[0]);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+});
+
 // Manual, route-independent packed_stock_out -> delivered transition -- for
 // when there's no driver actively using the app to complete a route stop
 // through delivery.js's signature-required /orders/:id/confirm. No POD/
