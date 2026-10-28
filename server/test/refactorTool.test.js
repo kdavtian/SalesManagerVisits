@@ -88,3 +88,114 @@ export const other = 1;
   assert.equal(fs.readFileSync(path.join(dir, "boot.js"), "utf8"), "export const other = 1;\n");
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test("extract-inner with \"-\": top-level functions move, the module's own variables are shared through ctx", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "refactor-"));
+  fs.writeFileSync(path.join(dir, "package.json"), '{"type":"module"}');
+  fs.writeFileSync(path.join(dir, "helper.js"), "export const twice = (n) => n * 2;\n");
+  fs.writeFileSync(
+    path.join(dir, "main.js"),
+    `import { twice } from "./helper.js";
+
+let total = 0;
+const box = { value: 0 };
+function bump(x) {
+  total += x;
+  box.value = total;
+  return doubled();
+}
+function doubled() {
+  return twice(total);
+}
+export function api() {
+  return [bump(2), bump(3), total, box.value, doubled()];
+}
+`
+  );
+  const before = (await import(pathToFileURL(path.join(dir, "main.js")).href + "?a")).api();
+  execFileSync("node", [TOOL, "extract-inner", path.join(dir, "main.js"), "-", path.join(dir, "parts/counter.js"), "counter", "bump", "doubled"]);
+  const main = fs.readFileSync(path.join(dir, "main.js"), "utf8");
+  assert.match(main, /^const ctx = \{\n {2}get box\(\) \{ return box; \},/m);
+  assert.match(main, /get total\(\) \{ return total; \}, set total\(v\) \{ total = v; \},/);
+  assert.match(main, /^function bump\(\.\.\.args\) \{ return counter\.bump\(ctx, \.\.\.args\); \}$/m);
+  assert.doesNotMatch(fs.readFileSync(path.join(dir, "parts/counter.js"), "utf8"), /from "\.\.\/main\.js"/); // the part never imports main.js
+  assert.deepEqual((await import(pathToFileURL(path.join(dir, "main.js")).href + "?b")).api(), before);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("extract-inner keeps the text of multi-line template strings exactly", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "refactor-"));
+  fs.writeFileSync(path.join(dir, "package.json"), '{"type":"module"}');
+  fs.writeFileSync(
+    path.join(dir, "share.js"),
+    `export function render(name) {
+  function message() {
+    return \`Route for \${name}:
+  1. first stop
+    2. second stop\`;
+  }
+  return message();
+}
+`
+  );
+  const before = (await import(pathToFileURL(path.join(dir, "share.js")).href + "?a")).render("Ani");
+  execFileSync("node", [TOOL, "extract-inner", path.join(dir, "share.js"), "render", path.join(dir, "parts/share.js"), "shareParts", "message"]);
+  assert.match(fs.readFileSync(path.join(dir, "parts/share.js"), "utf8"), /^export function message\(ctx\) \{\n {2}return `Route/m);
+  assert.equal((await import(pathToFileURL(path.join(dir, "share.js")).href + "?b")).render("Ani"), before);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("wrap: statements become an inner function called in place (awaited when they await); unsafe ranges are refused", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "refactor-"));
+  fs.writeFileSync(path.join(dir, "package.json"), '{"type":"module"}');
+  const file = path.join(dir, "screen.js");
+  fs.writeFileSync(
+    file,
+    `export async function render(log) {
+  let n = 1;
+  const seen = [];
+  if (n > 0) {
+    const step = await Promise.resolve(2);
+    n += step;
+    seen.push(\`n=\${n}
+  (two spaces kept)\`);
+  }
+  const later = n * 10;
+  seen.push(later);
+  log(seen);
+  return n;
+}
+`
+  );
+  const runIt = async (tag) => {
+    const out = [];
+    const n = await (await import(pathToFileURL(file).href + tag)).render((x) => out.push(...x));
+    return [n, out];
+  };
+  const before = await runIt("?a");
+  // line 10 declares `later`, used on line 11: refused, file untouched
+  assert.throws(() => execFileSync("node", [TOOL, "wrap", file, "render", "4", "10", "bump"], { stdio: "pipe" }), /later is declared in the range/);
+  // a range that cuts a statement in half: refused
+  assert.throws(() => execFileSync("node", [TOOL, "wrap", file, "render", "4", "6", "bump"], { stdio: "pipe" }), /only partly inside/);
+  execFileSync("node", [TOOL, "wrap", file, "render", "4", "9", "bump"]);
+  const text = fs.readFileSync(file, "utf8");
+  assert.match(text, /\n {2}async function bump\(\) \{\n {4}if \(n > 0\) \{/);
+  assert.match(text, /\n {2}\(two spaces kept\)`\);/);
+  assert.match(text, /\n {2}await bump\(\);\n {2}const later/);
+  assert.deepEqual(await runIt("?b"), before);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("extract-top refuses a moved value computed at load time from something left in the source (import cycle)", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "refactor-"));
+  fs.writeFileSync(path.join(dir, "package.json"), '{"type":"module"}');
+  const file = path.join(dir, "src.js");
+  const text = "const base = 1;\nconst derived = base + 1;\nexport function read() {\n  return derived;\n}\n";
+  fs.writeFileSync(file, text);
+  assert.throws(() => execFileSync("node", [TOOL, "extract-top", file, path.join(dir, "part.js"), "derived"], { stdio: "pipe" }), /derived is computed at load time from base/);
+  assert.equal(fs.readFileSync(file, "utf8"), text);
+  assert.equal(fs.existsSync(path.join(dir, "part.js")), false);
+  // moving what it needs along is fine
+  execFileSync("node", [TOOL, "extract-top", file, path.join(dir, "part.js"), "base", "derived"]);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

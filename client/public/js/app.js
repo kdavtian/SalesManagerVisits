@@ -1,9 +1,48 @@
 import { api } from "./api.js";
-import { applyOrderBadge, applyWarehouseBadge, applyDeliveryBadge, applyNotificationBadge, applyPlanApprovalBadge, refreshOrderBadge, refreshPaymentBadge, refreshUnrecordedBadge, refreshWarehouseBadge, refreshAccountingBadge, refreshDeliveryBadge, refreshNotificationBadge, refreshPlanApprovalBadge, refreshEditRequestBadge, refreshAllBadgesFromServer, restoreCachedBadgeCounts } from "./badges.js";
+import { refreshOrderBadge, refreshPaymentBadge, refreshUnrecordedBadge, refreshWarehouseBadge, refreshAccountingBadge, refreshDeliveryBadge, refreshNotificationBadge, refreshPlanApprovalBadge, refreshEditRequestBadge, refreshAllBadgesFromServer, restoreCachedBadgeCounts } from "./badges.js";
 import { state, setUser, loadCachedUser } from "./state.js";
-import { canSeeCashflow } from "./shared/roles.js";
-import { getLang, t } from "./i18n.js";
-import { icons } from "./icons.js";
+import { t } from "./i18n.js";
+
+// The module's variables, for its parts in other files (read and written through getters / setters, so they always see the current value).
+const ctx = {
+  get applySidebarMode() { return applySidebarMode; },
+  get cachedSettings() { return cachedSettings; },
+  get handleNavTap() { return handleNavTap; },
+  get homeNavTarget() { return homeNavTarget; },
+  get lastNavSignature() { return lastNavSignature; }, set lastNavSignature(v) { lastNavSignature = v; },
+  get navBar() { return navBar; },
+  get navigate() { return navigate; },
+  get preSettingsHash() { return preSettingsHash; }, set preSettingsHash(v) { preSettingsHash = v; },
+  get rebuildNavMarkup() { return rebuildNavMarkup; },
+  get rebuildSidebarMarkup() { return rebuildSidebarMarkup; },
+  get shellTabs() { return shellTabs; },
+  get sidebar() { return sidebar; },
+  get syncNavActive() { return syncNavActive; },
+  get topBar() { return topBar; },
+  get app() { return app; },
+  get backStack() { return backStack; }, set backStack(v) { backStack = v; },
+  get baseAppClassName() { return baseAppClassName; },
+  get baseBodyClassName() { return baseBodyClassName; },
+  get currentCleanup() { return currentCleanup; }, set currentCleanup(v) { currentCleanup = v; },
+  get currentPath() { return currentPath; }, set currentPath(v) { currentPath = v; },
+  get disposeBackEntry() { return disposeBackEntry; },
+  get disposeParkedMap() { return disposeParkedMap; },
+  get doLogout() { return doLogout; },
+  get HOME_TREE_ROUTES() { return HOME_TREE_ROUTES; },
+  get installRoot() { return installRoot; },
+  get isModalMapFlow() { return isModalMapFlow; },
+  get lastHomeHash() { return lastHomeHash; }, set lastHomeHash(v) { lastHomeHash = v; },
+  get lastRenderedHash() { return lastRenderedHash; }, set lastRenderedHash(v) { lastRenderedHash = v; },
+  get NAV_TAB_ROOT_HASHES() { return NAV_TAB_ROOT_HASHES; },
+  get parkedMap() { return parkedMap; }, set parkedMap(v) { parkedMap = v; },
+  get parkMap() { return parkMap; },
+  get programmaticNav() { return programmaticNav; }, set programmaticNav(v) { programmaticNav = v; },
+  get render() { return render; },
+  get renderNav() { return renderNav; },
+  get renderSeq() { return renderSeq; },
+  get STALE_ROUTE() { return STALE_ROUTE; },
+  get trimBackStack() { return trimBackStack; },
+};
 
 // iOS Safari only applies :active (the pressed look of every button) once the page has a touch listener; without
 // it a tap shows no pressed state at all. A passive no-op listener on the document is enough.
@@ -68,22 +107,22 @@ document.addEventListener(
 // how often. This mirrors the dynamic-import pattern already used elsewhere
 // in this codebase for cross-view references (e.g. customerOrders.js's own
 // import("./customerDetail.js")).
-import { flushQueue, getQueue, onQueueChange } from "./offlineQueue.js";
+import { flushQueue, onQueueChange } from "./offlineQueue.js";
 import { startVaghinakWatch } from "./vaghinak.js";
-import { openSyncQueueSheet } from "./syncQueueSheet.js";
 import { clearListCache, clearCacheIfRoleChanged } from "./listCache.js";
-import { mountInstallPrompt } from "./install.js";
-import { mountUpdateBanner, initServiceWorkerUpdates, isUpdatePending } from "./updateBanner.js";
+import { mountUpdateBanner, initServiceWorkerUpdates } from "./updateBanner.js";
 import { startLocationBroadcast, stopLocationBroadcast } from "./locationBroadcast.js";
 import { startDriverArrival, stopDriverArrival } from "./driverArrival.js";
-import { opsShellFor, shellAllows } from "./opsShell.js";
-import { escapeHtml, takeParkedSheet, pruneParkedSheet, installPhoneMask } from "./util.js";
-import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds } from "./quickActions.js";
+import { pruneParkedSheet, installPhoneMask } from "./util.js";
+import { QUICK_ACTION_ROUTE } from "./quickActions.js";
 import { installStatusBarTap } from "./statusBarTap.js";
 import { startErrorMonitoring } from "./errorMonitoring.js";
 import { installTouchPrefetch } from "./prefetch.js";
-import { markShellShown } from "./launchTiming.js";
 import "./deskHover.js"; // desktop: full text of a cut-off cell on hover (roadmap step 9)
+import { runWhenIdle } from "./shell/preload.js";
+import { renderSyncBanner } from "./shell/syncBanner.js";
+import * as shellNav from "./shell/nav.js";
+import * as shellRoutes from "./shell/routes.js";
 
 const app = document.getElementById("app");
 const navBar = document.getElementById("nav-bar");
@@ -149,7 +188,6 @@ document.addEventListener(
   true
 );
 
-const syncBanner = document.getElementById("sync-banner");
 const installRoot = document.getElementById("install-root");
 const updateRoot = document.getElementById("update-root");
 mountUpdateBanner(updateRoot);
@@ -161,13 +199,10 @@ mountUpdateBanner(updateRoot);
 // carry .form-error/.form-success (per this app's own convention, an error
 // swapped into a list container is the container's only child, not mixed in
 // alongside its rows) -- but the observer has no way to know that up front,
-// so it still has to check. Deferred to idle time (a Safari-safe fallback
-// stands in for requestIdleCallback, which WebKit has never implemented) so
+// so it still has to check. Deferred to idle time (runWhenIdle, shell/preload.js) so
 // this bookkeeping never competes with the same-frame work of the render
 // that triggered it -- the assistive-tech announcement lands a beat later,
 // not the visible UI.
-const runWhenIdle =
-  window.requestIdleCallback || ((cb) => setTimeout(() => cb({ didTimeout: false, timeRemaining: () => 50 }), 1));
 let pendingFeedbackNodes = [];
 let feedbackScanScheduled = false;
 function scanPendingFeedbackNodes() {
@@ -199,123 +234,6 @@ new MutationObserver((mutations) => {
     runWhenIdle(scanPendingFeedbackNodes);
   }
 }).observe(document.body, { childList: true, subtree: true });
-
-// Bottom-nav tabs + Settings are the routes a rep hits over and over in a
-// working day. render()'s dynamic import() above means the very first tap
-// on each still costs a fetch -- fine on a normal SPA session where the
-// module cache then makes every later tap instant, but iOS Safari discards
-// a backgrounded PWA's whole page (module cache included) far more
-// aggressively than Android. Without this, switching apps or unlocking the
-// phone and coming back means the next tab tap is a fresh "first visit"
-// again, which is exactly the "loading every time" symptom reported live
-// from an iPhone. Warming these during idle time right after boot/login
-// means that fetch has almost always already happened by the time a tap
-// comes in, without touching the boot-time win the dynamic import()s were
-// for -- this doesn't block first paint, it just gets ahead of the taps
-// that follow it.
-let coreViewsPreloaded = false;
-function preloadCoreViews() {
-  if (coreViewsPreloaded) return;
-  coreViewsPreloaded = true;
-  runWhenIdle(() => {
-    [
-      "./views/dashboard.js",
-      "./views/activity.js",
-      "./views/map.js",
-      "./views/customers.js",
-      "./views/customerDetail.js", // the first card opened in a session otherwise waits for this file (and what it imports) to download
-      "./views/orders.js",
-      "./views/settings.js",
-    ].forEach((path) => import(path).catch(() => {}));
-    // Leaflet itself (leafletLoader.js) is loaded on demand rather than
-    // unconditionally at page load now -- warmed here alongside map.js's
-    // own module fetch so the two are usually both ready together by the
-    // time a tap actually opens Map or Add-customer.
-    import("./leafletLoader.js").then((m) => m.ensureLeaflet()).catch(() => {});
-  });
-}
-
-// Same "loads too slow" complaint, for the map's basemap tiles specifically
-// -- OSM tile requests from a device in Armenia can genuinely take several
-// seconds each (see the tile-health-check comment in map.js), so by the
-// time a rep opens the Map tab it's too late to start fetching. Warms the
-// whole-country view (zoom 6-9: country-to-city, not the zoom-15
-// per-customer grid, which would be tens of thousands of tiles over an area
-// that isn't even known yet) into the service worker's tile cache during
-// idle time, so those tiles are usually already local by the time Map is
-// opened. sw.js's fetch handler already caches any tile.openstreetmap.org
-// request regardless of who made it, so a plain fetch() here is enough --
-// no message-passing to the service worker needed.
-const ARMENIA_TILE_BOUNDS = { west: 43.4, east: 46.7, south: 38.8, north: 41.35 };
-const ARMENIA_TILE_ZOOMS = [6, 7, 8, 9];
-const TILE_SUBDOMAINS = "abc";
-
-function lonToTileX(lon, z) {
-  return Math.floor(((lon + 180) / 360) * 2 ** z);
-}
-function latToTileY(lat, z) {
-  const rad = (lat * Math.PI) / 180;
-  return Math.floor(((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * 2 ** z);
-}
-
-let tilesPreloadScheduled = false;
-const TILE_PREWARM_STORAGE_KEY = "fieldvisits_tiles_prewarmed_at";
-const TILE_PREWARM_INTERVAL_MS = 24 * 60 * 60 * 1000;
-
-function preloadArmeniaTiles() {
-  if (tilesPreloadScheduled) return;
-  tilesPreloadScheduled = true;
-  // Data Saver is an explicit "don't spend my data in the background"
-  // signal -- unsupported on iOS Safari (this feature's main audience),
-  // where it's simply undefined and this check is a no-op.
-  if (navigator.connection?.saveData) return;
-  let lastRun = 0;
-  try {
-    lastRun = Number(localStorage.getItem(TILE_PREWARM_STORAGE_KEY)) || 0;
-  } catch {
-    // Storage can throw in a locked-down/private-browsing context -- treat
-    // that the same as "never warmed" rather than skipping the feature.
-  }
-  if (Date.now() - lastRun < TILE_PREWARM_INTERVAL_MS) return;
-  runWhenIdle(async () => {
-    const tiles = [];
-    for (const z of ARMENIA_TILE_ZOOMS) {
-      const xMin = lonToTileX(ARMENIA_TILE_BOUNDS.west, z);
-      const xMax = lonToTileX(ARMENIA_TILE_BOUNDS.east, z);
-      const yMin = latToTileY(ARMENIA_TILE_BOUNDS.north, z);
-      const yMax = latToTileY(ARMENIA_TILE_BOUNDS.south, z);
-      for (let x = xMin; x <= xMax; x++) {
-        for (let y = yMin; y <= yMax; y++) tiles.push({ x, y, z });
-      }
-    }
-    // A handful of parallel fetches at a time -- this is a best-effort
-    // background nicety running on the user's own data/battery while the
-    // app is idle, not a race to finish, so it shouldn't compete with
-    // whatever the user is actually doing on the network right when the
-    // app opens.
-    let next = 0;
-    async function worker() {
-      while (next < tiles.length) {
-        const { x, y, z } = tiles[next++];
-        const s = TILE_SUBDOMAINS[(x + y) % TILE_SUBDOMAINS.length];
-        const url = `https://${s}.tile.openstreetmap.org/${z}/${x}/${y}.png`;
-        try {
-          await fetch(url);
-        } catch {
-          // Offline or unreachable -- fine, this is best-effort warmup; the
-          // real tile fetch/retry/fallback-provider logic in map.js still
-          // runs normally whenever Map is actually opened.
-        }
-      }
-    }
-    await Promise.all(Array.from({ length: 4 }, worker));
-    try {
-      localStorage.setItem(TILE_PREWARM_STORAGE_KEY, String(Date.now()));
-    } catch {
-      // Non-fatal if storage isn't writable.
-    }
-  });
-}
 
 let currentCleanup = null;
 let currentPath = null;
@@ -640,344 +558,7 @@ function recoverBlankScreen() {
 document.addEventListener("visibilitychange", recoverBlankScreen);
 window.addEventListener("pageshow", recoverBlankScreen);
 
-async function renderRoute() {
-  // A screen whose code arrives after a newer render started (the session turned out to be expired while the remembered Home was
-  // loading, a fast second tap) must not paint over the newer screen: it is dropped (render() ignores STALE_ROUTE).
-  const mySeq = renderSeq;
-  const fresh = (loading) => loading.then((m) => {
-    if (mySeq !== renderSeq) throw STALE_ROUTE;
-    return m;
-  });
-  document.documentElement.lang = getLang();
-  // Any open sheet/dialog overlay is appended straight to document.body,
-  // outside the routed view container render() replaces below -- so
-  // navigating away (an in-app back button, but especially the browser/
-  // PWA's own edge-swipe-back gesture, which changes location.hash without
-  // going through any of this app's own close handlers) used to leave it
-  // floating on screen over whatever the new route rendered underneath,
-  // instead of closing along with the page it belonged to.
-  document.querySelectorAll(".sheet-overlay").forEach((el) => el.remove());
-
-  if (!state.user) {
-    if (currentCleanup) {
-      currentCleanup();
-      currentCleanup = null;
-    }
-    // A logged-out session's back-cache would otherwise hold onto this
-    // account's DOM (and whatever cleanup it owned) across a login screen
-    // that might belong to a different account entirely on a shared device.
-    backStack.forEach(disposeBackEntry);
-    backStack = [];
-    disposeParkedMap();
-    lastRenderedHash = null;
-    topBar.hidden = true;
-    navBar.hidden = true;
-    sidebar.hidden = true;
-    const { renderLogin } = await fresh(import("./views/login.js"));
-    renderLogin(app, async () => {
-      location.hash = "#/dashboard";
-      startLocationBroadcast();
-      startDriverArrival(navigate);
-      // A session that expired while this device had queued offline work
-      // stops flushQueue() at the first 401 rather than deleting that work
-      // (see offlineQueue.js) -- nothing else re-triggers a flush once the
-      // rep is back online AND re-authenticated (the 'online' listener
-      // already fired before they logged back in), so a fresh login is the
-      // other point that needs its own retry.
-      flushQueue();
-      render();
-      refreshOrderBadge();
-      refreshPaymentBadge();
-      refreshUnrecordedBadge();
-      refreshWarehouseBadge();
-      refreshAccountingBadge();
-      refreshDeliveryBadge();
-      refreshNotificationBadge();
-      refreshPlanApprovalBadge();
-    });
-    return;
-  }
-
-  topBar.hidden = false;
-  navBar.hidden = false;
-  sidebar.hidden = false;
-  markShellShown();
-  // Warehouse manager / driver: their own small app -- anything outside their screens goes back to their Home.
-  if (!shellAllows(state.user.role, location.hash)) {
-    location.replace("#/dashboard");
-    return;
-  }
-  // Cashflow holds salaries and every money movement: only the owner's own roles open it (server: canSeeCashflow); anyone else who types or follows the
-  // address lands on Home instead of an empty page with an error (a deep link from an old notification, a bookmark).
-  if (/^#\/cashflow(\?|$)/.test(location.hash) && !canSeeCashflow(state.user.role)) {
-    location.replace("#/dashboard");
-    return;
-  }
-  renderNav();
-  mountInstallPrompt(installRoot);
-  preloadCoreViews();
-  preloadArmeniaTiles();
-
-  const hash = location.hash || "#/dashboard";
-  // A new version is waiting and the person chose "Later": the screens already loaded are the old ones, and a screen opened for the first
-  // time now would come from the new files and clash with them ("This screen could not load", e.g. the customer card). Moving to another
-  // screen is the safe moment to switch: reload straight onto it.
-  if (isUpdatePending() && lastRenderedHash && hash.split("?")[0] !== lastRenderedHash.split("?")[0]) {
-    location.reload();
-    return;
-  }
-  if (HOME_TREE_ROUTES.has(hash.split("?")[0])) lastHomeHash = hash;
-
-  // Restore from the back-cache -- only on a genuine back/forward
-  // navigation (see the popstate listener below), and only when it's the
-  // exact screen we most recently left. Reattaches the same DOM nodes (so
-  // every click listener, timer, and closure-held filter/sort/search state
-  // is still exactly as it was) instead of asking the route's view module
-  // to rebuild everything from scratch and lose all of it.
-  const isHistory = !programmaticNav;
-  programmaticNav = false;
-  // Back to the Map tab while it sits parked: it is the entry to restore (a Map link with a customer, add or plan flag builds fresh).
-  if (hash === "#/map" && parkedMap && !backStack.some((entry) => entry.hash === "#/map")) {
-    backStack.push(parkedMap);
-    parkedMap = null;
-  }
-  let matchIdx = -1;
-  for (let i = backStack.length - 1; i >= 0; i--) {
-    if (backStack[i].hash === hash) {
-      matchIdx = i;
-      break;
-    }
-  }
-  if (matchIdx >= 0 && (matchIdx === backStack.length - 1 || isHistory)) {
-    if (currentCleanup) {
-      currentCleanup();
-      currentCleanup = null;
-    }
-    // Screens opened after the one we are returning to are being unwound.
-    backStack.splice(matchIdx + 1).forEach(disposeBackEntry);
-    const { nodes, cleanup, scrollTop, appClassName, bodyClassName } = backStack.pop();
-    app.replaceChildren(nodes);
-    // Reapply whatever #app/document.body class customization the
-    // restored view had made at mount time (e.g. map.js's scroll lock) --
-    // stripped below when it was stashed, since its own cleanup function
-    // (the only thing that normally removes them) is deferred, not run,
-    // while a view sits in the back-cache.
-    app.className = appClassName ?? baseAppClassName;
-    document.body.className = bodyClassName ?? baseBodyClassName;
-    currentCleanup = cleanup || null;
-    lastRenderedHash = hash;
-    requestAnimationFrame(() => {
-      app.scrollTop = scrollTop;
-    });
-    // A restored view's DOM/closures are exactly as they were when the
-    // user left -- including whatever data they rendered with, which may
-    // no longer be current (e.g. map.js's markers after an edit made on a
-    // customer detail page visited in between). A view that cares opts in
-    // by attaching an onRestore() hook to its cleanup function; one that
-    // doesn't need this is unaffected.
-    currentCleanup?.onRestore?.();
-    // Back from a screen that a sheet's link opened: put that sheet back.
-    const parked = takeParkedSheet(hash);
-    if (parked) document.body.appendChild(parked);
-    return;
-  }
-
-  // Not restoring: whatever is currently mounted is about to be replaced.
-  // Stash it into the single back-cache slot first (so a subsequent "back"
-  // to exactly this hash is instant) unless there's nothing to stash (first
-  // paint) or we're already on this exact hash (a re-render of the same
-  // route, e.g. after a settings change). A stale, unconsumed cache entry
-  // from an earlier hop is disposed here rather than silently dropped, so
-  // whatever cleanup it owned (a timer, a geolocation watch) still runs.
-  // A tab switch is a lateral move: start a fresh trail (see the back-stack
-  // comment above). A cached copy of the screen we are about to render fresh
-  // would only be stale, so it is disposed too.
-  if (NAV_TAB_ROOT_HASHES.has(hash.split("?")[0]) && !isHistory) {
-    const mapEntry = backStack.find((entry) => entry.hash === "#/map");
-    backStack.forEach((entry) => entry !== mapEntry && disposeBackEntry(entry));
-    backStack = [];
-    if (mapEntry) parkMap(mapEntry);
-  }
-  // A Map that is about to be built fresh (a link with a flag, a restart) replaces whatever is parked.
-  if (hash.startsWith("#/map")) disposeParkedMap();
-  backStack = backStack.filter((entry) => {
-    if (entry.hash !== hash) return true;
-    disposeBackEntry(entry);
-    return false;
-  });
-  if (isHistory && lastRenderedHash && lastRenderedHash !== hash && app.firstChild && matchIdx < 0 && backStack.length === 0) {
-    // History traversal to a screen we hold no copy of, with nothing cached:
-    // keep the trail as it is rather than caching the screen we leave.
-    if (currentCleanup) {
-      currentCleanup();
-      currentCleanup = null;
-    }
-  } else if (lastRenderedHash && lastRenderedHash !== hash && app.firstChild && !isModalMapFlow(lastRenderedHash)) {
-    // Captured BEFORE emptying #app below -- a scroll container with no
-    // children always reports scrollTop 0, so reading it after the move
-    // loop would silently throw away the real position every time.
-    const scrollTopSnapshot = app.scrollTop;
-    const appClassNameSnapshot = app.className;
-    const bodyClassNameSnapshot = document.body.className;
-    const fragment = document.createDocumentFragment();
-    while (app.firstChild) fragment.appendChild(app.firstChild);
-    backStack.push({
-      hash: lastRenderedHash,
-      nodes: fragment,
-      cleanup: currentCleanup,
-      scrollTop: scrollTopSnapshot,
-      appClassName: appClassNameSnapshot,
-      bodyClassName: bodyClassNameSnapshot,
-    });
-    currentCleanup = null; // ownership transferred to the back stack
-    trimBackStack();
-    // The outgoing view's cleanup function -- the only thing that would
-    // normally strip any #app/document.body classes it added at mount
-    // time -- isn't going to run until its entry is evicted, which may be
-    // much later or never. The next view must not inherit them (e.g.
-    // mounting a checkin page under map.js's scroll-locking class), so
-    // reset to the true baseline now; restoring that entry later reapplies
-    // its own snapshot.
-    app.className = baseAppClassName;
-    document.body.className = baseBodyClassName;
-  } else if (currentCleanup) {
-    currentCleanup();
-    currentCleanup = null;
-  }
-  // A parked sheet only survives while the screen it was opened on is the one
-  // sitting in the back-cache.
-  pruneParkedSheet(backStack.map((entry) => entry.hash));
-  lastRenderedHash = hash;
-
-  const [path, queryString] = hash.split("?");
-  if (path !== currentPath) {
-    currentPath = path;
-    requestAnimationFrame(() => app.focus({ preventScroll: true }));
-  }
-  const query = new URLSearchParams(queryString || "");
-  const customerMatch = path.match(/^#\/customers\/(\d+)$/);
-  const productMatch = path.match(/^#\/product\/(\d+)$/);
-  const customerOrdersMatch = path.match(/^#\/customers\/(\d+)\/orders$/);
-  const checkinSpotsMatch = path.match(/^#\/customers\/(\d+)\/spots$/);
-  const specialPricesMatch = path.match(/^#\/customers\/(\d+)\/special-prices$/);
-  const checkinMatch = path.match(/^#\/checkin\/(\d+)$/);
-  const orderCreateMatch = path.match(/^#\/orders\/new\/(\d+)$/);
-  const paymentDetailMatch = path.match(/^#\/payments\/(\d+)$/);
-  const handoffDetailMatch = path.match(/^#\/cash-handoffs\/(\d+)$/);
-  const routePlanSetMatch = path.match(/^#\/route-plan-sets\/(\d+)$/);
-
-  if (path === "#/dashboard" && state.user.role === "warehouse_manager") {
-    currentCleanup = await (await fresh(import("./views/warehouseHome.js"))).renderWarehouseHome(app, navigate);
-  } else if (path === "#/dashboard" && state.user.role === "delivery_manager") {
-    currentCleanup = await (await fresh(import("./views/driverHome.js"))).renderDriverHome(app, navigate);
-  } else if (path === "#/wh-home") {
-    // The same Home, opened from the normal app (admin / management compare it with the old screens).
-    currentCleanup = await (await fresh(import("./views/warehouseHome.js"))).renderWarehouseHome(app, navigate);
-  } else if (path === "#/driver-home") {
-    currentCleanup = await (await fresh(import("./views/driverHome.js"))).renderDriverHome(app, navigate);
-  } else if (path === "#/cashflow") {
-    (await fresh(import("./views/cashflow.js"))).renderCashflow(app, navigate);
-  } else if (path === "#/returns") {
-    (await fresh(import("./views/returns.js"))).renderReturns(app, navigate);
-  } else if (path === "#/staff" || /^#\/staff\/\d+$/.test(path)) {
-    (await fresh(import("./views/staff.js"))).renderStaff(app, navigate, path.split("/")[2] ?? null, query);
-  } else if (path === "#/wh-pack") {
-    currentCleanup = await (await fresh(import("./views/warehousePack.js"))).renderWarehousePack(app, navigate, query.get("tab"));
-  } else if (path === "#/dashboard") {
-    (await fresh(import("./views/dashboard.js"))).renderDashboard(app, navigate);
-  } else if (path === "#/activity") {
-    currentCleanup = (await fresh(import("./views/activity.js"))).renderActivity(app, navigate);
-  } else if (path === "#/map") {
-    const { renderMap } = await fresh(import("./views/map.js"));
-    currentCleanup = renderMap(
-      app,
-      navigate,
-      query.get("relocate"),
-      query.get("add") === "1",
-      query.get("plan") === "1",
-      query.get("customer")
-    );
-  } else if (path === "#/customers") {
-    currentCleanup = (await fresh(import("./views/customers.js"))).renderCustomers(app, navigate, query.get("visited"), query.get("potential") ?? "");
-  } else if (specialPricesMatch) {
-    (await fresh(import("./views/specialPrices.js"))).renderSpecialPrices(app, navigate, specialPricesMatch[1]);
-  } else if (checkinSpotsMatch) {
-    (await fresh(import("./views/checkinSpots.js"))).renderCheckinSpots(app, navigate, checkinSpotsMatch[1], query);
-  } else if (customerOrdersMatch) {
-    (await fresh(import("./views/customerOrders.js"))).renderCustomerOrders(app, navigate, customerOrdersMatch[1]);
-  } else if (orderCreateMatch) {
-    (await fresh(import("./views/orderCreate.js"))).renderOrderCreate(app, navigate, orderCreateMatch[1], query.get("checkin"), { from: query.get("from"), usual: query.get("usual") === "1" });
-  } else if (path === "#/orders") {
-    currentCleanup = (await fresh(import("./views/orders.js"))).renderOrders(app, navigate, query.get("open"), { startNew: query.get("new") === "1" });
-  } else if (paymentDetailMatch) {
-    (await fresh(import("./views/payments.js"))).renderPayments(app, navigate, paymentDetailMatch[1]);
-  } else if (path === "#/payments") {
-    (await fresh(import("./views/payments.js"))).renderPayments(app, navigate, null, query);
-  } else if (handoffDetailMatch) {
-    (await fresh(import("./views/cashHandoffs.js"))).renderCashHandoffs(app, navigate, handoffDetailMatch[1]);
-  } else if (path === "#/cash-handoffs") {
-    (await fresh(import("./views/cashHandoffs.js"))).renderCashHandoffs(app, navigate, null, { handover: query.get("handover") === "1" });
-  } else if (path === "#/money") {
-    (await fresh(import("./views/money.js"))).renderMoney(app, navigate);
-  } else if (path === "#/expenses") {
-    (await fresh(import("./views/cashExpenses.js"))).renderCashExpenses(app, navigate);
-  } else if (path === "#/reports") {
-    (await fresh(import("./views/reports.js"))).renderReports(app, navigate, query.get("r"));
-  } else if (path === "#/route-distribution") {
-    (await fresh(import("./views/routeDistribution.js"))).renderRouteDistribution(app, navigate);
-  } else if (routePlanSetMatch) {
-    (await fresh(import("./views/routePlanSets.js"))).renderRoutePlanSet(app, navigate, Number(routePlanSetMatch[1]));
-  } else if (path === "#/route-plans") {
-    (await fresh(import("./views/routePlans.js"))).renderRoutePlans(app, navigate);
-  } else if (path === "#/ops-control") {
-    (await fresh(import("./views/opsControl.js"))).renderOpsControl(app, navigate, query.get("tab"));
-  } else if (path === "#/ask-kad") {
-    (await fresh(import("./views/askKad.js"))).renderAskKad(app, navigate);
-  } else if (path === "#/vaghinak") {
-    (await fresh(import("./views/vaghinak.js"))).renderVaghinak(app, navigate, query);
-  } else if (path === "#/team-progress") {
-    (await fresh(import("./views/repProgress.js"))).renderRepProgress(app, navigate);
-  } else if (path === "#/team-performance" || /^#\/team-performance\/(planning|approvals)$/.test(path)) {
-    // Notifications sent before 1.360.0 carry #/team-performance/<tab>; new ones use ?tab=<tab>.
-    const legacyTab = path.split("/")[2];
-    if (legacyTab) query.set("tab", legacyTab);
-    (await fresh(import("./views/teamPerformance.js"))).renderTeamPerformance(app, navigate, query);
-  } else if (path === "#/company-dashboard") {
-    (await fresh(import("./views/dashboardOverview.js"))).renderDashboardOverview(app, navigate);
-  } else if (path === "#/pricelist") {
-    (await fresh(import("./views/pricelist.js"))).renderPricelist(app, navigate);
-  } else if (productMatch) {
-    (await fresh(import("./views/productDetail.js"))).renderProductDetail(app, navigate, productMatch[1]);
-  } else if (path === "#/warehouse") {
-    (await fresh(import("./views/warehouse.js"))).renderWarehouse(app, navigate);
-  } else if (path === "#/delivery") {
-    (await fresh(import("./views/deliveryRoute.js"))).renderDelivery(app, navigate);
-  } else if (path === "#/accounting") {
-    (await fresh(import("./views/accounting.js"))).renderAccounting(app, navigate);
-  } else if (path === "#/documents") {
-    (await fresh(import("./views/documents.js"))).renderDocuments(app, navigate);
-  } else if (path === "#/recorded") {
-    (await fresh(import("./views/recorded.js"))).renderRecorded(app, navigate);
-  } else if (path === "#/debt-balances") {
-    currentCleanup = (await fresh(import("./views/debtBalances.js"))).renderDebtBalances(app, navigate);
-  } else if (path === "#/sales") {
-    (await fresh(import("./views/sales.js"))).renderSales(app, navigate);
-  } else if (customerMatch) {
-    (await fresh(import("./views/customerDetail.js"))).renderCustomerDetail(app, navigate, customerMatch[1]);
-  } else if (checkinMatch) {
-    (await fresh(import("./views/checkin.js"))).renderCheckin(app, navigate, checkinMatch[1]);
-  } else if (path === "#/settings") {
-    (await fresh(import("./views/settings.js"))).renderSettings(app, doLogout, render, query.get("section"), navigate);
-  } else if (path === "#/notifications") {
-    (await fresh(import("./views/notifications.js"))).renderNotifications(app, navigate, refreshNotificationBadge);
-  } else if (path === "#/tasks") {
-    currentCleanup = (await fresh(import("./views/tasks.js"))).renderTasks(app, navigate, query.get("open"));
-  } else if (path === "#/bonuses") {
-    (await fresh(import("./views/bonuses.js"))).renderBonuses(app, navigate);
-  } else {
-    navigate("#/dashboard");
-  }
-}
+function renderRoute(...args) { return shellRoutes.renderRoute(ctx, ...args); }
 
 // Tracks the inputs renderNav()'s markup actually depends on (active tab,
 // language, display name) so a navigation that doesn't change any of them
@@ -996,344 +577,18 @@ let lastNavSignature = null;
 // rather than re-fetched on every navigation.
 let cachedSettings = null;
 
-// The bars are built once per language / user (and again when settings change what they list); a route change only moves the "active" mark.
-// They used to be torn down and rebuilt on EVERY hash change, which flashed the active state of the tab being tapped and re-created every
-// button (and its listener) in the middle of a tap.
-function syncNavActive(hash) {
-  const base = hash.split("?")[0];
-  const setCurrent = (el, active) => (active ? el.setAttribute("aria-current", "page") : el.removeAttribute("aria-current"));
-  const mark = (selector, activeClass) =>
-    document.querySelectorAll(selector).forEach((el) => {
-      const active = el.dataset.hash === hash;
-      el.classList.toggle(activeClass, active);
-      setCurrent(el, active);
-    });
-  mark("#nav-bar .nav-item[data-hash]", "nav-item-active");
-  mark("#nav-bar .nav-item-center[data-hash]", "nav-item-center-active");
-  mark("#sidebar .sidebar-item[data-hash]", "sidebar-item-active");
-  const bell = topBar.querySelector("#topbar-bell-btn");
-  const menu = topBar.querySelector("#topbar-menu-btn");
-  if (bell) setCurrent(bell, hash === "#/notifications");
-  if (menu) setCurrent(menu, base === "#/settings");
-}
+function syncNavActive(...args) { return shellNav.syncNavActive(ctx, ...args); }
 
-function renderNav() {
-  const hash = (location.hash || "#/dashboard").split("?")[0];
-  const signature = `${getLang()}|${state.user.name}|${state.user.role}`;
-  if (signature !== lastNavSignature) {
-    lastNavSignature = signature;
-    rebuildNavMarkup(hash);
-    rebuildSidebarMarkup(hash);
-  }
-  syncNavActive(hash);
-  applyOrderBadge();
-  applyNotificationBadge();
-  applyPlanApprovalBadge();
-  if (opsShellFor(state.user.role)) {
-    applyWarehouseBadge();
-    applyDeliveryBadge();
-  }
-}
+function renderNav(...args) { return shellNav.renderNav(ctx, ...args); }
 
-// Icons for the sidebar's role-visible quick-action items that aren't
-// already one of the 5 core routes (see EXCLUDED_FROM_SIDEBAR below).
-// colorClass is the exact same quick-action-icon-* class the Home screen's
-// grid uses for this same action (dashboard.js's QUICK_ACTION_ICON) -- the
-// two used to diverge (plain glyph here, colored tile there) for the
-// identical destination; reusing the same class instead of inventing a
-// second palette keeps them looking like the same action everywhere it
-// appears, not two different ones.
-const SIDEBAR_ITEM_ICON = {
-  qa_plan_route: { icon: icons.planDay, colorClass: "quick-action-icon-route" },
-  qa_money: { icon: icons.payment, colorClass: "quick-action-icon-payments" },
-  qa_pricelist: { icon: icons.tag, colorClass: "quick-action-icon-pricelist" },
-  qa_warehouse: { icon: icons.box, colorClass: "quick-action-icon-warehouse" },
-  qa_cashflow: { icon: icons.wallet, colorClass: "quick-action-icon-debt" },
-  qa_staff: { icon: icons.person, colorClass: "quick-action-icon-team" },
-  qa_returns: { icon: icons.undo, colorClass: "quick-action-icon-debt" },
-  qa_wh_home: { icon: icons.box, colorClass: "quick-action-icon-warehouse" },
-  qa_driver_home: { icon: icons.truck, colorClass: "quick-action-icon-delivery" },
-  qa_delivery: { icon: icons.truck, colorClass: "quick-action-icon-delivery" },
-  qa_recorded: { icon: icons.clock, colorClass: "quick-action-icon-recorded" },
-  qa_accounting: { icon: icons.note, colorClass: "quick-action-icon-accounting" },
-  qa_documents: { icon: icons.folder, colorClass: "quick-action-icon-accounting" },
-  qa_team_performance: { icon: icons.target, colorClass: "quick-action-icon-team" },
-  qa_reports: { icon: icons.chart, colorClass: "quick-action-icon-reports" },
-  qa_debt_balances: { icon: icons.wallet, colorClass: "quick-action-icon-debt" },
-  qa_company_dashboard: { icon: icons.dashboard, colorClass: "quick-action-icon-company" },
-  qa_sales: { icon: icons.trendUp, colorClass: "quick-action-icon-sales" },
-  qa_tasks: { icon: icons.tasks, colorClass: "quick-action-icon-tasks" },
-  qa_vaghinak: { icon: icons.vaghinak, colorClass: "quick-action-icon-vaghinak" },
-  qa_ask_kad: { icon: icons.sparkles, colorClass: "quick-action-icon-askkad" },
-  qa_bonuses: { icon: icons.gift, colorClass: "quick-action-icon-bonuses" },
-};
-
-// qa_check_in and qa_add_customer both jump into #/map (with a query
-// param) -- they're "do a thing right now" shortcuts that make sense as
-// their own tile on a phone's home screen, not a second, redundant
-// destination next to the Map item the sidebar already has.
-// The two "(new)" role apps are previews for management on the Home grid; in the sidebar they read as a second Warehouse
-// and a stray Driver item (owner, 2026-10-27: roadmap step 5), so the sidebar leaves them out.
-const EXCLUDED_FROM_SIDEBAR = new Set(["qa_check_in", "qa_add_customer", "qa_tasks", "qa_wh_home", "qa_driver_home"]);
-
-// The sidebar's MORE list in groups (docs/desktop-roadmap.md, step 5). A tile not named here lands in a last "More" group,
-// so a new Home tile is never lost from the sidebar. A group folds; the folded groups are remembered on this device.
-const SIDEBAR_GROUPS = [
-  { key: "sales", label: "sidebar_group_sales", ids: ["qa_vaghinak", "qa_team_performance", "qa_sales", "qa_reports", "qa_plan_route", "qa_bonuses"] },
-  { key: "money", label: "sidebar_group_money", ids: ["qa_money", "qa_debt_balances", "qa_cashflow", "qa_accounting", "qa_recorded"] },
-  { key: "operations", label: "sidebar_group_operations", ids: ["qa_delivery", "qa_warehouse", "qa_returns", "qa_documents", "qa_pricelist"] },
-  { key: "admin", label: "sidebar_group_admin", ids: ["qa_staff", "qa_ask_kad", "qa_company_dashboard"] },
-];
-const SIDEBAR_FOLD_KEY = "fieldvisits_sidebar_folded";
-const SIDEBAR_MODE_KEY = "fieldvisits_sidebar_mode"; // "auto" (icons only below 1280 px) | "collapsed" | "full"
-const readPref = (key, fallback) => {
-  try {
-    return localStorage.getItem(key) ?? fallback;
-  } catch {
-    return fallback;
-  }
-};
-const writePref = (key, value) => {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    /* storage blocked: the choice lasts until the page closes */
-  }
-};
-// Icons-only sidebar: chosen by the toggle, or automatically on a 1024-1279 px window.
-function applySidebarMode() {
-  const mode = readPref(SIDEBAR_MODE_KEY, "auto");
-  const narrow = window.matchMedia?.("(max-width: 1279px)").matches;
-  const collapsed = mode === "collapsed" || (mode === "auto" && narrow);
-  document.documentElement.classList.toggle("sidebar-collapsed", collapsed);
-  const toggle = document.querySelector("#sidebar-toggle");
-  if (toggle) {
-    toggle.setAttribute("aria-pressed", String(collapsed));
-    toggle.setAttribute("aria-label", t(collapsed ? "sidebar_expand" : "sidebar_collapse"));
-    toggle.title = t(collapsed ? "sidebar_expand" : "sidebar_collapse");
-  }
-}
+function applySidebarMode(...args) { return shellNav.applySidebarMode(ctx, ...args); }
 window.matchMedia?.("(max-width: 1279px)").addEventListener?.("change", applySidebarMode);
 
-function rebuildSidebarMarkup(hash) {
-  if (!sidebar) return;
+function rebuildSidebarMarkup(...args) { return shellNav.rebuildSidebarMarkup(ctx, ...args); }
 
-  const shell = opsShellFor(state.user.role);
-  const allVisibleIds = shell ? [] : visibleQuickActionIds(state.user.role, cachedSettings?.quick_action_visibility);
-  const coreItems = shell
-    ? shellTabs(shell)
-    : [
-    { hash: "#/dashboard", label: t("nav_dashboard"), icon: icons.home },
-    { hash: "#/activity", label: t("nav_activity"), icon: icons.activity },
-    { hash: "#/map", label: t("nav_map"), icon: icons.map },
-    { hash: "#/customers", label: t("nav_customers"), icon: icons.customers },
-    { hash: "#/orders", label: t("nav_orders"), icon: icons.cart, badgeId: "sidebar-orders-badge" },
-    // Tasks is one of the four screens a director lives in (owner, 2026-10-18): a main item, not buried under "More"
-    // (still hidden for a role whose Home grid hides it).
-    ...(allVisibleIds.includes("qa_tasks") ? [{ hash: "#/tasks", label: t("qa_tasks"), icon: icons.tasks }] : []),
-  ];
+function shellTabs(...args) { return shellNav.shellTabs(ctx, ...args); }
 
-  const visibleIds = allVisibleIds.filter(
-    (id) => !EXCLUDED_FROM_SIDEBAR.has(id) && (id !== "qa_bonuses" || cachedSettings?.bonuses_enabled)
-  );
-  const moreItems = QUICK_ACTIONS.filter((a) => visibleIds.includes(a.id) && QUICK_ACTION_ROUTE[a.id]).map((a) => {
-    const entry = SIDEBAR_ITEM_ICON[a.id];
-    return {
-      id: a.id,
-      hash: QUICK_ACTION_ROUTE[a.id],
-      label: t(a.id),
-      icon: entry?.icon || icons.chart,
-      colorClass: entry?.colorClass,
-    };
-  });
-  // MORE in groups; a group with nothing this person may open is not shown
-  const grouped = new Set(SIDEBAR_GROUPS.flatMap((g) => g.ids));
-  const groups = [
-    ...SIDEBAR_GROUPS.map((g) => ({ key: g.key, label: t(g.label), items: g.ids.map((id) => moreItems.find((m) => m.id === id)).filter(Boolean) })),
-    { key: "more", label: t("nav_more"), items: moreItems.filter((m) => !grouped.has(m.id)) },
-  ].filter((g) => g.items.length);
-  let folded = new Set();
-  try {
-    folded = new Set(JSON.parse(readPref(SIDEBAR_FOLD_KEY, "[]")));
-  } catch {
-    folded = new Set();
-  }
-
-  function itemHtml(item) {
-    const active = hash === item.hash;
-    return `
-      <button type="button" class="sidebar-item ${active ? "sidebar-item-active" : ""}" data-hash="${item.hash}" ${active ? 'aria-current="page"' : ""} title="${escapeHtml(item.label)}">
-        <span class="sidebar-item-icon ${item.colorClass ? `quick-action-icon ${item.colorClass}` : ""}">
-          ${item.icon}
-          ${item.badgeId ? `<span class="nav-badge count-badge" id="${item.badgeId}" hidden></span>` : ""}
-          ${item.badge ? `<span class="nav-badge count-badge" data-shell-badge="${item.badge}" hidden></span>` : ""}
-        </span>
-        <span>${item.label}</span>
-      </button>
-    `;
-  }
-
-  sidebar.innerHTML = `
-    <div class="sidebar-brand">
-      <img class="topbar-logo topbar-logo-wordmark" src="/brand/kad-wordmark.png" alt="KAD" />
-      <span class="topbar-title">${t("app_name_suffix")}</span>
-    </div>
-    <nav class="sidebar-nav" aria-label="${t("nav_settings")}">
-      ${coreItems.map(itemHtml).join("")}
-      ${groups
-        .map((g) => {
-          // a folded group hides its items except the page that is open now (desktop.css), so moving between pages needs no rebuild
-          const open = !folded.has(g.key);
-          return `<div class="sidebar-group${open ? "" : " is-folded"}" data-group="${g.key}">
-            <button type="button" class="sidebar-section-label sidebar-group-head" data-group-toggle="${g.key}" aria-expanded="${open}">
-              <span>${escapeHtml(g.label)}</span><span class="sidebar-group-chevron" aria-hidden="true"></span>
-            </button>
-            ${g.items.map(itemHtml).join("")}
-          </div>`;
-        })
-        .join("")}
-    </nav>
-  `;
-  // the icons-only toggle sits in the logo row, always in reach (a role shell has none: its sidebar is short)
-  if (!shell) {
-    sidebar
-      .querySelector(".sidebar-brand")
-      ?.insertAdjacentHTML("beforeend", `<button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-pressed="false">${icons.chevronLeft}</button>`);
-  }
-  sidebar.querySelectorAll("[data-hash]").forEach((el) => {
-    el.addEventListener("click", () => handleNavTap(el.dataset.hash === "#/dashboard" ? homeNavTarget() : el.dataset.hash));
-  });
-  sidebar.querySelectorAll("[data-group-toggle]").forEach((el) =>
-    el.addEventListener("click", () => {
-      const key = el.dataset.groupToggle;
-      if (folded.has(key)) folded.delete(key);
-      else folded.add(key);
-      writePref(SIDEBAR_FOLD_KEY, JSON.stringify([...folded]));
-      el.setAttribute("aria-expanded", String(!folded.has(key)));
-      el.closest(".sidebar-group")?.classList.toggle("is-folded", folded.has(key));
-    })
-  );
-  // The toggle flips between icons only and full width; the choice is remembered (auto again only after storage is cleared).
-  sidebar.querySelector("#sidebar-toggle")?.addEventListener("click", () => {
-    const collapsed = document.documentElement.classList.contains("sidebar-collapsed");
-    writePref(SIDEBAR_MODE_KEY, collapsed ? "full" : "collapsed");
-    applySidebarMode();
-  });
-  // A role shell (warehouse / driver) has no toggle: its sidebar is always full.
-  if (shell) document.documentElement.classList.remove("sidebar-collapsed");
-  else applySidebarMode();
-}
-
-// The bottom tabs of a role shell (warehouse manager / driver): their own screens, no centre map button.
-function shellTabs(shell) {
-  return shell.tabs.map((tab) => ({ hash: tab.hash, label: t(tab.label), icon: icons[tab.icon], badge: tab.badge }));
-}
-
-function rebuildNavMarkup(hash) {
-  const shell = opsShellFor(state.user.role);
-  const items = shell
-    ? shellTabs(shell)
-    : [
-        { hash: "#/dashboard", label: t("nav_dashboard"), icon: icons.home },
-        { hash: "#/activity", label: t("nav_activity"), icon: icons.activity },
-        { hash: "#/map", label: t("nav_map"), icon: icons.map, center: true },
-        { hash: "#/customers", label: t("nav_customers"), icon: icons.customers },
-        { hash: "#/orders", label: t("nav_orders"), icon: icons.cart },
-      ];
-
-  navBar.innerHTML = items
-    .map((item) =>
-      item.center
-        ? `
-      <div class="nav-item-center-wrap">
-        <button class="nav-item-center ${hash === item.hash ? "nav-item-center-active" : ""}" data-hash="${item.hash}" aria-label="${item.label}" ${hash === item.hash ? 'aria-current="page"' : ""}>
-          <span class="nav-icon-center">${item.icon}</span>
-        </button>
-        <span class="nav-item-center-label">${item.label}</span>
-      </div>
-    `
-        : `
-      <button class="nav-item ${hash === item.hash ? "nav-item-active" : ""}" data-hash="${item.hash}" aria-label="${item.label}" ${hash === item.hash ? 'aria-current="page"' : ""}>
-        <span class="nav-icon">
-          ${item.icon}
-          ${item.hash === "#/orders" ? `<span class="nav-badge count-badge" id="orders-nav-badge" hidden></span>` : ""}
-          ${item.badge ? `<span class="nav-badge count-badge" data-shell-badge="${item.badge}" hidden></span>` : ""}
-        </span>
-        <span>${item.label}</span>
-      </button>
-    `
-    )
-    .join("");
-
-  navBar.querySelectorAll("[data-hash]").forEach((el) => {
-    el.addEventListener("click", () => handleNavTap(el.dataset.hash === "#/dashboard" ? homeNavTarget() : el.dataset.hash));
-  });
-
-  topBar.innerHTML = `
-    <span class="topbar-brand">
-      <img class="topbar-logo topbar-logo-wordmark" src="/brand/kad-wordmark.png" alt="KAD" />
-      <span class="topbar-title">${t("app_name_suffix")}</span>
-    </span>
-    <div class="topbar-right">
-      <span class="topbar-user">${escapeHtml(state.user.name)}</span>
-      <button type="button" class="topbar-menu-btn" id="topbar-bell-btn" aria-label="${t("notifications_title")}" ${hash === "#/notifications" ? 'aria-current="page"' : ""}>
-        ${icons.bell}
-        <span class="nav-badge count-badge" id="topbar-bell-badge" hidden></span>
-      </button>
-      <button type="button" class="topbar-menu-btn" id="topbar-menu-btn" aria-label="${t("nav_settings")}" ${hash.split("?")[0] === "#/settings" ? 'aria-current="page"' : ""}>
-        ${icons.menu}
-        <span class="nav-badge count-badge" id="topbar-menu-badge" hidden></span>
-      </button>
-    </div>
-  `;
-  // Desktop: global search + quick actions + keyboard shortcuts (deskTopBar.js; fetched only on a desktop-wide window).
-  if (window.matchMedia?.("(min-width: 1024px)").matches) {
-    const allowed = !opsShellFor(state.user.role);
-    import("./deskTopBar.js").then((m) => m.installDeskTopBar(topBar, navigate, { allowed })).catch(() => {});
-  }
-  topBar.querySelector("#topbar-bell-btn").addEventListener("click", () => navigate("#/notifications"));
-  topBar.querySelector("#topbar-menu-btn").addEventListener("click", () => {
-    const current = (location.hash || "#/dashboard").split("?")[0];
-    if (current === "#/settings") {
-      navigate(preSettingsHash);
-    } else {
-      preSettingsHash = current;
-      navigate("#/settings");
-    }
-  });
-}
-
-function renderSyncBanner() {
-  const queue = getQueue();
-  const pending = queue.length;
-  if (!pending) {
-    syncBanner.hidden = true;
-    syncBanner.onclick = null;
-    syncBanner.onkeydown = null;
-    syncBanner.removeAttribute("tabindex");
-    syncBanner.setAttribute("role", "status");
-    syncBanner.classList.remove("sync-banner-link");
-    return;
-  }
-  syncBanner.hidden = false;
-  const needsAttention = queue.filter((e) => e.needsAttention).length;
-  // Either way the banner opens the "waiting to send" sheet (what is queued, retry now, discard a
-  // stuck item); stuck items keep the red button look from before.
-  const template = needsAttention ? t("sync_needs_attention_banner") : t(navigator.onLine ? "syncing_checkins" : "offline_checkins_waiting");
-  const count = needsAttention || pending;
-  // "{s}" is the English plural ending only; the Armenian texts have none.
-  syncBanner.textContent = template.replace("{n}", count).replace("{s}", count > 1 && getLang() !== "hy" ? "s" : "");
-  syncBanner.setAttribute("role", "button");
-  syncBanner.setAttribute("tabindex", "0");
-  syncBanner.classList.toggle("sync-banner-link", !needsAttention);
-  syncBanner.onclick = openSyncQueueSheet;
-  syncBanner.onkeydown = (e) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      openSyncQueueSheet();
-    }
-  };
-}
+function rebuildNavMarkup(...args) { return shellNav.rebuildNavMarkup(ctx, ...args); }
 
 onQueueChange(renderSyncBanner);
 window.addEventListener("online", renderSyncBanner);

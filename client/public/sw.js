@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v478";
+const CACHE_VERSION = "field-visits-v479";
 // v5: drops tiles cached while requests went out without a Referer (OSM may have
 // answered those with placeholder images) -- see Referrer-Policy in server/src/app.js.
 const TILE_CACHE = "field-visits-tiles-v5";
@@ -38,6 +38,10 @@ const APP_SHELL = [
   "/js/prefetch.js",
   "/js/app.js",
   "/js/badges.js",
+  "/js/shell/nav.js",
+  "/js/shell/preload.js",
+  "/js/shell/routes.js",
+  "/js/shell/syncBanner.js",
   "/js/activityDatePicker.js",
   "/js/ordersSearchEnhancements.js",
   "/js/unifiedSearchEnhancements.js",
