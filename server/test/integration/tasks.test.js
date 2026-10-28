@@ -147,3 +147,42 @@ test("09:30 deadline reminder goes out once, only after 09:30 Yerevan, only for 
   await sendDeadlineReminders(late);
   assert.equal(await reminders(), 1, "only once per day");
 });
+
+// Owner, 2026-10-28: who gives a task to whom follows Staff "reports to" (direct and indirect); admin and CEO give tasks to anyone.
+test("subordination: a task giver with a Staff record assigns down their Staff tree only; the CEO to anyone", async () => {
+  const ops = await createUser("operations_director");
+  const opsCookie = await loginAs(ops.email);
+  const outsider = await createUser("sales_manager");
+  const staffIds = [];
+  const addStaff = async (user, reportsTo) => {
+    const { rows } = await pool.query("INSERT INTO staff_members (user_id, name, position, reports_to) VALUES ($1, $2, 'ITest', $3) RETURNING id", [user.id, user.name, reportsTo]);
+    staffIds.push(rows[0].id);
+    return rows[0].id;
+  };
+  try {
+    // ops director > sales director > sales manager > manager2; the outsider and the accountant are not below the director
+    const opsId = await addStaff(ops, null);
+    const dirId = await addStaff(users.sales_director, opsId);
+    const repId = await addStaff(users.sales_manager, dirId);
+    await addStaff(users.manager2, repId);
+    const body = (assignee) => ({ title: "ITest subordination", assignee_id: assignee.id, due_date: yerevanToday() });
+    const post = (cookie, assignee) => apiRequest("/api/tasks", { method: "POST", cookie, body: body(assignee) });
+
+    assert.equal((await post(cookies.sales_director, users.sales_manager)).status, 201, "direct report");
+    assert.equal((await post(cookies.sales_director, users.manager2)).status, 201, "indirect report");
+    assert.equal((await post(cookies.sales_director, outsider)).status, 403, "a sales manager outside the director's tree");
+    assert.equal((await post(opsCookie, users.manager2)).status, 201, "the ops director reaches the whole chain");
+    assert.equal((await post(opsCookie, users.accountant)).status, 403, "the ops director no longer tasks people outside the tree");
+    assert.equal((await post(cookies.ceo, outsider)).status, 201, "the CEO gives tasks to anyone");
+
+    const picker = (await apiRequest("/api/tasks/assignees", { cookie: cookies.sales_director })).data.map((u) => u.id).sort();
+    assert.deepEqual(picker, [users.sales_manager.id, users.manager2.id].sort());
+    // the director sees the tasks of the people below them
+    const all = (await apiRequest("/api/tasks?scope=all&status=all", { cookie: cookies.sales_director })).data.rows;
+    assert.ok(all.some((t) => t.assignee_id === users.manager2.id));
+  } finally {
+    await pool.query("DELETE FROM tasks WHERE creator_id = $1", [ops.id]);
+    await pool.query("UPDATE staff_members SET reports_to = NULL WHERE id = ANY($1)", [staffIds]);
+    await pool.query("DELETE FROM staff_members WHERE id = ANY($1)", [staffIds]);
+  }
+});

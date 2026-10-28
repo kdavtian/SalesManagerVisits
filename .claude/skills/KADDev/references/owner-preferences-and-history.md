@@ -419,3 +419,5 @@ Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets 
   are blocked -- route them to a local PNG with RANDOM padding, because map.js treats identical tile sizes as the provider's "blocked"
   image and shows "The map couldn't load"; the status dropdown has a 260px `max-width` from unified-search.css, so reusing it as a row
   needs `max-width: none !important`.
+- **Task subordination decided (owner, 2026-10-28, "I agree"):** tasks follow Staff "reports to" (direct + indirect); admin and CEO
+  task anyone; the accountant's requests still go to the sales director; no Staff record = the old role rule until the person is added.

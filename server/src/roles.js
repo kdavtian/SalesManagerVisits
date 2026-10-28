@@ -438,7 +438,15 @@ export function seesAllTasks(role) {
   return role === "admin" || role === "ceo" || role === "operations_director";
 }
 
-// The roles a creator may assign a task to; null = any role.
+// Who gets a task from whom (owner, 2026-10-28: "follow Staff 'reports to'"): admin and CEO give tasks to anyone; every other
+// task giver to the people below them in the Staff tree (direct and indirect; routes/tasks.js), and the accountant's requests
+// still go to the sales director.
+export function tasksAnyone(role) {
+  return role === "admin" || role === "ceo";
+}
+
+// The roles a creator may assign a task to; null = any role. Since 2026-10-28 only the fallback for a task giver who has no
+// Staff record yet (no place in the tree to follow).
 export function taskAssigneeRoles(role) {
   if (role === "sales_director") return ["sales_manager"];
   if (sendsRequests(role)) return ["sales_director"];
