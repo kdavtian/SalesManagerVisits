@@ -98,7 +98,7 @@ test("every script and stylesheet is in sw.js APP_SHELL, and every APP_SHELL fil
 // ---- 4. notification types --------------------------------------------------------------------------------------------------------
 // Every type the server sends is in NOTIFICATION_TYPES (the list the on/off preferences are stored against), and every type the Settings
 // screen offers as a switch (views/settings.js) is a real type with its label in English and Armenian.
-test("every notifyUser type is in NOTIFICATION_TYPES; every type Settings shows is real and named in both languages", async () => {
+test("every notifyUser type is in NOTIFICATION_TYPES and offered in Settings, named in both languages", async () => {
   const used = new Map();
   for (const file of walk(path.join(SERVER, "src")).filter((f) => f.endsWith(".js"))) {
     eachNode(parse(file), (n) => {
@@ -111,13 +111,14 @@ test("every notifyUser type is in NOTIFICATION_TYPES; every type Settings shows 
   const unknown = [...used].filter(([type]) => !NOTIFICATION_TYPES.includes(type)).map(([type, where]) => `${type} (${where})`);
   assert.deepEqual(unknown, [], "types sent but missing from NOTIFICATION_TYPES");
 
-  const settings = fs.readFileSync(path.join(PUBLIC, "js/views/settings.js"), "utf8");
-  const shown = JSON.parse(settings.match(/const NOTIFICATION_TYPES = (\[[^\]]*\]);/)?.[1] ?? "null");
-  assert.ok(Array.isArray(shown) && shown.length, "the Settings list NOTIFICATION_TYPES was not found in views/settings.js");
-  assert.deepEqual(shown.filter((type) => !NOTIFICATION_TYPES.includes(type)), [], "Settings offers types the server does not know");
+  // Every kind Settings offers (js/shared/notificationTypes.js, all groups) has its label in both languages.
+  const { NOTIFICATION_GROUPS } = await import(pathToFileURL(path.join(PUBLIC, "js/shared/notificationTypes.js")).href);
+  const shown = NOTIFICATION_GROUPS.flatMap((g) => g.types.map((x) => x.type));
+  assert.deepEqual([...used.keys()].filter((type) => !shown.includes(type)), [], "types sent but not offered in Settings (add them to a group)");
   for (const lang of ["en", "hy"]) {
     const texts = (await import(pathToFileURL(path.join(PUBLIC, `js/i18n-${lang}.js`)).href)).default;
     assert.deepEqual(shown.filter((type) => !texts[`notification_type_${type}`]), [], `Settings types without notification_type_<type> in i18n-${lang}.js`);
+    assert.deepEqual(NOTIFICATION_GROUPS.filter((g) => !texts[`notif_group_${g.key}`]).map((g) => g.key), [], `group titles missing in i18n-${lang}.js`);
   }
 });
 

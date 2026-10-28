@@ -33,7 +33,9 @@ Put these to the owner again, in full, until answered; record the answer and its
 3. **Pace.** Recommended: one release per working day next to feature requests (about 5 weeks). Alternative: a focused push with
    features paused (about 2 weeks).
 
-Answers: _(none yet)_
+Answers (owner, 2026-10-28): 1 = **A** (bundle at deploy, when step 10 comes); 2 = safety first, done as steps 1-4; 3 = no fixed pace:
+the owner names the next steps each time ("I will tell what to implement"). Next named: section B, step 5.
+Also answered: notification switches = **1A** (every kind in Settings, grouped, each role sees its own kinds; 1.460.0).
 
 ## 2. Findings (measured 2026-10-28)
 

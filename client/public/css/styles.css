@@ -16180,3 +16180,14 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
   flex: 1 1 100%;
   order: -1;
 }
+
+/* Settings > Notifications: the group headings (Orders, Money, Tasks and plans, Reports and Excel). */
+.settings-list-group-title {
+  margin: 0;
+  padding: 12px 16px 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}

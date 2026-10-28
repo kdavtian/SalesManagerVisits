@@ -7,6 +7,7 @@ import { getPerfMode, setPerfMode } from "../perfMode.js";
 import { getTextSize, setTextSize } from "../textSize.js";
 import { state, isAdmin, canPlanForOthers, seesFinancialExports, canManageProducts, canReassignCustomers, isPerfCeo } from "../state.js";
 import { ROLES, signsHandoverActs, ownsCustomers } from "../shared/roles.js";
+import { notificationGroupsFor } from "../shared/notificationTypes.js";
 import { renderTeamSection, renderPlanApprovalsSection, renderEditRequestsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection, renderSalesChannelOwnersSection, renderQuickActionVisibilitySection, renderDataQualitySection, renderPlacesSection, renderNotificationDeliveryLogSection, renderClientErrorLogSection } from "./admin.js";
 import { renderSystemHealthSection } from "./systemHealth.js";
 import { renderPinReviewSection } from "./pinReview.js";
@@ -1642,7 +1643,8 @@ async function loadSalesPerformance(slot, role) {
   slot.innerHTML = sections.join("");
 }
 
-const NOTIFICATION_TYPES = ["plan_submitted", "plan_reviewed", "order_status_changed", "order_placed", "visit_reminder", "task_assigned", "task_deadline", "task_completed", "accounting_update", "vaghinak"];
+// Every kind of notification the role can receive, in groups (js/shared/notificationTypes.js; owner, 2026-10-28: "1A").
+const groupTitleRow = (key) => `<p class="settings-list-group-title">${t(`notif_group_${key}`)}</p>`;
 
 async function loadNotificationPreferences(slot) {
   let prefs;
@@ -1654,20 +1656,29 @@ async function loadNotificationPreferences(slot) {
   }
 
   const byType = new Map(prefs.map((p) => [p.notification_type, p]));
-  slot.innerHTML = NOTIFICATION_TYPES.map((type) => {
-    const p = byType.get(type) ?? { enabled: true, is_override: false };
-    return settingsToggleRow({
-      icon: ICON.bell,
-      label: t(`notification_type_${type}`),
-      value: p.enabled ? t("toggle_on") : t("toggle_off"),
-      id: `notif-pref-${type}`,
-      checked: p.enabled,
-      resetId: p.is_override ? `notif-pref-reset-${type}` : null,
-      color: "red",
-    });
-  }).join("");
+  const groups = notificationGroupsFor(state.user?.role);
+  slot.innerHTML = groups
+    .map(
+      (g) =>
+        groupTitleRow(g.key) +
+        g.types
+          .map((type) => {
+            const p = byType.get(type) ?? { enabled: true, is_override: false };
+            return settingsToggleRow({
+              icon: ICON.bell,
+              label: t(`notification_type_${type}`),
+              value: p.enabled ? t("toggle_on") : t("toggle_off"),
+              id: `notif-pref-${type}`,
+              checked: p.enabled,
+              resetId: p.is_override ? `notif-pref-reset-${type}` : null,
+              color: "red",
+            });
+          })
+          .join("")
+    )
+    .join("");
 
-  NOTIFICATION_TYPES.forEach((type) => {
+  groups.flatMap((g) => g.types).forEach((type) => {
     const toggle = slot.querySelector(`#notif-pref-${type}`);
     const valueEl = toggle.closest(".settings-list-row").querySelector(".settings-row-value");
     toggle.addEventListener("click", async () => {
@@ -1732,20 +1743,29 @@ async function renderNotificationDefaultsSection(slot) {
   const toggleList = slot.querySelector("#notif-default-toggles");
 
   function paintRole() {
-    toggleList.innerHTML = NOTIFICATION_TYPES.map((type) => {
-      const entry = matrix.find((m) => m.role === selectedRole && m.notification_type === type);
-      const enabled = entry?.enabled ?? true;
-      return settingsToggleRow({
-        icon: ICON.bell,
-        label: t(`notification_type_${type}`),
-        value: enabled ? t("toggle_on") : t("toggle_off"),
-        id: `notif-default-${type}`,
-        checked: enabled,
-        color: "red",
-      });
-    }).join("");
+    const groups = notificationGroupsFor(selectedRole);
+    toggleList.innerHTML = groups
+      .map(
+        (g) =>
+          groupTitleRow(g.key) +
+          g.types
+            .map((type) => {
+              const entry = matrix.find((m) => m.role === selectedRole && m.notification_type === type);
+              const enabled = entry?.enabled ?? true;
+              return settingsToggleRow({
+                icon: ICON.bell,
+                label: t(`notification_type_${type}`),
+                value: enabled ? t("toggle_on") : t("toggle_off"),
+                id: `notif-default-${type}`,
+                checked: enabled,
+                color: "red",
+              });
+            })
+            .join("")
+      )
+      .join("");
 
-    NOTIFICATION_TYPES.forEach((type) => {
+    groups.flatMap((g) => g.types).forEach((type) => {
       const toggle = toggleList.querySelector(`#notif-default-${type}`);
       const valueEl = toggle.closest(".settings-list-row").querySelector(".settings-row-value");
       toggle.addEventListener("click", async () => {
