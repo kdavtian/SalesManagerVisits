@@ -325,10 +325,3 @@ export async function expenseOverview(now = new Date(), db = pool) {
     cash_by_rep: cashByRep.rows.map((r) => ({ ...r, spend: Number(r.spend) })),
   };
 }
-
-let timer = null;
-export function startExpenseWatch() {
-  if (timer) return;
-  timer = setInterval(() => runExpenseWatch().catch((err) => console.error("Expense watch failed:", err.message)), 60 * 60 * 1000);
-  timer.unref?.();
-}

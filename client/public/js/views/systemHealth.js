@@ -5,7 +5,7 @@
 import { api } from "../api.js";
 import { APP_VERSION } from "../version.js";
 import { t } from "../i18n.js";
-import { escapeHtml, formatDateDMY } from "../util.js";
+import { escapeHtml, formatDateDMY, openInfoPopup } from "../util.js";
 import { checkForUpdateManually } from "../updateBanner.js";
 import { renderErpSyncCard } from "../erpSyncCard.js";
 
@@ -60,6 +60,8 @@ export async function renderSystemHealthSection(container) {
       ${row(t("health_uptime"), uptime(h.uptime_seconds))}
     </div>
 
+    ${jobsCardHtml(h.jobs ?? [])}
+
     <div class="card health-card" id="erp-sync-card"></div>
 
     <div class="card health-card" id="ai-card"></div>
@@ -87,6 +89,15 @@ export async function renderSystemHealthSection(container) {
       ${row(t("health_erp_key"), badge(h.integrations.erp_sync_key, "health_on", "health_off"))}
     </div>`;
 
+  for (const btn of container.querySelectorAll("[data-job]")) {
+    const job = (h.jobs ?? []).find((j) => j.name === btn.dataset.job);
+    btn.addEventListener("click", () =>
+      openInfoPopup(
+        `<h3>${escapeHtml(jobLabel(job.name))}</h3><p>${escapeHtml(job.last_error ?? "")}</p>` +
+          `<p class="muted">${escapeHtml(every(job.every_seconds))} · ${escapeHtml(t("health_job_failures").replace("{n}", job.failures))}</p>`
+      )
+    );
+  }
   renderErpSyncCard(container.querySelector("#erp-sync-card"));
   renderAiCard(container.querySelector("#ai-card"));
 
@@ -100,6 +111,31 @@ export async function renderSystemHealthSection(container) {
       btn.textContent = t("up_to_date");
     }
   });
+}
+
+// Background jobs (server/src/jobs/): when each last ran and how; a failed one opens its error and schedule.
+const jobLabel = (name) => t(`job_${name.replaceAll("-", "_")}`);
+const every = (seconds) => (seconds >= 3600 ? t("health_every_hours").replace("{n}", seconds / 3600) : t("health_every_minutes").replace("{n}", Math.round(seconds / 60)));
+function jobsCardHtml(jobs) {
+  if (!jobs.length) return "";
+  const failed = jobs.filter((j) => j.enabled && j.last_ok === false).length;
+  const anyOff = jobs.some((j) => !j.enabled);
+  const rowOf = (j) => {
+    if (!j.enabled) return row(jobLabel(j.name), `<span class="badge badge-neutral">${t("health_off")}</span>`);
+    if (j.last_ok === false) {
+      return `<button type="button" class="health-row health-row-btn" data-job="${escapeHtml(j.name)}">
+        <span class="health-label">${escapeHtml(jobLabel(j.name))}</span>
+        <span class="health-value">${escapeHtml(ago(j.last_finished_at))} <span class="badge badge-danger">${t("health_job_failed")} !</span></span>
+      </button>`;
+    }
+    if (!j.last_finished_at) return row(jobLabel(j.name), `<span class="muted">—</span>`); // not run yet
+    return row(jobLabel(j.name), escapeHtml(ago(j.last_finished_at)), `<span class="badge badge-success">${t("health_ok")}</span>`);
+  };
+  return `<div class="card health-card">
+      <h3 class="health-title">${t("health_jobs")} ${failed ? `<span class="badge badge-danger">${failed}</span>` : ""}</h3>
+      ${jobs.map(rowOf).join("")}
+      <p class="muted health-note">${t("health_jobs_note")}${anyOff ? ` ${t("health_job_off_push")}` : ""}</p>
+    </div>`;
 }
 
 const AI_TEST_CODES = ["not_configured", "key_rejected", "no_credit", "rate_limit", "model_not_found", "unreachable", "busy", "ai_error"];

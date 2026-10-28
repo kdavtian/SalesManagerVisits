@@ -51,8 +51,7 @@ bonusChallengesRouter.post("/templates/:id/publish", requireBonusChallengeManage
     const template = await publishTemplate(Number(req.params.id), req.user.id);
     // Otherwise the first round only appears once the hourly
     // bonusChallengeWorker.js tick happens to run next (up to an hour after
-    // this request, and setInterval fires no earlier than one full interval
-    // after server boot -- see startBonusChallengeEngine), so an admin
+    // this request -- see the bonus-challenges job in jobs/index.js), so an admin
     // publishing a challenge would see nothing change and a sales rep would
     // see no active challenge until then. ensureCurrentRound/ensureOnceRound
     // are the same idempotent functions the worker itself calls, so this is

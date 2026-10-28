@@ -1,15 +1,12 @@
 // Periodic "you still have unvisited planned stops today" push reminder.
-// There's no job runner in this app (see dashboard.js's monthly close-out
-// comment) and this doesn't need one -- a plain setInterval inside the one
-// long-running Node process is enough for a single-instance deployment.
-// Runs a few times a day rather than continuously, and remembers who it
+// Run every 2 hours by the background job scheduler (jobs/index.js), only when
+// push is set up. Runs a few times a day rather than continuously, and remembers who it
 // already nudged today so a rep gets at most one reminder per day.
 
 import { pool } from "./db/pool.js";
 import { enabled as pushEnabled } from "./push.js";
 import { notifyUser } from "./notifications.js";
 
-const CHECK_INTERVAL_MS = 2 * 60 * 60 * 1000; // every 2 hours
 const lastNotifiedDate = new Map(); // user_id -> "YYYY-MM-DD" already notified
 
 function todayKey() {
@@ -58,11 +55,4 @@ export async function checkOverdueReminders() {
       url: "/#/map",
     });
   }
-}
-
-export function startOverdueReminders() {
-  if (!pushEnabled) return;
-  setInterval(() => {
-    checkOverdueReminders().catch((err) => console.error("Overdue reminder check failed:", err.message));
-  }, CHECK_INTERVAL_MS);
 }

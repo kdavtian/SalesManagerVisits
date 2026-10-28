@@ -155,3 +155,16 @@ test("no screen keeps its own list of roles: it asks js/shared/roles.js", async 
   assert.ok(ROLES.length >= 8);
 });
 
+// ---- 6. one scheduler ------------------------------------------------------------------------------------------------------------------
+// Background work is a job in server/src/jobs/index.js (one scheduler: runs once even with two server copies, last run shown in Settings
+// > System health), never a module's own setInterval.
+test("no setInterval in the server outside the job scheduler", () => {
+  const offenders = [];
+  for (const file of walk(path.join(SERVER, "src")).filter((f) => f.endsWith(".js") && !f.endsWith(path.join("jobs", "scheduler.js")))) {
+    eachNode(parse(file), (n) => {
+      if (n.type === "CallExpression" && n.callee.type === "Identifier" && n.callee.name === "setInterval") offenders.push(`${path.relative(SERVER, file)}:${n.loc.start.line}`);
+    });
+  }
+  assert.deepEqual(offenders, [], "add a job to server/src/jobs/index.js instead");
+});
+

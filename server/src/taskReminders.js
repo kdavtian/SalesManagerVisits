@@ -1,16 +1,13 @@
 // "Deadline today" reminder for open tasks: at 09:30 Yerevan time on the day a
 // task is due, its assignee gets one more notification (the first one went out
-// when the task was created). Same setInterval-in-the-one-process pattern as
-// overdueReminders.js; the "already sent today" marker lives in the database
+// when the task was created). Run every minute by the background job scheduler
+// (jobs/index.js); the "already sent today" marker lives in the database
 // (tasks.deadline_reminder_sent_on) so a restart never double-notifies.
 import { pool } from "./db/pool.js";
 import { notifyUser } from "./notifications.js";
 import { yerevanToday } from "./utils/yerevanDate.js";
 import { runAutoTasks } from "./debtCollectionTasks.js";
-import { sendWeeklyScorecards } from "./scorecard.js";
-import { sendWeeklyDebtDigest } from "./debtDigest.js";
 
-const CHECK_INTERVAL_MS = 60 * 1000;
 const REMINDER_MINUTES = 9 * 60 + 30; // 09:30
 const YEREVAN_OFFSET_MS = 4 * 60 * 60 * 1000;
 
@@ -44,16 +41,10 @@ export async function sendDeadlineReminders(now = new Date()) {
 const AUTO_TASKS_MINUTES = 9 * 60 + 5;
 let autoTasksDay = null;
 
-export function startTaskReminders() {
-  setInterval(() => {
-    sendDeadlineReminders().catch((err) => console.error("Task reminder check failed:", err.message));
-    const now = new Date();
-    const today = yerevanToday(now);
-    sendWeeklyScorecards(now).catch((err) => console.error("Weekly scorecard failed:", err.message));
-    sendWeeklyDebtDigest(now).catch((err) => console.error("Weekly debt digest failed:", err.message));
-    if (yerevanMinutesOfDay(now) >= AUTO_TASKS_MINUTES && autoTasksDay !== today) {
-      autoTasksDay = today;
-      runAutoTasks(now).catch((err) => console.error("Automatic tasks failed:", err.message));
-    }
-  }, CHECK_INTERVAL_MS);
+// Called every minute by the scheduler (jobs/index.js): runs the automatic tasks the first time it is called after 09:05 each day.
+export async function runAutoTasksOnceADay(now = new Date()) {
+  const today = yerevanToday(now);
+  if (yerevanMinutesOfDay(now) < AUTO_TASKS_MINUTES || autoTasksDay === today) return;
+  autoTasksDay = today;
+  await runAutoTasks(now);
 }

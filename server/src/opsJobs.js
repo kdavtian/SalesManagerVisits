@@ -5,7 +5,6 @@ import { yerevanToday } from "./utils/yerevanDate.js";
 import { excelStatus, dataScorecard } from "./opsReports.js";
 import { createOpsTask, closeOpsTasks, usersWithRole } from "./opsTasks.js";
 import { isWorkingDay, minuteOfDay } from "./vaghinak/engine.js";
-import { runCashSheetJobs } from "./cashSheets.js";
 
 const CHECK_LABELS = {
   customers_no_channel: "Հաճախորդներ՝ առանց ալիքի",
@@ -50,14 +49,4 @@ export async function runOpsJobs(now = new Date(), db = pool) {
     }
   }
   return result;
-}
-
-let timer = null;
-export function startOpsJobs() {
-  if (timer) return;
-  timer = setInterval(() => {
-    runOpsJobs().catch((err) => console.error("Ops jobs failed:", err.message));
-    runCashSheetJobs().catch((err) => console.error("Cash sheet jobs failed:", err.message)); // document flow: unconfirmed hand-offs, sheets not recorded
-  }, 30 * 60 * 1000);
-  timer.unref?.();
 }

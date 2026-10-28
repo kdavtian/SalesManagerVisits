@@ -1,8 +1,8 @@
 // Periodic reminder for orders sitting "packed_stock_out" too long without
 // being delivered -- a batch that got packed but never made it onto (or
-// off of) a route (decision C1: remind after N hours, chosen as 4). Same
-// setInterval-in-the-one-process pattern as overdueReminders.js -- no job
-// runner needed for a single-instance deployment. Remembers which orders
+// off of) a route (decision C1: remind after N hours, chosen as 4). Run every
+// 30 minutes by the background job scheduler (jobs/index.js), only when push
+// is set up. Remembers which orders
 // it already nudged for so a stuck order gets at most one reminder.
 
 import { pool } from "./db/pool.js";
@@ -10,7 +10,6 @@ import { enabled as pushEnabled } from "./push.js";
 import { notifyUser } from "./notifications.js";
 import { WAREHOUSE_NOTIFY_ROLES } from "./notificationPreferences.js";
 
-const CHECK_INTERVAL_MS = 30 * 60 * 1000; // every 30 minutes
 const STALE_HOURS = 4;
 // Reminders only go out in working time (Yerevan): 09:00-17:59, Monday-Saturday.
 // An order that turns stale at night is simply picked up by the first sweep of the morning.
@@ -74,11 +73,4 @@ export function buildStalePackedMessage(staleOrders) {
     title: "Փաթեթավորված պատվերներ են սպասում",
     body: `${staleOrders.length} փաթեթավորված պատվեր սպասում է առաքման։`,
   };
-}
-
-export function startStalePackedReminder() {
-  if (!pushEnabled) return;
-  setInterval(() => {
-    checkStalePackedOrders().catch((err) => console.error("Stale-packed reminder check failed:", err.message));
-  }, CHECK_INTERVAL_MS);
 }

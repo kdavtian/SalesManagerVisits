@@ -1,7 +1,5 @@
-// Periodic reconciliation sweep for the Bonuses module -- same setInterval-
-// in-the-one-process pattern as dailySummary.js/erpSyncMonitor.js (see
-// those files' own header comments; no separate job runner for a
-// single-instance deployment). This is the safety net behind whatever
+// Periodic reconciliation sweep for the Bonuses module, run hourly by the
+// background job scheduler (jobs/index.js). This is the safety net behind whatever
 // direct route-level hooks a later phase adds: every ingest*() function in
 // bonusSourceIngest.js is idempotent, so re-sweeping a window that's mostly
 // already processed is always a cheap no-op, never a duplicate award --
@@ -16,7 +14,6 @@ import { pool } from "./db/pool.js";
 import { getBonusesEnabled } from "./bonusSettings.js";
 import { ingestVisitContribution, ingestCollectionContribution, ingestOrderDelivery, ingestOfficeAttendance } from "./bonusSourceIngest.js";
 
-const CHECK_INTERVAL_MS = 60 * 60 * 1000; // hourly
 
 // Generous overlap with the sweep interval so a checkin/payment that syncs
 // late from an offline device, or a payment approved well after it was
@@ -76,13 +73,4 @@ export async function runReconciliationSweep({ lookbackHours = DEFAULT_LOOKBACK_
     payments: payments.length,
     orders: orders.length,
   };
-}
-
-let started = false;
-export function startBonusReconciliation() {
-  if (started) return;
-  started = true;
-  setInterval(() => {
-    runReconciliationSweep().catch((err) => console.error("Bonus reconciliation sweep failed:", err.message));
-  }, CHECK_INTERVAL_MS);
 }

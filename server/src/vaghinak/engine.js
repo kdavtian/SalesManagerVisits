@@ -13,7 +13,6 @@ import { addressFor, clock, durationHy, pickVariant, QUESTION_CHOICES } from "./
 import { dataChase, orderChase, downpaymentChase } from "./chasers.js";
 import { clusterChase } from "./cluster.js";
 import { bullets } from "../utils/bullets.js";
-import { weeklyDigest } from "./digest.js";
 import { humanDelayPassed, jitteredDue } from "./humanDelay.js";
 import { rolesWhere, isVaghinakManagement } from "../roles.js";
 
@@ -265,17 +264,4 @@ export async function teamPulse(now = new Date(), db = pool) {
       open_questions: openBy.get(rep.id) ?? 0,
     })),
   };
-}
-
-let timer = null;
-export function startVaghinak() {
-  if (timer) return;
-  // every minute (not every 5): the random human delay is what spreads his messages over the minutes
-  timer = setInterval(() => {
-    const now = new Date();
-    tick(now).catch((err) => console.error("Vaghinak tick failed:", err.message));
-    wrapUp(now).catch((err) => console.error("Vaghinak wrap-up failed:", err.message));
-    weeklyDigest(now).catch((err) => console.error("Vaghinak weekly digest failed:", err.message));
-  }, 60 * 1000);
-  timer.unref?.();
 }

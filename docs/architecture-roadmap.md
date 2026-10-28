@@ -171,13 +171,21 @@ Twelve steps, three phases, about 24 releases. Size = number of releases.
   form and painted over it). `app.js` renderRoute now drops a screen whose code arrives after a newer render started.
 
 #### Step 4. One job scheduler - size 1
-- [ ] `server/src/jobs/index.js`: a registry `[{ name, every | at (Yerevan time), workingDaysOnly, run }]`, one `setInterval` tick
+- [x] `server/src/jobs/index.js`: a registry `[{ name, every | at (Yerevan time), workingDaysOnly, run }]`, one `setInterval` tick
       (30 s) that runs what is due; each run takes `pg_try_advisory_lock(hashtext(name))` so a second server never runs it twice;
       writes `job_runs` (name, started_at, finished_at, ok, error) - migration.
-- [ ] Move the 13 timers into the registry one by one (same schedule as today; keep each job's own function).
-- [ ] Settings > Administration > System health: a "Background jobs" list (name, schedule, last run, ok/failed) for admin.
-- [ ] Tests: the scheduler runs a due job once, skips a locked one, records failures.
+- [x] Move the 13 timers into the registry one by one (same schedule as today; keep each job's own function).
+- [x] Settings > Administration > System health: a "Background jobs" list (name, schedule, last run, ok/failed) for admin.
+- [x] Tests: the scheduler runs a due job once, skips a locked one, records failures.
 - Done when: `grep -rn setInterval server/src` finds only `jobs/index.js` (and the per-request rate limiter, if any).
+- As built (1.459.0, migration 167): `server/src/jobs/scheduler.js` (one 15 s timer) + `jobs/index.js` (the list: 18 jobs from the 12
+  modules, each at its old cadence; the four push-only ones are off without VAPID keys, as before). Instead of an advisory lock the claim
+  is one `UPDATE background_jobs SET next_run_at = ... WHERE next_run_at <= now() RETURNING name`: only one server copy gets each turn,
+  and the row keeps the last run, ok / error, duration, runs and failures. A job still running is not started again. A first start
+  waits one interval (like setInterval); later starts keep the stored next run, so a deploy no longer pushes every job back. Settings >
+  System health shows the "Background jobs" card (a failed job opens its error). Architecture check 6 fails on a `setInterval` outside
+  the scheduler. Jobs that remember "already sent today" in memory (overdue visits, daily summary, stale packed, auto tasks) still do;
+  with two server copies they would need that in the database (not needed with one).
 
 ### Phase B - structure (pure moves first, rewrites after; every release keeps behaviour identical)
 
@@ -289,4 +297,5 @@ the server share `roles.js`; a screen never edits another screen's DOM.
 - Analysis and plan: 2026-10-28 (no code change).
 - Step 1 code checker: 1.456.0, PR #500, 2026-10-28.
 - Step 2 architecture checks: 1.457.0, PR #501, 2026-10-28.
-- Step 3 one role file: 1.458.0, 2026-10-28.
+- Step 3 one role file: 1.458.0, PR #502, 2026-10-28.
+- Step 4 one job scheduler: 1.459.0, migration 167, 2026-10-28.
