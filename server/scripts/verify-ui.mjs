@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -25,6 +25,11 @@ const files = Object.fromEntries(
     ].map(async (name) => [name, await readFile(path.join(publicDir, name), "utf8")]),
   ),
 );
+// The map screen is split into views/map.js and its parts in views/map/ (step 6): the map checks read them together.
+const mapPartsDir = path.join(publicDir, "js/views/map");
+for (const part of (await readdir(mapPartsDir)).filter((f) => f.endsWith(".js")).sort()) {
+  files["js/views/map.js"] += `\n${await readFile(path.join(mapPartsDir, part), "utf8")}`;
+}
 
 const checks = [
   ["safe-area viewport is enabled", "index.html", /viewport-fit=cover/],

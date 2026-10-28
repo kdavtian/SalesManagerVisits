@@ -1,27 +1,26 @@
 import { api } from "../api.js";
-import { reorderChipHtml } from "../reorder.js";
-import { showToast, cssColor, activateCombobox, activateDialog, openInfoPopup, escapeHtml, formatRelative, formatAmd, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, rememberPosition, getLastKnownPosition, tierSelectorHtml, TIER_OPTIONS, isNeverVisited, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, regionLabelHy, subregionLabelHy, channelDisplayLabel, parseDateOnly, formatDayMonth } from "../util.js";
-import { wirePlaceInput, placeNoticeText } from "../places.js";
+import { openInfoPopup, escapeHtml, formatAmd, parseDateOnly, formatDayMonth } from "../util.js";
 import { t } from "../i18n.js";
-import { buildCustomerTree, renderTriStateTree, buildDirectionManagerTree, NO_GROUP_KEY } from "../regionTree.js";
-import { getTheme } from "../theme.js";
-import { icons } from "../icons.js";
-import { FILTER_ICONS } from "../filterIcons.js";
+import { NO_GROUP_KEY } from "../regionTree.js";
 import { nextVisitRowHtml, formatLastVisit } from "../visitSchedule.js";
-import { canViewTeamLocations, canEditDirectly, canPlanForOthers, canReassignCustomers, state } from "../state.js";
-import { movesAnyPinAtOnce } from "../shared/roles.js";
-import { getClusterPins, setClusterPins, getCompassMode, setCompassMode, getMapTileCacheEnabled, getColorBy, setColorBy, getPlannedMode, setPlannedMode, getDebtCoin, setDebtCoin } from "../mapPrefs.js";
+import { state } from "../state.js";
+import { getClusterPins, setClusterPins, getCompassMode, setCompassMode, getColorBy, setColorBy, getPlannedMode, getDebtCoin, setDebtCoin } from "../mapPrefs.js";
 import { repColor } from "../repColors.js";
 import { getPerfMode } from "../perfMode.js";
 import { ensureLeaflet } from "../leafletLoader.js";
 import { paintCheckinSpots, parseHere } from "../checkinSpotsLayer.js";
 import { routeLegs, openRouteInMaps, routeShareText, shareRouteToTelegram } from "../routeNavigation.js";
-import { loadWithCache } from "../listCache.js";
-import { createMapSideTable } from "../mapSideTable.js";
-import { openTriStateTreeSheet } from "../regionTree.js";
-import { COMPETITORS, indexBrandSummary, brandSearchText, currentChips, matchedEverEntries, matchesSelectedChips, buildBrandChipTree, chipHtml, shortDate } from "../brandChips.js";
+import { COMPETITORS, currentChips, matchedEverEntries, chipHtml, shortDate } from "../brandChips.js";
+import * as mapTiles from "./map/tiles.js";
+import * as mapMarkers from "./map/markers.js";
+import * as mapFilters from "./map/filters.js";
+import * as mapPlanning from "./map/planning.js";
+import * as mapSearch from "./map/search.js";
+import * as mapLocation from "./map/location.js";
+import * as mapAddCustomer from "./map/addCustomer.js";
+import * as mapTemplate from "./map/template.js";
 
-const NEARBY_RADIUS_METERS = 5000;
+export const NEARBY_RADIUS_METERS = 5000;
 
 // The channel/rep filter's own default (per explicit request): a field sales
 // manager's own assigned book -- every "SM ..." channel -- plus Potential
@@ -31,7 +30,7 @@ const NEARBY_RADIUS_METERS = 5000;
 // looking for, so they start hidden -- still just a normal filter value,
 // not a hard restriction: opening the channel filter sheet and selecting
 // any of them (or Clear, for "show everything") works exactly as before.
-const MAP_DEFAULT_CHANNEL_FILTERS = ["POTENTIAL", "SM YVN", "SM Davtashen", "SM Shirak", "SM CAS"];
+export const MAP_DEFAULT_CHANNEL_FILTERS = ["POTENTIAL", "SM YVN", "SM Davtashen", "SM Shirak", "SM CAS"];
 
 // Mirrors the brand_status shape recorded at check-in (see BRAND_GROUPS in
 // checkin.js) -- castrol/lotos/royal get their own status tags, each
@@ -55,7 +54,7 @@ const BRAND_FILTER_OPTIONS = [
 // for both themes; CARTO had a dedicated dark style but OSM only ships one
 // visual style, so dark mode is approximated with a CSS filter on the tile
 // pane instead (see .leaflet-tile-pane in map-safe-enhancements.css).
-const TILE_URLS = {
+export const TILE_URLS = {
   dark: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
   light: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
 };
@@ -64,12 +63,12 @@ const TILE_URLS = {
 // live from a real device, not a hypothetical. Wikimedia's own OSM-data
 // mirror, on independent infrastructure, backs up the primary -- diversifying
 // against one host having a bad day, not just one provider.
-const FALLBACK_TILE_URLS = [{ url: "https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png", subdomains: "" }];
-const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+export const FALLBACK_TILE_URLS = [{ url: "https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png", subdomains: "" }];
+export const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 // How many of a provider's own early tile loads get the soft-block byte-size
 // check below -- bounded so a healthy provider only pays this extra fetch
 // cost briefly at startup/provider-switch, not for the rest of the session.
-const SOFT_BLOCK_SAMPLE_SIZE = 6;
+export const SOFT_BLOCK_SAMPLE_SIZE = 6;
 
 // Leaflet itself is loaded on demand (see leafletLoader.js) rather than
 // unconditionally at page load -- app.js idle-preloads it right after
@@ -81,7 +80,7 @@ const SOFT_BLOCK_SAMPLE_SIZE = 6;
 // finished, or the load genuinely fails (offline on first visit, e.g.).
 
 // Checklist glyph of the open-task marker on a pin (also drawn in the pin key).
-const TASK_PIN_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10a1.5 1.5 0 0 1 1.5 1.5v14A1.5 1.5 0 0 1 17 21H7a1.5 1.5 0 0 1-1.5-1.5v-14A1.5 1.5 0 0 1 7 4Z"/><path d="m8.6 10 1.2 1.2 2-2.2M8.6 15.4l1.2 1.2 2-2.2M14 10.5h2.4M14 15.9h2.4"/></svg>';
+export const TASK_PIN_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10a1.5 1.5 0 0 1 1.5 1.5v14A1.5 1.5 0 0 1 17 21H7a1.5 1.5 0 0 1-1.5-1.5v-14A1.5 1.5 0 0 1 7 4Z"/><path d="m8.6 10 1.2 1.2 2-2.2M8.6 15.4l1.2 1.2 2-2.2M14 10.5h2.4M14 15.9h2.4"/></svg>';
 
 export function renderMap(root, navigate, relocateCustomerId, startInAddMode = false, startInPlanMode = false, focusCustomerId = null) {
   root.innerHTML = `<div class="map-view map-view-loading"><p class="loading-state" role="status">${t("loading")}</p></div>`;
@@ -152,6 +151,211 @@ function saveMapView(map) {
 }
 
 function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = false, startInPlanMode = false, focusCustomerId = null) {
+  // The screen's variables, for its parts in other files (read and written through getters / setters, so they always see the current value).
+  const ctx = {
+    get advanceProvider() { return advanceProvider; },
+    get blankChecks() { return blankChecks; }, set blankChecks(v) { blankChecks = v; },
+    get blankTimer() { return blankTimer; }, set blankTimer(v) { blankTimer = v; },
+    get checkMapNotBlank() { return checkMapNotBlank; },
+    get currentProvider() { return currentProvider; },
+    get hideMapError() { return hideMapError; },
+    get latToTileY() { return latToTileY; },
+    get lngToTileX() { return lngToTileX; },
+    get makeTileLayer() { return makeTileLayer; },
+    get map() { return map; },
+    get mapEl() { return mapEl; },
+    get mapErrorOverlay() { return mapErrorOverlay; },
+    get mapIsMeasurable() { return mapIsMeasurable; },
+    get mapRetryHint() { return mapRetryHint; },
+    get primaryTileUrl() { return primaryTileUrl; },
+    get providerIndex() { return providerIndex; }, set providerIndex(v) { providerIndex = v; },
+    get showMapError() { return showMapError; },
+    get startTileHealthCheck() { return startTileHealthCheck; },
+    get tileEverLoaded() { return tileEverLoaded; }, set tileEverLoaded(v) { tileEverLoaded = v; },
+    get tileHealthTimer() { return tileHealthTimer; }, set tileHealthTimer(v) { tileHealthTimer = v; },
+    get tileLayer() { return tileLayer; }, set tileLayer(v) { tileLayer = v; },
+    get warmedTileKeys() { return warmedTileKeys; },
+    get addMode() { return addMode; },
+    get applyFilter() { return applyFilter; },
+    get colorBy() { return colorBy; },
+    get customerClusterGroup() { return customerClusterGroup; },
+    get customerIcon() { return customerIcon; },
+    get customerMarkerLayer() { return customerMarkerLayer; }, set customerMarkerLayer(v) { customerMarkerLayer = v; },
+    get customerStatus() { return customerStatus; },
+    get customerStatusBadge() { return customerStatusBadge; },
+    get debtCoinHtml() { return debtCoinHtml; },
+    get debtCoinOn() { return debtCoinOn; },
+    get debtCoinSize() { return debtCoinSize; },
+    get debtors() { return debtors; }, set debtors(v) { debtors = v; },
+    get emptyBoundsRecenterAttempted() { return emptyBoundsRecenterAttempted; }, set emptyBoundsRecenterAttempted(v) { emptyBoundsRecenterAttempted = v; },
+    get factsCache() { return factsCache; },
+    get fetchFacts() { return fetchFacts; },
+    get focusCustomerId() { return focusCustomerId; },
+    get focusCustomerPin() { return focusCustomerPin; },
+    get focusOnCustomerMarker() { return focusOnCustomerMarker; },
+    get initialViewApplied() { return initialViewApplied; }, set initialViewApplied(v) { initialViewApplied = v; },
+    get lastCustomers() { return lastCustomers; }, set lastCustomers(v) { lastCustomers = v; },
+    get lastPopupCustomerId() { return lastPopupCustomerId; }, set lastPopupCustomerId(v) { lastPopupCustomerId = v; },
+    get loadBrandSummary() { return loadBrandSummary; },
+    get loadDebtFlags() { return loadDebtFlags; },
+    get loadSideDebt() { return loadSideDebt; },
+    get loadTaskFlags() { return loadTaskFlags; },
+    get markerKind() { return markerKind; },
+    get markerLayer() { return markerLayer; },
+    get navigate() { return navigate; },
+    get nudgePopupIntoView() { return nudgePopupIntoView; },
+    get paintCustomers() { return paintCustomers; },
+    get PIN_SHAPED_KINDS() { return PIN_SHAPED_KINDS; },
+    get PIN_TIP_RATIO() { return PIN_TIP_RATIO; },
+    get pinArtHtml() { return pinArtHtml; },
+    get pinSize() { return pinSize; },
+    get plainCustomerLayer() { return plainCustomerLayer; },
+    get plannedRingHtml() { return plannedRingHtml; },
+    get popupBrandChipsHtml() { return popupBrandChipsHtml; },
+    get popupFactsHtml() { return popupFactsHtml; },
+    get refreshNearestCustomerBar() { return refreshNearestCustomerBar; },
+    get renderIconFilterRow() { return renderIconFilterRow; },
+    get reopenCustomerId() { return reopenCustomerId; }, set reopenCustomerId(v) { reopenCustomerId = v; },
+    get repColorOf() { return repColorOf; },
+    get resolveCustomersReady() { return resolveCustomersReady; },
+    get sideListHost() { return sideListHost; },
+    get sideTable() { return sideTable; }, set sideTable(v) { sideTable = v; },
+    get syncSidePlanned() { return syncSidePlanned; },
+    get taskFlags() { return taskFlags; }, set taskFlags(v) { taskFlags = v; },
+    get taskMarkerHtml() { return taskMarkerHtml; },
+    get userTouchedMap() { return userTouchedMap; },
+    get warmVisiblePopups() { return warmVisiblePopups; },
+    get activeFilter() { return activeFilter; },
+    get assignmentKeyOf() { return assignmentKeyOf; },
+    get assignmentKeys() { return assignmentKeys; }, set assignmentKeys(v) { assignmentKeys = v; },
+    get brandAvailabilityIcon() { return brandAvailabilityIcon; },
+    get brandAvailabilityStatus() { return brandAvailabilityStatus; },
+    get brandChipIds() { return brandChipIds; }, set brandChipIds(v) { brandChipIds = v; },
+    get brandStatusByCustomer() { return brandStatusByCustomer; }, set brandStatusByCustomer(v) { brandStatusByCustomer = v; },
+    get brandStatusLoaded() { return brandStatusLoaded; }, set brandStatusLoaded(v) { brandStatusLoaded = v; },
+    get brandSummary() { return brandSummary; }, set brandSummary(v) { brandSummary = v; },
+    get categoryFilters() { return categoryFilters; }, set categoryFilters(v) { categoryFilters = v; },
+    get clearRouteAndStops() { return clearRouteAndStops; },
+    get currentAssignmentIds() { return currentAssignmentIds; },
+    get iconFilterRow() { return iconFilterRow; },
+    get keepRestoredView() { return keepRestoredView; },
+    get lastMatches() { return lastMatches; }, set lastMatches(v) { lastMatches = v; },
+    get loadPlannedFilter() { return loadPlannedFilter; },
+    get managerFilter() { return managerFilter; },
+    get MAP_TIER_ORDER() { return MAP_TIER_ORDER; },
+    get mapFilterIconButton() { return mapFilterIconButton; },
+    get myLocation() { return myLocation; }, set myLocation(v) { myLocation = v; },
+    get openMapTypeTierSheet() { return openMapTypeTierSheet; },
+    get paintRepLegend() { return paintRepLegend; },
+    get passesAssignment() { return passesAssignment; },
+    get phoneMatches() { return phoneMatches; },
+    get PIN_Z() { return PIN_Z; },
+    get plannedCustomerIds() { return plannedCustomerIds; },
+    get plannedEmptyHint() { return plannedEmptyHint; },
+    get plannedMode() { return plannedMode; },
+    get plannedStopsPanel() { return plannedStopsPanel; },
+    get plannedTodayByRep() { return plannedTodayByRep; },
+    get plannedTodayIdSet() { return plannedTodayIdSet; },
+    get refreshPlannedToday() { return refreshPlannedToday; },
+    get relocateCustomerId() { return relocateCustomerId; },
+    get renderSearchPanel() { return renderSearchPanel; },
+    get renderSideList() { return renderSideList; },
+    get renderStopListPanel() { return renderStopListPanel; },
+    get root() { return root; },
+    get searchNoResults() { return searchNoResults; },
+    get searchPanelOpen() { return searchPanelOpen; },
+    get searchQuery() { return searchQuery; },
+    get selectedBrand() { return selectedBrand; },
+    get startInAddMode() { return startInAddMode; },
+    get startInPlanMode() { return startInPlanMode; },
+    get syncCompetitorsForFilters() { return syncCompetitorsForFilters; },
+    get tierFilters() { return tierFilters; }, set tierFilters(v) { tierFilters = v; },
+    get customersReady() { return customersReady; },
+    get fetchPlannedToday() { return fetchPlannedToday; },
+    get fetchTodayPlannedIds() { return fetchTodayPlannedIds; },
+    get loadPlannedTodayByRep() { return loadPlannedTodayByRep; },
+    get numberedIcon() { return numberedIcon; },
+    get paintPlannedControls() { return paintPlannedControls; },
+    get PLAN_STATUS_KEY() { return PLAN_STATUS_KEY; },
+    get plannedBtn() { return plannedBtn; },
+    set plannedCustomerIds(v) { plannedCustomerIds = v; },
+    get plannedLabel() { return plannedLabel; },
+    set plannedMode(v) { plannedMode = v; },
+    set plannedTodayByRep(v) { plannedTodayByRep = v; },
+    set plannedTodayIdSet(v) { plannedTodayIdSet = v; },
+    get routeLine() { return routeLine; }, set routeLine(v) { routeLine = v; },
+    get selectedPlanManagerId() { return selectedPlanManagerId; },
+    get sidePlannedOff() { return sidePlannedOff; }, set sidePlannedOff(v) { sidePlannedOff = v; },
+    get stopListEl() { return stopListEl; },
+    get stopMarkers() { return stopMarkers; },
+    get WEEKDAY_KEYS() { return WEEKDAY_KEYS; },
+    get WEEKDAY_ORDER() { return WEEKDAY_ORDER; },
+    get addressLoading() { return addressLoading; }, set addressLoading(v) { addressLoading = v; },
+    get addressResults() { return addressResults; }, set addressResults(v) { addressResults = v; },
+    get addressResultsEl() { return addressResultsEl; },
+    get addressSearchMarker() { return addressSearchMarker; }, set addressSearchMarker(v) { addressSearchMarker = v; },
+    get addressSearchToken() { return addressSearchToken; }, set addressSearchToken(v) { addressSearchToken = v; },
+    get hideAddressResults() { return hideAddressResults; },
+    get mapSearchInput() { return mapSearchInput; },
+    get phoneTailDigits() { return phoneTailDigits; },
+    get SEARCH_PANEL_CUSTOMER_CAP() { return SEARCH_PANEL_CUSTOMER_CAP; },
+    get SEARCH_PIN_HTML() { return SEARCH_PIN_HTML; },
+    set searchPanelOpen(v) { searchPanelOpen = v; },
+    get searchTab() { return searchTab; }, set searchTab(v) { searchTab = v; },
+    get searchTabChosen() { return searchTabChosen; }, set searchTabChosen(v) { searchTabChosen = v; },
+    get selectAddressResult() { return selectAddressResult; },
+    get headingEventName() { return headingEventName; }, set headingEventName(v) { headingEventName = v; },
+    get locateBtn() { return locateBtn; },
+    get locationMode() { return locationMode; }, set locationMode(v) { locationMode = v; },
+    get meAccuracyCircle() { return meAccuracyCircle; }, set meAccuracyCircle(v) { meAccuracyCircle = v; },
+    get meIcon() { return meIcon; },
+    get meMarker() { return meMarker; }, set meMarker(v) { meMarker = v; },
+    get nearbyList() { return nearbyList; },
+    get nearbyPanel() { return nearbyPanel; },
+    get nearbyPanelTitle() { return nearbyPanelTitle; },
+    get nearestBar() { return nearestBar; },
+    get nearestCustomer() { return nearestCustomer; }, set nearestCustomer(v) { nearestCustomer = v; },
+    get nearestInfo() { return nearestInfo; },
+    get onHeading() { return onHeading; },
+    get renderNearbyList() { return renderNearbyList; },
+    get stopHeading() { return stopHeading; },
+    get stopWatch() { return stopWatch; },
+    get TEAM_AVATAR_COLORS() { return TEAM_AVATAR_COLORS; },
+    get teamAvatarColor() { return teamAvatarColor; },
+    get teamBtn() { return teamBtn; },
+    get teamEmptyHint() { return teamEmptyHint; },
+    get teamEmptyHintTimer() { return teamEmptyHintTimer; }, set teamEmptyHintTimer(v) { teamEmptyHintTimer = v; },
+    get teamLayer() { return teamLayer; },
+    get teamMemberIcon() { return teamMemberIcon; },
+    get updateLocateButtonState() { return updateLocateButtonState; },
+    get watchId() { return watchId; }, set watchId(v) { watchId = v; },
+    set addMode(v) { addMode = v; },
+    get cancelLocationPicker() { return cancelLocationPicker; },
+    get closeLocationPanel() { return closeLocationPanel; },
+    get fab() { return fab; },
+    get geocodeToken() { return geocodeToken; }, set geocodeToken(v) { geocodeToken = v; },
+    get handoffToCustomerForm() { return handoffToCustomerForm; },
+    get hint() { return hint; },
+    get lastTapPoint() { return lastTapPoint; }, set lastTapPoint(v) { lastTapPoint = v; },
+    get lastTapTime() { return lastTapTime; }, set lastTapTime(v) { lastTapTime = v; },
+    get loadCustomers() { return loadCustomers; },
+    get locationPanel() { return locationPanel; },
+    get longPressStart() { return longPressStart; }, set longPressStart(v) { longPressStart = v; },
+    get longPressTimer() { return longPressTimer; }, set longPressTimer(v) { longPressTimer = v; },
+    get NEW_PIN_HTML() { return NEW_PIN_HTML; },
+    get openAddressSearchSheet() { return openAddressSearchSheet; },
+    get openNewCustomerForm() { return openNewCustomerForm; },
+    get openRelocateConfirmDetails() { return openRelocateConfirmDetails; },
+    get placeLocationPin() { return placeLocationPin; },
+    get placingMarker() { return placingMarker; }, set placingMarker(v) { placingMarker = v; },
+    get removePlacingMarker() { return removePlacingMarker; },
+    get renderLocationPanelShell() { return renderLocationPanelShell; },
+    get showLocationErrorPanel() { return showLocationErrorPanel; },
+    get showLocationPanel() { return showLocationPanel; },
+    get startAddCustomerFlow() { return startAddCustomerFlow; },
+    set startInAddMode(v) { startInAddMode = v; },
+    get syncAddHint() { return syncAddHint; },
+  };
   const plainBrowse = !relocateCustomerId && !startInAddMode && !startInPlanMode && focusCustomerId == null;
   const restoredView = plainBrowse ? loadMapView() : null;
   // Pin-popup facts (last visit / debt / planned date), cached per customer
@@ -229,219 +433,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       ${nextVisitRowHtml(data)}
     `;
   };
-  root.innerHTML = `
-    <div class="map-view">
-      ${
-        relocateCustomerId
-          ? ""
-          : `<div class="map-side-list" id="map-side-list"></div>`
-      }
-      <div class="map-canvas" id="map-canvas">
-      <div id="leaflet-map"></div>
-      ${
-        relocateCustomerId
-          ? `<div class="relocate-banner" id="relocate-banner">
-              <span>${t("relocate_hint")}</span>
-              <button type="button" id="cancel-relocate">${t("cancel")}</button>
-            </div>`
-          : ""
-      }
-
-      ${
-        relocateCustomerId
-          ? ""
-          : `<div class="map-top-controls">
-              <div class="map-search-row">
-                <div class="map-search-input-wrap">
-                  <span class="map-search-input-icon" aria-hidden="true">${icons.search}</span>
-                  <input type="search" id="map-customer-search" placeholder="${t("map_search_placeholder")}" aria-label="${t("map_search_placeholder")}" />
-                </div>
-                <div class="map-address-results map-search-panel" id="map-address-results" hidden></div>
-              </div>
-              <p class="map-search-no-results" id="map-search-no-results" hidden>${t("map_search_no_results")}</p>
-              <div class="customer-filter-row" id="map-icon-filter-row"></div>
-              <div class="map-filter-row">
-                <button class="map-filter-chip chip-active" data-filter="" aria-pressed="true"><span class="map-filter-chip-icon">${icons.filter}</span>${t("filter_all")}</button>
-                <button class="map-filter-chip" data-filter="overdue" aria-pressed="false"><span class="map-filter-chip-icon">${icons.mapWarning}</span>${t("filter_overdue")}</button>
-                <button class="map-filter-chip" data-filter="visited-today" aria-pressed="false"><span class="map-filter-chip-icon">${icons.checkCircle}</span>${t("filter_visited_today")}</button>
-                <button class="map-filter-chip" data-filter="visited-7days" aria-pressed="false"><span class="map-filter-chip-icon">${icons.clock}</span>${t("filter_visited_7days")}</button>
-                <button class="map-filter-chip" data-filter="planned" aria-pressed="false"><span class="map-filter-chip-icon">${icons.send}</span>${t("filter_planned")}</button>
-                <button class="map-filter-chip" data-filter="nearby" aria-pressed="false"><span class="map-filter-chip-icon">${icons.locate}</span>${t("filter_nearby")}</button>
-                <button class="map-filter-chip" data-filter="brands" aria-pressed="false"><span class="map-filter-chip-icon">${FILTER_ICONS.brands}</span>${t("filter_brands")}</button>
-              </div>
-              <div class="map-filter-row" id="brand-picker-row" hidden></div>
-              <div class="map-brand-legend" id="brand-legend" hidden>
-                <span><span class="brand-legend-dot brand-legend-available"></span>${t("brand_legend_available")}</span>
-                <span><span class="brand-legend-dot brand-legend-unavailable"></span>${t("brand_legend_unavailable")}</span>
-                <span><span class="brand-legend-dot brand-legend-unknown"></span>${t("brand_legend_unknown")}</span>
-              </div>
-            </div>`
-      }
-
-      <div class="nearby-panel" id="nearby-panel" hidden>
-        <div class="nearby-panel-header">
-          <span id="nearby-panel-title">${t("nearby_loading")}</span>
-          <button type="button" class="icon-btn" id="nearby-panel-close" aria-label="${t("cancel")}">${icons.close}</button>
-        </div>
-        <div class="nearby-list card-list" id="nearby-list"></div>
-        <button type="button" class="nearby-view-all" id="nearby-view-all">${t("view_all_customers")}</button>
-      </div>
-
-      <!-- Bottom-docked (not a full-screen modal) so the map and its
-           draggable pin stay interactive while this is showing -- a modal
-           .sheet-overlay sits above everything and would swallow every tap
-           and drag on the map underneath it. -->
-      <div class="location-picker-panel" id="location-picker-panel" hidden></div>
-
-      <div class="nearby-panel" id="planned-stops-panel" hidden>
-        <div class="nearby-panel-header">
-          <span class="planned-stops-title"><span>${t("route_stops")}</span><small id="planned-stops-summary"></small></span>
-          <span class="nearby-panel-header-actions">
-            <button type="button" class="icon-btn" id="open-route-btn" aria-label="${t("route_open_title")}" title="${t("route_open_title")}">${icons.navigation}</button>
-            <button type="button" class="icon-btn" id="share-route-btn" aria-label="${t("route_share")}" title="${t("route_share")}">${icons.share}</button>
-            <button type="button" class="btn btn-sm" id="optimize-route-btn">${t("optimize_route")}</button>
-            <button type="button" class="icon-btn" id="planned-stops-close" aria-label="${t("cancel")}">${icons.close}</button>
-          </span>
-        </div>
-        <div class="stop-list" id="stop-list"></div>
-      </div>
-
-      <div class="map-controls">
-        <div class="map-control-cluster">
-          <button class="map-control-btn" id="zoom-in-btn" aria-label="${t("zoom_in")}">
-            ${icons.plus}
-          </button>
-          <div class="map-control-divider"></div>
-          <button class="map-control-btn" id="zoom-out-btn" aria-label="${t("zoom_out")}">
-            ${icons.minus}
-          </button>
-        </div>
-        <button class="map-control-btn map-control-standalone" id="locate-btn" aria-label="${t("locate_me")}">
-          ${icons.locate}
-        </button>
-        <button class="map-control-btn map-control-standalone" id="compass-btn" aria-label="${t("reset_north")}" hidden>
-          ${icons.compass}
-        </button>
-        ${
-          canViewTeamLocations()
-            ? `<button class="map-control-btn map-control-standalone" id="team-locations-btn" aria-label="${t("team_locations")}">${icons.team}</button>`
-            : ""
-        }
-        <button class="map-control-btn map-control-standalone" id="plan-day-btn" aria-label="${t("plan_day")}">
-          ${icons.planDay}
-        </button>
-        <button class="map-control-btn map-control-standalone" id="planned-today-filter-btn" aria-label="${t("filter_planned_today")}" title="${t("filter_planned_today")}" aria-pressed="false">
-          ${icons.target}
-        </button>
-        <button class="map-control-btn map-control-standalone map-control-legend-btn" id="map-legend-btn" aria-label="${t("map_legend")}" aria-expanded="false" aria-haspopup="dialog">
-          ${icons.info}
-        </button>
-      </div>
-
-      <div class="map-legend-panel" id="map-legend-panel" role="dialog" aria-label="${t("map_legend_title")}" hidden>
-        <div class="map-sheet-grab" id="map-legend-grab" aria-hidden="true"><span></span></div>
-        <div class="map-legend-header">
-          <span>${t("map_legend_title")}</span>
-          <button type="button" class="icon-btn" id="map-legend-close" aria-label="${t("close")}">${icons.close}</button>
-        </div>
-        <div class="map-legend-body">
-          <div class="map-legend-prefs">
-            <div class="map-legend-pref-row">
-              <span>${t("map_cluster_pins")}</span>
-              <button type="button" class="toggle-switch" id="map-legend-toggle-cluster" role="switch" aria-checked="${getClusterPins()}" aria-label="${t("map_cluster_pins")}">
-                <span class="toggle-thumb"></span>
-              </button>
-            </div>
-            <div class="map-legend-pref-row map-legend-pref-stack">
-              <span>${t("map_color_by")}</span>
-              <div class="segmented map-color-by" role="group" aria-label="${t("map_color_by")}">
-                <button type="button" class="chip ${getColorBy(state.user?.id) === "tier" ? "chip-active" : ""}" data-color-by="tier" aria-pressed="${getColorBy(state.user?.id) === "tier"}">${t("map_color_tier")}</button>
-                <button type="button" class="chip ${getColorBy(state.user?.id) === "rep" ? "chip-active" : ""}" data-color-by="rep" aria-pressed="${getColorBy(state.user?.id) === "rep"}">${t("map_color_rep")}</button>
-              </div>
-            </div>
-            <ul class="map-rep-legend" id="map-rep-legend" hidden></ul>
-            <div class="map-legend-pref-row map-legend-pref-stack">
-              <span>${t("map_planned_rings")}<span role="button" tabindex="0" class="settings-inline-hint-icon" id="map-planned-rings-info" aria-label="${t("more_info")}">!</span></span>
-              <div class="segmented map-planned-mode" role="group" aria-label="${t("map_planned_rings")}">
-                ${["off", "highlight", "only"].map((m) => `<button type="button" class="chip" data-planned-mode="${m}" aria-pressed="false">${t(`map_planned_${m}`)}</button>`).join("")}
-              </div>
-            </div>
-            <div class="map-legend-pref-row">
-              <span>${t("map_debt_coin")}</span>
-              <button type="button" class="toggle-switch" id="map-legend-toggle-debt" role="switch" aria-checked="${getDebtCoin(state.user?.id)}" aria-label="${t("map_debt_coin")}">
-                <span class="toggle-thumb"></span>
-              </button>
-            </div>
-            <div class="map-legend-pref-row">
-              <span>${t("map_compass_mode")}</span>
-              <button type="button" class="toggle-switch" id="map-legend-toggle-compass" role="switch" aria-checked="${getCompassMode()}" aria-label="${t("map_compass_mode")}">
-                <span class="toggle-thumb"></span>
-              </button>
-            </div>
-          </div>
-          <p class="map-legend-note">${t("map_legend_shape_note")}</p>
-          <ul class="map-legend-list">
-            <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/customer-other.svg" alt="" width="20" height="20" />${t("map_legend_customer")}</li>
-            <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/potential-other.png" alt="" width="20" height="20" />${t("map_legend_potential")}</li>
-            <li><img class="map-legend-swatch map-legend-swatch-img" src="/icons/markers/competitor-other.svg" alt="" width="20" height="20" />${t("map_legend_competitor")}</li>
-          </ul>
-          <div class="map-legend-divider"></div>
-          <ul class="map-legend-list">
-            <li><span class="map-legend-swatch map-legend-swatch-badge map-legend-swatch-visited">&#10003;</span>${t("map_legend_visited")}</li>
-            <li><span class="map-legend-swatch map-legend-swatch-badge map-legend-swatch-overdue">!</span>${t("map_legend_overdue")}</li>
-            <li><span class="map-legend-swatch map-legend-swatch-badge map-legend-swatch-never">!!</span>${t("never_visited")}</li>
-            <li><span class="map-legend-swatch map-legend-swatch-selected"></span>${t("map_legend_selected")}</li>
-            <li><span class="map-legend-swatch map-legend-swatch-debt map-legend-swatch-debt-s" aria-hidden="true"></span>${t("map_legend_debt_s")}</li>
-            <li><span class="map-legend-swatch map-legend-swatch-debt map-legend-swatch-debt-m" aria-hidden="true"></span>${t("map_legend_debt_m")}</li>
-            <li><span class="map-legend-swatch map-legend-swatch-debt map-legend-swatch-debt-l" aria-hidden="true"></span>${t("map_legend_debt_l")}</li>
-            <li><span class="map-legend-swatch map-legend-swatch-cluster">9</span>${t("map_legend_cluster")}</li>
-          </ul>
-          <p class="map-legend-note">${t("map_legend_glyph_note")}</p>
-          <div class="map-legend-divider"></div>
-          <ul class="map-legend-list">
-            <li><span class="map-legend-swatch map-legend-swatch-task map-legend-swatch-task-soon" aria-hidden="true">${TASK_PIN_SVG}</span>${t("map_legend_task_soon")}</li>
-            <li><span class="map-legend-swatch map-legend-swatch-task map-legend-swatch-task-due" aria-hidden="true">${TASK_PIN_SVG}</span>${t("map_legend_task_due")}</li>
-            <li><span class="map-legend-swatch map-legend-swatch-planned" aria-hidden="true"><b>2</b></span>${t("map_legend_planned")}</li>
-            <li><span class="map-legend-swatch map-legend-swatch-repring" aria-hidden="true"></span>${t("map_legend_rep_ring")}</li>
-            <li><span class="map-legend-swatch map-legend-swatch-stop" aria-hidden="true">1</span>${t("map_legend_route_stop")}</li>
-            <li><span class="map-legend-swatch map-legend-swatch-stop map-legend-swatch-stop-done" aria-hidden="true">&#10003;</span>${t("map_legend_route_stop_done")}</li>
-          </ul>
-          <div class="map-legend-divider"></div>
-          <ul class="map-legend-list">
-            <li><span class="map-legend-swatch map-legend-swatch-dot map-legend-swatch-dot-available" aria-hidden="true"></span>${t("map_legend_brand_available")}</li>
-            <li><span class="map-legend-swatch map-legend-swatch-dot map-legend-swatch-dot-unavailable" aria-hidden="true"></span>${t("map_legend_brand_unavailable")}</li>
-            <li><span class="map-legend-swatch map-legend-swatch-dot map-legend-swatch-dot-unknown" aria-hidden="true"></span>${t("map_legend_brand_unknown")}</li>
-          </ul>
-          <div class="map-legend-divider"></div>
-          <ul class="map-legend-list">
-            <li><span class="map-legend-swatch map-legend-swatch-me" aria-hidden="true"></span>${t("map_legend_me")}</li>
-            <li><span class="map-legend-swatch map-legend-swatch-team" aria-hidden="true">A</span>${t("map_legend_team")}</li>
-          </ul>
-        </div>
-      </div>
-
-      <button class="fab" id="add-customer-fab" title="${t("new_customer")}" aria-label="${t("new_customer")}" aria-pressed="false">${icons.mapPinPlus}</button>
-      ${
-        relocateCustomerId
-          ? ""
-          : `<div class="nearest-customer-bar" id="nearest-customer-bar" hidden>
-              <button type="button" class="nearest-checkin-btn" id="nearest-checkin-btn" aria-label="${t("check_in")}">${icons.mapPinCheck}</button>
-              <div class="nearest-customer-info" id="nearest-customer-info"></div>
-            </div>`
-      }
-      <div class="map-hint" id="map-hint" role="status" ${startInAddMode ? "" : "hidden"}>${t("tap_map_hint")}</div>
-      <div class="map-hint" id="map-retry-hint" role="status" hidden>${t("loading")}</div>
-      <div class="map-error-overlay" id="map-error-overlay" role="alert" hidden>
-        <div class="map-error-card">
-          <p>${t("map_load_failed")}</p>
-          <button type="button" class="btn btn-primary" id="map-error-retry">${t("try_again")}</button>
-        </div>
-      </div>
-      <div class="map-hint" id="team-empty-hint" hidden>${t("team_locations_empty")}</div>
-      <div class="map-hint" id="planned-empty-hint" hidden>${t("planned_empty")}</div>
-      </div>
-    </div>
-  `;
+  function mapViewHtml(...args) { return mapTemplate.mapViewHtml(ctx, ...args); }
+  root.innerHTML = mapViewHtml();
 
   const mapEl = root.querySelector("#leaflet-map");
   const hint = root.querySelector("#map-hint");
@@ -457,46 +450,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // the map (mapSideTable.js, roadmap step 8). A row click pans to the pin and opens its popup. null on the relocate-pin flow.
   const sideListHost = root.querySelector("#map-side-list");
   let sideTable = null;
-  function renderSideList(entries) {
-    if (!sideListHost) return;
-    if (!sideTable) {
-      sideTable = createMapSideTable({
-        host: sideListHost,
-        badgeOf: (status) => customerStatusBadge(status),
-        inView: (c) => map.getBounds().contains([c.lat, c.lng]),
-        onPick: (id) => focusCustomerPin(id),
-      });
-      loadSideDebt();
-      // after this screen's setup has run (the cached customer list can paint before the planned-visit code below is set up)
-      setTimeout(syncSidePlanned, 0);
-    }
-    sideTable.setEntries(entries);
-  }
-  // The debt column: the same light, RBAC'd list as the pin coin (ids + amounts), fetched once for the table.
-  async function loadSideDebt() {
-    try {
-      const rows = await api.getCustomerDebtFlags();
-      sideTable?.setDebt(new Map(rows.map((r) => [r.customer_id, Number(r.debt_amd)])));
-    } catch {
-      /* the column just stays empty */
-    }
-  }
-  function focusCustomerPin(id) {
-    const entry = lastCustomers.find(({ c }) => c.id === id);
-    if (!entry) return;
-    const { c, marker } = entry;
-    // centre the pin, then open its popup (a grouped pin first zooms until it stands alone)
-    const open = () => {
-      map.panTo([c.lat, c.lng], { animate: false });
-      marker.openPopup();
-    };
-    if (typeof customerMarkerLayer.zoomToShowLayer === "function" && customerMarkerLayer.hasLayer(marker)) {
-      customerMarkerLayer.zoomToShowLayer(marker, open);
-    } else {
-      map.setView([c.lat, c.lng], Math.max(map.getZoom(), 16));
-      open();
-    }
-  }
+  function renderSideList(...args) { return mapMarkers.renderSideList(ctx, ...args); }
+  function loadSideDebt(...args) { return mapMarkers.loadSideDebt(ctx, ...args); }
+  function focusCustomerPin(...args) { return mapMarkers.focusCustomerPin(ctx, ...args); }
 
   // Leaflet's internal pan/zoom gesture handling can fight with an ancestor
   // scroll container on iOS, producing the "freezes while panning" bug.
@@ -585,120 +541,19 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // 0 = primary (OSM); 1..FALLBACK_TILE_URLS.length = that fallback's index+1.
   let providerIndex = 0;
 
-  function hideMapError() {
-    mapErrorOverlay.hidden = true;
-    mapRetryHint.hidden = true;
-  }
+  function hideMapError(...args) { return mapTiles.hideMapError(ctx, ...args); }
 
-  function showMapError() {
-    mapErrorOverlay.hidden = false;
-    mapRetryHint.hidden = true;
-  }
+  function showMapError(...args) { return mapTiles.showMapError(ctx, ...args); }
 
-  function currentProvider() {
-    if (providerIndex === 0) return { url: primaryTileUrl(), subdomains: "abc" };
-    return FALLBACK_TILE_URLS[providerIndex - 1];
-  }
+  function currentProvider(...args) { return mapTiles.currentProvider(ctx, ...args); }
 
-  function makeTileLayer({ url, subdomains }) {
-    const layer = L.tileLayer(url, { maxZoom: 19, attribution: TILE_ATTRIBUTION, subdomains });
-    // OSM's usage-policy "heavy use" notice comes back as an ordinary 200 OK
-    // image, not an HTTP error -- a desktop's wider viewport requests enough
-    // more tiles per pan/zoom than a phone's to cross that informal
-    // threshold, and once it does, every tile in view is silently replaced
-    // by the same static gray/placeholder notice image forever, with
-    // tileload still firing normally (the "blocked map" users have reported
-    // on Windows desktops). tileerror/the 15s timeout below can never catch
-    // this, since nothing about the request actually fails. Detected
-    // instead by re-fetching a handful of early, different-coordinate tiles
-    // and checking for an identical byte size across several of them --
-    // real map tiles at different coordinates are essentially never
-    // byte-for-byte the same size, while the static notice image always is.
-    let softBlockChecks = 0;
-    const softBlockSizes = [];
-    layer.on("tileload", (e) => {
-      tileEverLoaded = true;
-      clearTimeout(tileHealthTimer);
-      hideMapError();
-      if (softBlockChecks >= SOFT_BLOCK_SAMPLE_SIZE) return;
-      softBlockChecks += 1;
-      const tileUrl = typeof layer.getTileUrl === "function" ? layer.getTileUrl(e.coords) : null;
-      if (!tileUrl) return;
-      fetch(tileUrl)
-        .then((res) => res.blob())
-        .then((blob) => {
-          // Ignore a check that resolves after this layer has already been
-          // swapped out (e.g. a provider switch already in flight) --
-          // acting on it here would double-advance past the real current
-          // provider.
-          if (tileLayer !== layer) return;
-          softBlockSizes.push(blob.size);
-          const counts = new Map();
-          for (const size of softBlockSizes) counts.set(size, (counts.get(size) || 0) + 1);
-          if ([...counts.values()].some((count) => count >= 3)) advanceProvider();
-        })
-        .catch(() => {
-          // CORS/network hiccup on this side-channel verification fetch --
-          // the tile itself already rendered fine via the <img> tag Leaflet
-          // used, so just skip this one check rather than treat it as a
-          // signal either way.
-        });
-    });
-    // A provider actively rejecting us (403, or any other real HTTP error
-    // response) fires this almost immediately per tile, unlike a genuinely
-    // unreachable/slow provider which just never responds -- waiting out
-    // the full 15s health-check timeout below in that case leaves the map
-    // visibly broken far longer than necessary once several tiles have
-    // already come back with a real error. Requiring a few errors (not
-    // just one) avoids over-reacting to a single edge/stale tile at the
-    // map's boundary, which 404s/errors normally and isn't a sign the
-    // whole provider is down.
-    let errorCount = 0;
-    layer.on("tileerror", () => {
-      if (tileEverLoaded || tileLayer !== layer) return;
-      errorCount += 1;
-      if (errorCount >= 3) advanceProvider();
-    });
-    return layer;
-  }
+  function makeTileLayer(...args) { return mapTiles.makeTileLayer(ctx, ...args); }
 
-  function primaryTileUrl() {
-    return TILE_URLS[getTheme()];
-  }
+  function primaryTileUrl(...args) { return mapTiles.primaryTileUrl(ctx, ...args); }
 
-  function advanceProvider() {
-    clearTimeout(tileHealthTimer);
-    if (providerIndex <= FALLBACK_TILE_URLS.length - 1) {
-      providerIndex += 1;
-      map.removeLayer(tileLayer);
-      tileLayer = makeTileLayer(currentProvider()).addTo(map);
-      startTileHealthCheck();
-    } else {
-      showMapError();
-    }
-  }
+  function advanceProvider(...args) { return mapTiles.advanceProvider(ctx, ...args); }
 
-  // Real-world mobile latency to a foreign tile CDN (DNS + TLS + first byte,
-  // over 4G/5G, possibly roaming) can genuinely run past what looks like a
-  // generous timeout on a fast connection -- reported live from a device in
-  // Yerevan where even OSM's own tile server didn't clear a 9s window. 15s
-  // gives a slow-but-working connection real room, while still failing fast
-  // enough that a truly unreachable provider doesn't leave the map looking
-  // frozen for too long. Each provider gets its own attempt in sequence
-  // (OSM -> Wikimedia) before showing a real error -- both independent
-  // hosts failing in a row is a strong signal the device has no route to
-  // any map tiles at all, not a problem with one of them.
-  // A provider returning real HTTP errors (see tileerror above) doesn't
-  // have to wait out this whole window -- this is the backstop for a
-  // provider that simply never responds at all.
-  function startTileHealthCheck() {
-    tileEverLoaded = false;
-    clearTimeout(tileHealthTimer);
-    tileHealthTimer = setTimeout(() => {
-      if (tileEverLoaded) return;
-      advanceProvider();
-    }, 15000);
-  }
+  function startTileHealthCheck(...args) { return mapTiles.startTileHealthCheck(ctx, ...args); }
 
   let tileLayer = makeTileLayer(currentProvider()).addTo(map);
   startTileHealthCheck();
@@ -715,58 +570,15 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // a fallback CDN nobody's using) and skips entirely once offline.
   const warmedTileKeys = new Set();
   let warmTilesTimer = null;
-  function lngToTileX(lng, z) {
-    return Math.floor(((lng + 180) / 360) * 2 ** z);
-  }
-  function latToTileY(lat, z) {
-    const rad = (lat * Math.PI) / 180;
-    return Math.floor(((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * 2 ** z);
-  }
-  function warmTileCache() {
-    if (!getMapTileCacheEnabled() || providerIndex !== 0 || navigator.onLine === false) return;
-    const { url, subdomains } = currentProvider();
-    const zoom = Math.round(map.getZoom());
-    const bounds = map.getBounds();
-    const minX = lngToTileX(bounds.getWest(), zoom) - 1;
-    const maxX = lngToTileX(bounds.getEast(), zoom) + 1;
-    const minY = latToTileY(bounds.getNorth(), zoom) - 1;
-    const maxY = latToTileY(bounds.getSouth(), zoom) + 1;
-    let issued = 0;
-    // Bounded: a long map session used to keep a huge key set and fire up to 40
-    // background tile fetches after EVERY pan/zoom, which piles up memory and
-    // network on low-RAM phones.
-    if (warmedTileKeys.size > 400) warmedTileKeys.clear();
-    for (let x = minX; x <= maxX && issued < 12; x++) {
-      for (let y = minY; y <= maxY && issued < 12; y++) {
-        const key = `${zoom}/${x}/${y}`;
-        if (warmedTileKeys.has(key)) continue;
-        warmedTileKeys.add(key);
-        issued += 1;
-        const s = subdomains[Math.floor(Math.random() * subdomains.length)] || "";
-        const tileUrl = url.replace("{s}", s).replace("{z}", zoom).replace("{x}", x).replace("{y}", y).replace("{r}", "");
-        fetch(tileUrl).catch(() => {});
-      }
-    }
-  }
+  function lngToTileX(...args) { return mapTiles.lngToTileX(ctx, ...args); }
+  function latToTileY(...args) { return mapTiles.latToTileY(ctx, ...args); }
+  function warmTileCache(...args) { return mapTiles.warmTileCache(ctx, ...args); }
   map.on("moveend zoomend", () => {
     clearTimeout(warmTilesTimer);
     warmTilesTimer = setTimeout(warmTileCache, 600);
   });
 
-  function retryTiles() {
-    hideMapError();
-    // Cycling all 3 providers again can take up to ~45s (see
-    // startTileHealthCheck's 15s-per-provider window) with the map canvas
-    // otherwise looking completely blank the whole time -- this visible
-    // "retrying" hint is what tells a rep the tap actually did something,
-    // instead of it reading as a dead button until either a tile shows up
-    // or the full error card reappears.
-    mapRetryHint.hidden = false;
-    providerIndex = 0;
-    map.removeLayer(tileLayer);
-    tileLayer = makeTileLayer(currentProvider()).addTo(map);
-    startTileHealthCheck();
-  }
+  function retryTiles(...args) { return mapTiles.retryTiles(ctx, ...args); }
   root.querySelector("#map-error-retry").addEventListener("click", retryTiles);
   // All three tile providers can fail together on a connection that's
   // still technically "online" per the OS (e.g. a mobile carrier that
@@ -776,19 +588,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // came back" case without the rep having to remember to tap Retry.
   window.addEventListener("online", retryTiles);
 
-  // Re-apply the matching tile style if the user flips light/dark while the
-  // map is mounted (Settings lives on a different tab, so this covers the
-  // case of returning to the map after toggling). Only matters while still
-  // on the primary provider -- the fallbacks have no theme variants.
-  function refreshTileStyle() {
-    if (providerIndex !== 0) return;
-    const url = primaryTileUrl();
-    if (tileLayer._url !== url) {
-      map.removeLayer(tileLayer);
-      tileLayer = makeTileLayer(currentProvider()).addTo(map);
-      startTileHealthCheck();
-    }
-  }
+  function refreshTileStyle(...args) { return mapTiles.refreshTileStyle(ctx, ...args); }
   document.addEventListener("visibilitychange", refreshTileStyle);
   // iOS/Android can drop the map's GPU layers while the app sits in the
   // background; on return, re-measure and redraw instead of showing a blank map.
@@ -811,32 +611,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // (no network) still create tile elements, so offline use never loops.
   let blankChecks = 0;
   let blankTimer = null;
-  function checkMapNotBlank() {
-    clearTimeout(blankTimer);
-    blankTimer = setTimeout(() => {
-      if (!mapIsMeasurable() || document.visibilityState !== "visible") return;
-      const tiles = mapEl.querySelectorAll(".leaflet-tile").length;
-      if (tiles > 0) {
-        blankChecks = 0;
-        return;
-      }
-      blankChecks += 1;
-      try {
-        // A map that never received a view (nothing to draw) gets the default
-        // one before re-measuring.
-        if (!map._loaded) map.setView([40.1872, 44.5152], 15, { animate: false });
-        map.invalidateSize();
-        tileLayer?.redraw?.();
-      } catch {
-        // map already torn down
-      }
-      if (blankChecks >= 2) {
-        window.dispatchEvent(new Event("app-rerender"));
-        return;
-      }
-      checkMapNotBlank();
-    }, 2500);
-  }
+  function checkMapNotBlank(...args) { return mapTiles.checkMapNotBlank(ctx, ...args); }
   // Size changes (rotation, keyboard, sidebar, returning from the back stack):
   // re-measure only when the container really has a size.
   const resizeObserver = typeof ResizeObserver === "function"
@@ -886,25 +661,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // Detect it ourselves from raw touchend timing/distance instead.
   let lastTapTime = 0;
   let lastTapPoint = null;
-  function onMapTouchEnd(e) {
-    if (e.touches.length > 0 || e.changedTouches.length !== 1) {
-      lastTapTime = 0;
-      lastTapPoint = null;
-      return;
-    }
-    if (e.target.closest(".leaflet-control, .leaflet-popup")) return;
-    const point = map.mouseEventToContainerPoint(e.changedTouches[0]);
-    const now = Date.now();
-    if (lastTapPoint && now - lastTapTime < 350 && point.distanceTo(lastTapPoint) < 30) {
-      e.preventDefault();
-      map.setZoomAround(map.containerPointToLatLng(point), map.getZoom() + 1);
-      lastTapTime = 0;
-      lastTapPoint = null;
-    } else {
-      lastTapTime = now;
-      lastTapPoint = point;
-    }
-  }
+  function onMapTouchEnd(...args) { return mapAddCustomer.onMapTouchEnd(ctx, ...args); }
   mapEl.addEventListener("touchend", onMapTouchEnd);
 
   // Long-press (touch) / right-click (desktop) anywhere on the map, outside
@@ -923,21 +680,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   let longPressStart = null;
   let longPressFired = false;
 
-  function cancelLongPress() {
-    clearTimeout(longPressTimer);
-    longPressTimer = null;
-    longPressStart = null;
-  }
+  function cancelLongPress(...args) { return mapAddCustomer.cancelLongPress(ctx, ...args); }
 
-  function triggerAddAtPoint(latlng) {
-    if (relocateCustomerId || addMode) return;
-    if (navigator.vibrate) navigator.vibrate(15);
-    addMode = true;
-    fab.classList.add("fab-active");
-    fab.setAttribute("aria-pressed", "true");
-    mapEl.classList.add("map-picking");
-    placeLocationPin(latlng, { source: "dragged_pin", onConfirm: handoffToCustomerForm });
-  }
+  function triggerAddAtPoint(...args) { return mapAddCustomer.triggerAddAtPoint(ctx, ...args); }
 
   mapEl.addEventListener("touchstart", (e) => {
     if (relocateCustomerId || addMode) return;
@@ -976,11 +721,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     mapEl.classList.add("map-picking");
   }
   let placingMarker = null;
-  // "Tap the map to place a pin" is only true while add mode is waiting for that tap: it used to stay on screen for the
-  // whole session (the add flow's own pin, the form, and after saving), telling the rep to tap when taps did nothing.
-  function syncAddHint() {
-    hint.hidden = !(addMode && !placingMarker && !relocateCustomerId);
-  }
+  function syncAddHint(...args) { return mapAddCustomer.syncAddHint(ctx, ...args); }
   syncAddHint();
   const markerLayer = L.layerGroup().addTo(map);
   // Customer pins specifically (not plan-day stop numbers, not team member
@@ -1023,15 +764,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   let customerMarkerLayer = clusteringEnabled ? customerClusterGroup : plainCustomerLayer;
   customerMarkerLayer.addTo(map);
 
-  function setClusteringPreference(enabled) {
-    const target = enabled ? customerClusterGroup : plainCustomerLayer;
-    if (customerMarkerLayer === target) return;
-    map.removeLayer(customerMarkerLayer);
-    customerMarkerLayer.clearLayers();
-    customerMarkerLayer = target;
-    customerMarkerLayer.addTo(map);
-    applyFilter({ refit: false });
-  }
+  function setClusteringPreference(...args) { return mapMarkers.setClusteringPreference(ctx, ...args); }
 
   // A plain solid teardrop with nothing inside read as "blank"/broken once
   // dropped -- an X glyph makes it obvious this pin is just a pending
@@ -1044,32 +777,11 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // isn't part of the add-customer flow at all and isn't tappable.
   const SEARCH_PIN_HTML = `<div class="pin pin-search-result"><span class="pin-glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 21s7-6.5 7-11a7 7 0 1 0-14 0c0 4.5 7 11 7 11Z"/></svg></span></div>`;
 
-  function customerStatus(c) {
-    if (c.visited_today) return "today";
-    if (c.overdue) return "overdue";
-    if (c.visited_this_week) return "week";
-    return "pending";
-  }
+  function customerStatus(...args) { return mapMarkers.customerStatus(ctx, ...args); }
 
-  // Shared by the nearby-customers list and the desktop side list -- same
-  // status, same badge, one place to keep them in sync.
-  function customerStatusBadge(status) {
-    return {
-      cls: status === "today" ? "badge-success" : status === "overdue" ? "badge-danger" : status === "week" ? "badge-info" : "badge-neutral",
-      text: status === "today" ? t("visited_today") : status === "overdue" ? t("filter_overdue") : status === "week" ? t("visited_this_week") : t("not_visited"),
-    };
-  }
+  function customerStatusBadge(...args) { return mapMarkers.customerStatusBadge(ctx, ...args); }
 
-  // The map doesn't show a customer's tier: every active customer (bronze,
-  // silver or gold) is the same green pin, potential customers the red
-  // crosshair, competitors the grey square. The tier still lives on the
-  // customer record and in the customer screens -- it just isn't a map
-  // concept. "customer" is the marker kind for the green pin set.
-  function markerKind(tier) {
-    if (tier === "bronze" || tier === "silver" || tier === "gold") return "customer";
-    if (tier === "competitor") return "competitor";
-    return "potential";
-  }
+  function markerKind(...args) { return mapMarkers.markerKind(ctx, ...args); }
 
   // The green customer pin is a teardrop whose point sits ~10% above the
   // bottom edge of its (square) source canvas; potential/competitor are
@@ -1095,23 +807,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // Customers with an open task: a checklist marker on the LEFT of the pin --
   // yellow while the deadline is ahead, red when due today or overdue.
   let taskFlags = new Map(); // customer id -> due (boolean)
-  function taskMarkerHtml(c) {
-    if (!taskFlags.has(c.id)) return "";
-    return `<span class="pin-task ${taskFlags.get(c.id) ? "pin-task-due" : "pin-task-soon"}" aria-hidden="true">${TASK_PIN_SVG}</span>`;
-  }
-  // repaint:false = the caller repaints the pins right after (back from a customer card), so only the flags are refreshed here.
-  async function loadTaskFlags({ repaint = true } = {}) {
-    try {
-      const rows = await api.getTaskCustomerFlags();
-      const next = new Map(rows.map((r) => [r.customer_id, Boolean(r.due)]));
-      const changed = next.size !== taskFlags.size || [...next].some(([id, due]) => taskFlags.get(id) !== due);
-      taskFlags = next;
-      // Also when the LAST open task was just completed (next.size is 0): its icon has to leave the pin.
-      if (repaint && changed) applyFilter({ refit: false });
-    } catch {
-      /* optional overlay */
-    }
-  }
+  function taskMarkerHtml(...args) { return mapMarkers.taskMarkerHtml(ctx, ...args); }
+  function loadTaskFlags(...args) { return mapMarkers.loadTaskFlags(ctx, ...args); }
 
   // Optional "debt coin" (owner, 2026-10-26; Off by default): a coin at the lower left of every customer pin that owes money, in three sizes and colours
   // by the amount (AMD): under 300,000 small yellow, under 1,000,000 medium orange, 1,000,000 and more large red.
@@ -1121,21 +818,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   let debtCoinOn = getDebtCoin(state.user?.id);
   let debtors = new Map(); // customer id -> debt in AMD
   const debtCoinHtml = (c) => (debtCoinOn && debtors.has(c.id) ? `<span class="pin-debt pin-debt-${debtCoinSize(debtors.get(c.id))}" aria-hidden="true"></span>` : "");
-  async function loadDebtFlags({ repaint = true } = {}) {
-    if (!debtCoinOn) {
-      debtors = new Map();
-      return;
-    }
-    try {
-      const rows = await api.getCustomerDebtFlags();
-      const next = new Map(rows.map((r) => [r.customer_id, Number(r.debt_amd)]));
-      const changed = next.size !== debtors.size || [...next].some(([id, amd]) => !debtors.has(id) || debtCoinSize(debtors.get(id)) !== debtCoinSize(amd));
-      debtors = next;
-      if (repaint && changed) applyFilter({ refit: false });
-    } catch {
-      /* optional overlay */
-    }
-  }
+  function loadDebtFlags(...args) { return mapMarkers.loadDebtFlags(ctx, ...args); }
 
   // "Colour by Rep": the pin keeps its own colour and gets a ring in the rep's colour behind it (owner, 2026-10-25, design B). `icons/markers/ring-<kind>.svg`
   // is the pin's outline only; it is used as a mask over a box in the rep colour, so there is no artwork per rep. A customer without a rep keeps the plain pin.
@@ -1155,40 +838,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       ? `<span class="pin-rep-ring" style="--rep-color:${planned.color}" aria-hidden="true"></span><span class="pin-stop-no" style="--rep-color:${planned.color}" aria-hidden="true">${planned.order}</span>`
       : "";
   };
-  function pinArtHtml(c, tier) {
-    // The potential customer's crosshair is the original raster art (PNG); the other kinds are SVG (see scripts/make-pin-art.mjs).
-    const src = `/icons/markers/${tier}-${categoryIconSlug(c.category)}.${tier === "potential" ? "png" : "svg"}`;
-    const img = `<img class="pin-img-asset" src="${src}" alt="" width="${pinSize(tier)}" height="${pinSize(tier)}" draggable="false" />`;
-    if (colorBy === "rep" && c.assigned_manager_id && tier !== "competitor") {
-      return `<span class="pin-colour-ring" style="--rep-color:${repColorOf(c)};--pin-ring:url('/icons/markers/ring-${tier}.svg')" aria-hidden="true"></span>${img}`;
-    }
-    return img;
-  }
+  function pinArtHtml(...args) { return mapMarkers.pinArtHtml(ctx, ...args); }
 
-  function customerIcon(c, status) {
-    const tier = markerKind(c.customer_tier);
-    const check = status === "today" ? '<span class="pin-check">&#10003;</span>' : "";
-    // Overdue pins already carry the red "!" badge (map-marker-system.css ::after); a never-visited pin shows the yellow "!!" instead of it.
-    const neverVisited = isNeverVisited(c);
-    const overdueClass = status === "overdue" ? "pin-status-overdue" : "";
-    const never = neverVisited ? '<span class="pin-never" aria-hidden="true">!!</span>' : "";
-    const isPinShaped = PIN_SHAPED_KINDS.has(tier);
-    const size = pinSize(tier);
-    const anchorY = isPinShaped ? Math.round(size * PIN_TIP_RATIO) : size / 2;
-    // Shape family also decides where the status badge hangs, since the two
-    // families fill their square canvas differently (see the CSS).
-    const shapeClass = isPinShaped ? "pin-img-teardrop" : "pin-img-round";
-    return L.divIcon({
-      className: "",
-      // .pin stays on the wrapper: marker selection (mapMarkerEnhancements)
-      // and the competitor-visibility toggle (map-safe-enhancements) both
-      // key off .pin / .pin-tier-* selectors.
-      html: `<div class="pin pin-img ${shapeClass} pin-tier-${tier} ${overdueClass} ${neverVisited ? "pin-is-never" : ""}">${pinArtHtml(c, tier)}${plannedRingHtml(c)}${check}${taskMarkerHtml(c)}${debtCoinHtml(c)}${never}</div>`,
-      iconSize: [size, size],
-      iconAnchor: [size / 2, anchorY],
-      popupAnchor: [0, -anchorY],
-    });
-  }
+  function customerIcon(...args) { return mapMarkers.customerIcon(ctx, ...args); }
 
   let activeFilter = "";
   // Sales managers don't get the "team locations" manager-filter dropdown
@@ -1230,227 +882,29 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // rather than imported since it's a private closure over that view's own
   // state, not an exported helper.
   const assignmentKeyOf = (c) => `${c.sales_channel || NO_GROUP_KEY}::${c.assigned_manager_id ?? NO_GROUP_KEY}`;
-  function passesAssignment(c) {
-    // Default: only the field channels (a customer with no channel at all is never hidden by it).
-    if (assignmentKeys === null) return !c.sales_channel || MAP_DEFAULT_CHANNEL_FILTERS.includes(c.sales_channel);
-    return !assignmentKeys.size || assignmentKeys.has(assignmentKeyOf(c));
-  }
-  function currentAssignmentIds() {
-    if (assignmentKeys !== null) return assignmentKeys;
-    return new Set(lastCustomers.filter(({ c }) => passesAssignment(c)).map(({ c }) => assignmentKeyOf(c)));
-  }
-  // The rep whose plan "Planned" should show: a sales manager's own id, else the single rep
-  // the user picked in the assignment filter (several reps or none = everyone's plans).
-  function selectedPlanManagerId() {
-    if (managerFilter) return managerFilter;
-    if (assignmentKeys === null || !assignmentKeys.size) return "";
-    const ids = new Set([...assignmentKeys].map((k) => k.split("::")[1]));
-    return ids.size === 1 && !ids.has(NO_GROUP_KEY) ? [...ids][0] : "";
-  }
-  // Competitors stay hidden unless asked for; picking the Competitor tier (or a COMPETITORS
-  // channel) is that explicit ask, and un-picking it hides them again.
-  function syncCompetitorsForFilters() {
-    const mapView = root.querySelector(".map-view");
-    if (!mapView) return;
-    const wanted = tierFilters.has("competitor") || (assignmentKeys !== null && [...assignmentKeys].some((k) => k.startsWith("COMPETITORS::")));
-    if (wanted && !mapView.classList.contains("kad-show-competitors")) {
-      mapView.dataset.competitorsForcedByFilter = "true";
-      mapView.classList.add("kad-show-competitors");
-    } else if (!wanted && mapView.dataset.competitorsForcedByFilter === "true") {
-      delete mapView.dataset.competitorsForcedByFilter;
-      mapView.classList.remove("kad-show-competitors");
-    }
-  }
+  function passesAssignment(...args) { return mapFilters.passesAssignment(ctx, ...args); }
+  function currentAssignmentIds(...args) { return mapFilters.currentAssignmentIds(ctx, ...args); }
+  function selectedPlanManagerId(...args) { return mapPlanning.selectedPlanManagerId(ctx, ...args); }
+  function syncCompetitorsForFilters(...args) { return mapFilters.syncCompetitorsForFilters(ctx, ...args); }
 
   // Customer tier chips (gold, silver, bronze, potential, competitor -- multi-select, the same
   // chips as the new-customer form) above the customer type rows (oil change point, shop,
   // workshop, other, always all four). Both empty = no filter. Compact on purpose: the whole
   // sheet shows without scrolling (.map-type-tier-sheet).
   const MAP_TIER_ORDER = ["gold", "silver", "bronze", "potential", "competitor"];
-  function openMapTypeTierSheet(currentCategories, currentTiers, onApply) {
-    const workingCategories = new Set(currentCategories);
-    const workingTiers = new Set(currentTiers);
-    const tiers = MAP_TIER_ORDER.map((v) => TIER_OPTIONS.find((o) => o.value === v)).filter(Boolean);
-    const overlay = document.createElement("div");
-    overlay.className = "sheet-overlay";
-    overlay.innerHTML = `
-      <div class="sheet filter-sheet map-type-tier-sheet">
-        <h2>${escapeHtml(t("customer_tier"))}</h2>
-        <h3 class="map-tier-filter-title">${escapeHtml(t("customer_tier"))}</h3>
-        <div class="tier-selector map-tier-filter-chips" role="group" aria-label="${escapeHtml(t("customer_tier"))}">
-          ${tiers
-            .map(
-              (opt) => `
-            <button type="button" class="tier-btn ${opt.cls} ${workingTiers.has(opt.value) ? "tier-btn-active" : ""}" data-tier="${opt.value}" aria-pressed="${workingTiers.has(opt.value)}">
-              <span class="tier-icon">${opt.icon}</span>
-              <span class="tier-label">${escapeHtml(t(opt.labelKey))}</span>
-            </button>`
-            )
-            .join("")}
-        </div>
-        <h3 class="map-tier-filter-title">${escapeHtml(t("category"))}</h3>
-        <div class="filter-sheet-options map-type-options">
-          ${CATEGORY_LIST.map(
-            (o) => `
-            <button type="button" role="menuitemcheckbox" aria-checked="${workingCategories.has(o.value)}" class="filter-sheet-option ${workingCategories.has(o.value) ? "filter-sheet-option-selected" : ""}" data-value="${escapeHtml(o.value)}">
-              <span class="filter-sheet-box" aria-hidden="true"></span>
-              <span>${escapeHtml(t(o.labelKey))}</span>
-            </button>`
-          ).join("")}
-        </div>
-        <div class="sheet-actions sheet-actions-floating">
-          <button type="button" class="btn" id="map-type-tier-clear">${t("clear")}</button>
-          <button type="button" class="btn btn-primary" id="map-type-tier-done">${t("show_results")}</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    activateDialog(overlay);
-    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
-    overlay.querySelectorAll(".filter-sheet-option").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const value = btn.dataset.value;
-        if (workingCategories.has(value)) workingCategories.delete(value);
-        else workingCategories.add(value);
-        btn.classList.toggle("filter-sheet-option-selected", workingCategories.has(value));
-        btn.setAttribute("aria-checked", String(workingCategories.has(value)));
-      });
-    });
-    overlay.querySelectorAll(".map-tier-filter-chips .tier-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const value = btn.dataset.tier;
-        if (workingTiers.has(value)) workingTiers.delete(value);
-        else workingTiers.add(value);
-        btn.classList.toggle("tier-btn-active", workingTiers.has(value));
-        btn.setAttribute("aria-pressed", String(workingTiers.has(value)));
-      });
-    });
-    overlay.querySelector("#map-type-tier-clear").addEventListener("click", () => {
-      overlay.remove();
-      onApply(new Set(), new Set());
-    });
-    overlay.querySelector("#map-type-tier-done").addEventListener("click", () => {
-      overlay.remove();
-      onApply(workingCategories, workingTiers);
-    });
-  }
+  function openMapTypeTierSheet(...args) { return mapFilters.openMapTypeTierSheet(ctx, ...args); }
 
-  function mapFilterIconButton({ key, icon, label, active, count }) {
-    // Same "(2)" count-badge language as Customers.js's own multi-select
-    // filter buttons -- a plain dot for zero/one selection, the actual
-    // number once there's more than one to distinguish from a single-value
-    // filter's own active state.
-    const a11yLabel = count > 1 ? `${label} (${count})` : label;
-    return `<button type="button" class="filter-icon-btn ${active ? "filter-icon-btn-active" : ""}" data-map-filter-btn="${key}" aria-label="${escapeHtml(a11yLabel)}" title="${escapeHtml(a11yLabel)}">
-      ${icon}
-      ${count > 1 ? `<span class="filter-icon-count" aria-hidden="true">${count}</span>` : active ? `<span class="filter-icon-dot" aria-hidden="true"></span>` : ""}
-    </button>`;
-  }
+  function mapFilterIconButton(...args) { return mapFilters.mapFilterIconButton(ctx, ...args); }
 
   const iconFilterRow = root.querySelector("#map-icon-filter-row");
 
-  // Best-effort: without the chips the map simply has no chip filter.
-  async function loadBrandSummary() {
-    try {
-      await loadWithCache("customers-brand-summary", () => api.getBrandSummary(), (rows) => {
-        brandSummary = indexBrandSummary(rows);
-        renderIconFilterRow();
-        if (brandChipIds.size || searchQuery) applyFilter({ refit: false });
-      });
-    } catch {
-      /* optional feature */
-    }
-  }
+  function loadBrandSummary(...args) { return mapFilters.loadBrandSummary(ctx, ...args); }
 
-  function renderIconFilterRow() {
-    if (!iconFilterRow) return;
-    const assignmentIds = currentAssignmentIds();
-    const assignmentChannelCount = new Set([...assignmentIds].map((k) => k.split("::")[0])).size;
-    const typeCount = categoryFilters.size + tierFilters.size;
+  function renderIconFilterRow(...args) { return mapFilters.renderIconFilterRow(ctx, ...args); }
 
-    iconFilterRow.innerHTML = [
-      lastCustomers.length
-        ? mapFilterIconButton({ key: "assignment", icon: FILTER_ICONS.manager, label: t("filter_direction_manager_title"), active: assignmentIds.size > 0, count: assignmentChannelCount })
-        : "",
-      brandSummary.size
-        ? mapFilterIconButton({ key: "brandchips", icon: FILTER_ICONS.brands, label: t("filter_brands_title"), active: brandChipIds.size > 0, count: brandChipIds.size })
-        : "",
-      lastCustomers.length
-        ? mapFilterIconButton({ key: "category", icon: FILTER_ICONS.category, label: t("category"), active: typeCount > 0, count: typeCount })
-        : "",
-    ]
-      .filter(Boolean)
-      .join("");
+  function brandAvailabilityStatus(...args) { return mapFilters.brandAvailabilityStatus(ctx, ...args); }
 
-    iconFilterRow.querySelector('[data-map-filter-btn="assignment"]')?.addEventListener("click", () => {
-      openTriStateTreeSheet(t("filter_direction_manager_title"), {
-        tree: buildDirectionManagerTree(
-          lastCustomers.map(({ c }) => c),
-          { channelLabel: channelDisplayLabel, noDirectionLabel: t("no_direction"), unassignedLabel: t("unassigned") }
-        ),
-        initialSelectedIds: assignmentIds,
-        countUnitLabel: t("perf_dq_customers_unit"),
-        onApply: (selectedIds) => {
-          assignmentKeys = new Set(selectedIds);
-          renderIconFilterRow();
-          // "Planned" follows the picked rep, so it has to re-fetch when the pick changes.
-          if (activeFilter === "planned") loadPlannedFilter();
-          else if (plannedMode !== "off") refreshPlannedToday();
-          else applyFilter();
-        },
-      });
-    });
-
-    iconFilterRow.querySelector('[data-map-filter-btn="brandchips"]')?.addEventListener("click", () => {
-      openTriStateTreeSheet(t("filter_brands_title"), {
-        tree: buildBrandChipTree(brandSummary, lastCustomers.map(({ c }) => c.id)),
-        initialSelectedIds: brandChipIds,
-        countUnitLabel: t("perf_dq_customers_unit"),
-        searchPlaceholder: t("search"),
-        onApply: (selectedIds) => {
-          brandChipIds = selectedIds;
-          renderIconFilterRow();
-          applyFilter();
-        },
-      });
-    });
-
-    iconFilterRow.querySelector('[data-map-filter-btn="category"]')?.addEventListener("click", () => {
-      openMapTypeTierSheet(categoryFilters, tierFilters, (cats, tiers) => {
-        categoryFilters = cats;
-        tierFilters = tiers;
-        renderIconFilterRow();
-        applyFilter();
-      });
-    });
-  }
-
-  // available/full_range -> green, unavailable -> red (or absent from the
-  // competitors list -> unknown grey, since that list is presence-only --
-  // a competitor not ticked was never confirmed absent, just not recorded).
-  function brandAvailabilityStatus(c) {
-    const status = brandStatusByCustomer?.get(c.id);
-    if (!status) return "unknown";
-    if (selectedBrand.startsWith("competitor:")) {
-      const key = selectedBrand.slice("competitor:".length);
-      return (status.competitors ?? []).includes(key) ? "available" : "unknown";
-    }
-    const tags = status[selectedBrand] ?? [];
-    if (tags.includes("available") || tags.includes("full_range")) return "available";
-    if (tags.includes("unavailable")) return "unavailable";
-    return "unknown";
-  }
-
-  function brandAvailabilityIcon(c) {
-    const level = brandAvailabilityStatus(c);
-    return L.divIcon({
-      className: "",
-      html: `<div class="brand-dot brand-dot-${level}"></div>`,
-      iconSize: [18, 18],
-      iconAnchor: [9, 9],
-      popupAnchor: [0, -9],
-    });
-  }
+  function brandAvailabilityIcon(...args) { return mapFilters.brandAvailabilityIcon(ctx, ...args); }
   let lastCustomers = [];
   // Guards the empty-bounds geolocation recenter at the bottom of
   // paintCustomers() -- loadCustomersCached() below can paint twice (a
@@ -1505,98 +959,11 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   const plannedStopsPanel = root.querySelector("#planned-stops-panel");
   const stopListEl = root.querySelector("#stop-list");
 
-  function numberedIcon(n, visited) {
-    return L.divIcon({
-      className: "",
-      html: `<div class="pin pin-stop ${visited ? "pin-stop-visited" : ""}">${visited ? "&#10003;" : n}</div>`,
-      iconSize: [26, 26],
-      iconAnchor: [13, 26],
-      popupAnchor: [0, -26],
-    });
-  }
+  function numberedIcon(...args) { return mapMarkers.numberedIcon(ctx, ...args); }
 
-  // Pulled out of renderStopListPanel so applyFilter's own "no longer on
-  // the planned filter" branch can call just the cleanup half -- it used
-  // to only hide the stop-list panel there, never touching the numbered
-  // stop markers or the dashed route polyline renderStopListPanel had
-  // drawn, so switching off "Planned" left that route line stuck on the
-  // map until the filter was tapped back on (which redraws over it, but
-  // never happening again left it there for good).
-  function clearRouteAndStops() {
-    stopMarkers.forEach((m) => markerLayer.removeLayer(m));
-    stopMarkers.length = 0;
-    if (routeLine) {
-      map.removeLayer(routeLine);
-      routeLine = null;
-    }
-  }
+  function clearRouteAndStops(...args) { return mapPlanning.clearRouteAndStops(ctx, ...args); }
 
-  function renderStopListPanel() {
-    clearRouteAndStops();
-
-    if (activeFilter !== "planned" || !plannedCustomerIds?.length) {
-      plannedStopsPanel.hidden = true;
-      stopListEl.innerHTML = "";
-      return;
-    }
-
-    const stops = plannedCustomerIds.map((id) => lastCustomers.find((entry) => entry.c.id === id)).filter(Boolean);
-    if (!stops.length) {
-      plannedStopsPanel.hidden = true;
-      return;
-    }
-
-    const latlngs = [];
-    stops.forEach(({ c }, i) => {
-      const visited = customerStatus(c) === "today";
-      const marker = L.marker([c.lat, c.lng], { icon: numberedIcon(i + 1, visited) }).addTo(markerLayer);
-      marker.on("click", () => navigate(`#/customers/${c.id}`));
-      stopMarkers.push(marker);
-      latlngs.push([c.lat, c.lng]);
-    });
-    // Leaflet's SVG renderer sets stroke via setAttribute, which doesn't
-    // resolve CSS custom properties -- read the theme's actual color value.
-    const accentColor = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#0969da";
-    routeLine = L.polyline(latlngs, { color: accentColor, weight: 3, opacity: 0.8, dashArray: "6 6" }).addTo(map);
-
-    plannedStopsPanel.hidden = false;
-    // About-km per leg (straight line x 1.3) and for the whole route, from the rep's position when known.
-    const { legs, total } = routeLegs(stops.map(({ c }) => c), myLocation);
-    plannedStopsPanel.querySelector("#planned-stops-summary").textContent = `${stops.length}${total ? ` · ≈ ${formatDistance(total)}` : ""}`;
-    stopListEl.innerHTML = stops
-      .map(({ c }, i) => {
-        const visited = customerStatus(c) === "today";
-        return `
-        <div class="stop-row" data-index="${i}">
-          <span class="stop-number ${visited ? "stop-number-done" : ""}">${visited ? "&#10003;" : i + 1}</span>
-          <span class="stop-name">${escapeHtml(c.name)}${legs[i] != null ? `<span class="stop-leg">≈ ${formatDistance(legs[i])}</span>` : ""}</span>
-          <span class="stop-reorder">
-            <button type="button" class="icon-btn" data-move="up" data-index="${i}" ${i === 0 ? "disabled" : ""} aria-label="${t("move_up")}">&uarr;</button>
-            <button type="button" class="icon-btn" data-move="down" data-index="${i}" ${i === stops.length - 1 ? "disabled" : ""} aria-label="${t("move_down")}">&darr;</button>
-          </span>
-        </div>`;
-      })
-      .join("");
-
-    stopListEl.querySelectorAll("[data-move]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const i = Number(btn.dataset.index);
-        const j = btn.dataset.move === "up" ? i - 1 : i + 1;
-        [plannedCustomerIds[i], plannedCustomerIds[j]] = [plannedCustomerIds[j], plannedCustomerIds[i]];
-        renderStopListPanel();
-        try {
-          await api.saveVisitPlan(undefined, plannedCustomerIds);
-        } catch {
-          // Order is still reflected locally; the next plan load will
-          // reconcile if the save genuinely failed.
-        }
-      });
-    });
-
-    stopListEl.querySelectorAll(".stop-name").forEach((el, i) => {
-      el.addEventListener("click", () => navigate(`#/customers/${stops[i].c.id}`));
-    });
-  }
+  function renderStopListPanel(...args) { return mapPlanning.renderStopListPanel(ctx, ...args); }
 
   root.querySelector("#planned-stops-close").addEventListener("click", () => {
     plannedStopsPanel.hidden = true;
@@ -1622,32 +989,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     shareRouteToTelegram(routeShareText(stops, { repName: state.user?.name ?? "", totalMeters: total, origin: myLocation }));
   });
 
-  // Greedy nearest-neighbor ordering -- not a true shortest-route solver,
-  // but for the handful of stops a single rep plans in a day it gets close
-  // enough while staying instant and dependency-free. Starts from the
-  // rep's live location when available (locate button already tapped),
-  // otherwise from whichever stop is currently first.
-  function nearestNeighborOrder(ids) {
-    const remaining = ids.map((id) => lastCustomers.find((entry) => entry.c.id === id)).filter(Boolean);
-    if (!remaining.length) return ids;
-    const ordered = [];
-    let current = myLocation ?? { lat: remaining[0].c.lat, lng: remaining[0].c.lng };
-    while (remaining.length) {
-      let bestIndex = 0;
-      let bestDistance = Infinity;
-      remaining.forEach((entry, i) => {
-        const distance = haversineMeters(current.lat, current.lng, entry.c.lat, entry.c.lng);
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          bestIndex = i;
-        }
-      });
-      const [chosen] = remaining.splice(bestIndex, 1);
-      ordered.push(chosen.c.id);
-      current = { lat: chosen.c.lat, lng: chosen.c.lng };
-    }
-    return ordered;
-  }
+  function nearestNeighborOrder(...args) { return mapPlanning.nearestNeighborOrder(ctx, ...args); }
 
   root.querySelector("#optimize-route-btn").addEventListener("click", async () => {
     if (!plannedCustomerIds?.length) return;
@@ -1661,185 +1003,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     }
   });
 
-  // refit: whether this pass may move the camera to fit the visible pins.
-  // True for something the USER just did (a filter, search, toggle); false
-  // for a background repaint (live data arriving after the cached list, the
-  // brand summary or task flags loading) -- those used to re-run fitBounds
-  // and yank the map to a zoomed-out view a moment after it had settled.
-  function applyFilter({ refit = true } = {}) {
-    paintRepLegend();
-    markerLayer.clearLayers();
-    customerMarkerLayer.clearLayers();
-    const bounds = [];
-    const sideListEntries = [];
-    // Collected and added to customerMarkerLayer in one addLayers() call
-    // after the loop, instead of marker.addTo() inside it -- each
-    // individual addLayer() on a MarkerClusterGroup re-runs its own
-    // clustering pass, so adding one at a time turned every filter change
-    // (search keystroke, toggle tap) into O(n) separate re-clusters for a
-    // customer base past ~180 pins. One addLayers() call clusters the
-    // whole batch in a single pass. Falls back to individual addTo() for
-    // the plain (non-clustered) layer group, which has no addLayers() and
-    // no per-add clustering cost to batch away anyway.
-    const markersToAdd = [];
-    let searchMatchCount = 0;
-    // Competitors are hidden by default (see .map-competitor-toggle /
-    // map-safe-enhancements.css, which hides their individual pins via
-    // CSS). Clustering happens in JS before that CSS rule ever applies, so
-    // without this check a cluster badge would count competitors that are
-    // never actually visible once it splits apart -- leaving the number on
-    // the badge wrong. Reading the toggle's own class keeps this in sync
-    // without depending on anything from that module directly.
-    syncCompetitorsForFilters();
-    const showCompetitors = root.querySelector(".map-view")?.classList.contains("kad-show-competitors");
-    for (const { c, marker } of lastCustomers) {
-      const status = customerStatus(c);
-      if (c.customer_tier === "competitor" && !showCompetitors) continue;
-      if (managerFilter && String(c.assigned_manager_id) !== managerFilter) continue;
-      if (tierFilters.size && !tierFilters.has(c.customer_tier || "potential")) continue;
-      // A customer with no sales_channel at all (normally normalized to
-      // "POTENTIAL" by customerPortfolioUi.js, but not for the edge case
-      // of an ERP-linked customer whose channel just hasn't been assigned
-      // yet -- see that module's own comment) is never hidden by this
-      // filter, default-on or user-selected -- an ambiguous/unassigned
-      // customer should stay visible, not silently disappear because it
-      // doesn't match whatever channels happen to be selected.
-      if (!passesAssignment(c)) continue;
-      if (categoryFilters.size && !categoryFilters.has(c.category)) continue;
-      if (plannedMode === "only" && !plannedTodayIdSet?.has(c.id)) continue;
-      if (brandChipIds.size && !matchesSelectedChips(brandSummary.get(c.id), brandChipIds)) continue;
-      if (searchQuery) {
-        const haystack = `${c.name} ${c.address ?? ""} ${c.category ?? ""} ${c.erp_customer_id ?? ""} ${brandSearchText(brandSummary.get(c.id))}`.toLowerCase();
-        if (!haystack.includes(searchQuery) && !phoneMatches(c, searchQuery)) continue;
-      }
-      searchMatchCount += 1;
-      if (activeFilter === "brands") {
-        marker.setIcon(selectedBrand ? brandAvailabilityIcon(c) : customerIcon(c, status));
-      } else if (activeFilter === "nearby") {
-        const distance = myLocation ? haversineMeters(myLocation.lat, myLocation.lng, c.lat, c.lng) : Infinity;
-        if (distance > NEARBY_RADIUS_METERS) continue;
-        marker.setIcon(customerIcon(c, status));
-      } else if (activeFilter === "planned") {
-        continue;
-      } else {
-        // visited-today/visited-7days read straight off the same
-        // visited_today/visited_this_week booleans customerStatus() itself
-        // derives status from -- visited_this_week is already a rolling
-        // 7-day window server-side (see routes/customers.js), not a
-        // calendar week, despite the "week" status label. There used to be
-        // a third "Visited" chip combining both, but it went through
-        // customerStatus()'s overdue-first priority instead of these raw
-        // booleans, so a customer visited within 7 days AND independently
-        // overdue by cadence fell out of it while still showing up under
-        // "Visited last 7 days" -- confusingly near-duplicate AND subtly
-        // inconsistent. Removed; these two are the whole, well-defined set.
-        if (
-          activeFilter &&
-          !(activeFilter === "overdue"
-            ? status === "overdue"
-            : activeFilter === "visited-today"
-              ? c.visited_today
-              : activeFilter === "visited-7days"
-                ? c.visited_today || c.visited_this_week
-                : true)
-        ) {
-          continue;
-        }
-        marker.setIcon(customerIcon(c, status));
-      }
-      // Today's planned visits above the other customers (owner, 2026-10-27); see PIN_Z for the whole order.
-      marker.setZIndexOffset(plannedTodayByRep.has(c.id) ? PIN_Z.planned : 0);
-      markersToAdd.push(marker);
-      bounds.push([c.lat, c.lng]);
-      sideListEntries.push({ c, status });
-    }
-    if (typeof customerMarkerLayer.addLayers === "function") {
-      customerMarkerLayer.addLayers(markersToAdd);
-    } else {
-      markersToAdd.forEach((m) => m.addTo(customerMarkerLayer));
-    }
-    renderSideList(sideListEntries);
-    lastMatches = sideListEntries;
-    // The grouped search panel lists exactly what is on the map now (same filters + search), so repaint it with the pins.
-    if (searchQuery && searchPanelOpen) renderSearchPanel();
-    if (searchNoResults) searchNoResults.hidden = !(searchQuery && searchMatchCount === 0);
-    if (activeFilter === "planned") {
-      renderStopListPanel();
-      if (plannedCustomerIds?.length) {
-        bounds.push(...plannedCustomerIds.map((id) => lastCustomers.find((e) => e.c.id === id)).filter(Boolean).map(({ c }) => [c.lat, c.lng]));
-      }
-      plannedEmptyHint.hidden = bounds.length > 0 || plannedCustomerIds === null;
-    } else {
-      clearRouteAndStops();
-      plannedStopsPanel.hidden = true;
-      plannedEmptyHint.hidden = true;
-    }
-    if (bounds.length && !keepRestoredView) {
-      // The very first time the map settles (plain browsing, not while
-      // relocating/adding a customer or opening straight into Plan Day),
-      // prefer centering on the user's own position at a close zoom over
-      // fitBounds-to-everyone -- fitBounds naturally zooms out to fit the
-      // whole territory, which is the opposite of what someone opening the
-      // map wants to see first (what's near them right now).
-      if (!initialViewApplied && !relocateCustomerId && !startInAddMode && !startInPlanMode && focusCustomerId == null) {
-        initialViewApplied = true;
-        getCurrentPosition({ timeout: 6000, goodAccuracy: 150, refineMs: 1500 })
-          .then((pos) => {
-            myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-            // The fix can take several seconds; if the user has already
-            // panned/zoomed by then, never pull the map out from under them.
-            if (!userTouchedMap) map.setView([myLocation.lat, myLocation.lng], 15);
-            refreshNearestCustomerBar();
-          })
-          .catch(() => {
-            if (userTouchedMap) return;
-            try {
-              map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
-            } catch {
-              // See note below about the rotate-plugin pane-timing quirk.
-            }
-          });
-        return;
-      }
-      if (!refit) return;
-      try {
-        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
-      } catch {
-        // See note below about the rotate-plugin pane-timing quirk.
-      }
-    }
-  }
+  function applyFilter(...args) { return mapFilters.applyFilter(ctx, ...args); }
 
-  // Bottom-left "nearest customer" widget — an icon-only check-in shortcut
-  // plus a glance at who's closest, without opening a panel or a popup.
-  // Recomputed whenever the customer list or the user's own location
-  // changes (see the calls to this after each of those below); nothing to
-  // do here at all in relocate mode, where the widget isn't rendered.
-  function refreshNearestCustomerBar() {
-    if (!nearestBar) return;
-    if (!myLocation || !lastCustomers.length) {
-      nearestBar.hidden = true;
-      nearestCustomer = null;
-      return;
-    }
-    let nearest = null;
-    let nearestDist = Infinity;
-    for (const { c } of lastCustomers) {
-      const d = haversineMeters(myLocation.lat, myLocation.lng, c.lat, c.lng);
-      if (d < nearestDist) {
-        nearestDist = d;
-        nearest = c;
-      }
-    }
-    if (!nearest) {
-      nearestBar.hidden = true;
-      nearestCustomer = null;
-      return;
-    }
-    nearestCustomer = nearest;
-    nearestInfo.innerHTML = `<strong>${escapeHtml(nearest.name)}</strong><span class="muted">${formatDistance(nearestDist)}</span>`;
-    nearestBar.hidden = false;
-  }
+  function refreshNearestCustomerBar(...args) { return mapLocation.refreshNearestCustomerBar(ctx, ...args); }
 
   nearestCheckinBtn?.addEventListener("click", () => {
     if (nearestCustomer) navigate(`#/checkin/${nearestCustomer.id}`);
@@ -1849,63 +1015,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   const nearbyPanelTitle = root.querySelector("#nearby-panel-title");
   const nearbyList = root.querySelector("#nearby-list");
 
-  async function openNearbyPanel() {
-    nearbyPanel.hidden = false;
-    nearbyPanelTitle.textContent = t("nearby_loading");
-    nearbyList.innerHTML = "";
+  function openNearbyPanel(...args) { return mapLocation.openNearbyPanel(ctx, ...args); }
 
-    if (!myLocation) {
-      try {
-        const pos = await getCurrentPosition();
-        myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        refreshNearestCustomerBar();
-      } catch {
-        nearbyPanelTitle.textContent = t("nearby_location_error");
-        applyFilter();
-        return;
-      }
-    }
-
-    applyFilter();
-    renderNearbyList();
-  }
-
-  function renderNearbyList() {
-    if (!myLocation) return;
-    const nearby = lastCustomers
-      .map(({ c }) => ({ c, distance: haversineMeters(myLocation.lat, myLocation.lng, c.lat, c.lng) }))
-      .filter((entry) => entry.distance <= NEARBY_RADIUS_METERS)
-      .sort((a, b) => a.distance - b.distance);
-
-    nearbyPanelTitle.textContent = `${t("nearby_customers")} · ${t("nearby_within")} · ${nearby.length}`;
-
-    if (!nearby.length) {
-      nearbyList.innerHTML = `<p class="muted">${t("nearby_empty")}</p>`;
-      return;
-    }
-
-    nearbyList.innerHTML = nearby
-      .map(({ c, distance }) => {
-        const badge = customerStatusBadge(customerStatus(c));
-        return `
-        <button class="card customer-card" data-id="${c.id}">
-          <div class="customer-card-main">
-            <strong>${escapeHtml(c.name)}</strong>
-            ${c.category ? `<span class="muted">${escapeHtml(categoryLabel(c.category))}</span>` : ""}
-            <span class="muted">${formatDistance(distance)}</span>
-          </div>
-          <span class="card-trailing">
-            <span class="badge ${badge.cls}">${badge.text}</span>
-            <span class="chevron">&#8250;</span>
-          </span>
-        </button>`;
-      })
-      .join("");
-
-    nearbyList.querySelectorAll(".customer-card").forEach((el) => {
-      el.addEventListener("click", () => navigate(`#/customers/${el.dataset.id}`));
-    });
-  }
+  function renderNearbyList(...args) { return mapLocation.renderNearbyList(ctx, ...args); }
 
   root.querySelector("#nearby-panel-close").addEventListener("click", () => {
     nearbyPanel.hidden = true;
@@ -1921,55 +1033,9 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   });
   root.querySelector("#nearby-view-all").addEventListener("click", () => navigate("#/customers"));
 
-  // Shared by the "Planned" chip (route-stops view below) and the
-  // "Planned today" icon toggle (an independent AND-with-everything-else
-  // filter, see plannedTodayOnly) -- both need the same "who's today's
-  // plan for, given the current manager filter" resolution, just rendered
-  // differently.
-  async function fetchTodayPlannedIds() {
-    let ids = [];
-    try {
-      const planManager = selectedPlanManagerId();
-      if (planManager || !canViewTeamLocations()) {
-        // canViewTeamLocations roles (admin/director/ceo) can pick a specific
-        // manager from the map's own manager filter -- the Planned filter
-        // needs to follow that same selection instead of always asking for
-        // the viewer's own plan (which is empty for these roles, since they
-        // don't have field-visit route plans of their own). This was the map
-        // "Planned" filter's actual disconnect from Route Plans: a
-        // director/admin choosing a manager and tapping Planned always saw
-        // nothing, because it silently kept querying their own account's
-        // plan regardless of who was selected.
-        const plan = await api.getMyVisitPlan(undefined, planManager || undefined);
-        ids = plan?.status === "approved" ? plan.customer_ids : [];
-      } else {
-        // Still true even with the fix above: a director/admin/CEO who
-        // hasn't picked anyone in the manager filter has no personal route
-        // of their own either, so this branch was ALSO always empty for
-        // them -- the actual most-reported case, since nobody manages by
-        // hand-picking one rep every time before checking the map. Show the
-        // union of every rep's approved plan for today instead, so
-        // "Planned" is useful the moment the tab opens.
-        const reps = await api.listPlannableUsers();
-        const plans = await Promise.all(reps.map((u) => api.getMyVisitPlan(undefined, u.id).catch(() => null)));
-        const idSet = new Set();
-        plans.forEach((plan) => {
-          if (plan?.status === "approved") plan.customer_ids.forEach((id) => idSet.add(id));
-        });
-        ids = [...idSet];
-      }
-    } catch {
-      ids = [];
-    }
-    return ids;
-  }
+  function fetchTodayPlannedIds(...args) { return mapPlanning.fetchTodayPlannedIds(ctx, ...args); }
 
-  async function loadPlannedFilter() {
-    const ids = await fetchTodayPlannedIds();
-    await customersReady;
-    plannedCustomerIds = ids;
-    applyFilter();
-  }
+  function loadPlannedFilter(...args) { return mapPlanning.loadPlannedFilter(ctx, ...args); }
 
   // Today's planned customers (all reps, or the one picked in the manager filter) for the highlight / only-today modes; see plannedMode above.
   let plannedTodayIdSet = null;
@@ -2021,18 +1087,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   }
 
   let brandStatusLoaded = false;
-  async function loadBrandStatus() {
-    if (!brandStatusLoaded) {
-      try {
-        const rows = await api.getBrandStatusByCustomer();
-        brandStatusByCustomer = new Map(rows.map((r) => [r.customer_id, r.brand_status]));
-      } catch {
-        brandStatusByCustomer = new Map();
-      }
-      brandStatusLoaded = true;
-    }
-    applyFilter();
-  }
+  function loadBrandStatus(...args) { return mapFilters.loadBrandStatus(ctx, ...args); }
 
   const mapSearchInput = root.querySelector("#map-customer-search");
   const searchNoResults = root.querySelector("#map-search-no-results");
@@ -2054,128 +1109,23 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // "091 007 019", "+374 91 007019", "91007" all find the customer with phone +37491007019 (3+ digits; the country code and
   // leading zeros are ignored on both sides).
   const phoneTailDigits = (v) => String(v ?? "").replace(/\D/g, "").replace(/^374/, "").replace(/^0+/, "");
-  function phoneMatches(c, q) {
-    const query = phoneTailDigits(q);
-    return query.length >= 3 && phoneTailDigits(c.phone).includes(query);
-  }
+  function phoneMatches(...args) { return mapSearch.phoneMatches(ctx, ...args); }
 
   // Which tab of the search panel is open: "customers" | "addresses". Follows the results until the person taps a tab.
   let searchTab = "customers";
   let searchTabChosen = false;
 
-  function hideAddressResults() {
-    searchPanelOpen = false;
-    addressResultsEl.hidden = true;
-    addressResultsEl.innerHTML = "";
-  }
+  function hideAddressResults(...args) { return mapSearch.hideAddressResults(ctx, ...args); }
 
   // One panel under the search field with two tabs, each with its count: the customers on the map that match (nearest
   // first, with the distance; name, ID, address, phone and brands match) and the street addresses the geocoder found. Tap a customer -> the map flies to the pin and
   // opens its card; tap an address -> a search pin is dropped there.
   const SEARCH_PANEL_CUSTOMER_CAP = 60;
-  function renderSearchPanel() {
-    const q = mapSearchInput.value.trim();
-    if (q.length < 2) {
-      hideAddressResults();
-      return;
-    }
-    const ref = myLocation || (() => { const c = map.getCenter(); return { lat: c.lat, lng: c.lng }; })();
-    const customers = lastMatches
-      .map(({ c }) => ({ c, d: haversineMeters(ref.lat, ref.lng, c.lat, c.lng) }))
-      .sort((a, b) => a.d - b.d);
-    const shown = customers.slice(0, SEARCH_PANEL_CUSTOMER_CAP);
-    const customerRows = shown
-      .map(({ c, d }) => {
-        const byPhone = phoneMatches(c, q);
-        const sub = [byPhone ? c.phone : "", c.erp_customer_id ? `ID ${c.erp_customer_id}` : "", c.sales_channel ? channelDisplayLabel(c.sales_channel) : "", c.address || ""].filter(Boolean).join(" · ");
-        return `<button type="button" class="map-sr-row" data-cid="${c.id}">
-          <span class="map-sr-main"><strong>${escapeHtml(c.name)}</strong>${sub ? `<span class="muted">${escapeHtml(sub)}</span>` : ""}</span>
-          <span class="map-sr-dist">${formatDistance(d)}</span>
-        </button>`;
-      })
-      .join("");
-    const showAddresses = q.length >= 3;
-    const addressBody = addressLoading
-      ? `<p class="map-sr-empty muted">${t("map_search_searching")}</p>`
-      : addressResults.length
-        ? addressResults.map((r, i) => `<button type="button" class="map-sr-row map-sr-address" data-aidx="${i}"><span class="map-sr-main"><strong>${escapeHtml(r.address)}</strong></span></button>`).join("")
-        : `<p class="map-sr-empty muted">${t("map_search_no_addresses")}</p>`;
-    // Tabs: nothing found among customers but addresses found -> show the addresses until the person picks a tab.
-    if (!searchTabChosen) searchTab = !customers.length && showAddresses && addressResults.length ? "addresses" : "customers";
-    if (!showAddresses) searchTab = "customers";
-    const addrCount = addressLoading ? "…" : addressResults.length;
-    addressResultsEl.innerHTML = `
-      ${
-        showAddresses
-          ? `<div class="map-sr-tabs" role="tablist">
-              <button type="button" role="tab" class="map-sr-tab ${searchTab === "customers" ? "map-sr-tab-active" : ""}" aria-selected="${searchTab === "customers"}" data-sr-tab="customers">${t("map_search_customers")} <span class="map-sr-count">${customers.length}</span></button>
-              <button type="button" role="tab" class="map-sr-tab ${searchTab === "addresses" ? "map-sr-tab-active" : ""}" aria-selected="${searchTab === "addresses"}" data-sr-tab="addresses">${t("map_search_address_matches")} <span class="map-sr-count">${addrCount}</span></button>
-            </div>`
-          : `<p class="map-address-results-label">${t("map_search_customers")} · ${customers.length}</p>`
-      }
-      <div class="map-sr-list">${searchTab === "addresses" ? addressBody : customerRows || `<p class="map-sr-empty muted">${t("map_search_no_results")}</p>`}</div>
-    `;
-    addressResultsEl.querySelectorAll("[data-sr-tab]").forEach((btn) =>
-      btn.addEventListener("click", () => {
-        searchTab = btn.dataset.srTab;
-        searchTabChosen = true;
-        renderSearchPanel();
-      })
-    );
-    searchPanelOpen = true;
-    addressResultsEl.hidden = false;
-    addressResultsEl.querySelectorAll("[data-cid]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        hideAddressResults();
-        mapSearchInput.blur();
-        focusOnCustomerMarker(btn.dataset.cid);
-      });
-    });
-    addressResultsEl.querySelectorAll("[data-aidx]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        mapSearchInput.blur();
-        selectAddressResult(addressResults[Number(btn.dataset.aidx)]);
-      });
-    });
-  }
+  function renderSearchPanel(...args) { return mapSearch.renderSearchPanel(ctx, ...args); }
 
-  function selectAddressResult(result) {
-    hideAddressResults();
-    const latlng = L.latLng(result.lat, result.lng);
-    map.setView(latlng, 16);
-    if (addressSearchMarker) map.removeLayer(addressSearchMarker);
-    addressSearchMarker = L.marker(latlng, {
-      icon: L.divIcon({ className: "", html: SEARCH_PIN_HTML, iconSize: [26, 26], iconAnchor: [13, 26] }),
-    }).addTo(map);
-    addressSearchMarker.bindPopup(escapeHtml(result.address)).openPopup();
-  }
+  function selectAddressResult(...args) { return mapSearch.selectAddressResult(ctx, ...args); }
 
-  // Real external geocoding, unlike the instant client-side customer
-  // filter above -- only worth firing past a few characters (shorter is
-  // mostly noise and burns API calls for nothing) and on its own, longer
-  // debounce (400ms, matching the old address-search sheet) since it's a
-  // network round trip rather than a local array scan.
-  async function runAddressSearch(query) {
-    if (query.length < 3) {
-      addressResults = [];
-      addressLoading = false;
-      renderSearchPanel();
-      return;
-    }
-    const myToken = ++addressSearchToken;
-    addressLoading = true;
-    renderSearchPanel();
-    let results = [];
-    try {
-      results = await api.searchAddress(query);
-    } catch {
-      results = [];
-    }
-    if (myToken !== addressSearchToken) return; // a newer query already superseded this one
-    addressResults = results;
-    addressLoading = false;
-    renderSearchPanel();
-  }
+  function runAddressSearch(...args) { return mapSearch.runAddressSearch(ctx, ...args); }
 
   mapSearchInput?.addEventListener("input", () => {
     const raw = mapSearchInput.value.trim();
@@ -2199,15 +1149,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     if (mapSearchInput.value.trim().length >= 2) renderSearchPanel();
   });
 
-  // Dismiss the address-match dropdown on an outside tap, same as any other
-  // lightweight popover in this app -- it isn't a modal sheet, so nothing
-  // else should block interacting with the rest of the map while it's open.
-  function dismissAddressResultsOutside(e) {
-    // composedPath is fixed when the click starts: a tap on a panel button that re-renders the panel (a tab) has already
-    // detached e.target by the time this runs, and closest() on a detached node would wrongly count it as "outside".
-    const inside = (e.composedPath?.() ?? []).some((n) => n.classList?.contains("map-search-row")) || e.target.closest(".map-search-row");
-    if (addressResultsEl && !addressResultsEl.hidden && !inside) hideAddressResults();
-  }
+  function dismissAddressResultsOutside(...args) { return mapSearch.dismissAddressResultsOutside(ctx, ...args); }
   document.addEventListener("click", dismissAddressResultsOutside);
 
   // The competitor visibility toggle is mounted separately (see
@@ -2219,178 +1161,13 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     if (e.target.closest(".map-competitor-toggle")) applyFilter();
   });
 
-  // Shared "focus the map on one customer" mechanism -- used both by the
-  // #/map?customer=<id> deep link (customer detail's "Show on map") and,
-  // right after creating a new customer, to land on that customer's own
-  // pin instead of the fitBounds-to-everyone zoom-out applyFilter would
-  // otherwise apply while add-mode is active.
-  // keepView: only reopen the popup where the camera already is (coming back from a customer card).
-  function focusOnCustomerMarker(id, { keepView = false } = {}) {
-    const entry = lastCustomers.find((item) => String(item.c.id) === String(id));
-    if (entry) {
-      if (!keepView) // Zoom 17 and closer draws every pin on its own (disableClusteringAtZoom): at 15 the new customer could sit inside
-      // a cluster bubble next to a neighbour, i.e. "the new pin is not on the map".
-        map.setView([entry.c.lat, entry.c.lng], Math.max(map.getZoom(), 17), { animate: false });
-      // The cluster layer adds markers in chunks over the next frames, so the marker is not on the map yet: open its
-      // popup as soon as it is (openPopup on a marker without a map does nothing).
-      let tries = 0;
-      const openWhenShown = () => {
-        if (entry.marker._map) entry.marker.openPopup();
-        else if (++tries < 40) setTimeout(openWhenShown, 75);
-      };
-      openWhenShown();
-    }
-    return entry;
-  }
+  function focusOnCustomerMarker(...args) { return mapMarkers.focusOnCustomerMarker(ctx, ...args); }
 
-  // Split from the actual fetch (see loadCustomers/loadCustomersCached
-  // below) so the initial mount can paint a cached list instantly and
-  // repaint once the live fetch lands, without duplicating this whole
-  // marker-build/applyFilter/nearest-bar pipeline at each call site.
-  function paintCustomers(customers) {
-    markerLayer.clearLayers();
-    customerMarkerLayer.clearLayers();
-    lastCustomers = [];
+  function paintCustomers(...args) { return mapMarkers.paintCustomers(ctx, ...args); }
 
-    // Efficiency mode's fast path for "Add new customer": building a
-    // Leaflet marker + bound popup (with its own async popupopen listener)
-    // for every existing customer is the single most expensive thing this
-    // view does -- hundreds of marker objects and clustering work -- and
-    // none of it is needed just to drop one new pin. Skipped only while
-    // addMode is actually active; the moment the new customer is saved,
-    // addMode is cleared and this same function runs again (see the
-    // form-submit handler below), building the full marker set normally
-    // from then on. startAddCustomerFlow() below has its own GPS/address-
-    // search positioning, independent of the customer bounds this loop
-    // would otherwise compute, so skipping it doesn't leave the map
-    // uncentered.
-    const skipMarkers = addMode && getPerfMode() === "efficiency";
-    const bounds = [];
-    if (!skipMarkers) {
-      for (const c of customers) {
-        const status = customerStatus(c);
-        const marker = L.marker([c.lat, c.lng], { icon: customerIcon(c, status) });
-        marker.bindPopup(`
-          <div class="map-popup">
-            <strong>${escapeHtml(c.name)}</strong>
-            ${c.sales_channel || reorderChipHtml(c) ? `<div class="popup-category">${c.sales_channel ? escapeHtml(channelDisplayLabel(c.sales_channel)) : ""} ${reorderChipHtml(c)}</div>` : ""}
-            <div class="popup-brand-chips" id="popup-brands-${c.id}">${popupBrandChipsHtml(c.id)}</div>
-            <div class="popup-facts" id="popup-facts-${c.id}">${popupFactsHtml(factsCache.get(c.id)?.data)}</div>
-            <div class="popup-actions">
-              <button data-action="checkin" data-id="${c.id}" class="btn-accent"><span>${icons.mapPinCheck}</span><span class="popup-action-label">${t("check_in")}</span></button>
-              <button data-action="details" data-id="${c.id}"><span class="popup-action-label">${t("more")}</span></button>
-            </div>
-          </div>
-        `, { maxWidth: 340 });
-        marker.on("popupopen", async (e) => {
-          // The selected halo also follows a popup that is reopened by code (back from the customer card), not only a tap.
-          const icon = marker.getElement?.();
-          if (icon?.querySelector(".pin:not(.pin-stop):not(.pin-new)")) {
-            document.querySelectorAll("#leaflet-map .leaflet-marker-icon.kad-marker-selected").forEach((el) => { if (el !== icon) el.classList.remove("kad-marker-selected"); });
-            icon.classList.add("kad-marker-selected");
-          }
-          const popupEl = e.popup.getElement();
-          popupEl.querySelector('[data-action="details"]').addEventListener("click", () => {
-            lastPopupCustomerId = c.id;
-            navigate(`#/customers/${c.id}`);
-          });
-          popupEl.querySelector('[data-action="checkin"]').addEventListener("click", () => {
-            lastPopupCustomerId = c.id;
-            navigate(`#/checkin/${c.id}`);
-          });
+  function loadCustomers(...args) { return mapMarkers.loadCustomers(ctx, ...args); }
 
-          // The chips may have arrived after this popup's HTML was built.
-          const brandsEl = popupEl.querySelector(`#popup-brands-${c.id}`);
-          if (brandsEl) brandsEl.innerHTML = popupBrandChipsHtml(c.id);
-          const factsEl = popupEl.querySelector(`#popup-facts-${c.id}`);
-          // Facts come from one small request, shown instantly from the
-          // session cache when we have it (refreshed in the background) and
-          // as a same-height skeleton otherwise, so the popup never jumps.
-          const render = (data) => {
-            factsEl.innerHTML = popupFactsHtml(data);
-            nudgePopupIntoView(popupEl);
-          };
-          try {
-            const cached = factsCache.get(c.id);
-            if (cached) render(cached.data);
-            if (!cached || Date.now() - cached.at > 20000) render(await fetchFacts(c.id));
-          } catch {
-            if (!factsCache.get(c.id)) factsEl.innerHTML = "";
-          }
-        });
-        marker.on("mousedown touchstart", () => {
-          if (!factsCache.has(c.id)) fetchFacts(c.id).catch(() => {});
-        });
-        lastCustomers.push({ c, marker });
-        bounds.push([c.lat, c.lng]);
-      }
-    }
-
-    resolveCustomersReady();
-    renderIconFilterRow();
-    applyFilter({ refit: false });
-    refreshNearestCustomerBar();
-    warmVisiblePopups();
-
-    // Item 7 -- customer detail's Navigate button offers "Show on map" as an
-    // in-app alternative to leaving for an external navigation app; this is
-    // the mechanism it (and any future "open map centered on customer X"
-    // caller) relies on. A customer not in the (filtered) list just silently
-    // has nothing to focus, same as the relocate flow above handling a
-    // missing id.
-    if (focusCustomerId != null) {
-      // Counts as the map's "first settle" too (see the geolocation-based
-      // centering this guards against in applyFilter above) -- otherwise
-      // that block keeps re-running on every later filter change (nothing
-      // else ever flips initialViewApplied while focusCustomerId stays
-      // set) and yanks the map back to the user's own location the next
-      // time they tap a filter chip.
-      initialViewApplied = true;
-      // Deliberately re-run on every paintCustomers() call (not just the
-      // first), unlike the geolocation block above -- loadCustomersCached()
-      // can paint twice (a cached list, then the live fetch), and each pass
-      // clearLayers()s and rebuilds every marker from scratch. Skipping the
-      // second call here would leave the popup open on a marker that pass
-      // just destroyed, i.e. no popup at all once the live data lands
-      // (reported as "Show on map" doing nothing after the Map tab had
-      // already been visited once this session, since only then is there a
-      // cached list to paint first).
-      focusOnCustomerMarker(focusCustomerId);
-    }
-    if (reopenCustomerId != null && focusOnCustomerMarker(reopenCustomerId, { keepView: true })) reopenCustomerId = null;
-
-    // Skipped alongside the marker loop above -- startAddCustomerFlow()
-    // already runs its own getCurrentPosition() to center the map, so this
-    // would otherwise race it with a second, redundant recenter. Also
-    // one-time-guarded (see emptyBoundsRecenterAttempted above).
-    if (!skipMarkers && !bounds.length && navigator.geolocation && !emptyBoundsRecenterAttempted) {
-      emptyBoundsRecenterAttempted = true;
-      getCurrentPosition({ timeout: 10000, goodAccuracy: 500 })
-        .then((pos) => !userTouchedMap && map.setView([pos.coords.latitude, pos.coords.longitude], 13))
-        .catch(() => {});
-    }
-  }
-
-  // Always-fresh fetch + paint -- used after an action that changed the
-  // customer list itself (adding a new customer below) and must show up
-  // immediately, never behind a stale cached paint.
-  async function loadCustomers() {
-    const customers = await api.listCustomers();
-    paintCustomers(customers);
-  }
-
-  // Cached stale-while-revalidate variant, used only for the view's
-  // initial mount (see map.whenReady below) -- paints whatever customer
-  // list was cached from the last visit instantly, then repaints with the
-  // live fetch once it lands. Never used for the post-add-customer reload
-  // above: that one needs the just-added customer to appear right away,
-  // not possibly flash the old (cached, pre-add) list first.
-  async function loadCustomersCached() {
-    await loadWithCache("map-customers", () => api.listCustomers(), paintCustomers);
-    loadBrandSummary();
-    loadTaskFlags();
-    loadDebtFlags();
-  }
+  function loadCustomersCached(...args) { return mapMarkers.loadCustomersCached(ctx, ...args); }
 
   // "My location" — blue dot + accuracy circle, kept live with watchPosition.
   // Three states cycled by tapping the same button: off -> on (shows the dot,
@@ -2401,132 +1178,19 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   let locationMode = "off"; // "off" | "on" | "track"
   let headingEventName = null;
 
-  // The heading arrow is drawn "north-up" (0deg = pointing up) inside the
-  // marker's own icon. Leaflet.Rotate rotates the whole map pane -- markers
-  // included -- by -bearing (see the #compass-btn needle above, which has
-  // to counter-rotate by the same -bearing to keep pointing at true north).
-  // Track mode sets the map bearing to the live heading, so pre-rotating the
-  // arrow by +heading cancels that pane rotation and keeps it pointing
-  // straight up on screen, i.e. "forward" -- exactly like a Google Maps-style
-  // compass-mode blue dot.
-  function meIcon(heading) {
-    const arrow =
-      heading != null
-        ? `<div class="me-heading-arrow" style="transform: rotate(${heading}deg)"></div>`
-        : "";
-    return L.divIcon({ className: "", html: `<div class="me-dot">${arrow}</div>`, iconSize: [18, 18], iconAnchor: [9, 9] });
-  }
+  function meIcon(...args) { return mapLocation.meIcon(ctx, ...args); }
 
-  function updateLocateButtonState() {
-    locateBtn.classList.toggle("map-control-active", locationMode === "on");
-    locateBtn.classList.toggle("map-control-tracking", locationMode === "track");
-    locateBtn.setAttribute(
-      "aria-label",
-      t(locationMode === "track" ? "location_mode_track" : locationMode === "on" ? "location_mode_on" : "locate_me")
-    );
-  }
+  function updateLocateButtonState(...args) { return mapLocation.updateLocateButtonState(ctx, ...args); }
 
-  function stopWatch() {
-    if (watchId != null) {
-      navigator.geolocation.clearWatch(watchId);
-      watchId = null;
-    }
-  }
+  function stopWatch(...args) { return mapLocation.stopWatch(ctx, ...args); }
 
-  function onHeading(e) {
-    // iOS Safari exposes a ready-to-use compass heading; everything else
-    // gives raw device-orientation alpha, which runs counter-clockwise from
-    // the device's start orientation and needs flipping to a clockwise
-    // compass bearing.
-    let heading = typeof e.webkitCompassHeading === "number" ? e.webkitCompassHeading : null;
-    if (heading == null && typeof e.alpha === "number") heading = (360 - e.alpha) % 360;
-    if (heading == null || Number.isNaN(heading)) return;
-    map.setBearing(heading);
-    if (meMarker) meMarker.setIcon(meIcon(heading));
-  }
+  function onHeading(...args) { return mapLocation.onHeading(ctx, ...args); }
 
-  function stopHeading() {
-    if (headingEventName) {
-      window.removeEventListener(headingEventName, onHeading);
-      headingEventName = null;
-    }
-    map.setBearing(0);
-    if (meMarker) meMarker.setIcon(meIcon(null));
-  }
+  function stopHeading(...args) { return mapLocation.stopHeading(ctx, ...args); }
 
-  async function startHeading() {
-    if (headingEventName) return;
-    // iOS 13+ only grants device-orientation data after an explicit
-    // user-gesture-triggered prompt -- this function only ever runs from
-    // inside the button's click handler, never on load, so the gesture
-    // requirement is satisfied.
-    if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
-      try {
-        const result = await DeviceOrientationEvent.requestPermission();
-        if (result !== "granted") return;
-      } catch {
-        return;
-      }
-    }
-    headingEventName = "ondeviceorientationabsolute" in window ? "deviceorientationabsolute" : "deviceorientation";
-    window.addEventListener(headingEventName, onHeading);
-  }
+  function startHeading(...args) { return mapLocation.startHeading(ctx, ...args); }
 
-  function startWatch() {
-    if (watchId != null) return;
-    watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        rememberPosition(pos);
-        const { latitude, longitude, accuracy } = pos.coords;
-        const latlng = [latitude, longitude];
-        myLocation = { lat: latitude, lng: longitude };
-        if (!meMarker) {
-          meMarker = L.marker(latlng, { icon: meIcon(null), pane: "mePane", interactive: false, keyboard: false }).addTo(map);
-          meAccuracyCircle = L.circle(latlng, {
-            radius: accuracy,
-            color: cssColor("--accent", "#0969da"),
-            weight: 1,
-            fillColor: cssColor("--accent", "#0969da"),
-            fillOpacity: 0.12,
-          }).addTo(map);
-          map.setView(latlng, Math.max(map.getZoom(), 15));
-        } else {
-          meMarker.setLatLng(latlng);
-          meAccuracyCircle.setLatLng(latlng).setRadius(accuracy);
-          if (locationMode === "track") map.panTo(latlng, { animate: true });
-        }
-        refreshNearestCustomerBar();
-      },
-      (err) => {
-        // Only a denied permission ends tracking. A TIMEOUT / POSITION_UNAVAILABLE
-        // is normal while the GPS warms up or the rep walks past a building;
-        // the watch keeps running and the next fix lands by itself (it used to
-        // switch the button off on the first timeout, which looked like "the
-        // app can't find me").
-        if (err && err.code !== 1) return;
-        locationMode = "off";
-        updateLocateButtonState();
-        stopWatch();
-        stopHeading();
-      },
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 }
-    );
-    // Show the last known position straight away while the fresh fix arrives.
-    const known = getLastKnownPosition(120000);
-    if (known && !meMarker) {
-      const { latitude, longitude, accuracy } = known.coords;
-      myLocation = { lat: latitude, lng: longitude };
-      meMarker = L.marker([latitude, longitude], { icon: meIcon(null), pane: "mePane", interactive: false, keyboard: false }).addTo(map);
-      meAccuracyCircle = L.circle([latitude, longitude], {
-        radius: accuracy,
-        color: cssColor("--accent", "#0969da"),
-        weight: 1,
-        fillColor: cssColor("--accent", "#0969da"),
-        fillOpacity: 0.12,
-      }).addTo(map);
-      map.setView([latitude, longitude], Math.max(map.getZoom(), 15));
-    }
-  }
+  function startWatch(...args) { return mapLocation.startWatch(ctx, ...args); }
 
   locateBtn.addEventListener("click", async () => {
     if (!navigator.geolocation) return;
@@ -2576,62 +1240,11 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // user id (not name, which two people could share) so the same manager
   // always gets the same ring color across sessions and devices.
   const TEAM_AVATAR_COLORS = ["#e8590c", "#2f9e44", "#1971c2", "#9c36b5", "#c2255c", "#f08c00", "#0c8599", "#5c5f66", "#e64980", "#2b8a3e"];
-  function teamAvatarColor(userId) {
-    return TEAM_AVATAR_COLORS[Math.abs(Number(userId) || 0) % TEAM_AVATAR_COLORS.length];
-  }
+  function teamAvatarColor(...args) { return mapLocation.teamAvatarColor(ctx, ...args); }
 
-  function teamMemberIcon(loc, bounce = false) {
-    const letter = escapeHtml((loc.name || "?").trim().charAt(0).toUpperCase() || "?");
-    const color = teamAvatarColor(loc.user_id);
-    return L.divIcon({
-      className: "",
-      // bounce: a short hop when the team is switched on, so the eye finds them at once (owner, 2026-10-27)
-      html: `<div class="team-avatar ${bounce ? "team-avatar-bounce" : ""}" style="--team-color:${color}">${letter}</div>`,
-      iconSize: [30, 30],
-      iconAnchor: [15, 15],
-    });
-  }
+  function teamMemberIcon(...args) { return mapLocation.teamMemberIcon(ctx, ...args); }
 
-  async function refreshTeamLocations({ fitBounds = false } = {}) {
-    let locations;
-    try {
-      locations = await api.getTeamLocations();
-    } catch {
-      return;
-    }
-    teamLayer.clearLayers();
-    for (const loc of locations) {
-      L.marker([loc.lat, loc.lng], { icon: teamMemberIcon(loc, fitBounds), pane: "teamPane" })
-        .bindPopup(
-          `<div class="map-popup"><strong>${escapeHtml(loc.name)}</strong><div class="popup-category">${escapeHtml(t(`role_${loc.role}`))} · ${formatRelative(loc.updated_at)}</div></div>`
-        )
-        .addTo(teamLayer);
-    }
-    // Only zoom to fit on the toggle-on load, not on every 15s poll refresh
-    // -- otherwise the map would yank the viewport out from under someone
-    // who's since panned/zoomed to look at a specific area.
-    if (fitBounds && locations.length) {
-      try {
-        map.fitBounds(
-          locations.map((loc) => [loc.lat, loc.lng]),
-          { padding: [50, 50], maxZoom: 15 }
-        );
-      } catch {
-        // See the rotate-plugin pane-timing note elsewhere in this file.
-      }
-    }
-    clearTimeout(teamEmptyHintTimer);
-    if (teamBtn.classList.contains("map-control-active") && locations.length === 0) {
-      teamEmptyHint.hidden = false;
-      // Toast-style: shows briefly then dismisses itself, instead of
-      // sitting on the map indefinitely while the toggle stays on.
-      teamEmptyHintTimer = setTimeout(() => {
-        teamEmptyHint.hidden = true;
-      }, 2000);
-    } else {
-      teamEmptyHint.hidden = true;
-    }
-  }
+  function refreshTeamLocations(...args) { return mapLocation.refreshTeamLocations(ctx, ...args); }
 
   teamBtn?.addEventListener("click", () => {
     const active = teamBtn.classList.toggle("map-control-active");
@@ -2660,288 +1273,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // on), but the week is shown Monday-first everywhere in the UI.
   const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
-  async function openPlanDaySheet() {
-    const overlay = document.createElement("div");
-    overlay.className = "sheet-overlay sheet-overlay-light";
-    overlay.innerHTML = `
-      <div class="sheet">
-        <h2>${t("plan_day")}</h2>
-        ${
-          canPlanForOthers()
-            ? `<label>${t("planning_for")}
-                <select id="plan-target-select">
-                  <option value="">${t("myself")}</option>
-                </select>
-              </label>`
-            : ""
-        }
-        <div class="plan-mode-tabs" role="tablist">
-          <button type="button" class="plan-mode-tab plan-mode-tab-active" data-mode="today" role="tab" aria-selected="true" aria-controls="plan-body" tabindex="0">${t("plan_mode_today")}</button>
-          <button type="button" class="plan-mode-tab" data-mode="recurring" role="tab" aria-selected="false" aria-controls="plan-body" tabindex="-1">${t("plan_mode_recurring")}</button>
-        </div>
-        <div id="plan-body" role="tabpanel"><p class="loading-state" role="status">${t("loading")}</p></div>
-        <p class="form-error" id="plan-day-error" hidden></p>
-        <div class="sheet-actions">
-          <button type="button" class="btn" id="cancel-plan-day">${t("cancel")}</button>
-          <button type="button" class="btn btn-primary" id="save-plan-day">${t("save_plan")}</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    activateDialog(overlay);
-
-    function close() {
-      overlay.remove();
-    }
-    overlay.querySelector("#cancel-plan-day").addEventListener("click", close);
-    overlay.addEventListener("click", (e) => e.target === overlay && close());
-
-    // The customer checklist below reads lastCustomers, which is still
-    // empty for a beat after the map view mounts -- wait for it so the
-    // list isn't rendered permanently blank.
-    await customersReady;
-
-    const bodyEl = overlay.querySelector("#plan-body");
-    const errorEl = overlay.querySelector("#plan-day-error");
-    const targetSelect = overlay.querySelector("#plan-target-select");
-    const saveBtn = overlay.querySelector("#save-plan-day");
-
-    let targetUserId = null;
-    let mode = "today";
-    let selectedWeekday = new Date().getDay();
-
-    if (targetSelect) {
-      try {
-        const plannable = await api.listPlannableUsers();
-        targetSelect.insertAdjacentHTML(
-          "beforeend",
-          plannable.map((u) => `<option value="${u.id}">${escapeHtml(u.name)}${u.position ? ` (${escapeHtml(u.position)})` : ""}</option>`).join("")
-        );
-      } catch {
-        // Leave just "Myself" if this fails -- not fatal.
-      }
-      targetSelect.addEventListener("change", () => {
-        targetUserId = targetSelect.value || null;
-        renderBody();
-      });
-    }
-
-    const planModeTabs = [...overlay.querySelectorAll(".plan-mode-tab")];
-    function selectPlanMode(tab) {
-        planModeTabs.forEach((t2) => {
-          t2.classList.remove("plan-mode-tab-active");
-          t2.setAttribute("aria-selected", "false");
-          t2.tabIndex = -1;
-        });
-        tab.classList.add("plan-mode-tab-active");
-        tab.setAttribute("aria-selected", "true");
-        tab.tabIndex = 0;
-        mode = tab.dataset.mode;
-        renderBody();
-    }
-    planModeTabs.forEach((tab, index) => {
-      tab.addEventListener("click", () => selectPlanMode(tab));
-      tab.addEventListener("keydown", (event) => {
-        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-        event.preventDefault();
-        const nextIndex = (index + (event.key === "ArrowRight" ? 1 : -1) + planModeTabs.length) % planModeTabs.length;
-        planModeTabs[nextIndex].focus();
-        selectPlanMode(planModeTabs[nextIndex]);
-      });
-    });
-
-    async function renderBody() {
-      errorEl.hidden = true;
-      bodyEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
-      if (mode === "today") {
-        await renderTodayMode();
-      } else {
-        await renderRecurringMode();
-      }
-    }
-
-    async function renderTodayMode() {
-      let existingPlan;
-      try {
-        existingPlan = await api.getMyVisitPlan(undefined, targetUserId);
-      } catch {
-        existingPlan = null;
-      }
-      const selectedIds = new Set(existingPlan?.customer_ids ?? []);
-      const statusClass =
-        existingPlan?.status === "approved" ? "badge-success" : existingPlan?.status === "rejected" ? "badge-danger" : "badge-neutral";
-      const statusLabel = existingPlan
-        ? existingPlan.source === "rule"
-          ? t("plan_status_from_rule")
-          : t(PLAN_STATUS_KEY[existingPlan.status])
-        : t("plan_status_none");
-
-      // Scope the checklist to whoever the plan is actually for -- the
-      // customers assigned to that rep, not the entire map. Without this a
-      // director planning for one SM would be picking from every other
-      // rep's customers too.
-      const effectiveTargetId = targetUserId ? Number(targetUserId) : state.user.id;
-      const sortedCustomers = lastCustomers
-        .filter(({ c }) => Number(c.assigned_manager_id) === effectiveTargetId)
-        .sort((a, b) => a.c.name.localeCompare(b.c.name));
-
-      bodyEl.innerHTML = `
-        <p class="badge ${statusClass}" id="plan-status-badge">${statusLabel}</p>
-        <p class="muted">${t("plan_day_hint")}</p>
-        <div class="plan-day-list" id="plan-day-list"></div>
-      `;
-      const listEl = bodyEl.querySelector("#plan-day-list");
-
-      // Same Region -> Subregion -> Customer tri-state accordion Route
-      // Plans' own customer-pick sheet uses (regionTree.js), rather than
-      // this sheet growing its own separate filter UI.
-      let checkedIds;
-      if (!sortedCustomers.length) {
-        listEl.innerHTML = `<p class="empty-state">${t("no_assigned_customers")}</p>`;
-        checkedIds = new Set();
-      } else {
-        checkedIds = renderTriStateTree(listEl, {
-          tree: buildCustomerTree(sortedCustomers.map(({ c }) => c)),
-          initialSelectedIds: selectedIds,
-          countUnitLabel: t("perf_dq_customers_unit"),
-          totalLabel: (n) => t("customers_selected_count").replace("{n}", n),
-        });
-      }
-
-      saveBtn.onclick = async () => {
-        saveBtn.disabled = true;
-        // renderTriStateTree's selectedIds Set is normalized to strings
-        // (see regionTree.js) -- back to numbers for the visit-plan API.
-        const ids = [...checkedIds].map(Number);
-        try {
-          await api.saveVisitPlan(undefined, ids, targetUserId);
-          close();
-          if (activeFilter === "planned") loadPlannedFilter();
-          if (plannedMode !== "off") refreshPlannedToday();
-        } catch (err) {
-          errorEl.textContent = err.message;
-          errorEl.hidden = false;
-          saveBtn.disabled = false;
-        }
-      };
-    }
-
-    async function renderRecurringMode() {
-      let regions = [];
-      let rules = [];
-      try {
-        [regions, rules] = await Promise.all([api.getCustomerRegions(), api.getVisitPlanRules(targetUserId)]);
-      } catch {
-        regions = [];
-        rules = [];
-      }
-      const regionNames = [...new Set(regions.map((r) => r.region))];
-      const currentRule = rules.find((r) => r.day_of_week === selectedWeekday);
-      const areas = currentRule?.areas ?? [];
-
-      bodyEl.innerHTML = `
-        <p class="muted">${t("plan_recurring_hint").replace("[weekday]", t(WEEKDAY_KEYS[selectedWeekday]))}</p>
-        <div class="weekday-picker" id="weekday-picker">
-          ${WEEKDAY_ORDER.map(
-            (i) => `<button type="button" class="weekday-btn ${i === selectedWeekday ? "weekday-btn-active" : ""}" data-day="${i}">${t(WEEKDAY_KEYS[i])}</button>`
-          ).join("")}
-        </div>
-        <div class="plan-area-list" id="plan-area-list">
-          ${
-            areas.length
-              ? areas
-                  .map(
-                    (a, i) => `
-              <div class="plan-area-row" data-index="${i}">
-                <span>${escapeHtml(a.region)}${a.subregion ? ` · ${escapeHtml(a.subregion)}` : ""}</span>
-                <button type="button" class="icon-btn plan-area-remove" data-index="${i}" aria-label="${t("cancel")}">${icons.close}</button>
-              </div>`
-                  )
-                  .join("")
-              : `<p class="muted">${t("no_areas_yet")}</p>`
-          }
-        </div>
-        <div class="plan-area-add-row">
-          <select id="plan-add-region">
-            <option value="">${t("region")}</option>
-            ${regionNames.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join("")}
-          </select>
-          <select id="plan-add-subregion">
-            <option value="">${t("all_subregions")}</option>
-          </select>
-          <button type="button" class="btn btn-sm plan-add-area-btn" id="plan-add-area-btn" aria-label="${t("add_area")}">${icons.plus}</button>
-        </div>
-      `;
-
-      let workingAreas = areas.map((a) => ({ ...a }));
-      const regionSelect = bodyEl.querySelector("#plan-add-region");
-      const subregionSelect = bodyEl.querySelector("#plan-add-subregion");
-
-      regionSelect.addEventListener("change", () => {
-        const subregions = regions.filter((r) => r.region === regionSelect.value && r.subregion).map((r) => r.subregion);
-        subregionSelect.innerHTML = `<option value="">${t("all_subregions")}</option>${subregions
-          .map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`)
-          .join("")}`;
-      });
-
-      function paintAreaList() {
-        const listEl = bodyEl.querySelector("#plan-area-list");
-        listEl.innerHTML = workingAreas.length
-          ? workingAreas
-              .map(
-                (a, i) => `
-          <div class="plan-area-row" data-index="${i}">
-            <span>${escapeHtml(a.region)}${a.subregion ? ` · ${escapeHtml(a.subregion)}` : ""}</span>
-            <button type="button" class="icon-btn plan-area-remove" data-index="${i}" aria-label="${t("cancel")}">${icons.close}</button>
-          </div>`
-              )
-              .join("")
-          : `<p class="muted">${t("no_areas_yet")}</p>`;
-        listEl.querySelectorAll(".plan-area-remove").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            workingAreas.splice(Number(btn.dataset.index), 1);
-            paintAreaList();
-          });
-        });
-      }
-      paintAreaList();
-
-      bodyEl.querySelector("#plan-add-area-btn").addEventListener("click", () => {
-        if (!regionSelect.value) return;
-        workingAreas.push({ region: regionSelect.value, subregion: subregionSelect.value || null });
-        paintAreaList();
-      });
-
-      bodyEl.querySelectorAll(".weekday-btn").forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          // Persist whatever was staged for the day being left before switching.
-          try {
-            await api.saveVisitPlanRule(selectedWeekday, workingAreas, targetUserId);
-          } catch {
-            // Non-fatal -- the explicit Save button below is the primary save path.
-          }
-          selectedWeekday = Number(btn.dataset.day);
-          renderRecurringMode();
-        });
-      });
-
-      saveBtn.onclick = async () => {
-        saveBtn.disabled = true;
-        try {
-          await api.saveVisitPlanRule(selectedWeekday, workingAreas, targetUserId);
-          close();
-          if (activeFilter === "planned") loadPlannedFilter();
-          if (plannedMode !== "off") refreshPlannedToday();
-        } catch (err) {
-          errorEl.textContent = err.message;
-          errorEl.hidden = false;
-          saveBtn.disabled = false;
-        }
-      };
-    }
-
-    await renderBody();
-  }
+  function openPlanDaySheet(...args) { return mapPlanning.openPlanDaySheet(ctx, ...args); }
 
   root.querySelector("#plan-day-btn").addEventListener("click", () => {
     openPlanDaySheet();
@@ -3013,22 +1345,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     }
   });
 
-  // Colour by Tier | Rep: remembered per user; the rep list (name + colour) shows under the switch while "Rep" is on.
-  function paintRepLegend() {
-    const repLegendEl = root.querySelector("#map-rep-legend");
-    if (!repLegendEl) return;
-    if (colorBy !== "rep") {
-      repLegendEl.hidden = true;
-      return;
-    }
-    const reps = new Map();
-    for (const { c } of lastCustomers) if (c.assigned_manager_id && !reps.has(c.assigned_manager_id)) reps.set(c.assigned_manager_id, { name: c.assigned_manager_name ?? "", color: repColor(c.assigned_manager_id, c.assigned_manager_color) });
-    repLegendEl.innerHTML = [...reps.values()]
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((r) => `<li><span class="map-rep-dot" style="background:${r.color}"></span><span class="map-rep-name">${escapeHtml(r.name)}</span></li>`)
-      .join("");
-    repLegendEl.hidden = !reps.size;
-  }
+  function paintRepLegend(...args) { return mapFilters.paintRepLegend(ctx, ...args); }
   root.querySelectorAll("[data-color-by]").forEach((btn) =>
     btn.addEventListener("click", () => {
       const next = btn.dataset.colorBy;
@@ -3049,86 +1366,14 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   const plannedBtn = root.querySelector("#planned-today-filter-btn");
   const PLANNED_MODES = ["off", "highlight", "only"];
   const plannedLabel = { off: t("map_planned_off"), highlight: t("map_planned_highlight"), only: t("map_planned_only") };
-  async function loadPlannedTodayByRep() {
-    plannedTodayByRep = new Map();
-    if (plannedMode === "off") return;
-    plannedTodayByRep = await fetchPlannedToday();
-  }
-  // customer id -> { userId, color, order } of today's approved plans (the viewer's own, the picked rep's, or every rep's)
-  async function fetchPlannedToday() {
-    const out = new Map();
-    const colorOfUser = (userId, chosen) => {
-      const known = lastCustomers.find(({ c }) => Number(c.assigned_manager_id) === Number(userId) && c.assigned_manager_color);
-      return repColor(userId, chosen || known?.c.assigned_manager_color);
-    };
-    const add = (plan, userId, chosen) => {
-      if (plan?.status !== "approved") return;
-      const color = colorOfUser(userId, chosen);
-      (plan.customer_ids ?? []).forEach((id, i) => {
-        if (!out.has(id)) out.set(id, { userId, color, order: i + 1 });
-      });
-    };
-    try {
-      const picked = selectedPlanManagerId();
-      if (picked || !canViewTeamLocations()) {
-        const userId = picked ? Number(picked) : state.user.id;
-        add(await api.getMyVisitPlan(undefined, picked || undefined), userId);
-      } else {
-        const reps = await api.listPlannableUsers();
-        const plans = await Promise.all(reps.map((u) => api.getMyVisitPlan(undefined, u.id).catch(() => null)));
-        plans.forEach((plan, i) => add(plan, reps[i].id, reps[i].map_color));
-      }
-    } catch {
-      return new Map();
-    }
-    return out;
-  }
+  function loadPlannedTodayByRep(...args) { return mapPlanning.loadPlannedTodayByRep(ctx, ...args); }
+  function fetchPlannedToday(...args) { return mapPlanning.fetchPlannedToday(ctx, ...args); }
   // The side table's "Today" column shows the planned stops whether or not the pins highlight them (fetched once while highlighting is off).
   let sidePlannedOff = null;
-  async function syncSidePlanned() {
-    if (!sideTable) return;
-    await customersReady;
-    if (plannedMode !== "off") return sideTable.setPlanned(plannedTodayByRep);
-    sidePlannedOff ??= await fetchPlannedToday();
-    sideTable?.setPlanned(sidePlannedOff);
-  }
-  async function refreshPlannedToday({ refit = false } = {}) {
-    await customersReady;
-    await loadPlannedTodayByRep();
-    plannedTodayIdSet = new Set(plannedTodayByRep.keys());
-    applyFilter({ refit });
-    syncSidePlanned();
-    if (plannedMode === "only" && !plannedTodayIdSet.size) showToast(t("planned_empty"));
-  }
-  function paintPlannedControls() {
-    if (plannedBtn) {
-      plannedBtn.dataset.mode = plannedMode;
-      plannedBtn.classList.toggle("map-control-active", plannedMode !== "off");
-      plannedBtn.setAttribute("aria-pressed", String(plannedMode !== "off"));
-      const text = `${t("filter_planned_today")}: ${plannedLabel[plannedMode]}`;
-      plannedBtn.setAttribute("aria-label", text);
-      plannedBtn.title = text;
-    }
-    root.querySelectorAll("[data-planned-mode]").forEach((b) => {
-      const on = b.dataset.plannedMode === plannedMode;
-      b.classList.toggle("chip-active", on);
-      b.setAttribute("aria-pressed", String(on));
-    });
-  }
-  function setPlannedModeTo(mode) {
-    if (mode === plannedMode) return;
-    plannedMode = mode;
-    setPlannedMode(state.user?.id, mode);
-    paintPlannedControls();
-    if (mode === "off") {
-      plannedTodayByRep = new Map();
-      plannedTodayIdSet = null;
-      applyFilter({ refit: false });
-      syncSidePlanned();
-    } else {
-      refreshPlannedToday({ refit: mode === "only" });
-    }
-  }
+  function syncSidePlanned(...args) { return mapPlanning.syncSidePlanned(ctx, ...args); }
+  function refreshPlannedToday(...args) { return mapPlanning.refreshPlannedToday(ctx, ...args); }
+  function paintPlannedControls(...args) { return mapPlanning.paintPlannedControls(ctx, ...args); }
+  function setPlannedModeTo(...args) { return mapPlanning.setPlannedModeTo(ctx, ...args); }
   plannedBtn?.addEventListener("click", () => setPlannedModeTo(PLANNED_MODES[(PLANNED_MODES.indexOf(plannedMode) + 1) % PLANNED_MODES.length]));
   root.querySelectorAll("[data-planned-mode]").forEach((b) => b.addEventListener("click", () => setPlannedModeTo(b.dataset.plannedMode)));
   const openRingsInfo = (e) => {
@@ -3178,264 +1423,25 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   const locationPanel = root.querySelector("#location-picker-panel");
   let geocodeToken = 0; // discards a stale reverse-geocode reply if the pin moved again before it returned
 
-  function removePlacingMarker() {
-    if (placingMarker) {
-      map.removeLayer(placingMarker);
-      placingMarker = null;
-    }
-    syncAddHint();
-  }
+  function removePlacingMarker(...args) { return mapAddCustomer.removePlacingMarker(ctx, ...args); }
 
-  function closeLocationPanel() {
-    locationPanel.hidden = true;
-    locationPanel.innerHTML = "";
-    if (!relocateCustomerId) fab.hidden = false;
-  }
+  function closeLocationPanel(...args) { return mapAddCustomer.closeLocationPanel(ctx, ...args); }
 
-  // Full abandon: closes the panel and removes the pin entirely. Used when
-  // the rep backs out of picking a location altogether (tapping the FAB a
-  // second time to cancel). Not used when handing off to the customer-
-  // details form below -- that keeps the pin on the map and takes over its
-  // lifecycle itself.
-  function cancelLocationPicker() {
-    closeLocationPanel();
-    removePlacingMarker();
-    if (!relocateCustomerId) {
-      addMode = false;
-      fab.classList.remove("fab-active");
-      fab.setAttribute("aria-pressed", "false");
-      mapEl.classList.remove("map-picking");
-      syncAddHint();
-      // The add flow is over: the address must stop saying so, or Back / a later visit re-enters add mode.
-      if (startInAddMode) {
-        startInAddMode = false;
-        navigate.rewrite?.("#/map");
-      }
-    }
-  }
+  function cancelLocationPicker(...args) { return mapAddCustomer.cancelLocationPicker(ctx, ...args); }
 
-  // Location confirmed -- resets the picker's own UI state but leaves the
-  // pin on the map for openNewCustomerForm to keep showing (and to remove
-  // itself, on that form's own cancel/save).
-  function handoffToCustomerForm(latlng) {
-    closeLocationPanel();
-    addMode = false;
-    syncAddHint();
-    fab.classList.remove("fab-active");
-    fab.setAttribute("aria-pressed", "false");
-    mapEl.classList.remove("map-picking");
-    // Freeze the pin in place -- the details form below doesn't listen for
-    // further drags (it reverse-geocodes once, at open), so leaving it
-    // draggable would let a drag here reopen the location panel on top of
-    // that form instead of updating it.
-    placingMarker?.dragging?.disable();
-    openNewCustomerForm(latlng);
-  }
+  function handoffToCustomerForm(...args) { return mapAddCustomer.handoffToCustomerForm(ctx, ...args); }
 
-  // Places (or moves) the one draggable "proposed location" pin, distinct
-  // from the blue "me" dot (.me-dot, only shown via the Locate button) so
-  // there's never any doubt which marker is about to be saved. Dragging it
-  // re-runs the same confirm step against the new spot -- nothing is
-  // written until Confirm is tapped.
-  function placeLocationPin(latlng, opts) {
-    if (placingMarker) {
-      placingMarker.setLatLng(latlng);
-    } else {
-      placingMarker = L.marker(latlng, {
-        icon: L.divIcon({ className: "", html: NEW_PIN_HTML, iconSize: [26, 26], iconAnchor: [13, 26] }),
-        draggable: true,
-        autoPan: true,
-      }).addTo(map);
-      placingMarker.on("dragend", () => {
-        showLocationPanel(placingMarker.getLatLng(), { ...opts, source: "dragged_pin", accuracy: undefined, onConfirm: opts.onConfirm });
-      });
-    }
-    syncAddHint();
-    showLocationPanel(latlng, opts);
-  }
+  function placeLocationPin(...args) { return mapAddCustomer.placeLocationPin(ctx, ...args); }
 
-  // The panel is bottom-docked at the same spot the FAB sits in, so the two
-  // would visually stack -- hide the FAB for as long as the panel is open
-  // and give the panel its own close (X) instead, consistent with the
-  // rest of the app's dismiss-vs-back convention (this is a temporary
-  // overlay panel, not a pushed page, so X rather than a back arrow).
-  function renderLocationPanelShell(bodyHtml) {
-    fab.hidden = true;
-    locationPanel.hidden = false;
-    locationPanel.innerHTML = `
-      <button type="button" class="icon-btn location-picker-close" id="location-panel-close" aria-label="${t("cancel")}">${icons.close}</button>
-      ${bodyHtml}
-    `;
-    locationPanel.querySelector("#location-panel-close").addEventListener("click", cancelLocationPicker);
-  }
+  function renderLocationPanelShell(...args) { return mapAddCustomer.renderLocationPanelShell(ctx, ...args); }
 
-  // The one confirm panel for "here's the proposed location" -- title and
-  // accuracy line vary with how the pin got there, everything else
-  // (address line, Confirm/Change-address actions, drag-to-adjust hint) is
-  // identical whether it came from a fresh GPS fix, a dragged pin, a
-  // searched address, or an existing customer's saved location.
-  function showLocationPanel(latlng, { source, accuracy, onConfirm }) {
-    const title =
-      source === "dragged_pin"
-        ? t("new_selected_address")
-        : source === "geocoded_address"
-          ? t("location_updated_title")
-          : t("selected_location");
-    const lowAccuracy = accuracy != null && accuracy > 50;
-    renderLocationPanelShell(`
-      <h2>${title}</h2>
-      <p class="location-picker-address" id="location-panel-address"><span class="skeleton-bar" role="status" aria-label="${escapeHtml(t("loading"))}"></span></p>
-      ${
-        accuracy != null
-          ? `<p class="location-picker-accuracy ${lowAccuracy ? "location-picker-accuracy-low" : ""}">${icons.locate}${
-              lowAccuracy
-                ? t("low_accuracy_warning").replace("{m}", String(Math.round(accuracy)))
-                : t("gps_accuracy_label").replace("{m}", String(Math.round(accuracy)))
-            }</p>`
-          : ""
-      }
-      <p class="muted location-picker-hint">${t("drag_pin_hint")}</p>
-      <div class="location-picker-actions">
-        <button type="button" class="btn" id="location-panel-address-btn">${t("change_address")}</button>
-        <button type="button" class="btn btn-primary" id="location-panel-confirm-btn">${t("confirm_location")}</button>
-      </div>
-    `);
+  function showLocationPanel(...args) { return mapAddCustomer.showLocationPanel(ctx, ...args); }
 
-    const myToken = ++geocodeToken;
-    api
-      .reverseGeocode(latlng.lat, latlng.lng)
-      .then((result) => {
-        if (myToken !== geocodeToken) return; // pin moved again since this request went out
-        const addressEl = document.getElementById("location-panel-address");
-        if (addressEl) addressEl.textContent = result?.address || t("address_unknown");
-      })
-      .catch(() => {
-        if (myToken !== geocodeToken) return;
-        const addressEl = document.getElementById("location-panel-address");
-        if (addressEl) addressEl.textContent = t("address_unknown");
-      });
+  function showLocationErrorPanel(...args) { return mapAddCustomer.showLocationErrorPanel(ctx, ...args); }
 
-    locationPanel.querySelector("#location-panel-address-btn").addEventListener("click", () => {
-      openAddressSearchSheet((result) => {
-        const newLatLng = L.latLng(result.lat, result.lng);
-        map.panTo(newLatLng);
-        placeLocationPin(newLatLng, { source: "geocoded_address", onConfirm });
-      });
-    });
-    locationPanel.querySelector("#location-panel-confirm-btn").addEventListener("click", () => {
-      const finalLatLng = placingMarker ? placingMarker.getLatLng() : latlng;
-      closeLocationPanel();
-      onConfirm(finalLatLng);
-    });
-  }
+  function openAddressSearchSheet(...args) { return mapAddCustomer.openAddressSearchSheet(ctx, ...args); }
 
-  function showLocationErrorPanel(onRetry, onEnterAddress) {
-    renderLocationPanelShell(`
-      <h2>${t("location_failed_title")}</h2>
-      <div class="location-picker-actions">
-        <button type="button" class="btn" id="location-panel-error-address">${t("enter_address")}</button>
-        <button type="button" class="btn btn-primary" id="location-panel-error-retry">${t("try_again")}</button>
-      </div>
-    `);
-    locationPanel.querySelector("#location-panel-error-retry").addEventListener("click", onRetry);
-    locationPanel.querySelector("#location-panel-error-address").addEventListener("click", onEnterAddress);
-  }
-
-  // Debounced address search -- only geocodes on an explicit result tap,
-  // never per keystroke, so typing never jumps the map or burns API calls
-  // on every character.
-  function openAddressSearchSheet(onSelect) {
-    const overlay = document.createElement("div");
-    overlay.className = "sheet-overlay";
-    overlay.innerHTML = `
-      <div class="sheet">
-        <h2>${t("search_address_title")}</h2>
-        <label class="visually-hidden" for="address-search-input">${t("search_address_placeholder")}</label>
-        <input type="search" id="address-search-input" placeholder="${t("search_address_placeholder")}" />
-        <div class="address-search-results" id="address-search-results"></div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    activateDialog(overlay);
-    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
-
-    const input = overlay.querySelector("#address-search-input");
-    const resultsEl = overlay.querySelector("#address-search-results");
-    let searchTimer;
-    let searchToken = 0;
-
-    input.addEventListener("input", () => {
-      clearTimeout(searchTimer);
-      const q = input.value.trim();
-      if (q.length < 3) {
-        resultsEl.innerHTML = "";
-        return;
-      }
-      searchTimer = setTimeout(async () => {
-        const myToken = ++searchToken;
-        resultsEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
-        let results;
-        try {
-          results = await api.searchAddress(q);
-        } catch (err) {
-          if (myToken !== searchToken) return;
-          resultsEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
-          return;
-        }
-        if (myToken !== searchToken) return; // a newer query already superseded this one
-        if (!results.length) {
-          resultsEl.innerHTML = `<p class="empty-state">${t("no_address_results")}</p>`;
-          return;
-        }
-        resultsEl.innerHTML = results
-          .map((r, i) => `<button type="button" class="address-search-result" data-index="${i}">${escapeHtml(r.address)}</button>`)
-          .join("");
-        resultsEl.querySelectorAll("[data-index]").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            overlay.remove();
-            onSelect(results[Number(btn.dataset.index)]);
-          });
-        });
-      }, 400);
-    });
-
-    // Focused synchronously, not via requestAnimationFrame -- mobile
-    // browsers (iOS Safari especially) only reliably raise the on-screen
-    // keyboard for a focus() call that happens within the same tick as the
-    // triggering tap/click; deferring it a frame (as this used to, and as
-    // activateDialog's own auto-focus below still does) silently focuses
-    // the input without the keyboard actually opening.
-    input.focus();
-  }
-
-  function startAddCustomerFlow() {
-    renderLocationPanelShell(`<p class="location-picker-address">${escapeHtml(t("locating_you"))}</p>`);
-    getCurrentPosition({ timeout: 8000 })
-      .then((pos) => {
-        const latlng = L.latLng(pos.coords.latitude, pos.coords.longitude);
-        map.setView(latlng, Math.max(map.getZoom(), 16));
-        placeLocationPin(latlng, {
-          source: "gps",
-          accuracy: pos.coords.accuracy,
-          onConfirm: handoffToCustomerForm,
-        });
-      })
-      .catch(() => {
-        showLocationErrorPanel(
-          () => startAddCustomerFlow(),
-          () => {
-            openAddressSearchSheet((result) => {
-              const latlng = L.latLng(result.lat, result.lng);
-              map.setView(latlng, 16);
-              placeLocationPin(latlng, {
-                source: "geocoded_address",
-                onConfirm: handoffToCustomerForm,
-              });
-            });
-          }
-        );
-      });
-  }
+  function startAddCustomerFlow(...args) { return mapAddCustomer.startAddCustomerFlow(ctx, ...args); }
 
   if (relocateCustomerId) {
     fab.hidden = true;
@@ -3506,452 +1512,11 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     placeLocationPin(e.latlng, { source: "dragged_pin", onConfirm: handoffToCustomerForm });
   });
 
-  // Final "save this?" step for an existing customer once a location has
-  // already been confirmed via the shared picker above -- kept separate
-  // from openNewCustomerForm because relocating writes immediately (or
-  // files an edit request) instead of opening the full customer-details
-  // form again.
-  function openRelocateConfirmDetails(latlng) {
-    closeLocationPanel();
-    // A pin correction is applied at once for the rep's own customers and for management (server:
-    // editRequests.js canAutoApprovePin); only someone else's customer still waits for approval.
-    const pinAppliesAtOnce = canEditDirectly() || movesAnyPinAtOnce(state.user?.role) || state.user?.role === "sales_manager";
-    placingMarker?.dragging?.disable();
-    const overlay = document.createElement("div");
-    overlay.className = "sheet-overlay sheet-overlay-light";
-    overlay.innerHTML = `
-      <div class="sheet">
-        <h2>${t("confirm_new_location")}</h2>
-        <p class="muted">${pinAppliesAtOnce ? t("confirm_new_location_hint") : t("confirm_new_location_hint_request")}</p>
-        <p class="form-error" id="relocate-error" hidden></p>
-        <div class="sheet-actions">
-          <button type="button" class="btn" id="cancel-relocate-confirm">${t("cancel")}</button>
-          <button type="button" class="btn btn-primary" id="save-relocate">${pinAppliesAtOnce ? t("save") : t("submit_request")}</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    activateDialog(overlay);
-
-    // Cancelling this step doesn't abandon the whole picker -- it goes back
-    // to the draggable-pin confirm panel so the rep can still adjust or
-    // re-search before deciding again, rather than dead-ending with a
-    // frozen pin and no visible way to continue.
-    function backToPicker() {
-      overlay.remove();
-      placingMarker?.dragging?.enable();
-      showLocationPanel(latlng, { source: "existing_customer", onConfirm: openRelocateConfirmDetails });
-    }
-    overlay.querySelector("#cancel-relocate-confirm").addEventListener("click", backToPicker);
-    overlay.addEventListener("click", (e) => e.target === overlay && backToPicker());
-
-    overlay.querySelector("#save-relocate").addEventListener("click", async (e) => {
-      const btn = e.target;
-      btn.disabled = true;
-      const errorEl = overlay.querySelector("#relocate-error");
-      const changes = { lat: latlng.lat, lng: latlng.lng };
-      try {
-        if (canEditDirectly()) {
-          await api.updateCustomer(relocateCustomerId, changes);
-        } else {
-          await api.createEditRequest(relocateCustomerId, changes);
-        }
-        overlay.remove();
-        // Replace (not push) the flow's history entry: Back from the customer card must not reopen "change location".
-        (navigate.replace ?? navigate)(`#/customers/${relocateCustomerId}`);
-      } catch (err) {
-        errorEl.textContent = err.message;
-        errorEl.hidden = false;
-        btn.disabled = false;
-      }
-    });
-  }
+  function openRelocateConfirmDetails(...args) { return mapAddCustomer.openRelocateConfirmDetails(ctx, ...args); }
 
   if (addMode) startAddCustomerFlow();
 
-  function openNewCustomerForm(latlng) {
-    const overlay = document.createElement("div");
-    overlay.className = "sheet-overlay sheet-overlay-light";
-    overlay.innerHTML = `
-      <div class="sheet">
-        <h2>${t("new_customer")}</h2>
-        <form id="new-customer-form">
-          ${tierSelectorHtml("potential")}
-          ${categorySelectorHtml(CATEGORY_LIST[0].value)}
-          <label>${t("name")}<input name="name" required /></label>
-          <label>${t("phone")}<input name="phone" type="tel" value="+374 " /></label>
-          <label>${t("address")}<input name="address" id="new-customer-address" /></label>
-          <div class="form-row-2">
-            <label>${t("region")}
-              <select name="region" id="new-customer-region">
-                <option value="">${t("select_placeholder")}</option>
-                ${REGION_LIST.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(regionLabelHy(r))}</option>`).join("")}
-              </select>
-            </label>
-            <label id="new-customer-subregion-wrap">${t("subregion")}<input name="subregion" id="new-customer-subregion" /></label>
-          </div>
-          <div class="form-row-2">
-            <label>${t("sales_channel")}
-              <select name="sales_channel" id="new-customer-channel">
-                <option value="">${t("select_placeholder")}</option>
-                ${SALES_CHANNELS.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")}
-              </select>
-            </label>
-            <label id="new-customer-manager-wrap" ${canReassignCustomers() ? "" : "hidden"}>${t("assigned_manager")}
-              <select name="assigned_manager_id" id="new-customer-manager">
-                <option value="">${t("unassigned")}</option>
-              </select>
-            </label>
-          </div>
-          <div class="form-row-2">
-            <label class="erp-suggest-wrap" id="new-customer-erp-label">${t("erp_customer_id")} <b class="req-mark" id="new-customer-erp-req" hidden>*</b>
-              <input type="text" name="erp_customer_id" id="new-customer-erp-input" autocomplete="off" />
-              <div class="erp-suggest-list" id="new-customer-erp-suggest" hidden></div>
-            </label>
-            <label>${t("tin")}<input name="tin" /></label>
-          </div>
-          <label>${t("notes")}<textarea name="notes" rows="2"></textarea></label>
-          <p class="form-error" id="new-customer-error" hidden></p>
-          <div class="sheet-actions">
-            <button type="button" class="btn" id="cancel-new-customer">${t("cancel")}</button>
-            <button type="submit" class="btn btn-primary">${t("save_customer")}</button>
-          </div>
-        </form>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    activateDialog(overlay);
-    // The potential level is NOT asked here (owner, 2026-10-25): adding a customer must stay as fast as possible; it is filled in at the visit
-    // (the check-in screen and the customer card ask for it).
-    // Bronze / Silver / Gold customers exist in Excel: their ERP customer ID is mandatory (owner, 2026-10-24).
-    const needsErpId = (tier) => ["bronze", "silver", "gold"].includes(tier);
-    activateTierSelector(overlay, (tier) => {
-      overlay.querySelector("#new-customer-erp-req").hidden = !needsErpId(tier);
-      overlay.querySelector("#new-customer-erp-label").classList.remove("field-invalid");
-      // the next thing a Bronze / Silver / Gold customer needs is its ERP ID: bring the field into view if it is below the fold
-      if (needsErpId(tier)) overlay.querySelector("#new-customer-erp-input")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    });
-    activateCategorySelector(overlay, () => refreshNameSuggestion());
-
-    // Keep the dropped pin visible above the sheet -- measured against the
-    // sheet's actual rendered height (it varies with content/keyboard),
-    // not a guessed fraction of the screen, so the pin reliably stays clear
-    // of the sheet's top edge instead of being hidden behind it.
-    const sheetEl = overlay.querySelector(".sheet");
-    const point = map.latLngToContainerPoint(latlng);
-    const sheetTop = mapEl.clientHeight - sheetEl.getBoundingClientRect().height - 40;
-    if (point.y > sheetTop) {
-      map.panBy([0, point.y - sheetTop], { animate: true });
-    }
-
-    function close() {
-      overlay.remove();
-      if (placingMarker) {
-        map.removeLayer(placingMarker);
-        placingMarker = null;
-      }
-      syncAddHint();
-      // Cancelled from the details form: the add flow is over (see cancelLocationPicker).
-      if (startInAddMode) {
-        startInAddMode = false;
-        navigate.rewrite?.("#/map");
-      }
-    }
-
-    overlay.querySelector("#cancel-new-customer").addEventListener("click", close);
-    overlay.addEventListener("click", (e) => {
-      if (e.target === overlay) close();
-    });
-    // The dropped pin itself doubles as a cancel target -- tapping it (its
-    // X glyph makes that discoverable) closes the sheet the same as the
-    // Cancel button.
-    placingMarker?.on("click", close);
-
-    // Auto-fill address/region/subregion from the dropped pin's coordinates
-    // -- the rep can still correct any of these by hand, this just saves
-    // typing/picking from scratch. Region/subregion are best-effort matches
-    // against the fixed lists (see matchRegion/matchSubregion in util.js),
-    // never silently trusted as exact.
-    const addressInput = overlay.querySelector("#new-customer-address");
-    const nameInput = overlay.querySelector('input[name="name"]');
-    const regionSelect = overlay.querySelector("#new-customer-region");
-    const subregionWrap = overlay.querySelector("#new-customer-subregion-wrap");
-
-    // Suggest a default name "{subregion} / {type word}{number}" -- e.g. "Ajapnyak / Yuxman ket1", "Ajapnyak /
-    // Avtopahestamaser2" -- once a subregion is known. The number is the next free one among the customers already
-    // named that way (server: GET /customers/name-suggestion), so same-type customers of one subregion can be told
-    // apart. Only a name the rep has not typed themselves is (re)filled: empty, or still equal to our last
-    // suggestion (so changing the type or the subregion updates it); manual entry is never clobbered (same "fill,
-    // don't lock" pattern as address/region/subregion/channel/manager below). Customer names are always Latin
-    // script: inside Yerevan, subregionField.value is already English (matched against the fixed YEREVAN_DISTRICTS
-    // list -- see matchSubregion in util.js). Outside Yerevan there's no fixed list, so that same field starts
-    // pre-filled with the geocoder's own raw guess, which is in Armenian (accept-language=hy) -- using it here would
-    // leak Armenian text into the name. The selected region code itself is always English (REGION_LIST), and for a
-    // non-Yerevan customer the "subregion" is usually just that region's own city anyway (per matchSubregion's
-    // comment), so it stands in as the English default.
-    let lastSuggestedName = "";
-    let nameSeq = 0;
-    function refreshNameSuggestion() {
-      if (nameInput.value && nameInput.value !== lastSuggestedName) return;
-      const region = regionSelect.value;
-      if (!region) return;
-      const location =
-        region === "Yerevan" ? overlay.querySelector("#new-customer-subregion")?.value || "" : region;
-      if (!location) return;
-      const category = overlay.querySelector('input[name="category"]')?.value;
-      const word = CATEGORY_LIST.find((c) => c.value === category)?.nameWord || CATEGORY_LIST[0].nameWord;
-      const base = `${location} / ${word}`;
-      const mine = ++nameSeq;
-      const apply = (name) => {
-        // a newer request, or the rep typing in the meantime, wins
-        if (mine !== nameSeq || (nameInput.value && nameInput.value !== lastSuggestedName)) return;
-        nameInput.value = name;
-        lastSuggestedName = name;
-      };
-      api
-        .suggestCustomerNameNumber(base)
-        .then((r) => apply(`${base}${r?.next ?? ""}`))
-        .catch(() => apply(base));
-    }
-
-    function renderSubregionField(region, guess) {
-      if (region === "Yerevan") {
-        subregionWrap.innerHTML = `${t("subregion")}
-          <select name="subregion" id="new-customer-subregion">
-            <option value="">${t("select_placeholder")}</option>
-            ${YEREVAN_DISTRICTS.map(
-              (d) => `<option value="${escapeHtml(d)}" ${d === guess ? "selected" : ""}>${escapeHtml(subregionLabelHy(d))}</option>`
-            ).join("")}
-          </select>`;
-      } else {
-        subregionWrap.innerHTML = `${t("subregion")}<input name="subregion" id="new-customer-subregion" value="${escapeHtml(guess || "")}" />`;
-        wirePlaceInput(subregionWrap.querySelector("#new-customer-subregion"), () => regionSelect.value);
-      }
-    }
-    wirePlaceInput(overlay.querySelector("#new-customer-subregion"), () => regionSelect.value);
-    const channelSelect = overlay.querySelector("#new-customer-channel");
-    const managerSelect = overlay.querySelector("#new-customer-manager");
-    let managerOptionsHtml = `<option value="">${t("unassigned")}</option>`;
-    api
-      .listPlannableUsers()
-      .then((users) => {
-        managerOptionsHtml =
-          `<option value="">${t("unassigned")}</option>` +
-          users.map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join("");
-        managerSelect.innerHTML = managerOptionsHtml;
-      })
-      .catch(() => {});
-
-    // Routes Distribution suggestion -- a convenience default, never a lock:
-    // it only fills in values, the rep can still change either dropdown
-    // before saving. Re-runs whenever region/subregion changes so picking a
-    // different area updates the suggestion instead of leaving a stale one.
-    // CVO/PCO/OEM channels are deliberately excluded -- those customer types
-    // don't follow the geographic route-distribution mapping, so the rep
-    // picks the channel (and therefore manager) themselves instead of
-    // getting an auto-filled guess.
-    const NO_AUTOFILL_CHANNELS = new Set(["CVO", "PCO", "OEM"]);
-    function refreshRouteSuggestion() {
-      const region = regionSelect.value;
-      if (!region) return;
-      const subregionField = overlay.querySelector("#new-customer-subregion");
-      const subregion = subregionField?.value || "";
-      api
-        .lookupRouteDistribution(region, subregion)
-        .then((match) => {
-          if (!match) return;
-          if (match.sales_channel && NO_AUTOFILL_CHANNELS.has(match.sales_channel)) return;
-          if (match.sales_channel && !channelSelect.value) channelSelect.value = match.sales_channel;
-          if (match.assigned_manager_id && !managerSelect.value) {
-            managerSelect.innerHTML = managerOptionsHtml;
-            managerSelect.value = String(match.assigned_manager_id);
-          }
-        })
-        .catch(() => {});
-    }
-    regionSelect.addEventListener("change", () => {
-      renderSubregionField(regionSelect.value, "");
-      refreshRouteSuggestion();
-      refreshNameSuggestion();
-    });
-    overlay.addEventListener("change", (e) => {
-      if (e.target.id === "new-customer-subregion") {
-        refreshRouteSuggestion();
-        refreshNameSuggestion();
-      }
-    });
-
-    api
-      .reverseGeocode(latlng.lat, latlng.lng)
-      .then((result) => {
-        if (result?.address && !addressInput.value) addressInput.value = result.address;
-        const guessedRegion = matchRegion(result?.region);
-        if (guessedRegion) {
-          regionSelect.value = guessedRegion;
-          renderSubregionField(guessedRegion, matchSubregion(result?.subregion, guessedRegion));
-          refreshRouteSuggestion();
-          refreshNameSuggestion();
-        }
-      })
-      .catch(() => {});
-
-    const erpInput = overlay.querySelector("#new-customer-erp-input");
-    const erpSuggestList = overlay.querySelector("#new-customer-erp-suggest");
-    let erpOptions = [];
-    api
-      .getUnlinkedErpCustomers()
-      .then((results) => {
-        erpOptions = [...results].sort((a, b) =>
-          (a.customer_name || "").localeCompare(b.customer_name || "", undefined, { sensitivity: "base" })
-        );
-      })
-      .catch(() => {});
-
-    function renderErpSuggestions(query) {
-      const q = query.trim().toLowerCase();
-      const matches = q
-        ? erpOptions.filter(
-            (r) => (r.customer_name || "").toLowerCase().includes(q) || r.erp_customer_id.includes(q)
-          )
-        : erpOptions;
-      if (!matches.length) {
-        erpSuggestList.hidden = true;
-        erpSuggestList.innerHTML = "";
-        return;
-      }
-      erpSuggestList.innerHTML = matches
-        .slice(0, 30)
-        .map(
-          (r) => `
-        <div class="erp-suggest-item" data-id="${escapeHtml(r.erp_customer_id)}">
-          <span>${escapeHtml(r.customer_name || r.erp_customer_id)}</span>
-          ${r.debt_amd > 0 ? `<span class="muted">${formatAmd(r.debt_amd)}</span>` : ""}
-        </div>`
-        )
-        .join("");
-      erpSuggestList.hidden = false;
-    }
-
-    erpInput.addEventListener("focus", () => renderErpSuggestions(erpInput.value));
-    erpInput.addEventListener("input", () => {
-      renderErpSuggestions(erpInput.value);
-      maybeAutoUpgradeTier();
-    });
-    erpInput.addEventListener("blur", () => {
-      setTimeout(() => (erpSuggestList.hidden = true), 150);
-    });
-    activateCombobox(erpInput, erpSuggestList, (item) => {
-      erpInput.value = item.dataset.id;
-      maybeAutoUpgradeTier();
-    });
-
-    // Linking an ERP customer ID means this is no longer just a "Potential"
-    // lead -- bump it to Bronze automatically the moment an ID is entered,
-    // same as the PATCH-side auto-upgrade for existing customers. Only
-    // fires while the selector is still on its default "potential": once
-    // the rep has picked Silver/Gold (or Bronze already) by hand, their
-    // choice always wins and this never overrides it.
-    erpInput.addEventListener("input", () => overlay.querySelector("#new-customer-erp-label").classList.remove("field-invalid"));
-    function maybeAutoUpgradeTier() {
-      const tierHiddenInput = overlay.querySelector('.tier-selector input[type=hidden]');
-      if (erpInput.value.trim() && tierHiddenInput?.value === "potential") {
-        setTierSelectorValue(overlay, "bronze");
-      }
-    }
-
-    const form = overlay.querySelector("#new-customer-form");
-    const errorEl = overlay.querySelector("#new-customer-error");
-
-    form.addEventListener("submit", (e) => {
-      e.preventDefault();
-      submitNewCustomer(false);
-    });
-
-    async function submitNewCustomer(confirmDuplicate) {
-      const data = new FormData(form);
-      if (needsErpId(data.get("customer_tier")) && !String(data.get("erp_customer_id") ?? "").trim()) {
-        errorEl.textContent = t("erp_id_required");
-        errorEl.hidden = false;
-        overlay.querySelector("#new-customer-erp-label").classList.add("field-invalid");
-        erpInput.scrollIntoView({ block: "center", behavior: "smooth" });
-        erpInput.focus();
-        return;
-      }
-      const submitBtn = form.querySelector('button[type="submit"]');
-      submitBtn.disabled = true;
-      submitBtn.textContent = t("saving");
-      form.setAttribute("aria-busy", "true");
-
-      try {
-        const phoneDigits = normalizePhone(data.get("phone"));
-        const created = await api.createCustomer({
-          name: data.get("name"),
-          category: data.get("category") || null,
-          phone: phoneDigits.length > 3 ? `+${phoneDigits}` : null,
-          address: data.get("address") || null,
-          notes: data.get("notes") || null,
-          tin: data.get("tin") || null,
-          erp_customer_id: data.get("erp_customer_id") || null,
-          customer_tier: data.get("customer_tier") || null,
-          region: data.get("region") || null,
-          subregion: data.get("subregion") || null,
-          sales_channel: data.get("sales_channel") || null,
-          assigned_manager_id: data.get("assigned_manager_id") ? Number(data.get("assigned_manager_id")) : null,
-          lat: latlng.lat,
-          lng: latlng.lng,
-          confirm_duplicate: confirmDuplicate || undefined,
-        });
-        overlay.remove();
-        const placeText = placeNoticeText(created?.place_notice);
-        if (placeText) showToast(placeText, { ms: 6500 });
-        if (placingMarker) {
-          map.removeLayer(placingMarker);
-          placingMarker = null;
-        }
-        // Land on the customer just created instead of applyFilter's
-        // fitBounds-to-everyone zoom-out -- startInAddMode staying true for
-        // the rest of this map session is exactly what makes that guard
-        // (see applyFilter above) keep re-fitting on every subsequent
-        // reload, so clear it here once the add flow is actually done, then
-        // focus the new pin the same way the #/map?customer=<id> deep link
-        // does (see focusOnCustomerMarker).
-        startInAddMode = false;
-        syncAddHint();
-        // The saved customer is now the screen's subject: make the address say so. Left as "#/map?add=1" it made Back
-        // (from the customer's card) reopen "tap the map to place a pin".
-        if (created?.id != null) navigate.rewrite?.(`#/map?customer=${created.id}`);
-        // Also pre-empt applyFilter's own "first settle" geolocation-recenter
-        // path (see above) -- without this, loadCustomers() below can kick
-        // off an async getCurrentPosition() that resolves after our
-        // focusOnCustomerMarker call and yanks the view back to the user's
-        // own location instead of the customer just created.
-        initialViewApplied = true;
-        await loadCustomers();
-        if (created?.id != null) focusOnCustomerMarker(created.id);
-      } catch (err) {
-        // Same "duplicate_warning" convention payments.js's own duplicate
-        // check uses -- offer to proceed anyway (a name/location match
-        // this close is usually the same shop re-entered, but a genuine
-        // coincidence should still be a one-tap override, not a hard
-        // block) instead of surfacing it as a plain validation error.
-        if (err.status === 409 && err.body?.error === "duplicate_warning") {
-          if (confirm(`${err.body.message}\n\n${t("add_anyway")}`)) {
-            await submitNewCustomer(true);
-            return;
-          }
-          submitBtn.disabled = false;
-          submitBtn.textContent = t("save_customer");
-          form.removeAttribute("aria-busy");
-          return;
-        }
-        errorEl.textContent = err.body?.code === "erp_id_assigned" ? t("erp_id_assigned").replace("{name}", err.body.assigned_manager_name) : err.message;
-        errorEl.hidden = false;
-        submitBtn.disabled = false;
-        submitBtn.textContent = t("save_customer");
-        form.removeAttribute("aria-busy");
-      }
-    }
-  }
+  function openNewCustomerForm(...args) { return mapAddCustomer.openNewCustomerForm(ctx, ...args); }
 
   map.whenReady(loadCustomersCached);
 
