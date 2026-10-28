@@ -256,7 +256,7 @@ export function applyFilter(ctx, { refit = true } = {}) {
     if (ctx.managerFilter && String(c.assigned_manager_id) !== ctx.managerFilter) continue;
     if (ctx.tierFilters.size && !ctx.tierFilters.has(c.customer_tier || "potential")) continue;
     // A customer with no sales_channel at all (normally normalized to
-    // "POTENTIAL" by customerPortfolioUi.js, but not for the edge case
+    // "POTENTIAL" by api.js's normalizeCustomer, but not for the edge case
     // of an ERP-linked customer whose channel just hasn't been assigned
     // yet -- see that module's own comment) is never hidden by this
     // filter, default-on or user-selected -- an ambiguous/unassigned

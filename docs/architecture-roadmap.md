@@ -271,6 +271,18 @@ areas goes to `shared/`.
   time is gone. Proof: the final HTML of 9 screens with their menus open, in both languages, recorded before and after, is the
   same (`search-bars.spec.mjs` now guards it). Small observers that watch only their own menu (sort menus, filter rows) stay
   inside the screens' bar code; no page-wide one is left for these screens.
+- 7b1 as built (1.466.0): the Map's bar is `views/map/searchBar.js` (status and icon filters inside the field, the compact
+  popover of an icon filter, the clear "x", the selected-pin halo), called by `views/map.js` once its markup is wired; the halo
+  now follows Leaflet's own popup open / close events instead of a page-wide observer. `unifiedSearchEnhancements.js`,
+  `mapDimensionFilterPlacement.js`, `mapMarkerEnhancements.js` and `customerPortfolioUi.js` are gone: the rule that shows a
+  customer with no channel as Potential and a competitor as COMPETITORS is now `normalizeCustomer` inside `api.js` (it used to
+  replace four api methods from outside). Dead code dropped on the way: the old Map manager dropdown (nothing creates it since the
+  manager filter became the "who" icon button), the competitor reveal for a "channel" button that no longer exists, and the
+  Customers "subregion" button removal (Customers no longer draws one). Proof as in 7a: the Map (pins, icon filters open and
+  closed, a pin chosen and its popup closed, the add flow's address search) and the customer list and cards (normal, potential,
+  competitor), both languages, render the same before and after; `search-bars.spec.mjs` covers the Map bar and the halo.
+- Still to fold (7b2): `fieldVisitEnhancements.js`, `customerSocialProfiles.js`, `activityDatePicker.js`; and
+  `competitorPolicySafe.js`, which wraps the visit-planning api methods from outside (same treatment as normalizeCustomer).
 
 #### Step 8. Split the shared files - size 2
 - 8a `api.js` -> `api/index.js` (request, json, cache, CSRF) + one file per area (`api/orders.js`, ...), re-exported as the same `api`

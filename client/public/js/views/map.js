@@ -19,6 +19,7 @@ import * as mapSearch from "./map/search.js";
 import * as mapLocation from "./map/location.js";
 import * as mapAddCustomer from "./map/addCustomer.js";
 import * as mapTemplate from "./map/template.js";
+import { enhanceMapSearchRow, enhanceMapDimensionFilters, wireMarkerSelection } from "./map/searchBar.js";
 
 export const NEARBY_RADIUS_METERS = 5000;
 
@@ -1518,6 +1519,10 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
   function openNewCustomerForm(...args) { return mapAddCustomer.openNewCustomerForm(ctx, ...args); }
 
+  // The search bar (status and icon filters inside the field, clear "x") and the selected-pin halo (map/searchBar.js).
+  enhanceMapSearchRow();
+  enhanceMapDimensionFilters();
+  wireMarkerSelection(map, mapEl);
   map.whenReady(loadCustomersCached);
 
   const cleanupMapInner = () => {

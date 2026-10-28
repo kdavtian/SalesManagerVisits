@@ -176,6 +176,28 @@ function bankForm(file, accountId, mapping) {
   return form;
 }
 
+// Potential and Competitors are portfolio-level channels in filters, not
+// operational routing values written into customers.sales_channel. Only
+// stand in for a MISSING sales_channel -- a customer an SM has already
+// assigned a real channel to (e.g. OEM, PCO) keeps showing that channel
+// everywhere even before it's ERP-linked; erp_customer_id alone is not
+// reason enough to hide it behind "Potential" (that used to happen here
+// unconditionally, which is why the map's channel filter/pins only ever
+// showed SM channels + Potential -- every not-yet-ERP-linked customer's
+// real channel was being overwritten regardless of whether it had one).
+// (was customerPortfolioUi.js, which replaced these four api methods from outside; docs/architecture-roadmap.md step 7b)
+function normalizeCustomer(customer) {
+  if (!customer || typeof customer !== "object") return customer;
+  const copy = { ...customer };
+  if (copy.customer_tier === "competitor") {
+    copy.sales_channel = "COMPETITORS";
+  } else if (!String(copy.erp_customer_id ?? "").trim() && !String(copy.sales_channel ?? "").trim()) {
+    copy.customer_tier = "potential";
+    copy.sales_channel = "POTENTIAL";
+  }
+  return copy;
+}
+
 export const api = {
   login: (email, password) => json("/auth/login", "POST", { email, password }),
   logout: () => request("/auth/logout", { method: "POST" }),
@@ -191,9 +213,10 @@ export const api = {
   getBrandStatusByCustomer: () => request("/customers/brand-status"),
   getBrandSummary: (params = {}) => request(`/customers/brand-summary${params.customer_id ? `?customer_id=${encodeURIComponent(params.customer_id)}` : ""}`),
   lookupTin: (tin) => request(`/customers/tin-lookup?tin=${encodeURIComponent(tin)}`),
-  listCustomers: (params = {}) => {
+  listCustomers: async (params = {}) => {
     const qs = new URLSearchParams(params).toString();
-    return request(`/customers${qs ? `?${qs}` : ""}`);
+    const rows = await request(`/customers${qs ? `?${qs}` : ""}`);
+    return Array.isArray(rows) ? rows.map(normalizeCustomer) : rows;
   },
   // Order returns and cancellations (see server/src/orders/orderReturns.js)
   listReturns: (params = {}) => request(`/returns?${new URLSearchParams(params)}`, { fresh: true }),
@@ -211,9 +234,9 @@ export const api = {
   createCustomer: async (data) => {
     const created = await json("/customers", "POST", data);
     await dropCachedCustomerLists();
-    return created;
+    return normalizeCustomer(created);
   },
-  getCustomer: (id) => request(`/customers/${id}`),
+  getCustomer: async (id) => normalizeCustomer(await request(`/customers/${id}`)),
   getVolumeReport: (params) => request(`/volume-report?${new URLSearchParams(params).toString()}`),
   getPinReview: () => request("/pin-review"),
   acceptPinReview: (customerId) => json(`/pin-review/${customerId}/accept`, "POST", {}),
@@ -228,7 +251,7 @@ export const api = {
     // Patch with what the server returned (falling back to what we sent) so
     // the Customers list is already right when the rep navigates back.
     await patchCachedCustomer(id, updated && typeof updated === "object" && !Array.isArray(updated) ? updated : data);
-    return updated;
+    return normalizeCustomer(updated);
   },
   deleteCustomer: async (id) => {
     const result = await request(`/customers/${id}`, { method: "DELETE" });

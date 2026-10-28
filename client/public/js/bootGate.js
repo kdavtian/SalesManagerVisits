@@ -21,12 +21,8 @@ const UNLOCK_KEY = "kad_calc_unlocked";
 const REAL_APP_MODULES = [
   "./competitorPolicySafe.js",
   "./activityDatePicker.js",
-  "./unifiedSearchEnhancements.js",
-  "./customerPortfolioUi.js",
-  "./mapDimensionFilterPlacement.js",
   "./fieldVisitEnhancements.js",
   "./customerSocialProfiles.js",
-  "./mapMarkerEnhancements.js",
   "./app.js",
   "./mapSafeUi.js",
 ];

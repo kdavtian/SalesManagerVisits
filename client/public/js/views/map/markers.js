@@ -150,7 +150,7 @@ export function customerIcon(ctx, c, status) {
   const shapeClass = isPinShaped ? "pin-img-teardrop" : "pin-img-round";
   return L.divIcon({
     className: "",
-    // .pin stays on the wrapper: marker selection (mapMarkerEnhancements)
+    // .pin stays on the wrapper: marker selection (map/searchBar.js)
     // and the competitor-visibility toggle (map-safe-enhancements) both
     // key off .pin / .pin-tier-* selectors.
     html: `<div class="pin pin-img ${shapeClass} pin-tier-${tier} ${overdueClass} ${neverVisited ? "pin-is-never" : ""}">${ctx.pinArtHtml(c, tier)}${ctx.plannedRingHtml(c)}${check}${ctx.taskMarkerHtml(c)}${ctx.debtCoinHtml(c)}${never}</div>`,
