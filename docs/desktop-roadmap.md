@@ -169,10 +169,14 @@ Issues found (I = issue, each has its fix in the steps below):
   Test: `desktop-map.spec.mjs`.
 
 ### Step 9. Forms and small controls sized for a mouse — I4
-- [ ] Wide-page buttons ("Add a person", "Cash handovers", "Import Excel") become normal-width buttons in the header row.
-- [ ] Native `<select>` boxes replaced by the same dropdown chips as the tables (Documents, Staff, Settings forms).
-- [ ] Touch-only tips (hold-to-open) hidden with a pointer: fine; hover tooltips with the full text on truncated cells.
-- [ ] Date inputs: the wheel picker stays on touch, a keyboard-typable date + calendar popover on the desktop.
+- [x] Page-wide buttons (Add a person, Cash handovers, Import Excel, Add expense, Hand over all, Review suggested limits, route plan
+      buttons) are normal buttons on a computer (`.desk-inline`).
+- [x] Filter selects are the tables' dropdown chips (`deskSelectChip` in deskTable.js: Documents, Cash handovers); selects that stay
+      native in forms and sheets are capped at 480 px.
+- [x] Hover shows the full text of any cut-off ("…") text (`deskHover.js`, one passive listener, no observer); the "hold New order"
+      tip says right-click with a mouse, and right-click opens that menu.
+- [x] Dates: the wheel stays on touch; a computer types the date (or uses the browser calendar), Enter confirms (`activityDatePicker.js`).
+- Also fixed: the dropdown menus' items had the browser's button look; an open menu stayed on screen after changing page.
 
 ### Step 10. Desktop in CI — I14
 - [ ] `desktop-shots.spec.mjs`: every main page at 1440 and 1920 px, artefacts kept by the nightly workflow.
@@ -200,3 +204,4 @@ Issues found (I = issue, each has its fix in the steps below):
 - Step 6 (reports as list + report, export, print): 1.446.0, 2026-10-27, PR #485.
 - Step 7 (dashboards use the width: Home KPI row + Needs attention + Today, wide grids): 1.447.0, 2026-10-27, PR #487.
 - Step 8 (map for the desktop: side table, popup Last order, filter bar, key panel): 1.448.0, 2026-10-28, PR #488.
+- Step 9 (mouse-sized controls: normal buttons, select chips, hover full text, typed dates): 1.454.0, 2026-10-28.

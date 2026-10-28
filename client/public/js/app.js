@@ -81,6 +81,7 @@ import { installStatusBarTap } from "./statusBarTap.js";
 import { startErrorMonitoring } from "./errorMonitoring.js";
 import { installTouchPrefetch } from "./prefetch.js";
 import { markShellShown } from "./launchTiming.js";
+import "./deskHover.js"; // desktop: full text of a cut-off cell on hover (roadmap step 9)
 
 const app = document.getElementById("app");
 const navBar = document.getElementById("nav-bar");

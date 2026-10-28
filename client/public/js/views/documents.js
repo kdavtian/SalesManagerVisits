@@ -5,6 +5,7 @@ import { t } from "../i18n.js";
 import { escapeHtml, formatDateTime } from "../util.js";
 import { openFileViewer, fileKindLabel } from "../fileViewer.js";
 import { openFileReadySheet } from "../fileReadySheet.js";
+import { deskSelectChip } from "../deskTable.js";
 
 const PERIODS = [
   ["today", "pb_today"],
@@ -75,6 +76,9 @@ export function renderDocuments(root, navigate) {
     root.querySelector('[data-flag="linked"]').addEventListener("click", () => ((filters.linked = filters.linked === "0" ? "" : "0"), reload()));
     root.querySelector('[data-flag="issues"]')?.addEventListener("click", () => ((filters.issues = filters.issues === "1" ? "" : "1"), reload()));
   }
+  // On a computer the two selects are the tables' dropdown chips (desktop roadmap step 9).
+  deskSelectChip(kindSelect, t("docs_type"));
+  const refreshRepChip = deskSelectChip(repSelect, t("manager"));
   kindSelect.addEventListener("change", () => ((filters.kind = kindSelect.value), reload()));
   repSelect.addEventListener("change", () => ((filters.user_id = repSelect.value), reload()));
 
@@ -83,6 +87,7 @@ export function renderDocuments(root, navigate) {
     const current = repSelect.value;
     repSelect.innerHTML = `<option value="">${t("all_managers")}</option>` + [...reps].map(([id, name]) => `<option value="${id}">${escapeHtml(name)}</option>`).join("");
     repSelect.value = filters.user_id || current;
+    refreshRepChip();
     if (!rows.length) {
       listEl.innerHTML = `<p class="empty-state">${t("files_documents_empty")}</p>`;
     } else {

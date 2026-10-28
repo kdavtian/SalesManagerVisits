@@ -231,10 +231,16 @@ function wireColumn(col) {
   });
 }
 
+// A computer with a mouse (desktop roadmap step 9): the same dialog, but the date is TYPED (day / month / year segments, arrow keys) or picked
+// from the browser's calendar instead of the touch wheel. Phones and tablets keep the wheel.
+const deskDateQuery = typeof matchMedia === "function" ? matchMedia("(pointer: fine) and (min-width: 1024px)") : null;
+const isDeskDate = () => Boolean(deskDateQuery?.matches);
+
 function renderPicker() {
   if (!overlay || !activeInput) return;
   const copy = text();
   const targetLabel = activeInput.dataset.pickerTitle || (isFromInput(activeInput) ? copy.start : copy.end);
+  if (isDeskDate()) return renderDeskPicker(copy, targetLabel);
 
   overlay.innerHTML = `
     <div class="activity-date-picker-backdrop" data-date-dismiss></div>
@@ -285,6 +291,58 @@ function renderPicker() {
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
   overlay.querySelector("[data-date-done]")?.addEventListener("click", commitPicker);
+}
+
+function renderDeskPicker(copy, targetLabel) {
+  overlay.innerHTML = `
+    <div class="activity-date-picker-backdrop" data-date-dismiss></div>
+    <section class="activity-date-picker desk-date-picker" role="dialog" aria-modal="true" aria-label="${escapeText(targetLabel)}">
+      <div class="activity-date-picker-topline">
+        <div class="activity-date-picker-target">${escapeText(targetLabel)}</div>
+        <button type="button" class="activity-date-picker-close" data-date-dismiss aria-label="Close">×</button>
+      </div>
+      <input type="date" class="desk-date-input" value="${draftIso()}" aria-label="${escapeText(targetLabel)}" />
+      <div class="activity-date-picker-actions">
+        <button type="button" class="activity-date-action activity-date-reset" data-date-reset>${copy.reset}</button>
+        <button type="button" class="activity-date-action activity-date-today" data-date-today>${copy.today}</button>
+        <button type="button" class="activity-date-action activity-date-done" data-date-done>${copy.done}</button>
+      </div>
+    </section>
+  `;
+  const field = overlay.querySelector(".desk-date-input");
+  const takeField = () => {
+    const d = localDateFromIso(field.value);
+    if (!d) return false;
+    draftYear = d.getFullYear();
+    draftMonth = d.getMonth() + 1;
+    draftDay = d.getDate();
+    return true;
+  };
+  field.addEventListener("input", takeField);
+  field.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && takeField()) {
+      e.preventDefault();
+      commitPicker();
+    }
+  });
+  overlay.querySelectorAll("[data-date-dismiss]").forEach((el) => el.addEventListener("click", closePicker));
+  overlay.querySelector("[data-date-today]").addEventListener("click", () => {
+    field.value = isoFromLocalDate(new Date());
+    takeField();
+    field.focus();
+  });
+  overlay.querySelector("[data-date-reset]").addEventListener("click", () => {
+    const input = activeInput;
+    input.value = "";
+    updateFieldButton(input);
+    closePicker();
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  overlay.querySelector("[data-date-done]").addEventListener("click", () => {
+    if (field.value && !takeField()) return field.focus();
+    commitPicker();
+  });
+  field.focus();
 }
 
 function openPicker(input) {

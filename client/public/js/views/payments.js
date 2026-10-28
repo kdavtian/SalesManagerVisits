@@ -100,7 +100,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
         </button>
       </div>
       <p class="muted" id="payments-pending-summary" hidden></p>
-      <button type="button" class="btn btn-block" id="payments-handoffs-btn">${t("cash_handoffs_open")}<span id="payments-handoffs-count"></span></button>
+      <button type="button" class="btn btn-block desk-inline" id="payments-handoffs-btn">${t("cash_handoffs_open")}<span id="payments-handoffs-count"></span></button>
       <div class="order-status-filter-row" id="payment-quick-filters"></div>
       <div class="order-status-filter-row" id="payment-active-filters" hidden></div>
       <div class="list-toolbar">

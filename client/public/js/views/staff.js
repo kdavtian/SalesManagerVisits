@@ -199,7 +199,7 @@ async function renderMain(root, navigate, month0, access, tab0) {
   function paintPeople() {
     const byId = new Map(people.map((p) => [p.id, p]));
     body.innerHTML = `
-      <button type="button" class="btn btn-primary btn-block" id="st-add">${t("st_add_person")}</button>
+      <button type="button" class="btn btn-primary btn-block desk-inline" id="st-add">${t("st_add_person")}</button>
       <div class="st-list">${people.length ? people
         .map(
           (p) => `<button type="button" class="st-row ${p.active ? "" : "st-row-off"}" data-edit="${p.id}">

@@ -42,7 +42,7 @@ export async function renderRoutePlans(root, navigate) {
         <div class="detail-header-title"><h1>${t("route_plans")}</h1></div>
       </div>
       ${canManage ? `<div class="rps-top-row"><button type="button" class="btn btn-primary" id="new-route-plan-btn">+ ${t("new_route_plan")}</button><button type="button" class="btn rps-auto-btn" id="auto-route-plan-btn">${t("auto_route_plan")}</button></div>` : ""}
-      ${canManage ? `<button type="button" class="btn btn-block" id="route-distribution-btn" style="margin-top:8px;">${t("route_distribution_title")}</button>` : ""}
+      ${canManage ? `<button type="button" class="btn btn-block desk-inline" id="route-distribution-btn" style="margin-top:8px;">${t("route_distribution_title")}</button>` : ""}
       ${canViewAll ? `<div id="route-plan-sets-card" style="margin-top:12px;"></div>` : ""}
       <p class="form-error" id="route-plans-error" hidden></p>
       <div id="route-plans-body" style="margin-top:12px;"><p class="loading-state" role="status">${t("loading")}</p></div>

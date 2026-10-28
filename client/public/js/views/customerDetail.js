@@ -345,13 +345,26 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
       openOrderMenu({ customer, navigate });
     },
   });
-  // One-time tip so the long press is found: shown once, never over an open sheet, and not at all for someone who
-  // has already opened the menu.
+  // With a mouse (desktop roadmap step 9) a long press is awkward: a right-click opens the same menu.
+  const mouse = matchMedia("(hover: hover) and (pointer: fine)").matches;
+  if (mouse) {
+    container.querySelector("#new-order-btn")?.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      try {
+        localStorage.setItem("fieldvisits_om_hint", "1");
+      } catch {
+        /* ignore */
+      }
+      openOrderMenu({ customer, navigate });
+    });
+  }
+  // One-time tip so the long press (right-click with a mouse) is found: shown once, never over an open sheet, and not at all for someone
+  // who has already opened the menu.
   setTimeout(() => {
     try {
       if (localStorage.getItem("fieldvisits_om_hint") || document.querySelector(".sheet-overlay") || !container.isConnected) return;
       localStorage.setItem("fieldvisits_om_hint", "1");
-      showToast(t("om_hint"), { ms: 6000 });
+      showToast(t(mouse ? "om_hint_desk" : "om_hint"), { ms: 6000 });
     } catch {
       /* private mode: no tip */
     }

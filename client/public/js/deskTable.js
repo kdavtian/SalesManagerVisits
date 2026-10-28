@@ -552,3 +552,42 @@ export function openDeskMenu(anchor, options, current, onPick) {
   menu.querySelector(".desk-menu-on, button")?.focus();
   return close;
 }
+
+// Desktop roadmap step 9: a native <select> shown as the tables' dropdown chip ("Kind: Payment slip ▾") on a computer; the select stays in
+// the page (hidden) so the view's own code keeps reading .value and listening to "change". Phones keep the native select. Returns
+// refresh() for when the view changes the options or the value by code.
+export function deskSelectChip(select, label = select.getAttribute("aria-label") || "") {
+  if (!select || !isDesktop() || select.dataset.deskChip === "1") return () => {};
+  select.dataset.deskChip = "1";
+  select.classList.add("desk-select-hidden");
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "desk-filter-btn desk-select-chip";
+  btn.setAttribute("aria-haspopup", "menu");
+  select.insertAdjacentElement("afterend", btn);
+  const refresh = () => {
+    const opt = select.selectedOptions[0];
+    const first = select.options[0];
+    const isDefault = !opt || opt === first;
+    btn.classList.toggle("desk-filter-btn-on", !isDefault);
+    btn.innerHTML = `${escapeHtml(isDefault ? first?.textContent || label : `${label ? `${label}: ` : ""}${opt.textContent}`)}<span class="desk-filter-caret" aria-hidden="true">▾</span>`;
+    btn.disabled = select.disabled;
+  };
+  btn.addEventListener("click", () =>
+    openDeskMenu(btn, [...select.options].map((o) => ({ value: o.value, label: o.textContent })), select.value, (value) => {
+      if (value === select.value) return;
+      select.value = value;
+      refresh();
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    })
+  );
+  select.addEventListener("change", refresh);
+  refresh();
+  return refresh;
+}
+
+// A dropdown menu (column picker, filter menu, select chip) lives on <body>: leaving the page must close it, or it floats over the next one.
+if (typeof window !== "undefined" && !window.__deskMenuRouteClose) {
+  window.__deskMenuRouteClose = true;
+  window.addEventListener("hashchange", () => document.querySelectorAll(".desk-col-menu").forEach((m) => m.remove()));
+}

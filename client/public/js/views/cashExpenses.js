@@ -25,7 +25,7 @@ export async function renderCashExpenses(root, navigate) {
           <h1>${t("cash_expenses")}</h1>
         </div>
       </div>
-      <button type="button" class="btn btn-primary btn-block" id="add-expense-btn">+ ${t("add_expense")}</button>
+      <button type="button" class="btn btn-primary btn-block desk-inline" id="add-expense-btn">+ ${t("add_expense")}</button>
       <div class="expenses-filters">
         <input type="search" id="expenses-search" placeholder="${t("search_expenses")}" />
         <div class="pill-date-filter-wrap">
