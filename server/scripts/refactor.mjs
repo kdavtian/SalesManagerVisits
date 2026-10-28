@@ -200,6 +200,27 @@ function mergeTarget(targetFile, header, importLines, bodyText) {
   fs.writeFileSync(targetFile, `${lines.join("\n").trimEnd()}\n\n${bodyText.trim()}\n`);
 }
 
+// string literals in moved code that are relative module paths ("./views/x.js" given to import(), a list of screens to preload):
+// rebased to the target's folder, so they still point at the same file
+function rebaseEdits(node, sourceFile, targetFile) {
+  const edits = [];
+  if (path.dirname(sourceFile) === path.dirname(targetFile)) return edits;
+  (function visit(n) {
+    if (!n || typeof n.type !== "string") return;
+    if (n.type === "Literal" && typeof n.value === "string" && /^\.\.?\/.*\.m?js$/.test(n.value)) {
+      const spec = rel(targetFile, path.resolve(path.dirname(sourceFile), n.value));
+      edits.push([n.range[0] + 1, n.range[1] - 1, spec]);
+    }
+    for (const k in n) {
+      if (k === "loc" || k === "range") continue;
+      const v = n[k];
+      if (Array.isArray(v)) v.forEach(visit);
+      else if (v && typeof v.type === "string") visit(v);
+    }
+  })(node);
+  return edits;
+}
+
 // ---- extract-top ----------------------------------------------------------------------------------------------------------------------
 function extractTop(sourceRel, targetRel, names) {
   const sourceFile = path.resolve(REPO, sourceRel);
@@ -228,10 +249,10 @@ function extractTop(sourceRel, targetRel, names) {
   const importLines = importsFor(sourceFile, targetFile, ast, moduleScope, uses, exportFromSource);
   const pieces = nodes.map(([, node]) => {
     const start = leadingCommentStart(ast, src, node);
-    const text = src.slice(start, lineEnd(src, node.range[1]));
+    const text = applyEdits(src.slice(start, lineEnd(src, node.range[1])), rebaseEdits(node, sourceFile, targetFile).map(([a, b, t]) => [a - start, b - start, t]));
     return node.type === "ExportNamedDeclaration" ? text : text.replace(/^(\s*(?:\/\/[^\n]*\n|\/\*[\s\S]*?\*\/\s*)*)/, "$1export ");
   });
-  const removeEdits = nodes.map(([, node]) => [leadingCommentStart(ast, src, node), lineEnd(src, node.range[1]), ""]);
+  const removeEdits = removalEdits(src, nodes.map(([, node]) => [leadingCommentStart(ast, src, node), lineEnd(src, node.range[1])]));
   // still used in the source? import them back
   const stillUsed = names.filter((n) => moduleScope.set.get(n).references.some((r) => !nodes.some(([, node]) => r.identifier.range[0] >= node.range[0] && r.identifier.range[1] <= node.range[1])));
   const exported = names.filter((n) => nodes.find(([m]) => m === n)[1].type === "ExportNamedDeclaration");
@@ -264,15 +285,30 @@ function pruneImports(file) {
       edits.push([node.range[0], node.range[1], `import ${parts.join(", ")} from ${src.slice(node.source.range[0], node.source.range[1])};`]);
     }
   }
-  if (edits.length) fs.writeFileSync(file, applyEdits(src, edits));
+  // a file whose only imports went away does not start with an empty line
+  if (edits.length) fs.writeFileSync(file, applyEdits(src, edits).replace(/^\n+/, ""));
 }
 function addImportLine(src, line) {
-  const lines = src.split("\n");
-  let last = -1;
-  for (let i = 0; i < lines.length; i++) if (/^import\b/.test(lines[i])) last = i;
-  while (last >= 0 && !/;\s*$/.test(lines[last])) last++;
-  lines.splice(last + 1, 0, line);
-  return lines.join("\n");
+  // right after the last import statement (its own line end, so a trailing comment stays where it was)
+  const imports = parse(src).body.filter((n) => n.type === "ImportDeclaration");
+  if (!imports.length) return `${line}\n${src}`;
+  const at = lineEnd(src, imports.at(-1).range[1]);
+  return `${src.slice(0, at)}${line}\n${src.slice(at)}`;
+}
+// removal edits for whole-line ranges: touching ranges become one, and a removed block between two blank lines takes one of them
+// along, so no run of empty lines is left behind
+function removalEdits(src, ranges) {
+  const merged = [];
+  for (const [start, end] of [...ranges].sort((a, b) => a[0] - b[0])) {
+    if (merged.length && start <= merged.at(-1)[1]) merged.at(-1)[1] = Math.max(merged.at(-1)[1], end);
+    else merged.push([start, end]);
+  }
+  return merged.map(([start, end]) => {
+    const blankBefore = start >= 2 && src.slice(start - 2, start) === "\n\n";
+    const next = src.indexOf("\n", end);
+    if (blankBefore && next >= 0 && /^[ \t]*$/.test(src.slice(end, next))) return [start, next + 1, ""];
+    return [start, end, ""];
+  });
 }
 function retargetImports(file, sourceFile, targetFile, names) {
   const src = read(file);
@@ -373,7 +409,7 @@ function extractInner(sourceRel, outerName, targetRel, namespace, names) {
       else idEdits.push([id.range[0], id.range[1], `${CTX}.${id.name}`]);
     }
     const shift = (e) => [e[0] - start, e[1] - start, e[2]];
-    let text = applyEdits(src.slice(start, node.range[1]), idEdits.map(shift));
+    let text = applyEdits(src.slice(start, node.range[1]), [...idEdits, ...rebaseEdits(node, sourceFile, targetFile)].map(shift));
     // signature: (ctx, ...original params)
     const headRe = new RegExp(`(^|\\n)(\\s*)(async\\s+)?function(\\s*\\*)?\\s+${name}\\s*\\(`);
     if (!headRe.test(text)) throw new Error(`${name}: could not read its signature`);

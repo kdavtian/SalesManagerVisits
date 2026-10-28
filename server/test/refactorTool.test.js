@@ -57,3 +57,34 @@ test("extract-inner keeps the behaviour: reads and writes of the screen's variab
   assert.deepEqual(await run(dir), before);
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test("extract-top into another folder: relative module paths in the moved code still point at the same files", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "refactor-"));
+  fs.writeFileSync(path.join(dir, "package.json"), '{"type":"module"}');
+  fs.writeFileSync(path.join(dir, "helper.js"), "export const twice = (n) => n * 2;\n");
+  fs.writeFileSync(
+    path.join(dir, "boot.js"),
+    `import { twice } from "./helper.js";
+
+// screens warmed at start
+const SCREENS = ["./helper.js"];
+export async function load() {
+  const m = await import("./helper.js");
+  const all = await Promise.all(SCREENS.map((p) => import(p)));
+  return m.twice(2) + all[0].twice(3) + twice(1);
+}
+
+export const other = 1;
+`
+  );
+  execFileSync("node", [TOOL, "extract-top", path.join(dir, "boot.js"), path.join(dir, "shell/load.js"), "SCREENS", "load"]);
+  const moved = fs.readFileSync(path.join(dir, "shell/load.js"), "utf8");
+  assert.match(moved, /const SCREENS = \["\.\.\/helper\.js"\];/);
+  assert.match(moved, /await import\("\.\.\/helper\.js"\)/);
+  assert.match(moved, /import \{ twice \} from "\.\.\/helper\.js";/);
+  const { load } = await import(pathToFileURL(path.join(dir, "shell/load.js")).href);
+  assert.equal(await load(), 4 + 6 + 2);
+  // what is left of the source: no run of empty lines where the code was
+  assert.equal(fs.readFileSync(path.join(dir, "boot.js"), "utf8"), "export const other = 1;\n");
+  fs.rmSync(dir, { recursive: true, force: true });
+});
