@@ -4,9 +4,8 @@
 // between the per-event notifications (order_status_changed, payment_due_soon,
 // etc.), which only fire on a state *change*, not on "still stuck".
 //
-// Same setInterval-in-the-one-process pattern as overdueReminders.js/
-// stalePackedReminder.js/erpSyncMonitor.js -- no job runner needed for a
-// single-instance deployment. Checks periodically but only actually sends
+// Run every 5 minutes by the background job scheduler (jobs/index.js), only
+// when push is set up. Checks periodically but only actually sends
 // once per calendar day (server-local date), remembered in-process.
 
 import { bullets } from "./utils/bullets.js";
@@ -16,7 +15,6 @@ import { notifyUser } from "./notifications.js";
 import { NOT_NO_VISIT_CHANNEL_SQL } from "./routes/customers.js";
 import { repVisitSql } from "./visitCount.js";
 
-const CHECK_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes; only sends inside the 7 pm window, once a day
 // The summary goes out once a day at 19:00 Yerevan time (the check that lands
 // in the 19:00 hour sends it; a restart later that evening still catches up,
 // but never after 22:00).
@@ -111,11 +109,4 @@ export async function checkDailySummary(now = new Date()) {
       url: "/#/dashboard",
     });
   }
-}
-
-export function startDailySummary() {
-  if (!pushEnabled) return;
-  setInterval(() => {
-    checkDailySummary().catch((err) => console.error("Daily summary check failed:", err.message));
-  }, CHECK_INTERVAL_MS);
 }

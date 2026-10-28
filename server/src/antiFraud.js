@@ -440,10 +440,3 @@ export async function recordCustomerDispute({ customerId, note }, db = pool) {
   if (id) await notifyFraudRoles("Հաճախորդը չի տեսնում իր վճարումները", `${c.name}${c.erp_id ? ` · ID ${c.erp_id}` : ""} — զանգահարիր հաճախորդին։`);
   return { id, customer: c.name };
 }
-
-let timer = null;
-export function startAntiFraud() {
-  if (timer) return;
-  timer = setInterval(() => runAntiFraud().catch((err) => console.error("Anti-fraud run failed:", err.message)), 60 * 60 * 1000);
-  timer.unref?.();
-}

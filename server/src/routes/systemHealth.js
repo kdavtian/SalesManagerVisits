@@ -11,6 +11,7 @@ import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { erpSyncFreshness, ERP_STALE_AFTER_HOURS } from "../erpSyncFreshness.js";
 import { SOURCES, dailyReportFreshness } from "../erpSyncMonitor.js";
+import { backgroundJobStatus } from "../jobs/index.js";
 
 export const systemHealthRouter = Router();
 systemHealthRouter.use(requireAuth, requireAdmin);
@@ -49,7 +50,7 @@ systemHealthRouter.get("/", async (req, res) => {
     ...SOURCES.map(async (s) => ({ key: s.key, label: s.label, ...(await erpSyncFreshness(s.table)) })),
     dailyReportFreshness().then((f) => ({ key: "erp_daily_report", label: "Օրական հաշվետվություն", ...f })),
   ]);
-  const [{ rows: dates }, migrations, { rows: digest }] = await Promise.all([
+  const [{ rows: dates }, migrations, { rows: digest }, jobs] = await Promise.all([
     pool.query(
       `SELECT (SELECT MAX(order_date) FROM erp_order_lines) AS latest_order_date,
               (SELECT MAX(report_date) FROM erp_daily_report WHERE period = 'daily') AS latest_report_date,
@@ -57,6 +58,7 @@ systemHealthRouter.get("/", async (req, res) => {
     ),
     migrationStatus(),
     pool.query("SELECT MAX(snapshot_date) AS last_digest FROM debt_digest_snapshots"),
+    backgroundJobStatus().catch(() => []), // before migration 167 the table does not exist yet
   ]);
 
   res.json({
@@ -73,5 +75,6 @@ systemHealthRouter.get("/", async (req, res) => {
       erp_sync_key: Boolean(process.env.ERP_SYNC_KEY),
     },
     last_debt_digest: digest[0]?.last_digest ?? null,
+    jobs,
   });
 });

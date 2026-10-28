@@ -4,9 +4,8 @@
 // failure to its own journal. Nothing on that side tells a human when a
 // push stops arriving; this is the app-side alarm for exactly that.
 //
-// Same setInterval-in-the-one-process pattern as overdueReminders.js/
-// stalePackedReminder.js -- no job runner needed for a single-instance
-// deployment. Reuses the same ERP_STALE_AFTER_HOURS threshold the Reports
+// Run hourly by the background job scheduler (jobs/index.js), only when push
+// is set up. Reuses the same ERP_STALE_AFTER_HOURS threshold the Reports
 // API's own freshness badges use (routes/reports.js), so "the report shows
 // a warning badge" and "admin/CEO got a push about it" never disagree.
 
@@ -16,7 +15,6 @@ import { notifyUser } from "./notifications.js";
 import { erpSyncFreshness, ERP_STALE_AFTER_HOURS } from "./erpSyncFreshness.js";
 import { getSyncStatus } from "./erpSyncStatus.js";
 
-const CHECK_INTERVAL_MS = 60 * 60 * 1000; // hourly -- no need to check more often than the staleness window itself
 
 const ALERT_ROLES = ["admin", "ceo", "operations_director"];
 
@@ -142,12 +140,4 @@ export async function checkWorkbookAge({ now = new Date(), anyHour = false, only
     await notifyUser(recipient.id, "erp_sync_stale", { title: "Excel ֆայլը հնացել է", body, url: "/#/settings?section=system-health" });
   }
   return { alerted: true, recipients: recipients.rowCount };
-}
-
-export function startErpSyncMonitor() {
-  if (!pushEnabled) return;
-  setInterval(() => {
-    checkErpSyncFreshness().catch((err) => console.error("ERP sync freshness check failed:", err.message));
-    checkWorkbookAge().catch((err) => console.error("Excel file age check failed:", err.message));
-  }, CHECK_INTERVAL_MS);
 }

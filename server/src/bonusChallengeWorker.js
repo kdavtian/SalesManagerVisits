@@ -1,6 +1,5 @@
-// Periodic driver for the Bonuses challenge engine -- same setInterval-in-
-// the-one-process pattern as dailySummary.js/erpSyncMonitor.js/
-// bonusReconciliation.js. Each tick:
+// Periodic driver for the Bonuses challenge engine, run hourly by the
+// background job scheduler (jobs/index.js). Each tick:
 //   1. Ensures the current round exists for every published template
 //      (recurring templates: the current period; 'once' templates: their
 //      single round, per first_round_policy).
@@ -18,7 +17,6 @@ import { issueWatermelonAward } from "./bonusChallengeAwards.js";
 import { createClaimsForFinalizedRound } from "./bonusRewardClaims.js";
 import { updatePersonalBestsForWeek, lastCompletedWeekBounds } from "./bonusPersonalBests.js";
 
-const CHECK_INTERVAL_MS = 60 * 60 * 1000; // hourly, same cadence as the other Bonuses/summary workers
 
 // Recomputes progress for one round, issues any watermelon awards it
 // triggers, and finalizes it (locks in 'not_achieved', ends the round,
@@ -104,13 +102,4 @@ export async function runChallengeEngineTick(now = new Date()) {
   await updatePersonalBestsForWeek(lastWeek.startAt, lastWeek.endAt);
 
   return { roundsCreated, roundsRecomputed, awardsIssued, roundsFinalized, claimsCreated };
-}
-
-let started = false;
-export function startBonusChallengeEngine() {
-  if (started) return;
-  started = true;
-  setInterval(() => {
-    runChallengeEngineTick().catch((err) => console.error("Bonus challenge engine tick failed:", err.message));
-  }, CHECK_INTERVAL_MS);
 }
