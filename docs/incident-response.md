@@ -28,7 +28,7 @@ it.
 auth bypass, a compromised account): the Emergency Disconnect / lockdown
 feature is the first lever. It logs out **every** session app-wide
 (admin's own included) and blocks all data access until lifted —
-`server/src/routes/lockdown.js`.
+`server/src/system/routes/lockdown.js`.
 
 **There is currently no UI button for this** — `api.js` exposes
 `engageLockdown()`/`liftLockdown()`, but nothing in the admin screens

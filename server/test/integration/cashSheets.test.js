@@ -10,8 +10,8 @@ import assert from "node:assert/strict";
 import ExcelJS from "exceljs";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs, trackPayment, trackHandoff } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { closeSheetsFoundInExcel, runCashSheetJobs } from "../../src/cashSheets.js";
-import { isWorkingDay } from "../../src/vaghinak/engine.js";
+import { closeSheetsFoundInExcel, runCashSheetJobs } from "../../src/money/cashSheets.js";
+import { isWorkingDay } from "../../src/team/vaghinak/engine.js";
 
 let base, rep, director, accountant, owner, repCookie, directorCookie, accountantCookie, customer, erpId;
 test.before(async () => {

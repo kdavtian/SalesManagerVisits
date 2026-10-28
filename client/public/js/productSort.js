@@ -20,7 +20,7 @@
 // the display-facing cleanup). The ERP extract's own name/brand/unit text
 // has real spacing drift sync to sync for what's the same physical
 // product; the server now normalizes this at the source (see
-// server/src/erpTransform.js's normalizeErpText), but a row synced before
+// server/src/erp/erpTransform.js's normalizeErpText), but a row synced before
 // that fix existed can still have it stored, so Warehouse Inventory's own
 // grouping key also normalizes defensively -- otherwise a whitespace-only
 // difference reads as two separate products with two different stock

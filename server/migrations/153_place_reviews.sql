@@ -1,5 +1,5 @@
 -- Region / subregion spelling (owner, 2026-10-25): the free text typed on a customer is matched against the built-in list of Armenian places
--- (server/src/places.js). What matches is saved with the right English name (shown in Armenian when the app is in Armenian). What does not match
+-- (server/src/customers/places.js). What matches is saved with the right English name (shown in Armenian when the app is in Armenian). What does not match
 -- is kept as typed and lands here for a person to look at; one-letter corrections are logged too.
 CREATE TABLE place_reviews (
   id SERIAL PRIMARY KEY,

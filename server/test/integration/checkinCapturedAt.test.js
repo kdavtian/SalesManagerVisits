@@ -2,7 +2,7 @@
 // submit (captured_at) -- but only when it is plausible.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseCapturedAt } from "../../src/routes/checkins.js";
+import { parseCapturedAt } from "../../src/field/routes/checkins.js";
 
 const NOW = Date.parse("2031-03-10T12:00:00Z");
 

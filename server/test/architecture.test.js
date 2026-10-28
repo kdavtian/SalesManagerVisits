@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import * as espree from "espree";
 import { app } from "../src/app.js";
-import { NOTIFICATION_TYPES } from "../src/notificationPreferences.js";
+import { NOTIFICATION_TYPES } from "../src/shared/notificationPreferences.js";
 
 const SERVER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PUBLIC = path.resolve(SERVER, "../client/public");
@@ -44,10 +44,10 @@ const PUBLIC_ROUTES = new Map([
 
 test("every API route needs a login (or is on the short public list with its reason)", async () => {
   const owner = new Map();
-  const routesDir = path.join(SERVER, "src/routes");
-  for (const f of fs.readdirSync(routesDir)) {
-    const mod = await import(pathToFileURL(path.join(routesDir, f)).href);
-    for (const v of Object.values(mod)) if (typeof v === "function" && Array.isArray(v.stack)) owner.set(v, f);
+  // route files live in <area>/routes/ (step 5)
+  for (const file of walk(path.join(SERVER, "src")).filter((f) => f.endsWith(".js") && path.basename(path.dirname(f)) === "routes")) {
+    const mod = await import(pathToFileURL(file).href);
+    for (const v of Object.values(mod)) if (typeof v === "function" && Array.isArray(v.stack)) owner.set(v, path.basename(file));
   }
   const unguarded = [];
   (function walkStack(stack, guarded, who) {
@@ -167,5 +167,19 @@ test("no setInterval in the server outside the job scheduler", () => {
     });
   }
   assert.deepEqual(offenders, [], "add a job to server/src/jobs/index.js instead");
+});
+
+// ---- 7. business folders -----------------------------------------------------------------------------------------------------------
+// server/src holds the entry points and folders only (docs/architecture-roadmap.md, step 5): a new module goes into the folder of its
+// area (orders, customers, field, money, products, erp, reports, team, bonus, system, shared), a route file into <area>/routes/.
+const AREAS = ["orders", "customers", "field", "money", "products", "erp", "reports", "team", "bonus", "system", "shared"];
+test("server/src: only the entry points at the top, every route file in <area>/routes", () => {
+  const top = fs.readdirSync(path.join(SERVER, "src"), { withFileTypes: true });
+  assert.deepEqual(top.filter((e) => e.isFile() && e.name.endsWith(".js")).map((e) => e.name).sort(), ["app.js", "index.js", "seed.js"]);
+  const misplaced = walk(path.join(SERVER, "src"))
+    .filter((f) => path.basename(path.dirname(f)) === "routes")
+    .map((f) => path.relative(path.join(SERVER, "src"), f))
+    .filter((rel) => !AREAS.includes(rel.split(path.sep)[0]));
+  assert.deepEqual(misplaced, []);
 });
 

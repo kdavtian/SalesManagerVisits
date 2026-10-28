@@ -1,5 +1,5 @@
 // Read-only Debt Balances viewer (item 4). Pulls from the ERP-synced
-// erp_customer_data.debt_amd (see server/src/routes/debtBalances.js) --
+// erp_customer_data.debt_amd (see server/src/money/routes/debtBalances.js) --
 // no write-back, no new ledger/aging workflow. A sales_manager gets a flat
 // list already scoped to their own book server-side; director/admin/ceo/
 // accountant additionally get a Flat/By-manager toggle and a manager
@@ -74,7 +74,7 @@ export function renderDebtBalances(root, navigate) {
   // Empty string = live erp_customer_data.debt_amd snapshot (the default,
   // and the only mode before this feature). A chosen date instead computes
   // a running balance from full order/cashflow history as of that date
-  // (see server/src/routes/debtBalances.js) -- never assumed to equal the
+  // (see server/src/money/routes/debtBalances.js) -- never assumed to equal the
   // live figure even for today, since the ERP sync can lag behind the
   // in-app collections the live snapshot already adjusts for.
   let asOfDate = "";

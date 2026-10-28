@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, apiRequest, loginAs, trackCustomer } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { resolvePlaces, searchPlaces } from "../../src/places.js";
+import { resolvePlaces, searchPlaces } from "../../src/customers/places.js";
 
 test.before(async () => {
   await startTestServer();

@@ -1,10 +1,10 @@
 // Pure payment/cash-handoff calculations and visibility decisions
-// (server/src/routes/payments.js, server/src/routes/cashHandoffs.js).
+// (server/src/money/routes/payments.js, server/src/money/routes/cashHandoffs.js).
 import "dotenv/config"; // routes/payments.js and routes/cashHandoffs.js import db/pool.js, which needs DATABASE_URL set at import time
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canSeePayment } from "../src/routes/payments.js";
-import { summarize, checkOnBehalf, canSeeHandoff } from "../src/routes/cashHandoffs.js";
+import { canSeePayment } from "../src/money/routes/payments.js";
+import { summarize, checkOnBehalf, canSeeHandoff } from "../src/money/routes/cashHandoffs.js";
 
 // --- canSeePayment --------------------------------------------------------
 

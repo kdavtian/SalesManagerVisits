@@ -1,4 +1,4 @@
-// API coverage for Customers and assignments (server/src/routes/customers.js):
+// API coverage for Customers and assignments (server/src/customers/routes/customers.js):
 // valid create, Armenia-bounds/tier/payment-method/credit-term boundary
 // validation, the soft near-duplicate warning + confirm_duplicate override,
 // the hard erp_customer_id uniqueness conflict, reassignment/finance-field

@@ -1,5 +1,5 @@
-// API coverage for Payments and cash handoffs (server/src/routes/payments.js,
-// server/src/routes/cashHandoffs.js): valid submission, MAX_AMOUNT boundary,
+// API coverage for Payments and cash handoffs (server/src/money/routes/payments.js,
+// server/src/money/routes/cashHandoffs.js): valid submission, MAX_AMOUNT boundary,
 // the advisory-lock duplicate_warning + confirm_duplicate override, a real
 // CONCURRENT double-submission via Promise.all (exactly one 201 + one 409),
 // role gating on submitting for others, the cash-custody chain's

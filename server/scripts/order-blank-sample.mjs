@@ -1,7 +1,7 @@
 // Renders a sample of the order blank (full + half versions) with made-up data:
 //   node scripts/order-blank-sample.mjs  ->  order-blank-sample.pdf
 import fs from "node:fs";
-import { buildOrderBlanksPdf } from "../src/orderBlankPdf.js";
+import { buildOrderBlanksPdf } from "../src/orders/orderBlankPdf.js";
 
 const mk = (rows) => rows.map(([brand, product_name, size_l, quantity, unit_price_amd]) => ({ brand, product_name, size_l, quantity, unit_price_amd, line_total_amd: quantity * unit_price_amd }));
 const rep = { name: "Արտակ Հայրապետյան", phone: "033007059", officePhone: "091-007-019" };

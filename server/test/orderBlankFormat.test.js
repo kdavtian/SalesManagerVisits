@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatSize, formatPhone, cleanCustomerName, lineLiters, formatLiters } from "../src/orderBlankPdf.js";
+import { formatSize, formatPhone, cleanCustomerName, lineLiters, formatLiters } from "../src/orders/orderBlankPdf.js";
 
 test("package size always carries the litre mark", () => {
   assert.equal(formatSize("4"), "4 L");
@@ -36,7 +36,7 @@ test("total litres = quantity x package size, non-litre units add nothing", () =
 });
 
 test("phones are stored as digits only: +37491007019", async () => {
-  const { normalizePhoneForStorage } = await import("../src/phoneFormat.js");
+  const { normalizePhoneForStorage } = await import("../src/shared/phoneFormat.js");
   assert.equal(normalizePhoneForStorage("091-007-019"), "+37491007019");
   assert.equal(normalizePhoneForStorage("+374 91 007 019"), "+37491007019");
   assert.equal(normalizePhoneForStorage("+374 91 007019"), "+37491007019");
@@ -48,7 +48,7 @@ test("phones are stored as digits only: +37491007019", async () => {
 });
 
 test("payment terms line: due days + downpayment only, nothing for an old order", async () => {
-  const { paymentTermsText } = await import("../src/orderBlankPdf.js");
+  const { paymentTermsText } = await import("../src/orders/orderBlankPdf.js");
   assert.deepEqual(paymentTermsText(null), { due: null, down: null });
   assert.deepEqual(paymentTermsText({ dueDays: null, downpaymentAmd: null, downpaymentPct: null }), { due: null, down: null });
   assert.equal(paymentTermsText({ dueDays: 45, downpaymentAmd: 301350, downpaymentPct: "30.00" }).due, "Վճարման ժամկետ՝ 45 օր");
@@ -58,7 +58,7 @@ test("payment terms line: due days + downpayment only, nothing for an old order"
 });
 
 test("blank dates: the order date is the day the order was made, the delivery date is the day the blank is printed (Yerevan calendar)", async () => {
-  const { blankDates, yerevanDate, buildOrderBlanksPdf } = await import("../src/orderBlankPdf.js");
+  const { blankDates, yerevanDate, buildOrderBlanksPdf } = await import("../src/orders/orderBlankPdf.js");
   assert.deepEqual(blankDates({ created_at: "2026-03-02T09:00:00Z" }, new Date("2026-10-22T08:00:00Z")), { orderDate: "02/03/2026", deliveryDate: "22/10/2026" });
   // 21:30 UTC is already the next day in Yerevan (UTC+4), for both dates
   assert.equal(yerevanDate("2026-10-21T21:30:00Z"), "22/10/2026");

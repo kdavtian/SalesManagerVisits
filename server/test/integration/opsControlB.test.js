@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, createProduct, apiRequest, loginAs, trackOrder } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { runOpsJobs } from "../../src/opsJobs.js";
+import { runOpsJobs } from "../../src/reports/opsJobs.js";
 
 let admin, director, accountant, rep, directorCookie, accountantCookie, repCookie, customer, product, slow;
 const stamp = Date.now();

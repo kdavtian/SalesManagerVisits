@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { computeStockForecast, DEAD_STOCK_DAYS, CRITICAL_DAYS_THRESHOLD, LOW_DAYS_THRESHOLD } from "../src/stockForecast.js";
+import { computeStockForecast, DEAD_STOCK_DAYS, CRITICAL_DAYS_THRESHOLD, LOW_DAYS_THRESHOLD } from "../src/products/stockForecast.js";
 
 const TODAY = "2026-06-30";
 

@@ -13,7 +13,7 @@ function savedTexts() {
   }
 }
 
-// Same rules as server/src/documentTexts.js signStatement. Also used live by the driver's delivery sheet.
+// Same rules as server/src/shared/documentTexts.js signStatement. Also used live by the driver's delivery sheet.
 export function composeStatement(texts, { orderCodes, paymentAmd, balanceAfterAmd }) {
   const amd = (n) => Math.round(Number(n)).toLocaleString("en-US");
   const hasOrders = orderCodes.length > 0;

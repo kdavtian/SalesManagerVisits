@@ -1,4 +1,4 @@
-// API coverage for Products and pricing (server/src/routes/products.js):
+// API coverage for Products and pricing (server/src/products/routes/products.js):
 // GET is open to every authenticated role; POST/PATCH/DELETE/promos/bulk
 // price updates are gated by requireProductManager (canManageProducts:
 // admin, ceo, accountant) -- a plain sales_manager is the disallowed-role

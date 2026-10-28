@@ -163,4 +163,4 @@ Waybills | Invoices, with All | Unsigned | Signed for created documents, plus se
 own orders there (the order list is already limited server-side); warehouse, accountant, directors, CEO and
 admin see all. Badge on the tile: accounting roles = requests Lily has not finished (pending / in progress /
 needs attention); warehouse manager = confirmed orders whose document is already made; others none
-(`server/src/accountingBadge.js`). The Orders page no longer has an Accounting chip.
+(`server/src/orders/accountingBadge.js`). The Orders page no longer has an Accounting chip.

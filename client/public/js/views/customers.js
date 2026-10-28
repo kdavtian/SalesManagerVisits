@@ -384,7 +384,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
 
     const buttons = [
       // A sales_manager is now always scoped server-side to their own
-      // customers (server/src/routes/customers.js) -- every row they can
+      // customers (server/src/customers/routes/customers.js) -- every row they can
       // see is already "assigned to me", so this filter has nothing left to
       // narrow for that role and just adds a confusing no-op control.
       seesAllActivity()

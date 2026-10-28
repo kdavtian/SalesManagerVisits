@@ -3,7 +3,7 @@
 // quantity unit; 2.5 points = 5 stored point units").
 import test from "node:test";
 import assert from "node:assert/strict";
-import { toScaled, fromScaled, formatScaled, sumScaled } from "../src/bonusUnits.js";
+import { toScaled, fromScaled, formatScaled, sumScaled } from "../src/bonus/bonusUnits.js";
 
 test("toScaled: whole and half values convert to the correct stored integer", () => {
   assert.equal(toScaled(0), 0);

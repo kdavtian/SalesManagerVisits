@@ -12,8 +12,8 @@ import "dotenv/config";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { pool } from "../../src/db/pool.js";
-import { runReconciliationSweep } from "../../src/bonusReconciliation.js";
-import { setBonusesEnabled, getBonusesEnabled, setBonusSettings } from "../../src/bonusSettings.js";
+import { runReconciliationSweep } from "../../src/bonus/bonusReconciliation.js";
+import { setBonusesEnabled, getBonusesEnabled, setBonusSettings } from "../../src/bonus/bonusSettings.js";
 import { createUser, createCustomer, trackCheckin, cleanupAll } from "./helpers.js";
 
 const userIds = [];

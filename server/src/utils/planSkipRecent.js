@@ -5,7 +5,7 @@
 // plan day itself never removes the customer (it stays on the list as done), and explicit one-off day plans
 // (visit_plans rows, a human decision) are never filtered -- only rule expansions.
 import { pool } from "../db/pool.js";
-import { repVisitSql } from "../visitCount.js";
+import { repVisitSql } from "../field/visitCount.js";
 
 const YEREVAN_OFFSET_MS = 4 * 60 * 60 * 1000;
 const DAY_MS = 86400000;

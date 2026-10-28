@@ -1,11 +1,11 @@
-// Products & liters report (server/src/volumeReport.js, GET /api/volume-report): periods, filters (product text,
+// Products & liters report (server/src/reports/volumeReport.js, GET /api/volume-report): periods, filters (product text,
 // brand/line/grade/size, channel of the LINE, region), comparison, breakdowns, scope. Liters only, no money.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, createProduct, loginAs, apiRequest } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
 import { yerevanToday } from "../../src/utils/yerevanDate.js";
-import { addDays, standardPeriods, resolveWindows } from "../../src/volumeReport.js";
+import { addDays, standardPeriods, resolveWindows } from "../../src/reports/volumeReport.js";
 
 const stamp = Date.now();
 const today = yerevanToday();

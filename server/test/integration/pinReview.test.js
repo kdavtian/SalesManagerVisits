@@ -1,10 +1,10 @@
-// Pin review (server/src/pinReview.js, routes/pinReview.js), refused-check-in evidence, and the rule that a
+// Pin review (server/src/customers/pinReview.js, routes/pinReview.js), refused-check-in evidence, and the rule that a
 // sales manager may delete their own order only until management confirms it (routes/orders.js DELETE).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { findPinCluster } from "../../src/pinReview.js";
+import { findPinCluster } from "../../src/customers/pinReview.js";
 
 let rep, rep2, director, admin;
 let repCookie, directorCookie, adminCookie;

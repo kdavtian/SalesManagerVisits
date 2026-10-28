@@ -1,7 +1,7 @@
 # KAD OS (repo `kdavtian/kad-gmm`, "GMM") - what to know when you work on it
 
 KAD OS is the free ERP of KAD Motors' wholesale customers (pilot: customer 10001 Garage Masters Mall). It is a SEPARATE repo and a separate
-droplet app. The supplier-side half of the link lives in THIS repo (`docs/kad-os-link.md`, `server/src/routes/partner.js`, `appOrders.js`,
+droplet app. The supplier-side half of the link lives in THIS repo (`docs/kad-os-link.md`, `server/src/orders/routes/partner.js`, `appOrders.js`,
 `appOrdersAdmin.js`, `views/kadOsAdmin.js`). Read that doc first for anything about orders, perks, campaigns, limits or the connection code.
 
 ## Workflow differences from Field Visits

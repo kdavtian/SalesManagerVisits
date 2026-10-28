@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { landingCost, netCost, priceForNetMargin, litersOfUnit, commissionPct, brandKey, mergeSavedRates, COST_RATES_DEFAULT, DEFAULT_COST_ITEMS } from "../../client/public/js/costModel.js";
-import { displayNetCost } from "../src/discountPolicy.js";
+import { displayNetCost } from "../src/orders/discountPolicy.js";
 
 // The owner's defaults since 1.359.0 are the market USD rate (366) and the VAT-payer method; the workbook's own numbers
 // (rate 377.5, "VAT tax" on the margin) are reproduced by passing WB.

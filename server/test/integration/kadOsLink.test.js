@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, createProduct, apiRequest, loginAs, trackOrder } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { orderFlow } from "../../src/opsReports.js";
+import { orderFlow } from "../../src/reports/opsReports.js";
 
 const stamp = Date.now();
 let admin, director, rep, partner, other, adminCookie, directorCookie, repCookie, partnerCookie;
@@ -648,7 +648,7 @@ test("KAD OS sees only what is in stock and never how many; the order limit per 
 test("catalog carries the Frequent ranking and the photo name; the photo is served to the linked account only, for catalog products", async () => {
   const fs = await import("node:fs");
   const path = await import("node:path");
-  const { uploadDirPath } = await import("../../src/upload.js");
+  const { uploadDirPath } = await import("../../src/shared/upload.js");
   fs.mkdirSync(uploadDirPath, { recursive: true });
   const file = `kos-photo-${stamp}.png`;
   fs.writeFileSync(path.join(uploadDirPath, file), Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64"));

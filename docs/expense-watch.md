@@ -3,7 +3,7 @@
 Owner, 2026-10-25: "he has to analyze expenses as well and give me reports, recommendations" -- "cash expense in app (it should be the same Excel data). Weekly reports and live alerts".
 Vaghinak reads the Excel cashflow (the trusted source) plus the reps' own cash expenses in the app and tells management what is growing, what looks odd and what to do. He never blocks or edits money.
 
-Code: `server/src/expenseWatch.js`, `server/src/routes/expenses.js` (`/api/expenses`), tables in `migrations/152_expense_watch.sql`, tab in `client/public/js/views/vaghinak.js`,
+Code: `server/src/money/expenseWatch.js`, `server/src/money/routes/expenses.js` (`/api/expenses`), tables in `migrations/152_expense_watch.sql`, tab in `client/public/js/views/vaghinak.js`,
 the "In Excel / Not in Excel" mark in `client/public/js/views/cashExpenses.js`. Roles: admin, CEO, operations director, accountant. Runs hourly and right after each Excel cashflow sync (not in tests).
 
 | Finding (`kind`) | Meaning | Default |

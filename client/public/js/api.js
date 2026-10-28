@@ -145,7 +145,7 @@ async function doRequest(path, options) {
     // request came from (Warehouse, Reports, Recorded... reached by link or
     // bookmark). Say what it means, in the user's language. Specific 403
     // messages ("Only the recipient can confirm this handoff") are left alone.
-    // An order refused for an out-of-stock product (server/src/orderStock.js): name the products in the user's language.
+    // An order refused for an out-of-stock product (server/src/orders/orderStock.js): name the products in the user's language.
     const message =
       body?.code === "out_of_stock" && Array.isArray(body.products)
         ? t("order_out_of_stock_error").replace("{names}", body.products.map((p) => p.name).join(", "))
@@ -195,7 +195,7 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/customers${qs ? `?${qs}` : ""}`);
   },
-  // Order returns and cancellations (see server/src/orderReturns.js)
+  // Order returns and cancellations (see server/src/orders/orderReturns.js)
   listReturns: (params = {}) => request(`/returns?${new URLSearchParams(params)}`, { fresh: true }),
   getReturnable: (orderId) => request(`/returns/order/${orderId}/returnable`, { fresh: true }),
   getReturnCounts: () => request("/returns/counts", { fresh: true }),
@@ -619,7 +619,7 @@ export const api = {
   linkOrderToErp: (id, erpOrderId) => json(`/orders/${id}/link-erp`, "POST", { erp_order_id: erpOrderId }),
   markOrderDeliveredWithoutRoute: (id) => request(`/orders/${id}/mark-delivered`, { method: "POST" }),
 
-  // Warehouse (see server/src/routes/warehouse.js)
+  // Warehouse (see server/src/orders/routes/warehouse.js)
   getCashMeta: (params = {}) => request(`/cashflow/meta?${new URLSearchParams(params)}`, { fresh: true }),
   getCashSummary: (params = {}) => request(`/cashflow/summary?${new URLSearchParams(params)}`, { fresh: true }),
   getCashEntries: (params = {}) => request(`/cashflow/entries?${new URLSearchParams(params)}`, { fresh: true }),
@@ -633,7 +633,7 @@ export const api = {
   getCashCustomers: () => request("/cashflow/customers"),
   addCashAccount: (data) => json("/cashflow/accounts", "POST", data),
   addCashCategory: (data) => json("/cashflow/categories", "POST", data),
-  // Bank statements (see server/src/routes/bankStatements.js)
+  // Bank statements (see server/src/money/routes/bankStatements.js)
   previewBankStatement: (file, accountId, mapping) => request("/cashflow/bank/preview", { method: "POST", body: bankForm(file, accountId, mapping) }),
   importBankStatement: (file, accountId, mapping) => request("/cashflow/bank/import", { method: "POST", body: bankForm(file, accountId, mapping) }),
   getBankLines: (params = {}) => request(`/cashflow/bank/lines?${new URLSearchParams(params)}`, { fresh: true }),
@@ -645,7 +645,7 @@ export const api = {
     form.set("file", file);
     return request("/cashflow/import", { method: "POST", body: form });
   },
-  // Staff (see server/src/routes/staff.js)
+  // Staff (see server/src/team/routes/staff.js)
   getStaffAccess: () => request("/staff/access", { fresh: true }),
   getStaffPeople: () => request("/staff/people", { fresh: true }),
   getStaffCandidates: () => request("/staff/candidates", { fresh: true }),
@@ -689,7 +689,7 @@ export const api = {
   bulkMarkOrdersPacked: (orderIds) => json("/warehouse/orders/bulk-packed", "POST", { order_ids: orderIds }),
   flagOrderStockIssue: (id, note) => json(`/warehouse/orders/${id}/stock-issue`, "POST", { note }),
 
-  // Delivery routes (see server/src/routes/delivery.js)
+  // Delivery routes (see server/src/orders/routes/delivery.js)
   getDeliveryPendingCount: () => request("/delivery/pending-count"),
   listPackedOrders: () => request("/delivery/packed-orders"),
   listActiveStops: () => request("/delivery/active-stops"),
@@ -704,7 +704,7 @@ export const api = {
   getOrderDebtSnapshot: (orderId) => request(`/delivery/orders/${orderId}/debt-snapshot`),
   podSignatureUrl: (orderId) => `/api/delivery/pod/${orderId}/signature`,
 
-  // Order rejection + accountant "Recorded" screen (see server/src/routes/orders.js)
+  // Order rejection + accountant "Recorded" screen (see server/src/orders/routes/orders.js)
   rejectOrder: (id, note) => json(`/orders/${id}/reject`, "POST", { note }),
   unconfirmOrder: (id) => json(`/orders/${id}/unconfirm`, "POST", {}),
   getRecordedList: (recorded, offset = 0) =>
@@ -727,7 +727,7 @@ export const api = {
   rejectPayment: (id, reason) => json(`/payments/${id}/reject`, "POST", { reason }),
   returnPaymentToPending: (id, reason) => json(`/payments/${id}/return-to-pending`, "POST", { reason }),
 
-  // Cash custody chain (see server/src/routes/cashHandoffs.js) -- the
+  // Cash custody chain (see server/src/money/routes/cashHandoffs.js) -- the
   // hand-to-hand journey of the physical cash, layered on top of the
   // payment rows above.
   getHandoffAvailable: (asUserId) =>
@@ -850,19 +850,19 @@ export const api = {
   getPerfDataQuality: () => request("/team-performance/data-quality"),
   getPerfBrandActualsSummary: () => request("/team-performance/brand-actuals-summary"),
 
-  // Debt balances (see server/src/routes/debtBalances.js) -- read-only,
+  // Debt balances (see server/src/money/routes/debtBalances.js) -- read-only,
   // role-scoped server-side already.
   getDebtBalances: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/debt-balances${qs ? `?${qs}` : ""}`);
   },
 
-  // Admin data-quality dashboard (see server/src/routes/dataQuality.js) --
+  // Admin data-quality dashboard (see server/src/system/routes/dataQuality.js) --
   // admin-only server-side already.
   getDataQuality: () => request("/data-quality"),
   getSystemHealth: () => request("/system-health"),
 
-  // Sales records (see server/src/routes/sales.js) -- read-only ERP order
+  // Sales records (see server/src/reports/routes/sales.js) -- read-only ERP order
   // history, role-scoped server-side already.
   getSales: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
@@ -876,7 +876,7 @@ export const api = {
   reportClientError: (report) => json("/client-errors", "POST", { ...report, user_agent: navigator.userAgent }),
   getClientErrorLog: (limit = 100) => request(`/client-errors?limit=${limit}`),
 
-  // KAD OS link, supplier side (server/src/routes/appOrdersAdmin.js): app-order perks, account links, campaigns.
+  // KAD OS link, supplier side (server/src/orders/routes/appOrdersAdmin.js): app-order perks, account links, campaigns.
   getKadOsSettings: () => request("/app-orders/settings", { fresh: true }),
   saveKadOsSettings: (data) => json("/app-orders/settings", "PUT", data),
   linkKadOsAccount: (user_id, customer_id) => json("/app-orders/links", "POST", { user_id, customer_id }),
@@ -888,7 +888,7 @@ export const api = {
   updateCampaign: (id, data) => json(`/app-orders/campaigns/${id}`, "PATCH", data),
   deleteCampaign: (id) => request(`/app-orders/campaigns/${id}`, { method: "DELETE" }),
 
-  // Bonuses challenge templates/rounds admin (see server/src/routes/bonusChallenges.js)
+  // Bonuses challenge templates/rounds admin (see server/src/bonus/routes/bonusChallenges.js)
   // -- canManageBonusChallenges (admin/ceo) server-side already.
   listChallengeTemplates: (status) => request(`/bonus-challenges/templates${status ? `?status=${status}` : ""}`),
   getChallengeTemplate: (id) => request(`/bonus-challenges/templates/${id}`),
@@ -897,7 +897,7 @@ export const api = {
   publishChallengeTemplate: (id) => json(`/bonus-challenges/templates/${id}/publish`, "POST"),
   cancelChallengeTemplate: (id, reason) => json(`/bonus-challenges/templates/${id}/cancel`, "POST", { reason }),
 
-  // Reward claim review/payout (see server/src/routes/bonusRewardClaims.js)
+  // Reward claim review/payout (see server/src/bonus/routes/bonusRewardClaims.js)
   // -- listing is role-scoped server-side already (a reviewer sees
   // everything, a plain user sees only their own).
   listBonusRewardClaims: (status) => request(`/bonus-reward-claims${status ? `?status=${status}` : ""}`),
@@ -908,7 +908,7 @@ export const api = {
   payBonusRewardClaim: (id, paymentReference, expectedVersion) =>
     json(`/bonus-reward-claims/${id}/pay`, "POST", { payment_reference: paymentReference, expected_version: expectedVersion }),
 
-  // Employee-facing "my Bonuses" summary (see server/src/routes/bonusSummary.js)
+  // Employee-facing "my Bonuses" summary (see server/src/bonus/routes/bonusSummary.js)
   // -- always scoped to the caller; 404s while bonuses_enabled is off.
   getBonusSummary: () => request("/bonus-summary"),
 };

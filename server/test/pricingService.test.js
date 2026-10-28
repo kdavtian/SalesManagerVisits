@@ -5,7 +5,7 @@
 // fallback logic needs direct coverage independent of any one surface.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getEffectiveProductPricing, isPromoActive, dateOnly } from "../src/pricingService.js";
+import { getEffectiveProductPricing, isPromoActive, dateOnly } from "../src/products/pricingService.js";
 
 const baseProduct = { bronze_price_amd: "10000", unit_price_amd: "12000", retail_price_amd: "15000" };
 

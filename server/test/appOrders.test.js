@@ -1,10 +1,10 @@
-// KAD OS app-order rules (server/src/appOrders.js): delivery promise, campaign pricing, app discount, statuses, levels and streak.
+// KAD OS app-order rules (server/src/orders/appOrders.js): delivery promise, campaign pricing, app discount, statuses, levels and streak.
 import "dotenv/config"; // appOrders.js imports db/pool.js, which needs DATABASE_URL at import time
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
   computePromisedDate, applyCampaigns, appDiscountAmd, partnerStatus, levelProgress, streakWeeks, validateSettingsPatch, normalizeSettings, APP_ORDER_DEFAULTS,
-} from "../src/appOrders.js";
+} from "../src/orders/appOrders.js";
 
 // 2026-10-21 is a Wednesday. Yerevan is UTC+4, so 08:00Z = 12:00 local, 12:00Z = 16:00 local.
 const at = (iso) => new Date(iso);

@@ -3,7 +3,7 @@
 Owner, 2026-10-25: "there is a very high risk that sales reps collect cash and do not record it in the app". Vaghinak watches for the signs;
 management (admin, CEO, operations director) decides. Nothing here blocks a rep or changes money.
 
-Code: `server/src/antiFraud.js` (detectors, risk score, learning, weekly check calls), `server/src/routes/antiFraud.js` (`/api/anti-fraud`),
+Code: `server/src/money/antiFraud.js` (detectors, risk score, learning, weekly check calls), `server/src/money/routes/antiFraud.js` (`/api/anti-fraud`),
 tables in `migrations/151_anti_fraud.sql`, tab in `client/public/js/views/vaghinak.js`. Runs every hour and right after each Excel sync.
 
 | Kind | What it means | Default limit |

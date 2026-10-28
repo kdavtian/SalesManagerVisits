@@ -1,6 +1,6 @@
 // Cash custody chain screen -- the hand-to-hand journey of the physical
 // cash, layered on top of the Payments screen (see
-// server/src/routes/cashHandoffs.js and migrations/059_cash_handoffs.sql).
+// server/src/money/routes/cashHandoffs.js and migrations/059_cash_handoffs.sql).
 //
 // Two halves:
 //   "Hand over"  -- what the signed-in user currently holds (or, for a

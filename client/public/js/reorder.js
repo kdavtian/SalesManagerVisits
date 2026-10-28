@@ -1,6 +1,6 @@
 // "Order usual" / "Reorder" helpers shared by the customer list/map, check-in result, task sheet,
 // order detail sheets and the order screen. Data comes from GET /api/customers/:id/reorder-profile
-// (server/src/customerReorder.js); the ordering rhythm chip from the customer list / map facts.
+// (server/src/customers/customerReorder.js); the ordering rhythm chip from the customer list / map facts.
 import { api } from "./api.js";
 import { t } from "./i18n.js";
 

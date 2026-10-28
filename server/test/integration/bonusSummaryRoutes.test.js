@@ -6,7 +6,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { setBonusesEnabled } from "../../src/bonusSettings.js";
+import { setBonusesEnabled } from "../../src/bonus/bonusSettings.js";
 
 let manager;
 let cookie;

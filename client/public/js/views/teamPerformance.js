@@ -492,7 +492,7 @@ async function renderManagementView(root, navigate, managerId, initialTab = null
       // A rejected plan is editable/resubmittable exactly like a draft --
       // being sent back for revision is the whole point of "rejected"; see
       // the matching comments on PUT /targets/:channelId and POST /submit
-      // in server/src/routes/teamPerformance.js for why (it used to be a
+      // in server/src/reports/routes/teamPerformance.js for why (it used to be a
       // dead end with no way back to draft).
       const isEditableStatus = plan.status === "draft" || plan.status === "rejected";
       const canSubmit = isEditableStatus && plan.targets.length > 0;

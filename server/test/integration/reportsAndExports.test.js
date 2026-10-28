@@ -1,12 +1,12 @@
-// API coverage for Reports and exports: server/src/routes/reports.js
+// API coverage for Reports and exports: server/src/reports/routes/reports.js
 // (canAccessReport/requireReportAccess -- role-gated, admin-overridable via
-// report_access) and server/src/routes/exports.js (seesFinancialExports --
+// report_access) and server/src/system/routes/exports.js (seesFinancialExports --
 // entirely unpaginated CSVs, so a genuine large-export test matters here).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, createProduct, apiRequest, loginAs, trackOrder } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { REPORTS, canAccessReport } from "../../src/reports.js";
+import { REPORTS, canAccessReport } from "../../src/reports/reports.js";
 
 let users;
 let cookies;

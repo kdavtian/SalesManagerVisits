@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { runExpenseWatch, expenseSummary, recommendationsFor } from "../../src/expenseWatch.js";
+import { runExpenseWatch, expenseSummary, recommendationsFor } from "../../src/money/expenseWatch.js";
 
 const CAT = `ItestExp${Date.now()}`;
 const NOW = new Date("2026-10-20T08:00:00Z"); // Tuesday 12:00 in Yerevan, day 20 of the month

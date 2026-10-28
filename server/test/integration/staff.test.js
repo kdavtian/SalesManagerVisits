@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { computeMonthPay, monthBounds, parseSalaryInfo, salaryKeyMatches, normalizeStaffSettings } from "../../src/payroll.js";
+import { computeMonthPay, monthBounds, parseSalaryInfo, salaryKeyMatches, normalizeStaffSettings } from "../../src/money/payroll.js";
 
 const REP = { fixed_salary_amd: 200000, visit_based: true, min_visit_pct: null, paid_dayoffs_per_month: 0, commission_basis: "none", commission_pct: 0 };
 // October 2026: 31 days, 4 Sundays (4, 11, 18, 25) -> 27 working days (the owner's example: 200,000 / 27 = 7,407)

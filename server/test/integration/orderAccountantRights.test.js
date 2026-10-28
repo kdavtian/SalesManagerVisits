@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, createProduct, loginAs, apiRequest, trackOrder } from "./helpers.js";
-import { canConfirmSubmittedOrders, canRequestAccountingDocs, canSubmitOrdersForOthers, canConfirmOrders } from "../../src/roles.js";
+import { canConfirmSubmittedOrders, canRequestAccountingDocs, canSubmitOrdersForOthers, canConfirmOrders } from "../../src/shared/roles.js";
 
 test.before(startTestServer);
 test.after(async () => {

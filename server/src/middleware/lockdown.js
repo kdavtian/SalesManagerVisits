@@ -1,4 +1,4 @@
-import { getLockdownState } from "../settings.js";
+import { getLockdownState } from "../shared/settings.js";
 
 // A tiny allow-list of paths that must keep working while lockdown is on --
 // otherwise nobody, including the admin who flipped it on, could ever get

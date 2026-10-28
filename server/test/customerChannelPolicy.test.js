@@ -1,10 +1,10 @@
-// Customer tier and sales-channel policy (server/src/customerChannelPolicy.js,
-// server/src/salesChannelAutofill.js).
+// Customer tier and sales-channel policy (server/src/customers/customerChannelPolicy.js,
+// server/src/customers/salesChannelAutofill.js).
 import "dotenv/config"; // salesChannelAutofill.js imports db/pool.js, which needs DATABASE_URL set at import time
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeCustomerPortfolio } from "../src/customerChannelPolicy.js";
-import { channelFromPosition } from "../src/salesChannelAutofill.js";
+import { normalizeCustomerPortfolio } from "../src/customers/customerChannelPolicy.js";
+import { channelFromPosition } from "../src/customers/salesChannelAutofill.js";
 
 function runMiddleware(fn, body) {
   const req = { body };

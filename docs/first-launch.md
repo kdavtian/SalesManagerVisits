@@ -8,7 +8,7 @@
 3. **Nothing was painted** until the JavaScript had built the first screen (first paint = 6 s on the rig).
 
 ## What changed
-- `server/src/modulePreload.js` reads `bootGate.js` and follows the static `import`s, once at start-up, and `index.html` gets one `<link rel="modulepreload">` per module (39 files, about 215 KB compressed). The browser now fetches them all in parallel from the first byte. Nothing is evaluated earlier, so the module order is unchanged. New modules imported by a boot module are picked up automatically; nothing to maintain.
+- `server/src/system/modulePreload.js` reads `bootGate.js` and follows the static `import`s, once at start-up, and `index.html` gets one `<link rel="modulepreload">` per module (39 files, about 215 KB compressed). The browser now fetches them all in parallel from the first byte. Nothing is evaluated earlier, so the module order is unchanged. New modules imported by a boot module are picked up automatically; nothing to maintain.
 - `app.js` starts `/api/me` together with `/api/lockdown`. Lockdown still decides first.
 - `index.html` has a tiny inline spinner (`.boot-splash`) that disappears as soon as anything else is rendered into `#app`.
 - Calculator Mode: neither the preload hints nor the spinner are emitted (the mode promises that nothing of the real app is fetched or shown before the unlock code). Covered by `test/integration/bootPreload.test.js`.

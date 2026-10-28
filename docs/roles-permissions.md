@@ -1,6 +1,6 @@
 # Roles and permissions
 
-Seven roles, defined in `server/src/roles.js`. Access control is
+Seven roles, defined in `server/src/shared/roles.js`. Access control is
 **entirely application-code enforcement** — every capability below is a
 function checked in a route handler, not a database-level policy. See
 [`governance/service-objectives-and-security.md`](governance/service-objectives-and-security.md)
@@ -94,7 +94,7 @@ shorthand for "full authority."
 
 ## Where this is enforced
 
-Every function above lives in `server/src/roles.js` and is imported
+Every function above lives in `server/src/shared/roles.js` and is imported
 directly into route handlers (`server/src/routes/*.js`) — there is no
 central "permission table" separate from the code. If this doc and the
 code ever disagree, the code wins; open a PR to fix whichever is wrong.

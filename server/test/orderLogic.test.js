@@ -1,9 +1,9 @@
-// Pure order business logic (server/src/routes/orders.js): the v3 status
+// Pure order business logic (server/src/orders/routes/orders.js): the v3 status
 // machine, the discount calculation, and the daily order-code format.
 import "dotenv/config"; // routes/orders.js imports db/pool.js, which needs DATABASE_URL set at import time
 import test from "node:test";
 import assert from "node:assert/strict";
-import { NEXT_STATUS, applyDiscount, formatOrderCode } from "../src/routes/orders.js";
+import { NEXT_STATUS, applyDiscount, formatOrderCode } from "../src/orders/routes/orders.js";
 
 test("NEXT_STATUS: the exact v3 status machine, draft -> submitted -> confirmed -> packed_stock_out -> delivered", () => {
   assert.deepEqual(NEXT_STATUS.draft, ["submitted"]);

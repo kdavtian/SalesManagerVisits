@@ -1,4 +1,4 @@
-// API coverage for Check-ins, GPS, and photos (server/src/routes/checkins.js).
+// API coverage for Check-ins, GPS, and photos (server/src/field/routes/checkins.js).
 // Offline-queue duplicate resubmission (client_ref idempotency) is already
 // covered by offlineIdempotency.test.js and deliberately not repeated here.
 //

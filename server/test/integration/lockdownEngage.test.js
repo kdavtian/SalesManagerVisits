@@ -1,4 +1,4 @@
-// The real engage-then-lift round trip for server/src/routes/lockdown.js,
+// The real engage-then-lift round trip for server/src/system/routes/lockdown.js,
 // kept in its own file and run in isolation (see package.json's separate
 // "test:lockdown" step, chained after the main parallel suite) rather than
 // alongside the rest of test/integration/.
@@ -58,7 +58,7 @@ test("POST /api/lockdown/engage and /lift: engaging invalidates every session in
     // Guarantee this always clears however the assertions above landed --
     // lockdown is process-wide shared state that must never leak into any
     // other test run against this database.
-    const { setLockdown } = await import("../../src/settings.js");
+    const { setLockdown } = await import("../../src/shared/settings.js");
     await setLockdown(false, null);
   }
 });

@@ -1,4 +1,4 @@
-// GET /api/customers in pages (server/src/routes/customers.js): the Customers screen reads the list 500 at a time,
+// GET /api/customers in pages (server/src/customers/routes/customers.js): the Customers screen reads the list 500 at a time,
 // each page continuing after the last customer of the previous one (after_name + after_id), the pickers ask for just
 // their first 8-30 matches (limit), and a call without limit still returns everything (the Map needs that).
 import test from "node:test";

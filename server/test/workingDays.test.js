@@ -1,11 +1,11 @@
-// Working-day calendar math (server/src/workingDays.js) -- Mon-Sat is a
+// Working-day calendar math (server/src/shared/workingDays.js) -- Mon-Sat is a
 // working day, Sunday never is, company_holidays are the only other
 // exception. Every pacing/forecast number in Team Performance is built on
 // this.
 import "dotenv/config"; // workingDays.js imports db/pool.js, which needs DATABASE_URL set at import time
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isWorkingDayOfWeek, computeWorkingDays } from "../src/workingDays.js";
+import { isWorkingDayOfWeek, computeWorkingDays } from "../src/shared/workingDays.js";
 
 function utc(y, m, d) {
   return new Date(Date.UTC(y, m, d));

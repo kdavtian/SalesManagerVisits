@@ -142,7 +142,7 @@ export, not app-owned data.
 - **Almost every table references `users(id)`** (creator, actor, or
   subject) with **no `ON DELETE CASCADE`** — this is why deleting a user
   who has ever done anything in the app fails with a foreign-key
-  violation; see the fix in `server/src/routes/users.js`'s `DELETE
+  violation; see the fix in `server/src/team/routes/users.js`'s `DELETE
   /:id` handler for the current behavior (a clear 409, not a raw error).
 - **Immutable-history pattern**: `order_status_history` and
   `payment_status_history` both use a `BEFORE UPDATE` trigger that

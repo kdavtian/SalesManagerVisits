@@ -1,5 +1,5 @@
 // Admin > Pin review: customers whose PIN is probably wrong (not the rep's GPS) -- two or more check-ins from
-// the same spot, all farther than the Check-in allowance from the pin (server/src/pinReview.js). Move the pin
+// the same spot, all farther than the Check-in allowance from the pin (server/src/customers/pinReview.js). Move the pin
 // to that spot in one tap, say "pin is fine", or open the map to look first.
 import { api } from "../api.js";
 import { t } from "../i18n.js";

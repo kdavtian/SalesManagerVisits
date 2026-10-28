@@ -4,8 +4,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, createProduct, apiRequest, apiFormRequest, loginAs, trackCheckin, trackOrder } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { createDebtCollectionTasks, createReorderFollowupTasks } from "../../src/debtCollectionTasks.js";
-import { queueReportLabel, queueSyncNotice, flushSyncNotices } from "../../src/syncNotifier.js";
+import { createDebtCollectionTasks, createReorderFollowupTasks } from "../../src/money/debtCollectionTasks.js";
+import { queueReportLabel, queueSyncNotice, flushSyncNotices } from "../../src/erp/syncNotifier.js";
 
 const stamp = Date.now();
 const erpIds = [];

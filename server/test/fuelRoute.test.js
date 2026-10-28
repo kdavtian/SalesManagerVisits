@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { splitCheckins, buildWaypoints, isYerevanPoint, fuelFor, haversineKm, estimateLegs, cityShare } from "../src/fuelRoute.js";
+import { splitCheckins, buildWaypoints, isYerevanPoint, fuelFor, haversineKm, estimateLegs, cityShare } from "../src/field/fuelRoute.js";
 
 const ci = (time, lat, lng, extra = {}) => ({ timestamp: `2031-03-03T${time}:00Z`, lat, lng, within_range: true, customer_name: `C${time}`, region: null, ...extra });
 const ARAGATS = { lat: 40.9, lng: 44.4 }; // far outside Yerevan

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isValidTin, extractByLabels, parseCompanyText } from "../src/registryLookup.js";
+import { isValidTin, extractByLabels, parseCompanyText } from "../src/customers/registryLookup.js";
 
 test("isValidTin: exactly 8 digits", () => {
   assert.equal(isValidTin("02256083"), true);

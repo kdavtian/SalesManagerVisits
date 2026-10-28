@@ -4,8 +4,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { debtHoldInfo, DEBT_HOLD_DAYS } from "../../src/debtAge.js";
-import { buildDebtSnapshot, compareSnapshots, formatDigest, sendWeeklyDebtDigest } from "../../src/debtDigest.js";
+import { debtHoldInfo, DEBT_HOLD_DAYS } from "../../src/money/debtAge.js";
+import { buildDebtSnapshot, compareSnapshots, formatDigest, sendWeeklyDebtDigest } from "../../src/money/debtDigest.js";
 import { yerevanToday } from "../../src/utils/yerevanDate.js";
 
 const stamp = Date.now();

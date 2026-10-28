@@ -5,8 +5,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { mergeScopeIds, parseScope, scopesFor } from "../../src/planScopes.js";
-import { planRepByScope } from "../../src/routePlanSets.js";
+import { mergeScopeIds, parseScope, scopesFor } from "../../src/field/planScopes.js";
+import { planRepByScope } from "../../src/field/routePlanSets.js";
 
 let admin, adminCookie, repCookie, rep;
 let m1, m2, b1, b2;

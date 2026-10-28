@@ -1,5 +1,5 @@
 // Manual link between an app order and its Excel order. The automatic match
-// (server/src/erpAutoMatch.js) only acts on a unique customer + date + total
+// (server/src/erp/erpAutoMatch.js) only acts on a unique customer + date + total
 // twin; when the accountant changed the order in Excel it finds none and the
 // order would wait for ever. This sheet lists the free Excel orders of the
 // same customer (closest total first) and links the one the user taps.

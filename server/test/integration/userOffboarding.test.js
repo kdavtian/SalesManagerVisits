@@ -1,4 +1,4 @@
-// Pause / offboard a rep (server/src/routes/users.js, migration 135): the account is switched off but kept, customers and open tasks can be
+// Pause / offboard a rep (server/src/team/routes/users.js, migration 135): the account is switched off but kept, customers and open tasks can be
 // handed over region by region in the same step, and the person disappears from rep lists and leaderboards.
 // Logins are kept to a handful (the login limiter is shared by the whole process, see usersRoles.test.js).
 import test from "node:test";

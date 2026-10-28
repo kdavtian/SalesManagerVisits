@@ -110,7 +110,7 @@ test("creating a potential customer can carry its level", async () => {
 });
 
 test("follow-up priority: higher level first among prospects, a due follow-up date is a reason of its own", async () => {
-  const { visitPriorities } = await import("../../src/visitPriorities.js");
+  const { visitPriorities } = await import("../../src/field/visitPriorities.js");
   const solo = await createUser("sales_manager");
   const mk = async (level, extra = {}) => {
     const c = await createCustomer({ created_by: solo.id, assigned_manager_id: solo.id, sales_channel: "SM YVN" });

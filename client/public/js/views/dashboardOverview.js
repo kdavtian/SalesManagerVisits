@@ -194,7 +194,7 @@ export async function renderDashboardOverview(root, navigate) {
 // (perf_plan_targets.sales_target_amd, summed per channel/rep) instead of
 // sales_performance's Excel-synced budget_amd column -- that column
 // carried stale/unreliable values unrelated to the real approved plan
-// (see server/src/routes/salesPerformance.js's GET / for the full story),
+// (see server/src/reports/routes/salesPerformance.js's GET / for the full story),
 // so the server now does that join itself and returns the field already
 // named plan_amd.
 function renderPlanSalesSection(leaderboard) {
@@ -245,7 +245,7 @@ function renderPlanSalesSection(leaderboard) {
 
 // Today/WTD: total sales + total collected read straight off the
 // daily-management report's own day_amd/wtd_amd columns (see
-// server/src/routes/reports.js -- the same erp_daily_report row already
+// server/src/reports/routes/reports.js -- the same erp_daily_report row already
 // carries every period's totals). No plan bar here: the plan figure is a
 // monthly one (see PLAN_PERIODS above), and there's no daily/weekly target
 // to compare against, so faking one would be misleading rather than just
@@ -331,7 +331,7 @@ function formatLiters(value) {
 // unit count -- a unit count on its own can't be compared across products
 // (a "1" for a 208L drum and a "1" for a 1L bottle mean very different
 // amounts of oil). GET /products already returns stock_qty per active
-// product (see server/src/routes/products.js) -- brand grouping is a
+// product (see server/src/products/routes/products.js) -- brand grouping is a
 // client-side reduce rather than a new server aggregation, since the flat
 // list is small enough to fold in JS.
 function renderInventorySection(products) {

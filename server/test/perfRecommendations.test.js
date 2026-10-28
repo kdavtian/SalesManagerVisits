@@ -4,8 +4,8 @@
 // perfRecommendations.js's own header comment.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { kpiProgress } from "../src/perfCalc.js";
-import { buildRecommendations, buildNeedsAttention } from "../src/perfRecommendations.js";
+import { kpiProgress } from "../src/reports/perfCalc.js";
+import { buildRecommendations, buildNeedsAttention } from "../src/reports/perfRecommendations.js";
 
 const wd = { elapsedWorkingDays: 10, totalWorkingDays: 20, remainingWorkingDays: 10 };
 

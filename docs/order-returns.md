@@ -22,7 +22,7 @@ Excel records a return as a negative-quantity order line. After each ERP sync `m
 | admin, ceo, operations_director, sales_director, accountant | any order | yes | | accountant, admin |
 | warehouse_manager | | | yes (admin too) | |
 
-Server guards: `canApproveReturns`, `canReceiveReturns`, `canRecordReturns` in `server/src/roles.js`; the real boundary is `server/src/routes/returns.js`.
+Server guards: `canApproveReturns`, `canReceiveReturns`, `canRecordReturns` in `server/src/shared/roles.js`; the real boundary is `server/src/orders/routes/returns.js`.
 
 ## Where in the app
 

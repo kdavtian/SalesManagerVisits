@@ -5,7 +5,7 @@
 //   node scripts/integration-token.mjs revoke <id>
 // The plaintext token is printed once by `create` and never stored.
 import { pool } from "../src/db/pool.js";
-import { createIntegrationToken, listIntegrationTokens, revokeIntegrationToken } from "../src/integrationTokens.js";
+import { createIntegrationToken, listIntegrationTokens, revokeIntegrationToken } from "../src/erp/integrationTokens.js";
 
 const [cmd, arg] = process.argv.slice(2);
 try {

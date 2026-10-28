@@ -65,7 +65,7 @@ CREATE INDEX pod_records_driver_id_idx ON pod_records (driver_id);
 
 -- A delivery route is one driver's ordered stop list for a day, built by
 -- the route planner (nearest-neighbor + 2-opt against OSRM, or a
--- straight-line fallback -- see server/src/osrm.js) and then hand-adjusted
+-- straight-line fallback -- see server/src/orders/osrm.js) and then hand-adjusted
 -- by drag-reorder. Distinct from the existing SM "Plan day" visit-plan
 -- tool (visit_plans table), which plans customer visits, not deliveries.
 CREATE TABLE delivery_routes (

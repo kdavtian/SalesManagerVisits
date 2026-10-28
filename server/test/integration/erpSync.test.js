@@ -1,4 +1,4 @@
-// API coverage for ERP synchronization (server/src/routes/erpSync.js):
+// API coverage for ERP synchronization (server/src/erp/routes/erpSync.js):
 // missing/wrong X-Sync-Key (a "missing external service"/auth case -- the
 // route rejects everything when ERP_SYNC_KEY isn't configured at all,
 // which is this app's actual production default per app.js's startup log),
@@ -560,7 +560,7 @@ test("POST /api/erp-sync: Retail price from Excel is stored, listed as a differe
 // 2026-10-24: the returns step threw on a database without migration 143 and the whole sync rolled back, so nothing was updated. An optional
 // step now runs in a SAVEPOINT: its failure is reported, the rest of the transaction (the sync) goes on.
 test("optionalSyncStep: a failing derived step is skipped, the transaction stays usable and the failure is reported", async () => {
-  const { optionalSyncStep } = await import("../../src/routes/erpSync.js");
+  const { optionalSyncStep } = await import("../../src/erp/routes/erpSync.js");
   const client = await pool.connect();
   try {
     await client.query("BEGIN");

@@ -4,8 +4,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, loginAs, apiRequest, trackCheckin } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { setRouteProvider, resetRouteState } from "../../src/fuelRoute.js";
-import { setRouteGraceMs } from "../../src/fuelReport.js";
+import { setRouteProvider, resetRouteState } from "../../src/field/fuelRoute.js";
+import { setRouteGraceMs } from "../../src/field/fuelReport.js";
 
 const MONTH = "2031-03";
 test.before(async () => {

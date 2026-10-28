@@ -2,8 +2,8 @@
 // Yerevan time, and stale packed orders are reminded about as ONE batch.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isSummaryWindow, summaryDayKey } from "../src/dailySummary.js";
-import { buildStalePackedMessage, isWarehouseWorkingTime } from "../src/stalePackedReminder.js";
+import { isSummaryWindow, summaryDayKey } from "../src/reports/dailySummary.js";
+import { buildStalePackedMessage, isWarehouseWorkingTime } from "../src/orders/stalePackedReminder.js";
 
 test("daily summary window is 19:00-21:59 Yerevan time (UTC+4)", () => {
   assert.equal(isSummaryWindow(new Date("2026-10-08T14:59:00Z")), false); // 18:59 Yerevan

@@ -2,7 +2,7 @@
 // period, product, channel and place, with comparison, breakdowns, an "all periods at a glance" table and charts
 // (trend vs the comparison period, month by month this year vs last, share of the breakdown).
 // One screen answers: "how many liters of Castrol this month / last year / YTD", "Magnatec 5W-30 C3 in Yerevan
-// Ajapnyak", "Royal 0W-8 sold by SM YVN or CVO" ... (server/src/volumeReport.js).
+// Ajapnyak", "Royal 0W-8 sold by SM YVN or CVO" ... (server/src/reports/volumeReport.js).
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { escapeHtml, openInfoPopup, channelDisplayLabel, regionLabelHy, subregionLabelHy, syncBadgeHtml, saveBlob, formatDateDMY } from "../util.js";

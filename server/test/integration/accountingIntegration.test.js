@@ -17,7 +17,7 @@ import {
   trackOrder,
 } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { createIntegrationToken } from "../../src/integrationTokens.js";
+import { createIntegrationToken } from "../../src/erp/integrationTokens.js";
 
 const tokenIds = [];
 test.before(startTestServer);

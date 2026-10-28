@@ -10,8 +10,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { recordSyncRun } from "../../src/erpSyncStatus.js";
-import { checkWorkbookAge, hoursWithoutWeekends } from "../../src/erpSyncMonitor.js";
+import { recordSyncRun } from "../../src/erp/erpSyncStatus.js";
+import { checkWorkbookAge, hoursWithoutWeekends } from "../../src/erp/erpSyncMonitor.js";
 
 const FILE = `itest-status-${process.pid}.xlsx`;
 let admin;

@@ -1,4 +1,4 @@
-// ERP sync payload transforms (server/src/erpTransform.js) -- what the
+// ERP sync payload transforms (server/src/erp/erpTransform.js) -- what the
 // bot's JSON push gets validated/normalized into before the bulk insert.
 // See docs/erp-sync-contract.md for the wire format these mirror.
 import test from "node:test";
@@ -15,7 +15,7 @@ import {
   transformErpSalesPerformance,
   transformErpProducts,
   transformErpBrandVolume,
-} from "../src/erpTransform.js";
+} from "../src/erp/erpTransform.js";
 
 // --- helpers ---------------------------------------------------------------
 

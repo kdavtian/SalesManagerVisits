@@ -21,9 +21,9 @@ import {
   ingestOrderDelivery,
   ingestOfficeAttendance,
   reverseSourceContribution,
-} from "../../src/bonusSourceIngest.js";
-import { reverseLedgerEntry } from "../../src/bonusLedger.js";
-import { setBonusSettings } from "../../src/bonusSettings.js";
+} from "../../src/bonus/bonusSourceIngest.js";
+import { reverseLedgerEntry } from "../../src/bonus/bonusLedger.js";
+import { setBonusSettings } from "../../src/bonus/bonusSettings.js";
 import { createUser, createCustomer, trackCheckin, trackPayment, trackOrder, cleanupAll } from "./helpers.js";
 
 const userIds = [];

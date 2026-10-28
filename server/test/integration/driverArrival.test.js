@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, createProduct, apiRequest, loginAs, trackOrder } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { normalizeArrivalSettings, validateArrivalPatch, ARRIVAL_DEFAULTS } from "../../src/driverArrival.js";
+import { normalizeArrivalSettings, validateArrivalPatch, ARRIVAL_DEFAULTS } from "../../src/orders/driverArrival.js";
 
 let rep, driver, admin, repCookie, driverCookie, adminCookie, customer, product, routeId;
 const HERE = { lat: 40.2, lng: 44.5 };

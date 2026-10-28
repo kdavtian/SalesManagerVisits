@@ -5,7 +5,7 @@ import "dotenv/config";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { pool } from "../../src/db/pool.js";
-import { updatePersonalBestsForWeek, lastCompletedWeekBounds, listPersonalBestsForUser } from "../../src/bonusPersonalBests.js";
+import { updatePersonalBestsForWeek, lastCompletedWeekBounds, listPersonalBestsForUser } from "../../src/bonus/bonusPersonalBests.js";
 import { yerevanWeekBounds } from "../../src/utils/yerevanDate.js";
 import { createUser, cleanupAll } from "./helpers.js";
 

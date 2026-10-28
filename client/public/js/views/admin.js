@@ -96,7 +96,7 @@ function purgeBlockHtml(purge) {
 
 // The one-case escape hatch for a test account that accumulated enough
 // check-ins/edit-requests/etc. to permanently 23503 out of DELETE /:id --
-// see server/src/routes/users.js's AUTO_CLEAR/MUST_RESOLVE for what's safe
+// see server/src/team/routes/users.js's AUTO_CLEAR/MUST_RESOLVE for what's safe
 // to auto-clear vs. what represents someone else's real record and has to
 // be resolved by hand first. `retryDelete` is the caller's own delete
 // attempt (already wired to show this sheet again on another 409), so a
@@ -811,7 +811,7 @@ export async function renderEditRequestsSection(container) {
   load();
 }
 
-// Places (owner, 2026-10-25): what the spelling autocorrect could not place, and a one-tap fix of the spellings already saved (server/src/routes/places.js).
+// Places (owner, 2026-10-25): what the spelling autocorrect could not place, and a one-tap fix of the spellings already saved (server/src/customers/routes/places.js).
 export async function renderPlacesSection(container) {
   container.innerHTML = `
     <h3 class="health-title">${t("places_review_title")}<button type="button" class="settings-hint-icon" id="places-hint" aria-label="${t("more_info")}">!</button></h3>
@@ -1910,7 +1910,7 @@ const DATA_QUALITY_FLAG_LABELS = {
   no_location: "data_quality_flag_no_location",
 };
 
-// Admin-only oversight tool (server/src/routes/dataQuality.js): surfaces
+// Admin-only oversight tool (server/src/system/routes/dataQuality.js): surfaces
 // customers missing an owner or sales channel (both nullable, and both a
 // silent gap in the app's own visibility/reporting logic rather than a
 // hard failure anywhere -- see the route's own comment), plus a same-
@@ -1983,7 +1983,7 @@ const DELIVERY_STATUS_BADGE = {
   expired: "badge-neutral",
 };
 
-// Admin-only oversight (server/src/routes/notifications.js's GET
+// Admin-only oversight (server/src/system/routes/notifications.js's GET
 // /delivery-log): what used to be visible only in server console output --
 // every push-delivery attempt, including retries (push.js retries a
 // transient failure twice more before giving up; each attempt is its own
@@ -2024,7 +2024,7 @@ const CLIENT_ERROR_KIND_BADGE = {
   slow_load: "badge-warning",
 };
 
-// Admin-only oversight (server/src/routes/clientErrors.js's GET /) --
+// Admin-only oversight (server/src/system/routes/clientErrors.js's GET /) --
 // window.onerror/unhandledrejection reports plus slow-page-load reports
 // from every user's device (see client/public/js/errorMonitoring.js),
 // which previously left no trace anywhere.

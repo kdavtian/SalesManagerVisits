@@ -1,5 +1,5 @@
 // Route plan SETS: several whole route plans that can be generated automatically ("Auto route plan"), rearranged,
-// saved as new plans and switched; one is active (server/src/routePlanSets.js). Three entry points:
+// saved as new plans and switched; one is active (server/src/field/routePlanSets.js). Three entry points:
 //   openAutoPlanSheet()          - frequency + working days -> creates a plan and opens it
 //   renderPlanSetsCard()         - the "Route plans" list on the Route Plans page
 //   renderRoutePlanSet()         - the editor (#/route-plan-sets/:id): week per rep, move customers between days, activate
