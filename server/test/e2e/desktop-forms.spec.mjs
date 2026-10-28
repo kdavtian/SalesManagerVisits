@@ -1,4 +1,4 @@
-import { test, expect, loginViaUi } from "./fixtures.mjs";
+import { test, expect, loginViaUi, pool } from "./fixtures.mjs";
 
 // docs/desktop-roadmap.md, step 9: on a computer the controls are mouse-sized. Page-wide buttons become normal buttons, a filter <select> is
 // the tables' dropdown chip, a cut-off text shows in full on hover, and a date is typed (or taken from the calendar) instead of the wheel.
@@ -49,6 +49,32 @@ test("desktop: normal-width buttons, select chips, hover text, typed date", asyn
   await field.fill("2026-11-05");
   await field.press("Enter");
   expect(await picked).toBe("2026-11-05");
+});
+
+test("desktop forms: Staff person form uses dropdown chips and saves the chosen value", async ({ page, fixtures }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const admin = await fixtures.createUser("admin");
+  const name = `Chip Person ${Date.now() % 100000}${Math.floor(Math.random() * 1000)}`;
+  await loginViaUi(page, admin.email);
+  await page.goto("/#/staff");
+  await page.locator('[data-tab="people"]').click();
+  await page.locator("#st-add").click();
+  const form = page.locator("#st-form");
+  await expect(form).toBeVisible();
+  await expect(form.locator('select[name="kind"]')).toBeHidden();
+  const kindChip = form.locator('select[name="kind"] + .desk-select-field');
+  await expect(kindChip).toBeVisible();
+  await kindChip.click();
+  await page.locator('.desk-pick-menu [data-value="warehouse"]').click();
+  await expect(kindChip).toContainText(/Warehouse/i);
+  await page.screenshot({ path: `${process.env.GB_SHOTS ?? "/tmp"}/staff-form-chips.png` });
+  await form.locator('[name="name"]').fill(name);
+  await form.locator('[name="position"]').fill("Storekeeper");
+  await form.locator('button[type="submit"]').click();
+  await expect(form).toHaveCount(0, { timeout: 10000 });
+  const { rows } = await pool.query("SELECT id, kind FROM staff_members WHERE name = $1", [name]);
+  fixtures.trackRow("staff_members", rows[0].id);
+  expect(rows[0].kind).toBe("warehouse");
 });
 
 test("phone keeps the native select and the wheel", async ({ page, fixtures }) => {

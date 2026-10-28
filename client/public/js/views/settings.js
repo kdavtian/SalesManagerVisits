@@ -14,6 +14,7 @@ import { renderKadOsPerksSection, renderKadOsCampaignsSection } from "./kadOsAdm
 import { renderDeliveryArrivalSection } from "./deliveryArrivalAdmin.js";
 import { renderDocumentTextsSection, renderVisitFrequencyTypesSection } from "./settingsDocTexts.js";
 import { openInfoPopup, formatAmd, escapeHtml, compressImage, activateDialog, attachSwipeToDismiss, formatPhoneDisplay, normalizePhone, downloadFromUrl, formatDateTime } from "../util.js";
+import { deskSelectChips } from "../deskTable.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
 import { statusBarTapAvailable, getStatusBarTapPref, setStatusBarTapPref } from "../statusBarTap.js";
@@ -1737,6 +1738,7 @@ async function renderNotificationDefaultsSection(slot) {
     <div class="card settings-list" id="notif-default-toggles"></div>
   `;
 
+  deskSelectChips(slot);
   const toggleList = slot.querySelector("#notif-default-toggles");
 
   function paintRole() {
@@ -1810,6 +1812,7 @@ async function renderReportsManagementSection(slot) {
     <div class="card settings-list" id="report-access-toggles"></div>
   `;
 
+  deskSelectChips(slot);
   const toggleList = slot.querySelector("#report-access-toggles");
 
   function paintReport() {

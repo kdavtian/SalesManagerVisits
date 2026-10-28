@@ -57,3 +57,12 @@ jobs:
           name: playwright-nightly-report
           path: server/playwright-report/
           retention-days: 14
+
+      # Desktop roadmap step 10: a screenshot of every main page at 1440 and 1920 px (desktop-shots.spec.mjs), kept two weeks.
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: desktop-shots
+          path: server/test-results/desktop-shots/
+          retention-days: 14
+          if-no-files-found: ignore

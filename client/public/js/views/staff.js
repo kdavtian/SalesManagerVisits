@@ -4,6 +4,7 @@
 import { api } from "../api.js";
 import { t, getLang } from "../i18n.js";
 import { activateDialog, escapeHtml, showToast, bindAmdInput, parseAmd } from "../util.js";
+import { deskSelectChips } from "../deskTable.js";
 
 const TABS = ["pay", "people", "tree", "rules"];
 const KINDS = ["executive", "director", "rep", "office", "warehouse", "driver"];
@@ -305,6 +306,7 @@ async function renderMain(root, navigate, month0, access, tab0) {
         ${p ? `<button type="button" class="btn btn-block btn-danger" id="st-del">${t("st_delete")}</button>` : ""}
       </form>`);
     bindAmdInput(overlay.querySelector('[name="fixed_salary_amd"]'));
+    deskSelectChips(overlay); // desktop: dropdown chips instead of window-wide selects (roadmap step 9)
     overlay.querySelector("#st-cancel").addEventListener("click", () => overlay.remove());
     const errEl = overlay.querySelector("#st-form-error");
     const showError = (m) => ((errEl.textContent = m), (errEl.hidden = false));
@@ -533,6 +535,7 @@ async function renderPerson(root, navigate, id, month0, access) {
         </div>
       </form>`);
     bindAmdInput(overlay.querySelector('[name="amount"]'));
+    deskSelectChips(overlay);
     overlay.querySelector("#st-item-cancel").addEventListener("click", () => overlay.remove());
     overlay.querySelector("#st-item-form").addEventListener("submit", async (e) => {
       e.preventDefault();

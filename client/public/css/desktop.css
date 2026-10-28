@@ -769,7 +769,7 @@
   }
   .desk-col-menu {
     position: fixed;
-    z-index: 950;
+    z-index: 2200; /* above sheets (2000) and dialogs (2100): a select chip inside a form sheet opens its menu on top */
     min-width: 200px;
     padding: 6px 0;
     background: var(--bg-card);
@@ -785,21 +785,14 @@
     text-transform: uppercase;
     color: var(--text-dim);
   }
+  /* One item style for every desktop menu: the column picker (labels with a checkbox) and the single-choice menus (<button>s). */
   .desk-col-menu-item {
     display: flex;
     align-items: center;
     gap: 10px;
+    width: 100%;
     min-height: 34px;
     padding: 0 14px;
-    font-size: 0.9rem;
-    cursor: pointer;
-  }
-  .desk-col-menu-item:hover {
-    background: var(--bg-card-pressed);
-  }
-  /* single-choice menus (openDeskMenu) are made of <button>s: no browser button look */
-  button.desk-col-menu-item {
-    width: 100%;
     border: 0;
     border-radius: 0;
     background: none;
@@ -807,9 +800,10 @@
     font: inherit;
     font-size: 0.9rem;
     text-align: left;
+    cursor: pointer;
   }
-  button.desk-col-menu-item:hover,
-  button.desk-col-menu-item:focus-visible {
+  .desk-col-menu-item:hover,
+  .desk-col-menu-item:focus-visible {
     background: var(--bg-card-pressed);
     outline: none;
   }
@@ -2011,5 +2005,17 @@
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+  }
+}
+@media (min-width: 1024px) {
+  /* a select chip inside a form: a field-shaped dropdown under its label (deskSelectChips) */
+  .desk-select-chip.desk-select-field {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    max-width: 360px;
+    min-height: 40px;
+    margin-top: 4px;
+    border-radius: 10px;
   }
 }
