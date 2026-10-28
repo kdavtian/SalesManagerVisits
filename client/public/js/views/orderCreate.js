@@ -13,6 +13,7 @@ import { searchProducts, debounce } from "../productSearch.js";
 import { numOrNull, tierPrice } from "../productPricing.js";
 import { loadReorderProfile, reorderRhythmText } from "../reorder.js";
 import { loadFrequentIds } from "../productFrequent.js";
+import { openWishSheet } from "../wishSheet.js";
 import { NON_ENGINE_CATEGORIES, CATEGORY_LABEL_KEY, productCategory, isAvailable, priceDiffChipHtml } from "../productBrowse.js";
 
 // Reps often open "Create order" several times a visit (once per checkin);
@@ -106,6 +107,8 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
   // Keyed by product id. No product can be sold out of catalog (decision C6), so every line is a real catalog
   // product. The cart survives every chip/search change, so items can come from several brands.
   const cart = new Map();
+  // Catalog products this customer already wished for (last 60 days, not back yet): their row says "Wished" instead of "Wish".
+  const wishedIds = new Set();
 
   // Which list is showing: "frequent" (default), a brand name or Merch. A search looks through ALL
   // products whatever the chip; category narrows whichever list is showing; showAll turns off the default
@@ -238,6 +241,17 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     updateCartBar();
   }).catch(() => {
     /* offline or not allowed to see debt: no warning, the server still checks */
+  });
+
+  api.listWishes(customerId).then((rows) => {
+    for (const w of rows) {
+      if (!w.product_id || w.back_in_stock_at || wishedIds.has(w.product_id)) continue;
+      wishedIds.add(w.product_id);
+      const product = catalogById.get(w.product_id);
+      if (product) rerenderRow(product);
+    }
+  }).catch(() => {
+    /* offline: rows offer "Wish" again; a second wish is harmless */
   });
 
   api.getOrderDefaults(customerId).then((d) => {
@@ -412,7 +426,9 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
                   <button type="button" class="icon-btn" data-action="inc" aria-label="${t("increase")}">&plus;</button>
                 </div>`
               : outOfStock
-              ? `<span class="badge badge-danger">${t("out_of_stock")}</span>`
+              ? wishedIds.has(product.id)
+                ? `<span class="badge oc-wished" title="${escapeHtml(t("out_of_stock"))}">${t("wish_wished")}</span>`
+                : `<button type="button" class="btn btn-sm oc-wish-btn" data-action="wish" aria-label="${escapeHtml(`${t("out_of_stock")}: ${t("wish_btn")}`)}">${t("wish_btn")}</button>`
               : `<button type="button" class="btn btn-sm" data-action="add">${t("add")}</button>`
           }
         </div>
@@ -443,6 +459,15 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
         rerenderRow(product, action);
         updateCartBar();
       };
+      if (action === "wish") {
+        btn.addEventListener("click", async () => {
+          if (await openWishSheet({ customerId, product })) {
+            wishedIds.add(product.id);
+            rerenderRow(product);
+          }
+        });
+        return;
+      }
       if (action === "inc" || action === "dec") {
         bindStepperButton(btn, {
           onTap: () => {
@@ -484,7 +509,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
   function renderListHead(shown) {
     const searching = Boolean(searchQuery.trim());
     let left = "";
-    if (searching) left = `<span class="oc-head-note muted">${t("oc_search_all").replace("{n}", String(shown.length))}</span>`;
+    if (searching) left = `<span class="oc-head-note muted">${t("oc_search_all").replace("{n}", String(shown.length))}</span>${newWishButton()}`;
     else if (view.chip === "frequent") {
       const addable = usualRows().filter((x) => isAvailable(x.product) && !cart.has(x.product.id));
       const note = reorderRhythmText(usualProfile?.cadence);
@@ -495,6 +520,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
       }
     }
     listHead.innerHTML = left ? `<div class="oc-list-head-row"><div class="oc-list-head-left">${left}</div></div>` : "";
+    wireNewWish(listHead);
     listHead.querySelector("#order-usual-add-all")?.addEventListener("click", () => {
       for (const { item, product } of usualRows()) if (isAvailable(product) && !cart.has(product.id)) addToCart(product, item.quantity);
       render();
@@ -503,6 +529,14 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     listHead.querySelector("#order-usual-info")?.addEventListener("click", () =>
       openInfoPopup(`<p>${escapeHtml(reorderRhythmText(usualProfile?.cadence))}</p><p class="muted">${t("usual_order_hint").replace("{n}", String(usualProfile?.orders_considered ?? 0))}</p>`)
     );
+  }
+
+  // "Product we don't have": a product we never carried, written down as a wish (starts with what the rep searched for).
+  function newWishButton() {
+    return `<button type="button" class="btn btn-sm oc-wish-new" data-wish-new>${t("wish_new_btn")}</button>`;
+  }
+  function wireNewWish(scope) {
+    scope.querySelector("[data-wish-new]")?.addEventListener("click", () => openWishSheet({ customerId, name: searchInput.value.trim() }));
   }
 
   function emptyText() {
@@ -522,7 +556,9 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     const base = baseList();
     renderCategories(base);
     let list = view.category ? base.filter((p) => productCategory(p) === view.category) : base;
-    if (!showAll) list = list.filter((p) => isAvailable(p) || cart.has(p.id));
+    // "Available only" hides what is out of stock while browsing; a search still shows it, because the rep looked for it by
+    // name: it cannot be added, only wished for ("Wish" on the row).
+    if (!showAll && !searchQuery.trim()) list = list.filter((p) => isAvailable(p) || cart.has(p.id));
     renderListHead(list);
     paintProductList(list, view.chip === "frequent" || Boolean(searchQuery.trim()));
     if (!list.length) listEl.innerHTML = `<p class="empty-state">${emptyText()}</p>`;

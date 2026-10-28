@@ -13030,6 +13030,37 @@ form select,
 .oc-list-head-left .btn {
   min-height: 40px;
 }
+/* Wishes (1.452.0): an out-of-stock row offers "Wish" instead of Add; a search offers "Product we don't have". */
+.oc-list-head-left:has(.oc-wish-new) {
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+}
+.oc-list-head-left:has(.oc-wish-new) .oc-head-note {
+  margin: 0;
+  flex: 1 1 150px;
+}
+.oc-wish-new {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+.oc-wish-btn {
+  min-height: 36px;
+  color: var(--accent);
+  border-color: var(--accent);
+  background: transparent;
+}
+.oc-wished {
+  background: rgba(255, 106, 19, 0.15);
+  color: var(--accent);
+}
+.wish-product {
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+.wish-hint {
+  font-size: 0.8rem;
+  margin: 4px 0 8px;
+}
 .order-product-row {
   position: relative;
 }
@@ -16001,3 +16032,74 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
   font-size: 0.86rem;
 }
 .team-locked-box .btn { flex: none; min-height: 40px; }
+
+/* Reports > Wished products (1.452.0) */
+.wish-report-summary {
+  margin: 0 4px 8px;
+}
+.wish-report-row {
+  padding: 0;
+}
+.wish-report-row > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+}
+.wish-report-row > summary::-webkit-details-marker {
+  display: none;
+}
+.wish-report-name {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.wish-report-name strong {
+  overflow-wrap: anywhere;
+}
+.wish-report-name .muted {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.wish-report-nums {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.wish-items {
+  list-style: none;
+  margin: 0;
+  padding: 0 14px 10px;
+  border-top: 1px solid var(--border);
+}
+.wish-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.wish-item:last-child {
+  border-bottom: 0;
+}
+.wish-item-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.wish-item-qty {
+  white-space: nowrap;
+}
+.wish-item-note {
+  font-style: italic;
+}

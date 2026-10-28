@@ -137,6 +137,7 @@ export async function renderReports(root, navigate, reportKey, { inPane = false 
   if (reportKey === "fuel_allowance") return (await import("./fuelReport.js")).renderFuelReport(root, navigate);
   if (reportKey === "orders_pipeline") return renderOrdersPipelineReport(root, navigate);
   if (reportKey === "brand_availability") return renderBrandAvailabilityReport(root, navigate);
+  if (reportKey === "product_wishes") return renderProductWishesReport(root, navigate);
   if (reportKey === "payments") return renderPaymentsReport(root, navigate);
   // Payments (Excel) now lives on the Sales page as its Payments tab.
   if (reportKey === "erp_payments") return navigate("#/sales?tab=payments");
@@ -266,7 +267,7 @@ async function renderReportsList(root, navigate) {
 const REPORT_GROUPS = [
   { id: "management", keys: ["daily_management", "weekly_scorecard", "sales_budget", "product_liters", "brand_volume"] },
   { id: "money", keys: ["customer_debt", "unpaid_invoices", "payments", "cash_custody", "cash_reconciliation"] },
-  { id: "orders", keys: ["orders_pipeline", "delivery_speed", "customer_pipeline", "new_customers", "brand_availability"] },
+  { id: "orders", keys: ["orders_pipeline", "delivery_speed", "customer_pipeline", "new_customers", "brand_availability", "product_wishes"] },
   { id: "team", keys: ["checkins", "fuel_allowance"] },
   { id: "documents", keys: ["documents"] },
 ];
@@ -301,6 +302,7 @@ const REPORT_ICONS = {
   delivery_speed: icons.route,
   orders_pipeline: icons.cart,
   brand_availability: icons.store,
+  product_wishes: icons.sparkles,
   payments: icons.payment,
   erp_payments: icons.wallet,
   cash_custody: icons.wallet,
@@ -1563,6 +1565,70 @@ async function renderBrandAvailabilityReport(root, navigate) {
           }
         </div>
       `;
+    } catch (err) {
+      body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  form.addEventListener("change", load);
+  await load();
+}
+
+// Wished products (1.452.0): what customers asked for that we did not have -- out-of-stock catalog products and products we never carried --
+// most wanted first (by customers, then quantity). Tap a row for who asked, how many, when and through whom.
+async function renderProductWishesReport(root, navigate) {
+  const periods = ["d30", "d90", "d365", "all"].map((p) => ({ value: p, label: t(`wish_period_${p}`) }));
+  root.innerHTML = `
+    <div class="detail-view">
+      ${reportHeaderHtml("report_product_wishes_name")}
+      <form id="report-filters" class="report-filter-form">${periodTabsHtml("period", periods, "d90")}</form>
+      <div id="report-body"><p class="loading-state" role="status">${t("loading")}</p></div>
+    </div>
+  `;
+  const container = root.querySelector(".detail-view");
+  container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/reports"));
+  const form = container.querySelector("#report-filters");
+  const body = container.querySelector("#report-body");
+
+  const itemHtml = (i) => `
+    <li class="wish-item">
+      <span class="wish-item-main"><strong>${escapeHtml(i.customer_name)}</strong><span class="wish-item-qty">× ${i.quantity}</span></span>
+      <span class="muted">${formatDateDMY(i.created_at)} · ${escapeHtml(i.source === "kados" ? t("wish_from_kados") : i.by || "")}${
+        i.back_in_stock_at ? ` · ${t("wish_back_on").replace("{date}", formatDateDMY(i.back_in_stock_at))}` : ""
+      }</span>
+      ${i.note ? `<span class="muted wish-item-note">${escapeHtml(i.note)}</span>` : ""}
+    </li>`;
+
+  async function load() {
+    body.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+    try {
+      const { rows } = await api.getProductWishesReport({ period: new FormData(form).get("period") });
+      const people = rows.reduce((n, r) => n + r.customers, 0);
+      body.innerHTML = rows.length
+        ? `<p class="muted wish-report-summary">${t("wish_report_summary").replace("{n}", String(rows.length)).replace("{c}", String(people))}</p>
+          <div class="card-list wish-report-list">
+            ${rows
+              .map(
+                (r) => `
+              <details class="card wish-report-row">
+                <summary>
+                  <span class="wish-report-name">
+                    <strong>${escapeHtml(r.name)}</strong>
+                    <span class="muted">${[r.brand, r.unit].filter(Boolean).map(escapeHtml).join(" · ")}${
+                      r.new_product ? `<span class="badge badge-accent">${t("wish_new_product")}</span>` : r.in_stock_now ? `<span class="badge badge-success">${t("wish_in_stock_now")}</span>` : `<span class="badge badge-danger">${t("out_of_stock")}</span>`
+                    }</span>
+                  </span>
+                  <span class="wish-report-nums">
+                    <strong>${t("wish_customers_n").replace("{n}", String(r.customers))}</strong>
+                    <span class="muted">${t("wish_qty_n").replace("{n}", String(r.quantity))}</span>
+                  </span>
+                </summary>
+                <ul class="wish-items">${r.items.map(itemHtml).join("")}</ul>
+              </details>`
+              )
+              .join("")}
+          </div>`
+        : `<p class="empty-state">${t("wish_report_empty")}</p>`;
     } catch (err) {
       body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     }

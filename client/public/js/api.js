@@ -784,6 +784,12 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/reports/brand-availability${qs ? `?${qs}` : ""}`);
   },
+  getProductWishesReport: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/reports/product-wishes${qs ? `?${qs}` : ""}`);
+  },
+  addWish: (body) => json("/wishes", "POST", body),
+  listWishes: (customerId) => request(`/wishes?customer_id=${encodeURIComponent(customerId)}`),
   getPaymentsReport: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/reports/payments${qs ? `?${qs}` : ""}`);

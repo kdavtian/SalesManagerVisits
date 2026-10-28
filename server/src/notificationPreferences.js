@@ -58,6 +58,9 @@ export const NOTIFICATION_TYPES = [
   "fraud_alert",
   // Expense findings and the Monday report for management (see expenseWatch.js).
   "expense_alert",
+  // Wished products (productWishes.js): a new wish for management, and "available again" for the customer's rep.
+  "product_wish",
+  "wish_back_in_stock",
 ];
 
 // Warehouse Manager: an order just entered their queue.

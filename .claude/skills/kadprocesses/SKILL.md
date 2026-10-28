@@ -103,8 +103,15 @@ forecast, "needs attention" recommendations. Route plans: recurring rules + day 
 - 2026-10-28: sales director and above (ops director, CEO, admin) may move a CONFIRMED order back to submitted to change it, then confirm
   again; not once packed, not while accounting works on its documents (a pending accounting request is cancelled).
 - 2026-10-28: no order may ADD a product that is out of stock (Excel stock minus what open orders already promised <= 0), whatever the path
-  (KAD Motors app, KAD OS, edit, draft submit); unknown stock passes for staff, not for KAD OS. Server: `orderStock.js`. Wished /
-  missing products are to be collected separately (design pending the owner's answers).
+  (KAD Motors app, KAD OS, edit, draft submit); unknown stock passes for staff, not for KAD OS. Server: `orderStock.js`.
+- 2026-10-28: what a customer wants but we do not have is a **wish** (`product_wishes`, `productWishes.js`): an out-of-stock catalog product
+  ("Wish" on the order row; a search shows out-of-stock matches even with "Available only") or a product we never carried ("Product we
+  don't have", typed name). Never part of the order. Management (admin, CEO, ops + sales director) is notified at once and reads Reports >
+  Wished products (by product / typed name, most customers first). After an Excel sync a wished product that is available again notifies the
+  customer's rep once. KAD OS customers add wishes too (`/api/partner/wishes`) and see "back in stock".
+- 2026-10-28 (document flow answers): Mane fills the Castrol Excel **Cashflow and Sales sheets**; the director counts **per rep**; the daily
+  cash sheet is posted to the **existing accounting Telegram group by the bot**; paper slips are kept for a **transition month**, then dropped.
+  Build: V1 + V2 of `references/cash-collection-flow.md`.
 
 ## 6. How to propose a process change (what the owner expects)
 1. Describe the process as it runs today in 3-5 steps naming the person and the paper / screen at each step.

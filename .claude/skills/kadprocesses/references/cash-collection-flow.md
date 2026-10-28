@@ -1,4 +1,4 @@
-# Cash collection and the document flow (owner's description 2026-10-28, proposal status: suggested, not decided)
+# Cash collection and the document flow (owner's description 2026-10-28; V1 + V2 chosen the same day)
 
 ## Today (as the owner described it)
 1. Reps collect money in the field; sometimes they deliver goods and collect at the same visit. They record it in the app: order,
@@ -20,7 +20,7 @@ Where fraud can hide: rep collects and does not record; director counts short; a
 - "In Excel / not in Excel" on every payment; "Collected, not in Excel" on Debt balances; anti-fraud findings (not in Excel after 3 days,
   cash held > 3 days or > 1,000,000 AMD, late recording, bursts, repeated round amounts, KAD OS disputes, weekly check calls).
 
-## Proposed flow (suggested 2026-10-28; the owner has not chosen yet)
+## Chosen flow (V1 + V2, owner 2026-10-28)
 1. Rep at the shop (no change): payment recorded, amount pre-filled from the debt, customer signs the slip; cash without a slip is flagged.
 2. Rep at the office: taps **"Hand over today's cash"** -> one hand-off with all his unconfirmed payments and the total to put on the table.
 3. Sales director: counts, opens the hand-off, sees the list (date, ERP id, customer, amount, rep), taps **Confirm** or **Discrepancy**
@@ -39,8 +39,8 @@ mis-keying (import, mismatches surface automatically). Full trail per day: who c
 
 Depths offered: V1 = steps 2-4 (one release); V2 = + steps 5-6 (recommended with V1); V3 = customer-side confirmation (later).
 
-Open questions put to the owner (unanswered as of 2026-10-28):
-1. Which Excel sheet and columns does Mane fill today (so the file matches exactly)? The Castrol file's Cashflow / Cash sheet?
-2. Does the director count per rep or one pile for all? (Per rep = cleaner trail.)
-3. Telegram post to the existing accounting group, through the bot that already reads the Excel?
-4. Abolish the paper slips at once or keep them for a transition month?
+Owner's answers (2026-10-28):
+1. The file must match the Castrol Excel **Cashflow** and **Sales** sheets Mane fills today.
+2. The director counts **per rep** (one hand-off per rep).
+3. Yes: the bot posts to the **existing accounting Telegram group**.
+4. Paper slips stay for a **transition month**, then the app is the only record.
