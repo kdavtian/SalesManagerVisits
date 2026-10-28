@@ -40,6 +40,7 @@ const CLEANUP_ORDER = [
   "customer_level_audit",
   "customers",
   "products",
+  "staff_members",
   "users",
 ];
 

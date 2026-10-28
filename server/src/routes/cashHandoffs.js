@@ -22,6 +22,7 @@ import {
   canSubmitHandoffForOthers,
 } from "../roles.js";
 import { notifyUser } from "../notifications.js";
+import { createCashSheet, reportDiscrepancy } from "../cashSheets.js";
 
 export const cashHandoffsRouter = Router();
 cashHandoffsRouter.use(requireAuth);
@@ -110,8 +111,13 @@ cashHandoffsRouter.get("/available", async (req, res) => {
   const recipientRoles = validHandoffRecipientRoles(holder.role);
   const { rows: recipients } = recipientRoles.length
     ? await pool.query(
-        "SELECT id, name, role, position FROM users WHERE role = ANY($1) ORDER BY role, name",
-        [recipientRoles]
+        // The holder's own boss in Staff ("reports to") first, then the sales directors, then the rest -- the first one is what the
+        // one-tap "Hand over today's cash" uses, so a rep's cash goes to his director, never straight past him (document flow 2026-10-28).
+        `SELECT u.id, u.name, u.role, u.position FROM users u
+         WHERE u.role = ANY($1) AND u.status = 'active'
+         ORDER BY (u.id = (SELECT boss.user_id FROM staff_members me JOIN staff_members boss ON boss.id = me.reports_to WHERE me.user_id = $2 LIMIT 1)) DESC NULLS LAST,
+                  (u.role = 'sales_director') DESC, u.role, u.name`,
+        [recipientRoles, holderId]
       )
     : { rows: [] };
 
@@ -279,7 +285,15 @@ cashHandoffsRouter.get("/:id", async (req, res) => {
   res.json(handoff);
 });
 
+// Body (optional): counted_amd = what the receiver counted on the table; a different amount than the hand-off is a DISCREPANCY and needs a
+// note (document flow 2026-10-28). The custody still moves (the money is in the receiver's hands); the owner's side is told at once.
 cashHandoffsRouter.post("/:id/confirm", async (req, res) => {
+  const countedRaw = req.body?.counted_amd;
+  const counted = countedRaw === undefined || countedRaw === null || countedRaw === "" ? null : Number(countedRaw);
+  if (counted !== null && (!Number.isFinite(counted) || counted < 0 || counted >= 100000000000)) {
+    return res.status(400).json({ error: "counted_amd must be an amount" });
+  }
+  const discrepancyNote = String(req.body?.note ?? "").trim().slice(0, 500) || null;
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -299,11 +313,23 @@ cashHandoffsRouter.post("/:id/confirm", async (req, res) => {
       return res.status(409).json({ error: "This handoff has already been resolved" });
     }
 
+    const expected = Math.round(Number(handoff.amount_amd));
+    const discrepancy = counted !== null && Math.round(counted) !== expected;
+    if (discrepancy && !discrepancyNote) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "The counted amount differs: write what happened", code: "discrepancy_note_required" });
+    }
+
     const recipient = await getUser(handoff.to_user_id, client);
+    const sender = await getUser(handoff.from_user_id, client);
     await client.query(
-      `UPDATE cash_handoffs SET status = 'confirmed', confirmed_by = $1, confirmed_at = now() WHERE id = $2`,
-      [req.user.id, handoff.id]
+      `UPDATE cash_handoffs SET status = 'confirmed', confirmed_by = $1, confirmed_at = now(), counted_amd = $3, discrepancy_note = $4 WHERE id = $2`,
+      [req.user.id, handoff.id, counted ?? expected, discrepancy ? discrepancyNote : null]
     );
+    // A rep's cash (the first hop) makes the daily cash sheet that replaces the director's paper list; the bot posts it to the accountant.
+    if (sender?.role === "sales_manager") {
+      await createCashSheet(client, handoff, { directorId: req.user.id, countedAmd: counted ?? expected });
+    }
 
     // Custody moves; the in-flight lock clears either way.
     await client.query(
@@ -336,6 +362,11 @@ cashHandoffsRouter.post("/:id/confirm", async (req, res) => {
 
     await client.query("COMMIT");
 
+    if (discrepancy) {
+      reportDiscrepancy({ handoffId: handoff.id, repName: sender?.name ?? "—", directorName: recipient.name, expected, counted, note: discrepancyNote }).catch((err) =>
+        console.error("Discrepancy report failed:", err.message)
+      );
+    }
     notifyHandoff(handoff.from_user_id, "cash_handoff_reviewed", {
       title: "Կանխիկի հանձնումը հաստատվեց",
       body: `${recipient.name} · ${Number(handoff.amount_amd).toLocaleString()} AMD`,
@@ -440,7 +471,15 @@ async function loadHandoff(id) {
      ORDER BY p.sales_channel NULLS LAST, p.payment_date DESC`,
     [id]
   );
-  return { ...handoff, amount_amd: Number(handoff.amount_amd), payments: items, ...summarize(items) };
+  const { rows: sheet } = await pool.query("SELECT id, posted_at, recorded_at FROM cash_sheets WHERE handoff_id = $1", [id]);
+  return {
+    ...handoff,
+    amount_amd: Number(handoff.amount_amd),
+    counted_amd: handoff.counted_amd === null ? null : Number(handoff.counted_amd),
+    cash_sheet: sheet[0] ?? null,
+    payments: items,
+    ...summarize(items),
+  };
 }
 
 // Anyone on either end of the handoff, whoever declared it, or a role that

@@ -44,3 +44,19 @@ Owner's answers (2026-10-28):
 2. The director counts **per rep** (one hand-off per rep).
 3. Yes: the bot posts to the **existing accounting Telegram group**.
 4. Paper slips stay for a **transition month**, then the app is the only record.
+
+## Built (1.453.0 + CEO bot, 2026-10-28)
+- Rep: Home card "Hand over today's cash" (amount + count) -> one confirm step; the cash goes to the rep's Staff "reports to" boss first,
+  then a sales director (never straight to the accountant by default).
+- Director: the hand-off sheet has "Counted on the table" (starts at the expected total); a different amount = "Confirm with difference"
+  + a required note; the owner side (admin, CEO) gets a notification and a task. Reject asks the reason inside the sheet (no pop-ups).
+- Confirming a REP's hand-off makes the daily cash sheet (`cash_sheets`, migration 166; `server/src/cashSheets.js`). The CEO bot polls
+  `/api/erp-sync/cash-sheets/pending` every ~30 s and posts text + Excel to `telegram.upload_chat_ids` (or `cash_sheet_chat_ids`).
+  Excel: tab "Cashflow" = workbook Cash columns A..G (Date, Amount, Currency=AMD, For="Oil order", ID=Customer ID, Source=rep cash box
+  by channel: SM YVN->Cash YVN, SM Davtashen->Cash DVT, SM Shirak->Cash Shirak, else Cash, Info="rep · app <payment id> · sheet <n>");
+  tab "Sales" = orders the rep delivered himself that day (pod_records.driver_id = rep).
+- Accountant: Cash handovers page > "Daily cash sheets": Excel file, "Recorded in Excel" (undo in the toast); the sync closes a sheet by
+  itself when every payment of it matches an Excel Cashflow row ("Found in Excel").
+- Checks (every 30 min, working days): a rep's hand-off still pending at 20:00 -> task for the receiver; a sheet not recorded after 2 days
+  -> task for the accountant(s); a discrepancy -> task + notification for admin and CEO.
+- Paper slips: kept for the transition month (until ~2026-11-28), then dropped (owner's decision; no code involved).

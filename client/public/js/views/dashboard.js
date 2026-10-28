@@ -259,7 +259,7 @@ export async function renderDashboard(root, navigate) {
     </div>`
     }
 
-    ${state.user.role === "sales_manager" ? `<div id="today-plan-slot"></div><div id="visit-first-slot"></div>` : ""}
+    ${state.user.role === "sales_manager" ? `<div id="handover-slot"></div><div id="today-plan-slot"></div><div id="visit-first-slot"></div>` : ""}
 
     <div class="card progress-card" id="progress-card" ${
       // Management taps through to "Progress by reps" (reps as columns, metrics as rows); a rep's own card has
@@ -565,7 +565,25 @@ export async function renderDashboard(root, navigate) {
 
   const todayPlanSlot = container.querySelector("#today-plan-slot");
   if (todayPlanSlot) renderTodayPlan(todayPlanSlot, myPlan, customers, navigate);
+  const handoverSlot = container.querySelector("#handover-slot");
+  if (handoverSlot) renderHandoverCard(handoverSlot, navigate);
   }
+}
+
+// Document flow (1.453.0): a rep holding collected cash sees "Hand over today's cash" at the top of Home; one tap opens the one confirm step
+// (the money then waits for the director's count). Nothing shows when he holds nothing or is offline.
+function renderHandoverCard(slot, navigate) {
+  api
+    .getHandoffAvailable()
+    .then((d) => {
+      if (!d.count || !slot.isConnected) return;
+      slot.innerHTML = `<button type="button" class="card home-handover-card" id="home-handover">
+        <span><strong>${t("handover_today_title")}</strong><span class="muted">${t("handover_today_meta").replace("{amount}", formatAmd(d.total_amd)).replace("{n}", String(d.count))}</span></span>
+        <span class="btn btn-primary btn-sm">${t("handover_today_btn")}</span>
+      </button>`;
+      slot.querySelector("#home-handover").addEventListener("click", () => navigate("#/cash-handoffs?handover=1"));
+    })
+    .catch(() => {});
 }
 
 // Today's actual planned stops (see the myPlan fetch above), cross-
