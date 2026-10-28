@@ -53,9 +53,6 @@ const ROWS = [
   { date: "2031-02-01", amount: -50000, currency: "AMD", for: "Brand New Category", source: "cash itest", info: "case-insensitive account" },
 ];
 
-function csrf() {
-  return {};
-}
 
 test("normalising a row: dates, USD conversion, customer id vs free text, skips", () => {
   assert.equal(ymd(new Date("2031-03-04T00:00:00Z")), "2031-03-04");

@@ -70,6 +70,9 @@ jobs:
 
       - run: npm run verify:ui
 
+      # Code checker + import check (docs/architecture-roadmap.md, step 1): undefined names, dead code, imports of missing files or names.
+      - run: npm run lint
+
       # Dependency scanning (improvement list 8.3): fails the build on any
       # high/critical advisory. Left at "high" rather than "moderate" so an
       # existing lower-severity transitive advisory (see uuid via exceljs)

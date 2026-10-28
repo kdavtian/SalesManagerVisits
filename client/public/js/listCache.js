@@ -87,9 +87,6 @@ async function getCached(key) {
   }
 }
 
-function setCached(key, value) {
-  return setCachedFull(scopedKey(key), value);
-}
 // `full` is the already-scoped key: an answer that lands after a logout + another login is not filed under the new person's name.
 async function setCachedFull(full, value) {
   const copy = cloneValue(value);

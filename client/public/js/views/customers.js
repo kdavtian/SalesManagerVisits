@@ -361,36 +361,6 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
   // matter how long the Armenian option text is (the old text-label
   // dropdown row didn't fit 4 of them on an iPhone-width screen and forced
   // the whole page to scroll sideways).
-  function openFilterSheet(titleText, options, currentValue, onSelect) {
-    const overlay = document.createElement("div");
-    overlay.className = "sheet-overlay";
-    overlay.innerHTML = `
-      <div class="sheet filter-sheet">
-        <h2>${escapeHtml(titleText)}</h2>
-        <div class="filter-sheet-options">
-          ${options
-            .map(
-              (o) => `
-            <button type="button" class="filter-sheet-option ${o.value === currentValue ? "filter-sheet-option-selected" : ""}" data-value="${escapeHtml(o.value)}">
-              <span>${escapeHtml(o.label)}</span>
-              ${o.value === currentValue ? `<span class="filter-sheet-check">${icons.checkCircle}</span>` : ""}
-            </button>
-          `
-            )
-            .join("")}
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    activateDialog(overlay);
-    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
-    overlay.querySelectorAll(".filter-sheet-option").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        onSelect(btn.dataset.value);
-        overlay.remove();
-      });
-    });
-  }
 
   function filterIconButton({ key, icon, label, active, count, onClick }) {
     // A multi-select filter shows how many are selected right on the
@@ -407,60 +377,6 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
       ${icon}
       ${count > 1 ? `<span class="filter-icon-count" aria-hidden="true">${count}</span>` : active ? `<span class="filter-icon-dot" aria-hidden="true"></span>` : ""}
     </button>`;
-  }
-
-  // Checkbox-style bottom sheet for filters where selecting more than one
-  // value is a real, useful query (see channelFilters above) -- unlike
-  // openFilterSheet, tapping an option toggles it without closing the
-  // sheet; the selection only commits when Done is tapped (Cancel via the
-  // overlay/backdrop discards it, matching how the single-select sheet's
-  // tap-to-close-with-that-value reads as "commit immediately").
-  function openMultiFilterSheet(titleText, options, currentSet, onApply) {
-    const working = new Set(currentSet);
-    const overlay = document.createElement("div");
-    overlay.className = "sheet-overlay";
-    overlay.innerHTML = `
-      <div class="sheet filter-sheet">
-        <h2>${escapeHtml(titleText)}</h2>
-        <div class="filter-sheet-options">
-          ${options
-            .map(
-              (o) => `
-            <button type="button" class="filter-sheet-option ${working.has(o.value) ? "filter-sheet-option-selected" : ""}" data-value="${escapeHtml(o.value)}">
-              <span>${escapeHtml(o.label)}</span>
-              <span class="filter-sheet-check" ${working.has(o.value) ? "" : "hidden"}>${icons.checkCircle}</span>
-            </button>
-          `
-            )
-            .join("")}
-        </div>
-        <div class="sheet-actions sheet-actions-floating">
-          <button type="button" class="btn" id="multi-filter-clear">${t("clear")}</button>
-          <button type="button" class="btn btn-primary" id="multi-filter-done">${t("show_results")}</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    activateDialog(overlay);
-    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
-    overlay.querySelectorAll(".filter-sheet-option").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const value = btn.dataset.value;
-        if (working.has(value)) working.delete(value);
-        else working.add(value);
-        btn.classList.toggle("filter-sheet-option-selected", working.has(value));
-        btn.querySelector(".filter-sheet-check").hidden = !working.has(value);
-      });
-    });
-    overlay.querySelector("#multi-filter-clear").addEventListener("click", () => {
-      working.clear();
-      overlay.remove();
-      onApply(working);
-    });
-    overlay.querySelector("#multi-filter-done").addEventListener("click", () => {
-      overlay.remove();
-      onApply(working);
-    });
   }
 
   function renderFilterRow() {
@@ -989,7 +905,6 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
           showDebt && c.debt_amd != null && Number(c.debt_amd) > 0
             ? `<span class="customer-card-debt">${t("outstanding_debt_label")}${labelColon()}${formatAmd(Number(c.debt_amd))}</span>`
             : "";
-        const debtDue = showDebt && c.debt_amd != null && Number(c.debt_amd) > 0;
         const reorderChip = reorderChipHtml(c);
         const potentialChip = c.customer_tier === "potential" ? potentialChipHtml(c.potential_level) : "";
         const counterfeitMark = c.counterfeit_flag ? `<span class="badge badge-danger" title="${escapeHtml(t("pl_counterfeit_resolve"))}">⚠️</span>` : "";

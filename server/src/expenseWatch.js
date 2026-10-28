@@ -17,7 +17,6 @@ const BIG_MIN_AMD = 500000;
 const NO_DESC_MIN_AMD = 200000;
 const REP_WEEK_MIN_AMD = 100000;
 
-const ym = (d) => d.toISOString().slice(0, 7);
 const monthStart = (day) => `${day.slice(0, 7)}-01`;
 const addMonths = (day, n) => {
   const d = new Date(`${monthStart(day)}T00:00:00Z`);

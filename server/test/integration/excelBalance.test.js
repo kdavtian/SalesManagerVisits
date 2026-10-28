@@ -12,7 +12,6 @@ import { markAppRowsInExcel } from "../../src/erpAutoMatch.js";
 const ERP = `ITX${process.pid}`;
 let rep;
 let customer;
-const today = () => new Date().toISOString().slice(0, 10);
 const daysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 
 test.before(async () => {

@@ -98,7 +98,6 @@ const DUE_PERIODS = ["overdue", "today", "week", "month"];
 // tap again to clear), and a search bar with icon filters (who / type / sort). Everything is
 // loaded once (open tasks always come first in the 500-row cap) and filtered on the phone, so
 // switching tabs, people and filters is instant.
-const TASK_KINDS = ["debt_collection", "reorder_followup", "check_products", "call", "visit", "ops", "manual"];
 // A typed task given by a person sits in the same group as its automatic twin (Collect debt = debt collection,
 // Make order = reorder follow-up); "Check products" has its own group.
 const kindOf = (r) => {
@@ -716,12 +715,6 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
 }
 
 // ---- Create / edit ----------------------------------------------------------
-
-function addDaysISO(dateISO, n) {
-  const d = new Date(`${dateISO}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-}
 
 // Where the task's deadline falls when it is "the customer's next visit".
 async function nextVisitDate(customerId) {

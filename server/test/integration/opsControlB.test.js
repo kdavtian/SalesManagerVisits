@@ -5,7 +5,7 @@ import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer
 import { pool } from "../../src/db/pool.js";
 import { runOpsJobs } from "../../src/opsJobs.js";
 
-let admin, director, accountant, rep, adminCookie, directorCookie, accountantCookie, repCookie, customer, product, slow;
+let admin, director, accountant, rep, directorCookie, accountantCookie, repCookie, customer, product, slow;
 const stamp = Date.now();
 const CH = `OPSCH-${stamp}`;
 
@@ -15,7 +15,7 @@ test.before(async () => {
   director = await createUser("sales_director");
   accountant = await createUser("accountant");
   rep = await createUser("sales_manager");
-  [adminCookie, directorCookie, accountantCookie, repCookie] = await Promise.all([admin, director, accountant, rep].map((u) => loginAs(u.email)));
+  [directorCookie, accountantCookie, repCookie] = await Promise.all([director, accountant, rep].map((u) => loginAs(u.email)));
   customer = await createCustomer({ created_by: rep.id, assigned_manager_id: rep.id, erp_customer_id: `OPSB-${stamp}` });
   product = await createProduct({ unit: "4L" });
   await pool.query("UPDATE products SET erp_product_id = $2, silver_price_amd = 20000, bronze_price_amd = 22000, gold_price_amd = 18000, unit_price_amd = 22000, landing_cost_amd = 12000, stock_qty = 10, created_at = now() - interval '120 days' WHERE id = $1", [product.id, `OPSB-P-${stamp}`]);

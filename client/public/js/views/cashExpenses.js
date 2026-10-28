@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { escapeHtml, formatAmd, activateDialog, parseDateOnly, monthShort, formatDateTime } from "../util.js";
-import { t, getLang } from "../i18n.js";
+import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state, seesFinancialExports } from "../state.js";
 

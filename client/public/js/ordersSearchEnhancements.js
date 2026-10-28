@@ -1,5 +1,5 @@
 import { FILTER_ICONS } from "./filterIcons.js";
-import { getLang, t } from "./i18n.js";
+import { getLang } from "./i18n.js";
 
 const CHANNEL_ICON = FILTER_ICONS.channel;
 

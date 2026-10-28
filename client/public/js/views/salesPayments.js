@@ -4,7 +4,7 @@
 // totals -- plus a Region filter and the Excel export (via the page header).
 import { api } from "../api.js";
 import { escapeHtml, openInfoPopup, formatAmd, channelDisplayLabel, syncBadgeHtml, parseDateOnly, regionLabelHy, monthShort, labelColon } from "../util.js";
-import { t, getLang } from "../i18n.js";
+import { t } from "../i18n.js";
 import { openTriStateTreeSheet, buildRegionSubregionTree } from "../regionTree.js";
 
 function dateInput(date) {

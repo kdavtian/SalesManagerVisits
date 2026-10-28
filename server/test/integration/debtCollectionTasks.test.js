@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { createDebtCollectionTasks, autoTaskDiagnostics, debtTaskTitle, DEBT_TASK_TITLE, DEBT_CALL_TITLE } from "../../src/debtCollectionTasks.js";
+import { createDebtCollectionTasks, autoTaskDiagnostics, debtTaskTitle } from "../../src/debtCollectionTasks.js";
 import { isQuietHours } from "../../src/quietHours.js";
 
 const stamp = Date.now();

@@ -1,4 +1,3 @@
-import { icons } from "./icons.js";
 import { FILTER_ICONS } from "./filterIcons.js";
 import { getLang, t } from "./i18n.js";
 

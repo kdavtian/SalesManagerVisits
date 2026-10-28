@@ -9,7 +9,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { createDraftTemplate, publishTemplate } from "../../src/bonusChallengeTemplates.js";
 import { ensureOnceRound } from "../../src/bonusChallengeRounds.js";
 import { processRound } from "../../src/bonusChallengeWorker.js";
 import { ingestCollectionContribution } from "../../src/bonusSourceIngest.js";

@@ -12,8 +12,6 @@ import { t, getLang } from "./i18n.js";
 import { icons } from "./icons.js";
 import { activateDialog, escapeHtml, groupDigits, openInfoPopup, SALES_CHANNELS, channelDisplayLabel } from "./util.js";
 import {
-  COST_RATES_DEFAULT,
-  DEFAULT_COST_ITEMS,
   RATE_MARKET_HINT,
   commissionPct,
   landingCost,

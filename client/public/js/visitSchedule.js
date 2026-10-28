@@ -2,7 +2,7 @@
 // from GET /api/customers/:id/visit-schedule, which joins one-off day plans,
 // recurring Route Plans weekdays and the customer's own visit cadence. Used by
 // the Map pin popup and the customer card's "Next visit" card.
-import { t, getLang } from "./i18n.js";
+import { t } from "./i18n.js";
 import { escapeHtml, parseDateOnly, formatDayMonth, formatDateTime, labelColon } from "./util.js";
 
 export function formatScheduleDate(dateOnly) {

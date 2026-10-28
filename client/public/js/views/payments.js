@@ -659,7 +659,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
             if (!confirm(t("confirm_approve_payment"))) return;
             actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
             try {
-              const updated = await api.approvePayment(p.id);
+              await api.approvePayment(p.id);
               notifyPaymentsChanged();
               refreshPendingSummary();
               load();

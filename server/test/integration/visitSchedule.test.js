@@ -7,7 +7,6 @@ import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer
 import { pool } from "../../src/db/pool.js";
 
 let mgr, other, adminU, mgrCookie, adminCookie, otherCookie, cust;
-const ids = { rules: [], plans: [] };
 
 function weekdayOfOffset(days) {
   const d = new Date();

@@ -4,7 +4,6 @@ import { patchCachedCustomer } from "./listCache.js";
 
 const INSTAGRAM_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.4" cy="6.7" r="1" fill="currentColor" stroke="none"/></svg>`;
 const FACEBOOK_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M13.8 21v-8h2.7l.4-3h-3.1V8.1c0-.9.25-1.5 1.55-1.5H17V3.9c-.3-.04-1.3-.12-2.5-.12-2.48 0-4.18 1.5-4.18 4.3V10H7.5v3h2.82v8z" fill="currentColor" stroke="none"/></svg>`;
-const EDIT_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>`;
 const MAIL_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m3.8 7 7.3 5.2a1.5 1.5 0 0 0 1.8 0L20.2 7"/></svg>`;
 const GLOBE_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M3.2 9.5h17.6M3.2 14.5h17.6"/><path d="M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"/></svg>`;
 

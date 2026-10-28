@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, groupDigits, bindAmdInput, formatPriceOrFree, tierBadgeHtml, activateDialog, activateCombobox, formatDateDMY, openInfoPopup, showToast } from "../util.js";
+import { escapeHtml, formatAmd, groupDigits, bindAmdInput, formatPriceOrFree, tierBadgeHtml, activateDialog, activateCombobox, formatDateDMY, openInfoPopup } from "../util.js";
 import { packQty, packStepUp, packStepDown, bindStepperButton } from "../stepper.js";
 import { t } from "../i18n.js";
 import { enqueueOrder } from "../offlineQueue.js";
@@ -10,7 +10,7 @@ import { canAssignErpCustomerId, state } from "../state.js";
 import { compareProducts, sortedBrands } from "../productSort.js";
 import { getProductCatalog } from "../productCatalog.js";
 import { searchProducts, debounce } from "../productSearch.js";
-import { numOrNull, tierPrice } from "../productPricing.js";
+import { tierPrice } from "../productPricing.js";
 import { loadReorderProfile, reorderRhythmText } from "../reorder.js";
 import { loadFrequentIds } from "../productFrequent.js";
 import { openWishSheet } from "../wishSheet.js";

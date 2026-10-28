@@ -38,7 +38,7 @@ test.describe("Cash handoff", () => {
     const manager = await fixtures.createUser("sales_manager");
     await fixtures.createUser("sales_director"); // the only valid first-hop recipient for a sales_manager
     const customer = await fixtures.createCustomer({ created_by: manager.id });
-    const payment = await fixtures.createPayment({
+    await fixtures.createPayment({
       customer_id: customer.id,
       customer_name_snapshot: customer.name,
       sales_manager_id: manager.id,

@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { reorderChipHtml } from "../reorder.js";
-import { showToast, cssColor, activateCombobox, activateDialog, openInfoPopup, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, rememberPosition, getLastKnownPosition, tierSelectorHtml, TIER_OPTIONS, isNeverVisited, isOverdueVisit, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, regionLabelHy, subregionLabelHy, channelDisplayLabel, parseDateOnly, formatDayMonth } from "../util.js";
+import { showToast, cssColor, activateCombobox, activateDialog, openInfoPopup, escapeHtml, formatRelative, formatAmd, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, rememberPosition, getLastKnownPosition, tierSelectorHtml, TIER_OPTIONS, isNeverVisited, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, regionLabelHy, subregionLabelHy, channelDisplayLabel, parseDateOnly, formatDayMonth } from "../util.js";
 import { wirePlaceInput, placeNoticeText } from "../places.js";
 import { t } from "../i18n.js";
 import { buildCustomerTree, renderTriStateTree, buildDirectionManagerTree, NO_GROUP_KEY } from "../regionTree.js";
@@ -1259,37 +1259,6 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       delete mapView.dataset.competitorsForcedByFilter;
       mapView.classList.remove("kad-show-competitors");
     }
-  }
-
-  function openMapFilterSheet(titleText, options, currentValue, onSelect) {
-    const overlay = document.createElement("div");
-    overlay.className = "sheet-overlay";
-    overlay.innerHTML = `
-      <div class="sheet filter-sheet">
-        <h2>${escapeHtml(titleText)}</h2>
-        <div class="filter-sheet-options">
-          ${options
-            .map(
-              (o) => `
-            <button type="button" class="filter-sheet-option ${o.value === currentValue ? "filter-sheet-option-selected" : ""}" data-value="${escapeHtml(o.value)}">
-              <span>${escapeHtml(o.label)}</span>
-              ${o.value === currentValue ? `<span class="filter-sheet-check">${icons.checkCircle}</span>` : ""}
-            </button>
-          `
-            )
-            .join("")}
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    activateDialog(overlay);
-    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
-    overlay.querySelectorAll(".filter-sheet-option").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        onSelect(btn.dataset.value);
-        overlay.remove();
-      });
-    });
   }
 
   // Customer tier chips (gold, silver, bronze, potential, competitor -- multi-select, the same

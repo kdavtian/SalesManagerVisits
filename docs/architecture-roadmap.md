@@ -112,15 +112,20 @@ Twelve steps, three phases, about 24 releases. Size = number of releases.
 ### Phase A - safety (so the later moves cannot break anything unnoticed)
 
 #### Step 1. Code checker (ESLint) - size 1
-- [ ] Add `eslint` (flat config `eslint.config.mjs` at the repo root) as a dev dependency of `server/`; two configs: Node for
+- [x] Add `eslint` (flat config `eslint.config.mjs` at the repo root) as a dev dependency of `server/`; two configs: Node for
       `server/src`, `server/scripts`, `server/test`; browser ES modules for `client/public/js` (globals: window, document, navigator,
       L for Leaflet, etc.).
-- [ ] Rules, errors only (no style rules, no reformatting): `no-undef`, `no-unused-vars` (args: none, ignore `_`), `no-dupe-keys`,
+- [x] Rules, errors only (no style rules, no reformatting): `no-undef`, `no-unused-vars` (args: none, ignore `_`), `no-dupe-keys`,
       `no-unreachable`, `no-redeclare`, `no-self-assign`, `no-dupe-else-if`, `import/no-unresolved` + `import/named` via
       `eslint-plugin-import` (catches a wrong import name or path).
-- [ ] Fix every finding in the same PR (expect dead variables; each real bug found is listed in the PR body).
-- [ ] `npm run lint` in `server/package.json`; added to the CI `static` job and to `scripts/local-ci.sh`.
+- [x] Fix every finding in the same PR (expect dead variables; each real bug found is listed in the PR body).
+- [x] `npm run lint` in `server/package.json`; added to the CI `static` job and to `scripts/local-ci.sh`.
 - Done when: CI fails on a deliberately undefined name in a view (prove it once in the PR, then remove it).
+- As built (1.456.0): ESLint 10 with `server/eslint.config.mjs` (run from the repo root); instead of `eslint-plugin-import` (not ready for
+  ESLint 10) the import rules are `server/scripts/check-imports.mjs` (espree: every relative import, re-export and literal dynamic
+  import resolves to a file that exports each imported name). `npm run lint` runs both. First run: 1 real bug (the wide customer
+  card's Files panel used a date helper it never imported, so the panel failed on a computer), 13 duplicate text keys per language
+  (the later value was the one shown; the dead earlier ones removed), 59 unused names (dead code removed).
 
 #### Step 2. Architecture checks - size 1
 - [ ] New `server/test/architecture.test.js` (plain node:test, no server needed). Checks:
@@ -259,3 +264,4 @@ the server share `roles.js`; a screen never edits another screen's DOM.
 (step, version, PR, date)
 
 - Analysis and plan: 2026-10-28 (no code change).
+- Step 1 code checker: 1.456.0, 2026-10-28.

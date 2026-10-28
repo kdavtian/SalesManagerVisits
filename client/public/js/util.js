@@ -184,11 +184,6 @@ function phoneLocalDigits(raw) {
   else if (d.startsWith("0")) d = d.slice(1);
   return d.slice(0, 8);
 }
-// The mask text for a list of local digits ("+374 91 007 019").
-function phoneFromLocalDigits(d) {
-  const groups = [d.slice(0, 2), d.slice(2, 5), d.slice(5)].filter(Boolean);
-  return `+374 ${groups.join(" ")}`.trimEnd();
-}
 // Caret position in the masked text right after the first `count` local digits ("+374 " when 0).
 function phoneCaretAfter(masked, count) {
   if (count <= 0) return Math.min(5, masked.length);

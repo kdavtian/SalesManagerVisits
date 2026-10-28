@@ -669,7 +669,6 @@ export async function renderCheckin(root, navigate, customerId) {
   const signBtn = container.querySelector("#blank-sign-btn");
   const signChip = container.querySelector("#blank-sign-chip");
   // One customer signature for the visit: on the act when orders are delivered, otherwise on the payment slip.
-  const slipBlock = container.querySelector("#slip-sign-block");
   const slipBtn = container.querySelector("#slip-sign-btn");
   const slipChip = container.querySelector("#slip-sign-chip");
   function paintSignature() {

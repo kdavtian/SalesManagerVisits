@@ -26,9 +26,12 @@ test.describe("Desktop customer card in three columns", () => {
         [customer.id, customer.name, erpId, rep.id]
       )
     ).rows[0].id;
+    // a file, so the Files panel draws its thumbnails (1.456.0: the thumbnail's date helper was not imported and the panel broke)
+    await pool.query("INSERT INTO customer_files (customer_id, kind, file_path, mime, created_by) VALUES ($1, 'other', 'e2e/none.pdf', 'application/pdf', $2)", [customer.id, admin.id]);
     return { admin, customer, near, order, payment, erpId, stamp };
   }
   async function cleanup({ customer, payment, erpId }) {
+    await pool.query("DELETE FROM customer_files WHERE customer_id = $1", [customer.id]);
     await pool.query("DELETE FROM checkins WHERE customer_id = $1", [customer.id]);
     await pool.query("DELETE FROM payments WHERE id = $1", [payment]);
     await pool.query("DELETE FROM erp_order_lines WHERE erp_customer_id = $1", [erpId]);
@@ -61,6 +64,7 @@ test.describe("Desktop customer card in three columns", () => {
       await expect(orders.locator(".cd-row", { hasText: `X${data.stamp}` })).toBeVisible();
       await expect(right.locator(".cd-panel-payments [data-payment-row]", { hasText: "64,000" })).toBeVisible({ timeout: 15000 });
       await expect(right.locator(".cd-panel-files")).toBeVisible();
+      await expect(right.locator('.cd-panel-files .cd-thumb[data-file="0"]')).toHaveAttribute("title", /\d{2}-\d{2}-\d{4}/);
 
       // mini map: this customer's pin and the neighbour's
       await expect(left.locator(".cd-mini-map .leaflet-container")).toBeVisible({ timeout: 20000 });

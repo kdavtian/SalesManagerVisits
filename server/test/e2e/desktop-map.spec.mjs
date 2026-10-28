@@ -15,7 +15,7 @@ test("desktop Map: side table, row opens the popup, visible area, key panel, fil
   const admin = await fixtures.createUser("admin");
   const stamp = `${Date.now() % 100000}${Math.floor(Math.random() * 1000)}`;
   const erp = `MAPT${stamp}`;
-  const near = await fixtures.createCustomer({ name: `MapNear${stamp}`, sales_channel: "SM YVN", created_by: admin.id, lat: 40.18, lng: 44.51, erp_customer_id: erp });
+  await fixtures.createCustomer({ name: `MapNear${stamp}`, sales_channel: "SM YVN", created_by: admin.id, lat: 40.18, lng: 44.51, erp_customer_id: erp });
   await fixtures.createCustomer({ name: `MapFar${stamp}`, sales_channel: "SM YVN", created_by: admin.id, lat: 40.6, lng: 44.95 });
   await pool.query("INSERT INTO erp_customer_data (erp_customer_id, debt_amd) VALUES ($1, 1234567)", [erp]);
   await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, revenue_amd) VALUES ($1, $2, '2026-10-02', 1000)", [erp, `O${stamp}`]);

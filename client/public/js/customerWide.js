@@ -6,7 +6,7 @@
 import { api } from "./api.js";
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
-import { escapeHtml, formatAmd, formatDayMonth, parseDateOnly } from "./util.js";
+import { escapeHtml, formatAmd, formatDateDMY, formatDayMonth, parseDateOnly } from "./util.js";
 import { loadWithCache } from "./listCache.js";
 import { paymentsSource, photosSource } from "./customerCardData.js";
 import { isWide } from "./deskTable.js";

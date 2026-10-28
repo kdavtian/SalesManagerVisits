@@ -2,7 +2,7 @@
 # One command for everything CI runs, on this machine:  bash scripts/local-ci.sh [--quick] [--e2e] [--no-audit]
 # Starts Postgres if it is down, gives every job its own fresh test database (like CI), runs the static checks, the test shards in
 # parallel and the isolated tests, and ends with ONE summary line. Full logs: /tmp/local-ci/*.log (override with LOCAL_CI_LOG).
-#   --quick     static checks only (version, ui, audit): about 20 s
+#   --quick     static checks only (version, ui, lint, audit): about 30 s
 #   --e2e       also the browser smoke tests
 #   --no-audit  skip `npm audit` (no network)
 # Env: SHARDS (default 4), PGBASE (default: tries postgres://gmm:gmm@127.0.0.1:5432 then postgres://postgres:postgres@localhost:5432).
@@ -37,7 +37,7 @@ run() {
   local name="$1"; shift; local t0=$SECONDS
   if "$@" > "$LOG/$name.log" 2>&1; then echo "ok $((SECONDS - t0))s" > "$LOG/$name.status"; else echo "FAIL $((SECONDS - t0))s" > "$LOG/$name.status"; fi
 }
-static() { npm run check:version && npm run verify:ui && { [ "$AUDIT" = 0 ] || npm audit --audit-level=high; }; }
+static() { npm run check:version && npm run verify:ui && npm run lint && { [ "$AUDIT" = 0 ] || npm audit --audit-level=high; }; }
 shard()  { fresh_db "fieldvisits_ci_$1" && DATABASE_URL="$PGBASE/fieldvisits_ci_$1" node --test --test-reporter=tap --test-shard="$1/$SHARDS" $(tests); }
 isolated() { bash scripts/run-isolated.sh test/isolated-tests.txt; }
 e2e()    { fresh_db fieldvisits_ci_e2e && DATABASE_URL="$PGBASE/fieldvisits_ci_e2e" npm run test:e2e:smoke; }

@@ -1,11 +1,10 @@
 import { api } from "../api.js";
-import { escapeHtml, firstUseHintHtml, activateFirstUseHints, activateDialog, downloadFromUrl, saveBlob, monthShort, formatDateTime as formatDateTimeShared, formatDayMonth, labelColon } from "../util.js";
-import { buildRegionSubregionTree, openTriStateTreeSheet, NO_GROUP_KEY } from "../regionTree.js";
-import { t, getLang } from "../i18n.js";
+import { escapeHtml, firstUseHintHtml, activateFirstUseHints, activateDialog, downloadFromUrl, monthShort, formatDateTime as formatDateTimeShared, formatDayMonth, labelColon } from "../util.js";
+import { t } from "../i18n.js";
 import { periodLabel, periodKey, periodAria } from "../periodButtons.js";
 import { icons } from "../icons.js";
 import { dueChipHtml } from "../debtChip.js";
-import { REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, CATEGORY_LIST, formatAmd, amdWithUnitHtml, channelDisplayLabel, syncBadgeHtml, syncNote, openInfoPopup, formatDateDMY, parseDateOnly } from "../util.js";
+import { REGION_LIST, regionLabelHy, CATEGORY_LIST, formatAmd, amdWithUnitHtml, channelDisplayLabel, syncNote, openInfoPopup, formatDateDMY, parseDateOnly } from "../util.js";
 
 // "all" (not "") for the All-time option: every one of this array's three
 // callers builds its request params with
@@ -339,11 +338,6 @@ function formatDateTime(value) {
 
 // syncBadgeHtml now lives in util.js, shared with sales.js and
 // debtBalances.js (see its own comment there for why).
-
-function subregionOptions(region) {
-  if (region === "Yerevan") return YEREVAN_DISTRICTS;
-  return [];
-}
 
 async function renderNewCustomersReport(root, navigate) {
   root.innerHTML = `

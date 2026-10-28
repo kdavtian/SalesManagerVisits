@@ -10,7 +10,7 @@ import { createDraftTemplate, publishTemplate } from "../../src/bonusChallengeTe
 import { ensureOnceRound } from "../../src/bonusChallengeRounds.js";
 import { processRound } from "../../src/bonusChallengeWorker.js";
 import { setBonusesEnabled } from "../../src/bonusSettings.js";
-import { getClaim, listClaims, approveClaim, rejectClaim, holdClaim, recordPayout, adjustClaimAmount, ClaimConflictError } from "../../src/bonusRewardClaims.js";
+import { listClaims, approveClaim, rejectClaim, holdClaim, recordPayout, adjustClaimAmount, ClaimConflictError } from "../../src/bonusRewardClaims.js";
 import { createUser, cleanupAll } from "./helpers.js";
 
 const userIds = [];
