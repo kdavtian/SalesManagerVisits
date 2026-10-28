@@ -102,6 +102,9 @@ forecast, "needs attention" recommendations. Route plans: recurring rules + day 
 - 2026-10-28: tasks follow Staff "reports to"; admin and CEO task anyone; admin unlocks a locked sign-in from the Team page.
 - 2026-10-28: sales director and above (ops director, CEO, admin) may move a CONFIRMED order back to submitted to change it, then confirm
   again; not once packed, not while accounting works on its documents (a pending accounting request is cancelled).
+- 2026-10-28: no order may ADD a product that is out of stock (Excel stock minus what open orders already promised <= 0), whatever the path
+  (KAD Motors app, KAD OS, edit, draft submit); unknown stock passes for staff, not for KAD OS. Server: `orderStock.js`. Wished /
+  missing products are to be collected separately (design pending the owner's answers).
 
 ## 6. How to propose a process change (what the owner expects)
 1. Describe the process as it runs today in 3-5 steps naming the person and the paper / screen at each step.
