@@ -145,7 +145,13 @@ async function doRequest(path, options) {
     // request came from (Warehouse, Reports, Recorded... reached by link or
     // bookmark). Say what it means, in the user's language. Specific 403
     // messages ("Only the recipient can confirm this handoff") are left alone.
-    const message = res.status === 403 && (body?.message || body?.error) === "Not allowed" ? t("not_available_for_role") : body?.message || body?.error;
+    // An order refused for an out-of-stock product (server/src/orderStock.js): name the products in the user's language.
+    const message =
+      body?.code === "out_of_stock" && Array.isArray(body.products)
+        ? t("order_out_of_stock_error").replace("{names}", body.products.map((p) => p.name).join(", "))
+        : res.status === 403 && (body?.message || body?.error) === "Not allowed"
+          ? t("not_available_for_role")
+          : body?.message || body?.error;
     const err = new Error(message || `Request failed (${res.status})`);
     err.status = res.status;
     err.body = body;

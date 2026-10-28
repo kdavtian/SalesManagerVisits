@@ -5,6 +5,7 @@ import { buildOrderBlanksPdf } from "../orderBlankPdf.js";
 import { getDocumentTexts } from "../documentTexts.js";
 import { loadBlankOrders } from "../orderBlankData.js";
 import { canChangeSignedOrder, SIGNED_ORDER_ERROR } from "../signedActs.js";
+import { outOfStockProducts, outOfStockResponse } from "../orderStock.js";
 import { Router } from "express";
 import fs from "node:fs";
 import path from "node:path";
@@ -301,6 +302,8 @@ export async function createOrderHandler(req, res) {
     const over = await firstOverLimit(items, await getAppOrderSettings());
     if (over) return res.status(400).json({ error: "This order is above the limit for one of its products", code: "order_limit", ...over, contact: await contactFor(customer.id) });
   }
+  const outOfStock = await outOfStockProducts(items, { strictUnknown: Boolean(partner) });
+  if (outOfStock.length) return outOfStockResponse(res, outOfStock);
   let lines;
   try {
     lines = await buildOrderLines(items, { customerId: customer.id, tier: customer.customer_tier, canSetPrices: canConfirmOrders(req.user.role) && !partner, userId: req.user.id });
@@ -809,6 +812,10 @@ ordersRouter.post("/:id/submit", async (req, res) => {
     return res.status(409).json({ error: `Cannot submit an order that is already "${order.status}"` });
   }
   if (order.cancelled_at) return res.status(409).json({ error: "The customer cancelled this order in KAD OS -- it cannot be submitted", code: "cancelled_by_customer" });
+  // A draft can wait for days: what it holds must still be on the shelf when it goes into the queue.
+  const { rows: draftLines } = await pool.query("SELECT product_id, quantity FROM order_items WHERE order_id = $1", [order.id]);
+  const outOfStock = await outOfStockProducts(draftLines, { excludeOrderId: order.id });
+  if (outOfStock.length) return outOfStockResponse(res, outOfStock);
 
   let erpCustomerId = order.erp_customer_id;
   if (!erpCustomerId) {
@@ -975,6 +982,10 @@ ordersRouter.patch("/:id", async (req, res) => {
     if (!Array.isArray(items) || !items.length) {
       return res.status(400).json({ error: "At least one item is required" });
     }
+    // only what the edit adds (a new product, a bigger quantity) must be on the shelf
+    const { rows: prevRows } = await pool.query("SELECT product_id, SUM(quantity)::int AS qty FROM order_items WHERE order_id = $1 GROUP BY product_id", [order.id]);
+    const outOfStock = await outOfStockProducts(items, { excludeOrderId: order.id, previous: new Map(prevRows.map((r) => [r.product_id, r.qty])), strictUnknown: Boolean(order.placed_via_app) });
+    if (outOfStock.length) return outOfStockResponse(res, outOfStock);
     try {
       const { rows: tierRows } = await pool.query("SELECT customer_tier FROM customers WHERE id = $1", [order.customer_id]);
       nextLines = await buildOrderLines(items, { customerId: order.customer_id, tier: tierRows[0]?.customer_tier, canSetPrices: canConfirmOrders(req.user.role), userId: req.user.id });

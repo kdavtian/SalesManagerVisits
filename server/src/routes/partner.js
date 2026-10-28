@@ -11,6 +11,7 @@
 //   POST /orders    place an app order (same rules as POST /api/orders for a linked account); with replaces_order_id it CHANGES a still-unconfirmed order
 //   POST /orders/:id/cancel   cancel an app order that KAD Motors has not confirmed yet
 //   POST /payments/dispute    "I don't see my payments": tells management (not the rep) and returns the office number to call
+import { outOfStockProducts, outOfStockResponse } from "../orderStock.js";
 import path from "node:path";
 import { Router } from "express";
 import { uploadDirPath } from "../upload.js";
@@ -293,6 +294,9 @@ partnerRouter.post("/preview", async (req, res) => {
   if (!items.length) return res.status(400).json({ error: "At least one item is required" });
   const over = await firstOverLimit(items, await getAppOrderSettings());
   if (over) return res.status(400).json({ error: "This order is above the limit for one of its products", code: "order_limit", ...over, contact: await contactForId(req.partner.customerId) });
+  // the basket may hold a product that sold out after the catalog was loaded: say so before the customer presses Send
+  const outOfStock = await outOfStockProducts(items, { strictUnknown: true });
+  if (outOfStock.length) return outOfStockResponse(res, outOfStock);
   const customer = await loadCustomer(req.partner.customerId);
   const ids = items.map((i) => Number(i.product_id)).filter(Number.isInteger);
   const { rows: products } = await pool.query("SELECT * FROM products WHERE id = ANY($1) AND active", [ids]);

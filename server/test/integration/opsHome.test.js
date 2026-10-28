@@ -23,8 +23,12 @@ test.after(async () => {
   await stopTestServer();
 });
 
+// A shortage happens when the Excel stock drops after orders were taken (an order cannot be placed for what is not on the shelf,
+// orderStock.js): take the order with enough stock, then put the stock back to 2.
 async function order(status, quantity = 1) {
+  await pool.query("UPDATE products SET stock_qty = 1000 WHERE id = $1", [product.id]);
   const res = await apiRequest("/api/orders", { method: "POST", cookie: repCookie, body: { customer_id: customer.id, payment_method: "invoice", items: [{ product_id: product.id, quantity }] } });
+  await pool.query("UPDATE products SET stock_qty = 2 WHERE id = $1", [product.id]);
   assert.equal(res.status, 201, JSON.stringify(res.data));
   trackOrder(res.data.id);
   if (status !== "submitted") await pool.query("UPDATE orders SET status = $2 WHERE id = $1", [res.data.id, status]);

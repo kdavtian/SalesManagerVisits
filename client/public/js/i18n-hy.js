@@ -1945,6 +1945,7 @@ export default {
     no_products_found: "Ապրանքներ չեն գտնվել",
     family_other: "Այլ",
     out_of_stock: "Առկա չէ",
+    order_out_of_stock_error: "Պահեստում չկա, հանեք պատվերից՝ {names}",
     reserved_by_orders_prefix: "արդեն այլ պատվերներում՝ ",
     only_n_available_prefix: "Մնացել է ընդամենը ",
     only_n_available_suffix: " հատ",

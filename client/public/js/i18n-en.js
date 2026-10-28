@@ -1945,6 +1945,7 @@ export default {
     no_products_found: "No products found",
     family_other: "Other",
     out_of_stock: "Out of stock",
+    order_out_of_stock_error: "Out of stock, remove from the order: {names}",
     reserved_by_orders_prefix: "already in other orders: ",
     only_n_available_prefix: "Only ",
     only_n_available_suffix: " left in stock",
