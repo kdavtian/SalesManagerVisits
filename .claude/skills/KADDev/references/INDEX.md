@@ -132,11 +132,12 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L96 Lessons added 2026-10-24 (the optimization round) - Tests that passed for months only because everything ran in one slow pass share global state; splitting CI exp
 - L103 Lessons added 2026-10-24 (features round) - Bot deploy is separate from the app deploy: cd /opt/castrol-ceo-bot && sudo -u castrolbot git pull origin main
 
-## optimization-ideas.md (9 KB, 58 lines)
+## optimization-ideas.md (9 KB, 62 lines)
 - L6 How an idea is written - N. <short name> - saves <minutes / taps / seconds / KB>; stays identical: <functionality, results, experience>
 - L12 Backlog (status: Suggested unless noted) - Owner answered "1, 2, 3, 4, 5, 6, 7, 8" on 2026-10-24 = all eight approved; built in the same round (Field Vis
 - L23 Ideas from the round that built these (Suggested) - [DONE 2026-10-24] Make the isolated bonus tests independent of the global switch - done without touching the t
 - L53 Ideas from the first-launch round (2026-10-25, Suggested) - [DONE 2026-10-26, 1.420.0] Load only the active language of the translations - saves about 55 KB compressed (a
+- L59 Desktop step 9 round (2026-10-28) - D1. One item style for every desktop dropdown menu (column picker + single-choice menus).
 
 ## owner-model.md (18 KB, 97 lines)
 - L5 1. Who they are, in one paragraph - A hands-on distributor owner (Castrol/Lotos/Royal/Orlen, Armenia) who runs the company from the app on an iPho
