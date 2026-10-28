@@ -1,69 +1,8 @@
 import { pool } from "./db/pool.js";
 
-// The fixed set of push notification events this app can send. Kept as a
-// plain list (not derived from anywhere else) so the admin matrix and the
-// self-service preferences UI both have one place to enumerate them from.
-export const NOTIFICATION_TYPES = [
-  "plan_submitted",
-  "plan_reviewed",
-  "order_status_changed",
-  "order_placed",
-  "visit_reminder",
-  "perf_plan_submitted",
-  "perf_plan_reviewed",
-  "payment_submitted",
-  "order_warehouse_review",
-  "order_stock_issue",
-  "order_packed",
-  "order_delivered",
-  "order_returned",
-  "order_stale_packed",
-  "payment_due_soon",
-  // The Excel sync changed prices (one notification per sync, see priceSyncLog.js).
-  "price_changed",
-  // Monday 09:00: last week's numbers (see scorecard.js).
-  "weekly_scorecard",
-  // Monday 09:00: total / overdue debt, change since last week and the biggest movers (see debtDigest.js).
-  "debt_digest",
-  // Cash custody chain (migrations/059): the receiver is told a handoff is
-  // waiting for them to count and confirm; the sender is told the outcome.
-  "cash_handoff_submitted",
-  "cash_handoff_reviewed",
-  // Pushed by the CEO Telegram bot's sync (server/src/routes/erpSync.js),
-  // not by anything happening inside this app -- one combined notification
-  // per sync run (see queueSyncNotification there) covering whichever of
-  // the daily report and the 3 generated workbooks landed together,
-  // instead of a separate daily_report_ready/generated_report_ready per
-  // call (up to 4 pushes for one sync, reported as "I receive 4
-  // notifications, I want only 1").
-  "sync_reports_ready",
-  // The bot's sync did NOT land within the expected window (see
-  // erpSyncMonitor.js) -- this app noticing its own absence, not something
-  // the bot pushed.
-  "erp_sync_stale",
-  // Once-a-day digest of unresolved orders/payments/overdue visits (see
-  // dailySummary.js) -- distinct from any single event above.
-  "daily_summary",
-  // Tasks (migrations/093): a task was given to you, its deadline day
-  // reminder (09:30), and the creator learning it was completed.
-  "task_assigned",
-  "task_deadline",
-  "task_completed",
-  // Lily (accounting) reported on an order the user sent to accounting:
-  // document created, signed, or needs attention.
-  "accounting_update",
-  // Vaghinak (the AI operations deputy director): reminders, questions and day wrap-ups (see vaghinak/engine.js).
-  "vaghinak",
-  // Anti-fraud findings for management and the "hand over your cash" reminder for a rep (see antiFraud.js).
-  "fraud_alert",
-  // Expense findings and the Monday report for management (see expenseWatch.js).
-  "expense_alert",
-  // Wished products (productWishes.js): a new wish for management, and "available again" for the customer's rep.
-  "product_wish",
-  "wish_back_in_stock",
-  // The AI check of a photographed order blank found a problem or could not read it (aiBlankCheck.js): told to the person who took it.
-  "document_issue",
-];
+// The kinds of notification this app can send, grouped and with their audiences: one list shared with the Settings screen
+// (client/public/js/shared/notificationTypes.js).
+export { NOTIFICATION_TYPES } from "../../client/public/js/shared/notificationTypes.js";
 
 // Warehouse Manager: an order just entered their queue.
 export const WAREHOUSE_NOTIFY_ROLES = ["warehouse_manager", "admin"];
