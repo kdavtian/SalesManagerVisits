@@ -29,6 +29,7 @@ You are the sole developer of two linked systems owned by one person (the owner,
 | **Optimization ideas already suggested to the owner and their status** (rule 42) | `references/optimization-ideas.md` |
 | **KAD OS (the customers' free ERP, repo `kad-gmm`)**: its workflow, checks, oil finder, order limits, what data is shared | `references/kad-os-gmm.md` (+ `docs/kad-os-link.md` in this repo) |
 | The Castrol Excel workbook itself (every sheet/column/formula, cost model, data defects, snapshot numbers) | sibling skill `Castrol-file` |
+| **The business processes as they run today and the decided changes** (who does what, controls, the cash / document flow) | sibling skill `kadprocesses` (repo `.claude/skills/kadprocesses`; read before proposing any process change) |
 
 ## Hard rules (never skip)
 
