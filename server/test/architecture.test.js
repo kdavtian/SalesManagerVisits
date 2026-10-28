@@ -1,0 +1,122 @@
+// Architecture checks (docs/architecture-roadmap.md, step 2): the structure rules that used to live only in the developer's head. Each
+// check names what is wrong and where, so a new route, module or notification that breaks a rule fails here instead of in the field.
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import * as espree from "espree";
+import { app } from "../src/app.js";
+import { NOTIFICATION_TYPES } from "../src/notificationPreferences.js";
+
+const SERVER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const PUBLIC = path.resolve(SERVER, "../client/public");
+const walk = (dir) =>
+  fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]));
+const parse = (file) => espree.parse(fs.readFileSync(file, "utf8"), { ecmaVersion: "latest", sourceType: "module", loc: true });
+function eachNode(node, visit) {
+  if (!node || typeof node.type !== "string") return;
+  visit(node);
+  for (const k in node) {
+    if (k === "loc") continue;
+    const v = node[k];
+    if (Array.isArray(v)) v.forEach((c) => eachNode(c, visit));
+    else if (v && typeof v.type === "string") eachNode(v, visit);
+  }
+}
+
+// ---- 1. every API route needs a login -------------------------------------------------------------------------------------------------
+// A route counts as guarded when requireAuth (a person's session), requireSyncKey (the CEO bot) or requireIntegrationToken (Lily) runs
+// before it: in the route itself or as router.use() earlier in its router. The few routes that must work without a login are listed here
+// with the reason; anything else unguarded fails.
+const GUARDS = new Set(["requireAuth", "requireSyncKey", "requireIntegrationToken"]);
+const PUBLIC_ROUTES = new Map([
+  ["app.js GET /api/health", "load balancer / deploy check"],
+  ["app.js GET /api/ready", "deploy check: database reachable"],
+  ["auth.js POST /login", "the login itself (rate limited)"],
+  ["auth.js POST /logout", "clears the cookie; works with an expired session"],
+  ["calculatorLock.js POST /verify", "PIN of the calculator mode, before any login (rate limited)"],
+  ["lockdown.js GET /", "the lockdown screen asks whether the app is locked, before any login"],
+  ["app.js GET /^\\/css\\/.*\\.css$/", "stylesheets"],
+  ["app.js GET /manifest.json", "the install manifest"],
+  ["app.js GET /.*/", "the app page for every other address (no data)"],
+]);
+
+test("every API route needs a login (or is on the short public list with its reason)", async () => {
+  const owner = new Map();
+  const routesDir = path.join(SERVER, "src/routes");
+  for (const f of fs.readdirSync(routesDir)) {
+    const mod = await import(pathToFileURL(path.join(routesDir, f)).href);
+    for (const v of Object.values(mod)) if (typeof v === "function" && Array.isArray(v.stack)) owner.set(v, f);
+  }
+  const unguarded = [];
+  (function walkStack(stack, guarded, who) {
+    for (const layer of stack) {
+      if (layer.route) {
+        const ok = guarded || layer.route.stack.some((s) => GUARDS.has(s.handle.name));
+        if (!ok) unguarded.push(`${who} ${Object.keys(layer.route.methods).join(",").toUpperCase()} ${layer.route.path}`);
+      } else if (Array.isArray(layer.handle?.stack)) {
+        walkStack(layer.handle.stack, guarded, owner.get(layer.handle) ?? "an unnamed router");
+      } else if (GUARDS.has(layer.handle?.name)) {
+        guarded = true;
+      }
+    }
+  })(app.router.stack, false, "app.js");
+  const unexpected = unguarded.filter((r) => !PUBLIC_ROUTES.has(r));
+  assert.deepEqual(unexpected, [], "routes reachable without a login: add requireAuth (or put them on PUBLIC_ROUTES with the reason)");
+  const stale = [...PUBLIC_ROUTES.keys()].filter((r) => !unguarded.includes(r));
+  assert.deepEqual(stale, [], "PUBLIC_ROUTES entries that no longer exist or are now guarded: remove them");
+});
+
+// ---- 2. screens do not import the app shell -------------------------------------------------------------------------------------------
+// app.js is the entry point (router + shell); a screen importing it ties the screen to the whole shell and makes a loop. What a screen
+// needs from the shell lives in its own small module (badges.js, state.js, ...).
+test("no phone-app module imports app.js", () => {
+  const offenders = walk(path.join(PUBLIC, "js"))
+    .filter((f) => f.endsWith(".js"))
+    .filter((f) => /from\s+["'](?:\.\.?\/)+app\.js["']|import\(\s*["'](?:\.\.?\/)+app\.js["']/.test(fs.readFileSync(f, "utf8")))
+    .map((f) => path.relative(PUBLIC, f));
+  assert.deepEqual(offenders, []);
+});
+
+// ---- 3. the offline copy is complete --------------------------------------------------------------------------------------------------
+// Every script and stylesheet of the app is in the service worker's APP_SHELL (otherwise a screen breaks offline after an update), and
+// every APP_SHELL entry exists (otherwise the service worker install fails and NO update reaches the phones).
+test("every script and stylesheet is in sw.js APP_SHELL, and every APP_SHELL file exists", () => {
+  const sw = fs.readFileSync(path.join(PUBLIC, "sw.js"), "utf8");
+  const list = sw.match(/const APP_SHELL = \[([\s\S]*?)\n\];/)?.[1];
+  assert.ok(list, "APP_SHELL not found in sw.js");
+  const shell = new Set([...list.matchAll(/^\s*"(\/[^"]*)"/gm)].map((m) => m[1]));
+  const files = [...walk(path.join(PUBLIC, "js")), ...walk(path.join(PUBLIC, "css"))]
+    .filter((f) => /\.(js|css)$/.test(f))
+    .map((f) => "/" + path.relative(PUBLIC, f).split(path.sep).join("/"));
+  assert.deepEqual(files.filter((f) => !shell.has(f)), [], "files missing from APP_SHELL (add them, and bump CACHE_VERSION)");
+  const missing = [...shell].filter((u) => u !== "/" && !fs.existsSync(path.join(PUBLIC, u)));
+  assert.deepEqual(missing, [], "APP_SHELL entries with no file");
+});
+
+// ---- 4. notification types --------------------------------------------------------------------------------------------------------
+// Every type the server sends is in NOTIFICATION_TYPES (the list the on/off preferences are stored against), and every type the Settings
+// screen offers as a switch (views/settings.js) is a real type with its label in English and Armenian.
+test("every notifyUser type is in NOTIFICATION_TYPES; every type Settings shows is real and named in both languages", async () => {
+  const used = new Map();
+  for (const file of walk(path.join(SERVER, "src")).filter((f) => f.endsWith(".js"))) {
+    eachNode(parse(file), (n) => {
+      if (n.type !== "CallExpression" || n.callee.type !== "Identifier" || n.callee.name !== "notifyUser") return;
+      const type = n.arguments[1];
+      if (type?.type === "Literal" && typeof type.value === "string") used.set(type.value, `${path.relative(SERVER, file)}:${n.loc.start.line}`);
+    });
+  }
+  assert.ok(used.size > 10, "notifyUser calls were not found: has the function been renamed?");
+  const unknown = [...used].filter(([type]) => !NOTIFICATION_TYPES.includes(type)).map(([type, where]) => `${type} (${where})`);
+  assert.deepEqual(unknown, [], "types sent but missing from NOTIFICATION_TYPES");
+
+  const settings = fs.readFileSync(path.join(PUBLIC, "js/views/settings.js"), "utf8");
+  const shown = JSON.parse(settings.match(/const NOTIFICATION_TYPES = (\[[^\]]*\]);/)?.[1] ?? "null");
+  assert.ok(Array.isArray(shown) && shown.length, "the Settings list NOTIFICATION_TYPES was not found in views/settings.js");
+  assert.deepEqual(shown.filter((type) => !NOTIFICATION_TYPES.includes(type)), [], "Settings offers types the server does not know");
+  for (const lang of ["en", "hy"]) {
+    const texts = (await import(pathToFileURL(path.join(PUBLIC, `js/i18n-${lang}.js`)).href)).default;
+    assert.deepEqual(shown.filter((type) => !texts[`notification_type_${type}`]), [], `Settings types without notification_type_<type> in i18n-${lang}.js`);
+  }
+});

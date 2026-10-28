@@ -3,7 +3,7 @@
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state } from "../state.js";
-import { applyPaymentBadge } from "../app.js";
+import { applyPaymentBadge } from "../badges.js";
 
 const NO_PAYMENTS_ROLES = ["warehouse_manager", "delivery_manager"];
 
