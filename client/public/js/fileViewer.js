@@ -9,14 +9,15 @@ import { api } from "./api.js";
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { state } from "./state.js";
+import { canManageSignedDocuments, seesAllCustomerFiles } from "./shared/roles.js";
 import { escapeHtml, formatDateTime, saveBlob, showToast } from "./util.js";
 import { openPhotoLightbox } from "./photoLightbox.js";
 
 export const fileKindLabel = (kind) => t(`file_kind_${kind}`);
 export const isPdf = (file) => file.mime === "application/pdf";
 // file.external: a document that is not a customer file (a signed accounting document): its own urls, no turning, no deleting here.
-const canRotate = (file) => !file.external && (["admin", "ceo"].includes(state.user.role) || file.created_by === state.user.id);
-const canDelete = (file) => !file.external && ["admin", "ceo"].includes(state.user.role);
+const canRotate = (file) => !file.external && (canManageSignedDocuments(state.user.role) || file.created_by === state.user.id);
+const canDelete = (file) => !file.external && canManageSignedDocuments(state.user.role);
 const SAVE_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 19h14"/></svg>`;
 
 // A GET with a progress callback (0..1, or null when the size is unknown).
@@ -61,7 +62,6 @@ export function aiSummaryHtml(file) {
 // Whether the AI check is switched on (App configuration, OFF by default): read once, so the "Check again" button only exists when it can work.
 let aiCheckOn = null;
 const aiCheckSwitch = () => (aiCheckOn ??= api.getSettings().then((s) => Boolean(s.ai_blank_check_enabled)).catch(() => false));
-const MANAGEMENT_ROLES = ["admin", "ceo", "operations_director", "sales_director", "accountant"];
 
 export function openFileViewer(files, startIndex = 0, { onChanged } = {}) {
   let index = startIndex;
@@ -166,7 +166,7 @@ export function openFileViewer(files, startIndex = 0, { onChanged } = {}) {
       ${!isPdf(file) && canRotate(file) ? `<button type="button" class="file-viewer-btn" data-act="rotate-left" aria-label="${t("rotate_left")}"><span style="display:inline-flex;transform:scaleX(-1)">${ROTATE_ICON}</span><span>${t("rotate_left")}</span></button><button type="button" class="file-viewer-btn" data-act="rotate-right" aria-label="${t("rotate_right")}">${ROTATE_ICON}<span>${t("rotate_right")}</span></button>` : ""}
       <button type="button" class="file-viewer-btn" data-act="share">${SHARE_ICON}<span>${t("file_share_short")}</span></button>
       <button type="button" class="file-viewer-btn" data-act="save-image">${SAVE_ICON}<span>${t("file_save_image")}</span></button>
-      ${aiOn && file.kind === "order_blank" && !isPdf(file) && MANAGEMENT_ROLES.includes(state.user.role) ? `<button type="button" class="file-viewer-btn" data-act="ai-check">${icons.sparkles}<span>${t("file_ai_recheck")}</span></button>` : ""}
+      ${aiOn && file.kind === "order_blank" && !isPdf(file) && seesAllCustomerFiles(state.user.role) ? `<button type="button" class="file-viewer-btn" data-act="ai-check">${icons.sparkles}<span>${t("file_ai_recheck")}</span></button>` : ""}
       ${canDelete(file) ? `<button type="button" class="file-viewer-btn file-viewer-btn-danger" data-act="delete">${icons.trash}<span>${t("delete_document")}</span></button>` : ""}`;
     bar.querySelectorAll("button").forEach((btn) => btn.addEventListener("click", () => act(btn.dataset.act, btn)));
     // Have both files ready before a tap asks for them.

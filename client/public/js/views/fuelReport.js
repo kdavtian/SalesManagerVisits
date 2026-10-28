@@ -10,6 +10,7 @@ import { t, getLang } from "../i18n.js";
 import { escapeHtml, formatAmd, downloadFromUrl, activateDialog } from "../util.js";
 import { icons } from "../icons.js";
 import { state } from "../state.js";
+import { canManageFuel } from "../shared/roles.js";
 import { ensureLeaflet } from "../leafletLoader.js";
 
 const MONTH_KEY = "fv_fuel_month";
@@ -49,7 +50,7 @@ const initials = (name) => String(name || "?").split(/\s+/).slice(0, 2).map((w) 
 const stopsOf = (d) => d.route.filter((p) => p.type === "checkin").length;
 
 export async function renderFuelReport(root, navigate) {
-  const canManage = ["admin", "ceo"].includes(state.user?.role);
+  const canManage = canManageFuel(state.user?.role);
   let month = savedMonth();
   let data = null;
   let polls = 0;

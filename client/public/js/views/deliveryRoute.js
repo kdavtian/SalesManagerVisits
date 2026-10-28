@@ -3,11 +3,12 @@ import { composeStatement } from "../signStatement.js";
 import { cssColor, escapeHtml, formatAmd, formatDateDMY, getCurrentPosition, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, labelColon } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
+import { canPlanRoutes, canDeliverOrders } from "../shared/roles.js";
 import { ensureOwnSignature } from "../signaturePad.js";
 import { ensureLeaflet } from "../leafletLoader.js";
 
-const canPlan = () => state.user.role === "delivery_manager" || state.user.role === "admin";
-const canDrive = () => state.user.role === "delivery_manager" || state.user.role === "admin";
+const canPlan = () => canPlanRoutes(state.user.role);
+const canDrive = () => canDeliverOrders(state.user.role);
 
 function stopMarkerIcon(n) {
   return L.divIcon({

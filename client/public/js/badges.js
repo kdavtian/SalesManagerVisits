@@ -3,6 +3,7 @@
 // a badge (Home, Money) does not import the app shell (docs/architecture-roadmap.md, step 2).
 import { api } from "./api.js";
 import { state, isAdmin, canPlanForOthers } from "./state.js";
+import { seesUnrecordedBadge } from "./shared/roles.js";
 
 // Every badge count below starts back at 0 on every single page load --
 // nothing persists them, unlike the cached-user optimistic render right
@@ -145,7 +146,7 @@ export function applyUnrecordedBadge() {
 }
 
 export async function refreshUnrecordedBadge() {
-  if (!state.user || !["accountant", "ceo", "operations_director", "admin"].includes(state.user.role)) return;
+  if (!state.user || !seesUnrecordedBadge(state.user.role)) return;
   try {
     const { count } = await api.getUnrecordedCount();
     unrecordedBadgeCount = count;

@@ -15,9 +15,9 @@ import { FILTER_ICONS } from "../filterIcons.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state, canCreateTasks, sendsRequests } from "../state.js";
+import { seesAllTasks } from "../shared/roles.js";
 import { pickDate } from "../activityDatePicker.js";
 
-const SEES_ALL_ROLES = new Set(["admin", "ceo", "operations_director", "sales_director"]);
 export { canCreateTasks };
 
 function notifyTasksChanged() {
@@ -151,13 +151,12 @@ function openTaskTypeMenu(onPick) {
 
 export function renderTasks(root, navigate, openId) {
   const creator = canCreateTasks();
-  const sawAll = SEES_ALL_ROLES.has(state.user.role);
   root.innerHTML = `<div class="activity-view tasks-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".tasks-view");
 
   // Managers see everything they gave or received (a task they just created for someone else
   // must show up); open tasks of any date by default.
-  const f = { tab: "open", scope: creator || sawAll ? "all" : "mine", person: "", kind: "", sort: "due", reversed: false, search: "", due: "" };
+  const f = { tab: "open", scope: creator ? "all" : "mine", person: "", kind: "", sort: "due", reversed: false, search: "", due: "" };
   let rows = [];
   let today = "";
   let openDropdown = null;
@@ -219,7 +218,7 @@ export function renderTasks(root, navigate, openId) {
     csvLead: { header: [t("desk_col_task"), t("desk_col_status")], row: (r) => [r.title, taskStatusText(r)] },
     // Reassign / cancel: the creator of a task, or a role that sees every task (the server checks each PATCH).
     bulkActions: (chosen) =>
-      creator || sawAll
+      creator
         ? [
             { key: "reassign", label: t("desk_reassign"), primary: true },
             ...(chosen.some((r) => r.status === "open") ? [{ key: "cancel", label: t("task_cancel"), danger: true }] : []),
@@ -294,7 +293,7 @@ export function renderTasks(root, navigate, openId) {
     if (f.person) chips.push({ label: rows.find((r) => String(r.assignee_id) === f.person)?.assignee_name || t("desk_col_person"), onRemove: () => { f.person = ""; renderShell(); } });
     renderDeskFilters(bar, {
       groups: [
-        ...(creator || sawAll ? [{ key: "scope", label: t("tasks_scope_label"), active: f.scope !== "all", onClick: (btn) => openDeskMenu(btn, scopeOptions, f.scope, (v) => { f.scope = v; renderShell(); }) }] : []),
+        ...(creator ? [{ key: "scope", label: t("tasks_scope_label"), active: f.scope !== "all", onClick: (btn) => openDeskMenu(btn, scopeOptions, f.scope, (v) => { f.scope = v; renderShell(); }) }] : []),
         { key: "kind", label: t("tasks_kind_label"), active: Boolean(f.kind), onClick: (btn) => openDeskMenu(btn, kindOptions, f.kind, (v) => { f.kind = v; renderShell(); }) },
         { key: "due", label: t("desk_col_due"), active: Boolean(f.due), onClick: (btn) => openDeskMenu(btn, dueOptions, f.due, (v) => { f.due = v; renderShell(); }) },
       ],
@@ -395,7 +394,7 @@ export function renderTasks(root, navigate, openId) {
         <label class="visually-hidden" for="task-search">${t("search")}</label>
         <input type="search" id="task-search" placeholder="${t("search")}" aria-label="${t("search")}" value="${escapeHtml(f.search)}" />
         <div class="activity-search-actions" aria-label="${t("filters")}">
-          ${creator || sawAll ? dropdownHtml("scope", scopeOptions, f.scope, FILTER_ICONS.manager, t("tasks_scope_label"), f.scope !== "all") : ""}
+          ${creator ? dropdownHtml("scope", scopeOptions, f.scope, FILTER_ICONS.manager, t("tasks_scope_label"), f.scope !== "all") : ""}
           ${dropdownHtml("kind", kindOptions, f.kind, FILTER_ICONS.outcome, t("tasks_kind_label"), Boolean(f.kind))}
           ${closedTab ? "" : dropdownHtml("sort", sortOptions, f.sort, FILTER_ICONS.sort, t("sort"), f.sort !== "due")}
         </div>
@@ -598,7 +597,7 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
 
   function render() {
     const info = taskDueInfo(task, today);
-    const isCreator = task.creator_id === state.user.id || ["admin", "ceo", "operations_director"].includes(state.user.role);
+    const isCreator = task.creator_id === state.user.id || seesAllTasks(state.user.role);
     const open = task.status === "open";
     sheet.innerHTML = `
       <button type="button" class="icon-btn sheet-close-x" data-action="close" aria-label="${t("close")}">${icons.close}</button>

@@ -3,10 +3,10 @@
 // Stock (dead stock actions), Customers (win-back result), Flow (order step timing), Data (scorecard, Excel upload).
 import { api } from "../api.js";
 import { state } from "../state.js";
+import { decidesOpsControl } from "../shared/roles.js";
 import { t } from "../i18n.js";
 import { activateDialog, escapeHtml, formatAmd, groupDigits, bindAmdInput, showToast } from "../util.js";
 
-const DECIDE_ROLES = new Set(["admin", "ceo", "operations_director"]);
 const DECISIONS = ["collect", "restructure", "dispute", "legal", "write_off"];
 const DECISION_BADGE = { collect: "badge-warning", restructure: "badge-info", dispute: "badge-neutral", legal: "badge-danger", write_off: "badge-neutral" };
 
@@ -54,7 +54,7 @@ export async function renderOpsControl(root, navigate, startTab) {
   // ---------------- Cash ----------------
   async function paintCash() {
     const [legacy, limits] = await Promise.all([api.opsLegacyBalances(), api.opsCreditLimits()]);
-    const canDecide = DECIDE_ROLES.has(state.user.role);
+    const canDecide = decidesOpsControl(state.user.role);
     const shown = legacy.items.slice(0, 40);
     body.innerHTML = `
       <section class="card ops-card">

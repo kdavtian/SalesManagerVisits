@@ -12,10 +12,9 @@ import { availableBulkActions, runBulkAction } from "../orderBulk.js";
 import { openPrintBlankSheet } from "../orderBlankPrint.js";
 import { ACCOUNTING_STATUS_BADGE, accountingStatusLabel } from "../accountingDocSheet.js";
 import { state, seesAllActivity } from "../state.js";
+// who sees (and can filter by) the accounting-document status: the people who send orders to accounting
+import { canRequestAccountingDocs } from "../shared/roles.js";
 
-// Who sees (and can filter by) the accounting-document status -- mirrors
-// canConfirmOrders in the server's roles.js.
-const ACCOUNTING_ROLES = new Set(["admin", "sales_director", "ceo", "operations_director", "accountant"]);
 const ACCOUNTING_FILTERS = ["pending", "in_progress", "waybill_created", "partially_created", "exported_unsigned", "signed", "needs_attention", "cancelled"];
 // The "Accounting" group next to Draft: every order that was sent to accounting
 // (a waybill or invoice request), with its own row of request-status chips.
@@ -346,7 +345,7 @@ export function renderOrders(root, navigate, openId = null, { startNew = false }
         .map((c) => `<button role="menuitemradio" aria-checked="${c === channelFilter}" data-channel="${escapeHtml(c)}">${escapeHtml(channelDisplayLabel(c))}</button>`)
         .join("")}
       ${
-        ACCOUNTING_ROLES.has(state.user.role)
+        canRequestAccountingDocs(state.user.role)
           ? `<div class="dropdown-menu-heading muted" role="presentation">${t("acc_section_title")}</div>
       <button role="menuitemradio" aria-checked="${accountingFilter === ""}" data-accounting="">${t("acc_filter_any")}</button>
       <button role="menuitemradio" aria-checked="${accountingFilter === "none"}" data-accounting="none">${t("acc_filter_none")}</button>

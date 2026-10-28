@@ -13,25 +13,9 @@ import { api } from "../api.js";
 import { escapeHtml, formatAmd, formatDateTime, formatDateDMY, activateDialog, channelDisplayLabel, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, bindAmdInput, downloadFromUrl, showToast } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
+import { validHandoffRecipientRoles, offersHandoffOnBehalf } from "../shared/roles.js";
 import { deskSelectChip } from "../deskTable.js";
 
-// Mirrors server/src/roles.js's validHandoffRecipientRoles /
-// canSubmitHandoffForOthers -- kept local for the same reason every other
-// view in this app duplicates its role rules (there is no shared client
-// roles module; see payments.js's REVIEW_ROLES).
-const NEXT_HOP_ROLES = {
-  sales_manager: ["sales_director", "accountant"],
-  sales_director: ["ceo", "operations_director", "accountant"],
-  ceo: ["accountant"],
-  operations_director: ["accountant"],
-};
-// The only on-behalf-of case in the chain is the FIRST hop: a sales
-// director declaring "I have received this rep's collections". The server
-// enforces that too (checkOnBehalf: the actor must be the receiver, and a
-// rep's only legal receiver is a director), so a CEO or accountant would
-// only ever get an error out of that picker -- don't offer it to them.
-// Admin keeps it as the usual backstop.
-const SUBMIT_FOR_OTHERS_ROLES = new Set(["admin", "sales_director", "accountant"]);
 
 const HANDOFF_STATUS_META = {
   pending: { key: "handoff_status_pending", cls: "badge-warning" },
@@ -74,8 +58,8 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
   document.querySelectorAll(".sheet-overlay").forEach((el) => el.remove());
 
   const role = state.user.role;
-  const canActForOthers = SUBMIT_FOR_OTHERS_ROLES.has(role);
-  const canSendOwn = Boolean(NEXT_HOP_ROLES[role]);
+  const canActForOthers = offersHandoffOnBehalf(role);
+  const canSendOwn = validHandoffRecipientRoles(role).length > 0;
 
   root.innerHTML = `
     <div class="detail-view">

@@ -14,7 +14,7 @@ import { pdfBufferPreview } from "../pdfPreview.js";
 import { pool } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
 import { tierListPrice } from "../tierPricing.js";
-import { seesAllActivity, canConfirmOrders, canConfirmSubmittedOrders, canRequestAccountingDocs, canSubmitOrdersForOthers, canAssignErpCustomerId, canRecordOrders, seesUnrecordedBadge, canMarkDeliveredWithoutRoute, seesProductCosts, seesOnlyRecentAccountingDocs, ACCOUNTING_DOCS_RECENT_DAYS } from "../roles.js";
+import { seesAllActivity, canConfirmOrders, canConfirmSubmittedOrders, canRequestAccountingDocs, canSetAccountingStatus, canSubmitOrdersForOthers, canAssignErpCustomerId, canRecordOrders, seesUnrecordedBadge, canMarkDeliveredWithoutRoute, seesProductCosts, seesOnlyRecentAccountingDocs, ACCOUNTING_DOCS_RECENT_DAYS } from "../roles.js";
 import { notifyTelegram, escapeHtml } from "../telegram.js";
 import { notifyUser } from "../notifications.js";
 import { ORDER_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES, DELIVERY_OUTCOME_NOTIFY_ROLES } from "../notificationPreferences.js";
@@ -1250,7 +1250,7 @@ ordersRouter.post("/:id/accounting-request", async (req, res) => {
 // for Lily, cancelled = withdrawn, created / signed / needs attention =
 // recorded by a person). Management and the accountant can do it.
 ordersRouter.post("/:id/accounting-status", async (req, res) => {
-  if (!canConfirmOrders(req.user.role) && req.user.role !== "accountant") return res.status(403).json({ error: "Not allowed" });
+  if (!canSetAccountingStatus(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const next = req.body?.status;
   if (!ACCOUNTING_STATUSES.includes(next)) return res.status(400).json({ error: "Unknown request status" });
   const { rows } = await pool.query("SELECT id, accounting_status FROM orders WHERE id = $1", [req.params.id]);
@@ -1279,7 +1279,7 @@ ordersRouter.post("/:id/accounting-status", async (req, res) => {
 // able to see it): marks one waybill (by HC document number) or all of them
 // as signed.
 ordersRouter.post("/:id/accounting-signed", async (req, res) => {
-  if (!canConfirmOrders(req.user.role) && req.user.role !== "accountant") return res.status(403).json({ error: "Not allowed" });
+  if (!canSetAccountingStatus(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const { rows } = await pool.query("SELECT id, accounting_status, accounting_documents FROM orders WHERE id = $1", [req.params.id]);
   const order = rows[0];
   if (!order) return res.status(404).json({ error: "Order not found" });

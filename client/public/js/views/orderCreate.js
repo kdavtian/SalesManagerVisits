@@ -7,6 +7,7 @@ import { openSyncQueueSheet } from "../syncQueueSheet.js";
 import { openPrintBlankSheet } from "../orderBlankPrint.js";
 import { icons } from "../icons.js";
 import { canAssignErpCustomerId, state } from "../state.js";
+import { canConfirmOrders } from "../shared/roles.js";
 import { compareProducts, sortedBrands } from "../productSort.js";
 import { getProductCatalog } from "../productCatalog.js";
 import { searchProducts, debounce } from "../productSearch.js";
@@ -90,7 +91,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
   // Gold customers can have individually negotiated prices; reviewer roles
   // (director and above) can set them from this form. The server applies
   // saved ones itself -- these are only for display and the edit input.
-  const canSetPrices = tier === "gold" && ["admin", "sales_director", "ceo", "operations_director"].includes(state.user?.role);
+  const canSetPrices = tier === "gold" && canConfirmOrders(state.user?.role);
   const individualPrices = new Map();
   if (tier === "gold") {
     try {

@@ -157,6 +157,18 @@ Twelve steps, three phases, about 24 releases. Size = number of releases.
 - Release 3b: the remaining files from the problem-6 list; add an architecture check that fails on a new literal role array in
   `client/public/js` (allowlist only for role pickers that list every role).
 - Done when: `grep -rn '\["admin", "ceo"' client/public/js` finds only the allowlisted pickers.
+- As built (1.458.0, 3a + 3b in one release): the rule file is `client/public/js/shared/roles.js` (the browser can only load files under
+  `client/public`); `server/src/roles.js` re-exports it, so server imports did not change; `client/package.json` (`"type": "module"`)
+  makes Node read it as a module on any Node version. `state.js` helpers and every screen list now call named rules; the server's own
+  lists that had a twin in the app (operations control, Home numbers, place review, pin auto-approval, Vaghinak, anti-fraud, expenses,
+  customer holders) moved into it too, as rules + `rolesWhere(rule)` where SQL needs a list. Rules only the screens need are in its
+  "Screen rules" section. Architecture check 5 fails on a role list (or `role === "a" || role === "b"`) outside that file; allowed:
+  the role pickers and the Home quick-action default roles. Every replaced list was compared role by role with the rule it now calls:
+  identical, so nothing on screen changed. Notification recipient lists (`notificationPreferences.js`) stay where they are (who is told,
+  not who may).
+- Also fixed (found by the wider browser tests): an expired session on a phone that remembers the person showed "Cannot read
+  properties of null (reading 'id')" instead of the login form, until a reload (the remembered Home's code arrived after the login
+  form and painted over it). `app.js` renderRoute now drops a screen whose code arrives after a newer render started.
 
 #### Step 4. One job scheduler - size 1
 - [ ] `server/src/jobs/index.js`: a registry `[{ name, every | at (Yerevan time), workingDaysOnly, run }]`, one `setInterval` tick
@@ -276,4 +288,5 @@ the server share `roles.js`; a screen never edits another screen's DOM.
 
 - Analysis and plan: 2026-10-28 (no code change).
 - Step 1 code checker: 1.456.0, PR #500, 2026-10-28.
-- Step 2 architecture checks: 1.457.0, 2026-10-28.
+- Step 2 architecture checks: 1.457.0, PR #501, 2026-10-28.
+- Step 3 one role file: 1.458.0, 2026-10-28.

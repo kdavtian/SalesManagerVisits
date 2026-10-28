@@ -120,3 +120,38 @@ test("every notifyUser type is in NOTIFICATION_TYPES; every type Settings shows 
     assert.deepEqual(shown.filter((type) => !texts[`notification_type_${type}`]), [], `Settings types without notification_type_<type> in i18n-${lang}.js`);
   }
 });
+
+// ---- 5. one place for role rules ------------------------------------------------------------------------------------------------------
+// Who may do what lives in client/public/js/shared/roles.js, shared by the server and the app. A screen asks a named rule from there
+// instead of keeping its own list of roles (a copied list drifts from the server's: a button that answers "not allowed", or a missing one).
+// Allowed: the role pickers (their own display order) and the per-tile default roles of the Home quick actions (data the admin edits,
+// not a rule).
+const ROLE_LIST_ALLOWED = new Set(["js/views/admin.js:ROLE_OPTIONS", "js/quickActions.js:ALL_ROLES", "js/quickActions.js:defaultRoles"]);
+test("no screen keeps its own list of roles: it asks js/shared/roles.js", async () => {
+  const { ROLES, PICKABLE_ROLES } = await import(pathToFileURL(path.join(PUBLIC, "js/shared/roles.js")).href);
+  const roleNames = new Set(PICKABLE_ROLES);
+  const isRole = (n) => n?.type === "Literal" && roleNames.has(n.value);
+  const offenders = [];
+  for (const file of walk(path.join(PUBLIC, "js")).filter((f) => f.endsWith(".js") && !f.includes(`${path.sep}shared${path.sep}`))) {
+    const rel = path.relative(PUBLIC, file).split(path.sep).join("/");
+    if (/\/i18n(-[a-z]+)?\.js$/.test(rel)) continue;
+    const owners = [];
+    eachNode(parse(file), (n) => {
+      if (n.type === "VariableDeclarator" && n.id.type === "Identifier") owners.push([n.init, n.id.name]);
+      if (n.type === "Property" && n.key.type === "Identifier") owners.push([n.value, n.key.name]);
+      // a list of two or more role names
+      if (n.type === "ArrayExpression" && n.elements.filter(isRole).length >= 2) {
+        const owner = owners.find(([node]) => node === n || (node?.type === "NewExpression" && node.arguments[0] === n))?.[1];
+        if (!ROLE_LIST_ALLOWED.has(`${rel}:${owner}`)) offenders.push(`${rel}:${n.loc.start.line} [${n.elements.filter(isRole).map((e) => e.value).join(", ")}]`);
+      }
+      // role === "a" || role === "b" (|| ...)
+      if (n.type === "LogicalExpression" && n.operator === "||") {
+        const sides = [n.left, n.right];
+        if (sides.every((x) => x.type === "BinaryExpression" && x.operator === "===" && (isRole(x.right) || isRole(x.left)))) offenders.push(`${rel}:${n.loc.start.line} (role === … || role === …)`);
+      }
+    });
+  }
+  assert.deepEqual(offenders, [], "role lists outside js/shared/roles.js: use (or add) a named rule there");
+  assert.ok(ROLES.length >= 8);
+});
+

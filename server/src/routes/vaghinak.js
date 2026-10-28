@@ -8,13 +8,13 @@ import { requireAuth } from "../middleware/auth.js";
 import { MANAGEMENT_ROLES, tick, wrapUp, teamPulse } from "../vaghinak/engine.js";
 import { getVaghinakSettings, saveVaghinakSettings } from "../vaghinak/settings.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
+import { editsVaghinakSettings } from "../roles.js";
 
 export const vaghinakRouter = Router();
 vaghinakRouter.use(requireAuth);
 
-const SETTINGS_ROLES = ["admin", "ceo", "operations_director"];
 const requireManagement = (req, res, next) => (MANAGEMENT_ROLES.includes(req.user.role) ? next() : res.status(403).json({ error: "Not allowed" }));
-const requireSettingsRole = (req, res, next) => (SETTINGS_ROLES.includes(req.user.role) ? next() : res.status(403).json({ error: "Not allowed" }));
+const requireSettingsRole = (req, res, next) => (editsVaghinakSettings(req.user.role) ? next() : res.status(403).json({ error: "Not allowed" }));
 
 const MINE = "user_id = $1 AND NOT shadow";
 const SELECT_MESSAGE = `id, kind, day, level, severity, body, needs_answer, mandatory, choices, answer_choice, answer_text, answered_at, read_at, reaction, created_at`;

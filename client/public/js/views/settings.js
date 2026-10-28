@@ -6,6 +6,7 @@ import { getTheme, setTheme } from "../theme.js";
 import { getPerfMode, setPerfMode } from "../perfMode.js";
 import { getTextSize, setTextSize } from "../textSize.js";
 import { state, isAdmin, canPlanForOthers, seesFinancialExports, canManageProducts, canReassignCustomers, isPerfCeo } from "../state.js";
+import { ROLES, signsHandoverActs, ownsCustomers } from "../shared/roles.js";
 import { renderTeamSection, renderPlanApprovalsSection, renderEditRequestsSection, renderProductsSection, renderPointsCloseoutSection, renderCompanyProfileSection, renderSalesChannelOwnersSection, renderQuickActionVisibilitySection, renderDataQualitySection, renderPlacesSection, renderNotificationDeliveryLogSection, renderClientErrorLogSection } from "./admin.js";
 import { renderSystemHealthSection } from "./systemHealth.js";
 import { renderPinReviewSection } from "./pinReview.js";
@@ -24,7 +25,6 @@ import { refreshProductCatalog } from "../productCatalog.js";
 import { isStrongDevice, getMapTileCacheEnabled, setMapTileCacheEnabled } from "../mapPrefs.js";
 
 // Who hands over delivery-acceptance acts and so has a signature on the profile (owner, 2026-10-26).
-const SIGNING_ROLES = ["sales_manager", "sales_director", "ceo", "admin", "operations_director", "delivery_manager"];
 
 const ICON = {
   camera: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg>`,
@@ -250,7 +250,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
           <span class="muted">${t(`role_${state.user.role_title || state.user.role}`)}${state.user.position ? ` · ${escapeHtml(state.user.position)}` : ""}</span>
           <span class="muted">${escapeHtml(state.user.email)}</span>
           ${state.user.has_avatar ? `<button type="button" class="settings-reset-link" id="avatar-remove-btn">${t("remove_avatar")}</button>` : ""}
-          ${SIGNING_ROLES.includes(state.user.role) ? `<button type="button" class="settings-reset-link" id="signature-btn">${t(state.user.has_signature ? "signature_redraw" : "signature_draw")}</button>` : ""}
+          ${signsHandoverActs(state.user.role) ? `<button type="button" class="settings-reset-link" id="signature-btn">${t(state.user.has_signature ? "signature_redraw" : "signature_draw")}</button>` : ""}
         </div>
       </div>
 
@@ -1600,7 +1600,7 @@ function targetProgressHtml(salesAmd, budgetAmd) {
 async function loadSalesPerformance(slot, role) {
   slot.innerHTML = `<h2 class="section-title">${t("sales_performance_title")}</h2><p class="loading-state" role="status">${t("loading")}</p>`;
 
-  const wantsOwn = role === "sales_manager" || role === "sales_director";
+  const wantsOwn = ownsCustomers(role);
 
   let mine = null;
   try {
@@ -1699,16 +1699,7 @@ async function loadNotificationPreferences(slot) {
   });
 }
 
-const NOTIFICATION_ROLES = [
-  "admin",
-  "ceo",
-  "operations_director",
-  "sales_director",
-  "sales_manager",
-  "warehouse_manager",
-  "delivery_manager",
-  "accountant",
-];
+const NOTIFICATION_ROLES = ROLES;
 
 // A role-by-role dropdown instead of one flat 7-role x 4-type grid -- the
 // full matrix doesn't fit a phone screen without horizontal scrolling,

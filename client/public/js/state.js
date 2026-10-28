@@ -1,3 +1,5 @@
+import * as R from "./shared/roles.js";
+
 export const state = {
   user: null,
 };
@@ -36,154 +38,41 @@ export function isAdmin() {
   return state.user?.role === "admin";
 }
 
-// Mirrors canManageProducts in the server's roles.js -- UI gate only, the
-// server independently re-checks on every product/pricing mutation.
-export function canManageProducts() {
-  const role = state.user?.role;
-  return role === "admin" || role === "ceo" || role === "operations_director" || role === "accountant";
-}
+// The logged-in person's permissions, read from the rules the server enforces (js/shared/roles.js): UI gates only, the server re-checks
+// every request.
+const role = () => state.user?.role;
+export const canManageProducts = () => R.canManageProducts(role());
+// gold price, landing and net cost (the API strips them for everyone else)
+export const seesProductCosts = () => R.seesProductCosts(role());
+// landing / net cost printed into a pricelist PDF
+export const canPrintCostColumns = () => R.canPrintCostColumns(role());
+// a sales manager sees only their own data, every other role everyone's
+export const seesAllActivity = () => R.seesAllActivity(role());
+export const canEditDirectly = () => R.canDeleteOrEditDirectly(role());
+export const canViewTeamLocations = () => R.canViewTeamLocations(role());
+// who drives a route
+export const canDeliverOrders = () => R.canDeliverOrders(role());
+export const broadcastsLocation = () => R.broadcastsLocation(role());
+export const seesFinancialExports = () => R.seesFinancialExports(role());
+export const canPlanForOthers = () => R.canPlanForOthers(role());
+// everyone who can plan for others, plus the accountant (read-only)
+export const canViewAllRoutePlans = () => R.canViewAllRoutePlans(role());
+// who gives tasks to others; everybody receives and completes them
+export const canCreateTasks = () => R.canCreateTasks(role());
+// the accountant / financial director sends REQUESTS (Խնդրանք) to the sales director: a task under another name (owner, 2026-10-27)
+export const sendsRequests = () => R.sendsRequests(role());
+export const canReassignCustomers = () => R.canReassignCustomers(role());
+export const canAssignErpCustomerId = (customer) => R.canAssignErpCustomerId(role(), customer.created_by, state.user?.id);
+export const canEditOwnSalesChannel = (customer) => R.canEditOwnSalesChannel(role(), customer.created_by, state.user?.id);
 
-// Mirrors seesProductCosts in the server's roles.js: gold price, landing and
-// net cost are management-only (the API strips them for everyone else).
-export function seesProductCosts() {
-  const role = state.user?.role;
-  return role === "admin" || role === "ceo" || role === "operations_director" || role === "sales_director" || role === "accountant";
-}
+// Team Performance: which screen renders (the server enforces the same rules)
+export const isPerfCeo = () => R.isPerfCeo(role());
+export const seesAllPerformance = () => R.seesAllPerformance(role());
+export const canEditChannelPlan = (ownerRole) => R.canEditChannelPlan(role(), ownerRole);
+export const canReviewPerfPlan = (submittedByRole) => R.canReviewPlan(role(), submittedByRole);
+export const canCloseMonth = () => R.canCloseMonth(role());
+// the "Move to draft" unblock action on a pending_approval / approved plan
+export const canReopenPerfPlanAsDraft = () => R.canReopenPlanAsDraft(role());
 
-// Mirrors canPrintCostColumns in the server's roles.js: landing / net cost can
-// be printed into a pricelist PDF only by admin, CEO and operations director.
-export function canPrintCostColumns() {
-  const role = state.user?.role;
-  return role === "admin" || role === "ceo" || role === "operations_director";
-}
-
-// Sales managers only see their own data; every other role sees
-// everyone's — mirrors server/src/roles.js.
-export function seesAllActivity() {
-  return state.user?.role !== "sales_manager";
-}
-
-export function canEditDirectly() {
-  return state.user?.role === "admin";
-}
-
-export function canViewTeamLocations() {
-  return (
-    state.user?.role === "admin" ||
-    state.user?.role === "sales_director" ||
-    state.user?.role === "ceo" ||
-    state.user?.role === "operations_director"
-  );
-}
-
-// Mirrors server/src/roles.js canDeliverOrders: who drives a route.
-export function canDeliverOrders() {
-  return state.user?.role === "delivery_manager" || state.user?.role === "admin";
-}
-
-export function broadcastsLocation() {
-  return state.user?.role !== "admin" && state.user?.role !== "ceo" && state.user?.role !== "operations_director";
-}
-
-export function seesFinancialExports() {
-  return (
-    state.user?.role === "admin" ||
-    state.user?.role === "ceo" ||
-    state.user?.role === "operations_director" ||
-    state.user?.role === "sales_director" ||
-    state.user?.role === "accountant"
-  );
-}
-
-export function canPlanForOthers() {
-  return (
-    state.user?.role === "admin" ||
-    state.user?.role === "sales_director" ||
-    state.user?.role === "ceo" ||
-    state.user?.role === "operations_director"
-  );
-}
-
-// Mirrors canViewAllRoutePlans in the server's roles.js: everyone who can plan
-// for others, plus the accountant (read-only).
-export function canViewAllRoutePlans() {
-  return canPlanForOthers() || state.user?.role === "accountant";
-}
-
-// Who gives tasks to others (server roles.js canCreateTasks); everybody receives and completes them.
-const TASK_CREATOR_ROLES = new Set(["admin", "ceo", "operations_director", "sales_director", "accountant"]);
-export const canCreateTasks = () => TASK_CREATOR_ROLES.has(state.user?.role);
-// The accountant / financial director sends REQUESTS (Խնդրանք) to the sales director: a task under another name (owner, 2026-10-27).
-export const sendsRequests = () => state.user?.role === "accountant";
-
-// Mirrors canReassignCustomers in the server's roles.js.
-export function canReassignCustomers() {
-  return (
-    state.user?.role === "admin" ||
-    state.user?.role === "sales_director" ||
-    state.user?.role === "ceo" ||
-    state.user?.role === "operations_director"
-  );
-}
-
-// Mirrors canAssignErpCustomerId in the server's roles.js -- UI gate only,
-// the server independently re-checks ownership on every PATCH.
-export function canAssignErpCustomerId(customer) {
-  const role = state.user?.role;
-  if (role === "admin" || role === "ceo" || role === "operations_director" || role === "accountant") return true;
-  if (role === "sales_manager" || role === "sales_director") return customer.created_by === state.user.id;
-  return false;
-}
-
-// Mirrors canEditOwnSalesChannel in the server's roles.js -- UI gate only,
-// the server independently re-checks ownership on every PATCH.
-export function canEditOwnSalesChannel(customer) {
-  if (canReassignCustomers()) return true;
-  return state.user?.role === "sales_manager" && customer.created_by === state.user.id;
-}
-
-// --- Team Performance -- mirrors server/src/roles.js exactly. The server
-// enforces all of this independently; these are UI-only gates so the right
-// screen renders in the first place, not a security boundary.
-
-export function isPerfCeo() {
-  return state.user?.role === "admin" || state.user?.role === "ceo" || state.user?.role === "operations_director";
-}
-
-export function seesAllPerformance() {
-  return (
-    state.user?.role === "admin" ||
-    state.user?.role === "ceo" ||
-    state.user?.role === "operations_director" ||
-    state.user?.role === "sales_director" ||
-    state.user?.role === "accountant"
-  );
-}
-
-export function canEditChannelPlan(ownerRole) {
-  if (isPerfCeo()) return true;
-  if (state.user?.role === "sales_director") return ownerRole === "sales_director";
-  if (state.user?.role === "accountant") return ownerRole === "accountant";
-  return false;
-}
-
-export function canReviewPerfPlan(submittedByRole) {
-  if (isPerfCeo()) return true;
-  if (state.user?.role === "accountant") return submittedByRole === "sales_director";
-  return false;
-}
-
-export function canCloseMonth() {
-  return isPerfCeo() || state.user?.role === "accountant";
-}
-
-// Mirrors canReopenPlanAsDraft in server/src/roles.js -- who sees the
-// "Move to draft" unblock action on a pending_approval/approved plan.
-export function canReopenPerfPlanAsDraft() {
-  return isPerfCeo() || state.user?.role === "sales_director" || state.user?.role === "accountant";
-}
-
-// Special pricelist of a Gold customer (individually negotiated prices): the roles that review orders.
-export function canSetCustomerPrices() {
-  return ["admin", "sales_director", "ceo", "operations_director"].includes(state.user?.role);
-}
+// Special pricelist of a Gold customer (individually negotiated prices): the roles that review orders (PUT /customers/:id/product-prices).
+export const canSetCustomerPrices = () => R.canConfirmOrders(role());

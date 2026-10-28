@@ -9,6 +9,7 @@ import { icons } from "../icons.js";
 import { FILTER_ICONS } from "../filterIcons.js";
 import { nextVisitRowHtml, formatLastVisit } from "../visitSchedule.js";
 import { canViewTeamLocations, canEditDirectly, canPlanForOthers, canReassignCustomers, state } from "../state.js";
+import { movesAnyPinAtOnce } from "../shared/roles.js";
 import { getClusterPins, setClusterPins, getCompassMode, setCompassMode, getMapTileCacheEnabled, getColorBy, setColorBy, getPlannedMode, setPlannedMode, getDebtCoin, setDebtCoin } from "../mapPrefs.js";
 import { repColor } from "../repColors.js";
 import { getPerfMode } from "../perfMode.js";
@@ -3514,7 +3515,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     closeLocationPanel();
     // A pin correction is applied at once for the rep's own customers and for management (server:
     // editRequests.js canAutoApprovePin); only someone else's customer still waits for approval.
-    const pinAppliesAtOnce = canEditDirectly() || ["sales_manager", "sales_director", "operations_director", "ceo"].includes(state.user?.role);
+    const pinAppliesAtOnce = canEditDirectly() || movesAnyPinAtOnce(state.user?.role) || state.user?.role === "sales_manager";
     placingMarker?.dragging?.disable();
     const overlay = document.createElement("div");
     overlay.className = "sheet-overlay sheet-overlay-light";

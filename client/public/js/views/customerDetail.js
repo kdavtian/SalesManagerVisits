@@ -10,6 +10,7 @@ import { t } from "../i18n.js";
 import { dueChipHtml } from "../debtChip.js";
 import { icons } from "../icons.js";
 import { state, canCreateTasks, sendsRequests, canSetCustomerPrices, canEditDirectly, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, isAdmin, seesFinancialExports } from "../state.js";
+import { reviewsPlaces } from "../shared/roles.js";
 import { openVisitDetailSheet, openPhotoLightbox, checkinOutcomeLabels } from "../visitDetail.js";
 import { visitStatusBadge } from "./customers.js";
 import { renderPotentialCard, potentialBadgeHtml } from "../potential.js";
@@ -199,7 +200,7 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
             ]
               .filter(Boolean)
               .map(escapeHtml)
-              .join(" &middot; ")}</span>${customer.place_review_pending && ["admin", "ceo", "operations_director", "sales_director"].includes(state.user.role) ? ` <span class="badge badge-warning">${t("place_to_review")}</span>` : ""}</div>`
+              .join(" &middot; ")}</span>${customer.place_review_pending && reviewsPlaces(state.user.role) ? ` <span class="badge badge-warning">${t("place_to_review")}</span>` : ""}</div>`
           : ""
       }
       ${customer.phone ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.phone}</span><a href="tel:${escapeHtml(customer.phone)}">${escapeHtml(formatPhoneDisplay(customer.phone))}</a></div>` : ""}

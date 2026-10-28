@@ -1,6 +1,7 @@
 import { api } from "./api.js";
 import { applyOrderBadge, applyWarehouseBadge, applyDeliveryBadge, applyNotificationBadge, applyPlanApprovalBadge, refreshOrderBadge, refreshPaymentBadge, refreshUnrecordedBadge, refreshWarehouseBadge, refreshAccountingBadge, refreshDeliveryBadge, refreshNotificationBadge, refreshPlanApprovalBadge, refreshEditRequestBadge, refreshAllBadgesFromServer, restoreCachedBadgeCounts } from "./badges.js";
 import { state, setUser, loadCachedUser } from "./state.js";
+import { canSeeCashflow } from "./shared/roles.js";
 import { getLang, t } from "./i18n.js";
 import { icons } from "./icons.js";
 
@@ -611,11 +612,13 @@ function showRenderFailure(err) {
     location.reload();
   });
 }
+const STALE_ROUTE = new Error("stale route");
 async function render() {
   const seq = ++renderSeq;
   try {
     await renderRoute();
   } catch (err) {
+    if (err === STALE_ROUTE) return;
     showRenderFailure(err);
   }
   // Watchdog: a view that neither threw nor painted anything.
@@ -638,6 +641,13 @@ document.addEventListener("visibilitychange", recoverBlankScreen);
 window.addEventListener("pageshow", recoverBlankScreen);
 
 async function renderRoute() {
+  // A screen whose code arrives after a newer render started (the session turned out to be expired while the remembered Home was
+  // loading, a fast second tap) must not paint over the newer screen: it is dropped (render() ignores STALE_ROUTE).
+  const mySeq = renderSeq;
+  const fresh = (loading) => loading.then((m) => {
+    if (mySeq !== renderSeq) throw STALE_ROUTE;
+    return m;
+  });
   document.documentElement.lang = getLang();
   // Any open sheet/dialog overlay is appended straight to document.body,
   // outside the routed view container render() replaces below -- so
@@ -663,7 +673,7 @@ async function renderRoute() {
     topBar.hidden = true;
     navBar.hidden = true;
     sidebar.hidden = true;
-    const { renderLogin } = await import("./views/login.js");
+    const { renderLogin } = await fresh(import("./views/login.js"));
     renderLogin(app, async () => {
       location.hash = "#/dashboard";
       startLocationBroadcast();
@@ -699,7 +709,7 @@ async function renderRoute() {
   }
   // Cashflow holds salaries and every money movement: only the owner's own roles open it (server: canSeeCashflow); anyone else who types or follows the
   // address lands on Home instead of an empty page with an error (a deep link from an old notification, a bookmark).
-  if (/^#\/cashflow(\?|$)/.test(location.hash) && !["admin", "ceo", "operations_director", "accountant"].includes(state.user.role)) {
+  if (/^#\/cashflow(\?|$)/.test(location.hash) && !canSeeCashflow(state.user.role)) {
     location.replace("#/dashboard");
     return;
   }
@@ -857,28 +867,28 @@ async function renderRoute() {
   const routePlanSetMatch = path.match(/^#\/route-plan-sets\/(\d+)$/);
 
   if (path === "#/dashboard" && state.user.role === "warehouse_manager") {
-    currentCleanup = await (await import("./views/warehouseHome.js")).renderWarehouseHome(app, navigate);
+    currentCleanup = await (await fresh(import("./views/warehouseHome.js"))).renderWarehouseHome(app, navigate);
   } else if (path === "#/dashboard" && state.user.role === "delivery_manager") {
-    currentCleanup = await (await import("./views/driverHome.js")).renderDriverHome(app, navigate);
+    currentCleanup = await (await fresh(import("./views/driverHome.js"))).renderDriverHome(app, navigate);
   } else if (path === "#/wh-home") {
     // The same Home, opened from the normal app (admin / management compare it with the old screens).
-    currentCleanup = await (await import("./views/warehouseHome.js")).renderWarehouseHome(app, navigate);
+    currentCleanup = await (await fresh(import("./views/warehouseHome.js"))).renderWarehouseHome(app, navigate);
   } else if (path === "#/driver-home") {
-    currentCleanup = await (await import("./views/driverHome.js")).renderDriverHome(app, navigate);
+    currentCleanup = await (await fresh(import("./views/driverHome.js"))).renderDriverHome(app, navigate);
   } else if (path === "#/cashflow") {
-    (await import("./views/cashflow.js")).renderCashflow(app, navigate);
+    (await fresh(import("./views/cashflow.js"))).renderCashflow(app, navigate);
   } else if (path === "#/returns") {
-    (await import("./views/returns.js")).renderReturns(app, navigate);
+    (await fresh(import("./views/returns.js"))).renderReturns(app, navigate);
   } else if (path === "#/staff" || /^#\/staff\/\d+$/.test(path)) {
-    (await import("./views/staff.js")).renderStaff(app, navigate, path.split("/")[2] ?? null, query);
+    (await fresh(import("./views/staff.js"))).renderStaff(app, navigate, path.split("/")[2] ?? null, query);
   } else if (path === "#/wh-pack") {
-    currentCleanup = await (await import("./views/warehousePack.js")).renderWarehousePack(app, navigate, query.get("tab"));
+    currentCleanup = await (await fresh(import("./views/warehousePack.js"))).renderWarehousePack(app, navigate, query.get("tab"));
   } else if (path === "#/dashboard") {
-    (await import("./views/dashboard.js")).renderDashboard(app, navigate);
+    (await fresh(import("./views/dashboard.js"))).renderDashboard(app, navigate);
   } else if (path === "#/activity") {
-    currentCleanup = (await import("./views/activity.js")).renderActivity(app, navigate);
+    currentCleanup = (await fresh(import("./views/activity.js"))).renderActivity(app, navigate);
   } else if (path === "#/map") {
-    const { renderMap } = await import("./views/map.js");
+    const { renderMap } = await fresh(import("./views/map.js"));
     currentCleanup = renderMap(
       app,
       navigate,
@@ -888,82 +898,82 @@ async function renderRoute() {
       query.get("customer")
     );
   } else if (path === "#/customers") {
-    currentCleanup = (await import("./views/customers.js")).renderCustomers(app, navigate, query.get("visited"), query.get("potential") ?? "");
+    currentCleanup = (await fresh(import("./views/customers.js"))).renderCustomers(app, navigate, query.get("visited"), query.get("potential") ?? "");
   } else if (specialPricesMatch) {
-    (await import("./views/specialPrices.js")).renderSpecialPrices(app, navigate, specialPricesMatch[1]);
+    (await fresh(import("./views/specialPrices.js"))).renderSpecialPrices(app, navigate, specialPricesMatch[1]);
   } else if (checkinSpotsMatch) {
-    (await import("./views/checkinSpots.js")).renderCheckinSpots(app, navigate, checkinSpotsMatch[1], query);
+    (await fresh(import("./views/checkinSpots.js"))).renderCheckinSpots(app, navigate, checkinSpotsMatch[1], query);
   } else if (customerOrdersMatch) {
-    (await import("./views/customerOrders.js")).renderCustomerOrders(app, navigate, customerOrdersMatch[1]);
+    (await fresh(import("./views/customerOrders.js"))).renderCustomerOrders(app, navigate, customerOrdersMatch[1]);
   } else if (orderCreateMatch) {
-    (await import("./views/orderCreate.js")).renderOrderCreate(app, navigate, orderCreateMatch[1], query.get("checkin"), { from: query.get("from"), usual: query.get("usual") === "1" });
+    (await fresh(import("./views/orderCreate.js"))).renderOrderCreate(app, navigate, orderCreateMatch[1], query.get("checkin"), { from: query.get("from"), usual: query.get("usual") === "1" });
   } else if (path === "#/orders") {
-    currentCleanup = (await import("./views/orders.js")).renderOrders(app, navigate, query.get("open"), { startNew: query.get("new") === "1" });
+    currentCleanup = (await fresh(import("./views/orders.js"))).renderOrders(app, navigate, query.get("open"), { startNew: query.get("new") === "1" });
   } else if (paymentDetailMatch) {
-    (await import("./views/payments.js")).renderPayments(app, navigate, paymentDetailMatch[1]);
+    (await fresh(import("./views/payments.js"))).renderPayments(app, navigate, paymentDetailMatch[1]);
   } else if (path === "#/payments") {
-    (await import("./views/payments.js")).renderPayments(app, navigate, null, query);
+    (await fresh(import("./views/payments.js"))).renderPayments(app, navigate, null, query);
   } else if (handoffDetailMatch) {
-    (await import("./views/cashHandoffs.js")).renderCashHandoffs(app, navigate, handoffDetailMatch[1]);
+    (await fresh(import("./views/cashHandoffs.js"))).renderCashHandoffs(app, navigate, handoffDetailMatch[1]);
   } else if (path === "#/cash-handoffs") {
-    (await import("./views/cashHandoffs.js")).renderCashHandoffs(app, navigate, null, { handover: query.get("handover") === "1" });
+    (await fresh(import("./views/cashHandoffs.js"))).renderCashHandoffs(app, navigate, null, { handover: query.get("handover") === "1" });
   } else if (path === "#/money") {
-    (await import("./views/money.js")).renderMoney(app, navigate);
+    (await fresh(import("./views/money.js"))).renderMoney(app, navigate);
   } else if (path === "#/expenses") {
-    (await import("./views/cashExpenses.js")).renderCashExpenses(app, navigate);
+    (await fresh(import("./views/cashExpenses.js"))).renderCashExpenses(app, navigate);
   } else if (path === "#/reports") {
-    (await import("./views/reports.js")).renderReports(app, navigate, query.get("r"));
+    (await fresh(import("./views/reports.js"))).renderReports(app, navigate, query.get("r"));
   } else if (path === "#/route-distribution") {
-    (await import("./views/routeDistribution.js")).renderRouteDistribution(app, navigate);
+    (await fresh(import("./views/routeDistribution.js"))).renderRouteDistribution(app, navigate);
   } else if (routePlanSetMatch) {
-    (await import("./views/routePlanSets.js")).renderRoutePlanSet(app, navigate, Number(routePlanSetMatch[1]));
+    (await fresh(import("./views/routePlanSets.js"))).renderRoutePlanSet(app, navigate, Number(routePlanSetMatch[1]));
   } else if (path === "#/route-plans") {
-    (await import("./views/routePlans.js")).renderRoutePlans(app, navigate);
+    (await fresh(import("./views/routePlans.js"))).renderRoutePlans(app, navigate);
   } else if (path === "#/ops-control") {
-    (await import("./views/opsControl.js")).renderOpsControl(app, navigate, query.get("tab"));
+    (await fresh(import("./views/opsControl.js"))).renderOpsControl(app, navigate, query.get("tab"));
   } else if (path === "#/ask-kad") {
-    (await import("./views/askKad.js")).renderAskKad(app, navigate);
+    (await fresh(import("./views/askKad.js"))).renderAskKad(app, navigate);
   } else if (path === "#/vaghinak") {
-    (await import("./views/vaghinak.js")).renderVaghinak(app, navigate, query);
+    (await fresh(import("./views/vaghinak.js"))).renderVaghinak(app, navigate, query);
   } else if (path === "#/team-progress") {
-    (await import("./views/repProgress.js")).renderRepProgress(app, navigate);
+    (await fresh(import("./views/repProgress.js"))).renderRepProgress(app, navigate);
   } else if (path === "#/team-performance" || /^#\/team-performance\/(planning|approvals)$/.test(path)) {
     // Notifications sent before 1.360.0 carry #/team-performance/<tab>; new ones use ?tab=<tab>.
     const legacyTab = path.split("/")[2];
     if (legacyTab) query.set("tab", legacyTab);
-    (await import("./views/teamPerformance.js")).renderTeamPerformance(app, navigate, query);
+    (await fresh(import("./views/teamPerformance.js"))).renderTeamPerformance(app, navigate, query);
   } else if (path === "#/company-dashboard") {
-    (await import("./views/dashboardOverview.js")).renderDashboardOverview(app, navigate);
+    (await fresh(import("./views/dashboardOverview.js"))).renderDashboardOverview(app, navigate);
   } else if (path === "#/pricelist") {
-    (await import("./views/pricelist.js")).renderPricelist(app, navigate);
+    (await fresh(import("./views/pricelist.js"))).renderPricelist(app, navigate);
   } else if (productMatch) {
-    (await import("./views/productDetail.js")).renderProductDetail(app, navigate, productMatch[1]);
+    (await fresh(import("./views/productDetail.js"))).renderProductDetail(app, navigate, productMatch[1]);
   } else if (path === "#/warehouse") {
-    (await import("./views/warehouse.js")).renderWarehouse(app, navigate);
+    (await fresh(import("./views/warehouse.js"))).renderWarehouse(app, navigate);
   } else if (path === "#/delivery") {
-    (await import("./views/deliveryRoute.js")).renderDelivery(app, navigate);
+    (await fresh(import("./views/deliveryRoute.js"))).renderDelivery(app, navigate);
   } else if (path === "#/accounting") {
-    (await import("./views/accounting.js")).renderAccounting(app, navigate);
+    (await fresh(import("./views/accounting.js"))).renderAccounting(app, navigate);
   } else if (path === "#/documents") {
-    (await import("./views/documents.js")).renderDocuments(app, navigate);
+    (await fresh(import("./views/documents.js"))).renderDocuments(app, navigate);
   } else if (path === "#/recorded") {
-    (await import("./views/recorded.js")).renderRecorded(app, navigate);
+    (await fresh(import("./views/recorded.js"))).renderRecorded(app, navigate);
   } else if (path === "#/debt-balances") {
-    currentCleanup = (await import("./views/debtBalances.js")).renderDebtBalances(app, navigate);
+    currentCleanup = (await fresh(import("./views/debtBalances.js"))).renderDebtBalances(app, navigate);
   } else if (path === "#/sales") {
-    (await import("./views/sales.js")).renderSales(app, navigate);
+    (await fresh(import("./views/sales.js"))).renderSales(app, navigate);
   } else if (customerMatch) {
-    (await import("./views/customerDetail.js")).renderCustomerDetail(app, navigate, customerMatch[1]);
+    (await fresh(import("./views/customerDetail.js"))).renderCustomerDetail(app, navigate, customerMatch[1]);
   } else if (checkinMatch) {
-    (await import("./views/checkin.js")).renderCheckin(app, navigate, checkinMatch[1]);
+    (await fresh(import("./views/checkin.js"))).renderCheckin(app, navigate, checkinMatch[1]);
   } else if (path === "#/settings") {
-    (await import("./views/settings.js")).renderSettings(app, doLogout, render, query.get("section"), navigate);
+    (await fresh(import("./views/settings.js"))).renderSettings(app, doLogout, render, query.get("section"), navigate);
   } else if (path === "#/notifications") {
-    (await import("./views/notifications.js")).renderNotifications(app, navigate, refreshNotificationBadge);
+    (await fresh(import("./views/notifications.js"))).renderNotifications(app, navigate, refreshNotificationBadge);
   } else if (path === "#/tasks") {
-    currentCleanup = (await import("./views/tasks.js")).renderTasks(app, navigate, query.get("open"));
+    currentCleanup = (await fresh(import("./views/tasks.js"))).renderTasks(app, navigate, query.get("open"));
   } else if (path === "#/bonuses") {
-    (await import("./views/bonuses.js")).renderBonuses(app, navigate);
+    (await fresh(import("./views/bonuses.js"))).renderBonuses(app, navigate);
   } else {
     navigate("#/dashboard");
   }

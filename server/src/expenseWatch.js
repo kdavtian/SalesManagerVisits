@@ -8,8 +8,9 @@ import { pool } from "./db/pool.js";
 import { notifyUser } from "./notifications.js";
 import { yerevanToday } from "./utils/yerevanDate.js";
 import { bullets } from "./utils/bullets.js";
+import { rolesWhere, seesExpenseWatch } from "./roles.js";
 
-export const EXPENSE_ROLES = ["admin", "ceo", "operations_director", "accountant"];
+export const EXPENSE_ROLES = rolesWhere(seesExpenseWatch);
 const MATCH_DAYS = 5;
 const SPIKE_FACTOR = 1.5;
 const SPIKE_MIN_AMD = 300000;

@@ -15,9 +15,10 @@ import { clusterChase } from "./cluster.js";
 import { bullets } from "../utils/bullets.js";
 import { weeklyDigest } from "./digest.js";
 import { humanDelayPassed, jitteredDue } from "./humanDelay.js";
+import { rolesWhere, isVaghinakManagement } from "../roles.js";
 
 const YEREVAN_OFFSET_MS = 4 * 60 * 60 * 1000;
-export const MANAGEMENT_ROLES = ["admin", "ceo", "operations_director", "sales_director", "accountant"];
+export const MANAGEMENT_ROLES = rolesWhere(isVaghinakManagement);
 const MANDATORY_ROLES = new Set(["sales_manager"]); // only field reps are ever blocked by a question
 
 export const minuteOfDay = (date) => {

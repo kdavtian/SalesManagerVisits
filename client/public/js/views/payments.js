@@ -4,16 +4,9 @@ import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
 import { periodDates, periodKeyLabel } from "../periodButtons.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
+import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments } from "../shared/roles.js";
 import { icons } from "../icons.js";
 
-// Mirrors server/src/roles.js -- kept local since the client has no shared
-// roles module (every other list/detail view in this app does the same,
-// see orders.js's FULFILLMENT_ROLES/CONFIRM_ROLES consts).
-const REVIEW_ROLES = new Set(["admin", "ceo", "operations_director", "accountant"]);
-const SUBMIT_FOR_OTHERS_ROLES = new Set(["admin", "ceo", "operations_director", "accountant", "sales_director"]);
-function seesAllPayments(role) {
-  return role !== "sales_manager";
-}
 
 const STATUS_META = {
   pending: { key: "payment_status_pending", cls: "badge-warning" },
@@ -86,7 +79,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
   document.querySelectorAll(".sheet-overlay").forEach((el) => el.remove());
 
   const canSeeAll = seesAllPayments(state.user.role);
-  const canReview = REVIEW_ROLES.has(state.user.role);
+  const canReview = canReviewPayments(state.user.role);
 
   root.innerHTML = `
     <div class="detail-view">
@@ -703,12 +696,12 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
     overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
 
     let selectedCustomer = null;
-    let selectedManager = SUBMIT_FOR_OTHERS_ROLES.has(state.user.role) ? null : { id: state.user.id, name: state.user.name, position: state.user.position };
+    let selectedManager = canSubmitPaymentsForOthers(state.user.role) ? null : { id: state.user.id, name: state.user.name, position: state.user.position };
     let managers = null;
     let pendingSubmit = null; // holds payload while a duplicate-warning confirm is showing
 
     async function ensureManagers() {
-      if (managers || !SUBMIT_FOR_OTHERS_ROLES.has(state.user.role)) return;
+      if (managers || !canSubmitPaymentsForOthers(state.user.role)) return;
       try {
         managers = await api.getEligiblePaymentManagers();
       } catch {
@@ -727,7 +720,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
             </button>
           </label>
           ${
-            SUBMIT_FOR_OTHERS_ROLES.has(state.user.role)
+            canSubmitPaymentsForOthers(state.user.role)
               ? `<label for="payment-manager-select">${t("payment_manager_label")}
               <select id="payment-manager-select">
                 <option value="">—</option>
@@ -860,7 +853,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
         errorEl.hidden = false;
         return;
       }
-      if (SUBMIT_FOR_OTHERS_ROLES.has(state.user.role) && !selectedManager) {
+      if (canSubmitPaymentsForOthers(state.user.role) && !selectedManager) {
         errorEl.textContent = t("payment_manager_required");
         errorEl.hidden = false;
         return;
@@ -876,7 +869,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
         client_ref: pendingSubmit?.client_ref || `${state.user.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         confirm_duplicate: confirmDuplicate,
       };
-      if (SUBMIT_FOR_OTHERS_ROLES.has(state.user.role) && selectedManager) {
+      if (canSubmitPaymentsForOthers(state.user.role) && selectedManager) {
         payload.sales_manager_id = selectedManager.id;
       }
       pendingSubmit = payload;

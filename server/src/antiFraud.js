@@ -15,9 +15,10 @@ import { notifyUser } from "./notifications.js";
 import { yerevanToday } from "./utils/yerevanDate.js";
 import { IN_EXCEL_SQL, DAYS_OLD_SQL, PAYMENT_DAY } from "./paymentExcelMatch.js";
 import { bulletNames } from "./utils/bullets.js";
+import { rolesWhere, seesFraudAlerts, editsFraudSettings } from "./roles.js";
 
-export const FRAUD_VIEW_ROLES = ["admin", "ceo", "operations_director"];
-export const FRAUD_SETTINGS_ROLES = ["admin", "ceo", "operations_director"];
+export const FRAUD_VIEW_ROLES = rolesWhere(seesFraudAlerts);
+export const FRAUD_SETTINGS_ROLES = rolesWhere(editsFraudSettings);
 
 export const FRAUD_DEFAULTS = {
   unmatchedDays: 3, // a payment recorded in the app and still missing from the Excel after this many days

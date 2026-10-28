@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { PICKABLE_ROLES, resolveRole, canPlanForOthers, canReassignCustomers } from "../roles.js";
+import { PICKABLE_ROLES, resolveRole, canPlanForOthers, canReassignCustomers, rolesWhere, ownsCustomers } from "../roles.js";
 import { passwordChangeLimiter } from "./auth.js";
 import { normalizePhoneForStorage } from "../phoneFormat.js";
 import { isTestUser, previewPurge, purgeUser } from "../userPurge.js";
@@ -154,7 +154,7 @@ usersRouter.post("/", async (req, res) => {
 // filters). Customers and open tasks can be handed over in the same step, region by region.
 const STATUSES = ["active", "paused", "offboarded"];
 const OPEN_ORDER_STATUSES = ["submitted", "confirmed", "packed_stock_out"];
-const TAKES_CUSTOMERS = ["sales_manager", "sales_director"];
+const TAKES_CUSTOMERS = rolesWhere(ownsCustomers);
 
 // What this person still holds, so the admin sees the checklist before pressing the button.
 usersRouter.get("/:id/offboarding", async (req, res) => {
