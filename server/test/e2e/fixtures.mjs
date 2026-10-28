@@ -47,7 +47,8 @@ const CLEANUP_ORDER = [
 let counter = 0;
 function nextId() {
   counter += 1;
-  return `${Date.now()}-${counter}`;
+  // the pid keeps two Playwright workers from drawing the same id (email) in the same millisecond
+  return `${Date.now()}-${process.pid}-${counter}`;
 }
 
 export class Fixtures {

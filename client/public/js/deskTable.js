@@ -556,21 +556,21 @@ export function openDeskMenu(anchor, options, current, onPick) {
 // Desktop roadmap step 9: a native <select> shown as the tables' dropdown chip ("Kind: Payment slip ▾") on a computer; the select stays in
 // the page (hidden) so the view's own code keeps reading .value and listening to "change". Phones keep the native select. Returns
 // refresh() for when the view changes the options or the value by code.
-export function deskSelectChip(select, label = select.getAttribute("aria-label") || "") {
+export function deskSelectChip(select, label = select?.getAttribute("aria-label") || "", { field = false } = {}) {
   if (!select || !isDesktop() || select.dataset.deskChip === "1") return () => {};
   select.dataset.deskChip = "1";
   select.classList.add("desk-select-hidden");
   const btn = document.createElement("button");
   btn.type = "button";
-  btn.className = "desk-filter-btn desk-select-chip";
+  btn.className = `desk-filter-btn desk-select-chip${field ? " desk-select-field" : ""}`;
   btn.setAttribute("aria-haspopup", "menu");
   select.insertAdjacentElement("afterend", btn);
   const refresh = () => {
     const opt = select.selectedOptions[0];
     const first = select.options[0];
     const isDefault = !opt || opt === first;
-    btn.classList.toggle("desk-filter-btn-on", !isDefault);
-    btn.innerHTML = `${escapeHtml(isDefault ? first?.textContent || label : `${label ? `${label}: ` : ""}${opt.textContent}`)}<span class="desk-filter-caret" aria-hidden="true">▾</span>`;
+    if (!field) btn.classList.toggle("desk-filter-btn-on", !isDefault); // a form field is not a filter: no "active" colour
+    btn.innerHTML = `${escapeHtml(isDefault || field ? (opt ?? first)?.textContent || label : `${label ? `${label}: ` : ""}${opt.textContent}`)}<span class="desk-filter-caret" aria-hidden="true">▾</span>`;
     btn.disabled = select.disabled;
   };
   btn.addEventListener("click", () =>
@@ -590,4 +590,11 @@ export function deskSelectChip(select, label = select.getAttribute("aria-label")
 if (typeof window !== "undefined" && !window.__deskMenuRouteClose) {
   window.__deskMenuRouteClose = true;
   window.addEventListener("hashchange", () => document.querySelectorAll(".desk-col-menu").forEach((m) => m.remove()));
+}
+
+// Every single-choice <select> inside a form / sheet as a dropdown chip (desktop only). The chip sits where the select was, so the form's
+// label stays above it and FormData still reads the hidden select.
+export function deskSelectChips(root) {
+  if (!root || !isDesktop()) return;
+  root.querySelectorAll("select:not([multiple])").forEach((s) => deskSelectChip(s, "", { field: true }));
 }

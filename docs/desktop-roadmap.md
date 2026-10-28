@@ -179,8 +179,12 @@ Issues found (I = issue, each has its fix in the steps below):
 - Also fixed: the dropdown menus' items had the browser's button look; an open menu stayed on screen after changing page.
 
 ### Step 10. Desktop in CI — I14
-- [ ] `desktop-shots.spec.mjs`: every main page at 1440 and 1920 px, artefacts kept by the nightly workflow.
-- [ ] Layout assertions: no element overflows the window, the right pane never covers the selected row, sticky headers stay.
+- [x] `desktop-shots.spec.mjs`: 28 main pages as admin at 1440 px (every PR, @smoke) and 1920 px (nightly); screenshots uploaded by the
+      nightly workflow (artifact `desktop-shots`, 14 days).
+- [x] Layout assertions: no sideways page scroll and no element past the window's right edge (outside its own scroller), the docked
+      panel starts where the list ends, the column headings stay on screen while the list scrolls.
+- Also (optimization ideas 1 + 2): one item style for every desktop menu; the Staff and Settings form selects are dropdown chips
+  (`deskSelectChips`), and the menus open above sheets.
 
 ## Improvement ideas beyond the steps (ask the owner before building)
 
@@ -204,4 +208,5 @@ Issues found (I = issue, each has its fix in the steps below):
 - Step 6 (reports as list + report, export, print): 1.446.0, 2026-10-27, PR #485.
 - Step 7 (dashboards use the width: Home KPI row + Needs attention + Today, wide grids): 1.447.0, 2026-10-27, PR #487.
 - Step 8 (map for the desktop: side table, popup Last order, filter bar, key panel): 1.448.0, 2026-10-28, PR #488.
-- Step 9 (mouse-sized controls: normal buttons, select chips, hover full text, typed dates): 1.454.0, 2026-10-28.
+- Step 9 (mouse-sized controls: normal buttons, select chips, hover full text, typed dates): 1.454.0, 2026-10-28, PR #496.
+- Step 10 (desktop in CI: page checks at 1440/1920 px, panel + sticky heading rules, nightly screenshots): 1.455.0, 2026-10-28.

@@ -55,3 +55,7 @@ Owner answered "1, 2, 3, 4, 5, 6, 7, 8" on 2026-10-24 = all eight approved; buil
 17. [Asked 2026-10-26: owner wants the trade-off explained first] **Cache the rest of the app shell after the first screen** (service worker installs about 60 core files, fetches the other 130 views and sheets in idle time) - saves about 1 MB competing with the first taps on a slow link; stays identical: offline coverage a few seconds later; cost/risk: an update installed and then immediately used offline may miss a rarely used screen once; recommend: only if reps still report slow first taps.
 18. **Trim the stylesheet** (`styles.css` 438 KB raw, 51 KB compressed, render-blocking) - saves about 0.1-0.2 s of first paint; cost/risk: dead-CSS removal needs a coverage run per screen; recommend: later.
 
+
+## Desktop step 9 round (2026-10-28)
+- D1. One item style for every desktop dropdown menu (column picker + single-choice menus). **DONE 1.455.0** (owner: "1, 2").
+- D2. Dropdown chips instead of native selects in the Staff and Settings forms (`deskSelectChips`). **DONE 1.455.0**.
