@@ -5,7 +5,7 @@ droplet app. The supplier-side half of the link lives in THIS repo (`docs/kad-os
 `appOrdersAdmin.js`, `views/kadOsAdmin.js`). Read that doc first for anything about orders, perks, campaigns, limits or the connection code.
 
 ## Workflow differences from Field Visits
-- Same owner rules apply (draft PR -> subscribe -> CI `test` + `e2e-smoke` -> ready -> squash merge -> unsubscribe; reset the branch from
+- Same owner rules apply (draft PR -> subscribe -> ready (starts CI) -> CI `test` + `e2e-smoke` -> squash merge -> unsubscribe; reset the branch from
   origin/main with a force-with-lease whose sha comes from `git ls-remote`; summaries end with the versions).
 - Versions: `client/public/js/version.js` (`APP_VERSION`, 0.x) AND `client/public/sw.js` (`CACHE_VERSION`, a plain number). `npm run check:version`.
 - CI = `changes` (docs-only skip) + `static` + `tests (unit + integration)` -> `test`, and `e2e (desktop|phone n/2)` -> `e2e-smoke` (see ops-runbook); `bash scripts/local-ci.sh` runs it all locally in about 3 min. Checks before pushing (in `server/`): `npm run verify:ui` (i18n keys hy + en, `node --check client/public/js/i18n.js`), `npm run check:version`,
