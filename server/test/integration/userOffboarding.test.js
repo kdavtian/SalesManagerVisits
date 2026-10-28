@@ -146,3 +146,27 @@ test("pausing keeps everything in place unless a hand-over is chosen", async () 
   assert.equal(login.status, 403);
   assert.match(login.data.error, /paused/);
 });
+
+// Owner, 2026-10-28 ("Sevo's account was locked"): the admin lifts the lock from the Team page instead of waiting 15 minutes.
+test("account lockout: the Team list shows the lock, an admin unlocks it, a rep cannot", async () => {
+  const user = await createUser("sales_manager");
+  await pool.query("UPDATE users SET failed_login_attempts = 0, locked_until = now() + interval '15 minutes' WHERE id = $1", [user.id]);
+
+  const list = await apiRequest("/api/users", { cookie: adminCookie });
+  assert.equal(list.data.find((u) => u.id === user.id).login_locked, true);
+
+  assert.equal((await apiRequest(`/api/users/${user.id}/unlock`, { method: "POST", cookie: await loginAs(heir.email), body: {} })).status, 403);
+
+  const unlock = await apiRequest(`/api/users/${user.id}/unlock`, { method: "POST", cookie: adminCookie, body: {} });
+  assert.equal(unlock.status, 200);
+  const after = await apiRequest("/api/users", { cookie: adminCookie });
+  assert.equal(after.data.find((u) => u.id === user.id).login_locked, false);
+  const success = await apiRequest("/api/auth/login", { method: "POST", body: { email: user.email, password: TEST_PASSWORD } });
+  assert.equal(success.status, 200, "signs in right after the unlock");
+
+  // a new password set by the admin lifts the lock too
+  await pool.query("UPDATE users SET locked_until = now() + interval '15 minutes' WHERE id = $1", [user.id]);
+  assert.equal((await apiRequest(`/api/users/${user.id}/password`, { method: "PATCH", cookie: adminCookie, body: { password: "NewPass12345!" } })).status, 204);
+  const { rows } = await pool.query("SELECT locked_until FROM users WHERE id = $1", [user.id]);
+  assert.equal(rows[0].locked_until, null);
+});

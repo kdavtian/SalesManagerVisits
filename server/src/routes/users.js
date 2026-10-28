@@ -55,7 +55,9 @@ usersRouter.get("/", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT id, email, name, role, role_title, position, phone, name_hy, created_at,
             last_seen_at, last_seen_app_version, last_seen_user_agent,
-            status, status_changed_at, status_note, map_color
+            status, status_changed_at, status_note, map_color,
+            -- the sign-in lock (auth.js: 5 wrong passwords = 15 minutes): the Team page shows it and can lift it
+            (locked_until IS NOT NULL AND locked_until > now()) AS login_locked, locked_until, failed_login_attempts
      FROM users WHERE role <> 'customer' ORDER BY (status = 'active') DESC, created_at DESC`
   );
   res.json(rows);
@@ -292,12 +294,23 @@ usersRouter.patch("/:id/password", passwordChangeLimiter, async (req, res) => {
   // Bumping token_version invalidates any session cookie already issued to
   // this user, so a reset password (e.g. after a suspected compromise)
   // actually logs them out everywhere instead of just changing the hash.
+  // A new password also lifts the sign-in lock: the admin resets it precisely because the person cannot get in.
   const { rowCount } = await pool.query(
-    "UPDATE users SET password_hash = $1, token_version = token_version + 1 WHERE id = $2",
+    "UPDATE users SET password_hash = $1, token_version = token_version + 1, failed_login_attempts = 0, locked_until = NULL WHERE id = $2",
     [passwordHash, req.params.id]
   );
   if (!rowCount) return res.status(404).json({ error: "User not found" });
   res.status(204).end();
+});
+
+// Lift the sign-in lock now (owner, 2026-10-28: "Admin should also be able to manage these kind of issues by admin panel")
+// instead of waiting the 15 minutes or running SQL on the droplet. The password stays.
+usersRouter.post("/:id/unlock", async (req, res) => {
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId)) return res.status(400).json({ error: "Invalid user id" });
+  const { rowCount } = await pool.query("UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = $1", [userId]);
+  if (!rowCount) return res.status(404).json({ error: "User not found" });
+  res.json({ ok: true });
 });
 
 // The DELETE /:id 23503 case below ("they have activity records") is real

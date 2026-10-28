@@ -15987,3 +15987,17 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 .signed-act-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .order-signed-note { margin: 8px 0; padding: 8px 10px; border-radius: 10px; background: rgba(46, 160, 67, 0.12); font-size: 0.85rem; }
 .blank-actions:has(#blank-sign-btn[hidden]) { grid-template-columns: 1fr; }
+
+/* Team: the sign-in lock box in the member sheet (admin unlocks it instead of waiting 15 minutes or running SQL) */
+.team-locked-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--danger, #d6403f);
+  border-radius: 12px;
+  font-size: 0.86rem;
+}
+.team-locked-box .btn { flex: none; min-height: 40px; }
