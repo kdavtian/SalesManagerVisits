@@ -13,6 +13,7 @@ import { api } from "../api.js";
 import { escapeHtml, formatAmd, formatDateTime, formatDateDMY, activateDialog, channelDisplayLabel, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, bindAmdInput, downloadFromUrl, showToast } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
+import { deskSelectChip } from "../deskTable.js";
 
 // Mirrors server/src/roles.js's validHandoffRecipientRoles /
 // canSubmitHandoffForOthers -- kept local for the same reason every other
@@ -368,12 +369,15 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
           `
       }
       <p class="form-error" id="handoff-submit-error" hidden></p>
-      <button type="button" class="btn btn-primary btn-block" id="handoff-submit-all" ${canSubmit ? "" : "disabled"}>
+      <button type="button" class="btn btn-primary btn-block desk-inline" id="handoff-submit-all" ${canSubmit ? "" : "disabled"}>
         ${t("handoff_submit_all")}
       </button>
       </form>
     `;
     availableEl.querySelector("#handoff-form").addEventListener("submit", (e) => e.preventDefault());
+    // On a computer: the tables' dropdown chips instead of window-wide selects (desktop roadmap step 9).
+    deskSelectChip(availableEl.querySelector("#handoff-sender-select"), "");
+    deskSelectChip(availableEl.querySelector("#handoff-recipient-select"), "");
 
     const senderSelect = availableEl.querySelector("#handoff-sender-select");
     if (senderSelect) {

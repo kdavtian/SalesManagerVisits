@@ -1167,6 +1167,7 @@ export default {
     om_pick_title: "Which order to copy?",
     om_copy: "Copy this order",
     om_hint: "Tip: hold the New order button for more ways to start (usual, repeat...)",
+    om_hint_desk: "Tip: right-click the New order button for more ways to start (usual, repeat...)",
     submit_checkin_and_order: "Submit check-in and create order",
     ops_effort_title: "Making an order",
     ops_effort_info: "Median time from opening the order screen to Save, and median taps, measured on the reps' phones (orders made after this feature shipped). Compared with the period before. 'Usual' and 'Repeat' are the shortcuts: if they are not clearly faster, or nobody uses them, they are candidates to cut.",

@@ -67,7 +67,7 @@ export async function renderOpsControl(root, navigate, startTab) {
       <section class="card ops-card">
         <div class="ops-card-head"><h2>${t("ops_limits_title")}</h2><button type="button" class="settings-hint-icon" id="ops-limits-info" aria-label="${t("more_info")}">!</button></div>
         <p class="ops-sum"><strong>${limits.without_limit}</strong> <span class="muted">${t("ops_without_limit")}</span> · <span class="muted">${limits.with_limit} ${t("ops_with_limit")}</span></p>
-        <button type="button" class="btn btn-block" id="ops-review-limits" ${limits.suggestions.length ? "" : "disabled"}>${t("ops_review_suggestions")}</button>
+        <button type="button" class="btn btn-block desk-inline" id="ops-review-limits" ${limits.suggestions.length ? "" : "disabled"}>${t("ops_review_suggestions")}</button>
       </section>`;
     body.querySelector("#ops-legacy-info").addEventListener("click", () => infoPopup(t("ops_legacy_info")));
     body.querySelector("#ops-limits-info").addEventListener("click", () => infoPopup(t("ops_limits_info")));

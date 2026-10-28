@@ -67,7 +67,7 @@ export async function renderCashflow(root, navigate) {
       <p class="muted cf-foot" id="cf-foot"></p>
       </div>
       </div>
-      <button type="button" class="btn btn-block" id="cf-import" hidden>${t("cf_import")}</button>
+      <button type="button" class="btn btn-block desk-inline" id="cf-import" hidden>${t("cf_import")}</button>
       <input type="file" id="cf-file" accept=".xlsx,.xlsm" hidden />
       <p class="form-error" id="cf-error" hidden></p>
     </div>`;

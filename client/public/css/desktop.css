@@ -797,6 +797,26 @@
   .desk-col-menu-item:hover {
     background: var(--bg-card-pressed);
   }
+  /* single-choice menus (openDeskMenu) are made of <button>s: no browser button look */
+  button.desk-col-menu-item {
+    width: 100%;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.9rem;
+    text-align: left;
+  }
+  button.desk-col-menu-item:hover,
+  button.desk-col-menu-item:focus-visible {
+    background: var(--bg-card-pressed);
+    outline: none;
+  }
+  .desk-col-menu-item.desk-menu-on {
+    color: var(--accent);
+    font-weight: 600;
+  }
   .desk-col-menu-item input {
     width: 16px;
     height: 16px;
@@ -1943,4 +1963,53 @@
   .map-canvas:has(#map-legend-panel:not([hidden])) .map-controls { right: 332px; }
   /* with the key open the bar is narrower: the filter buttons go back to icons */
   .map-canvas:has(#map-legend-panel:not([hidden])) .map-dimension-filter-btn::after { content: none; }
+}
+
+/* Desktop roadmap step 9: mouse-sized controls on a computer. */
+@media (min-width: 1024px) {
+  /* Page-wide action buttons ("Add a person", "Cash handovers", "Import Excel"...) become normal buttons. */
+  .btn.desk-inline {
+    display: inline-flex;
+    width: auto;
+    min-width: 200px;
+    max-width: 100%;
+    padding-left: 22px;
+    padding-right: 22px;
+    align-self: flex-start;
+  }
+  .rps-top-row {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .rps-top-row .btn {
+    flex: 0 0 auto;
+    min-width: 200px;
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+  /* A <select> turned into a dropdown chip (deskSelectChip): the select stays for the view's code but is not shown. */
+  .desk-select-hidden {
+    display: none !important;
+  }
+  .desk-select-chip {
+    max-width: 360px;
+  }
+  .desk-select-chip:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  /* Selects that stay native (forms, sheets) are sized to their content, not the whole window. */
+  .detail-view form select,
+  .sheet select {
+    max-width: 480px;
+  }
+}
+
+@media (min-width: 1024px) {
+  /* Documents: the two filter chips side by side, not stretched over a 2-column grid */
+  .documents-selects:has(.desk-select-chip) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
 }
