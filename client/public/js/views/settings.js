@@ -1148,7 +1148,6 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
     const bonusesToggle = root.querySelector("#toggle-bonuses-enabled");
     const bonusesToggleValue = bonusesToggle?.closest(".settings-toggle-row").querySelector(".settings-row-value");
     const disconnectBtn = root.querySelector("#emergency-disconnect-btn");
-    const disconnectSuccess = root.querySelector("#emergency-disconnect-success");
 
     const allowanceToggle = root.querySelector("#toggle-checkin-allowance");
     function paintAllowanceToggle(enabled) {

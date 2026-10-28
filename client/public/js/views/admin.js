@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, parseUserAgent, SALES_CHANNELS, REGION_LIST, YEREVAN_DISTRICTS, regionLabelHy, subregionLabelHy, parseDateOnly, formatPhoneDisplay, labelColon, groupDigits, parseAmd, bindAmdInput, showToast, openInfoPopup } from "../util.js";
+import { activateDialog, escapeHtml, formatDateTime, formatAmd, compressImage, parseUserAgent, SALES_CHANNELS, regionLabelHy, parseDateOnly, formatPhoneDisplay, labelColon, groupDigits, parseAmd, bindAmdInput, showToast, openInfoPopup } from "../util.js";
 import { t } from "../i18n.js";
 import { placeLabel } from "../places.js";
 import { icons } from "../icons.js";

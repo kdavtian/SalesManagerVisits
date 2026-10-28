@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { escapeHtml, formatAmd, activateDialog, channelDisplayLabel, formatLiters, monthShort, formatDateTime, formatDayMonth, showToast } from "../util.js";
-import { t, getLang } from "../i18n.js";
+import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { ORDER_STATUS_ICONS } from "../ordersSearchEnhancements.js";
 import { loadWithCache } from "../listCache.js";

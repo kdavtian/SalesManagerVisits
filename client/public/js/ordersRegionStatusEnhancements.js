@@ -1,7 +1,7 @@
 import { FILTER_ICONS } from "./filterIcons.js";
 import { api } from "./api.js";
 import { APP_VERSION } from "./version.js";
-import { getLang, t } from "./i18n.js";
+import { getLang } from "./i18n.js";
 
 const REGION_ICON = FILTER_ICONS.region;
 const COUNTED_STATUSES = ["submitted", "confirmed", "packed"];

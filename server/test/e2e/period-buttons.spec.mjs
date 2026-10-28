@@ -3,7 +3,6 @@ import { test, expect, loginViaUi } from "./fixtures.mjs";
 // Owner, 2026-10-22: tapping the SELECTED period button shows the previous period (Today -> Yesterday, This week -> Last week,
 // This month -> Last month, This quarter -> Last quarter, This year -> Last year); tapping again flips back; tapping another
 // button selects that one. Checked on every row of period buttons, in English.
-const label = (page, sel) => page.locator(sel).first();
 
 async function english(page) {
   await page.evaluate(() => localStorage.setItem("fieldvisits_lang", "en"));

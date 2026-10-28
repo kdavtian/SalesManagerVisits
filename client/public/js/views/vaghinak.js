@@ -141,7 +141,7 @@ export async function renderVaghinak(root, navigate, query) {
 
   // ---- messages (everyone) ----
   async function paintMessages(mine) {
-    const { messages, badge } = await api.vaghinakInbox();
+    const { messages } = await api.vaghinakInbox();
     if (mine !== token) return;
     if (!messages.length) {
       body.innerHTML = `<p class="empty-state">${t("vg_empty")}</p>`;

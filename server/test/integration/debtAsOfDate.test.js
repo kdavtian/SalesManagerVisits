@@ -177,11 +177,10 @@ test("GET /api/debt-balances?date=: balance0_amd closes the gap for a customer w
 // their actual order/cashflow history said. Reported live as "by date"
 // debt balances coming out wrong while "live" was fine.
 const PAID_OFF_ERP_ID = `itest-debt-asof-paidoff-${Date.now()}`;
-let paidOffCustomer;
 
 test("GET /api/debt-balances?date=: a customer no longer in the live erp_customer_data snapshot (fully paid off since) still shows their historical balance", async () => {
   const admin = await createUser("admin");
-  paidOffCustomer = await createCustomer({ created_by: admin.id, erp_customer_id: PAID_OFF_ERP_ID });
+  await createCustomer({ created_by: admin.id, erp_customer_id: PAID_OFF_ERP_ID });
   try {
     // Deliberately NO row inserted into erp_customer_data for this
     // customer -- simulating them having dropped out of the live extract

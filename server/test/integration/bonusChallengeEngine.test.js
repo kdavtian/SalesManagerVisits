@@ -8,7 +8,7 @@ import "dotenv/config";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { pool } from "../../src/db/pool.js";
-import { createDraftTemplate, publishTemplate, getTemplate } from "../../src/bonusChallengeTemplates.js";
+import { createDraftTemplate, publishTemplate } from "../../src/bonusChallengeTemplates.js";
 import { ensureCurrentRound, ensureOnceRound, getRoundParticipants } from "../../src/bonusChallengeRounds.js";
 import { recomputeRoundProgress, getProgress } from "../../src/bonusChallengeProgress.js";
 import { syncProductSalesContributions } from "../../src/bonusProductContributions.js";

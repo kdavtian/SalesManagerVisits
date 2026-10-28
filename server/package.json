@@ -8,6 +8,7 @@
     "start": "node src/index.js",
     "verify:deployment": "node scripts/verify-deployment.mjs",
     "verify:ui": "node scripts/verify-ui.mjs",
+    "lint": "cd .. && eslint --config server/eslint.config.mjs --max-warnings 0 . && node server/scripts/check-imports.mjs",
     "migrate": "node src/db/migrate.js",
     "seed": "node src/seed.js",
     "test": "node --test $(find test -name '*.test.js' -not -path 'test/integration/lockdownEngage.test.js') && npm run test:lockdown",
@@ -40,6 +41,9 @@
     "qs": "^6.16.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.63.0"
+    "@playwright/test": "^1.63.0",
+    "eslint": "^10.13.0",
+    "espree": "^11.2.0",
+    "globals": "^17.13.0"
   }
 }

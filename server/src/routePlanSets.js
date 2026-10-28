@@ -5,7 +5,7 @@ import { pool } from "./db/pool.js";
 import { NOT_NO_VISIT_CHANNEL_SQL } from "./routes/customers.js";
 import { batchExpandAreas } from "./routes/visitPlans.js";
 import { planRep, pathKm, hasLocation } from "./routePlanner.js";
-import { MAIN_SCOPE, SEPARATE_PLAN_CHANNELS, parseScope, scopeOfChannel, loadChannelMap, mergeScopeIds } from "./planScopes.js";
+import { MAIN_SCOPE, SEPARATE_PLAN_CHANNELS, scopeOfChannel, loadChannelMap, mergeScopeIds } from "./planScopes.js";
 
 // Week is shown Monday-first; day_of_week stays 0 = Sunday .. 6 = Saturday.
 export const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];

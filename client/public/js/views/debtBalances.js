@@ -8,7 +8,7 @@ import { api } from "../api.js";
 import { escapeHtml, formatAmd, syncNote, openInfoPopup, parseDateOnly, monthShort, formatDayMonth, labelColon, channelDisplayLabel } from "../util.js";
 import { buildDirectionManagerTree, openTriStateTreeSheet, NO_GROUP_KEY } from "../regionTree.js";
 import { state } from "../state.js";
-import { t, getLang } from "../i18n.js";
+import { t } from "../i18n.js";
 import { loadWithCache } from "../listCache.js";
 import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
 import { icons } from "../icons.js";

@@ -1,6 +1,5 @@
 // Saving a customer's region / subregion: the typed text is matched against the Armenian places (places.js), the right English name is saved, and
 // anything we could not place with confidence is queued in place_reviews for a person to look at (owner, 2026-10-25).
-import { pool } from "./db/pool.js";
 import { resolvePlaces } from "./places.js";
 
 export const PLACE_REVIEW_ROLES = ["admin", "ceo", "operations_director", "sales_director"];

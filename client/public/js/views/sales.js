@@ -6,7 +6,7 @@
 // contract as Debt Balances.
 import { api } from "../api.js";
 import { escapeHtml, saveBlob, openInfoPopup, formatAmd, formatLiters, channelDisplayLabel, activateDialog, syncBadgeHtml, parseDateOnly, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, erpLineDiscountRowHtml, monthShort, labelColon, formatDateDMY } from "../util.js";
-import { t, getLang } from "../i18n.js";
+import { t } from "../i18n.js";
 import { seesFinancialExports } from "../state.js";
 import { icons } from "../icons.js";
 import { unpaidRowClass, dueChipHtml } from "../debtChip.js";

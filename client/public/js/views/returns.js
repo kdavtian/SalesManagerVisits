@@ -3,7 +3,7 @@
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
-import { escapeHtml, formatAmd, formatDateTime, showToast, labelColon } from "../util.js";
+import { escapeHtml, formatAmd, formatDateTime, showToast } from "../util.js";
 
 const APPROVERS = ["admin", "ceo", "operations_director", "sales_director", "accountant"];
 const nf = (n) => Math.round(Number(n) || 0).toLocaleString("en-US");
