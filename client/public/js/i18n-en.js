@@ -32,6 +32,7 @@ export default {
     total: "Total",
     orders_count_label: "orders",
     confirm_order: "Confirm order",
+    order_unconfirm: "Back to submitted (to edit)",
     acc_waybill: "Waybill (Բեռնագիր)",
     acc_invoice: "Invoice (Հաշիվ ապրանքագիր)",
     acc_prompt_title_waybill: "Create a waybill?",

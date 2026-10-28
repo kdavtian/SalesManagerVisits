@@ -32,6 +32,7 @@ export default {
     total: "Ընդամենը",
     orders_count_label: "պատվեր",
     confirm_order: "Հաստատել պատվերը",
+    order_unconfirm: "Վերադարձնել «Ուղարկված» (խմբագրելու)",
     acc_waybill: "Բեռնագիր",
     acc_invoice: "Հաշիվ ապրանքագիր",
     acc_prompt_title_waybill: "Ստեղծե՞լ բեռնագիր",
