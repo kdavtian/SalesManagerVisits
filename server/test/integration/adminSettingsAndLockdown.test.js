@@ -1,5 +1,5 @@
-// API coverage for Administration and settings (server/src/routes/settings.js,
-// server/src/routes/lockdown.js): GET /api/settings open to any
+// API coverage for Administration and settings (server/src/system/routes/settings.js,
+// server/src/system/routes/lockdown.js): GET /api/settings open to any
 // authenticated role, PATCH admin-only with boundary validation, and
 // GET/POST /api/lockdown role gating.
 //
@@ -14,8 +14,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { setBonusesEnabled } from "../../src/bonusSettings.js";
-import { createDraftTemplate, publishTemplate } from "../../src/bonusChallengeTemplates.js";
+import { setBonusesEnabled } from "../../src/bonus/bonusSettings.js";
+import { createDraftTemplate, publishTemplate } from "../../src/bonus/bonusChallengeTemplates.js";
 
 let admin;
 let manager;

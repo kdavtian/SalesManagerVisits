@@ -7,8 +7,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiFormRequest, apiRequest, loginAs, trackCheckin } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { uploadDirPath } from "../../src/upload.js";
-import { balanceBeforeVisit } from "../../src/signedActs.js";
+import { uploadDirPath } from "../../src/shared/upload.js";
+import { balanceBeforeVisit } from "../../src/orders/signedActs.js";
 
 let baseUrl;
 const users = {};

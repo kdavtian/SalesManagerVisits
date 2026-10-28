@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { parsePricelistWorkbook, parseTechText } from "../src/pricelistImport.js";
+import { parsePricelistWorkbook, parseTechText } from "../src/products/pricelistImport.js";
 
 const file = process.argv[2];
 if (!file) {

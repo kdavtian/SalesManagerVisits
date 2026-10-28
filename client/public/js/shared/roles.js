@@ -1,5 +1,5 @@
 // Who may do what: ONE file for the server and the phone app (docs/architecture-roadmap.md, step 3). The server enforces these rules on every
-// request (server/src/roles.js re-exports this file); the app imports the same functions to decide which buttons and screens to show, so
+// request (server/src/shared/roles.js re-exports this file); the app imports the same functions to decide which buttons and screens to show, so
 // the two can no longer disagree. Plain functions of a role (and sometimes ids), no imports: it must run unchanged in Node and in the
 // browser. A rule only the screens need (what to show, not what is allowed) goes into the "Screen rules" section at the end.
 export const ROLES = [

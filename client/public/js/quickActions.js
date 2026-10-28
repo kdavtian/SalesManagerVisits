@@ -59,7 +59,7 @@ export const QUICK_ACTIONS = [
   // CEO/Operations Director get the same broad operational visibility
   // they already have everywhere else. Accountant included too --
   // inventory is financial data, same access line seesFinancialExports
-  // already draws elsewhere (see canManageWarehouse in server/src/roles.js,
+  // already draws elsewhere (see canManageWarehouse in server/src/shared/roles.js,
   // which this list must stay in sync with).
   {
     id: "qa_warehouse",
@@ -74,7 +74,7 @@ export const QUICK_ACTIONS = [
   { id: "qa_pricelist", defaultRoles: ALL_ROLES },
   // Same visibility as the financial exports/Company Dashboard -- raw
   // per-order ERP revenue is the same sensitivity class (see
-  // seesFinancialExports in server/src/roles.js, which server/src/routes/
+  // seesFinancialExports in server/src/shared/roles.js, which server/src/routes/
   // sales.js gates on too). A sales_manager already has their own
   // customers' order history via the customer detail page.
   { id: "qa_sales", defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"] },

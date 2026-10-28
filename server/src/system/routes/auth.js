@@ -1,0 +1,224 @@
+import fs from "node:fs";
+import path from "node:path";
+import { Router } from "express";
+import bcrypt from "bcryptjs";
+import rateLimit from "express-rate-limit";
+import { pool } from "../../db/pool.js";
+import { issueSession, clearSession, requireAuth } from "../../middleware/auth.js";
+import { saveOwnSignature } from "../../orders/signedActs.js";
+import { photoUpload, uploadDirPath } from "../../shared/upload.js";
+import { matchesDeclaredImageType } from "../../utils/imageSniff.js";
+import { normalizePhoneForStorage } from "../../shared/phoneFormat.js";
+
+export const authRouter = Router();
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many login attempts. Try again later." },
+  // The browser E2E suite (test/e2e) drives real logins through the actual
+  // form on every spec -- several specs need two (a multi-identity flow,
+  // e.g. rep + director), so the full suite blows past this IP-scoped
+  // budget well before it's done. Bypassed only when E2E_RATE_LIMIT_BYPASS_TOKEN
+  // is set AND matched by the request header (see playwright.config.mjs) --
+  // that env var is never set outside the E2E run, so this is a no-op in
+  // production and doesn't touch the node:test integration suite's own
+  // lockout/rate-limit tests, which never send the header.
+  skip: (req) =>
+    Boolean(process.env.E2E_RATE_LIMIT_BYPASS_TOKEN) &&
+    req.get("x-e2e-rate-limit-bypass") === process.env.E2E_RATE_LIMIT_BYPASS_TOKEN,
+});
+
+// Per-account lockout, on top of loginLimiter's IP-scoped rate limit above:
+// that one catches an attacker hammering many accounts from one IP, this
+// one catches a targeted brute force against a single account spread
+// across many IPs. LOCKOUT_THRESHOLD consecutive failures locks the
+// account for LOCKOUT_MINUTES; a single successful login (or the lock
+// simply expiring) clears the counter.
+const LOCKOUT_THRESHOLD = 5;
+const LOCKOUT_MINUTES = 15;
+
+authRouter.post("/login", loginLimiter, async (req, res) => {
+  const { email, password } = req.body ?? {};
+  if (!email || !password) {
+    return res.status(400).json({ error: "email and password are required" });
+  }
+
+  const { rows } = await pool.query(
+    "SELECT id, email, password_hash, name, role, token_version, failed_login_attempts, locked_until, status FROM users WHERE email = $1",
+    [String(email).toLowerCase()]
+  );
+  const user = rows[0];
+
+  if (user?.locked_until && new Date(user.locked_until) > new Date()) {
+    return res.status(423).json({ error: "Account temporarily locked due to repeated failed logins. Try again later." });
+  }
+
+  if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+    if (user) {
+      const attempts = user.failed_login_attempts + 1;
+      const lockedUntil = attempts >= LOCKOUT_THRESHOLD ? new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000) : null;
+      await pool.query(
+        "UPDATE users SET failed_login_attempts = $2, locked_until = $3 WHERE id = $1",
+        [user.id, lockedUntil ? 0 : attempts, lockedUntil]
+      );
+    }
+    return res.status(401).json({ error: "Invalid email or password" });
+  }
+
+  // Checked only after the password is right, so the message never tells a stranger which emails exist.
+  if (user.status !== "active") {
+    return res.status(403).json({ error: user.status === "paused" ? "This account is paused. Ask your manager." : "This account is switched off. Ask your manager.", code: "account_inactive" });
+  }
+
+  if (user.failed_login_attempts > 0 || user.locked_until) {
+    await pool.query("UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = $1", [user.id]);
+  }
+
+  issueSession(res, user);
+  res.json({ id: user.id, email: user.email, name: user.name, role: user.role });
+});
+
+authRouter.post("/logout", (req, res) => {
+  clearSession(res);
+  res.status(204).end();
+});
+
+export const meRouter = Router();
+
+meRouter.get("/", requireAuth, async (req, res) => {
+  const { rows } = await pool.query(
+    "SELECT id, email, name, role, role_title, position, phone, avatar_path IS NOT NULL AS has_avatar, signature_path IS NOT NULL AS has_signature, created_at FROM users WHERE id = $1",
+    [req.user.id]
+  );
+  if (!rows[0]) {
+    return res.status(401).json({ error: "User no longer exists" });
+  }
+  res.json(rows[0]);
+});
+
+// Self-service profile fields -- just phone for now, shown on the
+// personalized pricelist's "Prepared by" footer (see routes/products.js /
+// the pricelist export). Name/role/position stay admin-managed.
+meRouter.patch("/profile", requireAuth, async (req, res) => {
+  const { phone } = req.body ?? {};
+  if (phone !== undefined && phone !== null && String(phone).length > 40) {
+    return res.status(400).json({ error: "phone is too long" });
+  }
+  await pool.query("UPDATE users SET phone = $1 WHERE id = $2", [normalizePhoneForStorage(phone), req.user.id]);
+  res.status(204).end();
+});
+
+export const passwordChangeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many attempts. Try again later." },
+});
+
+// Self-service password change -- distinct from the admin-only
+// PATCH /api/users/:id/password (which resets *someone else's* password
+// without knowing the old one). This requires the current password.
+meRouter.patch("/password", requireAuth, passwordChangeLimiter, async (req, res) => {
+  const { current_password, new_password } = req.body ?? {};
+  if (!current_password || !new_password || new_password.length < 8) {
+    return res.status(400).json({ error: "current_password and a new_password of at least 8 characters are required" });
+  }
+
+  const { rows } = await pool.query("SELECT * FROM users WHERE id = $1", [req.user.id]);
+  const user = rows[0];
+  if (!user || !(await bcrypt.compare(current_password, user.password_hash))) {
+    return res.status(401).json({ error: "Current password is incorrect" });
+  }
+
+  const passwordHash = await bcrypt.hash(new_password, 10);
+  const { rows: updated } = await pool.query(
+    `UPDATE users SET password_hash = $1, token_version = token_version + 1 WHERE id = $2
+     RETURNING id, role, token_version`,
+    [passwordHash, req.user.id]
+  );
+  // Bumping token_version logs out every other session, but this device
+  // should stay signed in -- reissue a session carrying the new version.
+  issueSession(res, updated[0]);
+  res.status(204).end();
+});
+
+// Bumps token_version (invalidating every session cookie already issued to
+// this account) and immediately reissues one for the current device, so
+// "log out everywhere else" doesn't also log out the device you're using.
+meRouter.post("/logout-other-sessions", requireAuth, async (req, res) => {
+  const { rows } = await pool.query(
+    "UPDATE users SET token_version = token_version + 1 WHERE id = $1 RETURNING id, role, token_version",
+    [req.user.id]
+  );
+  issueSession(res, rows[0]);
+  res.status(204).end();
+});
+
+meRouter.post("/avatar", requireAuth, (req, res, next) => {
+  photoUpload.single("avatar")(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "avatar file is required" });
+  if (!matchesDeclaredImageType(req.file.path, req.file.mimetype)) {
+    fs.unlink(req.file.path, () => {});
+    return res.status(400).json({ error: "The uploaded file is not a valid image" });
+  }
+
+  const { rows } = await pool.query("SELECT avatar_path FROM users WHERE id = $1", [req.user.id]);
+  const previousPath = rows[0]?.avatar_path;
+
+  await pool.query("UPDATE users SET avatar_path = $1 WHERE id = $2", [req.file.filename, req.user.id]);
+  if (previousPath) fs.unlink(path.join(uploadDirPath, previousPath), () => {});
+  res.status(201).json({ ok: true });
+});
+
+meRouter.get("/avatar", requireAuth, async (req, res) => {
+  const { rows } = await pool.query("SELECT avatar_path FROM users WHERE id = $1", [req.user.id]);
+  const avatarPath = rows[0]?.avatar_path;
+  if (!avatarPath) return res.status(404).json({ error: "No avatar set" });
+  res.sendFile(path.join(uploadDirPath, avatarPath), (err) => {
+    if (err && !res.headersSent) res.status(404).json({ error: "Avatar not found" });
+  });
+});
+
+meRouter.delete("/avatar", requireAuth, async (req, res) => {
+  const { rows } = await pool.query("SELECT avatar_path FROM users WHERE id = $1", [req.user.id]);
+  const avatarPath = rows[0]?.avatar_path;
+  if (!avatarPath) return res.status(404).json({ error: "No avatar set" });
+
+  fs.unlink(path.join(uploadDirPath, avatarPath), () => {});
+  await pool.query("UPDATE users SET avatar_path = NULL WHERE id = $1", [req.user.id]);
+  res.status(204).end();
+});
+
+// The user's own signature (owner, 2026-10-26): drawn once on the phone, then applied silently to every delivery-acceptance act they hand over.
+// Stored like the avatar (a file under the upload folder); only its owner can fetch it back.
+meRouter.post("/signature", requireAuth, (req, res, next) => {
+  photoUpload.single("signature")(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "signature file is required" });
+  if (!matchesDeclaredImageType(req.file.path, req.file.mimetype)) {
+    fs.unlink(req.file.path, () => {});
+    return res.status(400).json({ error: "The uploaded file is not a valid image" });
+  }
+  await saveOwnSignature(req.user.id, req.file);
+  res.status(201).json({ ok: true });
+});
+
+meRouter.get("/signature", requireAuth, async (req, res) => {
+  const { rows } = await pool.query("SELECT signature_path FROM users WHERE id = $1", [req.user.id]);
+  const signaturePath = rows[0]?.signature_path;
+  if (!signaturePath) return res.status(404).json({ error: "No signature set" });
+  res.sendFile(path.join(uploadDirPath, signaturePath), { headers: { "Cache-Control": "private, no-store" } }, (err) => {
+    if (err && !res.headersSent) res.status(404).json({ error: "Signature not found" });
+  });
+});

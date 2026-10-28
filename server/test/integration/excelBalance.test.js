@@ -6,8 +6,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { cleanupAll, createUser, createCustomer } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { balanceBeforeVisit } from "../../src/signedActs.js";
-import { markAppRowsInExcel } from "../../src/erpAutoMatch.js";
+import { balanceBeforeVisit } from "../../src/orders/signedActs.js";
+import { markAppRowsInExcel } from "../../src/erp/erpAutoMatch.js";
 
 const ERP = `ITX${process.pid}`;
 let rep;

@@ -4,8 +4,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, createProduct, apiRequest, loginAs, trackOrder } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { tick, wrapUp } from "../../src/vaghinak/engine.js";
-import { saveVaghinakSettings } from "../../src/vaghinak/settings.js";
+import { tick, wrapUp } from "../../src/team/vaghinak/engine.js";
+import { saveVaghinakSettings } from "../../src/team/vaghinak/settings.js";
 
 // A fixed Monday in the past: 2026-10-12. "at(h, m)" = that day at h:m Yerevan time (UTC+4).
 const DAY = "2026-10-12";
@@ -316,7 +316,7 @@ test("order effort: the measurement (source / seconds / taps) is stored, junk is
   assert.equal(junk.status, 201);
   assert.equal(junk.data.order_source, null);
   assert.equal(junk.data.build_seconds, null);
-  const { orderEffort } = await import("../../src/opsReports.js");
+  const { orderEffort } = await import("../../src/reports/opsReports.js");
   const e = await orderEffort(pool, 30);
   assert.ok(e.current.n >= 1);
   assert.ok(e.by_source.usual.n >= 1);
@@ -373,7 +373,7 @@ test("cluster-skip: planned customers left behind within 300 m of a visited plac
 });
 
 test("Monday digest: each rep gets last week's result once; management gets one summary naming who needs a talk; nothing repeats", async () => {
-  const { weeklyDigest } = await import("../../src/vaghinak/digest.js");
+  const { weeklyDigest } = await import("../../src/team/vaghinak/digest.js");
   const adm = await createUser("admin");
   const good = await createUser("sales_manager", { name: "Digest Good" });
   const weak = await createUser("sales_manager", { name: "Digest Weak" });

@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, trackCheckin, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { computeKpis } from "../../src/dashboardKpis.js";
+import { computeKpis } from "../../src/reports/dashboardKpis.js";
 
 const ERP = `KPI-${Date.now()}`;
 let admin, rep, adminCookie, repCookie;

@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { pool } from "../../src/db/pool.js";
-import { notifyUser } from "../../src/notifications.js";
+import { notifyUser } from "../../src/shared/notifications.js";
 
 test("notifyUser to a user that no longer exists resolves quietly", async () => {
   const { rows } = await pool.query("SELECT COALESCE(MAX(id), 0) + 1000000 AS id FROM users");

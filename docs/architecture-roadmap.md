@@ -27,7 +27,7 @@ Put these to the owner again, in full, until answered; record the answer and its
 1. **Script bundling at deploy (step 10).** A, recommended: bundle and minify at deploy only (esbuild inside the Docker build); the
    code, development and tests stay file-per-module as today. First start about 1.8 s instead of 3.4 s; deploy about 20 s longer;
    source maps kept so errors still name the real file. B: no bundling; steps 9 and 11 only; first start about 2.5 s; deploy unchanged.
-   (Note: `server/src/modulePreload.js` already sends `<link rel="modulepreload">` for the boot graph, so preload hints are not a new
+   (Note: `server/src/system/modulePreload.js` already sends `<link rel="modulepreload">` for the boot graph, so preload hints are not a new
    lever; the remaining cost is the number of files and their unminified size.)
 2. **Order of the phases.** Recommended: safety first (steps 1-4), then structure (5-8), then speed (9-12). Alternative: speed first.
 3. **Pace.** Recommended: one release per working day next to feature requests (about 5 weeks). Alternative: a focused push with
@@ -152,7 +152,7 @@ Twelve steps, three phases, about 24 releases. Size = number of releases.
   alerts, sync, daily summary, wishes, document issues ...) cannot be switched off by a person or by the admin's role defaults.
 
 #### Step 3. One role rule file for both sides - size 2
-- Release 3a: serve `server/src/roles.js` to the browser unchanged (`express.static` alias `/js/shared/roles.js`; it has no Node imports
+- Release 3a: serve `server/src/shared/roles.js` to the browser unchanged (`express.static` alias `/js/shared/roles.js`; it has no Node imports
   - verify; if it does, split the pure part into `server/src/shared/roles.js`). Add to `APP_SHELL`. Replace the client's role lists
   with calls to the same functions (`canConfirmOrders(role)`, `validHandoffRecipientRoles(role)`, ...). Start with `cashHandoffs.js`,
   `payments.js`, `orders.js`, `orderDetailSheet.js`, `tasks.js`.
@@ -160,7 +160,7 @@ Twelve steps, three phases, about 24 releases. Size = number of releases.
   `client/public/js` (allowlist only for role pickers that list every role).
 - Done when: `grep -rn '\["admin", "ceo"' client/public/js` finds only the allowlisted pickers.
 - As built (1.458.0, 3a + 3b in one release): the rule file is `client/public/js/shared/roles.js` (the browser can only load files under
-  `client/public`); `server/src/roles.js` re-exports it, so server imports did not change; `client/package.json` (`"type": "module"`)
+  `client/public`); `server/src/shared/roles.js` re-exports it, so server imports did not change; `client/package.json` (`"type": "module"`)
   makes Node read it as a module on any Node version. `state.js` helpers and every screen list now call named rules; the server's own
   lists that had a twin in the app (operations control, Home numbers, place review, pin auto-approval, Vaghinak, anti-fraud, expenses,
   customer holders) moved into it too, as rules + `rolesWhere(rule)` where SQL needs a list. Rules only the screens need are in its
@@ -210,6 +210,17 @@ the starting proposal: re-check each file's real callers (`grep -rn "from \".*<n
 areas goes to `shared/`.
 - Done when: `server/src/` holds only `index.js`, `app.js`, `seed.js` and the area folders; no route handler longer than about 60
   lines; the architecture check forbids new loose files.
+- Phase 1 as built (1.461.0, one release instead of six: a tool moved the files and rewrote every import, the import check and the
+  full test suite prove nothing broke): `server/src` = `index.js`, `app.js`, `seed.js` + folders `shared/` (roles, notifications,
+  push, telegram, upload, settings, texts, `paths.js`), `system/` (login, lockdown, health, settings, badges, exports routes),
+  `orders/`, `customers/`, `field/`, `money/`, `products/`, `erp/`, `reports/`, `team/` (tasks, staff, users, `vaghinak/`, `askKad/`),
+  `bonus/`; each area's route files in `<area>/routes/`; `db/`, `middleware/`, `utils/`, `jobs/`, `data/` stay. Files that read
+  other files by location now use `shared/paths.js` (SERVER_DIR, CLIENT_PUBLIC_DIR, ...), so a move cannot break them. Architecture
+  check 7: only the three entry points at the top of `server/src`, route files only in `<area>/routes/`. Mentions of the old paths in
+  comments, docs and the skill were rewritten too.
+- Phase 2 (still open, one area per release, the owner picks the order): move each area's SQL out of its route handlers into
+  `<area>/queries.js` and repeated business rules into `<area>/rules.js`, starting with the rules written in two or more places;
+  biggest first: `orders/routes/orders.js` (1,778 lines), `customers/routes/customers.js` (1,724).
 
 #### Step 6. Split the giant screens - size 4
 - 6a `views/map.js` -> `views/map/` (`index.js` render + wiring, `filters.js`, `markers.js`, `popup.js`, `planning.js`, existing
@@ -300,4 +311,6 @@ the server share `roles.js`; a screen never edits another screen's DOM.
 - Step 1 code checker: 1.456.0, PR #500, 2026-10-28.
 - Step 2 architecture checks: 1.457.0, PR #501, 2026-10-28.
 - Step 3 one role file: 1.458.0, PR #502, 2026-10-28.
-- Step 4 one job scheduler: 1.459.0, migration 167, 2026-10-28.
+- Step 4 one job scheduler: 1.459.0, PR #503, migration 167, 2026-10-28.
+- Notification switches (owner 1A): 1.460.0, PR #504, 2026-10-28.
+- Step 5 phase 1 business folders: 1.461.0, 2026-10-28.

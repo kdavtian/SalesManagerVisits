@@ -1,4 +1,4 @@
-// API coverage for the read-only Sales viewer (server/src/routes/sales.js)
+// API coverage for the read-only Sales viewer (server/src/reports/routes/sales.js)
 // -- specifically GET /api/sales/order's per-line discount_amd (migration
 // 081), the ERP Orders sheet's own per-product "Discount" column that used
 // to be captured nowhere in this app at all (see docs/erp-sync-contract.md).

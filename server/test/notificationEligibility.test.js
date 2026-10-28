@@ -1,10 +1,10 @@
-// Notification eligibility precedence (server/src/notificationPreferences.js):
+// Notification eligibility precedence (server/src/shared/notificationPreferences.js):
 // a user-scoped setting always wins over a role-scoped one; with neither,
 // a notification is enabled by default (opt-out, not opt-in).
 import "dotenv/config"; // notificationPreferences.js imports db/pool.js, which needs DATABASE_URL set at import time
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveNotificationEnabled, NOTIFICATION_TYPES } from "../src/notificationPreferences.js";
+import { resolveNotificationEnabled, NOTIFICATION_TYPES } from "../src/shared/notificationPreferences.js";
 
 test("resolveNotificationEnabled: no matching rows at all defaults to enabled", () => {
   assert.equal(resolveNotificationEnabled([]), true);

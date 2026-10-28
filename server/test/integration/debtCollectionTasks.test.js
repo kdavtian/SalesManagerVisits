@@ -3,8 +3,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { createDebtCollectionTasks, autoTaskDiagnostics, debtTaskTitle } from "../../src/debtCollectionTasks.js";
-import { isQuietHours } from "../../src/quietHours.js";
+import { createDebtCollectionTasks, autoTaskDiagnostics, debtTaskTitle } from "../../src/money/debtCollectionTasks.js";
+import { isQuietHours } from "../../src/shared/quietHours.js";
 
 const stamp = Date.now();
 const erpIds = [];
@@ -218,7 +218,7 @@ test("a bank transfer clears the overdue invoices but newer ones remain: the tas
 });
 
 test("a stopped-ordering task closes when the customer orders through the workbook (not only through the app)", async () => {
-  const { createReorderFollowupTasks } = await import("../../src/debtCollectionTasks.js");
+  const { createReorderFollowupTasks } = await import("../../src/money/debtCollectionTasks.js");
   const c = await debtor("reord", { debt: 0, days: 5 });
   const { rows } = await pool.query(
     "INSERT INTO tasks (title, creator_id, assignee_id, customer_id, due_date, due_is_next_visit, auto_kind, created_at) VALUES ('ro', $1, $2, $3, current_date, true, 'reorder_followup', now() - interval '2 days') RETURNING id",

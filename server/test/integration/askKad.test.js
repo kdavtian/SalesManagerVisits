@@ -5,9 +5,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { askKad, AskError } from "../../src/askKad/engine.js";
-import { runTool } from "../../src/askKad/tools.js";
-import { loadNameBook, maskText, unmaskText } from "../../src/askKad/anonymize.js";
+import { askKad, AskError } from "../../src/team/askKad/engine.js";
+import { runTool } from "../../src/team/askKad/tools.js";
+import { loadNameBook, maskText, unmaskText } from "../../src/team/askKad/anonymize.js";
 
 const ERP = "90871";
 const NAME = "Zorbak Motors Garage";
@@ -200,7 +200,7 @@ test("Test connection: only admin; says not_configured without a key; maps real 
   } finally {
     if (saved) process.env.ANTHROPIC_API_KEY = saved;
   }
-  const { pingAi } = await import("../../src/askKad/engine.js");
+  const { pingAi } = await import("../../src/team/askKad/engine.js");
   const ok = await pingAi({ client: { messages: { create: async () => ({ content: [{ type: "text", text: "OK" }] }) } } });
   assert.equal(ok.ok, true);
   assert.equal(ok.reply, "OK");

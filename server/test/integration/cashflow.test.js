@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import ExcelJS from "exceljs";
 import { startTestServer, stopTestServer, cleanupAll, createUser, apiRequest, apiFormRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { normalizeCashRow, readCashWorkbook, ymd } from "../../src/cashflow.js";
+import { normalizeCashRow, readCashWorkbook, ymd } from "../../src/money/cashflow.js";
 
 let snap;
 let accountant, director, ops, admin, rep, cookies;
@@ -246,7 +246,7 @@ test("entries made in the app: direction + positive amount, USD with a rate, edi
   // a refresh from Excel never touches rows made here
   const kept = await send("accountant", "/entries", "POST", base);
   const before = (await pool.query("SELECT COUNT(*)::int AS n FROM cash_entries WHERE origin = 'manual'")).rows[0].n;
-  const { applyCashLedger } = await import("../../src/cashflow.js");
+  const { applyCashLedger } = await import("../../src/money/cashflow.js");
   await applyCashLedger([{ date: "2026-10-02", amount: 1, currency: "AMD", for: "Fuel", source: "Cash ITest2 Z", amount_amd: 1 }], { via: "bot" });
   assert.equal((await pool.query("SELECT COUNT(*)::int AS n FROM cash_entries WHERE origin = 'manual'")).rows[0].n, before);
   assert.ok(await row(kept.data.id));

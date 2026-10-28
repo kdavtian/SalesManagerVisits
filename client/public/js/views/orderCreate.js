@@ -966,7 +966,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     const discountPctToSend = discountType === "pct" ? value : 0;
     const discountAmdToSend = discountType === "amd" ? value : 0;
     // Generated once, before the first (online) attempt -- reused as-is if this falls through to enqueueOrder
-    // below, so a retry after a lost response can't create a second order. See server/src/routes/orders.js
+    // below, so a retry after a lost response can't create a second order. See server/src/orders/routes/orders.js
     // and offlineQueue.js.
     const clientRef = crypto.randomUUID();
     // The downpayment goes as the unit the rep typed (a % stays a % if the total changes server-side).

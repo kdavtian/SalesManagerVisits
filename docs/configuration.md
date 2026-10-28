@@ -61,8 +61,8 @@ everything else.
 - `server/src/app.js` — the required-variable boot check, CSP/security
   headers, CORS-free-by-design posture.
 - `server/src/middleware/auth.js`, `csrf.js` — `JWT_SECRET`, cookie flags.
-- `server/src/routes/erpSync.js` — `ERP_SYNC_KEY`.
-- `server/src/platformSync.js` — `PLATFORM_SYNC_URL`, `PLATFORM_SYNC_KEY`.
-- `server/src/notifications.js` (Telegram/push dispatch) — the
+- `server/src/erp/routes/erpSync.js` — `ERP_SYNC_KEY`.
+- `server/src/erp/platformSync.js` — `PLATFORM_SYNC_URL`, `PLATFORM_SYNC_KEY`.
+- `server/src/shared/notifications.js` (Telegram/push dispatch) — the
   `TELEGRAM_*`/`VAPID_*` variables.
 - `docker-compose.yml` — `POSTGRES_*` for the `db` service.

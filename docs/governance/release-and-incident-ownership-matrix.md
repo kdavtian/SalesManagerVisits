@@ -30,7 +30,7 @@ human accountable for the outcome (`kdavtian` in every case today).
 |---|---|---|
 | Detection | `kdavtian` (no on-call rotation, no external monitoring/alerting service configured) | Currently reactive: a failure is noticed by a user report, an ERP-sync-staleness alert, or manual inspection. There is no uptime monitor watching the droplet from outside it. |
 | Triage / severity call | `kdavtian` | Apply [severity-definitions.md](severity-definitions.md). A Critical incident (data loss, security breach, full outage) escalates to immediate action regardless of time of day. |
-| Containment | `kdavtian` | For a security incident specifically: the Emergency Disconnect / lockdown feature (`server/src/routes/lockdown.js`) is the first lever — it logs out every session and blocks all data access app-wide until lifted. |
+| Containment | `kdavtian` | For a security incident specifically: the Emergency Disconnect / lockdown feature (`server/src/system/routes/lockdown.js`) is the first lever — it logs out every session and blocks all data access app-wide until lifted. |
 | Fix / rollback | `kdavtian` | Roll back = redeploy the previous known-good commit via `deploy.sh`; there's no one-command automated rollback today. |
 | Postmortem | `kdavtian` | Not currently a formalized step. **Recommended addition**: for any Critical or High incident, write a short postmortem and add/update the relevant [risk register](risk-and-technical-debt-register.md) entry so the same class of failure is tracked, not just fixed once. |
 
@@ -44,7 +44,7 @@ accountability question:
 |---|---|
 | Secret custody (`JWT_SECRET`, `ERP_SYNC_KEY`, VAPID keys, DB password) | `kdavtian` (held in the droplet's `.env`, not in this repo) |
 | Dependency/vulnerability triage (`npm audit`, Dependabot) | `kdavtian` |
-| Access control changes (roles, permissions in `server/src/roles.js`) | `kdavtian` |
+| Access control changes (roles, permissions in `server/src/shared/roles.js`) | `kdavtian` |
 | Branch protection / repo settings | `kdavtian` (GitHub repo admin) |
 | TLS certificate renewal | Automated (certbot's systemd timer), `kdavtian` if it ever fails |
 

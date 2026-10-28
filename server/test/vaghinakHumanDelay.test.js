@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { humanDelayPassed, jitteredDue, HUMAN_DELAY_MAX_MS } from "../src/vaghinak/humanDelay.js";
+import { humanDelayPassed, jitteredDue, HUMAN_DELAY_MAX_MS } from "../src/team/vaghinak/humanDelay.js";
 
 const at = (min, sec = 0) => new Date(Date.UTC(2026, 9, 19, 6, min, sec)); // 10:MM Yerevan
 

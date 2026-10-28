@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { nameTokens, matchGroupsToProducts, parseTechText } from "../src/pricelistImport.js";
-import { modelName, formatVolume, groupByModel, formatValidUntil, formatPrice } from "../src/pricelistPdf.js";
+import { nameTokens, matchGroupsToProducts, parseTechText } from "../src/products/pricelistImport.js";
+import { modelName, formatVolume, groupByModel, formatValidUntil, formatPrice } from "../src/products/pricelistPdf.js";
 
 test("nameTokens drops brand, pack size and hyphens inside grades", () => {
   assert.deepEqual(nameTokens("Castrol EDGE 0W-20 C5 4L"), ["edge", "0w20", "c5"]);

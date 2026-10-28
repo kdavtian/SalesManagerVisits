@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, createProduct, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { markWishesBackInStock } from "../../src/productWishes.js";
+import { markWishesBackInStock } from "../../src/orders/productWishes.js";
 
 let rep, repCookie, director, directorCookie, partnerUser, partnerCookie, customer, other, shop, gone;
 test.before(async () => {

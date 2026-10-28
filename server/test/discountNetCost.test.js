@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { netCostAtPrice } from "../src/discountPolicy.js";
+import { netCostAtPrice } from "../src/orders/discountPolicy.js";
 
 // Workbook 2.1.0, Edge Professional EC 0w20 4 L: landing 14,033 AMD per pack, silver 31,000, gold 24,000.
 // The workbook says net 28,170 (it mixes the per-litre landing cost into a per-pack price); per pack it is ~24,550.

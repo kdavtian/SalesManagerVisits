@@ -1,7 +1,7 @@
 // Admin > System health: what this deployment is actually running, in one place -- the app version
 // the server serves vs the one open on this phone, applied migrations, how fresh each ERP feed from
 // the bot is, the latest Excel dates and which integrations are configured
-// (server/src/routes/systemHealth.js). Answers "Not updated" / "no data today" without SSH.
+// (server/src/system/routes/systemHealth.js). Answers "Not updated" / "no data today" without SSH.
 import { api } from "../api.js";
 import { APP_VERSION } from "../version.js";
 import { t } from "../i18n.js";

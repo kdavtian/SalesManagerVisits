@@ -79,7 +79,7 @@ const sortProducts = (list) => [...list].sort(compareProducts);
 // role is not completing routes in the app yet, see views/deliveryRoute.js).
 
 // Full created -> submitted -> confirmed -> packed -> delivered timeline
-// (server/src/routes/orders.js's order_status_history, populated at every
+// (server/src/orders/routes/orders.js's order_status_history, populated at every
 // real transition -- see migration 070). A draft-exception loop (rejected/
 // stock-issue/delivery-failure) shows up here too since it's a real status
 // change, not something to hide -- it's exactly the kind of thing this was
@@ -211,7 +211,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     // it's waiting on that review.
     const canReviewSubmitted = canConfirmOrders(state.user.role) && order.status === "submitted";
     const canConfirmSubmitted = canConfirmSubmittedOrders(state.user.role) && order.status === "submitted";
-    // A draft is editable too (server/src/routes/orders.js's PATCH /:id
+    // A draft is editable too (server/src/orders/routes/orders.js's PATCH /:id
     // already accepted this -- this button just never offered it), owner/
     // admin only since canReviewSubmitted is always false for a draft (a
     // director has nothing to review yet).
@@ -349,7 +349,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     }
     if (order.status === "packed_stock_out" || order.status === "confirmed") {
       // No route/signature required here -- see canMarkDeliveredWithoutRoute
-      // in server/src/roles.js for why this manual override exists. A CONFIRMED order can be marked delivered
+      // in server/src/shared/roles.js for why this manual override exists. A CONFIRMED order can be marked delivered
       // right away too (management skips the warehouse "packed" step).
       if (canMarkDeliveredWithoutRoute(state.user.role)) {
         buttons.push({ label: t("mark_delivered_no_route"), action: "mark-delivered", cls: "btn btn-primary" });

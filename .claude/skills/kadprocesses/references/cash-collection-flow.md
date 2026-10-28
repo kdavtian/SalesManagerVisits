@@ -50,7 +50,7 @@ Owner's answers (2026-10-28):
   then a sales director (never straight to the accountant by default).
 - Director: the hand-off sheet has "Counted on the table" (starts at the expected total); a different amount = "Confirm with difference"
   + a required note; the owner side (admin, CEO) gets a notification and a task. Reject asks the reason inside the sheet (no pop-ups).
-- Confirming a REP's hand-off makes the daily cash sheet (`cash_sheets`, migration 166; `server/src/cashSheets.js`). The CEO bot polls
+- Confirming a REP's hand-off makes the daily cash sheet (`cash_sheets`, migration 166; `server/src/money/cashSheets.js`). The CEO bot polls
   `/api/erp-sync/cash-sheets/pending` every ~30 s and posts text + Excel to `telegram.upload_chat_ids` (or `cash_sheet_chat_ids`).
   Excel: tab "Cashflow" = workbook Cash columns A..G (Date, Amount, Currency=AMD, For="Oil order", ID=Customer ID, Source=rep cash box
   by channel: SM YVN->Cash YVN, SM Davtashen->Cash DVT, SM Shirak->Cash Shirak, else Cash, Info="rep · app <payment id> · sheet <n>");

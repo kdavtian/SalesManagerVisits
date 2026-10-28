@@ -1,0 +1,117 @@
+import { Router } from "express";
+import rateLimit from "express-rate-limit";
+import { requireAuth } from "../../middleware/auth.js";
+
+export const geocodeRouter = Router();
+geocodeRouter.use(requireAuth);
+
+// Nominatim's usage policy requires a real User-Agent identifying the app
+// and caps free usage at ~1 request/second -- this endpoint is only hit
+// once per "drop a pin" action (a human action, not a bulk job), so a
+// generous per-user limit is enough to stay well within that.
+const geocodeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many location lookups. Try again in a moment." },
+});
+
+// Nominatim's address breakdown -- state is Armenia's marz (e.g. "Shirak"),
+// suburb/city_district is a Yerevan district (e.g. "Ajapnyak"), city/town is
+// a marz's city for anywhere else. The client maps these onto the fixed
+// region/subregion lists rather than trusting arbitrary OSM naming, since
+// Nominatim's exact field per area varies.
+//
+// Yerevan itself is the one region that never lands in `state` -- OSM tags
+// it place=city as well as admin_level=4 (same level as a marz), and
+// Nominatim's addressdetails puts an area that's tagged as a city under
+// `city`, not `state`, even at that admin level. Every Yerevan address
+// therefore came back with a null region (and so no auto-fill at all --
+// matchRegion(null) short-circuits before ever looking at the fixed region
+// list), regardless of how confidently `suburb`/`city_district` identified
+// the actual district. Detected here by name instead, in either script
+// Nominatim might use per accept-language.
+function regionAndSubregionFrom(address) {
+  const cityOrTown = address?.city || address?.town || null;
+  const isYerevan = typeof cityOrTown === "string" && /^(yerevan|երևան)$/i.test(cityOrTown.trim());
+  return {
+    region: address?.state || (isYerevan ? cityOrTown : null),
+    subregion: address?.suburb || address?.city_district || (isYerevan ? null : cityOrTown) || address?.town || null,
+  };
+}
+
+// "Կոմիտաս 5, Երևան, 0014, Հայաստան" -> "Կոմիտաս 5, Երևան, 0014": every customer is in Armenia, the country is noise (owner, 2026-10-27).
+export function withoutCountry(address) {
+  if (typeof address !== "string") return address ?? null;
+  return address.replace(/(,\s*(Հայաստան|Armenia|Армения))+\s*$/iu, "").trim() || null;
+}
+
+geocodeRouter.get("/reverse", geocodeLimiter, async (req, res) => {
+  const lat = Number(req.query.lat);
+  const lng = Number(req.query.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return res.status(400).json({ error: "lat and lng are required" });
+  }
+
+  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=hy`;
+  let response;
+  try {
+    response = await fetch(url, {
+      // accept-language=hy above asks Nominatim for Armenian names; every
+      // customer is local, and the region/subregion match against the
+      // fixed Armenian-labeled lists in util.js works best against
+      // consistent Armenian-script input rather than whatever OSM's
+      // untagged default happens to return for a given area.
+      headers: { "User-Agent": "KAD-Motors-FieldVisits/1.0 (internal field sales app)" },
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch {
+    return res.status(502).json({ error: "Address lookup failed" });
+  }
+  if (!response.ok) {
+    return res.status(502).json({ error: "Address lookup failed" });
+  }
+
+  const data = await response.json();
+  res.json({
+    address: withoutCountry(data.display_name),
+    ...regionAndSubregionFrom(data.address),
+  });
+});
+
+// Forward geocoding for the address-search fallback in the location picker
+// (map.js) -- lets a rep type a customer's address and drop the pin there
+// instead of relying on GPS. Same provider/rate-limit shape as /reverse.
+// Biased to Armenia (countrycodes=am) since every customer is local; still
+// returns whatever Nominatim finds if nothing local matches.
+geocodeRouter.get("/search", geocodeLimiter, async (req, res) => {
+  const q = String(req.query.q || "").trim();
+  if (!q || q.length < 3) {
+    return res.status(400).json({ error: "q must be at least 3 characters" });
+  }
+
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}&countrycodes=am&addressdetails=1&limit=5&accept-language=hy`;
+  let response;
+  try {
+    response = await fetch(url, {
+      headers: { "User-Agent": "KAD-Motors-FieldVisits/1.0 (internal field sales app)" },
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch {
+    return res.status(502).json({ error: "Address search failed" });
+  }
+  if (!response.ok) {
+    return res.status(502).json({ error: "Address search failed" });
+  }
+
+  const data = await response.json();
+  res.json(
+    data.map((item) => ({
+      address: withoutCountry(item.display_name),
+      lat: Number(item.lat),
+      lng: Number(item.lon),
+      ...regionAndSubregionFrom(item.address),
+    }))
+  );
+});

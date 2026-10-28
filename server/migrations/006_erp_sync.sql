@@ -1,7 +1,7 @@
 -- Links a Field Visits customer to its record in the Castrol Excel/ERP
 -- workbook (the same source the CEO Telegram bot reports from), and stores
 -- the latest pushed extract of debt/AR and recent-order data for it.
--- erp_customer_data is fully replaced on every sync (see server/src/routes/erpSync.js)
+-- erp_customer_data is fully replaced on every sync (see server/src/erp/routes/erpSync.js)
 -- rather than merged row by row, so a customer that drops out of the ERP
 -- extract (e.g. debt fully paid, no recent orders) doesn't show stale data.
 ALTER TABLE customers ADD COLUMN erp_customer_id TEXT;

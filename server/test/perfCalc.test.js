@@ -5,7 +5,7 @@
 // coverage independent of clicking through the UI.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { STATUS, paceStatus, forecastResult, requiredDailyRate, kpiProgress } from "../src/perfCalc.js";
+import { STATUS, paceStatus, forecastResult, requiredDailyRate, kpiProgress } from "../src/reports/perfCalc.js";
 
 test("paceStatus: ahead of expected pace is excellent", () => {
   // 12 elapsed of 20 working days (60% through the month), 70% of target

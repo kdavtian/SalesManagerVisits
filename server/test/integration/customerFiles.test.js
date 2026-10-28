@@ -6,7 +6,7 @@ import path from "node:path";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, loginAs, trackCheckin } from "./helpers.js";
 import { apiRequest } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { uploadDirPath } from "../../src/upload.js";
+import { uploadDirPath } from "../../src/shared/upload.js";
 
 const files = [];
 const photoIds = [];

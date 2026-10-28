@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs, trackPayment } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { runAntiFraud, ensureWeeklySpotChecks, recordCustomerDispute, getWeights, repRisk, riskLevel } from "../../src/antiFraud.js";
+import { runAntiFraud, ensureWeeklySpotChecks, recordCustomerDispute, getWeights, repRisk, riskLevel } from "../../src/money/antiFraud.js";
 
 const ERP = `itest-fraud-${Date.now()}`;
 let admin, rep, rep2, customers, adminCookie, repCookie;

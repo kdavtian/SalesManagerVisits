@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, createProduct, apiRequest, loginAs, trackOrder, trackPayment } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { roundUpQuarterHours } from "../../src/repProgress.js";
+import { roundUpQuarterHours } from "../../src/field/repProgress.js";
 
 let rep, director, repCookie, directorCookie, c1, c2, product;
 const DAY_START = `(date_trunc('day', now() AT TIME ZONE 'Asia/Yerevan') AT TIME ZONE 'Asia/Yerevan')`;

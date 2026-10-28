@@ -1,4 +1,4 @@
-// Excel product/pricelist import (server/src/productImport.js): net cost
+// Excel product/pricelist import (server/src/products/productImport.js): net cost
 // column support, and the brand+name+unit identity fallback that stops a
 // re-import from creating a duplicate catalog row for a product that was
 // never ERP-synced (see erpSync.js's own claim step for the mirror-image
@@ -6,7 +6,7 @@
 import "dotenv/config";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifyImportRows, applyImportRows } from "../src/productImport.js";
+import { classifyImportRows, applyImportRows } from "../src/products/productImport.js";
 import { pool } from "../src/db/pool.js";
 import { createUser, cleanupAll, trackProduct } from "./integration/helpers.js";
 

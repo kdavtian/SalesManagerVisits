@@ -6,8 +6,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { uploadDirPath } from "../../src/upload.js";
-import { judgeBlank, checkFileWithAi, setAiCheckEnabled, setAiCheckMonthlyCapUsd, getAiCheckSettings } from "../../src/aiBlankCheck.js";
+import { uploadDirPath } from "../../src/shared/upload.js";
+import { judgeBlank, checkFileWithAi, setAiCheckEnabled, setAiCheckMonthlyCapUsd, getAiCheckSettings } from "../../src/customers/aiBlankCheck.js";
 
 let rep;
 let customer;

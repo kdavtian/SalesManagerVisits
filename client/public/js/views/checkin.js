@@ -977,7 +977,7 @@ export async function renderCheckin(root, navigate, customerId) {
     // this falls through to enqueueCheckin below, so a retry after a lost
     // response (the fetch throws even though the server actually received
     // and saved this exact request) can't create a second check-in. See
-    // server/src/routes/checkins.js and offlineQueue.js.
+    // server/src/field/routes/checkins.js and offlineQueue.js.
     const clientRef = crypto.randomUUID();
     const formData = new FormData();
     formData.set("customer_id", customerId);

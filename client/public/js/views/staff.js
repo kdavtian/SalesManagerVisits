@@ -1,5 +1,5 @@
 // Staff (owner, 2026-10-23): people, who reports to whom, payroll of a month, the day-by-day calendar of a person, premiums / bonuses / deductions
-// and the company rules. Replaces the Excel sheets Tabel, Sales Team and Plan. Pay maths is on the server (server/src/payroll.js); this screen shows
+// and the company rules. Replaces the Excel sheets Tabel, Sales Team and Plan. Pay maths is on the server (server/src/money/payroll.js); this screen shows
 // it and lets the right people change it: admin / CEO / accountant manage, a boss marks the days of the people below, everybody sees their own.
 import { api } from "../api.js";
 import { t, getLang } from "../i18n.js";

@@ -9,12 +9,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { ensureOnceRound } from "../../src/bonusChallengeRounds.js";
-import { processRound } from "../../src/bonusChallengeWorker.js";
-import { ingestCollectionContribution } from "../../src/bonusSourceIngest.js";
-import { updatePersonalBestsForWeek } from "../../src/bonusPersonalBests.js";
+import { ensureOnceRound } from "../../src/bonus/bonusChallengeRounds.js";
+import { processRound } from "../../src/bonus/bonusChallengeWorker.js";
+import { ingestCollectionContribution } from "../../src/bonus/bonusSourceIngest.js";
+import { updatePersonalBestsForWeek } from "../../src/bonus/bonusPersonalBests.js";
 import { yerevanWeekBounds } from "../../src/utils/yerevanDate.js";
-import { getBonusesEnabled, setBonusesEnabled } from "../../src/bonusSettings.js";
+import { getBonusesEnabled, setBonusesEnabled } from "../../src/bonus/bonusSettings.js";
 
 let admin;
 let accountant;

@@ -1,4 +1,4 @@
-// API coverage for Orders and approval lifecycle (server/src/routes/orders.js)
+// API coverage for Orders and approval lifecycle (server/src/orders/routes/orders.js)
 // that isn't already covered by orderLifecycle.test.js (the full draft ->
 // delivered happy path + discount-approval gate) or rolePermissions.test.js
 // (cross-role confirm/pack denials): invalid/boundary creation input,

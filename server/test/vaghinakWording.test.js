@@ -2,7 +2,7 @@
 // a new wording that breaks a rule fails here before it reaches a rep.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pickVariant, variantCount } from "../src/vaghinak/phrases.js";
+import { pickVariant, variantCount } from "../src/team/vaghinak/phrases.js";
 
 const BANK_SHAPE = {
   late_start: { 1: ["rep"] },

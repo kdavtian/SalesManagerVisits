@@ -1,5 +1,5 @@
-// API coverage for Warehouse and delivery (server/src/routes/warehouse.js,
-// server/src/routes/delivery.js): role gating (canManageWarehouse /
+// API coverage for Warehouse and delivery (server/src/orders/routes/warehouse.js,
+// server/src/orders/routes/delivery.js): role gating (canManageWarehouse /
 // canPlanRoutes / canDeliverOrders -- all satisfied by delivery_manager or
 // admin), state-mismatch 409s on packing/stock-issue/confirm, missing
 // signature upload as boundary input, route planning succeeding with OSRM

@@ -1,9 +1,9 @@
 // Vaghinak's control-loop rules, as pure functions: no database, no wording.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { evaluateRep, flagsOf } from "../src/vaghinak/evaluate.js";
-import { DEFAULTS } from "../src/vaghinak/settings.js";
-import { pickVariant, addressFor, durationHy, variantCount } from "../src/vaghinak/phrases.js";
+import { evaluateRep, flagsOf } from "../src/team/vaghinak/evaluate.js";
+import { DEFAULTS } from "../src/team/vaghinak/settings.js";
+import { pickVariant, addressFor, durationHy, variantCount } from "../src/team/vaghinak/phrases.js";
 
 const S = DEFAULTS;
 const at = (h, m = 0) => h * 60 + m;

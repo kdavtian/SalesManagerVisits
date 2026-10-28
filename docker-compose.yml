@@ -73,7 +73,7 @@ services:
       - "127.0.0.1:3000:3000"
 
   # Self-hosted routing engine for the delivery Route Planner (see
-  # server/src/osrm.js). If this container isn't reachable, the app falls
+  # server/src/orders/osrm.js). If this container isn't reachable, the app falls
   # back to straight-line (haversine) distance automatically -- OSRM isn't
   # a hard dependency, just a nicer route.
   #

@@ -370,7 +370,7 @@ export async function renderWarehouse(root, navigate) {
     };
     const TREND_ARROW = { up: " ↑", down: " ↓" };
     // Days-of-stock-left badge for one product row/variant (see
-    // ../../../server/src/stockForecast.js for the model behind
+    // ../../../server/src/products/stockForecast.js for the model behind
     // stock_status/days_of_stock/demand_trend). Nothing to show for 'out'
     // (the zero-qty styling already says that) or 'unknown' (no stock_qty
     // on record to estimate from at all).

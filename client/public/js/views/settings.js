@@ -134,7 +134,7 @@ function formatStorageMb(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// Landing-cost rates editable in App configuration (server/src/landingCalc.js LANDING_RATE_FIELDS): [key, label key].
+// Landing-cost rates editable in App configuration (server/src/products/landingCalc.js LANDING_RATE_FIELDS): [key, label key].
 const LANDING_RATE_GROUPS = [
   { label: "lr_freight", fields: [["tRealCastrol", "lr_brand_castrol"], ["tRealRoyal", "lr_brand_royal"], ["tRealLotos", "lr_brand_lotos"], ["tRealOther", "lr_brand_other"]] },
   { label: "lr_legal", fields: [["tLegalCastrol", "lr_brand_castrol"], ["tLegalRoyal", "lr_brand_royal"], ["tLegalLotos", "lr_brand_lotos"], ["tLegalOther", "lr_brand_other"]] },
@@ -165,7 +165,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
   // account. Kept separate from the strict admin-only section below.
   const canApprovePlans = canPlanForOthers();
   const canExportFinancials = seesFinancialExports();
-  // Mirrors server/src/roles.js's canManageBonusChallenges (admin/ceo) --
+  // Mirrors server/src/shared/roles.js's canManageBonusChallenges (admin/ceo) --
   // broader than plain admin, so kept as its own flag rather than folded
   // into the admin-gated block below.
   const canManageChallenges = isPerfCeo();

@@ -1,7 +1,7 @@
 // Task management: a module page (my tasks / created by me / all), the task
 // sheet (checklist, complete, edit, cancel) and the create/edit sheet, which is
 // also opened from a customer card (customer pre-attached). Management gives
-// tasks (server/src/roles.js canCreateTasks); everyone receives and completes
+// tasks (server/src/shared/roles.js canCreateTasks); everyone receives and completes
 // them. Deadline: the customer's next visit by default, or a chosen date.
 import { openCollectionOutcomeSheet } from "../collectionOutcomeSheet.js";
 import { isCallTask, callButtonHtml, callHistoryHtml, rememberCall, openCallResultSheet } from "../callTask.js";

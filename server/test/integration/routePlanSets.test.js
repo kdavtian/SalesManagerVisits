@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { planRep, splitCapacities, pathKm, orderStops } from "../../src/routePlanner.js";
+import { planRep, splitCapacities, pathKm, orderStops } from "../../src/orders/routePlanner.js";
 
 const WEEK = [{ dow: 1, weight: 1 }, { dow: 2, weight: 1 }, { dow: 3, weight: 1 }, { dow: 4, weight: 1 }, { dow: 5, weight: 1 }, { dow: 6, weight: 0.5 }];
 

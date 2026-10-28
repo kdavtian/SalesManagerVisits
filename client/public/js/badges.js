@@ -196,7 +196,7 @@ window.addEventListener("warehouse-changed", refreshWarehouseBadge);
 
 // Same pattern again, on the Accounting quick action -- requests Lily has not
 // finished (accounting roles) or orders whose document is ready (warehouse);
-// 0 for everyone else (see server/src/accountingBadge.js). The Accounting
+// 0 for everyone else (see server/src/orders/accountingBadge.js). The Accounting
 // page fires "accounting-changed" after each load so the number follows.
 let accountingBadgeCount = 0;
 

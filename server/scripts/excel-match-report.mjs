@@ -7,7 +7,7 @@
 //   docker compose exec -T app node scripts/excel-match-report.mjs          # report only, nothing is saved
 //   docker compose exec -T app node scripts/excel-match-report.mjs --apply  # also saves the links now instead of at the next sync
 import { pool } from "../src/db/pool.js";
-import { markAppRowsInExcel } from "../src/erpAutoMatch.js";
+import { markAppRowsInExcel } from "../src/erp/erpAutoMatch.js";
 
 const apply = process.argv.includes("--apply");
 const DAYS = 60;

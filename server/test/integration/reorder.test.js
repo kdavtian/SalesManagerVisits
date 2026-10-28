@@ -4,10 +4,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, createProduct, apiRequest, loginAs, trackOrder } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { refreshOrderRhythm } from "../../src/orderRhythm.js";
-import { visitPriorities } from "../../src/visitPriorities.js";
+import { refreshOrderRhythm } from "../../src/orders/orderRhythm.js";
+import { visitPriorities } from "../../src/field/visitPriorities.js";
 import { yerevanToday } from "../../src/utils/yerevanDate.js";
-import { addDays } from "../../src/volumeReport.js";
+import { addDays } from "../../src/reports/volumeReport.js";
 
 const stamp = Date.now();
 const erpId = `ITEST-RO-${stamp}`;

@@ -4,8 +4,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, createProduct, loginAs, apiRequest, trackOrder } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { createDebtCollectionTasks, createReorderFollowupTasks } from "../../src/debtCollectionTasks.js";
-import { snapshotTierPrices, logTierPriceChanges } from "../../src/priceSyncLog.js";
+import { createDebtCollectionTasks, createReorderFollowupTasks } from "../../src/money/debtCollectionTasks.js";
+import { snapshotTierPrices, logTierPriceChanges } from "../../src/products/priceSyncLog.js";
 
 let users;
 let cookies;

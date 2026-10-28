@@ -8,8 +8,8 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startTestServer, stopTestServer, cleanupAll } from "./helpers.js";
-import { bootModuleHrefs } from "../../src/modulePreload.js";
-import { setCalculatorModeEnabled } from "../../src/settings.js";
+import { bootModuleHrefs } from "../../src/system/modulePreload.js";
+import { setCalculatorModeEnabled } from "../../src/shared/settings.js";
 
 const clientDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "client", "public");
 let baseUrl;

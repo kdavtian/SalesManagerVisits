@@ -1,6 +1,6 @@
 -- Owner, 2026-10-27:
 --  1. The texts the customer reads before signing (orders received / payment / both) and the warning printed on every blank are
---     editable in Settings > Sales & customers. NULL / missing keys = the built-in texts (server/src/documentTexts.js).
+--     editable in Settings > Sales & customers. NULL / missing keys = the built-in texts (server/src/shared/documentTexts.js).
 --  2. A default visit frequency per customer type (channel CVO, PCO, OEM, SM, CAS, KF; potential level; competitor; Bronze, Silver,
 --     Gold), "by default, but can be changed by specific customer". customers.visit_frequency_days stays the one number the whole app
 --     reads; it now follows the type defaults unless someone set this customer's frequency by hand (visit_frequency_manual).

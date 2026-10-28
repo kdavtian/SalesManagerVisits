@@ -1,0 +1,876 @@
+import { wishReport } from "../../orders/productWishes.js";
+import { Router } from "express";
+import { pool } from "../../db/pool.js";
+import { requireAuth, requireAdmin } from "../../middleware/auth.js";
+import { ROLES } from "../../shared/roles.js";
+import { REPORTS, findReport, canAccessReport } from "../reports.js";
+import { erpSyncFreshness } from "../../erp/erpSyncFreshness.js";
+import { AGING_BUCKETS, allocateFifo, loadOrdersNewestFirst } from "../../money/debtAging.js";
+import { yerevanToday } from "../../utils/yerevanDate.js";
+import { periodTimestampCondition, periodDateCondition, PERIOD_KEYS } from "../../utils/periodWindows.js";
+
+export const reportsRouter = Router();
+
+reportsRouter.use(requireAuth);
+
+// List the reports the current user is allowed to see, for the Reports
+// list page -- each entry just carries its key + i18n keys, the client
+// looks up the actual name/description text.
+reportsRouter.get("/", async (req, res) => {
+  const visible = [];
+  for (const report of REPORTS) {
+    if (await canAccessReport(req.user.role, report.key)) {
+      visible.push({ key: report.key, nameKey: report.nameKey, descriptionKey: report.descriptionKey });
+    }
+  }
+  res.json(visible);
+});
+
+// Admin-only: full role x report override matrix, for the "Reports
+// management" settings screen. Returns every REPORTS x ROLES pair with its
+// effective (possibly default) enabled state, so the UI can render a
+// checkbox grid without the admin needing to know the code defaults.
+reportsRouter.get("/access", requireAdmin, async (req, res) => {
+  const { rows } = await pool.query("SELECT report_key, role, enabled FROM report_access");
+  const overrides = new Map(rows.map((r) => [`${r.report_key}:${r.role}`, r.enabled]));
+  const matrix = REPORTS.map((report) => ({
+    key: report.key,
+    nameKey: report.nameKey,
+    roles: ROLES.filter((role) => role !== "admin").map((role) => ({
+      role,
+      enabled: overrides.has(`${report.key}:${role}`)
+        ? overrides.get(`${report.key}:${role}`)
+        : report.defaultRoles.includes(role),
+    })),
+  }));
+  res.json(matrix);
+});
+
+// Admin-only: set one explicit override. Written even if it happens to
+// match the code default -- simpler than trying to detect and skip a
+// no-op, and a future default change shouldn't silently flip an admin's
+// deliberate choice.
+reportsRouter.put("/access", requireAdmin, async (req, res) => {
+  const { report_key, role, enabled } = req.body ?? {};
+  if (!findReport(report_key)) return res.status(400).json({ error: "Unknown report_key" });
+  if (!ROLES.includes(role) || role === "admin") return res.status(400).json({ error: "Invalid role" });
+  if (typeof enabled !== "boolean") return res.status(400).json({ error: "enabled must be a boolean" });
+  await pool.query(
+    `INSERT INTO report_access (report_key, role, enabled) VALUES ($1, $2, $3)
+     ON CONFLICT (report_key, role) DO UPDATE SET enabled = EXCLUDED.enabled`,
+    [report_key, role, enabled]
+  );
+  res.status(204).end();
+});
+
+function requireReportAccess(reportKey) {
+  return async (req, res, next) => {
+    if (await canAccessReport(req.user.role, reportKey)) return next();
+    res.status(403).json({ error: "Not allowed" });
+  };
+}
+
+// The reports' period filter (client: PERIOD_OPTIONS in views/reports.js). Yerevan calendar days: today / week / month / quarter / year
+// and the previous one of each (yesterday, last_week, ...); "all" = no lower bound at all (the client's explicit All-time
+// selection, not "this month"). An omitted or unknown period means this month, as it always did.
+function periodCondition(column, period, params, { date = false, defaultMonth = true } = {}) {
+  const key = period || (defaultMonth ? "month" : null);
+  if (!key || key === "all") return null;
+  const make = date ? periodDateCondition : periodTimestampCondition;
+  return make(column, PERIOD_KEYS.includes(key) ? key : "month", params);
+}
+
+// Who created each new customer, when, and by which manager -- lets the
+// office answer "who is actively finding new opportunities" directly,
+// rather than inferring it from visit activity.
+// Wished products (productWishes.js): one row per product / typed name with the customers behind it. period as everywhere (default 90 days).
+reportsRouter.get("/product-wishes", requireReportAccess("product_wishes"), async (req, res) => {
+  // Rolling windows (demand is read as "lately", not per calendar month): 30 / 90 / 365 days, or everything.
+  const days = { d30: 30, d90: 90, d365: 365, all: null }[req.query.period] ?? 90;
+  const since = days ? new Date(Date.now() - days * 86400000) : null;
+  res.json({ rows: await wishReport({ since }) });
+});
+
+reportsRouter.get("/new-customers", requireReportAccess("new_customers"), async (req, res) => {
+  const { region, subregion, period, customer_tier } = req.query;
+  // A sales manager only ever sees their own new customers.
+  const mineOnly = req.user.role === "sales_manager";
+  const manager_id = mineOnly ? req.user.id : req.query.manager_id;
+  const conditions = [];
+  const params = [];
+  const when = periodCondition("c.created_at", period, params);
+  if (when) conditions.push(when);
+  if (region) {
+    params.push(region);
+    conditions.push(`c.region = $${params.length}`);
+  }
+  if (subregion) {
+    params.push(subregion);
+    conditions.push(`c.subregion = $${params.length}`);
+  }
+  if (manager_id) {
+    params.push(manager_id);
+    conditions.push(`c.created_by = $${params.length}`);
+  }
+  if (customer_tier) {
+    params.push(customer_tier);
+    conditions.push(`c.customer_tier = $${params.length}`);
+  }
+
+  const { rows } = await pool.query(
+    `SELECT c.id, c.name, c.category, c.customer_tier, c.region, c.subregion, c.created_at,
+            u.id AS created_by_id, u.name AS created_by_name
+     FROM customers c
+     JOIN users u ON u.id = c.created_by
+     WHERE ${conditions.join(" AND ")}
+     ORDER BY c.created_at DESC`,
+    params
+  );
+
+  const { rows: byManager } = await pool.query(
+    `SELECT u.id AS user_id, u.name AS user_name, count(c.id)::int AS new_customers
+     FROM users u
+     LEFT JOIN customers c ON c.created_by = u.id AND ${conditions.join(" AND ")}
+     WHERE u.role = 'sales_manager' AND u.status = 'active'${mineOnly ? ` AND u.id = $${params.length + 1}` : ""}
+     GROUP BY u.id, u.name
+     ORDER BY new_customers DESC, u.name`,
+    mineOnly ? [...params, req.user.id] : params
+  );
+
+  res.json({ customers: rows, by_manager: byManager });
+});
+
+// Check-ins filterable across every axis the field org cares about --
+// region/subregion/manager/period/type(category)/tier/outcome. Outcome is
+// matched against the `outcomes` array since a single visit can log more
+// than one.
+reportsRouter.get("/checkins", requireReportAccess("checkins"), async (req, res) => {
+  const { region, subregion, period, category, customer_tier, outcome } = req.query;
+  // A sales manager only ever sees their own visits.
+  const manager_id = req.user.role === "sales_manager" ? req.user.id : req.query.manager_id;
+  const conditions = [];
+  const params = [];
+  const when = periodCondition("ch.timestamp", period, params, { defaultMonth: false });
+  if (when) conditions.push(when);
+  if (region) {
+    params.push(region);
+    conditions.push(`c.region = $${params.length}`);
+  }
+  if (subregion) {
+    params.push(subregion);
+    conditions.push(`c.subregion = $${params.length}`);
+  }
+  if (manager_id) {
+    params.push(manager_id);
+    conditions.push(`ch.user_id = $${params.length}`);
+  }
+  if (category) {
+    params.push(category);
+    conditions.push(`c.category = $${params.length}`);
+  }
+  if (customer_tier) {
+    params.push(customer_tier);
+    conditions.push(`c.customer_tier = $${params.length}`);
+  }
+  if (outcome) {
+    params.push(outcome);
+    conditions.push(`$${params.length} = ANY(ch.outcomes)`);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const { rows } = await pool.query(
+    `SELECT ch.id, ch.timestamp, ch.outcomes, ch.note,
+            u.id AS user_id, u.name AS user_name,
+            c.id AS customer_id, c.name AS customer_name, c.region, c.subregion, c.category, c.customer_tier
+     FROM checkins ch
+     JOIN users u ON u.id = ch.user_id
+     JOIN customers c ON c.id = ch.customer_id
+     ${where}
+     ORDER BY ch.timestamp DESC
+     LIMIT 10000`,
+    params
+  );
+
+  res.json({ checkins: rows, total: rows.length });
+});
+
+// Order fulfillment pipeline -- no per-transition audit trail exists for
+// orders (unlike payments/cash handoffs, which log every status change to
+// their own history table; see migrations/018 and 051: orders only ever
+// carries created_at/updated_at). So "average time in status" per stage
+// isn't honestly derivable after the fact -- what this can show instead:
+// where this period's orders ended up, how long orders still sitting in
+// an unfinished status have been there (updated_at only moves when status
+// changes, so "now - updated_at" is really "time in current status"), and
+// discount-approval turnaround for orders still waiting on one.
+reportsRouter.get("/orders-pipeline", requireReportAccess("orders_pipeline"), async (req, res) => {
+  const { period, manager_id } = req.query;
+  const conditions = [];
+  const params = [];
+  const when = periodCondition("o.created_at", period, params);
+  if (when) conditions.push(when);
+  if (manager_id) {
+    params.push(manager_id);
+    conditions.push(`o.user_id = $${params.length}`);
+  }
+  const where = `WHERE ${conditions.join(" AND ")}`;
+
+  const { rows: byStatus } = await pool.query(
+    `SELECT o.status, count(*)::int AS count, COALESCE(sum(o.total_amd), 0) AS total_amd
+     FROM orders o
+     ${where}
+     GROUP BY o.status
+     ORDER BY count DESC`,
+    params
+  );
+
+  const { rows: deliveredRows } = await pool.query(
+    `SELECT count(*)::int AS delivered_count,
+            AVG(EXTRACT(EPOCH FROM (o.updated_at - o.created_at)) / 3600) AS avg_cycle_hours
+     FROM orders o
+     ${where} AND o.status = 'delivered'`,
+    params
+  );
+
+  // Deliberately not scoped to the period filter -- an order created two
+  // months ago and still sitting in "confirmed" is exactly what this
+  // should surface regardless of which period is selected, the same way
+  // Payments' "oldest pending" ignores its own period filter for the same
+  // reason.
+  const stuckConditions = ["o.status IN ('draft', 'submitted', 'confirmed', 'packed_stock_out')", "o.cancelled_at IS NULL"]; // a cancelled KAD OS order is closed, not stuck
+  const stuckParams = [];
+  if (manager_id) {
+    stuckParams.push(manager_id);
+    stuckConditions.push(`o.user_id = $${stuckParams.length}`);
+  }
+  const stuckWhere = `WHERE ${stuckConditions.join(" AND ")}`;
+
+  const { rows: activeByStatus } = await pool.query(
+    `SELECT o.status, count(*)::int AS count,
+            MIN(o.updated_at) AS oldest_updated_at,
+            count(*) FILTER (WHERE o.updated_at < now() - interval '48 hours')::int AS stuck_over_48h
+     FROM orders o
+     ${stuckWhere}
+     GROUP BY o.status
+     ORDER BY count DESC`,
+    stuckParams
+  );
+
+  const { rows: discountRows } = await pool.query(
+    `SELECT
+       count(*) FILTER (WHERE o.approval_status = 'pending')::int AS pending_count,
+       min(o.updated_at) FILTER (WHERE o.approval_status = 'pending') AS oldest_pending_at,
+       count(*) FILTER (WHERE o.approval_status = 'approved')::int AS approved_count,
+       count(*) FILTER (WHERE o.approval_status = 'rejected')::int AS rejected_count
+     FROM orders o
+     ${where}`,
+    params
+  );
+
+  res.json({
+    by_status: byStatus,
+    active: activeByStatus,
+    delivered: deliveredRows[0],
+    discount: discountRows[0],
+  });
+});
+
+// Brand presence per customer, from the latest check-in that actually
+// recorded a brand_status -- both our own brands and the named
+// competitors, so the office can see e.g. how Mobil is distributed across
+// Yerevan the same way they can see Castrol.
+reportsRouter.get("/brand-availability", requireReportAccess("brand_availability"), async (req, res) => {
+  const { region, subregion, manager_id } = req.query;
+  const conditions = ["ch.brand_status IS NOT NULL"];
+  const params = [];
+  if (region) {
+    params.push(region);
+    conditions.push(`c.region = $${params.length}`);
+  }
+  if (subregion) {
+    params.push(subregion);
+    conditions.push(`c.subregion = $${params.length}`);
+  }
+  if (manager_id) {
+    params.push(manager_id);
+    conditions.push(`c.assigned_manager_id = $${params.length}`);
+  }
+
+  const { rows } = await pool.query(
+    `SELECT DISTINCT ON (c.id)
+            c.id AS customer_id, c.name, c.region, c.subregion, c.lat, c.lng,
+            ch.brand_status, ch.timestamp AS as_of
+     FROM checkins ch
+     JOIN customers c ON c.id = ch.customer_id
+     WHERE ${conditions.join(" AND ")}
+     ORDER BY c.id, ch.timestamp DESC`,
+    params
+  );
+
+  res.json(rows);
+});
+
+// Payments report -- reuses the canonical `payments` table directly (no
+// separate reporting engine, per task spec), scoped to a period plus
+// optional channel/manager/status. APPROVED is the only status that
+// represents confirmed, reconciled collection; "submitted" (all statuses
+// combined) is reported separately so the two are never conflated.
+reportsRouter.get("/payments", requireReportAccess("payments"), async (req, res) => {
+  const { period, sales_channel, sales_manager_id, status } = req.query;
+  const conditions = [];
+  const params = [];
+  const when = periodCondition("p.payment_date", period, params);
+  if (when) conditions.push(when);
+  if (sales_channel) {
+    params.push(sales_channel);
+    conditions.push(`p.sales_channel = $${params.length}`);
+  }
+  if (sales_manager_id) {
+    params.push(sales_manager_id);
+    conditions.push(`p.sales_manager_id = $${params.length}`);
+  }
+  if (status) {
+    params.push(status);
+    conditions.push(`p.status = $${params.length}`);
+  }
+  const where = `WHERE ${conditions.join(" AND ")}`;
+
+  const { rows: kpiRows } = await pool.query(
+    `SELECT
+       count(*)::int AS submitted_count,
+       COALESCE(sum(amount_amd), 0) AS submitted_amd,
+       count(*) FILTER (WHERE status = 'approved')::int AS approved_count,
+       COALESCE(sum(amount_amd) FILTER (WHERE status = 'approved'), 0) AS approved_amd,
+       count(*) FILTER (WHERE status = 'pending')::int AS pending_count,
+       COALESCE(sum(amount_amd) FILTER (WHERE status = 'pending'), 0) AS pending_amd,
+       count(*) FILTER (WHERE status = 'rejected')::int AS rejected_count,
+       COALESCE(sum(amount_amd) FILTER (WHERE status = 'rejected'), 0) AS rejected_amd
+     FROM payments p
+     ${where}`,
+    params
+  );
+
+  const { rows: byChannel } = await pool.query(
+    `SELECT COALESCE(p.sales_channel, '—') AS sales_channel,
+            count(*)::int AS submitted_count,
+            COALESCE(sum(amount_amd) FILTER (WHERE status = 'approved'), 0) AS approved_amd
+     FROM payments p
+     ${where}
+     GROUP BY p.sales_channel
+     ORDER BY approved_amd DESC`,
+    params
+  );
+
+  const { rows: byManager } = await pool.query(
+    `SELECT p.sales_manager_id, p.sales_manager_name_snapshot AS sales_manager_name,
+            count(*)::int AS submitted_count,
+            COALESCE(sum(amount_amd) FILTER (WHERE status = 'approved'), 0) AS approved_amd
+     FROM payments p
+     ${where}
+     GROUP BY p.sales_manager_id, p.sales_manager_name_snapshot
+     ORDER BY approved_amd DESC`,
+    params
+  );
+
+  // Daily approved-collections trend within the period -- keyed by the
+  // day it was approved (not submitted), since that's the day the money
+  // is actually confirmed as collected.
+  const { rows: dailyTrend } = await pool.query(
+    `SELECT date_trunc('day', approved_at)::date AS day, COALESCE(sum(amount_amd), 0) AS approved_amd
+     FROM payments p
+     ${where.replace("p.payment_date", "p.approved_at")} AND p.status = 'approved'
+     GROUP BY day
+     ORDER BY day`,
+    params
+  );
+
+  const { rows: opsRows } = await pool.query(
+    `SELECT
+       count(*) FILTER (WHERE status = 'pending')::int AS pending_count,
+       min(created_at) FILTER (WHERE status = 'pending') AS oldest_pending_at,
+       count(*) FILTER (WHERE status = 'pending' AND created_at < now() - interval '24 hours')::int AS pending_over_24h,
+       count(*) FILTER (WHERE status = 'rejected')::int AS rejected_count,
+       AVG(approved_at - created_at) FILTER (WHERE status = 'approved') AS avg_approval_interval
+     FROM payments p
+     ${where}`,
+    params
+  );
+
+  res.json({
+    kpis: kpiRows[0],
+    by_channel: byChannel,
+    by_manager: byManager,
+    daily_trend: dailyTrend,
+    operations: opsRows[0],
+  });
+});
+
+// Customer payments from the Excel Cashflow sheet ("Oil order" rows -- the
+// sync already filters the ledger to just those, see erp_cashflow_lines), one
+// row per payment: date, amount, customer id/name, sales channel, region.
+// Filters: period or from/to, customer (name or ERP id), sales channels
+// (comma list), region::subregion keys (comma list). Capped at 2000 rows;
+// totals always cover the whole filtered set.
+const ERP_PAYMENTS_LIMIT = 2000;
+const ERP_PAYMENTS_FROM = `
+  FROM erp_cashflow_lines cf
+  LEFT JOIN customers c ON c.erp_customer_id = cf.erp_customer_id
+  LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = cf.erp_customer_id`;
+
+reportsRouter.get("/erp-payments", requireReportAccess("erp_payments"), async (req, res) => {
+  const { period, from, to, q, sales_channel, region_sub } = req.query;
+  const isDate = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const scope = [];
+  const scopeParams = [];
+  // A sales manager only sees payments of customers assigned to them.
+  if (req.user.role === "sales_manager") {
+    scopeParams.push(req.user.id);
+    scope.push(`c.assigned_manager_id = $${scopeParams.length}`);
+  }
+
+  const conditions = [...scope];
+  const params = [...scopeParams];
+  if (isDate(from) || isDate(to)) {
+    if (isDate(from)) {
+      params.push(from);
+      conditions.push(`cf.cashflow_date >= $${params.length}`);
+    }
+    if (isDate(to)) {
+      params.push(to);
+      conditions.push(`cf.cashflow_date <= $${params.length}`);
+    }
+  } else {
+    const when = periodCondition("cf.cashflow_date", period, params, { date: true, defaultMonth: false });
+    if (when) conditions.push(when);
+  }
+  const text = String(q ?? "").trim();
+  if (text) {
+    params.push(`%${text.replace(/[\\%_]/g, "\\$&")}%`);
+    conditions.push(`(COALESCE(c.name, erp.customer_name, '') ILIKE $${params.length} OR cf.erp_customer_id ILIKE $${params.length})`);
+  }
+  const channels = String(sales_channel ?? "").split(",").map((v) => v.trim()).filter(Boolean);
+  if (channels.length) {
+    params.push(channels);
+    conditions.push(`COALESCE(erp.assigned_sales_rep, c.sales_channel) = ANY($${params.length})`);
+  }
+  // "region::subregion" keys, as the shared region tree picker produces them
+  // (a missing subregion is "__none__").
+  const regionKeys = String(region_sub ?? "").split(",").map((v) => v.trim()).filter(Boolean);
+  if (regionKeys.length) {
+    const parts = regionKeys.map((key) => {
+      const [region, sub] = key.split("::");
+      params.push(region);
+      const r = `c.region = $${params.length}`;
+      if (!sub || sub === "__none__") return `(${r} AND COALESCE(c.subregion, '') = '')`;
+      params.push(sub);
+      return `(${r} AND c.subregion = $${params.length})`;
+    });
+    conditions.push(`(${parts.join(" OR ")})`);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const { rows } = await pool.query(
+    `SELECT to_char(cf.cashflow_date, 'YYYY-MM-DD') AS date, cf.amount_amd, cf.erp_customer_id,
+            COALESCE(c.name, erp.customer_name, cf.erp_customer_id) AS customer_name,
+            COALESCE(erp.assigned_sales_rep, c.sales_channel) AS sales_channel,
+            c.region, c.subregion
+     ${ERP_PAYMENTS_FROM}
+     ${where}
+     ORDER BY cf.cashflow_date DESC, cf.id DESC
+     LIMIT ${ERP_PAYMENTS_LIMIT}`,
+    params
+  );
+  const { rows: totalRows } = await pool.query(
+    `SELECT count(*)::int AS payment_count, COALESCE(sum(cf.amount_amd), 0) AS total_amd ${ERP_PAYMENTS_FROM} ${where}`,
+    params
+  );
+  // Filter options (the sales channels and regions that actually occur), within
+  // the viewer's own scope only.
+  const scopeWhere = scope.length ? `WHERE ${scope.join(" AND ")}` : "";
+  const { rows: facetRows } = await pool.query(
+    `SELECT DISTINCT COALESCE(erp.assigned_sales_rep, c.sales_channel) AS sales_channel, c.region, c.subregion
+     ${ERP_PAYMENTS_FROM} ${scopeWhere}`,
+    scopeParams
+  );
+  res.json({
+    rows,
+    truncated: totalRows[0].payment_count > rows.length,
+    totals: totalRows[0],
+    facets: {
+      sales_channels: [...new Set(facetRows.map((r) => r.sales_channel).filter(Boolean))].sort(),
+      regions: [...new Map(facetRows.filter((r) => r.region).map((r) => [`${r.region}::${r.subregion ?? ""}`, { region: r.region, subregion: r.subregion }])).values()],
+    },
+    sync: await erpSyncFreshness("erp_customer_data"),
+  });
+});
+
+// Real, physical cash the app already tracks custody of (see
+// payments.js/cashHandoffs.js: current_holder_id + pending_handoff_id) but
+// never rolled up into one view. Only 'pending' payments are unreconciled
+// cash still travelling through the custody chain -- 'approved' means it
+// already reached the accountant and was reconciled, 'rejected' means it
+// was never real collected cash to begin with.
+reportsRouter.get("/cash-custody", requireReportAccess("cash_custody"), async (req, res) => {
+  const { rows: byHolder } = await pool.query(
+    `SELECT p.current_holder_id, u.name AS holder_name, COALESCE(u.role_title, u.role) AS holder_role,
+            count(*)::int AS payment_count,
+            COALESCE(sum(p.amount_amd), 0) AS amount_amd,
+            count(*) FILTER (WHERE p.pending_handoff_id IS NOT NULL)::int AS in_transit_count
+     FROM payments p
+     JOIN users u ON u.id = p.current_holder_id
+     WHERE p.status = 'pending'
+     GROUP BY p.current_holder_id, u.name, u.role
+     ORDER BY amount_amd DESC`
+  );
+
+  const { rows: totalsRows } = await pool.query(
+    `SELECT COALESCE(sum(amount_amd), 0) AS total_unreconciled_amd,
+            count(*)::int AS total_unreconciled_count,
+            COALESCE(sum(amount_amd) FILTER (WHERE pending_handoff_id IS NOT NULL), 0) AS in_transit_amd,
+            count(*) FILTER (WHERE pending_handoff_id IS NOT NULL)::int AS in_transit_count
+     FROM payments
+     WHERE status = 'pending'`
+  );
+
+  // In-flight handoffs -- declared by the sender, awaiting the receiver's
+  // confirm/reject. "Overdue" mirrors the same 24h convention the Payments
+  // report already uses for its own pending-approval ageing.
+  const { rows: handoffs } = await pool.query(
+    `SELECT h.id, h.amount_amd, h.submitted_at, fu.name AS from_name, tu.name AS to_name
+     FROM cash_handoffs h
+     JOIN users fu ON fu.id = h.from_user_id
+     JOIN users tu ON tu.id = h.to_user_id
+     WHERE h.status = 'pending'
+     ORDER BY h.submitted_at ASC`
+  );
+
+  const { rows: opsRows } = await pool.query(
+    `SELECT count(*)::int AS pending_handoff_count,
+            min(submitted_at) AS oldest_pending_at,
+            count(*) FILTER (WHERE submitted_at < now() - interval '24 hours')::int AS pending_over_24h
+     FROM cash_handoffs
+     WHERE status = 'pending'`
+  );
+
+  res.json({ by_holder: byHolder, totals: totalsRows[0], handoffs, operations: opsRows[0] });
+});
+
+// A day where cash collected in the field diverges from what got
+// submitted as a payment that same day is exactly what a daily cash
+// reconciliation is meant to catch -- not a perfectly precise per-
+// transaction match (a rep's collection and its eventual payment
+// submission can legitimately land a day apart), but a divergence past
+// CASH_RECONCILIATION_ALERT_AMD is worth an accountant's eye rather than
+// staying buried in two separate screens that never get compared.
+// "Collected" sums both field collections (checkins.amount_collected_amd)
+// and delivery-time collections (pod_records.amount_collected_amd);
+// "submitted" is every non-rejected payment created that day -- rejected
+// payments were never real money received, so they'd only ever
+// misrepresent a day as under-submitted.
+const CASH_RECONCILIATION_ALERT_AMD = 10000;
+reportsRouter.get("/cash-reconciliation", requireReportAccess("cash_reconciliation"), async (req, res) => {
+  const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 90);
+  const { rows } = await pool.query(
+    `WITH days AS (
+       SELECT generate_series((now() AT TIME ZONE 'Asia/Yerevan')::date - ($1::int - 1), (now() AT TIME ZONE 'Asia/Yerevan')::date, interval '1 day')::date AS day
+     ),
+     collected AS (
+       SELECT (ch.timestamp AT TIME ZONE 'Asia/Yerevan')::date AS day, SUM(ch.amount_collected_amd) AS amount
+       FROM checkins ch
+       WHERE ch.amount_collected_amd IS NOT NULL
+       GROUP BY 1
+     ),
+     pod_collected AS (
+       SELECT (pod.delivered_at AT TIME ZONE 'Asia/Yerevan')::date AS day, SUM(pod.amount_collected_amd) AS amount
+       FROM pod_records pod
+       WHERE pod.amount_collected_amd > 0
+       GROUP BY 1
+     ),
+     submitted AS (
+       SELECT (p.created_at AT TIME ZONE 'Asia/Yerevan')::date AS day, SUM(p.amount_amd) AS amount
+       FROM payments p
+       WHERE p.status != 'rejected'
+       GROUP BY 1
+     )
+     SELECT d.day,
+            COALESCE(c.amount, 0) + COALESCE(pc.amount, 0) AS collected_amd,
+            COALESCE(s.amount, 0) AS submitted_amd,
+            (COALESCE(c.amount, 0) + COALESCE(pc.amount, 0)) - COALESCE(s.amount, 0) AS difference_amd
+     FROM days d
+     LEFT JOIN collected c ON c.day = d.day
+     LEFT JOIN pod_collected pc ON pc.day = d.day
+     LEFT JOIN submitted s ON s.day = d.day
+     ORDER BY d.day DESC`,
+    [days]
+  );
+  const withAlerts = rows.map((r) => ({
+    ...r,
+    alert: Math.abs(Number(r.difference_amd)) > CASH_RECONCILIATION_ALERT_AMD,
+  }));
+  res.json({ rows: withAlerts, alert_threshold_amd: CASH_RECONCILIATION_ALERT_AMD });
+});
+
+// The next three read the Castrol ERP extract synced in by erpSync.js
+// (erp_customer_data / sales_performance / perf_actuals_brand_monthly) --
+// the same data an external Telegram bot on the sync PC already formats
+// and sends outside this app, now also browsable here.
+
+// Debt/aging -- erp_customer_data is TRUNCATE-and-replaced whole on every
+// sync (see erpSync.js), so this always reflects the latest extract, not
+// an accumulating history. sales_channel here filters on
+// assigned_sales_rep, the same free-text rep-name space sales_channels.code
+// already matches for Team Performance.
+//
+// The Castrol Excel extract stays the trusted source of debt for as long as
+// the app and ERP run in parallel (expected: months, not days) -- this
+// never recomputes debt from app data wholesale, even though the app now
+// tracks collections of its own. Instead, estimated_debt_amd narrows the
+// gap between syncs the same way an individual customer's own card already
+// does (see routes/customers.js GET /:id, "estimated_debt_amd"): subtract
+// collections the app has recorded since the last sync, floored at zero.
+// Both the raw ERP figure and the adjusted one are returned so a reviewer
+// can see the gap, not just the result.
+const estimatedDebtJoin = `
+  LEFT JOIN LATERAL (
+    SELECT SUM(ch.amount_collected_amd) AS amount
+    FROM checkins ch
+    JOIN customers c ON c.id = ch.customer_id
+    WHERE c.erp_customer_id = erp.erp_customer_id
+      AND ch.amount_collected_amd IS NOT NULL
+      AND ch.timestamp > erp.synced_at
+  ) collected ON true`;
+const estimatedDebtExpr = "GREATEST(erp.debt_amd - COALESCE(collected.amount, 0), 0)";
+
+// Debt as of a past date D, computed from the customer's opening balance
+// plus full order/cashflow history -- see docs/erp-sync-contract.md's
+// cashflow_lines entry and migration 083's balance0_amd. Not floored at
+// zero like estimatedDebtExpr above: a customer who has paid ahead can
+// genuinely show a negative (credit) balance as of a given date, and
+// that's real information, not noise.
+const asOfDebtJoin = `
+  LEFT JOIN LATERAL (
+    SELECT SUM(ol.revenue_amd) AS amount
+    FROM erp_order_lines ol
+    WHERE ol.erp_customer_id = erp.erp_customer_id AND ol.order_date <= $__AS_OF_DATE__
+  ) orders_asof ON true
+  LEFT JOIN LATERAL (
+    SELECT SUM(cf.amount_amd) AS amount
+    FROM erp_cashflow_lines cf
+    WHERE cf.erp_customer_id = erp.erp_customer_id AND cf.cashflow_date <= $__AS_OF_DATE__
+  ) cashflow_asof ON true`;
+const asOfDebtExpr = "(COALESCE(erp.balance0_amd, 0) + COALESCE(orders_asof.amount, 0) - COALESCE(cashflow_asof.amount, 0))";
+
+reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async (req, res) => {
+  const { sales_channel, debt_only, date, aging } = req.query;
+  const asOfDate = typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+
+  const conditions = [];
+  const params = [];
+  // sales_channel may be a comma-separated list (multi-select filter).
+  const channels = String(sales_channel ?? "").split(",").map((c) => c.trim()).filter(Boolean);
+  if (channels.length) {
+    params.push(channels);
+    conditions.push(`erp.assigned_sales_rep = ANY($${params.length})`);
+  }
+  // A sales manager only sees the ERP customers assigned to them (same rule
+  // as seesCustomerErpData in roles.js).
+  if (req.user.role === "sales_manager") {
+    params.push(req.user.id);
+    conditions.push(
+      `erp.erp_customer_id IN (SELECT erp_customer_id FROM customers WHERE assigned_manager_id = $${params.length} AND erp_customer_id IS NOT NULL)`
+    );
+  }
+
+  let debtExpr = estimatedDebtExpr;
+  let debtJoin = estimatedDebtJoin;
+  if (asOfDate) {
+    params.push(asOfDate);
+    debtJoin = asOfDebtJoin.replaceAll("$__AS_OF_DATE__", `$${params.length}`);
+    debtExpr = asOfDebtExpr;
+  }
+
+  if (debt_only === "1") {
+    conditions.push(`${debtExpr} > 0`);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  // Aging filter (comma-separated bucket keys, see debtAging.js): narrows the customer list and the
+  // totals, while the by-bucket summary keeps showing every bucket so the filter chips stay available.
+  const agingList = String(aging ?? "").split(",").map((a) => a.trim()).filter((a) => AGING_BUCKETS.includes(a));
+
+  // Most recent payment from any source -- the sync's own (often blank)
+  // last_payment_date, the full ERP cashflow history, and approved in-app
+  // payments -- the same three sources Debt Balances uses, so both screens
+  // show the same date. In as-of mode only payments up to that date count.
+  const asOfParam = asOfDate ? `$${params.length}::date` : null;
+  const cashflowBound = asOfParam ? ` AND cf.cashflow_date <= ${asOfParam}` : "";
+  const appPaymentBound = asOfParam ? ` AND (p.payment_date AT TIME ZONE 'Asia/Yerevan')::date <= ${asOfParam}` : "";
+  const lastPaymentExpr = `GREATEST(
+      ${asOfParam ? `CASE WHEN erp.last_payment_date <= ${asOfParam} THEN erp.last_payment_date END` : "erp.last_payment_date"},
+      (SELECT max(cf.cashflow_date) FROM erp_cashflow_lines cf WHERE cf.erp_customer_id = erp.erp_customer_id AND cf.amount_amd > 0${cashflowBound}),
+      (SELECT max((p.payment_date AT TIME ZONE 'Asia/Yerevan')::date) FROM payments p JOIN customers pc ON pc.id = p.customer_id WHERE pc.erp_customer_id = erp.erp_customer_id AND p.status = 'approved'${appPaymentBound})
+    )`;
+
+  const { rows: baseRows } = await pool.query(
+    `SELECT erp.erp_customer_id, erp.customer_name, erp.assigned_sales_rep, erp.debt_amd,
+            ${lastPaymentExpr} AS last_payment_date, erp.days_since_payment, erp.aging_bucket,
+            (SELECT cc.credit_term_days FROM customers cc WHERE cc.erp_customer_id = erp.erp_customer_id LIMIT 1) AS credit_term_days,
+            ${asOfDate ? "0" : "COALESCE(collected.amount, 0)"} AS collected_since_sync_amd,
+            ${debtExpr} AS estimated_debt_amd
+     FROM erp_customer_data erp
+     ${debtJoin}
+     ${where}
+     ORDER BY estimated_debt_amd DESC NULLS LAST`,
+    params
+  );
+
+  // Invoice-based aging (FIFO, credit term deducted -- see debtAging.js), as of the chosen date
+  // or today. The debt allocated is the same figure the list shows (estimated / as-of).
+  const today = asOfDate ?? yerevanToday();
+  const ordersByCustomer = await loadOrdersNewestFirst(pool, baseRows.filter((r) => Number(r.estimated_debt_amd) > 0).map((r) => r.erp_customer_id), { asOf: asOfDate });
+  const bucketTotals = Object.fromEntries(AGING_BUCKETS.map((b) => [b, { total: 0, customers: 0 }]));
+  const withAging = baseRows.map((r) => {
+    const a = allocateFifo({ orders: ordersByCustomer.get(r.erp_customer_id) ?? [], debt: Number(r.estimated_debt_amd), today, termDays: r.credit_term_days ?? 45 });
+    for (const b of AGING_BUCKETS) {
+      if (a.buckets[b] > 0) {
+        bucketTotals[b].total += a.buckets[b];
+        bucketTotals[b].customers += 1;
+      }
+    }
+    return { ...r, oldest_due_days: a.oldest_due_days, overdue_amd: a.overdue_amd, opening_amd: Math.round(a.buckets.opening), _buckets: a.buckets };
+  });
+  const customerRows = (agingList.length ? withAging.filter((r) => agingList.some((b) => r._buckets[b] > 0)) : withAging).map(({ _buckets, ...r }) => r);
+  const byBucket = AGING_BUCKETS.filter((b) => bucketTotals[b].customers > 0).map((b) => ({
+    aging_bucket: b,
+    customer_count: bucketTotals[b].customers,
+    total_debt_amd: Math.round(bucketTotals[b].total),
+  }));
+  const totals = {
+    total_debt_amd: customerRows.reduce((sum, r) => sum + (Number(r.estimated_debt_amd) || 0), 0),
+    total_debt_amd_erp: customerRows.reduce((sum, r) => sum + (Number(r.debt_amd) || 0), 0),
+    customers_with_debt: customerRows.filter((r) => Number(r.estimated_debt_amd) > 0).length,
+  };
+
+  res.json({
+    customers: customerRows,
+    by_bucket: byBucket,
+    totals,
+    as_of_date: asOfDate,
+    sync: await erpSyncFreshness("erp_customer_data"),
+  });
+});
+
+// Sales vs. budget per rep/channel for one calendar month -- month comes in
+// as "YYYY-MM" from an <input type="month">, normalized to that month's
+// first day to match sales_performance's own month column (always a
+// month-truncated date, see 015_sales_performance.sql).
+reportsRouter.get("/sales-budget", requireReportAccess("sales_budget"), async (req, res) => {
+  const { month } = req.query;
+  const monthDate = /^\d{4}-\d{2}$/.test(month || "") ? `${month}-01` : null;
+
+  const { rows } = await pool.query(
+    `SELECT sp.rep_name, sc.name AS channel_name, sp.sales_amd, sp.budget_amd, sp.collected_amd
+     FROM sales_performance sp
+     LEFT JOIN sales_channels sc ON sc.code = sp.rep_name
+     WHERE sp.month = date_trunc('month', COALESCE($1::date, now()))
+     ORDER BY sp.sales_amd DESC`,
+    [monthDate]
+  );
+
+  const totals = rows.reduce(
+    (acc, r) => ({
+      sales_amd: acc.sales_amd + Number(r.sales_amd),
+      budget_amd: acc.budget_amd + Number(r.budget_amd),
+      collected_amd: acc.collected_amd + Number(r.collected_amd),
+    }),
+    { sales_amd: 0, budget_amd: 0, collected_amd: 0 }
+  );
+
+  res.json({ rows, totals, sync: await erpSyncFreshness("sales_performance") });
+});
+
+// Brand volume (liters) per channel for one calendar month, plus a
+// company-wide per-brand total for the same month.
+reportsRouter.get("/brand-volume", requireReportAccess("brand_volume"), async (req, res) => {
+  const { month, sales_channel } = req.query;
+  const monthDate = /^\d{4}-\d{2}$/.test(month || "") ? `${month}-01` : null;
+  const conditions = [`p.month = date_trunc('month', COALESCE($1::date, now()))`];
+  const params = [monthDate];
+  if (sales_channel) {
+    params.push(sales_channel);
+    conditions.push(`p.channel_code = $${params.length}`);
+  }
+  const where = `WHERE ${conditions.join(" AND ")}`;
+
+  const { rows } = await pool.query(
+    `SELECT p.channel_code, sc.name AS channel_name, p.brand, p.liters
+     FROM perf_actuals_brand_monthly p
+     LEFT JOIN sales_channels sc ON sc.code = p.channel_code
+     ${where}
+     ORDER BY p.liters DESC`,
+    params
+  );
+
+  const byBrandWhere = where.replace(/p\./g, "");
+  const { rows: byBrand } = await pool.query(
+    `SELECT brand, COALESCE(sum(liters), 0) AS total_liters
+     FROM perf_actuals_brand_monthly
+     ${byBrandWhere}
+     GROUP BY brand
+     ORDER BY total_liters DESC`,
+    params
+  );
+
+  res.json({ rows, by_brand: byBrand, sync: await erpSyncFreshness("perf_actuals_brand_monthly") });
+});
+
+const REPORT_PERIODS = new Set(["daily", "weekly", "monthly", "quarterly", "annual"]);
+
+// Daily management report -- a stored snapshot pushed once per
+// (period, report_date) by POST /api/erp-sync/daily-report (see
+// erpSync.js), not derived from the other ERP tables above. "Daily" is the
+// default period (matches the name every existing caller already expects);
+// ?period=weekly|monthly|quarterly|annual switches to that period's own
+// latest-by-default/one-specific-date-via-?date= snapshot instead.
+reportsRouter.get("/daily-management", requireReportAccess("daily_management"), async (req, res) => {
+  const { date } = req.query;
+  const period = REPORT_PERIODS.has(req.query.period) ? req.query.period : "daily";
+  const { rows } = await pool.query(
+    `SELECT *, report_date::text AS report_date, prev_report_date::text AS prev_report_date
+     FROM erp_daily_report
+     WHERE period = $2
+       AND report_date = COALESCE($1::date, (SELECT max(report_date) FROM erp_daily_report WHERE period = $2))`,
+    [/^\d{4}-\d{2}-\d{2}$/.test(date || "") ? date : null, period]
+  );
+  if (!rows.length) return res.json({ report: null, available_dates: [], period });
+
+  const { rows: dates } = await pool.query(
+    `SELECT report_date::text AS report_date FROM erp_daily_report WHERE period = $1 ORDER BY report_date DESC LIMIT 30`,
+    [period]
+  );
+  res.json({ report: rows[0], available_dates: dates.map((d) => d.report_date), period });
+});
+
+// Generated report files (Sales Director workbook, debt/receivables Excel,
+// CEO management workbook) pushed as-is by POST /api/erp-sync/reports (see
+// erpSync.js) -- metadata only, not the file bytes themselves (see the
+// /documents/:id/download route below for that).
+reportsRouter.get("/documents", requireReportAccess("documents"), async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT id, report_type, report_date::text AS report_date, file_name, synced_at
+     FROM generated_reports
+     ORDER BY report_date DESC, report_type`
+  );
+  res.json(rows);
+});
+
+reportsRouter.get("/documents/:id/download", requireReportAccess("documents"), async (req, res) => {
+  const { rows } = await pool.query(
+    "SELECT file_name, content_type, file_data FROM generated_reports WHERE id = $1",
+    [req.params.id]
+  );
+  const doc = rows[0];
+  if (!doc) return res.status(404).json({ error: "Report not found" });
+  res.setHeader("Content-Type", doc.content_type);
+  res.setHeader("Content-Disposition", `attachment; filename="${doc.file_name.replace(/"/g, "")}"`);
+  res.send(doc.file_data);
+});

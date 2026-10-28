@@ -1,5 +1,5 @@
 // Armenian places on the client (owner, 2026-10-25): shows a stored place name in the language of the app, suggests names while typing, and says in one
-// line what the server did with the typed text. The spelling autocorrect itself is on the server (server/src/places.js).
+// line what the server did with the typed text. The spelling autocorrect itself is on the server (server/src/customers/places.js).
 import { PLACE_DATA, PLACE_REGIONS } from "./placesData.js";
 import { getLang, t } from "./i18n.js";
 

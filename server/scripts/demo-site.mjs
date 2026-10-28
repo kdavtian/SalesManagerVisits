@@ -12,8 +12,8 @@ import "dotenv/config";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { pool } from "../src/db/pool.js";
-import { ROLES } from "../src/roles.js";
-import { formatOrderCode } from "../src/routes/orders.js";
+import { ROLES } from "../src/shared/roles.js";
+import { formatOrderCode } from "../src/orders/routes/orders.js";
 
 const DOMAIN = "kad.demo";
 

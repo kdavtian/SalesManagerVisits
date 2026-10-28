@@ -6,11 +6,11 @@ import "dotenv/config";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { pool } from "../../src/db/pool.js";
-import { getBonusSummaryForUser } from "../../src/bonusEmployeeSummary.js";
-import { createDraftTemplate, publishTemplate } from "../../src/bonusChallengeTemplates.js";
-import { ensureCurrentRound } from "../../src/bonusChallengeRounds.js";
-import { processRound } from "../../src/bonusChallengeWorker.js";
-import { setBonusesEnabled } from "../../src/bonusSettings.js";
+import { getBonusSummaryForUser } from "../../src/bonus/bonusEmployeeSummary.js";
+import { createDraftTemplate, publishTemplate } from "../../src/bonus/bonusChallengeTemplates.js";
+import { ensureCurrentRound } from "../../src/bonus/bonusChallengeRounds.js";
+import { processRound } from "../../src/bonus/bonusChallengeWorker.js";
+import { setBonusesEnabled } from "../../src/bonus/bonusSettings.js";
 import { createUser, cleanupAll } from "./helpers.js";
 
 const userIds = [];

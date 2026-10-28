@@ -49,7 +49,7 @@ Retries and staleness below).
 
 Unlike everything else in this doc, this one direction is **this app
 pushing out**, not receiving. After `POST /api/erp-sync` commits its
-transaction, `server/src/platformSync.js` reads the current `products`
+transaction, `server/src/erp/platformSync.js` reads the current `products`
 table and the wholesale customers (`customers` joined to
 `erp_customer_data`), and pushes them to Platform (the public KAD MOTORS
 website/PWA, `kdavtian/castrolarmenia` repo) at
@@ -72,7 +72,7 @@ its end, so a retried or re-ordered push is safe.
   re-sends the same (or a corrected) snapshot, the app just replaces the
   table again — there's no partial-write or duplicate-row risk from a
   retried push.
-- **Staleness monitoring** (`server/src/erpSyncMonitor.js`): checks hourly
+- **Staleness monitoring** (`server/src/erp/erpSyncMonitor.js`): checks hourly
   whether the most recent `synced_at` timestamp on any ERP-sourced table
   is older than `ERP_STALE_AFTER_HOURS` (72 hours). If so, it notifies
   admin/CEO — the deliberate signal that "the pipeline looks broken", not
@@ -92,7 +92,7 @@ sources of truth that get compared, not merged**:
   note: "ERP-invoiced revenue, not the app's own order pipeline").
 - **Payments** collected through the app go through their own review/
   custody chain (see [`docs/roles-permissions.md`](roles-permissions.md)
-  and `server/src/routes/payments.js`) and are marked
+  and `server/src/money/routes/payments.js`) and are marked
   `approved`/`rejected`/`pending` independently of anything the ERP says.
   An accountant reconciling the books compares the two — the app doesn't
   attempt to auto-match an ERP-reported payment against an app-recorded

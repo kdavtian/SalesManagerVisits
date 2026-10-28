@@ -62,7 +62,7 @@ Documentation is "done" (for the purposes of workstream 1 above) when:
 - Every environment variable and external dependency is documented
   ([`configuration.md`](configuration.md)).
 - Role/permission documentation ([`roles-permissions.md`](roles-permissions.md))
-  matches what `server/src/roles.js` and the test suite actually enforce —
+  matches what `server/src/shared/roles.js` and the test suite actually enforce —
   re-check this doc whenever `roles.js` changes.
 - Every release is reproducible from a Git tag (see below).
 - This doc's freshness is reviewed as part of any PR that changes

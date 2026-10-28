@@ -1,4 +1,4 @@
-// API coverage for Users and roles (server/src/routes/users.js) -- admin-only
+// API coverage for Users and roles (server/src/team/routes/users.js) -- admin-only
 // management CRUD, its two narrower non-admin GETs, role validation, and
 // the DB unique-email constraint surfacing as a clean 409.
 //

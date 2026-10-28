@@ -1,7 +1,7 @@
-// Bank statement reading and matching (server/src/bankStatement.js): no database needed.
+// Bank statement reading and matching (server/src/money/bankStatement.js): no database needed.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseCsv, parseAmount, readStatement, hashLines, matchLines } from "../src/bankStatement.js";
+import { parseCsv, parseAmount, readStatement, hashLines, matchLines } from "../src/money/bankStatement.js";
 
 test("amounts: thousands separators, decimal comma, brackets and trailing minus", () => {
   assert.equal(parseAmount("1,234.56"), 1234.56);

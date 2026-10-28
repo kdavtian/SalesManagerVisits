@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, apiFormRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { uploadDirPath } from "../../src/upload.js";
+import { uploadDirPath } from "../../src/shared/upload.js";
 
 let baseUrl;
 const made = [];

@@ -82,7 +82,7 @@ what's still needed from repo ownership to stand one up.
 
 ## Roles and access model
 
-Seven roles (`server/src/roles.js`): `admin`, `ceo`, `sales_director`,
+Seven roles (`server/src/shared/roles.js`): `admin`, `ceo`, `sales_director`,
 `sales_manager`, `warehouse_manager`, `delivery_manager`, `accountant`.
 Access is enforced entirely in application code (per-route capability
 functions like `canDeliverOrders`, `seesFinancialExports`,

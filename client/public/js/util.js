@@ -857,7 +857,7 @@ export function labelColon() {
 // debtBalances.js) so "data as of" reads the same everywhere instead of
 // each screen inventing its own freshness wording. The extract stays the
 // trusted source of truth for these numbers while the app and ERP run in
-// parallel (see server/src/erpSyncFreshness.js's ERP_STALE_AFTER_HOURS) --
+// parallel (see server/src/erp/erpSyncFreshness.js's ERP_STALE_AFTER_HOURS) --
 // this badge is a "the sync pipeline looks broken" flag, not a "the
 // number is old" one, so it only turns into a warning well past a normal
 // sync gap. `sync` is the {synced_at, stale, stale_after_hours} shape

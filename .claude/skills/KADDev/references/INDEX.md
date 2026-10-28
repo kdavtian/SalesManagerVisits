@@ -15,7 +15,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L73 KAD AI (Ask KAD), built 1.369.0 (owner decisions 2026-10-18) - Admin-only AI analyst: Home tile "KAD AI" -> #/ask-kad.
 - L82 Lists at scale (1.373.0, owner decision 2026-10-19: "500 per page so the app fee - GET /api/customers takes limit (max 1000) with aftername + afterid (keyset on (name, id), index customersnamei
 - L85 Pause / offboard a rep (1.376.0, migration 135) - users.status = active | paused | offboarded (+ statuschangedat/by, statusnote).
-- L94 Additions 2026-10-24 (returns, potential, bank statements, lists) - Order returns (migration 143): server/src/orderReturns.js, routes/returns.js, client returnSheet.js, views/ret
+- L94 Additions 2026-10-24 (returns, potential, bank statements, lists) - Order returns (migration 143): server/src/orders/orderReturns.js, routes/returns.js, client returnSheet.js, vi
 
 ## bot-architecture.md (7 KB, 35 lines)
 - L5 Flow - Accountant posts the workbook (e.g.
@@ -54,7 +54,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L117 Task management (v1.269.0) - Tables tasks (title, creator, assignee, optional customer, duedate, dueisnextvisit, status open/done/cancelled
 - L144 Consolidated business-process map (added 2026-10-09) - Order lifecycle: rep creates draft -> submits (lines auto-sorted in products-page order via productSort.js) ->
 - L154 Process-logic rules added 2026-10-10 (v1.295.0) - Credit limit (customers.creditlimitamd, NULL = no limit; migration 101): set in Customer -> Account settings -
-- L163 Debt-collection tasks and quiet hours (2026-10-10, server-only) - When is a debt "overdue" (2026-10-10, server/src/debtAge.js): measured from the OLDEST UNPAID INVOICE, not fro
+- L163 Debt-collection tasks and quiet hours (2026-10-10, server-only) - When is a debt "overdue" (2026-10-10, server/src/money/debtAge.js): measured from the OLDEST UNPAID INVOICE, n
 - L172 Round 2 of the process review (2026-10-10, v1.297.0, migrations 103-105) - Discount policy (discountPolicy.js): up to 3 % is auto-approved (approvalstatus 'approved', approvedby NULL) u
 - L180 Round 3 of the process review (2026-10-10, v1.298.0, migration 106; bot PR #38) - Visit first (visitPriorities.js, GET /customers/visit-priorities, Home card for sales managers): score = overd
 - L189 Debt follow-ups (2026-10-10, v1.306.0, migration 107) - Debt statement (GET /customers/:id/debt-statement, debtStatementPdf.js, button "Պարտքի ամփոփաթերթ" in the cust
@@ -64,8 +64,8 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L218 Order usual / Reorder (2026-10-13, v1.313.0, migration 110) - customerorderrhythm (migration 110, rebuilt inside every ERP sync by orderRhythm.js): per ERP customer the las
 - L224 Merch (free items) -- 2026-10-13 - Products whose Products-sheet Product Family is Merch (today: CastrolStend, 100 pcs, no prices) are given to c
 - L227 Pin corrections and ERP-id ownership (2026-10-13) - Pin corrections are auto-approved (routes/editRequests.js canAutoApprovePin): an edit request that changes ONL
-- L231 Pin review and order deletion (2026-10-13, migration 112) - Pin review (Settings > Admin workspace > Pin review; server/src/pinReview.js, routes/pinReview.js, views/pinRe
-- L235 Products & liters report (2026-10-13; migration 114, bot sends `sales_rep` per o - Report productliters (Reports list, #/reports?r=productliters; server/src/volumeReport.js, routes/volumeReport
+- L231 Pin review and order deletion (2026-10-13, migration 112) - Pin review (Settings > Admin workspace > Pin review; server/src/customers/pinReview.js, routes/pinReview.js, v
+- L235 Products & liters report (2026-10-13; migration 114, bot sends `sales_rep` per o - Report productliters (Reports list, #/reports?r=productliters; server/src/reports/volumeReport.js, routes/volu
 - L241 Check-in allowance On/Off (2026-10-13, migration 115) - appsettings.checkinallowanceenabled (default true) = switch beside the meters field in Settings > Admin worksp
 - L245 Route plan sets + Auto route plan (2026-10-13, 1.325.0, migration 116) - Route Plans page: top row = [+ New route plan | Auto route plan]; below it a "Route plans" card listing the SE
 - L251 Check-in accuracy credit (1.325.0) - A sales manager's check-in is refused only when distance - min(GPS accuracy, 100 m) > allowance (creditedDista
@@ -75,7 +75,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L271 Progress by reps + purge of test users (2026-10-14, 1.329.0, no migration) - Home progress card (management only: every role except salesmanager) -> tap -> #/team-progress (views/repProgr
 - L277 Vaghinak V1 (2026-10-14, 1.331.0, migration 120) - Spec and decisions: vaghinak-spec.md.
 - L284 Operations control, part 1 (2026-10-15, 1.332.0, migration 121) - from the opera - Page #/ops-control (since 1.336.0 reached from Vaghinak's page: six quick-action tiles Cash / Margin / Stock /
-- L290 Operations control, part 2 + Vaghinak chasers (2026-10-15, 1.333.0, migration 12 - Tabs of #/ops-control (API /api/ops/, reports in server/src/opsReports.js): CASH (part 1), MARGIN (price reali
+- L290 Operations control, part 2 + Vaghinak chasers (2026-10-15, 1.333.0, migration 12 - Tabs of #/ops-control (API /api/ops/, reports in server/src/reports/opsReports.js): CASH (part 1), MARGIN (pri
 - L297 New order sheet, round 3 (2026-10-15, 1.334.0, migration 123) - "View order" and "Payment terms" are ONE step: the bottom bar opens "Your order" with the lines grouped by bra
 - L304 Order sheet fixes + readability (2026-10-15, 1.335.0, no migration) - The "price below our cost" warning (#oc-floor) keeps its last answer (floorBelow) across repaints, so it no lo
 - L311 Ordering made faster, part 1 (2026-10-15, 1.337.0, no migration) - Vaghinak's page: his sections (Messages, Team today, Questions, Everything he said, Settings) and the six Oper
@@ -99,7 +99,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L414 Batch 1.359.0 (owner 2026-10-18) - Owner's three decisions (answered): the cost model's default method is VAT payer, the default USD rate is 366
 - L422 Notification links (1.360.0, owner 2026-10-18: "tap on a notification must conne - A notification's url must open the SUBJECT, not a list: order notifications -> /#/orders?open=<orderId> (Order
 - L427 Vaghinak page polish (1.361.0, owner 2026-10-18: "I told you several times to ch - No one-sided colored borders on cards, ever (a blue left stripe on an unread Vaghinak message looked broken ag
-- L431 Vaghinak speaks at human times (owner 2026-10-18: "not at strictly 10:31 -- rand - server/src/vaghinak/humanDelay.js: when a rule first turns true for a person (not started, office too long, st
+- L431 Vaghinak speaks at human times (owner 2026-10-18: "not at strictly 10:31 -- rand - server/src/team/vaghinak/humanDelay.js: when a rule first turns true for a person (not started, office too lon
 - L436 Call and Visit tasks (1.362.0, migration 128, owner 2026-10-18) - New task types a manager can give (Tasks page: long-press + -> type menu; or from a customer): Call (taskkind
 - L442 Desktop dialogs + wide person pills + Close on task sheets (1.363.0, owner 2026- - From 900 px every .sheet is a CENTRED dialog (rounded on all sides, max 560 px wide, max 86 vh, own scrolling,
 - L447 Desktop layout v2 (1.365.0, owner 2026-10-18: admin uses the desktop; sidebar ye - All desktop-only rules live in client/public/css/desktop.css (loaded LAST in index.html, precached in sw.js),
@@ -175,7 +175,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L232 Potential ("Հեռանկար") editor tidy-up, customer card order, iPhone status-bar ta - Owner's points: (1) fix the editor UI (the "Next contact" date field ran past the sheet's right edge on iPhone
 - L238 Map "Colour by Tier | Rep", rep colours, AI connection test (owner, 2026-10-24,  - Owner chose: the map's "i" panel gets a Colour by: Tier | Rep switch BETWEEN "Group nearby pins" and "Compass"
 - L244 Settings + Administration redesign (owner, 2026-10-24, 1.405.0) - Owner: "rearrange settings and admin part from 0, hyper convenient and logical, Apple iOS and macOS styles and
-- L252 Six small ideas implemented (owner: "Implement ideas", 2026-10-24, 1.406.0) - (1) Counts on the Administration list: GET /api/settings/admin-counts (server/src/adminCounts.js, role-aware)
+- L252 Six small ideas implemented (owner: "Implement ideas", 2026-10-24, 1.406.0) - (1) Counts on the Administration list: GET /api/settings/admin-counts (server/src/system/adminCounts.js, role-
 - L260 "App scrolls up constantly", channel -> rep, map key as a bottom sheet, colour-b - Scrolling to top constantly: cause = the iPhone status-bar trick of 1.403.0 (statusBarTap.js): the document re
 - L269 Owner's answers of 2026-10-24 (round 2) -> 1.408.0 - Share route on a phone: keep the share sheet.
 - L278 2026-10-24 (1.409.0): scroll-to-top came back -> the status-bar trick is now OFF - Owner, after 1.408.0: "the app scrolls up by itself on all pages".

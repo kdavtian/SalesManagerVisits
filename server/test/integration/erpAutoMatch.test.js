@@ -7,7 +7,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createCustomer, createUser, trackOrder, trackPayment } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { autoDeliverOrdersFromErp, autoApprovePaymentsFromErp } from "../../src/erpAutoMatch.js";
+import { autoDeliverOrdersFromErp, autoApprovePaymentsFromErp } from "../../src/erp/erpAutoMatch.js";
 
 // The matchers work on Yerevan calendar dates; the database's CURRENT_DATE is
 // UTC, which differs from 20:00 UTC to midnight -- use Yerevan's today.

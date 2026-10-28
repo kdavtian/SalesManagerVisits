@@ -1,4 +1,4 @@
-// Permission decisions (server/src/roles.js) -- every exported function is
+// Permission decisions (server/src/shared/roles.js) -- every exported function is
 // pure (role string(s) in, boolean/array out), so every one is tested
 // directly against all 7 roles rather than only through the HTTP-level
 // coverage in test/integration/rolePermissions.test.js.
@@ -43,7 +43,7 @@ import {
   canManageBonusChallenges,
   canApproveBonusRewards,
   canRecordBonusPayouts,
-} from "../src/roles.js";
+} from "../src/shared/roles.js";
 
 const OTHER_ROLES = (role) => ROLES.filter((r) => r !== role);
 
@@ -278,7 +278,7 @@ test("canRecordBonusPayouts: mirrors canRecordOrders", () => {
 });
 
 test("tasks: management creates, sales director only for sales managers, CEO-level for anyone", async () => {
-  const { canCreateTasks, seesAllTasks, taskAssigneeRoles } = await import("../src/roles.js");
+  const { canCreateTasks, seesAllTasks, taskAssigneeRoles } = await import("../src/shared/roles.js");
   for (const role of ["admin", "ceo", "operations_director", "sales_director", "accountant"]) assert.equal(canCreateTasks(role), true, role);
   for (const role of ["sales_manager", "warehouse_manager", "delivery_manager"]) assert.equal(canCreateTasks(role), false, role);
   assert.deepEqual(taskAssigneeRoles("sales_director"), ["sales_manager"]);
@@ -291,12 +291,12 @@ test("tasks: management creates, sales director only for sales managers, CEO-lev
 });
 
 test("tasks: admin and CEO give tasks to anyone; the others follow Staff 'reports to' (owner, 2026-10-28)", async () => {
-  const { tasksAnyone } = await import("../src/roles.js");
+  const { tasksAnyone } = await import("../src/shared/roles.js");
   for (const role of ROLES) assert.equal(tasksAnyone(role), role === "admin" || role === "ceo", role);
 });
 
 test("KAD OS link: campaigns for admin/ceo/sales_director, perks + account links for admin/ceo", async () => {
-  const { canManageCampaigns, canManageAppOrders } = await import("../src/roles.js");
+  const { canManageCampaigns, canManageAppOrders } = await import("../src/shared/roles.js");
   for (const role of ROLES) {
     assert.equal(canManageCampaigns(role), ["admin", "ceo", "sales_director"].includes(role), role);
     assert.equal(canManageAppOrders(role), ["admin", "ceo"].includes(role), role);

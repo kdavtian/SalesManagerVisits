@@ -1,5 +1,5 @@
 // "Due: 71 days" chips and the unpaid-order highlight. Payments clear the oldest invoices first
-// (FIFO, computed on the server: unpaid_amd / due_days on every order, see server/src/debtAge.js);
+// (FIFO, computed on the server: unpaid_amd / due_days on every order, see server/src/money/debtAge.js);
 // the credit term is already deducted from due_days: > 0 = that many days overdue, <= 0 = due in
 // that many days.
 import { t } from "./i18n.js";

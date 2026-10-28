@@ -1,4 +1,4 @@
-// DB coverage for server/src/bonusRules.js -- the versioned, prospective-
+// DB coverage for server/src/bonus/bonusRules.js -- the versioned, prospective-
 // only earning-rule lookup (docs/bonuses-design.md section 3).
 // No HTTP route exists yet (added in a later phase), so this drives the
 // functions directly against the real test database rather than through
@@ -7,7 +7,7 @@ import "dotenv/config"; // bonusRules.js imports db/pool.js, which needs DATABAS
 import test from "node:test";
 import assert from "node:assert/strict";
 import { pool } from "../../src/db/pool.js";
-import { getEarningRuleAt, getCurrentEarningRules, setEarningRule, EARNING_ACTIVITIES } from "../../src/bonusRules.js";
+import { getEarningRuleAt, getCurrentEarningRules, setEarningRule, EARNING_ACTIVITIES } from "../../src/bonus/bonusRules.js";
 import { createUser, cleanupAll } from "./helpers.js";
 
 // bonus_earning_rule_versions is genuinely append-only in production (see

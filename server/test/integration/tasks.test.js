@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, loginAs, apiRequest } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { sendDeadlineReminders } from "../../src/taskReminders.js";
+import { sendDeadlineReminders } from "../../src/team/taskReminders.js";
 import { yerevanToday } from "../../src/utils/yerevanDate.js";
 
 let users;

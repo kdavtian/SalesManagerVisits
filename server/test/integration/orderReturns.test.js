@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, createProduct, apiRequest, loginAs, trackOrder } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { matchReturnsToErp } from "../../src/orderReturns.js";
+import { matchReturnsToErp } from "../../src/orders/orderReturns.js";
 
 let rep, rep2, director, accountant, warehouse, cookies = {}, customer, product, product2;
 test.before(async () => {

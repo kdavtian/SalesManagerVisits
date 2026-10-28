@@ -2,7 +2,7 @@
 
 Home -> **KAD AI** (admin only). The admin asks a question in Armenian or English ("Who owes us the most?", "Which good
 customers stopped ordering?", "How are we against the plan by channel?") and gets a short answer with a recommended action.
-Code: `server/src/askKad/` (engine, tools, anonymiser, settings), `server/src/routes/askKad.js`, `client/public/js/views/askKad.js`.
+Code: `server/src/askKad/` (engine, tools, anonymiser, settings), `server/src/team/routes/askKad.js`, `client/public/js/views/askKad.js`.
 
 ## How it works
 1. The question goes to our server. Every known customer and staff **name is replaced by a code** (`CUST-<ERP id>`,

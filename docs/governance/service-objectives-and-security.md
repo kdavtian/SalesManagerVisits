@@ -33,17 +33,17 @@ the [ownership matrix](release-and-incident-ownership-matrix.md).
 
 | Control | Where | Notes |
 |---|---|---|
-| Password hashing | `bcryptjs`, `server/src/routes/auth.js` | Standard bcrypt, no plaintext/reversible storage. |
+| Password hashing | `bcryptjs`, `server/src/system/routes/auth.js` | Standard bcrypt, no plaintext/reversible storage. |
 | Session auth | httpOnly, `sameSite=lax` JWT cookie | `server/src/middleware/auth.js`. |
 | CSRF protection | Double-submit cookie, `server/src/middleware/csrf.js` | Applied to every mutating request carrying the session cookie. |
-| Per-account brute-force lockout | 5 failed attempts → 15 min lock | `server/src/routes/auth.js`, migration `075`. |
+| Per-account brute-force lockout | 5 failed attempts → 15 min lock | `server/src/system/routes/auth.js`, migration `075`. |
 | IP-scoped rate limiting | `express-rate-limit` on login + password-change | Complements, doesn't replace, the account lockout above. |
 | Security headers | `helmet` (CSP, HSTS, frame/content-type/referrer defaults) | `server/src/app.js`. |
-| Upload validation | MIME allow-list, size limits, server-generated filenames (no path traversal from user input) | `server/src/upload.js`. |
+| Upload validation | MIME allow-list, size limits, server-generated filenames (no path traversal from user input) | `server/src/shared/upload.js`. |
 | Immutable audit trails | `payment_status_history`, `order_status_history` — `BEFORE UPDATE` triggers reject modification | Migration `071`. Deliberately not blocking `DELETE`, to preserve legitimate cascade cleanup — see that migration's own comment for why. |
-| Emergency kill-switch | `server/src/routes/lockdown.js` | Logs out every session and blocks all data app-wide until an admin lifts it — the actual incident-containment lever, see the ownership matrix. |
+| Emergency kill-switch | `server/src/system/routes/lockdown.js` | Logs out every session and blocks all data app-wide until an admin lifts it — the actual incident-containment lever, see the ownership matrix. |
 | Dependency scanning | `npm audit --audit-level=high` in CI, Dependabot weekly | Added this baseline — first CI this repo has ever had. |
-| Access control | Role-based, enforced in application code (`server/src/roles.js`) | No DB-level row-level security; see below. |
+| Access control | Role-based, enforced in application code (`server/src/shared/roles.js`) | No DB-level row-level security; see below. |
 
 ### Known limitations (also in the risk register where relevant)
 

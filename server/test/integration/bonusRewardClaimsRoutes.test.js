@@ -1,15 +1,15 @@
 // HTTP-level coverage for the reward-claims API
-// (server/src/routes/bonusRewardClaims.js): listing scope (reviewer sees
+// (server/src/bonus/routes/bonusRewardClaims.js): listing scope (reviewer sees
 // everything, a plain user sees only their own), the approve/pay state
 // machine end to end, and the optimistic-lock conflict surfacing as 409.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { createDraftTemplate, publishTemplate } from "../../src/bonusChallengeTemplates.js";
-import { ensureOnceRound } from "../../src/bonusChallengeRounds.js";
-import { processRound } from "../../src/bonusChallengeWorker.js";
-import { setBonusesEnabled } from "../../src/bonusSettings.js";
+import { createDraftTemplate, publishTemplate } from "../../src/bonus/bonusChallengeTemplates.js";
+import { ensureOnceRound } from "../../src/bonus/bonusChallengeRounds.js";
+import { processRound } from "../../src/bonus/bonusChallengeWorker.js";
+import { setBonusesEnabled } from "../../src/bonus/bonusSettings.js";
 
 let admin;
 let accountant;

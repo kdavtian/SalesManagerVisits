@@ -1,4 +1,4 @@
-// "Print blank": the print-ready delivery-acceptance act for one or more orders (server/src/orderBlankPdf.js). Always the
+// "Print blank": the print-ready delivery-acceptance act for one or more orders (server/src/orders/orderBlankPdf.js). Always the
 // automatic layout (small orders share an A4 sheet two by two, big ones get a whole sheet) -- nobody ever picked
 // another one, so the sheet goes straight to building the PDF (with a progress bar) and then hands it over through the
 // file-ready step (open / share / save; never navigates the app to the file).

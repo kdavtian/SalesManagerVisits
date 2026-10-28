@@ -1,8 +1,8 @@
 import jwt from "jsonwebtoken";
 import { pool } from "../db/pool.js";
-import { canDeleteOrEditDirectly, canViewTeamLocations, canManageProducts, canManageBonusChallenges } from "../roles.js";
+import { canDeleteOrEditDirectly, canViewTeamLocations, canManageProducts, canManageBonusChallenges } from "../shared/roles.js";
 import { issueCsrfToken, clearCsrfToken } from "./csrf.js";
-import { isPartnerAccount, partnerMayUse } from "../appOrders.js";
+import { isPartnerAccount, partnerMayUse } from "../orders/appOrders.js";
 
 const COOKIE_NAME = "session";
 

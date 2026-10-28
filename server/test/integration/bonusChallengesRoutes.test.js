@@ -1,5 +1,5 @@
 // HTTP-level coverage for the admin Bonus challenges API
-// (server/src/routes/bonusChallenges.js): role gating (canManageBonusChallenges
+// (server/src/bonus/routes/bonusChallenges.js): role gating (canManageBonusChallenges
 // = admin/ceo only for template management), validation error shape, and
 // the rounds/progress read endpoints' own narrower access rule (a manager
 // sees any round's full roster; a plain participant sees only their own row).
@@ -7,8 +7,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { ensureCurrentRound } from "../../src/bonusChallengeRounds.js";
-import { setBonusesEnabled } from "../../src/bonusSettings.js";
+import { ensureCurrentRound } from "../../src/bonus/bonusChallengeRounds.js";
+import { setBonusesEnabled } from "../../src/bonus/bonusSettings.js";
 
 let admin;
 let manager;

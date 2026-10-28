@@ -1,7 +1,7 @@
 import { app } from "./app.js";
 import { startBackgroundJobs } from "./jobs/index.js";
-import { loadCustomPlaces } from "./places.js";
-import { runPricelistSeedOnce } from "./pricelistSeed.js";
+import { loadCustomPlaces } from "./customers/places.js";
+import { runPricelistSeedOnce } from "./products/pricelistSeed.js";
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {

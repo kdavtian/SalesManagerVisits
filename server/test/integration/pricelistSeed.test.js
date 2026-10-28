@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { cleanupAll, createProduct } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { runPricelistSeedOnce } from "../../src/pricelistSeed.js";
+import { runPricelistSeedOnce } from "../../src/products/pricelistSeed.js";
 
 let products = {};
 

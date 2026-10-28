@@ -4,8 +4,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, apiFormRequest, loginAs, trackCheckin } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { buildScorecard } from "../../src/scorecard.js";
-import { ingestVisitContribution } from "../../src/bonusSourceIngest.js";
+import { buildScorecard } from "../../src/reports/scorecard.js";
+import { ingestVisitContribution } from "../../src/bonus/bonusSourceIngest.js";
 
 let director, rep, other, repCookie, office;
 

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { tierListPrice } from "../src/tierPricing.js";
+import { tierListPrice } from "../src/products/tierPricing.js";
 
 const p = (o) => ({ unit_price_amd: null, bronze_price_amd: null, silver_price_amd: null, gold_price_amd: null, ...o });
 
