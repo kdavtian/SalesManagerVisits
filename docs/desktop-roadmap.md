@@ -156,9 +156,17 @@ Issues found (I = issue, each has its fix in the steps below):
   and categories in a side column beside the movements. Phones untouched. Test: `desktop-home.spec.mjs`.
 
 ### Step 8. Map for the desktop — I11
-- [ ] Side list as a table (customer, channel, debt, last visit, planned today) sortable, "only the visible area" toggle, click = pan +
+- [x] Side list as a table (customer, channel, debt, last visit, planned today) sortable, "only the visible area" toggle, click = pan +
       open the popup; the popup gains the Last order and Debt lines it has on the card.
-- [ ] Pin key as a right panel (not a bottom sheet) above 1400 px; filters row above the map instead of the icon buttons.
+- [x] Pin key as a right panel (not a bottom sheet) above 1400 px; filters row above the map instead of the icon buttons.
+- As built (1.448.0): new `mapSideTable.js` draws the side list (desktop only) from the same entries `applyFilter()` puts on the map:
+  header tap sorts, tap again reverses (remembered in `fieldvisits_map_side_sort`); "Only the visible area" (`fieldvisits_map_visible_only`)
+  re-filters on every `moveend`; debt from `GET /customers/debt-flags` (same RBAC as every debt figure), planned today from the same
+  plans as the pin highlight (fetched once when highlighting is off); max 400 rows with a hint. A row centres the pin (a grouped pin
+  zooms until it stands alone) and opens its popup. The popup shows Debt, Last order (new `erp_last_order_date` on both map-facts
+  endpoints, withheld like the debt) and Last visit, on phones too. Above 1400 px (desktop.css): the search + labelled filter buttons +
+  status chips form a bar above the map, and the pin key is a 320 px panel on the right that stays open while the map is used.
+  Test: `desktop-map.spec.mjs`.
 
 ### Step 9. Forms and small controls sized for a mouse — I4
 - [ ] Wide-page buttons ("Add a person", "Cash handovers", "Import Excel") become normal-width buttons in the header row.
@@ -190,4 +198,5 @@ Issues found (I = issue, each has its fix in the steps below):
 - Step 4 (top bar search + quick actions + keyboard): 1.444.0, PR #483, 2026-10-27.
 - Step 5 (sidebar groups + icons-only mode): 1.445.0, PR #484, 2026-10-27.
 - Step 6 (reports as list + report, export, print): 1.446.0, 2026-10-27, PR #485.
-- Step 7 (dashboards use the width: Home KPI row + Needs attention + Today, wide grids): 1.447.0, 2026-10-27.
+- Step 7 (dashboards use the width: Home KPI row + Needs attention + Today, wide grids): 1.447.0, 2026-10-27, PR #487.
+- Step 8 (map for the desktop: side table, popup Last order, filter bar, key panel): 1.448.0, 2026-10-28.

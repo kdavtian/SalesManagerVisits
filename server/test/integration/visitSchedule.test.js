@@ -96,3 +96,21 @@ test("GET /customers/map-facts: batch of popup facts, same shape as the single e
   const empty = await apiRequest("/api/customers/map-facts", { cookie: mgrCookie });
   assert.deepEqual(empty.data, {});
 });
+
+// Desktop Map (roadmap step 8): the popup's "Last order" is the workbook's latest order date, withheld like the debt from a rep
+// who does not own the customer.
+test("map-facts: last order date, same RBAC as the debt", async () => {
+  const erp = `MF-${Date.now()}`;
+  const owned = await createCustomer({ created_by: mgr.id, erp_customer_id: erp });
+  await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, revenue_amd) VALUES ($1, 'A', '2026-09-01', 10), ($1, 'B', '2026-10-03', 10)", [erp]);
+  try {
+    const mine = await apiRequest(`/api/customers/${owned.id}/map-facts`, { cookie: mgrCookie });
+    assert.equal(mine.data.erp_last_order_date, "2026-10-03");
+    const batch = await apiRequest(`/api/customers/map-facts?ids=${owned.id}`, { cookie: adminCookie });
+    assert.equal(batch.data[owned.id].erp_last_order_date, "2026-10-03");
+    const notMine = await apiRequest(`/api/customers/${owned.id}/map-facts`, { cookie: otherCookie });
+    assert.equal(notMine.data.erp_last_order_date, null);
+  } finally {
+    await pool.query("DELETE FROM erp_order_lines WHERE erp_customer_id = $1", [erp]);
+  }
+});

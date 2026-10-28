@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { reorderChipHtml } from "../reorder.js";
-import { showToast, cssColor, activateCombobox, activateDialog, openInfoPopup, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, rememberPosition, getLastKnownPosition, tierSelectorHtml, TIER_OPTIONS, isNeverVisited, isOverdueVisit, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, regionLabelHy, subregionLabelHy, channelDisplayLabel, parseDateOnly } from "../util.js";
+import { showToast, cssColor, activateCombobox, activateDialog, openInfoPopup, escapeHtml, formatRelative, formatAmd, formatDateTime, formatDistance, normalizePhone, haversineMeters, getCurrentPosition, rememberPosition, getLastKnownPosition, tierSelectorHtml, TIER_OPTIONS, isNeverVisited, isOverdueVisit, activateTierSelector, setTierSelectorValue, categorySelectorHtml, activateCategorySelector, categoryIconSlug, categoryLabel, CATEGORY_LIST, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, matchRegion, matchSubregion, regionLabelHy, subregionLabelHy, channelDisplayLabel, parseDateOnly, formatDayMonth } from "../util.js";
 import { wirePlaceInput, placeNoticeText } from "../places.js";
 import { t } from "../i18n.js";
 import { buildCustomerTree, renderTriStateTree, buildDirectionManagerTree, NO_GROUP_KEY } from "../regionTree.js";
@@ -16,6 +16,7 @@ import { ensureLeaflet } from "../leafletLoader.js";
 import { paintCheckinSpots, parseHere } from "../checkinSpotsLayer.js";
 import { routeLegs, openRouteInMaps, routeShareText, shareRouteToTelegram } from "../routeNavigation.js";
 import { loadWithCache } from "../listCache.js";
+import { createMapSideTable } from "../mapSideTable.js";
 import { openTriStateTreeSheet } from "../regionTree.js";
 import { COMPETITORS, indexBrandSummary, brandSearchText, currentChips, matchedEverEntries, matchesSelectedChips, buildBrandChipTree, chipHtml, shortDate } from "../brandChips.js";
 
@@ -213,12 +214,16 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   const popupFactsHtml = (data) => {
     if (!data) {
       // Same three-row height as the real facts, so nothing jumps on arrival.
-      return [0, 1, 2].map(() => '<div class="popup-fact popup-fact-skeleton"><span class="skeleton-bar"></span></div>').join("");
+      return [0, 1, 2, 3].map(() => '<div class="popup-fact popup-fact-skeleton"><span class="skeleton-bar"></span></div>').join("");
     }
     const debtLabel = data.erp_debt_amd != null ? formatAmd(data.erp_debt_amd) : "—";
     const lastVisitLabel = data.last_visit_at ? formatLastVisit(data.last_visit_at) : t("never_visited");
+    // Last order, as on the customer card (roadmap step 8): the workbook's latest order date
+    const lastOrder = parseDateOnly(data.erp_last_order_date);
+    const lastOrderLabel = lastOrder ? formatDayMonth(lastOrder, { year: lastOrder.getFullYear() !== new Date().getFullYear() }) : "—";
     return `
       <div class="popup-fact"><span class="muted">${t("outstanding_debt")}</span><strong>${escapeHtml(debtLabel)}</strong></div>
+      <div class="popup-fact"><span class="muted">${t("last_order")}</span><strong>${escapeHtml(lastOrderLabel)}</strong></div>
       <div class="popup-fact"><span class="muted">${t("last_visit")}</span><strong>${escapeHtml(lastVisitLabel)}</strong></div>
       ${nextVisitRowHtml(data)}
     `;
@@ -228,9 +233,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       ${
         relocateCustomerId
           ? ""
-          : `<div class="map-side-list" id="map-side-list">
-              <div class="card-list" id="map-side-list-cards"></div>
-            </div>`
+          : `<div class="map-side-list" id="map-side-list"></div>`
       }
       <div class="map-canvas" id="map-canvas">
       <div id="leaflet-map"></div>
@@ -449,42 +452,49 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   const nearestCheckinBtn = root.querySelector("#nearest-checkin-btn");
   const nearestInfo = root.querySelector("#nearest-customer-info");
   let nearestCustomer = null;
-  // Desktop only (see .map-side-list in styles.css) -- a persistent
-  // filterable card list next to the map, mirroring whatever applyFilter()
-  // currently has passing every active filter/search. null on the
-  // relocate-pin flow, which hides the side list entirely.
-  const sideListCards = root.querySelector("#map-side-list-cards");
-
+  // Desktop only (see .map-side-list in styles.css): the customers passing every active filter/search, as a sortable table next to
+  // the map (mapSideTable.js, roadmap step 8). A row click pans to the pin and opens its popup. null on the relocate-pin flow.
+  const sideListHost = root.querySelector("#map-side-list");
+  let sideTable = null;
   function renderSideList(entries) {
-    if (!sideListCards) return;
-    if (!entries.length) {
-      sideListCards.innerHTML = `<p class="muted">${t("map_search_no_results")}</p>`;
-      return;
+    if (!sideListHost) return;
+    if (!sideTable) {
+      sideTable = createMapSideTable({
+        host: sideListHost,
+        badgeOf: (status) => customerStatusBadge(status),
+        inView: (c) => map.getBounds().contains([c.lat, c.lng]),
+        onPick: (id) => focusCustomerPin(id),
+      });
+      loadSideDebt();
+      // after this screen's setup has run (the cached customer list can paint before the planned-visit code below is set up)
+      setTimeout(syncSidePlanned, 0);
     }
-    sideListCards.innerHTML = entries
-      .map(({ c, status }) => {
-        const badge = customerStatusBadge(status);
-        return `
-        <button class="card customer-card" data-id="${c.id}">
-          <div class="customer-card-main">
-            <strong>${escapeHtml(c.name)}</strong>
-            ${c.category ? `<span class="muted">${escapeHtml(categoryLabel(c.category))}</span>` : ""}
-            ${c.address ? `<span class="muted">${escapeHtml(c.address)}</span>` : ""}
-            ${(() => {
-              const chips = currentChips(brandSummary.get(c.id)?.current);
-              return chips.length ? `<span class="list-row-bottom product-match-row">${chips.map((d) => chipHtml(d)).join("")}</span>` : "";
-            })()}
-          </div>
-          <span class="card-trailing">
-            <span class="badge ${badge.cls}">${badge.text}</span>
-            <span class="chevron">&#8250;</span>
-          </span>
-        </button>`;
-      })
-      .join("");
-    sideListCards.querySelectorAll(".customer-card").forEach((el) => {
-      el.addEventListener("click", () => navigate(`#/customers/${el.dataset.id}`));
-    });
+    sideTable.setEntries(entries);
+  }
+  // The debt column: the same light, RBAC'd list as the pin coin (ids + amounts), fetched once for the table.
+  async function loadSideDebt() {
+    try {
+      const rows = await api.getCustomerDebtFlags();
+      sideTable?.setDebt(new Map(rows.map((r) => [r.customer_id, Number(r.debt_amd)])));
+    } catch {
+      /* the column just stays empty */
+    }
+  }
+  function focusCustomerPin(id) {
+    const entry = lastCustomers.find(({ c }) => c.id === id);
+    if (!entry) return;
+    const { c, marker } = entry;
+    // centre the pin, then open its popup (a grouped pin first zooms until it stands alone)
+    const open = () => {
+      map.panTo([c.lat, c.lng], { animate: false });
+      marker.openPopup();
+    };
+    if (typeof customerMarkerLayer.zoomToShowLayer === "function" && customerMarkerLayer.hasLayer(marker)) {
+      customerMarkerLayer.zoomToShowLayer(marker, open);
+    } else {
+      map.setView([c.lat, c.lng], Math.max(map.getZoom(), 16));
+      open();
+    }
   }
 
   // Leaflet's internal pan/zoom gesture handling can fight with an ancestor
@@ -557,6 +567,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // keep this instance alive and evict it later, or the app can be closed).
   if (plainBrowse) map.on("moveend", () => saveMapView(map));
   map.on("moveend", () => warmVisiblePopups());
+  map.on("moveend", () => sideTable?.mapMoved());
 
   // Root cause of "the map doesn't show anything": the tile provider (a
   // third-party CDN) can be unreachable -- blocked by a network/firewall,
@@ -3071,6 +3082,11 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   async function loadPlannedTodayByRep() {
     plannedTodayByRep = new Map();
     if (plannedMode === "off") return;
+    plannedTodayByRep = await fetchPlannedToday();
+  }
+  // customer id -> { userId, color, order } of today's approved plans (the viewer's own, the picked rep's, or every rep's)
+  async function fetchPlannedToday() {
+    const out = new Map();
     const colorOfUser = (userId, chosen) => {
       const known = lastCustomers.find(({ c }) => Number(c.assigned_manager_id) === Number(userId) && c.assigned_manager_color);
       return repColor(userId, chosen || known?.c.assigned_manager_color);
@@ -3079,7 +3095,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       if (plan?.status !== "approved") return;
       const color = colorOfUser(userId, chosen);
       (plan.customer_ids ?? []).forEach((id, i) => {
-        if (!plannedTodayByRep.has(id)) plannedTodayByRep.set(id, { userId, color, order: i + 1 });
+        if (!out.has(id)) out.set(id, { userId, color, order: i + 1 });
       });
     };
     try {
@@ -3093,14 +3109,25 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
         plans.forEach((plan, i) => add(plan, reps[i].id, reps[i].map_color));
       }
     } catch {
-      plannedTodayByRep = new Map();
+      return new Map();
     }
+    return out;
+  }
+  // The side table's "Today" column shows the planned stops whether or not the pins highlight them (fetched once while highlighting is off).
+  let sidePlannedOff = null;
+  async function syncSidePlanned() {
+    if (!sideTable) return;
+    await customersReady;
+    if (plannedMode !== "off") return sideTable.setPlanned(plannedTodayByRep);
+    sidePlannedOff ??= await fetchPlannedToday();
+    sideTable?.setPlanned(sidePlannedOff);
   }
   async function refreshPlannedToday({ refit = false } = {}) {
     await customersReady;
     await loadPlannedTodayByRep();
     plannedTodayIdSet = new Set(plannedTodayByRep.keys());
     applyFilter({ refit });
+    syncSidePlanned();
     if (plannedMode === "only" && !plannedTodayIdSet.size) showToast(t("planned_empty"));
   }
   function paintPlannedControls() {
@@ -3127,6 +3154,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
       plannedTodayByRep = new Map();
       plannedTodayIdSet = null;
       applyFilter({ refit: false });
+      syncSidePlanned();
     } else {
       refreshPlannedToday({ refit: mode === "only" });
     }
@@ -3162,6 +3190,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   });
 
   root.addEventListener("click", (event) => {
+    // >= 1400 px the key is a panel beside the map (desktop.css): it stays open while the map is used
+    if (window.matchMedia?.("(min-width: 1400px)").matches) return;
     if (!legendPanel.hidden && !legendPanel.contains(event.target) && event.target !== legendBtn && !legendBtn.contains(event.target)) {
       closeLegend();
     }

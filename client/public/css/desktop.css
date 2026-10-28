@@ -560,59 +560,45 @@
   #debt-list.debt-desk-list { margin-top: 0 !important; }
 }
 
-/* ---------- 8. Map side list: compact rows (owner, 2026-10-24: "on map page the customers cards are too big") ---------- */
+/* ---------- 8. Map side list as a table (mapSideTable.js; docs/desktop-roadmap.md step 8) ----------
+   customer | channel | debt | last visit | planned today; headers sort (tap again to reverse); a row pans to the pin and opens its popup. */
 @media (min-width: 1024px) {
-  .map-side-list {
-    width: 320px;
-  }
-  .map-side-list .card-list {
-    padding: 8px;
-    gap: 4px;
-  }
-  .map-side-list .customer-card {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 0;
-    padding: 6px 10px;
-    border-radius: 10px;
-    box-shadow: none;
-  }
-  .map-side-list .customer-card-main {
-    flex: 1;
-    min-width: 0;
-    gap: 0;
-  }
-  .map-side-list .customer-card-main > strong {
-    display: block;
-    font-size: 0.86rem;
-    line-height: 1.3;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .map-side-list .customer-card-main > .muted {
-    display: block;
-    font-size: 0.74rem;
-    line-height: 1.3;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .map-side-list .card-trailing {
-    flex: none;
-    gap: 4px;
-  }
-  .map-side-list .card-trailing .badge {
-    font-size: 0.66rem;
-    padding: 2px 7px;
-  }
-  .map-side-list .card-trailing .chevron {
-    display: none;
-  }
-  .map-side-list .product-match-row {
-    margin-top: 2px;
-  }
+  .map-side-list { width: 440px; padding: 0; }
+  .mst-bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; background: var(--bg); border-bottom: 1px solid var(--border); font-size: 0.82rem; }
+  .mst-visible { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; cursor: pointer; white-space: nowrap; }
+  .mst-visible input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+  .mst-head,
+  .mst-row { display: grid; grid-template-columns: minmax(0, 1fr) 64px 84px 60px 40px; align-items: center; column-gap: 8px; padding: 0 12px; }
+  .mst-head { position: sticky; top: 49px; z-index: 1; background: var(--bg); border-bottom: 1px solid var(--border); }
+  .mst-th { display: flex; align-items: center; gap: 2px; min-height: 32px; padding: 0; border: 0; background: none; color: var(--text-dim); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; cursor: pointer; text-align: left; }
+  .mst-th.mst-end { justify-content: flex-end; }
+  .mst-th.mst-center { justify-content: center; }
+  .mst-th.is-sorted { color: var(--text); }
+  .mst-th:focus-visible,
+  .mst-row:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+  .mst-row { width: 100%; min-height: 40px; border: 0; border-bottom: 1px solid var(--border); background: none; color: var(--text); font: inherit; font-size: 0.84rem; text-align: left; cursor: pointer; }
+  .mst-row:hover { background: var(--bg-hover, rgba(0, 0, 0, 0.04)); }
+  .mst-row.is-active { background: var(--accent-soft, rgba(10, 132, 255, 0.1)); }
+  .mst-name { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 600; }
+  .mst-name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mst-dot { flex: none; width: 8px; height: 8px; padding: 0; border-radius: 50%; background: var(--text-dim); }
+  .mst-dot.badge-success { background: var(--success, #1a7f37); }
+  .mst-dot.badge-danger { background: var(--danger, #d6403f); }
+  .mst-dot.badge-info { background: var(--accent); }
+  .mst-dot.badge-neutral { background: var(--border-strong, #c7c7cc); }
+  .mst-channel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.78rem; }
+  .mst-end { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .mst-center { display: flex; justify-content: center; }
+  .mst-stop { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; color: #fff; font-size: 0.72rem; font-weight: 700; }
+  .mst-empty, .mst-more { margin: 12px; font-size: 0.82rem; }
+}
+@media (min-width: 1400px) {
+  .map-side-list { width: 440px; }
+  .mst-head,
+  .mst-row { grid-template-columns: minmax(0, 1fr) 72px 90px 66px 40px; }
+}
+@media (min-width: 1600px) {
+  .map-side-list { width: 500px; }
 }
 
 /* ---------- 9. Tables on the desktop table engine (deskTable.js createDeskTable; docs/desktop-roadmap.md steps 1-2) ----------
@@ -1870,4 +1856,91 @@
   .cf-side .cf-accounts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
   .cf-main { min-width: 0; }
   .cf-main .cf-search { margin-left: 0; margin-right: 0; }
+}
+
+/* ---------- Step 8: the Map on a wide screen (>= 1400 px) ----------
+   The search and filters become a bar above the map (filters labelled, the status choices a visible row of chips instead of the
+   funnel menu), and the pin key opens as a panel on the right that stays open while the map is used (map.js skips its outside-click
+   close at this width). */
+@media (min-width: 1400px) {
+  .map-canvas { display: flex; flex-direction: column; }
+  .map-view .map-top-controls { position: relative; inset: auto; order: -1; flex: none; padding: 10px 12px; background: var(--bg); border-bottom: 1px solid var(--border); }
+  .map-canvas > #leaflet-map { flex: 1; height: auto; min-height: 0; }
+  .map-view .map-controls,
+  .map-view .map-hint { top: 136px; }
+
+  /* filter buttons with their names */
+  .map-view .map-dimension-filter-inline .map-dimension-filter-btn { flex: 0 0 auto; width: auto; min-width: 40px; padding: 0 12px; gap: 6px; }
+  .map-view .map-dimension-filter-inline { gap: 4px; }
+  .map-view .map-dimension-filter-btn::after { content: attr(title); font-size: 0.82rem; font-weight: 600; white-space: nowrap; }
+
+  /* the status menu as a row of chips under the search field */
+  .map-view .map-top-controls .map-search-row { margin-bottom: 46px; }
+  .map-view .map-top-controls .map-search-actions,
+  .map-view .map-primary-filter-wrap { position: static; }
+  .map-view .map-primary-filter-wrap > .activity-search-filter-btn { display: none; }
+  .map-view .map-primary-filter-wrap > .map-search-filter-menu,
+  .map-view .map-primary-filter-wrap > .map-search-filter-menu[hidden] {
+    display: flex !important;
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 6px;
+    width: auto !important;
+    min-width: 0;
+    /* the dropdown's own 260px cap (unified-search.css) does not apply to the row */
+    max-width: none !important;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    overflow-x: auto;
+    background: none;
+    border: 0;
+    box-shadow: none;
+  }
+  .map-view .map-search-filter-menu > .map-filter-chip {
+    flex: none;
+    width: auto;
+    min-height: 36px;
+    padding: 0 12px;
+    gap: 6px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: var(--bg-card);
+    white-space: nowrap;
+    font-size: 0.84rem;
+  }
+  .map-view .map-search-filter-menu > .map-filter-chip.filter-dropdown-selected,
+  .map-view .map-search-filter-menu > .map-filter-chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft, rgba(10, 132, 255, 0.12)); color: var(--accent-dark, var(--accent)); }
+  .map-view .map-search-filter-menu .activity-menu-check { display: none; }
+  .map-view .map-search-filter-menu .map-filter-chip-icon svg { width: 16px; height: 16px; }
+
+  /* the pin key: a panel on the right, the map narrows beside it */
+  .map-view .map-legend-panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: auto;
+    width: 320px;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0 16px 12px;
+    border: 0;
+    border-left: 1px solid var(--border);
+    border-radius: 0;
+    box-shadow: none;
+    transform: none !important;
+    z-index: 1020;
+  }
+  .map-view .map-legend-panel .map-sheet-grab { display: none; }
+  .map-view .map-legend-panel .map-legend-header { padding-top: 12px; }
+  .map-canvas:has(#map-legend-panel:not([hidden])) { padding-right: 320px; }
+  .map-canvas:has(#map-legend-panel:not([hidden])) .map-controls { right: 332px; }
+  /* with the key open the bar is narrower: the filter buttons go back to icons */
+  .map-canvas:has(#map-legend-panel:not([hidden])) .map-dimension-filter-btn::after { content: none; }
 }
