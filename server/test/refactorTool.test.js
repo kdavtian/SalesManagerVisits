@@ -185,3 +185,17 @@ test("wrap: statements become an inner function called in place (awaited when th
   assert.deepEqual(await runIt("?b"), before);
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test("extract-top refuses a moved value computed at load time from something left in the source (import cycle)", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "refactor-"));
+  fs.writeFileSync(path.join(dir, "package.json"), '{"type":"module"}');
+  const file = path.join(dir, "src.js");
+  const text = "const base = 1;\nconst derived = base + 1;\nexport function read() {\n  return derived;\n}\n";
+  fs.writeFileSync(file, text);
+  assert.throws(() => execFileSync("node", [TOOL, "extract-top", file, path.join(dir, "part.js"), "derived"], { stdio: "pipe" }), /derived is computed at load time from base/);
+  assert.equal(fs.readFileSync(file, "utf8"), text);
+  assert.equal(fs.existsSync(path.join(dir, "part.js")), false);
+  // moving what it needs along is fine
+  execFileSync("node", [TOOL, "extract-top", file, path.join(dir, "part.js"), "base", "derived"]);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

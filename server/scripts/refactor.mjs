@@ -254,6 +254,26 @@ function extractTop(sourceRel, targetRel, names) {
   }
   const exportFromSource = new Set();
   const importLines = importsFor(sourceFile, targetFile, ast, moduleScope, uses, exportFromSource);
+  // the source imports the target, so the target runs first: a moved value computed at load time from something that stays in the
+  // source would read it before it exists (an import cycle, ReferenceError on load). Move what it needs along, or leave it.
+  for (const [name, node] of nodes) {
+    const eager = [];
+    (function collect(n) {
+      if (!n || typeof n.type !== "string") return;
+      if (/Function/.test(n.type) || n.type === "ClassBody") return; // runs later, when called
+      if (n.type === "Identifier") eager.push(n.range);
+      for (const k in n) {
+        if (k === "loc" || k === "range") continue;
+        const v = n[k];
+        if (Array.isArray(v)) v.forEach(collect);
+        else if (v && typeof v.type === "string") collect(v);
+      }
+    })((node.declaration ?? node).type === "VariableDeclaration" ? (node.declaration ?? node).declarations[0].init : null);
+    for (const dep of exportFromSource) {
+      const r = moduleScope.set.get(dep).references.find((ref) => eager.some(([a, b]) => ref.identifier.range[0] === a && ref.identifier.range[1] === b));
+      if (r) throw new Error(`${name} is computed at load time from ${dep}, which stays in ${sourceRel}: move ${dep} too`);
+    }
+  }
   const pieces = nodes.map(([, node]) => {
     const start = leadingCommentStart(ast, src, node);
     const text = applyEdits(src.slice(start, lineEnd(src, node.range[1])), rebaseEdits(node, sourceFile, targetFile).map(([a, b, t]) => [a - start, b - start, t]));
