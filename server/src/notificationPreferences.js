@@ -61,6 +61,8 @@ export const NOTIFICATION_TYPES = [
   // Wished products (productWishes.js): a new wish for management, and "available again" for the customer's rep.
   "product_wish",
   "wish_back_in_stock",
+  // The AI check of a photographed order blank found a problem or could not read it (aiBlankCheck.js): told to the person who took it.
+  "document_issue",
 ];
 
 // Warehouse Manager: an order just entered their queue.

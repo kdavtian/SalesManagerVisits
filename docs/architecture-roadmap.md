@@ -128,7 +128,7 @@ Twelve steps, three phases, about 24 releases. Size = number of releases.
   (the later value was the one shown; the dead earlier ones removed), 59 unused names (dead code removed).
 
 #### Step 2. Architecture checks - size 1
-- [ ] New `server/test/architecture.test.js` (plain node:test, no server needed). Checks:
+- [x] New `server/test/architecture.test.js` (plain node:test, no server needed). Checks:
   - every `server/src/routes/*.js` router uses `requireAuth` or is on an explicit public allowlist (login, health, erp-sync with
     sync key, integration with bearer token, partner, client-errors);
   - no file under `client/public/js/views/` imports `../app.js` (today: 2 do; move what they need into a small module first);
@@ -137,6 +137,17 @@ Twelve steps, three phases, about 24 releases. Size = number of releases.
   - after step 5 starts: no NEW `.js` file directly in `server/src/` (allowlist = the files present at that moment, shrinking);
   - every `notifyUser(..., "<type>")` type is in `NOTIFICATION_TYPES` with both i18n keys.
 - Done when: each check fails on a deliberate violation (prove in the PR).
+- As built (1.457.0): four checks. (1) Routes: the real Express route table is walked; a route counts as guarded when `requireAuth`,
+  `requireSyncKey` or `requireIntegrationToken` (Lily's bearer check, now a named function) runs before it; 9 routes are public on
+  purpose, each listed in `PUBLIC_ROUTES` with its reason. (2) No client module imports `app.js`: the Home and Money screens imported
+  their badge painters from it; all badge code moved, unchanged, to `client/public/js/badges.js` (the first piece of step 6b).
+  (3) Every file under `client/public/js` and `css` is in APP_SHELL, and every APP_SHELL file exists. (4) Every `notifyUser` type is in
+  `NOTIFICATION_TYPES` (found: `document_issue`, the AI blank check, was missing, so its on/off preference was not stored against a
+  known type; added), and every type the Settings screen offers has its label in both languages. The "no new loose server file" rule
+  is added when step 5 starts.
+- Finding for the owner (open question): Settings > Notifications offers switches for only 10 of the 31 notification types the
+  server sends (the client list in `views/settings.js`); the other 21 (payments, warehouse, delivery, cash hand-over, fraud and expense
+  alerts, sync, daily summary, wishes, document issues ...) cannot be switched off by a person or by the admin's role defaults.
 
 #### Step 3. One role rule file for both sides - size 2
 - Release 3a: serve `server/src/roles.js` to the browser unchanged (`express.static` alias `/js/shared/roles.js`; it has no Node imports
@@ -264,4 +275,5 @@ the server share `roles.js`; a screen never edits another screen's DOM.
 (step, version, PR, date)
 
 - Analysis and plan: 2026-10-28 (no code change).
-- Step 1 code checker: 1.456.0, 2026-10-28.
+- Step 1 code checker: 1.456.0, PR #500, 2026-10-28.
+- Step 2 architecture checks: 1.457.0, 2026-10-28.

@@ -22,7 +22,8 @@ function fail(res, status, code, message) {
 
 // --- auth + audit + idempotency -------------------------------------------
 
-integrationRouter.use(async (req, res, next) => {
+// Named: test/architecture.test.js counts it as the login of every route below.
+integrationRouter.use(async function requireIntegrationToken(req, res, next) {
   const header = req.get("authorization") || "";
   const match = /^Bearer\s+(\S+)$/i.exec(header);
   if (!match) return fail(res, 401, "unauthorized", "Missing bearer token");

@@ -5,7 +5,7 @@ import { state, canViewTeamLocations, seesAllActivity } from "../state.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { applyVaghinakBadge } from "../vaghinak.js";
-import { applyPaymentBadge, applyUnrecordedBadge, applyWarehouseBadge, applyDeliveryBadge, applyAccountingBadge } from "../app.js";
+import { applyPaymentBadge, applyUnrecordedBadge, applyWarehouseBadge, applyDeliveryBadge, applyAccountingBadge } from "../badges.js";
 import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds } from "../quickActions.js";
 import { loadWithCache } from "../listCache.js";
 import { renderHomeKpis, KPI_ROLES } from "./homeKpis.js";
