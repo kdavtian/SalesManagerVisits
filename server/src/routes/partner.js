@@ -2,6 +2,7 @@
 // signed-in KAD user account is linked to in partner_links. No other customer's data is reachable, whatever the role of that account.
 //   GET  /me        customer, the app perks, balance summary, progress (levels / streak / savings), running offers
 //   GET  /catalog   the orderable products with this customer's tier price and what is available
+//   POST /wishes, GET /wishes   wished products (out of stock or never carried) and which of them are back
 //   GET  /price-list   the Bronze list price of EVERY active product (also what is out of stock), for a shop that resells at the Bronze price
 //   GET  /offers    campaigns and bundles running for this customer
 //   GET  /orders    this customer's orders with the 5-step status (received, confirmed, packed, on the way, delivered)
@@ -12,6 +13,7 @@
 //   POST /orders/:id/cancel   cancel an app order that KAD Motors has not confirmed yet
 //   POST /payments/dispute    "I don't see my payments": tells management (not the rep) and returns the office number to call
 import { outOfStockProducts, outOfStockResponse } from "../orderStock.js";
+import { addWish, cleanWish, WishValidationError } from "../productWishes.js";
 import path from "node:path";
 import { Router } from "express";
 import { uploadDirPath } from "../upload.js";
@@ -289,6 +291,46 @@ partnerRouter.get("/balance", async (req, res) => {
 });
 
 // The same pricing a real order gets (campaigns, then the app discount on the rest, then the delivery promise), nothing saved.
+// Wished products (productWishes.js): the customer asks for a product we do not have on the shelf (any product of the price list) or one we
+// never carried (typed name). Management is told; when a wished product is back, it shows here with back_in_stock_at.
+partnerRouter.post("/wishes", async (req, res) => {
+  try {
+    const wish = cleanWish(req.body);
+    if (wish.productId !== null) {
+      const { rows } = await pool.query("SELECT 1 FROM products WHERE id = $1 AND active", [wish.productId]);
+      if (!rows[0]) return res.status(400).json({ error: "Product not found" });
+    }
+    const row = await addWish({ customerId: req.partner.customerId, userId: req.user.id, source: "kados", wish });
+    res.status(201).json(presentWish(row));
+  } catch (err) {
+    if (err instanceof WishValidationError) return res.status(400).json({ error: err.message });
+    throw err;
+  }
+});
+
+// The customer's own wishes of the last 90 days, newest first; back_in_stock_at says "available again, order it now".
+partnerRouter.get("/wishes", async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT w.*, p.name AS product_name, p.unit FROM product_wishes w LEFT JOIN products p ON p.id = w.product_id
+     WHERE w.customer_id = $1 AND w.created_at > now() - interval '90 days' ORDER BY w.created_at DESC LIMIT 200`,
+    [req.partner.customerId]
+  );
+  res.json({ wishes: rows.map(presentWish) });
+});
+
+function presentWish(w) {
+  return {
+    id: w.id,
+    product_id: w.product_id,
+    name: w.product_id ? w.product_name : w.custom_name,
+    size: w.product_id ? w.unit ?? "" : "",
+    quantity: w.quantity,
+    note: w.note,
+    created_at: w.created_at,
+    back_in_stock_at: w.back_in_stock_at,
+  };
+}
+
 partnerRouter.post("/preview", async (req, res) => {
   const items = Array.isArray(req.body?.items) ? req.body.items : [];
   if (!items.length) return res.status(400).json({ error: "At least one item is required" });

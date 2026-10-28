@@ -1,3 +1,4 @@
+import { wishReport } from "../productWishes.js";
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
@@ -82,6 +83,14 @@ function periodCondition(column, period, params, { date = false, defaultMonth = 
 // Who created each new customer, when, and by which manager -- lets the
 // office answer "who is actively finding new opportunities" directly,
 // rather than inferring it from visit activity.
+// Wished products (productWishes.js): one row per product / typed name with the customers behind it. period as everywhere (default 90 days).
+reportsRouter.get("/product-wishes", requireReportAccess("product_wishes"), async (req, res) => {
+  // Rolling windows (demand is read as "lately", not per calendar month): 30 / 90 / 365 days, or everything.
+  const days = { d30: 30, d90: 90, d365: 365, all: null }[req.query.period] ?? 90;
+  const since = days ? new Date(Date.now() - days * 86400000) : null;
+  res.json({ rows: await wishReport({ since }) });
+});
+
 reportsRouter.get("/new-customers", requireReportAccess("new_customers"), async (req, res) => {
   const { region, subregion, period, customer_tier } = req.query;
   // A sales manager only ever sees their own new customers.

@@ -1,3 +1,4 @@
+import { markWishesBackInStock } from "../productWishes.js";
 import crypto from "node:crypto";
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
@@ -507,6 +508,9 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
       order: 2,
     });
   }
+
+  // New stock just landed: wished products that are available again are announced to the customers' reps (and KAD OS).
+  if (prodErpIds.length) markWishesBackInStock().catch((err) => console.error("Wishes back in stock failed:", err.message));
 
   // New debt figures just landed: give reps a "collect the debt" task where due.
   if (process.env.NODE_ENV !== "test") {

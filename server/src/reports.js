@@ -37,6 +37,13 @@ export const REPORTS = [
     descriptionKey: "report_delivery_speed_description",
     defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "warehouse_manager", "delivery_manager"],
   },
+  // What customers want but we do not have (out of stock or never carried), grouped by product -- productWishes.js.
+  {
+    key: "product_wishes",
+    nameKey: "report_product_wishes_name",
+    descriptionKey: "report_product_wishes_description",
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director"],
+  },
   {
     key: "new_customers",
     nameKey: "report_new_customers_name",
@@ -186,6 +193,7 @@ const REPORT_DISPLAY_ORDER = [
   "new_customers",
   "brand_volume",
   "brand_availability",
+  "product_wishes",
   "cash_custody",
   "cash_reconciliation",
   "documents",
