@@ -17,6 +17,12 @@
 //       Each moved function receives the screen's state as its first parameter `ctx`: every variable of the outer function it uses is
 //       read and written through `ctx` (getters / setters on the real variables, so it always sees the current value). In <source> the
 //       function keeps its name as a one-line wrapper, so every caller, event listener and hoisting stays as it was.
+//       <outerFunction> "-" does the same for top-level functions sharing the module's own variables (a module nothing may import,
+//       like app.js): the ctx object then sits before the module's first statement.
+//
+//   node server/scripts/refactor.mjs wrap <source.js> <outerFunction> <fromLine> <toLine> <name>
+//       Turn the statements of <outerFunction> on those lines into an inner function <name>, called where they were (awaited when they
+//       await), so extract-inner can move it; refused when that could change what the code does.
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -157,6 +163,7 @@ function importsFor(sourceFile, targetFile, srcAst, moduleScope, names, exportFr
       const decl = def.parent;
       const spec = def.node;
       const absolute = resolveSpec(sourceFile, decl.source.value);
+      if (absolute === targetFile) continue; // declared in the target itself (moved there by an earlier run)
       const from = absolute ? (decl.source.value.startsWith("/") ? decl.source.value : rel(targetFile, absolute)) : decl.source.value;
       if (spec.type === "ImportNamespaceSpecifier") lines.push(`import * as ${name} from "${from}";`);
       else if (spec.type === "ImportDefaultSpecifier") lines.push(`import ${name} from "${from}";`);
@@ -340,10 +347,15 @@ function extractInner(sourceRel, outerName, targetRel, namespace, names) {
   const targetFile = path.resolve(REPO, targetRel);
   const src = read(sourceFile);
   const { ast, sm, moduleScope } = analyze(src);
-  const top = ast.body.find((n) => (n.declaration ?? n).id?.name === outerName);
-  if (!top) throw new Error(`${outerName}: not a top-level function of ${sourceRel}`);
-  const outer = top.declaration ?? top;
-  const outerScope = sm.acquire(outer);
+  // outerName "-": the functions are top-level ones and the shared state is the module's own variables (app.js, which no other
+  // module may import)
+  const moduleMode = outerName === "-";
+  const top = moduleMode ? null : ast.body.find((n) => (n.declaration ?? n).id?.name === outerName);
+  if (!moduleMode && !top) throw new Error(`${outerName}: not a top-level function of ${sourceRel}`);
+  const outer = moduleMode ? null : top.declaration ?? top;
+  const outerScope = moduleMode ? moduleScope : sm.acquire(outer);
+  const statements = moduleMode ? ast.body : outer.body.body;
+  const pad = moduleMode ? "" : "  ";
   const CTX = "ctx";
   if (moduleScope.set.has(namespace)) throw new Error(`name clash: ${namespace}`);
   // a ctx made by an earlier run is extended; any other variable called ctx is a clash
@@ -357,8 +369,8 @@ function extractInner(sourceRel, outerName, targetRel, namespace, names) {
   const edits = [];
   const moduleUses = new Set();
   for (const name of names) {
-    const node = outer.body.body.find((s) => s.type === "FunctionDeclaration" && s.id.name === name);
-    if (!node) throw new Error(`${name}: not a function declared directly in ${outerName}`);
+    const node = statements.find((s) => s.type === "FunctionDeclaration" && s.id.name === name);
+    if (!node) throw new Error(`${name}: not a function declared directly in ${moduleMode ? sourceRel : outerName}${moduleMode ? " (exported ones stay)" : ""}`);
     const scope = sm.acquire(node);
     // `this` / `arguments` of the moved function itself would change meaning
     (function noThis(n, top) {
@@ -382,7 +394,7 @@ function extractInner(sourceRel, outerName, targetRel, namespace, names) {
     })(scope);
     for (const r of all) {
       if (!r.resolved) continue;
-      if (r.resolved.scope === outerScope) {
+      if (r.resolved.scope === outerScope && !(moduleMode && r.resolved.defs[0]?.type === "ImportBinding")) {
         const entry = ctxNames.get(r.identifier.name) ?? { write: false };
         if (r.isWrite()) entry.write = true;
         ctxNames.set(r.identifier.name, entry);
@@ -415,7 +427,22 @@ function extractInner(sourceRel, outerName, targetRel, namespace, names) {
     if (!headRe.test(text)) throw new Error(`${name}: could not read its signature`);
     text = text.replace(headRe, (m, nl, ind, asy, gen) => `${nl}${ind}export ${asy ?? ""}function${gen ?? ""} ${name}(${CTX}${node.params.length ? ", " : ""}`);
     const indent = src.slice(src.lastIndexOf("\n", node.range[0] - 1) + 1, node.range[0]).match(/^\s*/)[0];
-    pieces.push(text.split("\n").map((l) => (l.startsWith(indent) ? l.slice(indent.length) : l.trimStart())).join("\n"));
+    // dedent, except lines inside a multi-line template string (their spaces are part of the text)
+    const templates = [];
+    (function findTemplates(n) {
+      if (!n || typeof n.type !== "string") return;
+      if (n.type === "TemplateLiteral") templates.push(n.range);
+      for (const k in n) {
+        if (k === "loc" || k === "range") continue;
+        const v = n[k];
+        if (Array.isArray(v)) v.forEach(findTemplates);
+        else if (v && typeof v.type === "string") findTemplates(v);
+      }
+    })(node);
+    const lineStarts = [start];
+    for (let i = src.indexOf("\n", start); i >= 0 && i < node.range[1]; i = src.indexOf("\n", i + 1)) lineStarts.push(i + 1);
+    const inTemplate = (i) => templates.some(([a, b]) => lineStarts[i] > a && lineStarts[i] < b);
+    pieces.push(text.split("\n").map((l, i) => (inTemplate(i) ? l : l.startsWith(indent) ? l.slice(indent.length) : l.trimStart())).join("\n"));
     // in the source: a one-line wrapper with the same name (hoisted like the original)
     if (node.generator) throw new Error(`${name} is a generator`);
     const wrapIndent = src.slice(src.lastIndexOf("\n", node.range[0] - 1) + 1, node.range[0]).match(/^\s*/)[0];
@@ -430,14 +457,22 @@ function extractInner(sourceRel, outerName, targetRel, namespace, names) {
       [have.has(`get:${n}`) ? "" : `get ${n}() { return ${n}; },`, write && !have.has(`set:${n}`) ? `set ${n}(v) { ${n} = v; },` : ""].filter(Boolean).join(" ")
     )
     .filter(Boolean)
-    .map((line) => `    ${line}`)
+    .map((line) => `${pad}  ${line}`)
     .join("\n");
   if (ctxDecl) {
     const at = src.lastIndexOf("\n", ctxDecl.init.range[1] - 1) + 1; // the line of the closing brace
     if (props) edits.push([at, at, `${props}\n`]);
   } else {
-    const bodyStart = outer.body.range[0] + 1;
-    edits.push([bodyStart, bodyStart, `\n  // The screen's variables, for its parts in other files (read and written through getters / setters, so they always see the current value).\n  const ${CTX} = {\n${props}\n  };`]);
+    const note = `${pad}// The ${moduleMode ? "module" : "screen"}'s variables, for its parts in other files (read and written through getters / setters, so they always see the current value).`;
+    if (moduleMode) {
+      // before the module's first statement, so code that runs while the module loads can already call the wrappers
+      const first = ast.body.find((n) => n.type !== "ImportDeclaration");
+      const at = leadingCommentStart(ast, src, first);
+      edits.push([at, at, `${note}\nconst ${CTX} = {\n${props}\n};\n\n`]);
+    } else {
+      const bodyStart = outer.body.range[0] + 1;
+      edits.push([bodyStart, bodyStart, `\n${note}\n  const ${CTX} = {\n${props}\n  };`]);
+    }
   }
   const exportFromSource = new Set();
   const importLines = importsFor(sourceFile, targetFile, ast, moduleScope, moduleUses, exportFromSource);
@@ -445,16 +480,107 @@ function extractInner(sourceRel, outerName, targetRel, namespace, names) {
   out = addImportLine(out, `import * as ${namespace} from "${rel(sourceFile, targetFile)}";`);
   fs.writeFileSync(sourceFile, out);
   pruneImports(sourceFile);
-  mergeTarget(targetFile, `// Parts of ${outerName} (${path.basename(sourceFile)}), moved out with the refactor tool (docs/architecture-roadmap.md, step 6). Each\n// function takes the screen's state as \`ctx\` (see the ctx object at the top of ${outerName}).`, importLines, pieces.join("\n\n"));
+  const owner = moduleMode ? path.basename(sourceFile) : `${outerName} (${path.basename(sourceFile)})`;
+  mergeTarget(targetFile, `// Parts of ${owner}, moved out with the refactor tool (docs/architecture-roadmap.md, step 6). Each\n// function takes the shared state as \`ctx\` (see the ctx object at the top of ${moduleMode ? path.basename(sourceFile) : outerName}).`, importLines, pieces.join("\n\n"));
   console.log(`moved ${names.length} functions of ${outerName} to ${targetRel} (${ctxNames.size} shared variables)`);
+}
+
+// ---- wrap ------------------------------------------------------------------------------------------------------------------------------
+// Turn statements of a big function (lines <from>..<to>: a block of event wiring, an admin-only `if`, the screen's markup) into an inner
+// function called at the same place, so extract-inner can then move it. Refused when that could change what the code does: a
+// declaration in the range used after it, a `return` / `yield` / `this` / `arguments` of the outer function, a jump out of the range.
+function wrap(sourceRel, outerName, from, to, name) {
+  const sourceFile = path.resolve(REPO, sourceRel);
+  const src = read(sourceFile);
+  const { ast, sm } = analyze(src);
+  const top = ast.body.find((n) => (n.declaration ?? n).id?.name === outerName);
+  if (!top) throw new Error(`${outerName}: not a top-level function of ${sourceRel}`);
+  const outer = top.declaration ?? top;
+  const outerScope = sm.acquire(outer);
+  if (outerScope.set.has(name)) throw new Error(`name clash: ${name}`);
+  const body = outer.body.body;
+  const inRange = body.filter((st) => st.loc.start.line >= from && st.loc.end.line <= to);
+  const cut = body.find((st) => !inRange.includes(st) && st.loc.start.line <= to && st.loc.end.line >= from);
+  if (cut) throw new Error(`the statement at line ${cut.loc.start.line} (to ${cut.loc.end.line}) is only partly inside ${from}-${to}`);
+  if (!inRange.length) throw new Error(`no statement of ${outerName} lies within lines ${from}-${to}`);
+  const [first, last] = [inRange[0], inRange.at(-1)];
+  let usesAwait = false;
+  (function check(n, fnDepth, arrowDepth) {
+    if (!n || typeof n.type !== "string") return;
+    const isFn = /^Function(Declaration|Expression)$/.test(n.type);
+    const isArrow = n.type === "ArrowFunctionExpression";
+    if (fnDepth === 0) {
+      if (n.type === "ReturnStatement" && arrowDepth === 0) throw new Error(`line ${n.loc.start.line}: a return of ${outerName}`);
+      if (n.type === "YieldExpression") throw new Error(`line ${n.loc.start.line}: yield`);
+      if (n.type === "ThisExpression") throw new Error(`line ${n.loc.start.line}: this`);
+      if (n.type === "Identifier" && n.name === "arguments") throw new Error(`line ${n.loc.start.line}: arguments`);
+      if ((n.type === "AwaitExpression" || (n.type === "ForOfStatement" && n.await)) && arrowDepth === 0) usesAwait = true;
+      if ((n.type === "BreakStatement" || n.type === "ContinueStatement") && n.label && arrowDepth === 0) {
+        const label = n.label.name;
+        let declared = false;
+        (function find(m) {
+          if (!m || typeof m.type !== "string") return;
+          if (m.type === "LabeledStatement" && m.label.name === label) declared = true;
+          for (const k in m) {
+            if (k === "loc" || k === "range") continue;
+            const v = m[k];
+            if (Array.isArray(v)) v.forEach(find);
+            else if (v && typeof v.type === "string") find(v);
+          }
+        })({ type: "Program", body: inRange });
+        if (!declared) throw new Error(`line ${n.loc.start.line}: jumps to label ${label} outside the range`);
+      }
+    }
+    for (const k in n) {
+      if (k === "loc" || k === "range") continue;
+      const v = n[k];
+      const next = (c) => check(c, fnDepth + (isFn ? 1 : 0), arrowDepth + (isArrow ? 1 : 0));
+      if (Array.isArray(v)) v.forEach(next);
+      else if (v && typeof v.type === "string") next(v);
+    }
+  })({ type: "Program", body: inRange }, 0, 0);
+  // the outer function's own variables declared in the range (a const / let / function at its top level, a var anywhere) must not be
+  // used outside it: after wrapping they live inside the new function
+  const [a, b] = [first.range[0], last.range[1]];
+  for (const v of outerScope.variables) {
+    if (!v.defs.some((d) => d.name.range[0] >= a && d.name.range[1] <= b)) continue;
+    const outside = v.references.find((r) => r.identifier.range[0] < a || r.identifier.range[1] > b);
+    if (outside) throw new Error(`${v.name} is declared in the range and used at line ${outside.identifier.loc.start.line}`);
+  }
+  // re-indent by two spaces, except lines inside a multi-line template string (their spaces are part of the text)
+  const templates = [];
+  (function findTemplates(n) {
+    if (!n || typeof n.type !== "string") return;
+    if (n.type === "TemplateLiteral") templates.push(n.range);
+    for (const k in n) {
+      if (k === "loc" || k === "range") continue;
+      const v = n[k];
+      if (Array.isArray(v)) v.forEach(findTemplates);
+      else if (v && typeof v.type === "string") findTemplates(v);
+    }
+  })({ type: "Program", body: inRange });
+  const start = src.lastIndexOf("\n", a - 1) + 1;
+  const end = lineEnd(src, b);
+  const indent = src.slice(start, a).match(/^\s*/)[0];
+  let offset = start;
+  const lines = src.slice(start, end).replace(/\n$/, "").split("\n").map((l) => {
+    const at = offset;
+    offset += l.length + 1;
+    if (!l.trim() || templates.some(([ta, tb]) => at > ta && at < tb)) return l;
+    return `  ${l}`;
+  });
+  const text = `${indent}${usesAwait ? "async " : ""}function ${name}() {\n${lines.join("\n")}\n${indent}}\n${indent}${usesAwait ? "await " : ""}${name}();\n`;
+  fs.writeFileSync(sourceFile, applyEdits(src, [[start, end, text]]));
+  console.log(`wrapped lines ${first.loc.start.line}-${last.loc.end.line} of ${outerName} as ${usesAwait ? "async " : ""}${name}()`);
 }
 
 const [cmd, ...args] = process.argv.slice(2);
 if (cmd === "move") move(args[0]);
 else if (cmd === "extract-top") extractTop(args[0], args[1], args.slice(2));
 else if (cmd === "extract-inner") extractInner(args[0], args[1], args[2], args[3], args.slice(4));
+else if (cmd === "wrap") wrap(args[0], args[1], Number(args[2]), Number(args[3]), args[4]);
 else if (cmd === "prune-imports") args.forEach((f) => pruneImports(path.resolve(REPO, f)));
 else {
-  console.error("usage: refactor.mjs move <mapping.json> | extract-top <source> <target> <name...> | extract-inner <source> <outer> <target> <namespace> <name...>");
+  console.error("usage: refactor.mjs move <mapping.json> | extract-top <source> <target> <name...> | extract-inner <source> <outer|-> <target> <namespace> <name...> | wrap <source> <outer> <fromLine> <toLine> <name> | prune-imports <file...>");
   process.exit(2);
 }

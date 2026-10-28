@@ -25,10 +25,15 @@ const files = Object.fromEntries(
     ].map(async (name) => [name, await readFile(path.join(publicDir, name), "utf8")]),
   ),
 );
-// The map screen is split into views/map.js and its parts in views/map/ (step 6): the map checks read them together.
-const mapPartsDir = path.join(publicDir, "js/views/map");
-for (const part of (await readdir(mapPartsDir)).filter((f) => f.endsWith(".js")).sort()) {
-  files["js/views/map.js"] += `\n${await readFile(path.join(mapPartsDir, part), "utf8")}`;
+// Files split with the refactor tool (step 6) are read together with their parts: views/map.js with views/map/, app.js with shell/.
+for (const [file, dir] of [
+  ["js/views/map.js", "js/views/map"],
+  ["js/app.js", "js/shell"],
+]) {
+  const partsDir = path.join(publicDir, dir);
+  for (const part of (await readdir(partsDir)).filter((f) => f.endsWith(".js")).sort()) {
+    files[file] += `\n${await readFile(path.join(partsDir, part), "utf8")}`;
+  }
 }
 
 const checks = [
