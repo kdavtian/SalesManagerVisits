@@ -1,10 +1,4 @@
-/* Sits inline among the customer detail header's other icon-action buttons
-   (reassign/assign-ERP/edit) instead of taking a full-width row of its own. */
-.customer-social-section {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
+
 
 .customer-social-link {
   width: 36px;

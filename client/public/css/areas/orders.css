@@ -1,0 +1,157 @@
+/* Styles of the "orders" screens (docs/architecture-roadmap.md step 8c): loaded by js/styles.js before such a screen is drawn,
+   and in the background after the first screen. Moved here from the shared stylesheets by server/scripts/split-css.mjs, in their old
+   order; a new rule only screens of this area use goes here. */
+
+/* ---- from styles.css ---- */
+.route-stop-marker span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  font-size: 13px;
+  font-weight: 600;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+.route-stop-draggable {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: grab;
+}
+.route-stop-handle {
+  color: var(--text-dim);
+  font-size: 14px;
+  flex: none;
+}
+.route-stop-done {
+  opacity: 0.7;
+}
+.route-planner-map {
+  height: 220px;
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 8px 0 12px;
+}
+@media (min-width: 1024px) {
+  .route-planner-result {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 16px;
+    align-items: start;
+  }
+  .route-planner-map {
+    height: 560px;
+  }
+  .route-planner-stops {
+    max-height: 560px;
+    overflow-y: auto;
+  }
+}
+/* ============================================================
+   Desktop shell, Step 3: Accountant POD review
+
+   List+detail split, per the Step 1 audit: a compact left-hand list
+   (recorded.js's compactRowHtml) and a persistent right-hand pane
+   (detailPaneHtml) showing the selected delivery's full detail with its
+   POD signature always visible, instead of the mobile flow's full card
+   per row plus a "View signature" modal for each one. Same data/actions
+   as mobile (record/unrecord, view/create payment) via the shared
+   wireActions() -- just laid out differently. */
+
+.recorded-detail-pane {
+  display: none;
+}
+@media (min-width: 1024px) {
+  .recorded-layout {
+    display: grid;
+    grid-template-columns: minmax(300px, 380px) 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+  .recorded-detail-pane {
+    display: block;
+    position: sticky;
+    top: 24px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    min-height: 240px;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+  }
+  .recorded-row-active {
+    background: var(--bg-card-pressed);
+  }
+}
+.ops-hero-red {
+  background: var(--danger);
+}
+.ops-hero-cta {
+  margin-top: 10px;
+  padding: 10px 16px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  font-weight: 600;
+}
+.ops-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.ops-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 92px;
+  padding: 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.ops-stat-number {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.ops-stat-number small {
+  font-size: 1.1rem;
+  color: var(--text-dim);
+}
+.ops-stat-label {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+.ops-tile-wide {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  min-height: 64px;
+  color: var(--text-dim);
+}
+.ops-tile-badge {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+}
+.rt-card { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.rt-card-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.rt-card-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; }
+.rt-sub { font-size: 0.82rem; }
+.rt-card-line { font-size: 0.92rem; }
+.rt-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.rt-extra { display: flex; flex-direction: column; gap: 8px; }
+.rt-grade { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rt-grade-btns { display: inline-flex; gap: 6px; }

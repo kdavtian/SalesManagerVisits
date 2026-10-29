@@ -1,0 +1,3373 @@
+/* Styles of the "customers" screens (docs/architecture-roadmap.md step 8c): loaded by js/styles.js before such a screen is drawn,
+   and in the background after the first screen. Moved here from the shared stylesheets by server/scripts/split-css.mjs, in their old
+   order; a new rule only screens of this area use goes here. */
+
+/* ---- from styles.css ---- */
+.settings-hint {
+  font-size: 0.8rem;
+  margin: -6px 4px 20px;
+  line-height: 1.4;
+}
+/* While the map view is mounted, the app shell must not scroll — an
+   ancestor with overflow:auto fights Leaflet's own pan/zoom touch
+   handling on iOS and can make the map feel like it's freezing. */
+.app-main-locked {
+  overflow: hidden;
+}
+.btn-accent {
+  color: var(--accent);
+  font-weight: 700;
+}
+/* Pairs two fields on one line (region+subregion, ERP ID+TIN) instead of
+   each taking a full row -- the form gets long enough already on the new
+   customer sheet. */
+.form-row-2 {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.form-row-2 > label {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+/* Side-by-side fields always the same height: a native <select> (iOS) renders shorter than an <input> with the same
+   padding, which made "Region" look smaller than "Subregion" on the new customer sheet. */
+.form-row-2 input:not([type="checkbox"]):not([type="radio"]),
+.form-row-2 select {
+  height: 46px;
+  box-sizing: border-box;
+}
+.checkin-row-photo-count {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.checkin-note {
+  margin: 8px 0 0;
+}
+.brand-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.brand-tag {
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+.checkin-photo {
+  margin-top: 10px;
+  width: 100%;
+  border-radius: 10px;
+  display: block;
+  cursor: pointer;
+}
+.user-row-actions {
+  display: flex;
+  gap: 14px;
+}
+.team-edit-secondary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 14px;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.radius-help {
+  font-size: 0.8rem;
+  margin: -8px 0 14px;
+}
+.map-picking {
+  cursor: crosshair;
+}
+.nearest-customer-bar {
+  position: absolute;
+  left: 16px;
+  /* Mirrors .fab's bottom offset on the opposite corner, clearing the
+     opaque fixed nav bar the same way. */
+  bottom: calc(16px + 48px + var(--nav-safe-bottom));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 32px - 70px);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 14px 6px 6px;
+  box-shadow: var(--shadow-elevated);
+  z-index: 1000;
+}
+.nearest-checkin-btn {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--checkin-green);
+  color: #ffffff;
+  border: none;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.nearest-customer-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  font-size: 0.82rem;
+  line-height: 1.25;
+}
+.nearest-customer-info strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.relocate-banner {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--bg-elevated);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+.relocate-banner button {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+/* Shown when no map tile has loaded within a reasonable window (see
+   startTileHealthCheck in map.js) -- covers just the map area, not the
+   whole screen, so the search/filter chrome above it stays usable. */
+.map-error-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  padding: 24px;
+}
+.map-error-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+  max-width: 280px;
+}
+.pin-new {
+  width: 26px;
+  height: 26px;
+  background: var(--accent-fill);
+  border-width: 3px;
+  animation: pin-drop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+/* A plain address-search result -- distinct color from .pin-new so it
+   never reads as "a pending customer placement awaiting confirm". */
+.pin-search-result {
+  width: 26px;
+  height: 26px;
+  background: var(--success);
+  border-width: 3px;
+  animation: pin-drop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.pin-stop {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  transform: none;
+  background: var(--accent);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.pin-stop-visited {
+  background: var(--success);
+}
+/* Heading cone shown only in Track mode -- see meIcon()'s comment in map.js
+   for why rotating it by +heading keeps it pointing "forward" (up) once the
+   map itself has rotated -heading to put the current heading at the top of
+   the screen. The negative margins pull the (zero-size, border-only)
+   triangle box up so its flat base sits exactly on the dot's center, with
+   transform-origin at that same point so rotation pivots there rather than
+   swinging the whole cone around the dot. */
+.me-heading-arrow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  margin-left: -6px;
+  margin-top: -14px;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 14px solid rgba(10, 132, 255, 0.9);
+  transform-origin: 50% 100%;
+}
+.map-control-tracking {
+  color: #ffffff !important;
+  background: var(--accent-fill, var(--accent)) !important;
+  border-color: var(--accent-fill, var(--accent)) !important;
+}
+.map-control-divider {
+  height: 1px;
+  background: var(--border);
+}
+.map-control-btn:active {
+  background: var(--bg-card-pressed);
+}
+.map-control-active {
+  color: var(--accent);
+}
+.map-sheet-grab { display: flex; justify-content: center; padding: 8px 0 2px; touch-action: none; }
+.map-sheet-grab span { width: 38px; height: 5px; border-radius: 3px; background: var(--border-strong, var(--border)); }
+.map-legend-body { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding-bottom: 8px; }
+.map-legend-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.map-legend-prefs {
+  display: flex;
+  flex-direction: column;
+  margin: 4px 0 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.map-legend-pref-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 48px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+.map-legend-pref-row:last-child { border-bottom: 0; }
+.map-legend-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.map-legend-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  line-height: 1.25;
+}
+.map-legend-swatch {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.map-legend-swatch-img {
+  /* Real marker artwork straight out of icons/markers/, one row per tier --
+     the legend literally shows the file the map draws, so a future artwork
+     change can't leave the key describing a shape that no longer exists.
+     The "-other" category is used as the neutral stand-in; the glyph inside
+     varies by category, which the note below the list explains. */
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+.map-legend-note {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  line-height: 1.3;
+  color: var(--text-dim);
+}
+.map-legend-list + .map-legend-note {
+  margin: 8px 0 0;
+}
+.map-legend-divider {
+  height: 1px;
+  margin: 9px 0;
+  background: var(--border);
+}
+.map-legend-swatch-badge {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+}
+.map-legend-swatch-visited {
+  background: var(--map-visited, #22a45d);
+}
+.map-legend-swatch-overdue {
+  width: 16px;
+  height: 16px;
+  background: var(--map-overdue, #f2a900);
+  border: 2px solid #fff;
+  box-sizing: border-box;
+}
+.map-legend-swatch-never {
+  width: 18px;
+  height: 18px;
+  background: var(--map-never, #e33b43);
+  color: #fff;
+  border: 2px solid #fff;
+  box-sizing: border-box;
+  font-size: 10px;
+}
+.map-legend-swatch-selected {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--map-marker-blue, #1677f2);
+  box-shadow: 0 0 0 3px rgba(22, 119, 242, .28);
+}
+.map-legend-swatch-cluster {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+}
+/* each swatch sits in a 22 px wide slot so the three labels start at the same place */
+.map-legend-swatch-debt-s { width: 14px; height: 14px; margin-inline: 4px; }
+.map-legend-swatch-debt-m { width: 18px; height: 18px; margin-inline: 2px; }
+.map-legend-swatch-debt-l { width: 22px; height: 22px; }
+/* Pin key: swatches for the markers that are not map pins (task, planned visit, rep ring, route stop, brand dots, me, teammate). */
+.map-legend-swatch-task { width: 18px; height: 18px; border-radius: 6px; border: 1.5px solid #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); box-sizing: border-box; }
+.map-legend-swatch-task svg { width: 12px; height: 12px; }
+.map-legend-swatch-task-soon { background: #f5c518; color: #3d3000; }
+.map-legend-swatch-task-due { background: var(--danger); color: #fff; }
+.map-legend-swatch-planned,
+.map-legend-swatch-repring { width: 18px; height: 18px; border-radius: 50%; border: 3px solid var(--map-marker-blue, #1677f2); box-sizing: border-box; }
+.map-legend-swatch-planned { position: relative; background: color-mix(in srgb, var(--map-marker-blue, #1677f2) 14%, transparent); }
+.map-legend-swatch-planned b { position: absolute; right: -7px; bottom: -5px; min-width: 12px; height: 12px; padding: 0 2px; border-radius: 7px; background: var(--map-marker-blue, #1677f2); color: #fff; font-size: 8px; font-weight: 800; line-height: 12px; text-align: center; box-shadow: 0 0 0 1px #fff; }
+.map-legend-swatch-stop { width: 18px; height: 18px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 10px; font-weight: 700; }
+.map-legend-swatch-stop-done { background: var(--success); }
+.map-legend-swatch-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--pin-border, #fff); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); box-sizing: border-box; }
+.map-legend-swatch-dot-available { background: var(--success); }
+.map-legend-swatch-dot-unavailable { background: var(--danger); }
+.map-legend-swatch-dot-unknown { background: var(--inactive); }
+.map-legend-swatch-me { width: 14px; height: 14px; border-radius: 50%; border: 3px solid #fff; background: var(--map-marker-blue, #1677f2); box-shadow: 0 0 0 3px rgba(22, 119, 242, 0.22), 0 1px 3px rgba(17, 19, 24, 0.2); box-sizing: border-box; }
+.map-legend-swatch-team { width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 2.5px solid var(--map-marker-blue, #1677f2); color: var(--map-marker-blue, #1677f2); font-size: 9px; font-weight: 800; box-sizing: border-box; box-shadow: 0 1px 3px rgba(17, 19, 24, 0.26); }
+.map-popup {
+  color: var(--text);
+}
+.popup-category {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+.popup-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 6px;
+  /* Also sets the popup's working width -- widened from 180px so the two
+     action buttons below fit their icon+label side by side without wrapping
+     in the longest locale (see .popup-actions button). */
+  min-width: 250px;
+}
+.popup-fact {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.8rem;
+  /* Each fact is exactly one row ("Visit overdue [25 days]   Sat, Sep 12");
+     the popup grows to fit it (see bindPopup maxWidth) instead of wrapping. */
+  white-space: nowrap;
+}
+.popup-fact strong {
+  text-align: right;
+}
+.popup-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.popup-actions button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 10px 6px;
+  min-height: 44px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  /* Icon + label must stay on one line in every locale -- Armenian's
+     "Չեք-ին" plus the pin glyph used to wrap the button to two lines inside
+     Leaflet's narrow default popup. The label itself is the non-wrapping
+     part; the popup is widened via .popup-facts' min-width rather than by
+     shrinking the type. */
+  white-space: nowrap;
+}
+.popup-actions .popup-action-label {
+  white-space: nowrap;
+}
+.popup-actions .btn-accent {
+  background: var(--checkin-green);
+  color: #ffffff;
+  border-color: var(--checkin-green);
+}
+.guide-overlay-frame {
+  position: relative;
+  width: 100%;
+  max-width: var(--app-max-width);
+  margin: 0 auto;
+  height: 100%;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}
+/* iframe PDF preview is best-effort -- it renders fine on desktop and most
+   Android browsers, but an installed iOS PWA's WKWebView can't render a
+   PDF inside an iframe at all (renders blank). The toolbar's Share/Open
+   actions are the guaranteed-working path on every platform, not just a
+   fallback. */
+.guide-overlay-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: calc(10px + var(--safe-top)) 10px 10px;
+  flex-shrink: 0;
+}
+.guide-overlay-toolbar-actions {
+  display: flex;
+  gap: 8px;
+}
+.guide-overlay-frame iframe {
+  width: 100%;
+  flex: 1;
+  border: none;
+}
+.guide-overlay-fallback-hint {
+  text-align: center;
+  padding: 0 16px calc(12px + var(--safe-bottom));
+  flex-shrink: 0;
+}
+/* Close button sits in its own row above the scrolling body (a flex
+   sibling, not a descendant of .admin-section-overlay-body), so it never
+   scrolls away with the content and needs its own safe-area-top padding
+   instead of inheriting the body's. Right-aligned per the app's modal
+   convention (a full-screen sheet with a single dismiss action, no
+   competing primary action, gets its close X on the trailing/right side --
+   left is reserved for back navigation on routed, page-style views). */
+.admin-section-overlay-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: calc(10px + var(--safe-top)) 10px 6px;
+  flex-shrink: 0;
+}
+.admin-section-overlay-body {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 4px 16px var(--sheet-pad-bottom);
+}
+.admin-section-overlay-body h2 {
+  margin-top: 0;
+}
+.guide-overlay-close {
+  z-index: 1;
+  background: var(--bg-card);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+}
+.plan-mode-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 10px 0;
+  background: var(--bg);
+  border-radius: var(--radius);
+  padding: 3px;
+}
+.plan-mode-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  border-radius: calc(var(--radius) - 3px);
+  padding: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  cursor: pointer;
+  min-height: 44px;
+}
+.plan-mode-tab-active {
+  background: var(--bg-card);
+  color: var(--text);
+  box-shadow: var(--shadow-subtle);
+}
+.plan-area-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0;
+}
+.plan-area-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font-size: 0.85rem;
+}
+.plan-area-add-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.plan-area-add-row select {
+  flex: 1;
+  min-width: 0;
+}
+.perf-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 0.9rem;
+}
+.perf-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 0;
+}
+.perf-progress-label {
+  font-size: 0.78rem;
+  margin: 4px 0 2px;
+  text-align: right;
+}
+.perf-no-target {
+  font-size: 0.82rem;
+  margin: 2px 0;
+}
+.detail-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.detail-stat-tile {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.detail-stat-value {
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.detail-stat-label {
+  font-size: 0.76rem;
+  color: var(--text-dim);
+}
+.detail-stat-danger .detail-stat-value {
+  color: var(--danger);
+}
+.detail-stat-sublabel {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  margin-top: -2px;
+}
+.next-visit-due {
+  margin-top: 8px;
+}
+/* Icon-only, not "+ Add Customer" -- the full Armenian label ("Ավելացնել
+   հաճախորդ") next to the page title was wider than the button had room
+   for, which is exactly the kind of oversized header control that pushed
+   this whole page into horizontal scroll. A round accent-filled icon
+   button says "primary add action" without needing the words. */
+.list-header-add-btn {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #ffffff;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+/* Debt-visibility toggle sits next to the page title, same shape as Add
+   Customer but a neutral (not accent-filled) resting state -- it's off by
+   default, so it shouldn't read as "the" primary action the way Add
+   Customer does. */
+.list-header-add-btn#toggle-debt-btn {
+  background: var(--bg-inset, var(--bg-card));
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+}
+.list-header-add-btn-active {
+  background: var(--accent) !important;
+  color: #ffffff !important;
+  border-color: var(--accent) !important;
+}
+.customer-card-debt {
+  color: var(--danger);
+  font-weight: 600;
+}
+/* Admin data-quality dashboard (renderDataQualitySection, admin.js) */
+
+.dq-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 16px;
+}
+.dq-count-chip {
+  flex: 1;
+  min-width: 84px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 12px;
+  display: flex;
+  flex-direction: column;
+}
+.dq-count-chip strong {
+  font-size: var(--fs-stat-lg);
+  font-weight: var(--fw-stat-lg);
+  color: var(--text);
+}
+.dq-count-chip span {
+  font-size: var(--fs-stat-label);
+  font-weight: var(--fw-stat-label);
+  color: var(--text-dim);
+}
+.dq-subhead {
+  margin: 16px 0 8px;
+  font-size: 0.95rem;
+}
+.dq-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  text-decoration: none;
+  color: inherit;
+}
+.dq-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dq-row-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.customer-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+/* A sales manager's own customers stay full-strength; everyone else's
+   recede so they stay findable (via the assignment filter) without
+   competing for attention with the rep's actual book. */
+.customer-card-unassigned {
+  opacity: 0.5;
+}
+.detail-header-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+/* ===== Customer detail header: three stacked rows =====
+   1. big avatar + customer name   2. ERP ID / tier / visit status
+   3. action icons.
+   Every other screen keeps the plain single-row .detail-header, hence the
+   extra class rather than restyling .detail-header itself. Stacking is what
+   finally gives the name a full row of its own: five icon buttons sharing
+   one 390px line with the title was what squeezed it down to a single
+   letter. */
+.customer-detail-header {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+.customer-detail-header-main {
+  display: flex;
+  /* Top-aligned so the icon's top edge lines up with the first line of the
+     customer name -- and, now that the icon is the same 44px height as the
+     back button beside it, this also keeps both of them flush along the
+     same top edge. */
+  align-items: flex-start;
+  /* 10px between back button -> icon -> name/ERP-id column, all three. */
+  gap: 10px;
+  min-width: 0;
+}
+/* Same 44x44 footprint as the back button (.icon-btn) beside it -- was
+   88px/24px when this was the page's own hero avatar; sized down to match
+   its neighbor instead. No background/border/radius of its own: it's just
+   a same-size transparent wrapper now, deliberately left non-visible so it
+   doesn't double up with the inner .list-row-icon span (customerListIconHtml)
+   underneath, which is left un-overridden below -- so it renders with the
+   exact same bordered/tinted-background 44px box treatment every other
+   .list-row-icon in the app uses (see styles.css's shared .list-row-icon
+   rule), the same visual weight as the back button's own bordered square
+   rather than a small icon floating in empty space. */
+.customer-detail-header .detail-header-icon {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  background: none;
+  border: none;
+}
+/* Nested inside .detail-header-title now (a sibling of the h1, not of
+   .customer-detail-header-main) so it starts at the name's own left edge
+   and sits directly under it, instead of spanning the full header width
+   starting under the avatar. */
+.customer-detail-header .detail-header-status-row {
+  gap: 6px;
+  margin-top: 2px;
+}
+.checkin-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.checkin-photo-wrap {
+  position: relative;
+}
+.checkin-photo-grid .checkin-photo-wrap .checkin-photo {
+  margin-top: 0;
+  aspect-ratio: 1;
+  object-fit: cover;
+}
+.checkin-photo-grid .photo-delete-btn {
+  width: 44px;
+  height: 44px;
+  top: 0;
+  right: 0;
+  font-size: 0.85rem;
+  background: radial-gradient(circle, rgba(0, 0, 0, 0.68) 0 13px, transparent 14px);
+}
+.photo-delete-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #ffffff;
+  border: none;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.pending-request-card {
+  margin-bottom: 18px;
+}
+.pending-request-card-quiet {
+  padding: 12px 14px;
+}
+.pending-request-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.proposed-change {
+  font-size: 0.88rem;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.proposed-change:last-of-type {
+  border-bottom: none;
+}
+.detail-header-subtitle {
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.detail-header-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.detail-facts-card {
+  margin: 14px 0;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+/* One toolbar row at the top of the card: social/contact links
+   (Instagram/Facebook/email/website, filled in by customerSocialProfiles.js)
+   on the left, Account settings + Edit on the right -- both groups pinned to
+   their own edge via space-between rather than each picking their own
+   margin, so the row stays balanced regardless of how many social links a
+   given customer has (including zero). flex-wrap is the graceful fallback
+   for the narrowest phones; at the two groups' actual combined width
+   (4 social icons + 2 action buttons, ~260px) it should never be needed on
+   any real device. Pulled out of the card's own 10px vertical gap with a
+   larger margin-bottom so the toolbar reads as its own row, not just
+   another fact -- ~22px clear of the first fact line below it. */
+.detail-facts-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  /* 25% less than the original 12px. */
+  margin-bottom: 9px;
+}
+/* .customer-social-section already supplies the 36px-circular-button/8px-gap
+   styling (shared with the old standalone row this replaces); this class
+   only gives customerSocialProfiles.js a stable, unambiguous slot to target.
+   Deliberately left a plain inline-flex span rather than display:none when
+   empty -- a customer with no social profiles still needs this to stay a
+   real (zero-width) flex item so justify-content:space-between has two
+   items to split apart and keeps Account settings/Edit pinned to the right
+   edge; collapsing it out of the flex layout entirely would instead leave
+   that lone group sitting at the row's *left* edge. */
+.detail-facts-card-actions-primary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.detail-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+  gap: 8px;
+  margin: 18px 0;
+}
+.action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+}
+.action-btn span:first-child {
+  font-size: 1.2rem;
+}
+.action-btn-primary {
+  background: var(--checkin-green);
+  border-color: var(--checkin-green);
+  color: #ffffff;
+}
+/* The address-search icon used to be its own separate 44px button beside
+   the input, eating into the input's width before a single character of
+   the placeholder -- tight already, and worse for admin/director/CEO
+   roles who also get the manager-filter dropdown on this same row (see
+   below), which was truncating the placeholder to a few letters. It's now
+   an inline leading icon inside the field itself (like a standard search
+   bar), reclaiming that width for the text and putting the icon flush
+   against the field's own left edge instead of floating to its left. */
+.map-search-input-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+/* Purely decorative now -- the field always searches both customers and
+   addresses at once (see map.js), so there's no separate action to tap
+   here any more; this is a plain, unboxed 24x24 icon clearing the input's
+   own left padding above instead of visually colliding with the
+   placeholder text. */
+.map-search-input-wrap .map-search-input-icon {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  z-index: 1;
+  pointer-events: none;
+}
+.map-search-input-wrap .map-search-input-icon svg {
+  width: 18px;
+  height: 18px;
+}
+/* Address-match dropdown for the merged search field -- floats below the
+   input, above the map canvas, same shape as the old address-search
+   sheet's result list (.address-search-result below) but anchored to the
+   field instead of a separate full-screen sheet. */
+.map-address-results {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 500;
+  max-height: 50vh;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-elevated);
+}
+.map-address-results-label {
+  margin: 0;
+  padding: 8px 12px 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+}
+.map-search-no-results {
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-elevated);
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  text-align: center;
+}
+/* Cluster badge for grouped customer pins -- circular, accent-colored to
+   match the app's own palette instead of the plugin's default green/
+   yellow/orange scale, since a cluster of 40 potential customers isn't
+   more "alarming" than a cluster of 5. */
+.pin-cluster {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.8rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  border: 2px solid var(--bg-card);
+}
+/* Brand-availability mode: a small colored dot replaces the tier pin
+   entirely while active, so distribution reads at a glance across a whole
+   district instead of competing with tier shape/color. */
+.brand-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--pin-border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+.map-brand-legend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  box-shadow: var(--shadow-elevated);
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+.map-brand-legend span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.brand-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.brand-legend-available {
+  background: var(--success);
+}
+.brand-legend-unavailable {
+  background: var(--danger);
+}
+.brand-legend-unknown {
+  background: var(--inactive);
+}
+.nearby-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* Above .map-controls/.fab/.nearest-customer-bar (all z-index 1000) --
+     this full-width bottom sheet is meant to cover them the same way it
+     already covers the map underneath, but equal z-index left it losing to
+     whichever of those happened to come later in the DOM: the FAB and the
+     nearest-customer pill were rendering visibly on top of (and partly
+     swallowing taps meant for) the stop list. */
+  z-index: 1010;
+  max-height: 55%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-top: 1px solid var(--border);
+  border-radius: 16px 16px 0 0;
+  box-shadow: var(--shadow-elevated, 0 -4px 20px rgba(0, 0, 0, 0.2));
+}
+.nearby-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--border);
+}
+.nearby-panel-header #nearby-panel-close {
+  font-size: 1.3rem;
+  line-height: 1;
+  color: var(--text-dim);
+}
+.nearby-panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.stop-list {
+  overflow-y: auto;
+  /* This panel is bottom:0 underneath the opaque, position:fixed nav bar
+     (see .fab's own note on the same issue) -- without matching bottom
+     padding here, the last row(s) scroll in behind it instead of above. */
+  padding: 4px 0 calc(4px + 48px + var(--nav-safe-bottom));
+}
+.stop-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.stop-number {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.stop-number-done {
+  background: var(--success);
+}
+.stop-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.stop-reorder {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.nearby-list {
+  overflow-y: auto;
+  padding: 8px 12px;
+  flex: 1;
+}
+.nearby-view-all {
+  border: none;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.85rem;
+  /* This static footer button (not the scrolling .nearby-list above it) is
+     the element actually sitting against the panel's bottom:0 edge, which
+     is underneath the opaque, position:fixed nav bar -- same issue and fix
+     as .fab's own note on this. */
+  padding: 12px 12px calc(12px + 48px + var(--nav-safe-bottom));
+  cursor: pointer;
+}
+/* The Add Customer / relocate location picker -- deliberately NOT a
+   .sheet-overlay modal. A full-screen overlay sits above the whole map and
+   would swallow every tap and drag underneath it, but this panel needs the
+   pin above it to stay draggable and the rest of the map still pannable
+   while it's showing (see the task requirement that dragging the pin must
+   work with the confirmation panel visible). Docked to the bottom like
+   .nearby-panel instead, so it only claims its own footprint. */
+.location-picker-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* The global bottom nav-bar is position:fixed at z-index 1200 and stays
+     on top of everything in .map-view (which deliberately renders full-
+     bleed underneath it -- see .app-main's own padding-bottom note). A
+     panel docked to this view's bottom edge needs to clear both that
+     stacking order and its footprint, or its lowest buttons render
+     visible but unclickable, stolen by the nav bar sitting above them. */
+  z-index: 1250;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg-elevated);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-top: 1px solid var(--border);
+  border-radius: 16px 16px 0 0;
+  box-shadow: var(--shadow-elevated, 0 -4px 20px rgba(0, 0, 0, 0.2));
+  padding: 14px 16px calc(14px + 48px + var(--nav-safe-bottom));
+}
+.location-picker-panel h2 {
+  margin: 0;
+  padding-right: 40px;
+  font-size: 1.05rem;
+}
+.location-picker-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+}
+.location-picker-address {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.location-picker-accuracy {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+.location-picker-accuracy svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+.location-picker-accuracy-low {
+  color: var(--danger);
+}
+.location-picker-hint {
+  margin: 0;
+  font-size: 0.8rem;
+}
+.location-picker-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.address-search-results {
+  display: flex;
+  flex-direction: column;
+  margin-top: 10px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.address-search-result {
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 12px 4px;
+  min-height: 44px;
+  font-size: 0.9rem;
+  color: var(--text);
+  cursor: pointer;
+}
+.address-search-result:last-child {
+  border-bottom: none;
+}
+.address-search-result:active {
+  background: var(--bg-card-pressed);
+}
+.filter-sheet-option-selected {
+  color: var(--accent);
+  font-weight: 700;
+}
+.filter-sheet-check {
+  flex-shrink: 0;
+  color: var(--accent);
+  display: flex;
+}
+.filter-sheet-check svg {
+  width: 18px;
+  height: 18px;
+}
+.connected-records-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.connected-records-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 0.92rem;
+  border-bottom: 1px solid var(--border);
+}
+.connected-records-row:last-child {
+  border-bottom: none;
+}
+/* Interactive variant: Warehouse Inventory's collapsible brand/family
+   headers (see views/warehouse.js render()). Same look as the plain
+   .list-group-heading elsewhere, just as a full-width <button> with a
+   right-aligned stock summary and a chevron that flips per aria-expanded,
+   instead of a static label. */
+.list-group-heading-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.list-group-heading-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.list-group-heading-qty {
+  flex: none;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 700;
+  color: var(--text);
+}
+/* Nested one level under its brand header, same indent a family's own
+   products get from the brand's card-list gutter. */
+.list-group-heading-family {
+  padding-left: 14px;
+}
+/* Stock value line(s) under a brand/family header -- only present once a
+   price mode (wholesale/LC/NC) is toggled on, see groupAmountLines in
+   views/warehouse.js. Sits below the toggle button itself since that
+   button is a single flex row with no room for a second line. */
+.list-group-heading-amount {
+  text-align: right;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+.list-group-heading-family + .list-group-heading-amount {
+  padding-right: 14px;
+}
+.activity-status-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Small variant used in the row's top-right corner, next to the distance
+   label, now that the customer icon owns the row's left side. */
+.activity-status-icon-sm {
+  width: 20px;
+  height: 20px;
+}
+.activity-status-icon-sm svg {
+  width: 13px;
+  height: 13px;
+}
+.status-verified {
+  background: var(--success);
+}
+.status-pending {
+  background: var(--warning);
+}
+/* No circular background here (unlike verified/pending) -- the octagon
+   glyph itself is the red shape (fill="currentColor"), so a second red
+   circle behind it would just show as an ill-fitting halo. Verified/
+   pending read at the full 20px badge size because their colored circle
+   fills the whole .activity-status-icon-sm box around a small 13px glyph;
+   with no such circle, the rejected octagon needs to fill that same 20px
+   footprint itself instead of shrinking to the shared 13px glyph size, or
+   it reads visibly smaller than the other two statuses. */
+.status-rejected {
+  background: transparent;
+  color: var(--danger);
+}
+.status-rejected svg {
+  width: 20px;
+  height: 20px;
+}
+.activity-distance-danger {
+  color: var(--danger);
+  font-weight: 700;
+}
+.settings-workspace-tab {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.settings-workspace-tab-active {
+  background: var(--bg-card);
+  color: var(--text);
+  box-shadow: var(--shadow-subtle);
+}
+.settings-logout {
+  width: calc(100% - 32px);
+  margin: 20px 16px 16px;
+}
+.profile-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+}
+.profile-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.profile-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.profile-info strong {
+  font-size: 1.05rem;
+}
+.settings-list {
+  padding: 4px 0;
+  display: flex;
+  flex-direction: column;
+}
+/* A short explanatory line directly under a settings card, iOS-Settings
+   style footnote -- tight to the card above it, smaller than body text so
+   it doesn't compete with the row labels for attention. */
+.settings-hint {
+  margin: 6px 4px 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+.settings-expand-btn {
+  background: none;
+  border: none;
+  padding: 6px;
+  margin: 0;
+  cursor: pointer;
+  transition: transform 150ms ease;
+}
+.settings-expand-btn[aria-expanded="true"] {
+  transform: rotate(90deg);
+}
+.settings-expandable-content {
+  border-top: 1px solid var(--border);
+}
+/* A single grouped card holding several related forms (iOS-Settings-style
+   "section" containing multiple rows), separated by hairlines instead of
+   each form getting its own floating card. */
+.settings-list-group {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+.settings-list-group-item {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-list-group-item:last-child {
+  border-bottom: 0;
+}
+/* iOS-Settings-style icon badge: a colored rounded square behind a white
+   glyph, not a plain colored icon -- the single most recognizable visual
+   trait of the iOS Settings row. Color is picked per row (see settings.js's
+   settingsRow/settingsToggleRow `color` param) from the fixed iOS system
+   palette below, reused across rows the same way iOS itself reuses a
+   handful of colors across many settings rather than assigning a unique
+   one to each. */
+.settings-row-icon {
+  flex-shrink: 0;
+  width: 29px;
+  height: 29px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+}
+.settings-row-icon svg {
+  width: 17px;
+  height: 17px;
+}
+.settings-row-icon-red { background: var(--cat-red); }
+.settings-reset-link {
+  display: block;
+  border: none;
+  background: none;
+  padding: 4px 0 0;
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+  min-height: 24px;
+}
+.settings-reset-link:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.settings-toggle-row {
+  cursor: default;
+}
+.team-add-btn-wrap {
+  margin: 4px 16px 0;
+}
+.product-section-actions {
+  display: flex;
+  gap: 8px;
+}
+.settings-form-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+}
+/* Product Catalog's landing-cost sync diagnostic (admin.js
+   renderProductsSection) -- neutral by default, warning-tinted only once
+   synced products are actually missing a landing cost. */
+.sync-diagnostic-banner {
+  background: var(--bg-elevated);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.sync-diagnostic-banner-warning {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--warning) 10%, var(--bg-card));
+  color: var(--warning);
+}
+/* Product Catalog's duplicate-product finder (admin.js renderProductsSection,
+   GET /products/duplicates) -- each group is one card holding every row
+   that shares a name+brand+unit identity, so they sit side by side for a
+   quick compare instead of scattered through the full catalog list below. */
+.product-duplicate-group {
+  color: var(--text);
+}
+.product-duplicate-divider {
+  border: none;
+  border-top: 0.5px solid var(--border);
+  margin: 8px 0;
+}
+/* Visit detail sheet */
+
+.visit-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.visit-detail-header h2 {
+  margin: 0;
+}
+.visit-detail-header p {
+  margin: 0;
+}
+.visit-detail-info-card {
+  background: var(--bg-inset, var(--bg-card));
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  /* Slim rows (owner, 2026-10-26: "Mismatch button ... slimmer: 44px"): the card has no padding of its own, every row is 44px high. */
+  padding: 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 12px 0;
+}
+.visit-detail-info-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+.visit-detail-info-row + .visit-detail-info-row {
+  border-top: 1px solid var(--border);
+}
+.visit-detail-info-icon {
+  flex-shrink: 0;
+  display: flex;
+  color: var(--text-dim);
+}
+.visit-detail-info-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.visit-detail-danger-text {
+  color: var(--danger);
+  font-weight: 600;
+}
+.visit-detail-outcome-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.visit-detail-outcome-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.92rem;
+}
+.visit-detail-outcome-row-link {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.visit-detail-outcome-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--bg-inset, var(--bg-card));
+  border: 1px solid var(--border);
+  color: var(--accent, var(--primary));
+}
+.visit-detail-outcome-icon svg {
+  width: 17px;
+  height: 17px;
+}
+.visit-detail-note-icon {
+  display: inline-flex;
+  vertical-align: -3px;
+  margin-right: 6px;
+  color: var(--text-dim);
+}
+.visit-detail-note-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.product-image-editor {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.product-image-preview {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.product-image-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.product-image-placeholder {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+.product-image-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+.pick-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.pick-item-check {
+  flex: none;
+  display: flex;
+  color: var(--border);
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+.pick-item-check svg {
+  width: 20px;
+  height: 20px;
+}
+.pick-item-picked {
+  background: rgba(48, 209, 88, 0.12);
+  border-color: transparent;
+}
+.pick-item-picked .pick-item-check {
+  opacity: 1;
+  color: var(--success);
+}
+.pick-list-qty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  flex: none;
+}
+.pick-list-qty-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.pick-list-stock {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+/* Grand total across the whole currently-loaded list (every search/filter
+   result, not just what's expanded) -- a filled card so it reads as the
+   headline summary, distinct from the plain-text brand/family subtotals
+   underneath it. */
+.inventory-grand-total {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-subtle);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.inventory-grand-total-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.inventory-grand-total-label {
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-eyebrow);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-eyebrow);
+}
+.inventory-grand-total-qty {
+  font-weight: 700;
+  font-size: 1rem;
+}
+.inventory-grand-total-amount {
+  text-align: right;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+/* Inventory: one compact row per product -- name + size on the left,
+   pcs / total-liters right-aligned, in place of the old two-line card with
+   a separate stock-count pill. Read-only reference (see /inventory route),
+   so no pointer cursor. An optional second row (landing cost / wholesale
+   price, toggled on via the two buttons next to the brand filter) sits
+   below it in a smaller font, right-aligned the same way. */
+.inventory-row-card {
+  padding: 10px 14px;
+  cursor: default;
+}
+.inventory-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.inventory-row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+/* Wraps name + size chip so the chip sits outside the name's own
+   ellipsis span (flex:none below) -- previously the size lived inside
+   that same truncating span and could get clipped off entirely on a
+   long product name, leaving same-name size variants looking identical. */
+.inventory-row-name-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.inventory-row-name-wrap .inventory-row-name {
+  flex: 1 1 auto;
+}
+.inventory-row-size-chip {
+  flex: none;
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  font-weight: 700;
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.inventory-row-qty {
+  flex: none;
+  text-align: right;
+  font-weight: 600;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.inventory-row-qty-zero {
+  color: var(--warning);
+}
+.inventory-row-qty-unknown {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+.inventory-row-prices {
+  margin-top: 2px;
+  text-align: right;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+/* A product stocked in more than one size (productGroupHtml): name prints
+   once, each stocked size gets its own pill here instead of a whole
+   separate near-identical card per size. */
+.inventory-variant-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.inventory-variant-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 10px;
+}
+.inventory-variant-pill-top {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+.inventory-variant-pill-size {
+  font-weight: 700;
+  font-size: 0.78rem;
+}
+.inventory-variant-pill-qty {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.inventory-variant-pill-qty-zero {
+  color: var(--warning);
+}
+.inventory-variant-pill-price {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+}
+/* Days-of-stock-left badge (toggled by #inventory-days-btn) -- a single
+   row above the price lines on a single-size card, or its own stacked
+   line inside a variant pill. Semantic color by stock_status, same four
+   colors verify-ui's "filled accents use a dedicated contrast token"
+   check already requires elsewhere, so no new tokens needed. */
+.inventory-row-days {
+  margin-top: 2px;
+  text-align: right;
+}
+.inventory-days-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+.inventory-days-badge-critical {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+.inventory-days-badge-low {
+  background: color-mix(in srgb, var(--warning) 20%, transparent);
+  color: var(--warning);
+}
+.inventory-days-badge-ok {
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+  color: var(--success);
+}
+.inventory-days-badge-dead,
+.inventory-days-badge-new {
+  background: var(--bg);
+  color: var(--text-dim);
+}
+.plan-order-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.plan-order-row input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+.plan-order-row > span:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.inventory-search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.inventory-search-wrap input[type="search"] {
+  width: 100%;
+  box-sizing: border-box;
+  padding-right: 38px;
+}
+/* Overrides .icon-btn's own 44x44 box (this one sits inside the input, not
+   beside it) down to a compact 28x28 hit area positioned at the input's
+   right edge -- same technique as .map-search-input-wrap's left-side icon
+   button, mirrored to the right since the brand/size/stock filter button
+   moved inside the search field here instead of its own slot in the row. */
+.inventory-search-filter-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: none;
+  border: none;
+  box-shadow: none;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.inventory-search-filter-btn svg {
+  width: 18px;
+  height: 18px;
+}
+.inventory-search-filter-btn-active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-card));
+}
+/* Combined brand/size/stock-status filter sheet: three independent
+   single-select sections in one sheet instead of three separate button
+   taps -- see filterSectionHtml in views/warehouse.js. */
+.filter-sheet-section + .filter-sheet-section {
+  margin-top: 18px;
+}
+.filter-sheet-section-title {
+  margin: 0 0 4px;
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-eyebrow);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-eyebrow);
+}
+/* Admin > Quick actions per role: one collapsible card per role, a checkbox
+   per quick-action tile inside. Uses the same <details> card shape as the
+   dashboard's by-manager drill-down rather than a bespoke accordion. */
+.qav-role > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.qav-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.qav-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* 44px row so each checkbox is a comfortable phone tap target -- this
+     screen is a long list of them. */
+  min-height: 44px;
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+.qav-action input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+}
+/* ============================================================
+   Desktop shell, Step 3: Map/visits
+
+   The map view's markup wraps #leaflet-map and all of its absolutely-
+   positioned overlays (search/filter bar, legend, FAB, nearby/planned
+   panels, hints) in .map-canvas, a sibling of the new .map-side-list --
+   every one of those overlays keeps the exact offsets it always had
+   (top/left/right/bottom), just now relative to .map-canvas instead of
+   .map-view directly, so none of that positioning needed to change.
+   .map-side-list mirrors applyFilter()'s current results (see
+   renderSideList in map.js): the same customers the map is showing as
+   pins, as a scrollable filterable list next to it -- "side-by-side
+   map+filterable list" per the Step 1 audit. Hidden below 1024px and
+   during the relocate-pin flow (map.js doesn't render it there). */
+
+.map-side-list {
+  display: none;
+}
+@media (min-width: 1024px) {
+  .map-side-list {
+    display: flex;
+    flex-direction: column;
+    width: 360px;
+    flex-shrink: 0;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+    background: var(--bg);
+  }
+}
+/* F12: with no social links the toolbar row was an empty 44px band holding
+   two right-aligned buttons. Pull the buttons up beside the first facts
+   instead (those facts reserve room on the right). */
+.detail-facts-card-actions {
+  /* Stacks above the facts below it: in the compact layout those overlap
+     the buttons, and a later sibling would otherwise swallow the tap. */
+  position: relative;
+  z-index: 2;
+}
+.detail-facts-card-actions.is-compact {
+  margin-bottom: -44px;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  pointer-events: none;
+}
+.detail-facts-card-actions.is-compact .detail-facts-card-actions-primary {
+  pointer-events: auto;
+}
+.dropdown-menu-heading {
+  padding: 8px 12px 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-top: 1px solid var(--border);
+}
+/* Customer card: product chips (what visits recorded) + the "why it matched"
+   line under a Customers-list product search/filter. */
+.product-chips-card {
+  margin-bottom: 4px;
+  cursor: default;
+}
+.product-chips-hint {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+}
+.product-match-row {
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.product-chips-title {
+  margin: 0;
+}
+.product-chips-heading {
+  margin-top: 14px;
+  margin-bottom: 8px;
+}
+.product-chips-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.product-chips-col:empty { border-style: dashed; background: none; }
+/* A non-clickable info card has nothing to "press". */
+.detail-facts-card:active {
+  transform: none;
+  opacity: 1;
+}
+/* Map popup facts skeleton: same row height as the real facts. */
+.popup-fact-skeleton { min-height: 22px; align-items: center; }
+.skeleton-bar { display: block; width: 100%; height: 12px; border-radius: 6px; background: var(--skeleton); animation: skeleton-pulse 1.2s ease-in-out infinite; }
+/* Brand chips (what check-ins recorded about the shelf) in a map pin popup */
+.popup-brand-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0 2px;
+}
+.popup-brand-chips:empty {
+  display: none;
+}
+.acc-segmented { margin: 2px 0 8px; }
+.acc-segmented[hidden], .acc-agent[hidden] { display: none; }
+.acc-agent { margin: 0 2px 8px; display: flex; align-items: center; gap: 6px; font-size: var(--fs-row-meta); color: var(--text-dim); white-space: nowrap; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--text-dim); }
+.status-dot-on { background: var(--success, #2e9e5b); }
+.status-dot-off { background: var(--danger, #d64545); }
+/* Customer card: stat tiles are buttons (orders / payments / last order / last visit). */
+.detail-stat-tile-btn {
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+  cursor: pointer;
+}
+.detail-stat-tile-btn:disabled { cursor: default; opacity: 1; }
+.detail-stat-tile-btn:not(:disabled):active { background: var(--bg); }
+.payments-received-date { white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* A payment recorded in the app carries a long status chip ("App - Awaiting approval"): date + amount on the first line,
+   the chip on its own line under the date (it used to push the amount onto two lines and the sheet sideways). */
+.payments-received-row-app { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "date amount" "chip chip"; }
+.payments-received-row-app > :nth-child(1) { grid-area: date; }
+.payments-received-row-app > :nth-child(2) { grid-area: chip; justify-self: start; white-space: normal; max-width: 100%; }
+.payments-received-row-app > :nth-child(3) { grid-area: amount; }
+.payments-received-total { font-weight: 800; }
+.payments-received-list { max-height: 60vh; overflow-y: auto; overflow-x: hidden; }
+/* Customer action buttons: 3 per row on phones so long Armenian labels
+   ("Պատվերներ") fit on one line instead of breaking mid-word. */
+/* Customer action buttons stay on ONE row (check in, navigate, orders, new
+   order, photos): equal columns, tight padding, type that shrinks with the
+   screen so the widest Armenian word ("Պատվերներ") still fits unbroken. */
+.detail-actions-grid {
+  grid-template-columns: repeat(var(--action-cols, 5), minmax(0, 1fr));
+  gap: 6px;
+}
+.detail-actions-grid .action-btn {
+  padding: 10px 2px;
+  font-size: clamp(0.56rem, 2.45vw, 0.7rem);
+}
+.action-btn { min-width: 0; text-align: center; hyphens: manual; overflow-wrap: anywhere; word-break: normal; line-height: 1.2; }
+@media (max-width: 400px) {
+  .detail-actions-grid .action-btn { font-size: 0.6rem; padding-left: 1px; padding-right: 1px; }
+}
+/* Map: task marker on the left of a customer pin (yellow = not due, red = due today or overdue). */
+.pin-task {
+  position: absolute;
+  left: -13px;
+  top: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--bg-card);
+  border: 1.5px solid currentColor;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+.pin-task svg { width: 14px; height: 14px; }
+/* yellow = a task whose deadline is still ahead, red = due today or overdue */
+.pin-task-soon { background: #f5c518; color: #3d3000; border-color: #ffffff; }
+.pin-task-due { background: var(--danger); color: #ffffff; border-color: #ffffff; }
+/* Print-ready order blanks: select mode on the Orders list and the version picker. */
+.orders-header-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+/* Select mode swaps the order icon for a check circle in the same slot. */
+.order-select-slot { background: transparent; border-color: transparent; }
+.order-row-selected { border-color: var(--accent); }
+.orders-select-mode [data-order-id] { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+/* Floating action row, stuck to the bottom above the tab bar. */
+.orders-select-bar {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(60px + var(--nav-safe-bottom));
+  max-width: 560px;
+  margin: 0 auto;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 22px rgba(15, 23, 42, 0.18);
+}
+.orders-select-bar[hidden] { display: none; }
+.osb-summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.osb-summary > span { flex: 1; font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.osb-all { min-height: 44px; padding: 0 4px; white-space: nowrap; }
+.osb-note input { width: 100%; box-sizing: border-box; height: 44px; }
+.osb-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.osb-actions .osb-secondary { flex: 1 1 calc(50% - 4px); order: 2; }
+.detail-stat-tile {
+  position: relative;
+}
+.detail-stat-chip {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+.readonly-field {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0 2px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+.readonly-field-label {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+.readonly-field-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.readonly-field-credit {
+  color: var(--success);
+}
+.readonly-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 28px;
+  margin: -8px 0 -8px 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.readonly-info-btn svg {
+  width: 16px;
+  height: 16px;
+}
+/* A failed background job: the whole row opens its error (44 px tall). */
+.health-row-btn {
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+/* Map planned stops: the leg length under the customer name. */
+.stop-leg {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+.planned-stops-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+.planned-stops-title small {
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+.spots-spot span {
+  width: 26px;
+  height: 26px;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+.spots-here span {
+  display: block;
+  width: 16px;
+  height: 16px;
+  margin: 2px;
+  border-radius: 50%;
+  background: #1e90ff;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px rgba(30, 144, 255, 0.35);
+}
+.spots-pin svg {
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35));
+}
+.spots-use-btn {
+  margin-top: 6px;
+  min-height: 36px;
+}
+/* Pin review (views/pinReview.js) */
+.pin-review-help {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+}
+.pin-review-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pin-review-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 44px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pin-review-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pin-review-actions {
+  display: flex;
+  gap: 8px;
+}
+/* Settings > Check-in allowance switched off: the meters field is dimmed (still editable). */
+#radius-form.is-off input,
+#radius-form.is-off .radius-help {
+  opacity: 0.5;
+}
+.purge-keep { margin: 4px 0 0; font-weight: 600; }
+.purge-warning { margin: 0; }
+.purge-block #purge-btn { min-height: 44px; }
+.purge-block #purge-btn.is-armed { background: var(--danger); color: #ffffff; }
+.cl-legend-btn { position: relative; flex: 0 0 auto; }
+.cl-legend-btn::after { content: ""; position: absolute; inset: -13px; }
+.cl-legend-tiers { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0 0 12px; }
+.cl-legend-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+.cl-legend-tiers .cl-legend-row { margin: 0; }
+.cl-legend-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.settings-textsize { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 12px 14px; }
+.settings-textsize .ts-a1 { font-size: 0.95rem; }
+.settings-textsize .ts-a2 { font-size: 1.1rem; }
+.settings-textsize .ts-a3 { font-size: 1.3rem; }
+.om-loading { text-align: center; margin: 4px 0; }
+.om-lines { margin: 8px 0; max-height: 45vh; overflow-y: auto; }
+.om-line { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-top: 1px solid var(--border); }
+.om-line span { min-width: 0; overflow-wrap: anywhere; }
+.om-line strong { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+/* Map search panel: Customers and Addresses, each its own scrolling group. */
+.map-search-panel { display: flex; flex-direction: column; max-height: 70vh; max-height: 70dvh; overflow: hidden; }
+.map-sr-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 48px; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.map-sr-row:last-child { border-bottom: 0; }
+.map-sr-row:active { background: var(--bg-card-pressed); }
+.map-sr-main { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.map-sr-dist { flex: none; font-size: 0.8rem; font-weight: 600; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.map-sr-empty { margin: 0; padding: 12px; font-size: 0.85rem; text-align: center; }
+.ttf-row { display: grid; gap: 8px; }
+.ttf-row-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ttf-row-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ttf-tier-top { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.ttf-count { margin-left: auto; padding: 1px 7px; border-radius: 999px; background: rgba(127, 127, 127, 0.16); font-size: 0.78rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ttf-tiers .ttf-count { margin-left: 0; font-size: 0.95rem; padding: 0 9px; }
+.ttf-empty { opacity: 0.45; }
+.type-tier-sheet .map-tier-filter-title { padding: 0; margin-top: 14px; }
+/* Map search: Customers / Addresses tabs with counts (owner 2026-10-17) */
+.map-sr-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px 8px 6px; background: var(--bg-card); }
+.map-sr-tab { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); color: var(--text-dim); font: inherit; font-size: 0.85rem; font-weight: 700; cursor: pointer; min-width: 0; }
+.map-sr-tab-active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.map-sr-count { min-width: 22px; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, currentColor 18%, transparent); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+#map-address-results .map-sr-list, .map-address-results .map-sr-list { max-height: 56vh; max-height: 56dvh; }
+.list-more { height: 1px; flex: none; }
+/* Settings: "Retail price from Excel" differences list (app -> Excel, per product). */
+.retail-diff { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 0; padding: 0; list-style: none; max-height: 60vh; overflow-y: auto; }
+.retail-diff li { display: flex; justify-content: space-between; gap: 12px; }
+.retail-diff li b { flex: none; text-align: right; font-variant-numeric: tabular-nums; }
+/* Landing-cost rates in App configuration: a collapsed section with grouped number fields. */
+.lr-details > summary {
+  cursor: pointer;
+  min-height: 44px;
+  list-style: none;
+}
+.lr-details > summary::-webkit-details-marker { display: none; }
+.lr-details > summary::after { content: "›"; margin-left: auto; font-size: 1.4rem; line-height: 1; transform: rotate(90deg); transition: transform 0.15s; }
+.lr-details[open] > summary::after { transform: rotate(-90deg); }
+.lr-details[open] > summary { margin-bottom: 8px; }
+.lr-group { border: 0; padding: 0; margin: 0 0 12px; min-width: 0; }
+.lr-group legend { font-weight: 600; padding: 0; margin-bottom: 6px; }
+.lr-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
+.lr-field { display: flex; flex-direction: column; justify-content: space-between; gap: 3px; font-size: 0.85rem; min-width: 0; }
+.lr-field span { color: var(--text-dim); overflow-wrap: anywhere; }
+.lr-field input { width: 100%; min-width: 0; }
+.lr-actions { display: flex; gap: 8px; }
+/* Pause / switch off a team member (Settings -> Team -> a person) */
+.list-row-off { opacity: 0.62; }
+.offboard-title { display: flex; align-items: center; gap: 8px; }
+.offboard-mode { margin: 10px 0 12px; }
+.offboard-holds { margin: 4px 0 12px; font-size: 0.9rem; }
+.offboard-holds ul { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
+.offboard-holds .warn-text { display: block; color: var(--warning, #b36b00); font-size: 0.82rem; }
+.offboard-regions { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.offboard-region-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); align-items: center; gap: 10px; }
+.offboard-help { margin: -6px 0 12px; font-size: 0.82rem; }
+.kos-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.kos-row-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 10px;
+}
+.kos-row-fields[hidden] {
+  display: none;
+}
+.kos-num {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.kos-num input,
+.kos-levels input,
+.kos-minqty input {
+  width: 72px;
+  min-height: 44px;
+  text-align: right;
+}
+.kos-levels {
+  display: flex;
+  gap: 8px;
+}
+.kos-saved {
+  margin: 0;
+  padding: 8px 16px;
+}
+.kos-pick-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+.kos-pick {
+  width: 100%;
+  min-height: 44px;
+  text-align: left;
+}
+.kos-pick.is-picked {
+  outline: 1px solid var(--accent);
+  background: rgba(255, 106, 19, 0.1);
+}
+.kos-seg {
+  display: flex;
+  gap: 6px;
+  margin: 4px 0;
+}
+.kos-dates {
+  display: flex;
+  gap: 10px;
+}
+.kos-dates label {
+  flex: 1;
+  min-width: 0;
+}
+.kos-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.kos-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 4px 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 106, 19, 0.12);
+  font-size: 0.85rem;
+}
+.kos-chip button {
+  min-width: 32px;
+  min-height: 32px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 1.1rem;
+}
+.kos-prod-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+}
+.kos-prod-row > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.kos-minqty {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.kos-camp-lines > div {
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+.kos-camp-sheet {
+  max-height: 92vh;
+  overflow-y: auto;
+}
+.kos-label {
+  margin: 12px 0 4px;
+  font-weight: 600;
+}
+.kos-code {
+  width: 100%;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  word-break: break-all;
+  resize: none;
+}
+.arrival-modes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+.arrival-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  margin: 0;
+}
+.arrival-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.arrival-input input {
+  width: 84px;
+  text-align: right;
+}
+/* Settings > Sales & customers: signature/document texts and visit frequency by customer type (owner, 2026-10-27). */
+.doc-text-field { display: flex; flex-direction: column; gap: 6px; }
+.doc-text-field textarea { width: 100%; min-height: 72px; resize: vertical; font-size: 0.95rem; line-height: 1.4; }
+.doc-text-reset { align-self: flex-end; min-height: 44px; padding: 0 4px; }
+.visit-type-row .settings-row-label { min-width: 0; overflow-wrap: anywhere; }
+.visit-types-save { margin: 14px 0 4px; }
+.ops-tab {
+  flex: 1;
+  min-height: 44px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ops-tab-active {
+  background: var(--bg-card);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.ops-tab-count:not(:empty) {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-fill);
+  color: #ffffff;
+  font-size: 0.75rem;
+}
+.ops-order-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  flex: none;
+  max-width: 55%;
+}
+.ops-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ops-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--bg);
+  border-radius: 12px;
+  cursor: pointer;
+}
+.ops-line input {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  margin: 0;
+}
+.ops-line-name {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.98rem;
+}
+.ops-line-qty,
+.ops-product-qty {
+  flex: none;
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.ops-line-done {
+  opacity: 0.55;
+}
+.ops-line-done .ops-line-name {
+  text-decoration: line-through;
+}
+.ops-short {
+  color: var(--danger);
+  font-weight: 600;
+}
+.ops-progress {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+.ops-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+}
+.ops-reason {
+  min-height: 52px;
+  justify-content: flex-start;
+  text-align: left;
+}
+.ops-problem-note textarea {
+  width: 100%;
+}
+.ops-products {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ops-product {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.ops-product-short {
+  border-color: var(--danger);
+}
+.ops-product-name {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.ops-route-ok {
+  margin: 0;
+  color: var(--success);
+  font-weight: 600;
+}
+.ops-route-none {
+  margin: 0;
+  color: var(--warning);
+  font-weight: 600;
+}
+.pl-card { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.pl-card-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pl-edit-btn { margin-left: auto; }
+.pl-line { font-size: 0.9rem; overflow-wrap: anywhere; }
+.pl-link { align-self: flex-start; background: none; border: 0; padding: 10px 0; min-height: 44px; color: var(--accent); font: inherit; font-size: 0.9rem; }
+.pl-resolved { margin: 0; font-size: 0.82rem; }
+.pl-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.pl-levels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.pl-level-chip .pl-dot { flex: none; }
+.pl-level-active { font-weight: 400; }
+.pl-level-chip span { white-space: nowrap; }
+.pl-level-chip .pl-dot { width: 8px; height: 8px; }
+@media (max-width: 400px) {
+ .pl-level-chip { font-size: 0.84rem; gap: 4px; }
+}
+.pl-reason-more { border-style: dashed; color: var(--text-dim); }
+/* The reason list of the potential form: one line per reason, a check box on the left, thin dividers, same outline as the other fields. */
+.pl-reasons-list { display: flex; flex-direction: column; flex-wrap: nowrap; gap: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); overflow: hidden; }
+.pl-reasons-list .pl-reason-chip { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 7px 12px; border: 0; border-top: 1px solid var(--border); border-radius: 0; background: transparent; font-size: 0.92rem; font-weight: 400; line-height: 1.25; text-align: left; }
+.pl-reasons-list .pl-reason-chip:first-child { border-top: 0; }
+.pl-reasons-list .pl-reason-on { background: color-mix(in srgb, var(--accent) 8%, var(--bg-card)); }
+.pl-reason-box { flex: none; width: 20px; height: 20px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-card); display: grid; place-items: center; color: #fff; font-size: 13px; line-height: 1; }
+.pl-reason-on .pl-reason-box { background: var(--accent); border-color: var(--accent); }
+.pl-reason-on .pl-reason-box::after { content: "\2713"; }
+.pl-reason-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.pl-reasons-list .pl-reason-more { border-style: solid; color: var(--text-dim); }
+.pl-reason-chev { flex: none; width: 8px; height: 8px; margin-right: 6px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); }
+/* iOS gives a date field an intrinsic width that pushed it past the sheet's edge */
+.pl-sheet input, .pl-sheet .pl-more label { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+.pl-sheet input[type="date"] { -webkit-appearance: none; appearance: none; display: block; }
+.pl-more { margin: 4px 0 12px; }
+.pl-more summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--text-dim); font-size: 0.9rem; }
+.pl-hist { padding: 8px 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
+.pl-hist-date { font-size: 0.78rem; color: var(--text-dim); }
+.pl-reasons-wrap { display: flex; flex-direction: column; gap: 10px; }
+.pl-reasons-wrap[hidden] { display: none; }
+/* Potential: filter sheet + dashboard prospects card */
+.pl-filter-chip .pl-dot { color: inherit; }
+.pf-sheet .pl-filter-chip { display: inline-flex; align-items: center; gap: 6px; }
+.pf-sheet .pl-section-title { margin-top: 10px; }
+/* A required field the form refused to save without (ERP customer ID for Bronze / Silver / Gold) */
+.req-mark { color: var(--danger); }
+.field-invalid input { border-color: var(--danger); box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 25%, transparent); }
+.cl-group { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; -webkit-tap-highlight-color: transparent; user-select: none; }
+.cl-group-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cl-group-chevron { flex: none; width: 8px; height: 8px; margin: 0 4px 0 2px; border-right: 2px solid var(--text-dim); border-bottom: 2px solid var(--text-dim); transform: rotate(45deg); transition: transform 0.15s; }
+.cl-group[aria-expanded="false"] .cl-group-chevron { transform: rotate(-45deg); }
+.cl-group:focus-visible { outline: 1px solid var(--primary, #2f7bf5); outline-offset: 1px; border-radius: 6px; }
+.cl-group-region { margin: 14px 4px 4px; font-size: 0.95rem; font-weight: 800; color: var(--text); text-transform: uppercase; letter-spacing: 0.03em; }
+.cl-group-sub { margin: 8px 4px 4px 12px; font-size: 0.85rem; font-weight: 700; color: var(--text-dim); }
+.cl-group-count { font-size: 0.78rem; font-weight: 700; color: var(--text-dim); }
+.cd-tier-slot { display: contents; }
+.ai-result-ok { color: var(--success, #1a7f37); font-size: 0.85rem; }
+.ai-result-bad { color: var(--danger, #b3151f); font-size: 0.85rem; }
+.map-color-by { display: flex; width: 100%; }
+/* The reps of the pins on screen: compact chips under the switch (a long vertical list pushed the rest of the sheet off the screen). */
+.map-rep-legend { list-style: none; margin: 0; padding: 8px 14px 10px; display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--border); max-height: 130px; overflow-y: auto; }
+.map-rep-legend[hidden] { display: none; }
+.map-rep-legend li { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border-radius: 999px; background: var(--bg-card-pressed); font-size: 0.8rem; font-weight: 600; color: var(--text); }
+.map-rep-legend .map-rep-name { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-rep-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: -1px; flex: none; }
+.team-color-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-left: 6px; vertical-align: 0; }
+.team-color-field { margin: 4px 0 10px; }
+.team-color-label { display: block; font-size: 0.85rem; color: var(--text-dim); margin-bottom: 6px; }
+.team-color-swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.team-swatch { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border); background: var(--swatch, var(--bg-card)); padding: 0; cursor: pointer; position: relative; }
+.team-swatch-on { outline: 2px solid var(--text); outline-offset: 2px; }
+.team-swatch-auto { background: var(--bg-card); color: var(--text-dim); font-size: 0.72rem; }
+/* ===== Settings: iOS / macOS structure (1.405.0) =====
+   Phone: large title, search, Personal | Administration segmented control, inset-grouped cards. Personal is one
+   scrolling list of pages; Administration is a list of categories that open as pages (Back returns).
+   Computer: sidebar of pages (search + tabs on top) with the chosen page beside it. */
+.settings-view [hidden] { display: none !important; }
+.settings-page-title {
+  margin: 22px 16px 0;
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-eyebrow);
+  letter-spacing: var(--ls-eyebrow);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+/* A phone page opened from the Administration list already shows its name in the large title. */
+.settings-view[data-wide="0"][data-tab="admin"] .settings-page-title { display: none; }
+.settings-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 44px;
+  margin: 4px 8px 0;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.settings-back svg { width: 22px; height: 22px; }
+.settings-nav { padding: 0; overflow: hidden; }
+.settings-nav-item { min-height: 48px; }
+.settings-result-page { display: block; margin-top: 1px; font-size: 0.75rem; font-weight: 500; color: var(--text-dim); }
+.settings-list-row.settings-found,
+.settings-list-group-item.settings-found { animation: settings-found 1.6s ease-out; }
+.settings-hint-text {
+  margin: 0;
+  padding: 2px 16px 12px 57px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+.radius-help[hidden] { display: none; }
+.settings-danger-label { color: var(--cat-red); margin-bottom: 10px; }
+.settings-logout-wrap { padding: 0 16px; }
+.settings-logout-wrap .settings-logout { width: 100%; margin: 22px 0 24px; }
+.settings-section-pane h2 { margin: 4px 0 12px; }
+.settings-pane-back { margin: -6px 0 0 -10px; }
+@media (min-width: 1024px) {
+  .settings-view {
+    display: grid;
+    grid-template-columns: 300px minmax(0, 720px);
+    gap: 40px;
+    max-width: 1100px;
+    padding: 24px 24px 40px;
+    align-items: start;
+  }
+  .settings-aside { position: sticky; top: 16px; }
+  .settings-view h1 { padding: 0; font-size: 1.9rem; }
+  .settings-page-title,
+  .settings-page:first-child .settings-page-title {
+    margin: 4px 0 4px;
+    font-size: 1.5rem;
+    letter-spacing: -0.02em;
+    text-transform: none;
+    color: var(--text);
+    font-weight: 700;
+  }
+  .settings-view[data-wide="1"][data-tab="admin"] .settings-page-title { display: block; }
+  .settings-main .settings-page > div[id$="-slot"] { margin: 0; }
+  .settings-logout-wrap { padding: 0; }
+  .settings-logout-wrap .settings-logout { width: auto; min-width: 200px; }
+  .settings-section-pane {
+    position: static;
+    background: none;
+    border: 0;
+    padding: 0;
+    max-height: none;
+    min-height: 0;
+    overflow: visible;
+  }
+  /* Drill-down: the opened screen replaces the page; Back (named after the page) returns. */
+  .settings-view[data-drill] .settings-page { display: none !important; }
+  .settings-nav-item.settings-list-row-active { background: var(--bg-card-pressed); }
+  .settings-nav-item.settings-list-row-active .settings-row-chevron { visibility: hidden; }
+}
+/* The explanation paragraph is the last child while hidden: the row above it keeps its hairline, which showed as a stub. */
+.settings-list > .settings-list-row:has(+ .settings-hint-text[hidden]:last-child) { border-bottom: 0; }
+/* Armenian "Էկոնոմ ռեժիմ !" and "Հաշվիչի քողարկում !" kept the "!" on a second line at 390 px: a little more room for the label. */
+.settings-view .settings-toggle-row { gap: 10px; }
+.settings-view .settings-toggle-row .settings-row-value { font-size: 0.8rem; }
+.settings-view .settings-row-label { overflow-wrap: anywhere; }
+/* Counts beside the Administration categories (and the total on the tab): what is waiting for this person. */
+.settings-count {
+  flex-shrink: 0;
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--cat-red);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+.settings-tab-count { margin-left: 6px; vertical-align: middle; }
+.pl-prefill-note { margin: -2px 0 6px; font-size: 0.78rem; }
+.pl-prefill-note[hidden] { display: none; }
+/* A field the app just filled in for you (e.g. the rep after a sales-channel change): a brief highlight, still editable. */
+.field-auto-set { animation: field-auto-set 1.6s ease-out; }
+@media (min-width: 1024px) {
+ .map-legend-panel { bottom: 0; }
+}
+.map-legend-pref-stack { flex-direction: column; align-items: stretch; justify-content: center; padding-top: 10px; padding-bottom: 10px; }
+.map-planned-mode { display: flex; width: 100%; }
+/* Places to review (Settings -> Administration -> Places): the optional Armenian name for a place kept as typed. */
+.places-hy-input { width: 100%; min-height: 44px; box-sizing: border-box; margin: 8px 0 4px; border: 1px solid var(--control-border); border-radius: var(--radius); padding: 0 10px; background: var(--bg-card); color: var(--text); font: inherit; }
+.customer-files-sheet .checkin-photo-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 0; }
+.customer-files-sheet .checkin-photo { width: 100%; background: var(--bg-inset, var(--bg-card)); border-radius: 8px; }
+/* Visit rows on the customer card: the verified / mismatch state is an icon, so the rep's name and the date get the row
+   (the long Armenian badge text squeezed the name down to "P...", owner 2026-10-26 "detect such issues across the app"). */
+.visit-range-icon { display: inline-flex; flex: none; }
+.visit-range-icon svg { width: 22px; height: 22px; }
+.visit-range-icon.is-ok { color: var(--success); }
+.visit-range-icon.is-bad { color: var(--danger); }
+.add-file-kinds { display: flex; flex-wrap: wrap; gap: 8px; }
+.add-file-pick { display: flex; flex-direction: column; gap: 10px; }
+.add-file-preview { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.add-file-preview img { max-width: 100%; max-height: 38vh; border-radius: 8px; object-fit: contain; }
+.add-file-turn { display: flex; gap: 8px; }
+.add-file-orders-title { margin: 0 0 6px; font-size: 0.85rem; }
+.add-file-order-list { display: flex; flex-direction: column; gap: 6px; max-height: 24vh; overflow-y: auto; }
+.add-file-sheet input[type="text"] { width: 100%; }
+/* Team: the sign-in lock box in the member sheet (admin unlocks it instead of waiting 15 minutes or running SQL) */
+.team-locked-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--danger, #d6403f);
+  border-radius: 12px;
+  font-size: 0.86rem;
+}
+/* Settings > Notifications: the group headings (Orders, Money, Tasks and plans, Reports and Excel). */
+.settings-list-group-title {
+  margin: 0;
+  padding: 12px 16px 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+
+/* ---- from activity-search-filters.css ---- */
+.activity-manager-group-heading:first-child {
+  margin-top: 2px;
+}
+
+/* ---- from orders-search-filters.css ---- */
+.orders-search-combined .orders-channel-filter-btn { flex: 0 0 auto; }
+.orders-search-menu[hidden] { display: none !important; }
+.order-status-svg { display: block; width: 100%; height: 100%; }
+
+/* ---- from unified-search.css ---- */
+/* ----- Customers ------------------------------------------------------- */
+.customers-search-combined {
+  position: relative;
+  overflow: visible;
+}
+.customers-search-actions {
+  gap: 1px;
+}
+.unified-customer-filter-btn {
+  flex: 0 0 auto;
+}
+.customers-search-menu {
+  right: 0;
+}
+.customer-map-add-action {
+  width: 50px !important;
+  height: 50px !important;
+  min-width: 50px;
+  padding: 0 !important;
+  border-radius: 16px !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent) !important;
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-card)) !important;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border)) !important;
+  box-shadow: var(--shadow-subtle);
+  -webkit-tap-highlight-color: transparent;
+}
+.customer-map-add-action:active {
+  transform: scale(.95);
+  background: color-mix(in srgb, var(--accent) 13%, var(--bg-card)) !important;
+}
+.customer-map-add-action svg {
+  width: 27px !important;
+  height: 27px !important;
+}
+.orders-new-action:active {
+  transform: scale(.94);
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-card)) !important;
+  box-shadow: 0 2px 7px rgba(15, 23, 42, .08);
+}
+.orders-new-action svg { width: 28px; height: 28px; }
+/* The primary chip row lives in the popup now; brand-specific choices are
+   intentionally still rendered below the search field only after Brands is
+   selected, because those are the second level of that filter. */
+.map-top-controls > .map-filter-row:not(#brand-picker-row) {
+  margin: 0;
+}
+@media (max-width: 380px) {
+  .customers-search-combined input[type="search"] {
+    min-width: 64px;
+  }
+}
+
+/* ---- from order-map-filter-enhancements.css ---- */
+/* Orders: keep both dimension filters inside the same compact search action rail. */
+.orders-region-filter-wrap {
+  flex: 0 0 auto;
+}
+.orders-region-filter-menu {
+  right: 0;
+  min-width: 220px;
+}
+.order-status-count-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 750;
+  margin-left: 2px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  color: currentColor;
+  font-variant-numeric: tabular-nums;
+}
+.map-search-combined .map-search-actions > * + * {
+  margin-left: 0;
+}
+.map-dimension-popover #tree-sheet-body {
+  display: block;
+}
+/* Brand tree rows: the "customers" unit is dropped inside the popover so the
+   brand name (e.g. "Competitors") is never cut off by its own count. */
+.map-dimension-popover .route-plan-tree-unit {
+  display: none;
+}
+.map-dimension-popover .route-plan-tree-name {
+  text-overflow: clip;
+}
+.map-dimension-popover .filter-sheet-option {
+  min-height: 44px;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  font-size: .88rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 11px;
+  text-align: left;
+}
+.map-dimension-popover .filter-sheet-option:active {
+  background: var(--bg-card-pressed);
+}
+.map-dimension-popover .filter-sheet-option-selected {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+/* Checkbox in front of every multi-select option, so what is ticked is
+   obvious at a glance (before, only a hidden trailing check existed). */
+.filter-sheet-box {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  box-sizing: border-box;
+  border: 1.75px solid var(--control-border, var(--border));
+  border-radius: 6px;
+  background: var(--bg-card);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.filter-sheet-box::after {
+  content: "";
+  width: 10px;
+  height: 5.5px;
+  border-left: 2.2px solid #fff;
+  border-bottom: 2.2px solid #fff;
+  transform: translateY(-1px) rotate(-45deg) scale(0);
+  transition: transform 120ms ease;
+}
+.filter-sheet-option-selected .filter-sheet-box {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.filter-sheet-option-selected .filter-sheet-box::after {
+  transform: translateY(-1px) rotate(-45deg) scale(1);
+}
+@media (max-width: 390px) {
+  .order-status-count-badge {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    font-size: 10px;
+  }
+}
+/* Customer tier chips inside the Map's type filter: the new-customer tier chips, but they wrap
+   (the filter opens as a narrow popover) and several can be on at once. */
+.map-tier-filter-title {
+  margin: 14px 0 6px;
+  padding: 0 14px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+/* The type + tier filter always shows complete, no scrolling: compact rows, no inner scroll area. */
+.map-dimension-popover.map-type-tier-sheet {
+  max-height: none;
+  overflow: visible;
+}
+.map-type-tier-sheet .map-type-options {
+  flex: 0 0 auto;
+  overflow: visible;
+  padding: 2px 7px 8px;
+}
+.map-type-tier-sheet .map-type-options .filter-sheet-option {
+  min-height: 40px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+.map-type-tier-sheet .map-tier-filter-title:first-of-type {
+  margin-top: 10px;
+}
+
+/* ---- from customer-social.css ---- */
+/* Sits inline among the customer detail header's other icon-action buttons
+   (reassign/assign-ERP/edit) instead of taking a full-width row of its own. */
+.customer-social-section {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---- from desktop.css ---- */
+@media (min-width: 1024px) {
+  .customer-detail-view .detail-actions-grid .action-btn {
+    font-size: 0.8rem;
+    padding: 12px 4px;
+  }
+  .map-side-list { width: 440px; padding: 0; }
+  .mst-bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; background: var(--bg); border-bottom: 1px solid var(--border); font-size: 0.82rem; }
+  .mst-visible { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; cursor: pointer; white-space: nowrap; }
+  .mst-visible input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+  .mst-head,
+  .mst-row { display: grid; grid-template-columns: minmax(0, 1fr) 64px 84px 60px 40px; align-items: center; column-gap: 8px; padding: 0 12px; }
+  .mst-head { position: sticky; top: 49px; z-index: 1; background: var(--bg); border-bottom: 1px solid var(--border); }
+  .mst-th { display: flex; align-items: center; gap: 2px; min-height: 32px; padding: 0; border: 0; background: none; color: var(--text-dim); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; cursor: pointer; text-align: left; }
+  .mst-th.mst-end { justify-content: flex-end; }
+  .mst-th.mst-center { justify-content: center; }
+  .mst-th.is-sorted { color: var(--text); }
+  .mst-th:focus-visible,
+  .mst-row:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+  .mst-name { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 600; }
+  .mst-name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mst-channel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.78rem; }
+  .mst-end { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .mst-center { display: flex; justify-content: center; }
+  .mst-stop { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; color: #fff; font-size: 0.72rem; font-weight: 700; }
+  .mst-empty, .mst-more { margin: 12px; font-size: 0.82rem; }
+}
+@media (min-width: 1400px) {
+  .map-side-list { width: 440px; }
+  .mst-head,
+  .mst-row { grid-template-columns: minmax(0, 1fr) 72px 90px 66px 40px; }
+}
+@media (min-width: 1600px) {
+  .map-side-list { width: 500px; }
+}
+@media (min-width: 1024px) {
+  /* the Orders action bar (confirm / reject / deliver / print) sits at the bottom right beside the table */
+  .orders-select-bar {
+    left: auto;
+    right: 24px;
+    bottom: 24px;
+    width: 420px;
+  }
+}
+@media (min-width: 1400px) {
+  .customer-panel-open {
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .customer-detail-view.cd-three > .cd-col {
+    display: none;
+  }
+  .customer-detail-view.cd-three > .cd-wide {
+    grid-column: 1 / -1;
+  }
+  .cd-wcol {
+    min-width: 0;
+  }
+  .cd-wcol-mid #checkin-history > .checkin-row {
+    margin: 0;
+    min-height: 52px;
+    padding: 8px 14px;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .cd-wcol-mid #checkin-history > .checkin-row:last-child {
+    border-bottom: 0;
+  }
+  .cd-wcol-mid #checkin-history > .checkin-row:hover {
+    background: var(--bg-card-pressed);
+  }
+  .cd-wcol-mid .checkin-row-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 12px;
+    min-width: 0;
+  }
+  .cd-wcol-mid .checkin-row-main > .checkin-row-outcomes {
+    grid-column: 1 / -1;
+  }
+  .checkin-row-outcomes {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+  }
+  /* right-column panels */
+  .cd-panel {
+    margin-bottom: 16px;
+  }
+  .cd-panel-link {
+    padding: 4px 2px;
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    font-size: 0.86rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .cd-row {
+    display: grid;
+    grid-template-columns: 76px minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 10px;
+    width: 100%;
+    min-height: 40px;
+    padding: 6px 14px;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-size: 0.9rem;
+    text-align: left;
+    cursor: pointer;
+  }
+  button.cd-row:hover {
+    background: var(--bg-card-pressed);
+  }
+  .cd-row:last-child {
+    border-bottom: 0;
+  }
+  .cd-row-date {
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .cd-row-main {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .cd-row-code {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cd-row-date {
+    white-space: nowrap;
+  }
+  .cd-row-amount {
+    justify-self: end;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .cd-row-total {
+    cursor: default;
+    font-weight: 700;
+  }
+  .cd-thumbs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    padding: 8px 10px 4px;
+  }
+  .cd-thumb {
+    position: relative;
+    aspect-ratio: 1;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    cursor: pointer;
+  }
+  .cd-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .cd-thumb .files-blank-pdf {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+  }
+  .cd-thumbs-count {
+    margin: 0;
+    padding: 4px 12px 8px;
+    font-size: 0.8rem;
+  }
+  /* small map under the facts */
+  .cd-mini-map {
+    position: relative;
+    padding: 0;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .cd-mini-map-canvas {
+    height: 190px;
+    background: var(--bg);
+  }
+  .cd-mini-map-open {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    z-index: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-card);
+    color: var(--accent);
+    font: inherit;
+    font-size: 0.84rem;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    cursor: pointer;
+  }
+  .cd-mini-map-open svg {
+    width: 16px;
+    height: 16px;
+  }
+  .map-canvas { display: flex; flex-direction: column; }
+  /* the status menu as a row of chips under the search field */
+  .map-view .map-top-controls .map-search-row { margin-bottom: 46px; }
+  .map-view .map-search-filter-menu .map-filter-chip-icon svg { width: 16px; height: 16px; }
+  /* the pin key: a panel on the right, the map narrows beside it */
+  .map-view .map-legend-panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: auto;
+    width: 320px;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0 16px 12px;
+    border: 0;
+    border-left: 1px solid var(--border);
+    border-radius: 0;
+    box-shadow: none;
+    transform: none !important;
+    z-index: 1020;
+  }
+  .map-view .map-legend-panel .map-sheet-grab { display: none; }
+  .map-view .map-legend-panel .map-legend-header { padding-top: 12px; }
+  .map-canvas:has(#map-legend-panel:not([hidden])) { padding-right: 320px; }
+  .map-canvas:has(#map-legend-panel:not([hidden])) .map-controls { right: 332px; }
+  /* with the key open the bar is narrower: the filter buttons go back to icons */
+  .map-canvas:has(#map-legend-panel:not([hidden])) .map-dimension-filter-btn::after { content: none; }
+}

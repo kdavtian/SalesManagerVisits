@@ -37,7 +37,10 @@ function loadArea(area) {
   return done;
 }
 
-const areasFor = (hash) => firstTextAreas(hash).filter((area) => STYLE_AREAS.includes(area));
+// Home needs none: every class the start-up files (shell, login, Home and what they open) use is styled in css/app.css
+// (server/scripts/split-css.mjs keeps them there; styleAreas.test.js checks it). Its text list ("orders") is about texts only.
+const HOME = new Set(["", "#", "#/", "#/dashboard"]);
+const areasFor = (hash) => (HOME.has((hash || "").split("?")[0]) ? [] : firstTextAreas(hash).filter((area) => STYLE_AREAS.includes(area)));
 
 // Every style area the screen at `hash` needs has arrived (an address not listed in i18nAreas.js needs all of them).
 export const stylesReadyFor = (hash) => areasFor(hash).every((area) => loaded.has(area));
@@ -50,8 +53,12 @@ export function loadAllStyles() {
   return Promise.all(STYLE_AREAS.map(loadArea));
 }
 
-// The other areas, once the first screen has had its turn (a sheet of another area opened later finds its styles in place).
-if (typeof window !== "undefined") {
+// The other areas, after the first screen is drawn (app.js render): not before, so on a slow line they never compete with the first
+// screen's own files. A sheet of another area opened later finds its styles in place.
+let restQueued = false;
+export function loadOtherStylesSoon() {
+  if (restQueued || typeof window === "undefined") return;
+  restQueued = true;
   const later = window.requestIdleCallback ? (fn) => window.requestIdleCallback(fn, { timeout: 2000 }) : (fn) => setTimeout(fn, 1200);
   later(() => loadAllStyles());
 }

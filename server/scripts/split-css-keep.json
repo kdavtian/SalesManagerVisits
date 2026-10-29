@@ -1,0 +1,15 @@
+[
+ ".cf-main .cf-search",
+ ".cf-search",
+ ".filter-dropdown-btn",
+ ".map-control-btn",
+ ".map-control-cluster",
+ ".map-control-standalone",
+ ".map-filter-row",
+ ".map-search-row",
+ ".perf-sticky-header",
+ ".pricelist-filter-row",
+ ".settings-expandable-row",
+ ".settings-search-wrap",
+ ".settings-workspace-tabs"
+]

@@ -6,29 +6,11 @@
   width: 100%;
 }
 .orders-search-combined .orders-search-actions { margin-left: 0; }
-.orders-search-combined .orders-channel-filter-btn { flex: 0 0 auto; }
 .orders-search-combined .orders-search-menu { right: 0; min-width: 220px; }
-.orders-search-menu[hidden] { display: none !important; }
 .orders-search-menu button > span:first-child {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.order-status-filter-row {
-  max-width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  padding-bottom: 3px;
-  /* Same trailing-edge fade as .map-filter-row in styles.css, so a
-     partially-scrolled last tab reads as "more to scroll" instead of
-     looking clipped -- previously this row scrolled but gave no visual
-     hint that the last tab (Delivered) wasn't the full list. */
-  mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
-  -webkit-mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
 }
 .order-status-filter-row::-webkit-scrollbar { display: none; }
 .order-status-filter-row .map-filter-chip {
@@ -75,17 +57,9 @@ html[data-theme="dark"] .order-status-packed_stock_out, html[data-theme="dark"] 
   width: 24px;
   height: 24px;
 }
-.order-status-svg { display: block; width: 100%; height: 100%; }
 
 @media (max-width: 380px) {
   .orders-search-combined.activity-search-combined { margin-left: 0; margin-right: 0; }
   .orders-search-combined .orders-search-menu { min-width: 205px; }
   .order-status-filter-row .map-filter-chip { gap: 6px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .order-status-filter-row {
-    scroll-behavior: auto;
-    transition: none;
-  }
 }

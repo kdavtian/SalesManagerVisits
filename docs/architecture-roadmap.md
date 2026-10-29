@@ -308,8 +308,15 @@ areas goes to `shared/`.
   identical to the old files; `i18n-<lang>.js` joins them and lists `AREAS`; the missing-text refresh after an update now fetches every
   area file fresh (`texts.spec.mjs`, fails with the old code); `theme-init.js` preloads the area files; `i18nParity.test.js` checks each
   area pair, AREAS and the preload list.
-- [ ] 8c Styles: per-screen CSS out of `styles.css` into `css/<area>.css`, loaded with the view (step 9 part 2). Kept as its own step:
-  moving rules changes their order in the cascade, so it needs before/after screenshots of every screen (the parity method of step 7).
+- [x] 8c Styles: the rules only some screens use moved out of the shared stylesheets into `css/areas/<area>.css` (1.475.0, step 9
+  part 2). `server/scripts/split-css.mjs` decided it from the code: a rule moves when every class it names is used only by screens whose
+  area list (`i18nAreas.js`, the texts' lists) holds that area, and never one the shell, login or Home use (Home needs no area file);
+  rules sharing a class and a property keep their order. 1,569 of 3,934 rules (200 KB) moved; 15 more stay shared because the
+  computed-style comparison showed them changing a screen (`server/scripts/split-css-keep.json`). Proof: on every listed screen + a
+  customer card, for admin, rep, warehouse manager and accountant, at 390 and 1,280 px, every computed style property of every element
+  (~82,000 elements) is identical with the split stylesheets and with the original joined stylesheet. `js/styles.js` loads a screen's
+  areas before it is drawn (router), the others right after the first screen, always in the same order after `css/app.css`;
+  `styleAreas.test.js` fails when a screen can match a rule of an area it does not load.
 - Done when: a typical feature touches only its area's api, text and style files plus `version.js`/`sw.js`.
 
 ### Phase C - speed
@@ -333,7 +340,8 @@ data in Cache Storage (only the app files); bulk goes to IndexedDB.
       byte-identical to the 11 files fetched one by one (`stylesheetJoin.test.js`). Cold first start (1.6 Mbit/s, 150 ms, CPU 4x, no
       worker, rep): stylesheet requests 14 -> 2-4 (the rest are the map's own), CSS bytes 90 -> 76 KB, first paint 3.30 -> 3.08 s,
       Home 5.12 -> 4.93 s (median of 3).
-- [ ] Screen-only CSS (after step 8b) is loaded by the view on first open (`<link>` injected once, precached by the service worker).
+- [x] Screen-only CSS is loaded with the screen (step 8c, 1.475.0): shared stylesheet 64.5 -> 42.6 KB compressed; cold first start
+      (slow phone, build, median of 3, three runs each): first paint 2.17-2.24 -> 1.96-2.00 s, Home unchanged (4.2-4.9 -> 4.2-4.5 s).
 - Done when: cold start shows 1 blocking stylesheet; measure and record the new cold-start time.
 
 #### Step 10. Bundle scripts at deploy - size 2 (only after the owner's decision 1 = A)
@@ -450,3 +458,4 @@ the server share `roles.js`; a screen never edits another screen's DOM.
 - Step 11 texts in two parts: 1.473.0, PR #518, 2026-10-29.
 - Step 10 scripts bundled at deploy (esbuild in the Docker build, browser tests on the build): 1.474.0, PR #519, 2026-10-29.
 - Step 12 speed budgets in CI (first start on a slow phone; 10 busiest endpoints with a company-sized data set): tests only, PR #520, 2026-10-29.
+- Step 8c styles per area (css/areas/*, loaded with the screen; computed-style parity on every screen): 1.475.0, 2026-10-29.
