@@ -62,7 +62,8 @@ deliveryRouter.post("/arrival/deliver", async (req, res) => {
 deliveryRouter.get("/home", async (req, res) => {
   if (!canDeliverOrders(req.user.role) && !canPlanRoutes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const today = yerevanToday();
-  const { rows: stops } = await pool.query(
+  const [{ rows: stops }, { rows: [unrouted] }, { rows: [stale] }, { list }] = await Promise.all([
+    pool.query(
     `SELECT rs.id AS stop_id, rs.sequence, rs.completed_at, rs.arrived_at, o.id AS order_id, o.order_code, o.total_amd::float8 AS total_amd, o.status AS order_status,
             c.id AS customer_id, c.name AS customer_name, c.address, c.phone, c.lat, c.lng
      FROM route_stops rs
@@ -71,13 +72,12 @@ deliveryRouter.get("/home", async (req, res) => {
      JOIN customers c ON c.id = o.customer_id
      WHERE r.driver_id = $1 AND r.route_date = $2
      ORDER BY rs.sequence`,
-    [req.user.id, today]
-  );
-  const [{ rows: [unrouted] }, { rows: [stale] }] = await Promise.all([
+      [req.user.id, today]
+    ),
     pool.query(`SELECT COUNT(*)::int AS n FROM orders o WHERE o.status = 'packed_stock_out' AND NOT EXISTS (SELECT 1 FROM route_stops rs WHERE rs.order_id = o.id)`),
     pool.query(`SELECT COUNT(*)::int AS n FROM route_stops rs JOIN delivery_routes r ON r.id = rs.route_id WHERE r.driver_id = $1 AND rs.completed_at IS NULL AND r.route_date < $2`, [req.user.id, today]),
+    orderWaiting(),
   ]);
-  const { list } = await orderWaiting();
   const open = stops.filter((s) => !s.completed_at);
   res.json({
     stops,

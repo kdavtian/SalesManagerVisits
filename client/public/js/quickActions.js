@@ -61,6 +61,9 @@ export const QUICK_ACTIONS = [
   // inventory is financial data, same access line seesFinancialExports
   // already draws elsewhere (see canManageWarehouse in server/src/shared/roles.js,
   // which this list must stay in sync with).
+  // Stock count (Գույքագրում, server/src/orders/stockCount.js): the warehouse manager counts from his own Home; management and the
+  // accountant follow the month here (canViewStockCount).
+  { id: "qa_stock_count", defaultRoles: ["admin", "ceo", "operations_director", "accountant"] },
   {
     id: "qa_warehouse",
     defaultRoles: ["warehouse_manager", "sales_director", "ceo", "operations_director", "accountant", "admin"],
@@ -99,6 +102,7 @@ export const QUICK_ACTION_ROUTE = {
   qa_money: "#/money",
   qa_pricelist: "#/pricelist",
   qa_warehouse: "#/warehouse",
+  qa_stock_count: "#/stock-count",
   qa_accounting: "#/accounting",
   qa_documents: "#/documents",
   qa_delivery: "#/delivery",

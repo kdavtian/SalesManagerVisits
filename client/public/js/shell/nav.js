@@ -25,6 +25,7 @@ export const SIDEBAR_ITEM_ICON = {
   qa_staff: { icon: icons.person, colorClass: "quick-action-icon-team" },
   qa_returns: { icon: icons.undo, colorClass: "quick-action-icon-debt" },
   qa_wh_home: { icon: icons.box, colorClass: "quick-action-icon-warehouse" },
+  qa_stock_count: { icon: icons.clipboardCheck, colorClass: "quick-action-icon-warehouse" },
   qa_driver_home: { icon: icons.truck, colorClass: "quick-action-icon-delivery" },
   qa_delivery: { icon: icons.truck, colorClass: "quick-action-icon-delivery" },
   qa_recorded: { icon: icons.clock, colorClass: "quick-action-icon-recorded" },

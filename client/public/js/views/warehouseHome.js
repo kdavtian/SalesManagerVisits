@@ -24,11 +24,25 @@ export function attentionItems(h) {
   if (h.packed.unrouted > 0) items.push({ level: "amber", text: fill("ops_att_unrouted", { n: h.packed.unrouted }), to: "#/wh-pack?tab=packed" });
   if (h.packed.over_sla > 0) items.push({ level: "red", text: fill("ops_att_deliver_over", { n: h.packed.over_sla }), to: "#/wh-pack?tab=packed" });
   if (h.stale_stops > 0) items.push({ level: "amber", text: fill("ops_att_stale", { n: h.stale_stops }), to: "#/delivery" });
+  const sc = h.stock_count;
+  if (sc && !sc.finished && sc.due > sc.counted) items.push({ level: "amber", text: fill("ops_att_stock_count", { n: sc.due - sc.counted }), to: "#/stock-count" });
   if (h.tasks.overdue > 0) items.push({ level: "amber", text: fill("ops_att_tasks", { n: h.tasks.overdue }), to: "#/tasks" });
   return items;
 }
 
+function stockCountCard(sc) {
+  if (!sc || (!sc.due && !sc.finished)) return "";
+  return `<button type="button" class="ops-stat ops-stat-wide" data-go="#/stock-count">
+      <span class="ops-stat-number">${sc.counted}<small>/${sc.due}</small></span>
+      <span class="ops-stat-label">${t("ops_stock_count")}${sc.finished ? ` · ${t(sc.not_finished ? "stock_count_state_not_finished" : "ops_stock_count_done")}` : ""}</span>
+    </button>`;
+}
+
 function paint(box, h) {
+  // the 30-second refresh redraws only when a number changed: no flicker, no lost scroll, no idle DOM work
+  const sig = JSON.stringify(h);
+  if (box.dataset.sig === sig) return;
+  box.dataset.sig = sig;
   const over = h.to_pack.over_sla > 0;
   const att = attentionItems(h);
   box.innerHTML = `
@@ -51,6 +65,7 @@ function paint(box, h) {
         <span class="ops-stat-label">${t("ops_deliveries_today")}</span>
       </button>
     </div>
+    ${stockCountCard(h.stock_count)}
 
     <h2 class="section-title">${t("ops_attention")}</h2>
     ${
@@ -66,6 +81,7 @@ function paint(box, h) {
       <button type="button" class="ops-tile" data-go="#/pricelist"><span class="ops-tile-icon">${icons.tag}</span><span>${t("ops_tab_products")}</span></button>
       <button type="button" class="ops-tile" data-go="#/tasks"><span class="ops-tile-icon">${icons.tasks}</span><span>${t("qa_tasks")}</span>${h.tasks.open ? `<span class="count-badge ops-tile-badge">${h.tasks.open}</span>` : ""}</button>
       <button type="button" class="ops-tile" data-go="#/delivery"><span class="ops-tile-icon">${icons.truck}</span><span>${t("ops_shortcut_delivery")}</span></button>
+      <button type="button" class="ops-tile" data-go="#/stock-count"><span class="ops-tile-icon">${icons.clipboardCheck}</span><span>${t("qa_stock_count")}</span></button>
       <button type="button" class="ops-tile ops-tile-wide" data-go="#/warehouse"><span class="ops-tile-icon">${icons.box}</span><span>${t("ops_shortcut_inventory")}</span></button>
       <button type="button" class="ops-tile" data-go="#/returns"><span class="ops-tile-icon">${icons.undo}</span><span>${t("qa_returns")}</span>${h.returns_to_receive ? `<span class="count-badge ops-tile-badge">${h.returns_to_receive}</span>` : ""}</button>
       <button type="button" class="ops-tile" data-go="#/staff"><span class="ops-tile-icon">${icons.person}</span><span>${t("qa_staff")}</span></button>
@@ -108,6 +124,9 @@ export async function renderWarehouseHome(root, navigate) {
     if (alive) timer = setTimeout(async () => ((document.hidden ? 0 : await load()), schedule()), REFRESH_MS);
   };
   const onChanged = () => load();
+  // back to the app (phone unlocked, tab shown): fresh numbers at once, not after up to 30 s
+  const onVisible = () => !document.hidden && load();
+  document.addEventListener("visibilitychange", onVisible);
   window.addEventListener("warehouse-changed", onChanged);
   window.addEventListener("orders-changed", onChanged);
   await load();
@@ -115,6 +134,7 @@ export async function renderWarehouseHome(root, navigate) {
   return () => {
     alive = false;
     clearTimeout(timer);
+    document.removeEventListener("visibilitychange", onVisible);
     window.removeEventListener("warehouse-changed", onChanged);
     window.removeEventListener("orders-changed", onChanged);
   };

@@ -1363,6 +1363,7 @@ export const enCommon = {
     ops_driver_stops_done: "{done} of {total} stops done",
     ops_driver_no_route: "No route for today",
     ops_driver_next: "Next stop",
+    ops_driver_later: "Later on the route",
     ops_driver_here: "You are here",
     ops_driver_all_done: "All stops are done. Well done!",
     ops_driver_navigate: "Navigate",
@@ -1466,4 +1467,7 @@ export const enCommon = {
     vg_must_answer: "Vaghinak needs your answer",
     vg_block_hint: "Please answer to continue.",
     ops_age_days: "{n}d",
+    qa_stock_count: "Stock count",
+    notification_type_stock_count_diff: "Stock count differences",
+    job_stock_count_close: "Stock count: close the day (20:00)",
 };
