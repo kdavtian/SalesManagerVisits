@@ -6,6 +6,7 @@ import { PICKABLE_ROLES, resolveRole, canPlanForOthers, canReassignCustomers, ro
 import { passwordChangeLimiter } from "../../system/routes/auth.js";
 import { normalizePhoneForStorage } from "../../shared/phoneFormat.js";
 import { isTestUser, previewPurge, purgeUser } from "../userPurge.js";
+import { handOverTasks } from "../taskHandover.js";
 
 export const usersRouter = Router();
 
@@ -480,14 +481,25 @@ usersRouter.delete("/:id/records", async (req, res) => {
 });
 
 usersRouter.delete("/:id", async (req, res) => {
-  if (Number(req.params.id) === req.user.id) {
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId) || userId <= 0) return res.status(400).json({ error: "Invalid user id" });
+  if (userId === req.user.id) {
     return res.status(400).json({ error: "You can't delete your own account" });
   }
+  const client = await pool.connect();
   try {
-    const { rowCount } = await pool.query("DELETE FROM users WHERE id = $1", [req.params.id]);
-    if (!rowCount) return res.status(404).json({ error: "User not found" });
+    await client.query("BEGIN");
+    // their tasks pass to the next manager instead of being deleted with them (taskHandover.js)
+    await handOverTasks(client, userId);
+    const { rowCount } = await client.query("DELETE FROM users WHERE id = $1", [userId]);
+    if (!rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "User not found" });
+    }
+    await client.query("COMMIT");
     res.status(204).end();
   } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
     // Many tables reference users(id) without ON DELETE CASCADE (checkins,
     // customers.created_by, cash expenses, visit plans, cash handoffs,
     // performance records, ...) -- any account that ever actually did
@@ -501,5 +513,7 @@ usersRouter.delete("/:id", async (req, res) => {
       });
     }
     throw err;
+  } finally {
+    client.release();
   }
 });
