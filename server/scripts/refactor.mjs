@@ -203,7 +203,8 @@ function exportEdits(ast, names) {
 function mergeTarget(targetFile, header, importLines, bodyText) {
   if (!fs.existsSync(targetFile)) {
     fs.mkdirSync(path.dirname(targetFile), { recursive: true });
-    fs.writeFileSync(targetFile, `${header}\n${[...new Set(importLines)].join("\n")}\n\n${bodyText.trim()}\n`);
+    const imports = [...new Set(importLines)].join("\n");
+    fs.writeFileSync(targetFile, `${header}\n${imports ? `${imports}\n` : ""}\n${bodyText.trim()}\n`);
     return;
   }
   const existing = read(targetFile);

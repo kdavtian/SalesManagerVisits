@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v487";
+const CACHE_VERSION = "field-visits-v488";
 // Map tiles are kept in IndexedDB (TILE_DB below), not in Cache Storage (1.468.0). On iPhone, Safari's Cache Storage costs every launch
 // time for EVERY entry stored in ANY of the app's caches, even when the launch only reads the start page from another cache: measured on
 // WebKit, 5,000 stored tiles delayed the start page by ~0.16 s on a fast computer (a phone is several times slower), before the white
@@ -65,6 +65,24 @@ const APP_SHELL = [
   "/js/i18n.js",
   "/js/i18n-en.js",
   "/js/i18n-hy.js",
+  "/js/i18n/en/common.js",
+  "/js/i18n/en/customers.js",
+  "/js/i18n/en/orders.js",
+  "/js/i18n/en/field.js",
+  "/js/i18n/en/money.js",
+  "/js/i18n/en/products.js",
+  "/js/i18n/en/reports.js",
+  "/js/i18n/en/team.js",
+  "/js/i18n/en/settings.js",
+  "/js/i18n/hy/common.js",
+  "/js/i18n/hy/customers.js",
+  "/js/i18n/hy/orders.js",
+  "/js/i18n/hy/field.js",
+  "/js/i18n/hy/money.js",
+  "/js/i18n/hy/products.js",
+  "/js/i18n/hy/reports.js",
+  "/js/i18n/hy/team.js",
+  "/js/i18n/hy/settings.js",
   "/js/icons.js",
   "/js/theme.js",
   "/js/textSize.js",
