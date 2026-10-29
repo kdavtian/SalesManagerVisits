@@ -8,6 +8,10 @@ const LANG_KEY = "fieldvisits_lang";
 // 73 KB compressed (common + orders, the warehouse manager's Home) -- and the other areas follow right after, in the background. index.html's head script (theme-init.js) already starts
 // fetching `common` before this module runs. Top-level await: no other module sees `t` before the first part is in.
 const dicts = {}; // lang -> the texts of the areas loaded so far
+// The address of a text file, made at run time rather than written in the import: the deploy build (server/scripts/build-client.mjs) then
+// leaves every text file at its own address instead of bundling it, and theme-init.js's early fetch of `common` is the same file. From
+// the site root in the browser, because the built copy of this code no longer sits next to i18n/; next to this file under Node (tests).
+const textFile = (name) => (typeof location === "undefined" ? `./${name}` : `/js/${name}`);
 const loaded = {}; // lang -> Set of loaded areas
 async function loadAreas(lang, areas) {
   const have = (loaded[lang] ||= new Set());
@@ -15,7 +19,7 @@ async function loadAreas(lang, areas) {
     areas
       .filter((area) => !have.has(area))
       .map((area) =>
-        import(`./i18n/${lang}/${area}.js`).then((m) => {
+        import(textFile(`i18n/${lang}/${area}.js`)).then((m) => {
           dicts[lang] = Object.assign(dicts[lang] ?? {}, ...Object.values(m));
           have.add(area);
         })
@@ -92,8 +96,8 @@ function refreshOnMiss(lang) {
   refreshes += 1;
   lastRefreshAt = Date.now();
   const fresh = `?fresh=${Date.now()}`;
-  refresh = import(`./i18n-${lang}.js${fresh}`)
-    .then((index) => Promise.all((index.AREAS ?? TEXT_AREAS).map((area) => import(`./i18n/${lang}/${area}.js${fresh}`))))
+  refresh = import(textFile(`i18n-${lang}.js${fresh}`))
+    .then((index) => Promise.all((index.AREAS ?? TEXT_AREAS).map((area) => import(textFile(`i18n/${lang}/${area}.js${fresh}`)))))
     .then((areas) => {
       dicts[lang] = Object.assign({ ...dicts[lang] }, ...areas.flatMap((m) => Object.values(m)));
       replaceOnScreen(dicts[lang]);

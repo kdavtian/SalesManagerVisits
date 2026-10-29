@@ -24,15 +24,16 @@ export function preloadCoreViews() {
   if (coreViewsPreloaded) return;
   coreViewsPreloaded = true;
   runWhenIdle(() => {
+    // each import written out (not a list of addresses): the deploy build follows only imports it can read
     [
-      "../views/dashboard.js",
-      "../views/activity.js",
-      "../views/map.js",
-      "../views/customers.js",
-      "../views/customerDetail.js", // the first card opened in a session otherwise waits for this file (and what it imports) to download
-      "../views/orders.js",
-      "../views/settings.js",
-    ].forEach((path) => import(path).catch(() => {}));
+      () => import("../views/dashboard.js"),
+      () => import("../views/activity.js"),
+      () => import("../views/map.js"),
+      () => import("../views/customers.js"),
+      () => import("../views/customerDetail.js"), // the first card opened in a session otherwise waits for this file (and what it imports) to download
+      () => import("../views/orders.js"),
+      () => import("../views/settings.js"),
+    ].forEach((load) => load().catch(() => {}));
     // Leaflet itself (leafletLoader.js) is loaded on demand rather than
     // unconditionally at page load now -- warmed here alongside map.js's
     // own module fetch so the two are usually both ready together by the

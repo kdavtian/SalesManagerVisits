@@ -57,7 +57,8 @@ const checks = [
   ["application shell", "/", /<main[^>]+id="app"/],
   // css/app.css is joined by the server from the boot stylesheets (step 9): no @import may be left in it
   ["joined stylesheet", "/css/app.css", /^(?![\s\S]*@import)[\s\S]*\.nav-bar\s*\{/],
-  ["application entry module", "/js/app.js", /renderNav|renderRoute/],
+  // a module either way: the source file, or the deploy build's minified copy (docs/architecture-roadmap.md step 10)
+  ["application entry module", "/js/app.js", /\bimport\b[\s\S]*\bfrom\s*["']/],
 ];
 
 let failures = 0;
@@ -70,6 +71,25 @@ for (const [label, path, marker] of checks) {
     failures += 1;
     console.error(`FAIL  ${label} (${path}): ${error.message}`);
   }
+}
+
+// Every script the service worker stores for offline use must be served: with the deploy build that is the built files (a missing chunk
+// would break a screen on every phone after the update).
+try {
+  const { body } = await request("/sw.js");
+  const shell = [...(body.match(/const APP_SHELL = \[([\s\S]*?)\n\];/)?.[1] ?? "").matchAll(/^\s*"(\/js\/[^"]+)"/gm)].map((m) => m[1]);
+  if (!shell.length) throw new Error("no scripts listed in APP_SHELL");
+  const missing = [];
+  for (let i = 0; i < shell.length; i += 16) {
+    const batch = shell.slice(i, i + 16);
+    const results = await Promise.all(batch.map((path) => request(path).then(() => null, () => path)));
+    missing.push(...results.filter(Boolean));
+  }
+  if (missing.length) throw new Error(`not served: ${missing.slice(0, 5).join(", ")}${missing.length > 5 ? ` (+${missing.length - 5})` : ""}`);
+  console.log(`PASS  offline scripts (${shell.length} files in /sw.js)`);
+} catch (error) {
+  failures += 1;
+  console.error(`FAIL  offline scripts (/sw.js): ${error.message}`);
 }
 
 if (failures > 0) {

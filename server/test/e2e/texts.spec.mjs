@@ -4,10 +4,11 @@ import { test, expect, loginViaUi } from "./fixtures.mjs";
 // page's language file does not have yet: i18n.js then fetches the language file and each area file again, fresh, and replaces the raw
 // name on screen in place (no reload). With the texts split into area files, a fresh joining file alone would bring back the old areas.
 test("@smoke a text missing after an update is fetched fresh from its area file and replaces the raw name on screen", async ({ page, context, fixtures }) => {
-  // a "newer release" of the orders area: the same texts plus one new
+  // a "newer release" of the orders area: the same texts plus one new (an added export: i18n.js merges every export of an area file, and
+  // it works on the source file and on the deploy build's minified copy alike)
   await context.route(/\/js\/i18n\/en\/orders\.js\?fresh=/, async (route) => {
     const res = await route.fetch();
-    const body = (await res.text()).replace("export const enOrders = {", 'export const enOrders = {\n  e2e_new_text: "Fresh text from the new release",');
+    const body = `${await res.text()}\nexport const e2eNewRelease = { e2e_new_text: "Fresh text from the new release" };\n`;
     await route.fulfill({ response: res, body, headers: { ...res.headers(), "content-type": "text/javascript" } });
   });
   const admin = await fixtures.createUser("admin");

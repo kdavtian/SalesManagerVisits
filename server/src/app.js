@@ -16,7 +16,8 @@ import helmet from "helmet";
 import compression from "compression";
 import cookieParser from "cookie-parser";
 import fs from "node:fs";
-import { modulePreloadTags } from "./system/modulePreload.js";
+import { modulePreloadTags, useClientBuild } from "./system/modulePreload.js";
+import { CLIENT_DIST_DIR } from "./shared/paths.js";
 import { authRouter, meRouter } from "./system/routes/auth.js";
 import { usersRouter } from "./team/routes/users.js";
 import { customersRouter } from "./customers/routes/customers.js";
@@ -107,6 +108,10 @@ if (!process.env.ERP_SYNC_KEY && !isTestRun) {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientDir = path.join(__dirname, "..", "..", "client", "public");
+// The deploy build of the scripts (docs/architecture-roadmap.md step 10): the Docker image builds client/dist and runs with
+// NODE_ENV=production; CI's browser tests ask for it with CLIENT_BUILD=1. Anywhere else (local runs, the server tests) the source files
+// are served, so an old build left on a computer is never served in place of the code being edited.
+const clientBuild = useClientBuild();
 
 export const app = express();
 
@@ -300,6 +305,10 @@ app.get(/^\/css\/.*\.css$/, async (req, res, next) => {
 // false, and manifest.json is shadowed by the explicit route below) --
 // both are generated per-request from the calculator-mode setting instead;
 // everything else in client/public (icons included) still serves directly.
+if (clientBuild) {
+  app.use("/js", express.static(path.join(CLIENT_DIST_DIR, "js"), { index: false }));
+  app.get("/sw.js", (req, res) => res.sendFile(path.join(CLIENT_DIST_DIR, "sw.js")));
+}
 app.use(express.static(clientDir, { index: false }));
 
 app.use("/api", (req, res) => {
@@ -309,7 +318,7 @@ app.use("/api", (req, res) => {
 const indexHtmlPath = path.join(clientDir, "index.html");
 const indexHtmlTemplate = fs.readFileSync(indexHtmlPath, "utf8");
 // Computed once at start-up from the client files themselves (see modulePreload.js).
-const modulePreloadHtml = modulePreloadTags(clientDir);
+const modulePreloadHtml = modulePreloadTags(clientDir, clientBuild);
 const BOOT_SPLASH_HTML = '<div class="boot-splash" role="status" aria-label="Loading"><span class="boot-splash-spin"></span></div>';
 
 const CALCULATOR_BRANDING = {

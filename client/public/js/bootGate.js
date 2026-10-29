@@ -15,11 +15,8 @@
 // re-renders) never re-shows the calculator.
 const UNLOCK_KEY = "kad_calc_unlocked";
 
-// The app itself. The "enhancer" scripts that used to load next to it (and patched screens from outside) are gone: each screen
-// builds its own parts now (docs/architecture-roadmap.md step 7).
-const REAL_APP_MODULES = [
-  "./app.js",
-];
+// The app itself (the "enhancer" scripts that used to load next to it are gone: each screen builds its own parts now, roadmap step 7).
+// Written out in the import, not taken from a list: the deploy build (server/scripts/build-client.mjs) follows only imports it can read.
 
 async function bootRealApp() {
   try {
@@ -30,9 +27,7 @@ async function bootRealApp() {
   }
   const themeColor = document.querySelector('meta[name="theme-color"]');
   if (themeColor) themeColor.content = "#f6f7f9";
-  for (const path of REAL_APP_MODULES) {
-    await import(path);
-  }
+  await import("./app.js");
 }
 
 async function showLockScreen() {

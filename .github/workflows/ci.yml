@@ -266,7 +266,13 @@ jobs:
 
       - run: npx playwright install --with-deps chromium
 
+      # The browser tests run against the deploy build, the scripts phones get (docs/architecture-roadmap.md step 10b): build, then
+      # CLIENT_BUILD=1 makes the test server serve client/dist in front of the source files.
+      - run: npm run build:client
+
       - run: npm run test:e2e:smoke -- --shard=${{ matrix.shard }}/2
+        env:
+          CLIENT_BUILD: "1"
 
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
@@ -329,7 +335,12 @@ jobs:
 
       - run: npx playwright install --with-deps webkit
 
+      # against the deploy build, like the Chrome smoke above
+      - run: npm run build:client
+
       - run: npm run test:e2e:iphone
+        env:
+          CLIENT_BUILD: "1"
 
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}

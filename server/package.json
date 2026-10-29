@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
+    "build:client": "node scripts/build-client.mjs",
     "verify:deployment": "node scripts/verify-deployment.mjs",
     "verify:ui": "node scripts/verify-ui.mjs",
     "lint": "cd .. && eslint --config server/eslint.config.mjs --max-warnings 0 . && node server/scripts/check-imports.mjs",
@@ -43,6 +44,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "esbuild": "0.28.2",
     "eslint": "^10.13.0",
     "eslint-scope": "^9.1.2",
     "espree": "^11.2.0",

@@ -49,7 +49,12 @@ jobs:
 
       - run: npx playwright install --with-deps chromium webkit   # the full run includes the @iphone tests in Safari's engine
 
+      # the deploy build, the scripts phones get (docs/architecture-roadmap.md step 10b)
+      - run: npm run build:client
+
       - run: npm run test:e2e
+        env:
+          CLIENT_BUILD: "1"
 
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
