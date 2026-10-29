@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "../../db/pool.js";
 import { requireAuth, requireAdmin } from "../../middleware/auth.js";
+import { mapStackText } from "../sourceMaps.js";
 
 export const clientErrorsRouter = Router();
 
@@ -27,7 +28,7 @@ clientErrorsRouter.post("/", async (req, res) => {
   await pool.query(
     `INSERT INTO client_error_log (user_id, kind, message, stack, url, duration_ms, user_agent)
      VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [req.user.id, kind, clip(message), clip(stack), clip(url), Number.isFinite(duration_ms) ? Math.round(duration_ms) : null, clip(user_agent)]
+    [req.user.id, kind, clip(mapStackText(message)), clip(mapStackText(stack)), clip(url), Number.isFinite(duration_ms) ? Math.round(duration_ms) : null, clip(user_agent)]
   );
   res.status(204).end();
 });

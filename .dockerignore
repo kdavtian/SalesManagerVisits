@@ -6,3 +6,4 @@ server/uploads/*
 !.env.example
 .git
 *.md
+client/dist

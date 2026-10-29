@@ -43,14 +43,15 @@ run() {
 static() { npm run check:version && npm run verify:ui && npm run lint && { [ "$AUDIT" = 0 ] || npm audit --audit-level=high; }; }
 shard()  { fresh_db "fieldvisits_ci_$1" && DATABASE_URL="$PGBASE/fieldvisits_ci_$1" node --test --test-reporter=tap --test-shard="$1/$SHARDS" $(tests); }
 isolated() { bash scripts/run-isolated.sh test/isolated-tests.txt; }
-e2e()    { fresh_db fieldvisits_ci_e2e && DATABASE_URL="$PGBASE/fieldvisits_ci_e2e" npm run test:e2e:smoke; }
+# The browser tests run against the deploy build (client/dist, built once below before they start), like CI.
+e2e()    { fresh_db fieldvisits_ci_e2e && DATABASE_URL="$PGBASE/fieldvisits_ci_e2e" CLIENT_BUILD=1 npm run test:e2e:smoke; }
 # The @iphone tests in Safari's engine (project iphone-webkit), on their own database and port next to the Chrome run. WebKit and its system
 # libraries are installed once into WEBKIT_DIR (the install is a no-op when that revision is already there); exit 77 = not installable here.
 WEBKIT_DIR="${WEBKIT_DIR:-$HOME/.cache/ms-playwright-webkit}"
 iphone() {
   PLAYWRIGHT_BROWSERS_PATH="$WEBKIT_DIR" npx playwright install webkit || return 77
   if [ ! -f "$WEBKIT_DIR/.deps-ok" ]; then npx playwright install-deps webkit && touch "$WEBKIT_DIR/.deps-ok" || return 77; fi
-  fresh_db fieldvisits_ci_iphone && DATABASE_URL="$PGBASE/fieldvisits_ci_iphone" E2E_PORT=3201 PLAYWRIGHT_BROWSERS_PATH="$WEBKIT_DIR" npm run test:e2e:iphone -- --output=test-results-iphone
+  fresh_db fieldvisits_ci_iphone && DATABASE_URL="$PGBASE/fieldvisits_ci_iphone" CLIENT_BUILD=1 E2E_PORT=3201 PLAYWRIGHT_BROWSERS_PATH="$WEBKIT_DIR" npm run test:e2e:iphone -- --output=test-results-iphone
 }
 # (its own output folder: each Playwright run empties its folder at start, and the Chrome run beside it uses test-results/)
 
@@ -58,7 +59,7 @@ jobs=(static); run static static &
 if [ "$QUICK" = 0 ]; then
   for i in $(seq 1 "$SHARDS"); do jobs+=("shard$i"); run "shard$i" shard "$i" & done
   jobs+=(isolated); run isolated isolated &
-  [ "$E2E" = 1 ] && { jobs+=(e2e iphone); run e2e e2e & run iphone iphone & }
+  [ "$E2E" = 1 ] && { npm run build:client >/dev/null || exit 1; jobs+=(e2e iphone); run e2e e2e & run iphone iphone & }
 fi
 wait
 

@@ -8,6 +8,10 @@ const LANG_KEY = "fieldvisits_lang";
 // 73 KB compressed (common + orders, the warehouse manager's Home) -- and the other areas follow right after, in the background. index.html's head script (theme-init.js) already starts
 // fetching `common` before this module runs. Top-level await: no other module sees `t` before the first part is in.
 const dicts = {}; // lang -> the texts of the areas loaded so far
+// The address of a text file, made at run time rather than written in the import: the deploy build (server/scripts/build-client.mjs) then
+// leaves every text file at its own address instead of bundling it, and theme-init.js's early fetch of `common` is the same file. From
+// the site root in the browser, because the built copy of this code no longer sits next to i18n/; next to this file under Node (tests).
+const textFile = (name) => (typeof location === "undefined" ? `./${name}` : `/js/${name}`);
 const loaded = {}; // lang -> Set of loaded areas
 async function loadAreas(lang, areas) {
   const have = (loaded[lang] ||= new Set());
@@ -15,7 +19,7 @@ async function loadAreas(lang, areas) {
     areas
       .filter((area) => !have.has(area))
       .map((area) =>
-        import(`./i18n/${lang}/${area}.js`).then((m) => {
+        import(textFile(`i18n/${lang}/${area}.js`)).then((m) => {
           dicts[lang] = Object.assign(dicts[lang] ?? {}, ...Object.values(m));
           have.add(area);
         })
@@ -23,6 +27,7 @@ async function loadAreas(lang, areas) {
   );
 }
 const allLoaded = (lang) => TEXT_AREAS.every((area) => loaded[lang]?.has(area));
+export const allTextsLoaded = () => allLoaded(getLang());
 // Which areas this page has loaded so far (the tests check the first part is in before a screen is drawn).
 export const loadedTextAreas = (lang = getLang()) => [...(loaded[lang] ?? [])];
 
@@ -36,11 +41,12 @@ export function getLang() {
 await loadAreas(getLang(), typeof location === "undefined" ? TEXT_AREAS : firstTextAreas(location.hash));
 
 // The other areas, once the first screen has had its turn. A text needed before they arrive loads them at once (see t below).
-let loadingRest = null;
+// one load per language: the language can change while the other one is still loading (Settings, another tab)
+const loadingRest = {};
 export function loadAllTexts(lang = getLang()) {
   if (allLoaded(lang)) return Promise.resolve();
-  loadingRest ||= loadAreas(lang, TEXT_AREAS).finally(() => (loadingRest = null));
-  return loadingRest;
+  loadingRest[lang] ||= loadAreas(lang, TEXT_AREAS).finally(() => delete loadingRest[lang]);
+  return loadingRest[lang];
 }
 if (typeof window !== "undefined") {
   const later = window.requestIdleCallback ? (fn) => window.requestIdleCallback(fn, { timeout: 2000 }) : (fn) => setTimeout(fn, 1200);
@@ -71,7 +77,11 @@ function needText(key) {
   const lang = getLang();
   if (!allLoaded(lang)) {
     loadAllTexts(lang)
-      .then(() => replaceOnScreen(dicts[lang]))
+      .then(() => {
+        replaceOnScreen(dicts[lang]);
+        // still missing with every area in: a text of a newer release (the fresh fetch below)
+        if ([...missing].some((k) => dicts[lang][k] === undefined)) refreshOnMiss(lang);
+      })
       .catch(() => {});
     return;
   }
@@ -92,8 +102,8 @@ function refreshOnMiss(lang) {
   refreshes += 1;
   lastRefreshAt = Date.now();
   const fresh = `?fresh=${Date.now()}`;
-  refresh = import(`./i18n-${lang}.js${fresh}`)
-    .then((index) => Promise.all((index.AREAS ?? TEXT_AREAS).map((area) => import(`./i18n/${lang}/${area}.js${fresh}`))))
+  refresh = import(textFile(`i18n-${lang}.js${fresh}`))
+    .then((index) => Promise.all((index.AREAS ?? TEXT_AREAS).map((area) => import(textFile(`i18n/${lang}/${area}.js${fresh}`)))))
     .then((areas) => {
       dicts[lang] = Object.assign({ ...dicts[lang] }, ...areas.flatMap((m) => Object.values(m)));
       replaceOnScreen(dicts[lang]);

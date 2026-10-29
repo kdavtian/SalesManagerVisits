@@ -6,7 +6,8 @@ test.describe("Customers list is built in batches", () => {
   test("100 first, more while scrolling, search starts again", async ({ page, fixtures }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const admin = await fixtures.createUser("admin");
-    const tag = `BATCH${Date.now()}`;
+    // letters only: a tag with digits ("BATCH1793250...") contains "250", and the search for "Customer 250" below matched every row
+    const tag = `BATCH${[...String(Date.now())].map((d) => "abcdefghij"[d]).join("")}`;
     await pool.query(
       `INSERT INTO customers (name, sales_channel, created_by, assigned_manager_id, lat, lng, erp_customer_id, region)
        SELECT '${tag} Customer ' || lpad(g::text, 3, '0'), 'SM YVN', $1, $1, 40.1 + g * 0.0001, 44.5, '${tag}-' || g, 'Yerevan' FROM generate_series(1, 260) g`,

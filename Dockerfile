@@ -1,3 +1,13 @@
+# The phone app's scripts bundled for deploy (docs/architecture-roadmap.md step 10, server/scripts/build-client.mjs): a separate stage,
+# so esbuild and the other development tools never reach the running image. Its dependency layer is cached like the one below.
+FROM node:20-alpine AS client-build
+WORKDIR /app
+COPY server/package*.json server/
+RUN cd server && npm ci --no-audit --no-fund --ignore-scripts
+COPY client client
+COPY server/scripts/build-client.mjs server/scripts/build-client.mjs
+RUN node server/scripts/build-client.mjs
+
 FROM node:20-alpine
 
 # The user and su-exec come first: they never change, so this layer is cached and the slow steps below do not repeat on every deploy.
@@ -15,6 +25,8 @@ RUN apk add --no-cache poppler-utils
 
 COPY server server
 COPY client client
+# the built scripts: served in front of client/public (server/src/app.js); the source files stay in the image for the server's own imports
+COPY --from=client-build /app/client/dist client/dist
 
 # Only the uploads folder is ever written to (docker-entrypoint.sh fixes its owner at start). The code and node_modules stay root-owned and
 # read-only for the app user: the old `chown -R /app` copied the whole of node_modules into a new image layer on every deploy.

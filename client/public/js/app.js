@@ -110,7 +110,7 @@ document.addEventListener(
 import { flushQueue, onQueueChange } from "./offlineQueue.js";
 import { startVaghinakWatch } from "./vaghinak.js";
 import { clearListCache, clearCacheIfRoleChanged } from "./listCache.js";
-import { mountUpdateBanner, initServiceWorkerUpdates } from "./updateBanner.js";
+import { mountUpdateBanner, initServiceWorkerUpdates, isUpdatePending } from "./updateBanner.js";
 import { startLocationBroadcast, stopLocationBroadcast } from "./locationBroadcast.js";
 import { startDriverArrival, stopDriverArrival } from "./driverArrival.js";
 import { pruneParkedSheet, installPhoneMask } from "./util.js";
@@ -496,12 +496,13 @@ async function doLogout() {
 function appIsBlank() {
   return !app.querySelector("*");
 }
+const MODULE_LOAD_FAILURE = /dynamically imported module|Importing a module script failed|Failed to fetch|Load failed|does not provide an export|Importing binding name|is not found/i;
+const isModuleLoadFailure = (err) => MODULE_LOAD_FAILURE.test(String(err?.message || err || ""));
 function showRenderFailure(err) {
   console.error("Screen failed to render:", err);
-  const message = String(err?.message || err || "");
   // Scripts of two versions meeting (an update arrived while the app was open) or a file that did not download: one reload fixes it,
   // so do it by itself -- whether or not something is still on screen.
-  const moduleLoadFailure = /dynamically imported module|Importing a module script failed|Failed to fetch|Load failed|does not provide an export|Importing binding name|is not found/i.test(message);
+  const moduleLoadFailure = isModuleLoadFailure(err);
   try {
     const last = Number(sessionStorage.getItem("fv_render_reload") || 0);
     if (moduleLoadFailure && Date.now() - last > 60000) {
@@ -546,7 +547,9 @@ async function render() {
   }, 8000);
 }
 window.addEventListener("unhandledrejection", (e) => {
-  if (appIsBlank()) showRenderFailure(e.reason);
+  // After an update the person put off ("Later"), a sheet or part not opened yet cannot load any more: the deploy build names its shared
+  // files by their content, so this page's old files are gone from the server. One reload (at most once a minute) brings the new version.
+  if (appIsBlank() || (isUpdatePending() && isModuleLoadFailure(e.reason))) showRenderFailure(e.reason);
 });
 window.addEventListener("error", (e) => {
   if (appIsBlank()) showRenderFailure(e.error || e.message);

@@ -337,11 +337,22 @@ data in Cache Storage (only the app files); bulk goes to IndexedDB.
 - Done when: cold start shows 1 blocking stylesheet; measure and record the new cold-start time.
 
 #### Step 10. Bundle scripts at deploy - size 2 (only after the owner's decision 1 = A)
-- 10a esbuild in the Docker build: entry `bootGate.js` + each view as a separate chunk (`--splitting --format=esm --minify
-  --sourcemap`), output to `client/dist/`; the server serves `dist/` when it exists, else `public/` (so local dev and tests are
-  unchanged); `sw.js` APP_SHELL generated from the build manifest at build time; `modulePreload.js` reads the manifest.
-- 10b CI builds once and runs the e2e smoke against the built files too.
-- Done when: cold start about 10 script requests; record time and bytes. If decision 1 = B: skip this step.
+- [x] 10a esbuild in the Docker build (`server/scripts/build-client.mjs`, own `client-build` stage, so esbuild never reaches the running
+      image): bootGate, app.js, every screen, every text file and the modules the browser tests import keep their address; shared code
+      goes to `js/chunks/<name>-<hash>.js`; minified, source maps next to every file. The modules the first screen needs (app.js's
+      imports + the login / Home screens' imports) are ONE chunk: every entry imports that group, otherwise esbuild cut them into ~20.
+      `sw.js` APP_SHELL is rewritten with the built files; `build-manifest.json` lists the first screen's files for the modulepreload
+      hints. The server serves `client/dist` in front of `client/public` when NODE_ENV=production or CLIENT_BUILD=1 (local runs and
+      server tests keep the source files). Imports the build cannot follow were written out (bootGate, preload.js); i18n.js makes the
+      text file addresses at run time, so text files stay one request each. Client error reports are mapped back to the real file and
+      line from the source maps before they are stored (`server/src/system/sourceMaps.js`). After an update put off with "Later", a part
+      whose old file is gone reloads the page once. `verify-deployment` checks every script in `/sw.js` is served.
+- [x] 10b CI (both Chrome smoke shards, the iPhone job, the nightly full run) and `scripts/local-ci.sh --e2e` build and run the browser
+      tests against the built files.
+- Done in 1.474.0. Measured, cold first start (1.6 Mbit/s, latency 150 ms, CPU 4x, Armenian, rep's Home), source -> build:
+  script files before Home 73-103 -> 11 (4 small plain scripts, bootGate, app, login, Home, one shared chunk, 2 text files);
+  script bytes 431 -> 314 KB compressed; first paint 3.04 -> 2.12 s; Home 5.54 -> 4.37 s (median of 3). Image build: +8 s once for the
+  esbuild stage's npm ci (cached afterwards), the build itself 0.7 s; the image is 8 MB larger (source maps).
 
 #### Step 11. Texts in two parts - size 1
 - [x] Common texts (shell, login, Home, errors) load first; each area's texts load with its first screen (after step 8b this is the
@@ -412,4 +423,5 @@ the server share `roles.js`; a screen never edits another screen's DOM.
 - Safari's engine in the test setup (CI job `e2e (iphone webkit)`, `@iphone` tests) + offline start fix (owner idea 2): 1.471.0, PR #515, 2026-10-29.
 - Tasks stay when a person is deleted (owner decision): server only, PR #516, 2026-10-29.
 - Step 8b texts split by area: 1.472.0, PR #517, 2026-10-29.
-- Step 11 texts in two parts: 1.473.0, 2026-10-29.
+- Step 11 texts in two parts: 1.473.0, PR #518, 2026-10-29.
+- Step 10 scripts bundled at deploy (esbuild in the Docker build, browser tests on the build): 1.474.0, 2026-10-29.

@@ -70,10 +70,10 @@ test("every API route needs a login (or is on the short public list with its rea
 
 // ---- 2. screens do not import the app shell -------------------------------------------------------------------------------------------
 // app.js is the entry point (router + shell); a screen importing it ties the screen to the whole shell and makes a loop. What a screen
-// needs from the shell lives in its own small module (badges.js, state.js, ...).
+// needs from the shell lives in its own small module (badges.js, state.js, ...). bootGate.js is the one that starts it.
 test("no phone-app module imports app.js", () => {
   const offenders = walk(path.join(PUBLIC, "js"))
-    .filter((f) => f.endsWith(".js"))
+    .filter((f) => f.endsWith(".js") && path.relative(PUBLIC, f) !== path.join("js", "bootGate.js"))
     .filter((f) => /from\s+["'](?:\.\.?\/)+app\.js["']|import\(\s*["'](?:\.\.?\/)+app\.js["']/.test(fs.readFileSync(f, "utf8")))
     .map((f) => path.relative(PUBLIC, f));
   assert.deepEqual(offenders, []);
